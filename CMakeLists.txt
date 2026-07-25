@@ -127,6 +127,19 @@ juce_add_plugin(OrbitAmp
 target_sources(OrbitAmp PRIVATE
     src/PluginProcessor.cpp
     src/PluginEditor.cpp
+    src/ui/Theme.cpp
+    src/ui/FaceplateView.cpp
+)
+
+# ----------------------------------------------------------------------------
+# Embedded assets. Michroma (OFL) is the family's display face and it lives in felitronics-appkit's
+# assets/ — referenced there, NOT copied here, so there is one copy of the file in the ecosystem.
+# felitronics_appkit_SOURCE_DIR is set by FetchContent above and points at whichever source won
+# (local checkout or fetched release).
+# ----------------------------------------------------------------------------
+juce_add_binary_data(OrbitAmpData
+    SOURCES
+        "${felitronics_appkit_SOURCE_DIR}/assets/Michroma-Regular.ttf"
 )
 
 target_compile_definitions(OrbitAmp PUBLIC
@@ -137,6 +150,7 @@ target_compile_definitions(OrbitAmp PUBLIC
 )
 
 target_link_libraries(OrbitAmp PRIVATE
+    OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
