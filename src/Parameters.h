@@ -24,6 +24,13 @@ inline constexpr const char* eqHpfHz  = "eq_hpf_hz";
 inline constexpr const char* eqLpfOn  = "eq_lpf_on";
 inline constexpr const char* eqLpfHz  = "eq_lpf_hz";
 
+inline constexpr const char* reverbType = "reverb_type";
+inline constexpr const char* reverbMix  = "reverb_mix";
+
+/** Reverb characters, in the order of the design's simple case. Size and damping follow from the
+    character rather than being loose knobs — the design calls for Mix only. */
+inline const juce::StringArray reverbCharacters { "Room", "Hall", "Plate", "Spring" };
+
 /** Tone range. +-12 dB is an amp tone control, not a mastering EQ — a wider range would invite
     corrective moves the block is not for. */
 inline constexpr float toneRangeDb = 12.0f;

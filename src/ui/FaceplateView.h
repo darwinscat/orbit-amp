@@ -3,6 +3,7 @@
 #include "BlockFrame.h"
 #include "EqBlock.h"
 #include "PreampBlock.h"
+#include "ReverbBlock.h"
 
 namespace orbitamp
 {
@@ -40,9 +41,9 @@ private:
     static constexpr int   row2H      = 240;
     static constexpr float phi        = 1.62f; // the preamp column's weight — the wider anchor
 
-    BlockFrame  boost  { "Boost",  BlockFrame::Kind::captured };
+    BlockFrame  boost { "Boost", BlockFrame::Kind::captured };
     PreampBlock preamp;
-    BlockFrame  reverb { "Reverb", BlockFrame::Kind::dsp };
+    ReverbBlock reverb;
     EqBlock     eq;
 
     juce::Rectangle<int> inGutter, outGutter;

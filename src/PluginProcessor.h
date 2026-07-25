@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/ReverbStage.h"
 #include "core/ToneStack.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -55,9 +56,13 @@ private:
         the stack only redesigns when something actually moved. */
     void updateToneSettings() noexcept;
 
+    /** Same, for the reverb: character and mix, applied only when they move. */
+    void updateReverbSettings() noexcept;
+
     float editorScale = 1.0f;
 
-    core::ToneStack tone;
+    core::ToneStack   tone;
+    core::ReverbStage reverb;
 
     // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
     // thread should not be doing per block.
@@ -69,6 +74,10 @@ private:
     std::atomic<float>* eqHpfHzParam = nullptr;
     std::atomic<float>* eqLpfOnParam = nullptr;
     std::atomic<float>* eqLpfHzParam = nullptr;
+
+    std::atomic<float>* reverbOnParam   = nullptr;
+    std::atomic<float>* reverbTypeParam = nullptr;
+    std::atomic<float>* reverbMixParam  = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };

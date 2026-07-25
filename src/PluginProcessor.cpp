@@ -19,6 +19,10 @@ AmpProcessor::AmpProcessor()
     eqHpfHzParam = apvts.getRawParameterValue (params::eqHpfHz);
     eqLpfOnParam = apvts.getRawParameterValue (params::eqLpfOn);
     eqLpfHzParam = apvts.getRawParameterValue (params::eqLpfHz);
+
+    reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
+    reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
+    reverbMixParam  = apvts.getRawParameterValue (params::reverbMix);
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -37,7 +41,19 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 void AmpProcessor::prepareToPlay (double sampleRate, int)
 {
     tone.prepare (sampleRate, juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels()));
+    reverb.prepare (sampleRate);
+
     updateToneSettings();
+    updateReverbSettings();
+}
+
+void AmpProcessor::updateReverbSettings() noexcept
+{
+    const int index = juce::jlimit (0, params::reverbCharacters.size() - 1,
+                                    juce::roundToInt (reverbTypeParam->load()));
+
+    reverb.setCharacter (static_cast<core::ReverbStage::Character> (index));
+    reverb.setMix (reverbMixParam->load() * 0.01f);   // the face reads percent
 }
 
 void AmpProcessor::updateToneSettings() noexcept
@@ -74,11 +90,21 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         buffer.clear (ch, 0, buffer.getNumSamples());
 
     updateToneSettings();
+    updateReverbSettings();
 
-    // boost -> preamp -> EQ -> reverb. Only the EQ is real so far; the captured stages need
-    // profiles that do not exist yet, and the reverb is still to be written.
+    auto* const* channels = buffer.getArrayOfWritePointers();
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples  = buffer.getNumSamples();
+
+    // boost -> preamp -> EQ -> reverb. The captured stages are still silent passthrough: they need
+    // profiles that do not exist yet.
     if (eqOnParam->load() > 0.5f)
-        tone.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
+        tone.process (channels, numChannels, numSamples);
+
+    if (reverbOnParam->load() > 0.5f)
+        reverb.process (channels, numChannels, numSamples);
+    else
+        reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
 }
 
 juce::AudioProcessorEditor* AmpProcessor::createEditor()

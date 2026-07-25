@@ -132,6 +132,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/FaceplateView.cpp
     src/ui/PreampBlock.cpp
     src/ui/EqBlock.cpp
+    src/ui/ReverbBlock.cpp
 )
 
 # ----------------------------------------------------------------------------
@@ -172,3 +173,16 @@ add_executable(orbitamp_tonestack_test tests/ToneStackTests.cpp)
 target_include_directories(orbitamp_tonestack_test PRIVATE src)
 target_link_libraries(orbitamp_tonestack_test PRIVATE felitronics::eq)
 target_compile_features(orbitamp_tonestack_test PRIVATE cxx_std_20)
+
+# Same gate for the reverb. It links juce_audio_basics because that stage is JUCE-bound by
+# construction (Freeverb) — which is exactly why it is a SEPARATE target: the tone-stack gate above
+# stays JUCE-free, and the split makes the dependency visible instead of quietly universal.
+juce_add_console_app(orbitamp_reverb_test PRODUCT_NAME "OrbitAmpReverbTest")
+target_sources(orbitamp_reverb_test PRIVATE tests/ReverbStageTests.cpp)
+target_include_directories(orbitamp_reverb_test PRIVATE src)
+target_compile_definitions(orbitamp_reverb_test PRIVATE
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_reverb_test PRIVATE
+    juce::juce_audio_basics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
