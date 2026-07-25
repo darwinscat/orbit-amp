@@ -4,8 +4,9 @@ namespace orbitamp
 {
 
 AmpEditor::AmpEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p), faceplate (p.apvts)
+    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p.apvts)
 {
+    addAndMakeVisible (chrome);
     addAndMakeVisible (faceplate);
 
     // Dragging the corner IS the zoom: the aspect is locked, so width alone determines the factor.
@@ -30,9 +31,15 @@ void AmpEditor::resized()
     const float s = (float) getWidth() / (float) baseWidth;
     amp.setEditorScale (s);
 
-    // Bounds stay in design units; the transform does all the scaling, including the margin offset.
-    faceplate.setBounds (margin, margin, FaceplateView::designWidth, FaceplateView::designHeight);
-    faceplate.setTransform (juce::AffineTransform::scale (s));
+    // Bounds stay in design units; the transform does all the scaling, margins included.
+    const auto zoom = juce::AffineTransform::scale (s);
+
+    chrome.setBounds (margin, margin, FaceplateView::designWidth, Chrome::designHeight);
+    chrome.setTransform (zoom);
+
+    faceplate.setBounds (margin, margin + Chrome::designHeight + chromeGap,
+                         FaceplateView::designWidth, FaceplateView::designHeight);
+    faceplate.setTransform (zoom);
 }
 
 } // namespace orbitamp

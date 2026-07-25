@@ -3,6 +3,7 @@
 #include "core/ReverbStage.h"
 #include "core/ToneStack.h"
 
+#include <felitronics/appkit/CompareHistory.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace orbitamp
@@ -11,7 +12,8 @@ namespace orbitamp
 /** The plugin shell. Deliberately thin: the chain (boost -> preamp -> EQ -> reverb) lands in
     src/core/ behind a single engine, and this class only pumps buffers into it and owns state.
     Passthrough for now — the scaffold exists to be loaded in a host, not to make sound yet. */
-class AmpProcessor final : public juce::AudioProcessor
+class AmpProcessor final : public juce::AudioProcessor,
+                           private juce::Timer
 {
 public:
     AmpProcessor();
@@ -42,6 +44,15 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    /** Undo/redo + the A/B/C/D registers, from felitronics-appkit. It lives on the PROCESSOR, not
+        the editor: the history is part of the session, so it has to survive closing the window and
+        be saved with the plugin state.
+
+        PerRegister topology — each register carries its own undo history and switching registers is
+        NOT an undo step (its inverse is simply selecting the other slot). That is the deliberate
+        opposite of OrbitCab, whose whole workspace is one timeline. */
+    felitronics::appkit::CompareHistory history;
+
     /** The editor's zoom, 50-200%. It lives here rather than in the editor so it survives closing
         and reopening the window; it is message-thread only and never read by the audio path.
         Persisting it across sessions comes with the state work. */
@@ -52,6 +63,10 @@ public:
     static constexpr float maxScale = 2.0f;
 
 private:
+    /** Pumps the history's settle timer — a burst of edits that has been quiet for a moment commits
+        as ONE undo step, so dragging a knob is not fifty of them. */
+    void timerCallback() override { history.tick(); }
+
     /** Reads the tone parameters into the stack's settings. Called per block from the audio thread;
         the stack only redesigns when something actually moved. */
     void updateToneSettings() noexcept;

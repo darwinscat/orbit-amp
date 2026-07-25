@@ -133,6 +133,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/PreampBlock.cpp
     src/ui/EqBlock.cpp
     src/ui/ReverbBlock.cpp
+    src/ui/Chrome.cpp
 )
 
 # ----------------------------------------------------------------------------
@@ -159,6 +160,7 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
+    juce::juce_data_structures       # ValueTree behind the workspace / presets
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags

@@ -9,8 +9,19 @@ AmpProcessor::AmpProcessor()
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "state", params::createLayout())
+      apvts (*this, nullptr, "state", params::createLayout()),
+      // The history's opaque seam: it snapshots and restores the parameter tree without knowing what
+      // is in it. replaceState takes a COPY so the parameter objects stay valid and every editor
+      // attachment survives an undo.
+      history (felitronics::appkit::CompareHistory::Mode::PerRegister,
+               [this] { return apvts.copyState(); },
+               [this] (const juce::ValueTree& t) { apvts.replaceState (t.createCopy()); },
+               felitronics::appkit::CompareHistory::Config {})
 {
+    // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
+    // burst commits about 0.4 s after you stop moving.
+    startTimerHz (30);
+
     eqOnParam    = apvts.getRawParameterValue (params::eqOn);
     eqLowParam   = apvts.getRawParameterValue (params::eqLow);
     eqMidParam   = apvts.getRawParameterValue (params::eqMid);
@@ -27,15 +38,30 @@ AmpProcessor::AmpProcessor()
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (auto xml = apvts.copyState().createXml())
+    // The workspace envelope already contains the live parameter tree, so saving it saves
+    // everything: the sound, the other three registers, and each register's undo history.
+    if (auto xml = history.toTree().createXml())
         copyXmlToBinary (*xml, destData);
 }
 
 void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    if (auto xml = getXmlFromBinary (data, sizeInBytes))
-        if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+    auto xml = getXmlFromBinary (data, sizeInBytes);
+    if (xml == nullptr)
+        return;
+
+    const auto tree = juce::ValueTree::fromXml (*xml);
+
+    if (history.fromTree (tree))
+        return;
+
+    // Sessions saved before the workspace existed hold a bare parameter tree. Load the sound and
+    // start a fresh history around it rather than dropping the session on the floor.
+    if (tree.hasType (apvts.state.getType()))
+    {
+        apvts.replaceState (tree);
+        history.reset();
+    }
 }
 
 void AmpProcessor::prepareToPlay (double sampleRate, int)

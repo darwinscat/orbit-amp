@@ -7,11 +7,11 @@ namespace orbitamp::core
 
 /** The reverb tail — the last of our own layers before the signal leaves for the cabinet.
 
-    Built on juce::Reverb (Freeverb). That makes this the ONE stage that is JUCE-bound: unlike
-    ToneStack it cannot move to felitronics-core, and if the algorithm ever needs to be shared it
-    would have to be rewritten first. That is a deliberate trade — a working reverb now beats a
-    portable one later, and reverb is the least likely stage to be shared with OrbitCab anyway
-    (the cab owns its own spring IRs).
+    Built on juce::Reverb (Freeverb), which is simply the right tool here: the plugin is a JUCE
+    application and has no reason to avoid it. The only consequence worth recording is placement —
+    felitronics-core stays JUCE-free (for possible embedded / web targets later), so this stage
+    lives in the product, not in core. ToneStack is JUCE-free because its maths is portable, not
+    because plugin code is supposed to be.
 
     The design calls for Mix only in the simple case, so size and damping are not loose knobs: they
     come from the chosen character. Everything reachable is on the face.
