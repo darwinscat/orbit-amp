@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/ToneStack.h"
+
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace orbitamp
@@ -49,7 +51,24 @@ public:
     static constexpr float maxScale = 2.0f;
 
 private:
+    /** Reads the tone parameters into the stack's settings. Called per block from the audio thread;
+        the stack only redesigns when something actually moved. */
+    void updateToneSettings() noexcept;
+
     float editorScale = 1.0f;
+
+    core::ToneStack tone;
+
+    // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
+    // thread should not be doing per block.
+    std::atomic<float>* eqOnParam    = nullptr;
+    std::atomic<float>* eqLowParam   = nullptr;
+    std::atomic<float>* eqMidParam   = nullptr;
+    std::atomic<float>* eqHighParam  = nullptr;
+    std::atomic<float>* eqHpfOnParam = nullptr;
+    std::atomic<float>* eqHpfHzParam = nullptr;
+    std::atomic<float>* eqLpfOnParam = nullptr;
+    std::atomic<float>* eqLpfHzParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };

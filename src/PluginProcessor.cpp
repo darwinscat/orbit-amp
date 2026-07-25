@@ -11,6 +11,14 @@ AmpProcessor::AmpProcessor()
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "state", params::createLayout())
 {
+    eqOnParam    = apvts.getRawParameterValue (params::eqOn);
+    eqLowParam   = apvts.getRawParameterValue (params::eqLow);
+    eqMidParam   = apvts.getRawParameterValue (params::eqMid);
+    eqHighParam  = apvts.getRawParameterValue (params::eqHigh);
+    eqHpfOnParam = apvts.getRawParameterValue (params::eqHpfOn);
+    eqHpfHzParam = apvts.getRawParameterValue (params::eqHpfHz);
+    eqLpfOnParam = apvts.getRawParameterValue (params::eqLpfOn);
+    eqLpfHzParam = apvts.getRawParameterValue (params::eqLpfHz);
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -26,8 +34,24 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
 }
 
-void AmpProcessor::prepareToPlay (double, int)
+void AmpProcessor::prepareToPlay (double sampleRate, int)
 {
+    tone.prepare (sampleRate, juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels()));
+    updateToneSettings();
+}
+
+void AmpProcessor::updateToneSettings() noexcept
+{
+    core::ToneStack::Settings s;
+    s.lowDb  = (double) eqLowParam->load();
+    s.midDb  = (double) eqMidParam->load();
+    s.highDb = (double) eqHighParam->load();
+    s.hpfOn  = eqHpfOnParam->load() > 0.5f;
+    s.hpfHz  = (double) eqHpfHzParam->load();
+    s.lpfOn  = eqLpfOnParam->load() > 0.5f;
+    s.lpfHz  = (double) eqLpfHzParam->load();
+
+    tone.setSettings (s);
 }
 
 bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -49,7 +73,12 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     for (auto ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, buffer.getNumSamples());
 
-    // Passthrough — the chain goes here.
+    updateToneSettings();
+
+    // boost -> preamp -> EQ -> reverb. Only the EQ is real so far; the captured stages need
+    // profiles that do not exist yet, and the reverb is still to be written.
+    if (eqOnParam->load() > 0.5f)
+        tone.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples());
 }
 
 juce::AudioProcessorEditor* AmpProcessor::createEditor()

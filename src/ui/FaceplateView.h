@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BlockFrame.h"
+#include "EqBlock.h"
 #include "PreampBlock.h"
 
 namespace orbitamp
@@ -42,7 +43,7 @@ private:
     BlockFrame  boost  { "Boost",  BlockFrame::Kind::captured };
     PreampBlock preamp;
     BlockFrame  reverb { "Reverb", BlockFrame::Kind::dsp };
-    BlockFrame  eq     { "EQ",     BlockFrame::Kind::dsp };
+    EqBlock     eq;
 
     juce::Rectangle<int> inGutter, outGutter;
 

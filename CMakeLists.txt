@@ -131,6 +131,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/Theme.cpp
     src/ui/FaceplateView.cpp
     src/ui/PreampBlock.cpp
+    src/ui/EqBlock.cpp
 )
 
 # ----------------------------------------------------------------------------
@@ -154,9 +155,20 @@ target_compile_definitions(OrbitAmp PUBLIC
 target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
+    felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
 )
+
+# ----------------------------------------------------------------------------
+# Headless acceptance gate for the tone stack. JUCE-free — it links only felitronics::eq, which is
+# the point of keeping core::ToneStack free of JUCE: the DSP is testable without a host, a GUI, or
+# an audio device. Non-zero exit on any failure.
+# ----------------------------------------------------------------------------
+add_executable(orbitamp_tonestack_test tests/ToneStackTests.cpp)
+target_include_directories(orbitamp_tonestack_test PRIVATE src)
+target_link_libraries(orbitamp_tonestack_test PRIVATE felitronics::eq)
+target_compile_features(orbitamp_tonestack_test PRIVATE cxx_std_20)

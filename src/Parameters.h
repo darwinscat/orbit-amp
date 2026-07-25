@@ -16,6 +16,18 @@ inline constexpr const char* preampType  = "preamp_type";
 inline constexpr const char* preampVoice = "preamp_voice";
 inline constexpr const char* preampGain  = "preamp_gain";
 
+inline constexpr const char* eqLow    = "eq_low";
+inline constexpr const char* eqMid    = "eq_mid";
+inline constexpr const char* eqHigh   = "eq_high";
+inline constexpr const char* eqHpfOn  = "eq_hpf_on";
+inline constexpr const char* eqHpfHz  = "eq_hpf_hz";
+inline constexpr const char* eqLpfOn  = "eq_lpf_on";
+inline constexpr const char* eqLpfHz  = "eq_lpf_hz";
+
+/** Tone range. +-12 dB is an amp tone control, not a mastering EQ — a wider range would invite
+    corrective moves the block is not for. */
+inline constexpr float toneRangeDb = 12.0f;
+
 /** The voicing types, in the order the design lists them — clean through modern is a ramp of
     increasing gain, so the order is meaningful, not alphabetical. */
 inline const juce::StringArray typeNames { "Clean", "Edge", "Crunch", "High-gain", "Modern" };
