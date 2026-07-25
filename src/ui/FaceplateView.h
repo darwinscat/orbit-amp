@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BlockFrame.h"
+#include "PreampBlock.h"
 
 namespace orbitamp
 {
@@ -13,7 +14,7 @@ namespace orbitamp
 class FaceplateView : public juce::Component
 {
 public:
-    FaceplateView();
+    explicit FaceplateView (juce::AudioProcessorValueTreeState&);
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -38,10 +39,10 @@ private:
     static constexpr int   row2H      = 240;
     static constexpr float phi        = 1.62f; // the preamp column's weight — the wider anchor
 
-    BlockFrame boost  { "Boost",  BlockFrame::Kind::captured };
-    BlockFrame preamp { "Preamp", BlockFrame::Kind::captured };
-    BlockFrame reverb { "Reverb", BlockFrame::Kind::dsp };
-    BlockFrame eq     { "EQ",     BlockFrame::Kind::dsp };
+    BlockFrame  boost  { "Boost",  BlockFrame::Kind::captured };
+    PreampBlock preamp;
+    BlockFrame  reverb { "Reverb", BlockFrame::Kind::dsp };
+    BlockFrame  eq     { "EQ",     BlockFrame::Kind::dsp };
 
     juce::Rectangle<int> inGutter, outGutter;
 

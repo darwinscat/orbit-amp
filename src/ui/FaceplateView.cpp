@@ -1,14 +1,20 @@
 #include "FaceplateView.h"
 
+#include "../Parameters.h"
+
 namespace orbitamp
 {
 
-FaceplateView::FaceplateView()
+FaceplateView::FaceplateView (juce::AudioProcessorValueTreeState& state)
+    : preamp (state)
 {
-    for (auto* b : { &boost, &preamp, &reverb, &eq })
+    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &eq })
         addAndMakeVisible (*b);
 
-    boost.setBlockOn (false, juce::dontSendNotification);   // a boost is an addition, off by default
+    // The preamp binds its own power; the other three are still bare frames.
+    boost .attachPower (*state.getParameter (params::boostOn));
+    eq    .attachPower (*state.getParameter (params::eqOn));
+    reverb.attachPower (*state.getParameter (params::reverbOn));
 }
 
 void FaceplateView::resized()

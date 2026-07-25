@@ -2,6 +2,8 @@
 
 #include "Theme.h"
 
+#include <juce_audio_processors/juce_audio_processors.h>
+
 namespace orbitamp
 {
 
@@ -37,8 +39,23 @@ public:
         setAlpha (on ? 1.0f : theme::offAlpha);   // dims children too — an off block stays interactive
         repaint();
 
-        if (notify != juce::dontSendNotification && onToggled != nullptr)
+        if (notify == juce::dontSendNotification)
+            return;
+
+        if (power != nullptr)
+            power->setValueAsCompleteGesture (on ? 1.0f : 0.0f);
+
+        if (onToggled != nullptr)
             onToggled (on);
+    }
+
+    /** Binds the frame's switch to the block's power parameter. The frame stays dumb — it holds the
+        attachment, not the parameter, and never reads the tree. */
+    void attachPower (juce::RangedAudioParameter& param)
+    {
+        power = std::make_unique<juce::ParameterAttachment> (param,
+            [this] (float v) { setBlockOn (v > 0.5f, juce::dontSendNotification); });
+        power->sendInitialUpdate();
     }
 
     std::function<void (bool)> onToggled;
@@ -131,6 +148,7 @@ private:
     juce::String title;
     Kind kind;
     bool on = true;
+    std::unique_ptr<juce::ParameterAttachment> power;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BlockFrame)
 };

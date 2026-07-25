@@ -34,8 +34,10 @@ public:
     const juce::String getProgramName (int) override         { return {}; }
     void changeProgramName (int, const juce::String&) override {}
 
-    void getStateInformation (juce::MemoryBlock&) override   {}
-    void setStateInformation (const void*, int) override     {}
+    void getStateInformation (juce::MemoryBlock&) override;
+    void setStateInformation (const void*, int) override;
+
+    juce::AudioProcessorValueTreeState apvts;
 
     /** The editor's zoom, 50-200%. It lives here rather than in the editor so it survives closing
         and reopening the window; it is message-thread only and never read by the audio path.

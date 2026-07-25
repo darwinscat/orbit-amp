@@ -127,8 +127,10 @@ juce_add_plugin(OrbitAmp
 target_sources(OrbitAmp PRIVATE
     src/PluginProcessor.cpp
     src/PluginEditor.cpp
+    src/Parameters.cpp
     src/ui/Theme.cpp
     src/ui/FaceplateView.cpp
+    src/ui/PreampBlock.cpp
 )
 
 # ----------------------------------------------------------------------------

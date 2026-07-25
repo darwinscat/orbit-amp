@@ -4,7 +4,7 @@ namespace orbitamp
 {
 
 AmpEditor::AmpEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p)
+    : juce::AudioProcessorEditor (&p), amp (p), faceplate (p.apvts)
 {
     addAndMakeVisible (faceplate);
 
