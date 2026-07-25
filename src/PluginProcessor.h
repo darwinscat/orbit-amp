@@ -37,7 +37,18 @@ public:
     void getStateInformation (juce::MemoryBlock&) override   {}
     void setStateInformation (const void*, int) override     {}
 
+    /** The editor's zoom, 50-200%. It lives here rather than in the editor so it survives closing
+        and reopening the window; it is message-thread only and never read by the audio path.
+        Persisting it across sessions comes with the state work. */
+    float getEditorScale() const noexcept { return editorScale; }
+    void setEditorScale (float s) noexcept { editorScale = juce::jlimit (minScale, maxScale, s); }
+
+    static constexpr float minScale = 0.5f;
+    static constexpr float maxScale = 2.0f;
+
 private:
+    float editorScale = 1.0f;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };
 

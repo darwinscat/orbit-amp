@@ -8,7 +8,9 @@ namespace orbitamp
 
 /** The editor window. It holds the faceplate and nothing else — no data, no engine reach-through.
 
-    Sizing is fixed at the design size for now; the 50-200% scale factor lands next. */
+    Zoom is ONE factor, applied once as a transform on the faceplate. Nothing below this point knows
+    the editor's zoom: every component lays itself out in design units and is scaled as a whole, so
+    the faceplate stays vector-crisp at any size and no layout is ever recomputed per zoom level. */
 class AmpEditor final : public juce::AudioProcessorEditor
 {
 public:
@@ -21,6 +23,10 @@ public:
 private:
     static constexpr int margin = 18;   // the ground the device sits on
 
+    static constexpr int baseWidth  = FaceplateView::designWidth  + margin * 2;
+    static constexpr int baseHeight = FaceplateView::designHeight + margin * 2;
+
+    AmpProcessor& amp;              // the base class's `processor` is the AudioProcessor& — this is ours
     FaceplateView faceplate;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpEditor)
