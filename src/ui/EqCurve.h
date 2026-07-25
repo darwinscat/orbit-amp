@@ -28,21 +28,31 @@ public:
 
         drawGrid (g, r);
 
-        // One point per pixel column — cheaper and smoother than a coarse grid interpolated up.
-        juce::Path curve;
-        const int w = juce::jmax (2, getWidth());
-
-        for (int x = 0; x < w; ++x)
         {
-            const float px = (float) x + r.getX();
-            const float y  = dbToY (r, (float) magnitudeDb (xToHz (r, px)));
+            // The curve is clipped to the well. A steep cut runs far past the bottom of the range,
+            // and it should lie along the floor INSIDE the scope rather than escape the box.
+            const juce::Graphics::ScopedSaveState clipped (g);
 
-            if (x == 0) curve.startNewSubPath (px, y);
-            else        curve.lineTo (px, y);
+            juce::Path well;
+            well.addRoundedRectangle (r, theme::radiusMd);
+            g.reduceClipRegion (well);
+
+            // One point per pixel column — cheaper and smoother than a coarse grid interpolated up.
+            juce::Path curve;
+            const int w = juce::jmax (2, getWidth());
+
+            for (int x = 0; x < w; ++x)
+            {
+                const float px = (float) x + r.getX();
+                const float y  = dbToY (r, (float) magnitudeDb (xToHz (r, px)));
+
+                if (x == 0) curve.startNewSubPath (px, y);
+                else        curve.lineTo (px, y);
+            }
+
+            g.setColour (theme::violet);
+            g.strokePath (curve, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
-
-        g.setColour (theme::violet);
-        g.strokePath (curve, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);

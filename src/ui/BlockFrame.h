@@ -70,8 +70,10 @@ public:
         g.setGradientFill (fill);
         g.fillRoundedRectangle (box, theme::radiusMd);
 
-        // The spec mixes the accent into the hairline for the border; the mixed result is the accent
-        // at roughly half alpha, which is what keeps an off block from reading as a hard outline.
+        // The frame is the block's colour code — orange for captured, violet for DSP — and it is
+        // load-bearing: it is how the face states which stages are profiled hardware and which are
+        // our own DSP. The spec mixes the accent into the hairline; the mixed result is the accent
+        // at roughly half alpha, which keeps a switched-off block from reading as a hard outline.
         g.setColour (accent().withAlpha (kind == Kind::captured ? 0.55f : 0.50f));
         g.drawRoundedRectangle (box, theme::radiusMd, theme::blockBorder);
 

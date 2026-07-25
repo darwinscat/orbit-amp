@@ -72,9 +72,14 @@ private:
             case Character::spring: p.roomSize = 0.25f; p.damping = 0.70f; p.width = 0.45f; break;
         }
 
-        // Freeverb mixes wet against dry itself, so Mix is just the two levels crossfading.
-        p.wetLevel   = mix;
-        p.dryLevel   = 1.0f - mix;
+        // An amp's reverb control ADDS the tank return to the dry signal — it does not crossfade
+        // away from it. The dry path stays at unity at every setting, exactly as the hardware does;
+        // a wet/dry crossfade is a studio-plugin convention and would be wrong here.
+        //
+        // The constants undo Freeverb's internal scaling (it multiplies dry by 2 and wet by 3), so
+        // dryLevel 0.5 is unity dry and Mix 0..1 sweeps the added tail from silent to unity.
+        p.dryLevel   = 0.5f;
+        p.wetLevel   = mix / 3.0f;
         p.freezeMode = 0.0f;
 
         reverb.setParameters (p);

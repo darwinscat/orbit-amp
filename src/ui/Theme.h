@@ -26,11 +26,6 @@ inline const juce::Colour tx      { 0xffece9f6 };
 inline const juce::Colour txDim   { 0xffa6a2bd };
 inline const juce::Colour txFaint { 0xff6f6b86 };
 
-// Device shell gradient (top -> 42% -> bottom in the spec).
-inline const juce::Colour deviceTop { 0xff1a1a26 };
-inline const juce::Colour deviceMid { 0xff101017 };
-inline const juce::Colour deviceBot { 0xff0d0d14 };
-
 // Block fills, per kind. The spec's borders are a mix of the accent over the hairline; JUCE has no
 // color-mix, so these are the mixed result at the alpha that reads the same on the device gradient.
 inline const juce::Colour capTop  { 0xff1b1620 };

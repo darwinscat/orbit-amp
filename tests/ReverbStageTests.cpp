@@ -50,7 +50,34 @@ int main()
     ReverbStage r;
     r.prepare (sampleRate);
 
-    // Mix at zero is dry only — the block must be inaudible, not "nearly" inaudible.
+    // An amp's reverb ADDS to the dry signal, it does not crossfade away from it. So the dry path
+    // must sit at unity at EVERY mix setting — including the maximum. This is the behaviour the
+    // whole control hangs on, so it is checked at both ends.
+    auto dryLevelAt = [&r] (float mix)
+    {
+        r.setMix (mix);
+        r.reset();
+
+        // juce::Reverb ramps its gains over ~10 ms so a mix change never zips. Run silence through
+        // first so the measurement is of the settled level, not of a gain still on its way there.
+        {
+            std::vector<float> l (4800, 0.0f), rr (4800, 0.0f);
+            float* warm[2] = { l.data(), rr.data() };
+            r.process (warm, 2, 4800);
+        }
+
+        std::vector<float> left (256, 0.0f), right (256, 0.0f);
+        left[0] = right[0] = 1.0f;
+        float* channels[2] = { left.data(), right.data() };
+        r.process (channels, 2, 256);
+
+        return (double) left[0];
+    };
+
+    report ("mix 0: dry at unity",   std::fabs (dryLevelAt (0.0f) - 1.0) < 0.02, "");
+    report ("mix 1: dry STILL unity (adds, never replaces)", std::fabs (dryLevelAt (1.0f) - 1.0) < 0.02, "");
+
+    // Mix at zero must be silent after the dry impulse — inaudible, not "nearly" inaudible.
     r.setMix (0.0f);
     r.reset();
     {

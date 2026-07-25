@@ -17,10 +17,7 @@ FaceplateView::FaceplateView (juce::AudioProcessorValueTreeState& state)
 
 void FaceplateView::resized()
 {
-    auto body = getLocalBounds().reduced (pad);
-    body.removeFromTop (namePlateH);
-
-    auto lane = body.reduced (lanePadX, lanePadY);
+    auto lane = getLocalBounds().reduced (pad).reduced (lanePadX, lanePadY);
 
     inGutter = lane.removeFromLeft (gutter);
     lane.removeFromLeft (colGap);
@@ -43,44 +40,12 @@ void FaceplateView::resized()
 
 void FaceplateView::paint (juce::Graphics& g)
 {
-    const auto shell = getLocalBounds().toFloat().reduced (0.5f);
-
-    // The device shell: a top-lit slab, darkening through 42% down — the spec's gradient.
-    juce::ColourGradient body (theme::deviceTop, 0.0f, shell.getY(),
-                               theme::deviceBot, 0.0f, shell.getBottom(), false);
-    body.addColour (0.42, theme::deviceMid);
-    g.setGradientFill (body);
-    g.fillRoundedRectangle (shell, theme::radiusXl);
-
-    g.setColour (theme::hair2);
-    g.drawRoundedRectangle (shell, theme::radiusXl, 1.0f);
-
-    paintNamePlate (g, getLocalBounds().reduced (pad).removeFromTop (namePlateH));
+    // Nothing wraps the row. The outlined slab that used to sit here — and the name plate inside it
+    // — were one thing: a web mockup's picture OF a device, drawn as a window on a page, with its
+    // own logo strip. The blocks keep their frames (that is the captured/DSP colour code, which is
+    // load-bearing); what goes is the box around them and the second mark it carried.
     paintGutter (g, inGutter,  "In");
     paintGutter (g, outGutter, "Out");
-}
-
-void FaceplateView::paintNamePlate (juce::Graphics& g, juce::Rectangle<int> area) const
-{
-    auto r = area.toFloat().withTrimmedBottom (16.0f);
-
-    // The orbit mark is the family's, drawn from appkit — never redrawn per product.
-    const float markSize = 44.0f;
-    felitronics::appkit::brand::drawOrbitRings (g, r.getX() + markSize * 0.5f, r.getCentreY(), markSize);
-
-    auto text = r.withTrimmedLeft (markSize + 15.0f);
-    const auto font = theme::displayFont (26.0f);
-
-    // "ORBIT" in the face colour, "AMP" in the accent — the mark and the name share one baseline.
-    const float wOrbit = theme::trackedWidth ("ORBIT", font, 0.06f);
-    g.setColour (theme::tx);
-    theme::drawTracked (g, "ORBIT", text, font, 0.06f, juce::Justification::centredLeft);
-    g.setColour (theme::violet);
-    theme::drawTracked (g, "AMP", text.withTrimmedLeft (wOrbit + 0.06f * font.getHeight()),
-                        font, 0.06f, juce::Justification::centredLeft);
-
-    g.setColour (theme::hair);
-    g.fillRect (area.toFloat().removeFromBottom (1.0f));
 }
 
 void FaceplateView::paintGutter (juce::Graphics& g, juce::Rectangle<int> area, const juce::String& label) const
