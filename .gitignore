@@ -1,0 +1,19 @@
+# ── private / agent notes — this is a PUBLIC repo, never commit these ──
+CLAUDE.md
+.private/
+.claude/
+
+# ── build ──
+build/
+build-*/
+cmake-build-*/
+*.o
+*.a
+*.dylib
+*.so
+
+# ── macOS / IDE / editors ──
+.DS_Store
+.idea/
+.vscode/
+*.swp
