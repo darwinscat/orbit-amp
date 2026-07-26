@@ -25,7 +25,7 @@ public:
         struct Entry { DeviceType type; const char* name; };
         static constexpr Entry entries[] = {
             { DeviceType::tube,  "tube"  },
-            { DeviceType::pnp,   "bjt"   },
+            { DeviceType::bjt,   "bjt"   },
             { DeviceType::fet,   "fet"   },
             { DeviceType::ic,    "ic"    },
             { DeviceType::dsp,   "dsp"   },
