@@ -8,6 +8,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 {
     addAndMakeVisible (chrome);
     addAndMakeVisible (faceplate);
+    addAndMakeVisible (glyphs);   // TEMPORARY
 
     // Dragging the corner IS the zoom: the aspect is locked, so width alone determines the factor.
     setResizable (true, true);
@@ -37,9 +38,14 @@ void AmpEditor::resized()
     chrome.setBounds (margin, margin, FaceplateView::designWidth, Chrome::designHeight);
     chrome.setTransform (zoom);
 
-    faceplate.setBounds (margin, margin + Chrome::designHeight + chromeGap,
-                         FaceplateView::designWidth, FaceplateView::designHeight);
+    const int faceplateY = margin + Chrome::designHeight + chromeGap;
+    faceplate.setBounds (margin, faceplateY, FaceplateView::designWidth, FaceplateView::designHeight);
     faceplate.setTransform (zoom);
+
+    // TEMPORARY — the glyph review strip, directly under the faceplate.
+    glyphs.setBounds (margin, faceplateY + FaceplateView::designHeight,
+                      FaceplateView::designWidth, GlyphPreview::designHeight);
+    glyphs.setTransform (zoom);
 }
 
 } // namespace orbitamp

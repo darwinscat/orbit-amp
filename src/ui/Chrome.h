@@ -2,23 +2,31 @@
 
 #include "Theme.h"
 
-#include <felitronics/appkit/chrome/BrandBlister.h>
-#include <felitronics/appkit/chrome/ChromeBar.h>
-#include <felitronics/appkit/chrome/ChromeUnderline.h>
-#include <felitronics/appkit/chrome/CompareCell.h>
+#include <felitronics/appkit/BrandHeader.h>
+#include <felitronics/appkit/IconButton.h>
+#include <felitronics/appkit/chrome/CompareCell.h>   // RegisterButton — the A/B/C/D button
 #include <felitronics/appkit/chrome/PresetCell.h>
+
+#include <memory>
+#include <vector>
 
 namespace orbitamp
 {
 
 class AmpProcessor;
 
-/** The toolbar: brand badge · undo/redo · A/B/C/D · preset name.
+/** The header, laid out as OrbitCab's:
 
-    Every piece of it comes from felitronics-appkit — this class is wiring, not widgets. What is
-    local is the theme (seeded from the device palette, never from the family brand values, so the
-    active-register frame matches this product's face) and the gestures' meaning. */
-class Chrome final : public juce::Component
+        [cat + mark + OrbitAmp by Darwin's Cat]  undo redo ....  A B C D  [preset]  save saveAs trash
+
+    Brand hugging its content on the left, undo/redo in the gap after it, and a right cluster of
+    registers, the preset name, and the file actions. Every piece comes from felitronics-appkit —
+    OrbitCab's own copies stay in OrbitCab; what is shared here is the arrangement, not the widgets.
+
+    It is its own DragAndDropContainer so dragging one register onto another (copy A to C) never
+    leaks out into the rest of the window. */
+class Chrome final : public juce::Component,
+                     public juce::DragAndDropContainer
 {
 public:
     explicit Chrome (AmpProcessor&);
@@ -26,35 +34,32 @@ public:
 
     void resized() override;
 
-    // The blister overhangs the flat bar, so the strip is as tall as the badge.
-    static constexpr int designHeight = 46;
+    // OrbitCab's header proportions: a 50-tall strip whose small controls live in a 44-tall band
+    // centred in it, so only the brand grows with the strip.
+    static constexpr int designHeight  = 50;
+    static constexpr int controlBand   = 44;
 
 private:
-    /** Pushes the engine's state into the compare cell. Called on every history change. */
+    /** Pushes the engine's state onto the buttons. Called on every history change. */
     void refreshModel();
 
     void showPresetMenu();
     void showRegisterMenu (int index);
-    void savePresetAs();
-
-    /** The orbit mark, in the badge. Drawn by appkit's brand kit — the mark is the family's. */
-    struct OrbitMark final : felitronics::appkit::chrome::BlisterMark
-    {
-        int preferredContentWidth (int blisterHeight) const override { return blisterHeight; }
-        void paint (juce::Graphics&) override;
-    };
+    void savePreset (bool forceNewName);
 
     AmpProcessor& amp;
 
-    felitronics::appkit::chrome::ChromeMetrics metrics {};
-    felitronics::appkit::chrome::ChromeTheme   theme;
+    felitronics::appkit::chrome::ChromeTheme theme;
 
-    OrbitMark                                   mark;
-    felitronics::appkit::chrome::BrandBlister   blister;
-    felitronics::appkit::chrome::CompareCell    compare;
-    felitronics::appkit::chrome::PresetCell     preset;
-    felitronics::appkit::chrome::ChromeUnderline underline;
-    felitronics::appkit::chrome::ChromeBar      bar;
+    felitronics::appkit::BrandHeader brand;
+    felitronics::appkit::IconButton  undo   { felitronics::appkit::IconButton::Kind::undo };
+    felitronics::appkit::IconButton  redo   { felitronics::appkit::IconButton::Kind::redo };
+    felitronics::appkit::IconButton  save   { felitronics::appkit::IconButton::Kind::save };
+    felitronics::appkit::IconButton  saveAs { felitronics::appkit::IconButton::Kind::saveAs };
+    felitronics::appkit::IconButton  trash  { felitronics::appkit::IconButton::Kind::trash };
+
+    std::vector<std::unique_ptr<felitronics::appkit::chrome::RegisterButton>> registers;
+    felitronics::appkit::chrome::PresetCell preset;
 
     juce::String presetName { "Default" };
 

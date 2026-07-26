@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "ui/Chrome.h"
 #include "ui/FaceplateView.h"
+#include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 
 namespace orbitamp
 {
@@ -27,11 +28,14 @@ private:
 
     static constexpr int baseWidth  = FaceplateView::designWidth + margin * 2;
     static constexpr int baseHeight = Chrome::designHeight + chromeGap
-                                    + FaceplateView::designHeight + margin * 2;
+                                    + FaceplateView::designHeight
+                                    + GlyphPreview::designHeight   // TEMPORARY
+                                    + margin * 2;
 
     AmpProcessor& amp;              // the base class's `processor` is the AudioProcessor& — this is ours
     Chrome        chrome;
     FaceplateView faceplate;
+    GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpEditor)
 };
