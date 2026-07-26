@@ -29,8 +29,8 @@ public:
         drawGrid (g, r);
 
         {
-            // The curve is clipped to the well. A steep cut runs far past the bottom of the range,
-            // and it should lie along the floor INSIDE the scope rather than escape the box.
+            // Clipped to the well so the dive ends at the scope's edge instead of painting over the
+            // block underneath — the curve leaves the display, it does not spill onto the face.
             const juce::Graphics::ScopedSaveState clipped (g);
 
             juce::Path well;
@@ -77,7 +77,10 @@ private:
 
     static float dbToY (juce::Rectangle<float> r, float db)
     {
-        return r.getCentreY() - juce::jlimit (-rangeDb, rangeDb, db) / rangeDb * (r.getHeight() * 0.5f - 6.0f);
+        // NOT clamped. A steep cut must keep diving and leave the scope through the floor — flooring
+        // it into a horizontal line would draw a brickwall shelf that the filter does not have, and
+        // would hide how steep the cut actually is. The well's clip is what ends the line.
+        return r.getCentreY() - db / rangeDb * (r.getHeight() * 0.5f - 6.0f);
     }
 
     void drawGrid (juce::Graphics& g, juce::Rectangle<float> r) const

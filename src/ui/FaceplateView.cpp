@@ -17,7 +17,7 @@ FaceplateView::FaceplateView (juce::AudioProcessorValueTreeState& state)
 
 void FaceplateView::resized()
 {
-    auto lane = getLocalBounds().reduced (pad).reduced (lanePadX, lanePadY);
+    auto lane = getLocalBounds().reduced (lanePadX, lanePadY);
 
     inGutter = lane.removeFromLeft (gutter);
     lane.removeFromLeft (colGap);

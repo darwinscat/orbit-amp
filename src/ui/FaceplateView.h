@@ -23,15 +23,14 @@ public:
 
     // The faceplate's design size, at 100%. The editor scales from these and never re-lays out.
     static constexpr int designWidth  = 880;
-    static constexpr int designHeight = 524;
+    static constexpr int designHeight = 480;
 
 private:
     void paintGutter (juce::Graphics&, juce::Rectangle<int>, const juce::String& label) const;
 
-    // Lane metrics, from the visual spec's grid: 58px | 1fr | phi*1fr | 1fr | 58px. `pad` was the
-    // removed slab's inner padding and stays as plain breathing room, so the row's proportions are
-    // exactly what they were before the box went away.
-    static constexpr int   pad        = 22;
+    // Lane metrics, from the visual spec's grid: 58px | 1fr | phi*1fr | 1fr | 58px. The slab's inner
+    // padding went with the slab — padding only exists to hold content off the edge of a box, and
+    // there is no box now. What is left is the lane's own small inset.
     static constexpr int   lanePadX   = 10;
     static constexpr int   lanePadY   = 16;
     static constexpr int   gutter     = 58;    // the in / out indicator columns
