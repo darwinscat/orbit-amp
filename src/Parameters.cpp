@@ -25,6 +25,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Float> (juce::ParameterID { boostTone, 1 }, "Boost Tone",
                                          juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 10.0f));
 
+    // Normalised 0..1: a measured control's real span is degrees on some device's dial, and the pack
+    // is what knows it. The parameter stays the same shape whatever loads.
+    for (int i = 0; i < boostNumMeasured; ++i)
+        layout.add (std::make_unique<Float> (juce::ParameterID { boostMeasured (i), 1 },
+                                             "Boost " + juce::String (i + 1),
+                                             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { boostType,  1 }, "Boost Type", typeNames, 0),
                 std::make_unique<Int>    (juce::ParameterID { boostVoice, 1 }, "Boost Voice",
                                           0, maxVoicesPerType - 1, 0));

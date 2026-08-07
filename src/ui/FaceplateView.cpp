@@ -1,12 +1,14 @@
 #include "FaceplateView.h"
 
 #include "../Parameters.h"
+#include "../PluginProcessor.h"
 
 namespace orbitamp
 {
 
-FaceplateView::FaceplateView (juce::AudioProcessorValueTreeState& state)
-    : boost (state), preamp (state), reverb (state), power (state), cabinet (state)
+FaceplateView::FaceplateView (AmpProcessor& processor)
+    : boost (processor), preamp (processor.apvts), reverb (processor.apvts),
+      power (processor.apvts), cabinet (processor.apvts)
 {
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })
         addAndMakeVisible (*b);

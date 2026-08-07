@@ -81,6 +81,31 @@ public:
         }
     }
 
+    /** The pack's measured controls — the ones a player computes rather than selects. */
+    const std::vector<namz::rig::Measured>* measured() const
+    {
+        const auto* s = firstNam();
+        return s != nullptr ? &s->measured : nullptr;
+    }
+
+    /** The device spec string for the glyph row, e.g. "ic:2,diode:4". Empty when the pack is silent
+        about the circuit. */
+    juce::String circuit() const
+    {
+        const auto* s = firstNam();
+        return s != nullptr ? juce::String (s->circuit) : juce::String();
+    }
+
+    juce::String deviceName() const
+    {
+        const auto* s = firstNam();
+        if (s == nullptr)
+            return {};
+
+        const auto make = juce::String (s->make), model = juce::String (s->model);
+        return make.isNotEmpty() ? make + " " + model : model;
+    }
+
     /** Frees models the swap retired. Message thread, once the audio has moved past them. */
     void collectGarbage() { stage.collectGarbage(); }
 

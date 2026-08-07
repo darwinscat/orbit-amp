@@ -22,6 +22,17 @@ public:
         setVelocityBasedMode (false);
     }
 
+    /** How many detents to mark. The pack decides for a captured control — twenty-one for one pedal,
+        something else for the next — so it cannot be a constructor argument any more. */
+    void setNotches (int n)
+    {
+        if (n != notches)
+        {
+            notches = n;
+            repaint();
+        }
+    }
+
     /** How the number on the face is written. Defaults to one decimal — the 0-10 amp scale. */
     std::function<juce::String (double)> textForValue = [] (double v) { return juce::String (v, 1); };
 

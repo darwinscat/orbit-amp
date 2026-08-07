@@ -14,6 +14,13 @@ inline constexpr const char* reverbOn    = "reverb_on";
 
 inline constexpr const char* boostGain  = "boost_gain";
 inline constexpr const char* boostTone  = "boost_tone";
+
+/** A pedal's MEASURED controls — the ones a player computes rather than selects. How many a device
+    has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge), but a host needs a fixed set of
+    parameters, so three slots are reserved and the loaded pack decides what each one drives. A slot
+    with nothing behind it is hidden rather than shown doing nothing. */
+inline constexpr int boostNumMeasured = 3;
+inline juce::String boostMeasured (int i) { return "boost_meas" + juce::String (i + 1); }
 inline constexpr const char* boostType  = "boost_type";
 inline constexpr const char* boostVoice = "boost_voice";
 

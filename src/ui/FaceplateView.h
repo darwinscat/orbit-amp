@@ -10,6 +10,8 @@
 namespace orbitamp
 {
 
+class AmpProcessor;
+
 /** The faceplate: the device shell, its name plate, the in/out gutters and the block row.
 
     The row's proportions are the design's golden-ratio lane — boost and reverb take one unit each
@@ -18,7 +20,10 @@ namespace orbitamp
 class FaceplateView : public juce::Component
 {
 public:
-    explicit FaceplateView (juce::AudioProcessorValueTreeState&);
+    explicit FaceplateView (AmpProcessor&);
+
+    /** The loaded device changed — the boost rebuilds its face from the pack. */
+    void deviceChanged() { boost.deviceChanged(); }
 
     void paint (juce::Graphics&) override;
     void resized() override;

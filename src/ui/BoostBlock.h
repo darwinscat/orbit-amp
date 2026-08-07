@@ -1,60 +1,82 @@
 #pragma once
 
+#include "../Parameters.h"
 #include "BlockFrame.h"
 #include "EqCurve.h"
 #include "Knob.h"
+#include "StepSwitch.h"
 #include "VoicingSelector.h"
 
-#include <felitronics/eq/MatchedBiquad.h>
+#include <felitronics/appkit/DeviceGlyph.h>
+
+#include <array>
+#include <memory>
 
 namespace orbitamp
 {
 
-/** The boost — a captured pedal in front of the preamp.
+class AmpProcessor;
 
-    Upper half is the pedal's own controls: a stepped gain knob, because gain SELECTS a capture and
-    between the captured positions there is nothing, and a continuous tone knob, because tone is
-    measured rather than captured and interpolating a measured curve is honest.
+/** The boost — a captured pedal in front of the preamp, laid out from the pack rather than from a
+    guess.
 
-    Lower half is the block's illustration: the tone control's response, read-only. A pedal usually
-    has one or two knobs and what matters is knowing what they actually do to the signal — so the
-    block shows it instead of naming it. */
+    The pack says what this device HAS: how many positions its gain was captured at, which of its
+    knobs were measured instead, whether one of them is a two-position switch, and what the circuit
+    is. SM7 comes out as one big Gain over twenty-one detents, two EQ knobs and a Sharp/Smooth
+    switch — nothing in this file names any of that.
+
+    A control slot with nothing behind it is hidden. A knob doing nothing is worse than a gap. */
 class BoostBlock final : public BlockFrame
 {
 public:
-    explicit BoostBlock (juce::AudioProcessorValueTreeState&);
+    explicit BoostBlock (AmpProcessor&);
     ~BoostBlock() override;
+
+    /** Rebuilds the face from whatever pack is loaded. Called when the device changes. */
+    void deviceChanged();
 
 private:
     int  headerHeight() const override { return headerRow; }
     void layOutHeader (juce::Rectangle<int>) override;
     void layOutContent (juce::Rectangle<int>) override;
+    void paintContent (juce::Graphics&) override;
 
-    void applyPick (int typeIndex, int voiceIndex);
+    /** The measured curve at the knob's position, interpolated between the two captured positions it
+        sits between — the same numbers the sound would be built from. */
+    double measuredDb (int slot, double freqHz) const;
 
-    static constexpr int headerRow = 22;   // taller than the default: it carries the pedal picker
+    void refreshCurve();
 
-    /** The measured tone, as the device descriptor models it: a first-order low pass whose corner
-        follows the knob. Drawing only — the captured half of this pedal does not exist yet. */
-    double toneMagnitudeDb (double freqHz) const;
-    void   refreshTone();
+    static constexpr int headerRow  = 22;
+    static constexpr int curveHeight = 130;
+    static constexpr int gap        = 10;
+    static constexpr int knobGap    = 10;
+    static constexpr int glyphRow   = 18;
+    static constexpr int switchRow  = 16;
 
-    static constexpr int curveHeight = 150;   // matches the preamp's EQ, so the row reads level
-    static constexpr int curveGap    = 10;
-    static constexpr int knobGap     = 14;
-
-    juce::AudioProcessorValueTreeState& state;
+    AmpProcessor& amp;
 
     VoicingSelector pedal;
-    Knob gain { "Gain", theme::orange, 21 };   // 21 notches = the 0.5 steps of the parameter
-    Knob tone { "Tone", theme::orange, 0 };
+    Knob gain { "Gain", theme::orange, 0 };
 
-    EqCurve curve { [this] (double hz) { return toneMagnitudeDb (hz); } };
+    struct Slot
+    {
+        std::unique_ptr<Knob>       knob;     // a sweeping measured control
+        std::unique_ptr<StepSwitch> steps;    // ...or a switch, when the pack lists two positions
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> knobAtt;
+        std::unique_ptr<juce::ParameterAttachment> stepAtt;
+        int measuredIndex = -1;
+    };
 
-    felitronics::eq::BiquadCoeffs toneCoeffs;
-    static constexpr double displayRate = 48000.0;
+    std::array<Slot, (size_t) params::boostNumMeasured> slots;
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment, toneAttachment;
+    EqCurve curve { [this] (double hz) { return measuredDb (curveSlot, hz); } };
+    int curveSlot = 0;   // which measured control the picture is showing
+
+    juce::String caption;
+    felitronics::appkit::DeviceSpec circuit;
+
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
     std::unique_ptr<juce::ParameterAttachment> typeAttachment, voiceAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BoostBlock)
