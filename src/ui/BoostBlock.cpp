@@ -3,14 +3,14 @@
 #include "../PluginProcessor.h"
 #include "../device/VoicingLibrary.h"
 
-#include <cmath>
+#include <felitronics/lineareq/MagnitudeCurve.h>
 
 namespace orbitamp
 {
 
 BoostBlock::BoostBlock (AmpProcessor& processor)
     : BlockFrame ("Boost", BlockFrame::Kind::captured), amp (processor),
-      scope (processor.boostScope, [this] (double hz) { return measuredDb (curveSlot, hz); })
+      scope (processor.boostScope, [this] (double hz) { return toneDb (hz); })
 {
     addAndMakeVisible (pedal);
     addAndMakeVisible (gain);
@@ -121,56 +121,65 @@ void BoostBlock::deviceChanged()
         }
     }
 
-    // Show the first sweeping control's curve; a switch has one too, but a knob is the thing you are
-    // most likely to be moving.
-    curveSlot = 0;
-    for (int i = 0; i < params::boostNumMeasured; ++i)
-        if (slots[(size_t) i].knob != nullptr) { curveSlot = i; break; }
-
     resized();
     refreshCurve();
     repaint();
 }
 
-double BoostBlock::measuredDb (int slot, double freqHz) const
+void BoostBlock::rebuildCurves()
 {
     const auto* measured = amp.boost.measured();
-    if (measured == nullptr || ! juce::isPositiveAndBelow (slot, (int) measured->size()))
-        return 0.0;
 
-    const auto& m = (*measured)[(size_t) slot];
-    if (m.positions.size() < 2 || m.grid.points < 2)
-        return 0.0;
+    for (int i = 0; i < params::boostNumMeasured; ++i)
+    {
+        auto& c = curves[(size_t) i];
+        c = Curve {};
 
-    // Where the knob is, 0..1 across the sweep. Positions arrive ascending by norm — the pack sorts
-    // them, so this can index and lerp without searching or defending.
-    double t = 0.5;
-    if (const auto* p = amp.apvts.getRawParameterValue (params::boostMeasured (slot)))
-        t = juce::jlimit (0.0, 1.0, (double) p->load());
+        if (measured == nullptr || i >= (int) measured->size())
+            continue;
 
-    const auto& pos = m.positions;
-    size_t hi = 1;
-    while (hi + 1 < pos.size() && pos[hi].norm < t)
-        ++hi;
+        const auto& m = (*measured)[(size_t) i];
+        if (m.positions.size() < 2 || m.grid.points < 2)
+            continue;
 
-    const auto& a = pos[hi - 1];
-    const auto& b = pos[hi];
-    const double span = juce::jmax (1.0e-9, b.norm - a.norm);
-    const double mix  = juce::jlimit (0.0, 1.0, (t - a.norm) / span);
+        std::vector<std::vector<double>> pos;
+        std::vector<double> norms;
+        for (const auto& p : m.positions)
+        {
+            pos.push_back (p.db);
+            norms.push_back (p.norm);
+        }
 
-    // The grid is logarithmic between fLo and fHi; find the point this frequency lands on.
-    const double lo = m.grid.fLo, hiHz = m.grid.fHi;
-    const double u = std::log (juce::jlimit (lo, hiHz, freqHz) / lo) / std::log (hiHz / lo);
-    const int idx = juce::jlimit (0, m.grid.points - 1, (int) std::lround (u * (m.grid.points - 1)));
+        double t = 0.5;
+        if (const auto* v = amp.apvts.getRawParameterValue (params::boostMeasured (i)))
+            t = juce::jlimit (0.0, 1.0, (double) v->load());
 
-    if (idx >= (int) a.db.size() || idx >= (int) b.db.size())
-        return 0.0;
+        c.hz = felitronics::lineareq::logFreqGrid (m.grid.fLo, m.grid.fHi, m.grid.points);
 
-    return a.db[(size_t) idx] * (1.0 - mix) + b.db[(size_t) idx] * mix;
+        // The same band decision the sound makes — see core::MeasuredFilter. Drawing the raw curve
+        // where the audio holds it flat would make the picture a promise the sound does not keep.
+        const bool tested = m.trusted.levels >= 2;
+        c.db = felitronics::lineareq::heldOutsideBand (
+            felitronics::lineareq::curveAtPosition (pos, norms, t), c.hz,
+            tested ? m.trusted.loHz : 0.0, tested ? m.trusted.hiHz : 0.0);
+    }
+}
+
+double BoostBlock::toneDb (double freqHz) const
+{
+    // Every measured control at once. They sit in series in the pedal — SM7's two EQ knobs and its
+    // Sharp/Smooth switch all act on the same signal — so the picture is their sum, not whichever one
+    // happens to be first. Showing one was showing a third of the tone.
+    double sum = 0.0;
+    for (const auto& c : curves)
+        sum += felitronics::lineareq::curveDbAt (c.db, c.hz, freqHz);
+
+    return sum;
 }
 
 void BoostBlock::refreshCurve()
 {
+    rebuildCurves();
     scope.repaint();
 }
 

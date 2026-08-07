@@ -120,6 +120,29 @@ void AmpProcessor::loadBoostModelIfChanged()
     boost.selectGainIndex (index);
 }
 
+void AmpProcessor::updateBoostToneIfChanged()
+{
+    const auto* measured = boost.measured();
+
+    for (int i = 0; i < params::boostNumMeasured; ++i)
+    {
+        auto& filter = boostTone[(size_t) i];
+
+        if (measured == nullptr || i >= (int) measured->size())
+        {
+            filter.clear();
+            continue;
+        }
+
+        const float v = apvts.getRawParameterValue (params::boostMeasured (i))->load();
+        if (juce::approximatelyEqual (v, lastBoostTone[(size_t) i]))
+            continue;
+
+        lastBoostTone[(size_t) i] = v;
+        filter.setPosition ((*measured)[(size_t) i], (double) v);
+    }
+}
+
 void AmpProcessor::applyOversamplingIfChanged()
 {
     const int index = juce::jlimit (0, params::oversampleFactors.size() - 1,
@@ -144,6 +167,12 @@ void AmpProcessor::prepareToPlay (double sampleRate, int)
     boost.prepare (sampleRate, getBlockSize());
     demo.prepare (sampleRate);
     scopeDry.setSize (1, juce::jmax (1, getBlockSize()));
+
+    for (auto& f : boostTone)
+        f.prepare (sampleRate, getBlockSize(), channels);
+
+    lastBoostTone.fill (-1.0f);
+    updateBoostToneIfChanged();
     lastBoostGainIndex = -1;
     loadBoostModelIfChanged();
 
@@ -227,6 +256,12 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         scopeDry.copyFrom (0, 0, buffer, 0, 0, numSamples);
 
         boost.process (channels, numChannels, numSamples);
+
+        // The measured controls sit AFTER the capture — `placement: post` — because that is where
+        // they sit in the pedal.
+        for (auto& f : boostTone)
+            f.process (buffer);
+
         boostScope.write (scopeDry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
     }
 

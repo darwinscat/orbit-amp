@@ -56,7 +56,18 @@ FetchContent_MakeAvailable(juce)
 # of the dependency graph. Its self-tests do NOT build from here (guarded by PROJECT_IS_TOP_LEVEL).
 # ----------------------------------------------------------------------------
 set(ORBITAMP_FCORE_TAG "v0.9.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
-set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
+
+# TEMPORARY, until felitronics-core#64 merges: MagnitudeCurve.h — the measured controls are built
+# from it, so the build has to reach a checkout that has it. Delete this block once the release is
+# out and the tag above is bumped; the sibling checkout below is the permanent arrangement.
+set(ORBITAMP_FCORE_BRANCH_WT "$ENV{HOME}/IdeaProjects/wt/core-mag-curve")
+if(EXISTS "${ORBITAMP_FCORE_BRANCH_WT}/modules/lineareq/include/felitronics/lineareq/MagnitudeCurve.h")
+    set(ORBITAMP_FCORE_DEFAULT "${ORBITAMP_FCORE_BRANCH_WT}")
+else()
+    set(ORBITAMP_FCORE_DEFAULT "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core")
+endif()
+
+set(ORBITAMP_FCORE_DIR "${ORBITAMP_FCORE_DEFAULT}"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_FCORE_DIR AND EXISTS "${ORBITAMP_FCORE_DIR}/CMakeLists.txt")
     message(STATUS "felitronics-core: local checkout — ${ORBITAMP_FCORE_DIR}")
@@ -188,6 +199,7 @@ target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
+    felitronics::lineareq            # measured curves -> minimum-phase FIR (core::MeasuredFilter)
     felitronics::nam                 # NAM inference — the captured devices actually play
     felitronics::poweramp            # white-box tube power amp (core::PowerAmp)
     felitronics::oversampling        # its 4x alias-free path
@@ -281,6 +293,22 @@ target_link_libraries(orbitamp_poweramp_test PRIVATE
     felitronics::saturation
     felitronics::eq
     juce::juce_dsp
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+# ----------------------------------------------------------------------------
+# Gate for the measured controls MAKING SOUND — a pack's magnitude tables become a filter that runs.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_measured_test PRODUCT_NAME "OrbitAmpMeasuredTest")
+target_sources(orbitamp_measured_test PRIVATE tests/MeasuredFilterTests.cpp)
+target_include_directories(orbitamp_measured_test PRIVATE src)
+target_compile_definitions(orbitamp_measured_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_measured_test PRIVATE
+    felitronics::lineareq
+    felitronics::nam                 # brings namz::rig, which the pack types come from
+    juce::juce_dsp
+    juce::juce_events
+    juce::juce_gui_basics
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 

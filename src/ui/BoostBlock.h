@@ -12,6 +12,7 @@
 
 #include <array>
 #include <memory>
+#include <vector>
 
 namespace orbitamp
 {
@@ -42,9 +43,12 @@ private:
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
 
-    /** The measured curve at the knob's position, interpolated between the two captured positions it
-        sits between — the same numbers the sound would be built from. */
-    double measuredDb (int slot, double freqHz) const;
+    /** Every measured control summed — what the pedal's tone section is doing as a whole. */
+    double toneDb (double freqHz) const;
+
+    /** Resolves each control's curve at wherever its knob sits. Cheap enough to do on every knob
+        move, and far cheaper than doing it once per pixel. */
+    void rebuildCurves();
 
     void refreshCurve();
 
@@ -72,9 +76,11 @@ private:
 
     std::array<Slot, (size_t) params::boostNumMeasured> slots;
 
+    struct Curve { std::vector<double> db, hz; };
+    std::array<Curve, (size_t) params::boostNumMeasured> curves;
+
     BoostScope scope;   // constructed in the .cpp: the tap lives on the processor, incomplete here
     Selector   scopeMode { theme::orange, true };
-    int curveSlot = 0;   // which measured control the tone view is showing
 
     juce::String caption;
     felitronics::appkit::DeviceSpec circuit;

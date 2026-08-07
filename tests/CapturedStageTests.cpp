@@ -115,6 +115,32 @@ int main()
                 juce::String (positions.size()) + " checked");
     }
 
+    // The whole sweep, the way the plugin maps it: knob 0..10 -> nearest captured position. If the
+    // sound does not move across this, the knob is decoration.
+    {
+        std::printf ("\nknob -> position -> rms\n");
+        double lo = 1.0e9, hi = -1.0e9;
+
+        for (int step = 0; step <= 10; ++step)
+        {
+            const float knob = (float) step;
+            const int index = juce::jlimit (0, positions.size() - 1,
+                                            juce::roundToInt (knob * 0.1f * (float) (positions.size() - 1)));
+
+            CapturedStage one;
+            one.prepare (sampleRate, blockSize);
+            one.setPack (&pack);
+            one.selectGainIndex (index);
+
+            const double r = runRms (one, 0.05);
+            lo = juce::jmin (lo, r); hi = juce::jmax (hi, r);
+            std::printf ("%4.0f   %6s   %.5f\n", knob, positions[index].toRawUTF8(), r);
+        }
+
+        report ("the sweep actually changes the sound", hi > lo * 1.5,
+                "rms " + juce::String (lo, 5) + " .. " + juce::String (hi, 5));
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }

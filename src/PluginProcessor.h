@@ -1,7 +1,9 @@
 #pragma once
 
+#include "Parameters.h"
 #include "core/CapturedStage.h"
 #include "core/DemoPlayer.h"
+#include "core/MeasuredFilter.h"
 #include "core/ScopeTap.h"
 #include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
@@ -9,6 +11,8 @@
 
 #include <felitronics/appkit/CompareHistory.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+
+#include <array>
 
 namespace orbitamp
 {
@@ -83,6 +87,11 @@ private:
         thread, off the timer — the audio thread never touches a disk. */
     void loadBoostModelIfChanged();
 
+    /** Re-designs a measured filter when its knob moved. Message thread — it builds an FIR. */
+    void updateBoostToneIfChanged();
+
+    std::array<float, (size_t) params::boostNumMeasured> lastBoostTone { -1.0f, -1.0f, -1.0f };
+
     /** Reads the tone parameters into the stack's settings. Called per block from the audio thread;
         the stack only redesigns when something actually moved. */
     void updateToneSettings() noexcept;
@@ -103,6 +112,9 @@ public:
 
     /** What went into the boost and what came out — the boost block's pictures read this. */
     core::ScopeTap boostScope;
+
+    /** The pedal's measured controls, playing. One per slot the pack fills. */
+    std::array<core::MeasuredFilter, (size_t) params::boostNumMeasured> boostTone;
     juce::Array<device::DeviceLibrary::Pack> devicePacks;
 
     /** Re-scans the devices folder and points the boost at the first pack. Message thread. */
