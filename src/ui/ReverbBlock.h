@@ -1,7 +1,9 @@
 #pragma once
 
+#include "../core/ReverbStage.h"
 #include "BlockFrame.h"
 #include "Knob.h"
+#include "ReverbTailView.h"
 #include "Selector.h"
 
 namespace orbitamp
@@ -21,13 +23,26 @@ public:
 private:
     void layOutContent (juce::Rectangle<int>) override;
 
+    /** Runs an impulse through a display-only reverb and hands the tail's envelope to the view.
+        Measuring beats drawing a picture of a room: the shape shown is the shape you hear. */
+    void refreshTail();
+
     static constexpr int combosHeight = 26;
     static constexpr int knobGap      = 10;
+    static constexpr int tailHeight   = 150;   // matches the preamp's EQ, so the row reads level
+    static constexpr int tailGap      = 10;
+
+    static constexpr double displayRate = 48000.0;
+    static constexpr double tailSeconds = 1.5;
+    static constexpr int    tailBuckets = 240;
 
     juce::AudioProcessorValueTreeState& state;
 
-    Selector character { theme::violet, true };
-    Knob     mix       { "Mix", theme::violet, 0 };
+    Selector       character { theme::violet, true };
+    Knob           mix       { "Mix", theme::violet, 0 };
+    ReverbTailView tail;
+
+    core::ReverbStage display;   // drawing only; never sees the audio thread
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<juce::ParameterAttachment> characterAttachment;
