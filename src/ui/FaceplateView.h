@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BlockFrame.h"
+#include "BoostBlock.h"
 #include "PreampBlock.h"
 #include "ReverbBlock.h"
 
@@ -41,7 +42,7 @@ private:
     static constexpr int   colGap     = 14;
     static constexpr float phi        = 1.62f; // the preamp column's weight — the wider anchor
 
-    BlockFrame  boost { "Boost", BlockFrame::Kind::captured };
+    BoostBlock  boost;
     PreampBlock preamp;
     ReverbBlock reverb;
 

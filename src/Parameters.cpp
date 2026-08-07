@@ -18,6 +18,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Bool> (juce::ParameterID { eqOn,     1 }, "EQ",     true),
                 std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", true));
 
+    // Boost. The gain knob is stepped because it selects a capture, not a value — between the
+    // captured positions there is no data. Tone is measured, so it is continuous.
+    layout.add (std::make_unique<Float> (juce::ParameterID { boostGain, 1 }, "Boost Gain",
+                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.5f), 5.0f),
+                std::make_unique<Float> (juce::ParameterID { boostTone, 1 }, "Boost Tone",
+                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 10.0f));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { preampType, 1 }, "Type", typeNames, 0),
                 std::make_unique<Int>    (juce::ParameterID { preampVoice, 1 }, "Voice", 0, maxVoicesPerType - 1, 0));
 

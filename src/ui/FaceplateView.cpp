@@ -6,13 +6,12 @@ namespace orbitamp
 {
 
 FaceplateView::FaceplateView (juce::AudioProcessorValueTreeState& state)
-    : preamp (state), reverb (state)
+    : boost (state), preamp (state), reverb (state)
 {
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb })
         addAndMakeVisible (*b);
 
-    // Every block but boost binds its own power; boost is still a bare frame.
-    boost.attachPower (*state.getParameter (params::boostOn));
+    // Every block binds its own power now.
 }
 
 void FaceplateView::resized()

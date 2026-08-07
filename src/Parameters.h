@@ -12,6 +12,14 @@ inline constexpr const char* preampOn    = "preamp_on";
 inline constexpr const char* eqOn        = "eq_on";
 inline constexpr const char* reverbOn    = "reverb_on";
 
+inline constexpr const char* boostGain = "boost_gain";
+inline constexpr const char* boostTone = "boost_tone";
+
+/** The pedal tone control's sweep, as the descriptor models it: a first-order low pass whose corner
+    moves. The measured example fitted 800 Hz at the dark end; wide open it is out of the way. */
+inline constexpr float boostToneLoHz = 800.0f;
+inline constexpr float boostToneHiHz = 20000.0f;
+
 inline constexpr const char* preampType  = "preamp_type";
 inline constexpr const char* preampVoice = "preamp_voice";
 inline constexpr const char* preampGain  = "preamp_gain";
