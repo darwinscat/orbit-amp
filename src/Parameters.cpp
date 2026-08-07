@@ -61,6 +61,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Bool>  (juce::ParameterID { eqLpfOn, 1 }, "LPF", false),
                 std::make_unique<Float> (juce::ParameterID { eqLpfHz, 1 }, "LPF Freq", hz (2000.0f, 20000.0f, 10000.0f), 10000.0f));
 
+    // The power amp is off by default: it is most useful for leads and least for tight rhythm, so
+    // it should be something you reach for rather than something you find already on.
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { powerOn,   1 }, "Power Amp", false),
+                std::make_unique<Choice> (juce::ParameterID { powerType, 1 }, "Power Amp Type", powerTypes, 0));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters, 0),
                 std::make_unique<Float>  (juce::ParameterID { reverbMix, 1 }, "Mix",
                                           juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 20.0f));

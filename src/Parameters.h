@@ -36,6 +36,14 @@ inline constexpr const char* eqHpfHz  = "eq_hpf_hz";
 inline constexpr const char* eqLpfOn  = "eq_lpf_on";
 inline constexpr const char* eqLpfHz  = "eq_lpf_hz";
 
+inline constexpr const char* powerOn   = "power_on";
+inline constexpr const char* powerType = "power_type";
+
+/** What drives the power amp. The block's own switch is the "none" — a second way to turn it off
+    inside the list would be two controls for one state. Simulation is our white-box tube stage;
+    the NAM slots are captures. */
+inline const juce::StringArray powerTypes { "Simulation", "NAM 1", "NAM 2" };
+
 inline constexpr const char* reverbType = "reverb_type";
 inline constexpr const char* reverbMix  = "reverb_mix";
 

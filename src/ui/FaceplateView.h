@@ -2,6 +2,7 @@
 
 #include "BlockFrame.h"
 #include "BoostBlock.h"
+#include "PowerAmpBlock.h"
 #include "PreampBlock.h"
 #include "ReverbBlock.h"
 
@@ -25,10 +26,11 @@ public:
     static constexpr int designWidth  = 880;
 
     // Row 1 is sized by the preamp: voicing row, gain knob, and the tone stack under it. Row 2 —
-    // power amp and cabinet — is not built yet, so the lane is one row for now rather than a band
-    // of empty space.
-    static constexpr int row1H = 318;
-    static constexpr int designHeight = row1H + 32;   // + lanePadY top and bottom
+    // power amp and cabinet — is half of it.
+    static constexpr int row1H  = 318;
+    static constexpr int row2H  = row1H / 2;
+    static constexpr int rowGap = 12;
+    static constexpr int designHeight = row1H + rowGap + row2H + 32;   // + lanePadY top and bottom
 
 private:
     void paintGutter (juce::Graphics&, juce::Rectangle<int>, const juce::String& label) const;
@@ -42,11 +44,12 @@ private:
     static constexpr int   colGap     = 14;
     static constexpr float phi        = 1.62f; // the preamp column's weight — the wider anchor
 
-    BoostBlock  boost;
-    PreampBlock preamp;
-    ReverbBlock reverb;
+    BoostBlock    boost;
+    PreampBlock   preamp;
+    ReverbBlock   reverb;
+    PowerAmpBlock power;
 
-    juce::Rectangle<int> inGutter, outGutter;
+    juce::Rectangle<int> inGutter, outGutter, cabinetArea;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FaceplateView)
 };

@@ -6,9 +6,9 @@ namespace orbitamp
 {
 
 FaceplateView::FaceplateView (juce::AudioProcessorValueTreeState& state)
-    : boost (state), preamp (state), reverb (state)
+    : boost (state), preamp (state), reverb (state), power (state)
 {
-    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb })
+    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &power })
         addAndMakeVisible (*b);
 
     // Every block binds its own power now.
@@ -23,18 +23,25 @@ void FaceplateView::resized()
     outGutter = lane.removeFromRight (gutter);
     lane.removeFromRight (colGap);
 
-    // Row 2 — power amp under boost, cabinet under preamp + reverb — is not built yet, so the lane
-    // is one row. The column split will be reused for it: same boundaries, half the height.
     auto row1 = lane.removeFromTop (row1H);
+    lane.removeFromTop (rowGap);
+    auto row2 = lane.removeFromTop (row2H);
 
     // Three columns weighted 1 : phi : 1 — the preamp is the anchor.
     const float unit = (float) (row1.getWidth() - 2 * colGap) / (2.0f + phi);
+    const int   col1 = juce::roundToInt (unit);
 
-    boost.setBounds (row1.removeFromLeft (juce::roundToInt (unit)));
+    boost.setBounds (row1.removeFromLeft (col1));
     row1.removeFromLeft (colGap);
     preamp.setBounds (row1.removeFromLeft (juce::roundToInt (unit * phi)));
     row1.removeFromLeft (colGap);
     reverb.setBounds (row1);
+
+    // Row 2 reuses row 1's boundary: the power amp sits under the boost, and the cabinet will take
+    // the rest — under the preamp and the reverb together.
+    power.setBounds (row2.removeFromLeft (col1));
+    row2.removeFromLeft (colGap);
+    cabinetArea = row2;
 }
 
 void FaceplateView::paint (juce::Graphics& g)
