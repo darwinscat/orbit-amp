@@ -38,6 +38,10 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s)
     lpfOnAtt = attach (params::eqLpfOn, [this] (float v) { lpf.setState (v > 0.5f, lpf.getHz()); refreshCurve(); });
     lpfHzAtt = attach (params::eqLpfHz, [this] (float v) { lpf.setState (lpf.isOn(), (double) v); refreshCurve(); });
     powerAtt = attach (params::eqOn,    [this] (float v) { on = v > 0.5f; repaint(); });
+    midHzAtt = attach (params::eqMidHz, [this] (float v) { midHz = (double) v; refreshCurve(); });
+
+    curve.onHandleDrag = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
+    curve.onDragActive = [this] (int i, bool a)               { handleDragActive (i, a); };
 
     hpf.onToggled     = [this] (bool b)   { hpfOnAtt->setValueAsCompleteGesture (b ? 1.0f : 0.0f); };
     lpf.onToggled     = [this] (bool b)   { lpfOnAtt->setValueAsCompleteGesture (b ? 1.0f : 0.0f); };
@@ -48,7 +52,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s)
     hpf.onDragActive = [this] (bool a) { a ? hpfHzAtt->beginGesture() : hpfHzAtt->endGesture(); };
     lpf.onDragActive = [this] (bool a) { a ? lpfHzAtt->beginGesture() : lpfHzAtt->endGesture(); };
 
-    for (auto* a : { &hpfOnAtt, &hpfHzAtt, &lpfOnAtt, &lpfHzAtt, &powerAtt })
+    for (auto* a : { &hpfOnAtt, &hpfHzAtt, &lpfOnAtt, &lpfHzAtt, &powerAtt, &midHzAtt })
         (*a)->sendInitialUpdate();
 
     refreshCurve();
@@ -61,6 +65,7 @@ void EqSection::refreshCurve()
     core::ToneStack::Settings s;
     s.lowDb      = low.getValue();
     s.midDb      = mid.getValue();
+    s.midHz      = midHz;
     s.highDb     = high.getValue();
     s.presenceDb = presence.getValue();
     s.hpfOn      = hpf.isOn();
@@ -69,7 +74,69 @@ void EqSection::refreshCurve()
     s.lpfHz      = lpf.getHz();
 
     display.setSettings (s);
+    refreshHandles();
     curve.repaint();
+    repaint();          // the mini knobs on the grip follow the values too
+}
+
+void EqSection::refreshHandles()
+{
+    using H = EqCurve::Handle;
+
+    juce::Array<H> h;
+    h.resize (numHandles);
+
+    h.getReference (hLow)      = { core::ToneStack::lowHz,      low.getValue(),      H::Freedom::gain, true };
+    h.getReference (hMid)      = { midHz,                       mid.getValue(),      H::Freedom::both, true };
+    h.getReference (hHigh)     = { core::ToneStack::highHz,     high.getValue(),     H::Freedom::gain, true };
+    h.getReference (hPresence) = { core::ToneStack::presenceHz, presence.getValue(), H::Freedom::gain, true };
+
+    // The cuts only exist while they are switched on — a handle for a filter that is not in the
+    // chain would be a control over nothing.
+    h.getReference (hHpf) = { hpf.getHz(), 0.0, H::Freedom::freq, hpf.isOn() };
+    h.getReference (hLpf) = { lpf.getHz(), 0.0, H::Freedom::freq, lpf.isOn() };
+
+    curve.setHandles (std::move (h));
+}
+
+void EqSection::handleDragged (int index, double hz, double db)
+{
+    const auto clampDb = [] (double v) { return juce::jlimit (-15.0, 15.0, v); };
+
+    switch (index)
+    {
+        case hLow:      low     .setValue (clampDb (db), juce::sendNotificationSync); break;
+        case hHigh:     high    .setValue (clampDb (db), juce::sendNotificationSync); break;
+        case hPresence: presence.setValue (clampDb (db), juce::sendNotificationSync); break;
+
+        case hMid:
+            mid.setValue (clampDb (db), juce::sendNotificationSync);
+            midHzAtt->setValueAsPartOfGesture ((float) juce::jlimit (200.0, 2000.0, hz));
+            midHz = juce::jlimit (200.0, 2000.0, hz);
+            break;
+
+        case hHpf: hpfHzAtt->setValueAsPartOfGesture ((float) juce::jlimit (20.0, 500.0, hz)); break;
+        case hLpf: lpfHzAtt->setValueAsPartOfGesture ((float) juce::jlimit (2000.0, 20000.0, hz)); break;
+
+        default: return;
+    }
+
+    refreshCurve();
+}
+
+void EqSection::handleDragActive (int index, bool active)
+{
+    // One drag is ONE undoable move in the host. The gain knobs are juce::Sliders, which bracket
+    // their own gestures; only the frequencies need it done by hand.
+    auto* att = index == hMid ? midHzAtt.get()
+              : index == hHpf ? hpfHzAtt.get()
+              : index == hLpf ? lpfHzAtt.get()
+              : nullptr;
+
+    if (att == nullptr)
+        return;
+
+    active ? att->beginGesture() : att->endGesture();
 }
 
 void EqSection::setExpanded (bool shouldExpand)
@@ -128,18 +195,24 @@ void EqSection::resized()
 void EqSection::paint (juce::Graphics& g)
 {
     auto grip = gripArea().toFloat();
+    const float y = grip.getCentreY();
 
-    // The grip says "there is more here" by looking like something you can pull: a short bar of
-    // dashes, brighter under the pointer, and it flips its meaning when the section is open.
-    const float w = 26.0f, y = grip.getCentreY();
-    const float x0 = grip.getCentreX() - w * 0.5f;
+    // Shut, the grip wears miniature copies of the knobs it hides — it says WHAT is behind it, not
+    // merely that something is. Open, they would be duplicates of the real ones, so it goes back to
+    // a plain pull-bar.
+    if (! expanded)
+    {
+        paintMiniKnobs (g, grip);
+    }
+    else
+    {
+        const float w = 26.0f, x0 = grip.getCentreX() - w * 0.5f;
+        g.setColour ((gripHover ? theme::lilac : theme::txFaint).withAlpha (on ? 1.0f : 0.5f));
+        for (int i = 0; i < 3; ++i)
+            g.fillRect (x0 + (float) i * (w / 3.0f), y - 0.5f, w / 3.0f - 4.0f, 1.0f);
+    }
 
     g.setColour ((gripHover ? theme::lilac : theme::txFaint).withAlpha (on ? 1.0f : 0.5f));
-    for (int i = 0; i < 3; ++i)
-    {
-        const float x = x0 + (float) i * (w / 3.0f);
-        g.fillRect (x, y - 0.5f, w / 3.0f - 4.0f, 1.0f);
-    }
 
     // A caret on the right end of the grip, pointing the way the curve will move.
     juce::Path caret;
@@ -148,6 +221,37 @@ void EqSection::paint (juce::Graphics& g)
     caret.lineTo          (cx,        expanded ? y - ch : y + ch);
     caret.lineTo          (cx + 4.0f, expanded ? y + ch : y - ch);
     g.strokePath (caret, juce::PathStrokeType (1.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+void EqSection::paintMiniKnobs (juce::Graphics& g, juce::Rectangle<float> grip) const
+{
+    // Non-const because juce::Slider::valueToProportionOfLength is not const; nothing here mutates.
+    Knob* const knobs[] = { const_cast<Knob*> (&low),  const_cast<Knob*> (&mid),
+                            const_cast<Knob*> (&high), const_cast<Knob*> (&presence) };
+    constexpr int n = 4;
+
+    const float rad  = juce::jmin (4.0f, grip.getHeight() * 0.42f);
+    const float step = rad * 3.4f;
+    const float y    = grip.getCentreY();
+    float x = grip.getCentreX() - step * (n - 1) * 0.5f;
+
+    const float alpha = on ? (gripHover ? 1.0f : 0.75f) : 0.4f;
+
+    for (auto* k : knobs)
+    {
+        // 3/4 sweep, same geometry as the real knob — a dot whose pointer already sits where the
+        // full-size one does.
+        const double t = juce::jlimit (0.0, 1.0, k->valueToProportionOfLength (k->getValue()));
+        const float  a = juce::MathConstants<float>::pi * (1.25f + 1.5f * (float) t);
+
+        g.setColour (theme::hair2.withMultipliedAlpha (alpha));
+        g.drawEllipse (x - rad, y - rad, rad * 2.0f, rad * 2.0f, 1.0f);
+
+        g.setColour ((gripHover ? theme::lilac : theme::violet).withMultipliedAlpha (alpha));
+        g.drawLine (x, y, x + std::sin (a) * rad * 0.9f, y - std::cos (a) * rad * 0.9f, 1.2f);
+
+        x += step;
+    }
 }
 
 void EqSection::mouseDown (const juce::MouseEvent& e)

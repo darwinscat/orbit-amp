@@ -33,13 +33,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Float> (juce::ParameterID { eqHigh,     1 }, "High",     tone, 0.0f),
                 std::make_unique<Float> (juce::ParameterID { eqPresence, 1 }, "Presence", tone, 0.0f));
 
-    // The cuts are off by default: they are for tightening a specific rig, not part of the voicing.
-    // Skewed ranges so the useful end of each sweep gets the middle of the travel.
+    // Frequencies are skewed so the useful end of each sweep gets the middle of the travel.
     auto hz = [] (float lo, float hi, float centre)
     {
         return juce::NormalisableRange<float> (lo, hi, 0.1f, std::log (0.5f) / std::log ((centre - lo) / (hi - lo)));
     };
 
+    // The bell is the one band whose centre moves — the shelves stay where the stack puts them.
+    // 200 Hz - 2 kHz is the span the measured devices sat in (734, 775, 912).
+    layout.add (std::make_unique<Float> (juce::ParameterID { eqMidHz, 1 }, "Mid Freq",
+                                         hz (200.0f, 2000.0f, 600.0f), 600.0f));
+
+    // The cuts are off by default: they are for tightening a specific rig, not part of the voicing.
     layout.add (std::make_unique<Bool>  (juce::ParameterID { eqHpfOn, 1 }, "HPF", false),
                 std::make_unique<Float> (juce::ParameterID { eqHpfHz, 1 }, "HPF Freq", hz (20.0f, 500.0f, 80.0f), 80.0f),
                 std::make_unique<Bool>  (juce::ParameterID { eqLpfOn, 1 }, "LPF", false),

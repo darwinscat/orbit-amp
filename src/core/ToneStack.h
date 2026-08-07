@@ -25,7 +25,6 @@ public:
     // the filters do. A later step can fit these per-device from a measured tone-stack sweep without
     // anything else in the chain noticing.
     static constexpr double lowHz  = 100.0;    // low shelf
-    static constexpr double midHz  = 600.0;    // bell
     static constexpr double midQ   = 0.8;
     static constexpr double highHz = 2800.0;   // high shelf
     // Presence is a SECOND high shelf, deliberately far above the first. Put the two at the same
@@ -41,6 +40,7 @@ public:
     {
         double lowDb      = 0.0;
         double midDb      = 0.0;
+        double midHz      = 600.0;   // the bell is the one band whose centre moves
         double highDb     = 0.0;
         double presenceDb = 0.0;
         bool   hpfOn  = false;
@@ -126,7 +126,7 @@ private:
         // stack bit-transparent rather than "flat within rounding".
         set (0, s.hpfOn,             m::highpass    (clampHz (s.hpfHz), fs, cutQ));
         set (1, s.lowDb      != 0.0, m::lowShelfDb  (lowHz,  fs, s.lowDb));
-        set (2, s.midDb      != 0.0, m::peakingDb   (midHz,  fs, midQ, s.midDb));
+        set (2, s.midDb      != 0.0, m::peakingDb   (clampHz (s.midHz), fs, midQ, s.midDb));
         set (3, s.highDb     != 0.0, m::highShelfDb (highHz, fs, s.highDb));
         set (4, s.presenceDb != 0.0, m::highShelfDb (presenceHz, fs, s.presenceDb));
         set (5, s.lpfOn,             m::lowpass     (clampHz (s.lpfHz), fs, cutQ));

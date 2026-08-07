@@ -20,6 +20,7 @@ inline constexpr const char* eqLow      = "eq_low";
 inline constexpr const char* eqMid      = "eq_mid";
 inline constexpr const char* eqHigh     = "eq_high";
 inline constexpr const char* eqPresence = "eq_presence";
+inline constexpr const char* eqMidHz    = "eq_mid_hz";
 inline constexpr const char* eqHpfOn  = "eq_hpf_on";
 inline constexpr const char* eqHpfHz  = "eq_hpf_hz";
 inline constexpr const char* eqLpfOn  = "eq_lpf_on";

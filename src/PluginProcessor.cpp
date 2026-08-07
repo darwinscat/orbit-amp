@@ -27,6 +27,7 @@ AmpProcessor::AmpProcessor()
     eqMidParam   = apvts.getRawParameterValue (params::eqMid);
     eqHighParam  = apvts.getRawParameterValue (params::eqHigh);
     eqPresParam  = apvts.getRawParameterValue (params::eqPresence);
+    eqMidHzParam = apvts.getRawParameterValue (params::eqMidHz);
     eqHpfOnParam = apvts.getRawParameterValue (params::eqHpfOn);
     eqHpfHzParam = apvts.getRawParameterValue (params::eqHpfHz);
     eqLpfOnParam = apvts.getRawParameterValue (params::eqLpfOn);
@@ -88,6 +89,7 @@ void AmpProcessor::updateToneSettings() noexcept
     core::ToneStack::Settings s;
     s.lowDb  = (double) eqLowParam->load();
     s.midDb  = (double) eqMidParam->load();
+    s.midHz  = (double) eqMidHzParam->load();
     s.highDb     = (double) eqHighParam->load();
     s.presenceDb = (double) eqPresParam->load();
     s.hpfOn  = eqHpfOnParam->load() > 0.5f;

@@ -39,6 +39,19 @@ private:
     void refreshCurve();
     void setExpanded (bool);
 
+    /** Rebuilds the draggable points from the current values. */
+    void refreshHandles();
+
+    /** A point on the curve moved. Which parameter that is depends on the index. */
+    void handleDragged (int index, double hz, double db);
+    void handleDragActive (int index, bool active);
+
+    /** Miniature versions of the four knobs, drawn on the grip while the real ones are hidden — the
+        strip then says what is behind it instead of just that something is. */
+    void paintMiniKnobs (juce::Graphics&, juce::Rectangle<float> grip) const;
+
+    enum Handle { hLow, hMid, hHigh, hPresence, hHpf, hLpf, numHandles };
+
     juce::Rectangle<int> gripArea() const;
 
     static constexpr int gripHeight   = 12;
@@ -66,7 +79,9 @@ private:
     FilterPill lpf { "LPF", { 2000.0, 20000.0 } };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lowAtt, midAtt, highAtt, presAtt;
-    std::unique_ptr<juce::ParameterAttachment> hpfOnAtt, hpfHzAtt, lpfOnAtt, lpfHzAtt, powerAtt;
+    std::unique_ptr<juce::ParameterAttachment> hpfOnAtt, hpfHzAtt, lpfOnAtt, lpfHzAtt, powerAtt, midHzAtt;
+
+    double midHz = 600.0;
 
     bool expanded  = false;
     bool gripHover = false;
