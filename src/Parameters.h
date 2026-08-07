@@ -36,6 +36,25 @@ inline constexpr const char* eqHpfHz  = "eq_hpf_hz";
 inline constexpr const char* eqLpfOn  = "eq_lpf_on";
 inline constexpr const char* eqLpfHz  = "eq_lpf_hz";
 
+inline constexpr const char* cabOn = "cab_on";
+
+/** Two mic slots, each with its own switch, its own pick from the SAME full list, and its own place
+    on the grille. Two mics on one cabinet is how the sound is actually made — one close and bright,
+    one back and thick — so the second is not an extra, it is the other half. */
+inline constexpr int cabNumMics = 2;
+
+inline juce::String cabMicOn   (int i) { return "cab_mic" + juce::String (i + 1) + "_on"; }
+inline juce::String cabMicType (int i) { return "cab_mic" + juce::String (i + 1) + "_type"; }
+inline juce::String cabMicPos  (int i) { return "cab_mic" + juce::String (i + 1) + "_pos"; }
+inline juce::String cabMicDist (int i) { return "cab_mic" + juce::String (i + 1) + "_dist"; }
+
+/** The mics, by the two everyone actually reaches for first. More arrive with the captures. */
+inline const juce::StringArray cabMics { "SM57", "MD421" };
+
+/** The speaker's radial zones, from the rim inwards — the rows of the placement grid. They are the
+    driver's own geometry, which is why the grid draws the speaker beside them. */
+inline const juce::StringArray cabPositions { "Cone Edge", "Center Cone", "Cap Edge", "Center Cap" };
+
 inline constexpr const char* powerOn   = "power_on";
 inline constexpr const char* powerType = "power_type";
 

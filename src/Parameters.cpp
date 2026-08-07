@@ -61,6 +61,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Bool>  (juce::ParameterID { eqLpfOn, 1 }, "LPF", false),
                 std::make_unique<Float> (juce::ParameterID { eqLpfHz, 1 }, "LPF Freq", hz (2000.0f, 20000.0f, 10000.0f), 10000.0f));
 
+    // The cabinet. Position and distance are the two halves of one gesture on the grid; distance is
+    // in centimetres, matching the grid's own ladder.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { cabOn, 1 }, "Cabinet", true));
+
+    for (int i = 0; i < cabNumMics; ++i)
+    {
+        const auto n = juce::String (i + 1);
+
+        // Mic 1 on, mic 2 off: one mic is the normal case and the second is the move you make on
+        // purpose. They start apart — close on the cap edge, further out on the cone — so switching
+        // the second on gives a blend rather than two mics in the same hole.
+        layout.add (std::make_unique<Bool>   (juce::ParameterID { cabMicOn (i),   1 }, "Mic " + n,          i == 0),
+                    std::make_unique<Choice> (juce::ParameterID { cabMicType (i), 1 }, "Mic " + n + " Type", cabMics, i),
+                    std::make_unique<Choice> (juce::ParameterID { cabMicPos (i),  1 }, "Mic " + n + " Position",
+                                              cabPositions, i == 0 ? 2 : 1),
+                    std::make_unique<Float>  (juce::ParameterID { cabMicDist (i), 1 }, "Mic " + n + " Distance",
+                                              juce::NormalisableRange<float> (0.0f, 15.0f, 0.1f), i == 0 ? 2.0f : 5.0f));
+    }
+
     // The power amp is off by default: it is most useful for leads and least for tight rhythm, so
     // it should be something you reach for rather than something you find already on.
     layout.add (std::make_unique<Bool>   (juce::ParameterID { powerOn,   1 }, "Power Amp", false),

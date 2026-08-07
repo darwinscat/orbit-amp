@@ -6,9 +6,9 @@ namespace orbitamp
 {
 
 FaceplateView::FaceplateView (juce::AudioProcessorValueTreeState& state)
-    : boost (state), preamp (state), reverb (state), power (state)
+    : boost (state), preamp (state), reverb (state), power (state), cabinet (state)
 {
-    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &power })
+    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })
         addAndMakeVisible (*b);
 
     // Every block binds its own power now.
@@ -41,7 +41,7 @@ void FaceplateView::resized()
     // the rest — under the preamp and the reverb together.
     power.setBounds (row2.removeFromLeft (col1));
     row2.removeFromLeft (colGap);
-    cabinetArea = row2;
+    cabinet.setBounds (row2);
 }
 
 void FaceplateView::paint (juce::Graphics& g)

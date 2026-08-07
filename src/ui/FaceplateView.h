@@ -2,6 +2,7 @@
 
 #include "BlockFrame.h"
 #include "BoostBlock.h"
+#include "CabinetBlock.h"
 #include "PowerAmpBlock.h"
 #include "PreampBlock.h"
 #include "ReverbBlock.h"
@@ -48,8 +49,9 @@ private:
     PreampBlock   preamp;
     ReverbBlock   reverb;
     PowerAmpBlock power;
+    CabinetBlock  cabinet;
 
-    juce::Rectangle<int> inGutter, outGutter, cabinetArea;
+    juce::Rectangle<int> inGutter, outGutter;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FaceplateView)
 };
