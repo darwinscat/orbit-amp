@@ -131,7 +131,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/Theme.cpp
     src/ui/FaceplateView.cpp
     src/ui/PreampBlock.cpp
-    src/ui/EqBlock.cpp
+    src/ui/EqSection.cpp
     src/ui/ReverbBlock.cpp
     src/ui/Chrome.cpp
 )

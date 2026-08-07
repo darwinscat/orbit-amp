@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BlockFrame.h"
+#include "EqSection.h"
 #include "Knob.h"
 #include "VoicingSelector.h"
 
@@ -33,8 +34,11 @@ private:
 
     juce::AudioProcessorValueTreeState& state;
 
+    static constexpr int eqGap = 10;
+
     VoicingSelector voicing;
     Knob            gain { "Gain", theme::orange };
+    EqSection       eq;   // the block's lower half: the tone stack, as its illustration
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
     std::unique_ptr<juce::ParameterAttachment> typeAttachment, voiceAttachment;

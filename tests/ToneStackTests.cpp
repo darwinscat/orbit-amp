@@ -53,6 +53,23 @@ int main()
     check ("high +12: 15 kHz (plateau)",  tone.magnitudeDb (15000.0), 12.0, 0.6);
     check ("high +12: 50 Hz (untouched)", tone.magnitudeDb (50.0),     0.0, 0.2);
 
+    s = {}; s.presenceDb = 12.0; tone.setSettings (s);
+    check ("presence +12: 15 kHz (plateau)",  tone.magnitudeDb (15000.0), 12.0, 0.6);
+    check ("presence +12: 200 Hz (clear)",    tone.magnitudeDb (200.0),    0.0, 0.3);
+
+    // Presence must NOT be the high shelf in a second copy — that is the trap the measured hardware
+    // fell into (1655 Hz and 1132 Hz, half an octave apart, i.e. one control twice). At the main
+    // shelf's own corner presence has to have delivered almost nothing yet.
+    {
+        const double atMainCorner = tone.magnitudeDb (2800.0);
+        const bool   ok = atMainCorner < 12.0 * 0.25;
+        if (! ok)
+            ++failures;
+
+        std::printf ("%-46s %8.3f  (want < %.1f of a 12 dB boost)  %s\n",
+                     "presence +12: barely started at 2.8 kHz", atMainCorner, 12.0 * 0.25, ok ? "ok" : "FAIL");
+    }
+
     // The cuts are 12 dB/oct: one octave below the corner must be ~12 dB down.
     s = {}; s.hpfOn = true; s.hpfHz = 100.0; tone.setSettings (s);
     check ("hpf 100: 100 Hz (-3 dB corner)", tone.magnitudeDb (100.0),   -3.0, 0.6);

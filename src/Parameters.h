@@ -16,9 +16,10 @@ inline constexpr const char* preampType  = "preamp_type";
 inline constexpr const char* preampVoice = "preamp_voice";
 inline constexpr const char* preampGain  = "preamp_gain";
 
-inline constexpr const char* eqLow    = "eq_low";
-inline constexpr const char* eqMid    = "eq_mid";
-inline constexpr const char* eqHigh   = "eq_high";
+inline constexpr const char* eqLow      = "eq_low";
+inline constexpr const char* eqMid      = "eq_mid";
+inline constexpr const char* eqHigh     = "eq_high";
+inline constexpr const char* eqPresence = "eq_presence";
 inline constexpr const char* eqHpfOn  = "eq_hpf_on";
 inline constexpr const char* eqHpfHz  = "eq_hpf_hz";
 inline constexpr const char* eqLpfOn  = "eq_lpf_on";
@@ -31,9 +32,10 @@ inline constexpr const char* reverbMix  = "reverb_mix";
     character rather than being loose knobs — the design calls for Mix only. */
 inline const juce::StringArray reverbCharacters { "Room", "Hall", "Plate", "Spring" };
 
-/** Tone range. +-12 dB is an amp tone control, not a mastering EQ — a wider range would invite
-    corrective moves the block is not for. */
-inline constexpr float toneRangeDb = 12.0f;
+/** Tone range. The measured hardware spanned about -10..+8 per control and up to 20 dB of travel on
+    presence; the survey's conclusion on the narrower first pass was that the ranges were too small.
+    +-15 covers every device measured with room either side. */
+inline constexpr float toneRangeDb = 15.0f;
 
 /** The voicing types, in the order the design lists them — clean through modern is a ramp of
     increasing gain, so the order is meaningful, not alphabetical. */

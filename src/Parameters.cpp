@@ -28,9 +28,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     // Tone. Corner frequencies are the stack's, not the user's — an amp tone control is three knobs.
     const juce::NormalisableRange<float> tone { -toneRangeDb, toneRangeDb, 0.1f };
-    layout.add (std::make_unique<Float> (juce::ParameterID { eqLow,  1 }, "Low",  tone, 0.0f),
-                std::make_unique<Float> (juce::ParameterID { eqMid,  1 }, "Mid",  tone, 0.0f),
-                std::make_unique<Float> (juce::ParameterID { eqHigh, 1 }, "High", tone, 0.0f));
+    layout.add (std::make_unique<Float> (juce::ParameterID { eqLow,      1 }, "Low",      tone, 0.0f),
+                std::make_unique<Float> (juce::ParameterID { eqMid,      1 }, "Mid",      tone, 0.0f),
+                std::make_unique<Float> (juce::ParameterID { eqHigh,     1 }, "High",     tone, 0.0f),
+                std::make_unique<Float> (juce::ParameterID { eqPresence, 1 }, "Presence", tone, 0.0f));
 
     // The cuts are off by default: they are for tightening a specific rig, not part of the voicing.
     // Skewed ranges so the useful end of each sweep gets the middle of the travel.

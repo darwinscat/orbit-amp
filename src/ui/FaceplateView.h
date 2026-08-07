@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BlockFrame.h"
-#include "EqBlock.h"
 #include "PreampBlock.h"
 #include "ReverbBlock.h"
 
@@ -23,7 +22,12 @@ public:
 
     // The faceplate's design size, at 100%. The editor scales from these and never re-lays out.
     static constexpr int designWidth  = 880;
-    static constexpr int designHeight = 480;
+
+    // Row 1 is sized by the preamp: voicing row, gain knob, and the tone stack under it. Row 2 —
+    // power amp and cabinet — is not built yet, so the lane is one row for now rather than a band
+    // of empty space.
+    static constexpr int row1H = 318;
+    static constexpr int designHeight = row1H + 32;   // + lanePadY top and bottom
 
 private:
     void paintGutter (juce::Graphics&, juce::Rectangle<int>, const juce::String& label) const;
@@ -35,15 +39,11 @@ private:
     static constexpr int   lanePadY   = 16;
     static constexpr int   gutter     = 58;    // the in / out indicator columns
     static constexpr int   colGap     = 14;
-    static constexpr int   rowGap     = 12;
-    static constexpr int   row1H      = 196;
-    static constexpr int   row2H      = 240;
     static constexpr float phi        = 1.62f; // the preamp column's weight — the wider anchor
 
     BlockFrame  boost { "Boost", BlockFrame::Kind::captured };
     PreampBlock preamp;
     ReverbBlock reverb;
-    EqBlock     eq;
 
     juce::Rectangle<int> inGutter, outGutter;
 

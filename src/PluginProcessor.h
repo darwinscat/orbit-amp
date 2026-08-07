@@ -85,6 +85,7 @@ private:
     std::atomic<float>* eqLowParam   = nullptr;
     std::atomic<float>* eqMidParam   = nullptr;
     std::atomic<float>* eqHighParam  = nullptr;
+    std::atomic<float>* eqPresParam  = nullptr;
     std::atomic<float>* eqHpfOnParam = nullptr;
     std::atomic<float>* eqHpfHzParam = nullptr;
     std::atomic<float>* eqLpfOnParam = nullptr;

@@ -28,15 +28,21 @@ public:
     static constexpr double midHz  = 600.0;    // bell
     static constexpr double midQ   = 0.8;
     static constexpr double highHz = 2800.0;   // high shelf
+    // Presence is a SECOND high shelf, deliberately far above the first. Put the two at the same
+    // corner and you have one control in two copies — which is what the measured hardware turned out
+    // to have (1655 Hz and 1132 Hz, half an octave apart). The main shelf colours the whole top from
+    // 2.8k; presence works the 5k band where a guitar cuts through a mix.
+    static constexpr double presenceHz = 5000.0;
     static constexpr double cutQ   = 0.7071067811865476;   // Butterworth, 12 dB/oct
 
     static constexpr int maxChannels = 2;
 
     struct Settings
     {
-        double lowDb  = 0.0;
-        double midDb  = 0.0;
-        double highDb = 0.0;
+        double lowDb      = 0.0;
+        double midDb      = 0.0;
+        double highDb     = 0.0;
+        double presenceDb = 0.0;
         bool   hpfOn  = false;
         double hpfHz  = 80.0;
         bool   lpfOn  = false;
@@ -106,8 +112,8 @@ public:
     const Settings& getSettings() const noexcept { return current; }
 
 private:
-    // HPF, low shelf, mid bell, high shelf, LPF — in chain order.
-    static constexpr int numBands = 5;
+    // HPF, low shelf, mid bell, high shelf, presence, LPF — in chain order.
+    static constexpr int numBands = 6;
 
     void design (const Settings& s, bool force) noexcept
     {
@@ -118,11 +124,12 @@ private:
 
         // A tone band at exactly 0 dB is a bypass — skipping it costs nothing and keeps a flat
         // stack bit-transparent rather than "flat within rounding".
-        set (0, s.hpfOn,          m::highpass    (clampHz (s.hpfHz), fs, cutQ));
-        set (1, s.lowDb  != 0.0,  m::lowShelfDb  (lowHz,  fs, s.lowDb));
-        set (2, s.midDb  != 0.0,  m::peakingDb   (midHz,  fs, midQ, s.midDb));
-        set (3, s.highDb != 0.0,  m::highShelfDb (highHz, fs, s.highDb));
-        set (4, s.lpfOn,          m::lowpass     (clampHz (s.lpfHz), fs, cutQ));
+        set (0, s.hpfOn,             m::highpass    (clampHz (s.hpfHz), fs, cutQ));
+        set (1, s.lowDb      != 0.0, m::lowShelfDb  (lowHz,  fs, s.lowDb));
+        set (2, s.midDb      != 0.0, m::peakingDb   (midHz,  fs, midQ, s.midDb));
+        set (3, s.highDb     != 0.0, m::highShelfDb (highHz, fs, s.highDb));
+        set (4, s.presenceDb != 0.0, m::highShelfDb (presenceHz, fs, s.presenceDb));
+        set (5, s.lpfOn,             m::lowpass     (clampHz (s.lpfHz), fs, cutQ));
 
         current = s;
 

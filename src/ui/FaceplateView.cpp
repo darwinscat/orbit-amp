@@ -6,9 +6,9 @@ namespace orbitamp
 {
 
 FaceplateView::FaceplateView (juce::AudioProcessorValueTreeState& state)
-    : preamp (state), reverb (state), eq (state)
+    : preamp (state), reverb (state)
 {
-    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &eq })
+    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb })
         addAndMakeVisible (*b);
 
     // Every block but boost binds its own power; boost is still a bare frame.
@@ -24,9 +24,9 @@ void FaceplateView::resized()
     outGutter = lane.removeFromRight (gutter);
     lane.removeFromRight (colGap);
 
+    // Row 2 — power amp under boost, cabinet under preamp + reverb — is not built yet, so the lane
+    // is one row. The column split will be reused for it: same boundaries, half the height.
     auto row1 = lane.removeFromTop (row1H);
-    lane.removeFromTop (rowGap);
-    eq.setBounds (lane.removeFromTop (row2H));
 
     // Three columns weighted 1 : phi : 1 — the preamp is the anchor.
     const float unit = (float) (row1.getWidth() - 2 * colGap) / (2.0f + phi);
