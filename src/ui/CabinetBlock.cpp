@@ -135,12 +135,6 @@ juce::Rectangle<int> CabinetBlock::switchArea (int slot) const
               .translated (0, slot * band);
 }
 
-void CabinetBlock::layOutHeader (juce::Rectangle<int>)
-{
-    // Nothing in the title row: the two mic rows carry their own switches, next to the list each
-    // one belongs to, rather than one switch standing for both.
-}
-
 void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 {
     auto mics = area.removeFromLeft (micColumn);

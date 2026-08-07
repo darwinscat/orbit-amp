@@ -107,7 +107,7 @@ private:
     juce::String label() const
     {
         if (! isValid())
-            return "—";
+            return juce::String::charToString ((juce::juce_wchar) 0x2014);   // em dash
 
         const auto& grp = groups.getReference (groupIndex);
         return (grp.name + "  " + grp.items[itemIndex]).toUpperCase();

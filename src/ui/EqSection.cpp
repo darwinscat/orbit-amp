@@ -159,9 +159,10 @@ void EqSection::layOutKnobs (juce::Rectangle<int> area)
     const int side = juce::jmin ((area.getHeight() - presenceGap) * 5 / 9,
                                  (area.getWidth() - 2 * knobGap) / 3);
 
-    auto top = area.removeFromTop (juce::roundToInt (side * 0.8f));
-    presence.setBounds (top.withSizeKeepingCentre (juce::roundToInt (side * 0.8f),
-                                                   juce::roundToInt (side * 0.8f)));
+    // Same size as the trio: at 0.8 the knob was narrower than its own label, which came out
+    // clipped to "RESENC".
+    auto top = area.removeFromTop (side);
+    presence.setBounds (top.withSizeKeepingCentre (side, side));
     area.removeFromTop (presenceGap);
 
     const int total = side * 3 + knobGap * 2;

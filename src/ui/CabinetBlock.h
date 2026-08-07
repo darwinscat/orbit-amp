@@ -27,8 +27,6 @@ public:
     ~CabinetBlock() override;
 
 private:
-    int  headerHeight() const override { return headerRow; }
-    void layOutHeader (juce::Rectangle<int>) override;
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -41,7 +39,6 @@ private:
 
     juce::Rectangle<int> switchArea (int slot) const;
 
-    static constexpr int headerRow  = 22;
     static constexpr int micColumn  = 132;   // the two mic rows, left of the speaker
     static constexpr int micRow     = 24;
     static constexpr int angleRow   = 16;

@@ -55,7 +55,7 @@ public:
         g.drawRoundedRectangle (cell.reduced (0.5f), theme::radiusSm, 1.0f);
 
         g.setColour (items.isEmpty() ? theme::txFaint : theme::tx);
-        theme::drawTracked (g, items.isEmpty() ? "—" : items[index].toUpperCase(), cell.reduced (5.0f, 0.0f),
+        theme::drawTracked (g, items.isEmpty() ? juce::String::charToString ((juce::juce_wchar) 0x2014) : items[index].toUpperCase(), cell.reduced (5.0f, 0.0f),
                             theme::displayFont (8.0f), 0.03f, juce::Justification::centred);
 
         if (showNav)
