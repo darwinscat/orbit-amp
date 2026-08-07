@@ -155,6 +155,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/EqSection.cpp
     src/ui/ReverbBlock.cpp
     src/ui/Chrome.cpp
+    src/ui/DemoStrip.cpp
     src/ui/Footer.cpp
 )
 
@@ -168,6 +169,12 @@ juce_add_binary_data(OrbitAmpData
     SOURCES
         "${felitronics_appkit_SOURCE_DIR}/assets/Michroma-Regular.ttf"
         "${felitronics_appkit_SOURCE_DIR}/assets/catlogo.svg"
+        # TEMPORARY — audition loops, referenced from the capture tool rather than copied. They go
+        # when the demo player goes.
+        "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/eleven-light-years.wav"
+        "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/cats-hard-day.wav"
+        "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/deep-space-is-my-home.wav"
+        "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/fifth-dimension.wav"
 )
 
 target_compile_definitions(OrbitAmp PUBLIC

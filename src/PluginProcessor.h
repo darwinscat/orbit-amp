@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core/CapturedStage.h"
+#include "core/DemoPlayer.h"
+#include "core/ScopeTap.h"
 #include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
 #include "core/ToneStack.h"
@@ -98,10 +100,17 @@ public:
     /** The captured pedal in front. The library and the loading live on the message thread; the
         audio thread only ever meets a model that is already in memory. */
     core::CapturedStage boost;
+
+    /** What went into the boost and what came out — the boost block's pictures read this. */
+    core::ScopeTap boostScope;
     juce::Array<device::DeviceLibrary::Pack> devicePacks;
 
     /** Re-scans the devices folder and points the boost at the first pack. Message thread. */
     void rescanDevices();
+
+    /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
+    core::DemoPlayer demo;
+    void selectDemoLoop (int index);
 
 private:
 
@@ -131,6 +140,7 @@ private:
     std::atomic<float>* boostOnParam    = nullptr;
     std::atomic<float>* boostGainParam  = nullptr;
     int lastBoostGainIndex = -1;
+    juce::AudioBuffer<float> scopeDry;   // the boost's input, kept for its pictures
 
 public:
     /** What the footer reports: the run's own facts, not the sound's. */

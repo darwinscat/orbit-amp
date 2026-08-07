@@ -9,13 +9,18 @@ namespace orbitamp
 {
 
 BoostBlock::BoostBlock (AmpProcessor& processor)
-    : BlockFrame ("Boost", BlockFrame::Kind::captured), amp (processor)
+    : BlockFrame ("Boost", BlockFrame::Kind::captured), amp (processor),
+      scope (processor.boostScope, [this] (double hz) { return measuredDb (curveSlot, hz); })
 {
     addAndMakeVisible (pedal);
     addAndMakeVisible (gain);
-    addAndMakeVisible (curve);
+    addAndMakeVisible (scope);
+    addAndMakeVisible (scopeMode);
 
-    curve.setInterceptsMouseClicks (false, false);   // read-only: an illustration, not a control
+    // Four ways of showing the same pedal. Which one reads best is not settled, so the choice is on
+    // the face rather than in the code.
+    scopeMode.setItems ({ "SHAPE", "ENVELOPE", "TRANSFER", "TONE" }, 0);
+    scopeMode.onChange = [this] (int i) { scope.setMode ((BoostScope::Mode) i); };
 
     attachPower (*amp.apvts.getParameter (params::boostOn));
 
@@ -166,7 +171,7 @@ double BoostBlock::measuredDb (int slot, double freqHz) const
 
 void BoostBlock::refreshCurve()
 {
-    curve.repaint();
+    scope.repaint();
 }
 
 void BoostBlock::layOutHeader (juce::Rectangle<int> area)
@@ -176,7 +181,9 @@ void BoostBlock::layOutHeader (juce::Rectangle<int> area)
 
 void BoostBlock::layOutContent (juce::Rectangle<int> area)
 {
-    curve.setBounds (area.removeFromBottom (curveHeight));
+    scope.setBounds (area.removeFromBottom (curveHeight));
+    area.removeFromBottom (gap / 2);
+    scopeMode.setBounds (area.removeFromBottom (modeRow));
     area.removeFromBottom (gap);
 
     if (! circuit.empty())

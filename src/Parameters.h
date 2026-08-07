@@ -76,6 +76,10 @@ inline constexpr const char* powerTube  = "power_tube";
 inline constexpr const char* powerCount = "power_count";
 inline constexpr const char* oversample = "oversample";
 
+/** TEMPORARY — the audition loops, in the order the player offers them. Default is the first. */
+inline const juce::StringArray demoLoops { "Eleven Light Years", "Cats Hard Day",
+                                           "Deep Space Is My Home", "Fifth Dimension" };
+
 /** Oversampling for the nonlinear stages. Not a per-preset taste: it trades CPU for alias-free
     saturation, and which trade you want depends on the machine you are on. Lives in the footer with
     the other facts about the run. */

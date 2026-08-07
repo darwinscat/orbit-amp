@@ -2,8 +2,9 @@
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
-#include "EqCurve.h"
+#include "BoostScope.h"
 #include "Knob.h"
+#include "Selector.h"
 #include "StepSwitch.h"
 #include "VoicingSelector.h"
 
@@ -53,6 +54,7 @@ private:
     static constexpr int knobGap    = 10;
     static constexpr int glyphRow   = 18;
     static constexpr int switchRow  = 16;
+    static constexpr int modeRow    = 18;
 
     AmpProcessor& amp;
 
@@ -70,8 +72,9 @@ private:
 
     std::array<Slot, (size_t) params::boostNumMeasured> slots;
 
-    EqCurve curve { [this] (double hz) { return measuredDb (curveSlot, hz); } };
-    int curveSlot = 0;   // which measured control the picture is showing
+    BoostScope scope;   // constructed in the .cpp: the tap lives on the processor, incomplete here
+    Selector   scopeMode { theme::orange, true };
+    int curveSlot = 0;   // which measured control the tone view is showing
 
     juce::String caption;
     felitronics::appkit::DeviceSpec circuit;

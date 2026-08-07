@@ -2,6 +2,8 @@
 #include "PluginEditor.h"
 #include "Parameters.h"
 
+#include <BinaryData.h>
+
 namespace orbitamp
 {
 
@@ -77,6 +79,21 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
     }
 }
 
+void AmpProcessor::selectDemoLoop (int index)
+{
+    struct Entry { const char* data; int size; };
+    const Entry loops[] = {
+        { BinaryData::elevenlightyears_wav,   BinaryData::elevenlightyears_wavSize },
+        { BinaryData::catshardday_wav,        BinaryData::catshardday_wavSize },
+        { BinaryData::deepspaceismyhome_wav,  BinaryData::deepspaceismyhome_wavSize },
+        { BinaryData::fifthdimension_wav,     BinaryData::fifthdimension_wavSize },
+    };
+
+    const int n = (int) (sizeof (loops) / sizeof (loops[0]));
+    const auto& e = loops[juce::jlimit (0, n - 1, index)];
+    demo.setLoop (e.data, e.size, getSampleRate());
+}
+
 void AmpProcessor::rescanDevices()
 {
     devicePacks = device::DeviceLibrary::scan();
@@ -125,6 +142,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int)
     tone.prepare (sampleRate, channels);
     reverb.prepare (sampleRate);
     boost.prepare (sampleRate, getBlockSize());
+    demo.prepare (sampleRate);
+    scopeDry.setSize (1, juce::jmax (1, getBlockSize()));
     lastBoostGainIndex = -1;
     loadBoostModelIfChanged();
 
@@ -189,6 +208,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     for (auto ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, buffer.getNumSamples());
 
+    // The demo replaces the input rather than mixing into it: a loop you can hear over your own
+    // playing is a loop you cannot judge anything by.
+    demo.fill (buffer);
+
     updateToneSettings();
     updateReverbSettings();
 
@@ -198,7 +221,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     // boost -> preamp -> EQ -> reverb -> power amp.
     if (boostOnParam->load() > 0.5f)
+    {
+        // Keep the input so the block can draw what it did to it, not just what came out.
+        scopeDry.setSize (1, numSamples, false, false, true);
+        scopeDry.copyFrom (0, 0, buffer, 0, 0, numSamples);
+
         boost.process (channels, numChannels, numSamples);
+        boostScope.write (scopeDry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
+    }
 
     if (eqOnParam->load() > 0.5f)
         tone.process (channels, numChannels, numSamples);

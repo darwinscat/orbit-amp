@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "ui/Chrome.h"
 #include "ui/FaceplateView.h"
+#include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
 #include "ui/Footer.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 
@@ -31,6 +32,7 @@ private:
     static constexpr int baseHeight = Chrome::designHeight + chromeGap
                                     + FaceplateView::designHeight
                                     + chromeGap + Footer::designHeight
+                                    + DemoStrip::designHeight      // TEMPORARY
                                     + GlyphPreview::designHeight   // TEMPORARY
                                     + margin * 2;
 
@@ -38,6 +40,7 @@ private:
     Chrome        chrome;
     FaceplateView faceplate;
     Footer        footer;
+    DemoStrip     demoStrip;       // TEMPORARY — audition player
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpEditor)

@@ -4,12 +4,13 @@ namespace orbitamp
 {
 
 AmpEditor::AmpEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p), footer (p)
+    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p), footer (p), demoStrip (p)
 {
     addAndMakeVisible (chrome);
     addAndMakeVisible (faceplate);
     addAndMakeVisible (footer);
-    addAndMakeVisible (glyphs);   // TEMPORARY
+    addAndMakeVisible (demoStrip);   // TEMPORARY
+    addAndMakeVisible (glyphs);      // TEMPORARY
 
     // Dragging the corner IS the zoom: the aspect is locked, so width alone determines the factor.
     setResizable (true, true);
@@ -47,8 +48,12 @@ void AmpEditor::resized()
     footer.setBounds (margin, footerY, FaceplateView::designWidth, Footer::designHeight);
     footer.setTransform (zoom);
 
-    // TEMPORARY — the glyph review strip, under the footer.
-    glyphs.setBounds (margin, footerY + Footer::designHeight,
+    // TEMPORARY — the audition player and the glyph review strip, under the footer.
+    const int demoY = footerY + Footer::designHeight;
+    demoStrip.setBounds (margin, demoY, FaceplateView::designWidth, DemoStrip::designHeight);
+    demoStrip.setTransform (zoom);
+
+    glyphs.setBounds (margin, demoY + DemoStrip::designHeight,
                       FaceplateView::designWidth, GlyphPreview::designHeight);
     glyphs.setTransform (zoom);
 }
