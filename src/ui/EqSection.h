@@ -10,34 +10,37 @@
 namespace orbitamp
 {
 
-/** The tone stack, living in the lower half of the preamp block as its illustration.
+/** The tone stack inside the preamp block: knobs in the upper half, the response curve across the
+    lower one.
 
-    Collapsed it is the curve and nothing else — the response is the readout, and most of the time
-    that is all you want to see. A grip along the bottom edge opens it: the curve gives up height and
-    the knobs appear in what it freed. The section's own height never changes, so opening it does not
-    push the block around.
+    NOT a Component. Its widgets become children of the block itself, because they live in two
+    separate regions of it — a container would have to be either non-rectangular or two containers,
+    and both are worse than owning the widgets and letting the block place them.
 
     It keeps a ToneStack of its own for DRAWING only, designed on the message thread from the current
     parameter values. Reading the playing stack's coefficients would be a race and would freeze the
     curve whenever transport is stopped. */
-class EqSection final : public juce::Component
+class EqSection final
 {
 public:
     explicit EqSection (juce::AudioProcessorValueTreeState&);
-    ~EqSection() override;
+    ~EqSection();
 
-    void paint (juce::Graphics&) override;
-    void resized() override;
-    void mouseDown (const juce::MouseEvent&) override;
-    void mouseMove (const juce::MouseEvent&) override;
-    void mouseExit (const juce::MouseEvent&) override;
+    /** Hands the widgets to the block that will place them. */
+    void addTo (juce::Component& parent);
 
-    /** How tall the section wants to be. Constant across open and shut. */
+    /** The curve and the two cut pills, across the block's lower half. */
+    void layOutCurve (juce::Rectangle<int> area);
+
+    /** How much of the block's height the curve takes. */
     static constexpr int designHeight = 150;
+
+    /** The knob cluster, laid out by the owner in the block's upper half: Low / Mid / High in a row
+        with Presence above them. Presence is not a fourth sibling — it sits over the tone trio. */
+    void layOutKnobs (juce::Rectangle<int> area);
 
 private:
     void refreshCurve();
-    void setExpanded (bool);
 
     /** Rebuilds the draggable points from the current values. */
     void refreshHandles();
@@ -46,17 +49,10 @@ private:
     void handleDragged (int index, double hz, double db);
     void handleDragActive (int index, bool active);
 
-    /** Miniature versions of the four knobs, drawn on the grip while the real ones are hidden — the
-        strip then says what is behind it instead of just that something is. */
-    void paintMiniKnobs (juce::Graphics&, juce::Rectangle<float> grip) const;
-
     enum Handle { hLow, hMid, hHigh, hPresence, hHpf, hLpf, numHandles };
 
-    juce::Rectangle<int> gripArea() const;
-
-    static constexpr int gripHeight   = 12;
-    static constexpr int knobRow      = 84;   // revealed when open; taken from the curve
-    static constexpr int knobGap      = 26;
+    static constexpr int knobGap      = 16;
+    static constexpr int presenceGap  = 6;
     static constexpr int pillWidth    = 62;
     static constexpr int pillHeight   = 18;
     static constexpr int pillInset    = 8;
@@ -83,9 +79,7 @@ private:
 
     double midHz = 600.0;
 
-    bool expanded  = false;
-    bool gripHover = false;
-    bool on        = true;
+    bool on = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EqSection)
 };

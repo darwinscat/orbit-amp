@@ -11,7 +11,7 @@ PreampBlock::PreampBlock (juce::AudioProcessorValueTreeState& s)
 {
     addAndMakeVisible (voicing);
     addAndMakeVisible (gain);
-    addAndMakeVisible (eq);
+    eq.addTo (*this);
 
     attachPower (*state.getParameter (params::preampOn));
 
@@ -66,12 +66,18 @@ void PreampBlock::layOutHeader (juce::Rectangle<int> area)
 
 void PreampBlock::layOutContent (juce::Rectangle<int> area)
 {
-    // Lower half is the illustration — here, the tone stack. Upper half is the hero.
-    eq.setBounds (area.removeFromBottom (EqSection::designHeight));
+    // Lower half is the illustration — here, the tone stack's response, full width.
+    eq.layOutCurve (area.removeFromBottom (EqSection::designHeight));
     area.removeFromBottom (eqGap);
 
-    const int side = juce::jmin (area.getWidth(), area.getHeight());
-    gain.setBounds (area.withSizeKeepingCentre (side, side));
+    // Upper half: the hero on the left, the tone cluster on the right.
+    auto left = area.removeFromLeft (area.getWidth() * 2 / 5);
+    area.removeFromLeft (eqGap);
+
+    const int side = juce::jmin (left.getWidth(), left.getHeight());
+    gain.setBounds (left.withSizeKeepingCentre (side, side));
+
+    eq.layOutKnobs (area);
 }
 
 } // namespace orbitamp

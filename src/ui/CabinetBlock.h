@@ -3,6 +3,7 @@
 #include "../Parameters.h"
 #include "BlockFrame.h"
 #include "Selector.h"
+#include "StepSwitch.h"
 
 #include <felitronics/appkit/MicGrid.h>
 
@@ -43,14 +44,16 @@ private:
     static constexpr int headerRow  = 22;
     static constexpr int micColumn  = 132;   // the two mic rows, left of the speaker
     static constexpr int micRow     = 24;
+    static constexpr int angleRow   = 16;
     static constexpr int micSwitchW = 22;
     static constexpr int micSwitchH = 11;
     static constexpr int gap        = 8;
 
     struct Slot
     {
-        std::unique_ptr<Selector> pick;
-        std::unique_ptr<juce::ParameterAttachment> onAtt, typeAtt, posAtt, distAtt;
+        std::unique_ptr<Selector>   pick;
+        std::unique_ptr<StepSwitch> angle;
+        std::unique_ptr<juce::ParameterAttachment> onAtt, typeAtt, posAtt, distAtt, angleAtt;
         bool on = false;
     };
 

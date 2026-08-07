@@ -23,16 +23,27 @@ CabinetBlock::CabinetBlock (juce::AudioProcessorValueTreeState& s)
     {
         auto& slot = slots[(size_t) i];
 
-        slot.pick = std::make_unique<Selector> (theme::violet, true);
+        const auto tint = felitronics::appkit::brand::slotColours[(size_t) i];
+
+        slot.pick = std::make_unique<Selector> (tint, true);
         slot.pick->setItems (params::cabMics, i);
         addAndMakeVisible (*slot.pick);
+
+        // Three named angles, all visible at once. There is nothing between them: each one is a
+        // capture that was or was not taken.
+        slot.angle = std::make_unique<StepSwitch>();
+        slot.angle->accent = tint;
+        slot.angle->setItems (params::cabAngles, 1);
+        addAndMakeVisible (*slot.angle);
 
         slot.onAtt = std::make_unique<juce::ParameterAttachment> (
             *state.getParameter (params::cabMicOn (i)),
             [this, i] (float v)
             {
                 slots[(size_t) i].on = v > 0.5f;
-                slots[(size_t) i].pick->setAlpha (slots[(size_t) i].on ? 1.0f : theme::offAlpha);
+                const float a = slots[(size_t) i].on ? 1.0f : theme::offAlpha;
+                slots[(size_t) i].pick->setAlpha (a);
+                slots[(size_t) i].angle->setAlpha (a);
                 refreshDots();
                 repaint();
             });
@@ -44,6 +55,18 @@ CabinetBlock::CabinetBlock (juce::AudioProcessorValueTreeState& s)
                 slots[(size_t) i].pick->setSelectedIndex (juce::roundToInt (v), juce::dontSendNotification);
                 refreshDots();
             });
+
+        slot.angleAtt = std::make_unique<juce::ParameterAttachment> (
+            *state.getParameter (params::cabMicAngle (i)),
+            [this, i] (float v) { slots[(size_t) i].angle->setSelectedIndex (juce::roundToInt (v),
+                                                                             juce::dontSendNotification); });
+
+        slot.angle->onChange = [this, i] (int v)
+        {
+            slots[(size_t) i].angleAtt->setValueAsCompleteGesture ((float) v);
+            activeSlot = i;
+            refreshDots();
+        };
 
         slot.posAtt  = std::make_unique<juce::ParameterAttachment> (
             *state.getParameter (params::cabMicPos (i)),  [this] (float) { refreshDots(); });
@@ -59,7 +82,7 @@ CabinetBlock::CabinetBlock (juce::AudioProcessorValueTreeState& s)
     }
 
     for (auto& slot : slots)
-        for (auto* a : { &slot.onAtt, &slot.typeAtt, &slot.posAtt, &slot.distAtt })
+        for (auto* a : { &slot.onAtt, &slot.typeAtt, &slot.posAtt, &slot.distAtt, &slot.angleAtt })
             (*a)->sendInitialUpdate();
 }
 
@@ -102,10 +125,14 @@ void CabinetBlock::refreshDots()
 
 juce::Rectangle<int> CabinetBlock::switchArea (int slot) const
 {
-    auto r = contentArea().removeFromLeft (micColumn);
-    r.removeFromTop (slot * (micRow + gap));
-    return r.removeFromTop (micRow).removeFromLeft (micSwitchW)
-            .withSizeKeepingCentre (micSwitchW, micSwitchH);
+    auto col = contentArea().removeFromLeft (micColumn);
+    const int band = col.getHeight() / params::cabNumMics;
+
+    return col.removeFromTop (band)
+              .withSizeKeepingCentre (col.getWidth(), micRow + gap / 2 + angleRow)
+              .removeFromTop (micRow)
+              .removeFromLeft (micSwitchW).withSizeKeepingCentre (micSwitchW, micSwitchH)
+              .translated (0, slot * band);
 }
 
 void CabinetBlock::layOutHeader (juce::Rectangle<int>)
@@ -120,12 +147,21 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
     area.removeFromLeft (gap);
     grid.setBounds (area);
 
+    // The column is split evenly and each mic is centred in its share, so the two rows use the whole
+    // height instead of huddling at the top over empty space.
+    const int band = mics.getHeight() / params::cabNumMics;
+
     for (int i = 0; i < params::cabNumMics; ++i)
     {
-        auto row = mics.removeFromTop (micRow);
-        mics.removeFromTop (gap);
+        auto cell = mics.removeFromTop (band)
+                        .withSizeKeepingCentre (mics.getWidth(), micRow + gap / 2 + angleRow);
+        auto row = cell.removeFromTop (micRow);
         row.removeFromLeft (micSwitchW + gap);
         slots[(size_t) i].pick->setBounds (row);
+
+        cell.removeFromTop (gap / 2);
+        slots[(size_t) i].angle->setBounds (cell.removeFromTop (angleRow)
+                                                .withTrimmedLeft (micSwitchW + gap));
     }
 }
 

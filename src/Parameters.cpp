@@ -77,7 +77,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                     std::make_unique<Choice> (juce::ParameterID { cabMicPos (i),  1 }, "Mic " + n + " Position",
                                               cabPositions, i == 0 ? 2 : 1),
                     std::make_unique<Float>  (juce::ParameterID { cabMicDist (i), 1 }, "Mic " + n + " Distance",
-                                              juce::NormalisableRange<float> (0.0f, 15.0f, 0.1f), i == 0 ? 2.0f : 5.0f));
+                                              juce::NormalisableRange<float> (0.0f, 15.0f, 0.1f), i == 0 ? 2.0f : 5.0f),
+                    std::make_unique<Choice> (juce::ParameterID { cabMicAngle (i), 1 }, "Mic " + n + " Angle",
+                                              cabAngles, 1));
     }
 
     // The power amp is off by default: it is most useful for leads and least for tight rhythm, so

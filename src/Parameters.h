@@ -47,6 +47,12 @@ inline juce::String cabMicOn   (int i) { return "cab_mic" + juce::String (i + 1)
 inline juce::String cabMicType (int i) { return "cab_mic" + juce::String (i + 1) + "_type"; }
 inline juce::String cabMicPos  (int i) { return "cab_mic" + juce::String (i + 1) + "_pos"; }
 inline juce::String cabMicDist (int i) { return "cab_mic" + juce::String (i + 1) + "_dist"; }
+inline juce::String cabMicAngle (int i) { return "cab_mic" + juce::String (i + 1) + "_angle"; }
+
+/** Mic angle, as three named positions rather than a sweep. Angle comes from captures, and captures
+    exist at the angles they were taken at — a slider in 15-degree steps would offer thirteen
+    positions where three have anything behind them. */
+inline const juce::StringArray cabAngles { "-30", "0", "+30" };
 
 /** The mics, by the two everyone actually reaches for first. More arrive with the captures. */
 inline const juce::StringArray cabMics { "SM57", "MD421" };
