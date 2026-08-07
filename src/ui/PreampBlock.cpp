@@ -9,31 +9,35 @@ namespace orbitamp
 PreampBlock::PreampBlock (juce::AudioProcessorValueTreeState& s)
     : BlockFrame ("Preamp", BlockFrame::Kind::captured), state (s)
 {
-    addAndMakeVisible (type);
-    addAndMakeVisible (voice);
+    addAndMakeVisible (voicing);
     addAndMakeVisible (gain);
 
     attachPower (*state.getParameter (params::preampOn));
 
-    type.setItems (params::typeNames, 0);
+    // The whole tree at once — every type with its voices under it. Nothing is rebuilt on a pick;
+    // only the selection moves.
+    juce::Array<VoicingSelector::Group> groups;
+    for (int t = 0; t < params::typeNames.size(); ++t)
+        groups.add ({ params::typeNames[t], device::VoicingLibrary::voicesFor (t) });
 
-    // Choice / int parameters come through a plain ParameterAttachment because these are custom
-    // views, not juce widgets — the attachment reports DENORMALISED values, i.e. the index itself.
+    voicing.setGroups (std::move (groups));
+    voicing.onPick = [this] (int t, int v) { applyPick (t, v); };
+
+    // Choice / int parameters come through a plain ParameterAttachment because this is a custom view,
+    // not a juce widget — the attachment reports DENORMALISED values, i.e. the index itself.
     typeAttachment = std::make_unique<juce::ParameterAttachment> (
         *state.getParameter (params::preampType),
         [this] (float v)
         {
-            const int index = juce::roundToInt (v);
-            type.setSelectedIndex (index, juce::dontSendNotification);
-            refreshVoices (index);
+            voicing.setSelection (juce::roundToInt (v), voicing.getItemIndex());
         });
 
     voiceAttachment = std::make_unique<juce::ParameterAttachment> (
         *state.getParameter (params::preampVoice),
-        [this] (float v) { voice.setSelectedIndex (juce::roundToInt (v), juce::dontSendNotification); });
-
-    type.onChange  = [this] (int i) { typeAttachment->setValueAsCompleteGesture ((float) i); };
-    voice.onChange = [this] (int i) { voiceAttachment->setValueAsCompleteGesture ((float) i); };
+        [this] (float v)
+        {
+            voicing.setSelection (voicing.getGroupIndex(), juce::roundToInt (v));
+        });
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         state, params::preampGain, gain);
@@ -44,28 +48,23 @@ PreampBlock::PreampBlock (juce::AudioProcessorValueTreeState& s)
 
 PreampBlock::~PreampBlock() = default;
 
-void PreampBlock::refreshVoices (int typeIndex)
+void PreampBlock::applyPick (int typeIndex, int voiceIndex)
 {
-    const auto names = device::VoicingLibrary::voicesFor (typeIndex);
-    const int wanted = device::VoicingLibrary::clampVoice (typeIndex, voice.getSelectedIndex());
+    // Clamp on the way in: a tree pick is always in range, but the parameter is an index and a saved
+    // session may hold one the type no longer offers.
+    const int voice = device::VoicingLibrary::clampVoice (typeIndex, voiceIndex);
 
-    voice.setItems (names, wanted);
+    typeAttachment->setValueAsCompleteGesture ((float) typeIndex);
+    voiceAttachment->setValueAsCompleteGesture ((float) voice);
+}
 
-    // Switching type can leave the stored index past the end of the new type's list; write the
-    // clamped value back so the parameter and the face never disagree.
-    if (voiceAttachment != nullptr && wanted != voice.getSelectedIndex())
-        voiceAttachment->setValueAsCompleteGesture ((float) wanted);
+void PreampBlock::layOutHeader (juce::Rectangle<int> area)
+{
+    voicing.setBounds (area);
 }
 
 void PreampBlock::layOutContent (juce::Rectangle<int> area)
 {
-    auto combos = area.removeFromTop (combosHeight);
-    type.setBounds (combos.removeFromLeft (typeWidth));
-    combos.removeFromLeft (combosGap);
-    voice.setBounds (combos);
-
-    area.removeFromTop (knobGap);
-
     const int side = juce::jmin (area.getWidth(), area.getHeight());
     gain.setBounds (area.withSizeKeepingCentre (side, side));
 }

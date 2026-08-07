@@ -33,6 +33,21 @@ inline const juce::Colour capBot  { 0xff120e17 };
 inline const juce::Colour dspTop  { 0xff181420 };
 inline const juce::Colour dspBot  { 0xff111019 };
 
+/** The character ramp: green through yellow and orange to red, following gain. The colour IS the
+    type, so a voicing list can drop the word and still say what it is at a glance. */
+inline juce::Colour characterColour (int typeIndex)
+{
+    static const juce::Colour ramp[] = {
+        juce::Colour (0xff5fc97a),   // clean
+        juce::Colour (0xffb8cc5a),   // edge
+        juce::Colour (0xffe8b04a),   // crunch
+        juce::Colour (0xffe8783c),   // high-gain
+        juce::Colour (0xffe0503c),   // modern
+    };
+    constexpr int n = (int) (sizeof (ramp) / sizeof (ramp[0]));
+    return ramp[juce::jlimit (0, n - 1, typeIndex)];
+}
+
 constexpr float radiusSm = 5.0f;
 constexpr float radiusMd = 9.0f;    // blocks
 constexpr float radiusLg = 15.0f;

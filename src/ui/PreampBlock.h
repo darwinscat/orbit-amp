@@ -2,16 +2,16 @@
 
 #include "BlockFrame.h"
 #include "Knob.h"
-#include "Selector.h"
+#include "VoicingSelector.h"
 
 namespace orbitamp
 {
 
-/** The preamp — the captured voicing, and the hero of the faceplate.
+/** The preamp — the captured voicing.
 
-    You pick a TYPE (clean through modern) and then a VOICE within it; the addressable unit is the
-    voicing, not a channel. GAIN is the big one: 0-10 on the amp-panel scale, mapping onto the
-    detents the profiles were captured at. */
+    Type and voice are ONE control, in the title row: picking a voicing is one decision, and it used
+    to cost two lists and a whole row of the block. With that row gone the gain knob takes the entire
+    body, which is what the block is for. */
 class PreampBlock final : public BlockFrame
 {
 public:
@@ -19,22 +19,22 @@ public:
     ~PreampBlock() override;
 
 private:
+    int  headerHeight() const override { return headerRow; }
+    void layOutHeader (juce::Rectangle<int>) override;
     void layOutContent (juce::Rectangle<int>) override;
 
-    /** Repopulates the voice list for the current type and pulls the stored index into range — a
-        saved session may name a voice this type no longer offers. */
-    void refreshVoices (int typeIndex);
+    /** Writes both parameters for one pick. They land in the same message-loop turn, so the history's
+        settle timer folds them into a single undo step. */
+    void applyPick (int typeIndex, int voiceIndex);
 
-    static constexpr int combosHeight = 26;
-    static constexpr int typeWidth    = 76;
-    static constexpr int combosGap    = 7;
-    static constexpr int knobGap      = 10;
+    // Taller than the default title row, because it carries a control. Only this block asks for it,
+    // so the other blocks keep the layout they already had.
+    static constexpr int headerRow = 22;
 
     juce::AudioProcessorValueTreeState& state;
 
-    Selector type  { theme::orange, false };   // the five types are a short, fixed list — no stepping
-    Selector voice { theme::orange, true };    // stepping through voices is the audition gesture
-    Knob     gain  { "Gain", theme::orange };
+    VoicingSelector voicing;
+    Knob            gain { "Gain", theme::orange };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
     std::unique_ptr<juce::ParameterAttachment> typeAttachment, voiceAttachment;
