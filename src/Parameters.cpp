@@ -95,6 +95,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Float> (juce::ParameterID { powerSag, 1 }, "Power Sag",
                                          juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 3.0f));
 
+    // Which bottle and how many. Both are the amp rather than a setting on it, which is why they sit
+    // with the model's name and not among the knobs.
+    layout.add (std::make_unique<Choice> (juce::ParameterID { powerTube,  1 }, "Power Tube", powerTubes, 2),
+                std::make_unique<Choice> (juce::ParameterID { powerCount, 1 }, "Power Tubes", powerCounts, 1));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters, 0),
                 std::make_unique<Float>  (juce::ParameterID { reverbMix, 1 }, "Mix",
                                           juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 20.0f));

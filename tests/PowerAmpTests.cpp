@@ -35,10 +35,13 @@ namespace
 
     /** A 1 kHz sine at -12 dBFS through the stage; returns its level relative to the input and the
         total harmonic distortion. */
-    Measured run (float driveKnob, float sagKnob)
+    Measured run (float driveKnob, float sagKnob,
+                  PowerAmp::Tube tube = PowerAmp::Tube::sixL6, int tubeCount = 2)
     {
         PowerAmp amp;
         amp.prepare (sampleRate, blockSize, 2);
+        amp.setTube (tube);
+        amp.setTubeCount (tubeCount);
         amp.setDrive (driveKnob);
         amp.setSag (sagKnob);
 
@@ -116,6 +119,65 @@ int main()
     // the measured make-up this span is about 7 dB.
     report ("level holds across the whole sweep", (maxLevel - minLevel) < 2.0,
             juce::String (maxLevel - minLevel, 2) + " dB spread");
+
+    // ---- the tube table -------------------------------------------------------------------------
+    // The four bottles have to be four different amps, ordered by headroom: at the same knob an EL84
+    // must be further into compression than a KT88, or the list is four names for one sound.
+    {
+        const auto el84 = run (8.0f, 0.0f, PowerAmp::Tube::el84);
+        const auto el34 = run (8.0f, 0.0f, PowerAmp::Tube::el34);
+        const auto sixl6 = run (8.0f, 0.0f, PowerAmp::Tube::sixL6);
+        const auto kt88 = run (8.0f, 0.0f, PowerAmp::Tube::kt88);
+
+        report ("tubes are ordered by headroom at one knob setting",
+                el84.thdPercent > el34.thdPercent && el34.thdPercent > sixl6.thdPercent
+                    && sixl6.thdPercent > kt88.thdPercent,
+                "EL84 " + juce::String (el84.thdPercent, 1) + " > EL34 " + juce::String (el34.thdPercent, 1)
+                    + " > 6L6 " + juce::String (sixl6.thdPercent, 1) + " > KT88 " + juce::String (kt88.thdPercent, 1));
+
+        report ("the spread is worth having, not a rounding difference",
+                (el84.thdPercent - kt88.thdPercent) > 8.0,
+                juce::String (el84.thdPercent - kt88.thdPercent, 1) + " points apart");
+    }
+
+    // One bottle is single-ended class A and has to measure as such: more distortion at the same
+    // drive than the push-pull pair, whose symmetry cancels the even harmonics.
+    {
+        const auto one = run (5.0f, 0.0f, PowerAmp::Tube::sixL6, 1);
+        const auto two = run (5.0f, 0.0f, PowerAmp::Tube::sixL6, 2);
+
+        report ("one bottle distorts more than two (class A vs push-pull)",
+                one.thdPercent > two.thdPercent * 1.5,
+                "1x " + juce::String (one.thdPercent, 2) + " % vs 2x " + juce::String (two.thdPercent, 2) + " %");
+    }
+
+    // The make-up is per tube AND per topology, so the level has to hold on every combination — not
+    // just on the one the curve was first measured for.
+    {
+        double worst = 0.0;
+        juce::String worstName;
+
+        for (int t = 0; t < (int) PowerAmp::Tube::count; ++t)
+            for (int c = 1; c <= 2; ++c)
+            {
+                double lo = 1.0e9, hi = -1.0e9;
+                for (float knob = 0.0f; knob <= 10.001f; knob += 2.0f)
+                {
+                    const auto m = run (knob, 0.0f, (PowerAmp::Tube) t, c);
+                    lo = juce::jmin (lo, m.levelDb);
+                    hi = juce::jmax (hi, m.levelDb);
+                }
+
+                if (hi - lo > worst)
+                {
+                    worst = hi - lo;
+                    worstName = juce::String (c) + "x tube " + juce::String (t);
+                }
+            }
+
+        report ("level holds on EVERY tube and count", worst < 2.0,
+                "worst spread " + juce::String (worst, 2) + " dB (" + worstName + ")");
+    }
 
     // A switch that changes the reported latency makes hosts re-align mid-song, so the bypass path
     // has to cost exactly what the stage costs.

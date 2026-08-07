@@ -65,6 +65,16 @@ inline constexpr const char* powerOn   = "power_on";
 inline constexpr const char* powerType  = "power_type";
 inline constexpr const char* powerDrive = "power_drive";
 inline constexpr const char* powerSag   = "power_sag";
+inline constexpr const char* powerTube  = "power_tube";
+inline constexpr const char* powerCount = "power_count";
+
+/** Output bottles, ordered by headroom — least first, which is also the order they break up in.
+    Measured across the Drive sweep an EL84 loses 12.5 dB to compression where a KT88 loses 4.5. */
+inline const juce::StringArray powerTubes { "EL84", "EL34", "6L6", "KT88" };
+
+/** One bottle or two. Not decoration: one output tube IS single-ended class A and two are push-pull,
+    which the stage takes as a first-class parameter and which measures differently. */
+inline const juce::StringArray powerCounts { "1", "2" };
 
 /** What drives the power amp. The block's own switch is the "none" — a second way to turn it off
     inside the list would be two controls for one state. Simulation is our white-box tube stage;

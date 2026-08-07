@@ -101,6 +101,8 @@ private:
     std::atomic<float>* powerOnParam    = nullptr;
     std::atomic<float>* powerDriveParam = nullptr;
     std::atomic<float>* powerSagParam   = nullptr;
+    std::atomic<float>* powerTubeParam  = nullptr;
+    std::atomic<float>* powerCountParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };

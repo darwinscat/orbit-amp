@@ -40,6 +40,8 @@ AmpProcessor::AmpProcessor()
     powerOnParam    = apvts.getRawParameterValue (params::powerOn);
     powerDriveParam = apvts.getRawParameterValue (params::powerDrive);
     powerSagParam   = apvts.getRawParameterValue (params::powerSag);
+    powerTubeParam  = apvts.getRawParameterValue (params::powerTube);
+    powerCountParam = apvts.getRawParameterValue (params::powerCount);
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -148,6 +150,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     else
         reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
 
+    power.setTube (static_cast<core::PowerAmp::Tube> (
+        juce::jlimit (0, (int) core::PowerAmp::Tube::count - 1, juce::roundToInt (powerTubeParam->load()))));
+    power.setTubeCount (juce::roundToInt (powerCountParam->load()) + 1);   // index 0 = one bottle
     power.setDrive (powerDriveParam->load());
     power.setSag (powerSagParam->load());
     power.process (channels, numChannels, numSamples, powerOnParam->load() > 0.5f);

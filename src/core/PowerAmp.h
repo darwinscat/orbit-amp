@@ -20,6 +20,37 @@ namespace orbitamp::core
 class PowerAmp
 {
 public:
+    /** The output bottles. The module is built around a per-tube voicing table — this is it.
+
+        Ordered by headroom, least first, which is also the order they break up in: measured across
+        the Drive sweep an EL84 loses 12.5 dB to compression where a KT88 loses 4.5. */
+    enum class Tube { el84, el34, sixL6, kt88, count };
+
+    /** One bottle or two. Not decoration: one output tube IS single-ended class A, two are
+        push-pull, and the module takes that as a first-class parameter. Each combination carries
+        its own measured make-up, because the two topologies compress differently. */
+    static constexpr int minTubes = 1;
+    static constexpr int maxTubes = 2;
+
+    void setTube (Tube t) noexcept
+    {
+        if (t != tube && t < Tube::count)
+        {
+            tube = t;
+            apply();
+        }
+    }
+
+    void setTubeCount (int n) noexcept
+    {
+        const int c = juce::jlimit (minTubes, maxTubes, n);
+        if (c != tubeCount)
+        {
+            tubeCount = c;
+            apply();
+        }
+    }
+
     /** The knob's span in the stage's own drive dB, from the calibration bench:
 
             knob  driveDb   THD
@@ -99,18 +130,36 @@ public:
     }
 
 private:
-    /** Make-up from the bench: the stage's own gain at nine measured drive settings, which the knob
-        gives back so its sweep is a change of character at a steady level. */
-    static float makeUpDb (float knob)
+    /** Make-up from the bench: the stage's own gain at nine measured drive settings, per tube and per
+        topology, which the knob gives back so its sweep is a change of character at a steady level.
+
+        Eight curves because the two topologies compress differently — a single-ended stage starts
+        bending earlier and keeps going, so one shared curve would leave the knob quieter at the top
+        on half the settings. Rows: driveDb -6, -3, 0, 3, 6, 9, 12, 15, 18. */
+    static constexpr int    kSteps = 9;
+    static constexpr float  kGain[2][(int) Tube::count][kSteps] = {
+        {   // push-pull, two tubes
+            { 0.36f, 0.29f,  0.01f, -0.76f, -2.27f, -4.42f, -6.96f, -9.70f, -12.53f },   // EL84
+            { 1.52f, 1.48f,  1.37f,  1.06f,  0.31f, -1.11f, -3.19f, -5.70f,  -8.43f },   // EL34
+            { 0.34f, 0.32f,  0.26f,  0.11f, -0.25f, -1.04f, -2.47f, -4.53f,  -7.01f },   // 6L6
+            { 0.35f, 0.33f,  0.30f,  0.22f,  0.05f, -0.32f, -1.09f, -2.47f,  -4.48f },   // KT88
+        },
+        {   // single-ended, one tube
+            { 0.15f, -0.10f, -0.67f, -1.80f, -3.60f, -5.94f, -8.59f, -11.38f, -14.26f },
+            { 1.37f,  1.20f,  0.86f,  0.20f, -0.96f, -2.73f, -5.03f,  -7.65f, -10.44f },
+            { 0.28f,  0.19f,  0.01f, -0.33f, -0.99f, -2.13f, -3.86f,  -6.11f,  -8.70f },
+            { 0.32f,  0.28f,  0.20f,  0.03f, -0.30f, -0.91f, -1.99f,  -3.64f,  -5.83f },
+        },
+    };
+
+    float makeUpDb (float knob) const
     {
-        // Measured gain (dB) at driveDb -6, -3, 0, 3, 6, 9, 12, 15, 18 — the knob's span in nine steps.
-        static constexpr float measured[] = { 0.33f, 0.31f, 0.25f, 0.10f, -0.26f, -1.05f, -2.48f, -4.54f, -7.02f };
-        constexpr int n = (int) (sizeof (measured) / sizeof (measured[0]));
+        const auto& row = kGain[tubeCount == 1 ? 1 : 0][(int) tube];
 
-        const float t = juce::jlimit (0.0f, 1.0f, knob) * (n - 1);
-        const int   i = juce::jlimit (0, n - 2, (int) t);
+        const float t = juce::jlimit (0.0f, 1.0f, knob) * (kSteps - 1);
+        const int   i = juce::jlimit (0, kSteps - 2, (int) t);
 
-        return -juce::jmap (t - (float) i, measured[i], measured[i + 1]);
+        return -juce::jmap (t - (float) i, row[i], row[i + 1]);
     }
 
     void apply() noexcept
@@ -118,7 +167,7 @@ private:
         felitronics::poweramp::Params p;
         p.driveDb     = juce::jmap (drive, driveDbAtZero, driveDbAtTen);
         p.outputDb    = makeUpDb (drive);
-        p.singleEnded = false;   // push-pull: the model's, not the player's
+        p.singleEnded = (tubeCount == 1);   // one bottle is class A; the count IS the topology
         p.autoComp    = 1.0f;    // small-signal gain stays put; only the character moves
         p.sag         = sag;
 
@@ -132,12 +181,13 @@ private:
         stage.setParams (p, voicing());
     }
 
-    /** The one model so far. A second entry is what "NAM 1 / NAM 2" become when captures arrive —
-        those are profiles rather than voicings, but the block's choice is the same shape.
+    /** The tube table. Differences are the ones a player would name: how much headroom before it
+        bends, how hard it sags, and where the transformer gives up.
 
-        These numbers are a STARTING POINT measured for sane THD, not a tuned amp: driveScale, the
-        bias pair and the transformer corners want ears on a guitar before they are called done. */
-    static felitronics::poweramp::Voicing voicing()
+        These numbers are a STARTING POINT chosen for a sane, ordered spread of THD, not four tuned
+        amps. The spread is real and measured; whether an EL34 here sounds like an EL34 wants ears on
+        a guitar. */
+    felitronics::poweramp::Voicing voicing() const
     {
         felitronics::poweramp::Voicing v;
         v.driveScale = 1.0f;
@@ -152,16 +202,48 @@ private:
 
         v.loadResHz = 100.0f; v.loadResQ = 1.0f; v.loadResDb = 4.0f;    // cone resonance
         v.loadRiseHz = 1500.0f; v.loadRiseDb = 3.0f;                    // inductive HF rise
-
         v.otLfHz = 150.0f; v.otSatK = 1.8f; v.otHfHz = 12000.0f;        // output transformer
+
+        switch (tube)
+        {
+            case Tube::el84:   // smallest bottle, least headroom, sags hardest
+                v.driveScale = 1.9f; v.k = 2.4f; v.bSE = 0.22f; v.evenLeak = 0.05f;
+                v.sagMaxDroop = 0.38f; v.sagRecoveryMs = 110.0f;
+                v.otLfHz = 190.0f; v.otSatK = 2.2f; v.otHfHz = 9500.0f;
+                break;
+
+            case Tube::el34:   // British, mid-forward, crunches before a 6L6 does
+                v.driveScale = 1.35f; v.k = 2.15f; v.evenLeak = 0.03f;
+                v.sagMaxDroop = 0.30f;
+                v.midHz = 700.0f; v.midDb = 1.6f; v.midQ = 0.8f;
+                v.otLfHz = 165.0f; v.otHfHz = 11000.0f;
+                break;
+
+            case Tube::sixL6:  // American, clean headroom, tight bottom
+                v.sagMaxDroop = 0.24f;
+                v.loadResDb = 4.5f; v.otLfHz = 140.0f; v.otHfHz = 13000.0f;
+                break;
+
+            case Tube::kt88:   // biggest and stiffest — most headroom, least sag
+                v.driveScale = 0.72f; v.k = 1.85f; v.evenLeak = 0.015f;
+                v.sagMaxDroop = 0.16f; v.sagRecoveryMs = 190.0f;
+                v.otLfHz = 120.0f; v.otSatK = 1.5f; v.otHfHz = 15000.0f;
+                break;
+
+            case Tube::count:
+            default: break;
+        }
+
         return v;
     }
 
     felitronics::poweramp::PowerAmpStage stage;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> bypass { 64 };
 
-    float drive = 0.5f;
-    float sag   = 0.0f;
+    Tube  tube      = Tube::sixL6;
+    int   tubeCount = 2;
+    float drive     = 0.5f;
+    float sag       = 0.0f;
 };
 
 } // namespace orbitamp::core
