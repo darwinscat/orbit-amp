@@ -66,7 +66,15 @@ public:
 private:
     /** Pumps the history's settle timer — a burst of edits that has been quiet for a moment commits
         as ONE undo step, so dragging a knob is not fifty of them. */
-    void timerCallback() override { history.tick(); }
+    void timerCallback() override
+    {
+        history.tick();
+        applyOversamplingIfChanged();
+    }
+
+    /** Re-preparing is a message-thread job, so the footer's oversampling choice is picked up here
+        rather than in the audio callback. */
+    void applyOversamplingIfChanged();
 
     /** Reads the tone parameters into the stack's settings. Called per block from the audio thread;
         the stack only redesigns when something actually moved. */
@@ -103,6 +111,16 @@ private:
     std::atomic<float>* powerSagParam   = nullptr;
     std::atomic<float>* powerTubeParam  = nullptr;
     std::atomic<float>* powerCountParam = nullptr;
+    std::atomic<float>* oversampleParam = nullptr;
+
+public:
+    /** What the footer reports: the run's own facts, not the sound's. */
+    double currentSampleRate() const noexcept { return getSampleRate(); }
+    float  dspLoadPercent() const noexcept    { return dspLoad.load(); }
+
+private:
+    std::atomic<float> dspLoad { 0.0f };
+    int lastOversample = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };

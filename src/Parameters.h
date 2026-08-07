@@ -67,6 +67,13 @@ inline constexpr const char* powerDrive = "power_drive";
 inline constexpr const char* powerSag   = "power_sag";
 inline constexpr const char* powerTube  = "power_tube";
 inline constexpr const char* powerCount = "power_count";
+inline constexpr const char* oversample = "oversample";
+
+/** Oversampling for the nonlinear stages. Not a per-preset taste: it trades CPU for alias-free
+    saturation, and which trade you want depends on the machine you are on. Lives in the footer with
+    the other facts about the run. */
+inline const juce::StringArray oversampleFactors { "2x", "4x", "8x", "16x" };
+inline constexpr int oversampleValues[] = { 2, 4, 8, 16 };
 
 /** Output bottles, ordered by headroom — least first, which is also the order they break up in.
     Measured across the Drive sweep an EL84 loses 12.5 dB to compression where a KT88 loses 4.5. */

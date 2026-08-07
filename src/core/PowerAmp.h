@@ -63,9 +63,27 @@ public:
     static constexpr float driveDbAtZero = -6.0f;
     static constexpr float driveDbAtTen  = 18.0f;
 
+    /** The oversampling factor is fixed at prepare() by the module, so changing it re-prepares. That
+        is why it lives in the footer rather than on a block: it is a property of the run, not of the
+        sound. */
+    void setOversampling (int factor)
+    {
+        const int f = juce::jlimit (2, 16, factor);
+        if (f == oversampleFactor)
+            return;
+
+        oversampleFactor = f;
+
+        // Re-prepare only if there is something to re-prepare. Called before the first prepare — as
+        // the processor does, so the factor is in place when the stage is built — this just stores it.
+        if (preparedRate > 0.0)
+            prepare (preparedRate, preparedBlock, preparedChannels);
+    }
+
     void prepare (double sampleRate, int maxBlock, int numChannels)
     {
-        stage.prepare (sampleRate, maxBlock, 4);
+        preparedRate = sampleRate; preparedBlock = maxBlock; preparedChannels = numChannels;
+        stage.prepare (sampleRate, maxBlock, oversampleFactor);
         stage.reset();
 
         // The bypass path is delayed by exactly the stage's latency, so switching the block on and
@@ -239,6 +257,10 @@ private:
 
     felitronics::poweramp::PowerAmpStage stage;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> bypass { 64 };
+
+    double preparedRate = 0.0;
+    int    preparedBlock = 0, preparedChannels = 2;
+    int    oversampleFactor = 4;
 
     Tube  tube      = Tube::sixL6;
     int   tubeCount = 2;

@@ -100,6 +100,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Choice> (juce::ParameterID { powerTube,  1 }, "Power Tube", powerTubes, 2),
                 std::make_unique<Choice> (juce::ParameterID { powerCount, 1 }, "Power Tubes", powerCounts, 1));
 
+    // 4x is the shipping default: enough for the tube stage, cheap enough not to think about.
+    layout.add (std::make_unique<Choice> (juce::ParameterID { oversample, 1 }, "Oversampling",
+                                          oversampleFactors, 1));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters, 0),
                 std::make_unique<Float>  (juce::ParameterID { reverbMix, 1 }, "Mix",
                                           juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 20.0f));

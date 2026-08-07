@@ -42,6 +42,7 @@ AmpProcessor::AmpProcessor()
     powerSagParam   = apvts.getRawParameterValue (params::powerSag);
     powerTubeParam  = apvts.getRawParameterValue (params::powerTube);
     powerCountParam = apvts.getRawParameterValue (params::powerCount);
+    oversampleParam = apvts.getRawParameterValue (params::oversample);
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -72,12 +73,33 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
     }
 }
 
+void AmpProcessor::applyOversamplingIfChanged()
+{
+    const int index = juce::jlimit (0, params::oversampleFactors.size() - 1,
+                                    juce::roundToInt (oversampleParam->load()));
+    if (index == lastOversample || getSampleRate() <= 0.0)
+        return;
+
+    lastOversample = index;
+    power.setOversampling (params::oversampleValues[index]);
+
+    // The factor does not change the round-trip — the module keeps it at tpp-1 across factors — but
+    // report it again anyway, so a future module that does cannot silently desync the host.
+    setLatencySamples (power.latencySamples());
+}
+
 void AmpProcessor::prepareToPlay (double sampleRate, int)
 {
     const int channels = juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels());
 
     tone.prepare (sampleRate, channels);
     reverb.prepare (sampleRate);
+
+    // Choose the factor BEFORE preparing, so prepare() builds with it and nothing has to re-prepare
+    // from inside a prepare.
+    lastOversample = juce::jlimit (0, params::oversampleFactors.size() - 1,
+                                   juce::roundToInt (oversampleParam->load()));
+    power.setOversampling (params::oversampleValues[lastOversample]);
     power.prepare (sampleRate, getBlockSize(), channels);
 
     // Reported ALWAYS, whether the power amp is switched on or not: its bypass path carries the same
@@ -128,6 +150,7 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
+    const auto blockStart = juce::Time::getHighResolutionTicks();
 
     // Clear any output channel the host gave us beyond what the input carries.
     for (auto ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
@@ -156,6 +179,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     power.setDrive (powerDriveParam->load());
     power.setSag (powerSagParam->load());
     power.process (channels, numChannels, numSamples, powerOnParam->load() > 0.5f);
+
+    // Load as a share of the block's own wall time — the number the footer shows.
+    if (const double budget = numSamples / juce::jmax (1.0, getSampleRate()); budget > 0.0)
+    {
+        const double spent = juce::Time::highResolutionTicksToSeconds (
+            juce::Time::getHighResolutionTicks() - blockStart);
+        dspLoad.store (dspLoad.load() * 0.9f + (float) (spent / budget * 100.0) * 0.1f);
+    }
 }
 
 juce::AudioProcessorEditor* AmpProcessor::createEditor()

@@ -9,23 +9,25 @@ PowerAmpBlock::PowerAmpBlock (juce::AudioProcessorValueTreeState& s)
     : BlockFrame ("Power Amp", BlockFrame::Kind::dsp), state (s)
 {
     addAndMakeVisible (type);
-    addAndMakeVisible (tube);
-    addAndMakeVisible (count);
+    addAndMakeVisible (output);
 
-    tube.setItems (params::powerTubes, 2);
-    count.accent = theme::orange;
-    count.setItems (params::powerCounts, 1);
+    output.setTubes (params::powerTubes);
 
     tubeAttachment = std::make_unique<juce::ParameterAttachment> (
         *state.getParameter (params::powerTube),
-        [this] (float v) { tube.setSelectedIndex (juce::roundToInt (v), juce::dontSendNotification); repaint(); });
+        [this] (float v) { output.setSelection (juce::roundToInt (v), output.getCount()); });
 
     countAttachment = std::make_unique<juce::ParameterAttachment> (
         *state.getParameter (params::powerCount),
-        [this] (float v) { count.setSelectedIndex (juce::roundToInt (v), juce::dontSendNotification); repaint(); });
+        [this] (float v) { output.setSelection (output.getTube(), juce::roundToInt (v) + 1); });
 
-    tube.onChange  = [this] (int v) { tubeAttachment->setValueAsCompleteGesture ((float) v); };
-    count.onChange = [this] (int v) { countAttachment->setValueAsCompleteGesture ((float) v); };
+    // One pick writes both: they land in the same message-loop turn, so the history folds them into
+    // a single undo step.
+    output.onPick = [this] (int t, int n)
+    {
+        tubeAttachment->setValueAsCompleteGesture ((float) t);
+        countAttachment->setValueAsCompleteGesture ((float) (n - 1));
+    };
     addAndMakeVisible (drive);
     addAndMakeVisible (sag);
 
@@ -67,13 +69,7 @@ void PowerAmpBlock::layOutContent (juce::Rectangle<int> area)
 {
     // The bottle and how many of it — the amp rather than a setting on it, so they sit above the
     // knobs with the model's name, not among them.
-    auto tubeStrip = area.removeFromTop (tubeRow);
-    count.setBounds (tubeStrip.removeFromRight (countCol));
-    tubeStrip.removeFromRight (rowGap);
-    tube.setBounds (tubeStrip);
-
-    area.removeFromTop (rowGap);
-    glyphArea = area.removeFromTop (glyphRow);
+    output.setBounds (area.removeFromTop (tubeRow));
     area.removeFromTop (rowGap);
 
     // Two knobs out of the stage's ten controls: Drive is what a power amp is for, Sag is what makes
@@ -85,19 +81,6 @@ void PowerAmpBlock::layOutContent (juce::Rectangle<int> area)
     drive.setBounds (row.removeFromLeft (side));
     row.removeFromLeft (knobGap);
     sag.setBounds (row.removeFromLeft (side));
-}
-
-void PowerAmpBlock::paintContent (juce::Graphics& g)
-{
-    // The bottles themselves, one glyph each. appkit already draws them, counts them and colours
-    // them; the block only says which and how many.
-    if (glyphArea.isEmpty())
-        return;
-
-    const int n = juce::jlimit (params::powerCounts.indexOf ("1") + 1, 2, count.getSelectedIndex() + 1);
-    const felitronics::appkit::DeviceSpec spec { { felitronics::appkit::DeviceType::tube, n } };
-
-    felitronics::appkit::drawDeviceSpecStatic (g, glyphArea.toFloat(), spec);
 }
 
 } // namespace orbitamp

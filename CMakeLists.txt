@@ -137,6 +137,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/EqSection.cpp
     src/ui/ReverbBlock.cpp
     src/ui/Chrome.cpp
+    src/ui/Footer.cpp
 )
 
 # ----------------------------------------------------------------------------

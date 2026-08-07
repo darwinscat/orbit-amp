@@ -3,9 +3,7 @@
 #include "BlockFrame.h"
 #include "Knob.h"
 #include "Selector.h"
-#include "StepSwitch.h"
-
-#include <felitronics/appkit/DeviceGlyph.h>
+#include "TubeSelector.h"
 
 namespace orbitamp
 {
@@ -28,25 +26,19 @@ private:
     int  headerHeight() const override { return headerRow; }
     void layOutHeader (juce::Rectangle<int>) override;
     void layOutContent (juce::Rectangle<int>) override;
-    void paintContent (juce::Graphics&) override;
 
     static constexpr int headerRow = 22;
 
     juce::AudioProcessorValueTreeState& state;
 
-    Selector   type  { theme::violet, true };
-    Selector   tube  { theme::orange, true };   // the bottle: captured hardware's colour, not ours
-    StepSwitch count;
+    Selector     type { theme::violet, true };
+    TubeSelector output;   // bottle and count as ONE choice, drawn as the bottles themselves
     Knob     drive { "Drive", theme::violet, 0 };
     Knob     sag   { "Sag",   theme::violet, 0 };
 
-    static constexpr int knobGap   = 12;
-    static constexpr int tubeRow   = 20;
-    static constexpr int countCol  = 46;
-    static constexpr int glyphRow  = 26;
-    static constexpr int rowGap    = 8;
-
-    juce::Rectangle<int> glyphArea;
+    static constexpr int knobGap = 12;
+    static constexpr int tubeRow = 26;
+    static constexpr int rowGap  = 8;
 
     std::unique_ptr<juce::ParameterAttachment> typeAttachment, tubeAttachment, countAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> driveAttachment, sagAttachment;
