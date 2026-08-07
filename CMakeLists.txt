@@ -68,6 +68,24 @@ else()
         GIT_TAG        ${ORBITAMP_FCORE_TAG}
         GIT_SHALLOW    TRUE)
 endif()
+# The neural runtime. felitronics::nam is OFF by default so a consumer that does not need it stays
+# header-only; orbit-amp plays captured devices, so it needs it. The module fetches
+# NeuralAmpModelerCore and the namz codec itself — the overrides below only spare a second clone of
+# trees this machine already has, and fall back to the pins when they are gone.
+set(FELITRONICS_WITH_NAM ON CACHE BOOL "orbit-amp plays .namz captures" FORCE)
+
+set(ORBITAMP_NAM_CORE_SRC "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/build-hard/_deps/nam_core_src-src"
+    CACHE PATH "Local NeuralAmpModelerCore checkout; empty fetches the pin")
+set(ORBITAMP_NAMZ_SRC "$ENV{HOME}/IdeaProjects/namz"
+    CACHE PATH "Local namz checkout; empty fetches the pin")
+
+if(EXISTS "${ORBITAMP_NAM_CORE_SRC}")
+    set(FELITRONICS_NAM_CORE_SRC "${ORBITAMP_NAM_CORE_SRC}" CACHE PATH "" FORCE)
+endif()
+if(EXISTS "${ORBITAMP_NAMZ_SRC}/include/namz.h")
+    set(FELITRONICS_NAMZ_SRC "${ORBITAMP_NAMZ_SRC}" CACHE PATH "" FORCE)
+endif()
+
 FetchContent_MakeAvailable(felitronics_core)
 
 # ----------------------------------------------------------------------------
@@ -163,6 +181,7 @@ target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
+    felitronics::nam                 # NAM inference — the captured devices actually play
     felitronics::poweramp            # white-box tube power amp (core::PowerAmp)
     felitronics::oversampling        # its 4x alias-free path
     felitronics::saturation          # its tube curves
@@ -255,5 +274,20 @@ target_link_libraries(orbitamp_poweramp_test PRIVATE
     felitronics::saturation
     felitronics::eq
     juce::juce_dsp
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+# ----------------------------------------------------------------------------
+# Gate for reading an .orbitrig pack and playing it. Skips cleanly when no pack is installed.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_captured_test PRODUCT_NAME "OrbitAmpCapturedTest")
+target_sources(orbitamp_captured_test PRIVATE tests/CapturedStageTests.cpp)
+target_include_directories(orbitamp_captured_test PRIVATE src)
+target_compile_definitions(orbitamp_captured_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_captured_test PRIVATE
+    felitronics::nam
+    juce::juce_audio_basics
+    juce::juce_events
+    juce::juce_gui_basics
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)

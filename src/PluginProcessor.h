@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/CapturedStage.h"
 #include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
 #include "core/ToneStack.h"
@@ -76,6 +77,10 @@ private:
         rather than in the audio callback. */
     void applyOversamplingIfChanged();
 
+    /** The boost's gain knob SELECTS a capture, so a move means loading a different file. Message
+        thread, off the timer — the audio thread never touches a disk. */
+    void loadBoostModelIfChanged();
+
     /** Reads the tone parameters into the stack's settings. Called per block from the audio thread;
         the stack only redesigns when something actually moved. */
     void updateToneSettings() noexcept;
@@ -88,6 +93,17 @@ private:
     core::ToneStack   tone;
     core::ReverbStage reverb;
     core::PowerAmp    power;
+
+public:
+    /** The captured pedal in front. The library and the loading live on the message thread; the
+        audio thread only ever meets a model that is already in memory. */
+    core::CapturedStage boost;
+    juce::Array<device::DeviceLibrary::Pack> devicePacks;
+
+    /** Re-scans the devices folder and points the boost at the first pack. Message thread. */
+    void rescanDevices();
+
+private:
 
     // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
     // thread should not be doing per block.
@@ -112,6 +128,9 @@ private:
     std::atomic<float>* powerTubeParam  = nullptr;
     std::atomic<float>* powerCountParam = nullptr;
     std::atomic<float>* oversampleParam = nullptr;
+    std::atomic<float>* boostOnParam    = nullptr;
+    std::atomic<float>* boostGainParam  = nullptr;
+    int lastBoostGainIndex = -1;
 
 public:
     /** What the footer reports: the run's own facts, not the sound's. */

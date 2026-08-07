@@ -16,12 +16,17 @@ class PresetManager
 public:
     static constexpr const char* extension = ".orbitamp";
 
+    /** JUCE's userApplicationDataDirectory is ~/Library on macOS, not ~/Library/Application Support —
+        without this, presets were being written one level too high. */
     static juce::File directory()
     {
-        auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                       .getChildFile ("Darwin's Cat")
-                       .getChildFile ("OrbitAmp")
-                       .getChildFile ("Presets");
+        auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
+
+       #if JUCE_MAC
+        dir = dir.getChildFile ("Application Support");
+       #endif
+
+        dir = dir.getChildFile ("Darwin's Cat").getChildFile ("OrbitAmp").getChildFile ("Presets");
 
         if (! dir.isDirectory())
             dir.createDirectory();

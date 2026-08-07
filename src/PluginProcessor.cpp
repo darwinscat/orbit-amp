@@ -43,6 +43,10 @@ AmpProcessor::AmpProcessor()
     powerTubeParam  = apvts.getRawParameterValue (params::powerTube);
     powerCountParam = apvts.getRawParameterValue (params::powerCount);
     oversampleParam = apvts.getRawParameterValue (params::oversample);
+    boostOnParam    = apvts.getRawParameterValue (params::boostOn);
+    boostGainParam  = apvts.getRawParameterValue (params::boostGain);
+
+    rescanDevices();
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -73,6 +77,32 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
     }
 }
 
+void AmpProcessor::rescanDevices()
+{
+    devicePacks = device::DeviceLibrary::scan();
+    boost.setPack (devicePacks.isEmpty() ? nullptr : &devicePacks.getReference (0));
+    lastBoostGainIndex = -1;
+}
+
+void AmpProcessor::loadBoostModelIfChanged()
+{
+    const auto positions = boost.gainPositions();
+    if (positions.isEmpty())
+        return;
+
+    // The knob reads 0..10; the captures sit at whatever angles the device was taken at, evenly
+    // spaced across that travel. Nearest position wins — between two captures there is nothing.
+    const float t = juce::jlimit (0.0f, 1.0f, boostGainParam->load() * 0.1f);
+    const int index = juce::jlimit (0, positions.size() - 1,
+                                    juce::roundToInt (t * (float) (positions.size() - 1)));
+
+    if (index == lastBoostGainIndex)
+        return;
+
+    lastBoostGainIndex = index;
+    boost.selectGainIndex (index);
+}
+
 void AmpProcessor::applyOversamplingIfChanged()
 {
     const int index = juce::jlimit (0, params::oversampleFactors.size() - 1,
@@ -94,6 +124,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int)
 
     tone.prepare (sampleRate, channels);
     reverb.prepare (sampleRate);
+    boost.prepare (sampleRate, getBlockSize());
+    lastBoostGainIndex = -1;
+    loadBoostModelIfChanged();
 
     // Choose the factor BEFORE preparing, so prepare() builds with it and nothing has to re-prepare
     // from inside a prepare.
@@ -163,8 +196,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
 
-    // boost -> preamp -> EQ -> reverb. The captured stages are still silent passthrough: they need
-    // profiles that do not exist yet.
+    // boost -> preamp -> EQ -> reverb -> power amp.
+    if (boostOnParam->load() > 0.5f)
+        boost.process (channels, numChannels, numSamples);
+
     if (eqOnParam->load() > 0.5f)
         tone.process (channels, numChannels, numSamples);
 
