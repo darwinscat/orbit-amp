@@ -1,6 +1,7 @@
 #include "BoostBlock.h"
 
 #include "../Parameters.h"
+#include "../device/VoicingLibrary.h"
 
 #include <cmath>
 
@@ -10,9 +11,27 @@ namespace orbitamp
 BoostBlock::BoostBlock (juce::AudioProcessorValueTreeState& s)
     : BlockFrame ("Boost", BlockFrame::Kind::captured), state (s)
 {
+    addAndMakeVisible (pedal);
     addAndMakeVisible (gain);
     addAndMakeVisible (tone);
     addAndMakeVisible (curve);
+
+    // Same tree and the same character ramp as the preamp's — a pedal is picked the same way an amp
+    // voicing is, so it should not be a different kind of control.
+    juce::Array<VoicingSelector::Group> groups;
+    for (int t = 0; t < params::typeNames.size(); ++t)
+        groups.add ({ params::typeNames[t], device::VoicingLibrary::pedalsFor (t) });
+
+    pedal.setGroups (std::move (groups));
+    pedal.onPick = [this] (int t, int v) { applyPick (t, v); };
+
+    typeAttachment = std::make_unique<juce::ParameterAttachment> (
+        *state.getParameter (params::boostType),
+        [this] (float v) { pedal.setSelection (juce::roundToInt (v), pedal.getItemIndex()); });
+
+    voiceAttachment = std::make_unique<juce::ParameterAttachment> (
+        *state.getParameter (params::boostVoice),
+        [this] (float v) { pedal.setSelection (pedal.getGroupIndex(), juce::roundToInt (v)); });
 
     curve.setInterceptsMouseClicks (false, false);   // read-only: an illustration, not a control
 
@@ -25,10 +44,24 @@ BoostBlock::BoostBlock (juce::AudioProcessorValueTreeState& s)
     toneAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         state, params::boostTone, tone);
 
+    typeAttachment->sendInitialUpdate();
+    voiceAttachment->sendInitialUpdate();
+
     refreshTone();
 }
 
 BoostBlock::~BoostBlock() = default;
+
+void BoostBlock::applyPick (int typeIndex, int voiceIndex)
+{
+    typeAttachment->setValueAsCompleteGesture ((float) typeIndex);
+    voiceAttachment->setValueAsCompleteGesture ((float) voiceIndex);
+}
+
+void BoostBlock::layOutHeader (juce::Rectangle<int> area)
+{
+    pedal.setBounds (area);
+}
 
 void BoostBlock::refreshTone()
 {

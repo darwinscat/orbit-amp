@@ -3,6 +3,7 @@
 #include "BlockFrame.h"
 #include "EqCurve.h"
 #include "Knob.h"
+#include "VoicingSelector.h"
 
 #include <felitronics/eq/MatchedBiquad.h>
 
@@ -25,7 +26,13 @@ public:
     ~BoostBlock() override;
 
 private:
+    int  headerHeight() const override { return headerRow; }
+    void layOutHeader (juce::Rectangle<int>) override;
     void layOutContent (juce::Rectangle<int>) override;
+
+    void applyPick (int typeIndex, int voiceIndex);
+
+    static constexpr int headerRow = 22;   // taller than the default: it carries the pedal picker
 
     /** The measured tone, as the device descriptor models it: a first-order low pass whose corner
         follows the knob. Drawing only — the captured half of this pedal does not exist yet. */
@@ -38,6 +45,7 @@ private:
 
     juce::AudioProcessorValueTreeState& state;
 
+    VoicingSelector pedal;
     Knob gain { "Gain", theme::orange, 21 };   // 21 notches = the 0.5 steps of the parameter
     Knob tone { "Tone", theme::orange, 0 };
 
@@ -47,6 +55,7 @@ private:
     static constexpr double displayRate = 48000.0;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment, toneAttachment;
+    std::unique_ptr<juce::ParameterAttachment> typeAttachment, voiceAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BoostBlock)
 };

@@ -26,6 +26,17 @@ struct VoicingLibrary
         }
     }
 
+    /** The pedals, by the character they sit at with the gain at noon.
+
+        EMPTY on purpose. The preamp's names above are stand-ins I made up to get the control built;
+        adding a second invented set would be doubling down on that. The selector renders correctly
+        against an empty list — it reads as "—" and the tree shows the types greyed — so this fills
+        in from the descriptors when they exist and nothing in the UI changes. */
+    static juce::StringArray pedalsFor (int /*typeIndex*/)
+    {
+        return {};
+    }
+
     /** Clamps a stored voice index to what the given type actually offers — a saved session may name
         a voice the type no longer has. */
     static int clampVoice (int typeIndex, int voiceIndex)

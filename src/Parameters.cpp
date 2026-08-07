@@ -25,6 +25,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Float> (juce::ParameterID { boostTone, 1 }, "Boost Tone",
                                          juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 10.0f));
 
+    layout.add (std::make_unique<Choice> (juce::ParameterID { boostType,  1 }, "Boost Type", typeNames, 0),
+                std::make_unique<Int>    (juce::ParameterID { boostVoice, 1 }, "Boost Voice",
+                                          0, maxVoicesPerType - 1, 0));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { preampType, 1 }, "Type", typeNames, 0),
                 std::make_unique<Int>    (juce::ParameterID { preampVoice, 1 }, "Voice", 0, maxVoicesPerType - 1, 0));
 
