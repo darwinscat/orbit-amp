@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BlockFrame.h"
+#include "Knob.h"
 #include "Selector.h"
 
 namespace orbitamp
@@ -23,15 +24,20 @@ public:
 private:
     int  headerHeight() const override { return headerRow; }
     void layOutHeader (juce::Rectangle<int>) override;
-    void paintContent (juce::Graphics&) override;
+    void layOutContent (juce::Rectangle<int>) override;
 
     static constexpr int headerRow = 22;
 
     juce::AudioProcessorValueTreeState& state;
 
     Selector type { theme::violet, true };
+    Knob     drive { "Drive", theme::violet, 0 };
+    Knob     sag   { "Sag",   theme::violet, 0 };
+
+    static constexpr int knobGap = 12;
 
     std::unique_ptr<juce::ParameterAttachment> typeAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> driveAttachment, sagAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PowerAmpBlock)
 };

@@ -9,6 +9,13 @@ PowerAmpBlock::PowerAmpBlock (juce::AudioProcessorValueTreeState& s)
     : BlockFrame ("Power Amp", BlockFrame::Kind::dsp), state (s)
 {
     addAndMakeVisible (type);
+    addAndMakeVisible (drive);
+    addAndMakeVisible (sag);
+
+    driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        state, params::powerDrive, drive);
+    sagAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        state, params::powerSag, sag);
 
     attachPower (*state.getParameter (params::powerOn));
 
@@ -37,13 +44,17 @@ void PowerAmpBlock::layOutHeader (juce::Rectangle<int> area)
     type.setBounds (area);
 }
 
-void PowerAmpBlock::paintContent (juce::Graphics& g)
+void PowerAmpBlock::layOutContent (juce::Rectangle<int> area)
 {
-    // Nothing here yet. Say so rather than leave an unexplained hole — an empty framed box reads as
-    // a bug, a labelled one reads as unfinished.
-    g.setColour (theme::txFaint.withAlpha (0.5f));
-    theme::drawTracked (g, "No illustration yet", contentArea().toFloat(),
-                        theme::displayFont (8.0f), 0.1f, juce::Justification::centred);
+    // Two knobs out of the stage's ten controls: Drive is what a power amp is for, Sag is what makes
+    // it feel like one. Everything else is the model, not a setting.
+    const int side  = juce::jmin (area.getHeight(), (area.getWidth() - knobGap) / 2);
+    const int total = side * 2 + knobGap;
+
+    auto row = area.withSizeKeepingCentre (total, side);
+    drive.setBounds (row.removeFromLeft (side));
+    row.removeFromLeft (knobGap);
+    sag.setBounds (row.removeFromLeft (side));
 }
 
 } // namespace orbitamp

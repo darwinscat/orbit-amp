@@ -36,6 +36,10 @@ AmpProcessor::AmpProcessor()
     reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
     reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
     reverbMixParam  = apvts.getRawParameterValue (params::reverbMix);
+
+    powerOnParam    = apvts.getRawParameterValue (params::powerOn);
+    powerDriveParam = apvts.getRawParameterValue (params::powerDrive);
+    powerSagParam   = apvts.getRawParameterValue (params::powerSag);
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -68,8 +72,16 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void AmpProcessor::prepareToPlay (double sampleRate, int)
 {
-    tone.prepare (sampleRate, juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels()));
+    const int channels = juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels());
+
+    tone.prepare (sampleRate, channels);
     reverb.prepare (sampleRate);
+    power.prepare (sampleRate, getBlockSize(), channels);
+
+    // Reported ALWAYS, whether the power amp is switched on or not: its bypass path carries the same
+    // delay, so a toggle never shifts the timing of everything downstream. A latency that changes
+    // with a switch is what makes hosts re-align mid-song.
+    setLatencySamples (power.latencySamples());
 
     updateToneSettings();
     updateReverbSettings();
@@ -135,6 +147,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         reverb.process (channels, numChannels, numSamples);
     else
         reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
+
+    power.setDrive (powerDriveParam->load());
+    power.setSag (powerSagParam->load());
+    power.process (channels, numChannels, numSamples, powerOnParam->load() > 0.5f);
 }
 
 juce::AudioProcessorEditor* AmpProcessor::createEditor()

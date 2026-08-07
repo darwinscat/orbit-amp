@@ -76,7 +76,7 @@ FetchContent_MakeAvailable(felitronics_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.9.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.9.1" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -162,6 +162,9 @@ target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
+    felitronics::poweramp            # white-box tube power amp (core::PowerAmp)
+    felitronics::oversampling        # its 4x alias-free path
+    felitronics::saturation          # its tube curves
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures       # ValueTree behind the workspace / presets
@@ -236,3 +239,20 @@ if(APPLE)
         message(STATUS "Standalone signing: no '${ORBITAMP_SIGN_IDENTITY}' identity — staying ad-hoc (mic prompt every launch)")
     endif()
 endif()
+
+# ----------------------------------------------------------------------------
+# Acceptance gate for the power amp's CALIBRATION — felitronics tests the tube stage itself; what is
+# ours is the knob mapping. Links juce_dsp for the bypass delay line.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_poweramp_test PRODUCT_NAME "OrbitAmpPowerAmpTest")
+target_sources(orbitamp_poweramp_test PRIVATE tests/PowerAmpTests.cpp)
+target_include_directories(orbitamp_poweramp_test PRIVATE src)
+target_compile_definitions(orbitamp_poweramp_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_poweramp_test PRIVATE
+    felitronics::poweramp
+    felitronics::oversampling
+    felitronics::saturation
+    felitronics::eq
+    juce::juce_dsp
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)

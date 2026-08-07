@@ -87,6 +87,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Bool>   (juce::ParameterID { powerOn,   1 }, "Power Amp", false),
                 std::make_unique<Choice> (juce::ParameterID { powerType, 1 }, "Power Amp Type", powerTypes, 0));
 
+    // Two knobs out of the stage's ten controls. The rest is what a power amp IS rather than what
+    // you set on it, and belongs to the model. Continuous, not stepped: this is our own DSP, so
+    // every position between two others is a real one — unlike a captured gain.
+    layout.add (std::make_unique<Float> (juce::ParameterID { powerDrive, 1 }, "Power Drive",
+                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f),
+                std::make_unique<Float> (juce::ParameterID { powerSag, 1 }, "Power Sag",
+                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 3.0f));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters, 0),
                 std::make_unique<Float>  (juce::ParameterID { reverbMix, 1 }, "Mix",
                                           juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 20.0f));

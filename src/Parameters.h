@@ -62,7 +62,9 @@ inline const juce::StringArray cabMics { "SM57", "MD421" };
 inline const juce::StringArray cabPositions { "Cone Edge", "Center Cone", "Cap Edge", "Center Cap" };
 
 inline constexpr const char* powerOn   = "power_on";
-inline constexpr const char* powerType = "power_type";
+inline constexpr const char* powerType  = "power_type";
+inline constexpr const char* powerDrive = "power_drive";
+inline constexpr const char* powerSag   = "power_sag";
 
 /** What drives the power amp. The block's own switch is the "none" — a second way to turn it off
     inside the list would be two controls for one state. Simulation is our white-box tube stage;

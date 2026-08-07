@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
 #include "core/ToneStack.h"
 
@@ -78,6 +79,7 @@ private:
 
     core::ToneStack   tone;
     core::ReverbStage reverb;
+    core::PowerAmp    power;
 
     // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
     // thread should not be doing per block.
@@ -95,6 +97,10 @@ private:
     std::atomic<float>* reverbOnParam   = nullptr;
     std::atomic<float>* reverbTypeParam = nullptr;
     std::atomic<float>* reverbMixParam  = nullptr;
+
+    std::atomic<float>* powerOnParam    = nullptr;
+    std::atomic<float>* powerDriveParam = nullptr;
+    std::atomic<float>* powerSagParam   = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };
