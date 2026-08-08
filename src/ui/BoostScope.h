@@ -3,6 +3,8 @@
 #include "../core/ScopeTap.h"
 #include "Theme.h"
 
+#include <felitronics/appkit/DeviceGlyph.h>
+
 #include <array>
 
 namespace orbitamp
@@ -37,6 +39,18 @@ public:
 
     Mode getMode() const noexcept { return mode; }
 
+    /** What is inside the device, drawn over the picture. It belongs to the picture rather than to a
+        row of its own: the row cost a line of height and the glyphs were small in it, and what is in
+        the box is a caption on what the box does, not a separate fact. */
+    void setSpec (felitronics::appkit::DeviceSpec s)
+    {
+        if (s != spec)
+        {
+            spec = std::move (s);
+            repaint();
+        }
+    }
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat();
@@ -57,6 +71,8 @@ public:
                 case Mode::transfer: paintTransfer (g, r.reduced (6.0f)); break;
                 case Mode::tone:     paintTone (g, r.reduced (6.0f)); break;
             }
+
+            paintSpec (g, r.reduced (5.0f));
         }
 
         g.setColour (theme::hair2);
@@ -64,6 +80,23 @@ public:
     }
 
 private:
+    /** The glyph row, over the picture's top-left corner. A running waveform passes straight through
+        thin strokes, so the glyphs sit on a scrim — barely there against the well, enough that they
+        never have to compete with what is moving behind them. */
+    void paintSpec (juce::Graphics& g, juce::Rectangle<float> r)
+    {
+        const int n = felitronics::appkit::deviceSpecCount (spec);
+        if (n <= 0)
+            return;
+
+        auto row = r.removeFromTop (glyphSize).removeFromLeft (glyphSize * (float) n);
+
+        g.setColour (theme::bezel.withAlpha (0.72f));
+        g.fillRoundedRectangle (row.expanded (3.0f, 2.0f), theme::radiusSm);
+
+        felitronics::appkit::drawDeviceSpecStatic (g, row, spec);
+    }
+
     void timerCallback() override
     {
         if (mode != Mode::tone)
@@ -214,8 +247,11 @@ private:
         g.strokePath (p, juce::PathStrokeType (1.6f));
     }
 
+    static constexpr float glyphSize = 26.0f;   // was 18 in a row of its own, and small there
+
     const core::ScopeTap& tap;
     std::function<double (double)> toneDb;
+    felitronics::appkit::DeviceSpec spec;
 
     mutable std::array<float, core::ScopeTap::size> dry {}, wet {};
     Mode mode = Mode::shape;
