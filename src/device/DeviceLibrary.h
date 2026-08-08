@@ -1,5 +1,6 @@
 #pragma once
 
+#include <namz.h>
 #include <namz_rig.h>
 #include <namz_rig_load.h>
 
@@ -19,12 +20,31 @@ public:
     struct Pack
     {
         juce::String  name;       // the rig's display name
-        juce::File    location;   // the folder, or the .orbitrig zip
+        juce::File    location;   // the folder, the .orbitrig zip, or a lone .nam/.namz
         bool          zipped = false;
+        bool          loose  = false;   // a single model file the user dropped in, not a pack
+        bool          bundled = false;  // shipped with the plugin rather than added by the user
+        int           character = 0;    // place on the ramp, from the stage's tone_type
         namz::rig::Rig rig;
 
         bool isValid() const { return ! rig.chain.empty(); }
     };
+
+    /** The ordered gain scale namz states per stage. Green to red, and the order IS the sort.
+
+        Unstated lands at the clean end rather than nowhere: a device that did not say is far more
+        often a clean one than a metal one, and it has to sort somewhere. */
+    static int characterFromToneType (const std::string& toneType)
+    {
+        const auto s = juce::String (toneType).trim().toLowerCase();
+
+        if (s == "clean")                       return 0;
+        if (s == "edge")                        return 1;
+        if (s == "crunch")                      return 2;
+        if (s == "hi-gain" || s == "high-gain") return 3;
+        if (s == "modern")                      return 4;
+        return 0;
+    }
 
     /** Where a user drops packs. Created on first look, so the folder exists to be dropped into. */
     /** JUCE's userApplicationDataDirectory is ~/Library on macOS, not ~/Library/Application Support —
@@ -50,38 +70,32 @@ public:
         return dir;
     }
 
-    /** Every pack found, in name order. Folders and zips both count — a pack being unzipped is a
-        convenience during development, not a different kind of thing. */
+    /** Where the plugin's own devices live, inside the bundle. Absent during development, which is
+        the honest state of it: nothing ships curated yet. */
+    static juce::File bundledDirectory()
+    {
+        return juce::File::getSpecialLocation (juce::File::currentApplicationFile)
+                 .getChildFile ("Contents").getChildFile ("Resources").getChildFile ("Devices");
+    }
+
+    /** Everything loadable, ordered green to red by how much gain it is.
+
+        Bundled devices first, then whatever the user added — packs and lone models alike, since a
+        `.nam` someone dropped in is theirs exactly as much as an `.orbitrig` is. Within each of the
+        two, the character ramp orders the list and the name settles ties. */
     static juce::Array<Pack> scan()
     {
         juce::Array<Pack> packs;
 
-        for (const auto& f : directory().findChildFiles (juce::File::findFilesAndDirectories, false))
+        scanFolder (bundledDirectory(), true, packs);
+        scanFolder (directory(), false, packs);
+
+        std::sort (packs.begin(), packs.end(), [] (const Pack& a, const Pack& b)
         {
-            const bool zipped = f.existsAsFile() && f.getFileName().endsWithIgnoreCase (".orbitrig.zip");
-            const bool folder = f.isDirectory() && f.getChildFile ("rig.json").existsAsFile();
-
-            if (! zipped && ! folder)
-                continue;
-
-            Pack p;
-            p.location = f;
-            p.zipped   = zipped;
-
-            const auto manifest = readEntry (p, "rig.json");
-            if (manifest.isEmpty())
-                continue;
-
-            bool ok = false;
-            p.rig  = namz::rig::loadRigManifest (manifest.toStdString(), &ok);
-            p.name = p.rig.name.empty() ? f.getFileNameWithoutExtension() : juce::String (p.rig.name);
-
-            if (ok && p.isValid())
-                packs.add (std::move (p));
-        }
-
-        std::sort (packs.begin(), packs.end(),
-                   [] (const Pack& a, const Pack& b) { return a.name < b.name; });
+            if (a.bundled != b.bundled)       return a.bundled;
+            if (a.character != b.character)   return a.character < b.character;
+            return a.name < b.name;
+        });
 
         return packs;
     }
@@ -90,6 +104,13 @@ public:
     static juce::MemoryBlock readBinaryEntry (const Pack& pack, const juce::String& entryName)
     {
         juce::MemoryBlock out;
+
+        // A lone model is its own only entry: whatever is asked for, there is one file to give.
+        if (pack.loose)
+        {
+            pack.location.loadFileAsData (out);
+            return out;
+        }
 
         if (! pack.zipped)
         {
@@ -109,6 +130,109 @@ public:
     }
 
 private:
+    static void scanFolder (const juce::File& dir, bool bundled, juce::Array<Pack>& out)
+    {
+        if (! dir.isDirectory())
+            return;
+
+        std::vector<namz::rig::FileMeta> loose;
+        juce::Array<juce::File> looseFiles;
+
+        for (const auto& f : dir.findChildFiles (juce::File::findFilesAndDirectories, false))
+        {
+            const bool zipped = f.existsAsFile() && f.getFileName().endsWithIgnoreCase (".orbitrig.zip");
+            const bool folder = f.isDirectory() && f.getChildFile ("rig.json").existsAsFile();
+
+            if (zipped || folder)
+            {
+                Pack p;
+                p.location = f;
+                p.zipped   = zipped;
+                p.bundled  = bundled;
+
+                const auto manifest = readEntry (p, "rig.json");
+                if (manifest.isEmpty())
+                    continue;
+
+                bool ok = false;
+                p.rig  = namz::rig::loadRigManifest (manifest.toStdString(), &ok);
+                p.name = p.rig.name.empty() ? f.getFileNameWithoutExtension() : juce::String (p.rig.name);
+
+                if (const auto* s = p.rig.firstKnown())
+                    p.character = characterFromToneType (s->toneType);
+
+                if (ok && p.isValid())
+                    out.add (std::move (p));
+
+                continue;
+            }
+
+            if (f.existsAsFile() && (f.hasFileExtension ("nam") || f.hasFileExtension ("namz")))
+            {
+                loose.push_back ({ f.getFileName().toStdString(),
+                                   f.getFileNameWithoutExtension().toStdString(),
+                                   readModelMeta (f) });
+                looseFiles.add (f);
+            }
+        }
+
+        // namz decides what a set of loose files IS — which of them are one device with a gain axis
+        // and which stand alone. Grouping them here would be a second opinion about that.
+        for (const auto& d : namz::rig::buildDevices (loose))
+        {
+            Pack p;
+            p.loose   = true;
+            p.bundled = bundled;
+            p.name    = d.family.empty() ? "Model" : juce::String (d.family);
+
+            // The file the device would load first, so the pack has somewhere to read bytes from.
+            for (const auto& f : looseFiles)
+                if (! d.files.empty() && f.getFileName().toStdString() == d.files.front().id)
+                {
+                    p.location = f;
+                    break;
+                }
+
+            if (p.location == juce::File())
+                continue;
+
+            namz::rig::Stage stage;
+            stage.kind   = namz::rig::StageKind::Nam;
+            stage.slot   = d.slot;
+            stage.device = d;
+            p.character  = characterFromToneType (stage.toneType);
+            p.rig.name   = p.name.toStdString();
+            p.rig.chain.push_back (std::move (stage));
+
+            out.add (std::move (p));
+        }
+    }
+
+    /** A model's header. `.namz` carries it in the container; a bare `.nam` is JSON with a metadata
+        object, which is JUCE's job to read rather than namz's — namz owns the container, not the
+        format NAM itself writes. */
+    static std::map<std::string, std::string> readModelMeta (const juce::File& f)
+    {
+        std::map<std::string, std::string> meta;
+
+        if (f.hasFileExtension ("namz"))
+        {
+            juce::MemoryBlock mb;
+            if (f.loadFileAsData (mb))
+                meta = namz::readMeta (mb.getData(), mb.getSize());
+
+            return meta;
+        }
+
+        const auto json = juce::JSON::parse (f.loadFileAsString());
+        if (const auto* obj = json.getDynamicObject())
+            if (const auto m = obj->getProperty ("metadata"); const auto* mo = m.getDynamicObject())
+                for (const auto& prop : mo->getProperties())
+                    meta[prop.name.toString().toStdString()] = prop.value.toString().toStdString();
+
+        return meta;
+    }
+
     static juce::String readEntry (const Pack& pack, const juce::String& entryName)
     {
         const auto data = readBinaryEntry (pack, entryName);

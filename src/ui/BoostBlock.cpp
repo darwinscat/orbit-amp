@@ -1,7 +1,6 @@
 #include "BoostBlock.h"
 
 #include "../PluginProcessor.h"
-#include "../device/VoicingLibrary.h"
 
 #include <felitronics/lineareq/MagnitudeCurve.h>
 
@@ -24,31 +23,21 @@ BoostBlock::BoostBlock (AmpProcessor& processor)
 
     attachPower (*amp.apvts.getParameter (params::boostOn));
 
-    juce::Array<VoicingSelector::Group> groups;
-    for (int t = 0; t < params::typeNames.size(); ++t)
-        groups.add ({ params::typeNames[t], device::VoicingLibrary::pedalsFor (t) });
+    deviceAttachment = std::make_unique<juce::ParameterAttachment> (
+        *amp.apvts.getParameter (params::boostDevice),
+        [this] (float v) { pedal.setSelection (juce::roundToInt (v)); });
 
-    pedal.setGroups (std::move (groups));
-
-    typeAttachment = std::make_unique<juce::ParameterAttachment> (
-        *amp.apvts.getParameter (params::boostType),
-        [this] (float v) { pedal.setSelection (juce::roundToInt (v), pedal.getItemIndex()); });
-
-    voiceAttachment = std::make_unique<juce::ParameterAttachment> (
-        *amp.apvts.getParameter (params::boostVoice),
-        [this] (float v) { pedal.setSelection (pedal.getGroupIndex(), juce::roundToInt (v)); });
-
-    pedal.onPick = [this] (int t, int v)
+    pedal.onPick = [this] (int i)
     {
-        typeAttachment->setValueAsCompleteGesture ((float) t);
-        voiceAttachment->setValueAsCompleteGesture ((float) v);
+        deviceAttachment->setValueAsCompleteGesture ((float) i);
+        amp.selectBoostDevice (i);
+        deviceChanged();
     };
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::boostGain, gain);
 
-    typeAttachment->sendInitialUpdate();
-    voiceAttachment->sendInitialUpdate();
+    deviceAttachment->sendInitialUpdate();
 
     deviceChanged();
 }
@@ -60,8 +49,25 @@ void BoostBlock::deviceChanged()
     const auto* measured = amp.boost.measured();
     const auto  positions = amp.boost.gainPositions();
 
+    // The list IS the combo: what a player has, greenest first. Nothing invented, nothing curated
+    // into groups — the character ramp does the ordering a "type" heading used to.
+    juce::Array<VoicingSelector::Entry> entries;
+    bool sawUser = false;
+
+    for (const auto& pack : amp.devicePacks)
+    {
+        VoicingSelector::Entry e;
+        e.name = pack.name;
+        e.character = pack.character;
+        e.startsSection = ! pack.bundled && ! sawUser;   // the rule between shipped and added
+        sawUser = sawUser || ! pack.bundled;
+        entries.add (std::move (e));
+    }
+
+    pedal.setEntries (std::move (entries));
+
     caption = amp.boost.deviceName();
-    circuit = felitronics::appkit::parseDeviceSpec (amp.boost.circuit());
+    scope.setSpec (felitronics::appkit::parseDeviceSpec (amp.boost.circuit()));
 
     // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next pack
     // says for the next one.
@@ -195,9 +201,6 @@ void BoostBlock::layOutContent (juce::Rectangle<int> area)
     scopeMode.setBounds (area.removeFromBottom (modeRow));
     area.removeFromBottom (gap);
 
-    if (! circuit.empty())
-        area.removeFromTop (glyphRow + gap / 2);   // the glyph row is painted, not a component
-
     // A switch sits under the knobs rather than beside them: it is not a third amount.
     for (auto& slot : slots)
         if (slot.steps != nullptr)
@@ -234,26 +237,12 @@ void BoostBlock::layOutContent (juce::Rectangle<int> area)
 
 void BoostBlock::paintContent (juce::Graphics& g)
 {
-    auto area = contentArea();
-
-    if (circuit.empty())
+    if (caption.isEmpty())
     {
-        if (caption.isEmpty())
-        {
-            g.setColour (theme::txFaint.withAlpha (0.5f));
-            theme::drawTracked (g, "No device loaded", area.toFloat(), theme::displayFont (8.0f), 0.1f,
-                                juce::Justification::centred);
-        }
-        return;
+        g.setColour (theme::txFaint.withAlpha (0.5f));
+        theme::drawTracked (g, "No device loaded", contentArea().toFloat(), theme::displayFont (8.0f),
+                            0.1f, juce::Justification::centred);
     }
-
-    // What is in the signal path, as the parts themselves. The pack ships the string; appkit draws it.
-    auto row = area.removeFromTop (glyphRow).toFloat();
-    felitronics::appkit::drawDeviceSpecStatic (g, row.removeFromLeft (row.getHeight() * 5.0f), circuit);
-
-    g.setColour (theme::txFaint);
-    theme::drawTracked (g, caption.toUpperCase(), row.withTrimmedLeft (6.0f), theme::displayFont (7.5f),
-                        0.08f, juce::Justification::centredLeft);
 }
 
 } // namespace orbitamp

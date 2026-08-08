@@ -21,8 +21,11 @@ inline constexpr const char* boostTone  = "boost_tone";
     with nothing behind it is hidden rather than shown doing nothing. */
 inline constexpr int boostNumMeasured = 3;
 inline juce::String boostMeasured (int i) { return "boost_meas" + juce::String (i + 1); }
-inline constexpr const char* boostType  = "boost_type";
-inline constexpr const char* boostVoice = "boost_voice";
+/** Which device is loaded, as an index into the scanned list. An index rather than a choice list:
+    a host fixes a Choice's names at construction, and this list is whatever the player has on disk
+    the moment the plugin opens. */
+inline constexpr const char* boostDevice = "boost_device";
+inline constexpr int maxDevices = 128;
 
 /** The pedal tone control's sweep, as the descriptor models it: a first-order low pass whose corner
     moves. The measured example fitted 800 Hz at the dark end; wide open it is out of the way. */

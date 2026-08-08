@@ -97,8 +97,20 @@ void AmpProcessor::selectDemoLoop (int index)
 void AmpProcessor::rescanDevices()
 {
     devicePacks = device::DeviceLibrary::scan();
-    boost.setPack (devicePacks.isEmpty() ? nullptr : &devicePacks.getReference (0));
+    selectBoostDevice (juce::roundToInt (apvts.getRawParameterValue (params::boostDevice)->load()));
+}
+
+void AmpProcessor::selectBoostDevice (int index)
+{
+    // A saved session names a device by position in a list that is whatever is on disk today. If it
+    // is gone, the first one stands in rather than nothing loading — silence is a worse answer than
+    // the wrong pedal, and the name in the combo says which it is.
+    boost.setPack (juce::isPositiveAndBelow (index, devicePacks.size())
+                     ? &devicePacks.getReference (index)
+                     : (devicePacks.isEmpty() ? nullptr : &devicePacks.getReference (0)));
+
     lastBoostGainIndex = -1;
+    lastBoostTone.fill (-1.0f);
 }
 
 void AmpProcessor::loadBoostModelIfChanged()

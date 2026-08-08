@@ -69,6 +69,34 @@ int main()
         return 0;
     }
 
+    // The list the combo shows: green to red by how much gain, the user's own after anything shipped.
+    {
+        std::printf ("\ndevices found\n");
+        for (const auto& p : packs)
+            std::printf ("  %-24s character %d  %s%s\n", p.name.toRawUTF8(), p.character,
+                         p.bundled ? "bundled" : "user", p.loose ? ", loose model" : "");
+
+        bool ordered = true;
+        for (int i = 1; i < packs.size(); ++i)
+        {
+            const auto& a = packs.getReference (i - 1);
+            const auto& b = packs.getReference (i);
+
+            if (a.bundled != b.bundled)      { ordered = ordered && a.bundled; continue; }
+            ordered = ordered && a.character <= b.character;
+        }
+
+        report ("the list runs green to red, shipped before added", ordered);
+        report ("every device has a name to show", [&packs]
+        {
+            for (const auto& p : packs)
+                if (p.name.isEmpty())
+                    return false;
+            return true;
+        }());
+    }
+
+    std::printf ("\n");
     const auto& pack = packs.getReference (0);
     std::printf ("pack: %s  (%s)\n\n", pack.name.toRawUTF8(), pack.zipped ? "zip" : "folder");
 

@@ -56,7 +56,6 @@ private:
     static constexpr int curveHeight = 130;
     static constexpr int gap        = 10;
     static constexpr int knobGap    = 10;
-    static constexpr int glyphRow   = 18;
     static constexpr int switchRow  = 16;
     static constexpr int modeRow    = 18;
 
@@ -83,10 +82,9 @@ private:
     Selector   scopeMode { theme::orange, true };
 
     juce::String caption;
-    felitronics::appkit::DeviceSpec circuit;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
-    std::unique_ptr<juce::ParameterAttachment> typeAttachment, voiceAttachment;
+    std::unique_ptr<juce::ParameterAttachment> deviceAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BoostBlock)
 };

@@ -117,8 +117,12 @@ public:
     std::array<core::MeasuredFilter, (size_t) params::boostNumMeasured> boostTone;
     juce::Array<device::DeviceLibrary::Pack> devicePacks;
 
-    /** Re-scans the devices folder and points the boost at the first pack. Message thread. */
+    /** Re-scans the devices folder and loads whatever the device parameter points at. Message
+        thread. */
     void rescanDevices();
+
+    /** Loads the device at `index` in the scanned list. Message thread — it reads files. */
+    void selectBoostDevice (int index);
 
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;

@@ -5,49 +5,56 @@
 namespace orbitamp
 {
 
-/** One control for the whole voicing choice: type AND voice, picked from a single tree.
+/** One control for the whole device choice: a flat list of everything loadable, picked from a popup
+    or stepped through with the chevrons.
 
-    Two separate lists cost a row and made you choose twice for one decision. Here the popup nests
-    voices under their type, and every entry carries its type's colour off the character ramp — green
-    through red as gain rises — so the type reads without being spelled out.
+    Flat rather than nested, because the list is what a player actually has rather than a taxonomy.
+    Every entry carries its own place on the character ramp — green through red as gain rises — so a
+    row of devices reads as a gradient and the ordering does the work a "type" heading used to do.
 
-    Dumb view: it holds a tree of names and a pair of indices, announces a pick through `onPick`, and
-    knows nothing about parameters. */
+    A section break draws a rule above an entry. That is all a section is here: the list stays one
+    list, and stepping with the chevrons crosses the rule without stopping, because auditioning
+    should not care where a device came from.
+
+    Dumb view: it holds names, an index, and announces a pick through `onPick`. It knows nothing about
+    parameters, packs, or files. */
 class VoicingSelector : public juce::Component
 {
 public:
     VoicingSelector() = default;   // the non-copyable macro below declares a ctor, suppressing this
 
-    struct Group
+    struct Entry
     {
         juce::String name;
-        juce::StringArray items;
+        int  character = 0;         // ramp index: 0 green (clean) .. 4 red
+        bool startsSection = false; // draw a separator above this entry
     };
 
-    void setGroups (juce::Array<Group> newGroups)
+    void setEntries (juce::Array<Entry> newEntries)
     {
-        groups = std::move (newGroups);
+        entries = std::move (newEntries);
+        index = juce::jlimit (0, juce::jmax (0, entries.size() - 1), index);
         repaint();
     }
 
-    void setSelection (int newGroup, int newItem)
+    void setSelection (int newIndex)
     {
-        groupIndex = newGroup;
-        itemIndex  = newItem;
+        index = newIndex;
         repaint();
     }
 
-    int getGroupIndex() const noexcept { return groupIndex; }
-    int getItemIndex()  const noexcept { return itemIndex; }
+    int getSelection() const noexcept { return index; }
+    int getCount() const noexcept     { return entries.size(); }
 
-    /** A pick out of the tree, or a step. */
-    std::function<void (int group, int item)> onPick;
+    /** A pick out of the list, or a step. */
+    std::function<void (int index)> onPick;
 
     //==============================================================================
     void paint (juce::Graphics& g) override
     {
         auto cell = cellArea().toFloat();
-        const auto tint = theme::characterColour (groupIndex);
+        const auto tint = isValid() ? theme::characterColour (entries.getReference (index).character)
+                                    : theme::txDim;
 
         g.setColour (juce::Colour (0xff0d0d14));
         g.fillRoundedRectangle (cell, theme::radiusSm);
@@ -68,36 +75,27 @@ public:
 
         if (prevArea().contains (p)) { step (-1); return; }
         if (nextArea().contains (p)) { step (+1); return; }
-        if (! cellArea().contains (p) || groups.isEmpty())
+        if (! cellArea().contains (p) || entries.isEmpty())
             return;
 
         juce::PopupMenu menu;
-        int id = 1;
 
-        for (int gi = 0; gi < groups.size(); ++gi)
+        for (int i = 0; i < entries.size(); ++i)
         {
-            const auto& grp  = groups.getReference (gi);
-            const auto  tint = theme::characterColour (gi);
+            const auto& e2 = entries.getReference (i);
 
-            juce::PopupMenu sub;
-            for (int ii = 0; ii < grp.items.size(); ++ii)
-            {
-                juce::PopupMenu::Item item (grp.items[ii]);
-                item.itemID = id++;
-                item.colour = tint;
-                item.isTicked = (gi == groupIndex && ii == itemIndex);
-                sub.addItem (item);
-            }
+            if (e2.startsSection && i > 0)
+                menu.addSeparator();
 
-            juce::PopupMenu::Item head (grp.name);
-            head.colour  = tint;
-            head.subMenu = std::make_unique<juce::PopupMenu> (sub);
-            head.isEnabled = ! grp.items.isEmpty();
-            menu.addItem (head);
+            juce::PopupMenu::Item item (e2.name);
+            item.itemID = i + 1;
+            item.colour = theme::characterColour (e2.character);
+            item.isTicked = (i == index);
+            menu.addItem (item);
         }
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-                            [this] (int choice) { if (choice > 0) pickFlat (choice - 1); });
+                            [this] (int choice) { if (choice > 0) pick (choice - 1); });
     }
 
     void mouseMove (const juce::MouseEvent& e) override { setHover (cellArea().contains (e.getPosition())); }
@@ -109,59 +107,25 @@ private:
         if (! isValid())
             return juce::String::charToString ((juce::juce_wchar) 0x2014);   // em dash
 
-        const auto& grp = groups.getReference (groupIndex);
-        return (grp.name + "  " + grp.items[itemIndex]).toUpperCase();
+        return entries.getReference (index).name.toUpperCase();
     }
 
-    bool isValid() const
-    {
-        return groupIndex >= 0 && groupIndex < groups.size()
-            && itemIndex  >= 0 && itemIndex  < groups.getReference (groupIndex).items.size();
-    }
+    bool isValid() const { return index >= 0 && index < entries.size(); }
 
-    /** Walks the tree flattened, so the chevrons step across type boundaries — the audition gesture
-        should not stop at the end of a type. */
-    void pickFlat (int flat)
+    void pick (int i)
     {
-        int seen = 0;
-        for (int gi = 0; gi < groups.size(); ++gi)
-        {
-            const int n = groups.getReference (gi).items.size();
-            if (flat < seen + n)
-            {
-                const int ii = flat - seen;
-                setSelection (gi, ii);
-                if (onPick)
-                    onPick (gi, ii);
-                return;
-            }
-            seen += n;
-        }
-    }
+        setSelection (i);
 
-    int flatCount() const
-    {
-        int n = 0;
-        for (const auto& g : groups)
-            n += g.items.size();
-        return n;
-    }
-
-    int flatIndex() const
-    {
-        int n = 0;
-        for (int gi = 0; gi < groupIndex && gi < groups.size(); ++gi)
-            n += groups.getReference (gi).items.size();
-        return n + itemIndex;
+        if (onPick)
+            onPick (i);
     }
 
     void step (int delta)
     {
-        const int n = flatCount();
-        if (n == 0)
+        if (entries.isEmpty())
             return;
 
-        pickFlat (juce::jlimit (0, n - 1, flatIndex() + delta));
+        pick (juce::jlimit (0, entries.size() - 1, index + delta));
     }
 
     void setHover (bool h)
@@ -206,9 +170,8 @@ private:
     static constexpr int navWidth = 16;
     static constexpr int navGap   = 4;
 
-    juce::Array<Group> groups;
-    int  groupIndex = 0;
-    int  itemIndex  = 0;
+    juce::Array<Entry> entries;
+    int  index = 0;
     bool hover = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VoicingSelector)

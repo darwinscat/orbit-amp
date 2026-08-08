@@ -28,6 +28,14 @@ private:
         settle timer folds them into a single undo step. */
     void applyPick (int typeIndex, int voiceIndex);
 
+    /** Puts the flat selection where the two parameters say. */
+    void syncSelection();
+
+    /** What each row of the flat list stands for. The parameters stay a (type, voice) pair — a host
+        has them saved — so the list keeps the mapping rather than the parameters changing shape. */
+    struct Pair { int type = 0, voice = 0; };
+    juce::Array<Pair> flat;
+
     // Taller than the default title row, because it carries a control. Only this block asks for it,
     // so the other blocks keep the layout they already had.
     static constexpr int headerRow = 22;

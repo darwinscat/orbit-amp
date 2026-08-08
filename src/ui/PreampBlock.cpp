@@ -15,30 +15,42 @@ PreampBlock::PreampBlock (juce::AudioProcessorValueTreeState& s)
 
     attachPower (*state.getParameter (params::preampOn));
 
-    // The whole tree at once — every type with its voices under it. Nothing is rebuilt on a pick;
-    // only the selection moves.
-    juce::Array<VoicingSelector::Group> groups;
-    for (int t = 0; t < params::typeNames.size(); ++t)
-        groups.add ({ params::typeNames[t], device::VoicingLibrary::voicesFor (t) });
+    // Every voicing in one flat list, greenest first, with a rule where the type changes. The type
+    // is not a heading any more — it is the colour, and the order.
+    //
+    // STILL THE PLACEHOLDER SET. The boost's list comes from what is on disk; this one cannot, until
+    // there are preamp captures to scan. The shape is now the same, so that swap is a scan and not a
+    // rewrite.
+    juce::Array<VoicingSelector::Entry> entries;
+    flat.clear();
 
-    voicing.setGroups (std::move (groups));
-    voicing.onPick = [this] (int t, int v) { applyPick (t, v); };
+    for (int ti = 0; ti < params::typeNames.size(); ++ti)
+    {
+        const auto voices = device::VoicingLibrary::voicesFor (ti);
+
+        for (int vi = 0; vi < voices.size(); ++vi)
+        {
+            entries.add ({ voices[vi], ti, vi == 0 && ti > 0 });
+            flat.add ({ ti, vi });
+        }
+    }
+
+    voicing.setEntries (std::move (entries));
+    voicing.onPick = [this] (int i)
+    {
+        if (juce::isPositiveAndBelow (i, flat.size()))
+            applyPick (flat.getReference (i).type, flat.getReference (i).voice);
+    };
 
     // Choice / int parameters come through a plain ParameterAttachment because this is a custom view,
     // not a juce widget — the attachment reports DENORMALISED values, i.e. the index itself.
     typeAttachment = std::make_unique<juce::ParameterAttachment> (
         *state.getParameter (params::preampType),
-        [this] (float v)
-        {
-            voicing.setSelection (juce::roundToInt (v), voicing.getItemIndex());
-        });
+        [this] (float) { syncSelection(); });
 
     voiceAttachment = std::make_unique<juce::ParameterAttachment> (
         *state.getParameter (params::preampVoice),
-        [this] (float v)
-        {
-            voicing.setSelection (voicing.getGroupIndex(), juce::roundToInt (v));
-        });
+        [this] (float) { syncSelection(); });
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         state, params::preampGain, gain);
@@ -48,6 +60,22 @@ PreampBlock::PreampBlock (juce::AudioProcessorValueTreeState& s)
 }
 
 PreampBlock::~PreampBlock() = default;
+
+void PreampBlock::syncSelection()
+{
+    const int type  = juce::roundToInt (state.getParameter (params::preampType)->getValue()
+                                        * (float) (params::typeNames.size() - 1));
+    const int voice = juce::roundToInt (
+        state.getParameter (params::preampVoice)->convertFrom0to1 (
+            state.getParameter (params::preampVoice)->getValue()));
+
+    for (int i = 0; i < flat.size(); ++i)
+        if (flat.getReference (i).type == type && flat.getReference (i).voice == voice)
+        {
+            voicing.setSelection (i);
+            return;
+        }
+}
 
 void PreampBlock::applyPick (int typeIndex, int voiceIndex)
 {
