@@ -19,13 +19,18 @@ class DeviceLibrary
 public:
     struct Pack
     {
-        juce::String  name;       // the rig's display name
+        juce::String  name;       // the gear's own name — make and model, as captured
+        juce::String  alias;      // the name this voice goes out under, when it has one
         juce::File    location;   // the folder, the .orbitrig zip, or a lone .nam/.namz
         bool          zipped = false;
         bool          loose  = false;   // a single model file the user dropped in, not a pack
         bool          bundled = false;  // shipped with the plugin rather than added by the user
         int           character = 0;    // place on the ramp, from the stage's tone_type
         namz::rig::Rig rig;
+
+        /** What a player sees. The alias is the pack's public identity — what a list shows and what
+            people say about it — and the model name is what it falls back to when nobody chose one. */
+        juce::String displayName() const { return alias.isNotEmpty() ? alias : name; }
 
         bool isValid() const { return ! rig.chain.empty(); }
     };
@@ -155,6 +160,12 @@ private:
                 p.rig  = namz::rig::loadRigManifest (manifest.toStdString(), &ok);
                 p.name = p.rig.name.empty() ? f.getFileNameWithoutExtension() : juce::String (p.rig.name);
 
+                // TEMPORARY, until namz carries `alias` on Rig: read the one key rather than the
+                // format. This is a bridge, not a second reader — when Rig has the field this becomes
+                // `p.alias = p.rig.alias;` and the JSON below goes.
+                if (const auto j = juce::JSON::parse (manifest); const auto* obj = j.getDynamicObject())
+                    p.alias = obj->getProperty ("alias").toString().trim();
+
                 if (const auto* s = p.rig.firstKnown())
                     p.character = characterFromToneType (s->toneType);
 
@@ -183,16 +194,17 @@ private:
                 p.character = characterFromToneType (value ("tone_type"));
 
                 const auto modelled = value ("gear_model");
-                p.name = modelled.empty() ? f.getFileNameWithoutExtension() : juce::String (modelled);
+                p.name  = modelled.empty() ? f.getFileNameWithoutExtension() : juce::String (modelled);
+                p.alias = juce::String (value ("alias")).trim();
 
                 namz::rig::Stage stage;
                 stage.kind     = namz::rig::StageKind::Nam;
                 stage.toneType = value ("tone_type");
                 stage.circuit  = value ("device");
-                stage.device.family = p.name.toStdString();
+                stage.device.family = p.displayName().toStdString();
                 stage.device.files.push_back ({ f.getFileName().toStdString(), {}, 0.0 });
 
-                p.rig.name = p.name.toStdString();
+                p.rig.name = p.displayName().toStdString();
                 p.rig.chain.push_back (std::move (stage));
 
                 out.add (std::move (p));

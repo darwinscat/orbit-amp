@@ -73,8 +73,9 @@ int main()
     {
         std::printf ("\ndevices found\n");
         for (const auto& p : packs)
-            std::printf ("  %-24s character %d  %s%s\n", p.name.toRawUTF8(), p.character,
-                         p.bundled ? "bundled" : "user", p.loose ? ", loose model" : "");
+            std::printf ("  %-24s character %d  %s%s%s\n", p.displayName().toRawUTF8(), p.character,
+                         p.bundled ? "bundled" : "user", p.loose ? ", loose model" : "",
+                         p.alias.isNotEmpty() ? "  (alias)" : "");
 
         bool ordered = true;
         for (int i = 1; i < packs.size(); ++i)
@@ -90,7 +91,16 @@ int main()
         report ("every device has a name to show", [&packs]
         {
             for (const auto& p : packs)
-                if (p.name.isEmpty())
+                if (p.displayName().isEmpty())
+                    return false;
+            return true;
+        }());
+
+        // An alias is what the pack goes out under; the model name is only the fallback.
+        report ("an alias, where there is one, is what shows", [&packs]
+        {
+            for (const auto& p : packs)
+                if (p.alias.isNotEmpty() && p.displayName() != p.alias)
                     return false;
             return true;
         }());

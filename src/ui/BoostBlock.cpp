@@ -57,7 +57,7 @@ void BoostBlock::deviceChanged()
     for (const auto& pack : amp.devicePacks)
     {
         VoicingSelector::Entry e;
-        e.name = pack.name;
+        e.name = pack.displayName();
         e.character = pack.character;
         e.startsSection = ! pack.bundled && ! sawUser;   // the rule between shipped and added
         sawUser = sawUser || ! pack.bundled;
