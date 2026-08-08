@@ -297,6 +297,18 @@ target_link_libraries(orbitamp_poweramp_test PRIVATE
     juce::juce_recommended_warning_flags)
 
 # ----------------------------------------------------------------------------
+# Gate for the waveform picture's MEMORY — what it recorded must not be rewritten later.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_ribbon_test PRODUCT_NAME "OrbitAmpRibbonTest")
+target_sources(orbitamp_ribbon_test PRIVATE tests/WaveRibbonTests.cpp)
+target_include_directories(orbitamp_ribbon_test PRIVATE src)
+target_compile_definitions(orbitamp_ribbon_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_ribbon_test PRIVATE
+    juce::juce_audio_basics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+# ----------------------------------------------------------------------------
 # Gate for the ASSEMBLED plugin: move a control, hear the output change. Links the plugin's own
 # sources rather than a stage of it, because what this checks is the wiring between them.
 # ----------------------------------------------------------------------------

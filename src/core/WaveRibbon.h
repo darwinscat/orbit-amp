@@ -20,8 +20,15 @@ namespace orbitamp::core
     mid-update draws one column from half of the newest window, which is a pixel, and a lock on the
     audio thread is a dropout.
 
-    Level-matched on the way out, like ScopeTap and for the same reason: a boost that is merely
-    louder would swamp the picture, and what the picture is for is what the boost DID. */
+    Level-matched ON THE WAY IN, which is the part that is easy to get wrong. Matching at read time
+    means one factor for the whole window, recomputed every frame from whatever is playing now — so
+    turning the gain up rescaled the entire history with it, and a peak recorded clipped an instant
+    ago drifted off the left edge rounded. The picture showed the past rearranged by the present.
+
+    So each column is matched as it is written, against a SLOW estimate of both levels, and read back
+    untouched. Slow on purpose: an estimate that tracked quickly would flatten the difference between
+    the two sides within a note, which is exactly what the picture exists to show. Seconds, not
+    milliseconds — slower than a note, fast enough to follow a knob. */
 class WaveRibbon
 {
 public:
@@ -39,6 +46,12 @@ public:
     void prepare (double sampleRate)
     {
         perBucket = juce::jmax (1, (int) (sampleRate * seconds / (double) buckets));
+
+        // A one-pole per sample would be a per-sample exp() budget for nothing; the estimate only has
+        // to move over seconds, so it moves once per column.
+        const double columnsPerSecond = sampleRate / (double) juce::jmax (1, perBucket);
+        levelCoeff = (float) std::exp (-1.0 / (juce::jmax (1.0, columnsPerSecond) * matchSeconds));
+
         reset();
     }
 
@@ -51,6 +64,7 @@ public:
 
         writePos = 0;
         filled = 0;
+        dryLevel = wetLevel = 0.0f;
         written.store (0, std::memory_order_release);
     }
 
@@ -73,17 +87,20 @@ public:
                 wetHi[w] = juce::jmax (wetHi[w], wet[i]);
             }
 
+            dryEnergy += (double) dry[i] * dry[i];
+            wetEnergy += (double) wet[i] * wet[i];
+
             if (++filled >= perBucket)
             {
-                filled = 0;
+                closeColumn();
                 writePos = (writePos + 1) % buckets;
                 written.fetch_add (1, std::memory_order_release);
             }
         }
     }
 
-    /** Copies the ribbon out oldest-first, with the wet side scaled to the dry side's level. False
-        when nothing has been written yet. */
+    /** Copies the ribbon out oldest-first. Already matched — see write(). False when nothing has
+        been written yet. */
     bool read (std::array<Column, buckets>& out) const noexcept
     {
         if (written.load (std::memory_order_acquire) == 0)
@@ -94,39 +111,53 @@ public:
         // at the far left, three seconds away from where it happened.
         const int start = (writePos + 1) % buckets;
 
-        double dryEnergy = 0.0, wetEnergy = 0.0;
-
         for (int i = 0; i < buckets - 1; ++i)
         {
             const auto s = (size_t) ((start + i) % buckets);
             out[(size_t) i] = { dryLo[s], dryHi[s], wetLo[s], wetHi[s] };
-
-            dryEnergy += (double) dryHi[s] * dryHi[s] + (double) dryLo[s] * dryLo[s];
-            wetEnergy += (double) wetHi[s] * wetHi[s] + (double) wetLo[s] * wetLo[s];
         }
 
         out[(size_t) (buckets - 1)] = out[(size_t) (buckets - 2)];   // keep the array's length
-
-        if (wetEnergy > 1.0e-12 && dryEnergy > 1.0e-12)
-        {
-            const float k = (float) std::sqrt (dryEnergy / wetEnergy);
-
-            for (auto& c : out)
-            {
-                c.wetLo *= k;
-                c.wetHi *= k;
-            }
-        }
-
         return true;
     }
 
 private:
+    /** Finish the column: fold its energy into the running levels, then store it at the ratio those
+        levels say — the one that was true WHEN IT HAPPENED, which is the whole fix. */
+    void closeColumn() noexcept
+    {
+        const float dryRms = (float) std::sqrt (dryEnergy / (double) juce::jmax (1, perBucket));
+        const float wetRms = (float) std::sqrt (wetEnergy / (double) juce::jmax (1, perBucket));
+
+        dryEnergy = wetEnergy = 0.0;
+
+        dryLevel = dryLevel * levelCoeff + dryRms * (1.0f - levelCoeff);
+        wetLevel = wetLevel * levelCoeff + wetRms * (1.0f - levelCoeff);
+
+        // Silence has no ratio to speak of. Leaving the column as it is beats inventing a huge factor
+        // out of two numbers that are both nearly zero.
+        if (wetLevel < 1.0e-6f || dryLevel < 1.0e-6f)
+            return;
+
+        const float k = juce::jlimit (0.05f, 20.0f, dryLevel / wetLevel);
+        const auto w = (size_t) writePos;
+
+        wetLo[w] *= k;
+        wetHi[w] *= k;
+    }
+
+    static constexpr double matchSeconds = 1.75;   // slower than a note, faster than a knob
+
     std::array<float, buckets> dryLo {}, dryHi {}, wetLo {}, wetHi {};
 
     int perBucket = 240;
     int writePos = 0;
     int filled = 0;
+
+    double dryEnergy = 0.0, wetEnergy = 0.0;   // this column's, reset as it closes
+    float dryLevel = 0.0f, wetLevel = 0.0f;    // the slow estimates the matching rides on
+    float levelCoeff = 0.99f;
+
     std::atomic<unsigned> written { 0 };
 };
 
