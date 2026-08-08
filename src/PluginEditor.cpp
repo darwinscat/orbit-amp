@@ -20,7 +20,21 @@ AmpEditor::AmpEditor (AmpProcessor& p)
                      juce::roundToInt (baseWidth  * AmpProcessor::maxScale),
                      juce::roundToInt (baseHeight * AmpProcessor::maxScale));
 
-    const float s = amp.getEditorScale();
+    // As large as the screen allows, up to the size the plugin WANTS to open at. Asking for 2x on a
+    // display that cannot hold it does not give 2x — it gives whatever the window manager shrinks it
+    // to, and reading that back as the next window's wish is how a plugin walks itself down to the
+    // minimum over a few launches.
+    float s = AmpProcessor::preferredScale;
+
+    if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const auto area = display->userArea;
+        const float fits = juce::jmin ((float) area.getWidth()  / (float) baseWidth,
+                                       (float) (area.getHeight() - titleBarAllowance) / (float) baseHeight);
+        s = juce::jlimit (AmpProcessor::minScale, s, fits);
+        amp.setEditorScale (s);
+    }
+
     setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight * s));
 }
 

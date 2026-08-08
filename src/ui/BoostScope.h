@@ -230,17 +230,19 @@ private:
     static float shape (float a)
     {
         return juce::jlimit (-1.0f, 1.0f,
-                             (a < 0.0f ? -1.0f : 1.0f) * std::pow (std::abs (a), 0.55f));
+                             (a < 0.0f ? -1.0f : 1.0f) * std::pow (std::abs (a), 0.7f));
     }
 
     /** Both waveforms over a few seconds, one on top of the other and matched for level.
 
-        Orange is what went in, violet is what came out, and the violet is drawn ON TOP — so orange
-        survives exactly where the input was BIGGER than the output. That is the picture: the spikes
-        of a pick attack left standing outside a violet body that is wider than the orange one beneath
-        it. Peaks cut, sustain lifted, in one look and with no numbers.
+        Orange is the input, filled. Violet is the output — the deeper accent rather than the lilac
+        tint, because the line spends most of its length ON the orange and has to hold against it —
+        drawn over the fill as an OUTLINE — so the whole
+        picture is where the violet line runs against the orange body: inside it at the pick attack,
+        where the peaks were cut, and outside it through the sustain, where the tail was lifted.
 
-        The violet is not quite opaque, so where the two agree you can still see there are two. */
+        An outline rather than a second filled shape, because a solid one hid the difference exactly
+        where there was one to see, which is most of a note. */
     void paintWave (juce::Graphics& g, juce::Rectangle<float> r)
     {
         if (! ribbon.read (columns))
@@ -248,43 +250,63 @@ private:
 
         const float mid = r.getCentreY();
         const float half = r.getHeight() * 0.5f;
-        const int pixels = juce::jmax (1, (int) r.getWidth());
+        const int pixels = juce::jmax (2, (int) r.getWidth());
+
+        // Every bucket that lands in this column, at its extreme. More buckets than columns is the
+        // normal case and the whole reason the ribbon keeps four thousand of them.
+        auto extremes = [this, pixels] (auto pick, int x, bool wantMax)
+        {
+            const int from = x * core::WaveRibbon::buckets / pixels;
+            const int to   = juce::jmax (from + 1, (x + 1) * core::WaveRibbon::buckets / pixels);
+
+            float v = 0.0f;
+            for (int i = from; i < to && i < core::WaveRibbon::buckets; ++i)
+                v = wantMax ? juce::jmax (v, pick (i)) : juce::jmin (v, pick (i));
+
+            return v;
+        };
 
         // Per PIXEL, not per bucket. There are more buckets than pixels, so drawing one rectangle per
         // bucket at a fractional step aliased into visible bands — four of them, and they showed up
         // even over silence, where the picture should have been a line. A pixel takes the extremes of
         // every bucket that lands in it, which is what a waveform display does.
-        auto band = [&] (auto lo, auto hi, juce::Colour c)
+        // ONE filled path, not a rectangle per pixel. A rectangle exactly one unit wide lands on
+        // fractional device pixels once the editor is scaled, and the antialiased seams between them
+        // read as a picket fence — the gaps were the rasteriser, not the audio.
+        auto band = [&] (auto lo, auto hi, juce::Colour c, bool filled)
         {
+            juce::Path p;
+            p.startNewSubPath (r.getX(), mid - shape (extremes (hi, 0, true)) * half);
+
+            // Started explicitly. A path whose first instruction is lineTo begins at the origin, so
+            // every frame drew a stroke down from the well's top-left corner — a diagonal that had
+            // nothing to do with the audio and was there even in silence.
+            for (int x = 1; x < pixels; ++x)
+                p.lineTo (r.getX() + (float) x, mid - shape (extremes (hi, x, true)) * half);
+
+            for (int x = pixels; --x >= 0;)
+                p.lineTo (r.getX() + (float) x, mid - shape (extremes (lo, x, false)) * half);
+
+            p.closeSubPath();
+
             g.setColour (c);
 
-            for (int x = 0; x < pixels; ++x)
-            {
-                const int from = x * core::WaveRibbon::buckets / pixels;
-                const int to   = juce::jmax (from + 1, (x + 1) * core::WaveRibbon::buckets / pixels);
+            if (filled)
+                g.fillPath (p);
 
-                float mn = 0.0f, mx = 0.0f;
-                for (int i = from; i < to && i < core::WaveRibbon::buckets; ++i)
-                {
-                    mn = juce::jmin (mn, lo (i));
-                    mx = juce::jmax (mx, hi (i));
-                }
-
-                const float top = mid - shape (mx) * half;
-                const float bot = mid - shape (mn) * half;
-
-                // At least a hair, or a nearly silent column vanishes instead of reading as quiet —
-                // and the run-up to a note is worth seeing.
-                g.fillRect (r.getX() + (float) x, top, 1.0f, juce::jmax (bot - top, 1.0f));
-            }
+            // Stroked either way: the path collapses to a line where the signal is silent, and a line
+            // with no thickness disappears. The approach to a note is worth seeing.
+            g.strokePath (p, juce::PathStrokeType (filled ? 1.0f : 1.4f));
         };
 
         band ([this] (int i) { return columns[(size_t) i].dryLo; },
-              [this] (int i) { return columns[(size_t) i].dryHi; }, theme::orange);
+              [this] (int i) { return columns[(size_t) i].dryHi; },
+              theme::orange.withAlpha (0.5f), true);
 
+        // The output as an OUTLINE over the filled input. A solid shape on top hid the very thing the
+        // picture is about — how the two differ — everywhere they overlap, which is most of a note.
         band ([this] (int i) { return columns[(size_t) i].wetLo; },
-              [this] (int i) { return columns[(size_t) i].wetHi; },
-              theme::lilac.withAlpha (0.88f));
+              [this] (int i) { return columns[(size_t) i].wetHi; }, theme::violet, false);
     }
 
     /** The measured tone control at wherever its knob sits. */

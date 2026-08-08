@@ -28,6 +28,11 @@ private:
     static constexpr int margin    = 18;   // the ground the device sits on
     static constexpr int chromeGap = 10;   // toolbar to faceplate
 
+    /** Room for the host's or the standalone's own title bar, which the display's user area does not
+        know about. Guessing slightly high costs nothing; guessing low costs a window that opens
+        partly off the bottom of the screen. */
+    static constexpr int titleBarAllowance = 60;
+
     static constexpr int baseWidth  = FaceplateView::designWidth + margin * 2;
     static constexpr int baseHeight = Chrome::designHeight + chromeGap
                                     + FaceplateView::designHeight

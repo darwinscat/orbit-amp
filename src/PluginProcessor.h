@@ -71,6 +71,12 @@ public:
     static constexpr float minScale = 0.5f;
     static constexpr float maxScale = 4.0f;
 
+    /** What a window OPENS at, before the screen has its say. Separate from editorScale on purpose:
+        editorScale follows the window, and the window is set by whoever hosts it — so an editor that
+        opened from it was reading back whatever the last host had shrunk it to, and once anything
+        shrank it the value stuck. A wanted size and a current size are two different facts. */
+    static constexpr float preferredScale = 1.0f;
+
 private:
     /** Pumps the history's settle timer — a burst of edits that has been quiet for a moment commits
         as ONE undo step, so dragging a knob is not fifty of them. */
@@ -113,9 +119,7 @@ private:
     /** Same, for the reverb: character and mix, applied only when they move. */
     void updateReverbSettings() noexcept;
 
-    // Opens at 2x. The design units were drawn small enough that 1x is a squint on any display made
-    // this decade, and a plugin that has to be resized before it can be read opens wrong.
-    float editorScale = 2.0f;
+    float editorScale = preferredScale;
 
     core::ToneStack   tone;
     core::ReverbStage reverb;
