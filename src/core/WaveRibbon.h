@@ -32,24 +32,40 @@ namespace orbitamp::core
 class WaveRibbon
 {
 public:
-    /** Deliberately more columns than any window will have pixels.
-
-        The ribbon is sampled per pixel, so too FEW columns is what shows: neighbouring pixels land on
-        the same column and the waveform turns into a picket fence — which is what a zoomed window did
-        at 640. The faceplate is 880 units wide and the boost block is a third of it, so even at 4x
-        this is three times what the widest picture can ask for. It costs 64 kB. */
+    /** The CAPACITY, not the resolution — see setResolution. Sized so the widest window a 4x
+        faceplate can show still gets a column per pixel. It costs 64 kB. */
     static constexpr int buckets = 4096;
     static constexpr double seconds = 3.0;
 
     struct Column { float dryLo, dryHi, wetLo, wetHi; };
 
+    /** How many columns the picture actually wants — one per pixel of its width.
+
+        Keeping more than that is not extra detail, it is noise: a dozen columns crammed into one
+        pixel are re-grouped every frame as the ribbon slides, so their extremes hop between pixels
+        and the waveform shimmers. One column per pixel means the ribbon moves a pixel at a time,
+        which is what a scrolling waveform is supposed to do. */
+    void setResolution (int columns)
+    {
+        const int wanted = juce::jlimit (64, buckets, columns);
+
+        if (wanted != active)
+        {
+            active = wanted;
+            prepare (rate);
+        }
+    }
+
+    int resolution() const noexcept { return active; }
+
     void prepare (double sampleRate)
     {
-        perBucket = juce::jmax (1, (int) (sampleRate * seconds / (double) buckets));
+        rate = sampleRate;
+        perBucket = juce::jmax (1, (int) (sampleRate * seconds / (double) active));
 
         // A one-pole per sample would be a per-sample exp() budget for nothing; the estimate only has
         // to move over seconds, so it moves once per column.
-        const double columnsPerSecond = sampleRate / (double) juce::jmax (1, perBucket);
+        const double columnsPerSecond = rate / (double) juce::jmax (1, perBucket);
         levelCoeff = (float) std::exp (-1.0 / (juce::jmax (1.0, columnsPerSecond) * matchSeconds));
 
         reset();
@@ -65,6 +81,7 @@ public:
         writePos = 0;
         filled = 0;
         dryLevel = wetLevel = 0.0f;
+        match = 1.0f;
         written.store (0, std::memory_order_release);
     }
 
@@ -93,31 +110,33 @@ public:
             if (++filled >= perBucket)
             {
                 closeColumn();
-                writePos = (writePos + 1) % buckets;
+                writePos = (writePos + 1) % active;
                 written.fetch_add (1, std::memory_order_release);
             }
         }
     }
 
-    /** Copies the ribbon out oldest-first. Already matched — see write(). False when nothing has
-        been written yet. */
-    bool read (std::array<Column, buckets>& out) const noexcept
+    /** Copies the ribbon out oldest-first and says how many columns it wrote. Already matched — see
+        write(). False when nothing has been written yet. */
+    bool read (std::array<Column, buckets>& out, int& count) const noexcept
     {
+        count = active;
+
         if (written.load (std::memory_order_acquire) == 0)
             return false;
 
         // Skip the bucket being written. It holds a fraction of a column's worth of the newest audio,
         // and it sits at the OLDEST end of the ribbon — so a live signal was being drawn as a stripe
         // at the far left, three seconds away from where it happened.
-        const int start = (writePos + 1) % buckets;
+        const int start = (writePos + 1) % active;
 
-        for (int i = 0; i < buckets - 1; ++i)
+        for (int i = 0; i < active - 1; ++i)
         {
-            const auto s = (size_t) ((start + i) % buckets);
+            const auto s = (size_t) ((start + i) % active);
             out[(size_t) i] = { dryLo[s], dryHi[s], wetLo[s], wetHi[s] };
         }
 
-        out[(size_t) (buckets - 1)] = out[(size_t) (buckets - 2)];   // keep the array's length
+        out[(size_t) (active - 1)] = out[(size_t) (active - 2)];   // the one being written
         return true;
     }
 
@@ -131,31 +150,51 @@ private:
 
         dryEnergy = wetEnergy = 0.0;
 
+        // Below this, nothing is playing — and the picture has to say so. The vertical scale lifts the
+        // small end on purpose, so a converter's noise floor, left to itself, is drawn as a thick band
+        // across an idle plugin: the display is loudest exactly when there is nothing to show. A floor
+        // is the honest fix, not a gentler curve, because the noise is not quiet enough to draw small,
+        // it is meaningless.
+        if (juce::jmax (dryRms, wetRms) < silenceFloor)
+        {
+            const auto w = (size_t) writePos;
+            dryLo[w] = dryHi[w] = wetLo[w] = wetHi[w] = 0.0f;
+
+            dryLevel *= levelCoeff;
+            wetLevel *= levelCoeff;
+            return;
+        }
+
         dryLevel = dryLevel * levelCoeff + dryRms * (1.0f - levelCoeff);
         wetLevel = wetLevel * levelCoeff + wetRms * (1.0f - levelCoeff);
 
-        // Silence has no ratio to speak of. Leaving the column as it is beats inventing a huge factor
-        // out of two numbers that are both nearly zero.
-        if (wetLevel < 1.0e-6f || dryLevel < 1.0e-6f)
-            return;
+        // Silence has no ratio of its own — but it still has to be drawn at the ratio that was true
+        // around it. Skipping the scaling there left quiet columns raw while loud ones were matched,
+        // so the two waveforms agreed through a note and disagreed everywhere between: the picture
+        // changed its mind about what it was showing depending on how loud the moment was.
+        if (wetLevel > 1.0e-6f && dryLevel > 1.0e-6f)
+            match = juce::jlimit (0.05f, 20.0f, dryLevel / wetLevel);
 
-        const float k = juce::jlimit (0.05f, 20.0f, dryLevel / wetLevel);
         const auto w = (size_t) writePos;
 
-        wetLo[w] *= k;
-        wetHi[w] *= k;
+        wetLo[w] *= match;
+        wetHi[w] *= match;
     }
 
     static constexpr double matchSeconds = 1.75;   // slower than a note, faster than a knob
+    static constexpr float silenceFloor = 3.2e-4f; // -70 dBFS: quieter than any note, louder than hiss
 
     std::array<float, buckets> dryLo {}, dryHi {}, wetLo {}, wetHi {};
 
     int perBucket = 240;
+    int active = 640;      // columns in use; the array is sized for the widest window
+    double rate = 48000.0;
     int writePos = 0;
     int filled = 0;
 
     double dryEnergy = 0.0, wetEnergy = 0.0;   // this column's, reset as it closes
     float dryLevel = 0.0f, wetLevel = 0.0f;    // the slow estimates the matching rides on
+    float match = 1.0f;                        // the last ratio worth believing, held through silence
     float levelCoeff = 0.99f;
 
     std::atomic<unsigned> written { 0 };

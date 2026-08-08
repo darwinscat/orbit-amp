@@ -22,7 +22,7 @@ class BoostScope final : public juce::Component,
 public:
     enum class Mode { shape, envelope, transfer, tone, wave };
 
-    explicit BoostScope (const core::ScopeTap& source, const core::WaveRibbon& ribbonSource,
+    explicit BoostScope (const core::ScopeTap& source, core::WaveRibbon& ribbonSource,
                          std::function<double (double)> toneDbAt)
         : tap (source), ribbon (ribbonSource), toneDb (std::move (toneDbAt))
     {
@@ -245,25 +245,20 @@ private:
         where there was one to see, which is most of a note. */
     void paintWave (juce::Graphics& g, juce::Rectangle<float> r)
     {
-        if (! ribbon.read (columns))
+        const int pixels = juce::jmax (2, (int) r.getWidth());
+        ribbon.setResolution (pixels);
+
+        int count = 0;
+        if (! ribbon.read (columns, count) || count < 2)
             return;
 
         const float mid = r.getCentreY();
         const float half = r.getHeight() * 0.5f;
-        const int pixels = juce::jmax (2, (int) r.getWidth());
 
-        // Every bucket that lands in this column, at its extreme. More buckets than columns is the
-        // normal case and the whole reason the ribbon keeps four thousand of them.
-        auto extremes = [this, pixels] (auto pick, int x, bool wantMax)
+        // One column per pixel, so no grouping is done here at all — grouping is what shimmered.
+        auto extremes = [this, count, pixels] (auto pick, int x, bool)
         {
-            const int from = x * core::WaveRibbon::buckets / pixels;
-            const int to   = juce::jmax (from + 1, (x + 1) * core::WaveRibbon::buckets / pixels);
-
-            float v = 0.0f;
-            for (int i = from; i < to && i < core::WaveRibbon::buckets; ++i)
-                v = wantMax ? juce::jmax (v, pick (i)) : juce::jmin (v, pick (i));
-
-            return v;
+            return pick (juce::jlimit (0, count - 1, x * count / juce::jmax (1, pixels)));
         };
 
         // Per PIXEL, not per bucket. There are more buckets than pixels, so drawing one rectangle per
@@ -342,7 +337,7 @@ private:
     static constexpr float glyphSize = 26.0f;   // was 18 in a row of its own, and small there
 
     const core::ScopeTap& tap;
-    const core::WaveRibbon& ribbon;
+    core::WaveRibbon& ribbon;
     std::function<double (double)> toneDb;
     felitronics::appkit::DeviceSpec spec;
 
