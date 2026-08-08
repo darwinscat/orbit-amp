@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/ScopeTap.h"
+#include "../core/WaveRibbon.h"
 #include "Theme.h"
 
 #include <felitronics/appkit/DeviceGlyph.h>
@@ -19,10 +20,11 @@ class BoostScope final : public juce::Component,
                          private juce::Timer
 {
 public:
-    enum class Mode { shape, envelope, transfer, tone };
+    enum class Mode { shape, envelope, transfer, tone, wave };
 
-    explicit BoostScope (const core::ScopeTap& source, std::function<double (double)> toneDbAt)
-        : tap (source), toneDb (std::move (toneDbAt))
+    explicit BoostScope (const core::ScopeTap& source, const core::WaveRibbon& ribbonSource,
+                         std::function<double (double)> toneDbAt)
+        : tap (source), ribbon (ribbonSource), toneDb (std::move (toneDbAt))
     {
         setInterceptsMouseClicks (false, false);
         startTimerHz (24);
@@ -70,6 +72,7 @@ public:
                 case Mode::envelope: paintEnvelope (g, r.reduced (6.0f)); break;
                 case Mode::transfer: paintTransfer (g, r.reduced (6.0f)); break;
                 case Mode::tone:     paintTone (g, r.reduced (6.0f)); break;
+                case Mode::wave:     paintWave (g, r.reduced (6.0f)); break;
             }
 
             paintSpec (g, r.reduced (5.0f));
@@ -217,6 +220,47 @@ private:
         g.strokePath (p, juce::PathStrokeType (1.0f));
     }
 
+    /** Both waveforms over a few seconds, one on top of the other and matched for level.
+
+        Orange is what went in, green is what came out, and the green is drawn ON TOP — so orange
+        survives exactly where the input was BIGGER than the output. That is the picture: the spikes
+        of a pick attack left standing outside a green body that is wider than the orange one beneath
+        it. Peaks cut, sustain lifted, in one look and with no numbers.
+
+        The green is not quite opaque, so where the two agree you can still see there are two. */
+    void paintWave (juce::Graphics& g, juce::Rectangle<float> r)
+    {
+        if (! ribbon.read (columns))
+            return;
+
+        const float mid = r.getCentreY();
+        const float half = r.getHeight() * 0.5f;
+        const float w = r.getWidth() / (float) core::WaveRibbon::buckets;
+
+        auto band = [&g, r, mid, half, w] (auto lo, auto hi, juce::Colour c)
+        {
+            g.setColour (c);
+
+            for (int i = 0; i < core::WaveRibbon::buckets; ++i)
+            {
+                const float top = mid - juce::jlimit (-1.0f, 1.0f, hi (i)) * half;
+                const float bot = mid - juce::jlimit (-1.0f, 1.0f, lo (i)) * half;
+
+                // At least a hair, or a column that is nearly silent vanishes instead of reading as
+                // quiet — and the run-up to a note is worth seeing.
+                g.fillRect (r.getX() + (float) i * w, top, juce::jmax (w, 1.0f),
+                            juce::jmax (bot - top, 1.0f));
+            }
+        };
+
+        band ([this] (int i) { return columns[(size_t) i].dryLo; },
+              [this] (int i) { return columns[(size_t) i].dryHi; }, theme::orange);
+
+        band ([this] (int i) { return columns[(size_t) i].wetLo; },
+              [this] (int i) { return columns[(size_t) i].wetHi; },
+              theme::characterColour (0).withAlpha (0.88f));
+    }
+
     /** The measured tone control at wherever its knob sits. */
     void paintTone (juce::Graphics& g, juce::Rectangle<float> r)
     {
@@ -250,10 +294,12 @@ private:
     static constexpr float glyphSize = 26.0f;   // was 18 in a row of its own, and small there
 
     const core::ScopeTap& tap;
+    const core::WaveRibbon& ribbon;
     std::function<double (double)> toneDb;
     felitronics::appkit::DeviceSpec spec;
 
     mutable std::array<float, core::ScopeTap::size> dry {}, wet {};
+    mutable std::array<core::WaveRibbon::Column, core::WaveRibbon::buckets> columns {};
     Mode mode = Mode::shape;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BoostScope)

@@ -5,6 +5,7 @@
 #include "core/DemoPlayer.h"
 #include "core/MeasuredFilter.h"
 #include "core/ScopeTap.h"
+#include "core/WaveRibbon.h"
 #include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
 #include "core/ToneStack.h"
@@ -125,6 +126,10 @@ public:
 
     /** What went into the boost and what came out — the boost block's pictures read this. */
     core::ScopeTap boostScope;
+
+    /** The same pair over SECONDS rather than milliseconds, so a note's attack and its sustain are
+        both on screen at once. A compressor's whole behaviour lives in the difference between them. */
+    core::WaveRibbon boostRibbon;
 
     /** The pedal's measured controls, playing. One per slot the pack fills. */
     std::array<core::MeasuredFilter, (size_t) params::boostNumMeasured> boostTone;

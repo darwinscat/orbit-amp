@@ -191,6 +191,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     reverb.prepare (sampleRate);
     boost.prepare (sampleRate, block);
     demo.prepare (sampleRate);
+    boostRibbon.prepare (sampleRate);
     scopeDry.setSize (1, block);
 
     for (auto& f : boostTone)
@@ -288,6 +289,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             f.process (buffer);
 
         boostScope.write (scopeDry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
+        boostRibbon.write (scopeDry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
     }
 
     if (eqOnParam->load() > 0.5f)

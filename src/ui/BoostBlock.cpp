@@ -9,7 +9,8 @@ namespace orbitamp
 
 BoostBlock::BoostBlock (AmpProcessor& processor)
     : BlockFrame ("Boost", BlockFrame::Kind::captured), amp (processor),
-      scope (processor.boostScope, [this] (double hz) { return toneDb (hz); })
+      scope (processor.boostScope, processor.boostRibbon,
+             [this] (double hz) { return toneDb (hz); })
 {
     addAndMakeVisible (pedal);
     addAndMakeVisible (gain);
@@ -18,7 +19,7 @@ BoostBlock::BoostBlock (AmpProcessor& processor)
 
     // Four ways of showing the same pedal. Which one reads best is not settled, so the choice is on
     // the face rather than in the code.
-    scopeMode.setItems ({ "SHAPE", "ENVELOPE", "TRANSFER", "TONE" }, 0);
+    scopeMode.setItems ({ "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" }, 0);
     scopeMode.onChange = [this] (int i) { scope.setMode ((BoostScope::Mode) i); };
 
     attachPower (*amp.apvts.getParameter (params::boostOn));
