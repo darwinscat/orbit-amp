@@ -38,6 +38,8 @@ public:
         loadedFile.clear();
         stage.clearModel();
         ready.store (false);
+
+        loadOnlyFile();
     }
 
     /** The captured positions of the control marked `role: gain`, in the order the pack lists them —
@@ -55,6 +57,24 @@ public:
         return out;
     }
 
+    /** A device with no gain axis has exactly one model, and nothing will ever ask for it by
+        position — so it loads when the device does. Without this a lone .nam sits silent: the gain
+        knob is what triggers a load, and this kind of device does not have one. */
+    void loadOnlyFile()
+    {
+        const auto* stageDef = firstNam();
+        if (pack == nullptr || stageDef == nullptr)
+            return;
+
+        if (! gainPositions().isEmpty() || stageDef->device.files.size() != 1)
+            return;
+
+        load (juce::String (stageDef->device.files.front().id));
+    }
+
+    /** Whether the loaded device's gain is a knob at all. */
+    bool hasGainAxis() const { return ! gainPositions().isEmpty(); }
+
     /** Load the model for a gain index. Message thread: it reads a file and decodes. */
     void selectGainIndex (int index)
     {
@@ -66,8 +86,13 @@ public:
         if (! juce::isPositiveAndBelow (index, positions.size()))
             return;
 
-        const auto wanted = fileForGain (*stageDef, positions[index]);
-        if (wanted.isEmpty() || wanted == loadedFile)
+        load (fileForGain (*stageDef, positions[index]));
+    }
+
+    /** Reads one named model in and plays it. Message thread. */
+    void load (const juce::String& wanted)
+    {
+        if (pack == nullptr || wanted.isEmpty() || wanted == loadedFile)
             return;
 
         const auto bytes = device::DeviceLibrary::readBinaryEntry (*pack, wanted);

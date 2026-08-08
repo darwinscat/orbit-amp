@@ -113,6 +113,13 @@ void AmpProcessor::selectBoostDevice (int index)
     lastBoostTone.fill (-1.0f);
 }
 
+void AmpProcessor::pumpDeviceWork()
+{
+    loadBoostModelIfChanged();
+    updateBoostToneIfChanged();
+    boost.collectGarbage();
+}
+
 void AmpProcessor::loadBoostModelIfChanged()
 {
     const auto positions = boost.gainPositions();
@@ -170,18 +177,24 @@ void AmpProcessor::applyOversamplingIfChanged()
     setLatencySamples (power.latencySamples());
 }
 
-void AmpProcessor::prepareToPlay (double sampleRate, int)
+void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     const int channels = juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels());
 
+    // The ARGUMENT, not getBlockSize(). A host sets both and they agree, so this looked fine for as
+    // long as only hosts called it — but the contract is the argument, and anything else calling
+    // prepareToPlay directly got stages built for a block size nobody was going to send. The
+    // convolver behind the measured controls then read past the end of its own buffers.
+    const int block = juce::jmax (1, samplesPerBlock);
+
     tone.prepare (sampleRate, channels);
     reverb.prepare (sampleRate);
-    boost.prepare (sampleRate, getBlockSize());
+    boost.prepare (sampleRate, block);
     demo.prepare (sampleRate);
-    scopeDry.setSize (1, juce::jmax (1, getBlockSize()));
+    scopeDry.setSize (1, block);
 
     for (auto& f : boostTone)
-        f.prepare (sampleRate, getBlockSize(), channels);
+        f.prepare (sampleRate, block, channels);
 
     lastBoostTone.fill (-1.0f);
     updateBoostToneIfChanged();
@@ -193,7 +206,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int)
     lastOversample = juce::jlimit (0, params::oversampleFactors.size() - 1,
                                    juce::roundToInt (oversampleParam->load()));
     power.setOversampling (params::oversampleValues[lastOversample]);
-    power.prepare (sampleRate, getBlockSize(), channels);
+    power.prepare (sampleRate, block, channels);
 
     // Reported ALWAYS, whether the power amp is switched on or not: its bypass path carries the same
     // delay, so a toggle never shifts the timing of everything downstream. A latency that changes

@@ -297,6 +297,44 @@ target_link_libraries(orbitamp_poweramp_test PRIVATE
     juce::juce_recommended_warning_flags)
 
 # ----------------------------------------------------------------------------
+# Gate for the ASSEMBLED plugin: move a control, hear the output change. Links the plugin's own
+# sources rather than a stage of it, because what this checks is the wiring between them.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_chain_test PRODUCT_NAME "OrbitAmpChainTest")
+target_sources(orbitamp_chain_test PRIVATE
+    tests/ChainTests.cpp
+    src/PluginProcessor.cpp
+    src/PluginEditor.cpp
+    src/Parameters.cpp
+    src/ui/Theme.cpp
+    src/ui/FaceplateView.cpp
+    src/ui/BoostBlock.cpp
+    src/ui/CabinetBlock.cpp
+    src/ui/PowerAmpBlock.cpp
+    src/ui/PreampBlock.cpp
+    src/ui/EqSection.cpp
+    src/ui/ReverbBlock.cpp
+    src/ui/Chrome.cpp
+    src/ui/DemoStrip.cpp
+    src/ui/Footer.cpp)
+target_include_directories(orbitamp_chain_test PRIVATE src)
+target_compile_definitions(orbitamp_chain_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_chain_test PRIVATE
+    OrbitAmpData
+    felitronics::appkit
+    felitronics::eq
+    felitronics::lineareq
+    felitronics::nam
+    felitronics::poweramp
+    felitronics::oversampling
+    felitronics::saturation
+    juce::juce_audio_utils
+    juce::juce_dsp
+    juce::juce_data_structures
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+# ----------------------------------------------------------------------------
 # Gate for the measured controls MAKING SOUND — a pack's magnitude tables become a filter that runs.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_measured_test PRODUCT_NAME "OrbitAmpMeasuredTest")

@@ -135,9 +135,6 @@ private:
         if (! dir.isDirectory())
             return;
 
-        std::vector<namz::rig::FileMeta> loose;
-        juce::Array<juce::File> looseFiles;
-
         for (const auto& f : dir.findChildFiles (juce::File::findFilesAndDirectories, false))
         {
             const bool zipped = f.existsAsFile() && f.getFileName().endsWithIgnoreCase (".orbitrig.zip");
@@ -167,44 +164,39 @@ private:
                 continue;
             }
 
+            // A lone model is ONE device with no knobs. Not a family to be grouped: grouping is what a
+            // pack's manifest is for, and inferring it from filenames would be guessing at a matrix
+            // nobody captured. One file in, one entry in the list, plays as it is.
             if (f.existsAsFile() && (f.hasFileExtension ("nam") || f.hasFileExtension ("namz")))
             {
-                loose.push_back ({ f.getFileName().toStdString(),
-                                   f.getFileNameWithoutExtension().toStdString(),
-                                   readModelMeta (f) });
-                looseFiles.add (f);
-            }
-        }
-
-        // namz decides what a set of loose files IS — which of them are one device with a gain axis
-        // and which stand alone. Grouping them here would be a second opinion about that.
-        for (const auto& d : namz::rig::buildDevices (loose))
-        {
-            Pack p;
-            p.loose   = true;
-            p.bundled = bundled;
-            p.name    = d.family.empty() ? "Model" : juce::String (d.family);
-
-            // The file the device would load first, so the pack has somewhere to read bytes from.
-            for (const auto& f : looseFiles)
-                if (! d.files.empty() && f.getFileName().toStdString() == d.files.front().id)
+                const auto meta = readModelMeta (f);
+                const auto value = [&meta] (const char* key) -> std::string
                 {
-                    p.location = f;
-                    break;
-                }
+                    const auto it = meta.find (key);
+                    return it != meta.end() ? it->second : std::string();
+                };
 
-            if (p.location == juce::File())
-                continue;
+                Pack p;
+                p.location = f;
+                p.loose    = true;
+                p.bundled  = bundled;
+                p.character = characterFromToneType (value ("tone_type"));
 
-            namz::rig::Stage stage;
-            stage.kind   = namz::rig::StageKind::Nam;
-            stage.slot   = d.slot;
-            stage.device = d;
-            p.character  = characterFromToneType (stage.toneType);
-            p.rig.name   = p.name.toStdString();
-            p.rig.chain.push_back (std::move (stage));
+                const auto modelled = value ("gear_model");
+                p.name = modelled.empty() ? f.getFileNameWithoutExtension() : juce::String (modelled);
 
-            out.add (std::move (p));
+                namz::rig::Stage stage;
+                stage.kind     = namz::rig::StageKind::Nam;
+                stage.toneType = value ("tone_type");
+                stage.circuit  = value ("device");
+                stage.device.family = p.name.toStdString();
+                stage.device.files.push_back ({ f.getFileName().toStdString(), {}, 0.0 });
+
+                p.rig.name = p.name.toStdString();
+                p.rig.chain.push_back (std::move (stage));
+
+                out.add (std::move (p));
+            }
         }
     }
 

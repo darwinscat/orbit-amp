@@ -76,12 +76,25 @@ private:
     void timerCallback() override
     {
         history.tick();
+        pumpDeviceWork();
         applyOversamplingIfChanged();
     }
 
     /** Re-preparing is a message-thread job, so the footer's oversampling choice is picked up here
         rather than in the audio callback. */
     void applyOversamplingIfChanged();
+
+public:
+    /** Everything a moved control needs done OFF the audio thread: loading the capture the gain knob
+        now points at, designing the measured filters, retiring models nobody is playing.
+
+        The timer calls this thirty times a second. It is public because it is the plugin's only
+        message-thread heartbeat, and something that is not a host — a test — has to be able to drive
+        it; without a driver a knob moves a parameter and nothing ever reads it, which is exactly the
+        bug this became. */
+    void pumpDeviceWork();
+
+private:
 
     /** The boost's gain knob SELECTS a capture, so a move means loading a different file. Message
         thread, off the timer — the audio thread never touches a disk. */

@@ -70,8 +70,10 @@ void BoostBlock::deviceChanged()
     scope.setSpec (felitronics::appkit::parseDeviceSpec (amp.boost.circuit()));
 
     // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next pack
-    // says for the next one.
+    // says for the next one — and none at all for a lone model, which has no gain axis and so gets no
+    // knob rather than a dead one.
     gain.setNotches (juce::jmax (0, positions.size()));
+    gain.setVisible (! positions.isEmpty());
 
     for (int i = 0; i < params::boostNumMeasured; ++i)
     {
@@ -209,21 +211,26 @@ void BoostBlock::layOutContent (juce::Rectangle<int> area)
             area.removeFromBottom (gap / 2);
         }
 
-    // The hero on the left, the measured knobs to its right.
+    // The hero on the left, the measured knobs to its right. A device with neither leaves the space
+    // to the picture instead of to a gap.
     int smallCount = 0;
     for (const auto& slot : slots)
         if (slot.knob != nullptr)
             ++smallCount;
 
-    const int side = juce::jmin (area.getHeight(), area.getWidth() * (smallCount > 0 ? 1 : 2) / 2);
-    auto left = area.removeFromLeft (juce::jmin (side, area.getWidth()));
-    gain.setBounds (left.withSizeKeepingCentre (juce::jmin (left.getWidth(), left.getHeight()),
-                                                juce::jmin (left.getWidth(), left.getHeight())));
+    if (gain.isVisible())
+    {
+        const int side = juce::jmin (area.getHeight(), area.getWidth() * (smallCount > 0 ? 1 : 2) / 2);
+        auto left = area.removeFromLeft (juce::jmin (side, area.getWidth()));
+        gain.setBounds (left.withSizeKeepingCentre (juce::jmin (left.getWidth(), left.getHeight()),
+                                                    juce::jmin (left.getWidth(), left.getHeight())));
+
+        if (smallCount > 0)
+            area.removeFromLeft (knobGap);
+    }
 
     if (smallCount == 0)
         return;
-
-    area.removeFromLeft (knobGap);
     const int small = juce::jmin (area.getHeight(), (area.getWidth() - (smallCount - 1) * knobGap) / smallCount);
 
     auto row = area.withSizeKeepingCentre (small * smallCount + knobGap * (smallCount - 1), small);
