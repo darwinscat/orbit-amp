@@ -220,14 +220,27 @@ private:
         g.strokePath (p, juce::PathStrokeType (1.0f));
     }
 
+    /** Amplitude, bent so quiet is visible.
+
+        Linear, a picked note spends most of its life in the bottom tenth of the well and the picture
+        is a flat line with a spike on it. This lifts the small end without a scale break at zero: at
+        full deflection it is unchanged, at a tenth it is a quarter, at a hundredth nearly a sixth.
+        The picture is not a meter — see the four modes it lives among — and legibility beats a
+        proportion nobody is going to measure. */
+    static float shape (float a)
+    {
+        return juce::jlimit (-1.0f, 1.0f,
+                             (a < 0.0f ? -1.0f : 1.0f) * std::pow (std::abs (a), 0.55f));
+    }
+
     /** Both waveforms over a few seconds, one on top of the other and matched for level.
 
-        Orange is what went in, green is what came out, and the green is drawn ON TOP — so orange
+        Orange is what went in, violet is what came out, and the violet is drawn ON TOP — so orange
         survives exactly where the input was BIGGER than the output. That is the picture: the spikes
-        of a pick attack left standing outside a green body that is wider than the orange one beneath
+        of a pick attack left standing outside a violet body that is wider than the orange one beneath
         it. Peaks cut, sustain lifted, in one look and with no numbers.
 
-        The green is not quite opaque, so where the two agree you can still see there are two. */
+        The violet is not quite opaque, so where the two agree you can still see there are two. */
     void paintWave (juce::Graphics& g, juce::Rectangle<float> r)
     {
         if (! ribbon.read (columns))
@@ -235,21 +248,34 @@ private:
 
         const float mid = r.getCentreY();
         const float half = r.getHeight() * 0.5f;
-        const float w = r.getWidth() / (float) core::WaveRibbon::buckets;
+        const int pixels = juce::jmax (1, (int) r.getWidth());
 
-        auto band = [&g, r, mid, half, w] (auto lo, auto hi, juce::Colour c)
+        // Per PIXEL, not per bucket. There are more buckets than pixels, so drawing one rectangle per
+        // bucket at a fractional step aliased into visible bands — four of them, and they showed up
+        // even over silence, where the picture should have been a line. A pixel takes the extremes of
+        // every bucket that lands in it, which is what a waveform display does.
+        auto band = [&] (auto lo, auto hi, juce::Colour c)
         {
             g.setColour (c);
 
-            for (int i = 0; i < core::WaveRibbon::buckets; ++i)
+            for (int x = 0; x < pixels; ++x)
             {
-                const float top = mid - juce::jlimit (-1.0f, 1.0f, hi (i)) * half;
-                const float bot = mid - juce::jlimit (-1.0f, 1.0f, lo (i)) * half;
+                const int from = x * core::WaveRibbon::buckets / pixels;
+                const int to   = juce::jmax (from + 1, (x + 1) * core::WaveRibbon::buckets / pixels);
 
-                // At least a hair, or a column that is nearly silent vanishes instead of reading as
-                // quiet — and the run-up to a note is worth seeing.
-                g.fillRect (r.getX() + (float) i * w, top, juce::jmax (w, 1.0f),
-                            juce::jmax (bot - top, 1.0f));
+                float mn = 0.0f, mx = 0.0f;
+                for (int i = from; i < to && i < core::WaveRibbon::buckets; ++i)
+                {
+                    mn = juce::jmin (mn, lo (i));
+                    mx = juce::jmax (mx, hi (i));
+                }
+
+                const float top = mid - shape (mx) * half;
+                const float bot = mid - shape (mn) * half;
+
+                // At least a hair, or a nearly silent column vanishes instead of reading as quiet —
+                // and the run-up to a note is worth seeing.
+                g.fillRect (r.getX() + (float) x, top, 1.0f, juce::jmax (bot - top, 1.0f));
             }
         };
 
@@ -258,7 +284,7 @@ private:
 
         band ([this] (int i) { return columns[(size_t) i].wetLo; },
               [this] (int i) { return columns[(size_t) i].wetHi; },
-              theme::characterColour (0).withAlpha (0.88f));
+              theme::lilac.withAlpha (0.88f));
     }
 
     /** The measured tone control at wherever its knob sits. */

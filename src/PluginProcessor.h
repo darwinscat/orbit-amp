@@ -69,7 +69,7 @@ public:
     void setEditorScale (float s) noexcept { editorScale = juce::jlimit (minScale, maxScale, s); }
 
     static constexpr float minScale = 0.5f;
-    static constexpr float maxScale = 2.0f;
+    static constexpr float maxScale = 4.0f;
 
 private:
     /** Pumps the history's settle timer — a burst of edits that has been quiet for a moment commits
@@ -113,7 +113,9 @@ private:
     /** Same, for the reverb: character and mix, applied only when they move. */
     void updateReverbSettings() noexcept;
 
-    float editorScale = 1.0f;
+    // Opens at 2x. The design units were drawn small enough that 1x is a squint on any display made
+    // this decade, and a plugin that has to be resized before it can be read opens wrong.
+    float editorScale = 2.0f;
 
     core::ToneStack   tone;
     core::ReverbStage reverb;

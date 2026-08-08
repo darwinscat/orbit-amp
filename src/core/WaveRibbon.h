@@ -25,7 +25,13 @@ namespace orbitamp::core
 class WaveRibbon
 {
 public:
-    static constexpr int buckets = 640;
+    /** Deliberately more columns than any window will have pixels.
+
+        The ribbon is sampled per pixel, so too FEW columns is what shows: neighbouring pixels land on
+        the same column and the waveform turns into a picket fence — which is what a zoomed window did
+        at 640. The faceplate is 880 units wide and the boost block is a third of it, so even at 4x
+        this is three times what the widest picture can ask for. It costs 64 kB. */
+    static constexpr int buckets = 4096;
     static constexpr double seconds = 3.0;
 
     struct Column { float dryLo, dryHi, wetLo, wetHi; };
@@ -83,11 +89,14 @@ public:
         if (written.load (std::memory_order_acquire) == 0)
             return false;
 
-        const int start = writePos;
+        // Skip the bucket being written. It holds a fraction of a column's worth of the newest audio,
+        // and it sits at the OLDEST end of the ribbon — so a live signal was being drawn as a stripe
+        // at the far left, three seconds away from where it happened.
+        const int start = (writePos + 1) % buckets;
 
         double dryEnergy = 0.0, wetEnergy = 0.0;
 
-        for (int i = 0; i < buckets; ++i)
+        for (int i = 0; i < buckets - 1; ++i)
         {
             const auto s = (size_t) ((start + i) % buckets);
             out[(size_t) i] = { dryLo[s], dryHi[s], wetLo[s], wetHi[s] };
@@ -95,6 +104,8 @@ public:
             dryEnergy += (double) dryHi[s] * dryHi[s] + (double) dryLo[s] * dryLo[s];
             wetEnergy += (double) wetHi[s] * wetHi[s] + (double) wetLo[s] * wetLo[s];
         }
+
+        out[(size_t) (buckets - 1)] = out[(size_t) (buckets - 2)];   // keep the array's length
 
         if (wetEnergy > 1.0e-12 && dryEnergy > 1.0e-12)
         {
