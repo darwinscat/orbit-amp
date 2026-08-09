@@ -117,6 +117,14 @@ void BoostBlock::deviceChanged()
             };
 
             slot.stepAtt->sendInitialUpdate();
+
+            // A switch has two positions and the parameter defaults to the middle of its range, which
+            // for a knob is sensible and for a switch is a place the hardware cannot be. It played as
+            // half of Smooth while the face lit Sharp, and clicking the lit half writes nothing — so
+            // it could sit there forever. Land it on a real position as the device loads.
+            if (const float v = amp.apvts.getRawParameterValue (params::boostMeasured (i))->load();
+                v > 0.0f && v < 1.0f)
+                slot.stepAtt->setValueAsCompleteGesture (v < 0.5f ? 0.0f : 1.0f);
         }
         else
         {
