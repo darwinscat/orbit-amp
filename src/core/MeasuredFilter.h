@@ -62,7 +62,12 @@ public:
         return { bandLoHz, bandHiHz };
     }
 
-    static constexpr double bandLoHz = 10.0;
+    // 30 Hz because that is where SM7's measurement stops lying, measured rather than chosen: all
+    // four of its EQ curves carry the same hump peaking at 21.7 Hz — plus twenty-six decibels on one
+    // of them — and all four are over it by 25 Hz. Four points out of two hundred and fifty-six, at
+    // the end of the grid where a sweep has the least energy to work with. 19 kHz trims the top
+    // point, which is the only one up there that steps out of line.
+    static constexpr double bandLoHz = 30.0;
     static constexpr double bandHiHz = 19000.0;
 
     void prepare (double sampleRate, int maxBlock, int numChannels)
