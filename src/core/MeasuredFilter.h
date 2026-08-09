@@ -27,36 +27,46 @@ namespace orbitamp::core
 class MeasuredFilter
 {
 public:
-    /** The band a measured curve is worth applying in — read from the pack when it says, and assumed
-        when it does not.
+    /** The band a measured curve is worth applying in.
 
-        A pack that measured its trust states it, and then the producer decides. SM7 does not: all
-        three of its controls carry no trusted block, so the curve was applied edge to edge — and at
-        the very bottom of the grid a measurement has almost no energy to work with. SM7's two EQ
-        curves both turn UPWARDS at 20 Hz, by four and seven decibels, while at 50 Hz they both go
-        down. That is not the pedal, that is the noise floor of the measurement, and it was being
-        drawn as a spike and played as an infrasonic bass boost.
+        A CEILING, not a fallback. A pack that measured its own trust states it and is believed —
+        within these limits, because the instrument sets limits that no measurement of a pedal can
+        widen. A guitar has nothing below 60 Hz and nothing worth shaping above 12 kHz, so a curve
+        claiming to know what happens there is describing the measurement rather than the pedal, and
+        whoever took it is the first to say so.
 
-        40 Hz is below the lowest note a guitar makes; 16 kHz is above anything a pedal shapes. Held
-        rather than rolled off, so nothing is invented past the edge — the curve simply stops having
-        an opinion where it never had evidence.
+        SM7 is the case in front of us: no trusted block anywhere, so the curve ran edge to edge, and
+        at the bottom of the grid there is almost no energy to measure with. Both its EQ curves turn
+        UPWARDS at 20 Hz — four and seven decibels — while at 50 Hz they both go down. That is a noise
+        floor, drawn as a spike into the top of the picture and played as an infrasonic bass boost.
 
-        This is a POLICY, and policy is why it lives here rather than in the library that does the
-        maths: felitronics::lineareq takes two numbers and asks no questions about them. */
+        Held rather than rolled off: nothing is invented past the edge, the curve simply stops
+        claiming. A collapsed band survives intact — "tested and failed everywhere" must not be
+        widened into a band by a clamp.
+
+        POLICY, which is why it is here and not in the library doing the maths: felitronics::lineareq
+        takes two numbers and asks no questions, which is right for a library and wrong for an
+        opinion about guitars. */
     struct Band { double lo, hi; };
 
     static Band bandFor (const namz::rig::Measured& m)
     {
-        // Two levels or more means the pack actually tested it — including the case where it tested
-        // and failed everywhere, which arrives as a collapsed band and applies nothing.
+        // Two levels or more means the pack tested it. A collapsed band is that test coming back
+        // negative everywhere — pass it through untouched so core zeroes the curve.
         if (m.trusted.levels >= 2)
-            return { m.trusted.loHz, m.trusted.hiHz };
+        {
+            if (m.trusted.hiHz <= m.trusted.loHz)
+                return { m.trusted.loHz, m.trusted.hiHz };
 
-        return { assumedLoHz, assumedHiHz };
+            return { juce::jmax (instrumentLoHz, m.trusted.loHz),
+                     juce::jmin (instrumentHiHz, m.trusted.hiHz) };
+        }
+
+        return { instrumentLoHz, instrumentHiHz };
     }
 
-    static constexpr double assumedLoHz = 40.0;
-    static constexpr double assumedHiHz = 16000.0;
+    static constexpr double instrumentLoHz = 60.0;
+    static constexpr double instrumentHiHz = 12000.0;
 
     void prepare (double sampleRate, int maxBlock, int numChannels)
     {

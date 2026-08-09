@@ -240,6 +240,28 @@ int main()
                 band.lo > 20.0 && band.hi < 20000.0,
                 juce::String (band.lo, 0) + ".." + juce::String (band.hi, 0) + " Hz");
 
+        // And a pack that claims MORE than the instrument has is narrowed to it. Whoever measured is
+        // the first to say the wide claim is the measurement's, not the pedal's.
+        namz::rig::Measured greedy = *sweep;
+        greedy.trusted.levels = 4;
+        greedy.trusted.loHz = 10.0;
+        greedy.trusted.hiHz = 20000.0;
+
+        const auto clamped = MeasuredFilter::bandFor (greedy);
+        report ("...and a pack claiming the whole grid is narrowed to it",
+                clamped.lo >= band.lo && clamped.hi <= band.hi,
+                juce::String (clamped.lo, 0) + ".." + juce::String (clamped.hi, 0) + " Hz");
+
+        // A collapsed band is a verdict, not a range, and must survive the clamp as one.
+        namz::rig::Measured failed2 = *sweep;
+        failed2.trusted.levels = 3;
+        failed2.trusted.loHz = 2000.0;
+        failed2.trusted.hiHz = 1000.0;
+
+        const auto verdict = MeasuredFilter::bandFor (failed2);
+        report ("...while \"failed everywhere\" is not widened into a band",
+                verdict.hi <= verdict.lo);
+
         MeasuredFilter f;
         arm (f, silent, 1.0);
 
