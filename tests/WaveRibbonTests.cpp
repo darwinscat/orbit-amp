@@ -76,7 +76,8 @@ int main()
     // A second at a settled output, then read it back.
     feed (ribbon, 1.0, 0.5f, 1.0f, phase);
     int n = 0;
-    report ("the ribbon has something to show", ribbon.read (before, n));
+    float ph = 0.0f;
+    report ("the ribbon has something to show", ribbon.read (before, n, ph));
 
     // The newest columns of that first stretch, once the slow level estimate has settled on it.
     const float recorded = peakOf (before, WaveRibbon::buckets - 200, WaveRibbon::buckets - 1);
@@ -86,7 +87,7 @@ int main()
     // Now the output jumps tenfold — a gain knob thrown up. The NEW columns may show whatever they
     // show; the ones already recorded must not move.
     feed (ribbon, 0.5, 0.5f, 10.0f, phase);
-    ribbon.read (after, n);
+    ribbon.read (after, n, ph);
 
     // Where that first stretch has slid to. Two columns of slack, because a column is a whole number
     // of samples and 0.5 s is not.
@@ -112,8 +113,8 @@ int main()
         feed (steady, 3.0, 0.5f, 8.0f, p2);
 
         std::array<WaveRibbon::Column, WaveRibbon::buckets> c {};
-        int n2 = 0;
-        steady.read (c, n2);
+        int n2 = 0; float ph2 = 0.0f;
+        steady.read (c, n2, ph2);
 
         const float wet = peakOf (c, WaveRibbon::buckets - 200, WaveRibbon::buckets - 1);
 

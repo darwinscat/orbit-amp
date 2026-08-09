@@ -118,9 +118,15 @@ public:
 
     /** Copies the ribbon out oldest-first and says how many columns it wrote. Already matched — see
         write(). False when nothing has been written yet. */
-    bool read (std::array<Column, buckets>& out, int& count) const noexcept
+    bool read (std::array<Column, buckets>& out, int& count, float& phase) const noexcept
     {
         count = active;
+
+        // How far into the next column the audio has got, 0..1. The picture shifts by this fraction
+        // of a pixel, which is what makes the ribbon SLIDE instead of stepping: a column is about nine
+        // milliseconds, so without it the whole waveform jumps a few pixels at a time and reads as a
+        // sequence of stills rather than a scroll.
+        phase = (float) filled / (float) juce::jmax (1, perBucket);
 
         if (written.load (std::memory_order_acquire) == 0)
             return false;

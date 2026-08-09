@@ -27,7 +27,7 @@ public:
         : tap (source), ribbon (ribbonSource), toneDb (std::move (toneDbAt))
     {
         setInterceptsMouseClicks (false, false);
-        startTimerHz (24);
+        startTimerHz (60);   // the ribbon slides; 24 reads as a slideshow
     }
 
     void setMode (Mode m)
@@ -249,7 +249,8 @@ private:
         ribbon.setResolution (pixels);
 
         int count = 0;
-        if (! ribbon.read (columns, count) || count < 2)
+        float phase = 0.0f;
+        if (! ribbon.read (columns, count, phase) || count < 2)
             return;
 
         const float mid = r.getCentreY();
@@ -271,16 +272,18 @@ private:
         auto band = [&] (auto lo, auto hi, juce::Colour c, bool filled)
         {
             juce::Path p;
-            p.startNewSubPath (r.getX(), mid - shape (extremes (hi, 0, true)) * half);
+            p.startNewSubPath (r.getX() - phase, mid - shape (extremes (hi, 0, true)) * half);
 
             // Started explicitly. A path whose first instruction is lineTo begins at the origin, so
             // every frame drew a stroke down from the well's top-left corner — a diagonal that had
             // nothing to do with the audio and was there even in silence.
-            for (int x = 1; x < pixels; ++x)
-                p.lineTo (r.getX() + (float) x, mid - shape (extremes (hi, x, true)) * half);
+            // One past the right edge: the whole path slides left by up to a pixel, and without it a
+            // sliver of well would blink at the edge every column.
+            for (int x = 1; x <= pixels; ++x)
+                p.lineTo (r.getX() + (float) x - phase, mid - shape (extremes (hi, x, true)) * half);
 
-            for (int x = pixels; --x >= 0;)
-                p.lineTo (r.getX() + (float) x, mid - shape (extremes (lo, x, false)) * half);
+            for (int x = pixels + 1; --x >= 0;)
+                p.lineTo (r.getX() + (float) x - phase, mid - shape (extremes (lo, x, false)) * half);
 
             p.closeSubPath();
 
