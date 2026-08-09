@@ -28,7 +28,8 @@ class AmpProcessor;
     switch — nothing in this file names any of that.
 
     A control slot with nothing behind it is hidden. A knob doing nothing is worse than a gap. */
-class BoostBlock final : public BlockFrame
+class BoostBlock final : public BlockFrame,
+                         private juce::AsyncUpdater
 {
 public:
     explicit BoostBlock (AmpProcessor&);
@@ -50,7 +51,17 @@ private:
         move, and far cheaper than doing it once per pixel. */
     void rebuildCurves();
 
+    /** Asks for the curve to be rebuilt — on the next message, not now.
+
+        Everything that moves a measured control writes a parameter, and the writes and the redraw
+        used to race. juce::ParameterAttachment deliberately does NOT call its own callback when it
+        writes the value itself (that would be a loop), and the redraw lived in that callback — so
+        clicking the switch changed the parameter and left the curve showing the position BEFORE the
+        click. On screen that reads as the switch being wired backwards. Deferring puts the rebuild
+        after every write, whoever made it. */
     void refreshCurve();
+
+    void handleAsyncUpdate() override;
 
     static constexpr int headerRow  = 22;
     static constexpr int curveHeight = 130;

@@ -114,6 +114,7 @@ void BoostBlock::deviceChanged()
             slot.steps->onChange = [this, i] (int v)
             {
                 slots[(size_t) i].stepAtt->setValueAsCompleteGesture (v > 0 ? 1.0f : 0.0f);
+                refreshCurve();
             };
 
             slot.stepAtt->sendInitialUpdate();
@@ -141,7 +142,7 @@ void BoostBlock::deviceChanged()
     }
 
     resized();
-    refreshCurve();
+    handleAsyncUpdate();   // the face is being built; the curve has to be right by the first paint
     repaint();
 }
 
@@ -196,6 +197,11 @@ double BoostBlock::toneDb (double freqHz) const
 }
 
 void BoostBlock::refreshCurve()
+{
+    triggerAsyncUpdate();
+}
+
+void BoostBlock::handleAsyncUpdate()
 {
     rebuildCurves();
     scope.repaint();
