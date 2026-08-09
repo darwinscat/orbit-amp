@@ -127,6 +127,36 @@ int main()
                 "dry " + juce::String (dry, 3) + ", wet " + juce::String (wet, 3));
     }
 
+    // Past the first full turn of the ring. A column closes on a sample counter, and when that
+    // counter stopped being reset the ribbon wrote one screenful and then raced — every sample
+    // closing a column, nothing accumulating — so the picture scrolled away into blank.
+    {
+        WaveRibbon lap;
+        lap.setResolution (512);
+        lap.prepare (sampleRate);
+
+        int p3 = 0;
+        feed (lap, WaveRibbon::seconds * 2.5, 0.5f, 1.0f, p3);   // two and a half windows
+
+        std::array<WaveRibbon::Column, WaveRibbon::buckets> c {};
+        int n3 = 0;
+        float ph3 = 0.0f;
+        lap.read (c, n3, ph3);
+
+        int drawn = 0;
+        for (int i = 0; i < n3; ++i)
+            if (c[(size_t) i].dryHi > 0.1f)
+                ++drawn;
+
+        std::printf ("\n%d of %d columns still hold signal after 2.5 windows\n", drawn, n3);
+
+        report ("the ribbon keeps writing past its first lap", drawn > n3 * 9 / 10,
+                juce::String (drawn) + "/" + juce::String (n3));
+
+        report ("...and the slide fraction stays a fraction", ph3 >= 0.0f && ph3 <= 1.0f,
+                juce::String (ph3, 3));
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }

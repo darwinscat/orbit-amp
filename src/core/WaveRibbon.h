@@ -110,6 +110,7 @@ public:
             if (++filled >= perBucket)
             {
                 closeColumn();
+                filled = 0;                       // starts the next column AT its first sample
                 writePos = (writePos + 1) % active;
                 written.fetch_add (1, std::memory_order_release);
             }
