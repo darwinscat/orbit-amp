@@ -228,6 +228,33 @@ int main()
                 "peak at sample " + juce::String (peak));
     }
 
+    // A pack that never stated a trusted band still must not be applied at the very edges of the
+    // grid. SM7 states none, and both its EQ curves turn upwards at 20 Hz — the measurement's own
+    // noise floor, four to seven decibels of it, drawn as a spike and played as an infrasonic boost.
+    {
+        namz::rig::Measured silent = *sweep;
+        silent.trusted = {};
+
+        const auto band = MeasuredFilter::bandFor (silent);
+        report ("a pack that says nothing still gets a band",
+                band.lo > 20.0 && band.hi < 20000.0,
+                juce::String (band.lo, 0) + ".." + juce::String (band.hi, 0) + " Hz");
+
+        MeasuredFilter f;
+        arm (f, silent, 1.0);
+
+        // Held flat below the band: whatever the grid claims at 20 Hz, what plays there is what the
+        // curve says at the edge of where it was believed.
+        const double atEdge = responseDb (f, band.lo);
+
+        MeasuredFilter below;
+        arm (below, silent, 1.0);
+        const double under = responseDb (below, 25.0);
+
+        report ("...and nothing new happens below it", std::abs (under - atEdge) < 1.5,
+                juce::String (atEdge, 2) + " dB at the edge, " + juce::String (under, 2) + " under it");
+    }
+
     // A control the pack says reproduced nowhere is a warning, and the widest possible permission is
     // the wrong way to read it.
     {

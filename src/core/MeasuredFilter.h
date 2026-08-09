@@ -18,14 +18,46 @@ namespace orbitamp::core
     reproduce in, the cepstral design — is `felitronics::lineareq`, and none of it is repeated here.
 
     What IS here is the pack's opinion, which core refuses to hold: what namz's `trusted` block means.
-    A band with no levels behind it was never tested, so the curve applies everywhere; a band that
-    collapsed was tested and failed, and gets handed to core as an empty band, which zeroes it.
+    A band that collapsed was tested and failed, and goes to core as an empty band, which zeroes the
+    curve. A band with nothing behind it was never tested at all, and gets the assumed one — see
+    bandFor, which is the only place either decision is made.
 
     Designing is message-thread work. The audio thread only ever convolves with a kernel already
     built. */
 class MeasuredFilter
 {
 public:
+    /** The band a measured curve is worth applying in — read from the pack when it says, and assumed
+        when it does not.
+
+        A pack that measured its trust states it, and then the producer decides. SM7 does not: all
+        three of its controls carry no trusted block, so the curve was applied edge to edge — and at
+        the very bottom of the grid a measurement has almost no energy to work with. SM7's two EQ
+        curves both turn UPWARDS at 20 Hz, by four and seven decibels, while at 50 Hz they both go
+        down. That is not the pedal, that is the noise floor of the measurement, and it was being
+        drawn as a spike and played as an infrasonic bass boost.
+
+        40 Hz is below the lowest note a guitar makes; 16 kHz is above anything a pedal shapes. Held
+        rather than rolled off, so nothing is invented past the edge — the curve simply stops having
+        an opinion where it never had evidence.
+
+        This is a POLICY, and policy is why it lives here rather than in the library that does the
+        maths: felitronics::lineareq takes two numbers and asks no questions about them. */
+    struct Band { double lo, hi; };
+
+    static Band bandFor (const namz::rig::Measured& m)
+    {
+        // Two levels or more means the pack actually tested it — including the case where it tested
+        // and failed everywhere, which arrives as a collapsed band and applies nothing.
+        if (m.trusted.levels >= 2)
+            return { m.trusted.loHz, m.trusted.hiHz };
+
+        return { assumedLoHz, assumedHiHz };
+    }
+
+    static constexpr double assumedLoHz = 40.0;
+    static constexpr double assumedHiHz = 16000.0;
+
     void prepare (double sampleRate, int maxBlock, int numChannels)
     {
         rate = sampleRate;
@@ -57,15 +89,9 @@ public:
 
         const auto db = felitronics::lineareq::curveAtPosition (curves, norms, norm);
 
-        // Never measured is not the same as measured and failed. A pack that says nothing about trust
-        // gets its curve applied across the band; one that says the curve reproduced nowhere gets an
-        // empty band, which core reads as "apply nothing".
-        const bool tested = m.trusted.levels >= 2;
-        const double loHz = tested ? m.trusted.loHz : 0.0;
-        const double hiHz = tested ? m.trusted.hiHz : 0.0;
-
+        const auto band = bandFor (m);
         const auto fir = felitronics::lineareq::magnitudeCurveToFir (db, freq, rate, firTaps,
-                                                                     designSize, loHz, hiHz);
+                                                                     designSize, band.lo, band.hi);
         if (fir.empty())            // flat, untrustworthy, or nothing to apply
         {
             active = false;

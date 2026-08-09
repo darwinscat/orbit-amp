@@ -165,12 +165,11 @@ void BoostBlock::rebuildCurves()
 
         c.hz = felitronics::lineareq::logFreqGrid (m.grid.fLo, m.grid.fHi, m.grid.points);
 
-        // The same band decision the sound makes — see core::MeasuredFilter. Drawing the raw curve
-        // where the audio holds it flat would make the picture a promise the sound does not keep.
-        const bool tested = m.trusted.levels >= 2;
+        // The same band decision the sound makes, from the same function — a picture that drew what
+        // the audio does not play would be a promise the sound never keeps.
+        const auto band = core::MeasuredFilter::bandFor (m);
         c.db = felitronics::lineareq::heldOutsideBand (
-            felitronics::lineareq::curveAtPosition (pos, norms, t), c.hz,
-            tested ? m.trusted.loHz : 0.0, tested ? m.trusted.hiHz : 0.0);
+            felitronics::lineareq::curveAtPosition (pos, norms, t), c.hz, band.lo, band.hi);
     }
 }
 
