@@ -122,9 +122,11 @@ void BoostBlock::deviceChanged()
             // for a knob is sensible and for a switch is a place the hardware cannot be. It played as
             // half of Smooth while the face lit Sharp, and clicking the lit half writes nothing — so
             // it could sit there forever. Land it on a real position as the device loads.
+            // The SAME rule the switch lights by, below — off by half a step and the parameter says
+            // Smooth while the face says Sharp, which is exactly the inversion this introduced.
             if (const float v = amp.apvts.getRawParameterValue (params::boostMeasured (i))->load();
                 v > 0.0f && v < 1.0f)
-                slot.stepAtt->setValueAsCompleteGesture (v < 0.5f ? 0.0f : 1.0f);
+                slot.stepAtt->setValueAsCompleteGesture (v > 0.5f ? 1.0f : 0.0f);
         }
         else
         {
