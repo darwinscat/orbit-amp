@@ -27,26 +27,23 @@ namespace orbitamp::core
 class MeasuredFilter
 {
 public:
-    /** The band a measured curve is worth applying in.
+    /** The band a measured curve is applied in — a ceiling over whatever the pack claims, and the
+        whole band when it claims nothing.
 
-        A CEILING, not a fallback. A pack that measured its own trust states it and is believed —
-        within these limits, because the instrument sets limits that no measurement of a pedal can
-        widen. A guitar has nothing below 60 Hz and nothing worth shaping above 12 kHz, so a curve
-        claiming to know what happens there is describing the measurement rather than the pedal, and
-        whoever took it is the first to say so.
-
-        SM7 is the case in front of us: no trusted block anywhere, so the curve ran edge to edge, and
-        at the bottom of the grid there is almost no energy to measure with. Both its EQ curves turn
-        UPWARDS at 20 Hz — four and seven decibels — while at 50 Hz they both go down. That is a noise
-        floor, drawn as a spike into the top of the picture and played as an infrasonic bass boost.
+        Currently the near-full range: an .orbitrig grid runs 20 Hz to 20 kHz, so this trims only the
+        very top and leaves the bottom to the pack. Where exactly to put it is UNSETTLED — narrow
+        enough and a measurement's noisiest corners stop being played (SM7 has no trusted block at
+        all, and both its EQ curves turn upwards at 20 Hz by four and seven decibels, which is a noise
+        floor rather than a pedal); wide enough and nothing measured is thrown away. Two numbers, and
+        they are meant to be moved.
 
         Held rather than rolled off: nothing is invented past the edge, the curve simply stops
         claiming. A collapsed band survives intact — "tested and failed everywhere" must not be
         widened into a band by a clamp.
 
         POLICY, which is why it is here and not in the library doing the maths: felitronics::lineareq
-        takes two numbers and asks no questions, which is right for a library and wrong for an
-        opinion about guitars. */
+        takes two numbers and asks no questions, which is right for a library and wrong for a decision
+        about what a measurement is worth. */
     struct Band { double lo, hi; };
 
     static Band bandFor (const namz::rig::Measured& m)
@@ -58,15 +55,15 @@ public:
             if (m.trusted.hiHz <= m.trusted.loHz)
                 return { m.trusted.loHz, m.trusted.hiHz };
 
-            return { juce::jmax (instrumentLoHz, m.trusted.loHz),
-                     juce::jmin (instrumentHiHz, m.trusted.hiHz) };
+            return { juce::jmax (bandLoHz, m.trusted.loHz),
+                     juce::jmin (bandHiHz, m.trusted.hiHz) };
         }
 
-        return { instrumentLoHz, instrumentHiHz };
+        return { bandLoHz, bandHiHz };
     }
 
-    static constexpr double instrumentLoHz = 60.0;
-    static constexpr double instrumentHiHz = 12000.0;
+    static constexpr double bandLoHz = 10.0;
+    static constexpr double bandHiHz = 19000.0;
 
     void prepare (double sampleRate, int maxBlock, int numChannels)
     {

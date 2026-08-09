@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/ScopeTap.h"
+#include "../core/MeasuredFilter.h"
 #include "../core/WaveRibbon.h"
 #include "Theme.h"
 
@@ -313,7 +314,12 @@ private:
         if (toneDb == nullptr)
             return;
 
-        constexpr double lo = 20.0, hi = 20000.0;
+        // The axis IS the band the curve is believed in. Drawing 20 Hz to 20 kHz meant most of the
+        // width went to the shelves where the curve is held flat — a long dead line at each end, and
+        // the bass one looked like the pedal doing something. It is not doing anything there; it is
+        // not known there, and the honest way to show that is not to show it.
+        const double lo = core::MeasuredFilter::bandLoHz;
+        const double hi = core::MeasuredFilter::bandHiHz;
         constexpr float range = 20.0f;
 
         juce::Path p;
