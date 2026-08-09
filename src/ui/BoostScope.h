@@ -51,6 +51,9 @@ public:
 
     Mode getMode() const noexcept { return mode; }
 
+    /** The rate the tap is being filled at, so a partial lands on the frequency it actually has. */
+    void setSampleRate (double rate) { toneView.setSampleRate (rate); }
+
     /** What is inside the device, drawn over the picture. It belongs to the picture rather than to a
         row of its own: the row cost a line of height and the glyphs were small in it, and what is in
         the box is a caption on what the box does, not a separate fact. */

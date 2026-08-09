@@ -21,6 +21,7 @@ BoostBlock::BoostBlock (AmpProcessor& processor)
     // the face rather than in the code.
     scopeMode.setItems ({ "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" }, 0);
     scopeMode.onChange = [this] (int i) { scope.setMode ((BoostScope::Mode) i); };
+    scope.setSampleRate (amp.currentSampleRate());
 
     attachPower (*amp.apvts.getParameter (params::boostOn));
 
@@ -47,6 +48,8 @@ BoostBlock::~BoostBlock() = default;
 
 void BoostBlock::deviceChanged()
 {
+    scope.setSampleRate (amp.currentSampleRate());
+
     const auto* measured = amp.boost.measured();
     const auto  positions = amp.boost.gainPositions();
 
