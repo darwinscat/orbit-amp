@@ -41,6 +41,7 @@ AmpProcessor::AmpProcessor()
 
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
+    gatePosParam       = apvts.getRawParameterValue (params::gatePos);
 
     reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
     reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
@@ -276,9 +277,18 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         gateKeyDb.store (juce::Decibels::gainToDecibels (peak, -90.0f));
     }
 
-    gate.process (channels, numChannels, numSamples,
+    // The gate KEYS here whatever it ends up muting — dual detection: the decision is made on the
+    // raw input, the attenuation lands where the parameter says. The enable crossfade makes the
+    // toggle pop-free, so analyse runs unconditionally and the switch is an argument.
+    gate.analyse (channels, numChannels, numSamples,
                   gateOnParam->load() > 0.5f, gateThresholdParam->load());
     gateMeterDb.store (juce::Decibels::gainToDecibels (gate.currentGain(), -90.0f));
+
+    const bool muteAtStart = juce::roundToInt (gatePosParam->load()) == 0;
+
+    // MUTE at the start: the nonlinearities themselves fall silent between notes.
+    if (muteAtStart)
+        gate.applyGain (channels, numChannels, numSamples);
 
     // The EQ links are links of their own, with their own switches: eq1 decides what reaches the
     // first nonlinearity, eq2 colours what the boost made before the preamp distorts it again.
@@ -293,6 +303,11 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     if (preampOnParam->load() > 0.5f)
         preamp.process (buffer, scopeDry);
+
+    // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
+    // (boost hiss, preamp hiss) dies here too, and the reverb tail past it rings out.
+    if (! muteAtStart)
+        gate.applyGain (channels, numChannels, numSamples);
 
     if (reverbOnParam->load() > 0.5f)
         reverb.process (channels, numChannels, numSamples);

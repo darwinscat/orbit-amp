@@ -3,8 +3,10 @@
 #include "../Parameters.h"
 #include "BlockFrame.h"
 #include "Knob.h"
+#include "StepSwitch.h"
 
 #include <atomic>
+#include <functional>
 
 namespace orbitamp
 {
@@ -16,15 +18,19 @@ namespace orbitamp
     signal down — is its own well at the side, because attenuation and key level are different
     facts that happen to share a unit.
 
-    The threshold is the gate's one decision; everything else about the feel stays fixed in the
-    engine, and a knob per fixed opinion would be nine knobs of noise. */
+    Two decisions live on this face and no more: the threshold — settable by ear, by runner, or by
+    LEARN, which measures your noise floor instead of asking you to guess it — and WHERE the mute
+    lands (the key never moves: it is always the raw input). Everything else about the feel stays
+    fixed in the engine, and a knob per fixed opinion would be nine knobs of noise. */
 class GateBlock final : public BlockFrame,
                         private juce::Timer
 {
 public:
     GateBlock (juce::AudioProcessorValueTreeState& s,
-               const std::atomic<float>& pressureDbSource, const std::atomic<float>& keyDbSource)
-        : BlockFrame ("Gate", Kind::dsp), pressureDb (pressureDbSource), keyDb (keyDbSource)
+               const std::atomic<float>& pressureDbSource, const std::atomic<float>& keyDbSource,
+               std::function<bool()> demoIsPlaying)
+        : BlockFrame ("Gate", Kind::dsp), pressureDb (pressureDbSource), keyDb (keyDbSource),
+          demoPlaying (std::move (demoIsPlaying))
     {
         threshold.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)) + " dB"; };
         addAndMakeVisible (threshold);
@@ -36,7 +42,22 @@ public:
         runnerAtt = std::make_unique<juce::ParameterAttachment> (
             *s.getParameter (params::gateThreshold), [this] (float) { repaint(); });
 
-        attachPower (*s.getParameter (params::gateOn));
+        // Where the mute lands. The key is not a choice, so the switch only says WHERE.
+        addAndMakeVisible (mutePos);
+        mutePos.accent = theme::violet;
+        mutePos.setItems ({ "MUTE: START", "MUTE: PRE-REVERB" }, 1);
+
+        mutePosAtt = std::make_unique<juce::ParameterAttachment> (
+            *s.getParameter (params::gatePos),
+            [this] (float v) { mutePos.setSelectedIndex (v > 0.5f ? 1 : 0, juce::dontSendNotification); });
+        mutePos.onChange = [this] (int i) { mutePosAtt->setValueAsCompleteGesture ((float) i); };
+        mutePosAtt->sendInitialUpdate();
+
+        // LEARN: the threshold is a fact about YOUR noise floor, and facts are measured. Don't
+        // play; the button listens to the key for a moment and parks the threshold just over the
+        // loudest thing it heard.
+        addAndMakeVisible (learn);
+        learn.onClick = [this] { startLearning(); };
     }
 
 private:
@@ -53,7 +74,62 @@ private:
         // Peak-style ballistics for the level: jump up instantly, fall at a readable rate.
         const float now = keyDb.load();
         levelDb = now > levelDb ? now : juce::jmax (now, levelDb - releasePerTick);
+
+        learn.lit = learning;
+
+        if (learning)
+        {
+            learnPeak = juce::jmax (learnPeak, now);
+
+            if (++learnTicks >= learnTotalTicks)
+            {
+                learning = false;
+
+                // Nothing arrived: a muted input teaches nothing, and parking the threshold at
+                // the floor would be pretending it did.
+                if (learnPeak < -75.0f)
+                {
+                    say ("NOTHING HEARD");
+                }
+                else
+                {
+                    // Half the hysteresis over the measured floor: the floor sits under the CLOSE
+                    // level too, with the same margin.
+                    const float th = juce::jlimit (-80.0f, -20.0f,
+                                                   learnPeak + params::gateHysteresisDb);
+                    runnerAtt->setValueAsCompleteGesture (th);
+                    say ("SET " + juce::String (juce::roundToInt (th)) + " DB");
+                }
+            }
+        }
+
+        if (messageTicks > 0)
+            --messageTicks;
+
         repaint();
+    }
+
+    void startLearning()
+    {
+        if (learning)
+            return;
+
+        // The demo replaces the input — learning from it would file music under noise.
+        if (demoPlaying != nullptr && demoPlaying())
+        {
+            say ("STOP THE DEMO FIRST");
+            return;
+        }
+
+        learning   = true;
+        learnPeak  = -90.0f;
+        learnTicks = 0;
+    }
+
+    void say (const juce::String& text)
+    {
+        message      = text;
+        messageTicks = 75;   // ~2.5 s at 30 Hz
     }
 
     void layOutContent (juce::Rectangle<int> area) override
@@ -61,6 +137,12 @@ private:
         pressureWell = area.removeFromRight (area.getWidth() / 5).reduced (area.getWidth() / 14, 8);
 
         keyMeter = area.removeFromBottom (64).reduced (18, 10);
+        area.removeFromBottom (8);
+
+        auto row = area.removeFromBottom (22).reduced (18, 0);
+        learn.setBounds (row.removeFromLeft (72));
+        row.removeFromLeft (12);
+        mutePos.setBounds (row.removeFromLeft (juce::jmin (row.getWidth(), 280)));
         area.removeFromBottom (8);
 
         const int side = juce::jmin (200, juce::jmin (area.getWidth(), area.getHeight()));
@@ -101,6 +183,14 @@ private:
                 g.fillRoundedRectangle (r.withRight (lx).reduced (2.0f), theme::radiusSm);
             }
 
+            // While learning, the running maximum walks the scale in the tuner's green — the
+            // threshold-to-be, being measured.
+            if (learning)
+            {
+                g.setColour (juce::Colour (0xff5fc97a));
+                g.fillRect (dbToX (r, learnPeak) - 0.75f, r.getY(), 1.5f, r.getHeight());
+            }
+
             const float openDb  = (float) threshold.getValue();
             const float openX   = dbToX (r, openDb);
             const float closeX  = dbToX (r, openDb - params::gateHysteresisDb);
@@ -124,6 +214,14 @@ private:
             g.setColour (theme::txFaint);
             theme::drawTracked (g, "KEY", r.withY (r.getBottom() + 2.0f).withHeight (10.0f),
                                 theme::displayFont (6.5f), 0.14f, juce::Justification::centredLeft);
+
+            // What LEARN has to say — a measurement's verdict, or why there is none.
+            if (messageTicks > 0)
+            {
+                g.setColour (theme::txDim);
+                theme::drawTracked (g, message, r.withY (r.getBottom() + 2.0f).withHeight (10.0f),
+                                    theme::displayFont (6.5f), 0.14f, juce::Justification::centredRight);
+            }
         }
 
         // ---- the pressure well: how hard the gate is holding, from the top down ----
@@ -187,17 +285,53 @@ private:
         runnerAtt->setValueAsPartOfGesture (xToDb (keyMeter.toFloat(), e.position.x));
     }
 
+    /** The one momentary control on the face. Lit while the measurement runs. */
+    struct LearnButton final : public juce::Component
+    {
+        std::function<void()> onClick;
+        bool lit = false;
+
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (0.5f);
+            g.setColour (lit ? theme::violet.withAlpha (0.35f) : theme::bezel);
+            g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+            g.setColour (lit ? theme::lilac : theme::hair2);
+            g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
+            g.setColour (lit ? theme::tx : theme::txDim);
+            theme::drawTracked (g, "LEARN", r, theme::displayFont (7.5f), 0.14f,
+                                juce::Justification::centred);
+        }
+
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            if (onClick != nullptr)
+                onClick();
+        }
+    };
+
     static constexpr float floorDb        = -80.0f;   // the meter's left edge — the threshold's own floor
     static constexpr float releasePerTick = 1.4f;     // ~42 dB/s at 30 Hz: readable, not sluggish
+    static constexpr int   learnTotalTicks = 45;      // 1.5 s at 30 Hz — enough for hum to show its worst
 
     const std::atomic<float>& pressureDb;
     const std::atomic<float>& keyDb;
+    std::function<bool()> demoPlaying;
     float levelDb = -90.0f;
 
     Knob threshold { "Threshold", theme::violet, 0 };
+    StepSwitch mutePos;
+    LearnButton learn;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> thresholdAtt;
-    std::unique_ptr<juce::ParameterAttachment> runnerAtt;
+    std::unique_ptr<juce::ParameterAttachment> runnerAtt, mutePosAtt;
     bool draggingRunner = false;
+
+    bool  learning   = false;
+    float learnPeak  = -90.0f;
+    int   learnTicks = 0;
+
+    juce::String message;
+    int messageTicks = 0;
 
     juce::Rectangle<int> keyMeter, pressureWell;
 

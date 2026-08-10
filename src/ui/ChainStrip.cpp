@@ -235,12 +235,16 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
         auto* t = make (ChainLink::gate, "Gate", theme::violet, params::gateOn);
 
         auto* thresholdParam = s.getRawParameterValue (params::gateThreshold);
+        auto* posParam       = s.getRawParameterValue (params::gatePos);
         const auto& pressureDb = amp.gateMeterDb;
         const auto& keyDb      = amp.gateKeyDb;
 
-        t->caption = [thresholdParam]
+        // The map must not lie: when the mute lands pre-reverb, the thumb says so — the KEY is
+        // here at the front either way, which is why the link itself does not move.
+        t->caption = [thresholdParam, posParam]
         {
-            return juce::String (juce::roundToInt (thresholdParam->load())) + " DB";
+            const auto db = juce::String (juce::roundToInt (thresholdParam->load()));
+            return juce::roundToInt (posParam->load()) == 0 ? db + " DB" : db + " →REV";
         };
 
         t->preview = [&pressureDb, &keyDb, thresholdParam] (juce::Graphics& g, juce::Rectangle<int> box)

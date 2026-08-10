@@ -57,9 +57,14 @@ tuner → gate → eq1 → boost → eq2 → preamp (voicing) → reverb → pow
   and it must stay ahead of the gate, or a closed gate blinds the needle on a
   decaying note, which is exactly when you tune. MPM (McLeod) pitch, ±half a cent.
 - **Noise gate** — `felitronics::dynamics::NoiseGate`, the engine OrbitCab ships:
-  Schmitt + hold, transient-safe open, pop-free enable. Self-keyed off the raw
-  guitar, killing hum before any dirt multiplies it. One decision on its face —
-  the threshold — plus a live gain-reduction meter. Off by default.
+  Schmitt + hold, transient-safe open, pop-free enable. Dual detection: it always
+  KEYS off the raw guitar, and the MUTE lands where the player says — at the
+  start, or pre-reverb (the default: the hiss the boost and preamp ADD dies too,
+  the clean key never pumps, the reverb tail rings out). Indicated the way gates
+  are: a live key-level meter with both decision marks on it — OPEN (the
+  threshold, draggable) and CLOSE (the engine's hysteresis under it) — plus a
+  pressure well. LEARN measures the noise floor instead of asking the player to
+  guess it. Off by default.
 - **EQ links (eq1, eq2)** — DSP, and **links of the chain, not sections of any
   block**. Exactly two, fixed (a host needs an unchanging parameter list): eq1
   ahead of the boost decides what reaches the first nonlinearity — it changes the

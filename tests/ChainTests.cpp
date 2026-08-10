@@ -343,19 +343,33 @@ int main()
         set (amp, orbitamp::params::boostOn, 0.0f);
         set (amp, orbitamp::params::preampOn, 0.0f);
 
-        // -46 dBFS, under a -20 dB threshold: hum, as far as the gate is concerned.
+        // -46 dBFS, under a -20 dB threshold: hum, as far as the gate is concerned. Both mute
+        // positions have to kill it — the KEY and the decision are the same, only the place the
+        // attenuation lands differs.
         set (amp, orbitamp::params::gateOn, 1.0f);
         set (amp, orbitamp::params::gateThreshold, -20.0f);
+
+        set (amp, orbitamp::params::gatePos, 1.0f);   // pre-reverb (the default)
         const auto gated = run (amp, 220.0, 0.005f);
+
+        set (amp, orbitamp::params::gatePos, 0.0f);   // start
+        const auto gatedStart = run (amp, 220.0, 0.005f);
 
         set (amp, orbitamp::params::gateOn, 0.0f);
         const auto open = run (amp, 220.0, 0.005f);
 
-        std::printf ("\ngate: hum gated -> rms %.6f, gate off -> %.6f\n", rms (gated), rms (open));
+        std::printf ("\ngate: hum pre-reverb -> rms %.6f, at start -> %.6f, gate off -> %.6f\n",
+                     rms (gated), rms (gatedStart), rms (open));
 
         report ("the gate closes on what is under its threshold",
                 rms (gated) < rms (open) * 0.1,
                 juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, rms (gated) / rms (open))), 1) + " dB");
+
+        report ("...at either mute position",
+                rms (gatedStart) < rms (open) * 0.1,
+                juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, rms (gatedStart) / rms (open))), 1) + " dB");
+
+        set (amp, orbitamp::params::gatePos, 1.0f);   // back to the default for the loud check
 
         // -12 dBFS over the same threshold: playing. The gate must not be audible at all.
         set (amp, orbitamp::params::gateOn, 1.0f);

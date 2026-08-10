@@ -25,6 +25,15 @@ inline constexpr const char* gateThreshold = "gate_threshold";
     display promises is the number the state machine runs. */
 inline constexpr float gateHysteresisDb = 6.0f;
 
+/** Where the gate MUTES. It always KEYS off the raw input — that is the whole dual-detection
+    idea — but the VCA can stand at the chain's start or after the preamp, ahead of the reverb.
+    Pre-Reverb is the G-String architecture and the default: it kills the hiss the boost and the
+    preamp ADD (which a gate at the start never meets), the clean key never pumps on distortion
+    sustain, and the reverb tail rings out past it. Start remains for the player who wants the
+    nonlinearity itself to fall silent between notes. */
+inline constexpr const char* gatePos = "gate_pos";
+inline const juce::StringArray gatePositions { "Start", "Pre-Reverb" };
+
 /** TEMPORARY — hear the capture with nothing of ours on it.
 
     Everything a block adds comes off: the measured curves the pack shipped, rebuilt as filters, and

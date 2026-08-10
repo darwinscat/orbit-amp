@@ -192,6 +192,7 @@ private:
 
     std::atomic<float>* gateOnParam        = nullptr;
     std::atomic<float>* gateThresholdParam = nullptr;
+    std::atomic<float>* gatePosParam       = nullptr;
 
     std::atomic<float>* reverbOnParam   = nullptr;
     std::atomic<float>* reverbTypeParam = nullptr;
