@@ -103,6 +103,14 @@ private:
         const float now = keyDb.load();
         levelDb = now > levelDb ? now : juce::jmax (now, levelDb - releasePerTick);
 
+        // Switched off mid-measurement: the block is read-only now, so the measurement dies
+        // rather than writing a threshold into a dark block.
+        if (learning && ! isBlockOn())
+        {
+            learning = false;
+            learn.trace.clear();
+        }
+
         learn.lit = learning;
 
         if (learning)
@@ -347,7 +355,9 @@ private:
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
-        if (draggingRunner)
+        // The power check repeats per event: a drag that started on a live block must not keep
+        // writing after the block goes dark under it.
+        if (draggingRunner && isBlockOn())
             dragRunner (e);
     }
 

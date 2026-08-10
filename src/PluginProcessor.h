@@ -224,6 +224,7 @@ private:
     std::atomic<float> dspLoad { 0.0f };
     int lastOversample = -1;
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };
 

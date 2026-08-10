@@ -78,16 +78,34 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     const auto tree = juce::ValueTree::fromXml (*xml);
 
-    if (history.fromTree (tree))
-        return;
-
-    // Sessions saved before the workspace existed hold a bare parameter tree. Load the sound and
-    // start a fresh history around it rather than dropping the session on the floor.
-    if (tree.hasType (apvts.state.getType()))
+    const auto apply = [] (AmpProcessor& self, const juce::ValueTree& t)
     {
-        apvts.replaceState (tree);
-        history.reset();
+        if (self.history.fromTree (t))
+            return;
+
+        // Sessions saved before the workspace existed hold a bare parameter tree. Load the sound
+        // and start a fresh history around it rather than dropping the session on the floor.
+        if (t.hasType (self.apvts.state.getType()))
+        {
+            self.apvts.replaceState (t);
+            self.history.reset();
+        }
+    };
+
+    // CompareHistory's contract is message-thread only, and a host may restore from anywhere —
+    // marshalled rather than raced against the settle timer (found in review).
+    if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+    {
+        apply (*this, tree);
+        return;
     }
+
+    juce::MessageManager::callAsync (
+        [weak = juce::WeakReference<AmpProcessor> (this), tree, apply]
+        {
+            if (auto* self = weak.get())
+                apply (*self, tree);
+        });
 }
 
 void AmpProcessor::selectDemoLoop (int index)
