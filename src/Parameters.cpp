@@ -35,9 +35,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Int> (juce::ParameterID { boostDevice, 1 }, "Boost Device",
                                        0, maxDevices - 1, 0));
 
-    // The advanced EQ, one set per captured block.
+    // The advanced EQ and the selector slots, one set per captured block.
     for (const char* blk : { boostId, preampId })
     {
+        layout.add (std::make_unique<Bool> (juce::ParameterID { rawId (blk), 1 },
+                                            juce::String (blk) + " Raw", false));
+
+        for (int i = 0; i < numSelectors; ++i)
+            layout.add (std::make_unique<Int> (juce::ParameterID { selectorId (blk, i), 1 },
+                                               juce::String (blk) + " Select " + juce::String (i + 1),
+                                               0, 15, 0));
+
         const juce::String name (juce::String (blk).substring (0, 1).toUpperCase()
                                  + juce::String (blk).substring (1));
 

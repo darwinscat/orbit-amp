@@ -122,8 +122,17 @@ void AmpProcessor::updateVoiceEq (auto& block, const char* blk)
 
 void AmpProcessor::pumpDeviceWork()
 {
-    auto pump = [this] (auto& block, auto& gainParam, auto measuredId)
+    auto pump = [this] (auto& block, auto& gainParam, auto measuredId, const char* blk)
     {
+        // Selectors first: they and the gain dial pick a file together, and a stale one would send
+        // resolve looking for a combination the player is not on any more.
+        std::array<int, (size_t) params::numSelectors> selectors {};
+        for (int i = 0; i < params::numSelectors; ++i)
+            selectors[(size_t) i] = juce::roundToInt (
+                apvts.getRawParameterValue (params::selectorId (blk, i))->load());
+
+        block.setRaw (apvts.getRawParameterValue (params::rawId (blk))->load() > 0.5f);
+        block.applySelectors (selectors);
         block.loadIfGainMoved (gainParam->load());
 
         std::array<float, (size_t) std::decay_t<decltype (block)>::numMeasured> values {};
@@ -134,8 +143,8 @@ void AmpProcessor::pumpDeviceWork()
         block.collectGarbage();
     };
 
-    pump (boost,  boostGainParam,  params::boostMeasured);
-    pump (preamp, preampGainParam, params::preampMeasured);
+    pump (boost,  boostGainParam,  params::boostMeasured,  params::boostId);
+    pump (preamp, preampGainParam, params::preampMeasured, params::preampId);
 
     updateVoiceEq (boost,  params::boostId);
     updateVoiceEq (preamp, params::preampId);

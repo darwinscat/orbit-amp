@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Parameters.h"
 #include "../device/DeviceLibrary.h"
 #include "CapturedStage.h"
 #include "MeasuredFilter.h"
@@ -63,6 +64,25 @@ public:
         lastTone.fill (-1.0f);
     }
 
+    /** Turn a device's other selecting control — the octave switch, a mode, whatever the pack has.
+        Loading is a file read, so this is message-thread work like the gain knob's. */
+    void applySelectors (const std::array<int, (size_t) params::numSelectors>& indices)
+    {
+        const auto list = stage.selectors();
+
+        for (int i = 0; i < params::numSelectors && i < list.size(); ++i)
+        {
+            const auto& sel = list.getReference (i);
+            const int index = juce::jlimit (0, sel.values.size() - 1, indices[(size_t) i]);
+
+            if (index == lastSelector[(size_t) i])
+                continue;
+
+            lastSelector[(size_t) i] = index;
+            stage.selectValue (sel.name, sel.values[index]);
+        }
+    }
+
     /** The gain knob SELECTS a capture, so a move means loading a file — message thread work, off the
         timer, because the audio thread never touches a disk. `gain` is the 0..10 panel scale. */
     void loadIfGainMoved (float gain)
@@ -93,6 +113,18 @@ public:
     }
 
     /** Re-designs a measured filter when its knob moved. Message thread — it builds an FIR. */
+    /** TEMPORARY — see params::rawId. Nothing of ours between the model and the output. */
+    void setRaw (bool shouldBeRaw)
+    {
+        if (raw == shouldBeRaw)
+            return;
+
+        raw = shouldBeRaw;
+        lastTone.fill (-1.0f);   // every filter changes state at once
+    }
+
+    bool isRaw() const noexcept { return raw; }
+
     void updateToneIfMoved (const std::array<float, (size_t) NumMeasured>& values)
     {
         const auto* measured = stage.measured();
@@ -101,7 +133,7 @@ public:
         {
             auto& filter = tone[(size_t) i];
 
-            if (measured == nullptr || i >= (int) measured->size())
+            if (raw || measured == nullptr || i >= (int) measured->size())
             {
                 filter.clear();
                 continue;
@@ -131,7 +163,7 @@ public:
 
         // BEFORE the capture, when it is set there — that is the whole reason the placement exists.
         // What reaches a nonlinearity decides what kind of distortion comes out of it.
-        if (eq.isPre())
+        if (! raw && eq.isPre())
             eq.process (channels, numChannels, numSamples);
 
         stage.process (channels, numChannels, numSamples);
@@ -141,7 +173,7 @@ public:
         for (auto& f : tone)
             f.process (buffer);
 
-        if (! eq.isPre())
+        if (! raw && ! eq.isPre())
             eq.process (channels, numChannels, numSamples);
 
         scope.write (dry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
@@ -173,7 +205,9 @@ private:
 
     device::DeviceLibrary::Slot slot;
     std::array<float, (size_t) NumMeasured> lastTone { };
+    std::array<int, (size_t) params::numSelectors> lastSelector { -1, -1 };
     int lastGainIndex = -1;
+    bool raw = false;
 };
 
 } // namespace orbitamp::core

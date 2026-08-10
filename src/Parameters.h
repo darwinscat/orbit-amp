@@ -15,6 +15,23 @@ inline constexpr const char* reverbOn    = "reverb_on";
 inline constexpr const char* boostGain  = "boost_gain";
 inline constexpr const char* boostTone  = "boost_tone";
 
+/** TEMPORARY — hear the capture with nothing of ours on it.
+
+    Everything a block adds comes off: the measured curves the pack shipped, rebuilt as filters, and
+    our own EQ. What stays is what picks WHICH model plays — the gain dial and the device's selecting
+    controls, an octave switch among them — because those are not treatments, they are the choice of
+    capture. Goes when the question it answers stops being asked. */
+inline juce::String rawId (const char* blk) { return juce::String (blk) + "_raw"; }
+
+/** A device's OTHER selecting controls — the ones that pick a file and are not the gain dial. Two
+    slots, like the measured ones: a fixed set a host can see, filled by whatever the pack declares.
+    Fur Coat needs one of them for its octave; most pedals need none. */
+inline constexpr int numSelectors = 2;
+inline juce::String selectorId (const char* blk, int i)
+{
+    return juce::String (blk) + "_sel" + juce::String (i + 1);
+}
+
 /** The ADVANCED EQ every captured block carries — ours, not the device's, and the same set in each
     block so it is learned once. `blk` is the block's id prefix ("boost", "preamp", "power").
 

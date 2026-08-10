@@ -2,6 +2,7 @@
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
+#include "ZoneSwitch.h"
 #include "scope/DeviceScope.h"
 #include "Knob.h"
 #include "Selector.h"
@@ -61,6 +62,13 @@ private:
         after every write, whoever made it. */
     void refreshCurve();
 
+    /** Whether a measured control's positions are named rather than numbered — the difference
+        between a switch and a knob that happens to have been swept at two points. */
+    static bool hasNamedPositions (const namz::rig::Measured&);
+
+    /** Builds a switch for each selecting control the device has beyond its gain dial. */
+    void buildSelectors();
+
     void handleAsyncUpdate() override;
 
     static constexpr int headerRow  = 22;
@@ -71,6 +79,10 @@ private:
     static constexpr int modeRow    = 18;
 
     AmpProcessor& amp;
+
+    /** TEMPORARY — everything of ours off, so the capture can be heard as it was taken. */
+    ZoneSwitch rawSwitch;
+    juce::Label rawLabel { {}, "RAW" };
 
     VoicingSelector pedal;
     Knob gain { "Gain", theme::orange, 0 };
@@ -85,6 +97,17 @@ private:
     };
 
     std::array<Slot, (size_t) params::boostNumMeasured> slots;
+
+    /** A device's other selecting controls — the ones that pick a FILE rather than shape one. Fur
+        Coat's octave is the first of them: two captures at every dial position, and without this
+        half the pack was unreachable. Drawn as a switch because that is what it is on the pedal. */
+    struct PickSlot
+    {
+        std::unique_ptr<StepSwitch> steps;
+        std::unique_ptr<juce::ParameterAttachment> attachment;
+    };
+
+    std::array<PickSlot, (size_t) params::numSelectors> selectors;
 
     struct Curve { std::vector<double> db, hz; };
     std::array<Curve, (size_t) params::boostNumMeasured> curves;

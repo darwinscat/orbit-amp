@@ -64,6 +64,50 @@ public:
         return out;
     }
 
+    /** The device's OTHER selecting controls — everything that picks a file and is not the gain axis.
+
+        Fur Coat is the case that exposed this: a Fuzz dial of twenty-one positions AND an Octave
+        switch, forty-two files, two for every dial position. Reading only the gain control meant half
+        the pack was unreachable — the player silently got whichever side `resolve` fell back to.
+
+        Returned as name plus its values, in the order the pack lists them, because that order is the
+        one the device's own panel had. */
+    struct Selector { juce::String name; juce::StringArray values; };
+
+    juce::Array<Selector> selectors() const
+    {
+        juce::Array<Selector> out;
+
+        if (const auto* stageDef = firstNam())
+            for (const auto& c : stageDef->device.controls)
+                if (c.role != namz::rig::Role::Gain && c.values.size() > 1)
+                {
+                    Selector s { juce::String (c.name), {} };
+                    for (const auto& v : c.values)
+                        s.values.add (juce::String (v));
+
+                    out.add (std::move (s));
+                }
+
+        return out;
+    }
+
+    /** Turn one of them, and load whatever that combination resolves to. Message thread. */
+    void selectValue (const juce::String& controlName, const juce::String& value)
+    {
+        const auto* stageDef = firstNam();
+        if (pack == nullptr || stageDef == nullptr || controlName.isEmpty())
+            return;
+
+        const auto* entry = namz::rig::resolve (stageDef->device, settings,
+                                                controlName.toStdString(), value.toStdString());
+        if (entry == nullptr)
+            return;
+
+        inputGain.store (juce::Decibels::decibelsToGain ((float) -entry->inputDb));
+        load (juce::String (entry->id));
+    }
+
     /** A device with no gain axis has exactly one model, and nothing will ever ask for it by
         position — so it loads when the device does. Without this a lone .nam sits silent: the gain
         knob is what triggers a load, and this kind of device does not have one. */

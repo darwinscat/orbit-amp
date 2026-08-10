@@ -12,6 +12,8 @@ BoostBlock::BoostBlock (AmpProcessor& processor)
       scope (processor.boost.scope, processor.boost.ribbon,
              [this] (double hz) { return toneDb (hz); })
 {
+    addAndMakeVisible (rawSwitch);
+    addAndMakeVisible (rawLabel);
     addAndMakeVisible (pedal);
     addAndMakeVisible (gain);
     addAndMakeVisible (scope);
@@ -22,6 +24,14 @@ BoostBlock::BoostBlock (AmpProcessor& processor)
     scopeMode.setItems ({ "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" }, 0);
     scopeMode.onChange = [this] (int i) { scope.setMode ((DeviceScope::Mode) i); };
     scope.setSampleRate (amp.currentSampleRate());
+
+    rawSwitch.accent = theme::violet;
+    rawSwitch.attach (*amp.apvts.getParameter (params::rawId (params::boostId)));
+
+    rawLabel.setFont (theme::displayFont (7.0f));
+    rawLabel.setColour (juce::Label::textColourId, theme::txFaint);
+    rawLabel.setJustificationType (juce::Justification::centredRight);
+    rawLabel.setInterceptsMouseClicks (false, false);
 
     attachPower (*amp.apvts.getParameter (params::boostOn));
 
@@ -102,9 +112,12 @@ void BoostBlock::deviceChanged()
 
         const auto name = juce::String (m.name).toUpperCase();
 
-        // Two positions with names rather than degrees is a switch, not a knob. The pack says which
-        // by what it ships, so nothing here has to know that SM7's third control is called Edge.
-        if (m.positions.size() == 2)
+        // A switch is a control whose positions have NAMES. Not one with two of them: a measured
+        // control's positions are the points it was measured AT, and the player interpolates between
+        // them — two is a perfectly ordinary number for a knob that was swept at each end. Fur Coat's
+        // EQ says "0" and "300", which are degrees, and counting them turned a tone knob into a
+        // two-position switch stuck at one end.
+        if (m.positions.size() == 2 && hasNamedPositions (m))
         {
             juce::StringArray labels;
             for (const auto& p : m.positions)
@@ -154,9 +167,67 @@ void BoostBlock::deviceChanged()
         }
     }
 
+    buildSelectors();
+
     resized();
     handleAsyncUpdate();   // the face is being built; the curve has to be right by the first paint
     repaint();
+}
+
+void BoostBlock::buildSelectors()
+{
+    const auto list = amp.boost.stage.selectors();
+
+    for (int i = 0; i < params::numSelectors; ++i)
+    {
+        auto& sel = selectors[(size_t) i];
+
+        sel.attachment.reset();
+        sel.steps.reset();
+
+        if (i >= list.size())
+            continue;
+
+        const auto& def = list.getReference (i);
+
+        juce::StringArray labels;
+        for (const auto& v : def.values)
+            labels.add (v.toUpperCase());
+
+        sel.steps = std::make_unique<StepSwitch>();
+        sel.steps->accent = theme::orange;
+        sel.steps->setItems (labels, 0);
+        addAndMakeVisible (*sel.steps);
+
+        sel.attachment = std::make_unique<juce::ParameterAttachment> (
+            *amp.apvts.getParameter (params::selectorId (params::boostId, i)),
+            [this, i, n = labels.size()] (float v)
+            {
+                if (auto* s = selectors[(size_t) i].steps.get())
+                    s->setSelectedIndex (juce::jlimit (0, n - 1, juce::roundToInt (v)),
+                                         juce::dontSendNotification);
+            });
+
+        sel.steps->onChange = [this, i] (int v)
+        {
+            selectors[(size_t) i].attachment->setValueAsCompleteGesture ((float) v);
+        };
+
+        sel.attachment->sendInitialUpdate();
+    }
+}
+
+bool BoostBlock::hasNamedPositions (const namz::rig::Measured& m)
+{
+    for (const auto& p : m.positions)
+    {
+        const auto s = juce::String (p.label.empty() ? p.value : p.label).trim();
+
+        if (s.isNotEmpty() && ! s.containsOnly ("0123456789.+-"))
+            return true;
+    }
+
+    return false;
 }
 
 void BoostBlock::rebuildCurves()
@@ -232,13 +303,31 @@ void BoostBlock::layOutContent (juce::Rectangle<int> area)
     scopeMode.setBounds (area.removeFromBottom (modeRow));
     area.removeFromBottom (gap);
 
-    // A switch sits under the knobs rather than beside them: it is not a third amount.
+    // Switches sit under the knobs rather than beside them: neither kind is a third amount. The
+    // device's own selecting controls go lowest — turning one loads a different capture, which is a
+    // bigger move than shaping the one you have.
+    for (auto& sel : selectors)
+        if (sel.steps != nullptr)
+        {
+            sel.steps->setBounds (area.removeFromBottom (switchRow));
+            area.removeFromBottom (gap / 2);
+        }
+
     for (auto& slot : slots)
         if (slot.steps != nullptr)
         {
             slot.steps->setBounds (area.removeFromBottom (switchRow));
             area.removeFromBottom (gap / 2);
         }
+
+    // TEMPORARY, top right: the raw switch and its label.
+    {
+        auto row = area.removeFromTop (ZoneSwitch::designHeight);
+        rawSwitch.setBounds (row.removeFromRight (ZoneSwitch::designWidth));
+        row.removeFromRight (4);
+        rawLabel.setBounds (row.removeFromRight (28));
+        area.removeFromTop (gap / 2);
+    }
 
     // The hero on the left, the measured knobs to its right. A device with neither leaves the space
     // to the picture instead of to a gap.
