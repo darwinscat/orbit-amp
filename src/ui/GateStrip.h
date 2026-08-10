@@ -60,6 +60,13 @@ public:
             g.fillRoundedRectangle (inCol.withTop (ly), 2.0f);
         }
 
+        // ---- peak hold: where the last phrase actually reached — the gain-staging line ----
+        if (holdDb > floorDb + 0.5f)
+        {
+            g.setColour (theme::tx.withAlpha (0.9f));
+            g.fillRect (inCol.getX(), dbToY (inCol, holdDb) - 0.75f, inCol.getWidth(), 1.5f);
+        }
+
         // ---- the threshold runner, dragged on the very scale it judges ----
         {
             const float openDb  = param.convertFrom0to1 (param.getValue());
@@ -131,6 +138,19 @@ private:
         // Peak-style ballistics: jump up instantly, fall at a readable rate.
         const float now = keyDb.load();
         levelDb = now > levelDb ? now : juce::jmax (now, levelDb - releasePerTick);
+
+        // The hold line: grabs every new maximum, keeps it steady for ~2 s, then lets go slowly —
+        // long enough to read after the phrase, never stale enough to lie about the next one.
+        if (now >= holdDb)
+        {
+            holdDb   = now;
+            holdAge  = 0;
+        }
+        else if (++holdAge > holdTicks)
+        {
+            holdDb = juce::jmax (floorDb, holdDb - holdReleasePerTick);
+        }
+
         repaint();
     }
 
@@ -150,8 +170,10 @@ private:
              + juce::jlimit (0.0f, 1.0f, (r.getBottom() - y) / juce::jmax (1.0f, r.getHeight())) * -floorDb;
     }
 
-    static constexpr float floorDb        = -80.0f;
-    static constexpr float releasePerTick = 1.4f;   // ~42 dB/s at 30 Hz
+    static constexpr float floorDb            = -80.0f;
+    static constexpr float releasePerTick     = 1.4f;   // ~42 dB/s at 30 Hz
+    static constexpr int   holdTicks          = 60;     // 2 s of steady hold...
+    static constexpr float holdReleasePerTick = 0.8f;   // ...then ~24 dB/s down
 
     // The scale's waypoint between violet and orange — the "yellow" of this face's meter — and
     // the ramp's own red for the gate's pressure.
@@ -164,6 +186,8 @@ private:
     std::unique_ptr<juce::ParameterAttachment> threshold;
 
     float levelDb = -90.0f;
+    float holdDb  = -90.0f;
+    int   holdAge = 0;
     bool  dragging = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateStrip)
