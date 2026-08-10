@@ -9,6 +9,7 @@
 
 #include "core/CapturedStage.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -31,8 +32,9 @@ namespace
     constexpr double sampleRate = 48000.0;
     constexpr int    blockSize  = 512;
 
-    /** RMS of a sine pushed through the stage. */
-    double runRms (CapturedStage& stage, double amp)
+    /** The stage's output for a sine, kept — see shapeDifference for why the samples matter and the
+        level does not. */
+    std::vector<float> run (CapturedStage& stage, double amp)
     {
         constexpr int n = 12000;
         std::vector<float> left ((size_t) n), right ((size_t) n);
@@ -47,11 +49,38 @@ namespace
             stage.process (io, 2, juce::jmin (blockSize, n - off));
         }
 
-        double sum = 0.0;
-        for (int i = n / 2; i < n; ++i)
-            sum += (double) left[(size_t) i] * left[(size_t) i];
+        return std::vector<float> (left.begin() + n / 2, left.end());
+    }
 
-        return std::sqrt (sum / (n / 2));
+    double rms (const std::vector<float>& x)
+    {
+        double sum = 0.0;
+        for (const float s : x)
+            sum += (double) s * s;
+
+        return std::sqrt (sum / (double) std::max<size_t> (1, x.size()));
+    }
+
+    /** How different two outputs are once their levels are matched, as a percentage of signal.
+
+        Level is the wrong question for a distortion, and this gate had been asking it. A pedal turned
+        up is not louder past a point — it is a different shape. SM7 happened to gain 11 dB across its
+        sweep and passed; Big Muff Pi moves 1.6 dB and would have been called broken, while its
+        waveform changes out of all recognition. */
+    double shapeDifference (const std::vector<float>& a, const std::vector<float>& b)
+    {
+        const double ra = rms (a), rb = rms (b);
+        if (ra < 1.0e-9 || rb < 1.0e-9 || a.size() != b.size())
+            return 0.0;
+
+        double diff = 0.0;
+        for (size_t i = 0; i < a.size(); ++i)
+        {
+            const double d = a[i] / ra - b[i] / rb;
+            diff += d * d;
+        }
+
+        return 100.0 * std::sqrt (diff / (double) a.size());
     }
 }
 
@@ -123,18 +152,18 @@ int main()
     stage.selectGainIndex (0);
     report ("the lowest capture loads", stage.isReady(), "file for gain " + positions[0]);
 
-    const double quiet = runRms (stage, 0.05);
-    report ("it makes sound", quiet > 1.0e-6, "rms " + juce::String (quiet, 6));
+    const auto quiet = run (stage, 0.05);
+    report ("it makes sound", rms (quiet) > 1.0e-6, "rms " + juce::String (rms (quiet), 6));
 
     // A captured gain knob picks a DIFFERENT MODEL, so the top of the sweep has to be audibly not
     // the bottom. Same input, two captures, compared.
     stage.selectGainIndex (positions.size() - 1);
     report ("the top capture loads too", stage.isReady(), "file for gain " + positions[positions.size() - 1]);
 
-    const double loud = runRms (stage, 0.05);
+    const auto loud = run (stage, 0.05);
     report ("top and bottom captures are different devices",
-            loud > quiet * 1.2 || quiet > loud * 1.2,
-            "rms " + juce::String (quiet, 5) + " vs " + juce::String (loud, 5));
+            shapeDifference (quiet, loud) > 5.0,
+            juce::String (shapeDifference (quiet, loud), 1) + "% different");
 
     // Every position must resolve to a file. A gap would be a knob detent that silently keeps the
     // previous sound — the worst kind of wrong, because nothing looks broken.
@@ -157,7 +186,8 @@ int main()
     // sound does not move across this, the knob is decoration.
     {
         std::printf ("\nknob -> position -> rms\n");
-        double lo = 1.0e9, hi = -1.0e9;
+        std::vector<float> first;
+        double worst = 0.0;
 
         for (int step = 0; step <= 10; ++step)
         {
@@ -170,13 +200,18 @@ int main()
             one.setPack (&pack);
             one.selectGainIndex (index);
 
-            const double r = runRms (one, 0.05);
-            lo = juce::jmin (lo, r); hi = juce::jmax (hi, r);
-            std::printf ("%4.0f   %6s   %.5f\n", knob, positions[index].toRawUTF8(), r);
+            const auto out = run (one, 0.05);
+
+            if (first.empty())
+                first = out;
+            else
+                worst = juce::jmax (worst, shapeDifference (first, out));
+
+            std::printf ("%4.0f   %6s   %.5f\n", knob, positions[index].toRawUTF8(), rms (out));
         }
 
-        report ("the sweep actually changes the sound", hi > lo * 1.5,
-                "rms " + juce::String (lo, 5) + " .. " + juce::String (hi, 5));
+        report ("the sweep actually changes the sound", worst > 10.0,
+                juce::String (worst, 1) + "% away from the bottom of the dial");
     }
 
     // ALIASES. A combination with no capture of its own points at a neighbour and says how much
@@ -212,16 +247,25 @@ int main()
             loud.setPack (&pack);
             loud.selectGainIndex (2);          // the same model, fed as it is
 
-            const double softRms = runRms (soft, 0.05);
-            const double loudRms = runRms (loud, 0.05);
+            const auto softOut = run (soft, 0.05);
+            const auto loudOut = run (loud, 0.05);
+            const double softRms = rms (softOut), loudRms = rms (loudOut);
 
             std::printf ("\nalias: %s at -12 dB in -> rms %.5f; the same model straight -> %.5f\n",
                          juce::String (borrowed).toRawUTF8(), softRms, loudRms);
+            std::printf ("shape differs by %.1f%%\n", shapeDifference (softOut, loudOut));
 
             report ("an alias plays its neighbour's model", softRms > 1.0e-6);
-            report ("...with the input attenuation the pack asked for", softRms < loudRms * 0.7,
-                    juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, softRms / loudRms)), 1)
-                        + " dB below it");
+
+            // Not "quieter by twelve decibels": twelve decibels less going IN to a fuzz comes out
+            // barely two decibels down, because squashing that is the whole point of the circuit.
+            // What the attenuation must do is arrive — the model is hit less hard, so what comes out
+            // is a different shape — and it must not come out louder.
+            report ("...with the input attenuation the pack asked for",
+                    shapeDifference (softOut, loudOut) > 5.0 && softRms <= loudRms * 1.02,
+                    juce::String (shapeDifference (softOut, loudOut), 1) + "% different, "
+                        + juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, softRms / loudRms)), 1)
+                        + " dB");
 
             juce::ignoreUnused (lowest);
         }

@@ -9,12 +9,9 @@ namespace orbitamp
 
 BoostBlock::BoostBlock (AmpProcessor& processor)
     : BlockFrame ("Boost", BlockFrame::Kind::captured), amp (processor),
-      advanced (processor.apvts, params::boostId),
       scope (processor.boost.scope, processor.boost.ribbon,
              [this] (double hz) { return toneDb (hz); })
 {
-    addAndMakeVisible (tabs);
-    addAndMakeVisible (advanced);
     addAndMakeVisible (pedal);
     addAndMakeVisible (gain);
     addAndMakeVisible (scope);
@@ -25,10 +22,6 @@ BoostBlock::BoostBlock (AmpProcessor& processor)
     scopeMode.setItems ({ "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" }, 0);
     scopeMode.onChange = [this] (int i) { scope.setMode ((DeviceScope::Mode) i); };
     scope.setSampleRate (amp.currentSampleRate());
-
-    tabs.accent = theme::orange;
-    tabs.setItems ({ "DEVICE", "ADVANCED" }, 0);
-    tabs.onChange = [this] (int) { applyTab(); };
 
     attachPower (*amp.apvts.getParameter (params::boostOn));
 
@@ -90,7 +83,16 @@ void BoostBlock::deviceChanged()
     for (int i = 0; i < params::boostNumMeasured; ++i)
     {
         auto& slot = slots[(size_t) i];
-        slot = Slot {};
+
+        // ORDER MATTERS, and `slot = Slot {}` had it backwards. Move-assignment walks the members in
+        // declaration order, so the knob was destroyed first and its attachment — which reaches for
+        // the slider in its own destructor — went next, into freed memory. Changing a device crashed
+        // the plugin, and it only showed once a second pack made the combo worth using.
+        slot.knobAtt.reset();
+        slot.stepAtt.reset();
+        slot.knob.reset();
+        slot.steps.reset();
+        slot.measuredIndex = -1;
 
         if (measured == nullptr || i >= (int) measured->size())
             continue;
@@ -152,7 +154,6 @@ void BoostBlock::deviceChanged()
         }
     }
 
-    applyTab();
     resized();
     handleAsyncUpdate();   // the face is being built; the curve has to be right by the first paint
     repaint();
@@ -208,31 +209,6 @@ double BoostBlock::toneDb (double freqHz) const
     return sum;
 }
 
-void BoostBlock::applyTab()
-{
-    // Nothing measured means nothing to put on the DEVICE tab. Rather than an empty half-block, the
-    // switch lands on ADVANCED and stays there — a lone .nam has no controls of its own, and ours are
-    // the only ones it will ever have.
-    int measuredCount = 0;
-    for (const auto& slot : slots)
-        if (slot.knob != nullptr || slot.steps != nullptr)
-            ++measuredCount;
-
-    if (measuredCount == 0 && tabs.getSelectedIndex() == 0)
-        tabs.setSelectedIndex (1, juce::dontSendNotification);
-
-    const bool device = tabs.getSelectedIndex() == 0 && measuredCount > 0;
-
-    for (auto& slot : slots)
-    {
-        if (slot.knob  != nullptr) slot.knob->setVisible (device);
-        if (slot.steps != nullptr) slot.steps->setVisible (device);
-    }
-
-    advanced.setVisible (! device);
-    resized();
-}
-
 void BoostBlock::refreshCurve()
 {
     triggerAsyncUpdate();
@@ -255,24 +231,6 @@ void BoostBlock::layOutContent (juce::Rectangle<int> area)
     area.removeFromBottom (gap / 2);
     scopeMode.setBounds (area.removeFromBottom (modeRow));
     area.removeFromBottom (gap);
-
-    tabs.setBounds (area.removeFromTop (tabRow));
-    area.removeFromTop (gap / 2);
-
-    // The hero keeps its place on both tabs — the gain knob is not part of either EQ, and moving it
-    // when the tab changes would make the block feel like two different blocks.
-    if (advanced.isVisible())
-    {
-        auto right = area;
-        const int heroSide = juce::jmin (right.getHeight(), right.getWidth() / 3);
-        auto left = right.removeFromLeft (heroSide);
-
-        gain.setBounds (left.withSizeKeepingCentre (juce::jmin (left.getWidth(), left.getHeight()),
-                                                    juce::jmin (left.getWidth(), left.getHeight())));
-        right.removeFromLeft (knobGap);
-        advanced.setBounds (right);
-        return;
-    }
 
     // A switch sits under the knobs rather than beside them: it is not a third amount.
     for (auto& slot : slots)

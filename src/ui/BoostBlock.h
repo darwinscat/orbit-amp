@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../Parameters.h"
-#include "AdvancedEqPanel.h"
 #include "BlockFrame.h"
 #include "scope/DeviceScope.h"
 #include "Knob.h"
@@ -62,9 +61,6 @@ private:
         after every write, whoever made it. */
     void refreshCurve();
 
-    /** Shows the tab that is selected, and forces the second one when the first has nothing in it. */
-    void applyTab();
-
     void handleAsyncUpdate() override;
 
     static constexpr int headerRow  = 22;
@@ -73,15 +69,8 @@ private:
     static constexpr int knobGap    = 10;
     static constexpr int switchRow  = 16;
     static constexpr int modeRow    = 18;
-    static constexpr int tabRow     = 16;
 
     AmpProcessor& amp;
-
-    /** DEVICE is what the pack shipped; ADVANCED is ours. A device with no measured controls has
-        nothing to show on the first tab, so it opens on the second and the first is disabled — which
-        is every lone .nam, and the whole reason the pair exists. */
-    StepSwitch      tabs;
-    AdvancedEqPanel advanced;
 
     VoicingSelector pedal;
     Knob gain { "Gain", theme::orange, 0 };
