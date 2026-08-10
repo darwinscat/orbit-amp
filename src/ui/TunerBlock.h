@@ -112,17 +112,17 @@ private:
             return ruler.getX() + ruler.getWidth() * (juce::jlimit (-50.0f, 50.0f, cents) + 50.0f) / 100.0f;
         };
 
-        // The scale wears its meaning: orange warmth burning in from the out-of-tune edges, a
-        // green heart at zero.
+        // Inverted on request: the edge wash is OUR violet — it deepens over the violet face
+        // instead of muddying like orange did — and the TICKS carry the orange. Green heart at zero.
         {
             const float bandH = ruler.getHeight() - 26.0f;
             const auto  band  = juce::Rectangle<float> (ruler.getX(), baseY - bandH, ruler.getWidth(), bandH);
 
-            const auto heatEdge = theme::orange.brighter (0.12f).withAlpha (0.42f);
+            const auto heatEdge = theme::violet.withAlpha (0.38f);
             juce::ColourGradient heat (heatEdge, band.getX(), band.getCentreY(),
                                        heatEdge, band.getRight(), band.getCentreY(), false);
-            heat.addColour (0.35, theme::orange.withAlpha (0.0f));
-            heat.addColour (0.65, theme::orange.withAlpha (0.0f));
+            heat.addColour (0.35, theme::violet.withAlpha (0.0f));
+            heat.addColour (0.65, theme::violet.withAlpha (0.0f));
             g.setGradientFill (heat);
             g.fillRect (band);
 
@@ -140,8 +140,8 @@ private:
             const float h = c == 0 ? ruler.getHeight() - 30.0f : (c % 25 == 0 ? 44.0f : 24.0f);
 
             g.setColour (c == 0 ? theme::lilac
-                                : (c % 25 == 0 ? theme::orange.withAlpha (0.85f)
-                                               : theme::violet.withAlpha (0.35f)));
+                                : (c % 25 == 0 ? theme::orange.withAlpha (0.9f)
+                                               : theme::orange.withAlpha (0.5f)));
             g.fillRect (juce::Rectangle<float> (x - (c == 0 ? 1.0f : 0.5f), baseY - h,
                                                 c == 0 ? 2.0f : 1.0f, h));
         }
