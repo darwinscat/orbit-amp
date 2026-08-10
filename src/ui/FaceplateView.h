@@ -37,6 +37,9 @@ public:
     void setZoom (std::optional<ChainLink>);
     std::optional<ChainLink> zoom() const noexcept { return zoomed; }
 
+    /** The zoomed tuner was clicked — the owner closes the lens (and keeps the strip in sync). */
+    std::function<void()> onTunerDismiss;
+
     void resized() override;
 
     // The faceplate's design size, at 100%. The editor scales from these and never re-lays out.

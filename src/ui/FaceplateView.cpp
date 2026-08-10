@@ -18,6 +18,8 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })
         addAndMakeVisible (*b);
 
+    tuner.onDismiss = [this] { if (onTunerDismiss != nullptr) onTunerDismiss(); };
+
     // The service links and the EQ links live in the zoom: on the overview their thumbs in the
     // strip say everything a miniature can, and opening one is a single click.
     addChildComponent (tuner);

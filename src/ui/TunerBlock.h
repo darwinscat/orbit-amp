@@ -21,6 +21,16 @@ public:
     {
     }
 
+    /** The tuner's own rule: it has no controls, so a click ANYWHERE on the open lens puts it
+        away — you looked, you are done. */
+    std::function<void()> onDismiss;
+
+    void mouseDown (const juce::MouseEvent&) override
+    {
+        if (onDismiss != nullptr)
+            onDismiss();
+    }
+
 private:
     void visibilityChanged() override
     {
