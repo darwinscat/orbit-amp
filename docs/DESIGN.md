@@ -49,19 +49,23 @@ layers on top.
 ## Signal chain
 
 ```
-boost → preamp (voicing) → EQ → reverb → [ power amp → cabinet ]
+eq1 → boost → eq2 → preamp (voicing) → reverb → power amp → cabinet
 ```
 
+- **EQ links (eq1, eq2)** — DSP, and **links of the chain, not sections of any
+  block**. Exactly two, fixed (a host needs an unchanging parameter list): eq1
+  ahead of the boost decides what reaches the first nonlinearity — it changes the
+  *kind* of distortion; eq2 between boost and preamp colours what the boost made.
+  A link's place in the chain answers "pre or post", so there is no placement
+  switch. Low/High are **shelves**, Mid is a peak; HPF/LPF are optional cuts
+  (12 dB/oct). Both links ship off and flat. An FX link will slot in between later.
 - **Boost** — a separate captured (neural) block in front. Toggleable.
 - **Preamp** — the captured voicing. Gain 0–10 maps to the captured detents; the
-  biggest knob (the hero).
-- **EQ** — DSP. Low/High are **shelves**, Mid is a peak; HPF/LPF are optional cuts
-  (12 dB/oct), off by default. Measured from the real device where a control maps to
-  a linear response.
+  biggest knob (the hero). Only the device's own (measured) controls live in the
+  block — our EQ does not.
 - **Reverb** — DSP (algorithmic); Mix only in the simple case.
-- **Power amp + cabinet** — downstream, in **OrbitCab**. The cabinet is a separate
-  IR module (linear); the power amp is optional (most useful for leads, less so for
-  tight high-gain rhythm) and belongs with the cab, not here.
+- **Power amp** — optional; simulation (white-box tube stage) or a captured slot.
+- **Cabinet** — IR module (linear), mic placement on the grille.
 
 ### Captured vs. rebuilt
 
@@ -73,17 +77,24 @@ boost → preamp (voicing) → EQ → reverb → [ power amp → cabinet ]
 | loudness-vs-gain | our own curve (capture normalises it away) |
 | sag | not captured (dynamic) — a thin DSP layer if wanted, or omit |
 | reverb | DSP |
-| cabinet | impulse response (OrbitCab) |
+| cabinet | impulse response |
 
 ## Visual language (faceplate)
 
 Futuristic, not retro — no grilles / tolex / glowing tubes; a dark, "instrument"
 feel. Brand tokens: a violet accent (per-device overridable), an orange "spark"
 constant for the captured neural core, the cat mark. Knobs are the heroes (value on
-the face, 0–10 numeric with notches). The blocks — boost / preamp / EQ / reverb —
-are framed, toggleable modules, colour-coded: **orange = captured**, **violet =
-DSP**. Golden-ratio proportions across the row (the preamp is the wider anchor). The
-whole editor scales 50–200% from a single factor.
+the face, 0–10 numeric with notches). The blocks are framed, toggleable modules,
+colour-coded: **orange = captured**, **violet = DSP**. Golden-ratio proportions
+across the overview row (the preamp is the wider anchor). The whole editor scales
+50–200% from a single factor.
+
+**The chain strip** runs across the top of the panel: every link in signal order as
+a miniature — its switch, a live preview (EQ curve, gain + tone for the captured
+blocks, mics on the grille for the cabinet), and what is loaded into it. It is the
+map of the signal. **Clicking a thumb zooms**: that link opens across the whole
+faceplate — a magnifying glass, not a mode; the overview returns when the lit thumb
+is clicked again. Tightness is cured by the zoom, never by hiding controls.
 
 The pixel-level reference is a set of HTML mockups produced during design (kept
 outside this repo). Rebuild the faceplate natively — the mockups are a spec, not

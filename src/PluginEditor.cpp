@@ -4,9 +4,10 @@ namespace orbitamp
 {
 
 AmpEditor::AmpEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p), footer (p), demoStrip (p)
+    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), strip (p), faceplate (p), footer (p), demoStrip (p)
 {
     addAndMakeVisible (chrome);
+    addAndMakeVisible (strip);
     addAndMakeVisible (faceplate);
     addAndMakeVisible (footer);
     addAndMakeVisible (demoStrip);   // TEMPORARY
@@ -14,6 +15,15 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (setup);       // hidden until the toolbar's gear opens it
 
     chrome.onShowSetup = [this] { setup.open(); };
+
+    // A thumb opens its link across the panel; the lit thumb closes it again. The strip is the map
+    // either way — it never leaves.
+    strip.onOpen = [this] (ChainLink link)
+    {
+        const auto next = faceplate.zoom() == link ? std::nullopt : std::optional<ChainLink> (link);
+        faceplate.setZoom (next);
+        strip.setActive (next);
+    };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
     // captured blocks rebuild their selectors from the lists that changed under them.
@@ -65,7 +75,12 @@ void AmpEditor::resized()
     chrome.setBounds (margin, margin, FaceplateView::designWidth, Chrome::designHeight);
     chrome.setTransform (zoom);
 
-    const int faceplateY = margin + Chrome::designHeight + chromeGap;
+    // The chain map first: the whole signal path, readable before any block is.
+    const int stripY = margin + Chrome::designHeight + chromeGap;
+    strip.setBounds (margin, stripY, FaceplateView::designWidth, ChainStrip::designHeight);
+    strip.setTransform (zoom);
+
+    const int faceplateY = stripY + ChainStrip::designHeight + chromeGap;
     faceplate.setBounds (margin, faceplateY, FaceplateView::designWidth, FaceplateView::designHeight);
     faceplate.setTransform (zoom);
 

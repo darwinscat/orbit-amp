@@ -36,9 +36,19 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     attachPower (*amp.apvts.getParameter (params::blockOn (blk)));
 
+    // The attachment hears everyone BUT this panel — a restored session, a host automating the
+    // parameter. Load the device it names before rebuilding the face, or the face is rebuilt from
+    // the pack that is leaving; loading twice costs nothing because selectIfMoved is a no-op when
+    // the pump already did it.
     deviceAttachment = std::make_unique<juce::ParameterAttachment> (
         *amp.apvts.getParameter (params::blockDevice (blk)),
-        [this] (float v) { device.setSelection (juce::roundToInt (v)); });
+        [this] (float v)
+        {
+            const int i = juce::roundToInt (v);
+            device.setSelection (i);
+            block.selectIfMoved (i);
+            deviceChanged();
+        });
 
     device.onPick = [this] (int i)
     {
@@ -233,25 +243,34 @@ void CapturedBlockPanel::layOutHeader (juce::Rectangle<int> area)
 
 void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 {
-    scope.setBounds (area.removeFromBottom (curveHeight));
+    // In a column the picture gets its fixed strip; zoomed across the whole panel it gets a third
+    // of the height instead — the zoom exists to look at things, not to inflate knobs.
+    scope.setBounds (area.removeFromBottom (juce::jmax (curveHeight, area.getHeight() / 3)));
     area.removeFromBottom (gap / 2);
-    scopeMode.setBounds (area.removeFromBottom (modeRow));
+    scopeMode.setBounds (area.removeFromBottom (modeRow).withSizeKeepingCentre (
+        juce::jmin (area.getWidth(), maxRowWidth), modeRow));
     area.removeFromBottom (gap);
 
     // Switches sit under the knobs rather than beside them: neither kind is a third amount. The
     // device's own selecting controls go lowest — turning one loads a different capture, which is a
     // bigger move than shaping the one you have.
+    const auto switchBounds = [&area]
+    {
+        auto row = area.removeFromBottom (switchRow);
+        return row.withSizeKeepingCentre (juce::jmin (row.getWidth(), maxRowWidth), switchRow);
+    };
+
     for (auto& sel : selectors)
         if (sel.steps != nullptr)
         {
-            sel.steps->setBounds (area.removeFromBottom (switchRow));
+            sel.steps->setBounds (switchBounds());
             area.removeFromBottom (gap / 2);
         }
 
     for (auto& slot : slots)
         if (slot.steps != nullptr)
         {
-            slot.steps->setBounds (area.removeFromBottom (switchRow));
+            slot.steps->setBounds (switchBounds());
             area.removeFromBottom (gap / 2);
         }
 
@@ -265,23 +284,27 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     }
 
     // The hero on the left, the measured knobs to its right. A device with neither leaves the space
-    // to the picture instead of to a gap.
+    // to the picture instead of to a gap. Both are capped: past a size a knob stops being easier to
+    // grab and starts being a balloon.
     int smallCount = 0;
     for (const auto& slot : slots)
         if (slot.knob != nullptr)
             ++smallCount;
 
-    const int side = juce::jmin (area.getHeight(), area.getWidth() * (smallCount > 0 ? 1 : 2) / 2);
+    const int side = juce::jmin (maxGainSide, juce::jmin (area.getHeight(),
+                                                          area.getWidth() * (smallCount > 0 ? 1 : 2) / 2));
     auto left = area.removeFromLeft (juce::jmin (side, area.getWidth()));
-    gain.setBounds (left.withSizeKeepingCentre (juce::jmin (left.getWidth(), left.getHeight()),
-                                                juce::jmin (left.getWidth(), left.getHeight())));
+    const int gainSide = juce::jmin (maxGainSide, juce::jmin (left.getWidth(), left.getHeight()));
+    gain.setBounds (left.withSizeKeepingCentre (gainSide, gainSide));
 
     if (smallCount > 0)
         area.removeFromLeft (knobGap);
 
     if (smallCount == 0)
         return;
-    const int small = juce::jmin (area.getHeight(), (area.getWidth() - (smallCount - 1) * knobGap) / smallCount);
+    const int small = juce::jmin (maxKnobSide,
+                                  juce::jmin (area.getHeight(),
+                                              (area.getWidth() - (smallCount - 1) * knobGap) / smallCount));
 
     auto row = area.withSizeKeepingCentre (small * smallCount + knobGap * (smallCount - 1), small);
     for (auto& slot : slots)

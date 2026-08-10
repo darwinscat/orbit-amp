@@ -32,11 +32,6 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink)
     hpfHzAtt = attach (params::eqHpfHz (link), [this] (float v) { hpf.setState (hpf.isOn(), (double) v); refreshCurve(); });
     lpfOnAtt = attach (params::eqLpfOn (link), [this] (float v) { lpf.setState (v > 0.5f, lpf.getHz()); refreshCurve(); });
     lpfHzAtt = attach (params::eqLpfHz (link), [this] (float v) { lpf.setState (lpf.isOn(), (double) v); refreshCurve(); });
-    powerAtt = attach (params::eqOn (link),    [this] (float v) { on = v > 0.5f; });
-
-    // Its own switch at last. Drawn on the curve's corner, where the picture it belongs to is.
-    power.accent = theme::violet;
-    power.attach (*state.getParameter (params::eqOn (link)));
     midHzAtt = attach (params::eqMidHz (link), [this] (float v) { midHz = (double) v; refreshCurve(); });
 
     curve.onHandleDrag = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
@@ -51,7 +46,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink)
     hpf.onDragActive = [this] (bool a) { a ? hpfHzAtt->beginGesture() : hpfHzAtt->endGesture(); };
     lpf.onDragActive = [this] (bool a) { a ? lpfHzAtt->beginGesture() : lpfHzAtt->endGesture(); };
 
-    for (auto* a : { &hpfOnAtt, &hpfHzAtt, &lpfOnAtt, &lpfHzAtt, &powerAtt, &midHzAtt })
+    for (auto* a : { &hpfOnAtt, &hpfHzAtt, &lpfOnAtt, &lpfHzAtt, &midHzAtt })
         (*a)->sendInitialUpdate();
 
     refreshCurve();
@@ -61,8 +56,6 @@ EqSection::~EqSection() = default;
 
 void EqSection::addTo (juce::Component& parent)
 {
-    parent.addAndMakeVisible (power);
-
     parent.addAndMakeVisible (curve);
     parent.addAndMakeVisible (hpf);
     parent.addAndMakeVisible (lpf);
@@ -156,12 +149,6 @@ void EqSection::layOutCurve (juce::Rectangle<int> area)
     auto pills = area.reduced (pillInset).removeFromTop (pillHeight);
     hpf.setBounds (pills.removeFromLeft (pillWidth));
     lpf.setBounds (pills.removeFromRight (pillWidth));
-
-    // Bottom left of the well, out of the curve's way — the response rises to the right, so the low
-    // corner is the one part of the picture nothing lands in.
-    power.setBounds (area.getX() + pillInset,
-                     area.getBottom() - pillInset - ZoneSwitch::designHeight,
-                     ZoneSwitch::designWidth, ZoneSwitch::designHeight);
 }
 
 void EqSection::layOutKnobs (juce::Rectangle<int> area)

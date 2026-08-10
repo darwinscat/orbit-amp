@@ -7,14 +7,35 @@ namespace orbitamp
 {
 
 FaceplateView::FaceplateView (AmpProcessor& processor)
-    : boost (processor, processor.boost, "Boost", params::boostId),
+    : eq1 (processor.apvts, 0), eq2 (processor.apvts, 1),
+      boost (processor, processor.boost, "Boost", params::boostId),
       preamp (processor, processor.preamp, "Preamp", params::preampId),
       reverb (processor.apvts), power (processor.apvts), cabinet (processor.apvts)
 {
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })
         addAndMakeVisible (*b);
 
+    // The EQ links live in the zoom: on the overview their thumbs in the strip say everything a
+    // miniature can, and opening one is a single click.
+    addChildComponent (eq1);
+    addChildComponent (eq2);
+
     // Every block binds its own power now.
+}
+
+std::array<juce::Component*, (size_t) numChainLinks> FaceplateView::linkFaces()
+{
+    return { &eq1, &boost, &eq2, &preamp, &reverb, &power, &cabinet };
+}
+
+void FaceplateView::setZoom (std::optional<ChainLink> link)
+{
+    if (zoomed == link)
+        return;
+
+    zoomed = link;
+    resized();
+    repaint();
 }
 
 void FaceplateView::resized()
@@ -25,6 +46,27 @@ void FaceplateView::resized()
     lane.removeFromLeft (colGap);
     outGutter = lane.removeFromRight (gutter);
     lane.removeFromRight (colGap);
+
+    auto faces = linkFaces();
+
+    // Zoomed: the open link takes the whole lane and everything else steps aside. Nothing is
+    // re-laid-out per zoom level — the block's own layout answers to whatever bounds it gets.
+    if (zoomed.has_value())
+    {
+        auto* open = faces[(size_t) *zoomed];
+
+        for (auto* f : faces)
+            f->setVisible (f == open);
+
+        open->setBounds (lane);
+        return;
+    }
+
+    eq1.setVisible (false);
+    eq2.setVisible (false);
+    for (auto* f : faces)
+        if (f != &eq1 && f != &eq2)
+            f->setVisible (true);
 
     auto row1 = lane.removeFromTop (row1H);
     lane.removeFromTop (rowGap);

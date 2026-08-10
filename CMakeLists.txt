@@ -160,6 +160,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/Theme.cpp
     src/ui/FaceplateView.cpp
     src/ui/CapturedBlockPanel.cpp
+    src/ui/ChainStrip.cpp
     src/ui/CabinetBlock.cpp
     src/ui/PowerAmpBlock.cpp
     src/ui/EqSection.cpp
@@ -323,6 +324,7 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/Theme.cpp
     src/ui/FaceplateView.cpp
     src/ui/CapturedBlockPanel.cpp
+    src/ui/ChainStrip.cpp
     src/ui/CabinetBlock.cpp
     src/ui/PowerAmpBlock.cpp
     src/ui/EqSection.cpp

@@ -64,6 +64,12 @@ private:
     static constexpr int switchRow  = 16;
     static constexpr int modeRow    = 18;
 
+    // Zoom caps: a block across the whole panel gets a bigger picture, not balloon knobs and a
+    // switch as wide as the window.
+    static constexpr int maxGainSide  = 200;
+    static constexpr int maxKnobSide  = 140;
+    static constexpr int maxRowWidth  = 420;
+
     AmpProcessor& amp;
     Block&        block;
     const char*   blk;

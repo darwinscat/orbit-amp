@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/ChainStrip.h"
 #include "ui/Chrome.h"
 #include "ui/FaceplateView.h"
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
@@ -36,6 +37,7 @@ private:
 
     static constexpr int baseWidth  = FaceplateView::designWidth + margin * 2;
     static constexpr int baseHeight = Chrome::designHeight + chromeGap
+                                    + ChainStrip::designHeight + chromeGap
                                     + FaceplateView::designHeight
                                     + chromeGap + Footer::designHeight
                                     + DemoStrip::designHeight      // TEMPORARY
@@ -44,6 +46,7 @@ private:
 
     AmpProcessor& amp;              // the base class's `processor` is the AudioProcessor& — this is ours
     Chrome        chrome;
+    ChainStrip    strip;            // the chain map, across the top of the panel
     FaceplateView faceplate;
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player

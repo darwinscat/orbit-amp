@@ -3,19 +3,26 @@
 #include "BlockFrame.h"
 #include "CabinetBlock.h"
 #include "CapturedBlockPanel.h"
+#include "ChainLink.h"
+#include "EqBlock.h"
 #include "PowerAmpBlock.h"
 #include "ReverbBlock.h"
+
+#include <array>
+#include <optional>
 
 namespace orbitamp
 {
 
 class AmpProcessor;
 
-/** The faceplate: the device shell, its name plate, the in/out gutters and the block row.
+/** The faceplate: the device shell, the in/out gutters and the block rows — or, zoomed, ONE link
+    of the chain across the whole panel.
 
-    The row's proportions are the design's golden-ratio lane — boost and reverb take one unit each
-    and the preamp takes phi, because the captured voicing is the instrument and the rest are layers
-    on it. EQ spans the full row beneath them; it is the one block wide enough to need a curve. */
+    The overview's proportions are the design's golden-ratio lane — boost and reverb take one unit
+    each and the preamp takes phi, because the captured voicing is the instrument and the rest are
+    layers on it. The zoom is a magnifying glass, not a mode: the overview comes back the moment
+    the open link's thumb is clicked again. */
 class FaceplateView : public juce::Component
 {
 public:
@@ -23,6 +30,10 @@ public:
 
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
     void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); }
+
+    /** Opens one link across the whole panel, or none for the overview. */
+    void setZoom (std::optional<ChainLink>);
+    std::optional<ChainLink> zoom() const noexcept { return zoomed; }
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -49,11 +60,18 @@ private:
     static constexpr int   colGap     = 14;
     static constexpr float phi        = 1.62f; // the preamp column's weight — the wider anchor
 
+    /** Every link's face, indexable in chain order — what setZoom opens by. */
+    std::array<juce::Component*, (size_t) numChainLinks> linkFaces();
+
+    EqBlock            eq1;
+    EqBlock            eq2;
     CapturedBlockPanel boost;
     CapturedBlockPanel preamp;
     ReverbBlock        reverb;
     PowerAmpBlock      power;
     CabinetBlock       cabinet;
+
+    std::optional<ChainLink> zoomed;
 
     juce::Rectangle<int> inGutter, outGutter;
 

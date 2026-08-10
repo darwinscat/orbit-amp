@@ -112,7 +112,12 @@ void AmpProcessor::pumpDeviceWork()
 {
     auto pump = [this] (auto& block, auto& gainParam, auto measuredId, const char* blk)
     {
-        // Selectors first: they and the gain dial pick a file together, and a stale one would send
+        // The device parameter first of all: a restored session or an automating host moves it
+        // without calling anyone, and every read below is about whatever pack it names.
+        block.selectIfMoved (juce::roundToInt (
+            apvts.getRawParameterValue (params::blockDevice (blk))->load()));
+
+        // Selectors next: they and the gain dial pick a file together, and a stale one would send
         // resolve looking for a combination the player is not on any more.
         std::array<int, (size_t) params::numSelectors> selectors {};
         for (int i = 0; i < params::numSelectors; ++i)

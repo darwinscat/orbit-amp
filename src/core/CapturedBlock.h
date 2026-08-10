@@ -56,12 +56,23 @@ public:
         since silence is a worse answer than the wrong device and the name says which it is. */
     void select (int index)
     {
+        lastSelected = index;
+
         stage.setPack (juce::isPositiveAndBelow (index, packs.size())
                          ? &packs.getReference (index)
                          : (packs.isEmpty() ? nullptr : &packs.getReference (0)));
 
         lastGainIndex = -1;
         lastTone.fill (-1.0f);
+    }
+
+    /** Loads what the device parameter now points at, when it moved. This is how a restored session
+        or a host automating the parameter actually lands: replaceState changes the number and calls
+        nothing, so the pump watches it — the same arrangement every other loading knob has. */
+    void selectIfMoved (int index)
+    {
+        if (index != lastSelected)
+            select (index);
     }
 
     /** Turn a device's other selecting control — the octave switch, a mode, whatever the pack has.
@@ -248,6 +259,7 @@ private:
     std::array<float, (size_t) NumMeasured> lastTone { };
     std::array<int, (size_t) params::numSelectors> lastSelector { -1, -1 };
     int lastGainIndex = -1;
+    int lastSelected  = -1;
     bool raw = false;
 };
 

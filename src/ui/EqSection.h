@@ -2,7 +2,6 @@
 
 #include "../core/ToneStack.h"
 #include "EqCurve.h"
-#include "ZoneSwitch.h"
 #include "FilterPill.h"
 #include "Knob.h"
 
@@ -78,16 +77,9 @@ private:
     FilterPill lpf { "LPF", { 2000.0, 20000.0 } };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lowAtt, midAtt, highAtt, presAtt;
-    std::unique_ptr<juce::ParameterAttachment> hpfOnAtt, hpfHzAtt, lpfOnAtt, lpfHzAtt, powerAtt, midHzAtt;
+    std::unique_ptr<juce::ParameterAttachment> hpfOnAtt, hpfHzAtt, lpfOnAtt, lpfHzAtt, midHzAtt;
 
     double midHz = 600.0;
-
-    bool on = true;
-
-public:
-    ZoneSwitch power;
-
-private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EqSection)
 };
