@@ -92,19 +92,53 @@ public:
             return ruler.getX() + ruler.getWidth() * (juce::jlimit (-50.0f, 50.0f, cents) + 50.0f) / 100.0f;
         };
 
+        // The scale wears its meaning: orange warmth burning in from the out-of-tune edges, a
+        // green heart at zero.
+        {
+            const auto band = juce::Rectangle<float> (ruler.getX(), midY - 13.0f, ruler.getWidth(), 26.0f);
+
+            juce::ColourGradient heat (theme::orange.withAlpha (0.22f), band.getX(), midY,
+                                       theme::orange.withAlpha (0.22f), band.getRight(), midY, false);
+            heat.addColour (0.35, theme::orange.withAlpha (0.0f));
+            heat.addColour (0.65, theme::orange.withAlpha (0.0f));
+            g.setGradientFill (heat);
+            g.fillRect (band);
+
+            const float cx = centsX (0.0f);
+            juce::ColourGradient heart (inTune.withAlpha (0.24f), cx, midY,
+                                        inTune.withAlpha (0.0f), cx + ruler.getWidth() * 0.07f, midY, true);
+            g.setGradientFill (heart);
+            g.fillRect (band);
+        }
+
         for (int c = -50; c <= 50; c += 5)
         {
             const float h = c == 0 ? 24.0f : (c % 25 == 0 ? 14.0f : 8.0f);
-            g.setColour (c == 0 ? theme::lilac.withAlpha (0.8f) : (c % 25 == 0 ? theme::hair2 : theme::hair));
+            g.setColour (c == 0 ? theme::lilac
+                                : (c % 25 == 0 ? theme::orange.withAlpha (0.6f)
+                                               : theme::violet.withAlpha (0.35f)));
             g.fillRect (juce::Rectangle<float> (centsX ((float) c) - 0.5f, midY - h * 0.5f,
                                                 c == 0 ? 2.0f : 1.0f, h));
         }
 
+        // The zero mark glows — it is the destination.
+        g.setColour (theme::lilac.withAlpha (0.25f));
+        g.fillRoundedRectangle (centsX (0.0f) - 2.5f, midY - 13.0f, 5.0f, 26.0f, 2.5f);
+
         if (live)
         {
+            // The needle says HOW off with its colour: green at home, orange by 25 cents out.
             const float x = centsX (ear.needle());
-            g.setColour (green ? inTune : theme::tx);
-            g.fillRoundedRectangle (x - 1.5f, midY - 15.0f, 3.0f, 30.0f, 1.5f);
+            const auto  needle = green ? inTune
+                                       : inTune.interpolatedWith (theme::orange,
+                                             juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+
+            g.setColour (needle.withAlpha (0.18f));
+            g.fillRoundedRectangle (x - 5.0f, midY - 17.0f, 10.0f, 34.0f, 5.0f);
+            g.setColour (needle.withAlpha (0.45f));
+            g.fillRoundedRectangle (x - 2.5f, midY - 16.0f, 5.0f, 32.0f, 2.5f);
+            g.setColour (needle);
+            g.fillRoundedRectangle (x - 1.25f, midY - 15.0f, 2.5f, 30.0f, 1.25f);
         }
     }
 
