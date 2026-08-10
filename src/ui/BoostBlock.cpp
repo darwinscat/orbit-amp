@@ -83,8 +83,9 @@ void BoostBlock::deviceChanged()
     // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next pack
     // says for the next one — and none at all for a lone model, which has no gain axis and so gets no
     // knob rather than a dead one.
+    // Detented where the pack has positions, continuous where it does not — but always THERE. A
+    // preamp without a gain knob is not a preamp, and a knob that drives is not a knob doing nothing.
     gain.setNotches (juce::jmax (0, positions.size()));
-    gain.setVisible (! positions.isEmpty());
 
     for (int i = 0; i < params::boostNumMeasured; ++i)
     {
@@ -266,13 +267,9 @@ void BoostBlock::layOutContent (juce::Rectangle<int> area)
         const int heroSide = juce::jmin (right.getHeight(), right.getWidth() / 3);
         auto left = right.removeFromLeft (heroSide);
 
-        if (gain.isVisible())
-        {
-            gain.setBounds (left.withSizeKeepingCentre (juce::jmin (left.getWidth(), left.getHeight()),
-                                                        juce::jmin (left.getWidth(), left.getHeight())));
-            right.removeFromLeft (knobGap);
-        }
-
+        gain.setBounds (left.withSizeKeepingCentre (juce::jmin (left.getWidth(), left.getHeight()),
+                                                    juce::jmin (left.getWidth(), left.getHeight())));
+        right.removeFromLeft (knobGap);
         advanced.setBounds (right);
         return;
     }
@@ -292,16 +289,13 @@ void BoostBlock::layOutContent (juce::Rectangle<int> area)
         if (slot.knob != nullptr)
             ++smallCount;
 
-    if (gain.isVisible())
-    {
-        const int side = juce::jmin (area.getHeight(), area.getWidth() * (smallCount > 0 ? 1 : 2) / 2);
-        auto left = area.removeFromLeft (juce::jmin (side, area.getWidth()));
-        gain.setBounds (left.withSizeKeepingCentre (juce::jmin (left.getWidth(), left.getHeight()),
-                                                    juce::jmin (left.getWidth(), left.getHeight())));
+    const int side = juce::jmin (area.getHeight(), area.getWidth() * (smallCount > 0 ? 1 : 2) / 2);
+    auto left = area.removeFromLeft (juce::jmin (side, area.getWidth()));
+    gain.setBounds (left.withSizeKeepingCentre (juce::jmin (left.getWidth(), left.getHeight()),
+                                                juce::jmin (left.getWidth(), left.getHeight())));
 
-        if (smallCount > 0)
-            area.removeFromLeft (knobGap);
-    }
+    if (smallCount > 0)
+        area.removeFromLeft (knobGap);
 
     if (smallCount == 0)
         return;

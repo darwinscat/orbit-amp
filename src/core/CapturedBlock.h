@@ -68,8 +68,16 @@ public:
     void loadIfGainMoved (float gain)
     {
         const auto positions = stage.gainPositions();
+
+        // No captured axis: the knob drives instead of selecting. 5 is unity, so the middle of the
+        // dial is the capture as it was taken and either side of it is a decision.
         if (positions.isEmpty())
+        {
+            stage.setDrive (juce::Decibels::decibelsToGain ((gain - 5.0f) * driveDbPerStep));
             return;
+        }
+
+        stage.setDrive (1.0f);
 
         // The knob reads 0..10; the captures sit at whatever angles the device was taken at, evenly
         // spaced across that travel. Nearest position wins — between two captures there is nothing.
@@ -159,6 +167,10 @@ public:
     std::array<MeasuredFilter, (size_t) NumMeasured> tone;
 
 private:
+    // Four decibels a step: the full dial spans forty, which is enough to take a capture from barely
+    // breaking up to thoroughly into it without leaving the range a model behaves in.
+    static constexpr float driveDbPerStep = 4.0f;
+
     device::DeviceLibrary::Slot slot;
     std::array<float, (size_t) NumMeasured> lastTone { };
     int lastGainIndex = -1;

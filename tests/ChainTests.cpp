@@ -241,6 +241,49 @@ int main()
         set (amp, orbitamp::params::advOn (orbitamp::params::boostId), 0.0f);
     }
 
+    // A capture with no gain axis still answers its gain knob — the knob DRIVES where it cannot
+    // select. Without this a lone .nam arrives with a dead control on the panel, and a preamp whose
+    // gain does nothing is not a preamp.
+    {
+        auto* stageDef = const_cast<namz::rig::Stage*> (
+            amp.boost.packs.getReference (0).rig.firstKnown());
+
+        if (stageDef != nullptr)
+        {
+            auto bare = amp.boost.packs.getReference (0);
+            auto* bareStage = const_cast<namz::rig::Stage*> (bare.rig.firstKnown());
+            // One file and no controls: exactly what a dropped-in .nam becomes. Leaving the other
+            // twenty in place would leave the stage with nothing it could load at all.
+            bareStage->device.controls.clear();
+            bareStage->measured.clear();
+            bareStage->device.files.resize (1);
+
+            orbitamp::AmpProcessor solo;
+            solo.prepareToPlay (sampleRate, blockSize);
+            set (solo, orbitamp::params::eqOn, 0.0f);
+            set (solo, orbitamp::params::reverbOn, 0.0f);
+            set (solo, orbitamp::params::powerOn, 0.0f);
+            set (solo, orbitamp::params::preampOn, 0.0f);
+            set (solo, orbitamp::params::boostOn, 1.0f);
+
+            solo.boost.packs.set (0, bare);
+            solo.boost.select (0);
+
+            set (solo, orbitamp::params::boostGain, 2.0f);
+            const auto quiet = run (solo);
+
+            set (solo, orbitamp::params::boostGain, 8.0f);
+            const auto hard = run (solo);
+
+            std::printf ("\nno gain axis: knob 2 -> rms %.5f, knob 8 -> rms %.5f\n\n",
+                         rms (quiet), rms (hard));
+
+            report ("a knob with nothing to select drives instead",
+                    differencePercent (quiet, hard) > 5.0,
+                    juce::String (differencePercent (quiet, hard), 1) + "% different");
+        }
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }

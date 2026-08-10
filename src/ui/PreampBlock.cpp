@@ -59,8 +59,9 @@ void PreampBlock::deviceChanged()
     // The detents ARE the captured positions, and a device with no gain axis gets no knob rather than
     // a dead one.
     const auto positions = amp.preamp.gainPositions();
+    // Detented where the pack has positions, continuous where it does not — but always THERE. A
+    // preamp without a gain knob is not a preamp, and a knob that drives is not a knob doing nothing.
     gain.setNotches (juce::jmax (0, positions.size()));
-    gain.setVisible (! positions.isEmpty());
 
     resized();
     repaint();

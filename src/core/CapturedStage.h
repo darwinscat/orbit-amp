@@ -169,12 +169,20 @@ public:
 
     bool isReady() const noexcept { return ready.load(); }
 
+    /** How hard to drive the model, for a device with no captured gain axis.
+
+        A capture taken at one setting has no dial of its own — but it still has a nonlinearity, and
+        what decides how hard that is hit is how much signal arrives. So the gain knob keeps working:
+        where a pack offers positions it SELECTS one, and where it does not it DRIVES. Same knob, same
+        gesture, and the block is never left with a control that does nothing. */
+    void setDrive (float linearGain) noexcept { drive.store (linearGain); }
+
     void process (float* const* channels, int numChannels, int numSamples) noexcept
     {
         if (! ready.load())
             return;
 
-        if (const float g = inputGain.load(); ! juce::approximatelyEqual (g, 1.0f))
+        if (const float g = inputGain.load() * drive.load(); ! juce::approximatelyEqual (g, 1.0f))
             for (int ch = 0; ch < numChannels; ++ch)
                 juce::FloatVectorOperations::multiply (channels[ch], g, numSamples);
 
@@ -200,6 +208,7 @@ private:
     const device::DeviceLibrary::Pack* pack = nullptr;
     juce::String loadedFile;
     std::atomic<float> inputGain { 1.0f };
+    std::atomic<float> drive { 1.0f };
     namz::rig::Settings settings;
     std::atomic<bool> ready { false };
 };
