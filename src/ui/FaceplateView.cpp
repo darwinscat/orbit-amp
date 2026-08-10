@@ -54,11 +54,6 @@ void FaceplateView::resized()
 {
     auto lane = getLocalBounds().reduced (lanePadX, lanePadY);
 
-    inGutter = lane.removeFromLeft (gutter);
-    lane.removeFromLeft (colGap);
-    outGutter = lane.removeFromRight (gutter);
-    lane.removeFromRight (colGap);
-
     auto faces = linkFaces();
 
     // Zoomed: the open link takes the whole lane and everything else steps aside. Nothing is
@@ -96,35 +91,6 @@ void FaceplateView::resized()
     power.setBounds (row2.removeFromLeft (col1));
     row2.removeFromLeft (colGap);
     cabinet.setBounds (row2);
-}
-
-void FaceplateView::paint (juce::Graphics& g)
-{
-    // Nothing wraps the row. The outlined slab that used to sit here — and the name plate inside it
-    // — were one thing: a web mockup's picture OF a device, drawn as a window on a page, with its
-    // own logo strip. The blocks keep their frames (that is the captured/DSP colour code, which is
-    // load-bearing); what goes is the box around them and the second mark it carried.
-    paintGutter (g, inGutter,  "In");
-    paintGutter (g, outGutter, "Out");
-}
-
-void FaceplateView::paintGutter (juce::Graphics& g, juce::Rectangle<int> area, const juce::String& label) const
-{
-    if (area.isEmpty())
-        return;
-
-    auto r = area.toFloat();
-    auto lab = r.removeFromTop (12.0f);
-
-    g.setColour (theme::txDim);
-    theme::drawTracked (g, label.toUpperCase(), lab, theme::displayFont (8.0f), 0.14f, juce::Justification::centred);
-
-    // The meter well. Empty for now — level metering lands with the engine, not with the frame.
-    const auto bar = r.withSizeKeepingCentre (34.0f, r.getHeight() - 7.0f);
-    g.setColour (theme::bezel);
-    g.fillRoundedRectangle (bar, theme::radiusMd);
-    g.setColour (theme::hair2);
-    g.drawRoundedRectangle (bar.reduced (0.5f), theme::radiusMd, 1.0f);
 }
 
 } // namespace orbitamp

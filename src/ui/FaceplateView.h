@@ -37,7 +37,6 @@ public:
     void setZoom (std::optional<ChainLink>);
     std::optional<ChainLink> zoom() const noexcept { return zoomed; }
 
-    void paint (juce::Graphics&) override;
     void resized() override;
 
     // The faceplate's design size, at 100%. The editor scales from these and never re-lays out.
@@ -51,14 +50,10 @@ public:
     static constexpr int designHeight = row1H + rowGap + row2H + 32;   // + lanePadY top and bottom
 
 private:
-    void paintGutter (juce::Graphics&, juce::Rectangle<int>, const juce::String& label) const;
-
-    // Lane metrics, from the visual spec's grid: 58px | 1fr | phi*1fr | 1fr | 58px. The slab's inner
-    // padding went with the slab — padding only exists to hold content off the edge of a box, and
-    // there is no box now. What is left is the lane's own small inset.
+    // Lane metrics. The in/out gutter columns are gone — they were empty wells reserved for
+    // metering that never landed, and the lane wears their width better than they did.
     static constexpr int   lanePadX   = 10;
     static constexpr int   lanePadY   = 16;
-    static constexpr int   gutter     = 58;    // the in / out indicator columns
     static constexpr int   colGap     = 14;
     static constexpr float phi        = 1.62f; // the preamp column's weight — the wider anchor
 
@@ -76,8 +71,6 @@ private:
     CabinetBlock       cabinet;
 
     std::optional<ChainLink> zoomed;
-
-    juce::Rectangle<int> inGutter, outGutter;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FaceplateView)
 };
