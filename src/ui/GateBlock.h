@@ -81,6 +81,11 @@ public:
 
         addAndMakeVisible (learn);
         learn.onClick = [this] { startLearning(); };
+
+        // Lost once in a whole-file rewrite, and the frame's switch became a free-floating local
+        // toggle — flipping pixels while the parameter, the thumb and the engine lived a
+        // different life. The strip's caption was honest the whole time; this face lied.
+        attachPower (*s.getParameter (params::gateOn));
     }
 
 private:
