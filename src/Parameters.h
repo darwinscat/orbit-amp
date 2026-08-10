@@ -34,6 +34,13 @@ inline constexpr float gateHysteresisDb = 6.0f;
 inline constexpr const char* gatePos = "gate_pos";
 inline const juce::StringArray gatePositions { "Start", "Pre-Reverb" };
 
+/** The gate's one FEEL control: how fast the VCA closes once the hold has run out. The rest of
+    the engine's voicing (attack, hold, hysteresis) stays fixed — an attack knob on a gate is a
+    knob for eating pick transients — but decay is a taste: ~30 ms is a metal chop, ~100 ms (the
+    default, the OrbitCab-shipped value) lets a note die naturally, longer breathes. */
+inline constexpr const char* gateDecay = "gate_decay";
+inline constexpr float gateDecayMinMs = 30.0f, gateDecayMaxMs = 500.0f, gateDecayDefaultMs = 100.0f;
+
 /** TEMPORARY — hear the capture with nothing of ours on it.
 
     Everything a block adds comes off: the measured curves the pack shipped, rebuilt as filters, and

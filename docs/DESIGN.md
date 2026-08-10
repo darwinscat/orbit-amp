@@ -64,7 +64,9 @@ tuner → gate → eq1 → boost → eq2 → preamp (voicing) → reverb → pow
   are: a live key-level meter with both decision marks on it — OPEN (the
   threshold, draggable) and CLOSE (the engine's hysteresis under it) — plus a
   pressure well. LEARN measures the noise floor instead of asking the player to
-  guess it. Off by default.
+  guess it. One feel control — Decay (30–500 ms), the close ramp: a metal chop at
+  the fast end, a natural die-away at the default; attack, hold and hysteresis
+  stay the engine's. Off by default.
 - **EQ links (eq1, eq2)** — DSP, and **links of the chain, not sections of any
   block**. Exactly two, fixed (a host needs an unchanging parameter list): eq1
   ahead of the boost decides what reaches the first nonlinearity — it changes the

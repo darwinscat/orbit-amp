@@ -38,6 +38,12 @@ public:
         thresholdAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
             s, params::gateThreshold, threshold);
 
+        decay.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)) + " ms"; };
+        addAndMakeVisible (decay);
+
+        decayAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+            s, params::gateDecay, decay);
+
         // The runner writes the same parameter the knob does; the attachments keep both true.
         runnerAtt = std::make_unique<juce::ParameterAttachment> (
             *s.getParameter (params::gateThreshold), [this] (float) { repaint(); });
@@ -145,8 +151,14 @@ private:
         mutePos.setBounds (row.removeFromLeft (juce::jmin (row.getWidth(), 280)));
         area.removeFromBottom (8);
 
-        const int side = juce::jmin (200, juce::jmin (area.getWidth(), area.getHeight()));
-        threshold.setBounds (area.withSizeKeepingCentre (side, side));
+        // The threshold is the decision, Decay is a taste on it — the sizes say so.
+        const int big   = juce::jmin (200, juce::jmin (area.getWidth() * 3 / 5, area.getHeight()));
+        const int small = big * 3 / 5;
+
+        auto pair = area.withSizeKeepingCentre (big + knobGap + small, big);
+        threshold.setBounds (pair.removeFromLeft (big));
+        pair.removeFromLeft (knobGap);
+        decay.setBounds (pair.withSizeKeepingCentre (small, small));
     }
 
     float dbToX (juce::Rectangle<float> r, float db) const
@@ -313,6 +325,7 @@ private:
     static constexpr float floorDb        = -80.0f;   // the meter's left edge — the threshold's own floor
     static constexpr float releasePerTick = 1.4f;     // ~42 dB/s at 30 Hz: readable, not sluggish
     static constexpr int   learnTotalTicks = 45;      // 1.5 s at 30 Hz — enough for hum to show its worst
+    static constexpr int   knobGap        = 24;
 
     const std::atomic<float>& pressureDb;
     const std::atomic<float>& keyDb;
@@ -320,9 +333,10 @@ private:
     float levelDb = -90.0f;
 
     Knob threshold { "Threshold", theme::violet, 0 };
+    Knob decay     { "Decay",     theme::violet, 0 };
     StepSwitch mutePos;
     LearnButton learn;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> thresholdAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> thresholdAtt, decayAtt;
     std::unique_ptr<juce::ParameterAttachment> runnerAtt, mutePosAtt;
     bool draggingRunner = false;
 

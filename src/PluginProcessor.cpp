@@ -42,6 +42,7 @@ AmpProcessor::AmpProcessor()
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
+    gateDecayParam     = apvts.getRawParameterValue (params::gateDecay);
 
     reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
     reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
@@ -142,6 +143,15 @@ void AmpProcessor::pumpDeviceWork()
 
     pump (boost,  boostGainParam,  params::boostMeasured,  params::boostId);
     pump (preamp, preampGainParam, params::preampMeasured, params::preampId);
+
+    // The gate's Decay: redesigning the close ramp is message-thread work, like every other
+    // moved-a-knob job on this pump. Rare by nature — it only fires when the knob actually moved.
+    if (const float decay = gateDecayParam->load(); ! juce::approximatelyEqual (decay, lastGateDecay))
+    {
+        lastGateDecay = decay;
+        gateCfg.closeMs = decay;
+        gate.setConfig (gateCfg);
+    }
 }
 
 void AmpProcessor::applyOversamplingIfChanged()

@@ -134,10 +134,14 @@ private:
     core::ReverbStage reverb;
     core::PowerAmp    power;
 
-    /** The noise gate, from felitronics-core — the same engine OrbitCab ships. Self-keyed here:
-        it stands at the front of the chain, so the raw guitar it attenuates is also the cleanest
-        key it could ask for. */
+    /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
+        raw input at the front of the chain; where it MUTES is the player's parameter. */
     felitronics::dynamics::NoiseGate gate;
+
+    /** The gate's voicing, ours to edit only where a parameter exists (Decay -> closeMs). Kept
+        here because the engine does not read its config back. */
+    felitronics::dynamics::NoiseGate::Config gateCfg;
+    float lastGateDecay = -1.0f;
 
 public:
     /** The captured pedal in front, and the captured preamp after it. Each is a device list, the
@@ -193,6 +197,7 @@ private:
     std::atomic<float>* gateOnParam        = nullptr;
     std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* gatePosParam       = nullptr;
+    std::atomic<float>* gateDecayParam     = nullptr;
 
     std::atomic<float>* reverbOnParam   = nullptr;
     std::atomic<float>* reverbTypeParam = nullptr;
