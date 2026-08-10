@@ -84,10 +84,11 @@ public:
     {
         // The off state dims the FACE, not the component: everything the frame paints drops into
         // a transparency layer, and the power switch is painted after it at full strength — on a
-        // dark block the way back must be the one thing that still reads.
+        // dark block the way back must be the one thing that still reads. Hover lifts the layer:
+        // looking is free, editing takes switching on.
         const bool dim = ! on;
         if (dim)
-            g.beginTransparencyLayer (theme::offAlpha);
+            g.beginTransparencyLayer (faceAlpha());
 
         const auto box     = boxArea().toFloat().reduced (theme::blockBorder * 0.5f);
         const auto topFill = kind == Kind::captured ? theme::capTop : theme::dspTop;
@@ -171,13 +172,26 @@ public:
         }
     }
 
-    void mouseExit (const juce::MouseEvent&) override
+    void mouseEnter (const juce::MouseEvent&) override
     {
-        if (switchHover)
+        blockHover = true;
+
+        if (! on)
         {
-            switchHover = false;
+            dimChildren();
             repaint();
         }
+    }
+
+    void mouseExit (const juce::MouseEvent&) override
+    {
+        blockHover  = false;
+        switchHover = false;
+
+        if (! on)
+            dimChildren();
+
+        repaint();
     }
 
     void showPowerMenu()
@@ -237,10 +251,15 @@ protected:
     void childrenChanged() override { dimChildren(); }
 
 private:
+    float faceAlpha() const
+    {
+        return on ? 1.0f : (blockHover ? theme::offHoverAlpha : theme::offAlpha);
+    }
+
     void dimChildren()
     {
         for (auto* c : getChildren())
-            c->setAlpha (on ? 1.0f : theme::offAlpha);
+            c->setAlpha (faceAlpha());
     }
 
     /** Anything riding the top border needs room above the line for its own height, so the drawn
@@ -328,6 +347,7 @@ private:
     bool hasSwitch = true;
     bool on = true;
     bool switchHover = false;
+    bool blockHover  = false;
     std::unique_ptr<juce::ParameterAttachment> power;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BlockFrame)

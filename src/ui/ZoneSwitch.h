@@ -61,8 +61,10 @@ public:
                         : juce::Colour (0xff26262f));
         g.fillRoundedRectangle (sw, r);
 
-        g.setColour (theme::hair2);
-        g.drawRoundedRectangle (sw, r, 1.0f);
+        // The pill in the accent, near full strength — a hairline here left only the knob dot
+        // readable on a dark thumb, and a switch is an OVAL with a dot, not a dot.
+        g.setColour (accent.withAlpha (0.85f));
+        g.drawRoundedRectangle (sw, r, 1.2f);
 
         const float knob = sw.getHeight() - 4.0f;
         const float kx   = on ? sw.getRight() - knob - 2.0f : sw.getX() + 2.0f;

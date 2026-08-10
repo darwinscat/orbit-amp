@@ -66,6 +66,9 @@ public:
                            .removeFromTop (ZoneSwitch::designHeight).removeFromRight (w).withHeight (h));
     }
 
+    void mouseEnter (const juce::MouseEvent&) override { hovered = true;  repaint(); }
+    void mouseExit  (const juce::MouseEvent&) override { hovered = false; repaint(); }
+
     void mouseDown (const juce::MouseEvent& e) override
     {
         // Right-click: the power menu, same as on the block itself. Left: open the zoom.
@@ -94,10 +97,11 @@ public:
     void paint (juce::Graphics& g) override
     {
         // Dim the FACE, not the component — the switch is a child painted after this, at full
-        // strength: on a dark thumb it is the one thing that must still read.
+        // strength: on a dark thumb it is the one thing that must still read. Hover lifts the
+        // dimming so a dark link can be read without waking it.
         const bool dim = dimmed;
         if (dim)
-            g.beginTransparencyLayer (theme::offAlpha);
+            g.beginTransparencyLayer (hovered ? theme::offHoverAlpha : theme::offAlpha);
 
         auto r = getLocalBounds().toFloat().reduced (0.5f);
 
@@ -140,6 +144,7 @@ private:
     std::unique_ptr<ZoneSwitch> sw;
     bool lit = false;
     bool dimmed = false;
+    bool hovered = false;
 };
 
 //==============================================================================
