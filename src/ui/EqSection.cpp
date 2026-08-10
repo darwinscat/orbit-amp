@@ -37,8 +37,17 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink)
     curve.onHandleDrag = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
     curve.onDragActive = [this] (int i, bool a)               { handleDragActive (i, a); };
 
-    hpf.onToggled     = [this] (bool b)   { hpfOnAtt->setValueAsCompleteGesture (b ? 1.0f : 0.0f); };
-    lpf.onToggled     = [this] (bool b)   { lpfOnAtt->setValueAsCompleteGesture (b ? 1.0f : 0.0f); };
+    // The negation of the PARAMETER, whatever the pill believed — its visual follows the echo.
+    hpf.onToggled = [this] (bool)
+    {
+        hpfOnAtt->setValueAsCompleteGesture (
+            state.getParameter (params::eqHpfOn (link))->getValue() > 0.5f ? 0.0f : 1.0f);
+    };
+    lpf.onToggled = [this] (bool)
+    {
+        lpfOnAtt->setValueAsCompleteGesture (
+            state.getParameter (params::eqLpfOn (link))->getValue() > 0.5f ? 0.0f : 1.0f);
+    };
     hpf.onFreqChanged = [this] (double f) { hpfHzAtt->setValueAsPartOfGesture ((float) f); refreshCurve(); };
     lpf.onFreqChanged = [this] (double f) { lpfHzAtt->setValueAsPartOfGesture ((float) f); refreshCurve(); };
 

@@ -82,9 +82,9 @@ public:
             return;
         }
 
-        on = ! on;
-        repaint();
-        if (onToggled) onToggled (on);
+        // A REQUEST, not a flip: the owner negates the parameter and the pill follows the echo
+        // through setState — the pill's own memory is never the thing that gets written back.
+        if (onToggled) onToggled (! on);
     }
 
 private:

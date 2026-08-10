@@ -51,6 +51,7 @@ private:
         std::unique_ptr<Selector>   pick;
         std::unique_ptr<StepSwitch> angle;
         std::unique_ptr<juce::ParameterAttachment> onAtt, typeAtt, posAtt, distAtt, angleAtt;
+        juce::RangedAudioParameter* onParam = nullptr;   // the truth its switch toggles by
         bool on = false;
     };
 

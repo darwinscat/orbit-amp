@@ -36,8 +36,9 @@ CabinetBlock::CabinetBlock (juce::AudioProcessorValueTreeState& s)
         slot.angle->setItems (params::cabAngles, 1);
         addAndMakeVisible (*slot.angle);
 
+        slot.onParam = state.getParameter (params::cabMicOn (i));
         slot.onAtt = std::make_unique<juce::ParameterAttachment> (
-            *state.getParameter (params::cabMicOn (i)),
+            *slot.onParam,
             [this, i] (float v)
             {
                 slots[(size_t) i].on = v > 0.5f;
@@ -190,7 +191,10 @@ void CabinetBlock::mouseDown (const juce::MouseEvent& e)
         {
             if (switchArea (i).contains (e.getPosition()))
             {
-                slots[(size_t) i].onAtt->setValueAsCompleteGesture (slots[(size_t) i].on ? 0.0f : 1.0f);
+                // The negation of the PARAMETER, not of the cached flag: a stale cache negated
+                // into the parameter is a click that does nothing, forever (found in review).
+                slots[(size_t) i].onAtt->setValueAsCompleteGesture (
+                    slots[(size_t) i].onParam->getValue() > 0.5f ? 0.0f : 1.0f);
                 return;
             }
         }
