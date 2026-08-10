@@ -4,12 +4,13 @@ namespace orbitamp
 {
 
 AmpEditor::AmpEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), strip (p), faceplate (p), footer (p),
-      demoStrip (p)
+    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), strip (p), faceplate (p),
+      tunerStrip (p.tunerEar), footer (p), demoStrip (p)
 {
     addAndMakeVisible (chrome);
     addAndMakeVisible (strip);
     addAndMakeVisible (faceplate);
+    addAndMakeVisible (tunerStrip);
     addAndMakeVisible (footer);
     addAndMakeVisible (demoStrip);   // TEMPORARY
     addAndMakeVisible (glyphs);      // TEMPORARY
@@ -85,7 +86,12 @@ void AmpEditor::resized()
     faceplate.setBounds (margin, faceplateY, FaceplateView::designWidth, FaceplateView::designHeight);
     faceplate.setTransform (zoom);
 
-    const int footerY = faceplateY + FaceplateView::designHeight + chromeGap;
+    // The always-on needle, full width, above the footer's facts.
+    const int tunerY = faceplateY + FaceplateView::designHeight + chromeGap;
+    tunerStrip.setBounds (margin, tunerY, FaceplateView::designWidth, TunerStrip::designHeight);
+    tunerStrip.setTransform (zoom);
+
+    const int footerY = tunerY + TunerStrip::designHeight + chromeGap;
     footer.setBounds (margin, footerY, FaceplateView::designWidth, Footer::designHeight);
     footer.setTransform (zoom);
 

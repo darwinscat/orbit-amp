@@ -6,6 +6,7 @@
 #include "ui/FaceplateView.h"
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
 #include "ui/Footer.h"
+#include "ui/TunerStrip.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 #include "ui/SetupPanel.h"
 
@@ -39,6 +40,7 @@ private:
     static constexpr int baseHeight = Chrome::designHeight + chromeGap
                                     + ChainStrip::designHeight + chromeGap
                                     + FaceplateView::designHeight
+                                    + chromeGap + TunerStrip::designHeight
                                     + chromeGap + Footer::designHeight
                                     + DemoStrip::designHeight      // TEMPORARY
                                     + GlyphPreview::designHeight   // TEMPORARY
@@ -48,6 +50,7 @@ private:
     Chrome        chrome;
     ChainStrip    strip;            // the chain map, across the top of the panel
     FaceplateView faceplate;
+    TunerStrip    tunerStrip;       // the always-on needle, full width above the footer
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
