@@ -11,17 +11,18 @@
 namespace orbitamp
 {
 
-/** The noise gate, zoomed, indicated the way gates are: a live KEY-LEVEL meter with two runners
-    on it — where the gate OPENS (the threshold, draggable) and where it CLOSES (the engine's
-    hysteresis under it). The signal runs along the same scale the decision is made on, so setting
-    the threshold is watching the level cross it. Pressure — how hard the gate is holding the
-    signal down — is its own well at the side, because attenuation and key level are different
-    facts that happen to share a unit.
+/** The noise gate, zoomed — and SIZED like a zoom: the whole panel is this block's, so every
+    control is at reading size. The tightness the strip lives with has no business here.
 
-    Two decisions live on this face and no more: the threshold — settable by ear, by runner, or by
-    LEARN, which measures your noise floor instead of asking you to guess it — and WHERE the mute
-    lands (the key never moves: it is always the raw input). Everything else about the feel stays
-    fixed in the engine, and a knob per fixed opinion would be nine knobs of noise. */
+    Indicated the way gates are: a live KEY-LEVEL meter with two runners on it — where the gate
+    OPENS (the threshold, draggable) and where it CLOSES (the engine's hysteresis under it). The
+    signal runs along the same scale the decision is made on, so setting the threshold is watching
+    the level cross it. Pressure — how hard the gate is holding the signal down — is its own well
+    at the side, because attenuation and key level are different facts that share a unit.
+
+    Three decisions and no more: the threshold (knob, runner, or LEARN — which measures your noise
+    floor instead of asking you to guess it), the DECAY way (normal / metal chop), and WHERE the
+    mute lands. The key never moves — it is always the raw input. */
 class GateBlock final : public BlockFrame,
                         private juce::Timer
 {
@@ -32,26 +33,43 @@ public:
         : BlockFrame ("Gate", Kind::dsp), pressureDb (pressureDbSource), keyDb (keyDbSource),
           demoPlaying (std::move (demoIsPlaying))
     {
-        threshold.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)) + " dB"; };
+        // The hero: its NAME is part of the face at this size.
+        threshold.textForValue    = [] (double v) { return juce::String (juce::roundToInt (v)) + " dB"; };
+        threshold.labelFontHeight = 22.0f;
+        threshold.labelRowHeight  = 30;
         addAndMakeVisible (threshold);
 
         thresholdAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
             s, params::gateThreshold, threshold);
 
-        decay.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)) + " ms"; };
-        addAndMakeVisible (decay);
-
-        decayAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-            s, params::gateDecay, decay);
-
         // The runner writes the same parameter the knob does; the attachments keep both true.
         runnerAtt = std::make_unique<juce::ParameterAttachment> (
             *s.getParameter (params::gateThreshold), [this] (float) { repaint(); });
 
+        // Both switches read at reading size, in text-on-fill contrast — violet on violet is how
+        // the first pass of this face became illegible.
+        const auto readable = [] (StepSwitch& sw)
+        {
+            sw.accent       = theme::violet;
+            sw.fontHeight   = 12.0f;
+            sw.highContrast = true;
+        };
+
+        // How the gate lets go: a note's natural die-away, or the chop.
+        readable (decayMode);
+        addAndMakeVisible (decayMode);
+        decayMode.setItems ({ "NORMAL", "METAL" }, 0);
+
+        decayAtt = std::make_unique<juce::ParameterAttachment> (
+            *s.getParameter (params::gateDecay),
+            [this] (float v) { decayMode.setSelectedIndex (v > 0.5f ? 1 : 0, juce::dontSendNotification); });
+        decayMode.onChange = [this] (int i) { decayAtt->setValueAsCompleteGesture ((float) i); };
+        decayAtt->sendInitialUpdate();
+
         // Where the mute lands. The key is not a choice, so the switch only says WHERE.
+        readable (mutePos);
         addAndMakeVisible (mutePos);
-        mutePos.accent = theme::violet;
-        mutePos.setItems ({ "MUTE: START", "MUTE: PRE-REVERB" }, 1);
+        mutePos.setItems ({ "AT START", "PRE-REVERB" }, 1);
 
         mutePosAtt = std::make_unique<juce::ParameterAttachment> (
             *s.getParameter (params::gatePos),
@@ -99,8 +117,8 @@ private:
                 }
                 else
                 {
-                    // Half the hysteresis over the measured floor: the floor sits under the CLOSE
-                    // level too, with the same margin.
+                    // The full hysteresis over the measured floor: the floor then sits under the
+                    // CLOSE level too, with the same margin.
                     const float th = juce::jlimit (-80.0f, -20.0f,
                                                    learnPeak + params::gateHysteresisDb);
                     runnerAtt->setValueAsCompleteGesture (th);
@@ -135,30 +153,37 @@ private:
     void say (const juce::String& text)
     {
         message      = text;
-        messageTicks = 75;   // ~2.5 s at 30 Hz
+        messageTicks = 90;   // ~3 s at 30 Hz
     }
 
     void layOutContent (juce::Rectangle<int> area) override
     {
-        pressureWell = area.removeFromRight (area.getWidth() / 5).reduced (area.getWidth() / 14, 8);
+        // A fifth of the face, and its name lives inside it — a well is its own label plate.
+        pressureWell = area.removeFromRight (area.getWidth() / 5).reduced (10, 12);
+        area.removeFromRight (4);
 
-        keyMeter = area.removeFromBottom (64).reduced (18, 10);
-        area.removeFromBottom (8);
+        // The key meter along the bottom, generous: it is the face's instrument panel.
+        keyMeter = area.removeFromBottom (72).reduced (12, 10);
 
-        auto row = area.removeFromBottom (22).reduced (18, 0);
-        learn.setBounds (row.removeFromLeft (72));
-        row.removeFromLeft (12);
-        mutePos.setBounds (row.removeFromLeft (juce::jmin (row.getWidth(), 280)));
-        area.removeFromBottom (8);
+        // The controls row belongs to the two labeled ways alone — LEARN moves up beside the
+        // hero, where the face has a whole empty flank to give it.
+        auto row = area.removeFromBottom (72).reduced (12, 6);
+        decayArea = row.removeFromLeft ((row.getWidth() - rowGap) * 2 / 5);
+        row.removeFromLeft (rowGap);
+        muteArea = row;
+        decayMode.setBounds (decayArea.withTrimmedTop (headingRow));
+        mutePos.setBounds (muteArea.withTrimmedTop (headingRow));
 
-        // The threshold is the decision, Decay is a taste on it — the sizes say so.
-        const int big   = juce::jmin (200, juce::jmin (area.getWidth() * 3 / 5, area.getHeight()));
-        const int small = big * 3 / 5;
+        area.removeFromBottom (6);
 
-        auto pair = area.withSizeKeepingCentre (big + knobGap + small, big);
-        threshold.setBounds (pair.removeFromLeft (big));
-        pair.removeFromLeft (knobGap);
-        decay.setBounds (pair.withSizeKeepingCentre (small, small));
+        // The hero in the middle, name included; LEARN sized like the button it is, centred on
+        // the left flank the knob does not use.
+        const int side = juce::jmin (230, juce::jmin (area.getWidth(), area.getHeight()));
+        const auto hero = area.withSizeKeepingCentre (side, side);
+        threshold.setBounds (hero);
+
+        auto flank = area.withRight (hero.getX()).reduced (16, 0);
+        learn.setBounds (flank.withSizeKeepingCentre (juce::jmin (180, flank.getWidth()), 48));
     }
 
     float dbToX (juce::Rectangle<float> r, float db) const
@@ -171,9 +196,19 @@ private:
         return floorDb + juce::jlimit (0.0f, 1.0f, (x - r.getX()) / juce::jmax (1.0f, r.getWidth())) * -floorDb;
     }
 
+    void heading (juce::Graphics& g, juce::Rectangle<int> box, const juce::String& text)
+    {
+        g.setColour (theme::txDim);
+        theme::drawTracked (g, text, box.withHeight (headingRow).toFloat(),
+                            theme::displayFont (10.0f), 0.14f, juce::Justification::centredLeft);
+    }
+
     void paintContent (juce::Graphics& g) override
     {
         const bool closed = pressureDb.load() < -1.0f;
+
+        heading (g, decayArea, "DECAY");
+        heading (g, muteArea,  "MUTE POSITION");
 
         // ---- the key meter: the level the gate decides by, with both decision marks on it ----
         {
@@ -216,23 +251,25 @@ private:
 
             // The runner's grab handle, riding the top edge.
             juce::Path caret;
-            caret.addTriangle (openX - 5.0f, r.getY() - 1.0f, openX + 5.0f, r.getY() - 1.0f,
-                               openX, r.getY() + 7.0f);
+            caret.addTriangle (openX - 6.0f, r.getY() - 1.0f, openX + 6.0f, r.getY() - 1.0f,
+                               openX, r.getY() + 8.0f);
             g.fillPath (caret);
 
             g.setColour (theme::hair2);
             g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);
 
-            g.setColour (theme::txFaint);
-            theme::drawTracked (g, "KEY", r.withY (r.getBottom() + 2.0f).withHeight (10.0f),
-                                theme::displayFont (6.5f), 0.14f, juce::Justification::centredLeft);
+            // The name lives INSIDE the well, on whatever is behind it.
+            const auto inner = r.reduced (10.0f, 6.0f);
+            g.setColour (theme::tx.withAlpha (0.8f));
+            theme::drawTracked (g, "KEY", inner.withTrimmedTop (inner.getHeight() - 12.0f),
+                                theme::displayFont (9.5f), 0.14f, juce::Justification::bottomLeft);
 
             // What LEARN has to say — a measurement's verdict, or why there is none.
             if (messageTicks > 0)
             {
-                g.setColour (theme::txDim);
-                theme::drawTracked (g, message, r.withY (r.getBottom() + 2.0f).withHeight (10.0f),
-                                    theme::displayFont (6.5f), 0.14f, juce::Justification::centredRight);
+                g.setColour (theme::tx);
+                theme::drawTracked (g, message, inner.withTrimmedTop (inner.getHeight() - 12.0f),
+                                    theme::displayFont (9.5f), 0.14f, juce::Justification::bottomRight);
             }
         }
 
@@ -255,9 +292,10 @@ private:
             g.setColour (theme::hair2);
             g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);
 
-            g.setColour (theme::txFaint);
-            theme::drawTracked (g, "GR", r.withY (r.getBottom() + 2.0f).withHeight (10.0f),
-                                theme::displayFont (6.5f), 0.14f, juce::Justification::centred);
+            // Inside, over fill or bezel alike — the well is its own label plate.
+            g.setColour (theme::tx.withAlpha (0.85f));
+            theme::drawTracked (g, "GR", r.reduced (0.0f, 8.0f),
+                                theme::displayFont (11.0f), 0.14f, juce::Justification::centredBottom);
         }
     }
 
@@ -297,7 +335,9 @@ private:
         runnerAtt->setValueAsPartOfGesture (xToDb (keyMeter.toFloat(), e.position.x));
     }
 
-    /** The one momentary control on the face. Lit while the measurement runs. */
+    //==============================================================================
+    /** The one momentary control on the face — a BUTTON, sized like one, in the capture orange
+        that says "this one acts". Lit while the measurement runs. */
     struct LearnButton final : public juce::Component
     {
         std::function<void()> onClick;
@@ -306,26 +346,36 @@ private:
         void paint (juce::Graphics& g) override
         {
             auto r = getLocalBounds().toFloat().reduced (0.5f);
-            g.setColour (lit ? theme::violet.withAlpha (0.35f) : theme::bezel);
-            g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
-            g.setColour (lit ? theme::lilac : theme::hair2);
-            g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
-            g.setColour (lit ? theme::tx : theme::txDim);
-            theme::drawTracked (g, "LEARN", r, theme::displayFont (7.5f), 0.14f,
+            const float corner = 8.0f;
+
+            g.setColour (lit ? theme::orange : theme::orange.withAlpha (over ? 0.35f : 0.22f));
+            g.fillRoundedRectangle (r, corner);
+            g.setColour (theme::orange);
+            g.drawRoundedRectangle (r, corner, 1.5f);
+
+            g.setColour (lit ? juce::Colour (0xff17120c) : theme::tx);
+            theme::drawTracked (g, lit ? "LISTENING" : "LEARN", r, theme::displayFont (13.0f), 0.14f,
                                 juce::Justification::centred);
         }
+
+        void mouseEnter (const juce::MouseEvent&) override { over = true;  repaint(); }
+        void mouseExit  (const juce::MouseEvent&) override { over = false; repaint(); }
 
         void mouseDown (const juce::MouseEvent&) override
         {
             if (onClick != nullptr)
                 onClick();
         }
+
+    private:
+        bool over = false;
     };
 
     static constexpr float floorDb        = -80.0f;   // the meter's left edge — the threshold's own floor
     static constexpr float releasePerTick = 1.4f;     // ~42 dB/s at 30 Hz: readable, not sluggish
     static constexpr int   learnTotalTicks = 45;      // 1.5 s at 30 Hz — enough for hum to show its worst
-    static constexpr int   knobGap        = 24;
+    static constexpr int   headingRow     = 20;
+    static constexpr int   rowGap         = 28;
 
     const std::atomic<float>& pressureDb;
     const std::atomic<float>& keyDb;
@@ -333,11 +383,10 @@ private:
     float levelDb = -90.0f;
 
     Knob threshold { "Threshold", theme::violet, 0 };
-    Knob decay     { "Decay",     theme::violet, 0 };
-    StepSwitch mutePos;
+    StepSwitch decayMode, mutePos;
     LearnButton learn;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> thresholdAtt, decayAtt;
-    std::unique_ptr<juce::ParameterAttachment> runnerAtt, mutePosAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> thresholdAtt;
+    std::unique_ptr<juce::ParameterAttachment> runnerAtt, decayAtt, mutePosAtt;
     bool draggingRunner = false;
 
     bool  learning   = false;
@@ -347,7 +396,7 @@ private:
     juce::String message;
     int messageTicks = 0;
 
-    juce::Rectangle<int> keyMeter, pressureWell;
+    juce::Rectangle<int> keyMeter, pressureWell, decayArea, muteArea;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateBlock)
 };

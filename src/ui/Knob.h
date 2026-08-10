@@ -36,13 +36,18 @@ public:
     /** How the number on the face is written. Defaults to one decimal — the 0-10 amp scale. */
     std::function<juce::String (double)> textForValue = [] (double v) { return juce::String (v, 1); };
 
+    /** The label row's type, overridable for a hero control whose NAME is part of the face —
+        a zoomed block's one big decision reads at reading size, not at panel size. */
+    float labelFontHeight = 8.0f;
+    int   labelRowHeight  = labelHeight;
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds();
 
         g.setColour (theme::txDim);
-        theme::drawTracked (g, label.toUpperCase(), r.removeFromTop (labelHeight).toFloat(),
-                            theme::displayFont (8.0f), 0.15f, juce::Justification::centred);
+        theme::drawTracked (g, label.toUpperCase(), r.removeFromTop (labelRowHeight).toFloat(),
+                            theme::displayFont (labelFontHeight), 0.15f, juce::Justification::centred);
 
         const float d = (float) juce::jmin (r.getWidth(), r.getHeight());
         const juce::Point<float> c { (float) r.getCentreX(), (float) r.getCentreY() };

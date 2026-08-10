@@ -145,11 +145,12 @@ void AmpProcessor::pumpDeviceWork()
     pump (preamp, preampGainParam, params::preampMeasured, params::preampId);
 
     // The gate's Decay: redesigning the close ramp is message-thread work, like every other
-    // moved-a-knob job on this pump. Rare by nature — it only fires when the knob actually moved.
+    // moved-a-control job on this pump. Rare by nature — it only fires when the switch flipped.
     if (const float decay = gateDecayParam->load(); ! juce::approximatelyEqual (decay, lastGateDecay))
     {
         lastGateDecay = decay;
-        gateCfg.closeMs = decay;
+        gateCfg.closeMs = params::gateDecayModeMs[juce::jlimit (0, params::gateDecayModes.size() - 1,
+                                                                juce::roundToInt (decay))];
         gate.setConfig (gateCfg);
     }
 }

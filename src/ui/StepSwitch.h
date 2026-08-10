@@ -42,6 +42,15 @@ public:
     int getSelectedIndex() const noexcept { return index; }
 
     juce::Colour accent = theme::violet;
+
+    /** The label size, overridable where the switch is a reading-size control rather than a
+        panel detail. */
+    float fontHeight = 7.5f;
+
+    /** Legibility over tint: the lit cell's TEXT goes near-white on a stronger accent fill, and
+        the unlit cells step up from faint to dim. For a violet switch on a violet face the
+        default styling is hue on hue — this is the way out where the control must READ. */
+    bool highContrast = false;
     std::function<void (int)> onChange;
 
     void paint (juce::Graphics& g) override
@@ -65,12 +74,16 @@ public:
 
             if (lit)
             {
-                g.setColour (accent.withAlpha (0.28f));
+                g.setColour (accent.withAlpha (highContrast ? 0.45f : 0.28f));
                 g.fillRoundedRectangle (cell.reduced (1.5f), theme::radiusSm - 1.0f);
             }
 
-            g.setColour (lit ? accent : (i == hovered ? theme::tx : theme::txFaint));
-            theme::drawTracked (g, items[i], cell, theme::displayFont (7.5f), 0.04f,
+            if (highContrast)
+                g.setColour (lit ? theme::tx : (i == hovered ? theme::tx : theme::txDim));
+            else
+                g.setColour (lit ? accent : (i == hovered ? theme::tx : theme::txFaint));
+
+            theme::drawTracked (g, items[i], cell, theme::displayFont (fontHeight), 0.04f,
                                 juce::Justification::centred);
         }
     }
