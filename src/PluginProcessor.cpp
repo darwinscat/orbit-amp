@@ -263,7 +263,11 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (preampOnParam->load() > 0.5f)
         preamp.process (buffer, scopeDry);
 
-    if (eqOnParam->load() > 0.5f)
+    // UNDER the preamp's switch, because it is drawn inside the preamp's block. It was a separate
+    // link with a parameter of its own and no control on the panel, so switching the preamp off left
+    // it cutting — the curve went dark and the sound did not. A block's switch has to mean everything
+    // that block shows.
+    if (preampOnParam->load() > 0.5f && eqOnParam->load() > 0.5f)
         tone.process (channels, numChannels, numSamples);
 
     if (reverbOnParam->load() > 0.5f)

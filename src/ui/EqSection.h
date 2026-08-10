@@ -2,6 +2,7 @@
 
 #include "../core/ToneStack.h"
 #include "EqCurve.h"
+#include "ZoneSwitch.h"
 #include "FilterPill.h"
 #include "Knob.h"
 
@@ -80,6 +81,11 @@ private:
     double midHz = 600.0;
 
     bool on = true;
+
+public:
+    ZoneSwitch power;
+
+private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EqSection)
 };

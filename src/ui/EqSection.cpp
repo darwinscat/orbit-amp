@@ -33,6 +33,10 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s)
     lpfOnAtt = attach (params::eqLpfOn, [this] (float v) { lpf.setState (v > 0.5f, lpf.getHz()); refreshCurve(); });
     lpfHzAtt = attach (params::eqLpfHz, [this] (float v) { lpf.setState (lpf.isOn(), (double) v); refreshCurve(); });
     powerAtt = attach (params::eqOn,    [this] (float v) { on = v > 0.5f; });
+
+    // Its own switch at last. Drawn on the curve's corner, where the picture it belongs to is.
+    power.accent = theme::violet;
+    power.attach (*state.getParameter (params::eqOn));
     midHzAtt = attach (params::eqMidHz, [this] (float v) { midHz = (double) v; refreshCurve(); });
 
     curve.onHandleDrag = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
@@ -57,6 +61,8 @@ EqSection::~EqSection() = default;
 
 void EqSection::addTo (juce::Component& parent)
 {
+    parent.addAndMakeVisible (power);
+
     parent.addAndMakeVisible (curve);
     parent.addAndMakeVisible (hpf);
     parent.addAndMakeVisible (lpf);
@@ -150,6 +156,12 @@ void EqSection::layOutCurve (juce::Rectangle<int> area)
     auto pills = area.reduced (pillInset).removeFromTop (pillHeight);
     hpf.setBounds (pills.removeFromLeft (pillWidth));
     lpf.setBounds (pills.removeFromRight (pillWidth));
+
+    // Bottom left of the well, out of the curve's way — the response rises to the right, so the low
+    // corner is the one part of the picture nothing lands in.
+    power.setBounds (area.getX() + pillInset,
+                     area.getBottom() - pillInset - ZoneSwitch::designHeight,
+                     ZoneSwitch::designWidth, ZoneSwitch::designHeight);
 }
 
 void EqSection::layOutKnobs (juce::Rectangle<int> area)
