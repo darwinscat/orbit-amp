@@ -22,7 +22,10 @@ public:
     /** `withSwitch = false` is for the one kind of block that has no on/off at all — a listener
         like the tuner, which does nothing to the signal there could be a switch about. */
     BlockFrame (juce::String blockTitle, Kind blockKind, bool withSwitch = true)
-        : title (std::move (blockTitle)), kind (blockKind), hasSwitch (withSwitch) {}
+        : title (std::move (blockTitle)), kind (blockKind), hasSwitch (withSwitch)
+    {
+        addChildComponent (shield);
+    }
 
     /** The accent this block is coded with — orange when captured, violet when DSP. */
     juce::Colour accent() const
@@ -53,9 +56,12 @@ public:
 
         // An off block is READ-ONLY: everything stays visible — a control you cannot see is a
         // control you forget you set — but nothing answers, so a dark block can never quietly
-        // eat an edit meant for a live one. The frame itself keeps listening: the power switch
-        // is how the block comes back.
-        setInterceptsMouseClicks (true, on);
+        // eat an edit meant for a live one. The SHIELD does this, not interception flags:
+        // setInterceptsMouseClicks(true, false) turned out not to block children at all —
+        // getComponentAt descends into them regardless (found in review). The shield forwards
+        // to the frame, so the power switch and the right-click menu work through it.
+        shield.setVisible (! on);
+        raiseShield();
         repaint();
 
         if (notify == juce::dontSendNotification)
@@ -158,6 +164,7 @@ public:
 
     void resized() override final
     {
+        shield.setBounds (getLocalBounds());
         layOutHeader (headerWidgetArea());
         layOutContent (contentArea());
     }
@@ -240,14 +247,47 @@ protected:
     virtual void paintContent (juce::Graphics&) {}
 
     /** Blocks rebuild their faces (a device change makes new knobs mid-life) — every child that
-        arrives inherits the block's dimming, or an off block would grow bright controls. */
-    void childrenChanged() override { dimChildren(); }
+        arrives inherits the block's dimming, and the shield stays on top of all of them. */
+    void childrenChanged() override
+    {
+        dimChildren();
+        raiseShield();
+    }
 
 private:
+    /** The read-only curtain: invisible, above every child while the block is off, handing its
+        clicks to the frame — which still answers for the power switch and the menu. */
+    struct OffShield final : public juce::Component
+    {
+        explicit OffShield (BlockFrame& owner) : frame (owner) {}
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            frame.mouseDown (e.getEventRelativeTo (&frame));
+        }
+
+        BlockFrame& frame;
+    };
+
     void dimChildren()
     {
         for (auto* c : getChildren())
-            c->setAlpha (on ? 1.0f : theme::offAlpha);
+            if (c != &shield)
+                c->setAlpha (on ? 1.0f : theme::offAlpha);
+    }
+
+    /** Keeps the shield the frontmost child. Guarded: toFront itself fires childrenChanged. */
+    void raiseShield()
+    {
+        if (shieldRaising || getNumChildComponents() == 0)
+            return;
+
+        if (getChildComponent (getNumChildComponents() - 1) == &shield)
+            return;
+
+        shieldRaising = true;
+        shield.toFront (false);
+        shieldRaising = false;
     }
 
     /** Anything riding the top border needs room above the line for its own height, so the drawn
@@ -334,6 +374,8 @@ private:
     Kind kind;
     bool hasSwitch = true;
     bool on = true;
+    bool shieldRaising = false;
+    OffShield shield { *this };
     juce::RangedAudioParameter* powerParam = nullptr;
     std::unique_ptr<juce::ParameterAttachment> power;
 
