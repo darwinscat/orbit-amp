@@ -168,7 +168,13 @@ int main()
     arm (down, *sweep, 0.0);
     arm (up,   *sweep, 1.0);
 
-    report ("the filter is built at all", down.isActive() && up.isActive());
+    // ONE of the ends has to build a filter, not both. A pack's reference position is flat by
+    // construction — it is the setting the models were captured at, so the curve against it is zero
+    // everywhere — and a flat curve deliberately costs no convolution. Guitar Butler's Bass is flat
+    // at the top of its travel; SM7's EQ-Lo was flat in the middle. Demanding both was demanding that
+    // no pack use its top position as the reference.
+    report ("a filter is built where the curve is not flat", down.isActive() || up.isActive(),
+            juce::String (down.isActive() ? "min " : "") + juce::String (up.isActive() ? "max" : ""));
 
     const double dbDown = responseDb (down, workHz);
     const double dbUp   = responseDb (up,   workHz);

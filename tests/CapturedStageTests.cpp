@@ -217,57 +217,57 @@ int main()
     // ALIASES. A combination with no capture of its own points at a neighbour and says how much
     // softer to feed it — the bottom notches of a gain dial, where the hardware gives hiss and little
     // else, played through the model above them with less going in. The player has to apply that
-    // attenuation, or those positions come out louder and dirtier than the capture intended.
+    // attenuation, or those positions come out as loud and as dirty as the capture they borrowed.
     //
-    // No pack here has one (SM7 is twenty-one files for twenty-one positions), so the pack is bent by
-    // hand: point its lowest position at the model two above it, softened.
+    // No pack here has one, so it is built by hand — and built as the SAME file twice, once plain and
+    // once softened, rather than by pointing one dial position at another's model. Borrowing across
+    // positions compares two different captures as much as it compares the attenuation, and on a
+    // device with more than one selecting control it may not even land on the pair it meant to.
     {
         auto aliased = pack;
         auto* stageDef = const_cast<namz::rig::Stage*> (aliased.rig.firstKnown());
 
-        if (stageDef == nullptr || stageDef->device.files.size() < 3)
+        if (stageDef == nullptr || stageDef->device.files.empty())
         {
             std::printf ("\nno device to alias — skipping\n");
         }
         else
         {
-            const auto lowest = stageDef->device.files.front().settings;
-            const auto borrowed = stageDef->device.files[2].id;
-
-            stageDef->device.files.front().id = borrowed;
-            stageDef->device.files.front().inputDb = 12.0;   // a big, unmistakable step down
+            // Every file, because which one a dial position resolves to is namz's business and not
+            // this gate's — marking only the first meant marking one that never played.
+            const auto borrowed = stageDef->device.files.front().id;
+            for (auto& f : stageDef->device.files)
+                f.inputDb = 12.0;
 
             CapturedStage soft, loud;
             soft.prepare (sampleRate, blockSize);
             loud.prepare (sampleRate, blockSize);
 
             soft.setPack (&aliased);
-            soft.selectGainIndex (0);          // the alias: model #2, fed 12 dB softer
+            soft.selectGainIndex (0);
 
             loud.setPack (&pack);
-            loud.selectGainIndex (2);          // the same model, fed as it is
+            loud.selectGainIndex (0);
 
             const auto softOut = run (soft, 0.05);
             const auto loudOut = run (loud, 0.05);
             const double softRms = rms (softOut), loudRms = rms (loudOut);
 
-            std::printf ("\nalias: %s at -12 dB in -> rms %.5f; the same model straight -> %.5f\n",
+            std::printf ("\nalias: %s fed 12 dB softer -> rms %.5f; the same file plain -> %.5f\n",
                          juce::String (borrowed).toRawUTF8(), softRms, loudRms);
             std::printf ("shape differs by %.1f%%\n", shapeDifference (softOut, loudOut));
 
-            report ("an alias plays its neighbour's model", softRms > 1.0e-6);
+            report ("an alias plays the model it borrowed", softRms > 1.0e-6);
 
-            // Not "quieter by twelve decibels": twelve decibels less going IN to a fuzz comes out
-            // barely two decibels down, because squashing that is the whole point of the circuit.
-            // What the attenuation must do is arrive — the model is hit less hard, so what comes out
-            // is a different shape — and it must not come out louder.
+            // Not "quieter by twelve decibels": twelve decibels less going into a distortion comes
+            // back a fraction of that, because squashing it is what the circuit is for. What the
+            // attenuation must do is ARRIVE — the model is hit less hard, so a different shape comes
+            // out — and it must not come out louder.
             report ("...with the input attenuation the pack asked for",
-                    shapeDifference (softOut, loudOut) > 5.0 && softRms <= loudRms * 1.02,
+                    shapeDifference (softOut, loudOut) > 2.0 && softRms <= loudRms * 1.02,
                     juce::String (shapeDifference (softOut, loudOut), 1) + "% different, "
                         + juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, softRms / loudRms)), 1)
                         + " dB");
-
-            juce::ignoreUnused (lowest);
         }
     }
 
