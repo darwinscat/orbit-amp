@@ -17,3 +17,6 @@ cmake-build-*/
 .idea/
 .vscode/
 *.swp
+
+# ── clangd / IDE index (machine-local, huge, never useful to anyone else) ──
+.cache/
