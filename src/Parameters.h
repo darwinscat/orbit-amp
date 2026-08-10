@@ -20,6 +20,11 @@ inline constexpr const char* boostTone  = "boost_tone";
 inline constexpr const char* gateOn        = "gate_on";
 inline constexpr const char* gateThreshold = "gate_threshold";
 
+/** Mirrors the engine's Schmitt hysteresis (felitronics NoiseGate::Config default): the CLOSE
+    level sits this far under the OPEN level. The meter draws both marks, so the number the
+    display promises is the number the state machine runs. */
+inline constexpr float gateHysteresisDb = 6.0f;
+
 /** TEMPORARY — hear the capture with nothing of ours on it.
 
     Everything a block adds comes off: the measured curves the pack shipped, rebuilt as filters, and

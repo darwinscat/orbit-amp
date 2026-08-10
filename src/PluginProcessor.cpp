@@ -269,6 +269,13 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
     // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
     // pop-free, so it runs unconditionally and the switch is an argument.
+    {
+        float peak = 0.0f;
+        for (int ch = 0; ch < numChannels; ++ch)
+            peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, numSamples));
+        gateKeyDb.store (juce::Decibels::gainToDecibels (peak, -90.0f));
+    }
+
     gate.process (channels, numChannels, numSamples,
                   gateOnParam->load() > 0.5f, gateThresholdParam->load());
     gateMeterDb.store (juce::Decibels::gainToDecibels (gate.currentGain(), -90.0f));

@@ -228,36 +228,47 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
         };
     }
 
-    // The gate: its threshold is the one thing set on it, its pressure the one thing to watch —
-    // a bar falling from the right as the gate closes, still at unity when it is open.
+    // The gate, indicated the way gates are: the key level running along a scale with both
+    // decision marks on it — where it opens, where it closes — and the fill dimming while the
+    // gate holds. The zoomed face draws the same picture at reading size.
     {
         auto* t = make (ChainLink::gate, "Gate", theme::violet, params::gateOn);
 
         auto* thresholdParam = s.getRawParameterValue (params::gateThreshold);
-        const auto& meterDb  = amp.gateMeterDb;
+        const auto& pressureDb = amp.gateMeterDb;
+        const auto& keyDb      = amp.gateKeyDb;
 
         t->caption = [thresholdParam]
         {
             return juce::String (juce::roundToInt (thresholdParam->load())) + " DB";
         };
 
-        t->preview = [&meterDb] (juce::Graphics& g, juce::Rectangle<int> box)
+        t->preview = [&pressureDb, &keyDb, thresholdParam] (juce::Graphics& g, juce::Rectangle<int> box)
         {
-            // A bar, not a well: a third of the preview's height, however tall the thumb is.
             const auto r = box.toFloat().reduced (2.0f, (float) box.getHeight() / 3.0f);
-            constexpr float rangeDb = 60.0f;
+            constexpr float floorDb = -80.0f;
+            const auto dbToX = [&r] (float db)
+            {
+                return r.getX() + r.getWidth() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
+            };
 
             g.setColour (theme::bezel);
             g.fillRoundedRectangle (r, theme::radiusSm);
 
-            const float depth = juce::jlimit (0.0f, rangeDb, -meterDb.load());
-            const float w = r.getWidth() * depth / rangeDb;
+            const bool  closed = pressureDb.load() < -1.0f;
+            const float lx     = dbToX (keyDb.load());
 
-            if (w > 0.5f)
+            if (lx > r.getX() + 1.0f)
             {
-                g.setColour (theme::violet.withAlpha (0.85f));
-                g.fillRoundedRectangle (r.withTrimmedLeft (r.getWidth() - w), theme::radiusSm);
+                g.setColour (theme::violet.withAlpha (closed ? 0.30f : 0.75f));
+                g.fillRoundedRectangle (r.withRight (lx).reduced (1.0f), theme::radiusSm);
             }
+
+            const float openDb = thresholdParam->load();
+            g.setColour (theme::lilac.withAlpha (0.45f));
+            g.fillRect (dbToX (openDb - params::gateHysteresisDb) - 0.5f, r.getY(), 1.0f, r.getHeight());
+            g.setColour (theme::lilac);
+            g.fillRect (dbToX (openDb) - 0.75f, r.getY(), 1.5f, r.getHeight());
 
             g.setColour (theme::hair2);
             g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);

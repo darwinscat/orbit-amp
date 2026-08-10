@@ -161,9 +161,14 @@ public:
     core::TunerTap tunerTap;
     core::TunerEar tunerEar;
 
-    /** The gate's effective gain at the last block end, in dB — what a meter shows. Written by the
-        audio thread, read by the strip's thumb and the zoomed gate on their repaint clocks. */
+    /** The gate's effective gain at the last block end, in dB — what a pressure meter shows.
+        Written by the audio thread, read by the strip's thumb and the zoomed gate on their
+        repaint clocks. */
     std::atomic<float> gateMeterDb { 0.0f };
+
+    /** The raw input's peak this block, in dB — the level the gate KEYS off, for the meter the
+        thresholds are drawn on. Same writer, same readers. */
+    std::atomic<float> gateKeyDb { -90.0f };
 
 private:
 
