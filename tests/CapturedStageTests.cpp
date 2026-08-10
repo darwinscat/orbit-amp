@@ -179,6 +179,54 @@ int main()
                 "rms " + juce::String (lo, 5) + " .. " + juce::String (hi, 5));
     }
 
+    // ALIASES. A combination with no capture of its own points at a neighbour and says how much
+    // softer to feed it — the bottom notches of a gain dial, where the hardware gives hiss and little
+    // else, played through the model above them with less going in. The player has to apply that
+    // attenuation, or those positions come out louder and dirtier than the capture intended.
+    //
+    // No pack here has one (SM7 is twenty-one files for twenty-one positions), so the pack is bent by
+    // hand: point its lowest position at the model two above it, softened.
+    {
+        auto aliased = pack;
+        auto* stageDef = const_cast<namz::rig::Stage*> (aliased.rig.firstKnown());
+
+        if (stageDef == nullptr || stageDef->device.files.size() < 3)
+        {
+            std::printf ("\nno device to alias — skipping\n");
+        }
+        else
+        {
+            const auto lowest = stageDef->device.files.front().settings;
+            const auto borrowed = stageDef->device.files[2].id;
+
+            stageDef->device.files.front().id = borrowed;
+            stageDef->device.files.front().inputDb = 12.0;   // a big, unmistakable step down
+
+            CapturedStage soft, loud;
+            soft.prepare (sampleRate, blockSize);
+            loud.prepare (sampleRate, blockSize);
+
+            soft.setPack (&aliased);
+            soft.selectGainIndex (0);          // the alias: model #2, fed 12 dB softer
+
+            loud.setPack (&pack);
+            loud.selectGainIndex (2);          // the same model, fed as it is
+
+            const double softRms = runRms (soft, 0.05);
+            const double loudRms = runRms (loud, 0.05);
+
+            std::printf ("\nalias: %s at -12 dB in -> rms %.5f; the same model straight -> %.5f\n",
+                         juce::String (borrowed).toRawUTF8(), softRms, loudRms);
+
+            report ("an alias plays its neighbour's model", softRms > 1.0e-6);
+            report ("...with the input attenuation the pack asked for", softRms < loudRms * 0.7,
+                    juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, softRms / loudRms)), 1)
+                        + " dB below it");
+
+            juce::ignoreUnused (lowest);
+        }
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }

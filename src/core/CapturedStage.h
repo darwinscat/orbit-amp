@@ -38,6 +38,13 @@ public:
         loadedFile.clear();
         stage.clearModel();
         ready.store (false);
+        inputGain.store (1.0f);
+
+        // The device's own default position for every selecting control. resolve() needs somewhere to
+        // start: the gain knob names one setting, and whatever else the device has keeps the value it
+        // was captured at until something moves it.
+        settings = firstNam() != nullptr ? namz::rig::defaultSettings (firstNam()->device)
+                                         : namz::rig::Settings {};
 
         loadOnlyFile();
     }
@@ -75,7 +82,13 @@ public:
     /** Whether the loaded device's gain is a knob at all. */
     bool hasGainAxis() const { return ! gainPositions().isEmpty(); }
 
-    /** Load the model for a gain index. Message thread: it reads a file and decodes. */
+    /** Load the model for a gain index. Message thread: it reads a file and decodes.
+
+        namz picks the file, not us. `resolve` knows what our own search did not: that a combination
+        with no capture of its own can be an ALIAS for a neighbour played with less signal going in,
+        and that when several controls select, the one just turned is law while the rest fall back to
+        the nearest match. A hand-rolled lookup on one control gets the right answer only while the
+        device has exactly one. */
     void selectGainIndex (int index)
     {
         const auto* stageDef = firstNam();
@@ -86,7 +99,27 @@ public:
         if (! juce::isPositiveAndBelow (index, positions.size()))
             return;
 
-        load (fileForGain (*stageDef, positions[index]));
+        juce::String gainName;
+        for (const auto& c : stageDef->device.controls)
+            if (c.role == namz::rig::Role::Gain)
+                gainName = juce::String (c.name);
+
+        if (gainName.isEmpty())
+            return;
+
+        const auto* entry = namz::rig::resolve (stageDef->device, settings,
+                                                gainName.toStdString(),
+                                                positions[index].toStdString());
+        if (entry == nullptr)
+            return;
+
+        // HOW MUCH SOFTER the signal reaching this model is. Into the model, never out of it: less
+        // signal is also less drive, which is the whole point — the bottom of a gain dial fades
+        // instead of falling into a hole where nothing was captured. The capture side decided this
+        // and wrote it down; a player only applies it.
+        inputGain.store (juce::Decibels::decibelsToGain ((float) -entry->inputDb));
+
+        load (juce::String (entry->id));
     }
 
     /** Reads one named model in and plays it. Message thread. */
@@ -138,8 +171,14 @@ public:
 
     void process (float* const* channels, int numChannels, int numSamples) noexcept
     {
-        if (ready.load())
-            stage.process (channels, numChannels, numSamples, true);
+        if (! ready.load())
+            return;
+
+        if (const float g = inputGain.load(); ! juce::approximatelyEqual (g, 1.0f))
+            for (int ch = 0; ch < numChannels; ++ch)
+                juce::FloatVectorOperations::multiply (channels[ch], g, numSamples);
+
+        stage.process (channels, numChannels, numSamples, true);
     }
 
 private:
@@ -156,26 +195,12 @@ private:
     }
 
     /** The file whose settings put the gain control at this value. */
-    static juce::String fileForGain (const namz::rig::Stage& stageDef, const juce::String& value)
-    {
-        juce::String gainName;
-        for (const auto& c : stageDef.device.controls)
-            if (c.role == namz::rig::Role::Gain)
-                gainName = juce::String (c.name);
-
-        for (const auto& f : stageDef.device.files)
-        {
-            const auto it = f.settings.find (gainName.toStdString());
-            if (it != f.settings.end() && juce::String (it->second) == value)
-                return juce::String (f.id);   // namz stores the manifest's "file" as the entry id
-        }
-
-        return {};
-    }
 
     felitronics::nam::NamStage stage;
     const device::DeviceLibrary::Pack* pack = nullptr;
     juce::String loadedFile;
+    std::atomic<float> inputGain { 1.0f };
+    namz::rig::Settings settings;
     std::atomic<bool> ready { false };
 };
 
