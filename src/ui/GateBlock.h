@@ -174,25 +174,24 @@ private:
         pressureWell = wells;
         area.removeFromRight (18);
 
-        // Golden split of what is left: the control column takes the major share, the hero the
-        // complement.
-        const int columnW = juce::roundToInt ((float) area.getWidth() / goldenRatio) - columnGap;
-        auto column = area.removeFromLeft (columnW);
-        area.removeFromLeft (columnGap);
-
-        // LEARN over DECAY over MUTE POSITION, one width — a stack, not a scatter.
+        // The hero on top, every button UNDER it: LEARN over DECAY over MUTE POSITION, one
+        // width — the golden share of the face — centred beneath the knob.
         const int stackH = learnH + stackGap + headingRow + switchH + stackGap + headingRow + switchH;
-        column = column.withSizeKeepingCentre (columnW, juce::jmin (column.getHeight(), stackH));
+        auto stack = area.removeFromBottom (stackH)
+                         .withSizeKeepingCentre (juce::roundToInt ((float) area.getWidth() / goldenRatio),
+                                                 stackH);
 
-        learn.setBounds (column.removeFromTop (learnH));
-        column.removeFromTop (stackGap);
-        decayArea = column.removeFromTop (headingRow + switchH);
+        learn.setBounds (stack.removeFromTop (learnH));
+        stack.removeFromTop (stackGap);
+        decayArea = stack.removeFromTop (headingRow + switchH);
         decayMode.setBounds (decayArea.withTrimmedTop (headingRow));
-        column.removeFromTop (stackGap);
-        muteArea = column.removeFromTop (headingRow + switchH);
+        stack.removeFromTop (stackGap);
+        muteArea = stack.removeFromTop (headingRow + switchH);
         mutePos.setBounds (muteArea.withTrimmedTop (headingRow));
 
-        // The hero fills its golden remainder, name included.
+        area.removeFromBottom (columnGap);
+
+        // What is left above belongs to the hero, name included.
         const int side = juce::jmin (area.getWidth(), area.getHeight());
         threshold.setBounds (area.withSizeKeepingCentre (side, side));
     }
