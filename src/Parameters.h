@@ -32,9 +32,13 @@ inline constexpr int maxDevices = 128;
 inline constexpr float boostToneLoHz = 800.0f;
 inline constexpr float boostToneHiHz = 20000.0f;
 
-inline constexpr const char* preampType  = "preamp_type";
-inline constexpr const char* preampVoice = "preamp_voice";
-inline constexpr const char* preampGain  = "preamp_gain";
+inline constexpr const char* preampDevice = "preamp_device";
+inline constexpr const char* preampGain   = "preamp_gain";
+
+/** The preamp's measured controls, same arrangement as the boost's: a fixed set of slots, and the
+    loaded device decides what each one drives. */
+inline constexpr int preampNumMeasured = 3;
+inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String (i + 1); }
 
 inline constexpr const char* eqLow      = "eq_low";
 inline constexpr const char* eqMid      = "eq_mid";

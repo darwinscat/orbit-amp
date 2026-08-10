@@ -125,13 +125,13 @@ int main()
     orbitamp::AmpProcessor amp;
     amp.prepareToPlay (sampleRate, blockSize);
 
-    if (amp.devicePacks.isEmpty())
+    if (amp.boost.packs.isEmpty())
     {
         std::printf ("no packs installed — nothing to check\n");
         return 0;
     }
 
-    std::printf ("device: %s\n\n", amp.devicePacks.getReference (0).displayName().toRawUTF8());
+    std::printf ("device: %s\n\n", amp.boost.packs.getReference (0).displayName().toRawUTF8());
 
     // Everything else off, so what is measured is the boost and nothing standing in front of it.
     set (amp, orbitamp::params::eqOn, 0.0f);

@@ -1,13 +1,14 @@
 #include "PreampBlock.h"
 
 #include "../Parameters.h"
-#include "../device/VoicingLibrary.h"
+#include "../PluginProcessor.h"
 
 namespace orbitamp
 {
 
-PreampBlock::PreampBlock (juce::AudioProcessorValueTreeState& s)
-    : BlockFrame ("Preamp", BlockFrame::Kind::captured), state (s), eq (s)
+PreampBlock::PreampBlock (AmpProcessor& processor)
+    : BlockFrame ("Preamp", BlockFrame::Kind::captured), amp (processor), state (processor.apvts),
+      eq (processor.apvts)
 {
     addAndMakeVisible (voicing);
     addAndMakeVisible (gain);
@@ -15,76 +16,54 @@ PreampBlock::PreampBlock (juce::AudioProcessorValueTreeState& s)
 
     attachPower (*state.getParameter (params::preampOn));
 
-    // Every voicing in one flat list, greenest first, with a rule where the type changes. The type
-    // is not a heading any more — it is the colour, and the order.
-    //
-    // STILL THE PLACEHOLDER SET. The boost's list comes from what is on disk; this one cannot, until
-    // there are preamp captures to scan. The shape is now the same, so that swap is a scan and not a
-    // rewrite.
-    juce::Array<VoicingSelector::Entry> entries;
-    flat.clear();
+    deviceAttachment = std::make_unique<juce::ParameterAttachment> (
+        *state.getParameter (params::preampDevice),
+        [this] (float v) { voicing.setSelection (juce::roundToInt (v)); });
 
-    for (int ti = 0; ti < params::typeNames.size(); ++ti)
-    {
-        const auto voices = device::VoicingLibrary::voicesFor (ti);
-
-        for (int vi = 0; vi < voices.size(); ++vi)
-        {
-            entries.add ({ voices[vi], ti, vi == 0 && ti > 0 });
-            flat.add ({ ti, vi });
-        }
-    }
-
-    voicing.setEntries (std::move (entries));
     voicing.onPick = [this] (int i)
     {
-        if (juce::isPositiveAndBelow (i, flat.size()))
-            applyPick (flat.getReference (i).type, flat.getReference (i).voice);
+        deviceAttachment->setValueAsCompleteGesture ((float) i);
+        amp.selectPreampDevice (i);
+        deviceChanged();
     };
-
-    // Choice / int parameters come through a plain ParameterAttachment because this is a custom view,
-    // not a juce widget — the attachment reports DENORMALISED values, i.e. the index itself.
-    typeAttachment = std::make_unique<juce::ParameterAttachment> (
-        *state.getParameter (params::preampType),
-        [this] (float) { syncSelection(); });
-
-    voiceAttachment = std::make_unique<juce::ParameterAttachment> (
-        *state.getParameter (params::preampVoice),
-        [this] (float) { syncSelection(); });
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         state, params::preampGain, gain);
 
-    typeAttachment->sendInitialUpdate();
-    voiceAttachment->sendInitialUpdate();
+    deviceAttachment->sendInitialUpdate();
+
+    deviceChanged();
 }
 
 PreampBlock::~PreampBlock() = default;
 
-void PreampBlock::syncSelection()
+void PreampBlock::deviceChanged()
 {
-    const int type  = juce::roundToInt (state.getParameter (params::preampType)->getValue()
-                                        * (float) (params::typeNames.size() - 1));
-    const int voice = juce::roundToInt (
-        state.getParameter (params::preampVoice)->convertFrom0to1 (
-            state.getParameter (params::preampVoice)->getValue()));
+    // The list is what is on disk, greenest first — same rule as the boost's, and the same reason:
+    // the character ramp orders it and a rule marks where the shipped ones end.
+    juce::Array<VoicingSelector::Entry> entries;
+    bool sawUser = false;
 
-    for (int i = 0; i < flat.size(); ++i)
-        if (flat.getReference (i).type == type && flat.getReference (i).voice == voice)
-        {
-            voicing.setSelection (i);
-            return;
-        }
-}
+    for (const auto& pack : amp.preamp.packs)
+    {
+        VoicingSelector::Entry e;
+        e.name = pack.displayName();
+        e.character = pack.character;
+        e.startsSection = ! pack.bundled && ! sawUser;
+        sawUser = sawUser || ! pack.bundled;
+        entries.add (std::move (e));
+    }
 
-void PreampBlock::applyPick (int typeIndex, int voiceIndex)
-{
-    // Clamp on the way in: a tree pick is always in range, but the parameter is an index and a saved
-    // session may hold one the type no longer offers.
-    const int voice = device::VoicingLibrary::clampVoice (typeIndex, voiceIndex);
+    voicing.setEntries (std::move (entries));
 
-    typeAttachment->setValueAsCompleteGesture ((float) typeIndex);
-    voiceAttachment->setValueAsCompleteGesture ((float) voice);
+    // The detents ARE the captured positions, and a device with no gain axis gets no knob rather than
+    // a dead one.
+    const auto positions = amp.preamp.gainPositions();
+    gain.setNotches (juce::jmax (0, positions.size()));
+    gain.setVisible (! positions.isEmpty());
+
+    resized();
+    repaint();
 }
 
 void PreampBlock::layOutHeader (juce::Rectangle<int> area)

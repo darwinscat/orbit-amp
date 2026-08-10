@@ -9,7 +9,7 @@ namespace orbitamp
 
 BoostBlock::BoostBlock (AmpProcessor& processor)
     : BlockFrame ("Boost", BlockFrame::Kind::captured), amp (processor),
-      scope (processor.boostScope, processor.boostRibbon,
+      scope (processor.boost.scope, processor.boost.ribbon,
              [this] (double hz) { return toneDb (hz); })
 {
     addAndMakeVisible (pedal);
@@ -20,7 +20,7 @@ BoostBlock::BoostBlock (AmpProcessor& processor)
     // Four ways of showing the same pedal. Which one reads best is not settled, so the choice is on
     // the face rather than in the code.
     scopeMode.setItems ({ "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" }, 0);
-    scopeMode.onChange = [this] (int i) { scope.setMode ((BoostScope::Mode) i); };
+    scopeMode.onChange = [this] (int i) { scope.setMode ((DeviceScope::Mode) i); };
     scope.setSampleRate (amp.currentSampleRate());
 
     attachPower (*amp.apvts.getParameter (params::boostOn));
@@ -58,7 +58,7 @@ void BoostBlock::deviceChanged()
     juce::Array<VoicingSelector::Entry> entries;
     bool sawUser = false;
 
-    for (const auto& pack : amp.devicePacks)
+    for (const auto& pack : amp.boost.packs)
     {
         VoicingSelector::Entry e;
         e.name = pack.displayName();

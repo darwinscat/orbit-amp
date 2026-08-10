@@ -47,6 +47,8 @@ AmpProcessor::AmpProcessor()
     oversampleParam = apvts.getRawParameterValue (params::oversample);
     boostOnParam    = apvts.getRawParameterValue (params::boostOn);
     boostGainParam  = apvts.getRawParameterValue (params::boostGain);
+    preampOnParam   = apvts.getRawParameterValue (params::preampOn);
+    preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
     rescanDevices();
 }
@@ -96,72 +98,31 @@ void AmpProcessor::selectDemoLoop (int index)
 
 void AmpProcessor::rescanDevices()
 {
-    // The boost's list is pedals. A preamp offered as a pedal is not a wrong sound, it is a wrong
-    // LIST — the block says what it is for, and the list has to agree with it.
-    devicePacks = device::DeviceLibrary::scan (device::DeviceLibrary::Slot::pedal);
-    selectBoostDevice (juce::roundToInt (apvts.getRawParameterValue (params::boostDevice)->load()));
+    // Each block asks for its own kind. A preamp offered as a pedal is not a wrong sound, it is a
+    // wrong LIST — the block says what it is for, and the list has to agree with it.
+    boost.rescan (juce::roundToInt (apvts.getRawParameterValue (params::boostDevice)->load()));
+    preamp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::preampDevice)->load()));
 }
 
-void AmpProcessor::selectBoostDevice (int index)
-{
-    // A saved session names a device by position in a list that is whatever is on disk today. If it
-    // is gone, the first one stands in rather than nothing loading — silence is a worse answer than
-    // the wrong pedal, and the name in the combo says which it is.
-    boost.setPack (juce::isPositiveAndBelow (index, devicePacks.size())
-                     ? &devicePacks.getReference (index)
-                     : (devicePacks.isEmpty() ? nullptr : &devicePacks.getReference (0)));
-
-    lastBoostGainIndex = -1;
-    lastBoostTone.fill (-1.0f);
-}
+void AmpProcessor::selectBoostDevice (int index)  { boost.select (index); }
+void AmpProcessor::selectPreampDevice (int index) { preamp.select (index); }
 
 void AmpProcessor::pumpDeviceWork()
 {
-    loadBoostModelIfChanged();
-    updateBoostToneIfChanged();
-    boost.collectGarbage();
-}
-
-void AmpProcessor::loadBoostModelIfChanged()
-{
-    const auto positions = boost.gainPositions();
-    if (positions.isEmpty())
-        return;
-
-    // The knob reads 0..10; the captures sit at whatever angles the device was taken at, evenly
-    // spaced across that travel. Nearest position wins — between two captures there is nothing.
-    const float t = juce::jlimit (0.0f, 1.0f, boostGainParam->load() * 0.1f);
-    const int index = juce::jlimit (0, positions.size() - 1,
-                                    juce::roundToInt (t * (float) (positions.size() - 1)));
-
-    if (index == lastBoostGainIndex)
-        return;
-
-    lastBoostGainIndex = index;
-    boost.selectGainIndex (index);
-}
-
-void AmpProcessor::updateBoostToneIfChanged()
-{
-    const auto* measured = boost.measured();
-
-    for (int i = 0; i < params::boostNumMeasured; ++i)
+    auto pump = [this] (auto& block, auto& gainParam, auto measuredId)
     {
-        auto& filter = boostTone[(size_t) i];
+        block.loadIfGainMoved (gainParam->load());
 
-        if (measured == nullptr || i >= (int) measured->size())
-        {
-            filter.clear();
-            continue;
-        }
+        std::array<float, (size_t) std::decay_t<decltype (block)>::numMeasured> values {};
+        for (int i = 0; i < (int) values.size(); ++i)
+            values[(size_t) i] = apvts.getRawParameterValue (measuredId (i))->load();
 
-        const float v = apvts.getRawParameterValue (params::boostMeasured (i))->load();
-        if (juce::approximatelyEqual (v, lastBoostTone[(size_t) i]))
-            continue;
+        block.updateToneIfMoved (values);
+        block.collectGarbage();
+    };
 
-        lastBoostTone[(size_t) i] = v;
-        filter.setPosition ((*measured)[(size_t) i], (double) v);
-    }
+    pump (boost,  boostGainParam,  params::boostMeasured);
+    pump (preamp, preampGainParam, params::preampMeasured);
 }
 
 void AmpProcessor::applyOversamplingIfChanged()
@@ -191,18 +152,12 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     tone.prepare (sampleRate, channels);
     reverb.prepare (sampleRate);
-    boost.prepare (sampleRate, block);
+    boost.prepare (sampleRate, block, channels);
+    preamp.prepare (sampleRate, block, channels);
     demo.prepare (sampleRate);
-    boostRibbon.prepare (sampleRate);
     scopeDry.setSize (1, block);
 
-    for (auto& f : boostTone)
-        f.prepare (sampleRate, block, channels);
-
-    lastBoostTone.fill (-1.0f);
-    updateBoostToneIfChanged();
-    lastBoostGainIndex = -1;
-    loadBoostModelIfChanged();
+    pumpDeviceWork();
 
     // Choose the factor BEFORE preparing, so prepare() builds with it and nothing has to re-prepare
     // from inside a prepare.
@@ -278,21 +233,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     // boost -> preamp -> EQ -> reverb -> power amp.
     if (boostOnParam->load() > 0.5f)
-    {
-        // Keep the input so the block can draw what it did to it, not just what came out.
-        scopeDry.setSize (1, numSamples, false, false, true);
-        scopeDry.copyFrom (0, 0, buffer, 0, 0, numSamples);
+        boost.process (buffer, scopeDry);
 
-        boost.process (channels, numChannels, numSamples);
-
-        // The measured controls sit AFTER the capture — `placement: post` — because that is where
-        // they sit in the pedal.
-        for (auto& f : boostTone)
-            f.process (buffer);
-
-        boostScope.write (scopeDry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
-        boostRibbon.write (scopeDry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
-    }
+    if (preampOnParam->load() > 0.5f)
+        preamp.process (buffer, scopeDry);
 
     if (eqOnParam->load() > 0.5f)
         tone.process (channels, numChannels, numSamples);

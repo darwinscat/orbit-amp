@@ -1,13 +1,13 @@
 #pragma once
 
-#include "../core/ScopeTap.h"
-#include "../core/WaveRibbon.h"
-#include "Theme.h"
-#include "scope/EnvelopeView.h"
-#include "scope/ShapeView.h"
-#include "scope/ToneView.h"
-#include "scope/TransferView.h"
-#include "scope/WaveView.h"
+#include "../../core/ScopeTap.h"
+#include "../../core/WaveRibbon.h"
+#include "../Theme.h"
+#include "EnvelopeView.h"
+#include "ShapeView.h"
+#include "ToneView.h"
+#include "TransferView.h"
+#include "WaveView.h"
 
 #include <felitronics/appkit/DeviceGlyph.h>
 
@@ -16,23 +16,27 @@
 namespace orbitamp
 {
 
-/** What the pedal does, drawn several ways.
+/** What a captured device does, drawn several ways.
 
-    This is the WELL, not the drawing: it owns the recess, the mode, the frame rate, the glyph row,
-    and reading the tap. Each way of looking lives in its own file under scope/ and is handed a
+    The WELL, not the drawing: it owns the recess, the mode, the frame rate, the glyph row, and
+    reading the tap. Each way of looking lives in its own file beside this one and is handed a
     rectangle and a window of audio — none of them knows it is in a plugin, and none of them can
     decide when to read.
+
+    Nothing here is about the boost. Every captured block gets the same well and the same ways of
+    looking, because the question is always the same one: what did this thing do to what went in.
+    Which of them a block offers is the block's business — it owns the selector.
 
     No axes and no numbers on any of them. This is the picture on a knob that reads 1 to 10: it
     exists so you can see what bends, not so you can measure it. The one exception is the tone curve,
     which is a measurement and says so by being drawn against the band it is trusted in. */
-class BoostScope final : public juce::Component,
+class DeviceScope final : public juce::Component,
                          private juce::Timer
 {
 public:
     enum class Mode { shape, envelope, transfer, tone, wave };
 
-    explicit BoostScope (const core::ScopeTap& source, core::WaveRibbon& ribbonSource,
+    explicit DeviceScope (const core::ScopeTap& source, core::WaveRibbon& ribbonSource,
                          std::function<double (double)> toneDbAt)
         : tap (source), ribbon (ribbonSource), toneDb (std::move (toneDbAt))
     {
@@ -141,7 +145,7 @@ private:
     std::array<float, core::ScopeTap::size> dry {}, wet {};
     Mode mode = Mode::shape;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BoostScope)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DeviceScope)
 };
 
 } // namespace orbitamp

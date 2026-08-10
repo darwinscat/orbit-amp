@@ -2,7 +2,7 @@
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
-#include "BoostScope.h"
+#include "scope/DeviceScope.h"
 #include "Knob.h"
 #include "Selector.h"
 #include "StepSwitch.h"
@@ -89,7 +89,7 @@ private:
     struct Curve { std::vector<double> db, hz; };
     std::array<Curve, (size_t) params::boostNumMeasured> curves;
 
-    BoostScope scope;   // constructed in the .cpp: the tap lives on the processor, incomplete here
+    DeviceScope scope;   // constructed in the .cpp: the tap lives on the processor, incomplete here
     Selector   scopeMode { theme::orange, true };
 
     juce::String caption;

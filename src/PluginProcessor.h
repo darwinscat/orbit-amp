@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Parameters.h"
-#include "core/CapturedStage.h"
+#include "core/CapturedBlock.h"
 #include "core/DemoPlayer.h"
 #include "core/MeasuredFilter.h"
 #include "core/ScopeTap.h"
@@ -92,8 +92,9 @@ private:
     void applyOversamplingIfChanged();
 
 public:
-    /** Everything a moved control needs done OFF the audio thread: loading the capture the gain knob
-        now points at, designing the measured filters, retiring models nobody is playing.
+    /** Everything a moved control needs done OFF the audio thread, for both captured blocks: loading
+        the capture a gain knob now points at, designing the measured filters, retiring models nobody
+        is playing.
 
         The timer calls this thirty times a second. It is public because it is the plugin's only
         message-thread heartbeat, and something that is not a host — a test — has to be able to drive
@@ -102,15 +103,6 @@ public:
     void pumpDeviceWork();
 
 private:
-
-    /** The boost's gain knob SELECTS a capture, so a move means loading a different file. Message
-        thread, off the timer — the audio thread never touches a disk. */
-    void loadBoostModelIfChanged();
-
-    /** Re-designs a measured filter when its knob moved. Message thread — it builds an FIR. */
-    void updateBoostToneIfChanged();
-
-    std::array<float, (size_t) params::boostNumMeasured> lastBoostTone { -1.0f, -1.0f, -1.0f };
 
     /** Reads the tone parameters into the stack's settings. Called per block from the audio thread;
         the stack only redesigns when something actually moved. */
@@ -126,27 +118,22 @@ private:
     core::PowerAmp    power;
 
 public:
-    /** The captured pedal in front. The library and the loading live on the message thread; the
-        audio thread only ever meets a model that is already in memory. */
-    core::CapturedStage boost;
+    /** The captured pedal in front, and the captured preamp after it. Each is a device list, the
+        stage playing what is chosen from it, that device's measured controls as filters, and the taps
+        its pictures read. The library and the loading live on the message thread; the audio thread
+        only ever meets a model that is already in memory. */
+    core::CapturedBlock<params::boostNumMeasured>  boost  { device::DeviceLibrary::Slot::pedal };
+    core::CapturedBlock<params::preampNumMeasured> preamp { device::DeviceLibrary::Slot::preamp };
 
-    /** What went into the boost and what came out — the boost block's pictures read this. */
-    core::ScopeTap boostScope;
-
-    /** The same pair over SECONDS rather than milliseconds, so a note's attack and its sustain are
-        both on screen at once. A compressor's whole behaviour lives in the difference between them. */
-    core::WaveRibbon boostRibbon;
-
-    /** The pedal's measured controls, playing. One per slot the pack fills. */
-    std::array<core::MeasuredFilter, (size_t) params::boostNumMeasured> boostTone;
-    juce::Array<device::DeviceLibrary::Pack> devicePacks;
-
-    /** Re-scans the devices folder and loads whatever the device parameter points at. Message
+    /** Re-scans the devices folder and loads whatever the device parameters point at. Message
         thread. */
     void rescanDevices();
 
-    /** Loads the device at `index` in the scanned list. Message thread — it reads files. */
+    /** Loads the device at `index` in the boost's list. Message thread — it reads files. */
     void selectBoostDevice (int index);
+
+    /** The same for the preamp. */
+    void selectPreampDevice (int index);
 
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
@@ -179,8 +166,9 @@ private:
     std::atomic<float>* oversampleParam = nullptr;
     std::atomic<float>* boostOnParam    = nullptr;
     std::atomic<float>* boostGainParam  = nullptr;
-    int lastBoostGainIndex = -1;
-    juce::AudioBuffer<float> scopeDry;   // the boost's input, kept for its pictures
+    std::atomic<float>* preampOnParam   = nullptr;
+    std::atomic<float>* preampGainParam = nullptr;
+    juce::AudioBuffer<float> scopeDry;   // a block's input, kept for its pictures
 
 public:
     /** What the footer reports: the run's own facts, not the sound's. */

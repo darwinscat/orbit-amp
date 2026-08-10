@@ -35,8 +35,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Int> (juce::ParameterID { boostDevice, 1 }, "Boost Device",
                                        0, maxDevices - 1, 0));
 
-    layout.add (std::make_unique<Choice> (juce::ParameterID { preampType, 1 }, "Type", typeNames, 0),
-                std::make_unique<Int>    (juce::ParameterID { preampVoice, 1 }, "Voice", 0, maxVoicesPerType - 1, 0));
+    layout.add (std::make_unique<Int> (juce::ParameterID { preampDevice, 1 }, "Preamp Device",
+                                       0, maxDevices - 1, 0));
+
+    for (int i = 0; i < preampNumMeasured; ++i)
+        layout.add (std::make_unique<Float> (juce::ParameterID { preampMeasured (i), 1 },
+                                             "Preamp " + juce::String (i + 1),
+                                             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
 
     // The hero. 0-10 is the amp-panel scale, not a dB value — it maps onto the captured detents, so
     // the number on the face is the number the capture was taken at.
