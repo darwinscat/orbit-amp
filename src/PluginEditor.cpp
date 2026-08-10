@@ -4,7 +4,8 @@ namespace orbitamp
 {
 
 AmpEditor::AmpEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), strip (p), faceplate (p), footer (p), demoStrip (p)
+    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), strip (p), faceplate (p), footer (p),
+      demoStrip (p), tuner (p)
 {
     addAndMakeVisible (chrome);
     addAndMakeVisible (strip);
@@ -12,9 +13,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (footer);
     addAndMakeVisible (demoStrip);   // TEMPORARY
     addAndMakeVisible (glyphs);      // TEMPORARY
+    addChildComponent (tuner);       // hidden until the toolbar's fork opens it
     addChildComponent (setup);       // hidden until the toolbar's gear opens it
 
     chrome.onShowSetup = [this] { setup.open(); };
+    chrome.onShowTuner = [this] { tuner.open(); };
 
     // A thumb opens its link across the panel; the lit thumb closes it again. The strip is the map
     // either way — it never leaves.
@@ -97,7 +100,10 @@ void AmpEditor::resized()
                       FaceplateView::designWidth, GlyphPreview::designHeight);
     glyphs.setTransform (zoom);
 
-    // The overlay covers the whole editor, margins included, in the same design units.
+    // The overlays cover the whole editor, margins included, in the same design units.
+    tuner.setBounds (0, 0, baseWidth, baseHeight);
+    tuner.setTransform (zoom);
+
     setup.setBounds (0, 0, baseWidth, baseHeight);
     setup.setTransform (zoom);
 }
