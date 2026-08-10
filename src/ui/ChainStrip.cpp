@@ -81,9 +81,9 @@ public:
         g.setGradientFill (fill);
         g.fillRoundedRectangle (r, theme::radiusMd);
 
-        // The border carries the same colour code the blocks do — and brightens when this link is
-        // the one the faceplate has open.
-        g.setColour (accent.withAlpha (lit ? 0.95f : 0.45f));
+        // The border carries the same colour code the blocks do — a live link wears it near full
+        // strength, the open one brightest of all. (Off thumbs dim wholesale via their alpha.)
+        g.setColour (accent.withAlpha (lit ? 0.95f : 0.65f));
         g.drawRoundedRectangle (r, theme::radiusMd, lit ? 1.8f : theme::blockBorder);
 
         auto area = getLocalBounds().reduced (narrow() ? 4 : pad, pad);

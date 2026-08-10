@@ -49,7 +49,13 @@ public:
             return;
 
         on = shouldBeOn;
-        setAlpha (on ? 1.0f : theme::offAlpha);   // dims children too — an off block stays interactive
+        setAlpha (on ? 1.0f : theme::offAlpha);   // dims children too
+
+        // An off block is READ-ONLY: everything stays visible — a control you cannot see is a
+        // control you forget you set — but nothing answers, so a dark block can never quietly
+        // eat an edit meant for a live one. The frame itself keeps listening: the power switch
+        // is how the block comes back.
+        setInterceptsMouseClicks (true, on);
         repaint();
 
         if (notify == juce::dontSendNotification)
@@ -207,7 +213,10 @@ private:
 
     juce::Colour borderColour() const
     {
-        return accent().withAlpha (kind == Kind::captured ? 0.55f : 0.50f);
+        // A live block wears its accent nearly full strength — active and inactive must be
+        // tellable at a glance, and the frame is the first thing a glance meets. (The off state
+        // is dimmed wholesale by setAlpha, so one bright constant serves both.)
+        return accent().withAlpha (kind == Kind::captured ? 0.85f : 0.80f);
     }
 
     void paintSwitch (juce::Graphics& g, juce::Rectangle<float> sw) const

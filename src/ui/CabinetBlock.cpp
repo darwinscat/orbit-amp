@@ -183,14 +183,17 @@ void CabinetBlock::paintContent (juce::Graphics& g)
 
 void CabinetBlock::mouseDown (const juce::MouseEvent& e)
 {
-    for (int i = 0; i < params::cabNumMics; ++i)
-    {
-        if (switchArea (i).contains (e.getPosition()))
+    // The mic switches are edits — read-only while the block is off. The frame's own handler
+    // still runs so the power switch works.
+    if (isBlockOn())
+        for (int i = 0; i < params::cabNumMics; ++i)
         {
-            slots[(size_t) i].onAtt->setValueAsCompleteGesture (slots[(size_t) i].on ? 0.0f : 1.0f);
-            return;
+            if (switchArea (i).contains (e.getPosition()))
+            {
+                slots[(size_t) i].onAtt->setValueAsCompleteGesture (slots[(size_t) i].on ? 0.0f : 1.0f);
+                return;
+            }
         }
-    }
 
     BlockFrame::mouseDown (e);
 }

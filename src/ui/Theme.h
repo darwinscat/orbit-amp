@@ -54,7 +54,11 @@ constexpr float radiusLg = 15.0f;
 constexpr float radiusXl = 22.0f;   // the device shell
 
 constexpr float blockBorder = 1.5f;
-constexpr float offAlpha    = 0.46f;   // a switched-off block dims but stays interactive
+
+/** A switched-off block goes properly DARK and read-only. 0.46 looked merely moody — dark enough
+    that nobody adjusted it, bright enough that a whole session was spent fighting a gate nobody
+    noticed was off. Off now reads as off across the face and the strip alike. */
+constexpr float offAlpha    = 0.33f;
 
 //==============================================================================
 // The display face — Michroma (OFL), embedded from felitronics-appkit's assets. Every label on the
