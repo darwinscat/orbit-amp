@@ -103,6 +103,13 @@ public:
     void pumpDeviceWork();
 
 private:
+    /** Reads a block's advanced-EQ parameters into its filters. Message thread, off the same pump —
+        redesigning biquads is not audio-thread work. */
+    void updateVoiceEq (auto& block, const char* blk);
+
+public:
+
+private:
 
     /** Reads the tone parameters into the stack's settings. Called per block from the audio thread;
         the stack only redesigns when something actually moved. */

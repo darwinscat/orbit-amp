@@ -35,6 +35,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Int> (juce::ParameterID { boostDevice, 1 }, "Boost Device",
                                        0, maxDevices - 1, 0));
 
+    // The advanced EQ, one set per captured block.
+    for (const char* blk : { boostId, preampId })
+    {
+        const juce::String name (juce::String (blk).substring (0, 1).toUpperCase()
+                                 + juce::String (blk).substring (1));
+
+        layout.add (std::make_unique<Bool>  (juce::ParameterID { advOn (blk), 1 },
+                                             name + " EQ", false),
+                    std::make_unique<Bool>  (juce::ParameterID { advPre (blk), 1 },
+                                             name + " EQ Pre", false),
+                    std::make_unique<Float> (juce::ParameterID { advHpf (blk), 1 }, name + " EQ HPF",
+                                             juce::NormalisableRange<float> (20.0f, 2000.0f, 1.0f, 0.3f),
+                                             20.0f),
+                    std::make_unique<Float> (juce::ParameterID { advLpf (blk), 1 }, name + " EQ LPF",
+                                             juce::NormalisableRange<float> (500.0f, 20000.0f, 1.0f, 0.3f),
+                                             20000.0f),
+                    std::make_unique<Float> (juce::ParameterID { advTilt (blk), 1 }, name + " EQ Tilt",
+                                             juce::NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f));
+    }
+
     layout.add (std::make_unique<Int> (juce::ParameterID { preampDevice, 1 }, "Preamp Device",
                                        0, maxDevices - 1, 0));
 

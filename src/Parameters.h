@@ -15,6 +15,21 @@ inline constexpr const char* reverbOn    = "reverb_on";
 inline constexpr const char* boostGain  = "boost_gain";
 inline constexpr const char* boostTone  = "boost_tone";
 
+/** The ADVANCED EQ every captured block carries — ours, not the device's, and the same set in each
+    block so it is learned once. `blk` is the block's id prefix ("boost", "preamp", "power").
+
+    Four per block: on, where it sits relative to the capture, a low cut, a high cut and a tilt. PRE
+    is the one that matters most and the one hardware rarely had — it changes what reaches the
+    nonlinearity, so it changes the kind of distortion rather than its colour. */
+inline juce::String advOn    (const char* blk) { return juce::String (blk) + "_adv_on"; }
+inline juce::String advPre   (const char* blk) { return juce::String (blk) + "_adv_pre"; }
+inline juce::String advHpf   (const char* blk) { return juce::String (blk) + "_adv_hpf"; }
+inline juce::String advLpf   (const char* blk) { return juce::String (blk) + "_adv_lpf"; }
+inline juce::String advTilt  (const char* blk) { return juce::String (blk) + "_adv_tilt"; }
+
+inline constexpr const char* boostId  = "boost";
+inline constexpr const char* preampId = "preamp";
+
 /** A pedal's MEASURED controls — the ones a player computes rather than selects. How many a device
     has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge), but a host needs a fixed set of
     parameters, so three slots are reserved and the loaded pack decides what each one drives. A slot

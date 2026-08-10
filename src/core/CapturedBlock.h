@@ -4,6 +4,7 @@
 #include "CapturedStage.h"
 #include "MeasuredFilter.h"
 #include "ScopeTap.h"
+#include "VoiceEq.h"
 #include "WaveRibbon.h"
 
 #include <array>
@@ -35,6 +36,8 @@ public:
 
         for (auto& f : tone)
             f.prepare (sampleRate, maxBlock, numChannels);
+
+        eq.prepare (sampleRate, numChannels);
 
         lastTone.fill (-1.0f);
         lastGainIndex = -1;
@@ -115,12 +118,23 @@ public:
         dry.setSize (1, numSamples, false, false, true);
         dry.copyFrom (0, 0, buffer, 0, 0, numSamples);
 
-        stage.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), numSamples);
+        auto* const* channels = buffer.getArrayOfWritePointers();
+        const int numChannels = buffer.getNumChannels();
+
+        // BEFORE the capture, when it is set there — that is the whole reason the placement exists.
+        // What reaches a nonlinearity decides what kind of distortion comes out of it.
+        if (eq.isPre())
+            eq.process (channels, numChannels, numSamples);
+
+        stage.process (channels, numChannels, numSamples);
 
         // The measured controls sit AFTER the capture — `placement: post` — because that is where
         // they sit in the device.
         for (auto& f : tone)
             f.process (buffer);
+
+        if (! eq.isPre())
+            eq.process (channels, numChannels, numSamples);
 
         scope.write (dry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
         ribbon.write (dry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
@@ -133,6 +147,10 @@ public:
     juce::String circuit() const                             { return stage.circuit(); }
     juce::String deviceName() const                          { return stage.deviceName(); }
     bool isReady() const noexcept                            { return stage.isReady(); }
+
+    /** Ours, not the device's — see core::VoiceEq. Public because the block's face draws it and the
+        processor feeds it from parameters. */
+    VoiceEq eq;
 
     CapturedStage stage;
     ScopeTap scope;

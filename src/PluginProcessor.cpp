@@ -107,6 +107,19 @@ void AmpProcessor::rescanDevices()
 void AmpProcessor::selectBoostDevice (int index)  { boost.select (index); }
 void AmpProcessor::selectPreampDevice (int index) { preamp.select (index); }
 
+void AmpProcessor::updateVoiceEq (auto& block, const char* blk)
+{
+    core::VoiceEq::Settings s;
+    s.enabled   = apvts.getRawParameterValue (params::advOn (blk))->load() > 0.5f;
+    s.placement = apvts.getRawParameterValue (params::advPre (blk))->load() > 0.5f
+                    ? core::VoiceEq::Placement::pre : core::VoiceEq::Placement::post;
+    s.hpfHz  = apvts.getRawParameterValue (params::advHpf (blk))->load();
+    s.lpfHz  = apvts.getRawParameterValue (params::advLpf (blk))->load();
+    s.tiltDb = apvts.getRawParameterValue (params::advTilt (blk))->load();
+
+    block.eq.setSettings (s);
+}
+
 void AmpProcessor::pumpDeviceWork()
 {
     auto pump = [this] (auto& block, auto& gainParam, auto measuredId)
@@ -123,6 +136,9 @@ void AmpProcessor::pumpDeviceWork()
 
     pump (boost,  boostGainParam,  params::boostMeasured);
     pump (preamp, preampGainParam, params::preampMeasured);
+
+    updateVoiceEq (boost,  params::boostId);
+    updateVoiceEq (preamp, params::preampId);
 }
 
 void AmpProcessor::applyOversamplingIfChanged()

@@ -208,6 +208,39 @@ int main()
         }
     }
 
+    // The advanced EQ, and the thing it exists for: the SAME filter before and after the capture is
+    // not the same sound. Post colours what came out. Pre changes what arrives at the nonlinearity,
+    // so it changes what kind of distortion happens at all — which is how one captured voice becomes
+    // two instruments, and is the reason the placement is a control rather than a constant.
+    {
+        set (amp, orbitamp::params::boostGain, 8.0f);   // well into the dirt, or there is no
+                                                        // nonlinearity for PRE to act on
+        set (amp, orbitamp::params::advOn (orbitamp::params::boostId), 0.0f);
+        const auto clean = run (amp);
+
+        set (amp, orbitamp::params::advOn (orbitamp::params::boostId), 1.0f);
+        set (amp, orbitamp::params::advHpf (orbitamp::params::boostId), 800.0f);
+        set (amp, orbitamp::params::advPre (orbitamp::params::boostId), 0.0f);
+        const auto post = run (amp);
+
+        set (amp, orbitamp::params::advPre (orbitamp::params::boostId), 1.0f);
+        const auto pre = run (amp);
+
+        std::printf ("\nadvanced EQ: off %.5f, post %.5f, pre %.5f\n",
+                     rms (clean), rms (post), rms (pre));
+        std::printf ("post differs from off by %.1f%%, pre from post by %.1f%%\n\n",
+                     differencePercent (clean, post), differencePercent (post, pre));
+
+        report ("the advanced EQ reaches the audio",
+                differencePercent (clean, post) > 5.0,
+                juce::String (differencePercent (clean, post), 1) + "% different");
+
+        report ("...and PRE is not POST", differencePercent (post, pre) > 5.0,
+                juce::String (differencePercent (post, pre), 1) + "% apart");
+
+        set (amp, orbitamp::params::advOn (orbitamp::params::boostId), 0.0f);
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }
