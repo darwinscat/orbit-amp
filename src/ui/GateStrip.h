@@ -139,15 +139,18 @@ public:
     void mouseDown (const juce::MouseEvent& e) override
     {
         // Right-click: the gate presets — the whole gate in one pick for whoever never opens
-        // the zoom.
+        // the zoom. The release of that same button must NOT count as the click that opens the
+        // lens, so it is swallowed whole.
         if (e.mods.isPopupMenu())
         {
+            swallowUp = true;
             showPresetMenu();
             return;
         }
 
-        dragging = false;
-        pressY   = e.position.y;
+        swallowUp = false;
+        dragging  = false;
+        pressY    = e.position.y;
     }
 
     void showPresetMenu()
@@ -219,6 +222,12 @@ public:
 
     void mouseUp (const juce::MouseEvent&) override
     {
+        if (swallowUp)
+        {
+            swallowUp = false;
+            return;
+        }
+
         if (dragging)
         {
             (grabbedTrim ? trim : threshold)->endGesture();
@@ -303,6 +312,7 @@ private:
     int   holdAge = 0;
     bool  dragging    = false;
     bool  grabbedTrim = false;
+    bool  swallowUp   = false;
     float pressY      = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateStrip)

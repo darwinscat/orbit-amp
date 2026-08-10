@@ -28,9 +28,10 @@ public:
     /** A click opens the big tuner — the strip is the glance, the zoom is the look. */
     std::function<void()> onClick;
 
-    void mouseDown (const juce::MouseEvent&) override
+    void mouseDown (const juce::MouseEvent& e) override
     {
-        if (onClick != nullptr)
+        // Left only — a right-click is never "open the lens".
+        if (! e.mods.isPopupMenu() && onClick != nullptr)
             onClick();
     }
 
