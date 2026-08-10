@@ -6,6 +6,7 @@
 #include "ui/FaceplateView.h"
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
 #include "ui/Footer.h"
+#include "ui/GateStrip.h"
 #include "ui/TunerStrip.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 #include "ui/SetupPanel.h"
@@ -50,6 +51,7 @@ private:
     Chrome        chrome;
     ChainStrip    strip;            // the chain map, across the top of the panel
     FaceplateView faceplate;
+    GateStrip     gateStrip;        // the IN sliver with the gate's story, left of the faceplate
     TunerStrip    tunerStrip;       // the always-on needle, full width above the footer
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player

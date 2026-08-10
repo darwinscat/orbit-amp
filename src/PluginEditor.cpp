@@ -5,11 +5,13 @@ namespace orbitamp
 
 AmpEditor::AmpEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), chrome (p), strip (p), faceplate (p),
+      gateStrip (p.gateKeyDb, p.gateMeterDb, *p.apvts.getParameter (params::gateThreshold)),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p)
 {
     addAndMakeVisible (chrome);
     addAndMakeVisible (strip);
     addAndMakeVisible (faceplate);
+    addAndMakeVisible (gateStrip);
     addAndMakeVisible (tunerStrip);
     addAndMakeVisible (footer);
     addAndMakeVisible (demoStrip);   // TEMPORARY
@@ -29,6 +31,9 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     // The tuner strip is the same gesture aimed at the same place: glance below, look above.
     tunerStrip.onClick = [this] { strip.onOpen (ChainLink::tuner); };
+
+    // And the gate's sliver: a clean click opens its zoom; drags belong to the threshold.
+    gateStrip.onClick = [this] { strip.onOpen (ChainLink::gate); };
 
     // And the open lens closes on any click — the tuner has nothing to operate, only to see.
     faceplate.onTunerDismiss = [this] { strip.onOpen (ChainLink::tuner); };
@@ -88,8 +93,14 @@ void AmpEditor::resized()
     strip.setBounds (margin, stripY, FaceplateView::designWidth, ChainStrip::designHeight);
     strip.setTransform (zoom);
 
+    // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
     const int faceplateY = stripY + ChainStrip::designHeight + chromeGap;
-    faceplate.setBounds (margin, faceplateY, FaceplateView::designWidth, FaceplateView::designHeight);
+    gateStrip.setBounds (margin, faceplateY, GateStrip::designWidth, FaceplateView::designHeight);
+    gateStrip.setTransform (zoom);
+
+    faceplate.setBounds (margin + GateStrip::designWidth + chromeGap, faceplateY,
+                         FaceplateView::designWidth - GateStrip::designWidth - chromeGap,
+                         FaceplateView::designHeight);
     faceplate.setTransform (zoom);
 
     // The always-on needle, full width, above the footer's facts.
