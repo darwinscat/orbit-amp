@@ -39,6 +39,13 @@ void FaceplateView::setZoom (std::optional<ChainLink> link)
         return;
 
     zoomed = link;
+
+    // Whatever is about to be looked at re-reads its power parameter — insurance against any
+    // widget that went stale while nobody was watching.
+    for (auto* f : linkFaces())
+        if (auto* b = dynamic_cast<BlockFrame*> (f))
+            b->resyncPower();
+
     resized();
     repaint();
 }

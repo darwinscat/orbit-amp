@@ -27,12 +27,29 @@ public:
 
     void attach (juce::RangedAudioParameter& param)
     {
+        parameter  = &param;
         attachment = std::make_unique<juce::ParameterAttachment> (param,
             [this] (float v) { setOn (v > 0.5f, false); });
         attachment->sendInitialUpdate();
     }
 
     bool isOn() const noexcept { return on; }
+
+    /** The parameter's own answer — the truth the visual follows. */
+    bool paramOn() const noexcept
+    {
+        return parameter != nullptr ? parameter->getValue() > 0.5f : on;
+    }
+
+    /** Flips the PARAMETER, not the widget: the visual follows the attachment's echo, so a stale
+        switch heals on its next click instead of pushing its staleness into the parameter. */
+    void toggle()
+    {
+        if (attachment != nullptr)
+            attachment->setValueAsCompleteGesture (paramOn() ? 0.0f : 1.0f);
+        else
+            setOn (! on);
+    }
 
     void setOn (bool shouldBeOn, bool notify = true)
     {
@@ -75,15 +92,16 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        // Left toggles; right belongs to whoever owns the popup menu around this switch.
+        // Left toggles (through the parameter); right belongs to whoever owns the popup menu.
         if (! e.mods.isPopupMenu())
-            setOn (! on);
+            toggle();
     }
 
     static constexpr int designWidth  = 20;
     static constexpr int designHeight = 11;
 
 private:
+    juce::RangedAudioParameter* parameter = nullptr;
     std::unique_ptr<juce::ParameterAttachment> attachment;
     bool on = false;
 

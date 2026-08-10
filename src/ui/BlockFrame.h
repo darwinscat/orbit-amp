@@ -68,13 +68,35 @@ public:
             onToggled (on);
     }
 
-    /** Binds the frame's switch to the block's power parameter. The frame stays dumb — it holds the
-        attachment, not the parameter, and never reads the tree. */
+    /** Binds the frame's switch to the block's power parameter. The PARAMETER is the only truth:
+        clicks write the negation of ITS value and the visual follows the attachment's echo — a
+        widget that flips its own memory first can drift from the parameter and stay drifted,
+        which is exactly how two switches on one parameter once disagreed. */
     void attachPower (juce::RangedAudioParameter& param)
     {
+        powerParam = &param;
         power = std::make_unique<juce::ParameterAttachment> (param,
             [this] (float v) { setBlockOn (v > 0.5f, juce::dontSendNotification); });
         power->sendInitialUpdate();
+    }
+
+    /** Re-reads the power parameter into the visual state — insurance against any stale widget,
+        called whenever a face comes (back) into view. */
+    void resyncPower()
+    {
+        if (power != nullptr)
+            power->sendInitialUpdate();
+    }
+
+    bool powerParamOn() const noexcept
+    {
+        return powerParam != nullptr && powerParam->getValue() > 0.5f;
+    }
+
+    void togglePowerParam()
+    {
+        if (power != nullptr)
+            power->setValueAsCompleteGesture (powerParamOn() ? 0.0f : 1.0f);
     }
 
     std::function<void (bool)> onToggled;
@@ -151,7 +173,13 @@ public:
         }
 
         if (hasSwitch && switchArea().contains (e.getPosition()))
-            setBlockOn (! on);
+        {
+            // Through the parameter, never the local flag — see attachPower.
+            if (power != nullptr)
+                togglePowerParam();
+            else
+                setBlockOn (! on);
+        }
     }
 
     void showPowerMenu()
@@ -161,12 +189,17 @@ public:
 
         juce::PopupMenu m;
         m.addSectionHeader (title.toUpperCase());
-        m.addItem (1, "ON", true, on);
+        m.addItem (1, "ON", true, power != nullptr ? powerParamOn() : on);
 
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
                          [safe = juce::Component::SafePointer<BlockFrame> (this)] (int r)
                          {
-                             if (r == 1 && safe != nullptr)
+                             if (r != 1 || safe == nullptr)
+                                 return;
+
+                             if (safe->power != nullptr)
+                                 safe->togglePowerParam();
+                             else
                                  safe->setBlockOn (! safe->isBlockOn());
                          });
     }
@@ -301,6 +334,7 @@ private:
     Kind kind;
     bool hasSwitch = true;
     bool on = true;
+    juce::RangedAudioParameter* powerParam = nullptr;
     std::unique_ptr<juce::ParameterAttachment> power;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BlockFrame)

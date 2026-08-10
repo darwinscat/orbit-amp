@@ -76,13 +76,13 @@ public:
 
             juce::PopupMenu m;
             m.addSectionHeader (name.toUpperCase());
-            m.addItem (1, "ON", true, sw->isOn());
+            m.addItem (1, "ON", true, sw->paramOn());
 
             m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
                              [safe = juce::Component::SafePointer<Thumb> (this)] (int r)
                              {
                                  if (r == 1 && safe != nullptr && safe->sw != nullptr)
-                                     safe->sw->setOn (! safe->sw->isOn());
+                                     safe->sw->toggle();
                              });
             return;
         }
