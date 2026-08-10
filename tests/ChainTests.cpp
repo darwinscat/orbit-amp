@@ -43,8 +43,9 @@ namespace
     /** The plugin's output for a guitar-ish sine, kept. The message-thread work a real host would
         drive — loading the model the gain knob selects, designing the measured filters — is pumped
         here the same way, because a knob that only takes effect on a timer still has to take
-        effect. */
-    std::vector<float> run (orbitamp::AmpProcessor& amp)
+        effect. The frequency is the caller's, because what is audible depends on what is asked:
+        a low shelf does nothing to a 220 Hz probe and everything to one inside its band. */
+    std::vector<float> run (orbitamp::AmpProcessor& amp, double toneHz = 220.0)
     {
         std::vector<float> out;
         juce::AudioBuffer<float> buf (2, blockSize);
@@ -59,7 +60,7 @@ namespace
             for (int i = 0; i < blockSize; ++i, ++phase)
             {
                 const float s = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
-                                                          * 220.0 * phase / sampleRate);
+                                                          * toneHz * phase / sampleRate);
                 buf.setSample (0, i, s);
                 buf.setSample (1, i, s);
             }
@@ -188,23 +189,64 @@ int main()
         }
         else
         {
-            const auto id = orbitamp::params::boostMeasured (sweep);
-            std::printf ("measured control: %s\n",
-                         juce::String ((*measured)[(size_t) sweep].name).toRawUTF8());
+            const auto& m = (*measured)[(size_t) sweep];
 
-            set (amp, id, 0.0f);
-            const auto dark = run (amp);
+            // The probe tone goes where the control's own tables promise the biggest swing, inside
+            // the trusted band — a fixed 220 Hz hears a Big Muff tone control and is deaf to a low
+            // shelf. The pack states what the knob does and where; what is checked is that the
+            // CHAIN delivers it, not that every knob happens to work at one frequency.
+            const auto& darkCurve   = m.positions.front().db;
+            const auto& brightCurve = m.positions.back().db;
+            const int   points      = m.grid.points;
 
-            set (amp, id, 1.0f);
-            const auto bright = run (amp);
+            int lo = 0, hi = points - 1;
+            if (m.trusted.hiIndex > m.trusted.loIndex)
+            {
+                lo = juce::jlimit (0, points - 1, m.trusted.loIndex);
+                hi = juce::jlimit (0, points - 1, m.trusted.hiIndex);
+            }
 
-            std::printf ("min -> rms %.5f, max -> rms %.5f\n\n", rms (dark), rms (bright));
+            int bestIndex = -1;
+            double promisedDb = 0.0;
+            for (int i = lo; i <= hi && i < (int) darkCurve.size() && i < (int) brightCurve.size(); ++i)
+                if (const double d = std::abs (darkCurve[(size_t) i] - brightCurve[(size_t) i]); d > promisedDb)
+                {
+                    promisedDb = d;
+                    bestIndex  = i;
+                }
 
-            // A tone control DOES change the level at a single frequency, so this one can say dB.
-            report ("a measured knob reaches the audio too",
-                    std::abs (20.0 * std::log10 (juce::jmax (1.0e-9, rms (bright) / rms (dark)))) > 1.0,
-                    juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, rms (bright) / rms (dark))), 1)
-                        + " dB apart");
+            if (bestIndex < 0 || promisedDb < 2.0)
+            {
+                std::printf ("the swept control promises under 2 dB anywhere trusted — skipping\n");
+            }
+            else
+            {
+                const double probeHz = m.grid.fLo * std::pow (m.grid.fHi / m.grid.fLo,
+                                                              (double) bestIndex / (double) (points - 1));
+
+                // The gain check above leaves the pedal at 10, and a capture at full drive
+                // saturates — compression that eats exactly the level difference this probe
+                // listens for. The knob is probed where the chain is linear enough to pass it.
+                set (amp, orbitamp::params::boostGain, 0.0f);
+
+                const auto id = orbitamp::params::boostMeasured (sweep);
+                std::printf ("measured control: %s, probed at %.0f Hz where it promises %.1f dB\n",
+                             juce::String (m.name).toRawUTF8(), probeHz, promisedDb);
+
+                set (amp, id, 0.0f);
+                const auto dark = run (amp, probeHz);
+
+                set (amp, id, 1.0f);
+                const auto bright = run (amp, probeHz);
+
+                std::printf ("min -> rms %.5f, max -> rms %.5f\n\n", rms (dark), rms (bright));
+
+                // A tone control DOES change the level at a single frequency, so this one can say dB.
+                report ("a measured knob reaches the audio too",
+                        std::abs (20.0 * std::log10 (juce::jmax (1.0e-9, rms (bright) / rms (dark)))) > 1.0,
+                        juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, rms (bright) / rms (dark))), 1)
+                            + " dB apart");
+            }
         }
     }
 
