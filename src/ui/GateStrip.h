@@ -19,17 +19,21 @@ namespace orbitamp
     other gate control writes. The gate's pressure descends the right lane in the ramp's red,
     solid — the one colour family this panel lets be a fill — meeting the input it is squeezing.
 
-    A drag moves the threshold; a clean click opens the gate's zoom. */
+    Two runners share the column, told apart by side and colour: the lilac threshold caret on the
+    left, the orange INPUT TRIM caret on the right — its own ±24 scale, unity notched at the
+    middle. A drag moves whichever runner is nearer to the grab; a clean click opens the zoom. */
 class GateStrip final : public juce::Component,
                         private juce::Timer
 {
 public:
     GateStrip (const std::atomic<float>& keyDbSource, const std::atomic<float>& pressureDbSource,
-               juce::RangedAudioParameter& thresholdParam)
-        : keyDb (keyDbSource), pressureDb (pressureDbSource), param (thresholdParam)
+               juce::RangedAudioParameter& thresholdParam, juce::RangedAudioParameter& trimParam)
+        : keyDb (keyDbSource), pressureDb (pressureDbSource), param (thresholdParam), trimP (trimParam)
     {
         threshold = std::make_unique<juce::ParameterAttachment> (thresholdParam,
                                                                  [this] (float) { repaint(); });
+        trim = std::make_unique<juce::ParameterAttachment> (trimParam,
+                                                            [this] (float) { repaint(); });
         startTimerHz (30);
     }
 
@@ -96,6 +100,23 @@ public:
             }
         }
 
+        // ---- the trim runner, up the right edge on its own ±24 scale ----
+        {
+            const auto  area = scaleArea();
+            const float t    = trimP.convertFrom0to1 (trimP.getValue());
+            const float ty   = trimY (area, t);
+            const float rx   = r.getRight() - 1.5f;
+
+            // The unity notch — the handle's home.
+            g.setColour (theme::orange.withAlpha (0.5f));
+            g.fillRect (r.getRight() - 6.0f, trimY (area, 0.0f) - 0.5f, 5.0f, 1.0f);
+
+            juce::Path caret;
+            caret.addTriangle (rx, ty - 4.5f, rx, ty + 4.5f, rx - 6.5f, ty);
+            g.setColour (theme::orange);
+            g.fillPath (caret);
+        }
+
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
 
@@ -105,25 +126,42 @@ public:
     }
 
     //==============================================================================
-    void mouseDown (const juce::MouseEvent&) override { dragging = false; }
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        dragging = false;
+        pressY   = e.position.y;
+    }
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
         if (! dragging && e.getDistanceFromDragStart() > 4)
         {
             dragging = true;
-            threshold->beginGesture();
+
+            // Whichever runner was nearer to the grab is the one that moves — on a sliver this
+            // wide, the Y axis is the only aim anyone has.
+            const auto  area = scaleArea();
+            const float thY  = dbToY (area, param.convertFrom0to1 (param.getValue()));
+            const float trY  = trimY (area, trimP.convertFrom0to1 (trimP.getValue()));
+
+            grabbedTrim = std::abs (pressY - trY) < std::abs (pressY - thY);
+            (grabbedTrim ? trim : threshold)->beginGesture();
         }
 
         if (dragging)
-            threshold->setValueAsPartOfGesture (yToDb (scaleArea(), e.position.y));
+        {
+            if (grabbedTrim)
+                trim->setValueAsPartOfGesture (trimFromY (scaleArea(), e.position.y));
+            else
+                threshold->setValueAsPartOfGesture (yToDb (scaleArea(), e.position.y));
+        }
     }
 
     void mouseUp (const juce::MouseEvent&) override
     {
         if (dragging)
         {
-            threshold->endGesture();
+            (grabbedTrim ? trim : threshold)->endGesture();
             dragging = false;
             return;
         }
@@ -170,6 +208,18 @@ private:
              + juce::jlimit (0.0f, 1.0f, (r.getBottom() - y) / juce::jmax (1.0f, r.getHeight())) * -floorDb;
     }
 
+    float trimY (juce::Rectangle<float> r, float trimDb) const
+    {
+        return r.getCentreY() - trimDb / params::inTrimRangeDb * (r.getHeight() * 0.5f - 6.0f);
+    }
+
+    float trimFromY (juce::Rectangle<float> r, float y) const
+    {
+        return juce::jlimit (-params::inTrimRangeDb, params::inTrimRangeDb,
+                             (r.getCentreY() - y) / juce::jmax (1.0f, r.getHeight() * 0.5f - 6.0f)
+                                 * params::inTrimRangeDb);
+    }
+
     static constexpr float floorDb            = -80.0f;
     static constexpr float releasePerTick     = 1.4f;   // ~42 dB/s at 30 Hz
     static constexpr int   holdTicks          = 60;     // 2 s of steady hold...
@@ -183,12 +233,15 @@ private:
     const std::atomic<float>& keyDb;
     const std::atomic<float>& pressureDb;
     juce::RangedAudioParameter& param;
-    std::unique_ptr<juce::ParameterAttachment> threshold;
+    juce::RangedAudioParameter& trimP;
+    std::unique_ptr<juce::ParameterAttachment> threshold, trim;
 
     float levelDb = -90.0f;
     float holdDb  = -90.0f;
     int   holdAge = 0;
-    bool  dragging = false;
+    bool  dragging    = false;
+    bool  grabbedTrim = false;
+    float pressY      = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateStrip)
 };

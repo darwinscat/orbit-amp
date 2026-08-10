@@ -39,6 +39,7 @@ AmpProcessor::AmpProcessor()
         p.lpfHz = apvts.getRawParameterValue (params::eqLpfHz (l));
     }
 
+    inTrimParam        = apvts.getRawParameterValue (params::inTrim);
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
@@ -201,6 +202,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& eq : eqLinks)
         eq.prepare (sampleRate, channels);
 
+    lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
+
     // Seeded from the parameter: a session saved gate-ON has to start already gated, not fade in
     // over a block of ungated hum.
     gate.prepare (sampleRate, block, channels);
@@ -283,6 +286,15 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The demo replaces the input rather than mixing into it: a loop you can hear over your own
     // playing is a loop you cannot judge anything by.
     demo.fill (buffer);
+
+    // The input trim FIRST — ahead of the tuner's ear and the gate's key, like the interface
+    // knob it stands in for: everything downstream, meters included, hears the trimmed level,
+    // which is what closes the gain-staging loop. Ramped per block against zipper noise.
+    {
+        const float target = juce::Decibels::decibelsToGain (inTrimParam->load());
+        buffer.applyGainRamp (0, buffer.getNumSamples(), lastTrimGain, target);
+        lastTrimGain = target;
+    }
 
     // The tuner listens HERE — the raw input (or the loop standing in for it), before any block
     // colours it.

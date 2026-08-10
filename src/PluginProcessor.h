@@ -194,6 +194,9 @@ private:
 
     std::array<EqLinkParams, params::numEqLinks> eqParams;
 
+    std::atomic<float>* inTrimParam        = nullptr;
+    float lastTrimGain = 1.0f;
+
     std::atomic<float>* gateOnParam        = nullptr;
     std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* gatePosParam       = nullptr;

@@ -17,6 +17,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, "Preamp", true),
                 std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", true));
 
+    // The input trim, ahead of everything. Unity by default: it exists to fix a rig, not to be
+    // part of a sound.
+    layout.add (std::make_unique<Float> (juce::ParameterID { inTrim, 1 }, "Input Trim",
+                                         juce::NormalisableRange<float> (-inTrimRangeDb, inTrimRangeDb, 0.1f),
+                                         0.0f));
+
     // The noise gate. Off out of the box — a gate is a decision about YOUR noise floor, not part
     // of the voicing. The ceiling is -10, NOT OrbitCab's -20: that range was voiced for a
     // post-trim guitar, and a raw input's bleed can sit at -20 dBFS all day — a threshold that

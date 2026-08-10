@@ -5,7 +5,8 @@ namespace orbitamp
 
 AmpEditor::AmpEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), chrome (p), strip (p), faceplate (p),
-      gateStrip (p.gateKeyDb, p.gateMeterDb, *p.apvts.getParameter (params::gateThreshold)),
+      gateStrip (p.gateKeyDb, p.gateMeterDb, *p.apvts.getParameter (params::gateThreshold),
+                 *p.apvts.getParameter (params::inTrim)),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p)
 {
     addAndMakeVisible (chrome);

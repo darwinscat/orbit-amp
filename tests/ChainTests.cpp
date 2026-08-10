@@ -393,6 +393,25 @@ int main()
                 juce::String (differencePercent (loudGated, loudOpen), 2) + "% different");
     }
 
+    // The input trim, through the whole plugin: a linear gain ahead of everything, so on a bare
+    // wire it must arrive as exactly itself.
+    {
+        set (amp, orbitamp::params::inTrim, 0.0f);
+        const auto unity = run (amp);
+
+        set (amp, orbitamp::params::inTrim, -24.0f);
+        const auto trimmed = run (amp);
+
+        const double dropDb = 20.0 * std::log10 (juce::jmax (1.0e-9, rms (trimmed) / rms (unity)));
+        std::printf ("\ntrim: 0 dB -> rms %.5f, -24 dB -> %.5f (%.1f dB)\n",
+                     rms (unity), rms (trimmed), dropDb);
+
+        report ("the input trim reaches the audio", dropDb < -22.0 && dropDb > -26.0,
+                juce::String (dropDb, 1) + " dB");
+
+        set (amp, orbitamp::params::inTrim, 0.0f);
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }

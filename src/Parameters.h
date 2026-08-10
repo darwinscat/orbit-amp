@@ -14,6 +14,12 @@ inline constexpr const char* reverbOn    = "reverb_on";
 inline constexpr const char* boostGain  = "boost_gain";
 inline constexpr const char* boostTone  = "boost_tone";
 
+/** The input trim — the interface knob the interface may not have: ±24 dB ahead of EVERYTHING,
+    the tuner's ear and the gate's key included, so the IN meter closes the gain-staging loop:
+    drag the trim, watch the same column answer. */
+inline constexpr const char* inTrim = "in_trim";
+inline constexpr float inTrimRangeDb = 24.0f;
+
 /** The noise gate — the second service link, right after the tuner: it keys off the raw guitar,
     and kills the hum before any dirt can multiply it. The threshold is the OPEN level in dBFS
     against that raw input; feel (attack, hold, hysteresis, floor) is fixed in the engine. */
