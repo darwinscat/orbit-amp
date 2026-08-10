@@ -84,11 +84,11 @@ public:
     {
         // The off state dims the FACE, not the component: everything the frame paints drops into
         // a transparency layer, and the power switch is painted after it at full strength — on a
-        // dark block the way back must be the one thing that still reads. Hover lifts the layer:
-        // looking is free, editing takes switching on.
+        // dark block the way back must be the one thing that still reads. The block itself STAYS
+        // dark under the mouse; hover lights the switch alone.
         const bool dim = ! on;
         if (dim)
-            g.beginTransparencyLayer (faceAlpha());
+            g.beginTransparencyLayer (theme::offAlpha);
 
         const auto box     = boxArea().toFloat().reduced (theme::blockBorder * 0.5f);
         const auto topFill = kind == Kind::captured ? theme::capTop : theme::dspTop;
@@ -132,9 +132,11 @@ public:
         // built this: on a dark block the switch was the thing you could not find.
         if (hasSwitch)
         {
-            if (switchHover)
+            // The halo answers the whole block: the mouse anywhere over a block lights its
+            // switch — brighter still when it is directly on it.
+            if (blockHover || switchHover)
             {
-                g.setColour (accent().withAlpha (0.30f));
+                g.setColour (accent().withAlpha (switchHover ? 0.45f : 0.28f));
                 g.fillRoundedRectangle (sw.expanded (5.0f, 4.0f), (sw.getHeight() + 8.0f) * 0.5f);
             }
 
@@ -175,22 +177,13 @@ public:
     void mouseEnter (const juce::MouseEvent&) override
     {
         blockHover = true;
-
-        if (! on)
-        {
-            dimChildren();
-            repaint();
-        }
+        repaint();
     }
 
     void mouseExit (const juce::MouseEvent&) override
     {
         blockHover  = false;
         switchHover = false;
-
-        if (! on)
-            dimChildren();
-
         repaint();
     }
 
@@ -251,15 +244,10 @@ protected:
     void childrenChanged() override { dimChildren(); }
 
 private:
-    float faceAlpha() const
-    {
-        return on ? 1.0f : (blockHover ? theme::offHoverAlpha : theme::offAlpha);
-    }
-
     void dimChildren()
     {
         for (auto* c : getChildren())
-            c->setAlpha (faceAlpha());
+            c->setAlpha (on ? 1.0f : theme::offAlpha);
     }
 
     /** Anything riding the top border needs room above the line for its own height, so the drawn

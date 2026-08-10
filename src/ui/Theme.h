@@ -60,11 +60,6 @@ constexpr float blockBorder = 1.5f;
     noticed was off. Off now reads as off across the face and the strip alike. */
 constexpr float offAlpha    = 0.33f;
 
-/** ...but under the mouse it lifts nearly to full: bright enough to READ everything that is set,
-    still read-only, and back to dark the moment the mouse leaves. Looking is free; editing takes
-    switching on. */
-constexpr float offHoverAlpha = 0.85f;
-
 //==============================================================================
 // The display face — Michroma (OFL), embedded from felitronics-appkit's assets. Every label on the
 // faceplate is uppercase, small and widely tracked; that tracking is what makes it read as an

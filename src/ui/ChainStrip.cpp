@@ -66,8 +66,17 @@ public:
                            .removeFromTop (ZoneSwitch::designHeight).removeFromRight (w).withHeight (h));
     }
 
-    void mouseEnter (const juce::MouseEvent&) override { hovered = true;  repaint(); }
-    void mouseExit  (const juce::MouseEvent&) override { hovered = false; repaint(); }
+    void mouseEnter (const juce::MouseEvent&) override { setGlow (true); }
+    void mouseExit  (const juce::MouseEvent&) override { setGlow (false); }
+
+    void setGlow (bool g)
+    {
+        if (sw != nullptr)
+        {
+            sw->glow = g;
+            sw->repaint();
+        }
+    }
 
     void mouseDown (const juce::MouseEvent& e) override
     {
@@ -97,11 +106,11 @@ public:
     void paint (juce::Graphics& g) override
     {
         // Dim the FACE, not the component — the switch is a child painted after this, at full
-        // strength: on a dark thumb it is the one thing that must still read. Hover lifts the
-        // dimming so a dark link can be read without waking it.
+        // strength: on a dark thumb it is the one thing that must still read. The thumb stays
+        // dark under the mouse; hover lights the switch alone.
         const bool dim = dimmed;
         if (dim)
-            g.beginTransparencyLayer (hovered ? theme::offHoverAlpha : theme::offAlpha);
+            g.beginTransparencyLayer (theme::offAlpha);
 
         auto r = getLocalBounds().toFloat().reduced (0.5f);
 
@@ -144,7 +153,6 @@ private:
     std::unique_ptr<ZoneSwitch> sw;
     bool lit = false;
     bool dimmed = false;
-    bool hovered = false;
 };
 
 //==============================================================================
@@ -308,7 +316,7 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
 
             if (const float ly = dbToY (keyDb.load()); ly < key.getBottom() - 1.0f)
             {
-                g.setColour (theme::violet.withAlpha (closed ? 0.30f : 0.75f));
+                g.setColour (theme::violet.withAlpha (closed ? 0.35f : 0.85f));
                 g.fillRoundedRectangle (key.withTop (ly).reduced (1.0f), theme::radiusSm);
             }
 
@@ -327,7 +335,8 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
             const float depth = juce::jlimit (0.0f, -floorDb, -pressureDb.load());
             if (const float h = gr.getHeight() * depth / -floorDb; h > 0.5f)
             {
-                g.setColour (theme::violet.withAlpha (0.85f));
+                // Orange like the zoomed face: pressure is the gate ACTING.
+                g.setColour (theme::orange.withAlpha (0.85f));
                 g.fillRoundedRectangle (gr.withHeight (h).reduced (1.0f), theme::radiusSm);
             }
 

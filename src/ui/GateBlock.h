@@ -256,7 +256,7 @@ private:
             {
                 // Dim while the gate is holding: the level is still THERE — the gate is a VCA,
                 // not a truth about the input — but the face says it is not getting through.
-                g.setColour (theme::violet.withAlpha (closed ? 0.30f : 0.75f));
+                g.setColour (theme::violet.withAlpha (closed ? 0.35f : 0.85f));
                 g.fillRoundedRectangle (r.withTop (ly).reduced (2.0f), theme::radiusSm);
             }
 
@@ -306,7 +306,9 @@ private:
 
             if (h > 0.5f)
             {
-                g.setColour (theme::violet.withAlpha (0.85f));
+                // Orange, not violet: pressure is the gate ACTING, and on this face orange is the
+                // colour of action — the same one LEARN wears.
+                g.setColour (theme::orange.withAlpha (0.85f));
                 g.fillRoundedRectangle (r.withHeight (h), theme::radiusSm);
             }
 
