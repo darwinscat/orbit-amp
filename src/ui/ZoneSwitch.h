@@ -71,7 +71,12 @@ public:
         g.fillEllipse (kx, sw.getCentreY() - knob * 0.5f, knob, knob);
     }
 
-    void mouseDown (const juce::MouseEvent&) override { setOn (! on); }
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        // Left toggles; right belongs to whoever owns the popup menu around this switch.
+        if (! e.mods.isPopupMenu())
+            setOn (! on);
+    }
 
     static constexpr int designWidth  = 20;
     static constexpr int designHeight = 11;

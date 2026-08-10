@@ -325,9 +325,9 @@ private:
     // follows, as one undoable move.
     void mouseDown (const juce::MouseEvent& e) override
     {
-        // Read-only while the block is off — the runner is an edit, and the frame's own handler
-        // still runs so the power switch works.
-        if (isBlockOn() && keyWell.contains (e.getPosition()))
+        // Read-only while the block is off, and right-clicks belong to the frame's power menu —
+        // the runner only answers a live left-button grab.
+        if (isBlockOn() && ! e.mods.isPopupMenu() && keyWell.contains (e.getPosition()))
         {
             runnerAtt->beginGesture();
             draggingRunner = true;

@@ -24,12 +24,12 @@ public:
         if (onParam == nullptr)
             return;
 
-        setAlpha (theme::offAlpha);   // attach() below corrects this for a link that is on
+        dimmed = true;   // attach() below corrects this for a link that is on
 
         sw = std::make_unique<ZoneSwitch>();
         addAndMakeVisible (*sw);
         sw->accent = accent;
-        sw->onChange = [this] (bool b) { setAlpha (b ? 1.0f : theme::offAlpha); };
+        sw->onChange = [this] (bool b) { dimmed = ! b; repaint(); };
         sw->attach (*onParam);
     }
 
@@ -66,14 +66,39 @@ public:
                            .removeFromTop (ZoneSwitch::designHeight).removeFromRight (w).withHeight (h));
     }
 
-    void mouseDown (const juce::MouseEvent&) override
+    void mouseDown (const juce::MouseEvent& e) override
     {
+        // Right-click: the power menu, same as on the block itself. Left: open the zoom.
+        if (e.mods.isPopupMenu())
+        {
+            if (sw == nullptr)
+                return;
+
+            juce::PopupMenu m;
+            m.addSectionHeader (name.toUpperCase());
+            m.addItem (1, "ON", true, sw->isOn());
+
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                             [safe = juce::Component::SafePointer<Thumb> (this)] (int r)
+                             {
+                                 if (r == 1 && safe != nullptr && safe->sw != nullptr)
+                                     safe->sw->setOn (! safe->sw->isOn());
+                             });
+            return;
+        }
+
         if (onClick != nullptr)
             onClick();
     }
 
     void paint (juce::Graphics& g) override
     {
+        // Dim the FACE, not the component — the switch is a child painted after this, at full
+        // strength: on a dark thumb it is the one thing that must still read.
+        const bool dim = dimmed;
+        if (dim)
+            g.beginTransparencyLayer (theme::offAlpha);
+
         auto r = getLocalBounds().toFloat().reduced (0.5f);
 
         juce::ColourGradient fill (theme::capTop.interpolatedWith (theme::dspTop, 0.5f), 0.0f, r.getY(),
@@ -104,6 +129,9 @@ public:
 
         if (preview != nullptr)
             preview (g, area.reduced (1, 3));
+
+        if (dim)
+            g.endTransparencyLayer();
     }
 
 private:
@@ -111,6 +139,7 @@ private:
 
     std::unique_ptr<ZoneSwitch> sw;
     bool lit = false;
+    bool dimmed = false;
 };
 
 //==============================================================================

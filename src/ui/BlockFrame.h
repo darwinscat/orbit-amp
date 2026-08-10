@@ -49,7 +49,7 @@ public:
             return;
 
         on = shouldBeOn;
-        setAlpha (on ? 1.0f : theme::offAlpha);   // dims children too
+        dimChildren();   // NOT setAlpha on the whole block: the power switch stays full strength
 
         // An off block is READ-ONLY: everything stays visible — a control you cannot see is a
         // control you forget you set — but nothing answers, so a dark block can never quietly
@@ -82,6 +82,13 @@ public:
     //==============================================================================
     void paint (juce::Graphics& g) override
     {
+        // The off state dims the FACE, not the component: everything the frame paints drops into
+        // a transparency layer, and the power switch is painted after it at full strength — on a
+        // dark block the way back must be the one thing that still reads.
+        const bool dim = ! on;
+        if (dim)
+            g.beginTransparencyLayer (theme::offAlpha);
+
         const auto box     = boxArea().toFloat().reduced (theme::blockBorder * 0.5f);
         const auto topFill = kind == Kind::captured ? theme::capTop : theme::dspTop;
 
@@ -113,13 +120,25 @@ public:
         theme::drawTracked (g, title.toUpperCase(), titleBox, theme::displayFont (labelHeight),
                             0.15f, juce::Justification::centredLeft);
 
+        paintContent (g);
+
+        if (dim)
+            g.endTransparencyLayer();
+
         // No mask for the switch: the border line runs straight into it and its own fill covers the
         // segment underneath, so the two read as one piece of hardware rather than a button parked
-        // on a broken line.
+        // on a broken line. Painted OUTSIDE the dim layer, with a hover halo — the request that
+        // built this: on a dark block the switch was the thing you could not find.
         if (hasSwitch)
-            paintSwitch (g, sw);
+        {
+            if (switchHover)
+            {
+                g.setColour (accent().withAlpha (0.30f));
+                g.fillRoundedRectangle (sw.expanded (5.0f, 4.0f), (sw.getHeight() + 8.0f) * 0.5f);
+            }
 
-        paintContent (g);
+            paintSwitch (g, sw);
+        }
     }
 
     void resized() override final
@@ -130,8 +149,52 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
+        // Right-click anywhere on the block, at any scale: the power menu. The one edit that must
+        // never need hunting for a target.
+        if (e.mods.isPopupMenu())
+        {
+            showPowerMenu();
+            return;
+        }
+
         if (hasSwitch && switchArea().contains (e.getPosition()))
             setBlockOn (! on);
+    }
+
+    void mouseMove (const juce::MouseEvent& e) override
+    {
+        const bool over = hasSwitch && switchArea().contains (e.getPosition());
+        if (over != switchHover)
+        {
+            switchHover = over;
+            repaint();
+        }
+    }
+
+    void mouseExit (const juce::MouseEvent&) override
+    {
+        if (switchHover)
+        {
+            switchHover = false;
+            repaint();
+        }
+    }
+
+    void showPowerMenu()
+    {
+        if (! hasSwitch)
+            return;
+
+        juce::PopupMenu m;
+        m.addSectionHeader (title.toUpperCase());
+        m.addItem (1, "ON", true, on);
+
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                         [safe = juce::Component::SafePointer<BlockFrame> (this)] (int r)
+                         {
+                             if (r == 1 && safe != nullptr)
+                                 safe->setBlockOn (! safe->isBlockOn());
+                         });
     }
 
 protected:
@@ -169,7 +232,17 @@ protected:
     virtual void layOutContent (juce::Rectangle<int>) {}
     virtual void paintContent (juce::Graphics&) {}
 
+    /** Blocks rebuild their faces (a device change makes new knobs mid-life) — every child that
+        arrives inherits the block's dimming, or an off block would grow bright controls. */
+    void childrenChanged() override { dimChildren(); }
+
 private:
+    void dimChildren()
+    {
+        for (auto* c : getChildren())
+            c->setAlpha (on ? 1.0f : theme::offAlpha);
+    }
+
     /** Anything riding the top border needs room above the line for its own height, so the drawn
         frame starts lower than the component. Zero when nothing rides it. */
     static constexpr int topInset()
@@ -254,6 +327,7 @@ private:
     Kind kind;
     bool hasSwitch = true;
     bool on = true;
+    bool switchHover = false;
     std::unique_ptr<juce::ParameterAttachment> power;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BlockFrame)
