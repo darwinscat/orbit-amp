@@ -1,10 +1,9 @@
 #pragma once
 
 #include "BlockFrame.h"
-#include "BoostBlock.h"
 #include "CabinetBlock.h"
+#include "CapturedBlockPanel.h"
 #include "PowerAmpBlock.h"
-#include "PreampBlock.h"
 #include "ReverbBlock.h"
 
 namespace orbitamp
@@ -50,11 +49,11 @@ private:
     static constexpr int   colGap     = 14;
     static constexpr float phi        = 1.62f; // the preamp column's weight — the wider anchor
 
-    BoostBlock    boost;
-    PreampBlock   preamp;
-    ReverbBlock   reverb;
-    PowerAmpBlock power;
-    CabinetBlock  cabinet;
+    CapturedBlockPanel boost;
+    CapturedBlockPanel preamp;
+    ReverbBlock        reverb;
+    PowerAmpBlock      power;
+    CabinetBlock       cabinet;
 
     juce::Rectangle<int> inGutter, outGutter;
 

@@ -108,9 +108,6 @@ void AmpProcessor::rescanDevices()
     preamp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::preampDevice)->load()));
 }
 
-void AmpProcessor::selectBoostDevice (int index)  { boost.select (index); }
-void AmpProcessor::selectPreampDevice (int index) { preamp.select (index); }
-
 void AmpProcessor::pumpDeviceWork()
 {
     auto pump = [this] (auto& block, auto& gainParam, auto measuredId, const char* blk)

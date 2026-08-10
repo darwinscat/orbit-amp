@@ -128,12 +128,6 @@ public:
         thread. */
     void rescanDevices();
 
-    /** Loads the device at `index` in the boost's list. Message thread — it reads files. */
-    void selectBoostDevice (int index);
-
-    /** The same for the preamp. */
-    void selectPreampDevice (int index);
-
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
     void selectDemoLoop (int index);

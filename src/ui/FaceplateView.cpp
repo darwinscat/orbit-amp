@@ -7,8 +7,9 @@ namespace orbitamp
 {
 
 FaceplateView::FaceplateView (AmpProcessor& processor)
-    : boost (processor), preamp (processor), reverb (processor.apvts),
-      power (processor.apvts), cabinet (processor.apvts)
+    : boost (processor, processor.boost, "Boost", params::boostId),
+      preamp (processor, processor.preamp, "Preamp", params::preampId),
+      reverb (processor.apvts), power (processor.apvts), cabinet (processor.apvts)
 {
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })
         addAndMakeVisible (*b);

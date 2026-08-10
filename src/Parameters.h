@@ -34,6 +34,14 @@ inline juce::String selectorId (const char* blk, int i)
 inline constexpr const char* boostId  = "boost";
 inline constexpr const char* preampId = "preamp";
 
+/** A captured block's own parameters, derived from its id prefix — the same shape for the boost,
+    the preamp, and whatever captured block comes next. The named constants around them predate
+    these and stay for call sites that mean a specific block. */
+inline juce::String blockOn       (const char* blk) { return juce::String (blk) + "_on"; }
+inline juce::String blockDevice   (const char* blk) { return juce::String (blk) + "_device"; }
+inline juce::String blockGain     (const char* blk) { return juce::String (blk) + "_gain"; }
+inline juce::String blockMeasured (const char* blk, int i) { return juce::String (blk) + "_meas" + juce::String (i + 1); }
+
 /** A pedal's MEASURED controls — the ones a player computes rather than selects. How many a device
     has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge), but a host needs a fixed set of
     parameters, so three slots are reserved and the loaded pack decides what each one drives. A slot

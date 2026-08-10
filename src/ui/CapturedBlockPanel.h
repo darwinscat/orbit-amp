@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Parameters.h"
+#include "../core/CapturedBlock.h"
 #include "BlockFrame.h"
 #include "ZoneSwitch.h"
 #include "scope/DeviceScope.h"
@@ -19,8 +20,10 @@ namespace orbitamp
 
 class AmpProcessor;
 
-/** The boost — a captured pedal in front of the preamp, laid out from the pack rather than from a
-    guess.
+/** The face every captured block wears — the boost in front, the preamp behind it, and whatever
+    captured block comes next. One class, because the question is always the same: which device,
+    which capture of it, and what its own controls do. Which BLOCK it is arrives as a reference and
+    an id prefix, and nothing else in the file knows.
 
     The pack says what this device HAS: how many positions its gain was captured at, which of its
     knobs were measured instead, whether one of them is a two-position switch, and what the circuit
@@ -28,11 +31,15 @@ class AmpProcessor;
     switch — nothing in this file names any of that.
 
     A control slot with nothing behind it is hidden. A knob doing nothing is worse than a gap. */
-class BoostBlock final : public BlockFrame
+class CapturedBlockPanel final : public BlockFrame
 {
 public:
-    explicit BoostBlock (AmpProcessor&);
-    ~BoostBlock() override;
+    using Block = core::CapturedBlock<params::boostNumMeasured>;
+    static_assert (params::preampNumMeasured == params::boostNumMeasured,
+                   "one face serves every captured block, so the slot counts have to agree");
+
+    CapturedBlockPanel (AmpProcessor&, Block&, const juce::String& title, const char* blockId);
+    ~CapturedBlockPanel() override;
 
     /** Rebuilds the face from whatever pack is loaded. Called when the device changes. */
     void deviceChanged();
@@ -58,12 +65,14 @@ private:
     static constexpr int modeRow    = 18;
 
     AmpProcessor& amp;
+    Block&        block;
+    const char*   blk;
 
     /** TEMPORARY — everything of ours off, so the capture can be heard as it was taken. */
     ZoneSwitch rawSwitch;
     juce::Label rawLabel { {}, "RAW" };
 
-    VoicingSelector pedal;
+    VoicingSelector device;
     Knob gain { "Gain", theme::orange, 0 };
 
     struct Slot
@@ -96,7 +105,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
     std::unique_ptr<juce::ParameterAttachment> deviceAttachment;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BoostBlock)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CapturedBlockPanel)
 };
 
 } // namespace orbitamp

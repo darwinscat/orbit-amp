@@ -1,75 +1,75 @@
-#include "BoostBlock.h"
+#include "CapturedBlockPanel.h"
 
 #include "../PluginProcessor.h"
 
 namespace orbitamp
 {
 
-BoostBlock::BoostBlock (AmpProcessor& processor)
-    : BlockFrame ("Boost", BlockFrame::Kind::captured), amp (processor),
+CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
+                                        const juce::String& title, const char* blockId)
+    : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId),
       // The tone curve comes from the block itself — the same data its filters were designed from,
       // resolved on the processor's pump. The scope repaints on its own clock, so it picks a move
       // up within a frame or two.
-      scope (processor.boost.scope, processor.boost.ribbon,
-             [this] (double hz) { return amp.boost.toneDb (hz); })
+      scope (b.scope, b.ribbon, [this] (double hz) { return block.toneDb (hz); })
 {
     addAndMakeVisible (rawSwitch);
     addAndMakeVisible (rawLabel);
-    addAndMakeVisible (pedal);
+    addAndMakeVisible (device);
     addAndMakeVisible (gain);
     addAndMakeVisible (scope);
     addAndMakeVisible (scopeMode);
 
-    // Four ways of showing the same pedal. Which one reads best is not settled, so the choice is on
-    // the face rather than in the code.
+    // Five ways of showing the same device. Which one reads best is not settled, so the choice is
+    // on the face rather than in the code.
     scopeMode.setItems ({ "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" }, 0);
     scopeMode.onChange = [this] (int i) { scope.setMode ((DeviceScope::Mode) i); };
     scope.setSampleRate (amp.currentSampleRate());
 
     rawSwitch.accent = theme::violet;
-    rawSwitch.attach (*amp.apvts.getParameter (params::rawId (params::boostId)));
+    rawSwitch.attach (*amp.apvts.getParameter (params::rawId (blk)));
 
     rawLabel.setFont (theme::displayFont (7.0f));
     rawLabel.setColour (juce::Label::textColourId, theme::txFaint);
     rawLabel.setJustificationType (juce::Justification::centredRight);
     rawLabel.setInterceptsMouseClicks (false, false);
 
-    attachPower (*amp.apvts.getParameter (params::boostOn));
+    attachPower (*amp.apvts.getParameter (params::blockOn (blk)));
 
     deviceAttachment = std::make_unique<juce::ParameterAttachment> (
-        *amp.apvts.getParameter (params::boostDevice),
-        [this] (float v) { pedal.setSelection (juce::roundToInt (v)); });
+        *amp.apvts.getParameter (params::blockDevice (blk)),
+        [this] (float v) { device.setSelection (juce::roundToInt (v)); });
 
-    pedal.onPick = [this] (int i)
+    device.onPick = [this] (int i)
     {
         deviceAttachment->setValueAsCompleteGesture ((float) i);
-        amp.selectBoostDevice (i);
+        block.select (i);   // message thread — it reads files
         deviceChanged();
     };
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-        amp.apvts, params::boostGain, gain);
+        amp.apvts, params::blockGain (blk), gain);
 
     deviceAttachment->sendInitialUpdate();
 
     deviceChanged();
 }
 
-BoostBlock::~BoostBlock() = default;
+CapturedBlockPanel::~CapturedBlockPanel() = default;
 
-void BoostBlock::deviceChanged()
+void CapturedBlockPanel::deviceChanged()
 {
     scope.setSampleRate (amp.currentSampleRate());
 
-    const auto* measured = amp.boost.measured();
-    const auto  positions = amp.boost.gainPositions();
+    const auto* measured = block.measured();
+    const auto  positions = block.gainPositions();
 
     // The list IS the combo: what a player has, greenest first. Nothing invented, nothing curated
     // into groups — the character ramp does the ordering a "type" heading used to.
     juce::Array<VoicingSelector::Entry> entries;
     bool sawUser = false;
 
-    for (const auto& pack : amp.boost.packs)
+    for (const auto& pack : block.packs)
     {
         VoicingSelector::Entry e;
         e.name = pack.displayName();
@@ -79,16 +79,15 @@ void BoostBlock::deviceChanged()
         entries.add (std::move (e));
     }
 
-    pedal.setEntries (std::move (entries));
+    device.setEntries (std::move (entries));
 
-    caption = amp.boost.deviceName();
-    scope.setSpec (felitronics::appkit::parseDeviceSpec (amp.boost.circuit()));
+    caption = block.deviceName();
+    scope.setSpec (felitronics::appkit::parseDeviceSpec (block.circuit()));
 
-    // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next pack
-    // says for the next one — and none at all for a lone model, which has no gain axis and so gets no
-    // knob rather than a dead one.
-    // Detented where the pack has positions, continuous where it does not — but always THERE. A
-    // preamp without a gain knob is not a preamp, and a knob that drives is not a knob doing nothing.
+    // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next
+    // pack says for the next one. Detented where the pack has positions, continuous where it does
+    // not — but always THERE: a knob with nothing to select drives instead, and a device without a
+    // gain knob is not a device.
     gain.setNotches (juce::jmax (0, positions.size()));
 
     for (int i = 0; i < params::boostNumMeasured; ++i)
@@ -130,7 +129,7 @@ void BoostBlock::deviceChanged()
             addAndMakeVisible (*slot.steps);
 
             slot.stepAtt = std::make_unique<juce::ParameterAttachment> (
-                *amp.apvts.getParameter (params::boostMeasured (i)),
+                *amp.apvts.getParameter (params::blockMeasured (blk, i)),
                 [this, i] (float v)
                 {
                     if (auto* s = slots[(size_t) i].steps.get())
@@ -150,7 +149,7 @@ void BoostBlock::deviceChanged()
             // it could sit there forever. Land it on a real position as the device loads.
             // The SAME rule the switch lights by, below — off by half a step and the parameter says
             // Smooth while the face says Sharp, which is exactly the inversion this introduced.
-            if (const float v = amp.apvts.getRawParameterValue (params::boostMeasured (i))->load();
+            if (const float v = amp.apvts.getRawParameterValue (params::blockMeasured (blk, i))->load();
                 v > 0.0f && v < 1.0f)
                 slot.stepAtt->setValueAsCompleteGesture (v > 0.5f ? 1.0f : 0.0f);
         }
@@ -161,7 +160,7 @@ void BoostBlock::deviceChanged()
             addAndMakeVisible (*slot.knob);
 
             slot.knobAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-                amp.apvts, params::boostMeasured (i), *slot.knob);
+                amp.apvts, params::blockMeasured (blk, i), *slot.knob);
         }
     }
 
@@ -171,9 +170,9 @@ void BoostBlock::deviceChanged()
     repaint();
 }
 
-void BoostBlock::buildSelectors()
+void CapturedBlockPanel::buildSelectors()
 {
-    const auto list = amp.boost.stage.selectors();
+    const auto list = block.stage.selectors();
 
     for (int i = 0; i < params::numSelectors; ++i)
     {
@@ -197,7 +196,7 @@ void BoostBlock::buildSelectors()
         addAndMakeVisible (*sel.steps);
 
         sel.attachment = std::make_unique<juce::ParameterAttachment> (
-            *amp.apvts.getParameter (params::selectorId (params::boostId, i)),
+            *amp.apvts.getParameter (params::selectorId (blk, i)),
             [this, i, n = labels.size()] (float v)
             {
                 if (auto* s = selectors[(size_t) i].steps.get())
@@ -214,7 +213,7 @@ void BoostBlock::buildSelectors()
     }
 }
 
-bool BoostBlock::hasNamedPositions (const namz::rig::Measured& m)
+bool CapturedBlockPanel::hasNamedPositions (const namz::rig::Measured& m)
 {
     for (const auto& p : m.positions)
     {
@@ -227,12 +226,12 @@ bool BoostBlock::hasNamedPositions (const namz::rig::Measured& m)
     return false;
 }
 
-void BoostBlock::layOutHeader (juce::Rectangle<int> area)
+void CapturedBlockPanel::layOutHeader (juce::Rectangle<int> area)
 {
-    pedal.setBounds (area);
+    device.setBounds (area);
 }
 
-void BoostBlock::layOutContent (juce::Rectangle<int> area)
+void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 {
     scope.setBounds (area.removeFromBottom (curveHeight));
     area.removeFromBottom (gap / 2);
@@ -293,7 +292,7 @@ void BoostBlock::layOutContent (juce::Rectangle<int> area)
         }
 }
 
-void BoostBlock::paintContent (juce::Graphics& g)
+void CapturedBlockPanel::paintContent (juce::Graphics& g)
 {
     if (caption.isEmpty())
     {
