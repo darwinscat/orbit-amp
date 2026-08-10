@@ -169,6 +169,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/DemoStrip.cpp
     src/ui/Footer.cpp
     src/ui/SetupPanel.cpp
+    src/ui/TunerPanel.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp
 )
@@ -224,6 +225,12 @@ add_executable(orbitamp_tonestack_test tests/ToneStackTests.cpp)
 target_include_directories(orbitamp_tonestack_test PRIVATE src)
 target_link_libraries(orbitamp_tonestack_test PRIVATE felitronics::eq)
 target_compile_features(orbitamp_tonestack_test PRIVATE cxx_std_20)
+
+# Same gate for the tuner's ear, and JUCE-free for the same reason: signals with a KNOWN pitch go
+# in, the cents error comes out. Links nothing at all — core::PitchTracker is plain C++.
+add_executable(orbitamp_tuner_test tests/TunerTests.cpp)
+target_include_directories(orbitamp_tuner_test PRIVATE src)
+target_compile_features(orbitamp_tuner_test PRIVATE cxx_std_20)
 
 # Same gate for the reverb. It links juce_audio_basics because that stage is JUCE-bound by
 # construction (Freeverb) — which is exactly why it is a SEPARATE target: the tone-stack gate above
@@ -333,6 +340,7 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/DemoStrip.cpp
     src/ui/Footer.cpp
     src/ui/SetupPanel.cpp
+    src/ui/TunerPanel.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp)
 target_include_directories(orbitamp_chain_test PRIVATE src)

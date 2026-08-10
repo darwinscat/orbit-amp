@@ -249,6 +249,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // playing is a loop you cannot judge anything by.
     demo.fill (buffer);
 
+    // The tuner listens HERE — the raw input (or the loop standing in for it), before any block
+    // colours it.
+    tunerTap.write (buffer.getReadPointer (0), buffer.getNumSamples());
+
     updateToneSettings();
     updateReverbSettings();
 

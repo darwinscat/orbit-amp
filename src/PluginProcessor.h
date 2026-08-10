@@ -5,6 +5,7 @@
 #include "core/DemoPlayer.h"
 #include "core/MeasuredFilter.h"
 #include "core/ScopeTap.h"
+#include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
@@ -145,6 +146,10 @@ public:
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
     void selectDemoLoop (int index);
+
+    /** The raw input, kept for the tuner window. The audio thread only ever writes it; listening
+        is the panel's business, on its own clock. */
+    core::TunerTap tunerTap;
 
 private:
 

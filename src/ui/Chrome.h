@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Theme.h"
+#include "TunerButton.h"
 
 #include <felitronics/appkit/BrandHeader.h>
 #include <felitronics/appkit/IconButton.h>
@@ -36,6 +37,9 @@ public:
         header only announces, like every other widget here. */
     std::function<void()> onShowSetup;
 
+    /** The fork was pressed. Same arrangement: the tuner window is the editor's to open. */
+    std::function<void()> onShowTuner;
+
     void resized() override;
 
     // OrbitCab's header proportions: a 50-tall strip whose small controls live in a 44-tall band
@@ -62,6 +66,7 @@ private:
     felitronics::appkit::IconButton  saveAs { felitronics::appkit::IconButton::Kind::saveAs };
     felitronics::appkit::IconButton  trash  { felitronics::appkit::IconButton::Kind::trash };
     felitronics::appkit::IconButton  gear   { felitronics::appkit::IconButton::Kind::settings };
+    TunerButton                      fork;
 
     std::vector<std::unique_ptr<felitronics::appkit::chrome::RegisterButton>> registers;
     felitronics::appkit::chrome::PresetCell preset;
