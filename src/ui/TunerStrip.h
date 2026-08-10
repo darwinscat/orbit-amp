@@ -21,8 +21,17 @@ class TunerStrip final : public juce::Component,
 public:
     explicit TunerStrip (const core::TunerEar& tunerEar) : ear (tunerEar)
     {
-        setInterceptsMouseClicks (false, false);
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
         startTimerHz (30);
+    }
+
+    /** A click opens the big tuner — the strip is the glance, the zoom is the look. */
+    std::function<void()> onClick;
+
+    void mouseDown (const juce::MouseEvent&) override
+    {
+        if (onClick != nullptr)
+            onClick();
     }
 
     static constexpr int designHeight = 44;

@@ -27,6 +27,9 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         strip.setActive (next);
     };
 
+    // The tuner strip is the same gesture aimed at the same place: glance below, look above.
+    tunerStrip.onClick = [this] { strip.onOpen (ChainLink::tuner); };
+
     // Devices came or went while the window was open: the engine re-reads the folder, then the
     // captured blocks rebuild their selectors from the lists that changed under them.
     setup.onDevicesChanged = [this]
