@@ -9,7 +9,6 @@ namespace orbitamp::params
 // saved project that used it.
 inline constexpr const char* boostOn     = "boost_on";
 inline constexpr const char* preampOn    = "preamp_on";
-inline constexpr const char* eqOn        = "eq_on";
 inline constexpr const char* reverbOn    = "reverb_on";
 
 inline constexpr const char* boostGain  = "boost_gain";
@@ -31,18 +30,6 @@ inline juce::String selectorId (const char* blk, int i)
 {
     return juce::String (blk) + "_sel" + juce::String (i + 1);
 }
-
-/** The ADVANCED EQ every captured block carries — ours, not the device's, and the same set in each
-    block so it is learned once. `blk` is the block's id prefix ("boost", "preamp", "power").
-
-    Four per block: on, where it sits relative to the capture, a low cut, a high cut and a tilt. PRE
-    is the one that matters most and the one hardware rarely had — it changes what reaches the
-    nonlinearity, so it changes the kind of distortion rather than its colour. */
-inline juce::String advOn    (const char* blk) { return juce::String (blk) + "_adv_on"; }
-inline juce::String advPre   (const char* blk) { return juce::String (blk) + "_adv_pre"; }
-inline juce::String advHpf   (const char* blk) { return juce::String (blk) + "_adv_hpf"; }
-inline juce::String advLpf   (const char* blk) { return juce::String (blk) + "_adv_lpf"; }
-inline juce::String advTilt  (const char* blk) { return juce::String (blk) + "_adv_tilt"; }
 
 inline constexpr const char* boostId  = "boost";
 inline constexpr const char* preampId = "preamp";
@@ -72,15 +59,25 @@ inline constexpr const char* preampGain   = "preamp_gain";
 inline constexpr int preampNumMeasured = 3;
 inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String (i + 1); }
 
-inline constexpr const char* eqLow      = "eq_low";
-inline constexpr const char* eqMid      = "eq_mid";
-inline constexpr const char* eqHigh     = "eq_high";
-inline constexpr const char* eqPresence = "eq_presence";
-inline constexpr const char* eqMidHz    = "eq_mid_hz";
-inline constexpr const char* eqHpfOn  = "eq_hpf_on";
-inline constexpr const char* eqHpfHz  = "eq_hpf_hz";
-inline constexpr const char* eqLpfOn  = "eq_lpf_on";
-inline constexpr const char* eqLpfHz  = "eq_lpf_hz";
+/** The EQ links — standalone links of the chain, not a section of any block. Exactly two, fixed:
+    `eq1` ahead of the boost and `eq2` between the boost and the preamp. Fixed because a host needs
+    an unchanging parameter list; two because those are the places that MEAN something — eq1 decides
+    what reaches the first nonlinearity, so it changes the kind of distortion, and eq2 colours what
+    the boost made before the preamp distorts it again. A link's place in the chain answers "pre or
+    post", which is why no placement switch exists. `l` is the link index, 0-based. */
+inline constexpr int numEqLinks = 2;
+
+inline juce::String eqId       (int l, const char* leaf) { return "eq" + juce::String (l + 1) + "_" + leaf; }
+inline juce::String eqOn       (int l) { return eqId (l, "on"); }
+inline juce::String eqLow      (int l) { return eqId (l, "low"); }
+inline juce::String eqMid      (int l) { return eqId (l, "mid"); }
+inline juce::String eqHigh     (int l) { return eqId (l, "high"); }
+inline juce::String eqPresence (int l) { return eqId (l, "presence"); }
+inline juce::String eqMidHz    (int l) { return eqId (l, "mid_hz"); }
+inline juce::String eqHpfOn    (int l) { return eqId (l, "hpf_on"); }
+inline juce::String eqHpfHz    (int l) { return eqId (l, "hpf_hz"); }
+inline juce::String eqLpfOn    (int l) { return eqId (l, "lpf_on"); }
+inline juce::String eqLpfHz    (int l) { return eqId (l, "lpf_hz"); }
 
 inline constexpr const char* cabOn = "cab_on";
 

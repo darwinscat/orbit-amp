@@ -24,16 +24,20 @@ AmpProcessor::AmpProcessor()
     // burst commits about 0.4 s after you stop moving.
     startTimerHz (30);
 
-    eqOnParam    = apvts.getRawParameterValue (params::eqOn);
-    eqLowParam   = apvts.getRawParameterValue (params::eqLow);
-    eqMidParam   = apvts.getRawParameterValue (params::eqMid);
-    eqHighParam  = apvts.getRawParameterValue (params::eqHigh);
-    eqPresParam  = apvts.getRawParameterValue (params::eqPresence);
-    eqMidHzParam = apvts.getRawParameterValue (params::eqMidHz);
-    eqHpfOnParam = apvts.getRawParameterValue (params::eqHpfOn);
-    eqHpfHzParam = apvts.getRawParameterValue (params::eqHpfHz);
-    eqLpfOnParam = apvts.getRawParameterValue (params::eqLpfOn);
-    eqLpfHzParam = apvts.getRawParameterValue (params::eqLpfHz);
+    for (int l = 0; l < params::numEqLinks; ++l)
+    {
+        auto& p = eqParams[(size_t) l];
+        p.on    = apvts.getRawParameterValue (params::eqOn (l));
+        p.low   = apvts.getRawParameterValue (params::eqLow (l));
+        p.mid   = apvts.getRawParameterValue (params::eqMid (l));
+        p.high  = apvts.getRawParameterValue (params::eqHigh (l));
+        p.pres  = apvts.getRawParameterValue (params::eqPresence (l));
+        p.midHz = apvts.getRawParameterValue (params::eqMidHz (l));
+        p.hpfOn = apvts.getRawParameterValue (params::eqHpfOn (l));
+        p.hpfHz = apvts.getRawParameterValue (params::eqHpfHz (l));
+        p.lpfOn = apvts.getRawParameterValue (params::eqLpfOn (l));
+        p.lpfHz = apvts.getRawParameterValue (params::eqLpfHz (l));
+    }
 
     reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
     reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
@@ -107,19 +111,6 @@ void AmpProcessor::rescanDevices()
 void AmpProcessor::selectBoostDevice (int index)  { boost.select (index); }
 void AmpProcessor::selectPreampDevice (int index) { preamp.select (index); }
 
-void AmpProcessor::updateVoiceEq (auto& block, const char* blk)
-{
-    core::VoiceEq::Settings s;
-    s.enabled   = apvts.getRawParameterValue (params::advOn (blk))->load() > 0.5f;
-    s.placement = apvts.getRawParameterValue (params::advPre (blk))->load() > 0.5f
-                    ? core::VoiceEq::Placement::pre : core::VoiceEq::Placement::post;
-    s.hpfHz  = apvts.getRawParameterValue (params::advHpf (blk))->load();
-    s.lpfHz  = apvts.getRawParameterValue (params::advLpf (blk))->load();
-    s.tiltDb = apvts.getRawParameterValue (params::advTilt (blk))->load();
-
-    block.eq.setSettings (s);
-}
-
 void AmpProcessor::pumpDeviceWork()
 {
     auto pump = [this] (auto& block, auto& gainParam, auto measuredId, const char* blk)
@@ -145,9 +136,6 @@ void AmpProcessor::pumpDeviceWork()
 
     pump (boost,  boostGainParam,  params::boostMeasured,  params::boostId);
     pump (preamp, preampGainParam, params::preampMeasured, params::preampId);
-
-    updateVoiceEq (boost,  params::boostId);
-    updateVoiceEq (preamp, params::preampId);
 }
 
 void AmpProcessor::applyOversamplingIfChanged()
@@ -175,7 +163,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // convolver behind the measured controls then read past the end of its own buffers.
     const int block = juce::jmax (1, samplesPerBlock);
 
-    tone.prepare (sampleRate, channels);
+    for (auto& eq : eqLinks)
+        eq.prepare (sampleRate, channels);
+
     reverb.prepare (sampleRate);
     boost.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
@@ -196,7 +186,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // with a switch is what makes hosts re-align mid-song.
     setLatencySamples (power.latencySamples());
 
-    updateToneSettings();
+    updateEqSettings();
     updateReverbSettings();
 }
 
@@ -209,20 +199,25 @@ void AmpProcessor::updateReverbSettings() noexcept
     reverb.setMix (reverbMixParam->load() * 0.01f);   // the face reads percent
 }
 
-void AmpProcessor::updateToneSettings() noexcept
+void AmpProcessor::updateEqSettings() noexcept
 {
-    core::ToneStack::Settings s;
-    s.lowDb  = (double) eqLowParam->load();
-    s.midDb  = (double) eqMidParam->load();
-    s.midHz  = (double) eqMidHzParam->load();
-    s.highDb     = (double) eqHighParam->load();
-    s.presenceDb = (double) eqPresParam->load();
-    s.hpfOn  = eqHpfOnParam->load() > 0.5f;
-    s.hpfHz  = (double) eqHpfHzParam->load();
-    s.lpfOn  = eqLpfOnParam->load() > 0.5f;
-    s.lpfHz  = (double) eqLpfHzParam->load();
+    for (int l = 0; l < params::numEqLinks; ++l)
+    {
+        const auto& p = eqParams[(size_t) l];
 
-    tone.setSettings (s);
+        core::ToneStack::Settings s;
+        s.lowDb      = (double) p.low->load();
+        s.midDb      = (double) p.mid->load();
+        s.midHz      = (double) p.midHz->load();
+        s.highDb     = (double) p.high->load();
+        s.presenceDb = (double) p.pres->load();
+        s.hpfOn      = p.hpfOn->load() > 0.5f;
+        s.hpfHz      = (double) p.hpfHz->load();
+        s.lpfOn      = p.lpfOn->load() > 0.5f;
+        s.lpfHz      = (double) p.lpfHz->load();
+
+        eqLinks[(size_t) l].setSettings (s);
+    }
 }
 
 bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -249,26 +244,27 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // playing is a loop you cannot judge anything by.
     demo.fill (buffer);
 
-    updateToneSettings();
+    updateEqSettings();
     updateReverbSettings();
 
     auto* const* channels = buffer.getArrayOfWritePointers();
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
 
-    // boost -> preamp -> EQ -> reverb -> power amp.
+    // eq1 -> boost -> eq2 -> preamp -> reverb -> power amp. The EQ links are links of their own,
+    // with their own switches: eq1 decides what reaches the first nonlinearity, eq2 colours what
+    // the boost made before the preamp distorts it again.
+    if (eqParams[0].on->load() > 0.5f)
+        eqLinks[0].process (channels, numChannels, numSamples);
+
     if (boostOnParam->load() > 0.5f)
         boost.process (buffer, scopeDry);
 
+    if (eqParams[1].on->load() > 0.5f)
+        eqLinks[1].process (channels, numChannels, numSamples);
+
     if (preampOnParam->load() > 0.5f)
         preamp.process (buffer, scopeDry);
-
-    // UNDER the preamp's switch, because it is drawn inside the preamp's block. It was a separate
-    // link with a parameter of its own and no control on the panel, so switching the preamp off left
-    // it cutting — the curve went dark and the sound did not. A block's switch has to mean everything
-    // that block shows.
-    if (preampOnParam->load() > 0.5f && eqOnParam->load() > 0.5f)
-        tone.process (channels, numChannels, numSamples);
 
     if (reverbOnParam->load() > 0.5f)
         reverb.process (channels, numChannels, numSamples);

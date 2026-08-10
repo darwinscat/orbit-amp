@@ -11,8 +11,9 @@
 namespace orbitamp
 {
 
-/** The tone stack inside the preamp block: knobs in the upper half, the response curve across the
-    lower one.
+/** One EQ link's controls: knobs in the upper half, the response curve across the lower one.
+    Which link it drives is the constructor's `link` — the same set of widgets is learned once and
+    met at every place in the chain an EQ sits.
 
     NOT a Component. Its widgets become children of the block itself, because they live in two
     separate regions of it — a container would have to be either non-rectangular or two containers,
@@ -24,7 +25,7 @@ namespace orbitamp
 class EqSection final
 {
 public:
-    explicit EqSection (juce::AudioProcessorValueTreeState&);
+    EqSection (juce::AudioProcessorValueTreeState&, int link);
     ~EqSection();
 
     /** Hands the widgets to the block that will place them. */
@@ -61,6 +62,7 @@ private:
     static constexpr int switchHeight = 11;
 
     juce::AudioProcessorValueTreeState& state;
+    const int link;
 
     static constexpr double displayRate = 48000.0;
     core::ToneStack display;

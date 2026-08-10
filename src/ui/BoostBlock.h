@@ -13,7 +13,6 @@
 
 #include <array>
 #include <memory>
-#include <vector>
 
 namespace orbitamp
 {
@@ -29,8 +28,7 @@ class AmpProcessor;
     switch — nothing in this file names any of that.
 
     A control slot with nothing behind it is hidden. A knob doing nothing is worse than a gap. */
-class BoostBlock final : public BlockFrame,
-                         private juce::AsyncUpdater
+class BoostBlock final : public BlockFrame
 {
 public:
     explicit BoostBlock (AmpProcessor&);
@@ -45,31 +43,12 @@ private:
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
 
-    /** Every measured control summed — what the pedal's tone section is doing as a whole. */
-    double toneDb (double freqHz) const;
-
-    /** Resolves each control's curve at wherever its knob sits. Cheap enough to do on every knob
-        move, and far cheaper than doing it once per pixel. */
-    void rebuildCurves();
-
-    /** Asks for the curve to be rebuilt — on the next message, not now.
-
-        Everything that moves a measured control writes a parameter, and the writes and the redraw
-        used to race. juce::ParameterAttachment deliberately does NOT call its own callback when it
-        writes the value itself (that would be a loop), and the redraw lived in that callback — so
-        clicking the switch changed the parameter and left the curve showing the position BEFORE the
-        click. On screen that reads as the switch being wired backwards. Deferring puts the rebuild
-        after every write, whoever made it. */
-    void refreshCurve();
-
     /** Whether a measured control's positions are named rather than numbered — the difference
         between a switch and a knob that happens to have been swept at two points. */
     static bool hasNamedPositions (const namz::rig::Measured&);
 
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
-
-    void handleAsyncUpdate() override;
 
     static constexpr int headerRow  = 22;
     static constexpr int curveHeight = 130;
@@ -108,9 +87,6 @@ private:
     };
 
     std::array<PickSlot, (size_t) params::numSelectors> selectors;
-
-    struct Curve { std::vector<double> db, hz; };
-    std::array<Curve, (size_t) params::boostNumMeasured> curves;
 
     DeviceScope scope;   // constructed in the .cpp: the tap lives on the processor, incomplete here
     Selector   scopeMode { theme::orange, true };

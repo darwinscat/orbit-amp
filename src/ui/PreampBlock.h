@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BlockFrame.h"
-#include "EqSection.h"
 #include "Knob.h"
 #include "VoicingSelector.h"
 
@@ -12,10 +11,9 @@ class AmpProcessor;
 
 /** The preamp — a captured device, chosen from what is on disk.
 
-    Built from the pack the same way the boost is: the combo is the list of preamps found, the gain
-    knob's detents are the positions that device was captured at, and its measured controls become
-    knobs or switches according to what it shipped. What it does NOT get from the pack is the tone
-    stack below — that is ours, and it stays whatever the device is.
+    Built from the pack the same way the boost is: the combo is the list of preamps found and the
+    gain knob's detents are the positions that device was captured at. Only the device's own
+    controls live here — our EQ is a link of the chain now, not a section of this block.
 
     The voicing lives in the title row: picking one is a single decision, and it used to cost two
     lists and a whole row of the block. */
@@ -40,11 +38,8 @@ private:
     AmpProcessor& amp;
     juce::AudioProcessorValueTreeState& state;
 
-    static constexpr int eqGap = 10;
-
     VoicingSelector voicing;
     Knob            gain { "Gain", theme::orange };
-    EqSection       eq;   // the block's lower half: the tone stack, as its illustration
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
     std::unique_ptr<juce::ParameterAttachment> deviceAttachment;

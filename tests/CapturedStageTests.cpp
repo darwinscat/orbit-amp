@@ -261,10 +261,15 @@ int main()
 
             // Not "quieter by twelve decibels": twelve decibels less going into a distortion comes
             // back a fraction of that, because squashing it is what the circuit is for. What the
-            // attenuation must do is ARRIVE — the model is hit less hard, so a different shape comes
-            // out — and it must not come out louder.
+            // attenuation must do is ARRIVE, and arriving shows differently by device: hit a
+            // nonlinearity less hard and a different SHAPE comes out; feed a capture that is still
+            // clean at this position and the shape barely moves but the LEVEL follows the input
+            // down. Either is proof; an alias that ignored its inputDb would show neither. And it
+            // must not come out louder.
+            const bool arrived = shapeDifference (softOut, loudOut) > 2.0
+                              || softRms < loudRms * 0.5;   // at least half the 12 dB asked
             report ("...with the input attenuation the pack asked for",
-                    shapeDifference (softOut, loudOut) > 2.0 && softRms <= loudRms * 1.02,
+                    arrived && softRms <= loudRms * 1.02,
                     juce::String (shapeDifference (softOut, loudOut), 1) + "% different, "
                         + juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, softRms / loudRms)), 1)
                         + " dB");

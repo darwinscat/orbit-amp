@@ -18,9 +18,9 @@
 namespace orbitamp
 {
 
-/** The plugin shell. Deliberately thin: the chain (boost -> preamp -> EQ -> reverb) lands in
-    src/core/ behind a single engine, and this class only pumps buffers into it and owns state.
-    Passthrough for now — the scaffold exists to be loaded in a host, not to make sound yet. */
+/** The plugin shell. Deliberately thin: the chain (eq1 -> boost -> eq2 -> preamp -> reverb ->
+    power amp -> cabinet) lands in src/core/ behind small engines, and this class only pumps
+    buffers into them and owns state. */
 class AmpProcessor final : public juce::AudioProcessor,
                            private juce::Timer
 {
@@ -103,24 +103,16 @@ public:
     void pumpDeviceWork();
 
 private:
-    /** Reads a block's advanced-EQ parameters into its filters. Message thread, off the same pump —
-        redesigning biquads is not audio-thread work. */
-    void updateVoiceEq (auto& block, const char* blk);
-
-public:
-
-private:
-
-    /** Reads the tone parameters into the stack's settings. Called per block from the audio thread;
-        the stack only redesigns when something actually moved. */
-    void updateToneSettings() noexcept;
+    /** Reads each EQ link's parameters into its stack. Called per block from the audio thread;
+        a stack only redesigns when something actually moved. */
+    void updateEqSettings() noexcept;
 
     /** Same, for the reverb: character and mix, applied only when they move. */
     void updateReverbSettings() noexcept;
 
     float editorScale = preferredScale;
 
-    core::ToneStack   tone;
+    std::array<core::ToneStack, params::numEqLinks> eqLinks;
     core::ReverbStage reverb;
     core::PowerAmp    power;
 
@@ -150,16 +142,21 @@ private:
 
     // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
     // thread should not be doing per block.
-    std::atomic<float>* eqOnParam    = nullptr;
-    std::atomic<float>* eqLowParam   = nullptr;
-    std::atomic<float>* eqMidParam   = nullptr;
-    std::atomic<float>* eqHighParam  = nullptr;
-    std::atomic<float>* eqPresParam  = nullptr;
-    std::atomic<float>* eqMidHzParam = nullptr;
-    std::atomic<float>* eqHpfOnParam = nullptr;
-    std::atomic<float>* eqHpfHzParam = nullptr;
-    std::atomic<float>* eqLpfOnParam = nullptr;
-    std::atomic<float>* eqLpfHzParam = nullptr;
+    struct EqLinkParams
+    {
+        std::atomic<float>* on    = nullptr;
+        std::atomic<float>* low   = nullptr;
+        std::atomic<float>* mid   = nullptr;
+        std::atomic<float>* high  = nullptr;
+        std::atomic<float>* pres  = nullptr;
+        std::atomic<float>* midHz = nullptr;
+        std::atomic<float>* hpfOn = nullptr;
+        std::atomic<float>* hpfHz = nullptr;
+        std::atomic<float>* lpfOn = nullptr;
+        std::atomic<float>* lpfHz = nullptr;
+    };
+
+    std::array<EqLinkParams, params::numEqLinks> eqParams;
 
     std::atomic<float>* reverbOnParam   = nullptr;
     std::atomic<float>* reverbTypeParam = nullptr;

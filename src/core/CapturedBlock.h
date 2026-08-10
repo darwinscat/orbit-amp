@@ -5,10 +5,12 @@
 #include "CapturedStage.h"
 #include "MeasuredFilter.h"
 #include "ScopeTap.h"
-#include "VoiceEq.h"
 #include "WaveRibbon.h"
 
+#include <felitronics/lineareq/MagnitudeCurve.h>
+
 #include <array>
+#include <vector>
 
 namespace orbitamp::core
 {
@@ -37,8 +39,6 @@ public:
 
         for (auto& f : tone)
             f.prepare (sampleRate, maxBlock, numChannels);
-
-        eq.prepare (sampleRate, numChannels);
 
         lastTone.fill (-1.0f);
         lastGainIndex = -1;
@@ -136,6 +136,7 @@ public:
             if (raw || measured == nullptr || i >= (int) measured->size())
             {
                 filter.clear();
+                curves[(size_t) i] = ToneCurve {};
                 continue;
             }
 
@@ -144,7 +145,24 @@ public:
 
             lastTone[(size_t) i] = values[(size_t) i];
             filter.setPosition ((*measured)[(size_t) i], (double) values[(size_t) i]);
+            rebuildCurve (i, (double) values[(size_t) i]);
         }
+    }
+
+    /** What the measured controls are doing as a whole, in dB at a frequency — the block's own
+        answer for any picture that wants to draw its tone, from the block's face to a chain
+        miniature. Message thread, off the same data the filters were designed from: the same band
+        decision the sound makes, so the picture never promises what the audio does not play. */
+    double toneDb (double freqHz) const
+    {
+        // Every measured control at once. They sit in series in the pedal — SM7's two EQ knobs and
+        // its Sharp/Smooth switch all act on the same signal — so the picture is their sum, not
+        // whichever one happens to be first.
+        double sum = 0.0;
+        for (const auto& c : curves)
+            sum += felitronics::lineareq::curveDbAt (c.db, c.hz, freqHz);
+
+        return sum;
     }
 
     void collectGarbage() { stage.collectGarbage(); }
@@ -161,20 +179,12 @@ public:
         auto* const* channels = buffer.getArrayOfWritePointers();
         const int numChannels = buffer.getNumChannels();
 
-        // BEFORE the capture, when it is set there — that is the whole reason the placement exists.
-        // What reaches a nonlinearity decides what kind of distortion comes out of it.
-        if (! raw && eq.isPre())
-            eq.process (channels, numChannels, numSamples);
-
         stage.process (channels, numChannels, numSamples);
 
         // The measured controls sit AFTER the capture — `placement: post` — because that is where
         // they sit in the device.
         for (auto& f : tone)
             f.process (buffer);
-
-        if (! raw && ! eq.isPre())
-            eq.process (channels, numChannels, numSamples);
 
         scope.write (dry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
         ribbon.write (dry.getReadPointer (0), buffer.getReadPointer (0), numSamples);
@@ -188,10 +198,6 @@ public:
     juce::String deviceName() const                          { return stage.deviceName(); }
     bool isReady() const noexcept                            { return stage.isReady(); }
 
-    /** Ours, not the device's — see core::VoiceEq. Public because the block's face draws it and the
-        processor feeds it from parameters. */
-    VoiceEq eq;
-
     CapturedStage stage;
     ScopeTap scope;
     WaveRibbon ribbon;
@@ -202,6 +208,41 @@ private:
     // Four decibels a step: the full dial spans forty, which is enough to take a capture from barely
     // breaking up to thoroughly into it without leaving the range a model behaves in.
     static constexpr float driveDbPerStep = 4.0f;
+
+    /** A measured control's curve at wherever its knob sits, resolved once per move rather than once
+        per pixel. Message-thread data, like everything else the pictures read. */
+    struct ToneCurve { std::vector<double> db, hz; };
+
+    void rebuildCurve (int i, double t)
+    {
+        auto& c = curves[(size_t) i];
+        c = ToneCurve {};
+
+        const auto* measured = stage.measured();
+        if (measured == nullptr || i >= (int) measured->size())
+            return;
+
+        const auto& m = (*measured)[(size_t) i];
+        if (m.positions.size() < 2 || m.grid.points < 2)
+            return;
+
+        std::vector<std::vector<double>> pos;
+        std::vector<double> norms;
+        for (const auto& p : m.positions)
+        {
+            pos.push_back (p.db);
+            norms.push_back (p.norm);
+        }
+
+        c.hz = felitronics::lineareq::logFreqGrid (m.grid.fLo, m.grid.fHi, m.grid.points);
+
+        const auto band = MeasuredFilter::bandFor (m);
+        c.db = felitronics::lineareq::heldOutsideBand (
+            felitronics::lineareq::curveAtPosition (pos, norms, juce::jlimit (0.0, 1.0, t)),
+            c.hz, band.lo, band.hi);
+    }
+
+    std::array<ToneCurve, (size_t) NumMeasured> curves;
 
     device::DeviceLibrary::Slot slot;
     std::array<float, (size_t) NumMeasured> lastTone { };

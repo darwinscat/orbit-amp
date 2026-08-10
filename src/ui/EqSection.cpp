@@ -5,8 +5,8 @@
 namespace orbitamp
 {
 
-EqSection::EqSection (juce::AudioProcessorValueTreeState& s)
-    : state (s)
+EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink)
+    : state (s), link (eqLink)
 {
     display.prepare (displayRate, 1);
 
@@ -17,27 +17,27 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s)
         k->onValueChange = [this] { refreshCurve(); };
     }
 
-    lowAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqLow,      low);
-    midAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqMid,      mid);
-    highAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqHigh,     high);
-    presAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqPresence, presence);
+    lowAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqLow (link),      low);
+    midAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqMid (link),      mid);
+    highAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqHigh (link),     high);
+    presAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqPresence (link), presence);
 
-    auto attach = [this] (const char* id, auto&& onChanged)
+    auto attach = [this] (const juce::String& id, auto&& onChanged)
     {
         return std::make_unique<juce::ParameterAttachment> (*state.getParameter (id),
                                                             std::forward<decltype (onChanged)> (onChanged));
     };
 
-    hpfOnAtt = attach (params::eqHpfOn, [this] (float v) { hpf.setState (v > 0.5f, hpf.getHz()); refreshCurve(); });
-    hpfHzAtt = attach (params::eqHpfHz, [this] (float v) { hpf.setState (hpf.isOn(), (double) v); refreshCurve(); });
-    lpfOnAtt = attach (params::eqLpfOn, [this] (float v) { lpf.setState (v > 0.5f, lpf.getHz()); refreshCurve(); });
-    lpfHzAtt = attach (params::eqLpfHz, [this] (float v) { lpf.setState (lpf.isOn(), (double) v); refreshCurve(); });
-    powerAtt = attach (params::eqOn,    [this] (float v) { on = v > 0.5f; });
+    hpfOnAtt = attach (params::eqHpfOn (link), [this] (float v) { hpf.setState (v > 0.5f, hpf.getHz()); refreshCurve(); });
+    hpfHzAtt = attach (params::eqHpfHz (link), [this] (float v) { hpf.setState (hpf.isOn(), (double) v); refreshCurve(); });
+    lpfOnAtt = attach (params::eqLpfOn (link), [this] (float v) { lpf.setState (v > 0.5f, lpf.getHz()); refreshCurve(); });
+    lpfHzAtt = attach (params::eqLpfHz (link), [this] (float v) { lpf.setState (lpf.isOn(), (double) v); refreshCurve(); });
+    powerAtt = attach (params::eqOn (link),    [this] (float v) { on = v > 0.5f; });
 
     // Its own switch at last. Drawn on the curve's corner, where the picture it belongs to is.
     power.accent = theme::violet;
-    power.attach (*state.getParameter (params::eqOn));
-    midHzAtt = attach (params::eqMidHz, [this] (float v) { midHz = (double) v; refreshCurve(); });
+    power.attach (*state.getParameter (params::eqOn (link)));
+    midHzAtt = attach (params::eqMidHz (link), [this] (float v) { midHz = (double) v; refreshCurve(); });
 
     curve.onHandleDrag = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
     curve.onDragActive = [this] (int i, bool a)               { handleDragActive (i, a); };

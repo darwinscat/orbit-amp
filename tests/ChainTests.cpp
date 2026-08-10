@@ -135,7 +135,9 @@ int main()
     std::printf ("device: %s\n\n", amp.boost.packs.getReference (0).displayName().toRawUTF8());
 
     // Everything else off, so what is measured is the boost and nothing standing in front of it.
-    set (amp, orbitamp::params::eqOn, 0.0f);
+    // The EQ links ship off — stated here anyway, because this test depends on it.
+    set (amp, orbitamp::params::eqOn (0), 0.0f);
+    set (amp, orbitamp::params::eqOn (1), 0.0f);
     set (amp, orbitamp::params::reverbOn, 0.0f);
     set (amp, orbitamp::params::powerOn, 0.0f);
 
@@ -250,37 +252,45 @@ int main()
         }
     }
 
-    // The advanced EQ, and the thing it exists for: the SAME filter before and after the capture is
-    // not the same sound. Post colours what came out. Pre changes what arrives at the nonlinearity,
-    // so it changes what kind of distortion happens at all — which is how one captured voice becomes
-    // two instruments, and is the reason the placement is a control rather than a constant.
+    // The EQ links, and the thing their PLACES exist for: the SAME filter before and after the
+    // capture is not the same sound. eq2, after the boost, colours what came out. eq1, ahead of it,
+    // changes what arrives at the nonlinearity, so it changes what kind of distortion happens at
+    // all — which is how one captured voice becomes two instruments, and is the reason the EQ is a
+    // link of the chain rather than a section of a block.
     {
         set (amp, orbitamp::params::boostGain, 8.0f);   // well into the dirt, or there is no
-                                                        // nonlinearity for PRE to act on
-        set (amp, orbitamp::params::advOn (orbitamp::params::boostId), 0.0f);
+                                                        // nonlinearity for eq1 to act on
         const auto clean = run (amp);
 
-        set (amp, orbitamp::params::advOn (orbitamp::params::boostId), 1.0f);
-        set (amp, orbitamp::params::advHpf (orbitamp::params::boostId), 800.0f);
-        set (amp, orbitamp::params::advPre (orbitamp::params::boostId), 0.0f);
+        // The same cut in both places: 800 Hz high-pass, well inside a guitar's body.
+        for (int l = 0; l < orbitamp::params::numEqLinks; ++l)
+        {
+            set (amp, orbitamp::params::eqHpfOn (l), 1.0f);
+            set (amp, orbitamp::params::eqHpfHz (l), 800.0f);
+        }
+
+        set (amp, orbitamp::params::eqOn (1), 1.0f);
         const auto post = run (amp);
 
-        set (amp, orbitamp::params::advPre (orbitamp::params::boostId), 1.0f);
+        set (amp, orbitamp::params::eqOn (1), 0.0f);
+        set (amp, orbitamp::params::eqOn (0), 1.0f);
         const auto pre = run (amp);
 
-        std::printf ("\nadvanced EQ: off %.5f, post %.5f, pre %.5f\n",
+        std::printf ("\nEQ links: off %.5f, eq2 %.5f, eq1 %.5f\n",
                      rms (clean), rms (post), rms (pre));
-        std::printf ("post differs from off by %.1f%%, pre from post by %.1f%%\n\n",
+        std::printf ("eq2 differs from off by %.1f%%, eq1 from eq2 by %.1f%%\n\n",
                      differencePercent (clean, post), differencePercent (post, pre));
 
-        report ("the advanced EQ reaches the audio",
+        report ("an EQ link reaches the audio",
                 differencePercent (clean, post) > 5.0,
                 juce::String (differencePercent (clean, post), 1) + "% different");
 
-        report ("...and PRE is not POST", differencePercent (post, pre) > 5.0,
+        report ("...and eq1 (before the boost) is not eq2", differencePercent (post, pre) > 5.0,
                 juce::String (differencePercent (post, pre), 1) + "% apart");
 
-        set (amp, orbitamp::params::advOn (orbitamp::params::boostId), 0.0f);
+        set (amp, orbitamp::params::eqOn (0), 0.0f);
+        for (int l = 0; l < orbitamp::params::numEqLinks; ++l)
+            set (amp, orbitamp::params::eqHpfOn (l), 0.0f);
     }
 
     // A capture with no gain axis still answers its gain knob — the knob DRIVES where it cannot
@@ -302,7 +312,8 @@ int main()
 
             orbitamp::AmpProcessor solo;
             solo.prepareToPlay (sampleRate, blockSize);
-            set (solo, orbitamp::params::eqOn, 0.0f);
+            set (solo, orbitamp::params::eqOn (0), 0.0f);
+            set (solo, orbitamp::params::eqOn (1), 0.0f);
             set (solo, orbitamp::params::reverbOn, 0.0f);
             set (solo, orbitamp::params::powerOn, 0.0f);
             set (solo, orbitamp::params::preampOn, 0.0f);

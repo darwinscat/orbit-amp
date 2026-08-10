@@ -15,7 +15,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // Block power. A boost is an addition to the sound, so it starts off; the rest are the sound.
     layout.add (std::make_unique<Bool> (juce::ParameterID { boostOn,  1 }, "Boost",  false),
                 std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, "Preamp", true),
-                std::make_unique<Bool> (juce::ParameterID { eqOn,     1 }, "EQ",     true),
                 std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", true));
 
     // Boost. The gain knob is stepped because it selects a capture, not a value — between the
@@ -35,7 +34,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Int> (juce::ParameterID { boostDevice, 1 }, "Boost Device",
                                        0, maxDevices - 1, 0));
 
-    // The advanced EQ and the selector slots, one set per captured block.
+    // The raw switch and the selector slots, one set per captured block.
     for (const char* blk : { boostId, preampId })
     {
         layout.add (std::make_unique<Bool> (juce::ParameterID { rawId (blk), 1 },
@@ -45,22 +44,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
             layout.add (std::make_unique<Int> (juce::ParameterID { selectorId (blk, i), 1 },
                                                juce::String (blk) + " Select " + juce::String (i + 1),
                                                0, 15, 0));
-
-        const juce::String name (juce::String (blk).substring (0, 1).toUpperCase()
-                                 + juce::String (blk).substring (1));
-
-        layout.add (std::make_unique<Bool>  (juce::ParameterID { advOn (blk), 1 },
-                                             name + " EQ", false),
-                    std::make_unique<Bool>  (juce::ParameterID { advPre (blk), 1 },
-                                             name + " EQ Pre", false),
-                    std::make_unique<Float> (juce::ParameterID { advHpf (blk), 1 }, name + " EQ HPF",
-                                             juce::NormalisableRange<float> (20.0f, 2000.0f, 1.0f, 0.3f),
-                                             20.0f),
-                    std::make_unique<Float> (juce::ParameterID { advLpf (blk), 1 }, name + " EQ LPF",
-                                             juce::NormalisableRange<float> (500.0f, 20000.0f, 1.0f, 0.3f),
-                                             20000.0f),
-                    std::make_unique<Float> (juce::ParameterID { advTilt (blk), 1 }, name + " EQ Tilt",
-                                             juce::NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f));
     }
 
     layout.add (std::make_unique<Int> (juce::ParameterID { preampDevice, 1 }, "Preamp Device",
@@ -76,29 +59,38 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Float> (juce::ParameterID { preampGain, 1 }, "Gain",
                                          juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f));
 
-    // Tone. Corner frequencies are the stack's, not the user's — an amp tone control is three knobs.
-    const juce::NormalisableRange<float> tone { -toneRangeDb, toneRangeDb, 0.1f };
-    layout.add (std::make_unique<Float> (juce::ParameterID { eqLow,      1 }, "Low",      tone, 0.0f),
-                std::make_unique<Float> (juce::ParameterID { eqMid,      1 }, "Mid",      tone, 0.0f),
-                std::make_unique<Float> (juce::ParameterID { eqHigh,     1 }, "High",     tone, 0.0f),
-                std::make_unique<Float> (juce::ParameterID { eqPresence, 1 }, "Presence", tone, 0.0f));
-
     // Frequencies are skewed so the useful end of each sweep gets the middle of the travel.
     auto hz = [] (float lo, float hi, float centre)
     {
         return juce::NormalisableRange<float> (lo, hi, 0.1f, std::log (0.5f) / std::log ((centre - lo) / (hi - lo)));
     };
 
-    // The bell is the one band whose centre moves — the shelves stay where the stack puts them.
-    // 200 Hz - 2 kHz is the span the measured devices sat in (734, 775, 912).
-    layout.add (std::make_unique<Float> (juce::ParameterID { eqMidHz, 1 }, "Mid Freq",
-                                         hz (200.0f, 2000.0f, 600.0f), 600.0f));
+    // The EQ links. Both ship OFF and flat: four lit EQs out of the box is mush and lost headroom,
+    // and an EQ you switched on yourself is an EQ you remember setting.
+    for (int l = 0; l < numEqLinks; ++l)
+    {
+        const juce::String name = "EQ" + juce::String (l + 1) + " ";
+        const juce::NormalisableRange<float> tone { -toneRangeDb, toneRangeDb, 0.1f };
 
-    // The cuts are off by default: they are for tightening a specific rig, not part of the voicing.
-    layout.add (std::make_unique<Bool>  (juce::ParameterID { eqHpfOn, 1 }, "HPF", false),
-                std::make_unique<Float> (juce::ParameterID { eqHpfHz, 1 }, "HPF Freq", hz (20.0f, 500.0f, 80.0f), 80.0f),
-                std::make_unique<Bool>  (juce::ParameterID { eqLpfOn, 1 }, "LPF", false),
-                std::make_unique<Float> (juce::ParameterID { eqLpfHz, 1 }, "LPF Freq", hz (2000.0f, 20000.0f, 10000.0f), 10000.0f));
+        layout.add (std::make_unique<Bool>  (juce::ParameterID { eqOn (l),       1 }, "EQ" + juce::String (l + 1), false),
+                    std::make_unique<Float> (juce::ParameterID { eqLow (l),      1 }, name + "Low",      tone, 0.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqMid (l),      1 }, name + "Mid",      tone, 0.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqHigh (l),     1 }, name + "High",     tone, 0.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqPresence (l), 1 }, name + "Presence", tone, 0.0f));
+
+        // The bell is the one band whose centre moves — the shelves stay where the stack puts them.
+        // 200 Hz - 2 kHz is the span the measured devices sat in (734, 775, 912).
+        layout.add (std::make_unique<Float> (juce::ParameterID { eqMidHz (l), 1 }, name + "Mid Freq",
+                                             hz (200.0f, 2000.0f, 600.0f), 600.0f));
+
+        // The cuts are off by default: they are for tightening a specific rig, not part of the voicing.
+        layout.add (std::make_unique<Bool>  (juce::ParameterID { eqHpfOn (l), 1 }, name + "HPF", false),
+                    std::make_unique<Float> (juce::ParameterID { eqHpfHz (l), 1 }, name + "HPF Freq",
+                                             hz (20.0f, 500.0f, 80.0f), 80.0f),
+                    std::make_unique<Bool>  (juce::ParameterID { eqLpfOn (l), 1 }, name + "LPF", false),
+                    std::make_unique<Float> (juce::ParameterID { eqLpfHz (l), 1 }, name + "LPF Freq",
+                                             hz (2000.0f, 20000.0f, 10000.0f), 10000.0f));
+    }
 
     // The cabinet. Position and distance are the two halves of one gesture on the grid; distance is
     // in centimetres, matching the grid's own ladder.

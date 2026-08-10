@@ -2,15 +2,16 @@
 
 #include "../PluginProcessor.h"
 
-#include <felitronics/lineareq/MagnitudeCurve.h>
-
 namespace orbitamp
 {
 
 BoostBlock::BoostBlock (AmpProcessor& processor)
     : BlockFrame ("Boost", BlockFrame::Kind::captured), amp (processor),
+      // The tone curve comes from the block itself — the same data its filters were designed from,
+      // resolved on the processor's pump. The scope repaints on its own clock, so it picks a move
+      // up within a frame or two.
       scope (processor.boost.scope, processor.boost.ribbon,
-             [this] (double hz) { return toneDb (hz); })
+             [this] (double hz) { return amp.boost.toneDb (hz); })
 {
     addAndMakeVisible (rawSwitch);
     addAndMakeVisible (rawLabel);
@@ -134,13 +135,11 @@ void BoostBlock::deviceChanged()
                 {
                     if (auto* s = slots[(size_t) i].steps.get())
                         s->setSelectedIndex (v > 0.5f ? 1 : 0, juce::dontSendNotification);
-                    refreshCurve();
                 });
 
             slot.steps->onChange = [this, i] (int v)
             {
                 slots[(size_t) i].stepAtt->setValueAsCompleteGesture (v > 0 ? 1.0f : 0.0f);
-                refreshCurve();
             };
 
             slot.stepAtt->sendInitialUpdate();
@@ -159,7 +158,6 @@ void BoostBlock::deviceChanged()
         {
             slot.knob = std::make_unique<Knob> (name, theme::orange, (int) m.positions.size());
             slot.knob->textForValue = [] (double) { return juce::String(); };   // no numbers here
-            slot.knob->onValueChange = [this] { refreshCurve(); };
             addAndMakeVisible (*slot.knob);
 
             slot.knobAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
@@ -170,7 +168,6 @@ void BoostBlock::deviceChanged()
     buildSelectors();
 
     resized();
-    handleAsyncUpdate();   // the face is being built; the curve has to be right by the first paint
     repaint();
 }
 
@@ -228,67 +225,6 @@ bool BoostBlock::hasNamedPositions (const namz::rig::Measured& m)
     }
 
     return false;
-}
-
-void BoostBlock::rebuildCurves()
-{
-    const auto* measured = amp.boost.measured();
-
-    for (int i = 0; i < params::boostNumMeasured; ++i)
-    {
-        auto& c = curves[(size_t) i];
-        c = Curve {};
-
-        if (measured == nullptr || i >= (int) measured->size())
-            continue;
-
-        const auto& m = (*measured)[(size_t) i];
-        if (m.positions.size() < 2 || m.grid.points < 2)
-            continue;
-
-        std::vector<std::vector<double>> pos;
-        std::vector<double> norms;
-        for (const auto& p : m.positions)
-        {
-            pos.push_back (p.db);
-            norms.push_back (p.norm);
-        }
-
-        double t = 0.5;
-        if (const auto* v = amp.apvts.getRawParameterValue (params::boostMeasured (i)))
-            t = juce::jlimit (0.0, 1.0, (double) v->load());
-
-        c.hz = felitronics::lineareq::logFreqGrid (m.grid.fLo, m.grid.fHi, m.grid.points);
-
-        // The same band decision the sound makes, from the same function — a picture that drew what
-        // the audio does not play would be a promise the sound never keeps.
-        const auto band = core::MeasuredFilter::bandFor (m);
-        c.db = felitronics::lineareq::heldOutsideBand (
-            felitronics::lineareq::curveAtPosition (pos, norms, t), c.hz, band.lo, band.hi);
-    }
-}
-
-double BoostBlock::toneDb (double freqHz) const
-{
-    // Every measured control at once. They sit in series in the pedal — SM7's two EQ knobs and its
-    // Sharp/Smooth switch all act on the same signal — so the picture is their sum, not whichever one
-    // happens to be first. Showing one was showing a third of the tone.
-    double sum = 0.0;
-    for (const auto& c : curves)
-        sum += felitronics::lineareq::curveDbAt (c.db, c.hz, freqHz);
-
-    return sum;
-}
-
-void BoostBlock::refreshCurve()
-{
-    triggerAsyncUpdate();
-}
-
-void BoostBlock::handleAsyncUpdate()
-{
-    rebuildCurves();
-    scope.repaint();
 }
 
 void BoostBlock::layOutHeader (juce::Rectangle<int> area)
