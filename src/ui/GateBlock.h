@@ -127,7 +127,7 @@ private:
                 {
                     // The full hysteresis over the measured floor: the floor then sits under the
                     // CLOSE level too, with the same margin.
-                    const float th = juce::jlimit (-80.0f, -20.0f,
+                    const float th = juce::jlimit (-80.0f, -10.0f,
                                                    learnPeak + params::gateHysteresisDb);
                     runnerAtt->setValueAsCompleteGesture (th);
                     say ("SET " + juce::String (juce::roundToInt (th)) + " DB");

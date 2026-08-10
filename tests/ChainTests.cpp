@@ -355,6 +355,10 @@ int main()
         set (amp, orbitamp::params::gatePos, 0.0f);   // start
         const auto gatedStart = run (amp, 220.0, 0.005f);
 
+        // Caught NOW, while the gate is still closed — after the next run it is off and the
+        // meter honestly reads unity.
+        const float meterWhileClosed = amp.gateMeterDb.load();
+
         set (amp, orbitamp::params::gateOn, 0.0f);
         const auto open = run (amp, 220.0, 0.005f);
 
@@ -368,6 +372,12 @@ int main()
         report ("...at either mute position",
                 rms (gatedStart) < rms (open) * 0.1,
                 juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, rms (gatedStart) / rms (open))), 1) + " dB");
+
+        // The GR meter is the same fact published for the face — a closed gate that meters open
+        // would send a player hunting a working gate for a broken picture.
+        report ("...and the GR meter reports the pressure",
+                meterWhileClosed < -60.0f,
+                juce::String (meterWhileClosed, 1) + " dB");
 
         set (amp, orbitamp::params::gatePos, 1.0f);   // back to the default for the loud check
 
