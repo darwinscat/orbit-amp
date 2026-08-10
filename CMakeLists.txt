@@ -168,6 +168,9 @@ target_sources(OrbitAmp PRIVATE
     src/ui/Chrome.cpp
     src/ui/DemoStrip.cpp
     src/ui/Footer.cpp
+    src/ui/SetupPanel.cpp
+    src/ui/library/DeviceListView.cpp
+    src/ui/library/IrTreeView.cpp
 )
 
 # ----------------------------------------------------------------------------
@@ -328,7 +331,10 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/ReverbBlock.cpp
     src/ui/Chrome.cpp
     src/ui/DemoStrip.cpp
-    src/ui/Footer.cpp)
+    src/ui/Footer.cpp
+    src/ui/SetupPanel.cpp
+    src/ui/library/DeviceListView.cpp
+    src/ui/library/IrTreeView.cpp)
 target_include_directories(orbitamp_chain_test PRIVATE src)
 target_compile_definitions(orbitamp_chain_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE
@@ -372,6 +378,21 @@ target_compile_definitions(orbitamp_captured_test PRIVATE JUCE_WEB_BROWSER=0 JUC
 target_link_libraries(orbitamp_captured_test PRIVATE
     felitronics::nam
     juce::juce_audio_basics
+    juce::juce_events
+    juce::juce_gui_basics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+# ----------------------------------------------------------------------------
+# Gate for the library manager's FILE WORK — imports, zip unpacking, renames, and the guards that
+# keep every destructive operation inside the library. Runs entirely in a temp folder.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_library_test PRODUCT_NAME "OrbitAmpLibraryTest")
+target_sources(orbitamp_library_test PRIVATE tests/LibraryTests.cpp)
+target_include_directories(orbitamp_library_test PRIVATE src)
+target_compile_definitions(orbitamp_library_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_library_test PRIVATE
+    felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events
     juce::juce_gui_basics
     juce::juce_recommended_config_flags

@@ -94,12 +94,17 @@ public:
         return dir;
     }
 
-    /** Where the plugin's own devices live, inside the bundle. Absent during development, which is
-        the honest state of it: nothing ships curated yet. */
+    /** Where the plugin's own devices live: inside the bundle once a build ships them curated, and
+        until then the machine-local `Factory` folder next to the user's `Devices`. The fallback
+        exists because the factory LAYER is a fact of the product before the bundle carries it —
+        the manager edits only what sits on top of factory, so something has to say which is which.
+        A build that does ship devices wins outright, so the two sources never double-list. */
     static juce::File bundledDirectory()
     {
-        return juce::File::getSpecialLocation (juce::File::currentApplicationFile)
-                 .getChildFile ("Contents").getChildFile ("Resources").getChildFile ("Devices");
+        const auto inBundle = juce::File::getSpecialLocation (juce::File::currentApplicationFile)
+                                .getChildFile ("Contents").getChildFile ("Resources").getChildFile ("Devices");
+
+        return inBundle.isDirectory() ? inBundle : appDataRoot().getChildFile ("Factory");
     }
 
     /** Everything loadable, ordered green to red by how much gain it is.
@@ -155,6 +160,60 @@ public:
             stream->readIntoMemoryBlock (out);
 
         return out;
+    }
+
+    /** Whether a path is something the Devices folder can hold: a lone model, an `.orbitrig.zip`,
+        or an unpacked pack folder — its `rig.json` is the tell, same as the scanner's. */
+    static bool looksLikeDevice (const juce::File& f)
+    {
+        if (f.isDirectory())
+            return f.getChildFile ("rig.json").existsAsFile();
+
+        return f.existsAsFile()
+            && (f.hasFileExtension ("nam;namz") || f.getFileName().endsWithIgnoreCase (".orbitrig.zip"));
+    }
+
+    /** Copies a device into the user folder, name kept, collisions numbered — never overwritten:
+        two files with one name are two different sounds until somebody has listened. Returns the
+        installed location; invalid when `src` is not a device or the copy failed. */
+    static juce::File importDevice (const juce::File& src, const juce::File& into = directory())
+    {
+        if (! looksLikeDevice (src))
+            return {};
+
+        const auto dst = uniqueIn (into, src.getFileName());
+
+        const bool ok = src.isDirectory() ? src.copyDirectoryTo (dst)
+                                          : src.copyFileTo (dst);
+        return ok ? dst : juce::File();
+    }
+
+    /** A user device out of the library, to the Trash — recoverable, unlike a delete. Bundled
+        entries are the build's, not the user's: refused here, hidden as an option in the UI. */
+    static bool removeDevice (const Pack& p)
+    {
+        return ! p.bundled && p.location.isAChildOf (directory()) && p.location.moveToTrash();
+    }
+
+    /** A landing name in `into` that collides with nothing. "Name 2" by hand rather than JUCE's
+        getNonexistentSibling, whose number lands before the LAST dot — turning a multi-dot name
+        like `amp.orbitrig.zip` into one the scanner no longer recognises. The split is at the
+        FIRST dot, so whatever extension chain the name carries survives intact. */
+    static juce::File uniqueIn (const juce::File& into, const juce::String& wantedName)
+    {
+        auto candidate = into.getChildFile (wantedName);
+        if (! candidate.exists())
+            return candidate;
+
+        const auto name = wantedName.upToFirstOccurrenceOf (".", false, false);
+        const auto ext  = wantedName.substring (name.length());
+
+        for (int i = 2;; ++i)
+        {
+            candidate = into.getChildFile (name + " " + juce::String (i) + ext);
+            if (! candidate.exists())
+                return candidate;
+        }
     }
 
 private:

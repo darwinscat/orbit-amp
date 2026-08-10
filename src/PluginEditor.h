@@ -6,6 +6,7 @@
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
 #include "ui/Footer.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
+#include "ui/SetupPanel.h"
 
 namespace orbitamp
 {
@@ -47,6 +48,7 @@ private:
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
+    SetupPanel    setup;            // the Setup overlay — last member, so it sits on top
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpEditor)
 };

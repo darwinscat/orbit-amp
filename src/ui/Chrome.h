@@ -32,6 +32,10 @@ public:
     explicit Chrome (AmpProcessor&);
     ~Chrome() override;
 
+    /** The gear was pressed. What opens — the Setup window — is the editor's business; the
+        header only announces, like every other widget here. */
+    std::function<void()> onShowSetup;
+
     void resized() override;
 
     // OrbitCab's header proportions: a 50-tall strip whose small controls live in a 44-tall band
@@ -57,6 +61,7 @@ private:
     felitronics::appkit::IconButton  save   { felitronics::appkit::IconButton::Kind::save };
     felitronics::appkit::IconButton  saveAs { felitronics::appkit::IconButton::Kind::saveAs };
     felitronics::appkit::IconButton  trash  { felitronics::appkit::IconButton::Kind::trash };
+    felitronics::appkit::IconButton  gear   { felitronics::appkit::IconButton::Kind::settings };
 
     std::vector<std::unique_ptr<felitronics::appkit::chrome::RegisterButton>> registers;
     felitronics::appkit::chrome::PresetCell preset;

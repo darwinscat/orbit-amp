@@ -11,6 +11,17 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (footer);
     addAndMakeVisible (demoStrip);   // TEMPORARY
     addAndMakeVisible (glyphs);      // TEMPORARY
+    addChildComponent (setup);       // hidden until the toolbar's gear opens it
+
+    chrome.onShowSetup = [this] { setup.open(); };
+
+    // Devices came or went while the window was open: the engine re-reads the folder, then the
+    // captured blocks rebuild their selectors from the lists that changed under them.
+    setup.onDevicesChanged = [this]
+    {
+        amp.rescanDevices();
+        faceplate.deviceChanged();
+    };
 
     // Dragging the corner IS the zoom: the aspect is locked, so width alone determines the factor.
     setResizable (true, true);
@@ -70,6 +81,10 @@ void AmpEditor::resized()
     glyphs.setBounds (margin, demoY + DemoStrip::designHeight,
                       FaceplateView::designWidth, GlyphPreview::designHeight);
     glyphs.setTransform (zoom);
+
+    // The overlay covers the whole editor, margins included, in the same design units.
+    setup.setBounds (0, 0, baseWidth, baseHeight);
+    setup.setTransform (zoom);
 }
 
 } // namespace orbitamp

@@ -33,7 +33,7 @@ Chrome::Chrome (AmpProcessor& processor)
 
     addAndMakeVisible (brand);
 
-    for (auto* b : { &undo, &redo, &save, &saveAs, &trash })
+    for (auto* b : { &undo, &redo, &save, &saveAs, &trash, &gear })
     {
         b->colour      = theme::txDim;
         b->panelColour = theme::panel;
@@ -42,6 +42,12 @@ Chrome::Chrome (AmpProcessor& processor)
 
     undo.onClick = [&history] { history.undo(); };
     redo.onClick = [&history] { history.redo(); };
+
+    gear.onClick = [this]
+    {
+        if (onShowSetup)
+            onShowSetup();
+    };
 
     // Save writes back to the loaded preset; Save As always asks for a name — the same split as the
     // sibling, so a working preset can be updated without a dialog every time.
@@ -103,10 +109,12 @@ void Chrome::resized()
 {
     auto header = getLocalBounds();
 
-    // ---- right cluster: file actions pinned right, then registers, then the preset name ----
-    auto right    = header.removeFromRight (440);
+    // ---- right cluster: the gear at the very edge, file actions, registers, the preset name ----
+    auto right    = header.removeFromRight (486);
     auto rightBar = right.withSizeKeepingCentre (right.getWidth(), controlBand);
 
+    gear.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
+    rightBar.removeFromRight (6);   // the gear opens a window, the rest edit the preset — a seam
     trash .setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     saveAs.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     save  .setBounds (rightBar.removeFromRight (40).reduced (4, 7));

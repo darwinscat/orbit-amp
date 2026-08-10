@@ -22,8 +22,8 @@ class FaceplateView : public juce::Component
 public:
     explicit FaceplateView (AmpProcessor&);
 
-    /** The loaded device changed — the boost rebuilds its face from the pack. */
-    void deviceChanged() { boost.deviceChanged(); }
+    /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
+    void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); }
 
     void paint (juce::Graphics&) override;
     void resized() override;
