@@ -103,17 +103,19 @@ private:
         if (learning)
         {
             ++learnTicks;
-            learn.progress = (float) learnTicks / (float) learnTotalTicks;
+            learn.trace.push_back (now);   // the waveform on the button IS the progress
 
             // The window's edges are thrown away: the button click itself, and the hand leaving
             // the mouse, are not the noise floor.
             if (learnTicks > learnEdgeTicks && learnTicks <= learnTotalTicks - learnEdgeTicks)
-                learnPeak = juce::jmax (learnPeak, now);
+            {
+                learnPeak    = juce::jmax (learnPeak, now);
+                learn.peakDb = learnPeak;
+            }
 
             if (learnTicks >= learnTotalTicks)
             {
                 learning = false;
-                learn.progress = 0.0f;
 
                 // Nothing arrived: a muted input teaches nothing, and parking the threshold at
                 // the floor would be pretending it did.
@@ -134,7 +136,10 @@ private:
         }
 
         if (messageTicks > 0 && --messageTicks == 0)
+        {
             learn.message.clear();
+            learn.trace.clear();   // the verdict took its record with it
+        }
 
         repaint();
     }
@@ -154,6 +159,12 @@ private:
         learning   = true;
         learnPeak  = -90.0f;
         learnTicks = 0;
+
+        learn.trace.clear();
+        learn.trace.reserve ((size_t) learnTotalTicks);
+        learn.totalTicks = learnTotalTicks;
+        learn.edgeTicks  = learnEdgeTicks;
+        learn.peakDb     = -90.0f;
     }
 
     /** The verdict lands ON the button — the one place the eye already is. */
@@ -165,13 +176,13 @@ private:
 
     void layOutContent (juce::Rectangle<int> area) override
     {
-        // The meter columns, side by side on the right: KEY — the decision's own scale — beside
-        // GR, each wide enough that its NAME can be set in real letters.
+        // The meter columns flank the face the way the signal flows: KEY — what comes IN, the
+        // decision's own scale — on the left, GR — what the gate is doing to it — on the right.
+        // Each wide enough that its NAME can be set in real letters.
         const int wellW = juce::jmin (96, area.getWidth() / 6);
-        auto wells = area.removeFromRight (wellW * 2 + wellGap).reduced (0, 4);
-        keyWell = wells.removeFromLeft (wellW);
-        wells.removeFromLeft (wellGap);
-        pressureWell = wells;
+        keyWell = area.removeFromLeft (wellW).reduced (0, 4);
+        area.removeFromLeft (18);
+        pressureWell = area.removeFromRight (wellW).reduced (0, 4);
         area.removeFromRight (18);
 
         // The hero on top, every button UNDER it: LEARN over DECAY over MUTE POSITION, one
@@ -347,14 +358,21 @@ private:
 
     //==============================================================================
     /** The one momentary control on the face — a BUTTON, sized like one, in the capture orange
-        that says "this one acts". The measurement's progress runs across it, and its verdict
-        lands on it. */
+        that says "this one acts". While it listens, what it HEARS runs across it: the key level
+        as a violet waveform on a dB scale — logarithmic, because on a linear one a -70 dB noise
+        floor is three pixels of nothing and the whole point is SEEING the floor. Its growth is
+        the progress; the window's thrown-away edges draw dimmer; the measured peak is the green
+        line. The verdict lands on the button too, over the trace that produced it. */
     struct LearnButton final : public juce::Component
     {
         std::function<void()> onClick;
         bool  lit = false;
-        float progress = 0.0f;
         juce::String message;
+
+        std::vector<float> trace;         // key dB per tick, the measurement's own record
+        int   totalTicks = 1;
+        int   edgeTicks  = 0;
+        float peakDb     = -90.0f;
 
         void paint (juce::Graphics& g) override
         {
@@ -364,15 +382,39 @@ private:
             g.setColour (theme::orange.withAlpha (over && ! lit ? 0.35f : 0.22f));
             g.fillRoundedRectangle (r, corner);
 
-            if (lit && progress > 0.0f)
+            if (! trace.empty())
             {
                 const juce::Graphics::ScopedSaveState clipped (g);
                 juce::Path p;
                 p.addRoundedRectangle (r, corner);
                 g.reduceClipRegion (p);
 
-                g.setColour (theme::orange);
-                g.fillRect (r.withWidth (r.getWidth() * juce::jlimit (0.0f, 1.0f, progress)));
+                // Mirrored around the centre line, half-height by dB: a waveform of the floor.
+                const auto halfH = [&r] (float db)
+                {
+                    return (juce::jlimit (traceFloorDb, 0.0f, db) - traceFloorDb) / -traceFloorDb
+                         * (r.getHeight() * 0.5f - 2.0f);
+                };
+
+                const float cy   = r.getCentreY();
+                const float step = r.getWidth() / (float) totalTicks;
+
+                for (int i = 0; i < (int) trace.size(); ++i)
+                {
+                    const bool counted = i >= edgeTicks && i < totalTicks - edgeTicks;
+                    const float h = juce::jmax (0.75f, halfH (trace[(size_t) i]));
+
+                    g.setColour (theme::violet.withAlpha (counted ? 0.9f : 0.35f));
+                    g.fillRect (r.getX() + step * (float) i, cy - h, juce::jmax (1.0f, step - 0.5f), h * 2.0f);
+                }
+
+                // The measured floor itself — the number the verdict is made of.
+                if (peakDb > traceFloorDb + 0.5f)
+                {
+                    g.setColour (juce::Colour (0xff5fc97a));
+                    g.fillRect (r.getX() + step * (float) edgeTicks, cy - halfH (peakDb) - 0.75f,
+                                step * (float) juce::jmax (1, (int) trace.size() - edgeTicks * 2), 1.5f);
+                }
             }
 
             g.setColour (theme::orange);
@@ -394,6 +436,8 @@ private:
         }
 
     private:
+        static constexpr float traceFloorDb = -80.0f;   // the KEY scale's floor, same story
+
         bool over = false;
     };
 
