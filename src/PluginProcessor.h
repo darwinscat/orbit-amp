@@ -5,6 +5,7 @@
 #include "core/DemoPlayer.h"
 #include "core/MeasuredFilter.h"
 #include "core/ScopeTap.h"
+#include "core/TunerEar.h"
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/PowerAmp.h"
@@ -86,6 +87,21 @@ private:
         history.tick();
         pumpDeviceWork();
         applyOversamplingIfChanged();
+        pumpTuner();
+    }
+
+    /** Listens only while someone is watching: with no editor there is no needle, and an MPM pass
+        thirty times a second for nobody is the definition of waste. */
+    void pumpTuner()
+    {
+        if (getActiveEditor() == nullptr)
+            return;
+
+        if (const double sr = getSampleRate();
+            sr > 0.0 && ! juce::approximatelyEqual (sr, tunerEar.preparedRate()))
+            tunerEar.prepare (sr);
+
+        tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 
     /** Re-preparing is a message-thread job, so the footer's oversampling choice is picked up here
@@ -133,9 +149,11 @@ public:
     core::DemoPlayer demo;
     void selectDemoLoop (int index);
 
-    /** The raw input, kept for the tuner window. The audio thread only ever writes it; listening
-        is the panel's business, on its own clock. */
+    /** The raw input, kept for the tuner. The audio thread only ever writes it; listening happens
+        on the processor's own message-thread pump, and every needle — the strip's miniature, the
+        zoomed tuner — reads the one ear, so they can never disagree. */
     core::TunerTap tunerTap;
+    core::TunerEar tunerEar;
 
 private:
 

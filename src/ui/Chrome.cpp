@@ -49,15 +49,6 @@ Chrome::Chrome (AmpProcessor& processor)
             onShowSetup();
     };
 
-    fork.colour      = theme::txDim;
-    fork.panelColour = theme::panel;
-    addAndMakeVisible (fork);
-    fork.onClick = [this]
-    {
-        if (onShowTuner)
-            onShowTuner();
-    };
-
     // Save writes back to the loaded preset; Save As always asks for a name — the same split as the
     // sibling, so a working preset can be updated without a dialog every time.
     save.onClick   = [this] { savePreset (false); };
@@ -119,12 +110,11 @@ void Chrome::resized()
     auto header = getLocalBounds();
 
     // ---- right cluster: the gear at the very edge, file actions, registers, the preset name ----
-    auto right    = header.removeFromRight (526);
+    auto right    = header.removeFromRight (486);
     auto rightBar = right.withSizeKeepingCentre (right.getWidth(), controlBand);
 
     gear.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-    fork.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-    rightBar.removeFromRight (6);   // the gear and the fork open windows, the rest edit the preset — a seam
+    rightBar.removeFromRight (6);   // the gear opens a window, the rest edit the preset — a seam
     trash .setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     saveAs.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     save  .setBounds (rightBar.removeFromRight (40).reduced (4, 7));

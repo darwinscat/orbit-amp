@@ -19,8 +19,10 @@ class BlockFrame : public juce::Component
 public:
     enum class Kind { captured, dsp };
 
-    BlockFrame (juce::String blockTitle, Kind blockKind)
-        : title (std::move (blockTitle)), kind (blockKind) {}
+    /** `withSwitch = false` is for the one kind of block that has no on/off at all — a listener
+        like the tuner, which does nothing to the signal there could be a switch about. */
+    BlockFrame (juce::String blockTitle, Kind blockKind, bool withSwitch = true)
+        : title (std::move (blockTitle)), kind (blockKind), hasSwitch (withSwitch) {}
 
     /** The accent this block is coded with — orange when captured, violet when DSP. */
     juce::Colour accent() const
@@ -108,7 +110,9 @@ public:
         // No mask for the switch: the border line runs straight into it and its own fill covers the
         // segment underneath, so the two read as one piece of hardware rather than a button parked
         // on a broken line.
-        paintSwitch (g, sw);
+        if (hasSwitch)
+            paintSwitch (g, sw);
+
         paintContent (g);
     }
 
@@ -120,7 +124,7 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        if (switchArea().contains (e.getPosition()))
+        if (hasSwitch && switchArea().contains (e.getPosition()))
             setBlockOn (! on);
     }
 
@@ -239,6 +243,7 @@ private:
 
     juce::String title;
     Kind kind;
+    bool hasSwitch = true;
     bool on = true;
     std::unique_ptr<juce::ParameterAttachment> power;
 

@@ -7,6 +7,7 @@
 #include "EqBlock.h"
 #include "PowerAmpBlock.h"
 #include "ReverbBlock.h"
+#include "TunerBlock.h"
 
 #include <array>
 #include <optional>
@@ -63,6 +64,7 @@ private:
     /** Every link's face, indexable in chain order — what setZoom opens by. */
     std::array<juce::Component*, (size_t) numChainLinks> linkFaces();
 
+    TunerBlock         tuner;
     EqBlock            eq1;
     EqBlock            eq2;
     CapturedBlockPanel boost;

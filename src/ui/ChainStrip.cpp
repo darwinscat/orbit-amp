@@ -16,15 +16,21 @@ namespace orbitamp
 class ChainStrip::Thumb final : public juce::Component
 {
 public:
-    Thumb (const juce::String& title, juce::Colour accentColour, juce::RangedAudioParameter& onParam)
+    /** `onParam` may be null — a link with nothing to switch (the tuner) gets no toggle and is
+        always at full strength. */
+    Thumb (const juce::String& title, juce::Colour accentColour, juce::RangedAudioParameter* onParam)
         : name (title), accent (accentColour)
     {
+        if (onParam == nullptr)
+            return;
+
         setAlpha (theme::offAlpha);   // attach() below corrects this for a link that is on
 
-        addAndMakeVisible (sw);
-        sw.accent = accent;
-        sw.onChange = [this] (bool b) { setAlpha (b ? 1.0f : theme::offAlpha); };
-        sw.attach (onParam);
+        sw = std::make_unique<ZoneSwitch>();
+        addAndMakeVisible (*sw);
+        sw->accent = accent;
+        sw->onChange = [this] (bool b) { setAlpha (b ? 1.0f : theme::offAlpha); };
+        sw->attach (*onParam);
     }
 
     std::function<juce::String()> caption;
@@ -45,8 +51,9 @@ public:
 
     void resized() override
     {
-        sw.setBounds (getLocalBounds().reduced (pad).removeFromTop (ZoneSwitch::designHeight)
-                          .removeFromRight (ZoneSwitch::designWidth));
+        if (sw != nullptr)
+            sw->setBounds (getLocalBounds().reduced (pad).removeFromTop (ZoneSwitch::designHeight)
+                               .removeFromRight (ZoneSwitch::designWidth));
     }
 
     void mouseDown (const juce::MouseEvent&) override
@@ -91,7 +98,7 @@ public:
 private:
     static constexpr int pad = 7;
 
-    ZoneSwitch sw;
+    std::unique_ptr<ZoneSwitch> sw;
     bool lit = false;
 };
 
@@ -160,12 +167,55 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
     auto make = [&] (ChainLink link, const juce::String& title, juce::Colour accent,
                      const juce::String& onId)
     {
-        auto t = std::make_unique<Thumb> (title, accent, *s.getParameter (onId));
+        auto t = std::make_unique<Thumb> (title, accent,
+                                          onId.isEmpty() ? nullptr : s.getParameter (onId));
         t->onClick = [this, link] { if (onOpen != nullptr) onOpen (link); };
         addAndMakeVisible (*t);
         thumbs[(size_t) link] = std::move (t);
         return thumbs[(size_t) link].get();
     };
+
+    // The tuner: no switch — it does nothing to the signal there could be a switch about. The
+    // needle is the whole preview, reading the same ear the zoomed tuner reads.
+    {
+        auto* t = make (ChainLink::tuner, "Tuner", theme::violet, {});
+
+        const auto& ear = amp.tunerEar;
+
+        t->caption = [&ear]
+        {
+            // Silence earns an empty line, not a dash — the display face owes us no dash, and a
+            // multi-byte one through a plain char* reads as garbage anyway.
+            if (! ear.live())
+                return juce::String();
+
+            const auto note = ear.nearestNote();
+            return juce::String (core::PitchTracker::noteName (note.midi))
+                     + juce::String (core::PitchTracker::noteOctave (note.midi));
+        };
+
+        t->preview = [&ear] (juce::Graphics& g, juce::Rectangle<int> box)
+        {
+            const auto r = box.toFloat().reduced (3.0f, 4.0f);
+            const float mid = r.getBottom() - 4.0f;
+
+            for (int c = -50; c <= 50; c += 10)
+            {
+                const float x = r.getX() + r.getWidth() * (float) (c + 50) / 100.0f;
+                const float h = c == 0 ? 14.0f : 6.0f;
+                g.setColour (c == 0 ? theme::hair2 : theme::hair);
+                g.fillRect (juce::Rectangle<float> (x - 0.5f, mid - h, 1.0f, h));
+            }
+
+            if (! ear.live())
+                return;
+
+            const float x = r.getX()
+                          + r.getWidth() * (juce::jlimit (-50.0f, 50.0f, ear.needle()) + 50.0f) / 100.0f;
+            g.setColour (ear.green() ? juce::Colour (0xff5fc97a) : theme::tx);
+            g.fillRoundedRectangle (x - 1.0f, mid - 18.0f, 2.0f, 21.0f, 1.0f);
+        };
+    }
 
     // The EQ links: the curve is the whole story, told by a display stack fed from the parameters
     // on the strip's clock.
@@ -187,7 +237,7 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
     {
         auto* t = make (link, title, theme::orange, params::blockOn (blk));
 
-        t->caption = [&block] { const auto n = block.deviceName(); return n.isEmpty() ? juce::String ("—") : n; };
+        t->caption = [&block] { return block.deviceName(); };
 
         auto* gainParam = s.getRawParameterValue (params::blockGain (blk));
 
@@ -267,7 +317,7 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
                     names.add (params::cabMics[juce::jlimit (0, params::cabMics.size() - 1,
                                                              juce::roundToInt (m.type->load()))]);
 
-            return names.isEmpty() ? juce::String ("—") : names.joinIntoString (" + ");
+            return names.joinIntoString (" + ");
         };
 
         t->preview = [mics] (juce::Graphics& g, juce::Rectangle<int> box)
@@ -299,9 +349,10 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
         };
     }
 
-    // The previews follow parameters and loaded devices, not events — a steady low-rate repaint is
-    // simpler than attaching to two dozen parameters, and cheaper than being wrong about one.
-    startTimerHz (15);
+    // The previews follow parameters and loaded devices, not events — a steady repaint is simpler
+    // than attaching to two dozen parameters, and cheaper than being wrong about one. 30 Hz
+    // because the tuner's needle lives here now, and a needle at 15 reads as a slideshow.
+    startTimerHz (30);
 }
 
 ChainStrip::~ChainStrip() = default;
@@ -347,11 +398,21 @@ void ChainStrip::timerCallback()
 
 void ChainStrip::resized()
 {
-    const float w = ((float) getWidth() - (float) thumbGap * (numChainLinks - 1)) / (float) numChainLinks;
-
+    // Weighted lanes: a service link takes half a tone link's width, and the unit falls out of
+    // whatever the weights add up to.
+    float units = 0.0f;
     for (int i = 0; i < numChainLinks; ++i)
-        thumbs[(size_t) i]->setBounds (juce::Rectangle<float> (
-            (w + (float) thumbGap) * (float) i, 0.0f, w, (float) getHeight()).toNearestInt());
+        units += chainLinkWeight ((ChainLink) i);
+
+    const float unit = ((float) getWidth() - (float) thumbGap * (numChainLinks - 1)) / units;
+
+    float x = 0.0f;
+    for (int i = 0; i < numChainLinks; ++i)
+    {
+        const float w = unit * chainLinkWeight ((ChainLink) i);
+        thumbs[(size_t) i]->setBounds (juce::Rectangle<float> (x, 0.0f, w, (float) getHeight()).toNearestInt());
+        x += w + (float) thumbGap;
+    }
 }
 
 void ChainStrip::paint (juce::Graphics& g)

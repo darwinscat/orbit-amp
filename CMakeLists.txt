@@ -168,7 +168,6 @@ target_sources(OrbitAmp PRIVATE
     src/ui/DemoStrip.cpp
     src/ui/Footer.cpp
     src/ui/SetupPanel.cpp
-    src/ui/TunerPanel.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp
 )
@@ -339,7 +338,6 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/DemoStrip.cpp
     src/ui/Footer.cpp
     src/ui/SetupPanel.cpp
-    src/ui/TunerPanel.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp)
 target_include_directories(orbitamp_chain_test PRIVATE src)
