@@ -52,20 +52,10 @@ public:
     std::function<void (bool)> onChange;
     juce::Colour accent = theme::orange;
 
-    /** Lit by the OWNER when the mouse is anywhere over the block or thumb this switch rules —
-        the switch answers the whole surface, not just its own few pixels. */
-    bool glow = false;
-
     void paint (juce::Graphics& g) override
     {
         auto sw = getLocalBounds().toFloat().reduced (0.5f);
         const float r = sw.getHeight() * 0.5f;
-
-        if (glow)
-        {
-            g.setColour (accent.withAlpha (0.35f));
-            g.fillRoundedRectangle (sw.expanded (3.0f, 2.5f), r + 3.0f);
-        }
 
         g.setColour (on ? accent.withAlpha (0.5f).overlaidWith (juce::Colour (0xff26262f))
                         : juce::Colour (0xff26262f));

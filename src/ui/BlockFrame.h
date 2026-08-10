@@ -131,17 +131,7 @@ public:
         // on a broken line. Painted OUTSIDE the dim layer, with a hover halo — the request that
         // built this: on a dark block the switch was the thing you could not find.
         if (hasSwitch)
-        {
-            // The halo answers the whole block: the mouse anywhere over a block lights its
-            // switch — brighter still when it is directly on it.
-            if (blockHover || switchHover)
-            {
-                g.setColour (accent().withAlpha (switchHover ? 0.45f : 0.28f));
-                g.fillRoundedRectangle (sw.expanded (5.0f, 4.0f), (sw.getHeight() + 8.0f) * 0.5f);
-            }
-
             paintSwitch (g, sw);
-        }
     }
 
     void resized() override final
@@ -162,29 +152,6 @@ public:
 
         if (hasSwitch && switchArea().contains (e.getPosition()))
             setBlockOn (! on);
-    }
-
-    void mouseMove (const juce::MouseEvent& e) override
-    {
-        const bool over = hasSwitch && switchArea().contains (e.getPosition());
-        if (over != switchHover)
-        {
-            switchHover = over;
-            repaint();
-        }
-    }
-
-    void mouseEnter (const juce::MouseEvent&) override
-    {
-        blockHover = true;
-        repaint();
-    }
-
-    void mouseExit (const juce::MouseEvent&) override
-    {
-        blockHover  = false;
-        switchHover = false;
-        repaint();
     }
 
     void showPowerMenu()
@@ -334,8 +301,6 @@ private:
     Kind kind;
     bool hasSwitch = true;
     bool on = true;
-    bool switchHover = false;
-    bool blockHover  = false;
     std::unique_ptr<juce::ParameterAttachment> power;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BlockFrame)

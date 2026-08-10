@@ -66,18 +66,6 @@ public:
                            .removeFromTop (ZoneSwitch::designHeight).removeFromRight (w).withHeight (h));
     }
 
-    void mouseEnter (const juce::MouseEvent&) override { setGlow (true); }
-    void mouseExit  (const juce::MouseEvent&) override { setGlow (false); }
-
-    void setGlow (bool g)
-    {
-        if (sw != nullptr)
-        {
-            sw->glow = g;
-            sw->repaint();
-        }
-    }
-
     void mouseDown (const juce::MouseEvent& e) override
     {
         // Right-click: the power menu, same as on the block itself. Left: open the zoom.
