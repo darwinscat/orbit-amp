@@ -247,35 +247,58 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
             return juce::roundToInt (posParam->load()) == 0 ? db + " DB" : db + " →REV";
         };
 
+        // The same two columns the zoomed face has, at map size: KEY with its decision marks,
+        // GR beside it.
         t->preview = [&pressureDb, &keyDb, thresholdParam] (juce::Graphics& g, juce::Rectangle<int> box)
         {
-            const auto r = box.toFloat().reduced (2.0f, (float) box.getHeight() / 3.0f);
             constexpr float floorDb = -80.0f;
-            const auto dbToX = [&r] (float db)
+            constexpr int   gap     = 4;
+
+            const int w = juce::jmin (18, (box.getWidth() - gap) / 2);
+            auto cols = box.withSizeKeepingCentre (w * 2 + gap, box.getHeight());
+
+            auto key = cols.removeFromLeft (w).toFloat();
+            cols.removeFromLeft (gap);
+            auto gr = cols.removeFromLeft (w).toFloat();
+
+            const auto dbToY = [&key] (float db)
             {
-                return r.getX() + r.getWidth() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
+                return key.getBottom()
+                     - key.getHeight() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
             };
 
+            const bool closed = pressureDb.load() < -1.0f;
+
             g.setColour (theme::bezel);
-            g.fillRoundedRectangle (r, theme::radiusSm);
+            g.fillRoundedRectangle (key, theme::radiusSm);
 
-            const bool  closed = pressureDb.load() < -1.0f;
-            const float lx     = dbToX (keyDb.load());
-
-            if (lx > r.getX() + 1.0f)
+            if (const float ly = dbToY (keyDb.load()); ly < key.getBottom() - 1.0f)
             {
                 g.setColour (theme::violet.withAlpha (closed ? 0.30f : 0.75f));
-                g.fillRoundedRectangle (r.withRight (lx).reduced (1.0f), theme::radiusSm);
+                g.fillRoundedRectangle (key.withTop (ly).reduced (1.0f), theme::radiusSm);
             }
 
             const float openDb = thresholdParam->load();
             g.setColour (theme::lilac.withAlpha (0.45f));
-            g.fillRect (dbToX (openDb - params::gateHysteresisDb) - 0.5f, r.getY(), 1.0f, r.getHeight());
+            g.fillRect (key.getX(), dbToY (openDb - params::gateHysteresisDb) - 0.5f, key.getWidth(), 1.0f);
             g.setColour (theme::lilac);
-            g.fillRect (dbToX (openDb) - 0.75f, r.getY(), 1.5f, r.getHeight());
+            g.fillRect (key.getX(), dbToY (openDb) - 0.75f, key.getWidth(), 1.5f);
 
             g.setColour (theme::hair2);
-            g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
+            g.drawRoundedRectangle (key.reduced (0.5f), theme::radiusSm, 1.0f);
+
+            g.setColour (theme::bezel);
+            g.fillRoundedRectangle (gr, theme::radiusSm);
+
+            const float depth = juce::jlimit (0.0f, -floorDb, -pressureDb.load());
+            if (const float h = gr.getHeight() * depth / -floorDb; h > 0.5f)
+            {
+                g.setColour (theme::violet.withAlpha (0.85f));
+                g.fillRoundedRectangle (gr.withHeight (h).reduced (1.0f), theme::radiusSm);
+            }
+
+            g.setColour (theme::hair2);
+            g.drawRoundedRectangle (gr.reduced (0.5f), theme::radiusSm, 1.0f);
         };
     }
 

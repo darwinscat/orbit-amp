@@ -12,17 +12,19 @@ namespace orbitamp
 {
 
 /** The noise gate, zoomed — and SIZED like a zoom: the whole panel is this block's, so every
-    control is at reading size. The tightness the strip lives with has no business here.
+    control is at reading size.
 
-    Indicated the way gates are: a live KEY-LEVEL meter with two runners on it — where the gate
-    OPENS (the threshold, draggable) and where it CLOSES (the engine's hysteresis under it). The
-    signal runs along the same scale the decision is made on, so setting the threshold is watching
-    the level cross it. Pressure — how hard the gate is holding the signal down — is its own well
-    at the side, because attenuation and key level are different facts that share a unit.
+    The face has three regions, golden-ratio split: the control column (LEARN over DECAY over
+    MUTE POSITION, one width), the hero threshold knob in the column's complement, and the two
+    METER COLUMNS on the right — KEY and GR side by side, named in letters sized to their width.
+    KEY is the level the gate decides by, drawn on the scale the decision is made on: the OPEN
+    runner rides it (draggable), the CLOSE mark sits the engine's hysteresis under it, and the
+    fill dims while the gate holds. GR is how hard the gate is pressing, top down.
 
-    Three decisions and no more: the threshold (knob, runner, or LEARN — which measures your noise
-    floor instead of asking you to guess it), the DECAY way (normal / metal chop), and WHERE the
-    mute lands. The key never moves — it is always the raw input. */
+    LEARN measures the noise floor instead of asking you to guess it: it listens for a moment —
+    ignoring the edges of its own window, where the button click itself lives — and parks the
+    threshold the full hysteresis over the loudest thing it heard. Progress runs across the
+    button itself. */
 class GateBlock final : public BlockFrame,
                         private juce::Timer
 {
@@ -46,12 +48,12 @@ public:
         runnerAtt = std::make_unique<juce::ParameterAttachment> (
             *s.getParameter (params::gateThreshold), [this] (float) { repaint(); });
 
-        // Both switches read at reading size, in text-on-fill contrast — violet on violet is how
-        // the first pass of this face became illegible.
+        // Reading size, text-on-fill contrast — violet on violet is how the first pass of this
+        // face became illegible.
         const auto readable = [] (StepSwitch& sw)
         {
             sw.accent       = theme::violet;
-            sw.fontHeight   = 12.0f;
+            sw.fontHeight   = 14.0f;
             sw.highContrast = true;
         };
 
@@ -77,9 +79,6 @@ public:
         mutePos.onChange = [this] (int i) { mutePosAtt->setValueAsCompleteGesture ((float) i); };
         mutePosAtt->sendInitialUpdate();
 
-        // LEARN: the threshold is a fact about YOUR noise floor, and facts are measured. Don't
-        // play; the button listens to the key for a moment and parks the threshold just over the
-        // loudest thing it heard.
         addAndMakeVisible (learn);
         learn.onClick = [this] { startLearning(); };
     }
@@ -103,11 +102,18 @@ private:
 
         if (learning)
         {
-            learnPeak = juce::jmax (learnPeak, now);
+            ++learnTicks;
+            learn.progress = (float) learnTicks / (float) learnTotalTicks;
 
-            if (++learnTicks >= learnTotalTicks)
+            // The window's edges are thrown away: the button click itself, and the hand leaving
+            // the mouse, are not the noise floor.
+            if (learnTicks > learnEdgeTicks && learnTicks <= learnTotalTicks - learnEdgeTicks)
+                learnPeak = juce::jmax (learnPeak, now);
+
+            if (learnTicks >= learnTotalTicks)
             {
                 learning = false;
+                learn.progress = 0.0f;
 
                 // Nothing arrived: a muted input teaches nothing, and parking the threshold at
                 // the floor would be pretending it did.
@@ -127,8 +133,8 @@ private:
             }
         }
 
-        if (messageTicks > 0)
-            --messageTicks;
+        if (messageTicks > 0 && --messageTicks == 0)
+            learn.message.clear();
 
         repaint();
     }
@@ -141,7 +147,7 @@ private:
         // The demo replaces the input — learning from it would file music under noise.
         if (demoPlaying != nullptr && demoPlaying())
         {
-            say ("STOP THE DEMO FIRST");
+            say ("STOP THE DEMO");
             return;
         }
 
@@ -150,84 +156,98 @@ private:
         learnTicks = 0;
     }
 
+    /** The verdict lands ON the button — the one place the eye already is. */
     void say (const juce::String& text)
     {
-        message      = text;
-        messageTicks = 90;   // ~3 s at 30 Hz
+        learn.message = text;
+        messageTicks  = 90;   // ~3 s at 30 Hz
     }
 
     void layOutContent (juce::Rectangle<int> area) override
     {
-        // A fifth of the face, and its name lives inside it — a well is its own label plate.
-        pressureWell = area.removeFromRight (area.getWidth() / 5).reduced (10, 12);
-        area.removeFromRight (4);
+        // The meter columns, side by side on the right: KEY — the decision's own scale — beside
+        // GR, each wide enough that its NAME can be set in real letters.
+        const int wellW = juce::jmin (96, area.getWidth() / 6);
+        auto wells = area.removeFromRight (wellW * 2 + wellGap).reduced (0, 4);
+        keyWell = wells.removeFromLeft (wellW);
+        wells.removeFromLeft (wellGap);
+        pressureWell = wells;
+        area.removeFromRight (18);
 
-        // The key meter along the bottom, generous: it is the face's instrument panel.
-        keyMeter = area.removeFromBottom (72).reduced (12, 10);
+        // Golden split of what is left: the control column takes the major share, the hero the
+        // complement.
+        const int columnW = juce::roundToInt ((float) area.getWidth() / goldenRatio) - columnGap;
+        auto column = area.removeFromLeft (columnW);
+        area.removeFromLeft (columnGap);
 
-        // The controls row belongs to the two labeled ways alone — LEARN moves up beside the
-        // hero, where the face has a whole empty flank to give it.
-        auto row = area.removeFromBottom (72).reduced (12, 6);
-        decayArea = row.removeFromLeft ((row.getWidth() - rowGap) * 2 / 5);
-        row.removeFromLeft (rowGap);
-        muteArea = row;
+        // LEARN over DECAY over MUTE POSITION, one width — a stack, not a scatter.
+        const int stackH = learnH + stackGap + headingRow + switchH + stackGap + headingRow + switchH;
+        column = column.withSizeKeepingCentre (columnW, juce::jmin (column.getHeight(), stackH));
+
+        learn.setBounds (column.removeFromTop (learnH));
+        column.removeFromTop (stackGap);
+        decayArea = column.removeFromTop (headingRow + switchH);
         decayMode.setBounds (decayArea.withTrimmedTop (headingRow));
+        column.removeFromTop (stackGap);
+        muteArea = column.removeFromTop (headingRow + switchH);
         mutePos.setBounds (muteArea.withTrimmedTop (headingRow));
 
-        area.removeFromBottom (6);
-
-        // The hero in the middle, name included; LEARN sized like the button it is, centred on
-        // the left flank the knob does not use.
-        const int side = juce::jmin (230, juce::jmin (area.getWidth(), area.getHeight()));
-        const auto hero = area.withSizeKeepingCentre (side, side);
-        threshold.setBounds (hero);
-
-        auto flank = area.withRight (hero.getX()).reduced (16, 0);
-        learn.setBounds (flank.withSizeKeepingCentre (juce::jmin (180, flank.getWidth()), 48));
+        // The hero fills its golden remainder, name included.
+        const int side = juce::jmin (area.getWidth(), area.getHeight());
+        threshold.setBounds (area.withSizeKeepingCentre (side, side));
     }
 
-    float dbToX (juce::Rectangle<float> r, float db) const
+    float dbToY (juce::Rectangle<float> r, float db) const
     {
-        return r.getX() + r.getWidth() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
+        return r.getBottom() - r.getHeight() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
     }
 
-    float xToDb (juce::Rectangle<float> r, float x) const
+    float yToDb (juce::Rectangle<float> r, float y) const
     {
-        return floorDb + juce::jlimit (0.0f, 1.0f, (x - r.getX()) / juce::jmax (1.0f, r.getWidth())) * -floorDb;
+        return floorDb + juce::jlimit (0.0f, 1.0f, (r.getBottom() - y) / juce::jmax (1.0f, r.getHeight())) * -floorDb;
     }
 
     void heading (juce::Graphics& g, juce::Rectangle<int> box, const juce::String& text)
     {
         g.setColour (theme::txDim);
         theme::drawTracked (g, text, box.withHeight (headingRow).toFloat(),
-                            theme::displayFont (10.0f), 0.14f, juce::Justification::centredLeft);
+                            theme::displayFont (12.0f), 0.14f, juce::Justification::centredLeft);
+    }
+
+    /** The wells' letters, sized by the wells: as big as "KEY" fits, and GR in the same font so
+        the pair reads as one instrument. */
+    float wellLabelFont() const
+    {
+        const float atTen = theme::trackedWidth ("KEY", theme::displayFont (10.0f), 0.10f);
+        return juce::jlimit (12.0f, 30.0f, 10.0f * ((float) keyWell.getWidth() - 12.0f) / atTen);
     }
 
     void paintContent (juce::Graphics& g) override
     {
-        const bool closed = pressureDb.load() < -1.0f;
+        const bool  closed    = pressureDb.load() < -1.0f;
+        const float labelFont = wellLabelFont();
 
         heading (g, decayArea, "DECAY");
         heading (g, muteArea,  "MUTE POSITION");
 
-        // ---- the key meter: the level the gate decides by, with both decision marks on it ----
+        // ---- KEY: the level the gate decides by, with both decision marks on it ----
         {
-            const auto r = keyMeter.toFloat();
+            const auto r = keyWell.toFloat();
 
             g.setColour (theme::bezel);
             g.fillRoundedRectangle (r, theme::radiusMd);
 
             g.setColour (theme::hair);
             for (float db = -60.0f; db < -0.5f; db += 20.0f)
-                g.fillRect (dbToX (r, db), r.getY() + 4.0f, 1.0f, r.getHeight() - 8.0f);
+                g.fillRect (r.getX() + 4.0f, dbToY (r, db), r.getWidth() - 8.0f, 1.0f);
 
-            const float lx = dbToX (r, levelDb);
-            if (lx > r.getX() + 1.0f)
+            const float ly = dbToY (r, levelDb);
+            if (ly < r.getBottom() - 1.0f)
             {
                 // Dim while the gate is holding: the level is still THERE — the gate is a VCA,
                 // not a truth about the input — but the face says it is not getting through.
                 g.setColour (theme::violet.withAlpha (closed ? 0.30f : 0.75f));
-                g.fillRoundedRectangle (r.withRight (lx).reduced (2.0f), theme::radiusSm);
+                g.fillRoundedRectangle (r.withTop (ly).reduced (2.0f), theme::radiusSm);
             }
 
             // While learning, the running maximum walks the scale in the tuner's green — the
@@ -235,45 +255,36 @@ private:
             if (learning)
             {
                 g.setColour (juce::Colour (0xff5fc97a));
-                g.fillRect (dbToX (r, learnPeak) - 0.75f, r.getY(), 1.5f, r.getHeight());
+                g.fillRect (r.getX(), dbToY (r, learnPeak) - 0.75f, r.getWidth(), 1.5f);
             }
 
-            const float openDb  = (float) threshold.getValue();
-            const float openX   = dbToX (r, openDb);
-            const float closeX  = dbToX (r, openDb - params::gateHysteresisDb);
+            const float openDb = (float) threshold.getValue();
+            const float openY  = dbToY (r, openDb);
+            const float closeY = dbToY (r, openDb - params::gateHysteresisDb);
 
             // The CLOSE mark first, under the OPEN one — dimmer, because it is derived.
             g.setColour (theme::lilac.withAlpha (0.45f));
-            g.fillRect (closeX - 0.75f, r.getY(), 1.5f, r.getHeight());
+            g.fillRect (r.getX(), closeY - 0.75f, r.getWidth(), 1.5f);
 
             g.setColour (theme::lilac);
-            g.fillRect (openX - 1.0f, r.getY(), 2.0f, r.getHeight());
+            g.fillRect (r.getX(), openY - 1.0f, r.getWidth(), 2.0f);
 
-            // The runner's grab handle, riding the top edge.
+            // The runner's grab handle, riding the left edge.
             juce::Path caret;
-            caret.addTriangle (openX - 6.0f, r.getY() - 1.0f, openX + 6.0f, r.getY() - 1.0f,
-                               openX, r.getY() + 8.0f);
+            caret.addTriangle (r.getX() - 1.0f, openY - 6.0f, r.getX() - 1.0f, openY + 6.0f,
+                               r.getX() + 8.0f, openY);
             g.fillPath (caret);
 
             g.setColour (theme::hair2);
             g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);
 
-            // The name lives INSIDE the well, on whatever is behind it.
-            const auto inner = r.reduced (10.0f, 6.0f);
-            g.setColour (theme::tx.withAlpha (0.8f));
-            theme::drawTracked (g, "KEY", inner.withTrimmedTop (inner.getHeight() - 12.0f),
-                                theme::displayFont (9.5f), 0.14f, juce::Justification::bottomLeft);
-
-            // What LEARN has to say — a measurement's verdict, or why there is none.
-            if (messageTicks > 0)
-            {
-                g.setColour (theme::tx);
-                theme::drawTracked (g, message, inner.withTrimmedTop (inner.getHeight() - 12.0f),
-                                    theme::displayFont (9.5f), 0.14f, juce::Justification::bottomRight);
-            }
+            g.setColour (theme::tx);
+            theme::drawTracked (g, "KEY", r.withTrimmedBottom (10.0f),
+                                theme::displayFont (labelFont), 0.10f,
+                                juce::Justification::centredBottom);
         }
 
-        // ---- the pressure well: how hard the gate is holding, from the top down ----
+        // ---- GR: how hard the gate is holding, from the top down ----
         {
             const auto r = pressureWell.toFloat();
 
@@ -292,19 +303,19 @@ private:
             g.setColour (theme::hair2);
             g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);
 
-            // Inside, over fill or bezel alike — the well is its own label plate.
-            g.setColour (theme::tx.withAlpha (0.85f));
-            theme::drawTracked (g, "GR", r.reduced (0.0f, 8.0f),
-                                theme::displayFont (11.0f), 0.14f, juce::Justification::centredBottom);
+            g.setColour (theme::tx);
+            theme::drawTracked (g, "GR", r.withTrimmedBottom (10.0f),
+                                theme::displayFont (labelFont), 0.10f,
+                                juce::Justification::centredBottom);
         }
     }
 
     //==============================================================================
-    // The open runner IS a control: grab it — or anywhere on the meter — and the threshold
+    // The open runner IS a control: grab it — or anywhere on the KEY column — and the threshold
     // follows, as one undoable move.
     void mouseDown (const juce::MouseEvent& e) override
     {
-        if (keyMeter.contains (e.getPosition()))
+        if (keyWell.contains (e.getPosition()))
         {
             runnerAtt->beginGesture();
             draggingRunner = true;
@@ -332,29 +343,45 @@ private:
 
     void dragRunner (const juce::MouseEvent& e)
     {
-        runnerAtt->setValueAsPartOfGesture (xToDb (keyMeter.toFloat(), e.position.x));
+        runnerAtt->setValueAsPartOfGesture (yToDb (keyWell.toFloat(), e.position.y));
     }
 
     //==============================================================================
     /** The one momentary control on the face — a BUTTON, sized like one, in the capture orange
-        that says "this one acts". Lit while the measurement runs. */
+        that says "this one acts". The measurement's progress runs across it, and its verdict
+        lands on it. */
     struct LearnButton final : public juce::Component
     {
         std::function<void()> onClick;
-        bool lit = false;
+        bool  lit = false;
+        float progress = 0.0f;
+        juce::String message;
 
         void paint (juce::Graphics& g) override
         {
             auto r = getLocalBounds().toFloat().reduced (0.5f);
             const float corner = 8.0f;
 
-            g.setColour (lit ? theme::orange : theme::orange.withAlpha (over ? 0.35f : 0.22f));
+            g.setColour (theme::orange.withAlpha (over && ! lit ? 0.35f : 0.22f));
             g.fillRoundedRectangle (r, corner);
+
+            if (lit && progress > 0.0f)
+            {
+                const juce::Graphics::ScopedSaveState clipped (g);
+                juce::Path p;
+                p.addRoundedRectangle (r, corner);
+                g.reduceClipRegion (p);
+
+                g.setColour (theme::orange);
+                g.fillRect (r.withWidth (r.getWidth() * juce::jlimit (0.0f, 1.0f, progress)));
+            }
+
             g.setColour (theme::orange);
             g.drawRoundedRectangle (r, corner, 1.5f);
 
-            g.setColour (lit ? juce::Colour (0xff17120c) : theme::tx);
-            theme::drawTracked (g, lit ? "LISTENING" : "LEARN", r, theme::displayFont (13.0f), 0.14f,
+            const auto text = message.isNotEmpty() ? message : juce::String (lit ? "LISTENING" : "LEARN");
+            g.setColour (theme::tx);
+            theme::drawTracked (g, text, r, theme::displayFont (15.0f), 0.14f,
                                 juce::Justification::centred);
         }
 
@@ -371,11 +398,17 @@ private:
         bool over = false;
     };
 
-    static constexpr float floorDb        = -80.0f;   // the meter's left edge — the threshold's own floor
+    static constexpr float goldenRatio    = 1.618f;
+    static constexpr float floorDb        = -80.0f;   // the KEY scale's bottom — the threshold's own floor
     static constexpr float releasePerTick = 1.4f;     // ~42 dB/s at 30 Hz: readable, not sluggish
-    static constexpr int   learnTotalTicks = 45;      // 1.5 s at 30 Hz — enough for hum to show its worst
-    static constexpr int   headingRow     = 20;
-    static constexpr int   rowGap         = 28;
+    static constexpr int   learnTotalTicks = 90;      // 3 s at 30 Hz
+    static constexpr int   learnEdgeTicks  = 15;      // half a second each end, thrown away
+    static constexpr int   headingRow     = 24;
+    static constexpr int   learnH         = 54;
+    static constexpr int   switchH        = 46;
+    static constexpr int   stackGap       = 18;
+    static constexpr int   columnGap      = 20;
+    static constexpr int   wellGap        = 14;
 
     const std::atomic<float>& pressureDb;
     const std::atomic<float>& keyDb;
@@ -392,11 +425,9 @@ private:
     bool  learning   = false;
     float learnPeak  = -90.0f;
     int   learnTicks = 0;
+    int   messageTicks = 0;
 
-    juce::String message;
-    int messageTicks = 0;
-
-    juce::Rectangle<int> keyMeter, pressureWell, decayArea, muteArea;
+    juce::Rectangle<int> keyWell, pressureWell, decayArea, muteArea;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateBlock)
 };
