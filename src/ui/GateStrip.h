@@ -27,13 +27,18 @@ class GateStrip final : public juce::Component,
 {
 public:
     GateStrip (const std::atomic<float>& keyDbSource, const std::atomic<float>& pressureDbSource,
-               juce::RangedAudioParameter& thresholdParam, juce::RangedAudioParameter& trimParam)
-        : keyDb (keyDbSource), pressureDb (pressureDbSource), param (thresholdParam), trimP (trimParam)
+               juce::RangedAudioParameter& thresholdParam, juce::RangedAudioParameter& trimParam,
+               juce::RangedAudioParameter& gateOnParam, juce::RangedAudioParameter& decayParam)
+        : keyDb (keyDbSource), pressureDb (pressureDbSource), param (thresholdParam), trimP (trimParam),
+          onP (gateOnParam), decayP (decayParam)
     {
         threshold = std::make_unique<juce::ParameterAttachment> (thresholdParam,
                                                                  [this] (float) { repaint(); });
         trim = std::make_unique<juce::ParameterAttachment> (trimParam,
                                                             [this] (float) { repaint(); });
+        onAtt = std::make_unique<juce::ParameterAttachment> (gateOnParam,
+                                                             [this] (float) { repaint(); });
+        decayAtt = std::make_unique<juce::ParameterAttachment> (decayParam, [] (float) {});
         startTimerHz (30);
     }
 
@@ -71,7 +76,8 @@ public:
             g.fillRect (inCol.getX(), dbToY (inCol, holdDb) - 0.75f, inCol.getWidth(), 1.5f);
         }
 
-        // ---- the threshold runner, dragged on the very scale it judges ----
+        // ---- the threshold: a line across the scale and a NAIL from the right — the right side
+        //      is the gate's own territory, so its handle hangs from there ----
         {
             const float openDb  = param.convertFrom0to1 (param.getValue());
             const float openY   = dbToY (inCol, openDb);
@@ -81,12 +87,12 @@ public:
             g.fillRect (inCol.getX(), closeY - 0.5f, inCol.getWidth(), 1.0f);
 
             g.setColour (theme::lilac);
-            g.fillRect (inCol.getX(), openY - 1.0f, inCol.getWidth(), 2.0f);
+            g.fillRect (inCol.getX(), openY - 1.0f, scaleArea().getWidth(), 2.0f);
 
-            juce::Path caret;
-            caret.addTriangle (inCol.getX() - 1.0f, openY - 4.0f, inCol.getX() - 1.0f, openY + 4.0f,
-                               inCol.getX() + 5.0f, openY);
-            g.fillPath (caret);
+            juce::Path nail;
+            const float bx = r.getRight() - 1.0f;
+            nail.addTriangle (bx, openY - 4.5f, bx, openY + 4.5f, bx - 7.0f, openY);
+            g.fillPath (nail);
         }
 
         // ---- GR: the gate pressing down the right lane, in solid red ----
@@ -100,21 +106,25 @@ public:
             }
         }
 
-        // ---- the trim runner, up the right edge on its own ±24 scale ----
+        // ---- the trim: a slide-rule cursor — a frame crawling the scale, ears past both sides,
+        //      the meter showing through its window ----
         {
             const auto  area = scaleArea();
-            const float t    = trimP.convertFrom0to1 (trimP.getValue());
-            const float ty   = trimY (area, t);
-            const float rx   = r.getRight() - 1.5f;
+            const float ty   = trimY (area, trimP.convertFrom0to1 (trimP.getValue()));
 
-            // The unity notch — the handle's home.
+            // The unity notch — the frame's home.
             g.setColour (theme::orange.withAlpha (0.5f));
-            g.fillRect (r.getRight() - 6.0f, trimY (area, 0.0f) - 0.5f, 5.0f, 1.0f);
+            g.fillRect (r.getX() + 0.5f, trimY (area, 0.0f) - 0.5f, 3.0f, 1.0f);
+            g.fillRect (r.getRight() - 3.5f, trimY (area, 0.0f) - 0.5f, 3.0f, 1.0f);
 
-            juce::Path caret;
-            caret.addTriangle (rx, ty - 4.5f, rx, ty + 4.5f, rx - 6.5f, ty);
+            const auto frame = juce::Rectangle<float> (r.getX() + 0.75f, ty - 5.0f,
+                                                       r.getWidth() - 1.5f, 10.0f);
             g.setColour (theme::orange);
-            g.fillPath (caret);
+            g.drawRoundedRectangle (frame, 2.0f, 1.6f);
+
+            // The ears, thickened at both sides — the grip of the cursor.
+            g.fillRect (frame.getX() - 0.5f,     ty - 3.5f, 2.5f, 7.0f);
+            g.fillRect (frame.getRight() - 2.0f, ty - 3.5f, 2.5f, 7.0f);
         }
 
         g.setColour (theme::hair2);
@@ -128,8 +138,58 @@ public:
     //==============================================================================
     void mouseDown (const juce::MouseEvent& e) override
     {
+        // Right-click: the gate presets — the whole gate in one pick for whoever never opens
+        // the zoom.
+        if (e.mods.isPopupMenu())
+        {
+            showPresetMenu();
+            return;
+        }
+
         dragging = false;
         pressY   = e.position.y;
+    }
+
+    void showPresetMenu()
+    {
+        const bool  isOn  = onP.getValue() > 0.5f;
+        const float th    = param.convertFrom0to1 (param.getValue());
+        const bool  metal = decayP.getValue() > 0.5f;
+
+        const auto matches = [&] (float t, bool m)
+        {
+            return isOn && std::abs (th - t) < 0.5f && metal == m;
+        };
+
+        juce::PopupMenu m;
+        m.addSectionHeader ("GATE");
+        m.addItem (1, "OFF",         true, ! isOn);
+        m.addItem (2, "SOFT   -60",  true, matches (-60.0f, false));
+        m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
+        m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
+
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                         [safe = juce::Component::SafePointer<GateStrip> (this)] (int r)
+                         {
+                             if (safe != nullptr)
+                                 safe->applyPreset (r);
+                         });
+    }
+
+    void applyPreset (int choice)
+    {
+        if (choice == 0)
+            return;
+
+        if (choice == 1)
+        {
+            onAtt->setValueAsCompleteGesture (0.0f);
+            return;
+        }
+
+        onAtt->setValueAsCompleteGesture (1.0f);
+        threshold->setValueAsCompleteGesture (choice == 2 ? -60.0f : choice == 3 ? -50.0f : -40.0f);
+        decayAtt->setValueAsCompleteGesture (choice == 4 ? 1.0f : 0.0f);   // HARD is the metal chop
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
@@ -234,7 +294,9 @@ private:
     const std::atomic<float>& pressureDb;
     juce::RangedAudioParameter& param;
     juce::RangedAudioParameter& trimP;
-    std::unique_ptr<juce::ParameterAttachment> threshold, trim;
+    juce::RangedAudioParameter& onP;
+    juce::RangedAudioParameter& decayP;
+    std::unique_ptr<juce::ParameterAttachment> threshold, trim, onAtt, decayAtt;
 
     float levelDb = -90.0f;
     float holdDb  = -90.0f;
