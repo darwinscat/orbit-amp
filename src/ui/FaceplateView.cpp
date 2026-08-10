@@ -52,7 +52,7 @@ void FaceplateView::setZoom (std::optional<ChainLink> link)
 
 void FaceplateView::resized()
 {
-    auto lane = getLocalBounds().reduced (lanePadX, lanePadY);
+    auto lane = getLocalBounds().reduced (0, lanePadY);
 
     auto faces = linkFaces();
 

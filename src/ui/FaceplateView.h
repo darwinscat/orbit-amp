@@ -50,9 +50,8 @@ public:
     static constexpr int designHeight = row1H + rowGap + row2H + 32;   // + lanePadY top and bottom
 
 private:
-    // Lane metrics. The in/out gutter columns are gone — they were empty wells reserved for
-    // metering that never landed, and the lane wears their width better than they did.
-    static constexpr int   lanePadX   = 10;
+    // Lane metrics. No horizontal inset: the lane's edges ARE the strip's edges — one width from
+    // the map above to the faces below, so nothing on the panel is almost-aligned.
     static constexpr int   lanePadY   = 16;
     static constexpr int   colGap     = 14;
     static constexpr float phi        = 1.62f; // the preamp column's weight — the wider anchor
