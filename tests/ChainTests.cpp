@@ -45,7 +45,7 @@ namespace
         here the same way, because a knob that only takes effect on a timer still has to take
         effect. The frequency is the caller's, because what is audible depends on what is asked:
         a low shelf does nothing to a 220 Hz probe and everything to one inside its band. */
-    std::vector<float> run (orbitamp::AmpProcessor& amp, double toneHz = 220.0)
+    std::vector<float> run (orbitamp::AmpProcessor& amp, double toneHz = 220.0, float amplitude = 0.25f)
     {
         std::vector<float> out;
         juce::AudioBuffer<float> buf (2, blockSize);
@@ -59,8 +59,8 @@ namespace
         {
             for (int i = 0; i < blockSize; ++i, ++phase)
             {
-                const float s = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
-                                                          * toneHz * phase / sampleRate);
+                const float s = amplitude * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                              * toneHz * phase / sampleRate);
                 buf.setSample (0, i, s);
                 buf.setSample (1, i, s);
             }
@@ -335,6 +335,38 @@ int main()
                     differencePercent (quiet, hard) > 5.0,
                     juce::String (differencePercent (quiet, hard), 1) + "% different");
         }
+    }
+
+    // The gate, through the whole plugin: under its threshold the chain goes quiet, over it
+    // nothing is touched. Everything else off, so what is measured is the gate on a bare wire.
+    {
+        set (amp, orbitamp::params::boostOn, 0.0f);
+        set (amp, orbitamp::params::preampOn, 0.0f);
+
+        // -46 dBFS, under a -20 dB threshold: hum, as far as the gate is concerned.
+        set (amp, orbitamp::params::gateOn, 1.0f);
+        set (amp, orbitamp::params::gateThreshold, -20.0f);
+        const auto gated = run (amp, 220.0, 0.005f);
+
+        set (amp, orbitamp::params::gateOn, 0.0f);
+        const auto open = run (amp, 220.0, 0.005f);
+
+        std::printf ("\ngate: hum gated -> rms %.6f, gate off -> %.6f\n", rms (gated), rms (open));
+
+        report ("the gate closes on what is under its threshold",
+                rms (gated) < rms (open) * 0.1,
+                juce::String (20.0 * std::log10 (juce::jmax (1.0e-9, rms (gated) / rms (open))), 1) + " dB");
+
+        // -12 dBFS over the same threshold: playing. The gate must not be audible at all.
+        set (amp, orbitamp::params::gateOn, 1.0f);
+        const auto loudGated = run (amp);
+
+        set (amp, orbitamp::params::gateOn, 0.0f);
+        const auto loudOpen = run (amp);
+
+        report ("...and leaves what is over it alone",
+                differencePercent (loudGated, loudOpen) < 0.5,
+                juce::String (differencePercent (loudGated, loudOpen), 2) + "% different");
     }
 
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");

@@ -200,6 +200,7 @@ target_compile_definitions(OrbitAmp PUBLIC
 target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
+    felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # measured curves -> minimum-phase FIR (core::MeasuredFilter)
     felitronics::nam                 # NAM inference — the captured devices actually play
@@ -345,6 +346,7 @@ target_compile_definitions(orbitamp_chain_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_U
 target_link_libraries(orbitamp_chain_test PRIVATE
     OrbitAmpData
     felitronics::appkit
+    felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
     felitronics::nam

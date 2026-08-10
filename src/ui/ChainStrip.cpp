@@ -49,11 +49,21 @@ public:
         repaint();
     }
 
+    /** Half-lane thumbs shrink their chrome instead of clipping it: a smaller switch and a
+        tighter title, so "GATE" and its toggle share a row a tone link would give the title
+        alone. */
+    bool narrow() const { return getWidth() < 70; }
+
     void resized() override
     {
-        if (sw != nullptr)
-            sw->setBounds (getLocalBounds().reduced (pad).removeFromTop (ZoneSwitch::designHeight)
-                               .removeFromRight (ZoneSwitch::designWidth));
+        if (sw == nullptr)
+            return;
+
+        const int w = narrow() ? 16 : ZoneSwitch::designWidth;
+        const int h = narrow() ? 9  : ZoneSwitch::designHeight;
+
+        sw->setBounds (getLocalBounds().reduced (narrow() ? 4 : pad, pad)
+                           .removeFromTop (ZoneSwitch::designHeight).removeFromRight (w).withHeight (h));
     }
 
     void mouseDown (const juce::MouseEvent&) override
@@ -76,11 +86,12 @@ public:
         g.setColour (accent.withAlpha (lit ? 0.95f : 0.45f));
         g.drawRoundedRectangle (r, theme::radiusMd, lit ? 1.8f : theme::blockBorder);
 
-        auto area = getLocalBounds().reduced (pad);
+        auto area = getLocalBounds().reduced (narrow() ? 4 : pad, pad);
 
         auto top = area.removeFromTop (11);
         g.setColour (accent);
-        theme::drawTracked (g, name.toUpperCase(), top.toFloat(), theme::displayFont (7.0f), 0.12f,
+        theme::drawTracked (g, name.toUpperCase(), top.toFloat(),
+                            theme::displayFont (narrow() ? 6.0f : 7.0f), narrow() ? 0.06f : 0.12f,
                             juce::Justification::centredLeft);
 
         auto label = area.removeFromBottom (10);
@@ -214,6 +225,42 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
                           + r.getWidth() * (juce::jlimit (-50.0f, 50.0f, ear.needle()) + 50.0f) / 100.0f;
             g.setColour (ear.green() ? juce::Colour (0xff5fc97a) : theme::tx);
             g.fillRoundedRectangle (x - 1.0f, mid - 18.0f, 2.0f, 21.0f, 1.0f);
+        };
+    }
+
+    // The gate: its threshold is the one thing set on it, its pressure the one thing to watch —
+    // a bar falling from the right as the gate closes, still at unity when it is open.
+    {
+        auto* t = make (ChainLink::gate, "Gate", theme::violet, params::gateOn);
+
+        auto* thresholdParam = s.getRawParameterValue (params::gateThreshold);
+        const auto& meterDb  = amp.gateMeterDb;
+
+        t->caption = [thresholdParam]
+        {
+            return juce::String (juce::roundToInt (thresholdParam->load())) + " DB";
+        };
+
+        t->preview = [&meterDb] (juce::Graphics& g, juce::Rectangle<int> box)
+        {
+            // A bar, not a well: a third of the preview's height, however tall the thumb is.
+            const auto r = box.toFloat().reduced (2.0f, (float) box.getHeight() / 3.0f);
+            constexpr float rangeDb = 60.0f;
+
+            g.setColour (theme::bezel);
+            g.fillRoundedRectangle (r, theme::radiusSm);
+
+            const float depth = juce::jlimit (0.0f, rangeDb, -meterDb.load());
+            const float w = r.getWidth() * depth / rangeDb;
+
+            if (w > 0.5f)
+            {
+                g.setColour (theme::violet.withAlpha (0.85f));
+                g.fillRoundedRectangle (r.withTrimmedLeft (r.getWidth() - w), theme::radiusSm);
+            }
+
+            g.setColour (theme::hair2);
+            g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
         };
     }
 

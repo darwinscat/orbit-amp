@@ -13,6 +13,7 @@
 #include "core/ToneStack.h"
 
 #include <felitronics/appkit/CompareHistory.h>
+#include <felitronics/dynamics/NoiseGate.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <array>
@@ -133,6 +134,11 @@ private:
     core::ReverbStage reverb;
     core::PowerAmp    power;
 
+    /** The noise gate, from felitronics-core — the same engine OrbitCab ships. Self-keyed here:
+        it stands at the front of the chain, so the raw guitar it attenuates is also the cleanest
+        key it could ask for. */
+    felitronics::dynamics::NoiseGate gate;
+
 public:
     /** The captured pedal in front, and the captured preamp after it. Each is a device list, the
         stage playing what is chosen from it, that device's measured controls as filters, and the taps
@@ -155,6 +161,10 @@ public:
     core::TunerTap tunerTap;
     core::TunerEar tunerEar;
 
+    /** The gate's effective gain at the last block end, in dB — what a meter shows. Written by the
+        audio thread, read by the strip's thumb and the zoomed gate on their repaint clocks. */
+    std::atomic<float> gateMeterDb { 0.0f };
+
 private:
 
     // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
@@ -174,6 +184,9 @@ private:
     };
 
     std::array<EqLinkParams, params::numEqLinks> eqParams;
+
+    std::atomic<float>* gateOnParam        = nullptr;
+    std::atomic<float>* gateThresholdParam = nullptr;
 
     std::atomic<float>* reverbOnParam   = nullptr;
     std::atomic<float>* reverbTypeParam = nullptr;

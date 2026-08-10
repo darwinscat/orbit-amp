@@ -8,6 +8,7 @@ namespace orbitamp
 
 FaceplateView::FaceplateView (AmpProcessor& processor)
     : tuner (processor.tunerEar),
+      gate (processor.apvts, processor.gateMeterDb),
       eq1 (processor.apvts, 0), eq2 (processor.apvts, 1),
       boost (processor, processor.boost, "Boost", params::boostId),
       preamp (processor, processor.preamp, "Preamp", params::preampId),
@@ -16,9 +17,10 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })
         addAndMakeVisible (*b);
 
-    // The tuner and the EQ links live in the zoom: on the overview their thumbs in the strip say
-    // everything a miniature can, and opening one is a single click.
+    // The service links and the EQ links live in the zoom: on the overview their thumbs in the
+    // strip say everything a miniature can, and opening one is a single click.
     addChildComponent (tuner);
+    addChildComponent (gate);
     addChildComponent (eq1);
     addChildComponent (eq2);
 
@@ -27,7 +29,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
 
 std::array<juce::Component*, (size_t) numChainLinks> FaceplateView::linkFaces()
 {
-    return { &tuner, &eq1, &boost, &eq2, &preamp, &reverb, &power, &cabinet };
+    return { &tuner, &gate, &eq1, &boost, &eq2, &preamp, &reverb, &power, &cabinet };
 }
 
 void FaceplateView::setZoom (std::optional<ChainLink> link)
@@ -64,12 +66,8 @@ void FaceplateView::resized()
         return;
     }
 
-    tuner.setVisible (false);
-    eq1.setVisible (false);
-    eq2.setVisible (false);
     for (auto* f : faces)
-        if (f != &tuner && f != &eq1 && f != &eq2)
-            f->setVisible (true);
+        f->setVisible (f != &tuner && f != &gate && f != &eq1 && f != &eq2);
 
     auto row1 = lane.removeFromTop (row1H);
     lane.removeFromTop (rowGap);

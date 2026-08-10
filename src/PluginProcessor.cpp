@@ -39,6 +39,9 @@ AmpProcessor::AmpProcessor()
         p.lpfHz = apvts.getRawParameterValue (params::eqLpfHz (l));
     }
 
+    gateOnParam        = apvts.getRawParameterValue (params::gateOn);
+    gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
+
     reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
     reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
     reverbMixParam  = apvts.getRawParameterValue (params::reverbMix);
@@ -168,6 +171,11 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& eq : eqLinks)
         eq.prepare (sampleRate, channels);
 
+    // Seeded from the parameter: a session saved gate-ON has to start already gated, not fade in
+    // over a block of ungated hum.
+    gate.prepare (sampleRate, block, channels);
+    gate.seedEnabled (gateOnParam->load() > 0.5f);
+
     reverb.prepare (sampleRate);
     boost.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
@@ -257,9 +265,16 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
 
-    // eq1 -> boost -> eq2 -> preamp -> reverb -> power amp. The EQ links are links of their own,
-    // with their own switches: eq1 decides what reaches the first nonlinearity, eq2 colours what
-    // the boost made before the preamp distorts it again.
+    // gate -> eq1 -> boost -> eq2 -> preamp -> reverb -> power amp. The gate stands at the very
+    // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
+    // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
+    // pop-free, so it runs unconditionally and the switch is an argument.
+    gate.process (channels, numChannels, numSamples,
+                  gateOnParam->load() > 0.5f, gateThresholdParam->load());
+    gateMeterDb.store (juce::Decibels::gainToDecibels (gate.currentGain(), -90.0f));
+
+    // The EQ links are links of their own, with their own switches: eq1 decides what reaches the
+    // first nonlinearity, eq2 colours what the boost made before the preamp distorts it again.
     if (eqParams[0].on->load() > 0.5f)
         eqLinks[0].process (channels, numChannels, numSamples);
 

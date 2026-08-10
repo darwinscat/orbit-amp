@@ -49,9 +49,17 @@ layers on top.
 ## Signal chain
 
 ```
-eq1 → boost → eq2 → preamp (voicing) → reverb → power amp → cabinet
+tuner → gate → eq1 → boost → eq2 → preamp (voicing) → reverb → power amp → cabinet
 ```
 
+- **Tuner** — a listener, not a processor: it taps the raw input and never touches
+  the signal, so it has no switch. It sits FIRST because that is what it hears —
+  and it must stay ahead of the gate, or a closed gate blinds the needle on a
+  decaying note, which is exactly when you tune. MPM (McLeod) pitch, ±half a cent.
+- **Noise gate** — `felitronics::dynamics::NoiseGate`, the engine OrbitCab ships:
+  Schmitt + hold, transient-safe open, pop-free enable. Self-keyed off the raw
+  guitar, killing hum before any dirt multiplies it. One decision on its face —
+  the threshold — plus a live gain-reduction meter. Off by default.
 - **EQ links (eq1, eq2)** — DSP, and **links of the chain, not sections of any
   block**. Exactly two, fixed (a host needs an unchanging parameter list): eq1
   ahead of the boost decides what reaches the first nonlinearity — it changes the
@@ -90,11 +98,13 @@ across the overview row (the preamp is the wider anchor). The whole editor scale
 50–200% from a single factor.
 
 **The chain strip** runs across the top of the panel: every link in signal order as
-a miniature — its switch, a live preview (EQ curve, gain + tone for the captured
-blocks, mics on the grille for the cabinet), and what is loaded into it. It is the
-map of the signal. **Clicking a thumb zooms**: that link opens across the whole
-faceplate — a magnifying glass, not a mode; the overview returns when the lit thumb
-is clicked again. Tightness is cured by the zoom, never by hiding controls.
+a miniature — its switch, a live preview (the tuner's needle, the gate's pressure,
+EQ curves, gain + tone for the captured blocks, mics on the grille for the
+cabinet), and what is loaded into it. It is the map of the signal. Service links
+(tuner, gate) take half a lane — the map saying "plumbing, not voice". **Clicking a
+thumb zooms**: that link opens across the whole faceplate — a magnifying glass, not
+a mode; the overview returns when the lit thumb is clicked again. Tightness is
+cured by the zoom, never by hiding controls.
 
 The pixel-level reference is a set of HTML mockups produced during design (kept
 outside this repo). Rebuild the faceplate natively — the mockups are a spec, not

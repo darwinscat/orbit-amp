@@ -17,6 +17,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, "Preamp", true),
                 std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", true));
 
+    // The noise gate. Off out of the box — a gate is a decision about YOUR noise floor, not part
+    // of the voicing — and the threshold range is OrbitCab's, measured against the same raw input.
+    layout.add (std::make_unique<Bool>  (juce::ParameterID { gateOn, 1 }, "Gate", false),
+                std::make_unique<Float> (juce::ParameterID { gateThreshold, 1 }, "Gate Threshold",
+                                         juce::NormalisableRange<float> (-80.0f, -20.0f, 1.0f), -50.0f));
+
     // Boost. The gain knob is stepped because it selects a capture, not a value — between the
     // captured positions there is no data. Tone is measured, so it is continuous.
     layout.add (std::make_unique<Float> (juce::ParameterID { boostGain, 1 }, "Boost Gain",

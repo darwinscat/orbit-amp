@@ -14,6 +14,12 @@ inline constexpr const char* reverbOn    = "reverb_on";
 inline constexpr const char* boostGain  = "boost_gain";
 inline constexpr const char* boostTone  = "boost_tone";
 
+/** The noise gate — the second service link, right after the tuner: it keys off the raw guitar,
+    and kills the hum before any dirt can multiply it. The threshold is the OPEN level in dBFS
+    against that raw input; feel (attack, hold, hysteresis, floor) is fixed in the engine. */
+inline constexpr const char* gateOn        = "gate_on";
+inline constexpr const char* gateThreshold = "gate_threshold";
+
 /** TEMPORARY — hear the capture with nothing of ours on it.
 
     Everything a block adds comes off: the measured curves the pack shipped, rebuilt as filters, and

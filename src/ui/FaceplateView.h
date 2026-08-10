@@ -5,6 +5,7 @@
 #include "CapturedBlockPanel.h"
 #include "ChainLink.h"
 #include "EqBlock.h"
+#include "GateBlock.h"
 #include "PowerAmpBlock.h"
 #include "ReverbBlock.h"
 #include "TunerBlock.h"
@@ -65,6 +66,7 @@ private:
     std::array<juce::Component*, (size_t) numChainLinks> linkFaces();
 
     TunerBlock         tuner;
+    GateBlock          gate;
     EqBlock            eq1;
     EqBlock            eq2;
     CapturedBlockPanel boost;
