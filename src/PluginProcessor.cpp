@@ -96,7 +96,9 @@ void AmpProcessor::selectDemoLoop (int index)
 
 void AmpProcessor::rescanDevices()
 {
-    devicePacks = device::DeviceLibrary::scan();
+    // The boost's list is pedals. A preamp offered as a pedal is not a wrong sound, it is a wrong
+    // LIST — the block says what it is for, and the list has to agree with it.
+    devicePacks = device::DeviceLibrary::scan (device::DeviceLibrary::Slot::pedal);
     selectBoostDevice (juce::roundToInt (apvts.getRawParameterValue (params::boostDevice)->load()));
 }
 

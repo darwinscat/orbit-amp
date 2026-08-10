@@ -17,6 +17,24 @@ namespace orbitamp::device
 class DeviceLibrary
 {
 public:
+    /** Which block a device belongs in front of.
+
+        A pack names it (`pedal`, `preamp`, `amp`, `poweramp`), and a lone .nam carries the same word
+        in its header. Without this every list shows every device: pedals offered as preamps, preamps
+        as pedals. `any` is the honest answer for a file that says nothing — it goes in every list
+        rather than in none, because a model somebody dropped in is a model they want to hear. */
+    enum class Slot { pedal, preamp, poweramp, any };
+
+    static Slot slotFromString (const std::string& s)
+    {
+        const auto l = juce::String (s).trim().toLowerCase();
+
+        if (l == "pedal")                    return Slot::pedal;
+        if (l == "preamp" || l == "amp")     return Slot::preamp;
+        if (l == "poweramp" || l == "power") return Slot::poweramp;
+        return Slot::any;
+    }
+
     struct Pack
     {
         juce::String  name;       // the gear's own name — make and model, as captured
@@ -26,6 +44,7 @@ public:
         bool          loose  = false;   // a single model file the user dropped in, not a pack
         bool          bundled = false;  // shipped with the plugin rather than added by the user
         int           character = 0;    // place on the ramp, from the stage's tone_type
+        Slot          slot = Slot::any; // which block it belongs in front of
         namz::rig::Rig rig;
 
         /** What a player sees. The alias is the pack's public identity — what a list shows and what
@@ -88,12 +107,16 @@ public:
         Bundled devices first, then whatever the user added — packs and lone models alike, since a
         `.nam` someone dropped in is theirs exactly as much as an `.orbitrig` is. Within each of the
         two, the character ramp orders the list and the name settles ties. */
-    static juce::Array<Pack> scan()
+    static juce::Array<Pack> scan (Slot wanted = Slot::any)
     {
         juce::Array<Pack> packs;
 
         scanFolder (bundledDirectory(), true, packs);
         scanFolder (directory(), false, packs);
+
+        if (wanted != Slot::any)
+            packs.removeIf ([wanted] (const Pack& p)
+                            { return p.slot != wanted && p.slot != Slot::any; });
 
         std::sort (packs.begin(), packs.end(), [] (const Pack& a, const Pack& b)
         {
@@ -167,7 +190,10 @@ private:
                     p.alias = obj->getProperty ("alias").toString().trim();
 
                 if (const auto* s = p.rig.firstKnown())
+                {
                     p.character = characterFromToneType (s->toneType);
+                    p.slot = slotFromString (s->slot);
+                }
 
                 if (ok && p.isValid())
                     out.add (std::move (p));
@@ -192,6 +218,8 @@ private:
                 p.loose    = true;
                 p.bundled  = bundled;
                 p.character = characterFromToneType (value ("tone_type"));
+                p.slot = slotFromString (! value ("slot").empty() ? value ("slot")
+                                                                 : value ("gear_type"));
 
                 const auto modelled = value ("gear_model");
                 p.name  = modelled.empty() ? f.getFileNameWithoutExtension() : juce::String (modelled);
