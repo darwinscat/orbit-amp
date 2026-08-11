@@ -22,7 +22,8 @@ namespace orbitamp::scope
 class WaveView
 {
 public:
-    void paint (juce::Graphics& g, juce::Rectangle<float> r, core::WaveRibbon& ribbon)
+    void paint (juce::Graphics& g, juce::Rectangle<float> r, core::WaveRibbon& ribbon,
+                bool halfWave = false)
     {
         const int pixels = juce::jmax (2, (int) r.getWidth());
         ribbon.setResolution (pixels);
@@ -32,8 +33,10 @@ public:
         if (! ribbon.read (columns, count, phase) || count < 2)
             return;
 
-        const float mid = r.getCentreY();
-        const float half = r.getHeight() * 0.5f;
+        // Half-wave: the magnitude silhouette off the floor — an audio editor's overview.
+        // The lo pick becomes the flat baseline and the hi pick the envelope's extreme.
+        const float mid  = halfWave ? r.getBottom() : r.getCentreY();
+        const float half = halfWave ? r.getHeight() : r.getHeight() * 0.5f;
 
         // One column per pixel, so no grouping happens here at all — grouping is what shimmered.
         auto at = [count, pixels] (auto pick, int x)
@@ -71,6 +74,22 @@ public:
             // with no thickness disappears. The approach to a note is worth seeing.
             g.strokePath (p, juce::PathStrokeType (filled ? 1.0f : 1.4f));
         };
+
+        if (halfWave)
+        {
+            // One magnitude per column — the larger excursion of the pair — and zero for the lo
+            // pick, which pins the band's return path to the baseline.
+            band ([] (int) { return 0.0f; },
+                  [this] (int i) { const auto& c = columns[(size_t) i];
+                                   return juce::jmax (c.dryHi, -c.dryLo); },
+                  theme::orange.withAlpha (0.5f), true);
+
+            band ([] (int) { return 0.0f; },
+                  [this] (int i) { const auto& c = columns[(size_t) i];
+                                   return juce::jmax (c.wetHi, -c.wetLo); },
+                  theme::violet, false);
+            return;
+        }
 
         band ([this] (int i) { return columns[(size_t) i].dryLo; },
               [this] (int i) { return columns[(size_t) i].dryHi; },

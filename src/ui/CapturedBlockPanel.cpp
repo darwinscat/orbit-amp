@@ -34,6 +34,14 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         addAndMakeVisible (c);
     }
 
+    halfTag.onChange = [this]
+    {
+        scopes[(size_t) DeviceScope::Mode::wave]->waveHalf = halfTag.half;
+        repaint();
+    };
+    scopes[(size_t) DeviceScope::Mode::wave]->waveHalf = halfTag.half;   // half is the default
+    addChildComponent (halfTag);
+
     attachPower (*amp.apvts.getParameter (params::blockOn (blk)));
 
     // The attachment hears everyone BUT this panel — a restored session, a host automating the
@@ -260,6 +268,10 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     auto zone = area.removeFromTop (area.getHeight() / 3);
     area.removeFromTop (gap);
 
+    // The checkboxes live UP HERE in the zoom — the picture zone below keeps its full width.
+    layChecks (zone.removeFromRight (110));
+    zone.removeFromRight (gap);
+
     const int gainSide = juce::jmin (maxGainSide, zone.getHeight());
     gain.setBounds (zone.removeFromLeft (gainSide).withSizeKeepingCentre (gainSide, gainSide));
     zone.removeFromLeft (knobGap);
@@ -364,21 +376,28 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         }
     }
 
-    layOutViz (area);
+    layTiles (area);
 }
 
-void CapturedBlockPanel::layOutViz (juce::Rectangle<int> area)
+void CapturedBlockPanel::layChecks (juce::Rectangle<int> checks)
 {
-    // The picture zone: the checkbox column picks which ways of looking are down; whichever are
-    // tile the rest — one row up to three, two rows past.
-    auto checks = area.removeFromLeft (110);
     for (auto& c : vizChecks)
     {
         c.setBounds (checks.removeFromTop (24));
         checks.removeFromTop (4);
     }
-    area.removeFromLeft (gap);
+}
 
+void CapturedBlockPanel::layOutViz (juce::Rectangle<int> area)
+{
+    // The compact face keeps the column beside the tiles — its knob row has no room up top.
+    layChecks (area.removeFromLeft (110));
+    area.removeFromLeft (gap);
+    layTiles (area);
+}
+
+void CapturedBlockPanel::layTiles (juce::Rectangle<int> area)
+{
     std::vector<DeviceScope*> shown;
     for (int i = 0; i < numViz; ++i)
     {
@@ -397,12 +416,23 @@ void CapturedBlockPanel::layOutViz (juce::Rectangle<int> area)
     const int tileW    = (area.getWidth() - (cols - 1) * gap) / juce::jmax (1, cols);
     const int tileH    = (area.getHeight() - (tileRows - 1) * gap) / tileRows;
 
+    halfTag.setVisible (false);
+
     for (int i = 0; i < n; ++i)
     {
         const int rr = i / cols, cc = i % cols;
         shown[(size_t) i]->setBounds (area.getX() + cc * (tileW + gap),
                                       area.getY() + rr * (tileH + gap), tileW, tileH);
         shown[(size_t) i]->setVisible (true);
+
+        // The WAVE tile wears its half-wave toggle in the corner.
+        if (shown[(size_t) i] == scopes[(size_t) DeviceScope::Mode::wave].get())
+        {
+            const auto tb = shown[(size_t) i]->getBounds();
+            halfTag.setBounds (tb.getRight() - 34, tb.getY() + 4, 28, 16);
+            halfTag.setVisible (true);
+            halfTag.toFront (false);
+        }
     }
 }
 

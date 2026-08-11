@@ -36,6 +36,9 @@ class DeviceScope final : public juce::Component,
 public:
     enum class Mode { shape, envelope, transfer, tone, wave };
 
+    /** WAVE only: the half-wave silhouette instead of the mirrored band. */
+    bool waveHalf = false;
+
     explicit DeviceScope (const core::ScopeTap& source, core::WaveRibbon& ribbonSource,
                          std::function<double (double)> toneDbAt)
         : tap (source), ribbon (ribbonSource), toneDb (std::move (toneDbAt))
@@ -92,7 +95,7 @@ public:
                 case Mode::envelope: scope::EnvelopeView::paint (g, area, frame); break;
                 case Mode::transfer: scope::TransferView::paint (g, area, frame); break;
                 case Mode::tone:     toneView.paint (g, area, toneDb, frame); break;
-                case Mode::wave:     waveView.paint (g, area, ribbon); break;
+                case Mode::wave:     waveView.paint (g, area, ribbon, waveHalf); break;
             }
 
             paintSpec (g, r.reduced (5.0f));

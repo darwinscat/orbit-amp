@@ -145,6 +145,36 @@ private:
 
     std::array<VizCheck, (size_t) numViz> vizChecks;
 
+    /** The little overlay on the WAVE tile: half-wave against the mirrored band. */
+    struct HalfTag final : public juce::Component
+    {
+        bool half = true;
+        std::function<void()> onChange;
+
+        void paint (juce::Graphics& g) override
+        {
+            const auto r = getLocalBounds().toFloat();
+            g.setColour (theme::bezel.withAlpha (0.8f));
+            g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+            g.setColour (half ? theme::orange : theme::txDim);
+            theme::drawTracked (g, "1/2", r, theme::displayFont (10.0f), 0.06f,
+                                juce::Justification::centred);
+        }
+
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            half = ! half;
+            repaint();
+            if (onChange != nullptr)
+                onChange();
+        }
+    };
+
+    HalfTag halfTag;
+
+    void layChecks (juce::Rectangle<int>);
+    void layTiles  (juce::Rectangle<int>);
+
     juce::String caption;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
