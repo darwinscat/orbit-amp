@@ -235,6 +235,35 @@ target_link_libraries(OrbitAmp PRIVATE
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.
 # ----------------------------------------------------------------------------
+# Diagnostics, not gates: what the stage sees in packs, how hot the chain runs, and offline
+# listening renders — the instruments that caught the fuzz.
+juce_add_console_app(orbitamp_pack_probe PRODUCT_NAME "OrbitAmpPackProbe")
+target_sources(orbitamp_pack_probe PRIVATE tests/PackProbe.cpp)
+target_include_directories(orbitamp_pack_probe PRIVATE src)
+target_compile_definitions(orbitamp_pack_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_pack_probe PRIVATE
+    felitronics::lineareq felitronics::nam
+    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats
+    juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+juce_add_console_app(orbitamp_render_probe PRODUCT_NAME "OrbitAmpRenderProbe")
+target_sources(orbitamp_render_probe PRIVATE tests/RenderProbe.cpp)
+target_include_directories(orbitamp_render_probe PRIVATE src)
+target_compile_definitions(orbitamp_render_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_render_probe PRIVATE
+    felitronics::lineareq felitronics::nam
+    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats
+    juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+juce_add_console_app(orbitamp_level_probe PRODUCT_NAME "OrbitAmpLevelProbe")
+target_sources(orbitamp_level_probe PRIVATE tests/LevelProbe.cpp)
+target_include_directories(orbitamp_level_probe PRIVATE src)
+target_compile_definitions(orbitamp_level_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_level_probe PRIVATE
+    felitronics::lineareq felitronics::nam
+    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats
+    juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
 # The NAM bench — not a gate, a measuring instrument: ns/frame through the shipping stage.
 add_executable(orbitamp_nam_bench tests/NamBench.cpp)
 target_link_libraries(orbitamp_nam_bench PRIVATE felitronics::nam juce::juce_dsp juce::juce_core)

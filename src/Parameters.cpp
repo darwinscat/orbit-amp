@@ -86,7 +86,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // The hero. 0-10 is the amp-panel scale, not a dB value — it maps onto the captured detents, so
     // the number on the face is the number the capture was taken at.
     layout.add (std::make_unique<Float> (juce::ParameterID { preampGain, 1 }, "Gain",
-                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f));
+                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.5f), 5.0f));
 
     // Frequencies are skewed so the useful end of each sweep gets the middle of the travel.
     auto hz = [] (float lo, float hi, float centre)
