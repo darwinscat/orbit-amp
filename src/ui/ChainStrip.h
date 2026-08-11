@@ -29,6 +29,12 @@ class ChainStrip final : public juce::Component,
 {
 public:
     explicit ChainStrip (AmpProcessor&);
+
+    /** A captured thumb's gain runner entered/left the hand — the editor summons the ladder. */
+    std::function<void (ChainLink, bool)> onGainDrag;
+
+    /** Where that thumb stands, in the strip's own coordinates — the ladder anchors to it. */
+    juce::Rectangle<int> thumbBounds (ChainLink l) const;
     ~ChainStrip() override;
 
     /** A thumb was clicked. The owner decides what opening means. */

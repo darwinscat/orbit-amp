@@ -102,6 +102,33 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (outRuler);
     addChildComponent (ceilRuler);
 
+    addChildComponent (gainRuler);
+
+    // The magnified gain ladder: summoned under whichever captured thumb's runner is in hand,
+    // wider than the runner — a projection, not an echo.
+    strip.onGainDrag = [this] (ChainLink link, bool active)
+    {
+        if (! active)
+        {
+            gainRuler.setVisible (false);
+            return;
+        }
+
+        const char* blk = link == ChainLink::boost ? params::boostId : params::preampId;
+        auto* p = amp.apvts.getParameter (params::blockGain (blk));
+        gainRuler.currentValue = [p] { return p->convertFrom0to1 (p->getValue()); };
+
+        const auto tb = strip.thumbBounds (link);
+        const int  w  = juce::roundToInt ((float) tb.getWidth() * 1.7f);
+        const int  x  = juce::jlimit (margin, margin + FaceplateView::designWidth - w,
+                                      margin + tb.getCentreX() - w / 2);
+
+        gainRuler.setBounds (x, strip.getY() + tb.getBottom() + 4, w, 40);
+        gainRuler.setTransform (strip.getTransform());
+        gainRuler.setVisible (true);
+        gainRuler.toFront (false);
+    };
+
     gateStrip.onTrimDrag = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
     outStrip.onTrimDrag  = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
     outStrip.onCeilDrag  = [this] (bool a) { ceilRuler.setVisible (a); if (a) ceilRuler.toFront (false); };

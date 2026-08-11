@@ -112,4 +112,74 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DragRuler)
 };
 
+/** The horizontal cousin, MAGNIFIED: summoned under a thumb's gain runner, wider than the
+    runner itself — a projection, not an echo. Integers major with numbers, halves minor, the
+    value in hand as an orange line with its number riding it. */
+class HDragRuler final : public juce::Component,
+                         private juce::Timer
+{
+public:
+    HDragRuler() { setInterceptsMouseClicks (false, false); }
+
+    float minV = 0.0f, maxV = 10.0f;
+
+    std::function<float()> currentValue;
+
+    void visibilityChanged() override
+    {
+        if (isVisible())
+            startTimerHz (30);
+        else
+            stopTimer();
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat();
+
+        g.setColour (theme::panel.withAlpha (0.92f));
+        g.fillRoundedRectangle (r, theme::radiusSm);
+        g.setColour (theme::hair2);
+        g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
+
+        const auto area = r.reduced (10.0f, 3.0f);
+
+        for (float v = minV; v <= maxV + 0.01f; v += 0.5f)
+        {
+            const bool  major = std::abs (v - std::round (v)) < 0.01f;
+            const float x     = xOf (area, v);
+
+            g.setColour (juce::Colours::white.withAlpha (major ? 0.45f : 0.28f));
+            g.fillRect (x - 1.0f, area.getBottom() - (major ? 9.0f : 6.0f), 2.0f,
+                        major ? 9.0f : 6.0f);
+
+            if (major)
+            {
+                g.setColour (juce::Colours::white.withAlpha (0.5f));
+                theme::drawTracked (g, juce::String ((int) std::round (v)),
+                                    { x - 12.0f, area.getY(), 24.0f, 13.0f },
+                                    theme::displayFont (11.0f), 0.04f, juce::Justification::centred);
+            }
+        }
+
+        if (currentValue != nullptr)
+        {
+            const float x = xOf (area, currentValue());
+            g.setColour (theme::orange);
+            g.fillRect (x - 1.0f, r.getY() + 2.0f, 2.0f, r.getHeight() - 4.0f);
+        }
+    }
+
+private:
+    void timerCallback() override { repaint(); }
+
+    float xOf (juce::Rectangle<float> area, float v) const
+    {
+        return area.getX()
+             + area.getWidth() * juce::jlimit (0.0f, 1.0f, (v - minV) / (maxV - minV));
+    }
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HDragRuler)
+};
+
 } // namespace orbitamp

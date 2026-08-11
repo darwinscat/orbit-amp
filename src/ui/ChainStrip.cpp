@@ -39,10 +39,14 @@ public:
         g.fillRoundedRectangle (x - 1.5f, r.getY(), 3.0f, r.getHeight(), 1.5f);
     }
 
+    std::function<void (bool)> onDragActive;
+
     void mouseDown (const juce::MouseEvent& e) override
     {
         att->beginGesture();
         att->setValueAsPartOfGesture (fromX (e.position.x));
+        if (onDragActive != nullptr)
+            onDragActive (true);
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
@@ -50,7 +54,12 @@ public:
         att->setValueAsPartOfGesture (fromX (e.position.x));
     }
 
-    void mouseUp (const juce::MouseEvent&) override { att->endGesture(); }
+    void mouseUp (const juce::MouseEvent&) override
+    {
+        att->endGesture();
+        if (onDragActive != nullptr)
+            onDragActive (false);
+    }
 
 private:
     float fromX (float x) const
@@ -96,9 +105,13 @@ public:
     /** Captured thumbs stack downward: name under the title, the gain runner under the name. */
     bool captionUnderTitle = false;
 
+    /** The runner entered/left the hand — the editor summons the magnified ladder. */
+    std::function<void (bool)> onGainDrag;
+
     void attachGain (juce::RangedAudioParameter& p)
     {
         gain = std::make_unique<MiniGain> (p);
+        gain->onDragActive = [this] (bool a) { if (onGainDrag != nullptr) onGainDrag (a); };
         addAndMakeVisible (*gain);
         resized();
     }
@@ -389,6 +402,7 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
         t->captionUnderTitle = true;
         t->caption = [&block] { return block.deviceName(); };
         t->attachGain (*s.getParameter (params::blockGain (blk)));
+        t->onGainDrag = [this, link] (bool a) { if (onGainDrag != nullptr) onGainDrag (link, a); };
 
         t->preview = [this, &block] (juce::Graphics& g, juce::Rectangle<int> box)
         {
@@ -562,6 +576,12 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
 }
 
 ChainStrip::~ChainStrip() = default;
+
+juce::Rectangle<int> ChainStrip::thumbBounds (ChainLink l) const
+{
+    return thumbs[(size_t) l] != nullptr ? thumbs[(size_t) l]->getBounds()
+                                         : juce::Rectangle<int>();
+}
 
 void ChainStrip::setActive (std::optional<ChainLink> link)
 {
