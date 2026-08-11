@@ -23,6 +23,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                          juce::NormalisableRange<float> (-inTrimRangeDb, inTrimRangeDb, 0.1f),
                                          0.0f));
 
+    layout.add (std::make_unique<Float> (juce::ParameterID { outTrim, 1 }, "Output Trim",
+                                         juce::NormalisableRange<float> (-inTrimRangeDb, inTrimRangeDb, 0.1f),
+                                         0.0f));
+
     // The noise gate. Off out of the box — a gate is a decision about YOUR noise floor, not part
     // of the voicing. The ceiling is -10, NOT OrbitCab's -20: that range was voiced for a
     // post-trim guitar, and a raw input's bleed can sit at -20 dBFS all day — a threshold that

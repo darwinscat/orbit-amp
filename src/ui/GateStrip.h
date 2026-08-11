@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Parameters.h"
+#include "MeterRail.h"
 #include "Theme.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -27,19 +28,37 @@ class GateStrip final : public juce::Component,
 {
 public:
     GateStrip (const std::atomic<float>& keyDbSource, const std::atomic<float>& pressureDbSource,
+               std::atomic<bool>& clipLatch,
                juce::RangedAudioParameter& thresholdParam, juce::RangedAudioParameter& trimParam,
                juce::RangedAudioParameter& gateOnParam, juce::RangedAudioParameter& decayParam)
-        : keyDb (keyDbSource), pressureDb (pressureDbSource), param (thresholdParam), trimP (trimParam),
-          onP (gateOnParam), decayP (decayParam)
+        : keyDb (keyDbSource), pressureDb (pressureDbSource), clip (clipLatch),
+          param (thresholdParam), trimP (trimParam), onP (gateOnParam), decayP (decayParam)
     {
         threshold = std::make_unique<juce::ParameterAttachment> (thresholdParam,
                                                                  [this] (float) { repaint(); });
         trim = std::make_unique<juce::ParameterAttachment> (trimParam,
-                                                            [this] (float) { repaint(); });
+                                                            [this] (float) { refreshValue(); repaint(); });
         onAtt = std::make_unique<juce::ParameterAttachment> (gateOnParam,
                                                              [this] (float) { repaint(); });
         decayAtt = std::make_unique<juce::ParameterAttachment> (decayParam, [] (float) {});
+
+        meterrail::initReadout (value, trimP, [this] { return trim.get(); });
+        addAndMakeVisible (value);
+        refreshValue();
+
         startTimerHz (30);
+    }
+
+    void resized() override
+    {
+        value.setBounds (getLocalBounds().removeFromBottom (26).removeFromTop (13));
+    }
+
+    void refreshValue()
+    {
+        if (! value.isBeingEdited())
+            value.setText (meterrail::trimText (trimP.convertFrom0to1 (trimP.getValue())),
+                           juce::dontSendNotification);
     }
 
     /** A clean click (no drag) opens the big gate — the sliver is the glance. */
@@ -59,21 +78,21 @@ public:
         lanes.removeFromLeft (2.0f);
         const auto grCol = lanes;
 
-        // ---- IN: the input revealing a fixed scale, quiet violet to hot orange ----
-        if (const float ly = dbToY (inCol, levelDb); ly < inCol.getBottom() - 1.0f)
-        {
-            juce::ColourGradient scale (theme::violet, inCol.getX(), inCol.getBottom(),
-                                        theme::orange, inCol.getX(), inCol.getY(), false);
-            scale.addColour (0.55, transition);
-            g.setGradientFill (scale);
-            g.fillRoundedRectangle (inCol.withTop (ly), 2.0f);
-        }
+        // ---- IN: the family meter rail — tabby's dB-anchored gradient, white hold, clip cap ----
+        meterrail::paintFill (g, inCol, dbToY (inCol, levelDb));
 
-        // ---- peak hold: where the last phrase actually reached — the gain-staging line ----
         if (holdDb > floorDb + 0.5f)
+            meterrail::paintHold (g, inCol, dbToY (inCol, holdDb));
+
+        meterrail::paintClipCap (g, inCol, clip.load());
+
+        // ---- learning: an orange fuse burning up the left edge — the measurement's progress ----
+        if (learning)
         {
-            g.setColour (theme::tx.withAlpha (0.9f));
-            g.fillRect (inCol.getX(), dbToY (inCol, holdDb) - 0.75f, inCol.getWidth(), 1.5f);
+            const float frac = (float) learnTicks / (float) learnTotalTicks;
+            g.setColour (theme::orange);
+            g.fillRect (inCol.getX(), inCol.getBottom() - inCol.getHeight() * frac,
+                        2.0f, inCol.getHeight() * frac);
         }
 
         // ---- the threshold: a line across the scale and a NAIL from the right — the right side
@@ -106,25 +125,12 @@ public:
             }
         }
 
-        // ---- the trim: a slide-rule cursor — a frame crawling the scale, ears past both sides,
-        //      the meter showing through its window ----
+        // ---- the trim: tabby's hollow sliding frame with its sight, riding the whole rail ----
         {
-            const auto  area = scaleArea();
-            const float ty   = trimY (area, trimP.convertFrom0to1 (trimP.getValue()));
-
-            // The unity notch — the frame's home.
-            g.setColour (theme::orange.withAlpha (0.5f));
-            g.fillRect (r.getX() + 0.5f, trimY (area, 0.0f) - 0.5f, 3.0f, 1.0f);
-            g.fillRect (r.getRight() - 3.5f, trimY (area, 0.0f) - 0.5f, 3.0f, 1.0f);
-
-            const auto frame = juce::Rectangle<float> (r.getX() + 0.75f, ty - 5.0f,
-                                                       r.getWidth() - 1.5f, 10.0f);
-            g.setColour (theme::orange);
-            g.drawRoundedRectangle (frame, 2.0f, 1.6f);
-
-            // The ears, thickened at both sides — the grip of the cursor.
-            g.fillRect (frame.getX() - 0.5f,     ty - 3.5f, 2.5f, 7.0f);
-            g.fillRect (frame.getRight() - 2.0f, ty - 3.5f, 2.5f, 7.0f);
+            const auto area = scaleArea();
+            meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (area, 0.0f));
+            meterrail::paintGrip (g, r, trimY (area, trimP.convertFrom0to1 (trimP.getValue())),
+                                  dragging && grabbedTrim);
         }
 
         g.setColour (theme::hair2);
@@ -145,6 +151,14 @@ public:
         {
             swallowUp = true;
             showPresetMenu (e.getScreenPosition());
+            return;
+        }
+
+        if (clip.load() && e.position.y <= scaleArea().getY() + 5.0f)
+        {
+            clip.store (false);
+            swallowUp = true;
+            repaint();
             return;
         }
 
@@ -170,6 +184,8 @@ public:
         m.addItem (2, "SOFT   -60",  true, matches (-60.0f, false));
         m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
         m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
+        m.addSeparator();
+        m.addItem (5, "LEARN",       true, learning);
 
         // At the MOUSE, not at the component: a menu summoned from a sliver as tall as the panel
         // would otherwise land wherever the sliver ends.
@@ -187,15 +203,35 @@ public:
         if (choice == 0)
             return;
 
+        // OFF is a TOGGLE, not a one-way door: picking it on a silent gate turns the gate on —
+        // the item must be un-pickable or the menu can only ever kill.
         if (choice == 1)
         {
-            onAtt->setValueAsCompleteGesture (0.0f);
+            onAtt->setValueAsCompleteGesture (onP.getValue() > 0.5f ? 0.0f : 1.0f);
+            return;
+        }
+
+        if (choice == 5)
+        {
+            // The measurement the zoom's LEARN makes, from the sliver: stay quiet, the fuse burns
+            // up the edge, and the threshold lands the full hysteresis above the measured floor.
+            learning   = true;
+            learnTicks = 0;
+            learnPeak  = -120.0f;
             return;
         }
 
         onAtt->setValueAsCompleteGesture (1.0f);
         threshold->setValueAsCompleteGesture (choice == 2 ? -60.0f : choice == 3 ? -50.0f : -40.0f);
         decayAtt->setValueAsCompleteGesture (choice == 4 ? 1.0f : 0.0f);   // HARD is the metal chop
+    }
+
+    void mouseDoubleClick (const juce::MouseEvent&) override
+    {
+        // The volume runner goes home on a double knock, wherever on the column it lands. The
+        // release after it must not read as another lens click.
+        swallowUp = true;
+        trim->setValueAsCompleteGesture (0.0f);
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
@@ -261,12 +297,35 @@ private:
             holdDb = juce::jmax (floorDb, holdDb - holdReleasePerTick);
         }
 
+        if (learning)
+        {
+            ++learnTicks;
+
+            // The window's edges are thrown away: the menu click itself, and the hand leaving the
+            // mouse, are not the noise floor.
+            if (learnTicks > learnEdgeTicks && learnTicks <= learnTotalTicks - learnEdgeTicks)
+                learnPeak = juce::jmax (learnPeak, now);
+
+            if (learnTicks >= learnTotalTicks)
+            {
+                learning = false;
+
+                // Nothing arrived: a muted input teaches nothing.
+                if (learnPeak >= -75.0f)
+                {
+                    threshold->setValueAsCompleteGesture (
+                        juce::jlimit (-80.0f, -10.0f, learnPeak + params::gateHysteresisDb));
+                    onAtt->setValueAsCompleteGesture (1.0f);
+                }
+            }
+        }
+
         repaint();
     }
 
     juce::Rectangle<float> scaleArea() const
     {
-        return getLocalBounds().toFloat().reduced (2.0f).withTrimmedBottom (13.0f);
+        return getLocalBounds().toFloat().reduced (2.0f).withTrimmedBottom (26.0f);
     }
 
     float dbToY (juce::Rectangle<float> r, float db) const
@@ -296,23 +355,29 @@ private:
     static constexpr float releasePerTick     = 1.4f;   // ~42 dB/s at 30 Hz
     static constexpr int   holdTicks          = 60;     // 2 s of steady hold...
     static constexpr float holdReleasePerTick = 0.8f;   // ...then ~24 dB/s down
+    static constexpr int   learnTotalTicks    = 90;     // 3 s at 30 Hz
+    static constexpr int   learnEdgeTicks     = 15;     // half a second each end, thrown away
 
-    // The scale's waypoint between violet and orange — the "yellow" of this face's meter — and
-    // the ramp's own red for the gate's pressure.
-    inline static const juce::Colour transition { 0xffc862b4 };
-    inline static const juce::Colour gateRed    { 0xffe0503c };
+    // The ramp's own red for the gate's pressure.
+    inline static const juce::Colour gateRed { 0xffe0503c };
 
     const std::atomic<float>& keyDb;
     const std::atomic<float>& pressureDb;
+    std::atomic<bool>&        clip;
     juce::RangedAudioParameter& param;
     juce::RangedAudioParameter& trimP;
     juce::RangedAudioParameter& onP;
     juce::RangedAudioParameter& decayP;
     std::unique_ptr<juce::ParameterAttachment> threshold, trim, onAtt, decayAtt;
 
+    juce::Label value;
+
     float levelDb = -90.0f;
     float holdDb  = -90.0f;
     int   holdAge = 0;
+    bool  learning   = false;
+    int   learnTicks = 0;
+    float learnPeak  = -120.0f;
     bool  dragging    = false;
     bool  grabbedTrim = false;
     bool  swallowUp   = false;

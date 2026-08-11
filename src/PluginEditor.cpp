@@ -5,15 +5,17 @@ namespace orbitamp
 
 AmpEditor::AmpEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), chrome (p), strip (p), faceplate (p),
-      gateStrip (p.gateKeyDb, p.gateMeterDb, *p.apvts.getParameter (params::gateThreshold),
+      gateStrip (p.gateKeyDb, p.gateMeterDb, p.inClip, *p.apvts.getParameter (params::gateThreshold),
                  *p.apvts.getParameter (params::inTrim), *p.apvts.getParameter (params::gateOn),
                  *p.apvts.getParameter (params::gateDecay)),
+      outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim)),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p)
 {
     addAndMakeVisible (chrome);
     addAndMakeVisible (strip);
     addAndMakeVisible (faceplate);
     addAndMakeVisible (gateStrip);
+    addAndMakeVisible (outStrip);
     addAndMakeVisible (tunerStrip);
     addAndMakeVisible (footer);
     addAndMakeVisible (demoStrip);   // TEMPORARY
@@ -100,8 +102,12 @@ void AmpEditor::resized()
     gateStrip.setBounds (margin, faceplateY, GateStrip::designWidth, FaceplateView::designHeight);
     gateStrip.setTransform (zoom);
 
+    outStrip.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth, faceplateY,
+                        OutStrip::designWidth, FaceplateView::designHeight);
+
     faceplate.setBounds (margin + GateStrip::designWidth + chromeGap, faceplateY,
-                         FaceplateView::designWidth - GateStrip::designWidth - chromeGap,
+                         FaceplateView::designWidth - GateStrip::designWidth - OutStrip::designWidth
+                             - 2 * chromeGap,
                          FaceplateView::designHeight);
     faceplate.setTransform (zoom);
 

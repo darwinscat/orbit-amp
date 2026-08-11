@@ -171,6 +171,11 @@ public:
         repaint clocks. */
     std::atomic<float> gateMeterDb { 0.0f };
 
+    /** The output level after everything, and the two latched clip caps (the UI clears them). */
+    std::atomic<float> outDb   { -90.0f };
+    std::atomic<bool>  inClip  { false };
+    std::atomic<bool>  outClip { false };
+
     /** Each EQ link's output peak this block, in dB — what its LEVEL column meters. Same
         writer, same readers. */
     std::array<std::atomic<float>, params::numEqLinks> eqOutDb { -90.0f, -90.0f };
@@ -214,6 +219,8 @@ private:
     std::array<EqLinkParams, params::numEqLinks> eqParams;
 
     std::atomic<float>* inTrimParam        = nullptr;
+    std::atomic<float>* outTrimParam       = nullptr;
+    float lastOutGain = 1.0f;
     float lastTrimGain = 1.0f;
 
     std::atomic<float>* gateOnParam        = nullptr;

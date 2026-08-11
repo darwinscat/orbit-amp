@@ -50,6 +50,7 @@ AmpProcessor::AmpProcessor()
     }
 
     inTrimParam        = apvts.getRawParameterValue (params::inTrim);
+    outTrimParam       = apvts.getRawParameterValue (params::outTrim);
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
@@ -216,6 +217,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         tap.reset();
 
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
+    lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
 
     // Seeded from the parameter: a session saved gate-ON has to start already gated, not fade in
     // over a block of ungated hum.
@@ -346,6 +348,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         for (int ch = 0; ch < numChannels; ++ch)
             peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, numSamples));
         gateKeyDb.store (juce::Decibels::gainToDecibels (peak, -90.0f));
+
+        if (peak > 1.0f)
+            inClip.store (true);   // latched; the IN rail's cap clears it
     }
 
     // The gate KEYS here whatever it ends up muting — dual detection: the decision is made on the
@@ -414,6 +419,22 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     power.setDrive (powerDriveParam->load());
     power.setSag (powerSagParam->load());
     power.process (channels, numChannels, numSamples, powerOnParam->load() > 0.5f);
+
+    // The output trim closes the chain — the master's hand on the way out, ramped per block
+    // against zipper noise — and the OUT rail reads the result, clip cap latched past 0 dBFS.
+    {
+        const float target = juce::Decibels::decibelsToGain (outTrimParam->load());
+        buffer.applyGainRamp (0, numSamples, lastOutGain, target);
+        lastOutGain = target;
+
+        float peak = 0.0f;
+        for (int ch = 0; ch < numChannels; ++ch)
+            peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, numSamples));
+        outDb.store (juce::Decibels::gainToDecibels (peak, -90.0f));
+
+        if (peak > 1.0f)
+            outClip.store (true);
+    }
 
     // Load as a share of the block's own wall time — the number the footer shows.
     if (const double budget = numSamples / juce::jmax (1.0, getSampleRate()); budget > 0.0)

@@ -1,5 +1,7 @@
 #include "EqSection.h"
 
+#include "MeterRail.h"
+
 #include "Theme.h"
 
 namespace orbitamp
@@ -31,36 +33,14 @@ public:
 
         const auto col = meterArea();
 
-        if (const float ly = dbToY (col, levelDb); ly < col.getBottom() - 1.0f)
-        {
-            juce::ColourGradient scale (theme::violet, col.getX(), col.getBottom(),
-                                        theme::orange, col.getX(), col.getY(), false);
-            scale.addColour (0.55, transition);
-            g.setGradientFill (scale);
-            g.fillRoundedRectangle (col.withTop (ly), 2.0f);
-        }
+        meterrail::paintFill (g, col, dbToY (col, levelDb));
 
         if (holdDb > floorDb + 0.5f)
-        {
-            g.setColour (theme::tx.withAlpha (0.9f));
-            g.fillRect (col.getX(), dbToY (col, holdDb) - 0.75f, col.getWidth(), 1.5f);
-        }
+            meterrail::paintHold (g, col, dbToY (col, holdDb));
 
-        // The fader frame, slide-rule style, on its own ±12 scale.
-        {
-            const float ty = faderY (param.convertFrom0to1 (param.getValue()));
-
-            g.setColour (theme::orange.withAlpha (0.5f));
-            g.fillRect (r.getX() + 0.5f, faderY (0.0f) - 0.5f, 3.0f, 1.0f);
-            g.fillRect (r.getRight() - 3.5f, faderY (0.0f) - 0.5f, 3.0f, 1.0f);
-
-            const auto frame = juce::Rectangle<float> (r.getX() + 0.75f, ty - 5.0f,
-                                                       r.getWidth() - 1.5f, 10.0f);
-            g.setColour (theme::orange);
-            g.drawRoundedRectangle (frame, 2.0f, 1.6f);
-            g.fillRect (frame.getX() - 0.5f,     ty - 3.5f, 2.5f, 7.0f);
-            g.fillRect (frame.getRight() - 2.0f, ty - 3.5f, 2.5f, 7.0f);
-        }
+        // The fader on its own ±12 scale — tabby's hollow frame with its sight.
+        meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), faderY (0.0f));
+        meterrail::paintGrip (g, r, faderY (param.convertFrom0to1 (param.getValue())));
 
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);

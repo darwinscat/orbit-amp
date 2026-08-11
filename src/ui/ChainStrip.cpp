@@ -245,80 +245,8 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
     // needle lane there is better at the job than a half-lane tile ever was. The zoom face
     // still exists; the strip below opens it.
 
-    // The gate, indicated the way gates are: the key level running along a scale with both
-    // decision marks on it — where it opens, where it closes — and the fill dimming while the
-    // gate holds. The zoomed face draws the same picture at reading size.
-    {
-        auto* t = make (ChainLink::gate, "Gate", theme::violet, params::gateOn);
-
-        auto* thresholdParam = s.getRawParameterValue (params::gateThreshold);
-        auto* posParam       = s.getRawParameterValue (params::gatePos);
-        const auto& pressureDb = amp.gateMeterDb;
-        const auto& keyDb      = amp.gateKeyDb;
-
-        // The map must not lie: when the mute lands pre-reverb, the thumb says so — the KEY is
-        // here at the front either way, which is why the link itself does not move.
-        t->caption = [thresholdParam, posParam]
-        {
-            const auto db = juce::String (juce::roundToInt (thresholdParam->load()));
-            return juce::roundToInt (posParam->load()) == 0 ? db + " DB" : db + " →REV";
-        };
-
-        // The same two columns the zoomed face has, at map size: KEY with its decision marks,
-        // GR beside it.
-        t->preview = [&pressureDb, &keyDb, thresholdParam] (juce::Graphics& g, juce::Rectangle<int> box)
-        {
-            constexpr float floorDb = -80.0f;
-            constexpr int   gap     = 4;
-
-            const int w = juce::jmin (18, (box.getWidth() - gap) / 2);
-            auto cols = box.withSizeKeepingCentre (w * 2 + gap, box.getHeight());
-
-            auto key = cols.removeFromLeft (w).toFloat();
-            cols.removeFromLeft (gap);
-            auto gr = cols.removeFromLeft (w).toFloat();
-
-            const auto dbToY = [&key] (float db)
-            {
-                return key.getBottom()
-                     - key.getHeight() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
-            };
-
-            const bool closed = pressureDb.load() < -1.0f;
-
-            g.setColour (theme::bezel);
-            g.fillRoundedRectangle (key, theme::radiusSm);
-
-            if (const float ly = dbToY (keyDb.load()); ly < key.getBottom() - 1.0f)
-            {
-                g.setColour (theme::violet.withAlpha (closed ? 0.35f : 0.85f));
-                g.fillRoundedRectangle (key.withTop (ly).reduced (1.0f), theme::radiusSm);
-            }
-
-            const float openDb = thresholdParam->load();
-            g.setColour (theme::lilac.withAlpha (0.45f));
-            g.fillRect (key.getX(), dbToY (openDb - params::gateHysteresisDb) - 0.5f, key.getWidth(), 1.0f);
-            g.setColour (theme::lilac);
-            g.fillRect (key.getX(), dbToY (openDb) - 0.75f, key.getWidth(), 1.5f);
-
-            g.setColour (theme::hair2);
-            g.drawRoundedRectangle (key.reduced (0.5f), theme::radiusSm, 1.0f);
-
-            g.setColour (theme::bezel);
-            g.fillRoundedRectangle (gr, theme::radiusSm);
-
-            const float depth = juce::jlimit (0.0f, -floorDb, -pressureDb.load());
-            if (const float h = gr.getHeight() * depth / -floorDb; h > 0.5f)
-            {
-                // Orange like the zoomed face: pressure is the gate ACTING.
-                g.setColour (theme::orange.withAlpha (0.85f));
-                g.fillRoundedRectangle (gr.withHeight (h).reduced (1.0f), theme::radiusSm);
-            }
-
-            g.setColour (theme::hair2);
-            g.drawRoundedRectangle (gr.reduced (0.5f), theme::radiusSm, 1.0f);
-        };
-    }
+    // No gate thumb either: the IN sliver left of the faceplate IS the gate's face out here —
+    // meter, threshold, pressure and presets in one column; its click opens the zoom.
 
     // The EQ links: the curve, and — while the link is switched on — the live spectrum under it,
     // read from the same tap the zoom reads.
