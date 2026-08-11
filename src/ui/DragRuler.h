@@ -13,10 +13,21 @@ namespace orbitamp
 
     A projection, not a control: it intercepts nothing. Its bounds must match the column's
     vertical extent, so its ladder lands exactly at the runner's heights. */
-class DragRuler final : public juce::Component
+class DragRuler final : public juce::Component,
+                        private juce::Timer
 {
 public:
     DragRuler() { setInterceptsMouseClicks (false, false); }
+
+    /** The ruler repaints itself while summoned — nobody underneath can be trusted to: the
+        orange line only moved where some neighbour's timer happened to redraw the overlap. */
+    void visibilityChanged() override
+    {
+        if (isVisible())
+            startTimerHz (30);
+        else
+            stopTimer();
+    }
 
     /** Numbers and ticks hug the edge nearest the column: left when the ruler stands right of
         it (IN), right when it stands left (OUT). */
@@ -72,6 +83,8 @@ public:
     }
 
 private:
+    void timerCallback() override { repaint(); }
+
     /** MUST mirror the strips' trimY: centre is unity, 6 px margin at each end of the travel. */
     float dbToY (juce::Rectangle<float> r, float db) const
     {
