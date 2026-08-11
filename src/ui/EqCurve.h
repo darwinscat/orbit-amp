@@ -44,6 +44,9 @@ public:
     /** The wheel over a handle — Q on a bell, slope on a wall; the owner knows which. */
     std::function<void (int index, float delta)> onHandleWheel;
 
+    /** Discrete vertical-drag notches on a line handle (slope ladder): index, +-steps. */
+    std::function<void (int index, int steps)> onHandleStep;
+
     /** Double-clicks: on empty curve — create (the surgical bell lands here); on a handle — the
         owner may take it away again. */
     std::function<void (double hz)> onCurveDoubleClick;
@@ -63,6 +66,22 @@ public:
 
         g.setColour (theme::bezel);
         g.fillRoundedRectangle (r, theme::radiusMd);
+
+        {
+            // tabby's vignette: centre lifted a touch, corners deepened — the plot breathes
+            // instead of sitting flat.
+            const juce::Graphics::ScopedSaveState clipped (g);
+            juce::Path well;
+            well.addRoundedRectangle (r, theme::radiusMd);
+            g.reduceClipRegion (well);
+
+            juce::ColourGradient vg (theme::bezel.brighter (0.18f),
+                                     r.getCentreX(), r.getCentreY() - r.getHeight() * 0.06f,
+                                     theme::bezel.darker (0.55f),
+                                     r.getX(), r.getBottom(), true);
+            g.setGradientFill (vg);
+            g.fillRect (r);
+        }
 
         drawGrid (g, r);
 
@@ -128,7 +147,8 @@ public:
     //==============================================================================
     void mouseDown (const juce::MouseEvent& e) override
     {
-        dragging = handleAt (e.position);
+        dragging   = handleAt (e.position);
+        stepAnchor = e.position.y;
         if (dragging >= 0 && onDragActive)
             onDragActive (dragging, true);
     }
@@ -143,6 +163,19 @@ public:
 
         const double hz = h.freedom == Handle::Freedom::gain ? h.hz : xToHz (r, e.position.x);
         const double db = h.freedom == Handle::Freedom::freq ? h.db : yToDb (r, e.position.y);
+
+        // A line has no gain to give the vertical axis, so the vertical axis works the ladder:
+        // every stepPx of travel is one slope notch, up = steeper. Same message as the wheel.
+        if (h.freedom == Handle::Freedom::freq && onHandleStep != nullptr)
+        {
+            constexpr float stepPx = 28.0f;
+            const int steps = (int) ((stepAnchor - e.position.y) / stepPx);
+            if (steps != 0)
+            {
+                stepAnchor -= (float) steps * stepPx;
+                onHandleStep (dragging, steps);
+            }
+        }
 
         onHandleDrag (dragging, hz, db);
     }
@@ -216,6 +249,19 @@ private:
             if (! h.visible)
                 continue;
 
+            // A line handle answers along its whole height — distance is horizontal only.
+            if (h.freedom == Handle::Freedom::freq)
+            {
+                const double dx = std::abs (p.x - hzToX (r, h.hz));
+                const double d  = dx * dx * 4.0;   // narrower grab than a dot, or it shadows nodes
+                if (d < bestD)
+                {
+                    bestD = d;
+                    best  = i;
+                }
+                continue;
+            }
+
             const auto c = handlePos (r, h);
             const double d = (double) p.getDistanceSquaredFrom (c);
             if (d < bestD)
@@ -244,8 +290,20 @@ private:
             if (! h.visible)
                 continue;
 
-            const auto c   = handlePos (r, h);
             const bool lit = (i == hovered || i == dragging);
+
+            // A cut is a PLACE, not an amount — its handle is the whole vertical line, grabbable
+            // anywhere along its height.
+            if (h.freedom == Handle::Freedom::freq)
+            {
+                const float x = hzToX (r, h.hz);
+                g.setColour (wallRed.withAlpha (lit ? 1.0f : 0.65f));
+                g.fillRect (x - (lit ? 1.25f : 0.75f), r.getY() + 2.0f,
+                            lit ? 2.5f : 1.5f, r.getHeight() - 4.0f);
+                continue;
+            }
+
+            const auto c   = handlePos (r, h);
             const float rad = handleRadius * (lit ? 1.25f : 1.0f);
 
             g.setColour (theme::bezel);
@@ -287,11 +345,22 @@ private:
 
     void drawGrid (juce::Graphics& g, juce::Rectangle<float> r) const
     {
+        // The log grid the way EQs have always drawn it: the 1-2-5 series carries the weight
+        // and the numbers, every other step stays hair-thin between them — the shrinking
+        // spacing IS the logarithm, visible.
+        for (double decade : { 10.0, 100.0, 1000.0, 10000.0 })
+            for (int mult = 1; mult <= 9; ++mult)
+            {
+                const double hz = decade * mult;
+                if (hz < 20.0 || hz > 20000.0)
+                    continue;
+
+                const bool major = mult == 1 || mult == 2 || mult == 5;
+                g.setColour (major ? theme::hair2.withAlpha (0.20f) : theme::hair.withAlpha (0.07f));
+                g.fillRect (hzToX (r, hz), r.getY() + 4.0f, 1.0f, r.getHeight() - 8.0f);
+            }
+
         g.setColour (theme::hair);
-
-        for (double hz : { 100.0, 1000.0, 10000.0 })
-            g.fillRect (hzToX (r, hz), r.getY() + 4.0f, 1.0f, r.getHeight() - 8.0f);
-
         for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
             g.fillRect (r.getX() + 4.0f, dbToY (r, db), r.getWidth() - 8.0f, 1.0f);
 
@@ -305,12 +374,19 @@ private:
         const auto hzLabel = [&] (double hz, const char* text)
         {
             theme::drawTracked (g, text,
-                                { hzToX (r, hz) + 4.0f, r.getBottom() - 14.0f, 40.0f, 10.0f },
-                                theme::displayFont (8.5f), 0.08f, juce::Justification::centredLeft);
+                                { hzToX (r, hz) - 20.0f, r.getBottom() - 14.0f, 40.0f, 10.0f },
+                                theme::displayFont (8.5f), 0.08f, juce::Justification::centred);
         };
+        hzLabel (20.0, "20");
+        hzLabel (50.0, "50");
         hzLabel (100.0, "100");
+        hzLabel (200.0, "200");
+        hzLabel (500.0, "500");
         hzLabel (1000.0, "1K");
+        hzLabel (2000.0, "2K");
+        hzLabel (5000.0, "5K");
         hzLabel (10000.0, "10K");
+        hzLabel (20000.0, "20K");
 
         for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
             theme::drawTracked (g, (db > 0 ? "+" : "") + juce::String ((int) db),
@@ -323,6 +399,7 @@ private:
     juce::Array<Handle> handles;
     int hovered  = -1;
     int dragging = -1;
+    float stepAnchor = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EqCurve)
 };

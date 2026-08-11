@@ -55,6 +55,7 @@ private:
     void handleDragged (int index, double hz, double db);
     void handleDragActive (int index, bool active);
     void handleWheel (int index, float delta);
+    void stepSlope (int index, int steps);
     void curveDoubleClicked (double hz);
     void handleDoubleClicked (int index);
 
@@ -87,6 +88,19 @@ private:
 
     void resetLink();
 
+    static juce::String formatHz (double hz);
+    void freqEdited (int handle, juce::Label&);
+
+    /** The slope readout under a cut's switch: shows the ladder value, click opens the ladder as
+        a menu at the mouse — a combo in behaviour, our own face in pixels. */
+    struct SlopeCombo final : public juce::Component
+    {
+        std::function<int()> getIndex;
+        std::function<void (int)> setIndex;
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+    };
+
     Knob lo { "LO", theme::violet, 0 };
     Knob b1 { "B1", theme::violet, 0 };
     Knob b2 { "B2", theme::violet, 0 };
@@ -96,6 +110,10 @@ private:
 
     ZoneSwitch  hpfSw, lpfSw;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };
+    SlopeCombo  hpfSlopeBox, lpfSlopeBox;
+
+    /** Editable frequency readouts under the gain knobs, in LO/B1/B2/HI order. */
+    juce::Label freqReadout[4];
 
     std::unique_ptr<LevelColumn> level;
 

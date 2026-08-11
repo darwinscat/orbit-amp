@@ -158,13 +158,19 @@ namespace
         g.setColour (theme::hair2);
         g.fillRect (r.getX(), r.getCentreY(), r.getWidth(), 1.0f);
 
+        // NOT clamped: a cut keeps diving and leaves through the floor — pinning it to the edge
+        // drew a wall crawling along the bottom that the filter does not have. The clip is what
+        // ends the line.
+        const juce::Graphics::ScopedSaveState clipped (g);
+        g.reduceClipRegion (box);
+
         juce::Path p;
         const int w = juce::jmax (2, box.getWidth());
 
         for (int x = 0; x < w; ++x)
         {
             const double hz = 20.0 * std::pow (1000.0, (double) x / (double) (w - 1));   // 20 Hz .. 20 kHz
-            const float  db = juce::jlimit (-rangeDb, rangeDb, (float) magnitudeDb (hz));
+            const float  db = (float) magnitudeDb (hz);
             const float  y  = r.getCentreY() - db / rangeDb * (r.getHeight() * 0.5f - 1.0f);
 
             if (x == 0) p.startNewSubPath (r.getX(), y);

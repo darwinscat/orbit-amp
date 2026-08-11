@@ -236,12 +236,34 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         l->setInterceptsMouseClicks (false, false);
     }
 
+    // The frequency of every node, in writing, under its own knob — and a way to just TYPE it.
+    static constexpr int readoutHandle[4] = { hLo, hB1, hB2, hHi };
+
+    for (int i = 0; i < 4; ++i)
+    {
+        auto& l = freqReadout[i];
+        l.setFont (theme::displayFont (9.5f));
+        l.setColour (juce::Label::textColourId, theme::txDim);
+        l.setColour (juce::Label::backgroundWhenEditingColourId, theme::bezel);
+        l.setColour (juce::Label::textWhenEditingColourId, theme::lilac);
+        l.setColour (juce::TextEditor::highlightColourId, theme::violet.withAlpha (0.35f));
+        l.setJustificationType (juce::Justification::centred);
+        l.setEditable (true, false, false);
+        l.onTextChange = [this, i] { freqEdited (readoutHandle[i], freqReadout[i]); };
+    }
+
+    hpfSlopeBox.getIndex = [this] { return juce::roundToInt (raw (params::eqHpfSlope (link))); };
+    lpfSlopeBox.getIndex = [this] { return juce::roundToInt (raw (params::eqLpfSlope (link))); };
+    hpfSlopeBox.setIndex = [this] (int i) { hpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
+    lpfSlopeBox.setIndex = [this] (int i) { lpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
+
     resetBtn.onClick = [this] { resetLink(); };
 
     curve.filterMagnitudeDb  = [this] (double hz) { return display.filterMagnitudeDb (hz); };
     curve.onHandleDrag       = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
     curve.onDragActive       = [this] (int i, bool a) { handleDragActive (i, a); };
     curve.onHandleWheel      = [this] (int i, float d) { handleWheel (i, d); };
+    curve.onHandleStep       = [this] (int i, int n) { stepSlope (i, n); };
     curve.onCurveDoubleClick = [this] (double hz) { curveDoubleClicked (hz); };
     curve.onHandleDoubleClick = [this] (int i) { handleDoubleClicked (i); };
 
@@ -334,7 +356,12 @@ void EqSection::addTo (juce::Component& parent)
     parent.addAndMakeVisible (lpfSw);
     parent.addAndMakeVisible (hpfLabel);
     parent.addAndMakeVisible (lpfLabel);
+    parent.addAndMakeVisible (hpfSlopeBox);
+    parent.addAndMakeVisible (lpfSlopeBox);
     parent.addAndMakeVisible (*level);
+
+    for (auto& l : freqReadout)
+        parent.addAndMakeVisible (l);
 
     for (auto* k : { &lo, &b1, &b2, &hi })
         parent.addAndMakeVisible (*k);
@@ -371,7 +398,81 @@ void EqSection::refreshCurve()
 
     display.setSettings (s);
     refreshHandles();
+
+    const double readoutHz[4] = { s.loHz, s.b1Hz, s.b2Hz, s.hiHz };
+
+    for (int i = 0; i < 4; ++i)
+        if (! freqReadout[i].isBeingEdited())
+            freqReadout[i].setText (formatHz (readoutHz[i]), juce::dontSendNotification);
+
+    hpfSlopeBox.repaint();
+    lpfSlopeBox.repaint();
     curve.repaint();
+}
+
+juce::String EqSection::formatHz (double hz)
+{
+    if (hz < 1000.0)
+        return juce::String (juce::roundToInt (hz));
+
+    auto k = juce::String (hz / 1000.0, hz < 10000.0 ? 2 : 1)
+                 .trimCharactersAtEnd ("0").trimCharactersAtEnd (".");
+    return k + "K";
+}
+
+void EqSection::freqEdited (int handle, juce::Label& label)
+{
+    // Accepts what a musician types: "820", "2.5k", "2500", "1 K" — anything else is ignored and
+    // the next refresh writes the truth back.
+    const auto t = label.getText().toUpperCase().retainCharacters ("0123456789.K");
+    const double mul = t.containsChar ('K') ? 1000.0 : 1.0;
+    const double hz  = t.upToFirstOccurrenceOf ("K", false, false).getDoubleValue() * mul;
+
+    if (hz > 0.0)
+        freqAtt[handle]->setValueAsCompleteGesture ((float) hz);
+
+    refreshCurve();
+}
+
+void EqSection::SlopeCombo::paint (juce::Graphics& g)
+{
+    if (getIndex == nullptr)
+        return;
+
+    const auto r = getLocalBounds().toFloat();
+    const auto text = params::eqSlopes[juce::jlimit (0, params::eqSlopes.size() - 1, getIndex())]
+                          + juce::String (" DB/OCT");
+
+    g.setColour (theme::txDim);
+    theme::drawTracked (g, text, r.withTrimmedRight (10.0f), theme::displayFont (9.0f), 0.06f,
+                        juce::Justification::centred);
+
+    // The chevron that says "this opens".
+    juce::Path v;
+    const float cx = r.getRight() - 8.0f, cy = r.getCentreY() - 1.0f;
+    v.startNewSubPath (cx - 3.0f, cy);
+    v.lineTo (cx, cy + 3.0f);
+    v.lineTo (cx + 3.0f, cy);
+    g.strokePath (v, juce::PathStrokeType (1.2f));
+}
+
+void EqSection::SlopeCombo::mouseDown (const juce::MouseEvent& e)
+{
+    if (getIndex == nullptr || setIndex == nullptr)
+        return;
+
+    juce::PopupMenu m;
+    for (int i = 0; i < params::eqSlopes.size(); ++i)
+        m.addItem (i + 1, params::eqSlopes[i] + " dB/oct", true, i == getIndex());
+
+    m.showMenuAsync (juce::PopupMenu::Options()
+                         .withTargetScreenArea ({ e.getScreenPosition().x,
+                                                  e.getScreenPosition().y, 1, 1 }),
+                     [safe = juce::Component::SafePointer<SlopeCombo> (this)] (int r)
+                     {
+                         if (r > 0 && safe != nullptr)
+                             safe->setIndex (r - 1);
+                     });
 }
 
 void EqSection::refreshHandles()
@@ -443,14 +544,19 @@ void EqSection::handleWheel (int index, float delta)
     }
 
     if (index == hHpf || index == hLpf)
-    {
-        auto& att = index == hHpf ? hpfSlopeAtt : lpfSlopeAtt;
-        const auto id = index == hHpf ? params::eqHpfSlope (link) : params::eqLpfSlope (link);
-        const int step = delta > 0 ? 1 : -1;
-        const int next = juce::jlimit (0, params::eqSlopes.size() - 1,
-                                       juce::roundToInt (raw (id)) + step);
-        att->setValueAsCompleteGesture ((float) next);
-    }
+        stepSlope (index, delta > 0 ? 1 : -1);
+}
+
+void EqSection::stepSlope (int index, int steps)
+{
+    if (index != hHpf && index != hLpf)
+        return;
+
+    auto& att = index == hHpf ? hpfSlopeAtt : lpfSlopeAtt;
+    const auto id = index == hHpf ? params::eqHpfSlope (link) : params::eqLpfSlope (link);
+    const int next = juce::jlimit (0, params::eqSlopes.size() - 1,
+                                   juce::roundToInt (raw (id)) + steps);
+    att->setValueAsCompleteGesture ((float) next);
 }
 
 void EqSection::curveDoubleClicked (double hz)
@@ -473,28 +579,34 @@ void EqSection::layOut (juce::Rectangle<int> content)
     level->setBounds (lvl.reduced (0, 2));
     content.removeFromRight (12);
 
-    // The control row: [HPF sw][LO][B1][B2][HI][LPF sw], gain knobs only.
-    auto row = content.removeFromBottom (96).reduced (0, 4);
+    // The control row: [HPF sw][LO][B1][B2][HI][LPF sw], gain knobs only; under every knob its
+    // frequency in writing, under every switch its slope combo.
+    auto row = content.removeFromBottom (112).reduced (0, 4);
     content.removeFromBottom (6);
 
-    const int cellW = row.getWidth() / 6;
+    const int cellW    = row.getWidth() / 6;
+    const int readoutH = 15;
 
-    const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label)
+    const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
+                                 SlopeCombo& combo)
     {
+        combo.setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (74, readoutH));
         label.setBounds (cell.removeFromTop (16));
         sw.setBounds (cell.withSizeKeepingCentre (30, 16));
     };
 
-    switchCell (row.removeFromLeft (cellW), hpfSw, hpfLabel);
+    switchCell (row.removeFromLeft (cellW), hpfSw, hpfLabel, hpfSlopeBox);
 
+    int i = 0;
     for (auto* k : { &lo, &b1, &b2, &hi })
     {
         auto cell = row.removeFromLeft (cellW);
+        freqReadout[i++].setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (58, readoutH));
         const int side = juce::jmin (cell.getWidth(), cell.getHeight());
         k->setBounds (cell.withSizeKeepingCentre (side, side));
     }
 
-    switchCell (row, lpfSw, lpfLabel);
+    switchCell (row, lpfSw, lpfLabel, lpfSlopeBox);
 
     // The curve gets everything else; the reset overlays its top-right corner.
     curve.setBounds (content);
