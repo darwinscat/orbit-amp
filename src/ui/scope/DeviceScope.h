@@ -102,13 +102,17 @@ public:
             well.addRoundedRectangle (r, theme::radiusMd);
             g.reduceClipRegion (well);
 
-            // tabby's vignette, same as the EQ's well: centre lifted a touch, corners deepened.
-            juce::ColourGradient vg (theme::bezel.brighter (0.18f),
-                                     r.getCentreX(), r.getCentreY() - r.getHeight() * 0.06f,
-                                     theme::bezel.darker (0.55f),
-                                     r.getX(), r.getBottom(), true);
-            g.setGradientFill (vg);
-            g.fillRect (r);
+            // tabby's vignette, same as the EQ's well — TONE only: the measuring view earns
+            // the measuring ground; the moving pictures keep their flat black.
+            if (mode == Mode::tone)
+            {
+                juce::ColourGradient vg (theme::bezel.brighter (0.18f),
+                                         r.getCentreX(), r.getCentreY() - r.getHeight() * 0.06f,
+                                         theme::bezel.darker (0.55f),
+                                         r.getX(), r.getBottom(), true);
+                g.setGradientFill (vg);
+                g.fillRect (r);
+            }
 
             const auto area = r.reduced (6.0f);
             const auto frame = fetch();
