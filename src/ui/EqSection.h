@@ -81,9 +81,12 @@ private:
         to its default except the power, which belongs to the frame. */
     struct ResetButton final : public juce::Component
     {
-        std::function<void()> onClick;
+        std::function<void (juce::Point<int>)> onClick;
         void paint (juce::Graphics&) override;
-        void mouseDown (const juce::MouseEvent&) override { if (onClick) onClick(); }
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            if (onClick) onClick (e.getScreenPosition());
+        }
     };
 
     void resetLink();

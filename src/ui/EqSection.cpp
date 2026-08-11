@@ -272,7 +272,16 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     hpfSlopeBox.setIndex = [this] (int i) { hpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
     lpfSlopeBox.setIndex = [this] (int i) { lpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
 
-    resetBtn.onClick = [this] { resetLink(); };
+    resetBtn.onClick = [this] (juce::Point<int> screenPos)
+    {
+        juce::PopupMenu m;
+        m.addSectionHeader ("EQ " + juce::String (link + 1) + " \u2014 BACK TO FLAT?");
+        m.addItem (1, "Reset");
+
+        m.showMenuAsync (juce::PopupMenu::Options()
+                             .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                         [this] (int r) { if (r == 1) resetLink(); });
+    };
 
     curve.filterMagnitudeDb  = [this] (double hz) { return display.filterMagnitudeDb (hz); };
     curve.onHandleDrag       = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
@@ -332,7 +341,7 @@ void EqSection::ResetButton::paint (juce::Graphics& g)
     g.setColour (theme::hair2);
     g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
     g.setColour (theme::txDim);
-    theme::drawTracked (g, "RESET", r, theme::displayFont (9.0f), 0.14f,
+    theme::drawTracked (g, "RESET", r, theme::displayFont (12.0f), 0.14f,
                         juce::Justification::centred);
 }
 
@@ -625,7 +634,7 @@ void EqSection::layOut (juce::Rectangle<int> content)
 
     // The curve gets everything else; the reset overlays its top-right corner.
     curve.setBounds (content);
-    resetBtn.setBounds (content.getRight() - 74, content.getY() + 8, 64, 20);
+    resetBtn.setBounds (content.getRight() - 94, content.getY() + 8, 84, 24);
     resetBtn.toFront (false);
 }
 
