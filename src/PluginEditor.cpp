@@ -15,6 +15,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
       limitBadge ("Limit", *p.apvts.getParameter (params::limiterOn), p.limiterGrDb, 6.0f),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p)
 {
+    setWantsKeyboardFocus (true);
+
     addAndMakeVisible (chrome);
     addAndMakeVisible (strip);
     addAndMakeVisible (faceplate);
@@ -175,6 +177,19 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 void AmpEditor::paint (juce::Graphics& g)
 {
     g.fillAll (theme::ground);
+}
+
+bool AmpEditor::keyPressed (const juce::KeyPress& key)
+{
+    // Space is the transport, like everywhere else sound is judged. Text editors keep their
+    // spaces — a focused editor consumes the key before it ever reaches us.
+    if (key == juce::KeyPress::spaceKey)
+    {
+        amp.demo.setPlaying (! amp.demo.isPlaying());
+        return true;
+    }
+
+    return false;
 }
 
 void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)

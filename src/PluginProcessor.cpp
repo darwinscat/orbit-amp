@@ -200,7 +200,10 @@ void AmpProcessor::pumpDeviceWork()
             selectors[(size_t) i] = juce::roundToInt (
                 apvts.getRawParameterValue (params::selectorId (blk, i))->load());
 
-        block.setRaw (apvts.getRawParameterValue (params::rawId (blk))->load() > 0.5f);
+        // The packs' measured EQ curves are ignored WHOLESALE, his order: a NAM player and
+        // nothing else — no FIRs before or after the model. The raw parameter stays in the tree
+        // for the day this becomes a choice again; the pump simply stops asking it.
+        block.setRaw (true);
         block.applySelectors (selectors);
         block.loadIfGainMoved (gainParam->load());
 

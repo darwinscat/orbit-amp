@@ -228,7 +228,9 @@ void CapturedBlockPanel::deviceChanged()
         slot.steps.reset();
         slot.measuredIndex = -1;
 
-        if (measured == nullptr || i >= (int) measured->size())
+        // Measured EQ is ignored wholesale (see the pump) — a knob that drives a bypassed
+        // filter is worse than no knob, so none are built.
+        if (true || measured == nullptr || i >= (int) measured->size())
             continue;
 
         const auto& m = (*measured)[(size_t) i];

@@ -21,8 +21,10 @@ int main (int argc, char** argv)
     const juce::String boostName  = argc > 3 ? argv[3] : "Muff";
     const juce::String preampName = argc > 4 ? argv[4] : "IR";
 
-    // The loop, straight from the sibling's assets — the same file the demo strip plays.
-    juce::File loopFile ("~/IdeaProjects/orbit-nam-capture/app/assets/loops/eleven-light-years.wav");
+    // The loop, straight from the sibling's assets — the same file the demo strip plays;
+    // argv[5] substitutes any other take (HIS take, where the artifacts actually live).
+    juce::File loopFile (argc > 5 ? juce::String (argv[5])
+                                  : "~/IdeaProjects/orbit-nam-capture/app/assets/loops/eleven-light-years.wav");
 
     juce::AudioFormatManager fm;
     fm.registerBasicFormats();
@@ -92,9 +94,10 @@ int main (int argc, char** argv)
 
     std::printf ("gains: %s %.1f, %s %.1f\n", boostName.toRawUTF8(), bGain,
                  preampName.toRawUTF8(), pGain);
-    render (true, false, "probe-1-" + boostName.toLowerCase() + "-only.wav");
-    render (false, true, "probe-2-" + preampName.toLowerCase() + "-only.wav");
-    render (true, true,  "probe-3-" + boostName.toLowerCase() + "-plus-"
+    const juce::String tag = loopFile.getFileNameWithoutExtension().toLowerCase() + "-";
+    render (true, false, "probe-" + tag + "1-" + boostName.toLowerCase() + "-only.wav");
+    render (false, true, "probe-" + tag + "2-" + preampName.toLowerCase() + "-only.wav");
+    render (true, true,  "probe-" + tag + "3-" + boostName.toLowerCase() + "-plus-"
                              + preampName.toLowerCase() + ".wav");
 
     return 0;
