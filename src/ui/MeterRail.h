@@ -86,6 +86,12 @@ inline void paintTrimTicks (juce::Graphics& g, juce::Rectangle<float> track,
         g.setColour (juce::Colours::white.withAlpha (major ? 0.45f : 0.32f));
         g.fillRect (track.getX(), y - 1.0f, len, 2.0f);
         g.fillRect (track.getRight() - len, y - 1.0f, len, 2.0f);
+
+        // The number between the notches — the ruler says what it means.
+        g.setColour (juce::Colours::white.withAlpha (major ? 0.45f : 0.35f));
+        theme::drawTracked (g, (db > 0 ? "+" : "") + juce::String ((int) db),
+                            { track.getX(), y - 5.5f, track.getWidth(), 11.0f },
+                            theme::displayFont (10.0f), 0.04f, juce::Justification::centred);
     }
 }
 
