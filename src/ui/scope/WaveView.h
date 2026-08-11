@@ -38,6 +38,22 @@ public:
         const float mid  = halfWave ? r.getBottom() : r.getCentreY();
         const float half = halfWave ? r.getHeight() : r.getHeight() * 0.5f;
 
+        // The dB grid the scale earns: this view reads in decibels now, so it says so.
+        for (float db : { -20.0f, -40.0f, -60.0f })
+        {
+            const float t = (db - floorDb) / -floorDb;
+
+            g.setColour (theme::hair);
+            g.fillRect (r.getX(), mid - t * half, r.getWidth(), 1.0f);
+            if (! halfWave)
+                g.fillRect (r.getX(), mid + t * half, r.getWidth(), 1.0f);
+
+            g.setColour (theme::txFaint);
+            theme::drawTracked (g, juce::String ((int) db),
+                                { r.getX() + 4.0f, mid - t * half - 12.0f, 34.0f, 11.0f },
+                                theme::displayFont (10.0f), 0.06f, juce::Justification::centredLeft);
+        }
+
         // One column per pixel, so no grouping happens here at all — grouping is what shimmered.
         auto at = [count, pixels] (auto pick, int x)
         {
@@ -100,16 +116,16 @@ public:
     }
 
 private:
-    /** Amplitude, bent so quiet is visible.
+    /** Amplitude on a DECIBEL ruler, -80 at the baseline to 0 at the top — the same scale the
+        rails and the learn sheet speak, which is why this view can afford a grid. Sign survives
+        for the mirrored band. */
+    static constexpr float floorDb = -80.0f;
 
-        Linear, a picked note spends most of its life in the bottom tenth of the well and the picture
-        is a flat line with a spike on it. This lifts the small end without a scale break at zero: at
-        full deflection it is unchanged, at a tenth it is a fifth, at a hundredth a twentieth. The
-        picture is not a meter, and legibility beats a proportion nobody is going to measure. */
     static float shape (float a)
     {
-        return juce::jlimit (-1.0f, 1.0f,
-                             (a < 0.0f ? -1.0f : 1.0f) * std::pow (std::abs (a), 0.55f));
+        const float db = juce::Decibels::gainToDecibels (std::abs (a), floorDb);
+        const float t  = juce::jlimit (0.0f, 1.0f, (db - floorDb) / -floorDb);
+        return a < 0.0f ? -t : t;
     }
 
     std::array<core::WaveRibbon::Column, core::WaveRibbon::buckets> columns {};
