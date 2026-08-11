@@ -734,7 +734,7 @@ void EqSection::layOut (juce::Rectangle<int> content)
                           .withSizeKeepingCentre (30, 16));
         combo.setBounds (juce::Rectangle<int> (cell.getX(), sw.getBottom(),
                                                cell.getWidth(), freq.getY() - sw.getBottom())
-                              .withSizeKeepingCentre (98, readoutH));
+                              .withSizeKeepingCentre (98, readoutH).translated (0, 6));
     };
 
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox, freqReadout[4]);
