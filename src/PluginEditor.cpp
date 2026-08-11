@@ -42,8 +42,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     tunerStrip.onClick = [this] { strip.onOpen (ChainLink::tuner); };
 
     // And the gate's sliver: a clean click opens its zoom; drags belong to the threshold.
-    // The badge is the gate's one door — the sliver's clicks belong to its runners now.
-    gateBadge.onOpen = [this] { strip.onOpen (ChainLink::gate); };
+    // The badges' clicks mean MENU — the whole device in one pick; the gate's zoom is the
+    // menu's OPEN item, for the day the deep face is wanted.
+    gateBadge.onOpen = [this] (juce::Point<int> pos) { gateStrip.showPresetMenu (pos); };
+    gateStrip.onOpenZoom = [this] { strip.onOpen (ChainLink::gate); };
+    limitBadge.onOpen = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
 
     // And the open lens closes on any click — the tuner has nothing to operate, only to see.
     faceplate.onTunerDismiss = [this] { strip.onOpen (ChainLink::tuner); };
@@ -85,6 +88,49 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 void AmpEditor::paint (juce::Graphics& g)
 {
     g.fillAll (theme::ground);
+}
+
+void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
+{
+    auto* on   = amp.apvts.getParameter (params::limiterOn);
+    auto* ceil = amp.apvts.getParameter (params::limiterCeiling);
+
+    const bool  isOn = on->getValue() > 0.5f;
+    const float c    = ceil->convertFrom0to1 (ceil->getValue());
+
+    const auto matches = [&] (float v) { return isOn && std::abs (c - v) < 0.05f; };
+
+    juce::PopupMenu m;
+    m.addSectionHeader ("LIMITER");
+    m.addItem (1, "OFF",           true, ! isOn);
+    m.addItem (2, "SAFETY  -0.3",  true, matches (-0.3f));
+    m.addItem (3, "NORMAL  -1.0",  true, matches (-1.0f));
+    m.addItem (4, "TIGHT   -3.0",  true, matches (-3.0f));
+
+    m.showMenuAsync (juce::PopupMenu::Options()
+                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                     [this, on, ceil] (int r)
+                     {
+                         if (r == 0)
+                             return;
+
+                         const auto set = [] (juce::RangedAudioParameter* p, float plain)
+                         {
+                             p->beginChangeGesture();
+                             p->setValueNotifyingHost (p->convertTo0to1 (plain));
+                             p->endChangeGesture();
+                         };
+
+                         // OFF is a toggle here too — a menu that can only kill is no menu.
+                         if (r == 1)
+                         {
+                             set (on, on->getValue() > 0.5f ? 0.0f : 1.0f);
+                             return;
+                         }
+
+                         set (on, 1.0f);
+                         set (ceil, r == 2 ? -0.3f : r == 3 ? -1.0f : -3.0f);
+                     });
 }
 
 void AmpEditor::resized()

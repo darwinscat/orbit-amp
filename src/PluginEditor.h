@@ -30,6 +30,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    void showLimiterMenu (juce::Point<int> screenPos);
+
 private:
     static constexpr int margin    = 18;   // the ground the device sits on
     static constexpr int chromeGap = 10;   // toolbar to faceplate

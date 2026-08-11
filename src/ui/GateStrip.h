@@ -48,6 +48,9 @@ public:
     /** A clean click (no drag) opens the big gate — the sliver is the glance. */
     std::function<void()> onClick;
 
+    /** The menu's OPEN item — the door to the zoom, now that the badge's click means MENU. */
+    std::function<void()> onOpenZoom;
+
     static constexpr int designWidth = 38;
 
     void paint (juce::Graphics& g) override
@@ -165,6 +168,8 @@ public:
         m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
         m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
         m.addItem (5, "LEARN",       true, learning);
+        m.addSeparator();
+        m.addItem (6, "OPEN",        true, false);
 
         // At the MOUSE, not at the component: a menu summoned from a sliver as tall as the panel
         // would otherwise land wherever the sliver ends.
@@ -187,6 +192,13 @@ public:
         if (choice == 1)
         {
             onAtt->setValueAsCompleteGesture (onP.getValue() > 0.5f ? 0.0f : 1.0f);
+            return;
+        }
+
+        if (choice == 6)
+        {
+            if (onOpenZoom != nullptr)
+                onOpenZoom();
             return;
         }
 

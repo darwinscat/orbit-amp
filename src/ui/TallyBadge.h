@@ -27,8 +27,8 @@ public:
         startTimerHz (30);
     }
 
-    /** The click that is the zoom's — everything else (switch, menu) is the frame's. */
-    std::function<void()> onOpen;
+    /** The click, with where it landed on screen — the owner opens its menu there. */
+    std::function<void (juce::Point<int>)> onOpen;
 
     static constexpr int designWidth = 82;
 
@@ -37,7 +37,7 @@ public:
         if (! e.mods.isPopupMenu())
         {
             if (onOpen != nullptr)
-                onOpen();
+                onOpen (e.getScreenPosition());
             return;
         }
 
