@@ -193,6 +193,12 @@ public:
     std::atomic<float>    stageWorst[numStages] {};
     std::atomic<uint32_t> overruns { 0 };
 
+    /** The load's last ~12 seconds, one column per ~33 ms holding the WORST total share inside
+        it — a strip chart the panel draws. Peaks survive here; an EMA would eat them. */
+    static constexpr int loadHistSize = 360;
+    std::atomic<float> loadHist[loadHistSize] {};
+    std::atomic<int>   loadHistPos { 0 };
+
     /** Latched: the limiter has worked since somebody last looked (the badge clears it). */
     std::atomic<bool> limiterWorked { false };
 
@@ -249,6 +255,8 @@ private:
     std::atomic<float>* outTrimParam       = nullptr;
     std::atomic<float>* limiterOnParam     = nullptr;
     std::atomic<float>* stereoModeParam    = nullptr;
+    float histWorst   = 0.0f;
+    int   histSamples = 0;
     std::atomic<float>* limiterCeilParam   = nullptr;
     float lastOutGain = 1.0f;
     core::SoftLimiter limiter;

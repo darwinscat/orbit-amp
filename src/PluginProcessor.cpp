@@ -602,6 +602,19 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
         if (nsStage[stTotal] > budgetNs)
             overruns.fetch_add (1, std::memory_order_relaxed);
+
+        // The strip chart: a column closes every ~33 ms carrying the worst block inside it.
+        histWorst = juce::jmax (histWorst, (float) (nsStage[stTotal] / budgetNs * 100.0));
+        histSamples += numSamples;
+
+        if (const int bucket = juce::roundToInt (getSampleRate() / 30.0); histSamples >= bucket)
+        {
+            const int next = (loadHistPos.load (std::memory_order_relaxed) + 1) % loadHistSize;
+            loadHist[next].store (histWorst, std::memory_order_relaxed);
+            loadHistPos.store (next, std::memory_order_release);
+            histWorst   = 0.0f;
+            histSamples = 0;
+        }
     }
 
     // Load as a share of the block's own wall time — the number the footer shows.

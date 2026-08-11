@@ -131,17 +131,54 @@ void Footer::showLoadBreakdown()
     {
         explicit Panel (AmpProcessor& p) : amp (p)
         {
-            setSize (300, 24 + AmpProcessor::numStages * rowH + 30);
-            startTimerHz (10);
+            setSize (320, 24 + graphH + 6 + AmpProcessor::numStages * rowH + 30 + 26);
+            startTimerHz (15);
         }
 
-        void mouseDown (const juce::MouseEvent&) override
+        void mouseDown (const juce::MouseEvent& e) override
         {
-            // The look clears the evidence — same law as the badges' dots.
-            for (auto& w : amp.stageWorst)
-                w.store (0.0f);
-            amp.overruns.store (0);
-            repaint();
+            if (resetArea().contains (e.getPosition()))
+            {
+                for (auto& w : amp.stageWorst)
+                    w.store (0.0f);
+                amp.overruns.store (0);
+                for (auto& hcol : amp.loadHist)
+                    hcol.store (0.0f);
+                repaint();
+                return;
+            }
+
+            if (copyArea().contains (e.getPosition()))
+            {
+                juce::SystemClipboard::copyTextToClipboard (report());
+                copied = 24;   // a moment of confirmation on the button
+                repaint();
+            }
+        }
+
+        juce::String report() const
+        {
+            static const char* const names[AmpProcessor::numStages] = {
+                "TOTAL", "GATE", "EQ1", "BOOST", "EQ2", "PREAMP", "REVERB", "POWER", "CAB", "OUT",
+            };
+
+            juce::String t;
+            t << "OrbitAmp DSP report  |  " << juce::String (amp.currentSampleRate() / 1000.0, 1)
+              << " kHz  |  block " << amp.getBlockSize()
+              << "  |  oversample " << params::oversampleFactors[
+                     juce::jlimit (0, params::oversampleFactors.size() - 1,
+                                   juce::roundToInt (amp.apvts.getRawParameterValue (params::oversample)->load()))]
+              << "  |  " << (amp.apvts.getRawParameterValue (params::stereoMode)->load() > 0.5f
+                                 ? "STEREO" : "MONO")
+              << "\n";
+            t << juce::String::formatted ("%-8s %8s %8s\n", "STAGE", "MEAN", "WORST");
+
+            for (int i = 0; i < AmpProcessor::numStages; ++i)
+                t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", names[i],
+                                              amp.stageLoad[i].load(), amp.stageWorst[i].load());
+
+            t << "OVERRUNS " << (int) amp.overruns.load() << "\n";
+            return t;
         }
 
         void paint (juce::Graphics& g) override
@@ -160,6 +197,39 @@ void Footer::showLoadBreakdown()
                 g.setColour (theme::txDim);
                 theme::drawTracked (g, "MEAN / WORST", head.toFloat(),
                                     theme::displayFont (10.0f), 0.08f, juce::Justification::centredRight);
+            }
+
+            // The strip chart: ~12 s of worst-in-column shares, the budget line at 100% —
+            // anything over it is a block that missed its deadline, i.e. an audible drop.
+            {
+                auto plot = r.removeFromTop (graphH).toFloat();
+                r.removeFromTop (6);
+
+                g.setColour (theme::bezel);
+                g.fillRoundedRectangle (plot, 3.0f);
+
+                constexpr float ceilPct = 250.0f;
+                const float y100 = plot.getBottom() - plot.getHeight() * (100.0f / ceilPct);
+
+                g.setColour (theme::hair2);
+                g.fillRect (plot.getX(), y100, plot.getWidth(), 1.0f);
+
+                const int pos = amp.loadHistPos.load (std::memory_order_acquire);
+                const float colW = plot.getWidth() / (float) AmpProcessor::loadHistSize;
+
+                for (int i = 0; i < AmpProcessor::loadHistSize; ++i)
+                {
+                    const float v = amp.loadHist[(size_t) ((pos + 1 + i)
+                                                           % AmpProcessor::loadHistSize)].load();
+                    if (v <= 0.01f)
+                        continue;
+
+                    const float hgt = plot.getHeight()
+                                    * juce::jlimit (0.0f, 1.0f, v / ceilPct);
+                    g.setColour (v > 100.0f ? theme::orange : theme::violet.withAlpha (0.75f));
+                    g.fillRect (plot.getX() + (float) i * colW, plot.getBottom() - hgt,
+                                juce::jmax (1.0f, colW), hgt);
+                }
             }
 
             for (int i = 0; i < AmpProcessor::numStages; ++i)
@@ -193,7 +263,7 @@ void Footer::showLoadBreakdown()
                                         2.0f);
             }
 
-            // The verdict line: blown blocks ARE the audible drops. Click clears.
+            // The verdict line: blown blocks ARE the audible drops.
             {
                 auto foot = r.removeFromTop (24);
                 const auto n = amp.overruns.load();
@@ -203,12 +273,36 @@ void Footer::showLoadBreakdown()
                                     foot.toFloat(), theme::displayFont (11.0f), 0.08f,
                                     juce::Justification::centredLeft);
             }
+
+            // The buttons: RESET starts a fresh measurement, COPY hands me the numbers as text.
+            const auto pill = [&g] (juce::Rectangle<int> b, const juce::String& text, bool lit)
+            {
+                g.setColour (theme::panel);
+                g.fillRoundedRectangle (b.toFloat(), b.getHeight() * 0.5f);
+                g.setColour (lit ? theme::orange : theme::hair2);
+                g.drawRoundedRectangle (b.toFloat().reduced (0.5f), b.getHeight() * 0.5f, 1.0f);
+                g.setColour (lit ? theme::orange : theme::txDim);
+                theme::drawTracked (g, text, b.toFloat(), theme::displayFont (11.0f), 0.1f,
+                                    juce::Justification::centred);
+            };
+
+            pill (resetArea(), "RESET", false);
+            pill (copyArea(), copied > 0 ? "COPIED" : "COPY", copied > 0);
         }
 
-        void timerCallback() override { repaint(); }
+        juce::Rectangle<int> resetArea() const { return { 12, getHeight() - 28, 70, 20 }; }
+        juce::Rectangle<int> copyArea()  const { return { 90, getHeight() - 28, 70, 20 }; }
 
-        enum { rowH = 19 };
+        void timerCallback() override
+        {
+            if (copied > 0)
+                --copied;
+            repaint();
+        }
+
+        enum { rowH = 19, graphH = 64 };
         AmpProcessor& amp;
+        int copied = 0;
     };
 
     auto panel = std::make_unique<Panel> (amp);
