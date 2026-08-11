@@ -55,13 +55,15 @@ public:
             pm.specTop    = 0.0;
             pm.specBottom = -90.0;
 
-            juce::Path fill, peak;
+            juce::Path fill, edge, peak;
             fill.startNewSubPath (r.getX(), r.getBottom());
 
             pane->buildColumns (pm, paneRate, 4.5, 1000.0,
                                 [&] (int, float x, float yFill, float yPeak)
                                 {
                                     fill.lineTo (r.getX() + x, r.getY() + yFill);
+                                    if (edge.isEmpty()) edge.startNewSubPath (r.getX() + x, r.getY() + yFill);
+                                    else                edge.lineTo (r.getX() + x, r.getY() + yFill);
                                     if (peak.isEmpty()) peak.startNewSubPath (r.getX() + x, r.getY() + yPeak);
                                     else                peak.lineTo (r.getX() + x, r.getY() + yPeak);
                                 });
@@ -74,6 +76,11 @@ public:
                                                      theme::spectrum.withAlpha (0.03f),
                                                      0.0f, r.getBottom(), false));
             g.fillPath (fill);
+
+            // The rim: the fill's own top edge, drawn — without it the silhouette read as fog.
+            g.setColour (theme::spectrum.withAlpha (0.75f));
+            g.strokePath (edge, juce::PathStrokeType (1.3f));
+
             g.setColour (theme::spectrum.withAlpha (0.55f));
             g.strokePath (peak, juce::PathStrokeType (1.0f));
         }
