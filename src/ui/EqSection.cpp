@@ -237,10 +237,11 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         l->setInterceptsMouseClicks (false, false);
     }
 
-    // The frequency of every node, in writing, under its own knob — and a way to just TYPE it.
-    static constexpr int readoutHandle[4] = { hLo, hB1, hB2, hHi };
+    // The frequency of every node, in writing, on one line across the bottom — under the knobs
+    // for the bands, under the switches for the cuts — and a way to just TYPE it.
+    static constexpr int readoutHandle[6] = { hLo, hB1, hB2, hHi, hHpf, hLpf };
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 6; ++i)
     {
         auto& l = freqReadout[i];
         l.setFont (theme::displayFont (13.0f));
@@ -255,7 +256,9 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         const juce::String hzId = i == 0 ? params::eqLoHz (link)
                                 : i == 1 ? params::eqBellHz (link, 0)
                                 : i == 2 ? params::eqBellHz (link, 1)
-                                :          params::eqHiHz (link);
+                                : i == 3 ? params::eqHiHz (link)
+                                : i == 4 ? params::eqHpfHz (link)
+                                :          params::eqLpfHz (link);
 
         l.onEditorShow = [this, i, hzId]
         {
@@ -509,9 +512,9 @@ void EqSection::refreshCurve()
     display.setSettings (s);
     refreshHandles();
 
-    const double readoutHz[4] = { s.loHz, s.b1Hz, s.b2Hz, s.hiHz };
+    const double readoutHz[6] = { s.loHz, s.b1Hz, s.b2Hz, s.hiHz, s.hpfHz, s.lpfHz };
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 6; ++i)
         if (! freqReadout[i].isBeingEdited())
             freqReadout[i].setText (formatHz (readoutHz[i]), juce::dontSendNotification);
 
@@ -697,15 +700,23 @@ void EqSection::layOut (juce::Rectangle<int> content)
     const int cellW    = row.getWidth() / 6;
     const int readoutH = 18;
 
+    // The cut cell, bottom to top: the frequency on the shared bottom line, the switch exactly
+    // where it always sat, the combo lifted into the gap between name and switch.
     const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
-                                 SlopeCombo& combo)
+                                 SlopeCombo& combo, juce::Label& freq)
     {
-        combo.setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (98, readoutH));
+        freq.setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (76, readoutH));
         label.setBounds (cell.removeFromTop (18));
-        sw.setBounds (cell.withSizeKeepingCentre (30, 16));
+
+        const auto swRect = cell.withSizeKeepingCentre (30, 16);
+        sw.setBounds (swRect);
+
+        combo.setBounds (juce::Rectangle<int> (cell.getX(), label.getBottom(),
+                                               cell.getWidth(), swRect.getY() - label.getBottom())
+                             .withSizeKeepingCentre (98, readoutH));
     };
 
-    switchCell (row.removeFromLeft (cellW), hpfSw, hpfLabel, hpfSlopeBox);
+    switchCell (row.removeFromLeft (cellW), hpfSw, hpfLabel, hpfSlopeBox, freqReadout[4]);
 
     int i = 0;
     for (auto* k : { &lo, &b1, &b2, &hi })
@@ -716,7 +727,7 @@ void EqSection::layOut (juce::Rectangle<int> content)
         k->setBounds (cell.withSizeKeepingCentre (side, side));
     }
 
-    switchCell (row, lpfSw, lpfLabel, lpfSlopeBox);
+    switchCell (row, lpfSw, lpfLabel, lpfSlopeBox, freqReadout[5]);
 
     // The curve gets everything else; the reset overlays its top-right corner.
     curve.setBounds (content);

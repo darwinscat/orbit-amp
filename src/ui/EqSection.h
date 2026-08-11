@@ -117,8 +117,8 @@ private:
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };
     SlopeCombo  hpfSlopeBox, lpfSlopeBox;
 
-    /** Editable frequency readouts under the gain knobs, in LO/B1/B2/HI order. */
-    juce::Label freqReadout[4];
+    /** Editable frequency readouts along the bottom line: LO, LO MID, HI MID, HI, HPF, LPF. */
+    juce::Label freqReadout[6];
 
     std::unique_ptr<LevelColumn> level;
 
