@@ -701,33 +701,44 @@ void EqSection::layOut (juce::Rectangle<int> content)
     const int cellW    = row.getWidth() / 6;
     const int readoutH = 18;
 
-    // The cut cell, top to bottom: name, then switch with its slope combo right under it — one
-    // stacked instrument, centred in the room between name and the shared frequency line.
+    // The knobs go down first so the cut cells can borrow their geometry: the switch sits on the
+    // DIAL AXIS — the same height as the knobs' centres — and the slope combo splits the distance
+    // between switch and the shared frequency line.
+    const juce::Rectangle<int> hpfCell = row.removeFromLeft (cellW);
+
+    juce::Rectangle<int> knobCells[4];
+    for (auto& c : knobCells)
+        c = row.removeFromLeft (cellW);
+
+    const juce::Rectangle<int> lpfCell = row;
+
+    int i = 0;
+    for (auto* k : { &lo, &b1, &b2, &hi })
+    {
+        auto cell = knobCells[i];
+        freqReadout[i++].setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (76, readoutH));
+        const int side = juce::jmin (cell.getWidth(), cell.getHeight());
+        k->setBounds (cell.withSizeKeepingCentre (side, side));
+    }
+
+    const int dialAxisY = lo.getY() + lo.labelRowHeight
+                          + (lo.getHeight() - lo.labelRowHeight) / 2;
+
     const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
                                  SlopeCombo& combo, juce::Label& freq)
     {
         freq.setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (76, readoutH));
         label.setBounds (cell.removeFromTop (18));
 
-        const int stackH = 16 + 6 + readoutH;
-        auto stack = cell.withSizeKeepingCentre (cell.getWidth(), stackH);
-        sw.setBounds (stack.removeFromTop (16).withSizeKeepingCentre (30, 16));
-        stack.removeFromTop (6);
-        combo.setBounds (stack.withSizeKeepingCentre (98, readoutH));
+        sw.setBounds (juce::Rectangle<int> (cell.getX(), dialAxisY - 8, cell.getWidth(), 16)
+                          .withSizeKeepingCentre (30, 16));
+        combo.setBounds (juce::Rectangle<int> (cell.getX(), sw.getBottom(),
+                                               cell.getWidth(), freq.getY() - sw.getBottom())
+                              .withSizeKeepingCentre (98, readoutH));
     };
 
-    switchCell (row.removeFromLeft (cellW), hpfSw, hpfLabel, hpfSlopeBox, freqReadout[4]);
-
-    int i = 0;
-    for (auto* k : { &lo, &b1, &b2, &hi })
-    {
-        auto cell = row.removeFromLeft (cellW);
-        freqReadout[i++].setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (76, readoutH));
-        const int side = juce::jmin (cell.getWidth(), cell.getHeight());
-        k->setBounds (cell.withSizeKeepingCentre (side, side));
-    }
-
-    switchCell (row, lpfSw, lpfLabel, lpfSlopeBox, freqReadout[5]);
+    switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox, freqReadout[4]);
+    switchCell (lpfCell, lpfSw, lpfLabel, lpfSlopeBox, freqReadout[5]);
 
     // The curve gets everything else; the reset overlays its top-right corner.
     curve.setBounds (content);

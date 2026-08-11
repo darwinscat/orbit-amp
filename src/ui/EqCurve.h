@@ -149,11 +149,11 @@ public:
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);
 
-        // The maker's mark, top-right under the presets: the family's own DSP glyph, in the
-        // glyph set's own colour — this face is our silicon.
+        // The maker's mark, top-left: the family's own DSP glyph, in the glyph set's own
+        // colour — this face is our silicon.
         {
             using felitronics::appkit::DeviceType;
-            const juce::Rectangle<float> mark { r.getRight() - 48.0f, r.getY() + 44.0f, 28.0f, 28.0f };
+            const juce::Rectangle<float> mark { r.getX() + 14.0f, r.getY() + 12.0f, 28.0f, 28.0f };
             felitronics::appkit::drawDeviceGlyph (g, mark, DeviceType::dsp,
                                                   felitronics::appkit::deviceStroke (DeviceType::dsp));
         }
