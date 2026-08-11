@@ -390,12 +390,17 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             peak = juce::jmax (peak, buffer.getMagnitude (c, 0, numSamples));
         eqOutDb[(size_t) l].store (juce::Decibels::gainToDecibels (peak, -90.0f));
 
-        auto& tap = eqSpectrumTap[(size_t) l];
-        const float* d = buffer.getReadPointer (0);
-        for (int i = 0; i < numSamples; ++i)
-            tap.push (d[i]);
-        tap.publishIfDue (eqSpectrumOrder,
-                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+        // A switched-off link keeps its spectrum QUIET: feeding the tap with the bypassed
+        // signal claimed the device was doing something. Starved, the pane settles to silence.
+        if (eqParams[(size_t) l].on->load() > 0.5f)
+        {
+            auto& tap = eqSpectrumTap[(size_t) l];
+            const float* d = buffer.getReadPointer (0);
+            for (int i = 0; i < numSamples; ++i)
+                tap.push (d[i]);
+            tap.publishIfDue (eqSpectrumOrder,
+                              juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+        }
     };
 
     if (eqParams[0].on->load() > 0.5f)
@@ -406,6 +411,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (boostOnParam->load() > 0.5f)
         boost.process (buffer, scopeDry);
 
+    if (boostOnParam->load() > 0.5f)
     {
         auto& tap = blockSpectrumTap[0];
         const float* d = buffer.getReadPointer (0);
@@ -423,6 +429,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (preampOnParam->load() > 0.5f)
         preamp.process (buffer, scopeDry);
 
+    if (preampOnParam->load() > 0.5f)
     {
         auto& tap = blockSpectrumTap[1];
         const float* d = buffer.getReadPointer (0);
