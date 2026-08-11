@@ -73,13 +73,13 @@ public:
         g.setColour (theme::bezel);
         g.fillRoundedRectangle (r, theme::radiusSm);
 
-        auto lanes = scaleArea();
-        auto inCol = lanes.removeFromLeft (lanes.getWidth() * 0.62f);
-        lanes.removeFromLeft (2.0f);
-        const auto grCol = lanes;
+        const auto inCol = scaleArea();
 
-        // ---- IN: the family meter rail — tabby's dB-anchored gradient, white hold, clip cap ----
-        meterrail::paintFill (g, inCol, dbToY (inCol, levelDb));
+        // ---- IN: the family meter rail — tabby's dB-anchored gradient, white hold, clip cap.
+        //      The gate's pressure is told by DRAINING THE COLOUR: the deeper it squeezes, the
+        //      greyer the column, monochrome at full mute — life leaving the signal, literally.
+        meterrail::paintFill (g, inCol, dbToY (inCol, levelDb),
+                              juce::jlimit (0.0f, 1.0f, -pressureDb.load() / 40.0f));
 
         if (holdDb > floorDb + 0.5f)
             meterrail::paintHold (g, inCol, dbToY (inCol, holdDb));
@@ -112,17 +112,6 @@ public:
             const float bx = r.getRight() - 1.0f;
             nail.addTriangle (bx, openY - 4.5f, bx, openY + 4.5f, bx - 7.0f, openY);
             g.fillPath (nail);
-        }
-
-        // ---- GR: the gate pressing down the right lane, in solid red ----
-        {
-            const float depth = juce::jlimit (0.0f, -floorDb, -pressureDb.load());
-
-            if (const float h = grCol.getHeight() * depth / -floorDb; h > 0.5f)
-            {
-                g.setColour (gateRed);
-                g.fillRoundedRectangle (grCol.withHeight (h), 2.0f);
-            }
         }
 
         // ---- the trim: tabby's hollow sliding frame with its sight, riding the whole rail ----
@@ -357,9 +346,6 @@ private:
     static constexpr float holdReleasePerTick = 0.8f;   // ...then ~24 dB/s down
     static constexpr int   learnTotalTicks    = 90;     // 3 s at 30 Hz
     static constexpr int   learnEdgeTicks     = 15;     // half a second each end, thrown away
-
-    // The ramp's own red for the gate's pressure.
-    inline static const juce::Colour gateRed { 0xffe0503c };
 
     const std::atomic<float>& keyDb;
     const std::atomic<float>& pressureDb;

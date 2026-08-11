@@ -13,14 +13,19 @@ namespace orbitamp::meterrail
     hollow sliding frame with a sight: the meter keeps running through it, and the two ticks biting
     in from the sides mark the exact value, which a 10 px-tall frame alone could not. */
 
-inline void paintFill (juce::Graphics& g, juce::Rectangle<float> r, float yLevel)
+/** `desat` drains the colour out of the rail, 0..1 — the gate strip uses it to show pressure:
+    the deeper the gate squeezes, the greyer the signal's column, monochrome at full mute. */
+inline void paintFill (juce::Graphics& g, juce::Rectangle<float> r, float yLevel, float desat = 0.0f)
 {
     if (yLevel >= r.getBottom() - 1.0f)
         return;
 
-    juce::ColourGradient grad (theme::violet.withAlpha (0.50f), 0.0f, r.getBottom(),
-                               theme::orange, 0.0f, r.getY(), false);
-    grad.addColour (0.58, theme::violet.withAlpha (0.60f));   // thin violet up to ~58%, then warms
+    const float keep = 1.0f - juce::jlimit (0.0f, 1.0f, desat);
+
+    juce::ColourGradient grad (theme::violet.withMultipliedSaturation (keep).withAlpha (0.50f),
+                               0.0f, r.getBottom(),
+                               theme::orange.withMultipliedSaturation (keep), 0.0f, r.getY(), false);
+    grad.addColour (0.58, theme::violet.withMultipliedSaturation (keep).withAlpha (0.60f));
 
     const juce::Graphics::ScopedSaveState ss (g);
     g.reduceClipRegion ((int) std::floor (r.getX()), (int) yLevel,
