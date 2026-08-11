@@ -300,7 +300,9 @@ private:
         frame starts lower than the component. Zero when nothing rides it. */
     int topInset() const
     {
-        return (titleInBorder || switchInBorder) ? switchH / 2 + 1 : 0;
+        // Room above the line only for what actually RIDES the line: a badge with no switch and
+        // its name inside reserves nothing, so its box meets its neighbours edge to edge.
+        return (titleInBorder && showTitle) || (switchInBorder && hasSwitch) ? switchH / 2 + 1 : 0;
     }
 
 protected:
