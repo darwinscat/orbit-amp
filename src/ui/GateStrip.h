@@ -115,7 +115,7 @@ public:
         // The runners live half-ghosted until the hand comes near: the column is a METER first,
         // its controls surface when wanted. (His own ask — the no-hover law covers lighting,
         // not decluttering.)
-        const float hoverA = isMouseOverOrDragging (true) ? 1.0f : 0.4f;
+        const float hoverA = isMouseOverOrDragging (true) ? 1.0f : 0.3f;
 
         {
             const float dimmed  = (onP.getValue() > 0.5f ? 1.0f : 0.35f) * hoverA;

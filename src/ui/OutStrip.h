@@ -77,7 +77,7 @@ public:
         // The ceiling first (under the trim in z): the limiter's runner in the gate's lilac,
         // living where ceilings live — near the top of the rail. A switched-off limiter's
         // runner dims to read-only strength and will not answer, same law as the gate's.
-        const float hoverA = isMouseOverOrDragging (true) ? 1.0f : 0.4f;
+        const float hoverA = isMouseOverOrDragging (true) ? 1.0f : 0.3f;
 
         {
             const float dimmed = (limOnP.getValue() > 0.5f ? 1.0f : 0.35f) * hoverA;
