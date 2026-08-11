@@ -96,16 +96,18 @@ public:
         }
 
         // ---- the threshold: a line across the scale and a NAIL from the right — the right side
-        //      is the gate's own territory, so its handle hangs from there ----
+        //      is the gate's own territory, so its handle hangs from there. A switched-off gate
+        //      is read-only here like everywhere: its marks dim and its runner will not answer.
         {
+            const float dimmed  = onP.getValue() > 0.5f ? 1.0f : 0.35f;
             const float openDb  = param.convertFrom0to1 (param.getValue());
             const float openY   = dbToY (inCol, openDb);
             const float closeY  = dbToY (inCol, openDb - params::gateHysteresisDb);
 
-            g.setColour (theme::lilac.withAlpha (0.45f));
+            g.setColour (theme::lilac.withAlpha (0.45f * dimmed));
             g.fillRect (inCol.getX(), closeY - 0.5f, inCol.getWidth(), 1.0f);
 
-            g.setColour (theme::lilac);
+            g.setColour (theme::lilac.withAlpha (dimmed));
             g.fillRect (inCol.getX(), openY - 1.0f, scaleArea().getWidth(), 2.0f);
 
             juce::Path nail;
@@ -117,6 +119,8 @@ public:
         // ---- the trim: tabby's hollow sliding frame with its sight, riding the whole rail ----
         {
             const auto area = scaleArea();
+            meterrail::paintTrimTicks (g, r.reduced (0.0f, 2.0f),
+                                       [&] (float db) { return trimY (area, db); });
             meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (area, 0.0f));
             meterrail::paintGrip (g, r, trimY (area, trimP.convertFrom0to1 (trimP.getValue())),
                                   dragging && grabbedTrim);
@@ -235,7 +239,10 @@ public:
             const float thY  = dbToY (area, param.convertFrom0to1 (param.getValue()));
             const float trY  = trimY (area, trimP.convertFrom0to1 (trimP.getValue()));
 
-            grabbedTrim = std::abs (pressY - trY) < std::abs (pressY - thY);
+            // A dark gate's runner does not answer — the grab falls through to the trim,
+            // which is the input's own and never sleeps.
+            grabbedTrim = onP.getValue() <= 0.5f
+                       || std::abs (pressY - trY) < std::abs (pressY - thY);
             (grabbedTrim ? trim : threshold)->beginGesture();
         }
 

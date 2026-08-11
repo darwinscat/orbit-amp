@@ -72,6 +72,22 @@ inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y,
     g.fillRect (frame.getRight() - sightW,  y - 0.75f, sightW, 1.5f);
 }
 
+/** The grip's ruler, inside the rail: a nub every 6 dB of the trim scale on both edges, the
+    12s a touch longer — the metre's own lane stays clean, the marks live at the walls. */
+inline void paintTrimTicks (juce::Graphics& g, juce::Rectangle<float> track,
+                            const std::function<float (float)>& yOfDb)
+{
+    for (float db : { -18.0f, -12.0f, -6.0f, 6.0f, 12.0f, 18.0f })
+    {
+        const float len = juce::roundToInt (db) % 12 == 0 ? 3.0f : 2.0f;
+        const float y   = yOfDb (db);
+
+        g.setColour (juce::Colours::white.withAlpha (0.15f));
+        g.fillRect (track.getX(), y - 0.5f, len, 1.0f);
+        g.fillRect (track.getRight() - len, y - 0.5f, len, 1.0f);
+    }
+}
+
 /** The value under the rail: "+3.5", "-24", "0" — one decimal only when it is earning its keep. */
 inline juce::String trimText (float db)
 {

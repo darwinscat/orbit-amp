@@ -61,6 +61,8 @@ public:
 
         meterrail::paintClipCap (g, col, clip.load());
 
+        meterrail::paintTrimTicks (g, r.reduced (0.0f, 2.0f),
+                                   [&] (float db) { return trimY (col, db); });
         meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (col, 0.0f));
         meterrail::paintGrip (g, r, trimY (col, trimP.convertFrom0to1 (trimP.getValue())),
                               dragging);
