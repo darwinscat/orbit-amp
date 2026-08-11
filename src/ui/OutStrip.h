@@ -46,6 +46,19 @@ public:
 
         meterrail::paintClipCap (g, col, clip.load());
 
+        // The ghost: the peak-hold's future under the trim in hand — the consequence, on the grid.
+        if (dragging && ! grabbedCeil)
+        {
+            const float delta = trimP.convertFrom0to1 (trimP.getValue()) - trimStartDb;
+            if (holdDb > floorDb + 0.5f && std::abs (delta) > 0.05f)
+            {
+                const float gy = dbToY (col, holdDb + delta);
+                const float dashes[] = { 4.0f, 3.0f };
+                g.setColour (juce::Colours::white.withAlpha (0.55f));
+                g.drawDashedLine ({ col.getX(), gy, col.getRight(), gy }, dashes, 2, 1.4f);
+            }
+        }
+
         meterrail::paintDbScale (g, r.reduced (0.0f, 2.0f),
                                  [&] (float db) { return dbToY (col, db); }, floorDb);
         meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (col, 0.0f));
@@ -109,6 +122,7 @@ public:
                         < std::abs (e.getMouseDownPosition().toFloat().y - trY);
 
             (grabbedCeil ? ceil : trim)->beginGesture();
+            trimStartDb = trimP.convertFrom0to1 (trimP.getValue());
         }
 
         if (dragging)
@@ -245,6 +259,7 @@ private:
     bool  dragging    = false;
     bool  swallow     = false;
     bool  grabbedCeil = false;
+    float trimStartDb = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutStrip)
 };

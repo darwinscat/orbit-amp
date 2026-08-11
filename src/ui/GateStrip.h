@@ -72,6 +72,21 @@ public:
 
         meterrail::paintClipCap (g, inCol, clip.load());
 
+        // ---- the ghost: while the trim is in hand, the peak-hold's FUTURE — where the last
+        //      phrase's peak will land with the new gain — walks the scale as a dashed line.
+        //      This is what puts the runner IN the column's grid: you see the consequence. ----
+        if (dragging && grabbedTrim)
+        {
+            const float delta = trimP.convertFrom0to1 (trimP.getValue()) - trimStartDb;
+            if (holdDb > floorDb + 0.5f && std::abs (delta) > 0.05f)
+            {
+                const float gy = dbToY (inCol, holdDb + delta);
+                const float dashes[] = { 4.0f, 3.0f };
+                g.setColour (juce::Colours::white.withAlpha (0.55f));
+                g.drawDashedLine ({ inCol.getX(), gy, inCol.getRight(), gy }, dashes, 2, 1.4f);
+            }
+        }
+
         // ---- learning: an orange fuse burning up the left edge — the measurement's progress ----
         if (learning)
         {
@@ -273,6 +288,9 @@ public:
             grabbedTrim = onP.getValue() <= 0.5f
                        || std::abs (pressY - trY) < std::abs (pressY - thY);
             (grabbedTrim ? trim : threshold)->beginGesture();
+
+            // The ghost's anchor: where the trim stood when the hand closed on it.
+            trimStartDb = trimP.convertFrom0to1 (trimP.getValue());
         }
 
         if (dragging)
@@ -402,6 +420,7 @@ private:
     float learnPeak  = -120.0f;
     bool  dragging    = false;
     bool  grabbedTrim = false;
+    float trimStartDb = 0.0f;
     bool  swallowUp   = false;
     float pressY      = 0.0f;
 
