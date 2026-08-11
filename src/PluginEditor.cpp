@@ -104,29 +104,28 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     addChildComponent (gainRuler);
 
-    // The magnified gain ladder: summoned under whichever captured thumb's runner is in hand,
-    // wider than the runner — a projection, not an echo.
+    // EXPERIMENT (the ladder code stays for the rollback): a captured thumb's runner in hand
+    // PEEKS the zoom instead — the link's whole face opens under the drag, its big dial moving
+    // live, and letting go returns whatever was open before. Already on that face? Then there
+    // is nothing to peek and nothing to restore.
     strip.onGainDrag = [this] (ChainLink link, bool active)
     {
-        if (! active)
+        const auto set = [this] (std::optional<ChainLink> z)
         {
-            gainRuler.setVisible (false);
+            faceplate.setZoom (z);
+            strip.setActive (z);
+        };
+
+        if (active)
+        {
+            zoomBeforePeek = faceplate.zoom();
+            if (zoomBeforePeek != link)
+                set (link);
             return;
         }
 
-        const char* blk = link == ChainLink::boost ? params::boostId : params::preampId;
-        auto* p = amp.apvts.getParameter (params::blockGain (blk));
-        gainRuler.currentValue = [p] { return p->convertFrom0to1 (p->getValue()); };
-
-        const auto tb = strip.thumbBounds (link);
-        const int  w  = juce::roundToInt ((float) tb.getWidth() * 1.7f);
-        const int  x  = juce::jlimit (margin, margin + FaceplateView::designWidth - w,
-                                      margin + tb.getCentreX() - w / 2);
-
-        gainRuler.setBounds (x, strip.getY() + tb.getBottom() + 4, w, 40);
-        gainRuler.setTransform (strip.getTransform());
-        gainRuler.setVisible (true);
-        gainRuler.toFront (false);
+        if (faceplate.zoom() == link && zoomBeforePeek != link)
+            set (zoomBeforePeek);
     };
 
     gateStrip.onTrimDrag = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };

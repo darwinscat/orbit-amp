@@ -34,6 +34,9 @@ public:
 
     void showLimiterMenu (juce::Point<int> screenPos);
 
+    /** What the panel showed before a gain-drag peeked a zoom — restored on release. */
+    std::optional<ChainLink> zoomBeforePeek;
+
 private:
     static constexpr int margin    = 18;   // the ground the device sits on
     static constexpr int chromeGap = 10;   // toolbar to faceplate
