@@ -134,8 +134,8 @@ public:
         if (gain != nullptr)
         {
             auto area = getLocalBounds().reduced (narrow() ? 4 : pad, pad);
-            area.removeFromTop (14);                    // the title row
-            if (captionUnderTitle) area.removeFromTop (11);
+            area.removeFromTop (14 + 3);                // the title row, plus breathing room
+            if (captionUnderTitle) area.removeFromTop (11 + 3);
             gain->setBounds (area.removeFromTop (12));
         }
     }
@@ -198,6 +198,7 @@ public:
 
         if (caption != nullptr && captionUnderTitle)
         {
+            area.removeFromTop (3);
             auto label = area.removeFromTop (11);
             g.setColour (theme::txDim);
             theme::drawTracked (g, caption().toUpperCase(), label.toFloat(), theme::displayFont (8.0f),
@@ -212,7 +213,7 @@ public:
         }
 
         if (gain != nullptr)
-            area.removeFromTop (12 + 2);                // the runner's row (a child, painted by itself)
+            area.removeFromTop (3 + 12 + 2);            // the runner's row (a child, painted by itself)
 
         if (preview != nullptr)
             preview (g, area.reduced (1, 1));
