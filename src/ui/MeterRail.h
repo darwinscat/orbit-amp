@@ -57,9 +57,14 @@ inline void paintUnityNubs (juce::Graphics& g, juce::Rectangle<float> track, flo
     g.fillRect (track.getRight() - 7.0f, y - 1.0f, 7.0f, 2.0f);
 }
 
-inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y, bool lit = false)
+constexpr float gripH = 18.0f;
+
+/** The grip carries its own number: the frame is tall enough to hold the CURRENT value, so the
+    reading rides in the hand — no bubble, no footnote row. Double-click it to type. */
+inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y,
+                       const juce::String& text, bool lit = false)
 {
-    constexpr float gripH = 11.0f, sightW = 4.0f;
+    constexpr float sightW = 4.0f;
 
     const juce::Rectangle<float> frame (track.getX() + 0.75f, y - gripH * 0.5f,
                                         track.getWidth() - 1.5f, gripH);
@@ -70,26 +75,80 @@ inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y,
     g.drawRoundedRectangle (frame, 2.5f, 1.4f);
     g.fillRect (frame.getX(),               y - 0.75f, sightW, 1.5f);
     g.fillRect (frame.getRight() - sightW,  y - 0.75f, sightW, 1.5f);
+
+    g.setColour (juce::Colours::white);
+    theme::drawTracked (g, text, frame, theme::displayFont (10.5f), 0.02f,
+                        juce::Justification::centred);
 }
 
-/** The grip's ruler, inside the rail: a nub every 6 dB of the trim scale on both edges, the
-    12s a touch longer — the metre's own lane stays clean, the marks live at the walls. */
-inline void paintTrimTicks (juce::Graphics& g, juce::Rectangle<float> track,
-                            const std::function<float (float)>& yOfDb)
+/** The in-place editor the grip opens on a double-click: created once, shown over the frame,
+    committed on Enter or focus lost, dismissed on Escape. */
+struct GripEditor
 {
-    for (float db : { -18.0f, -12.0f, -6.0f, 6.0f, 12.0f, 18.0f })
+    void open (juce::Component& parent, juce::Rectangle<int> box, float current,
+               std::function<void (float)> commitFn)
     {
-        const bool  major = juce::roundToInt (db) % 12 == 0;
-        const float len   = major ? 6.0f : 4.5f;
-        const float y     = yOfDb (db);
+        commit = std::move (commitFn);
 
-        g.setColour (juce::Colours::white.withAlpha (major ? 0.45f : 0.32f));
-        g.fillRect (track.getX(), y - 1.0f, len, 2.0f);
-        g.fillRect (track.getRight() - len, y - 1.0f, len, 2.0f);
+        if (! inited)
+        {
+            inited = true;
+            ed.setJustification (juce::Justification::centred);
+            ed.setFont (theme::displayFont (11.0f));
+            ed.setColour (juce::TextEditor::backgroundColourId, theme::bezel);
+            ed.setColour (juce::TextEditor::outlineColourId, theme::orange);
+            ed.setColour (juce::TextEditor::focusedOutlineColourId, theme::orange);
+            ed.setColour (juce::TextEditor::textColourId, juce::Colours::white);
+            ed.setColour (juce::TextEditor::highlightColourId, theme::violet.withAlpha (0.35f));
+            parent.addChildComponent (ed);
 
-        // The number between the notches — the ruler says what it means.
-        g.setColour (juce::Colours::white.withAlpha (major ? 0.45f : 0.35f));
-        theme::drawTracked (g, (db > 0 ? "+" : "") + juce::String ((int) db),
+            ed.onReturnKey = [this] { takeAndHide(); };
+            ed.onFocusLost = [this] { takeAndHide(); };
+            ed.onEscapeKey = [this] { ed.setVisible (false); };
+        }
+
+        ed.setBounds (box);
+        ed.setText (juce::String (current, 1), false);
+        ed.setVisible (true);
+        ed.selectAll();
+        ed.grabKeyboardFocus();
+    }
+
+    void takeAndHide()
+    {
+        if (! ed.isVisible())
+            return;
+
+        const auto t = ed.getText().retainCharacters ("0123456789.+-");
+        ed.setVisible (false);
+
+        if (t.isNotEmpty() && commit != nullptr)
+            commit (t.getFloatValue());
+    }
+
+    juce::TextEditor ed;
+    bool inited = false;
+    std::function<void (float)> commit;
+};
+
+/** The METER's ruler: a numbered mark every 6 dBFS of the level scale — the scale is about the
+    SIGNAL, not about any runner. Rows that would collide with the rail's name are skipped. */
+inline void paintDbScale (juce::Graphics& g, juce::Rectangle<float> track,
+                          const std::function<float (float)>& yOfDb, float floorDb)
+{
+    for (float db = 0.0f; db > floorDb; db -= 6.0f)
+    {
+        const float y = yOfDb (db);
+
+        if (y < track.getY() + 6.0f || y > track.getBottom() - 24.0f)
+            continue;
+
+        g.setColour (juce::Colours::white.withAlpha (0.30f));
+        g.fillRect (track.getX(), y - 1.0f, 4.5f, 2.0f);
+        g.fillRect (track.getRight() - 4.5f, y - 1.0f, 4.5f, 2.0f);
+
+        g.setColour (juce::Colours::white.withAlpha (0.38f));
+        theme::drawTracked (g, juce::String ((int) db),
                             { track.getX(), y - 5.5f, track.getWidth(), 11.0f },
                             theme::displayFont (10.0f), 0.04f, juce::Justification::centred);
     }
@@ -101,38 +160,6 @@ inline juce::String trimText (float db)
     const float r = (float) juce::roundToInt (db);
     const auto  n = std::abs (db - r) < 0.05f ? juce::String ((int) r) : juce::String (db, 1);
     return db > 0.05f ? "+" + n : n;
-}
-
-/** Wires an editable dB readout under a rail: type a number, Enter, done. The attachment is
-    fetched through a getter because the label outlives no one — it is a member next to it. */
-inline void initReadout (juce::Label& l, juce::RangedAudioParameter& p,
-                         std::function<juce::ParameterAttachment*()> att)
-{
-    l.setFont (theme::displayFont (12.0f));
-    l.setColour (juce::Label::textColourId, theme::txDim);
-    l.setColour (juce::Label::backgroundWhenEditingColourId, theme::bezel);
-    l.setColour (juce::Label::textWhenEditingColourId, theme::lilac);
-    l.setColour (juce::TextEditor::highlightColourId, theme::violet.withAlpha (0.35f));
-    l.setJustificationType (juce::Justification::centred);
-    l.setEditable (true, false, false);
-
-    l.onTextChange = [&l, &p, att]
-    {
-        const auto t = l.getText().retainCharacters ("0123456789.+-");
-        if (t.isNotEmpty() && att() != nullptr)
-            att()->setValueAsCompleteGesture (t.getFloatValue());
-        l.setText (trimText (p.convertFrom0to1 (p.getValue())), juce::dontSendNotification);
-    };
-
-    l.onEditorShow = [&l, &p]
-    {
-        if (auto* ed = l.getCurrentTextEditor())
-        {
-            ed->setJustification (juce::Justification::centred);
-            ed->setText (juce::String (p.convertFrom0to1 (p.getValue()), 1), false);
-            ed->selectAll();
-        }
-    };
 }
 
 /** The rail's name, set INSIDE the column near its foot — part of the instrument, not a footnote. */

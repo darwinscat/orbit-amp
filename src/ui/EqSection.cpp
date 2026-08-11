@@ -40,7 +40,7 @@ public:
 
         // The fader on its own ±12 scale — tabby's hollow frame with its sight.
         meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), faderY (0.0f));
-        meterrail::paintGrip (g, r, faderY (param.convertFrom0to1 (param.getValue())));
+        meterrail::paintGrip (g, r, faderY (param.convertFrom0to1 (param.getValue())), {});
 
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);

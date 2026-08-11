@@ -37,28 +37,12 @@ public:
         threshold = std::make_unique<juce::ParameterAttachment> (thresholdParam,
                                                                  [this] (float) { repaint(); });
         trim = std::make_unique<juce::ParameterAttachment> (trimParam,
-                                                            [this] (float) { refreshValue(); repaint(); });
+                                                            [this] (float) { repaint(); });
         onAtt = std::make_unique<juce::ParameterAttachment> (gateOnParam,
                                                              [this] (float) { repaint(); });
         decayAtt = std::make_unique<juce::ParameterAttachment> (decayParam, [] (float) {});
 
-        meterrail::initReadout (value, trimP, [this] { return trim.get(); });
-        addAndMakeVisible (value);
-        refreshValue();
-
         startTimerHz (30);
-    }
-
-    void resized() override
-    {
-        value.setBounds (getLocalBounds().removeFromBottom (16));
-    }
-
-    void refreshValue()
-    {
-        if (! value.isBeingEdited())
-            value.setText (meterrail::trimText (trimP.convertFrom0to1 (trimP.getValue())),
-                           juce::dontSendNotification);
     }
 
     /** A clean click (no drag) opens the big gate — the sliver is the glance. */
@@ -119,10 +103,11 @@ public:
         // ---- the trim: tabby's hollow sliding frame with its sight, riding the whole rail ----
         {
             const auto area = scaleArea();
-            meterrail::paintTrimTicks (g, r.reduced (0.0f, 2.0f),
-                                       [&] (float db) { return trimY (area, db); });
+            meterrail::paintDbScale (g, r.reduced (0.0f, 2.0f),
+                                     [&] (float db) { return dbToY (area, db); }, floorDb);
             meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (area, 0.0f));
-            meterrail::paintGrip (g, r, trimY (area, trimP.convertFrom0to1 (trimP.getValue())),
+            const float v = trimP.convertFrom0to1 (trimP.getValue());
+            meterrail::paintGrip (g, r, trimY (area, v), meterrail::trimText (v),
                                   dragging && grabbedTrim);
         }
 
@@ -217,12 +202,28 @@ public:
         decayAtt->setValueAsCompleteGesture (choice == 4 ? 1.0f : 0.0f);   // HARD is the metal chop
     }
 
-    void mouseDoubleClick (const juce::MouseEvent&) override
+    void mouseDoubleClick (const juce::MouseEvent& e) override
     {
-        // The volume runner goes home on a double knock, wherever on the column it lands. The
-        // release after it must not read as another lens click.
+        // On the grip: type the number. Anywhere else on the column: the runner goes home.
+        // Either way the release must not read as another lens click.
         swallowUp = true;
+
+        if (gripRect().contains (e.position))
+        {
+            gripEd.open (*this, gripRect().toNearestInt(),
+                         trimP.convertFrom0to1 (trimP.getValue()),
+                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
+            return;
+        }
+
         trim->setValueAsCompleteGesture (0.0f);
+    }
+
+    juce::Rectangle<float> gripRect() const
+    {
+        const auto area = scaleArea();
+        const float y   = trimY (area, trimP.convertFrom0to1 (trimP.getValue()));
+        return { 0.0f, y - meterrail::gripH * 0.5f, (float) getWidth(), meterrail::gripH };
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
@@ -319,7 +320,7 @@ private:
 
     juce::Rectangle<float> scaleArea() const
     {
-        return getLocalBounds().toFloat().reduced (2.0f).withTrimmedBottom (16.0f);
+        return getLocalBounds().toFloat().reduced (2.0f);
     }
 
     float dbToY (juce::Rectangle<float> r, float db) const
@@ -361,7 +362,7 @@ private:
     juce::RangedAudioParameter& decayP;
     std::unique_ptr<juce::ParameterAttachment> threshold, trim, onAtt, decayAtt;
 
-    juce::Label value;
+    meterrail::GripEditor gripEd;
 
     float levelDb = -90.0f;
     float holdDb  = -90.0f;

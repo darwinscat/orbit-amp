@@ -22,25 +22,8 @@ public:
         : outDb (outDbSource), clip (clipLatch), trimP (trimParam)
     {
         trim = std::make_unique<juce::ParameterAttachment> (trimParam,
-                                                            [this] (float) { refreshValue(); repaint(); });
-
-        meterrail::initReadout (value, trimP, [this] { return trim.get(); });
-        addAndMakeVisible (value);
-        refreshValue();
-
+                                                            [this] (float) { repaint(); });
         startTimerHz (30);
-    }
-
-    void resized() override
-    {
-        value.setBounds (getLocalBounds().removeFromBottom (16));
-    }
-
-    void refreshValue()
-    {
-        if (! value.isBeingEdited())
-            value.setText (meterrail::trimText (trimP.convertFrom0to1 (trimP.getValue())),
-                           juce::dontSendNotification);
     }
 
     static constexpr int designWidth = 32;
@@ -61,11 +44,13 @@ public:
 
         meterrail::paintClipCap (g, col, clip.load());
 
-        meterrail::paintTrimTicks (g, r.reduced (0.0f, 2.0f),
-                                   [&] (float db) { return trimY (col, db); });
+        meterrail::paintDbScale (g, r.reduced (0.0f, 2.0f),
+                                 [&] (float db) { return dbToY (col, db); }, floorDb);
         meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (col, 0.0f));
-        meterrail::paintGrip (g, r, trimY (col, trimP.convertFrom0to1 (trimP.getValue())),
-                              dragging);
+        {
+            const float v = trimP.convertFrom0to1 (trimP.getValue());
+            meterrail::paintGrip (g, r, trimY (col, v), meterrail::trimText (v), dragging);
+        }
 
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
@@ -105,11 +90,27 @@ public:
         repaint();
     }
 
-    void mouseDoubleClick (const juce::MouseEvent&) override
+    void mouseDoubleClick (const juce::MouseEvent& e) override
     {
-        // Home is one knock away; the write rides the double-click's own open gesture.
-        if (! swallow)
-            trim->setValueAsPartOfGesture (0.0f);
+        if (swallow)
+            return;
+
+        // On the grip: type the number. Anywhere else on the column: home.
+        if (gripRect().contains (e.position))
+        {
+            gripEd.open (*this, gripRect().toNearestInt(),
+                         trimP.convertFrom0to1 (trimP.getValue()),
+                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
+            return;
+        }
+
+        trim->setValueAsPartOfGesture (0.0f);
+    }
+
+    juce::Rectangle<float> gripRect() const
+    {
+        const float y = trimY (scaleArea(), trimP.convertFrom0to1 (trimP.getValue()));
+        return { 0.0f, y - meterrail::gripH * 0.5f, (float) getWidth(), meterrail::gripH };
     }
 
 private:
@@ -133,7 +134,7 @@ private:
 
     juce::Rectangle<float> scaleArea() const
     {
-        return getLocalBounds().toFloat().reduced (2.0f).withTrimmedBottom (16.0f);
+        return getLocalBounds().toFloat().reduced (2.0f);
     }
 
     float dbToY (juce::Rectangle<float> r, float db) const
@@ -163,7 +164,7 @@ private:
     juce::RangedAudioParameter& trimP;
     std::unique_ptr<juce::ParameterAttachment> trim;
 
-    juce::Label value;
+    meterrail::GripEditor gripEd;
 
     float levelDb = -90.0f;
     float holdDb  = -90.0f;
