@@ -52,6 +52,10 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     device.fontHeight = 16.0f;   // the device's NAME is the face's headline, sized like one
 
+    // The hero's name above the hero: bigger than the rank and file.
+    gain.labelFontHeight = 16.0f;
+    gain.labelRowHeight  = 20;
+
     // Five ways of showing the same device, TOGETHER: one scope per way, a checkbox per scope,
     // whichever are down tile the picture zone. The tone curve comes from the block itself —
     // the same data its filters were designed from, resolved on the processor's pump.
@@ -268,6 +272,8 @@ void CapturedBlockPanel::deviceChanged()
         {
             slot.knob = std::make_unique<Knob> (name, theme::orange, (int) m.positions.size());
             slot.knob->textForValue = [] (double) { return juce::String(); };   // no numbers here
+            slot.knob->labelFontHeight = 12.0f;   // the checkboxes' size — the reading floor
+            slot.knob->labelRowHeight  = 16;
             addAndMakeVisible (*slot.knob);
 
             slot.knobAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
