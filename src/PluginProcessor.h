@@ -180,6 +180,9 @@ public:
     /** How hard the limiter squeezed the last block, in dB (0 = untouched) — the LIMIT badge. */
     std::atomic<float> limiterGrDb { 0.0f };
 
+    /** Latched: the limiter has worked since somebody last looked (the badge clears it). */
+    std::atomic<bool> limiterWorked { false };
+
     /** Each EQ link's output peak this block, in dB — what its LEVEL column meters. Same
         writer, same readers. */
     std::array<std::atomic<float>, params::numEqLinks> eqOutDb { -90.0f, -90.0f };

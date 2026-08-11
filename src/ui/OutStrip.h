@@ -18,9 +18,13 @@ class OutStrip final : public juce::Component,
 {
 public:
     OutStrip (const std::atomic<float>& outDbSource, std::atomic<bool>& clipLatch,
-              juce::RangedAudioParameter& trimParam, juce::RangedAudioParameter& ceilingParam)
-        : outDb (outDbSource), clip (clipLatch), trimP (trimParam), ceilP (ceilingParam)
+              juce::RangedAudioParameter& trimParam, juce::RangedAudioParameter& ceilingParam,
+              juce::RangedAudioParameter& limiterOnParam)
+        : outDb (outDbSource), clip (clipLatch), trimP (trimParam), ceilP (ceilingParam),
+          limOnP (limiterOnParam)
     {
+        limOnAtt = std::make_unique<juce::ParameterAttachment> (limiterOnParam,
+                                                                [this] (float) { repaint(); });
         trim = std::make_unique<juce::ParameterAttachment> (trimParam,
                                                             [this] (float) { repaint(); });
         ceil = std::make_unique<juce::ParameterAttachment> (ceilingParam,
@@ -33,6 +37,9 @@ public:
     /** A runner entered/left the hand — the editor slides the matching ruler out beside us. */
     std::function<void (bool)> onTrimDrag;
     std::function<void (bool)> onCeilDrag;
+
+    /** Right-click: the column's menu — the limiter's, since the ceiling lives here. */
+    std::function<void (juce::Point<int>)> onMenu;
 
     void paint (juce::Graphics& g) override
     {
@@ -67,10 +74,13 @@ public:
                                  [&] (float db) { return dbToY (col, db); }, floorDb);
         meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (col, 0.0f));
         // The ceiling first (under the trim in z): the limiter's runner in the gate's lilac,
-        // living where ceilings live — near the top of the rail.
+        // living where ceilings live — near the top of the rail. A switched-off limiter's
+        // runner dims to read-only strength and will not answer, same law as the gate's.
         {
+            const float dimmed = limOnP.getValue() > 0.5f ? 1.0f : 0.35f;
             const float v = ceilP.convertFrom0to1 (ceilP.getValue());
-            meterrail::paintGrip (g, r, ceilY (col, v), juce::String (v, 1), theme::lilac,
+            meterrail::paintGrip (g, r, ceilY (col, v), juce::String (v, 1),
+                                  theme::lilac.withMultipliedAlpha (dimmed),
                                   dragging && grabbedCeil);
         }
 
@@ -96,6 +106,14 @@ public:
             return;
         }
 
+        if (e.mods.isPopupMenu())
+        {
+            swallow = true;
+            if (onMenu != nullptr)
+                onMenu (e.getScreenPosition());
+            return;
+        }
+
         // The reset click must not turn into a fader drag.
         if (clip.load() && e.position.y <= scaleArea().getY() + 5.0f)
         {
@@ -118,11 +136,13 @@ public:
         {
             dragging = true;
 
-            // Whichever runner was nearer to the grab moves — same law as the IN column.
+            // Whichever runner was nearer to the grab moves — same law as the IN column; a
+            // dark limiter's runner does not answer, the grab falls through to the trim.
             const auto col = scaleArea();
             const float trY = trimY (col, trimP.convertFrom0to1 (trimP.getValue()));
             const float ceY = ceilY (col, ceilP.convertFrom0to1 (ceilP.getValue()));
-            grabbedCeil = std::abs (e.getMouseDownPosition().toFloat().y - ceY)
+            grabbedCeil = limOnP.getValue() > 0.5f
+                       && std::abs (e.getMouseDownPosition().toFloat().y - ceY)
                         < std::abs (e.getMouseDownPosition().toFloat().y - trY);
 
             (grabbedCeil ? ceil : trim)->beginGesture();
@@ -171,7 +191,7 @@ public:
             return;
         }
 
-        if (ceilRect().contains (e.position))
+        if (limOnP.getValue() > 0.5f && ceilRect().contains (e.position))
         {
             gripEd.open (*this, ceilRect().toNearestInt(),
                          ceilP.convertFrom0to1 (ceilP.getValue()), theme::lilac,
@@ -259,7 +279,8 @@ private:
     std::atomic<bool>&        clip;
     juce::RangedAudioParameter& trimP;
     juce::RangedAudioParameter& ceilP;
-    std::unique_ptr<juce::ParameterAttachment> trim, ceil;
+    juce::RangedAudioParameter& limOnP;
+    std::unique_ptr<juce::ParameterAttachment> trim, ceil, limOnAtt;
 
     meterrail::GripEditor gripEd;
 

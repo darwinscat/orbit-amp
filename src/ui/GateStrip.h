@@ -202,6 +202,10 @@ public:
         m.addSubMenu ("DECAY", decay);
 
         m.addSeparator();
+        m.addSectionHeader ("VOLUME");
+        m.addItem (7, "RESET");
+
+        m.addSeparator();
         m.addItem (6, "OPEN",        true, false);
 
         // At the MOUSE, not at the component: a menu summoned from a sliver as tall as the panel
@@ -238,6 +242,12 @@ public:
         if (choice == 10 || choice == 11)
         {
             decayAtt->setValueAsCompleteGesture (choice == 11 ? 1.0f : 0.0f);
+            return;
+        }
+
+        if (choice == 7)
+        {
+            trim->setValueAsCompleteGesture (0.0f);
             return;
         }
 

@@ -30,12 +30,19 @@ public:
     /** The click, with where it landed on screen — the owner opens its menu there. */
     std::function<void (juce::Point<int>)> onOpen;
 
+    /** Optional latched mark: "worked since you last looked". The click that opens the menu is
+        the look, so it clears it. */
+    std::atomic<bool>* latch = nullptr;
+
     static constexpr int designWidth = 82;
 
     void mouseDown (const juce::MouseEvent& e) override
     {
         if (! e.mods.isPopupMenu())
         {
+            if (latch != nullptr)
+                latch->store (false);   // seen
+
             if (onOpen != nullptr)
                 onOpen (e.getScreenPosition());
             return;
@@ -56,6 +63,14 @@ private:
             g.setColour (theme::dspTop.interpolatedWith (theme::orange, depth));
             g.fillRoundedRectangle (boxArea().toFloat().reduced (theme::blockBorder + 1.0f),
                                     theme::radiusMd - 2.0f);
+        }
+
+        // The latched mark: a solid orange dot in the corner — it worked while you were away.
+        if (latch != nullptr && latch->load())
+        {
+            const auto box = boxArea().toFloat();
+            g.setColour (theme::orange);
+            g.fillEllipse (box.getRight() - 12.0f, box.getY() + 6.0f, 6.0f, 6.0f);
         }
 
         // The name, in the middle of the box — the badge IS the word. On the orange flood the

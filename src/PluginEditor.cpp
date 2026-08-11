@@ -9,7 +9,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
                  *p.apvts.getParameter (params::inTrim), *p.apvts.getParameter (params::gateOn),
                  *p.apvts.getParameter (params::gateDecay)),
       outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim),
-                *p.apvts.getParameter (params::limiterCeiling)),
+                *p.apvts.getParameter (params::limiterCeiling),
+                *p.apvts.getParameter (params::limiterOn)),
       gateBadge ("Gate", *p.apvts.getParameter (params::gateOn), p.gateMeterDb, 40.0f),
       limitBadge ("Limit", *p.apvts.getParameter (params::limiterOn), p.limiterGrDb, 6.0f),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p)
@@ -103,6 +104,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     outStrip.onTrimDrag  = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
     outStrip.onCeilDrag  = [this] (bool a) { ceilRuler.setVisible (a); if (a) ceilRuler.toFront (false); };
     limitBadge.onOpen = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
+    limitBadge.latch  = &amp.limiterWorked;
+    outStrip.onMenu   = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
 
     // And the open lens closes on any click — the tuner has nothing to operate, only to see.
     faceplate.onTunerDismiss = [this] { strip.onOpen (ChainLink::tuner); };
@@ -163,6 +166,10 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
     m.addItem (3, "NORMAL  -1.0",  true, matches (-1.0f));
     m.addItem (4, "TIGHT   -3.0",  true, matches (-3.0f));
 
+    m.addSeparator();
+    m.addSectionHeader ("VOLUME");
+    m.addItem (7, "RESET");
+
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [this, on, ceil] (int r)
@@ -181,6 +188,12 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
                          if (r == 1)
                          {
                              set (on, on->getValue() > 0.5f ? 0.0f : 1.0f);
+                             return;
+                         }
+
+                         if (r == 7)
+                         {
+                             set (amp.apvts.getParameter (params::outTrim), 0.0f);
                              return;
                          }
 

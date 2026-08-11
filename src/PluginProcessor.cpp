@@ -437,6 +437,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                          limiterOnParam->load() > 0.5f, limiterCeilParam->load());
         limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
 
+        if (limiter.lastMinGain() < 0.999f)
+            limiterWorked.store (true);
+
         float peak = 0.0f;
         for (int ch = 0; ch < numChannels; ++ch)
             peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, numSamples));
