@@ -41,6 +41,15 @@ public:
     {
         if (! e.mods.isPopupMenu())
         {
+            // The dot's own corner answers by itself: a click there ACKNOWLEDGES — no menu.
+            // Anywhere else opens the menu (and counts as the look too).
+            if (latch != nullptr && latch->load() && dotArea().contains (e.getPosition()))
+            {
+                latch->store (false);
+                repaint();
+                return;
+            }
+
             if (latch != nullptr)
                 latch->store (false);   // seen
 
@@ -69,9 +78,9 @@ private:
         // The latched mark: a solid orange dot in the corner — it worked while you were away.
         if (latch != nullptr && latch->load())
         {
-            const auto box = boxArea().toFloat();
+            const auto d = dotArea().toFloat();
             g.setColour (theme::orange);
-            g.fillEllipse (box.getRight() - 12.0f, box.getY() + 6.0f, 6.0f, 6.0f);
+            g.fillEllipse (d.withSizeKeepingCentre (6.0f, 6.0f));
         }
 
         // The name, in the middle of the box — the badge IS the word. On the orange flood the
@@ -79,6 +88,12 @@ private:
         g.setColour (theme::lilac.interpolatedWith (juce::Colours::white, depth));
         theme::drawTracked (g, label, boxArea().toFloat(), theme::displayFont (17.0f), 0.12f,
                             juce::Justification::centred);
+    }
+
+    /** The dot's corner, generous enough to hit: its click acknowledges without the menu. */
+    juce::Rectangle<int> dotArea() const
+    {
+        return boxArea().removeFromTop (20).removeFromRight (20);
     }
 
     void timerCallback() override
