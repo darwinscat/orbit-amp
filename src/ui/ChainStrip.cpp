@@ -105,6 +105,9 @@ public:
     /** Captured thumbs stack downward: name under the title, the gain runner under the name. */
     bool captionUnderTitle = false;
 
+    /** The link's live output level, bottom-right — the gain-staging story, one number a thumb. */
+    std::function<float()> outDb;
+
     /** The runner entered/left the hand — the editor summons the magnified ladder. */
     std::function<void (bool)> onGainDrag;
 
@@ -227,6 +230,16 @@ public:
 
         if (gain != nullptr)
             area.removeFromTop (3 + 12 + 2);            // the runner's row (a child, painted by itself)
+
+        if (outDb != nullptr)
+        {
+            const float v = outDb();
+            g.setColour (v > -0.1f ? theme::orange : theme::txDim);
+            theme::drawTracked (g, v <= -89.0f ? juce::String ("--")
+                                               : juce::String (juce::roundToInt (v)),
+                                area.removeFromBottom (12).toFloat(), theme::displayFont (9.0f),
+                                0.06f, juce::Justification::centredRight);
+        }
 
         if (preview != nullptr)
             preview (g, area.reduced (1, 1));
@@ -406,6 +419,10 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
         t->caption = [&block] { return block.deviceName(); };
         t->attachGain (*s.getParameter (params::blockGain (blk)));
         t->onGainDrag = [this, link] (bool a) { if (onGainDrag != nullptr) onGainDrag (link, a); };
+        t->outDb = [this, link]
+        {
+            return link == ChainLink::boost ? amp.boostOutDb.load() : amp.preampOutDb.load();
+        };
 
         t->preview = [this, &block] (juce::Graphics& g, juce::Rectangle<int> box)
         {
@@ -537,6 +554,8 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
 
             return names.joinIntoString (" + ");
         };
+
+        t->outDb = [this] { return amp.cabOutDb.load(); };
 
         t->preview = [mics] (juce::Graphics& g, juce::Rectangle<int> box)
         {

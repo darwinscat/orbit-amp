@@ -55,12 +55,18 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 {
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
+    addAndMakeVisible (level);
 
     device.fontHeight = 16.0f;   // the device's NAME is the face's headline, sized like one
 
     // The hero's name above the hero: bigger than the rank and file.
     gain.labelFontHeight = 16.0f;
     gain.labelRowHeight  = 20;
+
+    // The block's own volume — the hand that fixes gain staging AT the stage.
+    level.labelFontHeight = 12.0f;
+    level.labelRowHeight  = 16;
+    level.textForValue = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
 
     // Five ways of showing the same device, TOGETHER: one scope per way, a checkbox per scope,
     // whichever are down tile the picture zone. The tone curve comes from the block itself —
@@ -133,6 +139,8 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::blockGain (blk), gain);
+    levelAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        amp.apvts, params::blockLevel (blk), level);
 
     deviceAttachment->sendInitialUpdate();
 
@@ -419,7 +427,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     gain.setBounds (zone.removeFromLeft (gainSide).withSizeKeepingCentre (gainSide, gainSide));
     zone.removeFromLeft (knobGap);
 
-    std::vector<Knob*> knobs;
+    std::vector<Knob*> knobs { &level };   // the block's volume leads the rank and file
     for (auto& slot : slots)
         if (slot.knob != nullptr)
             knobs.push_back (slot.knob.get());
@@ -619,7 +627,7 @@ void CapturedBlockPanel::layOutCompact (juce::Rectangle<int> area)
     layOutViz (area.removeFromBottom (juce::jmax (150, area.getHeight() * 2 / 5)));
     area.removeFromBottom (gap);
 
-    std::vector<Knob*> knobs;
+    std::vector<Knob*> knobs { &level };
     for (auto& slot : slots)
         if (slot.knob != nullptr)
             knobs.push_back (slot.knob.get());

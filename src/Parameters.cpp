@@ -63,9 +63,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Int> (juce::ParameterID { boostDevice, 1 }, "Boost Device",
                                        0, maxDevices - 1, 0));
 
-    // The raw switch and the selector slots, one set per captured block.
+    // The raw switch and the selector slots, one set per captured block — and the block's own
+    // LEVEL, the volume knob every real pedal has: the hand that fixes gain staging where the
+    // stage actually is.
     for (const char* blk : { boostId, preampId })
     {
+        layout.add (std::make_unique<Float> (juce::ParameterID { blockLevel (blk), 1 },
+                                             juce::String (blk) + " Level",
+                                             juce::NormalisableRange<float> (-blockLevelRangeDb,
+                                                                             blockLevelRangeDb, 0.1f),
+                                             0.0f));
+
         layout.add (std::make_unique<Bool> (juce::ParameterID { rawId (blk), 1 },
                                             juce::String (blk) + " Raw", false));
 

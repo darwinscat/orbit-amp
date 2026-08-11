@@ -175,6 +175,11 @@ public:
 
     /** The output level after everything, and the two latched clip caps (the UI clears them). */
     std::atomic<float> outDb   { -90.0f };
+
+    /** The level at every joint of the chain — the gain-staging story, readable per stage. */
+    std::atomic<float> boostOutDb  { -90.0f };
+    std::atomic<float> preampOutDb { -90.0f };
+    std::atomic<float> cabOutDb    { -90.0f };
     std::atomic<bool>  inClip  { false };
     std::atomic<bool>  outClip { false };
 
@@ -265,6 +270,11 @@ private:
     std::atomic<float>* cabOnParam = nullptr;
     std::atomic<float>* cabIrParam = nullptr;
     int lastCabIr = -1;
+
+    std::atomic<float>* boostLevelParam  = nullptr;
+    std::atomic<float>* preampLevelParam = nullptr;
+    float lastBoostLevelGain  = 1.0f;
+    float lastPreampLevelGain = 1.0f;
     float lastTrimGain = 1.0f;
 
     std::atomic<float>* gateOnParam        = nullptr;

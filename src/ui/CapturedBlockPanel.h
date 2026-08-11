@@ -75,7 +75,9 @@ private:
     felitronics::analysis::RollingSpectrumTap& toneTap;
 
     VoicingSelector device;
-    Knob gain { "Gain", theme::orange, 0 };
+    Knob gain  { "Gain", theme::orange, 0 };
+    Knob level { "Level", theme::orange, 0 };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> levelAttachment;
 
     struct Slot
     {

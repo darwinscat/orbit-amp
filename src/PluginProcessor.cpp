@@ -54,6 +54,8 @@ AmpProcessor::AmpProcessor()
     limiterOnParam     = apvts.getRawParameterValue (params::limiterOn);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
     cabOnParam         = apvts.getRawParameterValue (params::cabOn);
+    boostLevelParam    = apvts.getRawParameterValue (params::blockLevel (params::boostId));
+    preampLevelParam   = apvts.getRawParameterValue (params::blockLevel (params::preampId));
     cabIrParam         = apvts.getRawParameterValue (params::cabIr);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
@@ -274,6 +276,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
     lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
+    lastBoostLevelGain  = juce::Decibels::decibelsToGain (boostLevelParam->load());
+    lastPreampLevelGain = juce::Decibels::decibelsToGain (preampLevelParam->load());
     limiter.prepare (sampleRate);
 
     cab.prepare (sampleRate, block, channels);
@@ -491,6 +495,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     { const auto a = PerfClock::now();
       if (boostOnParam->load() > 0.5f)
           boost.process (chainView, scopeDry);
+
+      // The block's own LEVEL — the pedal's volume knob, ramped against zipper.
+      const float target = juce::Decibels::decibelsToGain (boostLevelParam->load());
+      chainView.applyGainRamp (0, numSamples, lastBoostLevelGain, target);
+      lastBoostLevelGain = target;
+
+      boostOutDb.store (juce::Decibels::gainToDecibels (
+          chainView.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stBoost] = elapsedNs (a); }
 
     if (boostOnParam->load() > 0.5f)
@@ -513,6 +525,13 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     { const auto a = PerfClock::now();
       if (preampOnParam->load() > 0.5f)
           preamp.process (chainView, scopeDry);
+
+      const float target = juce::Decibels::decibelsToGain (preampLevelParam->load());
+      chainView.applyGainRamp (0, numSamples, lastPreampLevelGain, target);
+      lastPreampLevelGain = target;
+
+      preampOutDb.store (juce::Decibels::gainToDecibels (
+          chainView.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stPreamp] = elapsedNs (a); }
 
     if (preampOnParam->load() > 0.5f)
@@ -549,6 +568,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
     { const auto a = PerfClock::now();
       cab.process (channels, nch, numSamples, cabOnParam->load() > 0.5f);
+      cabOutDb.store (juce::Decibels::gainToDecibels (
+          buffer.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stCab] = elapsedNs (a); }
 
     const auto tOut = PerfClock::now();

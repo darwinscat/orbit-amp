@@ -83,6 +83,8 @@ inline constexpr const char* preampId = "preamp";
 inline juce::String blockOn       (const char* blk) { return juce::String (blk) + "_on"; }
 inline juce::String blockDevice   (const char* blk) { return juce::String (blk) + "_device"; }
 inline juce::String blockGain     (const char* blk) { return juce::String (blk) + "_gain"; }
+inline juce::String blockLevel    (const char* blk) { return juce::String (blk) + "_level"; }
+inline constexpr float blockLevelRangeDb = 12.0f;
 inline juce::String blockMeasured (const char* blk, int i) { return juce::String (blk) + "_meas" + juce::String (i + 1); }
 
 /** A pedal's MEASURED controls — the ones a player computes rather than selects. How many a device
