@@ -8,6 +8,7 @@
 #include "ui/Footer.h"
 #include "ui/GateStrip.h"
 #include "ui/OutStrip.h"
+#include "ui/GateBadge.h"
 #include "ui/TunerStrip.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 #include "ui/SetupPanel.h"
@@ -54,7 +55,8 @@ private:
     FaceplateView faceplate;
     GateStrip     gateStrip;        // the IN sliver with the gate's story, left of the faceplate
     OutStrip      outStrip;         // the OUT sliver with the master's hand, right of it
-    TunerStrip    tunerStrip;       // the always-on needle, full width above the footer
+    GateBadge     gateBadge;        // the gate's door and tally light, left of the tuner
+    TunerStrip    tunerStrip;       // the always-on needle, above the footer
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip

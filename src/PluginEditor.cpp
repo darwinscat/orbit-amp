@@ -9,6 +9,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
                  *p.apvts.getParameter (params::inTrim), *p.apvts.getParameter (params::gateOn),
                  *p.apvts.getParameter (params::gateDecay)),
       outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim)),
+      gateBadge (*p.apvts.getParameter (params::gateOn), p.gateMeterDb),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p)
 {
     addAndMakeVisible (chrome);
@@ -16,6 +17,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (faceplate);
     addAndMakeVisible (gateStrip);
     addAndMakeVisible (outStrip);
+    addAndMakeVisible (gateBadge);
     addAndMakeVisible (tunerStrip);
     addAndMakeVisible (footer);
     addAndMakeVisible (demoStrip);   // TEMPORARY
@@ -37,7 +39,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     tunerStrip.onClick = [this] { strip.onOpen (ChainLink::tuner); };
 
     // And the gate's sliver: a clean click opens its zoom; drags belong to the threshold.
-    gateStrip.onClick = [this] { strip.onOpen (ChainLink::gate); };
+    // The badge is the gate's one door — the sliver's clicks belong to its runners now.
+    gateBadge.onOpen = [this] { strip.onOpen (ChainLink::gate); };
 
     // And the open lens closes on any click — the tuner has nothing to operate, only to see.
     faceplate.onTunerDismiss = [this] { strip.onOpen (ChainLink::tuner); };
@@ -114,7 +117,12 @@ void AmpEditor::resized()
 
     // The always-on needle, full width, above the footer's facts.
     const int tunerY = faceplateY + FaceplateView::designHeight + chromeGap;
-    tunerStrip.setBounds (margin, tunerY, FaceplateView::designWidth, TunerStrip::designHeight);
+    gateBadge.setBounds (margin, tunerY, GateBadge::designWidth, TunerStrip::designHeight);
+    gateBadge.setTransform (zoom);
+
+    tunerStrip.setBounds (margin + GateBadge::designWidth + chromeGap, tunerY,
+                          FaceplateView::designWidth - GateBadge::designWidth - chromeGap,
+                          TunerStrip::designHeight);
     tunerStrip.setTransform (zoom);
 
     const int footerY = tunerY + TunerStrip::designHeight + chromeGap;

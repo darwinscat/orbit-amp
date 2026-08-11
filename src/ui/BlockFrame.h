@@ -299,7 +299,10 @@ private:
         return (titleInBorder || switchInBorder) ? switchH / 2 + 1 : 0;
     }
 
+protected:
     juce::Rectangle<int> boxArea() const { return getLocalBounds().withTrimmedTop (topInset()); }
+
+private:
 
     juce::Rectangle<int> headerArea() const
     {
@@ -321,6 +324,7 @@ private:
                  .withCentre ({ boxArea().getX() + borderInset + w / 2, boxArea().getY() });
     }
 
+protected:
     juce::Rectangle<int> switchArea() const
     {
         if (! switchInBorder)
@@ -332,6 +336,8 @@ private:
         return juce::Rectangle<int> (0, 0, switchW, switchH)
                  .withCentre ({ boxArea().getRight() - borderInset - switchW / 2, boxArea().getY() });
     }
+
+private:
 
     juce::Colour borderColour() const
     {
