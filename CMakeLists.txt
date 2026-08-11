@@ -56,17 +56,7 @@ FetchContent_MakeAvailable(juce)
 # ----------------------------------------------------------------------------
 set(ORBITAMP_FCORE_TAG "v0.9.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
-# TEMPORARY, until felitronics-core#64 merges: MagnitudeCurve.h — the measured controls are built
-# from it, so the build has to reach a checkout that has it. Delete this block once the release is
-# out and the tag above is bumped; the sibling checkout below is the permanent arrangement.
-set(ORBITAMP_FCORE_BRANCH_WT "$ENV{HOME}/IdeaProjects/wt/core-mag-curve")
-if(EXISTS "${ORBITAMP_FCORE_BRANCH_WT}/modules/lineareq/include/felitronics/lineareq/MagnitudeCurve.h")
-    set(ORBITAMP_FCORE_DEFAULT "${ORBITAMP_FCORE_BRANCH_WT}")
-else()
-    set(ORBITAMP_FCORE_DEFAULT "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core")
-endif()
-
-set(ORBITAMP_FCORE_DIR "${ORBITAMP_FCORE_DEFAULT}"
+set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_FCORE_DIR AND EXISTS "${ORBITAMP_FCORE_DIR}/CMakeLists.txt")
     message(STATUS "felitronics-core: local checkout — ${ORBITAMP_FCORE_DIR}")
@@ -199,6 +189,7 @@ target_compile_definitions(OrbitAmp PUBLIC
 
 target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
+    felitronics::analysis            # spectrum taps + panes behind the EQ curves
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
@@ -345,6 +336,7 @@ target_include_directories(orbitamp_chain_test PRIVATE src)
 target_compile_definitions(orbitamp_chain_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE
     OrbitAmpData
+    felitronics::analysis
     felitronics::appkit
     felitronics::dynamics
     felitronics::eq
