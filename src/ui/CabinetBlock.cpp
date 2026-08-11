@@ -11,6 +11,22 @@ CabinetBlock::CabinetBlock (juce::AudioProcessorValueTreeState& s)
     addAndMakeVisible (grid);
     attachPower (*state.getParameter (params::cabOn));
 
+    // The cabinet itself, first: which IR speaks. Parameter truth through the attachment echo.
+    ir.setItems (params::cabIrNames, params::cabIrDefault);
+    addAndMakeVisible (ir);
+
+    irAtt = std::make_unique<juce::ParameterAttachment> (
+        *state.getParameter (params::cabIr),
+        [this] (float v)
+        {
+            ir.setSelectedIndex (juce::jlimit (0, params::cabIrNames.size() - 1,
+                                               juce::roundToInt (v)),
+                                 juce::dontSendNotification);
+        });
+
+    ir.onChange = [this] (int i) { irAtt->setValueAsCompleteGesture ((float) i); };
+    irAtt->sendInitialUpdate();
+
     grid.setUnit ("cm");
 
     // Clicking an empty cell moves the ACTIVE mic; clicking a dot makes that mic active; dragging a
@@ -138,6 +154,10 @@ juce::Rectangle<int> CabinetBlock::switchArea (int slot) const
 
 void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 {
+    // The IR selector rides the top, full width — the cabinet is chosen before it is miked.
+    ir.setBounds (area.removeFromTop (24));
+    area.removeFromTop (gap / 2);
+
     auto mics = area.removeFromLeft (micColumn);
     area.removeFromLeft (gap);
     grid.setBounds (area);

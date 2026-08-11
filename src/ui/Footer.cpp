@@ -98,14 +98,14 @@ void Footer::paint (juce::Graphics& g)
     auto right = r.withTrimmedLeft ((float) (itemWidth + 66 + gap * 2));
 
     g.setColour (theme::txFaint);
-    theme::drawTracked (g, rateText, right.removeFromLeft (70.0f), theme::displayFont (8.0f), 0.1f,
+    theme::drawTracked (g, rateText, right.removeFromLeft (96.0f), theme::displayFont (12.0f), 0.1f,
                         juce::Justification::centredLeft);
 
     // The load turns warm as it climbs — a number you only notice when it starts to matter.
     g.setColour (loadPercent > 80.0f ? theme::orange
                : loadPercent > 50.0f ? theme::lilac
                                      : theme::txFaint);
-    theme::drawTracked (g, "DSP " + loadText, right.removeFromLeft (80.0f), theme::displayFont (8.0f), 0.1f,
+    theme::drawTracked (g, "DSP " + loadText, right.removeFromLeft (100.0f), theme::displayFont (12.0f), 0.1f,
                         juce::Justification::centredLeft);
 }
 

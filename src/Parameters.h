@@ -150,6 +150,18 @@ inline constexpr int eqSlopeDefault  = 1;
 inline constexpr float eqLevelRangeDb = 12.0f;
 
 inline constexpr const char* cabOn = "cab_on";
+inline constexpr const char* cabIr = "cab_ir";
+
+// The cabinet IRs, orbitcab's set — display names derived from the files. big-bubba is the
+// shipping default: the one he asked for by (approximately) name.
+inline const juce::StringArray cabIrNames {
+    "COOKIE MONSTER", "DARTH GENOCIDER", "KITTEN SLAYER", "KAIJU TAMER", "ICEBURN SUICIDE",
+    "VERTICAL LIP STABBER", "MANSLAUGHTER JOE", "BIG BUBBA", "DEVILS CUNNILINGUS",
+    "OCTOBER 32TH", "WUMBO", "WORLD COLLIDER", "CANNIBAL CHOIR", "CATHODE RAY FLESHBURN",
+    "IMPALER JIM", "NACHO GUACAMOLE", "PICKLE PUNISHER", "WASABI WARRIOR", "PESTO PALADIN",
+    "DON SPINACIO", "KILL DILL",
+};
+inline constexpr int cabIrDefault = 7;   // BIG BUBBA
 
 /** Two mic slots, each with its own switch, its own pick from the SAME full list, and its own place
     on the grille. Two mics on one cabinet is how the sound is actually made — one close and bright,

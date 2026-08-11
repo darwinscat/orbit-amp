@@ -197,6 +197,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // option — two takes on one bus, each through its own amp.
     layout.add (std::make_unique<Bool> (juce::ParameterID { stereoMode, 1 }, "Stereo", false));
 
+    layout.add (std::make_unique<Choice> (juce::ParameterID { cabIr, 1 }, "Cabinet IR",
+                                          cabIrNames, cabIrDefault));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters, 0),
                 std::make_unique<Float>  (juce::ParameterID { reverbMix, 1 }, "Mix",
                                           juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 20.0f));

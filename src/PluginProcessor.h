@@ -9,6 +9,7 @@
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
+#include "core/CabinetIr.h"
 #include "core/SoftLimiter.h"
 #include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
@@ -239,6 +240,11 @@ private:
     std::atomic<float>* limiterCeilParam   = nullptr;
     float lastOutGain = 1.0f;
     core::SoftLimiter limiter;
+
+    core::CabinetIr cab;
+    std::atomic<float>* cabOnParam = nullptr;
+    std::atomic<float>* cabIrParam = nullptr;
+    int lastCabIr = -1;
     float lastTrimGain = 1.0f;
 
     std::atomic<float>* gateOnParam        = nullptr;

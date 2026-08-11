@@ -178,6 +178,30 @@ juce_add_binary_data(OrbitAmpData
         "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/cats-hard-day.wav"
         "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/deep-space-is-my-home.wav"
         "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/fifth-dimension.wav"
+
+        # The cabinet IRs — orbitcab's, referenced there like everything shared: one copy in the
+        # ecosystem.
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/01-cookie-monster.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/02-darth-genocider.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/03-kitten-slayer.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/04-kaiju-tamer.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/05-iceburn-suicide.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/06-vertical-lip-stabber.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/07-manslaughter-joe.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/08-big-bubba.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/09-devils-cunnilingus.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/10-october-32th.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/11-wumbo.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/12-world-collider.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/13-cannibal-choir.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/14-cathode-ray-fleshburn.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/15-impaler-jim.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/16-nacho-guacamole.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/17-pickle-punisher.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/18-wasabi-warrior.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/19-pesto-paladin.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/20-don-spinacio.wav"
+        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/21-kill-dill.wav"
 )
 
 target_compile_definitions(OrbitAmp PUBLIC

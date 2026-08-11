@@ -57,6 +57,10 @@ private:
 
     juce::AudioProcessorValueTreeState& state;
 
+    /** The cabinet itself — which IR speaks. Every module's grammar: arrows and a name. */
+    Selector ir { theme::orange, true };
+    std::unique_ptr<juce::ParameterAttachment> irAtt;
+
     std::array<Slot, (size_t) params::cabNumMics> slots;
     felitronics::appkit::MicGrid grid;
 

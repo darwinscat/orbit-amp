@@ -53,6 +53,8 @@ AmpProcessor::AmpProcessor()
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
     limiterOnParam     = apvts.getRawParameterValue (params::limiterOn);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
+    cabOnParam         = apvts.getRawParameterValue (params::cabOn);
+    cabIrParam         = apvts.getRawParameterValue (params::cabIr);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
@@ -146,6 +148,41 @@ void AmpProcessor::rescanDevices()
     preamp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::preampDevice)->load()));
 }
 
+namespace
+{
+    struct IrBytes { const char* data; int size; };
+
+    /** The shelf, in cabIrNames order — the embedded orbitcab set. */
+    const IrBytes& cabIrBytes (int index)
+    {
+        static const IrBytes shelf[] = {
+            { BinaryData::_01cookiemonster_wav,       BinaryData::_01cookiemonster_wavSize },
+            { BinaryData::_02darthgenocider_wav,      BinaryData::_02darthgenocider_wavSize },
+            { BinaryData::_03kittenslayer_wav,        BinaryData::_03kittenslayer_wavSize },
+            { BinaryData::_04kaijutamer_wav,          BinaryData::_04kaijutamer_wavSize },
+            { BinaryData::_05iceburnsuicide_wav,      BinaryData::_05iceburnsuicide_wavSize },
+            { BinaryData::_06verticallipstabber_wav,  BinaryData::_06verticallipstabber_wavSize },
+            { BinaryData::_07manslaughterjoe_wav,     BinaryData::_07manslaughterjoe_wavSize },
+            { BinaryData::_08bigbubba_wav,            BinaryData::_08bigbubba_wavSize },
+            { BinaryData::_09devilscunnilingus_wav,   BinaryData::_09devilscunnilingus_wavSize },
+            { BinaryData::_10october32th_wav,         BinaryData::_10october32th_wavSize },
+            { BinaryData::_11wumbo_wav,               BinaryData::_11wumbo_wavSize },
+            { BinaryData::_12worldcollider_wav,       BinaryData::_12worldcollider_wavSize },
+            { BinaryData::_13cannibalchoir_wav,       BinaryData::_13cannibalchoir_wavSize },
+            { BinaryData::_14cathoderayfleshburn_wav, BinaryData::_14cathoderayfleshburn_wavSize },
+            { BinaryData::_15impalerjim_wav,          BinaryData::_15impalerjim_wavSize },
+            { BinaryData::_16nachoguacamole_wav,      BinaryData::_16nachoguacamole_wavSize },
+            { BinaryData::_17picklepunisher_wav,      BinaryData::_17picklepunisher_wavSize },
+            { BinaryData::_18wasabiwarrior_wav,       BinaryData::_18wasabiwarrior_wavSize },
+            { BinaryData::_19pestopaladin_wav,        BinaryData::_19pestopaladin_wavSize },
+            { BinaryData::_20donspinacio_wav,         BinaryData::_20donspinacio_wavSize },
+            { BinaryData::_21killdill_wav,            BinaryData::_21killdill_wavSize },
+        };
+
+        return shelf[(size_t) juce::jlimit (0, (int) std::size (shelf) - 1, index)];
+    }
+} // namespace
+
 void AmpProcessor::pumpDeviceWork()
 {
     auto pump = [this] (auto& block, auto& gainParam, auto measuredId, const char* blk)
@@ -186,6 +223,15 @@ void AmpProcessor::pumpDeviceWork()
                                                                 juce::roundToInt (decay))];
         gate.setConfig (gateCfg);
     }
+
+    // The cabinet IR: choosing one is picking a FILE, so it loads here — the convolution's own
+    // background loader swaps it in without a click.
+    if (const int ir = juce::roundToInt (cabIrParam->load()); ir != lastCabIr)
+    {
+        lastCabIr = ir;
+        const auto& bytes = cabIrBytes (ir);
+        cab.load (bytes.data, (size_t) bytes.size);
+    }
 }
 
 void AmpProcessor::applyOversamplingIfChanged()
@@ -225,6 +271,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
     lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
     limiter.prepare (sampleRate);
+
+    cab.prepare (sampleRate, block, channels);
+    lastCabIr = -1;   // the pump reloads the chosen IR into the freshly prepared engine
 
     // Seeded from the parameter: a session saved gate-ON has to start already gated, not fade in
     // over a block of ungated hum.
@@ -467,6 +516,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     power.setDrive (powerDriveParam->load());
     power.setSag (powerSagParam->load());
     power.process (channels, nch, numSamples, powerOnParam->load() > 0.5f);
+
+    // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
+    cab.process (channels, nch, numSamples, cabOnParam->load() > 0.5f);
 
     // The output trim closes the chain — the master's hand on the way out, ramped per block
     // against zipper noise — and the OUT rail reads the result, clip cap latched past 0 dBFS.
