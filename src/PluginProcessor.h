@@ -187,6 +187,12 @@ public:
                  stOut, numStages };
     std::atomic<float> stageLoad[numStages] {};
 
+    /** The dropout evidence: every block that BLEW its budget counts, and each stage keeps the
+        worst share it has hit since somebody last looked (the breakdown panel clears them).
+        A mean of 7% hides a worst of 200% — and one blown block is one audible drop. */
+    std::atomic<float>    stageWorst[numStages] {};
+    std::atomic<uint32_t> overruns { 0 };
+
     /** Latched: the limiter has worked since somebody last looked (the badge clears it). */
     std::atomic<bool> limiterWorked { false };
 

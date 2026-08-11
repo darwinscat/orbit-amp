@@ -131,8 +131,17 @@ void Footer::showLoadBreakdown()
     {
         explicit Panel (AmpProcessor& p) : amp (p)
         {
-            setSize (240, 24 + AmpProcessor::numStages * rowH + 8);
+            setSize (300, 24 + AmpProcessor::numStages * rowH + 30);
             startTimerHz (10);
+        }
+
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            // The look clears the evidence — same law as the badges' dots.
+            for (auto& w : amp.stageWorst)
+                w.store (0.0f);
+            amp.overruns.store (0);
+            repaint();
         }
 
         void paint (juce::Graphics& g) override
@@ -143,9 +152,15 @@ void Footer::showLoadBreakdown()
 
             auto r = getLocalBounds().reduced (12, 4);
 
-            g.setColour (theme::tx);
-            theme::drawTracked (g, "DSP LOAD", r.removeFromTop (22).toFloat(),
-                                theme::displayFont (12.0f), 0.1f, juce::Justification::centredLeft);
+            {
+                auto head = r.removeFromTop (22);
+                g.setColour (theme::tx);
+                theme::drawTracked (g, "DSP LOAD", head.toFloat(),
+                                    theme::displayFont (12.0f), 0.1f, juce::Justification::centredLeft);
+                g.setColour (theme::txDim);
+                theme::drawTracked (g, "MEAN / WORST", head.toFloat(),
+                                    theme::displayFont (10.0f), 0.08f, juce::Justification::centredRight);
+            }
 
             for (int i = 0; i < AmpProcessor::numStages; ++i)
             {
@@ -156,6 +171,13 @@ void Footer::showLoadBreakdown()
                 g.setColour (total ? theme::tx : theme::txDim);
                 theme::drawTracked (g, names[i], row.removeFromLeft (64).toFloat(),
                                     theme::displayFont (11.0f), 0.08f, juce::Justification::centredLeft);
+
+                const float w = amp.stageWorst[i].load();
+
+                auto worst = row.removeFromRight (52);
+                g.setColour (w > 100.0f ? theme::orange : theme::txFaint);
+                theme::drawTracked (g, juce::String (juce::roundToInt (w)) + "%", worst.toFloat(),
+                                    theme::displayFont (11.0f), 0.06f, juce::Justification::centredRight);
 
                 auto num = row.removeFromRight (46);
                 g.setColour (v > 50.0f ? theme::orange : total ? theme::tx : theme::txDim);
@@ -169,6 +191,17 @@ void Footer::showLoadBreakdown()
                 g.fillRoundedRectangle (bar.withWidth (bar.getWidth()
                                                         * juce::jlimit (0.0f, 1.0f, v / 100.0f)),
                                         2.0f);
+            }
+
+            // The verdict line: blown blocks ARE the audible drops. Click clears.
+            {
+                auto foot = r.removeFromTop (24);
+                const auto n = amp.overruns.load();
+                g.setColour (n > 0 ? theme::orange : theme::txDim);
+                theme::drawTracked (g, "OVERRUNS  " + juce::String ((int) n)
+                                        + juce::String (n > 0 ? "  = AUDIBLE DROPS" : ""),
+                                    foot.toFloat(), theme::displayFont (11.0f), 0.08f,
+                                    juce::Justification::centredLeft);
             }
         }
 

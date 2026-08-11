@@ -594,7 +594,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                                     + 0.08f * ((float) pct
                                                - stageLoad[i].load (std::memory_order_relaxed)),
                                 std::memory_order_relaxed);
+
+            // The worst-hold: a spike an EMA would smooth away is exactly the block that drops.
+            if ((float) pct > stageWorst[i].load (std::memory_order_relaxed))
+                stageWorst[i].store ((float) pct, std::memory_order_relaxed);
         }
+
+        if (nsStage[stTotal] > budgetNs)
+            overruns.fetch_add (1, std::memory_order_relaxed);
     }
 
     // Load as a share of the block's own wall time — the number the footer shows.
