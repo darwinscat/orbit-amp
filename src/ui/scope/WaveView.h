@@ -109,7 +109,7 @@ private:
     static float shape (float a)
     {
         return juce::jlimit (-1.0f, 1.0f,
-                             (a < 0.0f ? -1.0f : 1.0f) * std::pow (std::abs (a), 0.7f));
+                             (a < 0.0f ? -1.0f : 1.0f) * std::pow (std::abs (a), 0.55f));
     }
 
     std::array<core::WaveRibbon::Column, core::WaveRibbon::buckets> columns {};
