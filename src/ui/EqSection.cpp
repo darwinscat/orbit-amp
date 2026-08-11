@@ -194,8 +194,8 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     {
         k->textForValue    = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
         k->onValueChange   = [this] { refreshCurve(); };
-        k->labelFontHeight = 11.0f;
-        k->labelRowHeight  = 15;
+        k->labelFontHeight = 15.0f;
+        k->labelRowHeight  = 19;
     }
 
     loAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqLoDb (link), lo);
@@ -230,7 +230,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
 
     for (auto* l : { &hpfLabel, &lpfLabel })
     {
-        l->setFont (theme::displayFont (11.0f));
+        l->setFont (theme::displayFont (14.0f));
         l->setColour (juce::Label::textColourId, theme::txDim);
         l->setJustificationType (juce::Justification::centred);
         l->setInterceptsMouseClicks (false, false);
@@ -242,7 +242,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     for (int i = 0; i < 4; ++i)
     {
         auto& l = freqReadout[i];
-        l.setFont (theme::displayFont (9.5f));
+        l.setFont (theme::displayFont (13.0f));
         l.setColour (juce::Label::textColourId, theme::txDim);
         l.setColour (juce::Label::backgroundWhenEditingColourId, theme::bezel);
         l.setColour (juce::Label::textWhenEditingColourId, theme::lilac);
@@ -250,6 +250,21 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         l.setJustificationType (juce::Justification::centred);
         l.setEditable (true, false, false);
         l.onTextChange = [this, i] { freqEdited (readoutHandle[i], freqReadout[i]); };
+
+        const juce::String hzId = i == 0 ? params::eqLoHz (link)
+                                : i == 1 ? params::eqBellHz (link, 0)
+                                : i == 2 ? params::eqBellHz (link, 1)
+                                :          params::eqHiHz (link);
+
+        l.onEditorShow = [this, i, hzId]
+        {
+            if (auto* ed = freqReadout[i].getCurrentTextEditor())
+            {
+                ed->setJustification (juce::Justification::centred);
+                ed->setText (juce::String (juce::roundToInt (raw (hzId))), false);
+                ed->selectAll();
+            }
+        };
     }
 
     hpfSlopeBox.getIndex = [this] { return juce::roundToInt (raw (params::eqHpfSlope (link))); };
@@ -444,12 +459,12 @@ void EqSection::SlopeCombo::paint (juce::Graphics& g)
                           + juce::String (" DB/OCT");
 
     g.setColour (theme::txDim);
-    theme::drawTracked (g, text, r.withTrimmedRight (10.0f), theme::displayFont (9.0f), 0.06f,
+    theme::drawTracked (g, text, r.withTrimmedRight (12.0f), theme::displayFont (12.0f), 0.06f,
                         juce::Justification::centred);
 
     // The chevron that says "this opens".
     juce::Path v;
-    const float cx = r.getRight() - 8.0f, cy = r.getCentreY() - 1.0f;
+    const float cx = r.getRight() - 9.0f, cy = r.getCentreY() - 1.0f;
     v.startNewSubPath (cx - 3.0f, cy);
     v.lineTo (cx, cy + 3.0f);
     v.lineTo (cx + 3.0f, cy);
@@ -581,17 +596,17 @@ void EqSection::layOut (juce::Rectangle<int> content)
 
     // The control row: [HPF sw][LO][B1][B2][HI][LPF sw], gain knobs only; under every knob its
     // frequency in writing, under every switch its slope combo.
-    auto row = content.removeFromBottom (112).reduced (0, 4);
+    auto row = content.removeFromBottom (124).reduced (0, 4);
     content.removeFromBottom (6);
 
     const int cellW    = row.getWidth() / 6;
-    const int readoutH = 15;
+    const int readoutH = 18;
 
     const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
                                  SlopeCombo& combo)
     {
-        combo.setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (74, readoutH));
-        label.setBounds (cell.removeFromTop (16));
+        combo.setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (98, readoutH));
+        label.setBounds (cell.removeFromTop (18));
         sw.setBounds (cell.withSizeKeepingCentre (30, 16));
     };
 
@@ -601,7 +616,7 @@ void EqSection::layOut (juce::Rectangle<int> content)
     for (auto* k : { &lo, &b1, &b2, &hi })
     {
         auto cell = row.removeFromLeft (cellW);
-        freqReadout[i++].setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (58, readoutH));
+        freqReadout[i++].setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (76, readoutH));
         const int side = juce::jmin (cell.getWidth(), cell.getHeight());
         k->setBounds (cell.withSizeKeepingCentre (side, side));
     }

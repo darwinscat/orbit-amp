@@ -146,7 +146,7 @@ public:
         }
 
         g.setColour (kind == Kind::captured ? theme::orange : theme::lilac);
-        theme::drawTracked (g, title.toUpperCase(), titleBox, theme::displayFont (labelHeight),
+        theme::drawTracked (g, title.toUpperCase(), titleBox, theme::displayFont (titleHeight),
                             0.15f, juce::Justification::centredLeft);
 
         paintContent (g);
@@ -315,9 +315,9 @@ private:
             return headerArea().withWidth (titleWidth);
 
         const int w = juce::roundToInt (theme::trackedWidth (title.toUpperCase(),
-                                                             theme::displayFont (labelHeight), 0.15f)) + 1;
+                                                             theme::displayFont (titleHeight), 0.15f)) + 1;
 
-        return juce::Rectangle<int> (0, 0, w, switchHeight)
+        return juce::Rectangle<int> (0, 0, w, juce::jmax (switchHeight, (int) titleHeight + 6))
                  .withCentre ({ boxArea().getX() + borderInset + w / 2, boxArea().getY() });
     }
 
@@ -371,6 +371,13 @@ private:
     static constexpr int   switchWidth  = 26;
     static constexpr int   switchHeight = 14;
     static constexpr float labelHeight  = 9.0f;
+
+protected:
+    /** The title's font height. Panel-size blocks keep the default; zoom faces raise it to
+        reading size — a magnified block must not whisper its own name. */
+    float titleHeight = labelHeight;
+
+private:
 
     juce::String title;
     Kind kind;

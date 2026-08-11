@@ -35,6 +35,8 @@ public:
         : BlockFrame ("Gate", Kind::dsp), pressureDb (pressureDbSource), keyDb (keyDbSource),
           demoPlaying (std::move (demoIsPlaying))
     {
+        titleHeight = 16.0f;   // a zoom face states its name at reading size
+
         // The hero: its NAME is part of the face at this size.
         threshold.textForValue    = [] (double v) { return juce::String (juce::roundToInt (v)) + " dB"; };
         threshold.labelFontHeight = 22.0f;

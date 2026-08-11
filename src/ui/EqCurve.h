@@ -234,7 +234,7 @@ private:
     static constexpr float handleRadius = 5.0f;
     static constexpr float grabRadius   = 11.0f;   // generous: the dot is small, the target is not
 
-    inline static const juce::Colour wallRed { 0xffe0503c };   // the ramp's red: removed, like GR
+    inline static const juce::Colour wallRed = theme::orange;   // the cuts wear the brand orange
 
     int handleAt (juce::Point<float> p) const
     {
@@ -297,9 +297,10 @@ private:
             if (h.freedom == Handle::Freedom::freq)
             {
                 const float x = hzToX (r, h.hz);
+                const float dashes[] = { 5.0f, 4.0f };
                 g.setColour (wallRed.withAlpha (lit ? 1.0f : 0.65f));
-                g.fillRect (x - (lit ? 1.25f : 0.75f), r.getY() + 2.0f,
-                            lit ? 2.5f : 1.5f, r.getHeight() - 4.0f);
+                g.drawDashedLine ({ x, r.getY() + 2.0f, x, r.getBottom() - 2.0f },
+                                  dashes, 2, lit ? 2.2f : 1.4f);
                 continue;
             }
 
@@ -364,8 +365,8 @@ private:
         for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
             g.fillRect (r.getX() + 4.0f, dbToY (r, db), r.getWidth() - 8.0f, 1.0f);
 
-        // The 0 dB line reads brighter — it is the reference the curve is judged against.
-        g.setColour (theme::hair2);
+        // The 0 dB line is the reference the curve is judged against — brand orange, like tabby.
+        g.setColour (theme::orange.withAlpha (0.85f));
         g.fillRect (r.getX() + 4.0f, dbToY (r, 0.0f), r.getWidth() - 8.0f, 1.0f);
 
         // The numbers on the scales: an instrument, not a sketch.
@@ -374,8 +375,8 @@ private:
         const auto hzLabel = [&] (double hz, const char* text)
         {
             theme::drawTracked (g, text,
-                                { hzToX (r, hz) - 20.0f, r.getBottom() - 14.0f, 40.0f, 10.0f },
-                                theme::displayFont (8.5f), 0.08f, juce::Justification::centred);
+                                { hzToX (r, hz) - 24.0f, r.getBottom() - 18.0f, 48.0f, 13.0f },
+                                theme::displayFont (12.0f), 0.08f, juce::Justification::centred);
         };
         hzLabel (20.0, "20");
         hzLabel (50.0, "50");
@@ -390,8 +391,8 @@ private:
 
         for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
             theme::drawTracked (g, (db > 0 ? "+" : "") + juce::String ((int) db),
-                                { r.getX() + 6.0f, dbToY (r, db) - 11.0f, 34.0f, 10.0f },
-                                theme::displayFont (8.5f), 0.08f, juce::Justification::centredLeft);
+                                { r.getX() + 6.0f, dbToY (r, db) - 15.0f, 40.0f, 13.0f },
+                                theme::displayFont (12.0f), 0.08f, juce::Justification::centredLeft);
     }
 
     std::function<double (double)> magnitudeDb;

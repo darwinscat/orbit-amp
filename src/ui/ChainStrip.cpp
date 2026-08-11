@@ -122,16 +122,16 @@ public:
                             theme::displayFont (narrow() ? 6.0f : 7.0f), narrow() ? 0.06f : 0.12f,
                             juce::Justification::centredLeft);
 
-        auto label = area.removeFromBottom (10);
         if (caption != nullptr)
         {
+            auto label = area.removeFromBottom (10);
             g.setColour (theme::txDim);
             theme::drawTracked (g, caption().toUpperCase(), label.toFloat(), theme::displayFont (6.5f),
                                 0.08f, juce::Justification::centred);
         }
 
         if (preview != nullptr)
-            preview (g, area.reduced (1, 3));
+            preview (g, area.reduced (1, 1));
 
         if (dim)
             g.endTransparencyLayer();
@@ -148,14 +148,16 @@ private:
 //==============================================================================
 namespace
 {
-    /** A response curve in a preview box, ±15 dB against a faint zero line. */
+    /** A response curve in a preview box, ±15 dB against the brand-orange zero line — the same
+        axis the zoom draws. `wallDb`, when given, paints the cuts' area in the same orange. */
     void drawMiniCurve (juce::Graphics& g, juce::Rectangle<int> box,
-                        const std::function<double (double)>& magnitudeDb, juce::Colour colour)
+                        const std::function<double (double)>& magnitudeDb, juce::Colour colour,
+                        const std::function<double (double)>& wallDb = {})
     {
         const auto r = box.toFloat();
         constexpr float rangeDb = 15.0f;
 
-        g.setColour (theme::hair2);
+        g.setColour (theme::orange.withAlpha (0.75f));
         g.fillRect (r.getX(), r.getCentreY(), r.getWidth(), 1.0f);
 
         // NOT clamped: a cut keeps diving and leaves through the floor — pinning it to the edge
@@ -164,8 +166,29 @@ namespace
         const juce::Graphics::ScopedSaveState clipped (g);
         g.reduceClipRegion (box);
 
-        juce::Path p;
         const int w = juce::jmax (2, box.getWidth());
+
+        if (wallDb != nullptr)
+        {
+            juce::Path walls;
+            walls.startNewSubPath (r.getX(), r.getCentreY());
+
+            for (int x = 0; x < w; ++x)
+            {
+                const double hz = 20.0 * std::pow (1000.0, (double) x / (double) (w - 1));
+                const float  db = (float) wallDb (hz);
+                walls.lineTo (r.getX() + (float) x,
+                              r.getCentreY() - db / rangeDb * (r.getHeight() * 0.5f - 1.0f));
+            }
+
+            walls.lineTo (r.getRight(), r.getCentreY());
+            walls.closeSubPath();
+
+            g.setColour (theme::orange.withAlpha (0.25f));
+            g.fillPath (walls);
+        }
+
+        juce::Path p;
 
         for (int x = 0; x < w; ++x)
         {
@@ -382,7 +405,8 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
             }
 
             drawMiniCurve (g, box, [this, l] (double hz) { return eqDisplay[(size_t) l].magnitudeDb (hz); },
-                           theme::violet);
+                           theme::violet,
+                           [this, l] (double hz) { return eqDisplay[(size_t) l].filterMagnitudeDb (hz); });
         };
     }
 

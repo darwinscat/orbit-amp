@@ -102,8 +102,8 @@ private:
     };
 
     Knob lo { "LO", theme::violet, 0 };
-    Knob b1 { "B1", theme::violet, 0 };
-    Knob b2 { "B2", theme::violet, 0 };
+    Knob b1 { "LO MID", theme::violet, 0 };
+    Knob b2 { "HI MID", theme::violet, 0 };
     Knob hi { "HI", theme::violet, 0 };
 
     ResetButton resetBtn;
