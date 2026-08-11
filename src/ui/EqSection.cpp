@@ -272,16 +272,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     hpfSlopeBox.setIndex = [this] (int i) { hpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
     lpfSlopeBox.setIndex = [this] (int i) { lpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
 
-    resetBtn.onClick = [this] (juce::Point<int> screenPos)
-    {
-        juce::PopupMenu m;
-        m.addSectionHeader ("EQ " + juce::String (link + 1) + " \u2014 BACK TO FLAT?");
-        m.addItem (1, "Reset");
-
-        m.showMenuAsync (juce::PopupMenu::Options()
-                             .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                         [this] (int r) { if (r == 1) resetLink(); });
-    };
+    presetBtn.onClick = [this] (juce::Point<int> screenPos) { showPresets (screenPos); };
 
     curve.filterMagnitudeDb  = [this] (double hz) { return display.filterMagnitudeDb (hz); };
     curve.onHandleDrag       = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
@@ -333,7 +324,7 @@ std::unique_ptr<juce::ParameterAttachment> EqSection::attach (const juce::String
                                                         [this] (float) { refreshCurve(); });
 }
 
-void EqSection::ResetButton::paint (juce::Graphics& g)
+void EqSection::PresetButton::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat().reduced (0.5f);
     g.setColour (theme::panel.withAlpha (0.85f));
@@ -341,8 +332,103 @@ void EqSection::ResetButton::paint (juce::Graphics& g)
     g.setColour (theme::hair2);
     g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
     g.setColour (theme::txDim);
-    theme::drawTracked (g, "RESET", r, theme::displayFont (12.0f), 0.14f,
+    theme::drawTracked (g, "PRESETS", r.withTrimmedRight (14.0f), theme::displayFont (12.0f), 0.14f,
                         juce::Justification::centred);
+
+    juce::Path v;
+    const float cx = r.getRight() - 13.0f, cy = r.getCentreY() - 1.0f;
+    v.startNewSubPath (cx - 3.0f, cy);
+    v.lineTo (cx, cy + 3.0f);
+    v.lineTo (cx + 3.0f, cy);
+    g.strokePath (v, juce::PathStrokeType (1.2f));
+}
+
+void EqSection::showPresets (juce::Point<int> screenPos)
+{
+    // The menu is stamps of starting points, named for the JOB this link does at its place in the
+    // chain — eq1 preps the signal for the boost, eq2 shapes it for the preamp. Every stamp
+    // starts from flat and applies its move; the moment you touch a knob the sound is yours.
+    juce::PopupMenu m;
+    m.addSectionHeader ("EQ " + juce::String (link + 1));
+    m.addItem (1, "Flat");
+    m.addSeparator();
+
+    if (link == 0)
+    {
+        m.addItem (2, "Rumble cut");
+        m.addItem (3, "Tight low");
+        m.addItem (4, "Lead push");
+    }
+    else
+    {
+        m.addItem (2, "Tight");
+        m.addItem (3, "Bright");
+        m.addItem (4, "Smooth");
+    }
+
+    m.showMenuAsync (juce::PopupMenu::Options()
+                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                     [this] (int r)
+                     {
+                         if (r == 0)
+                             return;
+
+                         resetLink();   // every preset is a move away from flat
+
+                         if (link == 0)
+                         {
+                             if (r == 2)        // Rumble cut: the infra-low goes before the boost sees it
+                             {
+                                 setParam (params::eqHpfOn (link), 1.0f);
+                                 setParam (params::eqHpfHz (link), 75.0f);
+                                 setParam (params::eqHpfSlope (link), 3.0f);   // 24 dB/oct
+                             }
+                             else if (r == 3)   // Tight low: higher cut plus a leaner shelf
+                             {
+                                 setParam (params::eqHpfOn (link), 1.0f);
+                                 setParam (params::eqHpfHz (link), 110.0f);
+                                 setParam (params::eqHpfSlope (link), 3.0f);
+                                 setParam (params::eqLoDb (link), -2.0f);
+                             }
+                             else if (r == 4)   // Lead push: the screamer hump
+                             {
+                                 setParam (params::eqBellDb (link, 0), 4.0f);
+                                 setParam (params::eqBellHz (link, 0), 750.0f);
+                             }
+                         }
+                         else
+                         {
+                             if (r == 2)        // Tight: the preamp gets nothing to flub
+                             {
+                                 setParam (params::eqHpfOn (link), 1.0f);
+                                 setParam (params::eqHpfHz (link), 120.0f);
+                                 setParam (params::eqHpfSlope (link), 3.0f);
+                                 setParam (params::eqLoDb (link), -3.0f);
+                                 setParam (params::eqLoHz (link), 150.0f);
+                             }
+                             else if (r == 3)   // Bright
+                             {
+                                 setParam (params::eqHiDb (link), 4.0f);
+                                 setParam (params::eqHiHz (link), 3500.0f);
+                             }
+                             else if (r == 4)   // Smooth: the glass comes off before the drive
+                             {
+                                 setParam (params::eqLpfOn (link), 1.0f);
+                                 setParam (params::eqLpfHz (link), 7000.0f);
+                                 setParam (params::eqLpfSlope (link), 1.0f);   // 12 dB/oct
+                             }
+                         }
+                     });
+}
+
+void EqSection::setParam (const juce::String& id, float plainValue)
+{
+    if (auto* p = state.getParameter (id))
+    {
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (p->convertTo0to1 (plainValue));
+        p->endChangeGesture();
+    }
 }
 
 void EqSection::resetLink()
@@ -375,7 +461,7 @@ void EqSection::resetLink()
 void EqSection::addTo (juce::Component& parent)
 {
     parent.addAndMakeVisible (curve);
-    parent.addAndMakeVisible (resetBtn);
+    parent.addAndMakeVisible (presetBtn);
     parent.addAndMakeVisible (hpfSw);
     parent.addAndMakeVisible (lpfSw);
     parent.addAndMakeVisible (hpfLabel);
@@ -634,8 +720,8 @@ void EqSection::layOut (juce::Rectangle<int> content)
 
     // The curve gets everything else; the reset overlays its top-right corner.
     curve.setBounds (content);
-    resetBtn.setBounds (content.getRight() - 94, content.getY() + 8, 84, 24);
-    resetBtn.toFront (false);
+    presetBtn.setBounds (content.getRight() - 124, content.getY() + 8, 114, 24);
+    presetBtn.toFront (false);
 }
 
 } // namespace orbitamp

@@ -77,9 +77,9 @@ private:
 
     EqCurve curve { [this] (double hz) { return display.magnitudeDb (hz); } };
 
-    /** The overlay in the curve's corner that walks the whole link home — every parameter back
-        to its default except the power, which belongs to the frame. */
-    struct ResetButton final : public juce::Component
+    /** The overlay in the curve's corner: the presets menu. Flat (the old reset) leads the list,
+        then the link's own starting points — stamps, not state: pressed, applied, forgotten. */
+    struct PresetButton final : public juce::Component
     {
         std::function<void (juce::Point<int>)> onClick;
         void paint (juce::Graphics&) override;
@@ -89,7 +89,9 @@ private:
         }
     };
 
+    void showPresets (juce::Point<int> screenPos);
     void resetLink();
+    void setParam (const juce::String& id, float plainValue);
 
     static juce::String formatHz (double hz);
     void freqEdited (int handle, juce::Label&);
@@ -109,7 +111,7 @@ private:
     Knob b2 { "HI MID", theme::violet, 0 };
     Knob hi { "HI", theme::violet, 0 };
 
-    ResetButton resetBtn;
+    PresetButton presetBtn;
 
     ZoneSwitch  hpfSw, lpfSw;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };
