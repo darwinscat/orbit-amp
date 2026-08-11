@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Parameters.h"
-#include "../core/ToneStack.h"
+#include "../core/EqLink.h"
 #include "ChainLink.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -52,8 +52,8 @@ private:
     std::array<std::unique_ptr<Thumb>, (size_t) numChainLinks> thumbs;
 
     /** Drawing only, designed from the current parameter values on the strip's own clock — the
-        playing stacks belong to the audio thread and are never read from here. */
-    std::array<core::ToneStack, (size_t) params::numEqLinks> eqDisplay;
+        playing links belong to the audio thread and are never read from here. */
+    std::array<core::EqLink, (size_t) params::numEqLinks> eqDisplay;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainStrip)
 };

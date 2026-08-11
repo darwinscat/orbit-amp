@@ -8,9 +8,9 @@
 #include "core/TunerEar.h"
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
+#include "core/EqLink.h"
 #include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
-#include "core/ToneStack.h"
 
 #include <felitronics/appkit/CompareHistory.h>
 #include <felitronics/dynamics/NoiseGate.h>
@@ -130,7 +130,7 @@ private:
 
     float editorScale = preferredScale;
 
-    std::array<core::ToneStack, params::numEqLinks> eqLinks;
+    std::array<core::EqLink, params::numEqLinks> eqLinks;
     core::ReverbStage reverb;
     core::PowerAmp    power;
 
@@ -170,6 +170,10 @@ public:
         repaint clocks. */
     std::atomic<float> gateMeterDb { 0.0f };
 
+    /** Each EQ link's output peak this block, in dB — what its LEVEL column meters. Same
+        writer, same readers. */
+    std::array<std::atomic<float>, params::numEqLinks> eqOutDb { -90.0f, -90.0f };
+
     /** The raw input's peak this block, in dB — the level the gate KEYS off, for the meter the
         thresholds are drawn on. Same writer, same readers. */
     std::atomic<float> gateKeyDb { -90.0f };
@@ -180,16 +184,22 @@ private:
     // thread should not be doing per block.
     struct EqLinkParams
     {
-        std::atomic<float>* on    = nullptr;
-        std::atomic<float>* low   = nullptr;
-        std::atomic<float>* mid   = nullptr;
-        std::atomic<float>* high  = nullptr;
-        std::atomic<float>* pres  = nullptr;
-        std::atomic<float>* midHz = nullptr;
-        std::atomic<float>* hpfOn = nullptr;
-        std::atomic<float>* hpfHz = nullptr;
-        std::atomic<float>* lpfOn = nullptr;
-        std::atomic<float>* lpfHz = nullptr;
+        std::atomic<float>* on       = nullptr;
+        std::atomic<float>* hpfOn    = nullptr;
+        std::atomic<float>* hpfHz    = nullptr;
+        std::atomic<float>* hpfSlope = nullptr;
+        std::atomic<float>* loDb     = nullptr;
+        std::atomic<float>* loHz     = nullptr;
+        std::atomic<float>* hiDb     = nullptr;
+        std::atomic<float>* hiHz     = nullptr;
+        std::atomic<float>* lpfOn    = nullptr;
+        std::atomic<float>* lpfHz    = nullptr;
+        std::atomic<float>* lpfSlope = nullptr;
+        std::atomic<float>* level    = nullptr;
+        std::atomic<float>* b3On     = nullptr;
+        std::atomic<float>* bellDb[3] {};
+        std::atomic<float>* bellHz[3] {};
+        std::atomic<float>* bellQ[3]  {};
     };
 
     std::array<EqLinkParams, params::numEqLinks> eqParams;

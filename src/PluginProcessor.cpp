@@ -27,16 +27,26 @@ AmpProcessor::AmpProcessor()
     for (int l = 0; l < params::numEqLinks; ++l)
     {
         auto& p = eqParams[(size_t) l];
-        p.on    = apvts.getRawParameterValue (params::eqOn (l));
-        p.low   = apvts.getRawParameterValue (params::eqLow (l));
-        p.mid   = apvts.getRawParameterValue (params::eqMid (l));
-        p.high  = apvts.getRawParameterValue (params::eqHigh (l));
-        p.pres  = apvts.getRawParameterValue (params::eqPresence (l));
-        p.midHz = apvts.getRawParameterValue (params::eqMidHz (l));
-        p.hpfOn = apvts.getRawParameterValue (params::eqHpfOn (l));
-        p.hpfHz = apvts.getRawParameterValue (params::eqHpfHz (l));
-        p.lpfOn = apvts.getRawParameterValue (params::eqLpfOn (l));
-        p.lpfHz = apvts.getRawParameterValue (params::eqLpfHz (l));
+        p.on       = apvts.getRawParameterValue (params::eqOn (l));
+        p.hpfOn    = apvts.getRawParameterValue (params::eqHpfOn (l));
+        p.hpfHz    = apvts.getRawParameterValue (params::eqHpfHz (l));
+        p.hpfSlope = apvts.getRawParameterValue (params::eqHpfSlope (l));
+        p.loDb     = apvts.getRawParameterValue (params::eqLoDb (l));
+        p.loHz     = apvts.getRawParameterValue (params::eqLoHz (l));
+        p.hiDb     = apvts.getRawParameterValue (params::eqHiDb (l));
+        p.hiHz     = apvts.getRawParameterValue (params::eqHiHz (l));
+        p.lpfOn    = apvts.getRawParameterValue (params::eqLpfOn (l));
+        p.lpfHz    = apvts.getRawParameterValue (params::eqLpfHz (l));
+        p.lpfSlope = apvts.getRawParameterValue (params::eqLpfSlope (l));
+        p.level    = apvts.getRawParameterValue (params::eqLevel (l));
+        p.b3On     = apvts.getRawParameterValue (params::eqB3On (l));
+
+        for (int b = 0; b < 3; ++b)
+        {
+            p.bellDb[b] = apvts.getRawParameterValue (params::eqBellDb (l, b));
+            p.bellHz[b] = apvts.getRawParameterValue (params::eqBellHz (l, b));
+            p.bellQ[b]  = apvts.getRawParameterValue (params::eqBellQ (l, b));
+        }
     }
 
     inTrimParam        = apvts.getRawParameterValue (params::inTrim);
@@ -244,20 +254,37 @@ void AmpProcessor::updateReverbSettings() noexcept
 
 void AmpProcessor::updateEqSettings() noexcept
 {
+    const auto slope = [] (float v)
+    {
+        return params::eqSlopeValues[juce::jlimit (0, params::eqSlopes.size() - 1, juce::roundToInt (v))];
+    };
+
     for (int l = 0; l < params::numEqLinks; ++l)
     {
         const auto& p = eqParams[(size_t) l];
 
-        core::ToneStack::Settings s;
-        s.lowDb      = (double) p.low->load();
-        s.midDb      = (double) p.mid->load();
-        s.midHz      = (double) p.midHz->load();
-        s.highDb     = (double) p.high->load();
-        s.presenceDb = (double) p.pres->load();
-        s.hpfOn      = p.hpfOn->load() > 0.5f;
-        s.hpfHz      = (double) p.hpfHz->load();
-        s.lpfOn      = p.lpfOn->load() > 0.5f;
-        s.lpfHz      = (double) p.lpfHz->load();
+        core::EqLink::Settings s;
+        s.hpfOn    = p.hpfOn->load() > 0.5f;
+        s.hpfHz    = (double) p.hpfHz->load();
+        s.hpfSlope = slope (p.hpfSlope->load());
+        s.loDb     = (double) p.loDb->load();
+        s.loHz     = (double) p.loHz->load();
+        s.b1Db     = (double) p.bellDb[0]->load();
+        s.b1Hz     = (double) p.bellHz[0]->load();
+        s.b1Q      = (double) p.bellQ[0]->load();
+        s.b2Db     = (double) p.bellDb[1]->load();
+        s.b2Hz     = (double) p.bellHz[1]->load();
+        s.b2Q      = (double) p.bellQ[1]->load();
+        s.b3On     = p.b3On->load() > 0.5f;
+        s.b3Db     = (double) p.bellDb[2]->load();
+        s.b3Hz     = (double) p.bellHz[2]->load();
+        s.b3Q      = (double) p.bellQ[2]->load();
+        s.hiDb     = (double) p.hiDb->load();
+        s.hiHz     = (double) p.hiHz->load();
+        s.lpfOn    = p.lpfOn->load() > 0.5f;
+        s.lpfHz    = (double) p.lpfHz->load();
+        s.lpfSlope = slope (p.lpfSlope->load());
+        s.levelDb  = (double) p.level->load();
 
         eqLinks[(size_t) l].setSettings (s);
     }
@@ -333,14 +360,29 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     // The EQ links are links of their own, with their own switches: eq1 decides what reaches the
     // first nonlinearity, eq2 colours what the boost made before the preamp distorts it again.
+    // Each link's output peak feeds its LEVEL column — measured at the link's place in the
+    // chain whether it is processing or passing through, because the meter's question is
+    // "what leaves this point", not "what did the EQ do".
+    const auto meterEqOut = [this, &buffer, numChannels, numSamples] (int l)
+    {
+        float peak = 0.0f;
+        for (int c = 0; c < numChannels; ++c)
+            peak = juce::jmax (peak, buffer.getMagnitude (c, 0, numSamples));
+        eqOutDb[(size_t) l].store (juce::Decibels::gainToDecibels (peak, -90.0f));
+    };
+
     if (eqParams[0].on->load() > 0.5f)
         eqLinks[0].process (channels, numChannels, numSamples);
+
+    meterEqOut (0);
 
     if (boostOnParam->load() > 0.5f)
         boost.process (buffer, scopeDry);
 
     if (eqParams[1].on->load() > 0.5f)
         eqLinks[1].process (channels, numChannels, numSamples);
+
+    meterEqOut (1);
 
     if (preampOnParam->load() > 0.5f)
         preamp.process (buffer, scopeDry);

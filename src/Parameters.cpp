@@ -84,31 +84,60 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         return juce::NormalisableRange<float> (lo, hi, 0.1f, std::log (0.5f) / std::log ((centre - lo) / (hi - lo)));
     };
 
-    // The EQ links. Both ship OFF and flat: four lit EQs out of the box is mush and lost headroom,
-    // and an EQ you switched on yourself is an EQ you remember setting.
+    // The EQ links, in the console grammar. Both ship OFF and flat: four lit EQs out of the box
+    // is mush and lost headroom, and an EQ you switched on yourself is an EQ you remember setting.
     for (int l = 0; l < numEqLinks; ++l)
     {
         const juce::String name = "EQ" + juce::String (l + 1) + " ";
         const juce::NormalisableRange<float> tone { -toneRangeDb, toneRangeDb, 0.1f };
+        const juce::NormalisableRange<float> q    { 0.3f, 6.0f, 0.01f, 0.5f };
+        const juce::NormalisableRange<float> qN   { 1.0f, 18.0f, 0.01f, 0.5f };   // the surgical bell runs narrow
 
-        layout.add (std::make_unique<Bool>  (juce::ParameterID { eqOn (l),       1 }, "EQ" + juce::String (l + 1), false),
-                    std::make_unique<Float> (juce::ParameterID { eqLow (l),      1 }, name + "Low",      tone, 0.0f),
-                    std::make_unique<Float> (juce::ParameterID { eqMid (l),      1 }, name + "Mid",      tone, 0.0f),
-                    std::make_unique<Float> (juce::ParameterID { eqHigh (l),     1 }, name + "High",     tone, 0.0f),
-                    std::make_unique<Float> (juce::ParameterID { eqPresence (l), 1 }, name + "Presence", tone, 0.0f));
+        layout.add (std::make_unique<Bool> (juce::ParameterID { eqOn (l), 1 },
+                                            "EQ" + juce::String (l + 1), false));
 
-        // The bell is the one band whose centre moves — the shelves stay where the stack puts them.
-        // 200 Hz - 2 kHz is the span the measured devices sat in (734, 775, 912).
-        layout.add (std::make_unique<Float> (juce::ParameterID { eqMidHz (l), 1 }, name + "Mid Freq",
-                                             hz (200.0f, 2000.0f, 600.0f), 600.0f));
+        // The cut filters, each with its slope. Off by default: they are for tightening a
+        // specific rig, not part of the voicing.
+        layout.add (std::make_unique<Bool>   (juce::ParameterID { eqHpfOn (l),    1 }, name + "HPF", false),
+                    std::make_unique<Float>  (juce::ParameterID { eqHpfHz (l),    1 }, name + "HPF Freq",
+                                              hz (20.0f, 800.0f, 80.0f), 80.0f),
+                    std::make_unique<Choice> (juce::ParameterID { eqHpfSlope (l), 1 }, name + "HPF Slope",
+                                              eqSlopes, eqSlopeDefault),
+                    std::make_unique<Bool>   (juce::ParameterID { eqLpfOn (l),    1 }, name + "LPF", false),
+                    std::make_unique<Float>  (juce::ParameterID { eqLpfHz (l),    1 }, name + "LPF Freq",
+                                              hz (1000.0f, 20000.0f, 8000.0f), 10000.0f),
+                    std::make_unique<Choice> (juce::ParameterID { eqLpfSlope (l), 1 }, name + "LPF Slope",
+                                              eqSlopes, eqSlopeDefault));
 
-        // The cuts are off by default: they are for tightening a specific rig, not part of the voicing.
-        layout.add (std::make_unique<Bool>  (juce::ParameterID { eqHpfOn (l), 1 }, name + "HPF", false),
-                    std::make_unique<Float> (juce::ParameterID { eqHpfHz (l), 1 }, name + "HPF Freq",
-                                             hz (20.0f, 500.0f, 80.0f), 80.0f),
-                    std::make_unique<Bool>  (juce::ParameterID { eqLpfOn (l), 1 }, name + "LPF", false),
-                    std::make_unique<Float> (juce::ParameterID { eqLpfHz (l), 1 }, name + "LPF Freq",
-                                             hz (2000.0f, 20000.0f, 10000.0f), 10000.0f));
+        // The shelves: gain and corner, no Q — a shelf with a Q is a bell wearing a coat.
+        layout.add (std::make_unique<Float> (juce::ParameterID { eqLoDb (l), 1 }, name + "Lo",      tone, 0.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqLoHz (l), 1 }, name + "Lo Freq",
+                                             hz (30.0f, 500.0f, 100.0f), 100.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqHiDb (l), 1 }, name + "Hi",      tone, 0.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqHiHz (l), 1 }, name + "Hi Freq",
+                                             hz (1500.0f, 16000.0f, 6000.0f), 8000.0f));
+
+        // The bells: two for the tone, and the narrow third that switches in — the surgical slot
+        // search→treat lands in.
+        layout.add (std::make_unique<Float> (juce::ParameterID { eqBellDb (l, 0), 1 }, name + "B1",      tone, 0.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqBellHz (l, 0), 1 }, name + "B1 Freq",
+                                             hz (60.0f, 3000.0f, 400.0f), 400.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqBellQ (l, 0),  1 }, name + "B1 Q", q, 1.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqBellDb (l, 1), 1 }, name + "B2",      tone, 0.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqBellHz (l, 1), 1 }, name + "B2 Freq",
+                                             hz (300.0f, 12000.0f, 2500.0f), 2500.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqBellQ (l, 1),  1 }, name + "B2 Q", q, 1.0f),
+                    std::make_unique<Bool>  (juce::ParameterID { eqB3On (l),      1 }, name + "B3", false),
+                    std::make_unique<Float> (juce::ParameterID { eqBellDb (l, 2), 1 }, name + "B3",      tone, 0.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqBellHz (l, 2), 1 }, name + "B3 Freq",
+                                             hz (100.0f, 12000.0f, 3000.0f), 3000.0f),
+                    std::make_unique<Float> (juce::ParameterID { eqBellQ (l, 2),  1 }, name + "B3 Q", qN, 8.0f));
+
+        // The output level — a fader on the link, because every boost here is also "+drive into
+        // the next nonlinearity", and shape deserves a say separate from push.
+        layout.add (std::make_unique<Float> (juce::ParameterID { eqLevel (l), 1 }, name + "Level",
+                                             juce::NormalisableRange<float> (-eqLevelRangeDb, eqLevelRangeDb, 0.1f),
+                                             0.0f));
     }
 
     // The cabinet. Position and distance are the two halves of one gesture on the grid; distance is

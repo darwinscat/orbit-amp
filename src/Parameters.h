@@ -107,20 +107,39 @@ inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String
     an unchanging parameter list; two because those are the places that MEAN something — eq1 decides
     what reaches the first nonlinearity, so it changes the kind of distortion, and eq2 colours what
     the boost made before the preamp distorts it again. A link's place in the chain answers "pre or
-    post", which is why no placement switch exists. `l` is the link index, 0-based. */
+    post", which is why no placement switch exists. `l` is the link index, 0-based.
+
+    The console grammar per link: HPF/LPF with a slope choice, LO/HI shelves with free corners
+    (gain + freq, no Q), bells B1/B2 (gain + freq + Q) and the narrow switchable B3 — the surgical
+    slot — plus an output LEVEL. Bells are indexed 0..2 for the id helpers. */
 inline constexpr int numEqLinks = 2;
 
-inline juce::String eqId       (int l, const char* leaf) { return "eq" + juce::String (l + 1) + "_" + leaf; }
+inline juce::String eqId (int l, const char* leaf) { return "eq" + juce::String (l + 1) + "_" + leaf; }
+
 inline juce::String eqOn       (int l) { return eqId (l, "on"); }
-inline juce::String eqLow      (int l) { return eqId (l, "low"); }
-inline juce::String eqMid      (int l) { return eqId (l, "mid"); }
-inline juce::String eqHigh     (int l) { return eqId (l, "high"); }
-inline juce::String eqPresence (int l) { return eqId (l, "presence"); }
-inline juce::String eqMidHz    (int l) { return eqId (l, "mid_hz"); }
 inline juce::String eqHpfOn    (int l) { return eqId (l, "hpf_on"); }
 inline juce::String eqHpfHz    (int l) { return eqId (l, "hpf_hz"); }
+inline juce::String eqHpfSlope (int l) { return eqId (l, "hpf_slope"); }
+inline juce::String eqLoDb     (int l) { return eqId (l, "lo_db"); }
+inline juce::String eqLoHz     (int l) { return eqId (l, "lo_hz"); }
+inline juce::String eqHiDb     (int l) { return eqId (l, "hi_db"); }
+inline juce::String eqHiHz     (int l) { return eqId (l, "hi_hz"); }
 inline juce::String eqLpfOn    (int l) { return eqId (l, "lpf_on"); }
 inline juce::String eqLpfHz    (int l) { return eqId (l, "lpf_hz"); }
+inline juce::String eqLpfSlope (int l) { return eqId (l, "lpf_slope"); }
+inline juce::String eqLevel    (int l) { return eqId (l, "level"); }
+
+inline juce::String eqBellDb (int l, int b) { return eqId (l, "b") + juce::String (b + 1) + "_db"; }
+inline juce::String eqBellHz (int l, int b) { return eqId (l, "b") + juce::String (b + 1) + "_hz"; }
+inline juce::String eqBellQ  (int l, int b) { return eqId (l, "b") + juce::String (b + 1) + "_q"; }
+inline juce::String eqB3On   (int l)        { return eqId (l, "b3_on"); }
+
+/** The slope ladder both cut filters climb. 12 is the default — the amp-world's own. */
+inline const juce::StringArray eqSlopes { "6", "12", "18", "24", "48" };
+inline constexpr int eqSlopeValues[] = { 6, 12, 18, 24, 48 };
+inline constexpr int eqSlopeDefault  = 1;
+
+inline constexpr float eqLevelRangeDb = 12.0f;
 
 inline constexpr const char* cabOn = "cab_on";
 

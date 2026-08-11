@@ -41,6 +41,18 @@ public:
     std::function<void (int index, double hz, double db)> onHandleDrag;
     std::function<void (int index, bool active)>          onDragActive;
 
+    /** The wheel over a handle — Q on a bell, slope on a wall; the owner knows which. */
+    std::function<void (int index, float delta)> onHandleWheel;
+
+    /** Double-clicks: on empty curve — create (the surgical bell lands here); on a handle — the
+        owner may take it away again. */
+    std::function<void (double hz)> onCurveDoubleClick;
+    std::function<void (int index)> onHandleDoubleClick;
+
+    /** The cut filters' own response, drawn as red WALLS under the curve — what is removed,
+        separated from how the rest is coloured. Unset = no walls. */
+    std::function<double (double)> filterMagnitudeDb;
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat();
@@ -59,9 +71,33 @@ public:
             well.addRoundedRectangle (r, theme::radiusMd);
             g.reduceClipRegion (well);
 
+            const int w = juce::jmax (2, getWidth());
+
+            // The walls first: the area between 0 dB and the filters' own response, filled in the
+            // cut's red — solid-dark over the near-black well, so it stays red instead of mudding.
+            // Zero height in the passband, rising exactly where the filters bite.
+            if (filterMagnitudeDb != nullptr)
+            {
+                juce::Path walls;
+                walls.startNewSubPath (r.getX(), dbToY (r, 0.0f));
+
+                for (int x = 0; x < w; ++x)
+                {
+                    const float px = (float) x + r.getX();
+                    walls.lineTo (px, dbToY (r, (float) filterMagnitudeDb (xToHz (r, px))));
+                }
+
+                walls.lineTo (r.getRight(), dbToY (r, 0.0f));
+                walls.closeSubPath();
+
+                g.setColour (wallRed.withAlpha (0.30f));
+                g.fillPath (walls);
+                g.setColour (wallRed.withAlpha (0.75f));
+                g.strokePath (walls, juce::PathStrokeType (1.2f));
+            }
+
             // One point per pixel column — cheaper and smoother than a coarse grid interpolated up.
             juce::Path curve;
-            const int w = juce::jmax (2, getWidth());
 
             for (int x = 0; x < w; ++x)
             {
@@ -132,9 +168,33 @@ public:
         }
     }
 
+    void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override
+    {
+        if (onHandleWheel == nullptr)
+            return;
+
+        if (const int over = handleAt (e.position); over >= 0)
+            onHandleWheel (over, wheel.deltaY);
+    }
+
+    void mouseDoubleClick (const juce::MouseEvent& e) override
+    {
+        if (const int over = handleAt (e.position); over >= 0)
+        {
+            if (onHandleDoubleClick != nullptr)
+                onHandleDoubleClick (over);
+            return;
+        }
+
+        if (onCurveDoubleClick != nullptr)
+            onCurveDoubleClick (xToHz (getLocalBounds().toFloat(), e.position.x));
+    }
+
 private:
     static constexpr float handleRadius = 5.0f;
     static constexpr float grabRadius   = 11.0f;   // generous: the dot is small, the target is not
+
+    inline static const juce::Colour wallRed { 0xffe0503c };   // the ramp's red: removed, like GR
 
     int handleAt (juce::Point<float> p) const
     {

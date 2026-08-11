@@ -488,17 +488,33 @@ void ChainStrip::timerCallback()
     for (int l = 0; l < params::numEqLinks; ++l)
     {
         auto& s = amp.apvts;
+        const auto raw = [&s] (const juce::String& id) { return s.getRawParameterValue (id)->load(); };
+        const auto slope = [] (float v)
+        {
+            return params::eqSlopeValues[juce::jlimit (0, params::eqSlopes.size() - 1, juce::roundToInt (v))];
+        };
 
-        core::ToneStack::Settings set;
-        set.lowDb      = (double) s.getRawParameterValue (params::eqLow (l))->load();
-        set.midDb      = (double) s.getRawParameterValue (params::eqMid (l))->load();
-        set.midHz      = (double) s.getRawParameterValue (params::eqMidHz (l))->load();
-        set.highDb     = (double) s.getRawParameterValue (params::eqHigh (l))->load();
-        set.presenceDb = (double) s.getRawParameterValue (params::eqPresence (l))->load();
-        set.hpfOn      = s.getRawParameterValue (params::eqHpfOn (l))->load() > 0.5f;
-        set.hpfHz      = (double) s.getRawParameterValue (params::eqHpfHz (l))->load();
-        set.lpfOn      = s.getRawParameterValue (params::eqLpfOn (l))->load() > 0.5f;
-        set.lpfHz      = (double) s.getRawParameterValue (params::eqLpfHz (l))->load();
+        core::EqLink::Settings set;
+        set.hpfOn    = raw (params::eqHpfOn (l)) > 0.5f;
+        set.hpfHz    = (double) raw (params::eqHpfHz (l));
+        set.hpfSlope = slope (raw (params::eqHpfSlope (l)));
+        set.loDb     = (double) raw (params::eqLoDb (l));
+        set.loHz     = (double) raw (params::eqLoHz (l));
+        set.b1Db     = (double) raw (params::eqBellDb (l, 0));
+        set.b1Hz     = (double) raw (params::eqBellHz (l, 0));
+        set.b1Q      = (double) raw (params::eqBellQ (l, 0));
+        set.b2Db     = (double) raw (params::eqBellDb (l, 1));
+        set.b2Hz     = (double) raw (params::eqBellHz (l, 1));
+        set.b2Q      = (double) raw (params::eqBellQ (l, 1));
+        set.b3On     = raw (params::eqB3On (l)) > 0.5f;
+        set.b3Db     = (double) raw (params::eqBellDb (l, 2));
+        set.b3Hz     = (double) raw (params::eqBellHz (l, 2));
+        set.b3Q      = (double) raw (params::eqBellQ (l, 2));
+        set.hiDb     = (double) raw (params::eqHiDb (l));
+        set.hiHz     = (double) raw (params::eqHiHz (l));
+        set.lpfOn    = raw (params::eqLpfOn (l)) > 0.5f;
+        set.lpfHz    = (double) raw (params::eqLpfHz (l));
+        set.lpfSlope = slope (raw (params::eqLpfSlope (l)));
 
         eqDisplay[(size_t) l].setSettings (set);
     }

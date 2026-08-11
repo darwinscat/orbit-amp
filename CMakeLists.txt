@@ -216,14 +216,14 @@ target_link_libraries(OrbitAmp PRIVATE
 )
 
 # ----------------------------------------------------------------------------
-# Headless acceptance gate for the tone stack. JUCE-free — it links only felitronics::eq, which is
-# the point of keeping core::ToneStack free of JUCE: the DSP is testable without a host, a GUI, or
+# Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
+# the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.
 # ----------------------------------------------------------------------------
-add_executable(orbitamp_tonestack_test tests/ToneStackTests.cpp)
-target_include_directories(orbitamp_tonestack_test PRIVATE src)
-target_link_libraries(orbitamp_tonestack_test PRIVATE felitronics::eq)
-target_compile_features(orbitamp_tonestack_test PRIVATE cxx_std_20)
+add_executable(orbitamp_eqlink_test tests/EqLinkTests.cpp)
+target_include_directories(orbitamp_eqlink_test PRIVATE src)
+target_link_libraries(orbitamp_eqlink_test PRIVATE felitronics::eq)
+target_compile_features(orbitamp_eqlink_test PRIVATE cxx_std_20)
 
 # Same gate for the tuner's ear, and JUCE-free for the same reason: signals with a KNOWN pitch go
 # in, the cents error comes out. Links nothing at all — core::PitchTracker is plain C++.
