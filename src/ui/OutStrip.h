@@ -26,7 +26,7 @@ public:
         startTimerHz (30);
     }
 
-    static constexpr int designWidth = 32;
+    static constexpr int designWidth = 38;
 
     void paint (juce::Graphics& g) override
     {
@@ -49,7 +49,8 @@ public:
         meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (col, 0.0f));
         {
             const float v = trimP.convertFrom0to1 (trimP.getValue());
-            meterrail::paintGrip (g, r, trimY (col, v), meterrail::trimText (v), dragging);
+            meterrail::paintGrip (g, r, trimY (col, v), meterrail::trimText (v), theme::orange,
+                                  dragging);
         }
 
         g.setColour (theme::hair2);
@@ -60,6 +61,14 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
+        // A click anywhere while the grip editor is open COMMITS it first — the field convention.
+        if (gripEd.isOpen())
+        {
+            gripEd.takeAndHide();
+            swallow = true;
+            return;
+        }
+
         // The reset click must not turn into a fader drag.
         if (clip.load() && e.position.y <= scaleArea().getY() + 5.0f)
         {
@@ -69,42 +78,52 @@ public:
             return;
         }
 
-        swallow  = false;
-        dragging = true;
-        trim->beginGesture();
-        trim->setValueAsPartOfGesture (trimFromY (scaleArea(), e.position.y));
+        swallow     = false;
+        dragging    = false;
+        pressOnGrip = gripRect().contains (e.position);
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
-        if (! swallow)
+        if (swallow)
+            return;
+
+        if (! dragging && e.getDistanceFromDragStart() > 4)
+        {
+            dragging = true;
+            trim->beginGesture();
+        }
+
+        if (dragging)
             trim->setValueAsPartOfGesture (trimFromY (scaleArea(), e.position.y));
     }
 
     void mouseUp (const juce::MouseEvent&) override
     {
-        if (! swallow)
-            trim->endGesture();
+        if (swallow)
+            return;
 
-        dragging = false;
-        repaint();
+        if (dragging)
+        {
+            trim->endGesture();
+            dragging = false;
+            repaint();
+            return;
+        }
+
+        // A clean click on the grip asks for its NUMBER.
+        if (pressOnGrip)
+            gripEd.open (*this, gripRect().toNearestInt(),
+                         trimP.convertFrom0to1 (trimP.getValue()), theme::orange,
+                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
     }
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
-        if (swallow)
-            return;
+        if (swallow || gripRect().contains (e.position))
+            return;   // the single click already opened the editor
 
-        // On the grip: type the number. Anywhere else on the column: home.
-        if (gripRect().contains (e.position))
-        {
-            gripEd.open (*this, gripRect().toNearestInt(),
-                         trimP.convertFrom0to1 (trimP.getValue()),
-                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
-            return;
-        }
-
-        trim->setValueAsPartOfGesture (0.0f);
+        trim->setValueAsCompleteGesture (0.0f);
     }
 
     juce::Rectangle<float> gripRect() const
@@ -169,8 +188,9 @@ private:
     float levelDb = -90.0f;
     float holdDb  = -90.0f;
     int   holdAge = 0;
-    bool  dragging = false;
-    bool  swallow  = false;
+    bool  dragging    = false;
+    bool  swallow     = false;
+    bool  pressOnGrip = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutStrip)
 };

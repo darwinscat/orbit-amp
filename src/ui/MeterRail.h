@@ -57,12 +57,13 @@ inline void paintUnityNubs (juce::Graphics& g, juce::Rectangle<float> track, flo
     g.fillRect (track.getRight() - 7.0f, y - 1.0f, 7.0f, 2.0f);
 }
 
-constexpr float gripH = 18.0f;
+constexpr float gripH = 22.0f;
 
-/** The grip carries its own number: the frame is tall enough to hold the CURRENT value, so the
-    reading rides in the hand — no bubble, no footnote row. Double-click it to type. */
+/** The grip carries its own number IN ITS OWN COLOUR: the frame is tall enough to hold the
+    CURRENT value, so the reading rides in the hand — no bubble, no footnote row. Click it to
+    type. Each runner keeps its identity by colour — orange trims, violet gate. */
 inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y,
-                       const juce::String& text, bool lit = false)
+                       const juce::String& text, juce::Colour colour, bool lit = false)
 {
     constexpr float sightW = 4.0f;
 
@@ -71,13 +72,12 @@ inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y,
 
     g.setColour (juce::Colours::black.withAlpha (0.45f));   // seat it over the gradient
     g.drawRoundedRectangle (frame, 2.5f, 3.0f);
-    g.setColour (lit ? theme::orange.brighter (0.25f) : theme::orange);
+    g.setColour (lit ? colour.brighter (0.25f) : colour);
     g.drawRoundedRectangle (frame, 2.5f, 1.4f);
     g.fillRect (frame.getX(),               y - 0.75f, sightW, 1.5f);
     g.fillRect (frame.getRight() - sightW,  y - 0.75f, sightW, 1.5f);
 
-    g.setColour (juce::Colours::white);
-    theme::drawTracked (g, text, frame, theme::displayFont (10.5f), 0.02f,
+    theme::drawTracked (g, text, frame, theme::displayFont (11.0f), 0.02f,
                         juce::Justification::centred);
 }
 
@@ -86,7 +86,7 @@ inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y,
 struct GripEditor
 {
     void open (juce::Component& parent, juce::Rectangle<int> box, float current,
-               std::function<void (float)> commitFn)
+               juce::Colour accent, std::function<void (float)> commitFn)
     {
         commit = std::move (commitFn);
 
@@ -94,10 +94,8 @@ struct GripEditor
         {
             inited = true;
             ed.setJustification (juce::Justification::centred);
-            ed.setFont (theme::displayFont (11.0f));
+            ed.setFont (theme::displayFont (12.0f));
             ed.setColour (juce::TextEditor::backgroundColourId, theme::bezel);
-            ed.setColour (juce::TextEditor::outlineColourId, theme::orange);
-            ed.setColour (juce::TextEditor::focusedOutlineColourId, theme::orange);
             ed.setColour (juce::TextEditor::textColourId, juce::Colours::white);
             ed.setColour (juce::TextEditor::highlightColourId, theme::violet.withAlpha (0.35f));
             parent.addChildComponent (ed);
@@ -107,12 +105,17 @@ struct GripEditor
             ed.onEscapeKey = [this] { ed.setVisible (false); };
         }
 
+        ed.setColour (juce::TextEditor::outlineColourId, accent);
+        ed.setColour (juce::TextEditor::focusedOutlineColourId, accent);
+
         ed.setBounds (box);
         ed.setText (juce::String (current, 1), false);
         ed.setVisible (true);
         ed.selectAll();
         ed.grabKeyboardFocus();
     }
+
+    bool isOpen() const { return inited && ed.isVisible(); }
 
     void takeAndHide()
     {

@@ -48,7 +48,7 @@ public:
     /** A clean click (no drag) opens the big gate — the sliver is the glance. */
     std::function<void()> onClick;
 
-    static constexpr int designWidth = 32;
+    static constexpr int designWidth = 38;
 
     void paint (juce::Graphics& g) override
     {
@@ -79,9 +79,9 @@ public:
                         2.0f, inCol.getHeight() * frac);
         }
 
-        // ---- the threshold: a line across the scale and a NAIL from the right — the right side
-        //      is the gate's own territory, so its handle hangs from there. A switched-off gate
-        //      is read-only here like everywhere: its marks dim and its runner will not answer.
+        // ---- the threshold: the same grip instrument as the trim, in the gate's violet — its
+        //      number aboard, the derived CLOSE line the hysteresis under it. A switched-off
+        //      gate is read-only here like everywhere: its runner dims and will not answer.
         {
             const float dimmed  = onP.getValue() > 0.5f ? 1.0f : 0.35f;
             const float openDb  = param.convertFrom0to1 (param.getValue());
@@ -91,13 +91,9 @@ public:
             g.setColour (theme::lilac.withAlpha (0.45f * dimmed));
             g.fillRect (inCol.getX(), closeY - 0.5f, inCol.getWidth(), 1.0f);
 
-            g.setColour (theme::lilac.withAlpha (dimmed));
-            g.fillRect (inCol.getX(), openY - 1.0f, scaleArea().getWidth(), 2.0f);
-
-            juce::Path nail;
-            const float bx = r.getRight() - 1.0f;
-            nail.addTriangle (bx, openY - 4.5f, bx, openY + 4.5f, bx - 7.0f, openY);
-            g.fillPath (nail);
+            meterrail::paintGrip (g, r, openY, juce::String (juce::roundToInt (openDb)),
+                                  theme::lilac.withMultipliedAlpha (dimmed),
+                                  dragging && ! grabbedTrim);
         }
 
         // ---- the trim: tabby's hollow sliding frame with its sight, riding the whole rail ----
@@ -107,7 +103,7 @@ public:
                                      [&] (float db) { return dbToY (area, db); }, floorDb);
             meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (area, 0.0f));
             const float v = trimP.convertFrom0to1 (trimP.getValue());
-            meterrail::paintGrip (g, r, trimY (area, v), meterrail::trimText (v),
+            meterrail::paintGrip (g, r, trimY (area, v), meterrail::trimText (v), theme::orange,
                                   dragging && grabbedTrim);
         }
 
@@ -120,6 +116,15 @@ public:
     //==============================================================================
     void mouseDown (const juce::MouseEvent& e) override
     {
+        // A click anywhere while the grip editor is open COMMITS it first — the field convention.
+        // Without this the abandoned editor sat at its old spot wearing a grip's face.
+        if (gripEd.isOpen())
+        {
+            gripEd.takeAndHide();
+            swallowUp = true;
+            return;
+        }
+
         // Right-click: the gate presets — the whole gate in one pick for whoever never opens
         // the zoom. The release of that same button must NOT count as the click that opens the
         // lens, so it is swallowed whole.
@@ -141,6 +146,8 @@ public:
         swallowUp = false;
         dragging  = false;
         pressY    = e.position.y;
+        pressOnTrim = gripRect().contains (e.position);
+        pressOnTh   = ! pressOnTrim && onP.getValue() > 0.5f && thGripRect().contains (e.position);
     }
 
     void showPresetMenu (juce::Point<int> screenPos)
@@ -208,13 +215,8 @@ public:
         // Either way the release must not read as another lens click.
         swallowUp = true;
 
-        if (gripRect().contains (e.position))
-        {
-            gripEd.open (*this, gripRect().toNearestInt(),
-                         trimP.convertFrom0to1 (trimP.getValue()),
-                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
-            return;
-        }
+        if (gripRect().contains (e.position) || thGripRect().contains (e.position))
+            return;   // the single click already opened the editor — the double adds nothing
 
         trim->setValueAsCompleteGesture (0.0f);
     }
@@ -223,6 +225,13 @@ public:
     {
         const auto area = scaleArea();
         const float y   = trimY (area, trimP.convertFrom0to1 (trimP.getValue()));
+        return { 0.0f, y - meterrail::gripH * 0.5f, (float) getWidth(), meterrail::gripH };
+    }
+
+    juce::Rectangle<float> thGripRect() const
+    {
+        const auto area = scaleArea();
+        const float y   = dbToY (area, param.convertFrom0to1 (param.getValue()));
         return { 0.0f, y - meterrail::gripH * 0.5f, (float) getWidth(), meterrail::gripH };
     }
 
@@ -266,6 +275,23 @@ public:
         {
             (grabbedTrim ? trim : threshold)->endGesture();
             dragging = false;
+            return;
+        }
+
+        // A clean click on a grip asks for its NUMBER, not for the lens.
+        if (pressOnTrim)
+        {
+            gripEd.open (*this, gripRect().toNearestInt(),
+                         trimP.convertFrom0to1 (trimP.getValue()), theme::orange,
+                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
+            return;
+        }
+
+        if (pressOnTh)
+        {
+            gripEd.open (*this, thGripRect().toNearestInt(),
+                         param.convertFrom0to1 (param.getValue()), theme::lilac,
+                         [this] (float v) { threshold->setValueAsCompleteGesture (v); });
             return;
         }
 
@@ -373,6 +399,8 @@ private:
     bool  dragging    = false;
     bool  grabbedTrim = false;
     bool  swallowUp   = false;
+    bool  pressOnTrim = false;
+    bool  pressOnTh   = false;
     float pressY      = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateStrip)
