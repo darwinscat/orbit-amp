@@ -9,6 +9,7 @@
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
+#include "core/SoftLimiter.h"
 #include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
 
@@ -176,6 +177,9 @@ public:
     std::atomic<bool>  inClip  { false };
     std::atomic<bool>  outClip { false };
 
+    /** How hard the limiter squeezed the last block, in dB (0 = untouched) — the LIMIT badge. */
+    std::atomic<float> limiterGrDb { 0.0f };
+
     /** Each EQ link's output peak this block, in dB — what its LEVEL column meters. Same
         writer, same readers. */
     std::array<std::atomic<float>, params::numEqLinks> eqOutDb { -90.0f, -90.0f };
@@ -220,7 +224,10 @@ private:
 
     std::atomic<float>* inTrimParam        = nullptr;
     std::atomic<float>* outTrimParam       = nullptr;
+    std::atomic<float>* limiterOnParam     = nullptr;
+    std::atomic<float>* limiterCeilParam   = nullptr;
     float lastOutGain = 1.0f;
+    core::SoftLimiter limiter;
     float lastTrimGain = 1.0f;
 
     std::atomic<float>* gateOnParam        = nullptr;

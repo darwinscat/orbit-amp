@@ -18,10 +18,12 @@ class OutStrip final : public juce::Component,
 {
 public:
     OutStrip (const std::atomic<float>& outDbSource, std::atomic<bool>& clipLatch,
-              juce::RangedAudioParameter& trimParam)
-        : outDb (outDbSource), clip (clipLatch), trimP (trimParam)
+              juce::RangedAudioParameter& trimParam, juce::RangedAudioParameter& ceilingParam)
+        : outDb (outDbSource), clip (clipLatch), trimP (trimParam), ceilP (ceilingParam)
     {
         trim = std::make_unique<juce::ParameterAttachment> (trimParam,
+                                                            [this] (float) { repaint(); });
+        ceil = std::make_unique<juce::ParameterAttachment> (ceilingParam,
                                                             [this] (float) { repaint(); });
         startTimerHz (30);
     }
@@ -47,10 +49,18 @@ public:
         meterrail::paintDbScale (g, r.reduced (0.0f, 2.0f),
                                  [&] (float db) { return dbToY (col, db); }, floorDb);
         meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (col, 0.0f));
+        // The ceiling first (under the trim in z): the limiter's runner in the gate's lilac,
+        // living where ceilings live — near the top of the rail.
+        {
+            const float v = ceilP.convertFrom0to1 (ceilP.getValue());
+            meterrail::paintGrip (g, r, ceilY (col, v), juce::String (v, 1), theme::lilac,
+                                  dragging && grabbedCeil);
+        }
+
         {
             const float v = trimP.convertFrom0to1 (trimP.getValue());
             meterrail::paintGrip (g, r, trimY (col, v), meterrail::trimText (v), theme::orange,
-                                  dragging);
+                                  dragging && ! grabbedCeil);
         }
 
         g.setColour (theme::hair2);
@@ -90,11 +100,24 @@ public:
         if (! dragging && e.getDistanceFromDragStart() > 4)
         {
             dragging = true;
-            trim->beginGesture();
+
+            // Whichever runner was nearer to the grab moves — same law as the IN column.
+            const auto col = scaleArea();
+            const float trY = trimY (col, trimP.convertFrom0to1 (trimP.getValue()));
+            const float ceY = ceilY (col, ceilP.convertFrom0to1 (ceilP.getValue()));
+            grabbedCeil = std::abs (e.getMouseDownPosition().toFloat().y - ceY)
+                        < std::abs (e.getMouseDownPosition().toFloat().y - trY);
+
+            (grabbedCeil ? ceil : trim)->beginGesture();
         }
 
         if (dragging)
-            trim->setValueAsPartOfGesture (trimFromY (scaleArea(), e.position.y));
+        {
+            if (grabbedCeil)
+                ceil->setValueAsPartOfGesture (ceilFromY (scaleArea(), e.position.y));
+            else
+                trim->setValueAsPartOfGesture (trimFromY (scaleArea(), e.position.y));
+        }
     }
 
     void mouseUp (const juce::MouseEvent&) override
@@ -104,7 +127,7 @@ public:
 
         if (dragging)
         {
-            trim->endGesture();
+            (grabbedCeil ? ceil : trim)->endGesture();
             dragging = false;
             repaint();
         }
@@ -115,12 +138,20 @@ public:
         if (swallow)
             return;
 
-        // The convention: DOUBLE-click the grip to type its number; elsewhere — home.
+        // The convention: DOUBLE-click a grip to type its number; elsewhere — home.
         if (gripRect().contains (e.position))
         {
             gripEd.open (*this, gripRect().toNearestInt(),
                          trimP.convertFrom0to1 (trimP.getValue()), theme::orange,
                          [this] (float v) { trim->setValueAsCompleteGesture (v); });
+            return;
+        }
+
+        if (ceilRect().contains (e.position))
+        {
+            gripEd.open (*this, ceilRect().toNearestInt(),
+                         ceilP.convertFrom0to1 (ceilP.getValue()), theme::lilac,
+                         [this] (float v) { ceil->setValueAsCompleteGesture (v); });
             return;
         }
 
@@ -130,6 +161,12 @@ public:
     juce::Rectangle<float> gripRect() const
     {
         const float y = trimY (scaleArea(), trimP.convertFrom0to1 (trimP.getValue()));
+        return { 0.0f, y - meterrail::gripH * 0.5f, (float) getWidth(), meterrail::gripH };
+    }
+
+    juce::Rectangle<float> ceilRect() const
+    {
+        const float y = ceilY (scaleArea(), ceilP.convertFrom0to1 (ceilP.getValue()));
         return { 0.0f, y - meterrail::gripH * 0.5f, (float) getWidth(), meterrail::gripH };
     }
 
@@ -167,6 +204,21 @@ private:
         return r.getCentreY() - trimDb / params::inTrimRangeDb * (r.getHeight() * 0.5f - 6.0f);
     }
 
+    /** The ceiling lives in the rail's top third — the neighbourhood its dBFS values name —
+        loudest lid at the top, deepest at the third's floor. */
+    float ceilY (juce::Rectangle<float> r, float v) const
+    {
+        const float t = (params::limiterCeilingMax - v)
+                      / (params::limiterCeilingMax - params::limiterCeilingMin);
+        return r.getY() + 14.0f + t * (r.getHeight() / 3.0f);
+    }
+
+    float ceilFromY (juce::Rectangle<float> r, float y) const
+    {
+        const float t = juce::jlimit (0.0f, 1.0f, (y - r.getY() - 14.0f) / (r.getHeight() / 3.0f));
+        return params::limiterCeilingMax - t * (params::limiterCeilingMax - params::limiterCeilingMin);
+    }
+
     float trimFromY (juce::Rectangle<float> r, float y) const
     {
         return juce::jlimit (-params::inTrimRangeDb, params::inTrimRangeDb,
@@ -182,15 +234,17 @@ private:
     const std::atomic<float>& outDb;
     std::atomic<bool>&        clip;
     juce::RangedAudioParameter& trimP;
-    std::unique_ptr<juce::ParameterAttachment> trim;
+    juce::RangedAudioParameter& ceilP;
+    std::unique_ptr<juce::ParameterAttachment> trim, ceil;
 
     meterrail::GripEditor gripEd;
 
     float levelDb = -90.0f;
     float holdDb  = -90.0f;
     int   holdAge = 0;
-    bool  dragging = false;
-    bool  swallow  = false;
+    bool  dragging    = false;
+    bool  swallow     = false;
+    bool  grabbedCeil = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutStrip)
 };

@@ -51,6 +51,8 @@ AmpProcessor::AmpProcessor()
 
     inTrimParam        = apvts.getRawParameterValue (params::inTrim);
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
+    limiterOnParam     = apvts.getRawParameterValue (params::limiterOn);
+    limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
@@ -218,6 +220,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
     lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
+    limiter.prepare (sampleRate);
 
     // Seeded from the parameter: a session saved gate-ON has to start already gated, not fade in
     // over a block of ungated hum.
@@ -426,6 +429,13 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         const float target = juce::Decibels::decibelsToGain (outTrimParam->load());
         buffer.applyGainRamp (0, numSamples, lastOutGain, target);
         lastOutGain = target;
+
+        // The safety after the master's hand: nothing downstream of here touches gain, so the
+        // ceiling it enforces is the ceiling that leaves the box. The meter reads AFTER it —
+        // the truth on the rail is the truth at the jack.
+        limiter.process (channels, numChannels, numSamples,
+                         limiterOnParam->load() > 0.5f, limiterCeilParam->load());
+        limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
 
         float peak = 0.0f;
         for (int ch = 0; ch < numChannels; ++ch)

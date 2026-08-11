@@ -17,9 +17,16 @@ inline constexpr const char* boostTone  = "boost_tone";
 /** The input trim — the interface knob the interface may not have: ±24 dB ahead of EVERYTHING,
     the tuner's ear and the gate's key included, so the IN meter closes the gain-staging loop:
     drag the trim, watch the same column answer. */
-inline constexpr const char* inTrim = "in_trim";
+inline constexpr const char* inTrim  = "in_trim";
 inline constexpr const char* outTrim = "out_trim";
 inline constexpr float inTrimRangeDb = 24.0f;   // one range for both trims
+
+// The safety at the door: on by default — it exists to protect, and protection you must
+// remember to arm is not protection.
+inline constexpr const char* limiterOn      = "limiter_on";
+inline constexpr const char* limiterCeiling = "limiter_ceiling";
+inline constexpr float limiterCeilingMin = -3.0f;
+inline constexpr float limiterCeilingMax = -0.1f;
 
 /** The noise gate — the second service link, right after the tuner: it keys off the raw guitar,
     and kills the hum before any dirt can multiply it. The threshold is the OPEN level in dBFS

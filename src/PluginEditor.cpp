@@ -8,8 +8,10 @@ AmpEditor::AmpEditor (AmpProcessor& p)
       gateStrip (p.gateKeyDb, p.gateMeterDb, p.inClip, *p.apvts.getParameter (params::gateThreshold),
                  *p.apvts.getParameter (params::inTrim), *p.apvts.getParameter (params::gateOn),
                  *p.apvts.getParameter (params::gateDecay)),
-      outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim)),
-      gateBadge (*p.apvts.getParameter (params::gateOn), p.gateMeterDb),
+      outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim),
+                *p.apvts.getParameter (params::limiterCeiling)),
+      gateBadge ("Gate", *p.apvts.getParameter (params::gateOn), p.gateMeterDb, 40.0f),
+      limitBadge ("Limit", *p.apvts.getParameter (params::limiterOn), p.limiterGrDb, 6.0f),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p)
 {
     addAndMakeVisible (chrome);
@@ -18,6 +20,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (gateStrip);
     addAndMakeVisible (outStrip);
     addAndMakeVisible (gateBadge);
+    addAndMakeVisible (limitBadge);
     addAndMakeVisible (tunerStrip);
     addAndMakeVisible (footer);
     addAndMakeVisible (demoStrip);   // TEMPORARY
@@ -117,11 +120,15 @@ void AmpEditor::resized()
 
     // The always-on needle, full width, above the footer's facts.
     const int tunerY = faceplateY + FaceplateView::designHeight + chromeGap;
-    gateBadge.setBounds (margin, tunerY, GateBadge::designWidth, TunerStrip::designHeight);
+    gateBadge.setBounds (margin, tunerY, TallyBadge::designWidth, TunerStrip::designHeight);
     gateBadge.setTransform (zoom);
 
-    tunerStrip.setBounds (margin + GateBadge::designWidth + chromeGap, tunerY,
-                          FaceplateView::designWidth - GateBadge::designWidth - chromeGap,
+    limitBadge.setBounds (margin + FaceplateView::designWidth - TallyBadge::designWidth, tunerY,
+                          TallyBadge::designWidth, TunerStrip::designHeight);
+    limitBadge.setTransform (zoom);
+
+    tunerStrip.setBounds (margin + TallyBadge::designWidth + chromeGap, tunerY,
+                          FaceplateView::designWidth - 2 * (TallyBadge::designWidth + chromeGap),
                           TunerStrip::designHeight);
     tunerStrip.setTransform (zoom);
 

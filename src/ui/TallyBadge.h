@@ -7,19 +7,23 @@
 namespace orbitamp
 {
 
-/** The gate's door, standing left of the tuner: a small framed GATE with its switch on the
-    border, zoom-style. A click on it — and only on it — opens the gate's zoom. While the gate
-    presses, the inside floods red by depth: the badge is the tally light of the whole device. */
-class GateBadge final : public BlockFrame,
-                        private juce::Timer
+/** A tally badge: a small framed WORD that floods brand orange while its device is working —
+    GATE left of the tuner, LIMIT right of it, the two guards flanking the needle. A click opens
+    whatever `onOpen` says (the gate's zoom); right-click keeps the power menu.
+
+    `fullDepthDb` is how many dB of pressure paint the flood solid — a gate leans on tens of dB,
+    a limiter earns full orange after a few. */
+class TallyBadge final : public BlockFrame,
+                         private juce::Timer
 {
 public:
-    GateBadge (juce::RangedAudioParameter& gateOnParam, const std::atomic<float>& pressureDbSource)
-        : BlockFrame ("Gate", Kind::dsp, false /*no switch — the menu still has the power*/),
-          pressureDb (pressureDbSource)
+    TallyBadge (const juce::String& word, juce::RangedAudioParameter& onParam,
+                const std::atomic<float>& pressureDbSource, float fullDepthDbIn)
+        : BlockFrame (word, Kind::dsp, false /*no switch — the menu still has the power*/),
+          label (word.toUpperCase()), pressureDb (pressureDbSource), fullDepthDb (fullDepthDbIn)
     {
         showTitle = false;   // the name goes INSIDE the box, not on the border
-        attachPower (gateOnParam);
+        attachPower (onParam);
         startTimerHz (30);
     }
 
@@ -43,9 +47,7 @@ public:
 private:
     void paintContent (juce::Graphics& g) override
     {
-        // The red rises with the pressure — the same depth law as the rail's desaturation,
-        // told in the one colour this face reserves for "being held down".
-        const float depth = juce::jlimit (0.0f, 1.0f, -pressureDb.load() / 40.0f);
+        const float depth = juce::jlimit (0.0f, 1.0f, -pressureDb.load() / fullDepthDb);
 
         if (depth > 0.01f)
         {
@@ -59,13 +61,13 @@ private:
         // The name, in the middle of the box — the badge IS the word. On the orange flood the
         // lilac drowns, so the letters whiten with the depth.
         g.setColour (theme::lilac.interpolatedWith (juce::Colours::white, depth));
-        theme::drawTracked (g, "GATE", boxArea().toFloat(), theme::displayFont (17.0f), 0.12f,
+        theme::drawTracked (g, label, boxArea().toFloat(), theme::displayFont (17.0f), 0.12f,
                             juce::Justification::centred);
     }
 
     void timerCallback() override
     {
-        const float depth = juce::jlimit (0.0f, 1.0f, -pressureDb.load() / 40.0f);
+        const float depth = juce::jlimit (0.0f, 1.0f, -pressureDb.load() / fullDepthDb);
         if (std::abs (depth - shownDepth) > 0.01f)
         {
             shownDepth = depth;
@@ -73,10 +75,12 @@ private:
         }
     }
 
+    const juce::String label;
     const std::atomic<float>& pressureDb;
+    const float fullDepthDb;
     float shownDepth = 0.0f;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateBadge)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TallyBadge)
 };
 
 } // namespace orbitamp
