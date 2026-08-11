@@ -52,6 +52,7 @@ AmpProcessor::AmpProcessor()
     inTrimParam        = apvts.getRawParameterValue (params::inTrim);
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
     limiterOnParam     = apvts.getRawParameterValue (params::limiterOn);
+    stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
@@ -345,6 +346,16 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
 
+    // MONO by default: a guitar chain is one signal, and running the WaveNets per channel on a
+    // duplicated input was paying twice for the same answer. The whole chain works channel 0;
+    // the copy to the other channels happens once, after the limiter. STEREO (the double-track
+    // option) restores true per-channel processing.
+    const bool stereo = stereoModeParam->load() > 0.5f;
+    const int  nch    = stereo ? numChannels : juce::jmin (1, numChannels);
+
+    // The captured blocks take a BUFFER — this alias holds only the channels the chain works.
+    juce::AudioBuffer<float> chainView (const_cast<float**> (channels), nch, numSamples);
+
     // gate -> eq1 -> boost -> eq2 -> preamp -> reverb -> power amp. The gate stands at the very
     // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
     // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
@@ -362,7 +373,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The gate KEYS here whatever it ends up muting — dual detection: the decision is made on the
     // raw input, the attenuation lands where the parameter says. The enable crossfade makes the
     // toggle pop-free, so analyse runs unconditionally and the switch is an argument.
-    gate.analyse (channels, numChannels, numSamples,
+    gate.analyse (channels, nch, numSamples,
                   gateOnParam->load() > 0.5f, gateThresholdParam->load());
     gateMeterDb.store (juce::Decibels::gainToDecibels (gate.currentGain(), -90.0f));
 
@@ -375,7 +386,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     // MUTE at the start: the nonlinearities themselves fall silent between notes.
     if (muteAtStart)
-        gate.applyGain (channels, numChannels, numSamples);
+        gate.applyGain (channels, nch, numSamples);
 
     // The EQ links are links of their own, with their own switches: eq1 decides what reaches the
     // first nonlinearity, eq2 colours what the boost made before the preamp distorts it again.
@@ -383,10 +394,11 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // both measured at the link's place in the chain whether it is processing or passing
     // through, because the meters' question is "what leaves this point", not "what did the EQ
     // do".
-    const auto meterEqOut = [this, &buffer, numChannels, numSamples] (int l)
+    const auto meterEqOut = [this, &buffer, nch, numSamples] (int l)
     {
+        // nch, not numChannels: in mono mode the other channel is stale until the tail copy.
         float peak = 0.0f;
-        for (int c = 0; c < numChannels; ++c)
+        for (int c = 0; c < nch; ++c)
             peak = juce::jmax (peak, buffer.getMagnitude (c, 0, numSamples));
         eqOutDb[(size_t) l].store (juce::Decibels::gainToDecibels (peak, -90.0f));
 
@@ -404,12 +416,12 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     };
 
     if (eqParams[0].on->load() > 0.5f)
-        eqLinks[0].process (channels, numChannels, numSamples);
+        eqLinks[0].process (channels, nch, numSamples);
 
     meterEqOut (0);
 
     if (boostOnParam->load() > 0.5f)
-        boost.process (buffer, scopeDry);
+        boost.process (chainView, scopeDry);
 
     if (boostOnParam->load() > 0.5f)
     {
@@ -422,12 +434,12 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     }
 
     if (eqParams[1].on->load() > 0.5f)
-        eqLinks[1].process (channels, numChannels, numSamples);
+        eqLinks[1].process (channels, nch, numSamples);
 
     meterEqOut (1);
 
     if (preampOnParam->load() > 0.5f)
-        preamp.process (buffer, scopeDry);
+        preamp.process (chainView, scopeDry);
 
     if (preampOnParam->load() > 0.5f)
     {
@@ -442,10 +454,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
     // (boost hiss, preamp hiss) dies here too, and the reverb tail past it rings out.
     if (! muteAtStart)
-        gate.applyGain (channels, numChannels, numSamples);
+        gate.applyGain (channels, nch, numSamples);
 
     if (reverbOnParam->load() > 0.5f)
-        reverb.process (channels, numChannels, numSamples);
+        reverb.process (channels, nch, numSamples);
     else
         reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
 
@@ -454,7 +466,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     power.setTubeCount (juce::roundToInt (powerCountParam->load()) + 1);   // index 0 = one bottle
     power.setDrive (powerDriveParam->load());
     power.setSag (powerSagParam->load());
-    power.process (channels, numChannels, numSamples, powerOnParam->load() > 0.5f);
+    power.process (channels, nch, numSamples, powerOnParam->load() > 0.5f);
 
     // The output trim closes the chain — the master's hand on the way out, ramped per block
     // against zipper noise — and the OUT rail reads the result, clip cap latched past 0 dBFS.
@@ -466,9 +478,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // The safety after the master's hand: nothing downstream of here touches gain, so the
         // ceiling it enforces is the ceiling that leaves the box. The meter reads AFTER it —
         // the truth on the rail is the truth at the jack.
-        limiter.process (channels, numChannels, numSamples,
+        limiter.process (channels, nch, numSamples,
                          limiterOnParam->load() > 0.5f, limiterCeilParam->load());
         limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
+
+        // The mono chain becomes the stereo output HERE — one copy, after everything.
+        if (! stereo)
+            for (int ch = 1; ch < numChannels; ++ch)
+                buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
 
         if (limiter.lastMinGain() < 0.999f)
             limiterWorked.store (true);

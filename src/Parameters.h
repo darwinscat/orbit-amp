@@ -181,6 +181,7 @@ inline constexpr const char* powerSag   = "power_sag";
 inline constexpr const char* powerTube  = "power_tube";
 inline constexpr const char* powerCount = "power_count";
 inline constexpr const char* oversample = "oversample";
+inline constexpr const char* stereoMode = "stereo_mode";
 
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first. */
 inline const juce::StringArray demoLoops { "Eleven Light Years", "Cats Hard Day",

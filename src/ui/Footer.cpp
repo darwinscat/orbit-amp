@@ -31,6 +31,21 @@ Footer::Footer (AmpProcessor& processor)
 
     oversampleAttachment->sendInitialUpdate();
 
+    // MONO | STEREO: binary, so the click IS the toggle — parameter truth, no local state.
+    stereo.theme = oversample.theme;
+    stereo.onClick = [this]
+    {
+        auto* p = amp.apvts.getParameter (params::stereoMode);
+        stereoAttachment->setValueAsCompleteGesture (p->getValue() > 0.5f ? 0.0f : 1.0f);
+    };
+    addAndMakeVisible (stereo);
+
+    stereoAttachment = std::make_unique<juce::ParameterAttachment> (
+        *amp.apvts.getParameter (params::stereoMode),
+        [this] (float v) { stereo.setButtonText (v > 0.5f ? "STEREO" : "MONO"); });
+
+    stereoAttachment->sendInitialUpdate();
+
     timerCallback();
     startTimerHz (4);   // nobody needs the sample rate or the load sooner than that
 }
@@ -80,7 +95,7 @@ void Footer::paint (juce::Graphics& g)
     g.setColour (theme::hair);
     g.fillRect (r.removeFromTop (1.0f));
 
-    auto right = r.withTrimmedLeft ((float) (itemWidth + gap));
+    auto right = r.withTrimmedLeft ((float) (itemWidth + 66 + gap * 2));
 
     g.setColour (theme::txFaint);
     theme::drawTracked (g, rateText, right.removeFromLeft (70.0f), theme::displayFont (8.0f), 0.1f,
@@ -96,7 +111,9 @@ void Footer::paint (juce::Graphics& g)
 
 void Footer::resized()
 {
-    oversample.setBounds (getLocalBounds().withTrimmedTop (1).removeFromLeft (itemWidth));
+    auto row = getLocalBounds().withTrimmedTop (1);
+    oversample.setBounds (row.removeFromLeft (itemWidth));
+    stereo.setBounds (row.removeFromLeft (66));
 }
 
 } // namespace orbitamp

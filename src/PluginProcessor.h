@@ -235,6 +235,7 @@ private:
     std::atomic<float>* inTrimParam        = nullptr;
     std::atomic<float>* outTrimParam       = nullptr;
     std::atomic<float>* limiterOnParam     = nullptr;
+    std::atomic<float>* stereoModeParam    = nullptr;
     std::atomic<float>* limiterCeilParam   = nullptr;
     float lastOutGain = 1.0f;
     core::SoftLimiter limiter;

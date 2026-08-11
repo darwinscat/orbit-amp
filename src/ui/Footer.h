@@ -40,8 +40,10 @@ private:
     AmpProcessor& amp;
 
     felitronics::appkit::chrome::FlatItem oversample;
+    felitronics::appkit::chrome::FlatItem stereo;
 
     std::unique_ptr<juce::ParameterAttachment> oversampleAttachment;
+    std::unique_ptr<juce::ParameterAttachment> stereoAttachment;
 
     juce::String rateText, loadText;
     float loadPercent = 0.0f;

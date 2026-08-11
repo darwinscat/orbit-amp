@@ -193,6 +193,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Choice> (juce::ParameterID { oversample, 1 }, "Oversampling",
                                           oversampleFactors, 1));
 
+    // MONO is the truth of a guitar chain and half the neural cost; STEREO is the double-track
+    // option — two takes on one bus, each through its own amp.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { stereoMode, 1 }, "Stereo", false));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters, 0),
                 std::make_unique<Float>  (juce::ParameterID { reverbMix, 1 }, "Mix",
                                           juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 20.0f));
