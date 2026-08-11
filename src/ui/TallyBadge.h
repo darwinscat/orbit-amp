@@ -35,6 +35,10 @@ public:
         the look, so it clears it. */
     std::atomic<bool>* latch = nullptr;
 
+    /** The flood's colour — violet for both guards, matching their lilac runners: the flood
+        says WORKING, the orange corner dot alone says something needs a look. */
+    juce::Colour flood = theme::violet;
+
     static constexpr int designWidth = 82;
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -68,9 +72,9 @@ private:
 
         if (depth > 0.01f)
         {
-            // SOLID, interpolated toward the brand orange by depth — never a translucent orange
-            // wash (that rots to brick on this panel); the fill is opaque at every depth.
-            g.setColour (theme::dspTop.interpolatedWith (theme::orange, depth));
+            // SOLID, interpolated toward the flood colour by depth — never a translucent wash
+            // (orange rots to brick on this panel); the fill is opaque at every depth.
+            g.setColour (theme::dspTop.interpolatedWith (flood, depth));
             g.fillRoundedRectangle (boxArea().toFloat().reduced (theme::blockBorder + 1.0f),
                                     theme::radiusMd - 2.0f);
         }
