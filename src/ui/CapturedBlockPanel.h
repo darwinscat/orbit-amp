@@ -172,6 +172,44 @@ private:
 
     HalfTag halfTag;
 
+    /** The corner glyph that throws a tile across the whole face — and brings it back. */
+    struct ExpandTag final : public juce::Component
+    {
+        bool expanded = false;
+        std::function<void()> onClick;
+
+        void paint (juce::Graphics& g) override
+        {
+            const auto r = getLocalBounds().toFloat();
+            g.setColour (theme::bezel.withAlpha (0.8f));
+            g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+
+            // Two diagonal arrows: outward to expand, inward to fold.
+            const auto c = r.getCentre();
+            g.setColour (theme::orange);
+
+            for (const float s : { -1.0f, 1.0f })
+            {
+                const juce::Point<float> tip  = expanded ? c + juce::Point<float> (2.0f * s, 2.0f * s)
+                                                         : c + juce::Point<float> (5.5f * s, 4.5f * s);
+                const juce::Point<float> tail = expanded ? c + juce::Point<float> (5.5f * s, 4.5f * s)
+                                                         : c + juce::Point<float> (2.0f * s, 2.0f * s);
+                g.drawLine ({ tail, tip }, 1.4f);
+                g.fillEllipse (tip.x - 1.6f, tip.y - 1.6f, 3.2f, 3.2f);
+            }
+        }
+
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            if (onClick != nullptr)
+                onClick();
+        }
+    };
+
+    std::array<ExpandTag, (size_t) numViz> expandTags;
+    int expandedViz = -1;
+
+    void setControlsVisible (bool);
     void layChecks (juce::Rectangle<int>);
     void layTiles  (juce::Rectangle<int>);
 

@@ -34,6 +34,19 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         addAndMakeVisible (c);
     }
 
+    for (int i = 0; i < numViz; ++i)
+    {
+        expandTags[(size_t) i].onClick = [this, i]
+        {
+            expandedViz = expandedViz == i ? -1 : i;
+            for (int j = 0; j < numViz; ++j)
+                expandTags[(size_t) j].expanded = expandedViz == j;
+            resized();
+            repaint();
+        };
+        addChildComponent (expandTags[(size_t) i]);
+    }
+
     halfTag.onChange = [this]
     {
         scopes[(size_t) DeviceScope::Mode::wave]->waveHalf = halfTag.half;
@@ -254,6 +267,38 @@ void CapturedBlockPanel::layOutHeader (juce::Rectangle<int> area)
 
 void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 {
+    // A thrown-open tile owns the WHOLE face: every control steps aside until the fold glyph
+    // brings the room back.
+    if (expandedViz >= 0)
+    {
+        setControlsVisible (false);
+
+        for (int i = 0; i < numViz; ++i)
+        {
+            scopes[(size_t) i]->setVisible (i == expandedViz);
+            expandTags[(size_t) i].setVisible (i == expandedViz);
+        }
+
+        auto* big = scopes[(size_t) expandedViz].get();
+        big->setBounds (area);
+
+        auto corner = area.removeFromTop (24).removeFromRight (60);
+        expandTags[(size_t) expandedViz].setBounds (corner.removeFromRight (28).reduced (2, 4)
+                                                        .translated (-6, 4));
+
+        halfTag.setVisible (expandedViz == (int) DeviceScope::Mode::wave);
+        if (halfTag.isVisible())
+        {
+            halfTag.setBounds (corner.removeFromRight (30).reduced (1, 4).translated (-6, 4));
+            halfTag.toFront (false);
+        }
+
+        expandTags[(size_t) expandedViz].toFront (false);
+        return;
+    }
+
+    setControlsVisible (true);
+
     // Two geometries, one face: the grand grid below is the ZOOM's — at overview size it made
     // doll's-house knobs. The compact overview keeps the old row.
     if (! zoomedFace)
@@ -379,6 +424,25 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     layTiles (area);
 }
 
+void CapturedBlockPanel::setControlsVisible (bool v)
+{
+    gain.setVisible (v);
+    device.setEnabled (v);
+
+    for (auto& slot : slots)
+    {
+        if (slot.knob != nullptr)  slot.knob->setVisible (v);
+        if (slot.steps != nullptr) slot.steps->setVisible (v);
+    }
+
+    for (auto& sel : selectors)
+        if (sel.steps != nullptr)
+            sel.steps->setVisible (v);
+
+    for (auto& c : vizChecks)
+        c.setVisible (v);
+}
+
 void CapturedBlockPanel::layChecks (juce::Rectangle<int> checks)
 {
     for (auto& c : vizChecks)
@@ -417,6 +481,8 @@ void CapturedBlockPanel::layTiles (juce::Rectangle<int> area)
     const int tileH    = (area.getHeight() - (tileRows - 1) * gap) / tileRows;
 
     halfTag.setVisible (false);
+    for (auto& t : expandTags)
+        t.setVisible (false);
 
     for (int i = 0; i < n; ++i)
     {
@@ -425,11 +491,22 @@ void CapturedBlockPanel::layTiles (juce::Rectangle<int> area)
                                       area.getY() + rr * (tileH + gap), tileW, tileH);
         shown[(size_t) i]->setVisible (true);
 
-        // The WAVE tile wears its half-wave toggle in the corner.
+        const auto tb = shown[(size_t) i]->getBounds();
+        int right = tb.getRight() - 6;
+
+        // Every tile wears the throw-open glyph; WAVE keeps its half toggle beside it.
+        for (int m = 0; m < numViz; ++m)
+            if (shown[(size_t) i] == scopes[(size_t) m].get())
+            {
+                expandTags[(size_t) m].setBounds (right - 22, tb.getY() + 4, 22, 16);
+                expandTags[(size_t) m].setVisible (true);
+                expandTags[(size_t) m].toFront (false);
+                right -= 26;
+            }
+
         if (shown[(size_t) i] == scopes[(size_t) DeviceScope::Mode::wave].get())
         {
-            const auto tb = shown[(size_t) i]->getBounds();
-            halfTag.setBounds (tb.getRight() - 34, tb.getY() + 4, 28, 16);
+            halfTag.setBounds (right - 28, tb.getY() + 4, 28, 16);
             halfTag.setVisible (true);
             halfTag.toFront (false);
         }
