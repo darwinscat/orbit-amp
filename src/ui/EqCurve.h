@@ -116,7 +116,12 @@ public:
                 walls.lineTo (r.getRight(), dbToY (r, 0.0f));
                 walls.closeSubPath();
 
-                g.setColour (wallRed.withAlpha (0.30f));
+                // The fill is VIOLET, tabby's way: densest at the 0 dB line, melting downward.
+                // Translucent orange rots to brick on this panel — orange is for LINES here.
+                const float y0 = dbToY (r, 0.0f);
+                g.setGradientFill (juce::ColourGradient (theme::violet.withAlpha (0.40f), 0.0f, y0,
+                                                         theme::violet.withAlpha (0.05f), 0.0f, r.getBottom(),
+                                                         false));
                 g.fillPath (walls);
                 g.setColour (wallRed.withAlpha (0.75f));
                 g.strokePath (walls, juce::PathStrokeType (1.2f));

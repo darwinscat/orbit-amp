@@ -184,8 +184,14 @@ namespace
             walls.lineTo (r.getRight(), r.getCentreY());
             walls.closeSubPath();
 
-            g.setColour (theme::orange.withAlpha (0.25f));
+            // Violet fill, orange edge — the mini speaks the zoom's colour law: translucent
+            // orange rots to brick on this panel, so orange stays a line.
+            g.setGradientFill (juce::ColourGradient (theme::violet.withAlpha (0.40f), 0.0f, r.getCentreY(),
+                                                     theme::violet.withAlpha (0.08f), 0.0f, r.getBottom(),
+                                                     false));
             g.fillPath (walls);
+            g.setColour (theme::orange.withAlpha (0.6f));
+            g.strokePath (walls, juce::PathStrokeType (1.0f));
         }
 
         juce::Path p;
