@@ -163,9 +163,12 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         fill.lineTo (r.getRight(), r.getBottom());
         fill.closeSubPath();
 
-        g.setColour (theme::violet.withAlpha (0.12f));
+        g.setGradientFill (juce::ColourGradient (theme::spectrum.withAlpha (0.22f),
+                                                 0.0f, r.getY() + r.getHeight() * 0.30f,
+                                                 theme::spectrum.withAlpha (0.03f),
+                                                 0.0f, r.getBottom(), false));
         g.fillPath (fill);
-        g.setColour (theme::violet.withAlpha (0.30f));
+        g.setColour (theme::spectrum.withAlpha (0.55f));
         g.strokePath (peak, juce::PathStrokeType (1.0f));
     };
 

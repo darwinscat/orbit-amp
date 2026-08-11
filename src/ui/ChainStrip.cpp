@@ -383,7 +383,10 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
                 fill.lineTo (r.getRight(), r.getBottom());
                 fill.closeSubPath();
 
-                g.setColour (theme::violet.withAlpha (0.16f));
+                g.setGradientFill (juce::ColourGradient (theme::spectrum.withAlpha (0.24f),
+                                                         0.0f, r.getY() + r.getHeight() * 0.30f,
+                                                         theme::spectrum.withAlpha (0.04f),
+                                                         0.0f, r.getBottom(), false));
                 g.fillPath (fill);
             }
 

@@ -23,6 +23,10 @@ inline const juce::Colour eqNode[5] = {
     juce::Colour (0xff4dd0e1),   // cyan — the scalpel
 };
 
+// The analyzer's smoke — tabby's spectrum token, a cool grey-blue deliberately clear of the
+// violet band fills, so the signal reads as weather behind the response, not as another band.
+inline const juce::Colour spectrum { 0xff7f93b5 };
+
 inline const juce::Colour ground  { 0xff08080d };   // behind the device
 inline const juce::Colour panel   { 0xff111119 };
 inline const juce::Colour panel2  { 0xff15151f };
