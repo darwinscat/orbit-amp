@@ -24,13 +24,22 @@ struct TransferView
         g.setColour (theme::hair);
         g.drawLine (box.getX(), box.getBottom(), box.getRight(), box.getY(), 1.0f);   // unity
 
+        // Normalised to the window's own peak — ONE factor for BOTH axes, so the slope and the
+        // unity diagonal keep telling the truth; the curve just stretches along it. (A dB axis
+        // is impossible here: a log cannot hold the negative half, and the S lives in linear.)
+        float peak = 0.02f;
+        for (int i = f.size / 2; i < f.size; ++i)
+            peak = juce::jmax (peak, juce::jmax (std::abs (f.dry[i]), std::abs (f.wet[i])));
+
+        const float norm = 0.92f / peak;
+
         juce::Path p;
         bool started = false;
 
         for (int i = f.size / 2; i < f.size; ++i)
         {
-            const float x = box.getCentreX() + juce::jlimit (-1.0f, 1.0f, f.dry[i]) * side * 0.5f;
-            const float y = box.getCentreY() - juce::jlimit (-1.0f, 1.0f, f.wet[i]) * side * 0.5f;
+            const float x = box.getCentreX() + juce::jlimit (-1.0f, 1.0f, f.dry[i] * norm) * side * 0.5f;
+            const float y = box.getCentreY() - juce::jlimit (-1.0f, 1.0f, f.wet[i] * norm) * side * 0.5f;
 
             if (! started) { p.startNewSubPath (x, y); started = true; }
             else           p.lineTo (x, y);
