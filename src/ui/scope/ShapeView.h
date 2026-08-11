@@ -35,7 +35,7 @@ struct ShapeView
 
         const float norm = 0.92f / peak;
 
-        trace (g, r, f.dry + from, n, norm, theme::txFaint.withAlpha (0.55f), 1.0f);
+        trace (g, r, f.dry + from, n, norm, theme::violet.withAlpha (0.65f), 1.0f);
         trace (g, r, f.wet + from, n, norm, theme::orange, 1.6f);
     }
 
