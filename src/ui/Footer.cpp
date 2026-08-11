@@ -159,7 +159,8 @@ void Footer::showLoadBreakdown()
         juce::String report() const
         {
             static const char* const names[AmpProcessor::numStages] = {
-                "TOTAL", "GATE", "EQ1", "BOOST", "EQ2", "PREAMP", "REVERB", "POWER", "CAB", "OUT",
+                "TOTAL", "TUNER", "GATE", "EQ1", "BOOST", "EQ2", "PREAMP", "REVERB", "POWER",
+                "CAB", "LIMIT", "OUT",
             };
 
             juce::String t;
@@ -184,7 +185,8 @@ void Footer::showLoadBreakdown()
         void paint (juce::Graphics& g) override
         {
             static const char* const names[AmpProcessor::numStages] = {
-                "TOTAL", "GATE", "EQ 1", "BOOST", "EQ 2", "PREAMP", "REVERB", "POWER", "CAB", "OUT",
+                "TOTAL", "TUNER", "GATE", "EQ 1", "BOOST", "EQ 2", "PREAMP", "REVERB", "POWER",
+                "CAB", "LIMIT", "OUT",
             };
 
             auto r = getLocalBounds().reduced (12, 4);

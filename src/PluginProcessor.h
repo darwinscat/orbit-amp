@@ -183,8 +183,8 @@ public:
 
     /** The per-stage DSP load, orbitcab's grammar: each stage's wall-clock as a smoothed % of
         the block's real-time budget. Indexed by Stage; the footer badge reads these. */
-    enum Stage { stTotal, stGate, stEq1, stBoost, stEq2, stPreamp, stReverb, stPower, stCab,
-                 stOut, numStages };
+    enum Stage { stTotal, stTuner, stGate, stEq1, stBoost, stEq2, stPreamp, stReverb, stPower,
+                 stCab, stLimit, stOut, numStages };
     std::atomic<float> stageLoad[numStages] {};
 
     /** The dropout evidence: every block that BLEW its budget counts, and each stage keeps the

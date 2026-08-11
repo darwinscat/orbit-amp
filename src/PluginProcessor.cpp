@@ -367,6 +367,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     juce::ScopedNoDenormals noDenormals;
     const auto blockStart = juce::Time::getHighResolutionTicks();
 
+    // The per-stage load meter, orbitcab's recipe verbatim: a cheap monotonic read around each
+    // stage, published at the tail as a smoothed share of the block's budget.
+    using PerfClock = std::chrono::steady_clock;
+    const auto tStart = PerfClock::now();
+    auto elapsedNs = [] (PerfClock::time_point a) noexcept
+    { return std::chrono::duration<double, std::nano> (PerfClock::now() - a).count(); };
+    double nsStage[numStages] {};
+
     // Clear any output channel the host gave us beyond what the input carries.
     for (auto ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, buffer.getNumSamples());
@@ -386,7 +394,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     // The tuner listens HERE — the raw input (or the loop standing in for it), before any block
     // colours it.
-    tunerTap.write (buffer.getReadPointer (0), buffer.getNumSamples());
+    { const auto a = PerfClock::now();
+      tunerTap.write (buffer.getReadPointer (0), buffer.getNumSamples());
+      nsStage[stTuner] = elapsedNs (a); }
 
     updateEqSettings();
     updateReverbSettings();
@@ -394,14 +404,6 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     auto* const* channels = buffer.getArrayOfWritePointers();
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
-
-    // The per-stage load meter, orbitcab's recipe verbatim: a cheap monotonic read around each
-    // stage, published at the tail as a smoothed share of the block's budget.
-    using PerfClock = std::chrono::steady_clock;
-    const auto tStart = PerfClock::now();
-    auto elapsedNs = [] (PerfClock::time_point a) noexcept
-    { return std::chrono::duration<double, std::nano> (PerfClock::now() - a).count(); };
-    double nsStage[numStages] {};
 
     // MONO by default: a guitar chain is one signal, and running the WaveNets per channel on a
     // duplicated input was paying twice for the same answer. The whole chain works channel 0;
@@ -557,8 +559,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // The safety after the master's hand: nothing downstream of here touches gain, so the
         // ceiling it enforces is the ceiling that leaves the box. The meter reads AFTER it —
         // the truth on the rail is the truth at the jack.
-        limiter.process (channels, nch, numSamples,
-                         limiterOnParam->load() > 0.5f, limiterCeilParam->load());
+        { const auto a = PerfClock::now();
+          limiter.process (channels, nch, numSamples,
+                           limiterOnParam->load() > 0.5f, limiterCeilParam->load());
+          nsStage[stLimit] = elapsedNs (a); }
         limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
 
         // The mono chain becomes the stereo output HERE — one copy, after everything.
