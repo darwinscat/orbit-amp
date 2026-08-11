@@ -236,7 +236,7 @@ protected:
     {
         auto h = headerArea();
         if (! titleInBorder)  h.removeFromLeft (titleWidth + headerGap);
-        if (! switchInBorder) h.removeFromRight (switchWidth + headerGap);
+        if (! switchInBorder) h.removeFromRight (switchW + headerGap);
         return h;
     }
 
@@ -294,9 +294,9 @@ private:
 
     /** Anything riding the top border needs room above the line for its own height, so the drawn
         frame starts lower than the component. Zero when nothing rides it. */
-    static constexpr int topInset()
+    int topInset() const
     {
-        return (titleInBorder || switchInBorder) ? switchHeight / 2 + 1 : 0;
+        return (titleInBorder || switchInBorder) ? switchH / 2 + 1 : 0;
     }
 
     juce::Rectangle<int> boxArea() const { return getLocalBounds().withTrimmedTop (topInset()); }
@@ -317,7 +317,7 @@ private:
         const int w = juce::roundToInt (theme::trackedWidth (title.toUpperCase(),
                                                              theme::displayFont (titleHeight), 0.15f)) + 1;
 
-        return juce::Rectangle<int> (0, 0, w, juce::jmax (switchHeight, (int) titleHeight + 6))
+        return juce::Rectangle<int> (0, 0, w, juce::jmax (switchH, (int) titleHeight + 6))
                  .withCentre ({ boxArea().getX() + borderInset + w / 2, boxArea().getY() });
     }
 
@@ -326,11 +326,11 @@ private:
         if (! switchInBorder)
         {
             auto h = headerArea();
-            return h.removeFromRight (switchWidth).withSizeKeepingCentre (switchWidth, switchHeight);
+            return h.removeFromRight (switchW).withSizeKeepingCentre (switchW, switchH);
         }
 
-        return juce::Rectangle<int> (0, 0, switchWidth, switchHeight)
-                 .withCentre ({ boxArea().getRight() - borderInset - switchWidth / 2, boxArea().getY() });
+        return juce::Rectangle<int> (0, 0, switchW, switchH)
+                 .withCentre ({ boxArea().getRight() - borderInset - switchW / 2, boxArea().getY() });
     }
 
     juce::Colour borderColour() const
@@ -376,6 +376,27 @@ protected:
     /** The title's font height. Panel-size blocks keep the default; zoom faces raise it to
         reading size — a magnified block must not whisper its own name. */
     float titleHeight = labelHeight;
+
+    /** The frame switch's size — the zoom scales it up with the title: on a full-panel face the
+        one control the frame owns must be sized like a control. */
+    int switchW = switchWidth;
+    int switchH = switchHeight;
+
+public:
+    // The reading-size metrics every zoomed face shares — ONE constant, not a per-block opinion.
+    static constexpr float zoomTitleHeight = 16.0f;
+    static constexpr int   zoomSwitchW     = 42;
+    static constexpr int   zoomSwitchH     = 22;
+
+    /** Zoomed faces grow their frame furniture; back on the overview it shrinks home. */
+    void setZoomed (bool z)
+    {
+        titleHeight = z ? zoomTitleHeight : labelHeight;
+        switchW     = z ? zoomSwitchW : switchWidth;
+        switchH     = z ? zoomSwitchH : switchHeight;
+        resized();
+        repaint();
+    }
 
 private:
 

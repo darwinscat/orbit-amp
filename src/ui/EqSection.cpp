@@ -393,7 +393,6 @@ void EqSection::showPresets (juce::Point<int> screenPos)
     };
 
     juce::PopupMenu m;
-    m.addSectionHeader ("EQ " + juce::String (link + 1));
     m.addItem (1, "Flat", true, linkIsFlat());
     m.addSeparator();
 
@@ -734,7 +733,7 @@ void EqSection::layOut (juce::Rectangle<int> content)
                           .withSizeKeepingCentre (30, 16));
         combo.setBounds (juce::Rectangle<int> (cell.getX(), sw.getBottom(),
                                                cell.getWidth(), freq.getY() - sw.getBottom())
-                              .withSizeKeepingCentre (98, readoutH).translated (0, 6));
+                              .withSizeKeepingCentre (98, readoutH).translated (0, 3));
     };
 
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox, freqReadout[4]);

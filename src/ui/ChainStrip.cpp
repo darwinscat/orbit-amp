@@ -59,11 +59,11 @@ public:
         if (sw == nullptr)
             return;
 
-        const int w = narrow() ? 16 : ZoneSwitch::designWidth;
-        const int h = narrow() ? 9  : ZoneSwitch::designHeight;
+        const int w = narrow() ? 20 : 26;
+        const int h = narrow() ? 11 : 14;
 
         sw->setBounds (getLocalBounds().reduced (narrow() ? 4 : pad, pad)
-                           .removeFromTop (ZoneSwitch::designHeight).removeFromRight (w).withHeight (h));
+                           .removeFromTop (h).removeFromRight (w).withHeight (h));
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -116,10 +116,10 @@ public:
 
         auto area = getLocalBounds().reduced (narrow() ? 4 : pad, pad);
 
-        auto top = area.removeFromTop (11);
+        auto top = area.removeFromTop (14);
         g.setColour (accent);
         theme::drawTracked (g, name.toUpperCase(), top.toFloat(),
-                            theme::displayFont (narrow() ? 6.0f : 7.0f), narrow() ? 0.06f : 0.12f,
+                            theme::displayFont (narrow() ? 8.0f : 10.0f), narrow() ? 0.06f : 0.12f,
                             juce::Justification::centredLeft);
 
         if (caption != nullptr)
@@ -241,47 +241,9 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
         return thumbs[(size_t) link].get();
     };
 
-    // The tuner: no switch — it does nothing to the signal there could be a switch about. The
-    // needle is the whole preview, reading the same ear the zoomed tuner reads.
-    {
-        auto* t = make (ChainLink::tuner, "Tuner", theme::violet, {});
-
-        const auto& ear = amp.tunerEar;
-
-        t->caption = [&ear]
-        {
-            // Silence earns an empty line, not a dash — the display face owes us no dash, and a
-            // multi-byte one through a plain char* reads as garbage anyway.
-            if (! ear.live())
-                return juce::String();
-
-            const auto note = ear.nearestNote();
-            return juce::String (core::PitchTracker::noteName (note.midi))
-                     + juce::String (core::PitchTracker::noteOctave (note.midi));
-        };
-
-        t->preview = [&ear] (juce::Graphics& g, juce::Rectangle<int> box)
-        {
-            const auto r = box.toFloat().reduced (3.0f, 4.0f);
-            const float mid = r.getBottom() - 4.0f;
-
-            for (int c = -50; c <= 50; c += 10)
-            {
-                const float x = r.getX() + r.getWidth() * (float) (c + 50) / 100.0f;
-                const float h = c == 0 ? 14.0f : 6.0f;
-                g.setColour (c == 0 ? theme::hair2 : theme::hair);
-                g.fillRect (juce::Rectangle<float> (x - 0.5f, mid - h, 1.0f, h));
-            }
-
-            if (! ear.live())
-                return;
-
-            const float x = r.getX()
-                          + r.getWidth() * (juce::jlimit (-50.0f, 50.0f, ear.needle()) + 50.0f) / 100.0f;
-            g.setColour (ear.green() ? juce::Colour (0xff5fc97a) : theme::tx);
-            g.fillRoundedRectangle (x - 1.0f, mid - 18.0f, 2.0f, 21.0f, 1.0f);
-        };
-    }
+    // No tuner thumb: the full-width TunerStrip by the footer is the tuner's one home — the
+    // needle lane there is better at the job than a half-lane tile ever was. The zoom face
+    // still exists; the strip below opens it.
 
     // The gate, indicated the way gates are: the key level running along a scale with both
     // decision marks on it — where it opens, where it closes — and the fill dimming while the
@@ -532,7 +494,8 @@ ChainStrip::~ChainStrip() = default;
 void ChainStrip::setActive (std::optional<ChainLink> link)
 {
     for (int i = 0; i < numChainLinks; ++i)
-        thumbs[(size_t) i]->setLit (link.has_value() && (int) *link == i);
+        if (thumbs[(size_t) i] != nullptr)
+            thumbs[(size_t) i]->setLit (link.has_value() && (int) *link == i);
 }
 
 void ChainStrip::timerCallback()
@@ -598,7 +561,8 @@ void ChainStrip::timerCallback()
     }
 
     for (auto& t : thumbs)
-        t->repaint();
+        if (t != nullptr)
+            t->repaint();
 }
 
 void ChainStrip::resized()
@@ -606,14 +570,22 @@ void ChainStrip::resized()
     // Weighted lanes: a service link takes half a tone link's width, and the unit falls out of
     // whatever the weights add up to.
     float units = 0.0f;
+    int   present = 0;
     for (int i = 0; i < numChainLinks; ++i)
-        units += chainLinkWeight ((ChainLink) i);
+        if (thumbs[(size_t) i] != nullptr)
+        {
+            units += chainLinkWeight ((ChainLink) i);
+            ++present;
+        }
 
-    const float unit = ((float) getWidth() - (float) thumbGap * (numChainLinks - 1)) / units;
+    const float unit = ((float) getWidth() - (float) thumbGap * (present - 1)) / units;
 
     float x = 0.0f;
     for (int i = 0; i < numChainLinks; ++i)
     {
+        if (thumbs[(size_t) i] == nullptr)
+            continue;
+
         const float w = unit * chainLinkWeight ((ChainLink) i);
         thumbs[(size_t) i]->setBounds (juce::Rectangle<float> (x, 0.0f, w, (float) getHeight()).toNearestInt());
         x += w + (float) thumbGap;
@@ -625,10 +597,22 @@ void ChainStrip::paint (juce::Graphics& g)
     // The flow marks in the gaps — the strip is a signal path, not a row of tiles.
     g.setColour (theme::txFaint);
 
-    for (int i = 1; i < numChainLinks; ++i)
+    const Thumb* prev = nullptr;
+    for (int i = 0; i < numChainLinks; ++i)
     {
-        const auto left  = thumbs[(size_t) (i - 1)]->getBounds();
-        const auto right = thumbs[(size_t) i]->getBounds();
+        if (thumbs[(size_t) i] == nullptr)
+            continue;
+
+        const auto* curr = thumbs[(size_t) i].get();
+        if (prev == nullptr)
+        {
+            prev = curr;
+            continue;
+        }
+
+        const auto left  = prev->getBounds();
+        const auto right = curr->getBounds();
+        prev = curr;
 
         const float cx = (float) (left.getRight() + right.getX()) * 0.5f;
         const float cy = (float) getHeight() * 0.5f;

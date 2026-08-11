@@ -21,7 +21,6 @@ public:
         : BlockFrame ("EQ " + juce::String (link + 1), Kind::dsp),
           eq (s, link, outDb, tap, std::move (sampleRate))
     {
-        titleHeight = 16.0f;   // a zoom face states its name at reading size
         eq.addTo (*this);
         attachPower (*s.getParameter (params::eqOn (link)));
     }
