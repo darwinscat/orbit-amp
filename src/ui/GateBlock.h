@@ -2,6 +2,7 @@
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
+#include "MeterRail.h"
 #include "Knob.h"
 #include "StepSwitch.h"
 
@@ -247,7 +248,6 @@ private:
 
     void paintContent (juce::Graphics& g) override
     {
-        const bool  closed    = pressureDb.load() < -1.0f;
         const float labelFont = wellLabelFont();
 
         heading (g, decayArea, "DECAY");
@@ -264,14 +264,11 @@ private:
             for (float db = -60.0f; db < -0.5f; db += 20.0f)
                 g.fillRect (r.getX() + 4.0f, dbToY (r, db), r.getWidth() - 8.0f, 1.0f);
 
-            const float ly = dbToY (r, levelDb);
-            if (ly < r.getBottom() - 1.0f)
-            {
-                // Dim while the gate is holding: the level is still THERE — the gate is a VCA,
-                // not a truth about the input — but the face says it is not getting through.
-                g.setColour (theme::violet.withAlpha (closed ? 0.35f : 0.85f));
-                g.fillRoundedRectangle (r.withTop (ly).reduced (2.0f), theme::radiusSm);
-            }
+            // The family rail, same as the sliver: dB-anchored violet-to-orange, and the gate's
+            // hold told by DRAINING THE COLOUR — the level is still THERE (the gate is a VCA,
+            // not a truth about the input), but it goes grey while it is not getting through.
+            meterrail::paintFill (g, r.reduced (2.0f), dbToY (r, levelDb),
+                                  juce::jlimit (0.0f, 1.0f, -pressureDb.load() / 40.0f));
 
             // While learning, the running maximum walks the scale in the tuner's green — the
             // threshold-to-be, being measured.
