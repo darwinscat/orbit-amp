@@ -15,7 +15,8 @@ class GateBadge final : public BlockFrame,
 {
 public:
     GateBadge (juce::RangedAudioParameter& gateOnParam, const std::atomic<float>& pressureDbSource)
-        : BlockFrame ("Gate", Kind::dsp), pressureDb (pressureDbSource)
+        : BlockFrame ("Gate", Kind::dsp, false /*no switch — the menu still has the power*/),
+          pressureDb (pressureDbSource)
     {
         showTitle = false;   // the name goes INSIDE the box, not on the border
         attachPower (gateOnParam);
@@ -29,7 +30,7 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        if (! e.mods.isPopupMenu() && ! switchArea().contains (e.getPosition()))
+        if (! e.mods.isPopupMenu())
         {
             if (onOpen != nullptr)
                 onOpen();
@@ -48,7 +49,9 @@ private:
 
         if (depth > 0.01f)
         {
-            g.setColour (juce::Colour (0xffe0503c).withAlpha (0.85f * depth));
+            // SOLID, interpolated toward the brand orange by depth — never a translucent orange
+            // wash (that rots to brick on this panel); the fill is opaque at every depth.
+            g.setColour (theme::dspTop.interpolatedWith (theme::orange, depth));
             g.fillRoundedRectangle (boxArea().toFloat().reduced (theme::blockBorder + 1.0f),
                                     theme::radiusMd - 2.0f);
         }

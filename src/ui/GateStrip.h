@@ -145,8 +145,6 @@ public:
         swallowUp = false;
         dragging  = false;
         pressY    = e.position.y;
-        pressOnTrim = gripRect().contains (e.position);
-        pressOnTh   = ! pressOnTrim && onP.getValue() > 0.5f && thGripRect().contains (e.position);
     }
 
     void showPresetMenu (juce::Point<int> screenPos)
@@ -209,12 +207,25 @@ public:
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
-        // On the grip: type the number. Anywhere else on the column: the runner goes home.
-        // Either way the release must not read as another lens click.
+        // The convention: DOUBLE-click a grip to type its number; a double anywhere else sends
+        // the volume runner home. The release must not read as another click.
         swallowUp = true;
 
-        if (gripRect().contains (e.position) || thGripRect().contains (e.position))
-            return;   // the single click already opened the editor — the double adds nothing
+        if (gripRect().contains (e.position))
+        {
+            gripEd.open (*this, gripRect().toNearestInt(),
+                         trimP.convertFrom0to1 (trimP.getValue()), theme::orange,
+                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
+            return;
+        }
+
+        if (onP.getValue() > 0.5f && thGripRect().contains (e.position))
+        {
+            gripEd.open (*this, thGripRect().toNearestInt(),
+                         param.convertFrom0to1 (param.getValue()), theme::lilac,
+                         [this] (float v) { threshold->setValueAsCompleteGesture (v); });
+            return;
+        }
 
         trim->setValueAsCompleteGesture (0.0f);
     }
@@ -273,23 +284,6 @@ public:
         {
             (grabbedTrim ? trim : threshold)->endGesture();
             dragging = false;
-            return;
-        }
-
-        // A clean click on a grip asks for its NUMBER, not for the lens.
-        if (pressOnTrim)
-        {
-            gripEd.open (*this, gripRect().toNearestInt(),
-                         trimP.convertFrom0to1 (trimP.getValue()), theme::orange,
-                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
-            return;
-        }
-
-        if (pressOnTh)
-        {
-            gripEd.open (*this, thGripRect().toNearestInt(),
-                         param.convertFrom0to1 (param.getValue()), theme::lilac,
-                         [this] (float v) { threshold->setValueAsCompleteGesture (v); });
             return;
         }
 
@@ -397,8 +391,6 @@ private:
     bool  dragging    = false;
     bool  grabbedTrim = false;
     bool  swallowUp   = false;
-    bool  pressOnTrim = false;
-    bool  pressOnTh   = false;
     float pressY      = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateStrip)

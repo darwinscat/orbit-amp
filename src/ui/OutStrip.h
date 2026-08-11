@@ -78,9 +78,8 @@ public:
             return;
         }
 
-        swallow     = false;
-        dragging    = false;
-        pressOnGrip = gripRect().contains (e.position);
+        swallow  = false;
+        dragging = false;
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
@@ -108,20 +107,22 @@ public:
             trim->endGesture();
             dragging = false;
             repaint();
-            return;
         }
-
-        // A clean click on the grip asks for its NUMBER.
-        if (pressOnGrip)
-            gripEd.open (*this, gripRect().toNearestInt(),
-                         trimP.convertFrom0to1 (trimP.getValue()), theme::orange,
-                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
     }
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
-        if (swallow || gripRect().contains (e.position))
-            return;   // the single click already opened the editor
+        if (swallow)
+            return;
+
+        // The convention: DOUBLE-click the grip to type its number; elsewhere — home.
+        if (gripRect().contains (e.position))
+        {
+            gripEd.open (*this, gripRect().toNearestInt(),
+                         trimP.convertFrom0to1 (trimP.getValue()), theme::orange,
+                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
+            return;
+        }
 
         trim->setValueAsCompleteGesture (0.0f);
     }
@@ -188,9 +189,8 @@ private:
     float levelDb = -90.0f;
     float holdDb  = -90.0f;
     int   holdAge = 0;
-    bool  dragging    = false;
-    bool  swallow     = false;
-    bool  pressOnGrip = false;
+    bool  dragging = false;
+    bool  swallow  = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutStrip)
 };
