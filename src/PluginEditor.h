@@ -10,6 +10,7 @@
 #include "ui/OutStrip.h"
 #include "ui/TallyBadge.h"
 #include "ui/LearnOverlay.h"
+#include "ui/DragRuler.h"
 #include "ui/TunerStrip.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 #include "ui/SetupPanel.h"
@@ -64,6 +65,8 @@ private:
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player
     LearnOverlay  learnOverlay;     // the LEARN measurement, projected large over the faceplate
+    DragRuler     inRuler;          // the IN trim's own ladder, summoned by the hand
+    DragRuler     outRuler;         // the OUT trim's, mirrored
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;            // the Setup overlay — last member, so it sits on top
 

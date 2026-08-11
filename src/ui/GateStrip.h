@@ -52,6 +52,9 @@ public:
     /** The menu's OPEN item — the door to the zoom, now that the badge's click means MENU. */
     std::function<void()> onOpenZoom;
 
+    /** The trim runner entered/left the hand — the editor slides the drag ruler out beside us. */
+    std::function<void (bool)> onTrimDrag;
+
     /** The big LEARN overlay's hooks: measurement started; measurement spoke its verdict. */
     std::function<void()>             onLearnBegin;
     std::function<void (juce::String)> onLearnDone;
@@ -318,6 +321,9 @@ public:
             // a hold that keeps decaying under the drag would melt the ghost mid-thought.
             trimStartDb = trimP.convertFrom0to1 (trimP.getValue());
             holdAtGrab  = holdDb;
+
+            if (grabbedTrim && onTrimDrag != nullptr)
+                onTrimDrag (true);
         }
 
         if (dragging)
@@ -340,6 +346,8 @@ public:
         if (dragging)
         {
             (grabbedTrim ? trim : threshold)->endGesture();
+            if (grabbedTrim && onTrimDrag != nullptr)
+                onTrimDrag (false);
             dragging = false;
             return;
         }

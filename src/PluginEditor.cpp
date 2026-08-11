@@ -53,6 +53,20 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     gateStrip.onLearnBegin  = [this] { learnOverlay.begin(); };
     gateStrip.onLearnDone   = [this] (const juce::String& v) { learnOverlay.finish (v); };
     addChildComponent (learnOverlay);
+
+    // The rulers the trims summon: IN's stands right of its column, OUT's left of its — over
+    // whatever lives there, gone the moment the hand opens.
+    inRuler.ticksOnLeft   = true;
+    outRuler.ticksOnLeft  = false;
+    inRuler.currentDb  = [this] { auto* p = amp.apvts.getParameter (params::inTrim);
+                                  return p->convertFrom0to1 (p->getValue()); };
+    outRuler.currentDb = [this] { auto* p = amp.apvts.getParameter (params::outTrim);
+                                  return p->convertFrom0to1 (p->getValue()); };
+    addChildComponent (inRuler);
+    addChildComponent (outRuler);
+
+    gateStrip.onTrimDrag = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
+    outStrip.onTrimDrag  = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
     limitBadge.onOpen = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
 
     // And the open lens closes on any click — the tuner has nothing to operate, only to see.
@@ -179,6 +193,13 @@ void AmpEditor::resized()
     limitBadge.setBounds (margin + FaceplateView::designWidth - TallyBadge::designWidth, tunerY,
                           TallyBadge::designWidth, TunerStrip::designHeight);
     limitBadge.setTransform (zoom);
+
+    // The summoned rulers: same vertical extent as their columns, standing toward the centre.
+    inRuler.setBounds (margin + GateStrip::designWidth + 2, faceplateY, 56, FaceplateView::designHeight);
+    inRuler.setTransform (zoom);
+    outRuler.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth - 58, faceplateY,
+                        56, FaceplateView::designHeight);
+    outRuler.setTransform (zoom);
 
     // The learn sheet: half the plugin, centred over the faceplate.
     learnOverlay.setBounds (margin + FaceplateView::designWidth / 6, faceplateY + 60,
