@@ -4,6 +4,7 @@
 #include "../core/EqLink.h"
 #include "ChainLink.h"
 
+#include <felitronics/analysis/SpectrumPane.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <array>
@@ -54,6 +55,10 @@ private:
     /** Drawing only, designed from the current parameter values on the strip's own clock — the
         playing links belong to the audio thread and are never read from here. */
     std::array<core::EqLink, (size_t) params::numEqLinks> eqDisplay;
+
+    /** The thumbs' own spectrum readers — sipping the same taps the zoom sips, which the tap's
+        starve-tolerant mailbox makes safe: two readers simply share the frames. */
+    std::array<felitronics::analysis::SpectrumPane, (size_t) params::numEqLinks> eqSpecPane;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainStrip)
 };

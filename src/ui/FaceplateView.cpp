@@ -10,8 +10,10 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     : tuner (processor.tunerEar),
       gate (processor.apvts, processor.gateMeterDb, processor.gateKeyDb,
             [&processor] { return processor.demo.isPlaying(); }),
-      eq1 (processor.apvts, 0, processor.eqOutDb[0]),
-      eq2 (processor.apvts, 1, processor.eqOutDb[1]),
+      eq1 (processor.apvts, 0, processor.eqOutDb[0], processor.eqSpectrumTap[0],
+           [&processor] { return processor.currentSampleRate(); }),
+      eq2 (processor.apvts, 1, processor.eqOutDb[1], processor.eqSpectrumTap[1],
+           [&processor] { return processor.currentSampleRate(); }),
       boost (processor, processor.boost, "Boost", params::boostId),
       preamp (processor, processor.preamp, "Preamp", params::preampId),
       reverb (processor.apvts), power (processor.apvts), cabinet (processor.apvts)

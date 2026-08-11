@@ -12,6 +12,7 @@
 #include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
 
+#include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/appkit/CompareHistory.h>
 #include <felitronics/dynamics/NoiseGate.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -173,6 +174,14 @@ public:
     /** Each EQ link's output peak this block, in dB — what its LEVEL column meters. Same
         writer, same readers. */
     std::array<std::atomic<float>, params::numEqLinks> eqOutDb { -90.0f, -90.0f };
+
+    /** Each EQ link's post-link analyser tap — the spectrum behind its curve. Lock-free SPSC
+        with a starve-tolerant reader, so the zoom and the thumb may both sip from it. */
+    std::array<felitronics::analysis::RollingSpectrumTap, params::numEqLinks> eqSpectrumTap;
+
+    /** One analysis resolution for every consumer of the taps: mixed orders would make the tap
+        force-republish on every alternating pull. */
+    static constexpr int eqSpectrumOrder = 11;   // 2048
 
     /** The raw input's peak this block, in dB — the level the gate KEYS off, for the meter the
         thresholds are drawn on. Same writer, same readers. */

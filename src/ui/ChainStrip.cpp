@@ -335,15 +335,46 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
         };
     }
 
-    // The EQ links: the curve is the whole story, told by a display stack fed from the parameters
-    // on the strip's clock.
+    // The EQ links: the curve, and — while the link is switched on — the live spectrum under it,
+    // read from the same tap the zoom reads.
     for (int l = 0; l < params::numEqLinks; ++l)
     {
         auto* t = make ((ChainLink) (l == 0 ? ChainLink::eq1 : ChainLink::eq2),
                         "EQ " + juce::String (l + 1), theme::violet, params::eqOn (l));
 
-        t->preview = [this, l] (juce::Graphics& g, juce::Rectangle<int> box)
+        auto* onParam = s.getRawParameterValue (params::eqOn (l));
+
+        t->preview = [this, l, onParam] (juce::Graphics& g, juce::Rectangle<int> box)
         {
+            if (onParam->load() > 0.5f)
+            {
+                const auto r = box.toFloat();
+
+                felitronics::analysis::PlotMap pm;
+                pm.width      = r.getWidth();
+                pm.height     = r.getHeight();
+                pm.plotBottom = r.getHeight();
+                pm.freqMin    = 20.0;
+                pm.freqMax    = 20000.0;
+                pm.specTop    = 0.0;
+                pm.specBottom = -90.0;
+
+                juce::Path fill;
+                fill.startNewSubPath (r.getX(), r.getBottom());
+
+                eqSpecPane[(size_t) l].buildColumns (pm, amp.currentSampleRate(), 4.5, 1000.0,
+                                                     [&] (int, float x, float yFill, float)
+                                                     {
+                                                         fill.lineTo (r.getX() + x, r.getY() + yFill);
+                                                     });
+
+                fill.lineTo (r.getRight(), r.getBottom());
+                fill.closeSubPath();
+
+                g.setColour (theme::violet.withAlpha (0.16f));
+                g.fillPath (fill);
+            }
+
             drawMiniCurve (g, box, [this, l] (double hz) { return eqDisplay[(size_t) l].magnitudeDb (hz); },
                            theme::violet);
         };
@@ -517,6 +548,23 @@ void ChainStrip::timerCallback()
         set.lpfSlope = slope (raw (params::eqLpfSlope (l)));
 
         eqDisplay[(size_t) l].setSettings (set);
+    }
+
+    // The thumbs' spectrum readers sip their taps — only for links that are ON, since only their
+    // thumbs draw it.
+    for (int l = 0; l < params::numEqLinks; ++l)
+    {
+        if (amp.apvts.getRawParameterValue (params::eqOn (l))->load() > 0.5f)
+        {
+            int order = 0;
+            auto& pane = eqSpecPane[(size_t) l];
+
+            if (amp.eqSpectrumTap[(size_t) l].tryPull (pane.frameInput(), order)
+                 && order == AmpProcessor::eqSpectrumOrder)
+                pane.ingest (order);
+            else
+                pane.starve();
+        }
     }
 
     // The power amp recolours with what is loaded into it, the same truth-telling the block does.

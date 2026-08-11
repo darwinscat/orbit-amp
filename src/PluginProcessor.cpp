@@ -212,6 +212,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& eq : eqLinks)
         eq.prepare (sampleRate, channels);
 
+    for (auto& tap : eqSpectrumTap)
+        tap.reset();
+
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
 
     // Seeded from the parameter: a session saved gate-ON has to start already gated, not fade in
@@ -360,15 +363,23 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     // The EQ links are links of their own, with their own switches: eq1 decides what reaches the
     // first nonlinearity, eq2 colours what the boost made before the preamp distorts it again.
-    // Each link's output peak feeds its LEVEL column — measured at the link's place in the
-    // chain whether it is processing or passing through, because the meter's question is
-    // "what leaves this point", not "what did the EQ do".
+    // Each link's output peak feeds its LEVEL column, and its samples feed the analyser tap —
+    // both measured at the link's place in the chain whether it is processing or passing
+    // through, because the meters' question is "what leaves this point", not "what did the EQ
+    // do".
     const auto meterEqOut = [this, &buffer, numChannels, numSamples] (int l)
     {
         float peak = 0.0f;
         for (int c = 0; c < numChannels; ++c)
             peak = juce::jmax (peak, buffer.getMagnitude (c, 0, numSamples));
         eqOutDb[(size_t) l].store (juce::Decibels::gainToDecibels (peak, -90.0f));
+
+        auto& tap = eqSpectrumTap[(size_t) l];
+        const float* d = buffer.getReadPointer (0);
+        for (int i = 0; i < numSamples; ++i)
+            tap.push (d[i]);
+        tap.publishIfDue (eqSpectrumOrder,
+                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
     };
 
     if (eqParams[0].on->load() > 0.5f)

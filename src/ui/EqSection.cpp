@@ -144,10 +144,46 @@ private:
 
 //==============================================================================
 EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
-                      const std::atomic<float>& outDb)
-    : state (s), link (eqLink)
+                      const std::atomic<float>& outDb,
+                      felitronics::analysis::RollingSpectrumTap& spectrumTap,
+                      std::function<double()> sampleRateGetter)
+    : state (s), link (eqLink), tap (spectrumTap), sampleRate (std::move (sampleRateGetter))
 {
     display.prepare (displayRate, 1);
+
+    // The spectrum behind everything: the signal is the ground the response stands on.
+    curve.paintSpectrum = [this] (juce::Graphics& g, juce::Rectangle<float> r)
+    {
+        felitronics::analysis::PlotMap pm;
+        pm.width      = r.getWidth();
+        pm.height     = r.getHeight();
+        pm.plotBottom = r.getHeight();
+        pm.freqMin    = 20.0;
+        pm.freqMax    = 20000.0;
+        pm.specTop    = 0.0;
+        pm.specBottom = -90.0;
+
+        juce::Path fill, peak;
+        fill.startNewSubPath (r.getX(), r.getBottom());
+        bool first = true;
+
+        pane.buildColumns (pm, sampleRate(), 4.5, 1000.0,
+                           [&] (int, float x, float yFill, float yPeak)
+                           {
+                               fill.lineTo (r.getX() + x, r.getY() + yFill);
+
+                               if (first) { peak.startNewSubPath (r.getX() + x, r.getY() + yPeak); first = false; }
+                               else       peak.lineTo (r.getX() + x, r.getY() + yPeak);
+                           });
+
+        fill.lineTo (r.getRight(), r.getBottom());
+        fill.closeSubPath();
+
+        g.setColour (theme::violet.withAlpha (0.12f));
+        g.fillPath (fill);
+        g.setColour (theme::violet.withAlpha (0.30f));
+        g.strokePath (peak, juce::PathStrokeType (1.0f));
+    };
 
     level = std::make_unique<LevelColumn> (outDb, *state.getParameter (params::eqLevel (link)));
 
@@ -208,6 +244,28 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
 }
 
 EqSection::~EqSection() = default;
+
+void EqSection::setSpectrumRunning (bool shouldRun)
+{
+    if (shouldRun)
+        startTimerHz (30);
+    else
+        stopTimer();
+}
+
+void EqSection::timerCallback()
+{
+    // Pull a frame if one is waiting; a mismatched order is discarded (another consumer switched
+    // resolutions — cannot happen while everyone agrees on spectrumOrder, but the contract stands).
+    int order = 0;
+
+    if (tap.tryPull (pane.frameInput(), order) && order == spectrumOrder)
+        pane.ingest (order);
+    else
+        pane.starve();
+
+    curve.repaint();
+}
 
 float EqSection::raw (const juce::String& id) const
 {

@@ -53,6 +53,10 @@ public:
         separated from how the rest is coloured. Unset = no walls. */
     std::function<double (double)> filterMagnitudeDb;
 
+    /** The live spectrum, painted first inside the well — behind the walls, behind the curve:
+        the signal is the ground the response stands on. Unset = no spectrum. */
+    std::function<void (juce::Graphics&, juce::Rectangle<float>)> paintSpectrum;
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat();
@@ -72,6 +76,9 @@ public:
             g.reduceClipRegion (well);
 
             const int w = juce::jmax (2, getWidth());
+
+            if (paintSpectrum != nullptr)
+                paintSpectrum (g, r);
 
             // The walls first: the area between 0 dB and the filters' own response, filled in the
             // cut's red — solid-dark over the near-black well, so it stays red instead of mudding.

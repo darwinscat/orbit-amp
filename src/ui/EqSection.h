@@ -6,6 +6,8 @@
 #include "Knob.h"
 #include "ZoneSwitch.h"
 
+#include <felitronics/analysis/RollingSpectrumTap.h>
+#include <felitronics/analysis/SpectrumPane.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <atomic>
@@ -27,11 +29,13 @@ namespace orbitamp
     NOT a Component: its widgets become children of the block, which places them via layOut().
     It keeps an EqLink of its own for DRAWING only, designed on the message thread — reading the
     playing link's coefficients would be a race. */
-class EqSection final
+class EqSection final : private juce::Timer
 {
 public:
-    EqSection (juce::AudioProcessorValueTreeState&, int link, const std::atomic<float>& outDb);
-    ~EqSection();
+    EqSection (juce::AudioProcessorValueTreeState&, int link, const std::atomic<float>& outDb,
+               felitronics::analysis::RollingSpectrumTap& spectrumTap,
+               std::function<double()> sampleRateGetter);
+    ~EqSection() override;
 
     /** Hands the widgets to the block that will place them. */
     void addTo (juce::Component& parent);
@@ -39,9 +43,13 @@ public:
     /** Places everything inside the block's content area. */
     void layOut (juce::Rectangle<int> content);
 
+    /** The spectrum only listens while the face is on screen — a hidden zoom costs nothing. */
+    void setSpectrumRunning (bool shouldRun);
+
 private:
     class LevelColumn;
 
+    void timerCallback() override;
     void refreshCurve();
     void refreshHandles();
     void handleDragged (int index, double hz, double db);
@@ -58,8 +66,13 @@ private:
     juce::AudioProcessorValueTreeState& state;
     const int link;
 
-    static constexpr double displayRate = 48000.0;
+    static constexpr double displayRate  = 48000.0;
+    static constexpr int spectrumOrder   = 11;      // must agree with every other tap consumer
     core::EqLink display;
+
+    felitronics::analysis::RollingSpectrumTap& tap;
+    felitronics::analysis::SpectrumPane        pane;
+    std::function<double()>                    sampleRate;
 
     EqCurve curve { [this] (double hz) { return display.magnitudeDb (hz); } };
 

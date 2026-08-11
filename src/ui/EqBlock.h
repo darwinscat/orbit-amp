@@ -16,14 +16,21 @@ namespace orbitamp
 class EqBlock final : public BlockFrame
 {
 public:
-    EqBlock (juce::AudioProcessorValueTreeState& s, int link, const std::atomic<float>& outDb)
-        : BlockFrame ("EQ " + juce::String (link + 1), Kind::dsp), eq (s, link, outDb)
+    EqBlock (juce::AudioProcessorValueTreeState& s, int link, const std::atomic<float>& outDb,
+             felitronics::analysis::RollingSpectrumTap& tap, std::function<double()> sampleRate)
+        : BlockFrame ("EQ " + juce::String (link + 1), Kind::dsp),
+          eq (s, link, outDb, tap, std::move (sampleRate))
     {
         eq.addTo (*this);
         attachPower (*s.getParameter (params::eqOn (link)));
     }
 
 private:
+    void visibilityChanged() override
+    {
+        eq.setSpectrumRunning (isVisible());
+    }
+
     void layOutContent (juce::Rectangle<int> area) override
     {
         eq.layOut (area);
