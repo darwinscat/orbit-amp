@@ -402,6 +402,10 @@ protected:
         its CONTENT (word, flood) do the talking. */
     float borderAlpha = 1.0f;
 
+    /** Whether this face is currently the magnified one — blocks that lay out differently at
+        reading size branch on it. */
+    bool zoomedFace = false;
+
 public:
     // The reading-size metrics every zoomed face shares — ONE constant, not a per-block opinion.
     static constexpr float zoomTitleHeight = 16.0f;
@@ -411,6 +415,7 @@ public:
     /** Zoomed faces grow their frame furniture; back on the overview it shrinks home. */
     void setZoomed (bool z)
     {
+        zoomedFace  = z;
         titleHeight = z ? zoomTitleHeight : labelHeight;
         switchW     = z ? zoomSwitchW : switchWidth;
         switchH     = z ? zoomSwitchH : switchHeight;

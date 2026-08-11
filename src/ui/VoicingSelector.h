@@ -49,6 +49,8 @@ public:
     /** A pick out of the list, or a step. */
     std::function<void (int index)> onPick;
 
+    float fontHeight = 8.0f;
+
     //==============================================================================
     void paint (juce::Graphics& g) override
     {
@@ -63,7 +65,7 @@ public:
 
         g.setColour (tint);
         theme::drawTracked (g, label(), cell.reduced (5.0f, 0.0f),
-                            theme::displayFont (8.0f), 0.04f, juce::Justification::centred);
+                            theme::displayFont (fontHeight), 0.04f, juce::Justification::centred);
 
         paintChevron (g, prevArea().toFloat(), true);
         paintChevron (g, nextArea().toFloat(), false);

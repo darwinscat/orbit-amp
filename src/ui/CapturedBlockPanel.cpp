@@ -7,32 +7,32 @@ namespace orbitamp
 
 CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
                                         const juce::String& title, const char* blockId)
-    : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId),
-      // The tone curve comes from the block itself — the same data its filters were designed from,
-      // resolved on the processor's pump. The scope repaints on its own clock, so it picks a move
-      // up within a frame or two.
-      scope (b.scope, b.ribbon, [this] (double hz) { return block.toneDb (hz); })
+    : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId)
 {
-    addAndMakeVisible (rawSwitch);
-    addAndMakeVisible (rawLabel);
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
-    addAndMakeVisible (scope);
-    addAndMakeVisible (scopeMode);
 
-    // Five ways of showing the same device. Which one reads best is not settled, so the choice is
-    // on the face rather than in the code.
-    scopeMode.setItems ({ "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" }, 0);
-    scopeMode.onChange = [this] (int i) { scope.setMode ((DeviceScope::Mode) i); };
-    scope.setSampleRate (amp.currentSampleRate());
+    device.fontHeight = 16.0f;   // the device's NAME is the face's headline, sized like one
 
-    rawSwitch.accent = theme::violet;
-    rawSwitch.attach (*amp.apvts.getParameter (params::rawId (blk)));
+    // Five ways of showing the same device, TOGETHER: one scope per way, a checkbox per scope,
+    // whichever are down tile the picture zone. The tone curve comes from the block itself —
+    // the same data its filters were designed from, resolved on the processor's pump.
+    static const char* const vizNames[numViz] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" };
 
-    rawLabel.setFont (theme::displayFont (7.0f));
-    rawLabel.setColour (juce::Label::textColourId, theme::txFaint);
-    rawLabel.setJustificationType (juce::Justification::centredRight);
-    rawLabel.setInterceptsMouseClicks (false, false);
+    for (int i = 0; i < numViz; ++i)
+    {
+        scopes[(size_t) i] = std::make_unique<DeviceScope> (
+            b.scope, b.ribbon, [this] (double hz) { return block.toneDb (hz); });
+        scopes[(size_t) i]->setMode ((DeviceScope::Mode) i);
+        scopes[(size_t) i]->setSampleRate (amp.currentSampleRate());
+        addChildComponent (*scopes[(size_t) i]);
+
+        auto& c = vizChecks[(size_t) i];
+        c.label = vizNames[i];
+        c.on = i == 0;   // SHAPE starts down, like the combo used to
+        c.onToggle = [this] { resized(); repaint(); };
+        addAndMakeVisible (c);
+    }
 
     attachPower (*amp.apvts.getParameter (params::blockOn (blk)));
 
@@ -69,7 +69,8 @@ CapturedBlockPanel::~CapturedBlockPanel() = default;
 
 void CapturedBlockPanel::deviceChanged()
 {
-    scope.setSampleRate (amp.currentSampleRate());
+    for (auto& sc : scopes)
+        sc->setSampleRate (amp.currentSampleRate());
 
     const auto* measured = block.measured();
     const auto  positions = block.gainPositions();
@@ -92,7 +93,9 @@ void CapturedBlockPanel::deviceChanged()
     device.setEntries (std::move (entries));
 
     caption = block.deviceName();
-    scope.setSpec (felitronics::appkit::parseDeviceSpec (block.circuit()));
+
+    // The circuit glyphs ride the FIRST picture only — five copies of the same badge is noise.
+    scopes[0]->setSpec (felitronics::appkit::parseDeviceSpec (block.circuit()));
 
     // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next
     // pack says for the next one. Detented where the pack has positions, continuous where it does
@@ -133,7 +136,7 @@ void CapturedBlockPanel::deviceChanged()
             for (const auto& p : m.positions)
                 labels.add (juce::String (p.label.empty() ? p.value : p.label).toUpperCase());
 
-            slot.steps = std::make_unique<StepSwitch>();
+            slot.steps = std::make_unique<VSwitch>();
             slot.steps->accent = theme::orange;
             slot.steps->setItems (labels, 0);
             addAndMakeVisible (*slot.steps);
@@ -200,7 +203,7 @@ void CapturedBlockPanel::buildSelectors()
         for (const auto& v : def.values)
             labels.add (v.toUpperCase());
 
-        sel.steps = std::make_unique<StepSwitch>();
+        sel.steps = std::make_unique<VSwitch>();
         sel.steps->accent = theme::orange;
         sel.steps->setItems (labels, 0);
         addAndMakeVisible (*sel.steps);
@@ -238,81 +241,218 @@ bool CapturedBlockPanel::hasNamedPositions (const namz::rig::Measured& m)
 
 void CapturedBlockPanel::layOutHeader (juce::Rectangle<int> area)
 {
-    device.setBounds (area);
+    device.setBounds (area.withTrimmedTop (6));   // the headline sits a touch lower
 }
 
 void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 {
-    // In a column the picture gets its fixed strip; zoomed across the whole panel it gets a third
-    // of the height instead — the zoom exists to look at things, not to inflate knobs.
-    scope.setBounds (area.removeFromBottom (juce::jmax (curveHeight, area.getHeight() / 3)));
-    area.removeFromBottom (gap / 2);
-    scopeMode.setBounds (area.removeFromBottom (modeRow).withSizeKeepingCentre (
-        juce::jmin (area.getWidth(), maxRowWidth), modeRow));
-    area.removeFromBottom (gap);
-
-    // Switches sit under the knobs rather than beside them: neither kind is a third amount. The
-    // device's own selecting controls go lowest — turning one loads a different capture, which is a
-    // bigger move than shaping the one you have.
-    const auto switchBounds = [&area]
+    // Two geometries, one face: the grand grid below is the ZOOM's — at overview size it made
+    // doll's-house knobs. The compact overview keeps the old row.
+    if (! zoomedFace)
     {
-        auto row = area.removeFromBottom (switchRow);
-        return row.withSizeKeepingCentre (juce::jmin (row.getWidth(), maxRowWidth), switchRow);
-    };
-
-    for (auto& sel : selectors)
-        if (sel.steps != nullptr)
-        {
-            sel.steps->setBounds (switchBounds());
-            area.removeFromBottom (gap / 2);
-        }
-
-    for (auto& slot : slots)
-        if (slot.steps != nullptr)
-        {
-            slot.steps->setBounds (switchBounds());
-            area.removeFromBottom (gap / 2);
-        }
-
-    // TEMPORARY, top right: the raw switch and its label.
-    {
-        auto row = area.removeFromTop (ZoneSwitch::designHeight);
-        rawSwitch.setBounds (row.removeFromRight (ZoneSwitch::designWidth));
-        row.removeFromRight (4);
-        rawLabel.setBounds (row.removeFromRight (28));
-        area.removeFromTop (gap / 2);
+        layOutCompact (area);
+        return;
     }
 
-    // The hero on the left, the measured knobs to its right. A device with neither leaves the space
-    // to the picture instead of to a gap. Both are capped: past a size a knob stops being easier to
-    // grab and starts being a balloon.
-    int smallCount = 0;
-    for (const auto& slot : slots)
-        if (slot.knob != nullptr)
-            ++smallCount;
+    // ---- the knob zone: the top third. GAIN is a full-height square on the left, always;
+    //      the measured knobs grid to its right in cells sized AS IF there were six, so a
+    //      two-knob device wears the same knobs a six-knob one does. ----
+    auto zone = area.removeFromTop (area.getHeight() / 3);
+    area.removeFromTop (gap);
 
-    const int side = juce::jmin (maxGainSide, juce::jmin (area.getHeight(),
-                                                          area.getWidth() * (smallCount > 0 ? 1 : 2) / 2));
-    auto left = area.removeFromLeft (juce::jmin (side, area.getWidth()));
-    const int gainSide = juce::jmin (maxGainSide, juce::jmin (left.getWidth(), left.getHeight()));
-    gain.setBounds (left.withSizeKeepingCentre (gainSide, gainSide));
+    const int gainSide = juce::jmin (maxGainSide, zone.getHeight());
+    gain.setBounds (zone.removeFromLeft (gainSide).withSizeKeepingCentre (gainSide, gainSide));
+    zone.removeFromLeft (knobGap);
 
-    if (smallCount > 0)
-        area.removeFromLeft (knobGap);
-
-    if (smallCount == 0)
-        return;
-    const int small = juce::jmin (maxKnobSide,
-                                  juce::jmin (area.getHeight(),
-                                              (area.getWidth() - (smallCount - 1) * knobGap) / smallCount));
-
-    auto row = area.withSizeKeepingCentre (small * smallCount + knobGap * (smallCount - 1), small);
+    std::vector<Knob*> knobs;
     for (auto& slot : slots)
         if (slot.knob != nullptr)
+            knobs.push_back (slot.knob.get());
+
+    std::vector<VSwitch*> switches;
+    for (auto& sel : selectors)
+        if (sel.steps != nullptr)
+            switches.push_back (sel.steps.get());
+    for (auto& slot : slots)
+        if (slot.steps != nullptr)
+            switches.push_back (slot.steps.get());
+
+    const int k = (int) knobs.size();
+
+    // The cell: a six-knob grid is three columns by two rows — that fit IS the size, whatever
+    // the actual count.
+    const int cell = juce::jmin (maxKnobSide,
+                                 juce::jmin ((zone.getWidth() - 2 * knobGap) / 3,
+                                             (zone.getHeight() - knobGap) / 2));
+
+    // Row shapes per count: staggered rows carry fewer and centre over the fuller one.
+    const auto rowsFor = [k] () -> std::vector<int>
+    {
+        switch (k)
         {
-            slot.knob->setBounds (row.removeFromLeft (small));
+            case 6:  return { 3, 3 };
+            case 5:  return { 2, 3 };
+            case 4:  return { 2, 2 };
+            case 3:  return { 1, 2 };
+            case 2:  return { 1, 1 };
+            case 1:  return { 1 };
+            default: return {};
+        }
+    };
+
+    const auto rows = rowsFor();
+    int gridCols = 0;
+    for (int n : rows)
+        gridCols = juce::jmax (gridCols, n);
+
+    const int gridW = gridCols > 0 ? gridCols * cell + (gridCols - 1) * knobGap : 0;
+
+    // Switches go RIGHT whenever the room right of the grid can take them — the fallback row
+    // under the knobs exists for the day a wide grid leaves no room.
+    const bool swRight = ! switches.empty()
+                      && zone.getWidth() - gridW - (gridW > 0 ? knobGap : 0) >= switchW;
+
+    auto grid = zone.removeFromLeft (juce::jmax (gridW, 1));
+
+    // The knobs, top row first; a staggered row centres over the widest.
+    {
+        size_t next = 0;
+        int y = grid.getY();
+
+        for (int rowN : rows)
+        {
+            const int rowW = rowN * cell + (rowN - 1) * knobGap;
+            int x = grid.getX() + (gridW - rowW) / 2;
+
+            for (int i = 0; i < rowN && next < knobs.size(); ++i)
+            {
+                knobs[next++]->setBounds (x, y, cell, cell);
+                x += cell + knobGap;
+            }
+
+            y += cell + knobGap;
+        }
+    }
+
+    if (! switches.empty())
+    {
+        if (swRight)
+        {
+            zone.removeFromLeft (knobGap);
+            auto col = zone.removeFromLeft (switchW);
+
+            for (auto* sw : switches)
+            {
+                sw->setBounds (col.removeFromTop (juce::jmin (col.getHeight(), sw->idealHeight())));
+                col.removeFromTop (gap);
+            }
+        }
+        else
+        {
+            // The fallback: a horizontal row of vertical switches under the grid.
+            auto row = juce::Rectangle<int> (grid.getX(), grid.getY() + 2 * cell + 2 * knobGap,
+                                             gridW, zone.getBottom() - (grid.getY() + 2 * cell + 2 * knobGap));
+            const int each = juce::jmax (1, (row.getWidth() - ((int) switches.size() - 1) * gap)
+                                                / (int) switches.size());
+
+            for (auto* sw : switches)
+            {
+                sw->setBounds (row.removeFromLeft (each).withHeight (
+                    juce::jmin (row.getHeight(), sw->idealHeight())));
+                row.removeFromLeft (gap);
+            }
+        }
+    }
+
+    layOutViz (area);
+}
+
+void CapturedBlockPanel::layOutViz (juce::Rectangle<int> area)
+{
+    // The picture zone: the checkbox column picks which ways of looking are down; whichever are
+    // tile the rest — one row up to three, two rows past.
+    auto checks = area.removeFromLeft (110);
+    for (auto& c : vizChecks)
+    {
+        c.setBounds (checks.removeFromTop (24));
+        checks.removeFromTop (4);
+    }
+    area.removeFromLeft (gap);
+
+    std::vector<DeviceScope*> shown;
+    for (int i = 0; i < numViz; ++i)
+    {
+        if (vizChecks[(size_t) i].on)
+            shown.push_back (scopes[(size_t) i].get());
+        else
+            scopes[(size_t) i]->setVisible (false);
+    }
+
+    const int n = (int) shown.size();
+    if (n == 0)
+        return;
+
+    const int tileRows = n <= 3 ? 1 : 2;
+    const int cols     = (n + tileRows - 1) / tileRows;
+    const int tileW    = (area.getWidth() - (cols - 1) * gap) / juce::jmax (1, cols);
+    const int tileH    = (area.getHeight() - (tileRows - 1) * gap) / tileRows;
+
+    for (int i = 0; i < n; ++i)
+    {
+        const int rr = i / cols, cc = i % cols;
+        shown[(size_t) i]->setBounds (area.getX() + cc * (tileW + gap),
+                                      area.getY() + rr * (tileH + gap), tileW, tileH);
+        shown[(size_t) i]->setVisible (true);
+    }
+}
+
+void CapturedBlockPanel::layOutCompact (juce::Rectangle<int> area)
+{
+    // The overview's face: pictures along the bottom, the gain square and a single knob row
+    // above, the switches wherever they fit — right of the knobs first, under them second.
+    layOutViz (area.removeFromBottom (juce::jmax (150, area.getHeight() * 2 / 5)));
+    area.removeFromBottom (gap);
+
+    std::vector<Knob*> knobs;
+    for (auto& slot : slots)
+        if (slot.knob != nullptr)
+            knobs.push_back (slot.knob.get());
+
+    std::vector<VSwitch*> switches;
+    for (auto& sel : selectors)
+        if (sel.steps != nullptr)
+            switches.push_back (sel.steps.get());
+    for (auto& slot : slots)
+        if (slot.steps != nullptr)
+            switches.push_back (slot.steps.get());
+
+    const int gainSide = juce::jmin (maxGainSide, juce::jmin (area.getHeight(), area.getWidth() / 2));
+    gain.setBounds (area.removeFromLeft (gainSide).withSizeKeepingCentre (gainSide, gainSide));
+    area.removeFromLeft (knobGap);
+
+    const int k = (int) knobs.size();
+
+    if (k > 0)
+    {
+        const int small = juce::jmin (maxKnobSide,
+                                      juce::jmin (area.getHeight() / 2,
+                                                  (area.getWidth() - (k - 1) * knobGap) / k));
+
+        auto row = area.removeFromTop (small);
+        for (auto* kn : knobs)
+        {
+            kn->setBounds (row.removeFromLeft (small));
             row.removeFromLeft (knobGap);
         }
+        area.removeFromTop (gap);
+    }
+
+    for (auto* sw : switches)
+    {
+        sw->setBounds (area.removeFromTop (juce::jmin (area.getHeight(), sw->idealHeight()))
+                           .withWidth (juce::jmin (area.getWidth(), switchW)));
+        area.removeFromTop (gap / 2);
+    }
 }
 
 void CapturedBlockPanel::paintContent (juce::Graphics& g)
