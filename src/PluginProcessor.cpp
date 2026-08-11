@@ -363,6 +363,11 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                   gateOnParam->load() > 0.5f, gateThresholdParam->load());
     gateMeterDb.store (juce::Decibels::gainToDecibels (gate.currentGain(), -90.0f));
 
+    // The accident latch: pressing while the key stands above the threshold means a live note
+    // got chopped — the badge shows the dot until somebody looks.
+    if (gate.currentGain() < 0.9f && gateKeyDb.load() > gateThresholdParam->load())
+        gateWorked.store (true);
+
     const bool muteAtStart = juce::roundToInt (gatePosParam->load()) == 0;
 
     // MUTE at the start: the nonlinearities themselves fall silent between notes.

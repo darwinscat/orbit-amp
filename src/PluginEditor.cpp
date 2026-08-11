@@ -46,6 +46,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // The badges' clicks mean MENU — the whole device in one pick; the gate's zoom is the
     // menu's OPEN item, for the day the deep face is wanted.
     gateBadge.onOpen = [this] (juce::Point<int> pos) { gateStrip.showPresetMenu (pos); };
+    gateBadge.latch  = &amp.gateWorked;
     gateStrip.onOpenZoom = [this] { strip.onOpen (ChainLink::gate); };
 
     // The measurement, projected: the overlay reads the strip's own trace.

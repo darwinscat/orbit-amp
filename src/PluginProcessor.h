@@ -183,6 +183,10 @@ public:
     /** Latched: the limiter has worked since somebody last looked (the badge clears it). */
     std::atomic<bool> limiterWorked { false };
 
+    /** Latched: the gate pressed a signal that was ABOVE its own threshold — it ate a live
+        note, not a pause. Closing on silence is the job; this is the accident worth a light. */
+    std::atomic<bool> gateWorked { false };
+
     /** Each EQ link's output peak this block, in dB — what its LEVEL column meters. Same
         writer, same readers. */
     std::array<std::atomic<float>, params::numEqLinks> eqOutDb { -90.0f, -90.0f };
