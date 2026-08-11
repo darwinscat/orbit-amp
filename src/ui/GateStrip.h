@@ -43,6 +43,7 @@ public:
                                                              [this] (float) { repaint(); });
         decayAtt = std::make_unique<juce::ParameterAttachment> (decayParam, [] (float) {});
 
+        setRepaintsOnMouseActivity (true);   // the runners fade in under the mouse
         startTimerHz (30);
     }
 
@@ -111,8 +112,13 @@ public:
         // ---- the threshold: the same grip instrument as the trim, in the gate's violet — its
         //      number aboard, the derived CLOSE line the hysteresis under it. A switched-off
         //      gate is read-only here like everywhere: its runner dims and will not answer.
+        // The runners live half-ghosted until the hand comes near: the column is a METER first,
+        // its controls surface when wanted. (His own ask — the no-hover law covers lighting,
+        // not decluttering.)
+        const float hoverA = isMouseOverOrDragging (true) ? 1.0f : 0.4f;
+
         {
-            const float dimmed  = onP.getValue() > 0.5f ? 1.0f : 0.35f;
+            const float dimmed  = (onP.getValue() > 0.5f ? 1.0f : 0.35f) * hoverA;
             const float openDb  = param.convertFrom0to1 (param.getValue());
             const float openY   = dbToY (inCol, openDb);
             const float closeY  = dbToY (inCol, openDb - params::gateHysteresisDb);
@@ -132,7 +138,8 @@ public:
                                      [&] (float db) { return dbToY (area, db); }, floorDb);
             meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (area, 0.0f));
             const float v = trimP.convertFrom0to1 (trimP.getValue());
-            meterrail::paintGrip (g, r, trimY (area, v), meterrail::trimText (v), theme::orange,
+            meterrail::paintGrip (g, r, trimY (area, v), meterrail::trimText (v),
+                                  theme::orange.withMultipliedAlpha (hoverA),
                                   dragging && grabbedTrim);
         }
 

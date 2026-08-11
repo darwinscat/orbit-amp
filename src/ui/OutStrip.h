@@ -29,6 +29,7 @@ public:
                                                             [this] (float) { repaint(); });
         ceil = std::make_unique<juce::ParameterAttachment> (ceilingParam,
                                                             [this] (float) { repaint(); });
+        setRepaintsOnMouseActivity (true);   // the runners fade in under the mouse
         startTimerHz (30);
     }
 
@@ -76,8 +77,10 @@ public:
         // The ceiling first (under the trim in z): the limiter's runner in the gate's lilac,
         // living where ceilings live — near the top of the rail. A switched-off limiter's
         // runner dims to read-only strength and will not answer, same law as the gate's.
+        const float hoverA = isMouseOverOrDragging (true) ? 1.0f : 0.4f;
+
         {
-            const float dimmed = limOnP.getValue() > 0.5f ? 1.0f : 0.35f;
+            const float dimmed = (limOnP.getValue() > 0.5f ? 1.0f : 0.35f) * hoverA;
             const float v = ceilP.convertFrom0to1 (ceilP.getValue());
             meterrail::paintGrip (g, r, ceilY (col, v), juce::String (v, 1),
                                   theme::lilac.withMultipliedAlpha (dimmed),
@@ -86,7 +89,8 @@ public:
 
         {
             const float v = trimP.convertFrom0to1 (trimP.getValue());
-            meterrail::paintGrip (g, r, trimY (col, v), meterrail::trimText (v), theme::orange,
+            meterrail::paintGrip (g, r, trimY (col, v), meterrail::trimText (v),
+                                  theme::orange.withMultipliedAlpha (hoverA),
                                   dragging && ! grabbedCeil);
         }
 
