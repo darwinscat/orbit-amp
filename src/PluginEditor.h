@@ -9,6 +9,7 @@
 #include "ui/GateStrip.h"
 #include "ui/OutStrip.h"
 #include "ui/TallyBadge.h"
+#include "ui/LearnOverlay.h"
 #include "ui/TunerStrip.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 #include "ui/SetupPanel.h"
@@ -62,6 +63,7 @@ private:
     TunerStrip    tunerStrip;       // the always-on needle, between the guards
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player
+    LearnOverlay  learnOverlay;     // the LEARN measurement, projected large over the faceplate
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;            // the Setup overlay — last member, so it sits on top
 

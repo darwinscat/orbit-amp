@@ -46,6 +46,13 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // menu's OPEN item, for the day the deep face is wanted.
     gateBadge.onOpen = [this] (juce::Point<int> pos) { gateStrip.showPresetMenu (pos); };
     gateStrip.onOpenZoom = [this] { strip.onOpen (ChainLink::gate); };
+
+    // The measurement, projected: the overlay reads the strip's own trace.
+    learnOverlay.trace      = &gateStrip.learnTraceRef();
+    learnOverlay.totalTicks = GateStrip::learnTotalTicks;
+    gateStrip.onLearnBegin  = [this] { learnOverlay.begin(); };
+    gateStrip.onLearnDone   = [this] (const juce::String& v) { learnOverlay.finish (v); };
+    addChildComponent (learnOverlay);
     limitBadge.onOpen = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
 
     // And the open lens closes on any click — the tuner has nothing to operate, only to see.
@@ -172,6 +179,11 @@ void AmpEditor::resized()
     limitBadge.setBounds (margin + FaceplateView::designWidth - TallyBadge::designWidth, tunerY,
                           TallyBadge::designWidth, TunerStrip::designHeight);
     limitBadge.setTransform (zoom);
+
+    // The learn sheet: half the plugin, centred over the faceplate.
+    learnOverlay.setBounds (margin + FaceplateView::designWidth / 6, faceplateY + 60,
+                            FaceplateView::designWidth * 2 / 3, 330);
+    learnOverlay.setTransform (zoom);
 
     tunerStrip.setBounds (margin + TallyBadge::designWidth + chromeGap, tunerY,
                           FaceplateView::designWidth - 2 * (TallyBadge::designWidth + chromeGap),

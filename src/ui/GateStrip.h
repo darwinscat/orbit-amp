@@ -7,6 +7,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <atomic>
+#include <vector>
 
 namespace orbitamp
 {
@@ -51,6 +52,14 @@ public:
     /** The menu's OPEN item — the door to the zoom, now that the badge's click means MENU. */
     std::function<void()> onOpenZoom;
 
+    /** The big LEARN overlay's hooks: measurement started; measurement spoke its verdict. */
+    std::function<void()>             onLearnBegin;
+    std::function<void (juce::String)> onLearnDone;
+
+    const std::vector<float>& learnTraceRef() const { return learnTrace; }
+
+    static constexpr int learnTotalTicks = 90;     // 3 s at 30 Hz
+
     static constexpr int designWidth = 38;
 
     void paint (juce::Graphics& g) override
@@ -78,9 +87,9 @@ public:
         if (dragging && grabbedTrim)
         {
             const float delta = trimP.convertFrom0to1 (trimP.getValue()) - trimStartDb;
-            if (holdDb > floorDb + 0.5f && std::abs (delta) > 0.05f)
+            if (holdAtGrab > floorDb + 0.5f && std::abs (delta) > 0.05f)
             {
-                const float gy = dbToY (inCol, holdDb + delta);
+                const float gy = dbToY (inCol, holdAtGrab + delta);
                 const float dashes[] = { 4.0f, 3.0f };
                 g.setColour (juce::Colours::white.withAlpha (0.55f));
                 g.drawDashedLine ({ inCol.getX(), gy, inCol.getRight(), gy }, dashes, 2, 1.4f);
@@ -183,6 +192,12 @@ public:
         m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
         m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
         m.addItem (5, "LEARN",       true, learning);
+
+        juce::PopupMenu decay;
+        decay.addItem (10, "NORMAL", true, ! metal);
+        decay.addItem (11, "METAL",  true, metal);
+        m.addSubMenu ("DECAY", decay);
+
         m.addSeparator();
         m.addItem (6, "OPEN",        true, false);
 
@@ -217,6 +232,12 @@ public:
             return;
         }
 
+        if (choice == 10 || choice == 11)
+        {
+            decayAtt->setValueAsCompleteGesture (choice == 11 ? 1.0f : 0.0f);
+            return;
+        }
+
         if (choice == 5)
         {
             // The measurement the zoom's LEARN makes, from the sliver: stay quiet, the fuse burns
@@ -224,6 +245,10 @@ public:
             learning   = true;
             learnTicks = 0;
             learnPeak  = -120.0f;
+            learnTrace.clear();
+            learnTrace.reserve ((size_t) learnTotalTicks);
+            if (onLearnBegin != nullptr)
+                onLearnBegin();
             return;
         }
 
@@ -289,8 +314,10 @@ public:
                        || std::abs (pressY - trY) < std::abs (pressY - thY);
             (grabbedTrim ? trim : threshold)->beginGesture();
 
-            // The ghost's anchor: where the trim stood when the hand closed on it.
+            // The ghost's anchors: the trim AND the hold as they stood when the hand closed —
+            // a hold that keeps decaying under the drag would melt the ghost mid-thought.
             trimStartDb = trimP.convertFrom0to1 (trimP.getValue());
+            holdAtGrab  = holdDb;
         }
 
         if (dragging)
@@ -343,6 +370,7 @@ private:
         if (learning)
         {
             ++learnTicks;
+            learnTrace.push_back (now);   // the waveform on the overlay IS the progress
 
             // The window's edges are thrown away: the menu click itself, and the hand leaving the
             // mouse, are not the noise floor.
@@ -354,12 +382,19 @@ private:
                 learning = false;
 
                 // Nothing arrived: a muted input teaches nothing.
+                juce::String verdict = "NOTHING HEARD";
+
                 if (learnPeak >= -75.0f)
                 {
-                    threshold->setValueAsCompleteGesture (
-                        juce::jlimit (-80.0f, -10.0f, learnPeak + params::gateHysteresisDb));
+                    const float th = juce::jlimit (-80.0f, -10.0f,
+                                                   learnPeak + params::gateHysteresisDb);
+                    threshold->setValueAsCompleteGesture (th);
                     onAtt->setValueAsCompleteGesture (1.0f);
+                    verdict = "SET " + juce::String (juce::roundToInt (th)) + " DB";
                 }
+
+                if (onLearnDone != nullptr)
+                    onLearnDone (verdict);
             }
         }
 
@@ -398,7 +433,6 @@ private:
     static constexpr float releasePerTick     = 1.4f;   // ~42 dB/s at 30 Hz
     static constexpr int   holdTicks          = 60;     // 2 s of steady hold...
     static constexpr float holdReleasePerTick = 0.8f;   // ...then ~24 dB/s down
-    static constexpr int   learnTotalTicks    = 90;     // 3 s at 30 Hz
     static constexpr int   learnEdgeTicks     = 15;     // half a second each end, thrown away
 
     const std::atomic<float>& keyDb;
@@ -418,9 +452,11 @@ private:
     bool  learning   = false;
     int   learnTicks = 0;
     float learnPeak  = -120.0f;
+    std::vector<float> learnTrace;
     bool  dragging    = false;
     bool  grabbedTrim = false;
     float trimStartDb = 0.0f;
+    float holdAtGrab  = -90.0f;
     bool  swallowUp   = false;
     float pressY      = 0.0f;
 

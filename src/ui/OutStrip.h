@@ -50,9 +50,9 @@ public:
         if (dragging && ! grabbedCeil)
         {
             const float delta = trimP.convertFrom0to1 (trimP.getValue()) - trimStartDb;
-            if (holdDb > floorDb + 0.5f && std::abs (delta) > 0.05f)
+            if (holdAtGrab > floorDb + 0.5f && std::abs (delta) > 0.05f)
             {
-                const float gy = dbToY (col, holdDb + delta);
+                const float gy = dbToY (col, holdAtGrab + delta);
                 const float dashes[] = { 4.0f, 3.0f };
                 g.setColour (juce::Colours::white.withAlpha (0.55f));
                 g.drawDashedLine ({ col.getX(), gy, col.getRight(), gy }, dashes, 2, 1.4f);
@@ -123,6 +123,7 @@ public:
 
             (grabbedCeil ? ceil : trim)->beginGesture();
             trimStartDb = trimP.convertFrom0to1 (trimP.getValue());
+            holdAtGrab  = holdDb;
         }
 
         if (dragging)
@@ -260,6 +261,7 @@ private:
     bool  swallow     = false;
     bool  grabbedCeil = false;
     float trimStartDb = 0.0f;
+    float holdAtGrab  = -90.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutStrip)
 };
