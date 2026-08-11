@@ -5,6 +5,44 @@
 namespace orbitamp
 {
 
+/** The whole monitor, one picture: a kiosk component of its own with a fresh DeviceScope inside,
+    black to the edges. A click anywhere or Escape hands the screen back. */
+class CapturedBlockPanel::ScopeTheater final : public juce::Component
+{
+public:
+    ScopeTheater (Block& b, std::function<double (double)> toneDb, DeviceScope::Mode mode,
+                  bool waveHalf, double sampleRate, std::function<void()> dismiss)
+        : scope (b.scope, b.ribbon, std::move (toneDb)), onDismiss (std::move (dismiss))
+    {
+        scope.setMode (mode);
+        scope.waveHalf = waveHalf;
+        scope.setSampleRate (sampleRate);
+        addAndMakeVisible (scope);
+        setOpaque (true);
+        setWantsKeyboardFocus (true);
+    }
+
+    void resized() override { scope.setBounds (getLocalBounds().reduced (24)); }
+
+    void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0xff060609)); }
+
+    void mouseDown (const juce::MouseEvent&) override { if (onDismiss) onDismiss(); }
+
+    bool keyPressed (const juce::KeyPress& k) override
+    {
+        if (k == juce::KeyPress::escapeKey && onDismiss)
+        {
+            onDismiss();
+            return true;
+        }
+        return false;
+    }
+
+private:
+    DeviceScope scope;
+    std::function<void()> onDismiss;
+};
+
 CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
                                         const juce::String& title, const char* blockId)
     : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId)
@@ -52,6 +90,9 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         scopes[(size_t) DeviceScope::Mode::wave]->waveHalf = halfTag.half;
         repaint();
     };
+
+    screenTag.onClick = [this] { openTheater(); };
+    addChildComponent (screenTag);
     scopes[(size_t) DeviceScope::Mode::wave]->waveHalf = halfTag.half;   // half is the default
     addChildComponent (halfTag);
 
@@ -86,7 +127,43 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     deviceChanged();
 }
 
-CapturedBlockPanel::~CapturedBlockPanel() = default;
+CapturedBlockPanel::~CapturedBlockPanel()
+{
+    closeTheater();
+}
+
+void CapturedBlockPanel::openTheater()
+{
+    if (expandedViz < 0 || theater != nullptr)
+        return;
+
+    theater = std::make_unique<ScopeTheater> (
+        block, [this] (double hz) { return block.toneDb (hz); },
+        (DeviceScope::Mode) expandedViz,
+        halfTag.half, amp.currentSampleRate(),
+        [this] { closeTheater(); });
+
+    // The face's own copy stops while the theatre runs — the wave ribbon must have ONE
+    // resolution-setting reader at a time.
+    scopes[(size_t) expandedViz]->setVisible (false);
+
+    theater->setBounds (juce::Desktop::getInstance().getDisplays()
+                            .getPrimaryDisplay()->totalArea);
+    theater->addToDesktop (juce::ComponentPeer::windowHasDropShadow);
+    theater->setVisible (true);
+    juce::Desktop::getInstance().setKioskModeComponent (theater.get(), false);
+    theater->grabKeyboardFocus();
+}
+
+void CapturedBlockPanel::closeTheater()
+{
+    if (theater == nullptr)
+        return;
+
+    juce::Desktop::getInstance().setKioskModeComponent (nullptr);
+    theater.reset();
+    resized();   // the face's copy comes back
+}
 
 void CapturedBlockPanel::deviceChanged()
 {
@@ -282,9 +359,13 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         auto* big = scopes[(size_t) expandedViz].get();
         big->setBounds (area);
 
-        auto corner = area.removeFromTop (24).removeFromRight (60);
+        auto corner = area.removeFromTop (24).removeFromRight (96);
         expandTags[(size_t) expandedViz].setBounds (corner.removeFromRight (28).reduced (2, 4)
                                                         .translated (-6, 4));
+
+        screenTag.setBounds (corner.removeFromRight (28).reduced (2, 4).translated (-6, 4));
+        screenTag.setVisible (true);
+        screenTag.toFront (false);
 
         halfTag.setVisible (expandedViz == (int) DeviceScope::Mode::wave);
         if (halfTag.isVisible())
@@ -481,6 +562,7 @@ void CapturedBlockPanel::layTiles (juce::Rectangle<int> area)
     const int tileH    = (area.getHeight() - (tileRows - 1) * gap) / tileRows;
 
     halfTag.setVisible (false);
+    screenTag.setVisible (false);
     for (auto& t : expandTags)
         t.setVisible (false);
 

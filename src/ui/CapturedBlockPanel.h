@@ -209,6 +209,46 @@ private:
     std::array<ExpandTag, (size_t) numViz> expandTags;
     int expandedViz = -1;
 
+    /** The theatre: one scope on the WHOLE MONITOR — a kiosk window of its own, black to the
+        edges, dismissed by a click anywhere or Escape. Its scope is a fresh instance reading
+        the same taps; the face's own copy hides while it runs so the wave ribbon has ONE
+        resolution-setting reader at a time. */
+    class ScopeTheater;
+    std::unique_ptr<ScopeTheater> theater;
+
+    struct ScreenTag final : public juce::Component
+    {
+        std::function<void()> onClick;
+
+        void paint (juce::Graphics& g) override
+        {
+            const auto r = getLocalBounds().toFloat();
+            g.setColour (theme::bezel.withAlpha (0.8f));
+            g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+
+            // Four corner brackets: the whole screen.
+            const auto b = r.withSizeKeepingCentre (11.0f, 9.0f);
+            g.setColour (theme::orange);
+            for (int cx = 0; cx < 2; ++cx)
+                for (int cy = 0; cy < 2; ++cy)
+                {
+                    const float x = cx == 0 ? b.getX() : b.getRight();
+                    const float y = cy == 0 ? b.getY() : b.getBottom();
+                    const float dx = cx == 0 ? 3.5f : -3.5f;
+                    const float dy = cy == 0 ? 3.0f : -3.0f;
+                    g.drawLine (x, y, x + dx, y, 1.3f);
+                    g.drawLine (x, y, x, y + dy, 1.3f);
+                }
+        }
+
+        void mouseDown (const juce::MouseEvent&) override { if (onClick) onClick(); }
+    };
+
+    ScreenTag screenTag;
+
+    void openTheater();
+    void closeTheater();
+
     void setControlsVisible (bool);
     void layChecks (juce::Rectangle<int>);
     void layTiles  (juce::Rectangle<int>);
