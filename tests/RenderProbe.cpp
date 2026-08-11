@@ -18,6 +18,8 @@ int main (int argc, char** argv)
 
     const float bGain = argc > 1 ? juce::String (argv[1]).getFloatValue() : 9.5f;
     const float pGain = argc > 2 ? juce::String (argv[2]).getFloatValue() : 7.0f;
+    const juce::String boostName  = argc > 3 ? argv[3] : "Muff";
+    const juce::String preampName = argc > 4 ? argv[4] : "IR";
 
     // The loop, straight from the sibling's assets — the same file the demo strip plays.
     juce::File loopFile ("~/IdeaProjects/orbit-nam-capture/app/assets/loops/eleven-light-years.wav");
@@ -44,18 +46,21 @@ int main (int argc, char** argv)
         boost.rescan (0);
         preamp.rescan (0);
 
+        // Matches the display name OR the pack file's name — three ReVolts share a face and
+        // only the file tells them apart.
         const auto pick = [] (Block& b, const juce::String& want)
         {
             for (int i = 0; i < b.packs.size(); ++i)
-                if (b.packs[i].displayName().containsIgnoreCase (want))
+                if (b.packs[i].displayName().containsIgnoreCase (want)
+                    || b.packs[i].location.getFileName().containsIgnoreCase (want))
                 {
                     b.select (i);
                     return;
                 }
         };
 
-        pick (boost, "Muff");
-        pick (preamp, "IR");
+        pick (boost, boostName);
+        pick (preamp, preampName);
         boost.loadIfGainMoved (bGain);
         preamp.loadIfGainMoved (pGain);
 
@@ -85,10 +90,12 @@ int main (int argc, char** argv)
                      juce::Decibels::gainToDecibels (out.getRMSLevel (0, 0, out.getNumSamples()), -120.0f));
     };
 
-    std::printf ("gains: muff %.1f, irx %.1f\n", bGain, pGain);
-    render (true, false, "probe-1-muff-only.wav");
-    render (false, true, "probe-2-irx-only.wav");
-    render (true, true,  "probe-3-both.wav");
+    std::printf ("gains: %s %.1f, %s %.1f\n", boostName.toRawUTF8(), bGain,
+                 preampName.toRawUTF8(), pGain);
+    render (true, false, "probe-1-" + boostName.toLowerCase() + "-only.wav");
+    render (false, true, "probe-2-" + preampName.toLowerCase() + "-only.wav");
+    render (true, true,  "probe-3-" + boostName.toLowerCase() + "-plus-"
+                             + preampName.toLowerCase() + ".wav");
 
     return 0;
 }

@@ -196,7 +196,7 @@ inline constexpr const char* oversample = "oversample";
 inline constexpr const char* stereoMode = "stereo_mode";
 
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first. */
-inline const juce::StringArray demoLoops { "Eleven Light Years", "Cats Hard Day",
+inline const juce::StringArray demoLoops { "GGG", "Eleven Light Years", "Cats Hard Day",
                                            "Deep Space Is My Home", "Fifth Dimension" };
 
 /** Oversampling for the nonlinear stages. Not a per-preset taste: it trades CPU for alias-free

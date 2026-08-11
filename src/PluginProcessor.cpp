@@ -129,6 +129,7 @@ void AmpProcessor::selectDemoLoop (int index)
 {
     struct Entry { const char* data; int size; };
     const Entry loops[] = {
+        { BinaryData::ggg_wav,                BinaryData::ggg_wavSize },
         { BinaryData::elevenlightyears_wav,   BinaryData::elevenlightyears_wavSize },
         { BinaryData::catshardday_wav,        BinaryData::catshardday_wavSize },
         { BinaryData::deepspaceismyhome_wav,  BinaryData::deepspaceismyhome_wavSize },
