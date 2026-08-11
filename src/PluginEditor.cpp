@@ -54,19 +54,54 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     gateStrip.onLearnDone   = [this] (const juce::String& v) { learnOverlay.finish (v); };
     addChildComponent (learnOverlay);
 
-    // The rulers the trims summon: IN's stands right of its column, OUT's left of its — over
-    // whatever lives there, gone the moment the hand opens.
-    inRuler.ticksOnLeft   = true;
-    outRuler.ticksOnLeft  = false;
+    // The rulers the runners summon: IN's stands right of its column, OUT's and the ceiling's
+    // left of theirs — over whatever lives there, gone the moment the hand opens.
+    const auto trimLadder = []
+    {
+        std::vector<DragRuler::Mark> m;
+        for (int db = -24; db <= 24; db += 3)
+            m.push_back ({ (float) db, db % 6 == 0 });
+        return m;
+    }();
+
+    const auto trimYOf = [] (juce::Rectangle<float> r, float db)
+    {
+        return r.getCentreY() - db / params::inTrimRangeDb * (r.getHeight() * 0.5f - 6.0f);
+    };
+
+    inRuler.ticksOnLeft  = true;
+    outRuler.ticksOnLeft = false;
+    inRuler.marks  = trimLadder;
+    outRuler.marks = trimLadder;
+    inRuler.yOfDb  = trimYOf;
+    outRuler.yOfDb = trimYOf;
     inRuler.currentDb  = [this] { auto* p = amp.apvts.getParameter (params::inTrim);
                                   return p->convertFrom0to1 (p->getValue()); };
     outRuler.currentDb = [this] { auto* p = amp.apvts.getParameter (params::outTrim);
                                   return p->convertFrom0to1 (p->getValue()); };
+
+    // The ceiling's own ladder: -0.1 at the top of the rail's top third, halves down to -3.
+    ceilRuler.ticksOnLeft   = false;
+    ceilRuler.labelDecimals = 1;
+    ceilRuler.accent        = theme::lilac;
+    ceilRuler.marks = { { -0.1f, true }, { -0.5f, false }, { -1.0f, true }, { -1.5f, false },
+                        { -2.0f, true }, { -2.5f, false }, { -3.0f, true } };
+    ceilRuler.yOfDb = [] (juce::Rectangle<float> r, float v)
+    {
+        const float t = (params::limiterCeilingMax - v)
+                      / (params::limiterCeilingMax - params::limiterCeilingMin);
+        return r.getY() + 14.0f + t * (r.getHeight() / 3.0f);
+    };
+    ceilRuler.currentDb = [this] { auto* p = amp.apvts.getParameter (params::limiterCeiling);
+                                   return p->convertFrom0to1 (p->getValue()); };
+
     addChildComponent (inRuler);
     addChildComponent (outRuler);
+    addChildComponent (ceilRuler);
 
     gateStrip.onTrimDrag = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
     outStrip.onTrimDrag  = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
+    outStrip.onCeilDrag  = [this] (bool a) { ceilRuler.setVisible (a); if (a) ceilRuler.toFront (false); };
     limitBadge.onOpen = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
 
     // And the open lens closes on any click — the tuner has nothing to operate, only to see.
@@ -200,6 +235,8 @@ void AmpEditor::resized()
     outRuler.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth - 58, faceplateY,
                         56, FaceplateView::designHeight);
     outRuler.setTransform (zoom);
+    ceilRuler.setBounds (outRuler.getBounds());
+    ceilRuler.setTransform (zoom);
 
     // The learn sheet: half the plugin, centred over the faceplate.
     learnOverlay.setBounds (margin + FaceplateView::designWidth / 6, faceplateY + 60,

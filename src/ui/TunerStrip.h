@@ -43,8 +43,10 @@ public:
 
         g.setColour (theme::panel);
         g.fillRoundedRectangle (r, theme::radiusMd);
-        g.setColour (theme::hair2);
-        g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);
+        // The live border, same strength as every ON block: the tuner is never off — a hairline
+        // here read as a switched-off frame next to the badges.
+        g.setColour (theme::violet.withAlpha (0.80f));
+        g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, theme::blockBorder);
 
         const bool live  = ear.live();
         const auto note  = ear.nearestNote();

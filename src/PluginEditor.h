@@ -67,6 +67,7 @@ private:
     LearnOverlay  learnOverlay;     // the LEARN measurement, projected large over the faceplate
     DragRuler     inRuler;          // the IN trim's own ladder, summoned by the hand
     DragRuler     outRuler;         // the OUT trim's, mirrored
+    DragRuler     ceilRuler;        // the limiter ceiling's, lilac, top-third ladder
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;            // the Setup overlay — last member, so it sits on top
 

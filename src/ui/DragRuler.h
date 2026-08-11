@@ -4,23 +4,50 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <vector>
+
 namespace orbitamp
 {
 
-/** The runner's OWN scale, summoned by the hand: while a trim runner is being dragged, this
-    ruler slides out beside its column — frosted over whatever lives there — with the ±dB ladder
-    the runner actually moves on, and an orange line at the value in hand. Let go and it is gone.
+/** A runner's OWN scale, summoned by the hand: while the runner is being dragged, this ruler
+    slides out beside its column — frosted over whatever lives there — with the ladder the runner
+    actually moves on, and a line in the runner's colour at the value in hand. Let go, gone.
 
-    A projection, not a control: it intercepts nothing. Its bounds must match the column's
-    vertical extent, so its ladder lands exactly at the runner's heights. */
+    Data-driven so every runner can bring its ladder: the marks, the dB-to-height mapping and the
+    accent are wired in by the editor. The mapping MUST mirror the strip's own (and the ruler's
+    bounds its column's vertical extent), so the marks land at the runner's true heights.
+
+    A projection, not a control: it intercepts nothing, and it repaints itself while summoned —
+    nobody underneath can be trusted to. */
 class DragRuler final : public juce::Component,
                         private juce::Timer
 {
 public:
     DragRuler() { setInterceptsMouseClicks (false, false); }
 
-    /** The ruler repaints itself while summoned — nobody underneath can be trusted to: the
-        orange line only moved where some neighbour's timer happened to redraw the overlap. */
+    struct Mark
+    {
+        float db;
+        bool  major;
+    };
+
+    std::vector<Mark> marks;
+
+    /** Numbers and ticks hug the edge nearest the column: left when the ruler stands right of
+        it (IN), right when it stands left (OUT). */
+    bool ticksOnLeft = true;
+
+    /** 0 = whole-dB labels with a plus on the positives; 1 = one decimal, sign as it falls. */
+    int labelDecimals = 0;
+
+    juce::Colour accent = juce::Colour (0xffff8a3d);
+
+    /** dB -> y inside the ruler's reduced(2) area — the strip's own formula, transplanted. */
+    std::function<float (juce::Rectangle<float>, float)> yOfDb;
+
+    /** The value in hand, plain dB — the accent line. */
+    std::function<float()> currentDb;
+
     void visibilityChanged() override
     {
         if (isVisible())
@@ -29,17 +56,11 @@ public:
             stopTimer();
     }
 
-    /** Numbers and ticks hug the edge nearest the column: left when the ruler stands right of
-        it (IN), right when it stands left (OUT). */
-    bool ticksOnLeft = true;
-
-    float rangeDb = 24.0f;
-
-    /** The value in hand, plain dB — the orange line. */
-    std::function<float()> currentDb;
-
     void paint (juce::Graphics& g) override
     {
+        if (yOfDb == nullptr)
+            return;
+
         auto r = getLocalBounds().toFloat();
 
         // Frosted glass, honestly faked: a deep translucent sheet with a hairline.
@@ -50,23 +71,26 @@ public:
 
         const auto area = r.reduced (2.0f);
 
-        for (int db = -24; db <= 24; db += 3)
+        for (const auto& m : marks)
         {
-            const bool  major = db % 6 == 0;
-            const float y     = dbToY (area, (float) db);
-            const float len   = major ? 7.0f : 4.5f;
+            const float y   = yOfDb (area, m.db);
+            const float len = m.major ? 7.0f : 4.5f;
 
-            g.setColour (juce::Colours::white.withAlpha (major ? 0.45f : 0.28f));
+            g.setColour (juce::Colours::white.withAlpha (m.major ? 0.45f : 0.28f));
 
             if (ticksOnLeft)
                 g.fillRect (area.getX(), y - 1.0f, len, 2.0f);
             else
                 g.fillRect (area.getRight() - len, y - 1.0f, len, 2.0f);
 
-            if (major)
+            if (m.major)
             {
+                const auto text = labelDecimals == 0
+                                ? (m.db > 0 ? "+" : "") + juce::String ((int) m.db)
+                                : juce::String (m.db, 1);
+
                 g.setColour (juce::Colours::white.withAlpha (0.5f));
-                theme::drawTracked (g, (db > 0 ? "+" : "") + juce::String (db),
+                theme::drawTracked (g, text,
                                     { ticksOnLeft ? area.getX() + 10.0f : area.getX() + 2.0f,
                                       y - 6.0f, area.getWidth() - 14.0f, 12.0f },
                                     theme::displayFont (10.5f), 0.04f,
@@ -77,19 +101,13 @@ public:
 
         if (currentDb != nullptr)
         {
-            g.setColour (theme::orange);
-            g.fillRect (area.getX(), dbToY (area, currentDb()) - 1.0f, area.getWidth(), 2.0f);
+            g.setColour (accent);
+            g.fillRect (area.getX(), yOfDb (area, currentDb()) - 1.0f, area.getWidth(), 2.0f);
         }
     }
 
 private:
     void timerCallback() override { repaint(); }
-
-    /** MUST mirror the strips' trimY: centre is unity, 6 px margin at each end of the travel. */
-    float dbToY (juce::Rectangle<float> r, float db) const
-    {
-        return r.getCentreY() - db / rangeDb * (r.getHeight() * 0.5f - 6.0f);
-    }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DragRuler)
 };

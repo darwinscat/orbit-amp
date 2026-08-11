@@ -30,8 +30,9 @@ public:
 
     static constexpr int designWidth = 38;
 
-    /** The trim runner entered/left the hand — the editor slides the drag ruler out beside us. */
+    /** A runner entered/left the hand — the editor slides the matching ruler out beside us. */
     std::function<void (bool)> onTrimDrag;
+    std::function<void (bool)> onCeilDrag;
 
     void paint (juce::Graphics& g) override
     {
@@ -128,8 +129,8 @@ public:
             trimStartDb = trimP.convertFrom0to1 (trimP.getValue());
             holdAtGrab  = holdDb;
 
-            if (! grabbedCeil && onTrimDrag != nullptr)
-                onTrimDrag (true);
+            if (auto& hook = grabbedCeil ? onCeilDrag : onTrimDrag; hook != nullptr)
+                hook (true);
         }
 
         if (dragging)
@@ -149,8 +150,8 @@ public:
         if (dragging)
         {
             (grabbedCeil ? ceil : trim)->endGesture();
-            if (! grabbedCeil && onTrimDrag != nullptr)
-                onTrimDrag (false);
+            if (auto& hook = grabbedCeil ? onCeilDrag : onTrimDrag; hook != nullptr)
+                hook (false);
             dragging = false;
             repaint();
         }
