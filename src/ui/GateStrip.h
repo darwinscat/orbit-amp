@@ -51,7 +51,7 @@ public:
 
     void resized() override
     {
-        value.setBounds (getLocalBounds().removeFromBottom (26).removeFromTop (13));
+        value.setBounds (getLocalBounds().removeFromBottom (16));
     }
 
     void refreshValue()
@@ -64,7 +64,7 @@ public:
     /** A clean click (no drag) opens the big gate — the sliver is the glance. */
     std::function<void()> onClick;
 
-    static constexpr int designWidth = 26;
+    static constexpr int designWidth = 32;
 
     void paint (juce::Graphics& g) override
     {
@@ -129,9 +129,7 @@ public:
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
 
-        g.setColour (theme::txDim);
-        theme::drawTracked (g, "IN", r.withTrimmedTop (r.getHeight() - 13.0f),
-                            theme::displayFont (8.0f), 0.10f, juce::Justification::centred);
+        meterrail::paintName (g, inCol, "IN");
     }
 
     //==============================================================================
@@ -321,7 +319,7 @@ private:
 
     juce::Rectangle<float> scaleArea() const
     {
-        return getLocalBounds().toFloat().reduced (2.0f).withTrimmedBottom (26.0f);
+        return getLocalBounds().toFloat().reduced (2.0f).withTrimmedBottom (16.0f);
     }
 
     float dbToY (juce::Rectangle<float> r, float db) const

@@ -104,6 +104,7 @@ void AmpEditor::resized()
 
     outStrip.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth, faceplateY,
                         OutStrip::designWidth, FaceplateView::designHeight);
+    outStrip.setTransform (zoom);
 
     faceplate.setBounds (margin + GateStrip::designWidth + chromeGap, faceplateY,
                          FaceplateView::designWidth - GateStrip::designWidth - OutStrip::designWidth

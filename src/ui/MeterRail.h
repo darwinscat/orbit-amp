@@ -52,9 +52,9 @@ inline void paintClipCap (juce::Graphics& g, juce::Rectangle<float> r, bool clip
     meter's own ticks. */
 inline void paintUnityNubs (juce::Graphics& g, juce::Rectangle<float> track, float y)
 {
-    g.setColour (juce::Colours::white.withAlpha (0.45f));
-    g.fillRect (track.getX(), y - 0.8f, 5.0f, 1.6f);
-    g.fillRect (track.getRight() - 5.0f, y - 0.8f, 5.0f, 1.6f);
+    g.setColour (juce::Colours::white.withAlpha (0.60f));
+    g.fillRect (track.getX(), y - 1.0f, 7.0f, 2.0f);
+    g.fillRect (track.getRight() - 7.0f, y - 1.0f, 7.0f, 2.0f);
 }
 
 inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y, bool lit = false)
@@ -80,12 +80,12 @@ inline void paintTrimTicks (juce::Graphics& g, juce::Rectangle<float> track,
     for (float db : { -18.0f, -12.0f, -6.0f, 6.0f, 12.0f, 18.0f })
     {
         const bool  major = juce::roundToInt (db) % 12 == 0;
-        const float len   = major ? 4.5f : 3.5f;
+        const float len   = major ? 6.0f : 4.5f;
         const float y     = yOfDb (db);
 
-        g.setColour (juce::Colours::white.withAlpha (major ? 0.35f : 0.25f));
-        g.fillRect (track.getX(), y - 0.8f, len, 1.6f);
-        g.fillRect (track.getRight() - len, y - 0.8f, len, 1.6f);
+        g.setColour (juce::Colours::white.withAlpha (major ? 0.45f : 0.32f));
+        g.fillRect (track.getX(), y - 1.0f, len, 2.0f);
+        g.fillRect (track.getRight() - len, y - 1.0f, len, 2.0f);
     }
 }
 
@@ -102,7 +102,7 @@ inline juce::String trimText (float db)
 inline void initReadout (juce::Label& l, juce::RangedAudioParameter& p,
                          std::function<juce::ParameterAttachment*()> att)
 {
-    l.setFont (theme::displayFont (9.5f));
+    l.setFont (theme::displayFont (12.0f));
     l.setColour (juce::Label::textColourId, theme::txDim);
     l.setColour (juce::Label::backgroundWhenEditingColourId, theme::bezel);
     l.setColour (juce::Label::textWhenEditingColourId, theme::lilac);
@@ -127,6 +127,14 @@ inline void initReadout (juce::Label& l, juce::RangedAudioParameter& p,
             ed->selectAll();
         }
     };
+}
+
+/** The rail's name, set INSIDE the column near its foot — part of the instrument, not a footnote. */
+inline void paintName (juce::Graphics& g, juce::Rectangle<float> col, const juce::String& name)
+{
+    g.setColour (juce::Colours::white.withAlpha (0.55f));
+    theme::drawTracked (g, name, col.withTrimmedTop (col.getHeight() - 20.0f),
+                        theme::displayFont (11.0f), 0.10f, juce::Justification::centred);
 }
 
 } // namespace orbitamp::meterrail
