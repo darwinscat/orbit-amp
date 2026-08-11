@@ -395,6 +395,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
 
+    // The per-stage load meter, orbitcab's recipe verbatim: a cheap monotonic read around each
+    // stage, published at the tail as a smoothed share of the block's budget.
+    using PerfClock = std::chrono::steady_clock;
+    const auto tStart = PerfClock::now();
+    auto elapsedNs = [] (PerfClock::time_point a) noexcept
+    { return std::chrono::duration<double, std::nano> (PerfClock::now() - a).count(); };
+    double nsStage[numStages] {};
+
     // MONO by default: a guitar chain is one signal, and running the WaveNets per channel on a
     // duplicated input was paying twice for the same answer. The whole chain works channel 0;
     // the copy to the other channels happens once, after the limiter. STEREO (the double-track
@@ -409,6 +417,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
     // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
     // pop-free, so it runs unconditionally and the switch is an argument.
+    const auto tGate = PerfClock::now();
     {
         float peak = 0.0f;
         for (int ch = 0; ch < numChannels; ++ch)
@@ -437,6 +446,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (muteAtStart)
         gate.applyGain (channels, nch, numSamples);
 
+    nsStage[stGate] = elapsedNs (tGate);
+
     // The EQ links are links of their own, with their own switches: eq1 decides what reaches the
     // first nonlinearity, eq2 colours what the boost made before the preamp distorts it again.
     // Each link's output peak feeds its LEVEL column, and its samples feed the analyser tap —
@@ -464,13 +475,17 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         }
     };
 
-    if (eqParams[0].on->load() > 0.5f)
-        eqLinks[0].process (channels, nch, numSamples);
+    { const auto a = PerfClock::now();
+      if (eqParams[0].on->load() > 0.5f)
+          eqLinks[0].process (channels, nch, numSamples);
+      nsStage[stEq1] = elapsedNs (a); }
 
     meterEqOut (0);
 
-    if (boostOnParam->load() > 0.5f)
-        boost.process (chainView, scopeDry);
+    { const auto a = PerfClock::now();
+      if (boostOnParam->load() > 0.5f)
+          boost.process (chainView, scopeDry);
+      nsStage[stBoost] = elapsedNs (a); }
 
     if (boostOnParam->load() > 0.5f)
     {
@@ -482,13 +497,17 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                           juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
     }
 
-    if (eqParams[1].on->load() > 0.5f)
-        eqLinks[1].process (channels, nch, numSamples);
+    { const auto a = PerfClock::now();
+      if (eqParams[1].on->load() > 0.5f)
+          eqLinks[1].process (channels, nch, numSamples);
+      nsStage[stEq2] = elapsedNs (a); }
 
     meterEqOut (1);
 
-    if (preampOnParam->load() > 0.5f)
-        preamp.process (chainView, scopeDry);
+    { const auto a = PerfClock::now();
+      if (preampOnParam->load() > 0.5f)
+          preamp.process (chainView, scopeDry);
+      nsStage[stPreamp] = elapsedNs (a); }
 
     if (preampOnParam->load() > 0.5f)
     {
@@ -506,7 +525,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         gate.applyGain (channels, nch, numSamples);
 
     if (reverbOnParam->load() > 0.5f)
-        reverb.process (channels, nch, numSamples);
+        { const auto a = PerfClock::now();
+          reverb.process (channels, nch, numSamples);
+          nsStage[stReverb] = elapsedNs (a); }
     else
         reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
 
@@ -515,10 +536,16 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     power.setTubeCount (juce::roundToInt (powerCountParam->load()) + 1);   // index 0 = one bottle
     power.setDrive (powerDriveParam->load());
     power.setSag (powerSagParam->load());
-    power.process (channels, nch, numSamples, powerOnParam->load() > 0.5f);
+    { const auto a = PerfClock::now();
+      power.process (channels, nch, numSamples, powerOnParam->load() > 0.5f);
+      nsStage[stPower] = elapsedNs (a); }
 
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
-    cab.process (channels, nch, numSamples, cabOnParam->load() > 0.5f);
+    { const auto a = PerfClock::now();
+      cab.process (channels, nch, numSamples, cabOnParam->load() > 0.5f);
+      nsStage[stCab] = elapsedNs (a); }
+
+    const auto tOut = PerfClock::now();
 
     // The output trim closes the chain — the master's hand on the way out, ramped per block
     // against zipper noise — and the OUT rail reads the result, clip cap latched past 0 dBFS.
@@ -549,6 +576,25 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
         if (peak > 1.0f)
             outClip.store (true);
+    }
+
+    nsStage[stOut]   = elapsedNs (tOut);
+    nsStage[stTotal] = elapsedNs (tStart);
+
+    // The per-stage publication: one-pole EMA at orbitcab's coefficient, so the two meters
+    // read on the same ruler.
+    if (const double budgetNs = getSampleRate() > 0.0
+                                    ? (double) numSamples / getSampleRate() * 1.0e9 : 0.0;
+        budgetNs > 0.0)
+    {
+        for (int i = 0; i < numStages; ++i)
+        {
+            const double pct = nsStage[i] / budgetNs * 100.0;
+            stageLoad[i].store (stageLoad[i].load (std::memory_order_relaxed)
+                                    + 0.08f * ((float) pct
+                                               - stageLoad[i].load (std::memory_order_relaxed)),
+                                std::memory_order_relaxed);
+        }
     }
 
     // Load as a share of the block's own wall time — the number the footer shows.

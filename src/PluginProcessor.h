@@ -181,6 +181,12 @@ public:
     /** How hard the limiter squeezed the last block, in dB (0 = untouched) — the LIMIT badge. */
     std::atomic<float> limiterGrDb { 0.0f };
 
+    /** The per-stage DSP load, orbitcab's grammar: each stage's wall-clock as a smoothed % of
+        the block's real-time budget. Indexed by Stage; the footer badge reads these. */
+    enum Stage { stTotal, stGate, stEq1, stBoost, stEq2, stPreamp, stReverb, stPower, stCab,
+                 stOut, numStages };
+    std::atomic<float> stageLoad[numStages] {};
+
     /** Latched: the limiter has worked since somebody last looked (the badge clears it). */
     std::atomic<bool> limiterWorked { false };
 

@@ -46,6 +46,9 @@ Footer::Footer (AmpProcessor& processor)
 
     stereoAttachment->sendInitialUpdate();
 
+    loadBadge.onClick = [this] { showLoadBreakdown(); };
+    addAndMakeVisible (loadBadge);
+
     timerCallback();
     startTimerHz (4);   // nobody needs the sample rate or the load sooner than that
 }
@@ -114,6 +117,70 @@ void Footer::resized()
     auto row = getLocalBounds().withTrimmedTop (1);
     oversample.setBounds (row.removeFromLeft (itemWidth));
     stereo.setBounds (row.removeFromLeft (66));
+
+    // The invisible click target over the painted DSP number.
+    row.removeFromLeft (gap + 96);
+    loadBadge.setBounds (row.removeFromLeft (100));
+}
+
+void Footer::showLoadBreakdown()
+{
+    // orbitcab's grammar: rows of stage, bar and number — the whole chain's cost, itemised.
+    struct Panel final : public juce::Component,
+                         private juce::Timer
+    {
+        explicit Panel (AmpProcessor& p) : amp (p)
+        {
+            setSize (240, 24 + AmpProcessor::numStages * rowH + 8);
+            startTimerHz (10);
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            static const char* const names[AmpProcessor::numStages] = {
+                "TOTAL", "GATE", "EQ 1", "BOOST", "EQ 2", "PREAMP", "REVERB", "POWER", "CAB", "OUT",
+            };
+
+            auto r = getLocalBounds().reduced (12, 4);
+
+            g.setColour (theme::tx);
+            theme::drawTracked (g, "DSP LOAD", r.removeFromTop (22).toFloat(),
+                                theme::displayFont (12.0f), 0.1f, juce::Justification::centredLeft);
+
+            for (int i = 0; i < AmpProcessor::numStages; ++i)
+            {
+                auto row = r.removeFromTop (rowH);
+                const float v = amp.stageLoad[i].load();
+                const bool total = i == AmpProcessor::stTotal;
+
+                g.setColour (total ? theme::tx : theme::txDim);
+                theme::drawTracked (g, names[i], row.removeFromLeft (64).toFloat(),
+                                    theme::displayFont (11.0f), 0.08f, juce::Justification::centredLeft);
+
+                auto num = row.removeFromRight (46);
+                g.setColour (v > 50.0f ? theme::orange : total ? theme::tx : theme::txDim);
+                theme::drawTracked (g, juce::String (v, 1) + "%", num.toFloat(),
+                                    theme::displayFont (11.0f), 0.06f, juce::Justification::centredRight);
+
+                auto bar = row.reduced (6, 7).toFloat();
+                g.setColour (theme::hair);
+                g.fillRoundedRectangle (bar, 2.0f);
+                g.setColour (total ? theme::violet : theme::orange.withAlpha (0.8f));
+                g.fillRoundedRectangle (bar.withWidth (bar.getWidth()
+                                                        * juce::jlimit (0.0f, 1.0f, v / 100.0f)),
+                                        2.0f);
+            }
+        }
+
+        void timerCallback() override { repaint(); }
+
+        enum { rowH = 19 };
+        AmpProcessor& amp;
+    };
+
+    auto panel = std::make_unique<Panel> (amp);
+    juce::CallOutBox::launchAsynchronously (std::move (panel),
+                                            loadBadge.getScreenBounds(), nullptr);
 }
 
 } // namespace orbitamp

@@ -33,6 +33,7 @@ public:
 private:
     void timerCallback() override;
     void showOversampleMenu();
+    void showLoadBreakdown();
 
     static constexpr int itemWidth = 92;
     static constexpr int gap       = 10;
@@ -41,6 +42,15 @@ private:
 
     felitronics::appkit::chrome::FlatItem oversample;
     felitronics::appkit::chrome::FlatItem stereo;
+
+    /** The DSP number is a door: click it and the per-stage breakdown steps out. */
+    struct LoadBadge final : public juce::Component
+    {
+        std::function<void()> onClick;
+        void mouseDown (const juce::MouseEvent&) override { if (onClick) onClick(); }
+    };
+
+    LoadBadge loadBadge;
 
     std::unique_ptr<juce::ParameterAttachment> oversampleAttachment;
     std::unique_ptr<juce::ParameterAttachment> stereoAttachment;
