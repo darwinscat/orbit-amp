@@ -62,6 +62,16 @@ public:
 
     const std::vector<float>& learnTraceRef() const { return learnTrace; }
 
+    /** The threshold LEARN would set if it ended now — the overlay's live dashed line.
+        -999 while the trusted window has heard nothing yet. */
+    float learnPendingDb() const
+    {
+        if (! learning || learnPeak <= -119.0f)
+            return -999.0f;
+
+        return juce::jlimit (-80.0f, -10.0f, learnPeak + params::gateHysteresisDb);
+    }
+
     static constexpr int learnTotalTicks = 90;     // 3 s at 30 Hz
 
     static constexpr int designWidth = 38;

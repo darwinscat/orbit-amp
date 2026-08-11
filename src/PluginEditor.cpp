@@ -52,6 +52,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // The measurement, projected: the overlay reads the strip's own trace.
     learnOverlay.trace      = &gateStrip.learnTraceRef();
     learnOverlay.totalTicks = GateStrip::learnTotalTicks;
+    learnOverlay.pendingDb  = [this] { return gateStrip.learnPendingDb(); };
     gateStrip.onLearnBegin  = [this] { learnOverlay.begin(); };
     gateStrip.onLearnDone   = [this] (const juce::String& v) { learnOverlay.finish (v); };
     addChildComponent (learnOverlay);
