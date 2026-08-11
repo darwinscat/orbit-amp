@@ -76,10 +76,23 @@ private:
 
     EqCurve curve { [this] (double hz) { return display.magnitudeDb (hz); } };
 
+    /** The overlay in the curve's corner that walks the whole link home — every parameter back
+        to its default except the power, which belongs to the frame. */
+    struct ResetButton final : public juce::Component
+    {
+        std::function<void()> onClick;
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override { if (onClick) onClick(); }
+    };
+
+    void resetLink();
+
     Knob lo { "LO", theme::violet, 0 };
     Knob b1 { "B1", theme::violet, 0 };
     Knob b2 { "B2", theme::violet, 0 };
     Knob hi { "HI", theme::violet, 0 };
+
+    ResetButton resetBtn;
 
     ZoneSwitch  hpfSw, lpfSw;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };

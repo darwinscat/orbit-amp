@@ -298,6 +298,24 @@ private:
         // The 0 dB line reads brighter — it is the reference the curve is judged against.
         g.setColour (theme::hair2);
         g.fillRect (r.getX() + 4.0f, dbToY (r, 0.0f), r.getWidth() - 8.0f, 1.0f);
+
+        // The numbers on the scales: an instrument, not a sketch.
+        g.setColour (theme::txFaint);
+
+        const auto hzLabel = [&] (double hz, const char* text)
+        {
+            theme::drawTracked (g, text,
+                                { hzToX (r, hz) + 4.0f, r.getBottom() - 14.0f, 40.0f, 10.0f },
+                                theme::displayFont (8.5f), 0.08f, juce::Justification::centredLeft);
+        };
+        hzLabel (100.0, "100");
+        hzLabel (1000.0, "1K");
+        hzLabel (10000.0, "10K");
+
+        for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
+            theme::drawTracked (g, (db > 0 ? "+" : "") + juce::String ((int) db),
+                                { r.getX() + 6.0f, dbToY (r, db) - 11.0f, 34.0f, 10.0f },
+                                theme::displayFont (8.5f), 0.08f, juce::Justification::centredLeft);
     }
 
     std::function<double (double)> magnitudeDb;

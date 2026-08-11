@@ -20,7 +20,7 @@ public:
         startTimerHz (30);
     }
 
-    static constexpr int designWidth = 36;
+    static constexpr int designWidth = 12;
 
     void paint (juce::Graphics& g) override
     {
@@ -64,10 +64,6 @@ public:
 
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
-
-        g.setColour (theme::txDim);
-        theme::drawTracked (g, "OUT", r.withTrimmedTop (r.getHeight() - 13.0f),
-                            theme::displayFont (8.0f), 0.10f, juce::Justification::centred);
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -82,6 +78,13 @@ public:
     }
 
     void mouseUp (const juce::MouseEvent&) override { att->endGesture(); }
+
+    void mouseDoubleClick (const juce::MouseEvent&) override
+    {
+        // Home is one knock away. The double-click's own mouseDown opened a gesture; this write
+        // rides it and the closing mouseUp seals it as one undoable move.
+        att->setValueAsPartOfGesture (0.0f);
+    }
 
 private:
     void timerCallback() override
@@ -104,7 +107,7 @@ private:
 
     juce::Rectangle<float> meterArea() const
     {
-        return getLocalBounds().toFloat().reduced (2.0f).withTrimmedBottom (13.0f);
+        return getLocalBounds().toFloat().reduced (2.0f);
     }
 
     float dbToY (juce::Rectangle<float> r, float db) const
@@ -233,6 +236,8 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         l->setInterceptsMouseClicks (false, false);
     }
 
+    resetBtn.onClick = [this] { resetLink(); };
+
     curve.filterMagnitudeDb  = [this] (double hz) { return display.filterMagnitudeDb (hz); };
     curve.onHandleDrag       = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
     curve.onDragActive       = [this] (int i, bool a) { handleDragActive (i, a); };
@@ -269,7 +274,11 @@ void EqSection::timerCallback()
 
 float EqSection::raw (const juce::String& id) const
 {
-    return state.getRawParameterValue (id)->load();
+    // The PARAMETER, not the apvts atomic: listener lists notify newest-first, so an attachment
+    // callback can run before the atomic cache updates — reading the cache there left this face
+    // exactly one click behind. The parameter object itself is written before anyone is told.
+    auto* p = state.getParameter (id);
+    return p->convertFrom0to1 (p->getValue());
 }
 
 std::unique_ptr<juce::ParameterAttachment> EqSection::attach (const juce::String& id)
@@ -278,9 +287,49 @@ std::unique_ptr<juce::ParameterAttachment> EqSection::attach (const juce::String
                                                         [this] (float) { refreshCurve(); });
 }
 
+void EqSection::ResetButton::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat().reduced (0.5f);
+    g.setColour (theme::panel.withAlpha (0.85f));
+    g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+    g.setColour (theme::hair2);
+    g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
+    g.setColour (theme::txDim);
+    theme::drawTracked (g, "RESET", r, theme::displayFont (9.0f), 0.14f,
+                        juce::Justification::centred);
+}
+
+void EqSection::resetLink()
+{
+    // Everything back to its default in one sweep — except the power: that is the frame's, and a
+    // reset that also switched you off would be a reset that argues.
+    const juce::StringArray ids {
+        params::eqHpfOn (link),  params::eqHpfHz (link),  params::eqHpfSlope (link),
+        params::eqLoDb (link),   params::eqLoHz (link),
+        params::eqBellDb (link, 0), params::eqBellHz (link, 0), params::eqBellQ (link, 0),
+        params::eqBellDb (link, 1), params::eqBellHz (link, 1), params::eqBellQ (link, 1),
+        params::eqB3On (link),
+        params::eqBellDb (link, 2), params::eqBellHz (link, 2), params::eqBellQ (link, 2),
+        params::eqHiDb (link),   params::eqHiHz (link),
+        params::eqLpfOn (link),  params::eqLpfHz (link),  params::eqLpfSlope (link),
+        params::eqLevel (link),
+    };
+
+    for (const auto& id : ids)
+    {
+        if (auto* p = state.getParameter (id))
+        {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->getDefaultValue());
+            p->endChangeGesture();
+        }
+    }
+}
+
 void EqSection::addTo (juce::Component& parent)
 {
     parent.addAndMakeVisible (curve);
+    parent.addAndMakeVisible (resetBtn);
     parent.addAndMakeVisible (hpfSw);
     parent.addAndMakeVisible (lpfSw);
     parent.addAndMakeVisible (hpfLabel);
@@ -447,8 +496,10 @@ void EqSection::layOut (juce::Rectangle<int> content)
 
     switchCell (row, lpfSw, lpfLabel);
 
-    // The curve gets everything else.
+    // The curve gets everything else; the reset overlays its top-right corner.
     curve.setBounds (content);
+    resetBtn.setBounds (content.getRight() - 74, content.getY() + 8, 64, 20);
+    resetBtn.toFront (false);
 }
 
 } // namespace orbitamp
