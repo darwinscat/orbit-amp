@@ -40,6 +40,8 @@ public:
         const double lo = core::MeasuredFilter::bandLoHz;
         const double hi = core::MeasuredFilter::bandHiHz;
 
+        drawGrid (g, r, lo, hi);
+
         // The EQ's own spectrum when a tap is wired — liquid columns with their peak hold —
         // mapped onto THIS view's trusted band; the homemade fog only when it is not.
         if (pane != nullptr)
@@ -67,9 +69,9 @@ public:
             fill.lineTo (r.getRight(), r.getBottom());
             fill.closeSubPath();
 
-            g.setColour (theme::violet.withAlpha (0.14f));
+            g.setColour (theme::violet.withAlpha (0.12f));
             g.fillPath (fill);
-            g.setColour (theme::violet.withAlpha (0.32f));
+            g.setColour (theme::violet.withAlpha (0.30f));
             g.strokePath (peak, juce::PathStrokeType (1.0f));
         }
         else
@@ -91,11 +93,61 @@ public:
             else        p.lineTo (r.getX() + (float) x, y);
         }
 
-        g.setColour (theme::hair);
-        g.fillRect (r.getX(), r.getCentreY(), r.getWidth(), 1.0f);
-
         g.setColour (theme::orange);
         g.strokePath (p, juce::PathStrokeType (1.6f));
+    }
+
+    /** The EQ's grid grammar on THIS view's trusted band: the 1-2-5 series carries the weight
+        and the numbers, the steps between stay hair-thin; +-6/+-12 rules with figures, the zero
+        line brighter — the reference the curve is judged against. */
+    static void drawGrid (juce::Graphics& g, juce::Rectangle<float> r, double lo, double hi)
+    {
+        const auto xOf = [&] (double hz)
+        {
+            return r.getX() + (float) (std::log (hz / lo) / std::log (hi / lo)) * r.getWidth();
+        };
+
+        for (double decade : { 10.0, 100.0, 1000.0, 10000.0 })
+            for (int mult = 1; mult <= 9; ++mult)
+            {
+                const double hz = decade * mult;
+                if (hz < lo || hz > hi)
+                    continue;
+
+                const bool major = mult == 1 || mult == 2 || mult == 5;
+                g.setColour (major ? theme::hair2.withAlpha (0.20f) : theme::hair.withAlpha (0.07f));
+                g.fillRect (xOf (hz), r.getY() + 4.0f, 1.0f, r.getHeight() - 8.0f);
+            }
+
+        constexpr float range = 20.0f;
+
+        g.setColour (theme::hair);
+        for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
+            g.fillRect (r.getX() + 4.0f, r.getCentreY() - db / range * r.getHeight() * 0.5f,
+                        r.getWidth() - 8.0f, 1.0f);
+
+        g.setColour (theme::hair2);
+        g.fillRect (r.getX() + 4.0f, r.getCentreY(), r.getWidth() - 8.0f, 1.0f);
+
+        g.setColour (theme::txFaint);
+
+        static const std::pair<double, const char*> hzLabels[] = {
+            { 100.0, "100" }, { 200.0, "200" }, { 500.0, "500" },
+            { 1000.0, "1K" }, { 2000.0, "2K" }, { 5000.0, "5K" }, { 10000.0, "10K" },
+        };
+
+        for (const auto& [hz, text] : hzLabels)
+            if (hz >= lo && hz <= hi)
+                theme::drawTracked (g, text,
+                                    { xOf (hz) - 24.0f, r.getBottom() - 18.0f, 48.0f, 13.0f },
+                                    theme::displayFont (12.0f), 0.08f, juce::Justification::centred);
+
+        for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
+            theme::drawTracked (g, (db > 0 ? "+" : "") + juce::String ((int) db),
+                                { r.getX() + 6.0f,
+                                  r.getCentreY() - db / range * r.getHeight() * 0.5f - 15.0f,
+                                  40.0f, 13.0f },
+                                theme::displayFont (12.0f), 0.08f, juce::Justification::centredLeft);
     }
 
     /** The sample rate the tap was filled at. Without it every partial sits at the wrong frequency —
