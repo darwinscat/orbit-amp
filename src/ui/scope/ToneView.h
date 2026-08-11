@@ -58,14 +58,27 @@ public:
             juce::Path fill, edge, peak;
             fill.startNewSubPath (r.getX(), r.getBottom());
 
+            // NOT Path::isEmpty() as the first-point test: it stays true after startNewSubPath,
+            // so every column restarted the subpath and the stroke had nothing to draw — the
+            // invisible rim. The explicit flag is the EqSection lesson, relearned.
+            bool first = true;
+
             pane->buildColumns (pm, paneRate, 4.5, 1000.0,
                                 [&] (int, float x, float yFill, float yPeak)
                                 {
                                     fill.lineTo (r.getX() + x, r.getY() + yFill);
-                                    if (edge.isEmpty()) edge.startNewSubPath (r.getX() + x, r.getY() + yFill);
-                                    else                edge.lineTo (r.getX() + x, r.getY() + yFill);
-                                    if (peak.isEmpty()) peak.startNewSubPath (r.getX() + x, r.getY() + yPeak);
-                                    else                peak.lineTo (r.getX() + x, r.getY() + yPeak);
+
+                                    if (first)
+                                    {
+                                        edge.startNewSubPath (r.getX() + x, r.getY() + yFill);
+                                        peak.startNewSubPath (r.getX() + x, r.getY() + yPeak);
+                                        first = false;
+                                    }
+                                    else
+                                    {
+                                        edge.lineTo (r.getX() + x, r.getY() + yFill);
+                                        peak.lineTo (r.getX() + x, r.getY() + yPeak);
+                                    }
                                 });
 
             fill.lineTo (r.getRight(), r.getBottom());
