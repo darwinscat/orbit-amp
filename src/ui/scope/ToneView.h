@@ -4,6 +4,8 @@
 #include "../Theme.h"
 #include "ScopeFrame.h"
 
+#include <felitronics/analysis/PlotMap.h>
+#include <felitronics/analysis/SpectrumPane.h>
 #include <juce_dsp/juce_dsp.h>
 
 #include <array>
@@ -29,7 +31,8 @@ class ToneView
 {
 public:
     void paint (juce::Graphics& g, juce::Rectangle<float> r,
-                const std::function<double (double)>& toneDb, const Frame& f)
+                const std::function<double (double)>& toneDb, const Frame& f,
+                felitronics::analysis::SpectrumPane* pane = nullptr, double paneRate = 48000.0)
     {
         if (toneDb == nullptr)
             return;
@@ -37,7 +40,40 @@ public:
         const double lo = core::MeasuredFilter::bandLoHz;
         const double hi = core::MeasuredFilter::bandHiHz;
 
-        paintSpectrum (g, r, f, lo, hi);
+        // The EQ's own spectrum when a tap is wired — liquid columns with their peak hold —
+        // mapped onto THIS view's trusted band; the homemade fog only when it is not.
+        if (pane != nullptr)
+        {
+            felitronics::analysis::PlotMap pm;
+            pm.width      = r.getWidth();
+            pm.height     = r.getHeight();
+            pm.plotBottom = r.getHeight();
+            pm.freqMin    = lo;
+            pm.freqMax    = hi;
+            pm.specTop    = 0.0;
+            pm.specBottom = -90.0;
+
+            juce::Path fill, peak;
+            fill.startNewSubPath (r.getX(), r.getBottom());
+
+            pane->buildColumns (pm, paneRate, 4.5, 1000.0,
+                                [&] (int, float x, float yFill, float yPeak)
+                                {
+                                    fill.lineTo (r.getX() + x, r.getY() + yFill);
+                                    if (peak.isEmpty()) peak.startNewSubPath (r.getX() + x, r.getY() + yPeak);
+                                    else                peak.lineTo (r.getX() + x, r.getY() + yPeak);
+                                });
+
+            fill.lineTo (r.getRight(), r.getBottom());
+            fill.closeSubPath();
+
+            g.setColour (theme::violet.withAlpha (0.14f));
+            g.fillPath (fill);
+            g.setColour (theme::violet.withAlpha (0.32f));
+            g.strokePath (peak, juce::PathStrokeType (1.0f));
+        }
+        else
+            paintSpectrum (g, r, f, lo, hi);
 
         constexpr float range = 20.0f;
 

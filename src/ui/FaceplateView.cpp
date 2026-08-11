@@ -14,8 +14,8 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
            [&processor] { return processor.currentSampleRate(); }),
       eq2 (processor.apvts, 1, processor.eqOutDb[1], processor.eqSpectrumTap[1],
            [&processor] { return processor.currentSampleRate(); }),
-      boost (processor, processor.boost, "Boost", params::boostId),
-      preamp (processor, processor.preamp, "Preamp", params::preampId),
+      boost (processor, processor.boost, "Boost", params::boostId, processor.blockSpectrumTap[0]),
+      preamp (processor, processor.preamp, "Preamp", params::preampId, processor.blockSpectrumTap[1]),
       reverb (processor.apvts), power (processor.apvts), cabinet (processor.apvts)
 {
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })

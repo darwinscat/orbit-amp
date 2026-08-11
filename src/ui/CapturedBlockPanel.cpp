@@ -11,12 +11,16 @@ class CapturedBlockPanel::ScopeTheater final : public juce::Component
 {
 public:
     ScopeTheater (Block& b, std::function<double (double)> toneDb, DeviceScope::Mode mode,
-                  bool waveHalf, double sampleRate, std::function<void()> dismiss)
+                  bool waveHalf, double sampleRate,
+                  felitronics::analysis::RollingSpectrumTap* tap, int tapOrder,
+                  std::function<void()> dismiss)
         : scope (b.scope, b.ribbon, std::move (toneDb)), onDismiss (std::move (dismiss))
     {
         scope.setMode (mode);
         scope.waveHalf = waveHalf;
         scope.setSampleRate (sampleRate);
+        if (mode == DeviceScope::Mode::tone && tap != nullptr)
+            scope.setSpectrumTap (tap, tapOrder);
         addAndMakeVisible (scope);
         setOpaque (true);
         setWantsKeyboardFocus (true);
@@ -44,8 +48,10 @@ private:
 };
 
 CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
-                                        const juce::String& title, const char* blockId)
-    : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId)
+                                        const juce::String& title, const char* blockId,
+                                        felitronics::analysis::RollingSpectrumTap& toneSpectrumTap)
+    : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId),
+      toneTap (toneSpectrumTap)
 {
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
@@ -67,6 +73,8 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
             b.scope, b.ribbon, [this] (double hz) { return block.toneDb (hz); });
         scopes[(size_t) i]->setMode ((DeviceScope::Mode) i);
         scopes[(size_t) i]->setSampleRate (amp.currentSampleRate());
+        if ((DeviceScope::Mode) i == DeviceScope::Mode::tone)
+            scopes[(size_t) i]->setSpectrumTap (&toneTap, AmpProcessor::eqSpectrumOrder);
         addChildComponent (*scopes[(size_t) i]);
 
         auto& c = vizChecks[(size_t) i];
@@ -145,6 +153,7 @@ void CapturedBlockPanel::openTheater()
         block, [this] (double hz) { return block.toneDb (hz); },
         (DeviceScope::Mode) expandedViz,
         halfTag.half, amp.currentSampleRate(),
+        &toneTap, AmpProcessor::eqSpectrumOrder,
         [this] { closeTheater(); });
 
     // The face's own copy stops while the theatre runs — the wave ribbon must have ONE

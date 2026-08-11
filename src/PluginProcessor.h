@@ -195,6 +195,9 @@ public:
         with a starve-tolerant reader, so the zoom and the thumb may both sip from it. */
     std::array<felitronics::analysis::RollingSpectrumTap, params::numEqLinks> eqSpectrumTap;
 
+    /** Post-boost and post-preamp, for the TONE views' spectrum — the EQ pane's grammar. */
+    std::array<felitronics::analysis::RollingSpectrumTap, 2> blockSpectrumTap;
+
     /** One analysis resolution for every consumer of the taps: mixed orders would make the tap
         force-republish on every alternating pull. */
     static constexpr int eqSpectrumOrder = 11;   // 2048

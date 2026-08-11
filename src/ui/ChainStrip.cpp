@@ -416,35 +416,30 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
             if (block.ribbon.read (ribbonBuf, count, phase) && count > 1)
             {
                 const int px = juce::jmax (2, box.getWidth());
-                const float mid = r.getCentreY(), half = r.getHeight() * 0.5f;
 
-                const auto shape = [] (float a)
+                // HALF-wave on the dB ruler, like the big WAVE — magnitude off the floor,
+                // magnified the way only a log can. (The 0.55 power curve is the one-line
+                // alternative if this reads too swollen.)
+                const auto mag = [] (float a)
                 {
-                    return juce::jlimit (-1.0f, 1.0f,
-                                         (a < 0.0f ? -1.0f : 1.0f) * std::pow (std::abs (a), 0.7f));
+                    const float db = juce::Decibels::gainToDecibels (std::abs (a), -80.0f);
+                    return juce::jlimit (0.0f, 1.0f, (db + 80.0f) / 80.0f);
                 };
 
                 juce::Path wave;
-                wave.startNewSubPath (r.getX(), mid);
+                wave.startNewSubPath (r.getX(), r.getBottom());
 
                 for (int x = 0; x < px; ++x)
                 {
                     const int a = x * count / px, b = juce::jmax (a + 1, (x + 1) * count / px);
-                    float hi = -1.0f;
+                    float m = 0.0f;
                     for (int i = a; i < b && i < count; ++i)
-                        hi = juce::jmax (hi, ribbonBuf[(size_t) i].wetHi);
-                    wave.lineTo (r.getX() + (float) x, mid - shape (hi) * half);
+                        m = juce::jmax (m, juce::jmax (ribbonBuf[(size_t) i].wetHi,
+                                                       -ribbonBuf[(size_t) i].wetLo));
+                    wave.lineTo (r.getX() + (float) x, r.getBottom() - mag (m) * r.getHeight());
                 }
 
-                for (int x = px; --x >= 0;)
-                {
-                    const int a = x * count / px, b = juce::jmax (a + 1, (x + 1) * count / px);
-                    float lo = 1.0f;
-                    for (int i = a; i < b && i < count; ++i)
-                        lo = juce::jmin (lo, ribbonBuf[(size_t) i].wetLo);
-                    wave.lineTo (r.getX() + (float) x, mid - shape (lo) * half);
-                }
-
+                wave.lineTo (r.getX() + (float) (px - 1), r.getBottom());
                 wave.closeSubPath();
                 g.setColour (theme::violet.withAlpha (0.35f));
                 g.fillPath (wave);

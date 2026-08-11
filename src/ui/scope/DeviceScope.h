@@ -5,6 +5,8 @@
 #include "../Theme.h"
 #include "EnvelopeView.h"
 #include "ShapeView.h"
+#include <felitronics/analysis/RollingSpectrumTap.h>
+#include <felitronics/analysis/SpectrumPane.h>
 #include "ToneView.h"
 #include "TransferView.h"
 #include "WaveView.h"
@@ -39,6 +41,14 @@ public:
     /** WAVE only: the half-wave silhouette instead of the mirrored band. */
     bool waveHalf = false;
 
+    /** TONE only: the family spectrum pane, fed from a post-block tap — the EQ's grammar. The
+        pull is gated on being on screen, so a hidden twin never steals the mailbox's frames. */
+    void setSpectrumTap (const felitronics::analysis::RollingSpectrumTap* tap, int order)
+    {
+        specTap   = tap;
+        specOrder = order;
+    }
+
     explicit DeviceScope (const core::ScopeTap& source, core::WaveRibbon& ribbonSource,
                          std::function<double (double)> toneDbAt)
         : tap (source), ribbon (ribbonSource), toneDb (std::move (toneDbAt))
@@ -59,7 +69,13 @@ public:
     Mode getMode() const noexcept { return mode; }
 
     /** The rate the tap is being filled at, so a partial lands on the frequency it actually has. */
-    void setSampleRate (double rate) { toneView.setSampleRate (rate); }
+    void setSampleRate (double newRate)
+    {
+        rate = newRate > 0.0 ? newRate : 48000.0;
+        toneView.setSampleRate (rate);
+    }
+
+    double sampleRateNow() const noexcept { return rate; }
 
     /** What is inside the device, drawn over the picture. It belongs to the picture rather than to a
         row of its own: the row cost a line of height and the glyphs were small in it, and what is in
@@ -94,7 +110,9 @@ public:
                 case Mode::shape:    scope::ShapeView::paint (g, area, frame); break;
                 case Mode::envelope: scope::EnvelopeView::paint (g, area, frame); break;
                 case Mode::transfer: scope::TransferView::paint (g, area, frame); break;
-                case Mode::tone:     toneView.paint (g, area, toneDb, frame); break;
+                case Mode::tone:     toneView.paint (g, area, toneDb, frame,
+                                                     specTap != nullptr ? &pane : nullptr,
+                                                     sampleRateNow()); break;
                 case Mode::wave:     waveView.paint (g, area, ribbon, waveHalf); break;
             }
 
@@ -106,6 +124,11 @@ public:
     }
 
 private:
+    const felitronics::analysis::RollingSpectrumTap* specTap = nullptr;
+    int    specOrder = 11;
+    double rate      = 48000.0;
+    felitronics::analysis::SpectrumPane pane;
+
     /** The glyph row, over the picture's top-left corner. A running waveform passes straight through
         thin strokes, so the glyphs sit on a scrim — barely there against the well, enough that they
         never have to compete with what is moving behind them. */
@@ -123,7 +146,20 @@ private:
         felitronics::appkit::drawDeviceSpecStatic (g, row, spec);
     }
 
-    void timerCallback() override { repaint(); }
+    void timerCallback() override
+    {
+        if (specTap != nullptr && mode == Mode::tone && isShowing())
+        {
+            int order = 0;
+            if (const_cast<felitronics::analysis::RollingSpectrumTap*> (specTap)
+                    ->tryPull (pane.frameInput(), order) && order == specOrder)
+                pane.ingest (order);
+            else
+                pane.starve();
+        }
+
+        repaint();
+    }
 
     /** The tap, copied out once per frame and handed to whichever view is showing. Empty when the tap
         has never been written. */

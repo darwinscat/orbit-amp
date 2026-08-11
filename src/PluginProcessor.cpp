@@ -218,6 +218,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& tap : eqSpectrumTap)
         tap.reset();
 
+    for (auto& tap : blockSpectrumTap)
+        tap.reset();
+
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
     lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
     limiter.prepare (sampleRate);
@@ -403,6 +406,15 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (boostOnParam->load() > 0.5f)
         boost.process (buffer, scopeDry);
 
+    {
+        auto& tap = blockSpectrumTap[0];
+        const float* d = buffer.getReadPointer (0);
+        for (int i = 0; i < numSamples; ++i)
+            tap.push (d[i]);
+        tap.publishIfDue (eqSpectrumOrder,
+                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+    }
+
     if (eqParams[1].on->load() > 0.5f)
         eqLinks[1].process (channels, numChannels, numSamples);
 
@@ -410,6 +422,15 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     if (preampOnParam->load() > 0.5f)
         preamp.process (buffer, scopeDry);
+
+    {
+        auto& tap = blockSpectrumTap[1];
+        const float* d = buffer.getReadPointer (0);
+        for (int i = 0; i < numSamples; ++i)
+            tap.push (d[i]);
+        tap.publishIfDue (eqSpectrumOrder,
+                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+    }
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
     // (boost hiss, preamp hiss) dies here too, and the reverb tail past it rings out.

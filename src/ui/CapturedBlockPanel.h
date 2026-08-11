@@ -36,7 +36,8 @@ public:
     static_assert (params::preampNumMeasured == params::boostNumMeasured,
                    "one face serves every captured block, so the slot counts have to agree");
 
-    CapturedBlockPanel (AmpProcessor&, Block&, const juce::String& title, const char* blockId);
+    CapturedBlockPanel (AmpProcessor&, Block&, const juce::String& title, const char* blockId,
+                        felitronics::analysis::RollingSpectrumTap& toneSpectrumTap);
     ~CapturedBlockPanel() override;
 
     /** Rebuilds the face from whatever pack is loaded. Called when the device changes. */
@@ -71,6 +72,7 @@ private:
     AmpProcessor& amp;
     Block&        block;
     const char*   blk;
+    felitronics::analysis::RollingSpectrumTap& toneTap;
 
     VoicingSelector device;
     Knob gain { "Gain", theme::orange, 0 };
