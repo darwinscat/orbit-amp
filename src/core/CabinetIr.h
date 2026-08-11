@@ -26,7 +26,7 @@ public:
         conv.loadImpulseResponse (data, size,
                                   juce::dsp::Convolution::Stereo::no,
                                   juce::dsp::Convolution::Trim::yes, 0,
-                                  juce::dsp::Convolution::Normalise::no);
+                                  juce::dsp::Convolution::Normalise::yes);
     }
 
     void process (float* const* io, int numChannels, int numSamples, bool on)
