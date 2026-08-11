@@ -22,7 +22,8 @@ public:
         : BlockFrame (word, Kind::dsp, false /*no switch — the menu still has the power*/),
           label (word.toUpperCase()), pressureDb (pressureDbSource), fullDepthDb (fullDepthDbIn)
     {
-        showTitle = false;   // the name goes INSIDE the box, not on the border
+        showTitle   = false;   // the name goes INSIDE the box, not on the border
+        borderAlpha = 0.45f;   // a quiet frame at all times — the word and the flood do the talking
         attachPower (onParam);
         startTimerHz (30);
     }

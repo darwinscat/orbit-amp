@@ -349,8 +349,9 @@ private:
     {
         // A live block wears its accent nearly full strength — active and inactive must be
         // tellable at a glance, and the frame is the first thing a glance meets. (The off state
-        // is dimmed wholesale by setAlpha, so one bright constant serves both.)
-        return accent().withAlpha (kind == Kind::captured ? 0.85f : 0.80f);
+        // is dimmed wholesale by setAlpha, so one bright constant serves both.) Second-rank
+        // furniture (the badges) scales itself down via borderAlpha.
+        return accent().withAlpha ((kind == Kind::captured ? 0.85f : 0.80f) * borderAlpha);
     }
 
     void paintSwitch (juce::Graphics& g, juce::Rectangle<float> sw) const
@@ -396,6 +397,10 @@ protected:
 
     /** Off: the name stays out of the frame entirely — the block writes it where it wants. */
     bool showTitle = true;
+
+    /** Frame brightness scale: second-rank furniture keeps a quiet border at all times and lets
+        its CONTENT (word, flood) do the talking. */
+    float borderAlpha = 1.0f;
 
 public:
     // The reading-size metrics every zoomed face shares — ONE constant, not a per-block opinion.

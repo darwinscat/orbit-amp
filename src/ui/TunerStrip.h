@@ -43,9 +43,9 @@ public:
 
         g.setColour (theme::panel);
         g.fillRoundedRectangle (r, theme::radiusMd);
-        // The live border, same strength as every ON block: the tuner is never off — a hairline
-        // here read as a switched-off frame next to the badges.
-        g.setColour (theme::violet.withAlpha (0.80f));
+        // The quiet border, matched to the badges beside it: the whole guard row is second-rank
+        // furniture until something in it works — then the badges' floods do the shouting.
+        g.setColour (theme::violet.withAlpha (0.36f));
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, theme::blockBorder);
 
         const bool live  = ear.live();
