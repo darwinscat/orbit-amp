@@ -237,7 +237,7 @@ target_link_libraries(OrbitAmp PRIVATE
 # ----------------------------------------------------------------------------
 # The NAM bench — not a gate, a measuring instrument: ns/frame through the shipping stage.
 add_executable(orbitamp_nam_bench tests/NamBench.cpp)
-target_link_libraries(orbitamp_nam_bench PRIVATE felitronics::nam juce::juce_core)
+target_link_libraries(orbitamp_nam_bench PRIVATE felitronics::nam juce::juce_dsp juce::juce_core)
 target_compile_definitions(orbitamp_nam_bench PRIVATE JUCE_STANDALONE_APPLICATION=1)
 
 add_executable(orbitamp_eqlink_test tests/EqLinkTests.cpp)

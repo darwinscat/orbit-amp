@@ -5,8 +5,12 @@
 // Prints ns/block, ns/sample and the share of a 512-sample real-time budget — the same unit the
 // footer meter speaks, so the two numbers can look each other in the eye.
 
+#include "../src/core/ScopeTap.h"
+#include "../src/core/WaveRibbon.h"
+
 #include <felitronics/nam/NamStage.h>
 #include <juce_core/juce_core.h>
+#include <juce_dsp/juce_dsp.h>
 
 #include <chrono>
 #include <cstdio>
@@ -82,10 +86,68 @@ int main (int argc, char** argv)
     const double budget   = block / rate * 1.0e9;
 
     std::printf ("blocks: %d x %d samples @ %.0f Hz\n", blocks, block, rate);
-    std::printf ("mean:  %10.0f ns/block  (%.1f ns/sample)\n", perBlock, perBlock / block);
-    std::printf ("worst: %10.0f ns/block\n", worstNs);
-    std::printf ("share of real-time budget: %.2f%%  (worst %.2f%%)\n",
+    std::printf ("stage mean:  %10.0f ns/block  (%.1f ns/sample)\n", perBlock, perBlock / block);
+    std::printf ("stage worst: %10.0f ns/block\n", worstNs);
+    std::printf ("stage share of budget: %.2f%%  (worst %.2f%%)\n",
                  perBlock / budget * 100.0, worstNs / budget * 100.0);
+
+    // ---- the CARGO the plugin's block adds around the stage, itemised -----------------------
+    using orbitamp::core::ScopeTap;
+    using orbitamp::core::WaveRibbon;
+
+    juce::AudioBuffer<float> buf (1, block), dry (1, block);
+
+    // Three 512-tap convolvers — the same juce::dsp::Convolution a MeasuredFilter runs, cost
+    // identical whatever the taps hold.
+    juce::dsp::Convolution fir[3];
+    {
+        std::mt19937 irRng (7);
+        for (auto& f : fir)
+        {
+            juce::AudioBuffer<float> ir (1, 512);
+            for (int i = 0; i < 512; ++i)
+                ir.setSample (0, i, noise (irRng));
+
+            f.prepare ({ rate, (juce::uint32) block, 1 });
+            f.loadImpulseResponse (std::move (ir), rate,
+                                   juce::dsp::Convolution::Stereo::no,
+                                   juce::dsp::Convolution::Trim::no,
+                                   juce::dsp::Convolution::Normalise::no);
+        }
+    }
+
+    ScopeTap  scope;
+    WaveRibbon ribbon;
+    ribbon.prepare (rate);
+
+    const auto timeIt = [&] (const char* name, auto&& body)
+    {
+        double ns = 0.0;
+        for (int i = 0; i < blocks; ++i)
+        {
+            refill();
+            buf.copyFrom (0, 0, data.data(), block);
+
+            const auto a = std::chrono::steady_clock::now();
+            body();
+            ns += std::chrono::duration<double, std::nano> (
+                      std::chrono::steady_clock::now() - a).count();
+        }
+        std::printf ("%-14s %8.0f ns/block   %.2f%% of budget\n",
+                     name, ns / blocks, ns / blocks / budget * 100.0);
+    };
+
+    timeIt ("3x FIR",   [&]
+    {
+        for (auto& f : fir)
+        {
+            juce::dsp::AudioBlock<float> b (buf);
+            f.process (juce::dsp::ProcessContextReplacing<float> (b));
+        }
+    });
+    timeIt ("dry copy", [&] { dry.copyFrom (0, 0, buf, 0, 0, block); });
+    timeIt ("scope",    [&] { scope.write (dry.getReadPointer (0), buf.getReadPointer (0), block); });
+    timeIt ("ribbon",   [&] { ribbon.write (dry.getReadPointer (0), buf.getReadPointer (0), block); });
 
     return 0;
 }
