@@ -52,9 +52,9 @@ inline void paintClipCap (juce::Graphics& g, juce::Rectangle<float> r, bool clip
     meter's own ticks. */
 inline void paintUnityNubs (juce::Graphics& g, juce::Rectangle<float> track, float y)
 {
-    g.setColour (juce::Colours::white.withAlpha (0.22f));
-    g.fillRect (track.getX(), y - 0.5f, 3.0f, 1.0f);
-    g.fillRect (track.getRight() - 3.0f, y - 0.5f, 3.0f, 1.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.45f));
+    g.fillRect (track.getX(), y - 0.8f, 5.0f, 1.6f);
+    g.fillRect (track.getRight() - 5.0f, y - 0.8f, 5.0f, 1.6f);
 }
 
 inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y, bool lit = false)
@@ -79,12 +79,13 @@ inline void paintTrimTicks (juce::Graphics& g, juce::Rectangle<float> track,
 {
     for (float db : { -18.0f, -12.0f, -6.0f, 6.0f, 12.0f, 18.0f })
     {
-        const float len = juce::roundToInt (db) % 12 == 0 ? 3.0f : 2.0f;
-        const float y   = yOfDb (db);
+        const bool  major = juce::roundToInt (db) % 12 == 0;
+        const float len   = major ? 4.5f : 3.5f;
+        const float y     = yOfDb (db);
 
-        g.setColour (juce::Colours::white.withAlpha (0.15f));
-        g.fillRect (track.getX(), y - 0.5f, len, 1.0f);
-        g.fillRect (track.getRight() - len, y - 0.5f, len, 1.0f);
+        g.setColour (juce::Colours::white.withAlpha (major ? 0.35f : 0.25f));
+        g.fillRect (track.getX(), y - 0.8f, len, 1.6f);
+        g.fillRect (track.getRight() - len, y - 0.8f, len, 1.6f);
     }
 }
 
