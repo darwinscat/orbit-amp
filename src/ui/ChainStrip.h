@@ -2,6 +2,7 @@
 
 #include "../Parameters.h"
 #include "../core/EqLink.h"
+#include "../core/WaveRibbon.h"
 #include "ChainLink.h"
 
 #include <felitronics/analysis/SpectrumPane.h>
@@ -55,6 +56,10 @@ private:
     /** Drawing only, designed from the current parameter values on the strip's own clock — the
         playing links belong to the audio thread and are never read from here. */
     std::array<core::EqLink, (size_t) params::numEqLinks> eqDisplay;
+
+    /** One shared read buffer for the captured thumbs' wave silhouettes — 64 kB once, not per
+        paint. Thumbs paint sequentially on the message thread; sharing is safe. */
+    std::array<core::WaveRibbon::Column, core::WaveRibbon::buckets> ribbonBuf {};
 
     /** The thumbs' own spectrum readers — sipping the same taps the zoom sips, which the tap's
         starve-tolerant mailbox makes safe: two readers simply share the frames. */

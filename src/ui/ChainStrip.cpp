@@ -10,6 +10,62 @@ namespace orbitamp
 {
 
 //==============================================================================
+/** The horizontal gain runner inside a captured thumb: a track, its filled share in orange, the
+    grip notch at the value. It eats its own clicks whole — the empty thumb around it stays the
+    door to the zoom. */
+class MiniGain final : public juce::Component
+{
+public:
+    explicit MiniGain (juce::RangedAudioParameter& p) : param (p)
+    {
+        att = std::make_unique<juce::ParameterAttachment> (p, [this] (float) { repaint(); });
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto r = getLocalBounds().toFloat().reduced (1.0f);
+        const auto track = r.withSizeKeepingCentre (r.getWidth(), 6.0f);
+
+        g.setColour (theme::hair);
+        g.fillRoundedRectangle (track, 3.0f);
+
+        const float prop = param.getValue();
+        const float x    = track.getX() + track.getWidth() * prop;
+
+        g.setColour (theme::orange.withAlpha (0.85f));
+        g.fillRoundedRectangle (track.withWidth (track.getWidth() * prop), 3.0f);
+
+        g.setColour (juce::Colours::white);
+        g.fillRoundedRectangle (x - 1.5f, r.getY(), 3.0f, r.getHeight(), 1.5f);
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        att->beginGesture();
+        att->setValueAsPartOfGesture (fromX (e.position.x));
+    }
+
+    void mouseDrag (const juce::MouseEvent& e) override
+    {
+        att->setValueAsPartOfGesture (fromX (e.position.x));
+    }
+
+    void mouseUp (const juce::MouseEvent&) override { att->endGesture(); }
+
+private:
+    float fromX (float x) const
+    {
+        const float w = juce::jmax (1.0f, (float) getWidth() - 2.0f);
+        return param.convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (x - 1.0f) / w));
+    }
+
+    juce::RangedAudioParameter& param;
+    std::unique_ptr<juce::ParameterAttachment> att;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MiniGain)
+};
+
+//==============================================================================
 /** One link's thumbnail: title and switch on top, the preview in the middle, what is loaded into
     the link along the bottom. The thumb owns nothing it shows — the caption and the preview are
     callbacks into whoever knows, which keeps every kind of link the same few pixels of code. */
@@ -37,6 +93,16 @@ public:
     std::function<void (juce::Graphics&, juce::Rectangle<int>)> preview;
     std::function<void()> onClick;
 
+    /** Captured thumbs stack downward: name under the title, the gain runner under the name. */
+    bool captionUnderTitle = false;
+
+    void attachGain (juce::RangedAudioParameter& p)
+    {
+        gain = std::make_unique<MiniGain> (p);
+        addAndMakeVisible (*gain);
+        resized();
+    }
+
     juce::String name;
     juce::Colour accent;
 
@@ -56,14 +122,22 @@ public:
 
     void resized() override
     {
-        if (sw == nullptr)
-            return;
+        if (sw != nullptr)
+        {
+            const int w = narrow() ? 20 : 26;
+            const int h = narrow() ? 11 : 14;
 
-        const int w = narrow() ? 20 : 26;
-        const int h = narrow() ? 11 : 14;
+            sw->setBounds (getLocalBounds().reduced (narrow() ? 4 : pad, pad)
+                               .removeFromTop (h).removeFromRight (w).withHeight (h));
+        }
 
-        sw->setBounds (getLocalBounds().reduced (narrow() ? 4 : pad, pad)
-                           .removeFromTop (h).removeFromRight (w).withHeight (h));
+        if (gain != nullptr)
+        {
+            auto area = getLocalBounds().reduced (narrow() ? 4 : pad, pad);
+            area.removeFromTop (14);                    // the title row
+            if (captionUnderTitle) area.removeFromTop (11);
+            gain->setBounds (area.removeFromTop (12));
+        }
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -122,13 +196,23 @@ public:
                             theme::displayFont (narrow() ? 8.0f : 10.0f), narrow() ? 0.06f : 0.12f,
                             juce::Justification::centredLeft);
 
-        if (caption != nullptr)
+        if (caption != nullptr && captionUnderTitle)
+        {
+            auto label = area.removeFromTop (11);
+            g.setColour (theme::txDim);
+            theme::drawTracked (g, caption().toUpperCase(), label.toFloat(), theme::displayFont (8.0f),
+                                0.08f, juce::Justification::centredLeft);
+        }
+        else if (caption != nullptr)
         {
             auto label = area.removeFromBottom (10);
             g.setColour (theme::txDim);
             theme::drawTracked (g, caption().toUpperCase(), label.toFloat(), theme::displayFont (6.5f),
                                 0.08f, juce::Justification::centred);
         }
+
+        if (gain != nullptr)
+            area.removeFromTop (12 + 2);                // the runner's row (a child, painted by itself)
 
         if (preview != nullptr)
             preview (g, area.reduced (1, 1));
@@ -141,6 +225,7 @@ private:
     static constexpr int pad = 7;
 
     std::unique_ptr<ZoneSwitch> sw;
+    std::unique_ptr<MiniGain> gain;
     bool lit = false;
     bool dimmed = false;
 };
@@ -293,22 +378,80 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
         };
     }
 
-    // The captured blocks: which device, the gain dial, and what its measured controls are doing —
-    // the tone curve straight from the block, the same data its filters were designed from.
+    // The captured blocks, stacked: the device's NAME under the title, the gain as a horizontal
+    // runner under the name, and the WAVE below — the ribbon's live silhouette in violet with
+    // the tone curve in orange over it: what the pedal is, and what it does to the spectrum.
     auto captured = [&] (ChainLink link, const juce::String& title, const char* blk, auto& block)
     {
         auto* t = make (link, title, theme::orange, params::blockOn (blk));
 
+        t->captionUnderTitle = true;
         t->caption = [&block] { return block.deviceName(); };
+        t->attachGain (*s.getParameter (params::blockGain (blk)));
 
-        auto* gainParam = s.getRawParameterValue (params::blockGain (blk));
-
-        t->preview = [&block, gainParam] (juce::Graphics& g, juce::Rectangle<int> box)
+        t->preview = [this, &block] (juce::Graphics& g, juce::Rectangle<int> box)
         {
-            auto knob = box.removeFromLeft (box.getHeight()).toFloat();
-            drawKnobGlyph (g, knob, gainParam->load() * 0.1f, theme::orange);
-            box.removeFromLeft (4);
-            drawMiniCurve (g, box, [&block] (double hz) { return block.toneDb (hz); }, theme::orange);
+            const auto r = box.toFloat().reduced (0.0f, 1.0f);
+
+            // The wave: the ribbon read at ITS resolution and bucketed here per pixel — calling
+            // setResolution from a second consumer would fight the zoom's scope over it.
+            int count = 0;
+            float phase = 0.0f;
+
+            if (block.ribbon.read (ribbonBuf, count, phase) && count > 1)
+            {
+                const int px = juce::jmax (2, box.getWidth());
+                const float mid = r.getCentreY(), half = r.getHeight() * 0.5f;
+
+                const auto shape = [] (float a)
+                {
+                    return juce::jlimit (-1.0f, 1.0f,
+                                         (a < 0.0f ? -1.0f : 1.0f) * std::pow (std::abs (a), 0.7f));
+                };
+
+                juce::Path wave;
+                wave.startNewSubPath (r.getX(), mid);
+
+                for (int x = 0; x < px; ++x)
+                {
+                    const int a = x * count / px, b = juce::jmax (a + 1, (x + 1) * count / px);
+                    float hi = -1.0f;
+                    for (int i = a; i < b && i < count; ++i)
+                        hi = juce::jmax (hi, ribbonBuf[(size_t) i].wetHi);
+                    wave.lineTo (r.getX() + (float) x, mid - shape (hi) * half);
+                }
+
+                for (int x = px; --x >= 0;)
+                {
+                    const int a = x * count / px, b = juce::jmax (a + 1, (x + 1) * count / px);
+                    float lo = 1.0f;
+                    for (int i = a; i < b && i < count; ++i)
+                        lo = juce::jmin (lo, ribbonBuf[(size_t) i].wetLo);
+                    wave.lineTo (r.getX() + (float) x, mid - shape (lo) * half);
+                }
+
+                wave.closeSubPath();
+                g.setColour (theme::violet.withAlpha (0.35f));
+                g.fillPath (wave);
+            }
+
+            // The tone curve over it, plain: no axis — two signatures, not a graph.
+            juce::Path curve;
+            constexpr float rangeDb = 15.0f;
+            const int w = juce::jmax (2, box.getWidth());
+
+            for (int x = 0; x < w; ++x)
+            {
+                const double hz = 20.0 * std::pow (1000.0, (double) x / (double) (w - 1));
+                const float  y  = r.getCentreY()
+                                - (float) block.toneDb (hz) / rangeDb * (r.getHeight() * 0.5f - 1.0f);
+                if (x == 0) curve.startNewSubPath (r.getX(), y);
+                else        curve.lineTo (r.getX() + (float) x, y);
+            }
+
+            g.setColour (theme::orange);
+            g.strokePath (curve, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved,
+                                                       juce::PathStrokeType::rounded));
         };
     };
 
