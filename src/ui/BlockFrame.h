@@ -138,16 +138,20 @@ public:
 
         // Sitting ON the border means masking the line behind it, fieldset-style. The mask is the
         // gradient's top colour, which is exactly what the border is drawn over up there.
-        if (titleInBorder)
+        // A block may keep its name off the border (the badge writes it inside instead).
+        if (showTitle)
         {
-            g.setColour (topFill);
-            g.fillRect (titleBox.expanded (legendGap, 0.0f).withHeight (theme::blockBorder + 2.0f)
-                                .withCentre ({ titleBox.getCentreX(), box.getY() }));
-        }
+            if (titleInBorder)
+            {
+                g.setColour (topFill);
+                g.fillRect (titleBox.expanded (legendGap, 0.0f).withHeight (theme::blockBorder + 2.0f)
+                                    .withCentre ({ titleBox.getCentreX(), box.getY() }));
+            }
 
-        g.setColour (kind == Kind::captured ? theme::orange : theme::lilac);
-        theme::drawTracked (g, title.toUpperCase(), titleBox, theme::displayFont (titleHeight),
-                            0.15f, juce::Justification::centredLeft);
+            g.setColour (kind == Kind::captured ? theme::orange : theme::lilac);
+            theme::drawTracked (g, title.toUpperCase(), titleBox, theme::displayFont (titleHeight),
+                                0.15f, juce::Justification::centredLeft);
+        }
 
         paintContent (g);
 
@@ -387,6 +391,9 @@ protected:
         one control the frame owns must be sized like a control. */
     int switchW = switchWidth;
     int switchH = switchHeight;
+
+    /** Off: the name stays out of the frame entirely — the block writes it where it wants. */
+    bool showTitle = true;
 
 public:
     // The reading-size metrics every zoomed face shares — ONE constant, not a per-block opinion.

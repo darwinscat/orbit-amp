@@ -264,11 +264,9 @@ private:
             for (float db = -60.0f; db < -0.5f; db += 20.0f)
                 g.fillRect (r.getX() + 4.0f, dbToY (r, db), r.getWidth() - 8.0f, 1.0f);
 
-            // The family rail, same as the sliver: dB-anchored violet-to-orange, and the gate's
-            // hold told by DRAINING THE COLOUR — the level is still THERE (the gate is a VCA,
-            // not a truth about the input), but it goes grey while it is not getting through.
-            meterrail::paintFill (g, r.reduced (2.0f), dbToY (r, levelDb),
-                                  juce::jlimit (0.0f, 1.0f, -pressureDb.load() / 40.0f));
+            // The family rail, same as the sliver: dB-anchored violet-to-orange. The hold is
+            // GR's column's story (and the badge's); desaturation here hit the eyes and retired.
+            meterrail::paintFill (g, r.reduced (2.0f), dbToY (r, levelDb));
 
             // While learning, the running maximum walks the scale in the tuner's green — the
             // threshold-to-be, being measured.

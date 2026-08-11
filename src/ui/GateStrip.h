@@ -60,10 +60,9 @@ public:
         const auto inCol = scaleArea();
 
         // ---- IN: the family meter rail — tabby's dB-anchored gradient, white hold, clip cap.
-        //      The gate's pressure is told by DRAINING THE COLOUR: the deeper it squeezes, the
-        //      greyer the column, monochrome at full mute — life leaving the signal, literally.
-        meterrail::paintFill (g, inCol, dbToY (inCol, levelDb),
-                              juce::jlimit (0.0f, 1.0f, -pressureDb.load() / 40.0f));
+        //      The gate's pressure lives on the BADGE now (red by depth); draining the colour
+        //      here hit the eyes and retired. ----
+        meterrail::paintFill (g, inCol, dbToY (inCol, levelDb));
 
         if (holdDb > floorDb + 0.5f)
             meterrail::paintHold (g, inCol, dbToY (inCol, holdDb));
@@ -167,7 +166,6 @@ public:
         m.addItem (2, "SOFT   -60",  true, matches (-60.0f, false));
         m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
         m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
-        m.addSeparator();
         m.addItem (5, "LEARN",       true, learning);
 
         // At the MOUSE, not at the component: a menu summoned from a sliver as tall as the panel

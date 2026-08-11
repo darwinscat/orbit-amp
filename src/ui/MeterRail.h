@@ -109,7 +109,9 @@ struct GripEditor
         ed.setColour (juce::TextEditor::focusedOutlineColourId, accent);
 
         ed.setBounds (box);
-        ed.setText (juce::String (current, 1), false);
+        // The editor deals in whole decibels: it opens on the nearest INT — type a fraction if
+        // you really mean one.
+        ed.setText (juce::String (juce::roundToInt (current)), false);
         ed.setVisible (true);
         ed.selectAll();
         ed.grabKeyboardFocus();

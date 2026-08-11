@@ -17,7 +17,7 @@ public:
     GateBadge (juce::RangedAudioParameter& gateOnParam, const std::atomic<float>& pressureDbSource)
         : BlockFrame ("Gate", Kind::dsp), pressureDb (pressureDbSource)
     {
-        titleHeight = 11.0f;
+        showTitle = false;   // the name goes INSIDE the box, not on the border
         attachPower (gateOnParam);
         startTimerHz (30);
     }
@@ -52,6 +52,11 @@ private:
             g.fillRoundedRectangle (boxArea().toFloat().reduced (theme::blockBorder + 1.0f),
                                     theme::radiusMd - 2.0f);
         }
+
+        // The name, in the middle of the box — the badge IS the word.
+        g.setColour (theme::lilac);
+        theme::drawTracked (g, "GATE", boxArea().toFloat(), theme::displayFont (13.0f), 0.15f,
+                            juce::Justification::centred);
     }
 
     void timerCallback() override
