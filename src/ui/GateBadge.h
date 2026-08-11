@@ -26,7 +26,7 @@ public:
     /** The click that is the zoom's — everything else (switch, menu) is the frame's. */
     std::function<void()> onOpen;
 
-    static constexpr int designWidth = 94;
+    static constexpr int designWidth = 82;
 
     void mouseDown (const juce::MouseEvent& e) override
     {
@@ -59,7 +59,7 @@ private:
         // The name, in the middle of the box — the badge IS the word. On the orange flood the
         // lilac drowns, so the letters whiten with the depth.
         g.setColour (theme::lilac.interpolatedWith (juce::Colours::white, depth));
-        theme::drawTracked (g, "GATE", boxArea().toFloat(), theme::displayFont (15.0f), 0.15f,
+        theme::drawTracked (g, "GATE", boxArea().toFloat(), theme::displayFont (17.0f), 0.12f,
                             juce::Justification::centred);
     }
 
