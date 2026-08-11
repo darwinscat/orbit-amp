@@ -148,16 +148,16 @@ private:
 //==============================================================================
 namespace
 {
-    /** A response curve in a preview box, ±15 dB against the brand-orange zero line — the same
-        axis the zoom draws. `wallDb`, when given, paints the cuts' area in the same orange. */
+    /** A response curve in a preview box, ±15 dB against the zero hairline — the zoom's grammar
+        in miniature. `deviationFill` paints the area between curve and zero in brand violet. */
     void drawMiniCurve (juce::Graphics& g, juce::Rectangle<int> box,
                         const std::function<double (double)>& magnitudeDb, juce::Colour colour,
-                        const std::function<double (double)>& wallDb = {})
+                        bool deviationFill = false)
     {
         const auto r = box.toFloat();
         constexpr float rangeDb = 15.0f;
 
-        g.setColour (theme::orange.withAlpha (0.75f));
+        g.setColour (juce::Colour (0x40ffffff));
         g.fillRect (r.getX(), r.getCentreY(), r.getWidth(), 1.0f);
 
         // NOT clamped: a cut keeps diving and leaves through the floor — pinning it to the edge
@@ -168,33 +168,8 @@ namespace
 
         const int w = juce::jmax (2, box.getWidth());
 
-        if (wallDb != nullptr)
-        {
-            juce::Path walls;
-            walls.startNewSubPath (r.getX(), r.getCentreY());
-
-            for (int x = 0; x < w; ++x)
-            {
-                const double hz = 20.0 * std::pow (1000.0, (double) x / (double) (w - 1));
-                const float  db = (float) wallDb (hz);
-                walls.lineTo (r.getX() + (float) x,
-                              r.getCentreY() - db / rangeDb * (r.getHeight() * 0.5f - 1.0f));
-            }
-
-            walls.lineTo (r.getRight(), r.getCentreY());
-            walls.closeSubPath();
-
-            // Violet fill, orange edge — the mini speaks the zoom's colour law: translucent
-            // orange rots to brick on this panel, so orange stays a line.
-            g.setGradientFill (juce::ColourGradient (theme::violet.withAlpha (0.40f), 0.0f, r.getCentreY(),
-                                                     theme::violet.withAlpha (0.08f), 0.0f, r.getBottom(),
-                                                     false));
-            g.fillPath (walls);
-            g.setColour (theme::orange.withAlpha (0.6f));
-            g.strokePath (walls, juce::PathStrokeType (1.0f));
-        }
-
-        juce::Path p;
+        juce::Path p, fill;
+        fill.startNewSubPath (r.getX(), r.getCentreY());
 
         for (int x = 0; x < w; ++x)
         {
@@ -204,6 +179,19 @@ namespace
 
             if (x == 0) p.startNewSubPath (r.getX(), y);
             else        p.lineTo (r.getX() + (float) x, y);
+            fill.lineTo (r.getX() + (float) x, y);
+        }
+
+        if (deviationFill)
+        {
+            fill.lineTo (r.getRight(), r.getCentreY());
+            fill.closeSubPath();
+
+            // Both halves in one pass at thumb size: violet, densest at the zero line.
+            g.setGradientFill (juce::ColourGradient (theme::violet.withAlpha (0.40f), 0.0f, r.getCentreY(),
+                                                     theme::violet.withAlpha (0.06f), 0.0f, r.getBottom(),
+                                                     false));
+            g.fillPath (fill);
         }
 
         g.setColour (colour);
@@ -411,8 +399,7 @@ ChainStrip::ChainStrip (AmpProcessor& processor) : amp (processor)
             }
 
             drawMiniCurve (g, box, [this, l] (double hz) { return eqDisplay[(size_t) l].magnitudeDb (hz); },
-                           theme::violet,
-                           [this, l] (double hz) { return eqDisplay[(size_t) l].filterMagnitudeDb (hz); });
+                           theme::orange, true);
         };
     }
 

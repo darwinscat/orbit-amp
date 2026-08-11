@@ -23,6 +23,7 @@ public:
         double  db = 0.0;
         Freedom freedom = Freedom::gain;
         bool    visible = true;
+        juce::Colour tint = juce::Colour (0xffb39bff);
     };
 
     explicit EqCurve (std::function<double (double)> magnitudeDbAt)
@@ -51,10 +52,6 @@ public:
         owner may take it away again. */
     std::function<void (double hz)> onCurveDoubleClick;
     std::function<void (int index)> onHandleDoubleClick;
-
-    /** The cut filters' own response, drawn as red WALLS under the curve — what is removed,
-        separated from how the rest is coloured. Unset = no walls. */
-    std::function<double (double)> filterMagnitudeDb;
 
     /** The live spectrum, painted first inside the well — behind the walls, behind the curve:
         the signal is the ground the response stands on. Unset = no spectrum. */
@@ -99,36 +96,12 @@ public:
             if (paintSpectrum != nullptr)
                 paintSpectrum (g, r);
 
-            // The walls first: the area between 0 dB and the filters' own response, filled in the
-            // cut's red — solid-dark over the near-black well, so it stays red instead of mudding.
-            // Zero height in the passband, rising exactly where the filters bite.
-            if (filterMagnitudeDb != nullptr)
-            {
-                juce::Path walls;
-                walls.startNewSubPath (r.getX(), dbToY (r, 0.0f));
-
-                for (int x = 0; x < w; ++x)
-                {
-                    const float px = (float) x + r.getX();
-                    walls.lineTo (px, dbToY (r, (float) filterMagnitudeDb (xToHz (r, px))));
-                }
-
-                walls.lineTo (r.getRight(), dbToY (r, 0.0f));
-                walls.closeSubPath();
-
-                // The fill is VIOLET, tabby's way: densest at the 0 dB line, melting downward.
-                // Translucent orange rots to brick on this panel — orange is for LINES here.
-                const float y0 = dbToY (r, 0.0f);
-                g.setGradientFill (juce::ColourGradient (theme::violet.withAlpha (0.40f), 0.0f, y0,
-                                                         theme::violet.withAlpha (0.05f), 0.0f, r.getBottom(),
-                                                         false));
-                g.fillPath (walls);
-                g.setColour (wallRed.withAlpha (0.75f));
-                g.strokePath (walls, juce::PathStrokeType (1.2f));
-            }
-
             // One point per pixel column — cheaper and smoother than a coarse grid interpolated up.
-            juce::Path curve;
+            // The fill path is the same trace closed along the 0 dB line: what is painted is the
+            // DEVIATION from flat, tabby's grammar — not any single filter's opinion.
+            const float y0 = dbToY (r, 0.0f);
+            juce::Path curve, fill;
+            fill.startNewSubPath (r.getX(), y0);
 
             for (int x = 0; x < w; ++x)
             {
@@ -137,14 +110,44 @@ public:
 
                 if (x == 0) curve.startNewSubPath (px, y);
                 else        curve.lineTo (px, y);
+                fill.lineTo (px, y);
             }
 
-            g.setColour (theme::violet);
+            fill.lineTo (r.getRight(), y0);
+            fill.closeSubPath();
+
+            // Brand violet both sides, densest at the 0 dB line, fading to nothing at the edges —
+            // one fill path, clipped to each half (tabby's exact recipe).
+            {
+                const juce::Graphics::ScopedSaveState half (g);
+                g.reduceClipRegion ({ (int) r.getX(), (int) r.getY(),
+                                      (int) r.getWidth(), juce::jmax (0, (int) (y0 - r.getY())) });
+                g.setGradientFill (juce::ColourGradient (theme::violet.withAlpha (0.0f),  0.0f, r.getY(),
+                                                         theme::violet.withAlpha (0.40f), 0.0f, y0, false));
+                g.fillPath (fill);
+            }
+            {
+                const juce::Graphics::ScopedSaveState half (g);
+                g.reduceClipRegion ({ (int) r.getX(), (int) y0,
+                                      (int) r.getWidth(), juce::jmax (0, (int) (r.getBottom() - y0)) });
+                g.setGradientFill (juce::ColourGradient (theme::violet.withAlpha (0.0f),  0.0f, r.getBottom(),
+                                                         theme::violet.withAlpha (0.40f), 0.0f, y0, false));
+                g.fillPath (fill);
+            }
+
+            // The composite is brand orange with a faint glow — stacked strokes, no real blur.
+            g.setColour (theme::orange.withAlpha (0.12f));
+            g.strokePath (curve, juce::PathStrokeType (5.0f));
+            g.setColour (theme::orange.withAlpha (0.22f));
+            g.strokePath (curve, juce::PathStrokeType (2.5f));
+            g.setColour (theme::orange);
             g.strokePath (curve, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);
+
+        drawChip (g, { r.getX() + 10.0f, r.getY() + 10.0f, 16.0f, 16.0f });
 
         paintHandles (g, r);
     }
@@ -239,7 +242,6 @@ private:
     static constexpr float handleRadius = 5.0f;
     static constexpr float grabRadius   = 11.0f;   // generous: the dot is small, the target is not
 
-    inline static const juce::Colour wallRed = theme::orange;   // the cuts wear the brand orange
 
     int handleAt (juce::Point<float> p) const
     {
@@ -303,7 +305,7 @@ private:
             {
                 const float x = hzToX (r, h.hz);
                 const float dashes[] = { 5.0f, 4.0f };
-                g.setColour (wallRed.withAlpha (lit ? 1.0f : 0.65f));
+                g.setColour (h.tint.withAlpha (lit ? 1.0f : 0.65f));
                 g.drawDashedLine ({ x, r.getY() + 2.0f, x, r.getBottom() - 2.0f },
                                   dashes, 2, lit ? 2.2f : 1.4f);
                 continue;
@@ -314,7 +316,7 @@ private:
 
             g.setColour (theme::bezel);
             g.fillEllipse (c.x - rad, c.y - rad, rad * 2.0f, rad * 2.0f);
-            g.setColour (lit ? theme::lilac : theme::violet);
+            g.setColour (lit ? h.tint.brighter (0.4f) : h.tint);
             g.drawEllipse (c.x - rad, c.y - rad, rad * 2.0f, rad * 2.0f, 1.6f);
         }
     }
@@ -349,6 +351,33 @@ private:
         return r.getCentreY() - db / rangeDb * (r.getHeight() * 0.5f - 6.0f);
     }
 
+    /** A little microchip in the corner — the maker's mark: this face is our own DSP. */
+    static void drawChip (juce::Graphics& g, juce::Rectangle<float> r)
+    {
+        const auto body = r.reduced (r.getWidth() * 0.2f);
+
+        g.setColour (theme::txFaint);
+        g.drawRoundedRectangle (body, 1.5f, 1.1f);
+
+        // Three pins a side, north-south-east-west.
+        for (int i = 0; i < 3; ++i)
+        {
+            const float t   = (0.5f + (float) i) / 3.0f;
+            const float len = r.getWidth() * 0.18f;
+
+            const float x = body.getX() + body.getWidth() * t;
+            g.fillRect (x - 0.5f, body.getY() - len, 1.0f, len);
+            g.fillRect (x - 0.5f, body.getBottom(),  1.0f, len);
+
+            const float y = body.getY() + body.getHeight() * t;
+            g.fillRect (body.getX() - len, y - 0.5f, len, 1.0f);
+            g.fillRect (body.getRight(),   y - 0.5f, len, 1.0f);
+        }
+
+        g.setColour (theme::violet.withAlpha (0.8f));
+        g.fillEllipse (body.getX() + 2.0f, body.getY() + 2.0f, 2.0f, 2.0f);
+    }
+
     void drawGrid (juce::Graphics& g, juce::Rectangle<float> r) const
     {
         // The log grid the way EQs have always drawn it: the 1-2-5 series carries the weight
@@ -370,9 +399,13 @@ private:
         for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
             g.fillRect (r.getX() + 4.0f, dbToY (r, db), r.getWidth() - 8.0f, 1.0f);
 
-        // The 0 dB line is the reference the curve is judged against — brand orange, like tabby.
-        g.setColour (theme::orange.withAlpha (0.85f));
-        g.fillRect (r.getX() + 4.0f, dbToY (r, 0.0f), r.getWidth() - 8.0f, 1.0f);
+        // The 0 dB line, tabby's exact recipe: a soft violet glow band under a translucent
+        // white hairline — the reference reads without shouting.
+        const float zy = dbToY (r, 0.0f);
+        g.setColour (theme::lilac.withAlpha (0.05f));
+        g.fillRect (r.getX() + 4.0f, zy - 2.5f, r.getWidth() - 8.0f, 5.0f);
+        g.setColour (juce::Colour (0x40ffffff));
+        g.fillRect (r.getX() + 4.0f, zy, r.getWidth() - 8.0f, 1.0f);
 
         // The numbers on the scales: an instrument, not a sketch.
         g.setColour (theme::txFaint);

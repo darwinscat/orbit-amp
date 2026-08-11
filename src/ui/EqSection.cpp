@@ -220,8 +220,9 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     b3OnAtt     = attach (params::eqB3On (link));
     b3DbAtt     = attach (params::eqBellDb (link, 2));
 
-    // The cut switches carry their own attachments; the curve refreshes off ours.
-    hpfSw.accent = theme::violet;
+    // The cut switches carry their own attachments; the curve refreshes off ours. Each cut wears
+    // its line's colour — orange HPF, violet LPF — so switch, dashed line and combo read as one.
+    hpfSw.accent = theme::orange;
     lpfSw.accent = theme::violet;
     hpfSw.attach (*state.getParameter (params::eqHpfOn (link)));
     lpfSw.attach (*state.getParameter (params::eqLpfOn (link)));
@@ -274,7 +275,6 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
 
     presetBtn.onClick = [this] (juce::Point<int> screenPos) { showPresets (screenPos); };
 
-    curve.filterMagnitudeDb  = [this] (double hz) { return display.filterMagnitudeDb (hz); };
     curve.onHandleDrag       = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
     curve.onDragActive       = [this] (int i, bool a) { handleDragActive (i, a); };
     curve.onHandleWheel      = [this] (int i, float d) { handleWheel (i, d); };
@@ -594,16 +594,16 @@ void EqSection::refreshHandles()
 
     const auto& s = display.getSettings();
 
-    h.getReference (hLo) = { s.loHz, s.loDb, H::Freedom::both, true };
-    h.getReference (hB1) = { s.b1Hz, s.b1Db, H::Freedom::both, true };
-    h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, true };
-    h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, s.b3On };
-    h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, true };
+    h.getReference (hLo) = { s.loHz, s.loDb, H::Freedom::both, true,   theme::eqNode[0] };
+    h.getReference (hB1) = { s.b1Hz, s.b1Db, H::Freedom::both, true,   theme::eqNode[1] };
+    h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, true,   theme::eqNode[2] };
+    h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, s.b3On, theme::eqNode[4] };
+    h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, true,   theme::eqNode[3] };
 
     // The cuts only exist while they are switched on — a handle for a filter that is not in the
-    // chain would be a control over nothing.
-    h.getReference (hHpf) = { s.hpfHz, 0.0, H::Freedom::freq, s.hpfOn };
-    h.getReference (hLpf) = { s.lpfHz, 0.0, H::Freedom::freq, s.lpfOn };
+    // chain would be a control over nothing. Orange HPF, violet LPF, same as their switches.
+    h.getReference (hHpf) = { s.hpfHz, 0.0, H::Freedom::freq, s.hpfOn, theme::orange };
+    h.getReference (hLpf) = { s.lpfHz, 0.0, H::Freedom::freq, s.lpfOn, theme::violet };
 
     curve.setHandles (std::move (h));
 }

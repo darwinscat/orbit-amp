@@ -13,6 +13,16 @@ using felitronics::appkit::brand::violet;   // DSP blocks, hairlines, primary ac
 using felitronics::appkit::brand::lilac;    // DSP label tint
 using felitronics::appkit::brand::orange;   // "spark" — the captured neural core
 
+// The EQ node palette, tabby's band slot colours: cool/non-orange so nodes never clash with the
+// orange composite line. LO, LO MID, HI MID, HI take the first four; the surgical B3 the fifth.
+inline const juce::Colour eqNode[5] = {
+    juce::Colour (0xff5ec8ff),   // blue
+    juce::Colour (0xff62d2a2),   // green
+    juce::Colour (0xffb388ff),   // light violet
+    juce::Colour (0xfff06292),   // pink
+    juce::Colour (0xff4dd0e1),   // cyan — the scalpel
+};
+
 inline const juce::Colour ground  { 0xff08080d };   // behind the device
 inline const juce::Colour panel   { 0xff111119 };
 inline const juce::Colour panel2  { 0xff15151f };

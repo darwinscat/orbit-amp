@@ -106,10 +106,10 @@ private:
         void mouseDown (const juce::MouseEvent&) override;
     };
 
-    Knob lo { "LO", theme::violet, 0 };
-    Knob b1 { "LO MID", theme::violet, 0 };
-    Knob b2 { "HI MID", theme::violet, 0 };
-    Knob hi { "HI", theme::violet, 0 };
+    Knob lo { "LO",     theme::eqNode[0], 0 };
+    Knob b1 { "LO MID", theme::eqNode[1], 0 };
+    Knob b2 { "HI MID", theme::eqNode[2], 0 };
+    Knob hi { "HI",     theme::eqNode[3], 0 };
 
     PresetButton presetBtn;
 
