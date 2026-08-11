@@ -60,53 +60,59 @@ public:
                             0.15f, juce::Justification::centredLeft);
         area.removeFromTop (6.0f);
 
-        // A real WAVEFORM: log-magnitude mirrored about the centre line — the oscilloscope
-        // silhouette, with the noise floor still visible the way only a log scale keeps it.
-        const float cy = area.getCentreY();
-
-        // The scale, mirrored faintly; numbers ride the top half only.
+        // The waveform as a CURVE: the peak envelope (per-block peak sampled at 30 Hz, log
+        // scale so the noise floor stays in the picture), one smooth path growing rightward,
+        // its area filled faintly under it — half-height, floor-anchored.
         for (float db : { -20.0f, -40.0f, -60.0f })
         {
-            const float h = dbToHalf (area, db);
+            const float y = dbToY (area, db);
             g.setColour (theme::hair);
-            g.fillRect (area.getX(), cy - h, area.getWidth(), 1.0f);
-            g.fillRect (area.getX(), cy + h, area.getWidth(), 1.0f);
+            g.fillRect (area.getX(), y, area.getWidth(), 1.0f);
             g.setColour (theme::txFaint);
             theme::drawTracked (g, juce::String ((int) db),
-                                { area.getX() + 4.0f, cy - h - 13.0f, 40.0f, 12.0f },
+                                { area.getX() + 4.0f, y - 13.0f, 40.0f, 12.0f },
                                 theme::displayFont (10.0f), 0.06f, juce::Justification::centredLeft);
         }
 
-        g.setColour (theme::hair2);
-        g.fillRect (area.getX(), cy - 0.5f, area.getWidth(), 1.0f);
-
-        if (trace != nullptr && ! trace->empty())
+        if (trace != nullptr && trace->size() > 1)
         {
-            const float barW = area.getWidth() / (float) juce::jmax (1, totalTicks);
+            const float stepW = area.getWidth() / (float) juce::jmax (1, totalTicks - 1);
 
-            g.setColour (theme::violet.withAlpha (0.9f));
+            juce::Path curve, fill;
+            fill.startNewSubPath (area.getX(), area.getBottom());
+
             for (size_t i = 0; i < trace->size(); ++i)
             {
-                const float h = juce::jmax (0.75f, dbToHalf (area, (*trace)[i]));
-                g.fillRect (area.getX() + (float) i * barW, cy - h,
-                            juce::jmax (1.0f, barW - 1.0f), h * 2.0f);
+                const float x = area.getX() + (float) i * stepW;
+                const float y = dbToY (area, (*trace)[i]);
+
+                if (i == 0) curve.startNewSubPath (x, y);
+                else        curve.lineTo (x, y);
+                fill.lineTo (x, y);
             }
+
+            fill.lineTo (area.getX() + (float) (trace->size() - 1) * stepW, area.getBottom());
+            fill.closeSubPath();
+
+            g.setColour (theme::violet.withAlpha (0.18f));
+            g.fillPath (fill);
+            g.setColour (theme::violet);
+            g.strokePath (curve, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved,
+                                                       juce::PathStrokeType::rounded));
         }
 
-        // The gate corridor being measured: the threshold-to-be as a mirrored dashed pair,
-        // walking live with the running maximum, its number beside it.
+        // The threshold-to-be walks live: one lilac dashed line with its number counting.
         if (const float pend = pendingDb != nullptr ? pendingDb() : -999.0f;
             pend > -200.0f && message.isEmpty())
         {
-            const float h = dbToHalf (area, pend);
+            const float y = dbToY (area, pend);
             const float dashes[] = { 5.0f, 4.0f };
 
             g.setColour (theme::lilac);
-            g.drawDashedLine ({ area.getX(), cy - h, area.getRight(), cy - h }, dashes, 2, 1.4f);
-            g.drawDashedLine ({ area.getX(), cy + h, area.getRight(), cy + h }, dashes, 2, 1.4f);
+            g.drawDashedLine ({ area.getX(), y, area.getRight(), y }, dashes, 2, 1.4f);
 
             theme::drawTracked (g, juce::String (juce::roundToInt (pend)) + " DB",
-                                { area.getRight() - 74.0f, cy - h - 18.0f, 70.0f, 14.0f },
+                                { area.getRight() - 74.0f, y - 18.0f, 70.0f, 14.0f },
                                 theme::displayFont (13.0f), 0.08f, juce::Justification::centredRight);
         }
 
@@ -131,12 +137,11 @@ private:
         repaint();
     }
 
-    /** Log magnitude to half-height about the centre line — the mirrored waveform's ruler. */
-    static float dbToHalf (juce::Rectangle<float> r, float db)
+    static float dbToY (juce::Rectangle<float> r, float db)
     {
         constexpr float floorDb = -80.0f;
-        return (r.getHeight() * 0.5f - 2.0f)
-             * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
+        return r.getBottom()
+             - r.getHeight() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
     }
 
     juce::String message;
