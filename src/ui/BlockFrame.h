@@ -175,7 +175,7 @@ public:
         // never need hunting for a target.
         if (e.mods.isPopupMenu())
         {
-            showPowerMenu();
+            showPowerMenu (e.getScreenPosition());
             return;
         }
 
@@ -189,7 +189,7 @@ public:
         }
     }
 
-    void showPowerMenu()
+    void showPowerMenu (juce::Point<int> screenPos)
     {
         if (! hasSwitch)
             return;
@@ -198,7 +198,9 @@ public:
         m.addSectionHeader (title.toUpperCase());
         m.addItem (1, "ON", true, power != nullptr ? powerParamOn() : on);
 
-        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+        // At the MOUSE — a whole block is a poor aiming point.
+        m.showMenuAsync (juce::PopupMenu::Options()
+                             .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                          [safe = juce::Component::SafePointer<BlockFrame> (this)] (int r)
                          {
                              if (r != 1 || safe == nullptr)

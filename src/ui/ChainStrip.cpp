@@ -78,7 +78,9 @@ public:
             m.addSectionHeader (name.toUpperCase());
             m.addItem (1, "ON", true, sw->paramOn());
 
-            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+            m.showMenuAsync (juce::PopupMenu::Options()
+                                 .withTargetScreenArea ({ e.getScreenPosition().x,
+                                                          e.getScreenPosition().y, 1, 1 }),
                              [safe = juce::Component::SafePointer<Thumb> (this)] (int r)
                              {
                                  if (r == 1 && safe != nullptr && safe->sw != nullptr)

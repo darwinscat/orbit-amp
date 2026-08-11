@@ -144,7 +144,7 @@ public:
         if (e.mods.isPopupMenu())
         {
             swallowUp = true;
-            showPresetMenu();
+            showPresetMenu (e.getScreenPosition());
             return;
         }
 
@@ -153,7 +153,7 @@ public:
         pressY    = e.position.y;
     }
 
-    void showPresetMenu()
+    void showPresetMenu (juce::Point<int> screenPos)
     {
         const bool  isOn  = onP.getValue() > 0.5f;
         const float th    = param.convertFrom0to1 (param.getValue());
@@ -171,7 +171,10 @@ public:
         m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
         m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
 
-        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+        // At the MOUSE, not at the component: a menu summoned from a sliver as tall as the panel
+        // would otherwise land wherever the sliver ends.
+        m.showMenuAsync (juce::PopupMenu::Options()
+                             .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                          [safe = juce::Component::SafePointer<GateStrip> (this)] (int r)
                          {
                              if (safe != nullptr)
