@@ -235,6 +235,11 @@ target_link_libraries(OrbitAmp PRIVATE
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.
 # ----------------------------------------------------------------------------
+# The NAM bench — not a gate, a measuring instrument: ns/frame through the shipping stage.
+add_executable(orbitamp_nam_bench tests/NamBench.cpp)
+target_link_libraries(orbitamp_nam_bench PRIVATE felitronics::nam juce::juce_core)
+target_compile_definitions(orbitamp_nam_bench PRIVATE JUCE_STANDALONE_APPLICATION=1)
+
 add_executable(orbitamp_eqlink_test tests/EqLinkTests.cpp)
 target_include_directories(orbitamp_eqlink_test PRIVATE src)
 target_link_libraries(orbitamp_eqlink_test PRIVATE felitronics::eq)
