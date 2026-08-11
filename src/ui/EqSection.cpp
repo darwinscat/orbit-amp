@@ -348,80 +348,77 @@ void EqSection::PresetButton::paint (juce::Graphics& g)
 
 void EqSection::showPresets (juce::Point<int> screenPos)
 {
-    // The menu is stamps of starting points, named for the JOB this link does at its place in the
-    // chain — eq1 preps the signal for the boost, eq2 shapes it for the preamp. Every stamp
-    // starts from flat and applies its move; the moment you touch a knob the sound is yours.
+    // Stamps, named for the JOB this link does at its place in the chain — eq1 preps the signal
+    // for the boost, eq2 shapes it for the preamp. Each stamp is SURGICAL: it writes only its own
+    // zone, so stamps compose — Rumble cut plus Lead push is both, in any order; rivals in the
+    // same zone simply overwrite each other. Flat stays the one full wipe.
+    //
+    // The ticks are computed, never stored: a stamp shows checked while the parameters it writes
+    // actually hold its values. Turn any of its knobs and the tick honestly goes out — that sound
+    // is yours now, not the preset's.
+    struct Stamp
+    {
+        const char* name;
+        std::vector<std::pair<juce::String, float>> moves;
+    };
+
+    const std::vector<Stamp> stamps = link == 0
+        ? std::vector<Stamp> {
+            { "Rumble cut",   // the infra-low goes before the boost sees it
+              { { params::eqHpfOn (link), 1.0f }, { params::eqHpfHz (link), 75.0f },
+                { params::eqHpfSlope (link), 3.0f } } },
+            { "Tight low",    // higher cut plus a leaner shelf
+              { { params::eqHpfOn (link), 1.0f }, { params::eqHpfHz (link), 110.0f },
+                { params::eqHpfSlope (link), 3.0f }, { params::eqLoDb (link), -2.0f } } },
+            { "Lead push",    // the screamer hump
+              { { params::eqBellDb (link, 0), 4.0f }, { params::eqBellHz (link, 0), 750.0f } } } }
+        : std::vector<Stamp> {
+            { "Tight",        // the preamp gets nothing to flub
+              { { params::eqHpfOn (link), 1.0f }, { params::eqHpfHz (link), 120.0f },
+                { params::eqHpfSlope (link), 3.0f }, { params::eqLoDb (link), -3.0f },
+                { params::eqLoHz (link), 150.0f } } },
+            { "Bright",
+              { { params::eqHiDb (link), 4.0f }, { params::eqHiHz (link), 3500.0f } } },
+            { "Smooth",       // the glass comes off before the drive
+              { { params::eqLpfOn (link), 1.0f }, { params::eqLpfHz (link), 7000.0f },
+                { params::eqLpfSlope (link), 1.0f } } } };
+
+    const auto holds = [this] (const Stamp& st)
+    {
+        for (const auto& [id, v] : st.moves)
+            if (auto* p = state.getParameter (id);
+                p == nullptr || std::abs (p->getValue() - p->convertTo0to1 (v)) > 0.005f)
+                return false;
+        return true;
+    };
+
     juce::PopupMenu m;
     m.addSectionHeader ("EQ " + juce::String (link + 1));
-    m.addItem (1, "Flat");
+    m.addItem (1, "Flat", true, linkIsFlat());
     m.addSeparator();
 
-    if (link == 0)
-    {
-        m.addItem (2, "Rumble cut");
-        m.addItem (3, "Tight low");
-        m.addItem (4, "Lead push");
-    }
-    else
-    {
-        m.addItem (2, "Tight");
-        m.addItem (3, "Bright");
-        m.addItem (4, "Smooth");
-    }
+    for (int i = 0; i < (int) stamps.size(); ++i)
+        m.addItem (i + 2, stamps[(size_t) i].name, true, holds (stamps[(size_t) i]));
 
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [this] (int r)
+                     [this, stamps] (int r)
                      {
-                         if (r == 0)
-                             return;
-
-                         resetLink();   // every preset is a move away from flat
-
-                         if (link == 0)
-                         {
-                             if (r == 2)        // Rumble cut: the infra-low goes before the boost sees it
-                             {
-                                 setParam (params::eqHpfOn (link), 1.0f);
-                                 setParam (params::eqHpfHz (link), 75.0f);
-                                 setParam (params::eqHpfSlope (link), 3.0f);   // 24 dB/oct
-                             }
-                             else if (r == 3)   // Tight low: higher cut plus a leaner shelf
-                             {
-                                 setParam (params::eqHpfOn (link), 1.0f);
-                                 setParam (params::eqHpfHz (link), 110.0f);
-                                 setParam (params::eqHpfSlope (link), 3.0f);
-                                 setParam (params::eqLoDb (link), -2.0f);
-                             }
-                             else if (r == 4)   // Lead push: the screamer hump
-                             {
-                                 setParam (params::eqBellDb (link, 0), 4.0f);
-                                 setParam (params::eqBellHz (link, 0), 750.0f);
-                             }
-                         }
-                         else
-                         {
-                             if (r == 2)        // Tight: the preamp gets nothing to flub
-                             {
-                                 setParam (params::eqHpfOn (link), 1.0f);
-                                 setParam (params::eqHpfHz (link), 120.0f);
-                                 setParam (params::eqHpfSlope (link), 3.0f);
-                                 setParam (params::eqLoDb (link), -3.0f);
-                                 setParam (params::eqLoHz (link), 150.0f);
-                             }
-                             else if (r == 3)   // Bright
-                             {
-                                 setParam (params::eqHiDb (link), 4.0f);
-                                 setParam (params::eqHiHz (link), 3500.0f);
-                             }
-                             else if (r == 4)   // Smooth: the glass comes off before the drive
-                             {
-                                 setParam (params::eqLpfOn (link), 1.0f);
-                                 setParam (params::eqLpfHz (link), 7000.0f);
-                                 setParam (params::eqLpfSlope (link), 1.0f);   // 12 dB/oct
-                             }
-                         }
+                         if (r == 1)
+                             resetLink();
+                         else if (r >= 2 && r - 2 < (int) stamps.size())
+                             for (const auto& [id, v] : stamps[(size_t) (r - 2)].moves)
+                                 setParam (id, v);
                      });
+}
+
+bool EqSection::linkIsFlat() const
+{
+    for (const auto& id : linkParamIds())
+        if (auto* p = state.getParameter (id);
+            p != nullptr && std::abs (p->getValue() - p->getDefaultValue()) > 0.005f)
+            return false;
+    return true;
 }
 
 void EqSection::setParam (const juce::String& id, float plainValue)
@@ -434,11 +431,10 @@ void EqSection::setParam (const juce::String& id, float plainValue)
     }
 }
 
-void EqSection::resetLink()
+juce::StringArray EqSection::linkParamIds() const
 {
-    // Everything back to its default in one sweep — except the power: that is the frame's, and a
-    // reset that also switched you off would be a reset that argues.
-    const juce::StringArray ids {
+    // Everything the link owns — except the power: that is the frame's.
+    return {
         params::eqHpfOn (link),  params::eqHpfHz (link),  params::eqHpfSlope (link),
         params::eqLoDb (link),   params::eqLoHz (link),
         params::eqBellDb (link, 0), params::eqBellHz (link, 0), params::eqBellQ (link, 0),
@@ -449,8 +445,13 @@ void EqSection::resetLink()
         params::eqLpfOn (link),  params::eqLpfHz (link),  params::eqLpfSlope (link),
         params::eqLevel (link),
     };
+}
 
-    for (const auto& id : ids)
+void EqSection::resetLink()
+{
+    // Back to default in one sweep — a reset that also switched you off would be a reset that
+    // argues, hence no power here.
+    for (const auto& id : linkParamIds())
     {
         if (auto* p = state.getParameter (id))
         {
@@ -700,20 +701,19 @@ void EqSection::layOut (juce::Rectangle<int> content)
     const int cellW    = row.getWidth() / 6;
     const int readoutH = 18;
 
-    // The cut cell, bottom to top: the frequency on the shared bottom line, the switch exactly
-    // where it always sat, the combo lifted into the gap between name and switch.
+    // The cut cell, top to bottom: name, then switch with its slope combo right under it — one
+    // stacked instrument, centred in the room between name and the shared frequency line.
     const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
                                  SlopeCombo& combo, juce::Label& freq)
     {
         freq.setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (76, readoutH));
         label.setBounds (cell.removeFromTop (18));
 
-        const auto swRect = cell.withSizeKeepingCentre (30, 16);
-        sw.setBounds (swRect);
-
-        combo.setBounds (juce::Rectangle<int> (cell.getX(), label.getBottom(),
-                                               cell.getWidth(), swRect.getY() - label.getBottom())
-                             .withSizeKeepingCentre (98, readoutH));
+        const int stackH = 16 + 6 + readoutH;
+        auto stack = cell.withSizeKeepingCentre (cell.getWidth(), stackH);
+        sw.setBounds (stack.removeFromTop (16).withSizeKeepingCentre (30, 16));
+        stack.removeFromTop (6);
+        combo.setBounds (stack.withSizeKeepingCentre (98, readoutH));
     };
 
     switchCell (row.removeFromLeft (cellW), hpfSw, hpfLabel, hpfSlopeBox, freqReadout[4]);

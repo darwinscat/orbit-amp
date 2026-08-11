@@ -2,6 +2,8 @@
 
 #include "Theme.h"
 
+#include <felitronics/appkit/DeviceGlyph.h>
+
 namespace orbitamp
 {
 
@@ -147,7 +149,14 @@ public:
         g.setColour (theme::hair2);
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);
 
-        drawChip (g, { r.getX() + 10.0f, r.getY() + 10.0f, 16.0f, 16.0f });
+        // The maker's mark, top-right under the presets: the family's own DSP glyph, in the
+        // glyph set's own colour — this face is our silicon.
+        {
+            using felitronics::appkit::DeviceType;
+            const juce::Rectangle<float> mark { r.getRight() - 48.0f, r.getY() + 44.0f, 28.0f, 28.0f };
+            felitronics::appkit::drawDeviceGlyph (g, mark, DeviceType::dsp,
+                                                  felitronics::appkit::deviceStroke (DeviceType::dsp));
+        }
 
         paintHandles (g, r);
     }
@@ -349,33 +358,6 @@ private:
         // it into a horizontal line would draw a brickwall shelf that the filter does not have, and
         // would hide how steep the cut actually is. The well's clip is what ends the line.
         return r.getCentreY() - db / rangeDb * (r.getHeight() * 0.5f - 6.0f);
-    }
-
-    /** A little microchip in the corner — the maker's mark: this face is our own DSP. */
-    static void drawChip (juce::Graphics& g, juce::Rectangle<float> r)
-    {
-        const auto body = r.reduced (r.getWidth() * 0.2f);
-
-        g.setColour (theme::txFaint);
-        g.drawRoundedRectangle (body, 1.5f, 1.1f);
-
-        // Three pins a side, north-south-east-west.
-        for (int i = 0; i < 3; ++i)
-        {
-            const float t   = (0.5f + (float) i) / 3.0f;
-            const float len = r.getWidth() * 0.18f;
-
-            const float x = body.getX() + body.getWidth() * t;
-            g.fillRect (x - 0.5f, body.getY() - len, 1.0f, len);
-            g.fillRect (x - 0.5f, body.getBottom(),  1.0f, len);
-
-            const float y = body.getY() + body.getHeight() * t;
-            g.fillRect (body.getX() - len, y - 0.5f, len, 1.0f);
-            g.fillRect (body.getRight(),   y - 0.5f, len, 1.0f);
-        }
-
-        g.setColour (theme::violet.withAlpha (0.8f));
-        g.fillEllipse (body.getX() + 2.0f, body.getY() + 2.0f, 2.0f, 2.0f);
     }
 
     void drawGrid (juce::Graphics& g, juce::Rectangle<float> r) const

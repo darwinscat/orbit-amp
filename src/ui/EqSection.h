@@ -91,6 +91,8 @@ private:
 
     void showPresets (juce::Point<int> screenPos);
     void resetLink();
+    juce::StringArray linkParamIds() const;
+    bool linkIsFlat() const;
     void setParam (const juce::String& id, float plainValue);
 
     static juce::String formatHz (double hz);
