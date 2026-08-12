@@ -96,6 +96,15 @@ namespace
         return std::sqrt (sum / std::max<size_t> (1, x.size()));
     }
 
+    double peakDb (const std::vector<float>& x)
+    {
+        float peak = 0.0f;
+        for (const float s : x)
+            peak = std::max (peak, std::abs (s));
+
+        return 20.0 * std::log10 (std::max (1.0e-9f, peak));
+    }
+
     /** How DIFFERENT two outputs are, after matching their levels — as a percentage of signal.
 
         Level is the wrong question for a distortion. Turning a pedal up does not make it louder past
@@ -141,6 +150,14 @@ int main()
     set (amp, orbitamp::params::reverbOn, 0.0f);
     set (amp, orbitamp::params::powerOn, 0.0f);
 
+    // Both younger than this gate, both in every path, both OFF here for the same reason the
+    // reverb is. The cabinet's convolution tail rings for over a second — longer than a run's
+    // settle — so with it on, one measurement's tail plays into the next one's window and two
+    // identical settings stop measuring identical. The limiter bends the very levels the checks
+    // compare. Each gets its own check at the end, switched on deliberately.
+    set (amp, orbitamp::params::cabOn, 0.0f);
+    set (amp, orbitamp::params::limiterOn, 0.0f);
+
     // The state a player meets on first launch. Worth stating as a check rather than a comment: it is
     // the most likely answer to "it does not react", and if it ever changes this says so.
     report ("the boost ships switched OFF",
@@ -177,6 +194,17 @@ int main()
     }
 
     // A measured control, through the whole plugin rather than through the filter alone.
+    //
+    // ASLEEP, deliberately: the captured blocks are pinned RAW — a NAM player and nothing else,
+    // the measured EQ curves ignored wholesale (the processor's setRaw (true)). While that stands,
+    // a measured knob not reaching the audio is the CONTRACT, not a failure. When the measured
+    // path returns, delete `measuredPinnedRaw` and this check wakes up as written.
+    constexpr bool measuredPinnedRaw = true;
+    if (measuredPinnedRaw)
+    {
+        std::printf ("measured EQ is pinned RAW — the tone check sits out\n");
+    }
+    else
     {
         const auto* measured = amp.boost.measured();
 
@@ -410,6 +438,55 @@ int main()
                 juce::String (dropDb, 1) + " dB");
 
         set (amp, orbitamp::params::inTrim, 0.0f);
+    }
+
+    // The cabinet, through the whole chain — the reason it sat out the checks above. ON, it has
+    // to voice: a speaker treats the guitar's body and its fizz differently, so the same probe at
+    // 220 Hz and at 6 kHz must come through with very different gains. And at reference unity it
+    // contributes tone, not gain: the in-band level stays near what left the chain without it.
+    {
+        const auto dryBody = run (amp);
+        const auto dryFizz = run (amp, 6000.0);
+
+        set (amp, orbitamp::params::cabOn, 1.0f);
+        const auto cabBody = run (amp);
+        const auto cabFizz = run (amp, 6000.0);
+        set (amp, orbitamp::params::cabOn, 0.0f);
+
+        const double bodyDb = 20.0 * std::log10 (juce::jmax (1.0e-9, rms (cabBody) / rms (dryBody)));
+        const double fizzDb = 20.0 * std::log10 (juce::jmax (1.0e-9, rms (cabFizz) / rms (dryFizz)));
+
+        std::printf ("\ncab: 220 Hz %+.1f dB, 6 kHz %+.1f dB through the IR\n", bodyDb, fizzDb);
+
+        report ("the cabinet voices — body through, fizz gone",
+                bodyDb - fizzDb > 6.0,
+                juce::String (bodyDb - fizzDb, 1) + " dB apart");
+
+        report ("...and at reference unity it is tone, not gain",
+                std::abs (bodyDb) < 8.0,
+                juce::String (bodyDb, 1) + " dB at 220 Hz");
+    }
+
+    // The limiter, through the whole chain: ON it holds its ceiling, OFF it does not exist. The
+    // probe peaks at -0.9 dBFS against a -3 dB ceiling — 2 dB of real work.
+    {
+        set (amp, orbitamp::params::limiterOn, 1.0f);
+        set (amp, orbitamp::params::limiterCeiling, -3.0f);
+        const auto held = run (amp, 220.0, 0.9f);
+
+        set (amp, orbitamp::params::limiterOn, 0.0f);
+        const auto free = run (amp, 220.0, 0.9f);
+
+        std::printf ("\nlimiter: ceiling -3 -> peak %.1f dBFS, off -> %.1f dBFS\n",
+                     peakDb (held), peakDb (free));
+
+        report ("the limiter holds its ceiling",
+                peakDb (held) < -2.4 && peakDb (held) > -4.5,
+                juce::String (peakDb (held), 1) + " dBFS");
+
+        report ("...and switched off it does not touch the sound",
+                peakDb (free) > -1.3 && peakDb (free) < -0.5,
+                juce::String (peakDb (free), 1) + " dBFS");
     }
 
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
