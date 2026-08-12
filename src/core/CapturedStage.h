@@ -157,11 +157,12 @@ public:
         if (entry == nullptr)
             return;
 
-        // HOW MUCH SOFTER the signal reaching this model is. Into the model, never out of it: less
-        // signal is also less drive, which is the whole point — the bottom of a gain dial fades
-        // instead of falling into a hole where nothing was captured. The capture side decided this
-        // and wrote it down; a player only applies it.
-        inputGain.store (juce::Decibels::decibelsToGain ((float) -entry->inputDb));
+        // The pre-volume INTO the model, applied AS WRITTEN: the capture side stores the offset
+        // in plain dB (negative = softer), and negating it here played every alias LOUDER and
+        // dirtier than its source — the bottom of the dial rose instead of fading. Found by ear
+        // on IR-X Ch1's Center bottom, convicted by the level probe, sentenced by the capture
+        // app's own table (pre dB -9.0 at the floor).
+        inputGain.store (juce::Decibels::decibelsToGain ((float) entry->inputDb));
 
         load (juce::String (entry->id));
     }

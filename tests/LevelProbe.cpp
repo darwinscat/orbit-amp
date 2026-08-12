@@ -36,7 +36,8 @@ int main (int argc, char** argv)
         return false;
     };
 
-    if (! pick (boost, "Muff") || ! pick (preamp, "IR"))
+    const juce::String preampName = argc > 3 ? argv[3] : "IR";
+    if (! pick (boost, argc > 4 ? argv[4] : "Muff") || ! pick (preamp, preampName))
     {
         std::printf ("packs not found\n");
         return 1;
