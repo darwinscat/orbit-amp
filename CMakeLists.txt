@@ -219,6 +219,7 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # measured curves -> minimum-phase FIR (core::MeasuredFilter)
+    felitronics::measurement         # reference-unity IR normalization (core::CabinetIr)
     felitronics::nam                 # NAM inference — the captured devices actually play
     felitronics::poweramp            # white-box tube power amp (core::PowerAmp)
     felitronics::oversampling        # its 4x alias-free path
@@ -400,6 +401,7 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
+    felitronics::measurement
     felitronics::nam
     felitronics::poweramp
     felitronics::oversampling
