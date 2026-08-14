@@ -151,8 +151,20 @@ public:
     }
 
     //==============================================================================
+    /** A right-click on the curve is the console's own menu — the same grammar the block and the
+        picture already use: right-click a thing, get that thing's choices. */
+    std::function<void (juce::Point<int>)> onContextMenu;
+
     void mouseDown (const juce::MouseEvent& e) override
     {
+        if (e.mods.isPopupMenu())
+        {
+            if (onContextMenu != nullptr)
+                onContextMenu (e.getScreenPosition());
+
+            return;
+        }
+
         dragging   = handleAt (e.position);
         stepAnchor = e.position.y;
         if (dragging >= 0 && onDragActive)

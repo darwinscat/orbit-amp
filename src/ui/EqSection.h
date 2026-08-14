@@ -4,7 +4,6 @@
 #include "../core/EqLink.h"
 #include "EqCurve.h"
 #include "Knob.h"
-#include "VSwitch.h"
 #include "ZoneSwitch.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
@@ -165,8 +164,9 @@ public:
         actually does is the pack's curves and our two walls, so that is what the line has to be. */
     void setNativeCurve (std::function<double (double)> db) { nativeDb = std::move (db); refreshCurve(); }
 
-    /** The one control the console owns about ITSELF: whose bands it is wearing. Hidden when the
-        device brought none, because a choice with one side is a label. */
+    /** The one question the console asks about ITSELF: whose bands it is wearing. Asked by
+        right-clicking the curve; silent when the device brought none, because a choice with one
+        side is a label. */
     void setModes (const juce::StringArray& names, int selected);
     std::function<void (int)> onModePicked;
 
@@ -182,7 +182,10 @@ private:
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 
     PresetButton presetBtn;
-    VSwitch      modeSw;
+
+    void showModeMenu (juce::Point<int> screenPos);
+    juce::StringArray modeNames;
+    int               modeIndex = 0;
 
     ZoneSwitch  hpfSw, lpfSw;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };

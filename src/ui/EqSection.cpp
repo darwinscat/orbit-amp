@@ -93,9 +93,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
 
     presetBtn.onClick = [this] (juce::Point<int> screenPos) { showPresets (screenPos); };
 
-    modeSw.accent = theme::lilac;   // it is a question about the console, not about the sound
-    modeSw.setHorizontal (true);
-    modeSw.onChange = [this] (int i) { if (onModePicked != nullptr) onModePicked (i); };
+    curve.onContextMenu = [this] (juce::Point<int> at) { showModeMenu (at); };
 
     curve.onHandleDrag       = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
     curve.onDragActive       = [this] (int i, bool a) { handleDragActive (i, a); };
@@ -161,12 +159,37 @@ void EqSection::buildBands (std::vector<Band> newBands)
 
 void EqSection::setModes (const juce::StringArray& names, int selected)
 {
-    // One side is not a choice. A device that measured nothing has no native bands to offer, and a
-    // switch offering only OURS would be a label pretending to be a control.
-    modeSw.setVisible (names.size() > 1);
+    modeNames = names;
+    modeIndex = juce::jlimit (0, juce::jmax (0, names.size() - 1), selected);
+}
 
-    if (names.size() > 1)
-        modeSw.setItems (names, selected);
+/** Whose bands the console wears, asked by right-clicking the curve.
+
+    It was a two-position switch parked over the curve's top edge, which is a lot of furniture for
+    a question asked once per device — and it was standing on the part of the picture the response
+    actually uses. A menu costs nothing until it is wanted, and right-click-a-thing-for-its-choices
+    is already how the block's power and the picture's five views are reached.
+
+    One side is not a choice: a device that measured nothing offers no native set, and the menu
+    simply does not open. */
+void EqSection::showModeMenu (juce::Point<int> screenPos)
+{
+    if (modeNames.size() < 2)
+        return;
+
+    juce::PopupMenu m;
+    m.addSectionHeader ("TONE CONTROLS");
+
+    for (int i = 0; i < modeNames.size(); ++i)
+        m.addItem (i + 1, modeNames[i].toUpperCase(), true, i == modeIndex);
+
+    m.showMenuAsync (juce::PopupMenu::Options()
+                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                     [safe = juce::Component::SafePointer<juce::Component> (&curve), this] (int r)
+                     {
+                         if (r > 0 && safe != nullptr && onModePicked != nullptr)
+                             onModePicked (r - 1);
+                     });
 }
 
 void EqSection::setBandDb (size_t index, double db)
@@ -356,7 +379,6 @@ void EqSection::addTo (juce::Component& parent)
 {
     parent.addAndMakeVisible (curve);
     parent.addAndMakeVisible (presetBtn);
-    parent.addChildComponent (modeSw);
     host = &parent;
 
     for (auto& k : bandKnobs)
@@ -384,7 +406,6 @@ void EqSection::setWidgetsVisible (bool v)
 
     curve.setVisible (v);
     presetBtn.setVisible (v);
-    modeSw.setVisible (v && modeSw.count() > 1);
     hpfSw.setVisible (v);
     lpfSw.setVisible (v);
     hpfLabel.setVisible (v);
@@ -653,11 +674,7 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // then which stamp, reading left to right in the order the questions are asked.
     curve.setBounds (content);
 
-    auto corner = content.withTrimmedTop (6).removeFromTop (24).removeFromRight (232);
-    modeSw.setBounds (corner.removeFromLeft (114).reduced (2, 0));
-    presetBtn.setBounds (corner.removeFromRight (108).withHeight (22));
-
-    modeSw.toFront (false);
+    presetBtn.setBounds (content.getRight() - 118, content.getY() + 6, 108, 22);
     presetBtn.toFront (false);
 }
 
