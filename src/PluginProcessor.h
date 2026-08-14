@@ -188,7 +188,9 @@ public:
 
     /** The per-stage DSP load, orbitcab's grammar: each stage's wall-clock as a smoothed % of
         the block's real-time budget. Indexed by Stage; the footer badge reads these. */
-    enum Stage { stTotal, stTuner, stGate, stEq1, stBoost, stEq2, stPreamp, stReverb, stPower,
+    // In chain order, which is now also the order the breakdown reads: each captured block is
+    // followed by its own EQ.
+    enum Stage { stTotal, stTuner, stGate, stBoost, stEq1, stPreamp, stEq2, stReverb, stPower,
                  stCab, stLimit, stOut, numStages };
     std::atomic<float> stageLoad[numStages] {};
 
@@ -211,15 +213,10 @@ public:
         note, not a pause. Closing on silence is the job; this is the accident worth a light. */
     std::atomic<bool> gateWorked { false };
 
-    /** Each EQ link's output peak this block, in dB — what its LEVEL column meters. Same
-        writer, same readers. */
-    std::array<std::atomic<float>, params::numEqLinks> eqOutDb { -90.0f, -90.0f };
-
-    /** Each EQ link's post-link analyser tap — the spectrum behind its curve. Lock-free SPSC
-        with a starve-tolerant reader, so the zoom and the thumb may both sip from it. */
-    std::array<felitronics::analysis::RollingSpectrumTap, params::numEqLinks> eqSpectrumTap;
-
-    /** Post-boost and post-preamp, for the TONE views' spectrum — the EQ pane's grammar. */
+    /** One tap per captured block, at its output — which, now that each block owns its EQ, is the
+        EQ's output too. The curve and the spectrum drawn under it therefore describe the same
+        point, and there is one FFT per block rather than two at the same place. Lock-free SPSC with
+        a starve-tolerant reader, so several views may sip from it. */
     std::array<felitronics::analysis::RollingSpectrumTap, 2> blockSpectrumTap;
 
     /** One analysis resolution for every consumer of the taps: mixed orders would make the tap

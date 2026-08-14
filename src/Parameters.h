@@ -112,19 +112,23 @@ inline constexpr const char* preampGain   = "preamp_gain";
 inline constexpr int preampNumMeasured = 3;
 inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String (i + 1); }
 
-/** The EQ links — standalone links of the chain, not a section of any block. Exactly two, fixed:
-    `eq1` ahead of the boost and `eq2` between the boost and the preamp. Fixed because a host needs
-    an unchanging parameter list; two because those are the places that MEAN something — eq1 decides
-    what reaches the first nonlinearity, so it changes the kind of distortion, and eq2 colours what
-    the boost made before the preamp distorts it again. A link's place in the chain answers "pre or
-    post", which is why no placement switch exists. `l` is the link index, 0-based.
+/** The EQ, one per captured block and BELONGING to it — index 0 is the boost's, index 1 the
+    preamp's. Each sits after its block's nonlinearity, which is what makes it a colour control
+    rather than a distortion-character one, and each goes dark with its block's switch.
 
-    The console grammar per link: HPF/LPF with a slope choice, LO/HI shelves with free corners
-    (gain + freq, no Q), bells B1/B2 (gain + freq + Q) and the narrow switchable B3 — the surgical
-    slot — plus an output LEVEL. Bells are indexed 0..2 for the id helpers. */
+    Their places in the chain are not arbitrary: the boost's lands in front of the preamp and the
+    preamp's in front of the power amp, which is where a real amplifier keeps its tone stack. So
+    there is no PRE/POST switch — every nonlinearity downstream is already being fed by one.
+
+    The console grammar: HPF/LPF with a slope choice, LO/HI shelves with free corners (gain + freq,
+    no Q), bells B1/B2 (gain + freq + Q) and the narrow switchable B3 — the surgical slot. Bells are
+    indexed 0..2 for the id helpers. */
 inline constexpr int numEqLinks = 2;
 
-inline juce::String eqId (int l, const char* leaf) { return "eq" + juce::String (l + 1) + "_" + leaf; }
+inline juce::String eqId (int l, const char* leaf)
+{
+    return juce::String (l == 0 ? boostId : preampId) + "_eq_" + leaf;
+}
 
 inline juce::String eqOn       (int l) { return eqId (l, "on"); }
 inline juce::String eqHpfOn    (int l) { return eqId (l, "hpf_on"); }

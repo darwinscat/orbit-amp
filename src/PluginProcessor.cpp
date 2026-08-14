@@ -268,9 +268,6 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& eq : eqLinks)
         eq.prepare (sampleRate, channels);
 
-    for (auto& tap : eqSpectrumTap)
-        tap.reset();
-
     for (auto& tap : blockSpectrumTap)
         tap.reset();
 
@@ -458,25 +455,50 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     nsStage[stGate] = elapsedNs (tGate);
 
-    // The EQ links are links of their own, with their own switches: eq1 decides what reaches the
-    // first nonlinearity, eq2 colours what the boost made before the preamp distorts it again.
-    // Each link's output peak feeds its LEVEL column, and its samples feed the analyser tap —
-    // both measured at the link's place in the chain whether it is processing or passing
-    // through, because the meters' question is "what leaves this point", not "what did the EQ
-    // do".
-    const auto meterEqOut = [this, &buffer, nch, numSamples] (int l)
+    // A captured block, whole: the capture, then its own EQ, then its own volume.
+    //
+    // The EQ sits AFTER the nonlinearity because that is what it is for here — colouring what the
+    // device made, not deciding what the device eats. The boost's lands in front of the preamp and
+    // the preamp's in front of the power amp, which is where a real amplifier keeps its tone stack,
+    // so nothing in the chain is left unfed.
+    //
+    // It also goes dark with the block. The EQ is part of the block now, not a link that happens to
+    // be drawn inside one, and a switch that leaves half of what it names still cutting is a switch
+    // nobody can trust.
+    //
+    // LEVEL comes last for the same reason: it is the block's output volume, and the OUT meter
+    // beside it has to be metering everything the block did — the EQ included.
+    const auto captured = [&] (auto& blk, int l, std::atomic<float>* onParam,
+                               std::atomic<float>* levelParam, float& lastLevelGain,
+                               std::atomic<float>& blockOutDb, int stBlock, int stEq)
     {
-        // nch, not numChannels: in mono mode the other channel is stale until the tail copy.
-        float peak = 0.0f;
-        for (int c = 0; c < nch; ++c)
-            peak = juce::jmax (peak, buffer.getMagnitude (c, 0, numSamples));
-        eqOutDb[(size_t) l].store (juce::Decibels::gainToDecibels (peak, -90.0f));
+        const bool on = onParam->load() > 0.5f;
 
-        // A switched-off link keeps its spectrum QUIET: feeding the tap with the bypassed
-        // signal claimed the device was doing something. Starved, the pane settles to silence.
-        if (eqParams[(size_t) l].on->load() > 0.5f)
+        { const auto a = PerfClock::now();
+          if (on)
+              blk.process (chainView, scopeDry);
+          nsStage[stBlock] = elapsedNs (a); }
+
+        { const auto a = PerfClock::now();
+          if (on && eqParams[(size_t) l].on->load() > 0.5f)
+              eqLinks[(size_t) l].process (channels, nch, numSamples);
+          nsStage[stEq] = elapsedNs (a); }
+
+        // The block's own volume — the pedal's knob, ramped against zipper.
+        const float target = juce::Decibels::decibelsToGain (levelParam->load());
+        chainView.applyGainRamp (0, numSamples, lastLevelGain, target);
+        lastLevelGain = target;
+
+        blockOutDb.store (juce::Decibels::gainToDecibels (
+            chainView.getMagnitude (0, 0, numSamples), -90.0f));
+
+        // ONE tap per block, at the block's output, which is now also the EQ's output — the curve
+        // and the spectrum drawn under it finally describe the same point. A switched-off block
+        // keeps it QUIET: feeding a bypassed signal in claimed the device was doing something, and
+        // starved, the pane settles to silence.
+        if (on)
         {
-            auto& tap = eqSpectrumTap[(size_t) l];
+            auto& tap = blockSpectrumTap[(size_t) l];
             const float* d = buffer.getReadPointer (0);
             for (int i = 0; i < numSamples; ++i)
                 tap.push (d[i]);
@@ -485,64 +507,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         }
     };
 
-    { const auto a = PerfClock::now();
-      if (eqParams[0].on->load() > 0.5f)
-          eqLinks[0].process (channels, nch, numSamples);
-      nsStage[stEq1] = elapsedNs (a); }
-
-    meterEqOut (0);
-
-    { const auto a = PerfClock::now();
-      if (boostOnParam->load() > 0.5f)
-          boost.process (chainView, scopeDry);
-
-      // The block's own LEVEL — the pedal's volume knob, ramped against zipper.
-      const float target = juce::Decibels::decibelsToGain (boostLevelParam->load());
-      chainView.applyGainRamp (0, numSamples, lastBoostLevelGain, target);
-      lastBoostLevelGain = target;
-
-      boostOutDb.store (juce::Decibels::gainToDecibels (
-          chainView.getMagnitude (0, 0, numSamples), -90.0f));
-      nsStage[stBoost] = elapsedNs (a); }
-
-    if (boostOnParam->load() > 0.5f)
-    {
-        auto& tap = blockSpectrumTap[0];
-        const float* d = buffer.getReadPointer (0);
-        for (int i = 0; i < numSamples; ++i)
-            tap.push (d[i]);
-        tap.publishIfDue (eqSpectrumOrder,
-                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
-    }
-
-    { const auto a = PerfClock::now();
-      if (eqParams[1].on->load() > 0.5f)
-          eqLinks[1].process (channels, nch, numSamples);
-      nsStage[stEq2] = elapsedNs (a); }
-
-    meterEqOut (1);
-
-    { const auto a = PerfClock::now();
-      if (preampOnParam->load() > 0.5f)
-          preamp.process (chainView, scopeDry);
-
-      const float target = juce::Decibels::decibelsToGain (preampLevelParam->load());
-      chainView.applyGainRamp (0, numSamples, lastPreampLevelGain, target);
-      lastPreampLevelGain = target;
-
-      preampOutDb.store (juce::Decibels::gainToDecibels (
-          chainView.getMagnitude (0, 0, numSamples), -90.0f));
-      nsStage[stPreamp] = elapsedNs (a); }
-
-    if (preampOnParam->load() > 0.5f)
-    {
-        auto& tap = blockSpectrumTap[1];
-        const float* d = buffer.getReadPointer (0);
-        for (int i = 0; i < numSamples; ++i)
-            tap.push (d[i]);
-        tap.publishIfDue (eqSpectrumOrder,
-                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
-    }
+    captured (boost,  0, boostOnParam,  boostLevelParam,  lastBoostLevelGain,  boostOutDb,  stBoost,  stEq1);
+    captured (preamp, 1, preampOnParam, preampLevelParam, lastPreampLevelGain, preampOutDb, stPreamp, stEq2);
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
     // (boost hiss, preamp hiss) dies here too, and the reverb tail past it rings out.
