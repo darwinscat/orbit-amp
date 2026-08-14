@@ -50,18 +50,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         g.strokePath (peak, juce::PathStrokeType (1.0f));
     };
 
-    for (auto* k : { &lo, &b1, &b2, &hi })
-    {
-        k->textForValue    = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
-        k->onValueChange   = [this] { refreshCurve(); };
-        k->labelFontHeight = 13.0f;
-        k->labelRowHeight  = 17;
-    }
-
-    loAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqLoDb (link), lo);
-    b1Att = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqBellDb (link, 0), b1);
-    b2Att = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqBellDb (link, 1), b2);
-    hiAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqHiDb (link), hi);
+    buildBands (ourBands());
 
     // The gesture-bearing attachments: frequencies per handle, Qs, slopes, and B3's pair.
     freqAtt[hLo]  = attach (params::eqLoHz (link));
@@ -115,6 +104,59 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
 }
 
 EqSection::~EqSection() = default;
+
+/** Short names on purpose: six cells across half a panel leave about sixty design units each, and
+    "LO MID" at reading size ran straight into its neighbour. The colour carries the identity the
+    name had to give up — the knob wears the same one as its point on the curve. */
+std::vector<EqSection::Band> EqSection::ourBands() const
+{
+    return { { "LO",    theme::eqNode[0], params::eqLoDb (link) },
+             { "L MID", theme::eqNode[1], params::eqBellDb (link, 0) },
+             { "H MID", theme::eqNode[2], params::eqBellDb (link, 1) },
+             { "HI",    theme::eqNode[3], params::eqHiDb (link) } };
+}
+
+/** Puts a set of bands on the row: a knob each, attached to whatever parameter the band names.
+
+    Rebuildable on purpose. The four this console has today are ours and fixed, but the next set is
+    a pack's own tone controls — one to three of whatever that device happened to have — and the one
+    after that is a classical stack's three. A row that can only be built once is a row that can
+    only ever hold ours. */
+void EqSection::buildBands (std::vector<Band> newBands)
+{
+    // Attachments first, and in this order: a SliderAttachment reaches for its slider in its own
+    // destructor, so a knob freed before its attachment is a knob freed from under it.
+    bandAtts.clear();
+    bandKnobs.clear();
+
+    bands = std::move (newBands);
+
+    for (const auto& b : bands)
+    {
+        auto k = std::make_unique<Knob> (b.label, b.colour, 0);
+        k->textForValue    = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
+        k->onValueChange   = [this] { refreshCurve(); };
+        k->labelFontHeight = 13.0f;
+        k->labelRowHeight  = 17;
+
+        bandAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+            state, b.param, *k));
+
+        bandKnobs.push_back (std::move (k));
+    }
+}
+
+void EqSection::setBandDb (size_t index, double db)
+{
+    if (index >= bandKnobs.size())
+        return;
+
+    // Through the KNOB, not the parameter: the knob is the parameter's face here, and writing past
+    // it would leave the dial showing the value the curve no longer has.
+    bandKnobs[index]->setValue (juce::jlimit (-(double) params::toneRangeDb,
+                                              (double) params::toneRangeDb, db),
+                                juce::sendNotificationSync);
+}
 
 void EqSection::setSpectrumRunning (bool shouldRun)
 {
@@ -298,7 +340,7 @@ void EqSection::addTo (juce::Component& parent)
     parent.addAndMakeVisible (hpfSlopeBox);
     parent.addAndMakeVisible (lpfSlopeBox);
 
-    for (auto* k : { &lo, &b1, &b2, &hi })
+    for (auto& k : bandKnobs)
         parent.addAndMakeVisible (*k);
 }
 
@@ -321,7 +363,7 @@ void EqSection::setWidgetsVisible (bool v)
     hpfSlopeBox.setVisible (v);
     lpfSlopeBox.setVisible (v);
 
-    for (auto* k : { &lo, &b1, &b2, &hi })
+    for (auto& k : bandKnobs)
         k->setVisible (v);
 }
 
@@ -437,10 +479,12 @@ void EqSection::handleDragged (int index, double hz, double db)
 
     switch (index)
     {
-        case hLo: lo.setValue (clampDb (db), juce::sendNotificationSync); break;
-        case hB1: b1.setValue (clampDb (db), juce::sendNotificationSync); break;
-        case hB2: b2.setValue (clampDb (db), juce::sendNotificationSync); break;
-        case hHi: hi.setValue (clampDb (db), juce::sendNotificationSync); break;
+        // The handles and the row are the same four bands in the same order, so the index IS the
+        // band. A curve that knew four names would be a second place to keep the list.
+        case hLo: setBandDb (0, db); break;
+        case hB1: setBandDb (1, db); break;
+        case hB2: setBandDb (2, db); break;
+        case hHi: setBandDb (3, db); break;
         case hB3: b3DbAtt->setValueAsPartOfGesture ((float) clampDb (db)); break;
         default: break;
     }
@@ -537,22 +581,23 @@ void EqSection::layOut (juce::Rectangle<int> content)
 
     const auto lpfCell = row;
 
-    int i = 0;
-    for (auto* k : { &lo, &b1, &b2, &hi })
+    for (size_t i = 0; i < bandKnobs.size() && i < 4; ++i)
     {
-        const auto cell = knobCells[i++];
+        const auto cell = knobCells[i];
         const int side = juce::jmin (cell.getWidth(), cell.getHeight());
-        k->setBounds (cell.withWidth (side).withHeight (side)
-                          .withX (cell.getCentreX() - side / 2));
+        bandKnobs[i]->setBounds (cell.withWidth (side).withHeight (side)
+                                     .withX (cell.getCentreX() - side / 2));
     }
 
-    const int dialAxisY = lo.getY() + lo.labelRowHeight
-                          + (lo.getHeight() - lo.labelRowHeight) / 2;
+    // The cuts hang off the first knob's geometry, so an empty row still has to put them somewhere.
+    const auto& first = bandKnobs.empty() ? row : bandKnobs.front()->getBounds();
+    const int labelH  = bandKnobs.empty() ? 17 : bandKnobs.front()->labelRowHeight;
+    const int dialAxisY = first.getY() + labelH + (first.getHeight() - labelH) / 2;
 
     const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
                                  SlopeCombo& combo)
     {
-        label.setBounds (cell.removeFromTop (lo.labelRowHeight));
+        label.setBounds (cell.removeFromTop (labelH));
 
         sw.setBounds (juce::Rectangle<int> (cell.getX(), dialAxisY - 8, cell.getWidth(), 16)
                           .withSizeKeepingCentre (juce::jmin (cell.getWidth(), 30), 16));

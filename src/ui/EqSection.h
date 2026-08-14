@@ -112,21 +112,41 @@ private:
         void mouseDown (const juce::MouseEvent&) override;
     };
 
-    // Short names on purpose: six cells across half a panel leaves about sixty design units each,
-    // and "LO MID" at reading size ran straight into its neighbour. The colour says which node it
-    // is anyway — the knob wears the same one as its point on the curve.
-    Knob lo { "LO",    theme::eqNode[0], 0 };
-    Knob b1 { "L MID", theme::eqNode[1], 0 };
-    Knob b2 { "H MID", theme::eqNode[2], 0 };
-    Knob hi { "HI",    theme::eqNode[3], 0 };
+    /** One cell of the control row between the two cuts: what it is called, what colour it wears,
+        and the parameter its knob writes.
+
+        The row used to name its four bands in four members, which is the same as saying the console
+        only ever has these four. It will not: a pack's own tone controls are one to three of
+        whatever that device happened to have, and the classical stacks are three more. What every
+        set has in common is exactly this list — a name, a colour and something to write to. The
+        colour is load-bearing rather than decoration: it is the ONLY thing tying a knob to its
+        point on the curve above, now that the names had to be shortened to fit. */
+    struct Band
+    {
+        juce::String label;
+        juce::Colour colour;
+        juce::String param;
+    };
+
+    /** OUR set: a parametric we own, four bands wide, plus the scalpel the curve summons. Fixed
+        because `core::EqLink` is fixed — a band list this one cannot vary is honest about that. */
+    std::vector<Band> ourBands() const;
+
+    void buildBands (std::vector<Band>);
+
+    /** Writes a band's gain from the curve's own hand — the knob is the parameter's face, so the
+        drag goes through it rather than round it. */
+    void setBandDb (size_t index, double db);
+
+    std::vector<Band> bands;
+    std::vector<std::unique_ptr<Knob>> bandKnobs;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 
     PresetButton presetBtn;
 
     ZoneSwitch  hpfSw, lpfSw;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };
     SlopeCombo  hpfSlopeBox, lpfSlopeBox;
-
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> loAtt, b1Att, b2Att, hiAtt;
 
     /** Frequency attachments per handle — the drag gestures write through these. */
     std::unique_ptr<juce::ParameterAttachment> freqAtt[numHandles];
