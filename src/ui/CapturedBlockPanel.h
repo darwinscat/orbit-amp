@@ -65,6 +65,16 @@ private:
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
 
+    /** Puts every slot back where the loaded pack says a player starts.
+
+        The measured slots and the selector slots are SLOTS, not controls: `boost_meas1` exists
+        always and what it turns is whatever the pack decided. So its value cannot survive a device
+        change — 0.7 of a Tube Screamer's Tone and 0.7 of an SM7's EQ-Lo are different physical
+        things wearing one number. GAIN is the exception and keeps its place: every device has one
+        and it means the same thing on all of them, which is what makes two devices comparable at
+        the same dial position. */
+    void resetToPackDefaults();
+
     /** The device's OWN tone controls as console bands — one to three of whatever it happened to
         have, in the order the pack lists them. Empty when it measured nothing, which is what makes
         the block fall back to ours without being told to. */

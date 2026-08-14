@@ -159,6 +159,17 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     {
         deviceAttachment->setValueAsCompleteGesture ((float) i);
         block.select (i);   // message thread — it reads files
+
+        // A PICK, and only a pick. Every slot goes back to what this pack says it should be —
+        // otherwise the new device arrives wearing the last one's settings, which are not even
+        // about the same controls.
+        //
+        // Deliberately not done on every device change: a restored session moves this parameter
+        // too, and resetting there would throw away exactly the settings the session was saved to
+        // keep. A host automating the device index keeps whatever it is automating, which is what
+        // automation means.
+        resetToPackDefaults();
+
         deviceChanged();
     };
 
@@ -445,6 +456,52 @@ void CapturedBlockPanel::applyEqMode()
         eq.setBands (eq.ourBandSet());
         eq.setNativeCurve (nullptr);
     }
+}
+
+void CapturedBlockPanel::resetToPackDefaults()
+{
+    const auto write = [this] (const juce::String& id, float plain)
+    {
+        if (auto* p = amp.apvts.getParameter (id))
+        {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 (plain));
+            p->endChangeGesture();
+        }
+    };
+
+    // The measured slots. A pack names where its knob starts — and it is NOT the reference
+    // position, which is usually an end of travel and therefore the wrong thing to reach for. An
+    // unclaimed slot goes to the middle, which is what it means when nothing is behind it.
+    const auto* measured = block.measured();
+
+    for (int i = 0; i < params::boostNumMeasured; ++i)
+    {
+        double norm = 0.5;
+
+        if (measured != nullptr && i < (int) measured->size())
+        {
+            const auto& m = (*measured)[(size_t) i];
+            const auto  want = juce::String (m.defaultValue).trim();
+
+            for (const auto& pos : m.positions)
+                if (juce::String (pos.value).trim() == want)
+                {
+                    norm = pos.norm;
+                    break;
+                }
+        }
+
+        write (params::blockMeasured (blk, i), (float) norm);
+    }
+
+    // ...and the selecting ones, which have the same problem for the same reason: slot one is an
+    // octave switch on one device and something else entirely on the next.
+    const auto list = block.stage.selectors();
+
+    for (int i = 0; i < params::numSelectors; ++i)
+        write (params::selectorId (blk, i),
+               (float) (i < list.size() ? list.getReference (i).defaultIndex : 0));
 }
 
 void CapturedBlockPanel::buildSelectors()

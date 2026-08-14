@@ -114,7 +114,12 @@ public:
 
         Returned as name plus its values, in the order the pack lists them, because that order is the
         one the device's own panel had. */
-    struct Selector { juce::String name; juce::StringArray values; };
+    struct Selector
+    {
+        juce::String      name;
+        juce::StringArray values;
+        int               defaultIndex = 0;   // where the pack says a player starts
+    };
 
     juce::Array<Selector> selectors() const
     {
@@ -124,9 +129,15 @@ public:
             for (const auto& c : stageDef->device.controls)
                 if (c.role != namz::rig::Role::Gain && c.values.size() > 1)
                 {
-                    Selector s { juce::String (c.name), {} };
+                    Selector s { juce::String (c.name), {}, 0 };
                     for (const auto& v : c.values)
                         s.values.add (juce::String (v));
+
+                    // Where the PACK says a player starts. namz works it out per control — a falsy
+                    // position first, the capture order otherwise — and it is the only answer worth
+                    // having: a device arrives set the way whoever captured it meant it to be.
+                    s.defaultIndex = juce::jmax (0, s.values.indexOf (
+                        juce::String (namz::rig::defaultValue (c))));
 
                     out.add (std::move (s));
                 }
