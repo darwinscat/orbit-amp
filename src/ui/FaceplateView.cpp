@@ -32,13 +32,21 @@ void FaceplateView::resized()
     row1.removeFromLeft (colGap);
     preamp.setBounds (row1);
 
-    // ...and what happens to it: a quarter, a quarter, a half.
-    const int quarter = (row2.getWidth() - 2 * colGap) / 4;
-    reverb.setBounds (row2.removeFromLeft (quarter));
-    row2.removeFromLeft (colGap);
-    power.setBounds (row2.removeFromLeft (quarter));
+    // Row two is cut from the SAME halves, not from its own quarters.
+    //
+    // Dividing each row on its own arithmetic looks equivalent and is not: row one spends one gap
+    // and row two spends two, so a quarter came out at 188 while a half came out at 383, and the
+    // cabinet's left edge missed the preamp's by seven units. Seven is exactly the distance at
+    // which an edge stops being aligned and starts being a mistake nobody can name. The panel has
+    // ONE line down its middle now, and everything either sits on it or spans it.
+    auto left = row2.removeFromLeft (half);
     row2.removeFromLeft (colGap);
     cabinet.setBounds (row2);
+
+    const int quarter = (left.getWidth() - colGap) / 2;
+    reverb.setBounds (left.removeFromLeft (quarter));
+    left.removeFromLeft (colGap);
+    power.setBounds (left);
 }
 
 } // namespace orbitamp

@@ -506,27 +506,36 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // not half a panel: keeping the numbers meant either shrinking the type below what can be read
     // at 1x or taking the room from the curve, and the curve IS the readout — a node's frequency is
     // where the node is standing. Dragging it sideways was always the way to set one.
-    auto row = content.removeFromBottom (rowH).reduced (0, 4);
+    auto row = content.removeFromBottom (rowH);
     content.removeFromBottom (6);
 
-    const int cellW = row.getWidth() / 6;
+    // ONE LINE OF NAMES. HPF, LO, L MID, H MID, HI, LPF all begin at the row's top edge, because
+    // six labels at three different heights read as three groups rather than one row of controls.
+    // A knob draws its own name in the first `labelRowHeight` of its bounds, so the knobs are set
+    // flush with the top of the row rather than centred in their cells — then the cuts' labels,
+    // given the same height, land on the same baseline for free.
+    //
+    // The cut cells are narrower than the knob cells on purpose: a switch and "12 DB" need less
+    // width than a dial does, and what they give up goes into the dials, which is the only place
+    // in this row where extra width becomes something you can aim at.
+    const int cutW  = 50;
+    const int knobW = (row.getWidth() - 2 * cutW) / 4;
 
-    // The knobs go down first so the cut cells can borrow their geometry: the switch sits on the
-    // DIAL AXIS — the same height as the knobs' centres — and the slope combo hangs under it.
-    const juce::Rectangle<int> hpfCell = row.removeFromLeft (cellW);
+    const auto hpfCell = row.removeFromLeft (cutW);
 
     juce::Rectangle<int> knobCells[4];
     for (auto& c : knobCells)
-        c = row.removeFromLeft (cellW);
+        c = row.removeFromLeft (knobW);
 
-    const juce::Rectangle<int> lpfCell = row;
+    const auto lpfCell = row;
 
     int i = 0;
     for (auto* k : { &lo, &b1, &b2, &hi })
     {
         const auto cell = knobCells[i++];
         const int side = juce::jmin (cell.getWidth(), cell.getHeight());
-        k->setBounds (cell.withSizeKeepingCentre (side, side));
+        k->setBounds (cell.withWidth (side).withHeight (side)
+                          .withX (cell.getCentreX() - side / 2));
     }
 
     const int dialAxisY = lo.getY() + lo.labelRowHeight
@@ -535,13 +544,12 @@ void EqSection::layOut (juce::Rectangle<int> content)
     const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
                                  SlopeCombo& combo)
     {
-        label.setBounds (cell.removeFromTop (18));
+        label.setBounds (cell.removeFromTop (lo.labelRowHeight));
 
         sw.setBounds (juce::Rectangle<int> (cell.getX(), dialAxisY - 8, cell.getWidth(), 16)
-                          .withSizeKeepingCentre (30, 16));
-        combo.setBounds (juce::Rectangle<int> (cell.getX(), sw.getBottom() + 6,
-                                               cell.getWidth(), 18)
-                              .withSizeKeepingCentre (juce::jmin (cell.getWidth(), 98), 18));
+                          .withSizeKeepingCentre (juce::jmin (cell.getWidth(), 30), 16));
+        combo.setBounds (juce::Rectangle<int> (cell.getX(), sw.getBottom() + 4,
+                                               cell.getWidth(), 18));
     };
 
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox);

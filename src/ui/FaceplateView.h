@@ -38,12 +38,17 @@ public:
     // Row 1 carries a device combo, the in/out meters, the gain column with the picture beside it,
     // and the whole EQ console under them. The console is the part that will not compress: knobs at
     // reading size plus a curve big enough to aim at. Row 2 is a combo and a control or two.
-    static constexpr int row1H  = 500;
+    static constexpr int row1H  = 460;
     static constexpr int row2H  = 220;
     static constexpr int rowGap = 12;
     // Lane metrics. No horizontal inset: the lane's edges ARE the panel's edges, so nothing is
     // almost-aligned with anything.
-    static constexpr int lanePadY = 16;
+    //
+    // Four, not sixteen. The gap a player actually SEES above the first block is this plus the
+    // toolbar's own ten plus the twelve a frame leaves above its line for the switch riding it —
+    // three separate paddings that only ever get added together, and at sixteen they came to
+    // thirty-eight units of nothing under the logo.
+    static constexpr int lanePadY = 4;
 
     static constexpr int designHeight = row1H + rowGap + row2H + 2 * lanePadY;
 

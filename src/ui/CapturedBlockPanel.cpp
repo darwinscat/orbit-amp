@@ -332,6 +332,10 @@ void CapturedBlockPanel::buildSelectors()
 
         sel.steps = std::make_unique<VSwitch>();
         sel.steps->accent = theme::orange;
+
+        // Lying down under the GAIN dial: stacked, two positions cost forty-four units of the
+        // column's height and the dial's diameter paid for every one of them.
+        sel.steps->setHorizontal (true);
         sel.steps->setItems (labels, 0);
         addAndMakeVisible (*sel.steps);
 
@@ -423,22 +427,24 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         outMeter.setBounds (line);
     }
 
-    // ---- the EQ console takes the bottom of the face. It is asked for what it needs rather than
-    //      given a fraction: the control row is knobs at reading size and does not compress, and
-    //      the curve under half a block is still a curve — squeeze either and the console stops
-    //      being usable before it stops fitting. ----
-    eq.layOut (area.removeFromBottom (juce::jmin (area.getHeight() - 120, EqSection::rowH + 120)));
-    area.removeFromBottom (gap);
+    // ---- the top zone is CAPPED and the console gets the remainder, not the other way round.
+    //
+    //      A dial and a picture stop improving once they are big enough to aim at; a curve does
+    //      not — every unit of height it gets is another decibel you can tell apart. So the zone
+    //      that saturates is the one with the ceiling on it. ----
+    auto top = area.removeFromTop (juce::jmin (topZoneH, area.getHeight() - EqSection::rowH - 90));
+    area.removeFromTop (gap);
+    eq.layOut (area);
 
-    // ---- the top zone: a column of FIXED width carrying the big GAIN with the device's own
+    // ---- inside it: a column of FIXED width carrying the big GAIN with the device's own
     //      selectors under it, and one picture taking everything to its right.
     //
     //      Fixed, because the picture must not move when the device changes. Fur Coat brings an
     //      octave switch and a Big Muff brings nothing, and if the column grew to fit them the
     //      whole right-hand side would shuffle sideways every time the combo was touched. Only the
     //      GAIN dial's diameter answers for what the switches take. ----
-    auto column = area.removeFromLeft (columnW);
-    area.removeFromLeft (gap);
+    auto column = top.removeFromLeft (columnW);
+    top.removeFromLeft (gap);
 
     // Only the SELECTING controls stand here — the ones that pick a capture. A measured control is
     // a band of the curve and belongs in the console's row, whatever shape its own control has.
@@ -471,7 +477,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
     gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
 
-    layWidget (area);
+    layWidget (top);
 }
 
 void CapturedBlockPanel::setControlsVisible (bool v)

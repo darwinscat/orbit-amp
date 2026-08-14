@@ -18,7 +18,10 @@ Chrome::Chrome (AmpProcessor& processor)
       // Seeded from the DEVICE palette, not the family brand constants: appkit's own guardrail says
       // a product must supply its tuned colours or every active-register frame drifts off its face.
       theme { .fill       = theme::panel,
-              .underline  = theme::hair,
+              // No rule under the wordmark. It was drawing a line across a third of the toolbar
+              // that separated nothing from nothing — the blocks below have their own frames, and
+              // the eye reads a hairline as "these two things are apart" when they are not.
+              .underline  = juce::Colours::transparentBlack,
               .accent     = theme::violet,
               .attention  = theme::orange,
               .text       = theme::tx,

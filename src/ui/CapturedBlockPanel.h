@@ -74,6 +74,11 @@ private:
         re-learn per device. */
     static constexpr int columnW = 168;
 
+    /** The ceiling on the dial-and-picture zone. Past this the dial is only bigger, not easier to
+        land on, and every unit above it is one the EQ curve could have used to separate two
+        decibels you would otherwise have to guess at. */
+    static constexpr int topZoneH = 140;
+
     static constexpr int numViz = 5;
 
     AmpProcessor& amp;

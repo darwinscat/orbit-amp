@@ -50,9 +50,10 @@ public:
         and everything else has to make room. */
     void setWidgetsVisible (bool);
 
-    /** How much of the block's height the control row under the curve wants. The owner takes the
-        console's total from this — knobs at reading size plus their labels, and no less. */
-    static constexpr int rowH = 112;
+    /** How much of the block's height the control row under the curve wants: a dial, its name above
+        it, and the slope combo that hangs a little below the dial's foot. Nothing more — the row
+        used to reserve a hundred and twelve and spend the last forty on air. */
+    static constexpr int rowH = 72;
 
 private:
     void timerCallback() override;

@@ -21,9 +21,15 @@ namespace orbitamp
 
     TWO SCALES ON ONE BAR, which is the same trick the gate's sliver plays and works for the same
     reason: they are told apart by what they are drawn as. The FILL is the signal, on a dBFS scale
-    from the floor to zero. The GRIP is a gain, on its own scale, unity notched. They meet because
-    moving the grip moves the fill — drag, watch the level walk into the green, let go. That loop
+    from the floor to zero. The NAIL is a gain, on its own scale, unity notched. They meet because
+    moving the nail moves the fill — drag, watch the level walk into the green, let go. That loop
     is the only reason a trim and a meter should ever share a bar.
+
+    A NAIL AND A NUMBER, not a framed grip carrying its own reading. The frame was thirty-four units
+    wide on a bar barely a hundred long: a third of the scale covered by the hand that moves it, and
+    the fill it was supposed to be answering hidden underneath. The hand is one line now and the
+    reading stands to the right of the bar, where it can be read at a glance and typed into with a
+    double-click.
 
     THE GREEN ZONE is where a captured device likes to be fed. It is drawn into the track rather
     than onto the fill: a wash under the signal reads as a place, a wash over it reads as a state.
@@ -46,7 +52,9 @@ public:
     /** The grip is in the hand — the owner may want to show a ladder beside it. */
     std::function<void (bool)> onDrag;
 
-    static constexpr int designHeight = 26;
+    // Eighteen, not twenty-six. Two of these ride between the combo and the dial, and every unit
+    // they keep is one the curve below does not get. A meter is a length, not a volume.
+    static constexpr int designHeight = 18;
 
     void paint (juce::Graphics& g) override
     {
@@ -109,7 +117,8 @@ public:
         g.fillRect (unityX - 1.0f, track.getY(), 2.0f, 5.0f);
         g.fillRect (unityX - 1.0f, track.getBottom() - 5.0f, 2.0f, 5.0f);
 
-        paintGrip (g, track);
+        paintNail (g, track);
+        paintValue (g);
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -120,6 +129,11 @@ public:
             trim->setValueAsCompleteGesture (0.0f);
             return;
         }
+
+        // The reading is not part of the scale — a click on it must not throw the value across the
+        // bar on the way to a double-click.
+        if (valueArea().contains (e.position))
+            return;
 
         dragging = true;
         param.beginChangeGesture();
@@ -146,8 +160,17 @@ public:
             onDrag (false);
     }
 
-    void mouseDoubleClick (const juce::MouseEvent&) override
+    void mouseDoubleClick (const juce::MouseEvent& e) override
     {
+        // On the number: type one. Anywhere on the bar: home. The same convention the vertical
+        // rails' grips already use, split across the two halves this meter has.
+        if (valueArea().contains (e.position))
+        {
+            editor.open (*this, valueArea().toNearestInt().expanded (2, 0), trimDb(), theme::orange,
+                         [this] (float v) { trim->setValueAsCompleteGesture (v); });
+            return;
+        }
+
         trim->setValueAsCompleteGesture (0.0f);
     }
 
@@ -165,10 +188,17 @@ private:
 
     juce::Rectangle<float> trackArea() const
     {
-        return getLocalBounds().toFloat().reduced (2.0f, 2.0f).withTrimmedLeft (nameW);
+        return getLocalBounds().toFloat().reduced (2.0f, 2.0f)
+                   .withTrimmedLeft (nameW).withTrimmedRight (valueW);
     }
 
-    static constexpr float nameW = 28.0f;
+    juce::Rectangle<float> valueArea() const
+    {
+        return getLocalBounds().toFloat().reduced (2.0f, 1.0f).removeFromRight (valueW - 2.0f);
+    }
+
+    static constexpr float nameW  = 26.0f;
+    static constexpr float valueW = 40.0f;
 
     // The scale, and it is not the usual sixty decibels. Two of these live side by side inside half
     // a block, so the bar is short and every unit of it has to be worth something: a floor at -60
@@ -221,28 +251,32 @@ private:
         g.fillRoundedRectangle (t, 2.0f);
     }
 
-    /** A hollow sliding frame with a sight, carrying its own number — the same hand the vertical
-        rails use, turned on its side. Orange: it is the player's, not the signal's. */
-    void paintGrip (juce::Graphics& g, juce::Rectangle<float> t) const
+    /** The hand: one line standing across the bar, with a head at each end so it reads as
+        something to take hold of rather than as another of the meter's own marks. Orange, because
+        it belongs to the player and the signal does not. */
+    void paintNail (juce::Graphics& g, juce::Rectangle<float> t) const
     {
-        constexpr float w = 34.0f;
-
         const float x = xOfTrim (t, trimDb());
-        const juce::Rectangle<float> frame (juce::jlimit (t.getX(), t.getRight() - w, x - w * 0.5f),
-                                            t.getY() + 0.75f, w, t.getHeight() - 1.5f);
+        const bool  lit = dragging || isMouseOver();
 
-        g.setColour (juce::Colours::black.withAlpha (0.45f));
-        g.drawRoundedRectangle (frame, 2.5f, 3.0f);
-        g.setColour (dragging || isMouseOver() ? theme::orange.brighter (0.25f) : theme::orange);
-        g.drawRoundedRectangle (frame, 2.5f, 1.4f);
+        g.setColour (juce::Colours::black.withAlpha (0.55f));
+        g.fillRect (x - 1.75f, t.getY() - 1.0f, 3.5f, t.getHeight() + 2.0f);
 
-        // The sight: two nubs biting in from top and bottom at the exact value, because a frame
-        // this wide cannot say a number precisely on its own.
-        g.fillRect (x - 0.75f, frame.getY(), 1.5f, 3.5f);
-        g.fillRect (x - 0.75f, frame.getBottom() - 3.5f, 1.5f, 3.5f);
+        g.setColour (lit ? theme::orange.brighter (0.3f) : theme::orange);
+        g.fillRect (x - 0.75f, t.getY() - 1.0f, 1.5f, t.getHeight() + 2.0f);
 
-        theme::drawTracked (g, meterrail::trimText (trimDb()), frame, theme::displayFont (10.0f),
-                            0.0f, juce::Justification::centred);
+        // The heads, top and bottom: without them a one-pixel line is indistinguishable from the
+        // peak hold that also crosses this bar.
+        g.fillRect (x - 2.5f, t.getY() - 1.0f, 5.0f, 2.5f);
+        g.fillRect (x - 2.5f, t.getBottom() - 1.5f, 5.0f, 2.5f);
+    }
+
+    /** The reading, beside the bar. Double-click to type one in. */
+    void paintValue (juce::Graphics& g) const
+    {
+        g.setColour (dragging ? theme::orange : theme::txDim);
+        theme::drawTracked (g, meterrail::trimText (trimDb()), valueArea(),
+                            theme::displayFont (11.0f), 0.0f, juce::Justification::centredRight);
     }
 
     inline static const juce::Colour inRange { 0xff5fc97a };   // the character ramp's clean green
@@ -253,6 +287,7 @@ private:
     bool zone = true;
 
     std::unique_ptr<juce::ParameterAttachment> trim;
+    meterrail::GripEditor editor;   // the in-place field the reading opens into
     float hold = -120.0f;
     bool  dragging = false;
 
