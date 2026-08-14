@@ -34,7 +34,7 @@ public:
 
     void prepare (double sampleRate, int maxBlock, int numChannels)
     {
-        stage.prepare (sampleRate, maxBlock);
+        stage.prepare (sampleRate, maxBlock, numChannels);
         ribbon.prepare (sampleRate);
 
         for (auto& f : tone)

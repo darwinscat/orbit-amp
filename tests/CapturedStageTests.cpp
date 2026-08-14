@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <vector>
 
 using orbitamp::core::CapturedStage;
@@ -52,6 +53,33 @@ namespace
         return std::vector<float> (left.begin() + n / 2, left.end());
     }
 
+    /** The stage's output for a sine WITH a model change dropped into the middle of it, kept whole —
+        the switch is the thing being looked at, so nothing may be trimmed away. `pump` stands in for
+        the processor's thirty-a-second message-thread tick. */
+    std::vector<float> runAcrossSwitch (CapturedStage& stage, double amp, int switchAtBlock,
+                                        const std::function<void()>& pump)
+    {
+        constexpr int n = 24000;   // half a second at 48k — a warm, a fade and a tail after it
+        std::vector<float> left ((size_t) n), right ((size_t) n);
+
+        for (int i = 0; i < n; ++i)
+            left[(size_t) i] = right[(size_t) i]
+                = (float) (amp * std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * i / sampleRate));
+
+        for (int off = 0, block = 0; off < n; off += blockSize, ++block)
+        {
+            if (block == switchAtBlock)
+                pump();
+
+            float* io[2] = { left.data() + off, right.data() + off };
+            stage.process (io, 2, juce::jmin (blockSize, n - off));
+
+            stage.collectGarbage();   // the pump also lands finished handovers and parked requests
+        }
+
+        return left;
+    }
+
     double rms (const std::vector<float>& x)
     {
         double sum = 0.0;
@@ -81,6 +109,42 @@ namespace
         }
 
         return 100.0 * std::sqrt (diff / (double) a.size());
+    }
+
+    /** The output's level hop by hop — a short-window RMS every 2.7 ms. */
+    std::vector<double> envelope (const std::vector<float>& x, size_t from, size_t to)
+    {
+        constexpr size_t window = 512, hop = 128;   // ~11 ms of window, two cycles of the 220 Hz probe
+        std::vector<double> out;
+
+        for (size_t at = from; at + window <= std::min (to, x.size()); at += hop)
+            out.push_back (rms (std::vector<float> (x.begin() + (long) at,
+                                                    x.begin() + (long) (at + window))));
+
+        return out;
+    }
+
+    /** The most the level moves between two neighbouring hops, as a ratio.
+
+        This is the question a model change has to answer, and the reason the two obvious ones are
+        wrong. Sample-to-sample jumps barely notice a swap: the top of the SM7's dial is a squared-off
+        wave whose own steepest edge dwarfs any seam. Nor does the floor — a NAM dropped in with empty
+        buffers still makes a plausible level almost at once, so nothing VANISHES either. What the ear
+        actually catches is the SPEED: the level of the whole thing arriving somewhere else within one
+        block instead of walking there. A crossfade cannot move faster than its own ramp; a swap moves
+        as fast as the two captures differ. */
+    double steepestLevelMove (const std::vector<float>& x, size_t from, size_t to)
+    {
+        const auto env = envelope (x, from, to);
+        double worst = 1.0;
+
+        for (size_t i = 1; i < env.size(); ++i)
+        {
+            const double a = std::max (1.0e-9, env[i - 1]), b = std::max (1.0e-9, env[i]);
+            worst = std::max (worst, std::max (a / b, b / a));
+        }
+
+        return worst;
     }
 }
 
@@ -212,6 +276,58 @@ int main()
 
         report ("the sweep actually changes the sound", worst > 10.0,
                 juce::String (worst, 1) + "% away from the bottom of the dial");
+    }
+
+    // THE HANDOVER. Turning the dial one notch is loading a whole other model, and done bare that is
+    // a step: the transfer changes between two samples, the newcomer's buffers are empty, and the
+    // loudness makeup jumps. The stage carries a second model for exactly this — warm it silently,
+    // fade it in — so the proof is that a switch mid-note leaves the waveform no rougher than the
+    // two captures are on their own. Levels and spectra both look fine through a click; the first
+    // difference does not.
+    {
+        CapturedStage swapping;
+        swapping.prepare (sampleRate, blockSize, 2);
+        swapping.setPack (&pack);
+        swapping.selectGainIndex (0);
+
+        constexpr int switchAtBlock = 20;                       // ~213 ms in — well past any settling
+        const size_t  switchAt = (size_t) (switchAtBlock * blockSize);
+
+        const int top = positions.size() - 1;
+        const auto crossed = runAcrossSwitch (swapping, 0.05, switchAtBlock,
+                                              [&swapping, top] { swapping.selectGainIndex (top); });
+
+        // Before, during, after. "During" is the warm plus the fade plus room to spare — and it has
+        // the whole distance between two very different captures to cover, 0 to 300 on the dial.
+        const double before = steepestLevelMove (crossed, 4000,            switchAt);
+        const double during = steepestLevelMove (crossed, switchAt,        switchAt + 6000);
+        const double after  = steepestLevelMove (crossed, switchAt + 8000, crossed.size());
+
+        // How far apart the two captures are in level — the distance the handover has to cover. It
+        // is the pack's business, not this gate's: SM7 spans eleven decibels across its dial and the
+        // next device will span something else, so the limit is derived from it rather than typed in.
+        const double levelBefore = rms ({ crossed.begin() + 4000, crossed.begin() + (long) switchAt });
+        const double levelAfter  = rms ({ crossed.end() - 6000, crossed.end() });
+        const double span = std::max (levelBefore, levelAfter)
+                          / std::max (1.0e-9, std::min (levelBefore, levelAfter));
+
+        // Forty milliseconds of fade is fifteen hops, so no single hop may carry more than about a
+        // tenth of the distance — and never less than what the steady waveform already wobbles by,
+        // or a device whose dial barely changes level would be gated on measurement noise.
+        const double allowed = std::max (1.0 + (span - 1.0) * 0.1, std::max (before, after) * 1.10);
+
+        std::printf ("\nhandover: steepest level move  before %.3fx  during %.3fx  after %.3fx"
+                     "   (span %.2fx, allowed %.3fx)\n", before, during, after, span, allowed);
+
+        report ("a model change walks in, never lands", during < allowed,
+                juce::String (during, 3) + "x per hop against " + juce::String (allowed, 3) + "x");
+
+        // ...and it has to actually be the other capture on the far side. A handover that never
+        // happened is perfectly smooth, and perfectly useless.
+        report ("...and the far side is the capture it was sent to",
+                shapeDifference (std::vector<float> (crossed.begin() + 4000, crossed.begin() + 10000),
+                                 std::vector<float> (crossed.end() - 6000, crossed.end())) > 5.0,
+                positions[0] + " -> " + positions[top]);
     }
 
     // ALIASES. A combination with no capture of its own points at a neighbour and says how much
