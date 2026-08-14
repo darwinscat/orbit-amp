@@ -90,6 +90,39 @@ namespace
             juce::Thread::sleep (5);
         }
     }
+
+    /** What the filter ACTUALLY does at a knob position, as the worst departure from unity in dB.
+
+        The pack's curve being flat and the played result being flat are two different claims: the
+        first belongs to whoever measured, the second to us, and the interpolation, the band hold and
+        the FIR design all sit in between. A neutral that is flat on paper and audible in the room is
+        our bug, not theirs, and only this half of the gate would ever find it.
+
+        Sampled inside 80..8000 Hz, where a convolution measurement is cleanest — the same window the
+        checks below use, and for the same reason. */
+    double playedFlatnessDb (const namz::rig::Measured& m, double norm)
+    {
+        MeasuredFilter f;
+        arm (f, m, norm);
+
+        if (! f.isActive())
+            return 0.0;          // nothing applied is exactly flat, and costs nothing to be so
+
+        const auto band = MeasuredFilter::bandFor (m);
+        const double lo = juce::jmax (80.0, band.lo);
+        const double hi = juce::jmin (8000.0, band.hi);
+
+        if (hi <= lo)
+            return 0.0;          // the trusted band does not reach the window we can measure in
+
+        constexpr int points = 8;
+        double worst = 0.0;
+
+        for (int i = 0; i < points; ++i)
+            worst = juce::jmax (worst, std::abs (responseDb (f, lo * std::pow (hi / lo, (double) i / (points - 1)))));
+
+        return worst;
+    }
 }
 
 int main()
@@ -104,6 +137,101 @@ int main()
         std::printf ("no packs in %s\n", DeviceLibrary::directory().getFullPathName().toRawUTF8());
         std::printf ("nothing to check — install an .orbitrig to exercise this gate\n");
         return 0;
+    }
+
+    // ---- THE NEUTRAL, across every installed pack ------------------------------------------------
+    //
+    // A pack states its curves AGAINST its reference position — the setting every model of the stage
+    // was captured at (`Measured::reference`). At that position the curve is therefore zero by
+    // definition, and anything applied there colours a capture that already carries the colour.
+    //
+    // Getting those zeros wrong is what once made the measured controls sound bad enough to switch
+    // them off wholesale, and it is the kind of mistake no amount of DSP catches: the curve stays
+    // smooth, stays plausible, and is wrong at every setting of the knob. It is a data fault, so it
+    // is caught here, on the data, for every control of every pack rather than for the one this file
+    // happens to exercise below.
+    //
+    // The tolerance is half a decibel. A correct pack lands on exactly zero — SM7 does — so this is
+    // not a budget to spend, it is room for a producer that rounds.
+    {
+        constexpr double neutralTolDb = 0.5;
+
+        int checked = 0;
+        double worst = 0.0;
+        juce::String worstWhere;
+
+        for (const auto& p : packs)
+        {
+            orbitamp::core::CapturedStage probe;
+            probe.prepare (sampleRate, blockSize);
+            probe.setPack (&p);
+
+            const auto* list = probe.measured();
+            if (list == nullptr)
+                continue;
+
+            for (const auto& m : *list)
+            {
+                const auto where = juce::String (p.name) + " / " + juce::String (m.name);
+
+                // Ascending norms are what every reader indexes and lerps against, this one included.
+                // A pack that ships them descending — "300, 240, … 0" is a normal way to write a knob
+                // that reads ten to zero — inverts the control silently and looks fine doing it.
+                bool ascends = true;
+                for (size_t i = 1; i < m.positions.size(); ++i)
+                    ascends = ascends && m.positions[i].norm >= m.positions[i - 1].norm;
+
+                report (("norms ascend: " + where).toRawUTF8(), ascends);
+
+                // A reference that names no position leaves the zero unknowable — the curves are
+                // stated against something the pack does not contain.
+                const namz::rig::MeasuredPosition* ref = nullptr;
+                for (const auto& pos : m.positions)
+                    if (juce::String (pos.value).trim() == juce::String (m.reference).trim())
+                    {
+                        ref = &pos;
+                        break;
+                    }
+
+                if (ref == nullptr)
+                {
+                    report (("reference names a position: " + where).toRawUTF8(), false,
+                            m.reference.empty() ? "none stated"
+                                                : "no position \"" + juce::String (m.reference) + "\"");
+                    continue;
+                }
+
+                double peak = 0.0;
+                bool   finite = true;
+
+                for (const double v : ref->db)
+                {
+                    finite = finite && std::isfinite (v);
+                    peak = juce::jmax (peak, std::abs (v));
+                }
+
+                ++checked;
+                if (peak > worst) { worst = peak; worstWhere = where; }
+
+                report (("the neutral is flat: " + where).toRawUTF8(),
+                        finite && peak <= neutralTolDb,
+                        "at " + juce::String (m.reference) + ": " + juce::String (peak, 3) + " dB"
+                            + (finite ? "" : " (NOT FINITE)"));
+
+                // ...and flat once it has been through our own machinery, which is the other half of
+                // the promise and the half we are answerable for.
+                if (finite)
+                {
+                    const double played = playedFlatnessDb (m, ref->norm);
+                    report (("...and stays flat when played: " + where).toRawUTF8(),
+                            played <= neutralTolDb, juce::String (played, 3) + " dB");
+                }
+            }
+        }
+
+        std::printf ("\n%d control%s checked; worst neutral %.3f dB%s\n\n",
+                     checked, checked == 1 ? "" : "s", worst,
+                     worstWhere.isEmpty() ? "" : (" (" + worstWhere + ")").toRawUTF8());
     }
 
     const auto& pack = packs.getReference (0);
