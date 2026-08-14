@@ -31,10 +31,14 @@ public:
     GateStrip (const std::atomic<float>& keyDbSource, const std::atomic<float>& pressureDbSource,
                std::atomic<bool>& clipLatch,
                juce::RangedAudioParameter& thresholdParam, juce::RangedAudioParameter& trimParam,
-               juce::RangedAudioParameter& gateOnParam, juce::RangedAudioParameter& decayParam)
+               juce::RangedAudioParameter& gateOnParam, juce::RangedAudioParameter& decayParam,
+               juce::RangedAudioParameter& posParam)
         : keyDb (keyDbSource), pressureDb (pressureDbSource), clip (clipLatch),
-          param (thresholdParam), trimP (trimParam), onP (gateOnParam), decayP (decayParam)
+          param (thresholdParam), trimP (trimParam), onP (gateOnParam), decayP (decayParam),
+          posP (posParam)
     {
+        posAtt = std::make_unique<juce::ParameterAttachment> (posParam, [] (float) {});
+
         threshold = std::make_unique<juce::ParameterAttachment> (thresholdParam,
                                                                  [this] (float) { repaint(); });
         trim = std::make_unique<juce::ParameterAttachment> (trimParam,
@@ -49,9 +53,6 @@ public:
 
     /** A clean click (no drag) opens the big gate — the sliver is the glance. */
     std::function<void()> onClick;
-
-    /** The menu's OPEN item — the door to the zoom, now that the badge's click means MENU. */
-    std::function<void()> onOpenZoom;
 
     /** The trim runner entered/left the hand — the editor slides the drag ruler out beside us. */
     std::function<void (bool)> onTrimDrag;
@@ -218,12 +219,19 @@ public:
         decay.addItem (11, "METAL",  true, metal);
         m.addSubMenu ("DECAY", decay);
 
+        // WHERE the gate mutes. It always keys off the raw input; the VCA can stand at the front or
+        // after the preamp. This lived on the gate's big face, and the big face is gone — a control
+        // with no door is a control that does not exist, so it moves in here.
+        const bool preReverb = posP.getValue() > 0.5f;
+
+        juce::PopupMenu where;
+        where.addItem (12, params::gatePositions[0].toUpperCase(), true, ! preReverb);
+        where.addItem (13, params::gatePositions[1].toUpperCase(), true, preReverb);
+        m.addSubMenu ("MUTES AT", where);
+
         m.addSeparator();
         m.addSectionHeader ("VOLUME");
         m.addItem (7, "RESET");
-
-        m.addSeparator();
-        m.addItem (6, "OPEN",        true, false);
 
         // At the MOUSE, not at the component: a menu summoned from a sliver as tall as the panel
         // would otherwise land wherever the sliver ends.
@@ -249,10 +257,9 @@ public:
             return;
         }
 
-        if (choice == 6)
+        if (choice == 12 || choice == 13)
         {
-            if (onOpenZoom != nullptr)
-                onOpenZoom();
+            posAtt->setValueAsCompleteGesture (choice == 13 ? 1.0f : 0.0f);
             return;
         }
 
@@ -477,7 +484,8 @@ private:
     juce::RangedAudioParameter& trimP;
     juce::RangedAudioParameter& onP;
     juce::RangedAudioParameter& decayP;
-    std::unique_ptr<juce::ParameterAttachment> threshold, trim, onAtt, decayAtt;
+    juce::RangedAudioParameter& posP;
+    std::unique_ptr<juce::ParameterAttachment> threshold, trim, onAtt, decayAtt, posAtt;
 
     meterrail::GripEditor gripEd;
 

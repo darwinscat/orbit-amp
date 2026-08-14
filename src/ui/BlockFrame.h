@@ -381,17 +381,19 @@ private:
     static constexpr int   headerGap    = 12;
     static constexpr int   borderInset  = 18;   // clear of the corner radius, for anything on the line
     static constexpr float legendGap    = 6.0f; // breathing room each side of anything on the line
-    static constexpr int   switchWidth  = 26;
-    static constexpr int   switchHeight = 14;
-    static constexpr float labelHeight  = 9.0f;
+    // Reading size, everywhere. These were the ZOOM's numbers back when a block could be magnified;
+    // with the lens gone every block is read at this size all the time, and a name or a switch too
+    // small to read at 1x is not a smaller version of a control, it is a missing one.
+    static constexpr int   switchWidth  = 42;
+    static constexpr int   switchHeight = 22;
+    static constexpr float labelHeight  = 16.0f;
 
 protected:
-    /** The title's font height. Panel-size blocks keep the default; zoom faces raise it to
-        reading size — a magnified block must not whisper its own name. */
+    /** The title's font height. One number for every block — a face that whispers its own name is
+        a face you have to lean into. */
     float titleHeight = labelHeight;
 
-    /** The frame switch's size — the zoom scales it up with the title: on a full-panel face the
-        one control the frame owns must be sized like a control. */
+    /** The frame switch's size. The one control the frame itself owns, sized like a control. */
     int switchW = switchWidth;
     int switchH = switchHeight;
 
@@ -401,27 +403,6 @@ protected:
     /** Frame brightness scale: second-rank furniture keeps a quiet border at all times and lets
         its CONTENT (word, flood) do the talking. */
     float borderAlpha = 1.0f;
-
-    /** Whether this face is currently the magnified one — blocks that lay out differently at
-        reading size branch on it. */
-    bool zoomedFace = false;
-
-public:
-    // The reading-size metrics every zoomed face shares — ONE constant, not a per-block opinion.
-    static constexpr float zoomTitleHeight = 16.0f;
-    static constexpr int   zoomSwitchW     = 42;
-    static constexpr int   zoomSwitchH     = 22;
-
-    /** Zoomed faces grow their frame furniture; back on the overview it shrinks home. */
-    void setZoomed (bool z)
-    {
-        zoomedFace  = z;
-        titleHeight = z ? zoomTitleHeight : labelHeight;
-        switchW     = z ? zoomSwitchW : switchWidth;
-        switchH     = z ? zoomSwitchH : switchHeight;
-        resized();
-        repaint();
-    }
 
 private:
 

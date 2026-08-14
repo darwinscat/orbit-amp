@@ -47,8 +47,6 @@ private:
     int  headerHeight() const override { return headerRow; }
     void layOutHeader (juce::Rectangle<int>) override;
     void layOutContent (juce::Rectangle<int>) override;
-    void layOutCompact (juce::Rectangle<int>);
-    void layOutViz (juce::Rectangle<int>);
     void paintContent (juce::Graphics&) override;
 
     /** Whether a measured control's positions are named rather than numbered — the difference

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "ui/ChainStrip.h"
 #include "ui/Chrome.h"
 #include "ui/FaceplateView.h"
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
@@ -35,9 +34,6 @@ public:
 
     void showLimiterMenu (juce::Point<int> screenPos);
 
-    /** What the panel showed before a gain-drag peeked a zoom — restored on release. */
-    std::optional<ChainLink> zoomBeforePeek;
-
 private:
     static constexpr int margin    = 18;   // the ground the device sits on
     static constexpr int chromeGap = 10;   // toolbar to faceplate
@@ -49,7 +45,6 @@ private:
 
     static constexpr int baseWidth  = FaceplateView::designWidth + margin * 2;
     static constexpr int baseHeight = Chrome::designHeight + chromeGap
-                                    + ChainStrip::designHeight + chromeGap
                                     + FaceplateView::designHeight
                                     + chromeGap + TunerStrip::designHeight
                                     + chromeGap + Footer::designHeight
@@ -59,8 +54,7 @@ private:
 
     AmpProcessor& amp;              // the base class's `processor` is the AudioProcessor& — this is ours
     Chrome        chrome;
-    ChainStrip    strip;            // the chain map, across the top of the panel
-    FaceplateView faceplate;
+    FaceplateView faceplate;        // the whole chain, five blocks in two rows
     GateStrip     gateStrip;        // the IN sliver with the gate's story, left of the faceplate
     OutStrip      outStrip;         // the OUT sliver with the master's hand, right of it
     TallyBadge    gateBadge;        // the gate's door and tally light, left of the tuner
@@ -72,7 +66,6 @@ private:
     DragRuler     inRuler;          // the IN trim's own ladder, summoned by the hand
     DragRuler     outRuler;         // the OUT trim's, mirrored
     DragRuler     ceilRuler;        // the limiter ceiling's, lilac, top-third ladder
-    HDragRuler    gainRuler;        // the captured gains' magnified ladder, under the thumb
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;            // the Setup overlay — last member, so it sits on top
 

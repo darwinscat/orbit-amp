@@ -405,14 +405,6 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     setControlsVisible (true);
 
-    // Two geometries, one face: the grand grid below is the ZOOM's — at overview size it made
-    // doll's-house knobs. The compact overview keeps the old row.
-    if (! zoomedFace)
-    {
-        layOutCompact (area);
-        return;
-    }
-
     // ---- the knob zone: the top third. GAIN is a full-height square on the left, always;
     //      the measured knobs grid to its right in cells sized AS IF there were six, so a
     //      two-knob device wears the same knobs a six-knob one does. ----
@@ -558,14 +550,6 @@ void CapturedBlockPanel::layChecks (juce::Rectangle<int> checks)
     }
 }
 
-void CapturedBlockPanel::layOutViz (juce::Rectangle<int> area)
-{
-    // The compact face keeps the column beside the tiles — its knob row has no room up top.
-    layChecks (area.removeFromLeft (110));
-    area.removeFromLeft (gap);
-    layTiles (area);
-}
-
 void CapturedBlockPanel::layTiles (juce::Rectangle<int> area)
 {
     std::vector<DeviceScope*> shown;
@@ -617,55 +601,6 @@ void CapturedBlockPanel::layTiles (juce::Rectangle<int> area)
             halfTag.setVisible (true);
             halfTag.toFront (false);
         }
-    }
-}
-
-void CapturedBlockPanel::layOutCompact (juce::Rectangle<int> area)
-{
-    // The overview's face: pictures along the bottom, the gain square and a single knob row
-    // above, the switches wherever they fit — right of the knobs first, under them second.
-    layOutViz (area.removeFromBottom (juce::jmax (150, area.getHeight() * 2 / 5)));
-    area.removeFromBottom (gap);
-
-    std::vector<Knob*> knobs { &level };
-    for (auto& slot : slots)
-        if (slot.knob != nullptr)
-            knobs.push_back (slot.knob.get());
-
-    std::vector<VSwitch*> switches;
-    for (auto& sel : selectors)
-        if (sel.steps != nullptr)
-            switches.push_back (sel.steps.get());
-    for (auto& slot : slots)
-        if (slot.steps != nullptr)
-            switches.push_back (slot.steps.get());
-
-    const int gainSide = juce::jmin (maxGainSide, juce::jmin (area.getHeight(), area.getWidth() / 2));
-    gain.setBounds (area.removeFromLeft (gainSide).withSizeKeepingCentre (gainSide, gainSide));
-    area.removeFromLeft (knobGap);
-
-    const int k = (int) knobs.size();
-
-    if (k > 0)
-    {
-        const int small = juce::jmin (maxKnobSide,
-                                      juce::jmin (area.getHeight() / 2,
-                                                  (area.getWidth() - (k - 1) * knobGap) / k));
-
-        auto row = area.removeFromTop (small);
-        for (auto* kn : knobs)
-        {
-            kn->setBounds (row.removeFromLeft (small));
-            row.removeFromLeft (knobGap);
-        }
-        area.removeFromTop (gap);
-    }
-
-    for (auto* sw : switches)
-    {
-        sw->setBounds (area.removeFromTop (juce::jmin (area.getHeight(), sw->idealHeight()))
-                           .withWidth (juce::jmin (area.getWidth(), switchW)));
-        area.removeFromTop (gap / 2);
     }
 }
 

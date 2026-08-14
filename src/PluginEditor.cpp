@@ -4,10 +4,10 @@ namespace orbitamp
 {
 
 AmpEditor::AmpEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), strip (p), faceplate (p),
+    : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p),
       gateStrip (p.gateKeyDb, p.gateMeterDb, p.inClip, *p.apvts.getParameter (params::gateThreshold),
                  *p.apvts.getParameter (params::inTrim), *p.apvts.getParameter (params::gateOn),
-                 *p.apvts.getParameter (params::gateDecay)),
+                 *p.apvts.getParameter (params::gateDecay), *p.apvts.getParameter (params::gatePos)),
       outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim),
                 *p.apvts.getParameter (params::limiterCeiling),
                 *p.apvts.getParameter (params::limiterOn)),
@@ -18,7 +18,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     setWantsKeyboardFocus (true);
 
     addAndMakeVisible (chrome);
-    addAndMakeVisible (strip);
     addAndMakeVisible (faceplate);
     addAndMakeVisible (gateStrip);
     addAndMakeVisible (outStrip);
@@ -32,24 +31,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     chrome.onShowSetup = [this] { setup.open(); };
 
-    // A thumb opens its link across the panel; the lit thumb closes it again. The strip is the map
-    // either way — it never leaves.
-    strip.onOpen = [this] (ChainLink link)
-    {
-        const auto next = faceplate.zoom() == link ? std::nullopt : std::optional<ChainLink> (link);
-        faceplate.setZoom (next);
-        strip.setActive (next);
-    };
-
-    // The tuner strip is the same gesture aimed at the same place: glance below, look above.
-    tunerStrip.onClick = [this] { strip.onOpen (ChainLink::tuner); };
-
-    // And the gate's sliver: a clean click opens its zoom; drags belong to the threshold.
-    // The badges' clicks mean MENU — the whole device in one pick; the gate's zoom is the
-    // menu's OPEN item, for the day the deep face is wanted.
+    // The badges' clicks mean MENU — the whole device in one pick. There is nowhere to "open" any
+    // more and nothing to open TO: every block wears its own face on the panel, and the gate's own
+    // controls, position included, live in this menu.
     gateBadge.onOpen = [this] (juce::Point<int> pos) { gateStrip.showPresetMenu (pos); };
     gateBadge.latch  = &amp.gateWorked;
-    gateStrip.onOpenZoom = [this] { strip.onOpen (ChainLink::gate); };
 
     // The measurement, projected: the overlay reads the strip's own trace.
     learnOverlay.trace      = &gateStrip.learnTraceRef();
@@ -104,41 +90,12 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (outRuler);
     addChildComponent (ceilRuler);
 
-    addChildComponent (gainRuler);
-
-    // EXPERIMENT (the ladder code stays for the rollback): a captured thumb's runner in hand
-    // PEEKS the zoom instead — the link's whole face opens under the drag, its big dial moving
-    // live, and letting go returns whatever was open before. Already on that face? Then there
-    // is nothing to peek and nothing to restore.
-    strip.onGainDrag = [this] (ChainLink link, bool active)
-    {
-        const auto set = [this] (std::optional<ChainLink> z)
-        {
-            faceplate.setZoom (z);
-            strip.setActive (z);
-        };
-
-        if (active)
-        {
-            zoomBeforePeek = faceplate.zoom();
-            if (zoomBeforePeek != link)
-                set (link);
-            return;
-        }
-
-        if (faceplate.zoom() == link && zoomBeforePeek != link)
-            set (zoomBeforePeek);
-    };
-
     gateStrip.onTrimDrag = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
     outStrip.onTrimDrag  = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
     outStrip.onCeilDrag  = [this] (bool a) { ceilRuler.setVisible (a); if (a) ceilRuler.toFront (false); };
     limitBadge.onOpen = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
     limitBadge.latch  = &amp.limiterWorked;
     outStrip.onMenu   = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
-
-    // And the open lens closes on any click — the tuner has nothing to operate, only to see.
-    faceplate.onTunerDismiss = [this] { strip.onOpen (ChainLink::tuner); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
     // captured blocks rebuild their selectors from the lists that changed under them.
@@ -256,13 +213,8 @@ void AmpEditor::resized()
     chrome.setBounds (margin, margin, FaceplateView::designWidth, Chrome::designHeight);
     chrome.setTransform (zoom);
 
-    // The chain map first: the whole signal path, readable before any block is.
-    const int stripY = margin + Chrome::designHeight + chromeGap;
-    strip.setBounds (margin, stripY, FaceplateView::designWidth, ChainStrip::designHeight);
-    strip.setTransform (zoom);
-
     // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
-    const int faceplateY = stripY + ChainStrip::designHeight + chromeGap;
+    const int faceplateY = margin + Chrome::designHeight + chromeGap;
     gateStrip.setBounds (margin, faceplateY, GateStrip::designWidth, FaceplateView::designHeight);
     gateStrip.setTransform (zoom);
 
