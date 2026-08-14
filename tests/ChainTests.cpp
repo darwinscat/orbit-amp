@@ -144,9 +144,8 @@ int main()
     std::printf ("device: %s\n\n", amp.boost.packs.getReference (0).displayName().toRawUTF8());
 
     // Everything else off, so what is measured is the boost and nothing standing in front of it.
-    // The EQ links ship off — stated here anyway, because this test depends on it.
-    set (amp, orbitamp::params::eqOn (0), 0.0f);
-    set (amp, orbitamp::params::eqOn (1), 0.0f);
+    // The EQ consoles have no enable of their own — they ship flat, and a flat link is
+    // bit-transparent, so there is nothing to switch off here.
     set (amp, orbitamp::params::reverbOn, 0.0f);
     set (amp, orbitamp::params::powerOn, 0.0f);
 
@@ -297,28 +296,32 @@ int main()
             set (amp, orbitamp::params::eqHpfHz (l), 800.0f);
         }
 
-        set (amp, orbitamp::params::eqOn (1), 1.0f);
+        // A console is armed by its VALUES now, which is the whole point of dropping the enable:
+        // there is no state in which the curve says one thing and the audio does another.
+        for (int l = 0; l < orbitamp::params::numEqLinks; ++l)
+            set (amp, orbitamp::params::eqHpfOn (l), 0.0f);
+
+        set (amp, orbitamp::params::eqHpfOn (1), 1.0f);
         const auto post = run (amp);
+        set (amp, orbitamp::params::eqHpfOn (1), 0.0f);
 
-        set (amp, orbitamp::params::eqOn (1), 0.0f);
-        set (amp, orbitamp::params::eqOn (0), 1.0f);
+        set (amp, orbitamp::params::eqHpfOn (0), 1.0f);
         const auto pre = run (amp);
+        set (amp, orbitamp::params::eqHpfOn (0), 0.0f);
 
-        std::printf ("\nEQ links: off %.5f, eq2 %.5f, eq1 %.5f\n",
+        std::printf ("\nEQ consoles: flat %.5f, preamp's %.5f, boost's %.5f\n",
                      rms (clean), rms (post), rms (pre));
-        std::printf ("eq2 differs from off by %.1f%%, eq1 from eq2 by %.1f%%\n\n",
+        std::printf ("the preamp's differs from flat by %.1f%%, the boost's from it by %.1f%%\n\n",
                      differencePercent (clean, post), differencePercent (post, pre));
 
-        report ("an EQ link reaches the audio",
+        report ("a block's EQ reaches the audio",
                 differencePercent (clean, post) > 5.0,
                 juce::String (differencePercent (clean, post), 1) + "% different");
 
-        report ("...and eq1 (before the boost) is not eq2", differencePercent (post, pre) > 5.0,
+        // They are not interchangeable and must not be: the boost's console feeds the preamp, so it
+        // changes what the next nonlinearity is given; the preamp's only colours what came out.
+        report ("...and the boost's console is not the preamp's", differencePercent (post, pre) > 5.0,
                 juce::String (differencePercent (post, pre), 1) + "% apart");
-
-        set (amp, orbitamp::params::eqOn (0), 0.0f);
-        for (int l = 0; l < orbitamp::params::numEqLinks; ++l)
-            set (amp, orbitamp::params::eqHpfOn (l), 0.0f);
     }
 
     // A capture with no gain axis still answers its gain knob — the knob DRIVES where it cannot
@@ -340,8 +343,6 @@ int main()
 
             orbitamp::AmpProcessor solo;
             solo.prepareToPlay (sampleRate, blockSize);
-            set (solo, orbitamp::params::eqOn (0), 0.0f);
-            set (solo, orbitamp::params::eqOn (1), 0.0f);
             set (solo, orbitamp::params::reverbOn, 0.0f);
             set (solo, orbitamp::params::powerOn, 0.0f);
             set (solo, orbitamp::params::preampOn, 0.0f);

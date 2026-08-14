@@ -101,17 +101,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         return juce::NormalisableRange<float> (lo, hi, 0.1f, std::log (0.5f) / std::log ((centre - lo) / (hi - lo)));
     };
 
-    // The EQ links, in the console grammar. Both ship OFF and flat: four lit EQs out of the box
-    // is mush and lost headroom, and an EQ you switched on yourself is an EQ you remember setting.
+    // The EQ links, in the console grammar. Both ship FLAT, which is also what they used to ship
+    // switched off as — a link with every band at zero is bit-transparent, so the enable it used to
+    // carry said nothing the values did not.
     for (int l = 0; l < numEqLinks; ++l)
     {
         const juce::String name = "EQ" + juce::String (l + 1) + " ";
         const juce::NormalisableRange<float> tone { -toneRangeDb, toneRangeDb, 0.1f };
         const juce::NormalisableRange<float> q    { 0.3f, 6.0f, 0.01f, 0.5f };
         const juce::NormalisableRange<float> qN   { 1.0f, 18.0f, 0.01f, 0.5f };   // the surgical bell runs narrow
-
-        layout.add (std::make_unique<Bool> (juce::ParameterID { eqOn (l), 1 },
-                                            "EQ" + juce::String (l + 1), false));
 
         // The cut filters, each with its slope. Off by default: they are for tightening a
         // specific rig, not part of the voicing.

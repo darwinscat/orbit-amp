@@ -409,8 +409,9 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
             expandTags[(size_t) i].setVisible (i == expandedViz);
         }
 
-        auto* big = scopes[(size_t) expandedViz].get();
-        big->setBounds (area);
+        // The whole face is the picture, so the whole face takes the click that walks the loop.
+        widgetArea = area;
+        scopes[(size_t) expandedViz]->setBounds (area);
 
         auto corner = area.removeFromTop (24).removeFromRight (96);
         expandTags[(size_t) expandedViz].setBounds (corner.removeFromRight (28).reduced (2, 4)
@@ -567,6 +568,15 @@ void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
 void CapturedBlockPanel::setViz (int which)
 {
     vizPick = juce::jlimit (0, numViz - 1, which);
+
+    // Thrown open, the loop walks the big picture rather than the small one behind it — otherwise
+    // clicking a full-face view changes something you cannot see.
+    if (expandedViz >= 0)
+    {
+        expandedViz = vizPick;
+        for (int j = 0; j < numViz; ++j)
+            expandTags[(size_t) j].expanded = expandedViz == j;
+    }
 
     // Kept with the session rather than as a parameter: it is which picture you are looking at,
     // not something a host should be automating.

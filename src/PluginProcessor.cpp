@@ -27,7 +27,6 @@ AmpProcessor::AmpProcessor()
     for (int l = 0; l < params::numEqLinks; ++l)
     {
         auto& p = eqParams[(size_t) l];
-        p.on       = apvts.getRawParameterValue (params::eqOn (l));
         p.hpfOn    = apvts.getRawParameterValue (params::eqHpfOn (l));
         p.hpfHz    = apvts.getRawParameterValue (params::eqHpfHz (l));
         p.hpfSlope = apvts.getRawParameterValue (params::eqHpfSlope (l));
@@ -493,7 +492,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
           nsStage[stBlock] = elapsedNs (a); }
 
         { const auto a = PerfClock::now();
-          if (on && eqParams[(size_t) l].on->load() > 0.5f)
+          // No enable of its own: the block's switch is the EQ's switch, and a flat link is
+          // bit-transparent, so a console standing at zero costs what it looks like it costs.
+          if (on)
               eqLinks[(size_t) l].process (channels, nch, numSamples);
           nsStage[stEq] = elapsedNs (a); }
 

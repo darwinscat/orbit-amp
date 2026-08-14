@@ -239,7 +239,6 @@ private:
     // thread should not be doing per block.
     struct EqLinkParams
     {
-        std::atomic<float>* on       = nullptr;
         std::atomic<float>* hpfOn    = nullptr;
         std::atomic<float>* hpfHz    = nullptr;
         std::atomic<float>* hpfSlope = nullptr;

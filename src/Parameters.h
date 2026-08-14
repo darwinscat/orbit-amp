@@ -146,6 +146,12 @@ inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String
     preamp's in front of the power amp, which is where a real amplifier keeps its tone stack. So
     there is no PRE/POST switch — every nonlinearity downstream is already being fed by one.
 
+    THERE IS NO ENABLE. The block's switch is the EQ's switch, and a flat link is bit-transparent
+    anyway — `core::EqLink` skips a band sitting at exactly 0 dB — so "off" and "flat" were the same
+    signal by two names, with Flat already in the presets menu. What the second name actually bought
+    was a console you could turn while it was not in the circuit, which is the worst kind of hidden
+    state and is now unrepresentable.
+
     The console grammar: HPF/LPF with a slope choice, LO/HI shelves with free corners (gain + freq,
     no Q), bells B1/B2 (gain + freq + Q) and the narrow switchable B3 — the surgical slot. Bells are
     indexed 0..2 for the id helpers. */
@@ -156,7 +162,6 @@ inline juce::String eqId (int l, const char* leaf)
     return juce::String (l == 0 ? boostId : preampId) + "_eq_" + leaf;
 }
 
-inline juce::String eqOn       (int l) { return eqId (l, "on"); }
 inline juce::String eqHpfOn    (int l) { return eqId (l, "hpf_on"); }
 inline juce::String eqHpfHz    (int l) { return eqId (l, "hpf_hz"); }
 inline juce::String eqHpfSlope (int l) { return eqId (l, "hpf_slope"); }
