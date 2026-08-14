@@ -238,11 +238,24 @@ void CapturedBlockPanel::deviceChanged()
     const auto spec = felitronics::appkit::parseDeviceSpec (block.circuit());
 
     // ...and the DEVICE view carries the paper the badge has no room for.
+    //
+    // THE ALIAS, not the gear. `Pack` keeps both on purpose — `name` is the make and model as
+    // captured, `alias` is the identity the voice goes out under — and only one of them belongs on
+    // the face of a public product: printing "Ibanez Tube Screamer" is a claim on somebody's mark,
+    // and it also contradicts what these voices are. The captured thing is material, not an
+    // original we are being faithful to. The combo has always shown the alias; this now agrees
+    // with it rather than quietly saying the other name two inches away.
+    const int chosen = juce::jlimit (0, juce::jmax (0, block.packs.size() - 1),
+                                     juce::roundToInt (amp.apvts.getRawParameterValue (
+                                         params::blockDevice (blk))->load()));
+
     juce::StringArray paper;
-    paper.add (block.deviceName().toUpperCase());
+
+    if (! block.packs.isEmpty())
+        paper.add (block.packs.getReference (chosen).displayName().toUpperCase());
 
     if (const auto circuit = juce::String (block.circuit()).trim(); circuit.isNotEmpty())
-        paper.add (circuit.toUpperCase());
+        paper.add (circuit.toUpperCase().replace (",", " · "));
 
     if (const int n = block.gainPositions().size(); n > 0)
         paper.add (juce::String (n) + (n == 1 ? " CAPTURE" : " CAPTURES") + " ON THE DIAL");
