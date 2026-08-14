@@ -83,17 +83,23 @@ inline constexpr const char* preampId = "preamp";
 inline juce::String blockOn       (const char* blk) { return juce::String (blk) + "_on"; }
 inline juce::String blockDevice   (const char* blk) { return juce::String (blk) + "_device"; }
 inline juce::String blockGain     (const char* blk) { return juce::String (blk) + "_gain"; }
-inline juce::String blockLevel    (const char* blk) { return juce::String (blk) + "_level"; }
-
 /** The block's INPUT trim — how hard the capture is fed, applied immediately before the model and
-    metered right there. It is the other half of the pair the OUT level makes, and the pair is the
-    point: a captured device answers to what goes IN, so a block that only has an output volume
-    lets you fix the loudness while leaving the drive wherever it landed. */
+    metered right there. ONE per block, and there is deliberately no output volume beside it.
+
+    A block's output and the next block's input are two multipliers in series with nothing between
+    them: the same decibel written twice, and two places for it to hide from you. Of the two names
+    for that one number, INPUT is the useful one — the meter beside it then reads what the capture
+    is being fed, which is the question the green zone answers.
+
+    The price, and it is the hardware's rather than ours: on a captured device this is a DRIVE
+    control, so every loudness fix between two blocks is also a tone change. Between a real pedal
+    and a real amp there is exactly one knob and turning it up is both louder and dirtier. The last
+    block's output is caught by the master volume, and what the power amp is fed by its own DRIVE. */
 inline juce::String blockIn (const char* blk) { return juce::String (blk) + "_in"; }
 
-/** Both trims, asymmetric on purpose. Twenty-four down and twelve up: cutting is what gain staging
-    mostly asks for — a hot interface, a hot pack, a boost feeding a preamp — and twelve decibels of
-    boost is already more than a capture wants before it stops being the device that was captured. */
+/** Asymmetric on purpose. Twenty-four down and twelve up: cutting is what gain staging mostly asks
+    for — a hot interface, a hot pack, a boost feeding a preamp — and twelve decibels of boost is
+    already more than a capture wants before it stops being the device that was captured. */
 inline constexpr float blockTrimMinDb = -24.0f;
 inline constexpr float blockTrimMaxDb =  12.0f;
 
@@ -104,6 +110,7 @@ inline constexpr float blockTrimMaxDb =  12.0f;
     default until the capture side writes down what it actually used. */
 inline constexpr float captureHotDb  = -6.0f;
 inline constexpr float captureColdDb = -18.0f;
+
 inline juce::String blockMeasured (const char* blk, int i) { return juce::String (blk) + "_meas" + juce::String (i + 1); }
 
 /** A pedal's MEASURED controls — the ones a player computes rather than selects. How many a device

@@ -36,7 +36,7 @@ class DeviceScope final : public juce::Component,
                          private juce::Timer
 {
 public:
-    enum class Mode { shape, envelope, transfer, tone, wave };
+    enum class Mode { shape, envelope, transfer, tone, wave, device };
 
     /** WAVE only: the half-wave silhouette instead of the mirrored band. */
     bool waveHalf = false;
@@ -79,12 +79,27 @@ public:
 
     /** What is inside the device, drawn over the picture. It belongs to the picture rather than to a
         row of its own: the row cost a line of height and the glyphs were small in it, and what is in
-        the box is a caption on what the box does, not a separate fact. */
+        the box is a caption on what the box does, not a separate fact.
+
+        Every view carries it, not just the first. Five pictures of one device that only sometimes
+        say whose device it is make you check the combo to be sure. */
     void setSpec (felitronics::appkit::DeviceSpec s)
     {
         if (s != spec)
         {
             spec = std::move (s);
+            repaint();
+        }
+    }
+
+    /** The device's paper: what it is, what it is made of, how it was captured. Shown by the DEVICE
+        view, which is the glyph badge grown into a picture of its own — the badge says the circuit
+        in two symbols and there was nowhere to say the rest. */
+    void setInfo (juce::StringArray lines)
+    {
+        if (lines != info)
+        {
+            info = std::move (lines);
             repaint();
         }
     }
@@ -126,9 +141,13 @@ public:
                                                      specTap != nullptr ? &pane : nullptr,
                                                      sampleRateNow()); break;
                 case Mode::wave:     waveView.paint (g, area, ribbon, waveHalf); break;
+                case Mode::device:   paintDevice (g, area); break;
             }
 
-            paintSpec (g, r.reduced (5.0f));
+            // The corner badge is the small version of what the DEVICE view IS, so it stands down
+            // there rather than saying the same thing twice on one picture.
+            if (mode != Mode::device)
+                paintSpec (g, r.reduced (5.0f));
         }
 
         g.setColour (theme::hair2);
@@ -156,6 +175,30 @@ private:
         g.fillRoundedRectangle (row.expanded (3.0f, 2.0f), theme::radiusSm);
 
         felitronics::appkit::drawDeviceSpecStatic (g, row, spec);
+    }
+
+    /** The paper. The circuit's symbols at a size you can actually read them at, and under them
+        the plain facts — name first, because that is what you came to check. */
+    void paintDevice (juce::Graphics& g, juce::Rectangle<float> r)
+    {
+        const int n = felitronics::appkit::deviceSpecCount (spec);
+
+        if (n > 0)
+        {
+            constexpr float big = 46.0f;
+            auto row = r.removeFromTop (big).withSizeKeepingCentre (big * (float) n, big);
+            felitronics::appkit::drawDeviceSpecStatic (g, row, spec);
+            r.removeFromTop (10.0f);
+        }
+
+        for (int i = 0; i < info.size(); ++i)
+        {
+            const bool head = i == 0;
+            g.setColour (head ? theme::tx : theme::txDim);
+            theme::drawTracked (g, info[i], r.removeFromTop (head ? 22.0f : 17.0f),
+                                theme::displayFont (head ? 15.0f : 12.0f), head ? 0.06f : 0.04f,
+                                juce::Justification::centred);
+        }
     }
 
     void timerCallback() override
@@ -189,6 +232,7 @@ private:
     core::WaveRibbon& ribbon;
     std::function<double (double)> toneDb;
     felitronics::appkit::DeviceSpec spec;
+    juce::StringArray info;
 
     scope::ToneView toneView;
     scope::WaveView waveView;

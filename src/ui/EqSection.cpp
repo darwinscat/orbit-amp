@@ -304,6 +304,14 @@ void EqSection::addTo (juce::Component& parent)
 
 void EqSection::setWidgetsVisible (bool v)
 {
+    // The console's clock rides its visibility, and this is the ONLY place that starts it now.
+    //
+    // It used to be started by the block that drew the EQ back when the EQ had a block of its own;
+    // that block is gone, nothing took the job over, and the spectrum behind the curve quietly
+    // stopped existing. The curve kept redrawing on every parameter move, which is exactly why it
+    // took a while to notice — a live line over a dead ground.
+    setSpectrumRunning (v);
+
     curve.setVisible (v);
     presetBtn.setVisible (v);
     hpfSw.setVisible (v);

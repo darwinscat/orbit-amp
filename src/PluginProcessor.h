@@ -274,14 +274,10 @@ private:
     std::atomic<float>* cabIrParam = nullptr;
     int lastCabIr = -1;
 
-    std::atomic<float>* boostLevelParam  = nullptr;
-    std::atomic<float>* preampLevelParam = nullptr;
-    std::atomic<float>* boostInParam     = nullptr;
-    std::atomic<float>* preampInParam    = nullptr;
-    float lastBoostLevelGain  = 1.0f;
-    float lastPreampLevelGain = 1.0f;
-    float lastBoostInGain     = 1.0f;
-    float lastPreampInGain    = 1.0f;
+    std::atomic<float>* boostInParam  = nullptr;
+    std::atomic<float>* preampInParam = nullptr;
+    float lastBoostInGain  = 1.0f;
+    float lastPreampInGain = 1.0f;
     float lastTrimGain = 1.0f;
 
     std::atomic<float>* gateOnParam        = nullptr;

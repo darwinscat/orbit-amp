@@ -63,19 +63,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Int> (juce::ParameterID { boostDevice, 1 }, "Boost Device",
                                        0, maxDevices - 1, 0));
 
-    // The raw switch and the selector slots, one set per captured block — and the block's own pair
-    // of trims. IN is how hard the capture is fed and OUT is what leaves; between them they are the
-    // whole of gain staging at this stage, which is why they sit on their own meters rather than
-    // being knobs among knobs.
+    // The raw switch and the selector slots, one set per captured block — and the block's one trim.
+    // IN is how hard the capture is fed, and it rides its own meter rather than being a knob among
+    // knobs, because it is the question you ask first about a captured device.
     for (const char* blk : { boostId, preampId })
     {
         const juce::NormalisableRange<float> trim (blockTrimMinDb, blockTrimMaxDb, 0.1f);
 
         layout.add (std::make_unique<Float> (juce::ParameterID { blockIn (blk), 1 },
                                              juce::String (blk) + " In", trim, 0.0f));
-
-        layout.add (std::make_unique<Float> (juce::ParameterID { blockLevel (blk), 1 },
-                                             juce::String (blk) + " Level", trim, 0.0f));
 
         layout.add (std::make_unique<Bool> (juce::ParameterID { rawId (blk), 1 },
                                             juce::String (blk) + " Raw", false));

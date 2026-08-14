@@ -54,8 +54,6 @@ AmpProcessor::AmpProcessor()
     limiterOnParam     = apvts.getRawParameterValue (params::limiterOn);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
     cabOnParam         = apvts.getRawParameterValue (params::cabOn);
-    boostLevelParam    = apvts.getRawParameterValue (params::blockLevel (params::boostId));
-    preampLevelParam   = apvts.getRawParameterValue (params::blockLevel (params::preampId));
     boostInParam       = apvts.getRawParameterValue (params::blockIn (params::boostId));
     preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
     cabIrParam         = apvts.getRawParameterValue (params::cabIr);
@@ -275,8 +273,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
     lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
-    lastBoostLevelGain  = juce::Decibels::decibelsToGain (boostLevelParam->load());
-    lastPreampLevelGain = juce::Decibels::decibelsToGain (preampLevelParam->load());
+    lastBoostInGain  = juce::Decibels::decibelsToGain (boostInParam->load());
+    lastPreampInGain = juce::Decibels::decibelsToGain (preampInParam->load());
     limiter.prepare (sampleRate);
 
     cab.prepare (sampleRate, block, channels);
@@ -471,8 +469,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // LEVEL comes last for the same reason: it is the block's output volume, and the OUT meter
     // beside it has to be metering everything the block did — the EQ included.
     const auto captured = [&] (auto& blk, int l, std::atomic<float>* onParam,
-                               std::atomic<float>* inParam, std::atomic<float>* levelParam,
-                               float& lastInGain, float& lastLevelGain,
+                               std::atomic<float>* inParam, float& lastInGain,
                                std::atomic<float>& blockOutDb, int stBlock, int stEq)
     {
         const bool on = onParam->load() > 0.5f;
@@ -480,9 +477,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // IN, first of all: how hard the capture is fed. Metered immediately after, at the model's
         // own door, so the grip on the meter and the fill under it are answering about one point.
         //
-        // Both trims ramp to UNITY when the block is off rather than simply not being applied — a
-        // bypassed block has to be a wire, and a switch that leaves a hand still pressing on the
-        // signal is a switch that lies. (The output level used to do exactly that.)
+        // It ramps to UNITY when the block is off rather than simply not being applied — a bypassed
+        // block has to be a wire, and a switch that leaves a hand still pressing on the signal is a
+        // switch that lies.
         const float inTarget = on ? juce::Decibels::decibelsToGain (inParam->load()) : 1.0f;
         chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
         lastInGain = inTarget;
@@ -499,11 +496,6 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
           if (on && eqParams[(size_t) l].on->load() > 0.5f)
               eqLinks[(size_t) l].process (channels, nch, numSamples);
           nsStage[stEq] = elapsedNs (a); }
-
-        // ...and OUT, the other end of the pair: what leaves the block, EQ included.
-        const float outTarget = on ? juce::Decibels::decibelsToGain (levelParam->load()) : 1.0f;
-        chainView.applyGainRamp (0, numSamples, lastLevelGain, outTarget);
-        lastLevelGain = outTarget;
 
         blockOutDb.store (juce::Decibels::gainToDecibels (
             chainView.getMagnitude (0, 0, numSamples), -90.0f));
@@ -523,10 +515,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         }
     };
 
-    captured (boost,  0, boostOnParam,  boostInParam,  boostLevelParam,
-              lastBoostInGain,  lastBoostLevelGain,  boostOutDb,  stBoost,  stEq1);
-    captured (preamp, 1, preampOnParam, preampInParam, preampLevelParam,
-              lastPreampInGain, lastPreampLevelGain, preampOutDb, stPreamp, stEq2);
+    captured (boost,  0, boostOnParam,  boostInParam,  lastBoostInGain,  boostOutDb,  stBoost,  stEq1);
+    captured (preamp, 1, preampOnParam, preampInParam, lastPreampInGain, preampOutDb, stPreamp, stEq2);
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
     // (boost hiss, preamp hiss) dies here too, and the reverb tail past it rings out.

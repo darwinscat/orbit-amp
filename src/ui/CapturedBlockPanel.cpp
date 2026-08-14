@@ -56,9 +56,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
       eq (processor.apvts, eqLink, toneSpectrumTap,
           [&processor] { return processor.currentSampleRate(); }),
       inMeter ("IN", processor.blockInDb[(size_t) eqLink],
-               *processor.apvts.getParameter (params::blockIn (blockId)), true),
-      outMeter ("OUT", eqLink == 0 ? processor.boostOutDb : processor.preampOutDb,
-                *processor.apvts.getParameter (params::blockLevel (blockId)), false)
+               *processor.apvts.getParameter (params::blockIn (blockId)), true)
 {
     // The console's widgets become children of this block, which places them. The spectrum behind
     // its curve is the block's own output tap — the same one the TONE picture reads, because after
@@ -68,7 +66,6 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
     addAndMakeVisible (inMeter);
-    addAndMakeVisible (outMeter);
 
     device.fontHeight = 16.0f;   // the device's NAME is the face's headline, sized like one
 
@@ -158,19 +155,24 @@ CapturedBlockPanel::~CapturedBlockPanel()
 
 void CapturedBlockPanel::openTheater()
 {
-    if (expandedViz < 0 || theater != nullptr)
+    if (theater != nullptr)
         return;
+
+    // Whatever is up — thrown across the face or sitting in its corner of the block. The theatre
+    // used to require the expanded state first, which made it the second half of a gesture nobody
+    // had a reason to start.
+    const int shown = expandedViz >= 0 ? expandedViz : vizPick;
 
     theater = std::make_unique<ScopeTheater> (
         block, [this] (double hz) { return block.toneDb (hz); },
-        (DeviceScope::Mode) expandedViz,
+        (DeviceScope::Mode) shown,
         halfTag.half, amp.currentSampleRate(),
         &toneTap, AmpProcessor::eqSpectrumOrder,
         [this] { closeTheater(); });
 
     // The face's own copy stops while the theatre runs — the wave ribbon must have ONE
     // resolution-setting reader at a time.
-    scopes[(size_t) expandedViz]->setVisible (false);
+    scopes[(size_t) shown]->setVisible (false);
 
     theater->setBounds (juce::Desktop::getInstance().getDisplays()
                             .getPrimaryDisplay()->totalArea);
@@ -217,8 +219,25 @@ void CapturedBlockPanel::deviceChanged()
 
     caption = block.deviceName();
 
-    // The circuit glyphs ride the FIRST picture only — five copies of the same badge is noise.
-    scopes[0]->setSpec (felitronics::appkit::parseDeviceSpec (block.circuit()));
+    // EVERY picture carries the circuit badge, not just the first. Five views of one device that
+    // only sometimes say whose device it is send you back to the combo to be sure.
+    const auto spec = felitronics::appkit::parseDeviceSpec (block.circuit());
+
+    // ...and the DEVICE view carries the paper the badge has no room for.
+    juce::StringArray paper;
+    paper.add (block.deviceName().toUpperCase());
+
+    if (const auto circuit = juce::String (block.circuit()).trim(); circuit.isNotEmpty())
+        paper.add (circuit.toUpperCase());
+
+    if (const int n = block.gainPositions().size(); n > 0)
+        paper.add (juce::String (n) + (n == 1 ? " CAPTURE" : " CAPTURES") + " ON THE DIAL");
+
+    for (auto& sc : scopes)
+    {
+        sc->setSpec (spec);
+        sc->setInfo (paper);
+    }
 
     // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next
     // pack says for the next one. Detented where the pack has positions, continuous where it does
@@ -415,17 +434,11 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     setControlsVisible (true);
     eq.setWidgetsVisible (true);
 
-    // ---- the pair of meters, one line under the combo, half the width each. They lead because
-    //      they are the question you ask first about a captured block: is it being fed right. ----
-    {
-        auto line = area.removeFromTop (BlockMeter::designHeight);
-        area.removeFromTop (gap);
-
-        const int half = (line.getWidth() - gap) / 2;
-        inMeter.setBounds (line.removeFromLeft (half));
-        line.removeFromLeft (gap);
-        outMeter.setBounds (line);
-    }
+    // ---- the meter, one line under the combo, the whole width. It leads because it is the
+    //      question you ask first about a captured block: is it being fed right. Full width because
+    //      it is the only one now, and a longer bar is a finer scale under the same hand. ----
+    inMeter.setBounds (area.removeFromTop (BlockMeter::designHeight));
+    area.removeFromTop (gap);
 
     // ---- the top zone is CAPPED and the console gets the remainder, not the other way round.
     //
@@ -484,7 +497,6 @@ void CapturedBlockPanel::setControlsVisible (bool v)
 {
     gain.setVisible (v);
     inMeter.setVisible (v);
-    outMeter.setVisible (v);
     device.setEnabled (v);
 
     for (auto& slot : slots)
@@ -511,6 +523,8 @@ void CapturedBlockPanel::layWidget (juce::Rectangle<int> area)
     for (auto& t : expandTags)
         t.setVisible (false);
 
+    // BOTH ways out, always. The whole-screen brackets used to appear only once a picture had
+    // already been thrown across the face — a door you can only find from inside the room.
     int right = area.getRight() - 6;
 
     expandTags[(size_t) vizPick].setBounds (right - 22, area.getY() + 4, 22, 16);
@@ -518,7 +532,10 @@ void CapturedBlockPanel::layWidget (juce::Rectangle<int> area)
     expandTags[(size_t) vizPick].toFront (false);
     right -= 26;
 
-    screenTag.setVisible (false);
+    screenTag.setBounds (right - 22, area.getY() + 4, 22, 16);
+    screenTag.setVisible (true);
+    screenTag.toFront (false);
+    right -= 26;
 
     const bool isWave = vizPick == (int) DeviceScope::Mode::wave;
     halfTag.setVisible (isWave);
@@ -533,13 +550,30 @@ void CapturedBlockPanel::layWidget (juce::Rectangle<int> area)
     power menu, which is the one edit that must never need aiming for. */
 void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
 {
-    if (e.mods.isPopupMenu() && widgetArea.contains (e.getPosition()))
+    if (widgetArea.contains (e.getPosition()))
     {
-        showVizMenu (e.getScreenPosition());
+        if (e.mods.isPopupMenu())
+            showVizMenu (e.getScreenPosition());
+        else
+            setViz ((vizPick + 1) % numViz);   // round the loop, one click at a time
+
         return;
     }
 
     BlockFrame::mouseDown (e);
+}
+
+/** Both ways of choosing land here, so the choice is remembered whichever was used. */
+void CapturedBlockPanel::setViz (int which)
+{
+    vizPick = juce::jlimit (0, numViz - 1, which);
+
+    // Kept with the session rather than as a parameter: it is which picture you are looking at,
+    // not something a host should be automating.
+    amp.apvts.state.setProperty (vizProperty(), vizPick, nullptr);
+
+    resized();
+    repaint();
 }
 
 /** Which of the five is up. A menu rather than five checkboxes: the block carries a whole EQ
@@ -547,7 +581,8 @@ void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
     envelope INSTEAD of the transfer curve, not as well as. */
 void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
 {
-    static const char* const names[numViz] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" };
+    static const char* const names[numViz] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE",
+                                              "DEVICE" };
 
     juce::PopupMenu m;
     m.addSectionHeader ("PICTURE");
@@ -561,14 +596,7 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
                          if (r == 0 || safe == nullptr)
                              return;
 
-                         safe->vizPick = r - 1;
-
-                         // Kept with the session rather than as a parameter: it is which picture you
-                         // are looking at, not something a host should be automating.
-                         safe->amp.apvts.state.setProperty (safe->vizProperty(), r - 1, nullptr);
-
-                         safe->resized();
-                         safe->repaint();
+                         safe->setViz (r - 1);
                      });
 }
 

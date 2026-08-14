@@ -72,14 +72,14 @@ private:
         many, only the GAIN dial's diameter answers for it — so the picture beside the column never
         moves when the pack changes. A face that reshuffles itself per device is a face you have to
         re-learn per device. */
-    static constexpr int columnW = 168;
+    static constexpr int columnW = 140;
 
     /** The ceiling on the dial-and-picture zone. Past this the dial is only bigger, not easier to
         land on, and every unit above it is one the EQ curve could have used to separate two
         decibels you would otherwise have to guess at. */
-    static constexpr int topZoneH = 140;
+    static constexpr int topZoneH = 118;
 
-    static constexpr int numViz = 5;
+    static constexpr int numViz = 6;
 
     AmpProcessor& amp;
     Block&        block;
@@ -94,12 +94,10 @@ private:
 
     Knob gain { "Gain", theme::orange, 0 };
 
-    /** The block's gain staging, as a pair of lying-down meters under the combo: what the model is
-        being fed, and what leaves the block. They replaced a LEVEL knob, which said only half of
-        it — a captured device answers to what goes IN, and a knob for the output alone lets you fix
-        the loudness while the drive stays wherever it landed. */
+    /** What the model is being fed, lying down under the combo. One meter, not two: a block's
+        output and the next block's input are the same multiplier written twice, and of the two
+        names for it the INPUT is the one whose meter answers a question — see `params::blockIn`. */
     BlockMeter inMeter;
-    BlockMeter outMeter;
 
     struct Slot
     {
@@ -134,6 +132,7 @@ private:
     juce::Rectangle<int> widgetArea;   // where the picture stands, so a right-click can find it
     void mouseDown (const juce::MouseEvent&) override;
     void showVizMenu (juce::Point<int> screenPos);
+    void setViz (int which);
     juce::Identifier vizProperty() const { return juce::Identifier (juce::String (blk) + "_viz"); }
 
     /** The little overlay on the WAVE tile: half-wave against the mirrored band. */
