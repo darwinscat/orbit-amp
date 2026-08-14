@@ -77,12 +77,15 @@ public:
 
     double sampleRateNow() const noexcept { return rate; }
 
-    /** What is inside the device, drawn over the picture. It belongs to the picture rather than to a
-        row of its own: the row cost a line of height and the glyphs were small in it, and what is in
-        the box is a caption on what the box does, not a separate fact.
+    /** What is inside the device — and it belongs to the DEVICE view alone.
 
-        Every view carries it, not just the first. Five pictures of one device that only sometimes
-        say whose device it is make you check the combo to be sure. */
+        It has been three things now, each honest about a different mistake. A row of its own cost a
+        line of height and drew the glyphs too small in it. A badge in the picture's corner sat on a
+        scrim that went opaque across a spectrum and hid the thing it was captioning. Turned into a
+        watermark it stopped hiding anything and started being visual noise on every view instead —
+        a caption repeated five times is not five captions, it is clutter with one meaning.
+
+        The paper page says it once, at a size worth reading, next to the rest of the facts. */
     void setSpec (felitronics::appkit::DeviceSpec s)
     {
         if (s != spec)
@@ -144,10 +147,6 @@ public:
                 case Mode::device:   paintDevice (g, area); break;
             }
 
-            // The corner badge is the small version of what the DEVICE view IS, so it stands down
-            // there rather than saying the same thing twice on one picture.
-            if (mode != Mode::device)
-                paintSpec (g, r.reduced (5.0f));
         }
 
         g.setColour (theme::hair2);
@@ -159,23 +158,6 @@ private:
     int    specOrder = 11;
     double rate      = 48000.0;
     felitronics::analysis::SpectrumPane pane;
-
-    /** The glyph row, over the picture's top-left corner. A running waveform passes straight through
-        thin strokes, so the glyphs sit on a scrim — barely there against the well, enough that they
-        never have to compete with what is moving behind them. */
-    void paintSpec (juce::Graphics& g, juce::Rectangle<float> r)
-    {
-        const int n = felitronics::appkit::deviceSpecCount (spec);
-        if (n <= 0)
-            return;
-
-        auto row = r.removeFromTop (glyphSize).removeFromLeft (glyphSize * (float) n);
-
-        g.setColour (theme::bezel.withAlpha (0.72f));
-        g.fillRoundedRectangle (row.expanded (3.0f, 2.0f), theme::radiusSm);
-
-        felitronics::appkit::drawDeviceSpecStatic (g, row, spec);
-    }
 
     /** The paper. The circuit's symbols at a size you can actually read them at, and under them
         the plain facts — name first, because that is what you came to check. */
