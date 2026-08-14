@@ -183,6 +183,15 @@ int main()
 
                 report (("norms ascend: " + where).toRawUTF8(), ascends);
 
+                // A pack may declare a control tested-and-failed-everywhere, and a player must
+                // honour that by not applying its curve. It is the producer's verdict to make, so
+                // this is not a failure here — but it is said OUT LOUD, because the symptom on the
+                // face is a knob that turns and does nothing, and hunting that by ear is a bad
+                // afternoon. ReVolt Clean's Treble arrived this way while its Bass did not.
+                if (const auto band = MeasuredFilter::bandFor (m); band.hi <= band.lo)
+                    std::printf ("%-52s %s  %s\n", ("NOT A FILTER, says the pack: " + where).toRawUTF8(),
+                                 "--", "its curve will not be applied");
+
                 // A reference that names no position leaves the zero unknowable — the curves are
                 // stated against something the pack does not contain.
                 const namz::rig::MeasuredPosition* ref = nullptr;

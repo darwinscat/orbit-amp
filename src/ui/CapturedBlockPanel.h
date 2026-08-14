@@ -2,6 +2,7 @@
 
 #include "../Parameters.h"
 #include "../core/CapturedBlock.h"
+#include "../core/MeasuredFilter.h"
 #include "BlockFrame.h"
 #include "BlockMeter.h"
 #include "EqSection.h"

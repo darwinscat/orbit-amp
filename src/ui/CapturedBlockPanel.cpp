@@ -401,6 +401,13 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
         if (m.positions.size() == 2 && hasNamedPositions (m))
             continue;
 
+        // A control the pack tested and found NOT to be a filter anywhere gets no knob. namz says
+        // so with a collapsed trusted band, and `MeasuredFilter` honours it by refusing to build
+        // anything — so a dial here would turn, look alive, and do nothing at all. That is worse
+        // than a gap, and it is the exact bug we have been pulling out of this face all evening.
+        if (const auto band = core::MeasuredFilter::bandFor (m); band.hi <= band.lo)
+            continue;
+
         out.push_back ({ juce::String (m.name).toUpperCase(),
                          theme::eqNode[(size_t) (out.size() % 5)],
                          params::blockMeasured (blk, i),
