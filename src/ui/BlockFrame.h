@@ -388,6 +388,16 @@ private:
     static constexpr int   switchHeight = 22;
     static constexpr float labelHeight  = 16.0f;
 
+public:
+    /** How far below the component's top the drawn frame actually begins — the room the switch
+        riding the top border needs above the line.
+
+        Public because anything laid out BESIDE a block has to know it. The in/out gutters stand the
+        full height of the faceplate, and a block's box starts lower than its component does; left
+        alone that is a panel of things which almost line up, which reads worse than things that
+        plainly do not. */
+    static constexpr int borderTopInset = switchHeight / 2 + 1;
+
 protected:
     /** The title's font height. One number for every block — a face that whispers its own name is
         a face you have to lean into. */

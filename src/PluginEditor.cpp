@@ -215,11 +215,19 @@ void AmpEditor::resized()
 
     // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
     const int faceplateY = margin + Chrome::designHeight + chromeGap;
-    gateStrip.setBounds (margin, faceplateY, GateStrip::designWidth, FaceplateView::designHeight);
+
+    // The gutters stand between the SAME two lines the blocks' frames do, not between the
+    // faceplate's own edges — a block is inset inside the lane and its box starts lower still,
+    // under the switch that rides the top border.
+    const int gutterY = faceplateY + FaceplateView::contentTop;
+    const int gutterH = FaceplateView::designHeight - FaceplateView::contentTop
+                                                    - FaceplateView::contentBottom;
+
+    gateStrip.setBounds (margin, gutterY, GateStrip::designWidth, gutterH);
     gateStrip.setTransform (zoom);
 
-    outStrip.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth, faceplateY,
-                        OutStrip::designWidth, FaceplateView::designHeight);
+    outStrip.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth, gutterY,
+                        OutStrip::designWidth, gutterH);
     outStrip.setTransform (zoom);
 
     faceplate.setBounds (margin + GateStrip::designWidth + chromeGap, faceplateY,
@@ -237,11 +245,11 @@ void AmpEditor::resized()
                           TallyBadge::designWidth, TunerStrip::designHeight);
     limitBadge.setTransform (zoom);
 
-    // The summoned rulers: same vertical extent as their columns, standing toward the centre.
-    inRuler.setBounds (margin + GateStrip::designWidth + 2, faceplateY, 56, FaceplateView::designHeight);
+    // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
+    inRuler.setBounds (margin + GateStrip::designWidth + 2, gutterY, 56, gutterH);
     inRuler.setTransform (zoom);
-    outRuler.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth - 58, faceplateY,
-                        56, FaceplateView::designHeight);
+    outRuler.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth - 58, gutterY,
+                        56, gutterH);
     outRuler.setTransform (zoom);
     ceilRuler.setBounds (outRuler.getBounds());
     ceilRuler.setTransform (zoom);

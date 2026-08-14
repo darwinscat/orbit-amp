@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BlockFrame.h"
 #include "CabinetBlock.h"
 #include "CapturedBlockPanel.h"
 #include "PowerAmpBlock.h"
@@ -39,13 +40,20 @@ public:
     static constexpr int row1H  = 360;
     static constexpr int row2H  = 180;
     static constexpr int rowGap = 12;
-    static constexpr int designHeight = row1H + rowGap + row2H + 32;   // + lanePadY top and bottom
-
-private:
     // Lane metrics. No horizontal inset: the lane's edges ARE the panel's edges, so nothing is
     // almost-aligned with anything.
     static constexpr int lanePadY = 16;
-    static constexpr int colGap   = 14;
+
+    static constexpr int designHeight = row1H + rowGap + row2H + 2 * lanePadY;
+
+    /** Where the blocks' drawn frames start and stop inside the faceplate. The in/out gutters
+        standing either side line themselves up with THESE rather than with the component, so the
+        four vertical edges across the panel are one line each. */
+    static constexpr int contentTop    = lanePadY + BlockFrame::borderTopInset;
+    static constexpr int contentBottom = lanePadY;
+
+private:
+    static constexpr int colGap = 14;
 
     CapturedBlockPanel boost;
     CapturedBlockPanel preamp;
