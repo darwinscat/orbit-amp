@@ -1,134 +1,12 @@
 #include "EqSection.h"
 
-#include "MeterRail.h"
-
 #include "Theme.h"
 
 namespace orbitamp
 {
 
 //==============================================================================
-/** The link's output meter with its fader riding it: the IN sliver's grammar — a fixed
-    violet-through-magenta-to-orange scale the level reveals, a peak-hold line, and the LEVEL as
-    a slide-rule frame on its own ±12 scale with a unity notch. */
-class EqSection::LevelColumn final : public juce::Component,
-                                     private juce::Timer
-{
-public:
-    LevelColumn (const std::atomic<float>& outDbSource, juce::RangedAudioParameter& levelParam)
-        : outDb (outDbSource), param (levelParam)
-    {
-        att = std::make_unique<juce::ParameterAttachment> (param, [this] (float) { repaint(); });
-        startTimerHz (30);
-    }
-
-    static constexpr int designWidth = 12;
-
-    void paint (juce::Graphics& g) override
-    {
-        auto r = getLocalBounds().toFloat();
-
-        g.setColour (theme::bezel);
-        g.fillRoundedRectangle (r, theme::radiusSm);
-
-        const auto col = meterArea();
-
-        meterrail::paintFill (g, col, dbToY (col, levelDb));
-
-        if (holdDb > floorDb + 0.5f)
-            meterrail::paintHold (g, col, dbToY (col, holdDb));
-
-        // The fader on its own ±12 scale — tabby's hollow frame with its sight.
-        meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), faderY (0.0f));
-        meterrail::paintGrip (g, r, faderY (param.convertFrom0to1 (param.getValue())), {},
-                              theme::orange);
-
-        g.setColour (theme::hair2);
-        g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
-    }
-
-    void mouseDown (const juce::MouseEvent& e) override
-    {
-        att->beginGesture();
-        att->setValueAsPartOfGesture (faderFromY (e.position.y));
-    }
-
-    void mouseDrag (const juce::MouseEvent& e) override
-    {
-        att->setValueAsPartOfGesture (faderFromY (e.position.y));
-    }
-
-    void mouseUp (const juce::MouseEvent&) override { att->endGesture(); }
-
-    void mouseDoubleClick (const juce::MouseEvent&) override
-    {
-        // Home is one knock away. The double-click's own mouseDown opened a gesture; this write
-        // rides it and the closing mouseUp seals it as one undoable move.
-        att->setValueAsPartOfGesture (0.0f);
-    }
-
-private:
-    void timerCallback() override
-    {
-        const float now = outDb.load();
-        levelDb = now > levelDb ? now : juce::jmax (now, levelDb - releasePerTick);
-
-        if (now >= holdDb)
-        {
-            holdDb  = now;
-            holdAge = 0;
-        }
-        else if (++holdAge > holdTicks)
-        {
-            holdDb = juce::jmax (floorDb, holdDb - holdReleasePerTick);
-        }
-
-        repaint();
-    }
-
-    juce::Rectangle<float> meterArea() const
-    {
-        return getLocalBounds().toFloat().reduced (2.0f);
-    }
-
-    float dbToY (juce::Rectangle<float> r, float db) const
-    {
-        return r.getBottom() - r.getHeight() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
-    }
-
-    float faderY (float levelDbValue) const
-    {
-        const auto r = meterArea();
-        return r.getCentreY() - levelDbValue / params::eqLevelRangeDb * (r.getHeight() * 0.5f - 6.0f);
-    }
-
-    float faderFromY (float y) const
-    {
-        const auto r = meterArea();
-        return juce::jlimit (-params::eqLevelRangeDb, params::eqLevelRangeDb,
-                             (r.getCentreY() - y) / juce::jmax (1.0f, r.getHeight() * 0.5f - 6.0f)
-                                 * params::eqLevelRangeDb);
-    }
-
-    static constexpr float floorDb            = -80.0f;
-    static constexpr float releasePerTick     = 1.4f;
-    static constexpr int   holdTicks          = 60;
-    static constexpr float holdReleasePerTick = 0.8f;
-
-    inline static const juce::Colour transition { 0xffc862b4 };
-
-    const std::atomic<float>& outDb;
-    juce::RangedAudioParameter& param;
-    std::unique_ptr<juce::ParameterAttachment> att;
-
-    float levelDb = -90.0f;
-    float holdDb  = -90.0f;
-    int   holdAge = 0;
-};
-
-//==============================================================================
 EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
-                      const std::atomic<float>& outDb,
                       felitronics::analysis::RollingSpectrumTap& spectrumTap,
                       std::function<double()> sampleRateGetter)
     : state (s), link (eqLink), tap (spectrumTap), sampleRate (std::move (sampleRateGetter))
@@ -172,14 +50,12 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         g.strokePath (peak, juce::PathStrokeType (1.0f));
     };
 
-    level = std::make_unique<LevelColumn> (outDb, *state.getParameter (params::eqLevel (link)));
-
     for (auto* k : { &lo, &b1, &b2, &hi })
     {
         k->textForValue    = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
         k->onValueChange   = [this] { refreshCurve(); };
-        k->labelFontHeight = 15.0f;
-        k->labelRowHeight  = 19;
+        k->labelFontHeight = 13.0f;
+        k->labelRowHeight  = 17;
     }
 
     loAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::eqLoDb (link), lo);
@@ -219,40 +95,6 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         l->setColour (juce::Label::textColourId, theme::txDim);
         l->setJustificationType (juce::Justification::centred);
         l->setInterceptsMouseClicks (false, false);
-    }
-
-    // The frequency of every node, in writing, on one line across the bottom — under the knobs
-    // for the bands, under the switches for the cuts — and a way to just TYPE it.
-    static constexpr int readoutHandle[6] = { hLo, hB1, hB2, hHi, hHpf, hLpf };
-
-    for (int i = 0; i < 6; ++i)
-    {
-        auto& l = freqReadout[i];
-        l.setFont (theme::displayFont (13.0f));
-        l.setColour (juce::Label::textColourId, theme::txDim);
-        l.setColour (juce::Label::backgroundWhenEditingColourId, theme::bezel);
-        l.setColour (juce::Label::textWhenEditingColourId, theme::lilac);
-        l.setColour (juce::TextEditor::highlightColourId, theme::violet.withAlpha (0.35f));
-        l.setJustificationType (juce::Justification::centred);
-        l.setEditable (true, false, false);
-        l.onTextChange = [this, i] { freqEdited (readoutHandle[i], freqReadout[i]); };
-
-        const juce::String hzId = i == 0 ? params::eqLoHz (link)
-                                : i == 1 ? params::eqBellHz (link, 0)
-                                : i == 2 ? params::eqBellHz (link, 1)
-                                : i == 3 ? params::eqHiHz (link)
-                                : i == 4 ? params::eqHpfHz (link)
-                                :          params::eqLpfHz (link);
-
-        l.onEditorShow = [this, i, hzId]
-        {
-            if (auto* ed = freqReadout[i].getCurrentTextEditor())
-            {
-                ed->setJustification (juce::Justification::centred);
-                ed->setText (juce::String (juce::roundToInt (raw (hzId))), false);
-                ed->selectAll();
-            }
-        };
     }
 
     hpfSlopeBox.getIndex = [this] { return juce::roundToInt (raw (params::eqHpfSlope (link))); };
@@ -455,13 +297,24 @@ void EqSection::addTo (juce::Component& parent)
     parent.addAndMakeVisible (lpfLabel);
     parent.addAndMakeVisible (hpfSlopeBox);
     parent.addAndMakeVisible (lpfSlopeBox);
-    parent.addAndMakeVisible (*level);
-
-    for (auto& l : freqReadout)
-        parent.addAndMakeVisible (l);
 
     for (auto* k : { &lo, &b1, &b2, &hi })
         parent.addAndMakeVisible (*k);
+}
+
+void EqSection::setWidgetsVisible (bool v)
+{
+    curve.setVisible (v);
+    presetBtn.setVisible (v);
+    hpfSw.setVisible (v);
+    lpfSw.setVisible (v);
+    hpfLabel.setVisible (v);
+    lpfLabel.setVisible (v);
+    hpfSlopeBox.setVisible (v);
+    lpfSlopeBox.setVisible (v);
+
+    for (auto* k : { &lo, &b1, &b2, &hi })
+        k->setVisible (v);
 }
 
 void EqSection::refreshCurve()
@@ -496,39 +349,9 @@ void EqSection::refreshCurve()
     display.setSettings (s);
     refreshHandles();
 
-    const double readoutHz[6] = { s.loHz, s.b1Hz, s.b2Hz, s.hiHz, s.hpfHz, s.lpfHz };
-
-    for (int i = 0; i < 6; ++i)
-        if (! freqReadout[i].isBeingEdited())
-            freqReadout[i].setText (formatHz (readoutHz[i]), juce::dontSendNotification);
-
     hpfSlopeBox.repaint();
     lpfSlopeBox.repaint();
     curve.repaint();
-}
-
-juce::String EqSection::formatHz (double hz)
-{
-    if (hz < 1000.0)
-        return juce::String (juce::roundToInt (hz));
-
-    auto k = juce::String (hz / 1000.0, hz < 10000.0 ? 2 : 1)
-                 .trimCharactersAtEnd ("0").trimCharactersAtEnd (".");
-    return k + "K";
-}
-
-void EqSection::freqEdited (int handle, juce::Label& label)
-{
-    // Accepts what a musician types: "820", "2.5k", "2500", "1 K" — anything else is ignored and
-    // the next refresh writes the truth back.
-    const auto t = label.getText().toUpperCase().retainCharacters ("0123456789.K");
-    const double mul = t.containsChar ('K') ? 1000.0 : 1.0;
-    const double hz  = t.upToFirstOccurrenceOf ("K", false, false).getDoubleValue() * mul;
-
-    if (hz > 0.0)
-        freqAtt[handle]->setValueAsCompleteGesture ((float) hz);
-
-    refreshCurve();
 }
 
 void EqSection::SlopeCombo::paint (juce::Graphics& g)
@@ -537,11 +360,16 @@ void EqSection::SlopeCombo::paint (juce::Graphics& g)
         return;
 
     const auto r = getLocalBounds().toFloat();
+
+    // "12 DB", not "12 DB/OCT". A cut cell inside a half-panel block is about sixty design units
+    // wide, and the per-octave part was clipping its own first digit off — a slope that reads "2"
+    // when it is twelve is worse than one that does not say the unit. Everyone reading a filter
+    // slope knows what it is per.
     const auto text = params::eqSlopes[juce::jlimit (0, params::eqSlopes.size() - 1, getIndex())]
-                          + juce::String (" DB/OCT");
+                          + juce::String (" DB");
 
     g.setColour (theme::txDim);
-    theme::drawTracked (g, text, r.withTrimmedRight (12.0f), theme::displayFont (12.0f), 0.06f,
+    theme::drawTracked (g, text, r.withTrimmedRight (11.0f), theme::displayFont (12.0f), 0.04f,
                         juce::Justification::centred);
 
     // The chevron that says "this opens".
@@ -671,22 +499,20 @@ void EqSection::handleDoubleClicked (int index)
 
 void EqSection::layOut (juce::Rectangle<int> content)
 {
-    // The LEVEL column takes the right edge, full height.
-    auto lvl = content.removeFromRight (LevelColumn::designWidth);
-    level->setBounds (lvl.reduced (0, 2));
-    content.removeFromRight (12);
-
-    // The control row: [HPF sw][LO][B1][B2][HI][LPF sw], gain knobs only; under every knob its
-    // frequency in writing, under every switch its slope combo.
-    auto row = content.removeFromBottom (124).reduced (0, 4);
+    // The control row across the bottom: [HPF sw][LO][B1][B2][HI][LPF sw], gain knobs only, and
+    // under each switch its slope combo.
+    //
+    // The frequencies used to be written out under every cell and are not any more. Half a block is
+    // not half a panel: keeping the numbers meant either shrinking the type below what can be read
+    // at 1x or taking the room from the curve, and the curve IS the readout — a node's frequency is
+    // where the node is standing. Dragging it sideways was always the way to set one.
+    auto row = content.removeFromBottom (rowH).reduced (0, 4);
     content.removeFromBottom (6);
 
-    const int cellW    = row.getWidth() / 6;
-    const int readoutH = 18;
+    const int cellW = row.getWidth() / 6;
 
     // The knobs go down first so the cut cells can borrow their geometry: the switch sits on the
-    // DIAL AXIS — the same height as the knobs' centres — and the slope combo splits the distance
-    // between switch and the shared frequency line.
+    // DIAL AXIS — the same height as the knobs' centres — and the slope combo hangs under it.
     const juce::Rectangle<int> hpfCell = row.removeFromLeft (cellW);
 
     juce::Rectangle<int> knobCells[4];
@@ -698,8 +524,7 @@ void EqSection::layOut (juce::Rectangle<int> content)
     int i = 0;
     for (auto* k : { &lo, &b1, &b2, &hi })
     {
-        auto cell = knobCells[i];
-        freqReadout[i++].setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (76, readoutH));
+        const auto cell = knobCells[i++];
         const int side = juce::jmin (cell.getWidth(), cell.getHeight());
         k->setBounds (cell.withSizeKeepingCentre (side, side));
     }
@@ -708,24 +533,23 @@ void EqSection::layOut (juce::Rectangle<int> content)
                           + (lo.getHeight() - lo.labelRowHeight) / 2;
 
     const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
-                                 SlopeCombo& combo, juce::Label& freq)
+                                 SlopeCombo& combo)
     {
-        freq.setBounds (cell.removeFromBottom (readoutH).withSizeKeepingCentre (76, readoutH));
         label.setBounds (cell.removeFromTop (18));
 
         sw.setBounds (juce::Rectangle<int> (cell.getX(), dialAxisY - 8, cell.getWidth(), 16)
                           .withSizeKeepingCentre (30, 16));
-        combo.setBounds (juce::Rectangle<int> (cell.getX(), sw.getBottom(),
-                                               cell.getWidth(), freq.getY() - sw.getBottom())
-                              .withSizeKeepingCentre (98, readoutH).translated (0, 3));
+        combo.setBounds (juce::Rectangle<int> (cell.getX(), sw.getBottom() + 6,
+                                               cell.getWidth(), 18)
+                              .withSizeKeepingCentre (juce::jmin (cell.getWidth(), 98), 18));
     };
 
-    switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox, freqReadout[4]);
-    switchCell (lpfCell, lpfSw, lpfLabel, lpfSlopeBox, freqReadout[5]);
+    switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox);
+    switchCell (lpfCell, lpfSw, lpfLabel, lpfSlopeBox);
 
-    // The curve gets everything else; the reset overlays its top-right corner.
+    // The curve gets everything else; the presets overlay its top-right corner.
     curve.setBounds (content);
-    presetBtn.setBounds (content.getRight() - 124, content.getY() + 8, 114, 24);
+    presetBtn.setBounds (content.getRight() - 118, content.getY() + 6, 108, 22);
     presetBtn.toFront (false);
 }
 

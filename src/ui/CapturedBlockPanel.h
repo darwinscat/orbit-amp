@@ -3,6 +3,7 @@
 #include "../Parameters.h"
 #include "../core/CapturedBlock.h"
 #include "BlockFrame.h"
+#include "EqSection.h"
 #include "scope/DeviceScope.h"
 #include "Knob.h"
 #include "VSwitch.h"
@@ -36,8 +37,10 @@ public:
     static_assert (params::preampNumMeasured == params::boostNumMeasured,
                    "one face serves every captured block, so the slot counts have to agree");
 
+    /** `eqLink` is which of the two EQ consoles is this block's — they belong to the blocks now,
+        and the index is the only thing that still says which is which. */
     CapturedBlockPanel (AmpProcessor&, Block&, const juce::String& title, const char* blockId,
-                        felitronics::analysis::RollingSpectrumTap& toneSpectrumTap);
+                        int eqLink, felitronics::analysis::RollingSpectrumTap& toneSpectrumTap);
     ~CapturedBlockPanel() override;
 
     /** Rebuilds the face from whatever pack is loaded. Called when the device changes. */
@@ -63,7 +66,12 @@ private:
     // Zoom caps: a block across the whole panel gets a bigger picture, not balloon knobs.
     static constexpr int maxGainSide  = 200;
     static constexpr int maxKnobSide  = 150;
-    static constexpr int switchW      = 150;   // a VSwitch column's width, labels included
+
+    /** The left column's width, FIXED. Whether the device brought selectors or not, and however
+        many, only the GAIN dial's diameter answers for it — so the picture beside the column never
+        moves when the pack changes. A face that reshuffles itself per device is a face you have to
+        re-learn per device. */
+    static constexpr int columnW = 168;
 
     static constexpr int numViz = 5;
 
@@ -73,6 +81,11 @@ private:
     felitronics::analysis::RollingSpectrumTap& toneTap;
 
     VoicingSelector device;
+
+    /** The block's own EQ, after the capture. Not a link that happens to be drawn here — the
+        block owns it, its switch darkens it, and the curve's spectrum is this block's output. */
+    EqSection eq;
+
     Knob gain  { "Gain", theme::orange, 0 };
     Knob level { "Level", theme::orange, 0 };
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> levelAttachment;
@@ -99,53 +112,18 @@ private:
 
     std::array<PickSlot, (size_t) params::numSelectors> selectors;
 
-    /** The visualizations: one scope per way of looking, shown TOGETHER — whichever checkboxes
-        are down tile the picture zone, one row up to three of them, two rows past that. */
+    /** The visualizations: one scope per way of looking, and exactly ONE of them on screen. The
+        five used to tile the picture zone behind a column of checkboxes; a block that also carries
+        a whole EQ console has room for one picture, and five ways to look at a device is a thing
+        you CHOOSE between rather than a thing you watch at once. Right-click the picture to
+        change it — the choice rides the session, so a reopened window shows what was left up. */
     std::array<std::unique_ptr<DeviceScope>, (size_t) numViz> scopes;
 
-    /** A checkbox in the column: a small square, a tick, a name. */
-    struct VizCheck final : public juce::Component
-    {
-        juce::String label;
-        bool on = false;
-        std::function<void()> onToggle;
-
-        void paint (juce::Graphics& g) override
-        {
-            const auto r = getLocalBounds().toFloat();
-            const auto box = juce::Rectangle<float> (r.getX(), r.getCentreY() - 7.0f, 14.0f, 14.0f);
-
-            g.setColour (theme::bezel);
-            g.fillRoundedRectangle (box, 3.0f);
-            g.setColour (on ? theme::orange : theme::hair2);
-            g.drawRoundedRectangle (box.reduced (0.5f), 3.0f, 1.2f);
-
-            if (on)
-            {
-                juce::Path tick;
-                tick.startNewSubPath (box.getX() + 3.5f, box.getCentreY() + 0.5f);
-                tick.lineTo (box.getCentreX() - 0.5f, box.getBottom() - 3.5f);
-                tick.lineTo (box.getRight() - 3.0f, box.getY() + 3.5f);
-                g.setColour (theme::orange);
-                g.strokePath (tick, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved,
-                                                          juce::PathStrokeType::rounded));
-            }
-
-            g.setColour (on ? theme::tx : theme::txDim);
-            theme::drawTracked (g, label, r.withTrimmedLeft (20.0f), theme::displayFont (12.0f),
-                                0.08f, juce::Justification::centredLeft);
-        }
-
-        void mouseDown (const juce::MouseEvent&) override
-        {
-            on = ! on;
-            repaint();
-            if (onToggle != nullptr)
-                onToggle();
-        }
-    };
-
-    std::array<VizCheck, (size_t) numViz> vizChecks;
+    int  vizPick = 0;
+    juce::Rectangle<int> widgetArea;   // where the picture stands, so a right-click can find it
+    void mouseDown (const juce::MouseEvent&) override;
+    void showVizMenu (juce::Point<int> screenPos);
+    juce::Identifier vizProperty() const { return juce::Identifier (juce::String (blk) + "_viz"); }
 
     /** The little overlay on the WAVE tile: half-wave against the mirrored band. */
     struct HalfTag final : public juce::Component
@@ -252,8 +230,7 @@ private:
     void closeTheater();
 
     void setControlsVisible (bool);
-    void layChecks (juce::Rectangle<int>);
-    void layTiles  (juce::Rectangle<int>);
+    void layWidget (juce::Rectangle<int>);
 
     juce::String caption;
 

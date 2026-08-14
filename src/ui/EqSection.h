@@ -32,7 +32,7 @@ namespace orbitamp
 class EqSection final : private juce::Timer
 {
 public:
-    EqSection (juce::AudioProcessorValueTreeState&, int link, const std::atomic<float>& outDb,
+    EqSection (juce::AudioProcessorValueTreeState&, int link,
                felitronics::analysis::RollingSpectrumTap& spectrumTap,
                std::function<double()> sampleRateGetter);
     ~EqSection() override;
@@ -43,12 +43,18 @@ public:
     /** Places everything inside the block's content area. */
     void layOut (juce::Rectangle<int> content);
 
-    /** The spectrum only listens while the face is on screen — a hidden zoom costs nothing. */
+    /** The spectrum only listens while the block is on screen. */
     void setSpectrumRunning (bool shouldRun);
 
-private:
-    class LevelColumn;
+    /** Steps the whole console aside — for when a picture is thrown open across the block's face
+        and everything else has to make room. */
+    void setWidgetsVisible (bool);
 
+    /** How much of the block's height the control row under the curve wants. The owner takes the
+        console's total from this — knobs at reading size plus their labels, and no less. */
+    static constexpr int rowH = 112;
+
+private:
     void timerCallback() override;
     void refreshCurve();
     void refreshHandles();
@@ -95,9 +101,6 @@ private:
     bool linkIsFlat() const;
     void setParam (const juce::String& id, float plainValue);
 
-    static juce::String formatHz (double hz);
-    void freqEdited (int handle, juce::Label&);
-
     /** The slope readout under a cut's switch: shows the ladder value, click opens the ladder as
         a menu at the mouse — a combo in behaviour, our own face in pixels. */
     struct SlopeCombo final : public juce::Component
@@ -108,21 +111,19 @@ private:
         void mouseDown (const juce::MouseEvent&) override;
     };
 
-    Knob lo { "LO",     theme::eqNode[0], 0 };
-    Knob b1 { "LO MID", theme::eqNode[1], 0 };
-    Knob b2 { "HI MID", theme::eqNode[2], 0 };
-    Knob hi { "HI",     theme::eqNode[3], 0 };
+    // Short names on purpose: six cells across half a panel leaves about sixty design units each,
+    // and "LO MID" at reading size ran straight into its neighbour. The colour says which node it
+    // is anyway — the knob wears the same one as its point on the curve.
+    Knob lo { "LO",    theme::eqNode[0], 0 };
+    Knob b1 { "L MID", theme::eqNode[1], 0 };
+    Knob b2 { "H MID", theme::eqNode[2], 0 };
+    Knob hi { "HI",    theme::eqNode[3], 0 };
 
     PresetButton presetBtn;
 
     ZoneSwitch  hpfSw, lpfSw;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };
     SlopeCombo  hpfSlopeBox, lpfSlopeBox;
-
-    /** Editable frequency readouts along the bottom line: LO, LO MID, HI MID, HI, HPF, LPF. */
-    juce::Label freqReadout[6];
-
-    std::unique_ptr<LevelColumn> level;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> loAtt, b1Att, b2Att, hiAtt;
 

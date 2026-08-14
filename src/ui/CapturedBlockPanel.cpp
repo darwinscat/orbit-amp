@@ -49,10 +49,18 @@ private:
 
 CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
                                         const juce::String& title, const char* blockId,
+                                        int eqLink,
                                         felitronics::analysis::RollingSpectrumTap& toneSpectrumTap)
     : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId),
-      toneTap (toneSpectrumTap)
+      toneTap (toneSpectrumTap),
+      eq (processor.apvts, eqLink, toneSpectrumTap,
+          [&processor] { return processor.currentSampleRate(); })
 {
+    // The console's widgets become children of this block, which places them. The spectrum behind
+    // its curve is the block's own output tap — the same one the TONE picture reads, because after
+    // the chain rework they are the same point in the signal.
+    eq.addTo (*this);
+
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
     addAndMakeVisible (level);
@@ -68,11 +76,8 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     level.labelRowHeight  = 16;
     level.textForValue = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
 
-    // Five ways of showing the same device, TOGETHER: one scope per way, a checkbox per scope,
-    // whichever are down tile the picture zone. The tone curve comes from the block itself —
-    // the same data its filters were designed from, resolved on the processor's pump.
-    static const char* const vizNames[numViz] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" };
-
+    // Five ways of showing the same device, one at a time. The tone curve comes from the block
+    // itself — the same data its filters were designed from, resolved on the processor's pump.
     for (int i = 0; i < numViz; ++i)
     {
         scopes[(size_t) i] = std::make_unique<DeviceScope> (
@@ -81,14 +86,16 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         scopes[(size_t) i]->setSampleRate (amp.currentSampleRate());
         if ((DeviceScope::Mode) i == DeviceScope::Mode::tone)
             scopes[(size_t) i]->setSpectrumTap (&toneTap, AmpProcessor::eqSpectrumOrder);
-        addChildComponent (*scopes[(size_t) i]);
 
-        auto& c = vizChecks[(size_t) i];
-        c.label = vizNames[i];
-        c.on = i == 0;   // SHAPE starts down, like the combo used to
-        c.onToggle = [this] { resized(); repaint(); };
-        addAndMakeVisible (c);
+        // The picture takes no clicks of its own, so the right-click that changes it reaches this
+        // block. Its corner glyphs are separate children and keep theirs.
+        scopes[(size_t) i]->setInterceptsMouseClicks (false, false);
+        addChildComponent (*scopes[(size_t) i]);
     }
+
+    // What was up when the session was saved.
+    vizPick = juce::jlimit (0, numViz - 1,
+                            (int) amp.apvts.state.getProperty (vizProperty(), 0));
 
     for (int i = 0; i < numViz; ++i)
     {
@@ -374,6 +381,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     if (expandedViz >= 0)
     {
         setControlsVisible (false);
+        eq.setWidgetsVisible (false);
 
         for (int i = 0; i < numViz; ++i)
         {
@@ -404,122 +412,60 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     }
 
     setControlsVisible (true);
+    eq.setWidgetsVisible (true);
 
-    // ---- the knob zone: the top third. GAIN is a full-height square on the left, always;
-    //      the measured knobs grid to its right in cells sized AS IF there were six, so a
-    //      two-knob device wears the same knobs a six-knob one does. ----
-    auto zone = area.removeFromTop (area.getHeight() / 3);
-    area.removeFromTop (gap);
+    // ---- the EQ console takes the bottom of the face. It is asked for what it needs rather than
+    //      given a fraction: the control row is knobs at reading size and does not compress, and
+    //      the curve under half a block is still a curve — squeeze either and the console stops
+    //      being usable before it stops fitting. ----
+    eq.layOut (area.removeFromBottom (juce::jmin (area.getHeight() - 120, EqSection::rowH + 120)));
+    area.removeFromBottom (gap);
 
-    // The checkboxes live UP HERE in the zoom — the picture zone below keeps its full width.
-    layChecks (zone.removeFromRight (110));
-    zone.removeFromRight (gap);
+    // ---- the top zone: a column of FIXED width carrying the big GAIN with the device's own
+    //      selectors under it, and one picture taking everything to its right.
+    //
+    //      Fixed, because the picture must not move when the device changes. Fur Coat brings an
+    //      octave switch and a Big Muff brings nothing, and if the column grew to fit them the
+    //      whole right-hand side would shuffle sideways every time the combo was touched. Only the
+    //      GAIN dial's diameter answers for what the switches take. ----
+    auto column = area.removeFromLeft (columnW);
+    area.removeFromLeft (gap);
 
-    const int gainSide = juce::jmin (maxGainSide, zone.getHeight());
-    gain.setBounds (zone.removeFromLeft (gainSide).withSizeKeepingCentre (gainSide, gainSide));
-    zone.removeFromLeft (knobGap);
-
-    std::vector<Knob*> knobs { &level };   // the block's volume leads the rank and file
-    for (auto& slot : slots)
-        if (slot.knob != nullptr)
-            knobs.push_back (slot.knob.get());
-
-    std::vector<VSwitch*> switches;
+    // Only the SELECTING controls stand here — the ones that pick a capture. A measured control is
+    // a band of the curve and belongs in the console's row, whatever shape its own control has.
+    std::vector<VSwitch*> picks;
     for (auto& sel : selectors)
         if (sel.steps != nullptr)
-            switches.push_back (sel.steps.get());
-    for (auto& slot : slots)
-        if (slot.steps != nullptr)
-            switches.push_back (slot.steps.get());
+            picks.push_back (sel.steps.get());
 
-    const int k = (int) knobs.size();
+    int pickH = 0;
+    for (auto* sw : picks)
+        pickH = juce::jmax (pickH, sw->idealHeight());
 
-    // The cell: a six-knob grid is three columns by two rows — that fit IS the size, whatever
-    // the actual count.
-    const int cell = juce::jmin (maxKnobSide,
-                                 juce::jmin ((zone.getWidth() - 2 * knobGap) / 3,
-                                             (zone.getHeight() - knobGap) / 2));
+    // LEVEL rides the same row for now; it goes when the OUT slider takes its job.
+    const int rowH = juce::jmax (pickH, 74);
+    auto bottomRow = column.removeFromBottom (rowH);
+    column.removeFromBottom (gap);
 
-    // Row shapes per count: staggered rows carry fewer and centre over the fuller one.
-    const auto rowsFor = [k] () -> std::vector<int>
+    const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
+    gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
+
     {
-        switch (k)
+        const int cells = 1 + (int) picks.size();
+        const int each  = juce::jmax (1, (bottomRow.getWidth() - (cells - 1) * knobGap) / cells);
+
+        level.setBounds (bottomRow.removeFromLeft (each).withHeight (juce::jmin (rowH, maxKnobSide)));
+        bottomRow.removeFromLeft (knobGap);
+
+        for (auto* sw : picks)
         {
-            case 6:  return { 3, 3 };
-            case 5:  return { 2, 3 };
-            case 4:  return { 2, 2 };
-            case 3:  return { 1, 2 };
-            case 2:  return { 1, 1 };
-            case 1:  return { 1 };
-            default: return {};
-        }
-    };
-
-    const auto rows = rowsFor();
-    int gridCols = 0;
-    for (int n : rows)
-        gridCols = juce::jmax (gridCols, n);
-
-    const int gridW = gridCols > 0 ? gridCols * cell + (gridCols - 1) * knobGap : 0;
-
-    // Switches go RIGHT whenever the room right of the grid can take them — the fallback row
-    // under the knobs exists for the day a wide grid leaves no room.
-    const bool swRight = ! switches.empty()
-                      && zone.getWidth() - gridW - (gridW > 0 ? knobGap : 0) >= switchW;
-
-    auto grid = zone.removeFromLeft (juce::jmax (gridW, 1));
-
-    // The knobs, top row first; a staggered row centres over the widest.
-    {
-        size_t next = 0;
-        int y = grid.getY();
-
-        for (int rowN : rows)
-        {
-            const int rowW = rowN * cell + (rowN - 1) * knobGap;
-            int x = grid.getX() + (gridW - rowW) / 2;
-
-            for (int i = 0; i < rowN && next < knobs.size(); ++i)
-            {
-                knobs[next++]->setBounds (x, y, cell, cell);
-                x += cell + knobGap;
-            }
-
-            y += cell + knobGap;
+            sw->setBounds (bottomRow.removeFromLeft (each)
+                               .withHeight (juce::jmin (bottomRow.getHeight(), sw->idealHeight())));
+            bottomRow.removeFromLeft (knobGap);
         }
     }
 
-    if (! switches.empty())
-    {
-        if (swRight)
-        {
-            zone.removeFromLeft (knobGap);
-            auto col = zone.removeFromLeft (switchW);
-
-            for (auto* sw : switches)
-            {
-                sw->setBounds (col.removeFromTop (juce::jmin (col.getHeight(), sw->idealHeight())));
-                col.removeFromTop (gap);
-            }
-        }
-        else
-        {
-            // The fallback: a horizontal row of vertical switches under the grid.
-            auto row = juce::Rectangle<int> (grid.getX(), grid.getY() + 2 * cell + 2 * knobGap,
-                                             gridW, zone.getBottom() - (grid.getY() + 2 * cell + 2 * knobGap));
-            const int each = juce::jmax (1, (row.getWidth() - ((int) switches.size() - 1) * gap)
-                                                / (int) switches.size());
-
-            for (auto* sw : switches)
-            {
-                sw->setBounds (row.removeFromLeft (each).withHeight (
-                    juce::jmin (row.getHeight(), sw->idealHeight())));
-                row.removeFromLeft (gap);
-            }
-        }
-    }
-
-    layTiles (area);
+    layWidget (area);
 }
 
 void CapturedBlockPanel::setControlsVisible (bool v)
@@ -537,71 +483,79 @@ void CapturedBlockPanel::setControlsVisible (bool v)
         if (sel.steps != nullptr)
             sel.steps->setVisible (v);
 
-    for (auto& c : vizChecks)
-        c.setVisible (v);
 }
 
-void CapturedBlockPanel::layChecks (juce::Rectangle<int> checks)
+/** One picture, filling what is left of the top zone, wearing its own corner glyphs. */
+void CapturedBlockPanel::layWidget (juce::Rectangle<int> area)
 {
-    for (auto& c : vizChecks)
-    {
-        c.setBounds (checks.removeFromTop (24));
-        checks.removeFromTop (4);
-    }
-}
-
-void CapturedBlockPanel::layTiles (juce::Rectangle<int> area)
-{
-    std::vector<DeviceScope*> shown;
     for (int i = 0; i < numViz; ++i)
-    {
-        if (vizChecks[(size_t) i].on)
-            shown.push_back (scopes[(size_t) i].get());
-        else
-            scopes[(size_t) i]->setVisible (false);
-    }
+        scopes[(size_t) i]->setVisible (i == vizPick);
 
-    const int n = (int) shown.size();
-    if (n == 0)
-        return;
+    widgetArea = area;
+    scopes[(size_t) vizPick]->setBounds (area);
 
-    const int tileRows = n <= 3 ? 1 : 2;
-    const int cols     = (n + tileRows - 1) / tileRows;
-    const int tileW    = (area.getWidth() - (cols - 1) * gap) / juce::jmax (1, cols);
-    const int tileH    = (area.getHeight() - (tileRows - 1) * gap) / tileRows;
-
-    halfTag.setVisible (false);
-    screenTag.setVisible (false);
     for (auto& t : expandTags)
         t.setVisible (false);
 
-    for (int i = 0; i < n; ++i)
+    int right = area.getRight() - 6;
+
+    expandTags[(size_t) vizPick].setBounds (right - 22, area.getY() + 4, 22, 16);
+    expandTags[(size_t) vizPick].setVisible (true);
+    expandTags[(size_t) vizPick].toFront (false);
+    right -= 26;
+
+    screenTag.setVisible (false);
+
+    const bool isWave = vizPick == (int) DeviceScope::Mode::wave;
+    halfTag.setVisible (isWave);
+    if (isWave)
     {
-        const int rr = i / cols, cc = i % cols;
-        shown[(size_t) i]->setBounds (area.getX() + cc * (tileW + gap),
-                                      area.getY() + rr * (tileH + gap), tileW, tileH);
-        shown[(size_t) i]->setVisible (true);
-
-        const auto tb = shown[(size_t) i]->getBounds();
-        int right = tb.getRight() - 6;
-
-        // Every tile wears the throw-open glyph; WAVE keeps its half toggle beside it.
-        for (int m = 0; m < numViz; ++m)
-            if (shown[(size_t) i] == scopes[(size_t) m].get())
-            {
-                expandTags[(size_t) m].setBounds (right - 22, tb.getY() + 4, 22, 16);
-                expandTags[(size_t) m].setVisible (true);
-                expandTags[(size_t) m].toFront (false);
-                right -= 26;
-            }
-
-        if (shown[(size_t) i] == scopes[(size_t) DeviceScope::Mode::wave].get())
-        {
-            halfTag.setBounds (right - 28, tb.getY() + 4, 28, 16);
-            halfTag.setVisible (true);
-            halfTag.toFront (false);
-        }
+        halfTag.setBounds (right - 28, area.getY() + 4, 28, 16);
+        halfTag.toFront (false);
     }
+}
+
+/** A right-click on the PICTURE picks which picture; anywhere else on the block it still means the
+    power menu, which is the one edit that must never need aiming for. */
+void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu() && widgetArea.contains (e.getPosition()))
+    {
+        showVizMenu (e.getScreenPosition());
+        return;
+    }
+
+    BlockFrame::mouseDown (e);
+}
+
+/** Which of the five is up. A menu rather than five checkboxes: the block carries a whole EQ
+    console now and has room for one picture, and choosing is the honest verb — you look at the
+    envelope INSTEAD of the transfer curve, not as well as. */
+void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
+{
+    static const char* const names[numViz] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE" };
+
+    juce::PopupMenu m;
+    m.addSectionHeader ("PICTURE");
+    for (int i = 0; i < numViz; ++i)
+        m.addItem (i + 1, names[i], true, i == vizPick);
+
+    m.showMenuAsync (juce::PopupMenu::Options()
+                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                     [safe = juce::Component::SafePointer<CapturedBlockPanel> (this)] (int r)
+                     {
+                         if (r == 0 || safe == nullptr)
+                             return;
+
+                         safe->vizPick = r - 1;
+
+                         // Kept with the session rather than as a parameter: it is which picture you
+                         // are looking at, not something a host should be automating.
+                         safe->amp.apvts.state.setProperty (safe->vizProperty(), r - 1, nullptr);
+
+                         safe->resized();
+                         safe->repaint();
+                     });
 }
 
 void CapturedBlockPanel::paintContent (juce::Graphics& g)
