@@ -140,39 +140,51 @@ void CabinetBlock::refreshDots()
     grid.setDots (std::move (dots));
 }
 
+/** One mic's cell inside the row the two of them share. The switch's own rectangle is derived from
+    the same split, so the painted toggle and the click target cannot drift apart. */
+juce::Rectangle<int> CabinetBlock::micCell (juce::Rectangle<int> content, int slot)
+{
+    content.removeFromTop (irRow + gap / 2);
+    auto row = content.removeFromTop (micRow + gap / 2 + angleRow);
+
+    const int each = (row.getWidth() - gap) / params::cabNumMics;
+    return row.removeFromLeft (each).translated (slot * (each + gap), 0);
+}
+
 juce::Rectangle<int> CabinetBlock::switchArea (int slot) const
 {
-    auto col = contentArea().removeFromLeft (micColumn);
-    const int band = col.getHeight() / params::cabNumMics;
-
-    return col.removeFromTop (band)
-              .withSizeKeepingCentre (col.getWidth(), micRow + gap / 2 + angleRow)
-              .removeFromTop (micRow)
-              .removeFromLeft (micSwitchW).withSizeKeepingCentre (micSwitchW, micSwitchH)
-              .translated (0, slot * band);
+    return micCell (contentArea(), slot)
+               .removeFromTop (micRow)
+               .removeFromLeft (micSwitchW).withSizeKeepingCentre (micSwitchW, micSwitchH);
 }
 
 void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 {
     // The IR selector rides the top, full width — the cabinet is chosen before it is miked.
-    ir.setBounds (area.removeFromTop (24));
+    ir.setBounds (area.removeFromTop (irRow));
     area.removeFromTop (gap / 2);
 
-    auto mics = area.removeFromLeft (micColumn);
-    area.removeFromLeft (gap);
+    // The two mics stand SIDE BY SIDE in one row rather than stacked in a column down the left.
+    //
+    // The column made sense while the cabinet had most of a wide row. At half of a short one it was
+    // taking a third of the width away from the grid, and the grid is the part that cannot be
+    // narrowed: it carries the driver, four named rows off it and nine distances across, and with a
+    // third gone its labels ran off the edge into the speaker. Two mics abreast fit the width they
+    // are given, and the grid gets all of it underneath.
+    auto row = area.removeFromTop (micRow + gap / 2 + angleRow);
+    area.removeFromTop (gap / 2);
     grid.setBounds (area);
 
-    // The column is split evenly and each mic is centred in its share, so the two rows use the whole
-    // height instead of huddling at the top over empty space.
-    const int band = mics.getHeight() / params::cabNumMics;
+    const int each = (row.getWidth() - gap) / params::cabNumMics;
 
     for (int i = 0; i < params::cabNumMics; ++i)
     {
-        auto cell = mics.removeFromTop (band)
-                        .withSizeKeepingCentre (mics.getWidth(), micRow + gap / 2 + angleRow);
-        auto row = cell.removeFromTop (micRow);
-        row.removeFromLeft (micSwitchW + gap);
-        slots[(size_t) i].pick->setBounds (row);
+        auto cell = row.removeFromLeft (each);
+        row.removeFromLeft (gap);
+
+        auto pick = cell.removeFromTop (micRow);
+        pick.removeFromLeft (micSwitchW + gap);
+        slots[(size_t) i].pick->setBounds (pick);
 
         cell.removeFromTop (gap / 2);
         slots[(size_t) i].angle->setBounds (cell.removeFromTop (angleRow)

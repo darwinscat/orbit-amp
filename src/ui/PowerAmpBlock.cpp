@@ -6,7 +6,9 @@ namespace orbitamp
 {
 
 PowerAmpBlock::PowerAmpBlock (juce::AudioProcessorValueTreeState& s)
-    : BlockFrame ("Power Amp", BlockFrame::Kind::dsp), state (s)
+    // "Power", not "Power Amp": a quarter-width block's top border carries the name AND the switch,
+    // and at reading size the two words ran into each other. The row it sits in says the rest.
+    : BlockFrame ("Power", BlockFrame::Kind::dsp), state (s)
 {
     addAndMakeVisible (type);
     addAndMakeVisible (output);

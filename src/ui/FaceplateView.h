@@ -39,7 +39,7 @@ public:
     // and the whole EQ console under them. The console is the part that will not compress: knobs at
     // reading size plus a curve big enough to aim at. Row 2 is a combo and a control or two.
     static constexpr int row1H  = 500;
-    static constexpr int row2H  = 180;
+    static constexpr int row2H  = 220;
     static constexpr int rowGap = 12;
     // Lane metrics. No horizontal inset: the lane's edges ARE the panel's edges, so nothing is
     // almost-aligned with anything.

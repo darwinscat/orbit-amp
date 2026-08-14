@@ -38,8 +38,9 @@ private:
     void placeMic (int slot, const juce::String& position, double distanceCm);
 
     juce::Rectangle<int> switchArea (int slot) const;
+    static juce::Rectangle<int> micCell (juce::Rectangle<int> content, int slot);
 
-    static constexpr int micColumn  = 132;   // the two mic rows, left of the speaker
+    static constexpr int irRow      = 24;    // the cabinet is chosen before it is miked
     static constexpr int micRow     = 24;
     static constexpr int angleRow   = 16;
     static constexpr int micSwitchW = 22;

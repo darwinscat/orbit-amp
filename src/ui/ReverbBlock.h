@@ -29,8 +29,7 @@ private:
 
     static constexpr int combosHeight = 26;
     static constexpr int knobGap      = 10;
-    static constexpr int tailHeight   = 150;   // matches the preamp's EQ, so the row reads level
-    static constexpr int tailGap      = 10;
+    static constexpr int maxKnobSide  = 96;    // the dial stops growing before it eats the picture
 
     static constexpr double displayRate = 48000.0;
     static constexpr double tailSeconds = 1.5;

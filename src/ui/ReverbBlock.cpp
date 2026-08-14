@@ -77,15 +77,18 @@ void ReverbBlock::refreshTail()
 
 void ReverbBlock::layOutContent (juce::Rectangle<int> area)
 {
-    // Lower half is the illustration, as in the other blocks — here, the measured decay.
-    tail.setBounds (area.removeFromBottom (tailHeight));
-    area.removeFromBottom (tailGap);
-
     character.setBounds (area.removeFromTop (combosHeight));
     area.removeFromTop (knobGap);
 
-    const int side = juce::jmin (area.getWidth(), area.getHeight());
-    mix.setBounds (area.withSizeKeepingCentre (side, side));
+    // The decay lies UNDER the knob, not beside it. A quarter-width block is narrow enough that
+    // standing them side by side left the tail taller than it was wide — and a decay envelope read
+    // in portrait is a decay you have to turn your head for. It is a picture of time passing, so it
+    // gets the width and the knob keeps the height above it.
+    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth(), area.getHeight() / 2));
+    mix.setBounds (area.removeFromTop (side).withSizeKeepingCentre (side, side));
+    area.removeFromTop (knobGap);
+
+    tail.setBounds (area);
 }
 
 } // namespace orbitamp
