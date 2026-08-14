@@ -127,6 +127,16 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     eq.onModePicked = [this] (int i)
     {
         eqModeAttachment->setValueAsCompleteGesture ((float) i);
+
+        // ...and apply it here, because the attachment will NOT call back for its own write: it
+        // sets `ignoreCallbacks` while it writes, so the lambda above never runs from a pick. The
+        // parameter moved, the processor's pump read it and the SOUND changed — while the row went
+        // on showing the other set until something else happened to rebuild it. Which reads as a
+        // switch that misses the first click. The device combo two lines up already does exactly
+        // this, for exactly this reason.
+        applyEqMode();
+        resized();
+        repaint();
     };
 
     attachPower (*amp.apvts.getParameter (params::blockOn (blk)));
@@ -256,9 +266,9 @@ void CapturedBlockPanel::deviceChanged()
     // and it also contradicts what these voices are. The captured thing is material, not an
     // original we are being faithful to. The combo has always shown the alias; this now agrees
     // with it rather than quietly saying the other name two inches away.
+    auto* devParam = amp.apvts.getParameter (params::blockDevice (blk));
     const int chosen = juce::jlimit (0, juce::jmax (0, block.packs.size() - 1),
-                                     juce::roundToInt (amp.apvts.getRawParameterValue (
-                                         params::blockDevice (blk))->load()));
+                                     juce::roundToInt (devParam->convertFrom0to1 (devParam->getValue())));
 
     juce::StringArray paper;
 
@@ -404,8 +414,11 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
 void CapturedBlockPanel::applyEqMode()
 {
     const auto native = nativeBands();
-    const int  want   = juce::roundToInt (
-        amp.apvts.getRawParameterValue (params::blockEqMode (blk))->load());
+    // The PARAMETER, not the apvts atomic. Called from an attachment callback — a host automating
+    // this, a session restoring — the atomic has not been written yet at that moment, and reading
+    // it there leaves the face exactly one change behind for good.
+    auto* modeParam  = amp.apvts.getParameter (params::blockEqMode (blk));
+    const int  want  = juce::roundToInt (modeParam->convertFrom0to1 (modeParam->getValue()));
 
     // A device that measured nothing has no native set, so the choice collapses to ours on its own
     // rather than showing an empty row and asking the player to work out why.
