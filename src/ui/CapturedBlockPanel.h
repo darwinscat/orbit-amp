@@ -3,6 +3,7 @@
 #include "../Parameters.h"
 #include "../core/CapturedBlock.h"
 #include "BlockFrame.h"
+#include "BlockMeter.h"
 #include "EqSection.h"
 #include "scope/DeviceScope.h"
 #include "Knob.h"
@@ -86,9 +87,14 @@ private:
         block owns it, its switch darkens it, and the curve's spectrum is this block's output. */
     EqSection eq;
 
-    Knob gain  { "Gain", theme::orange, 0 };
-    Knob level { "Level", theme::orange, 0 };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> levelAttachment;
+    Knob gain { "Gain", theme::orange, 0 };
+
+    /** The block's gain staging, as a pair of lying-down meters under the combo: what the model is
+        being fed, and what leaves the block. They replaced a LEVEL knob, which said only half of
+        it — a captured device answers to what goes IN, and a knob for the output alone lets you fix
+        the loudness while the drive stays wherever it landed. */
+    BlockMeter inMeter;
+    BlockMeter outMeter;
 
     struct Slot
     {

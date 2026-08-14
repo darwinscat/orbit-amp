@@ -179,6 +179,12 @@ public:
     /** The level at every joint of the chain — the gain-staging story, readable per stage. */
     std::atomic<float> boostOutDb  { -90.0f };
     std::atomic<float> preampOutDb { -90.0f };
+
+    /** What each captured block is FEEDING ITS MODEL, after its own input trim. Measured at the
+        model's door rather than the block's, because that is the level the question is about: a
+        capture answers to what goes in, and the meter has to be reading the same point the trim
+        beside it moves. Indexed like blockSpectrumTap — 0 boost, 1 preamp. */
+    std::array<std::atomic<float>, 2> blockInDb { -90.0f, -90.0f };
     std::atomic<float> cabOutDb    { -90.0f };
     std::atomic<bool>  inClip  { false };
     std::atomic<bool>  outClip { false };
@@ -270,8 +276,12 @@ private:
 
     std::atomic<float>* boostLevelParam  = nullptr;
     std::atomic<float>* preampLevelParam = nullptr;
+    std::atomic<float>* boostInParam     = nullptr;
+    std::atomic<float>* preampInParam    = nullptr;
     float lastBoostLevelGain  = 1.0f;
     float lastPreampLevelGain = 1.0f;
+    float lastBoostInGain     = 1.0f;
+    float lastPreampInGain    = 1.0f;
     float lastTrimGain = 1.0f;
 
     std::atomic<float>* gateOnParam        = nullptr;

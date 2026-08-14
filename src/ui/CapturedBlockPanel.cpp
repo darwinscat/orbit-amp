@@ -54,7 +54,11 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId),
       toneTap (toneSpectrumTap),
       eq (processor.apvts, eqLink, toneSpectrumTap,
-          [&processor] { return processor.currentSampleRate(); })
+          [&processor] { return processor.currentSampleRate(); }),
+      inMeter ("IN", processor.blockInDb[(size_t) eqLink],
+               *processor.apvts.getParameter (params::blockIn (blockId)), true),
+      outMeter ("OUT", eqLink == 0 ? processor.boostOutDb : processor.preampOutDb,
+                *processor.apvts.getParameter (params::blockLevel (blockId)), false)
 {
     // The console's widgets become children of this block, which places them. The spectrum behind
     // its curve is the block's own output tap — the same one the TONE picture reads, because after
@@ -63,18 +67,14 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
-    addAndMakeVisible (level);
+    addAndMakeVisible (inMeter);
+    addAndMakeVisible (outMeter);
 
     device.fontHeight = 16.0f;   // the device's NAME is the face's headline, sized like one
 
     // The hero's name above the hero: bigger than the rank and file.
     gain.labelFontHeight = 16.0f;
     gain.labelRowHeight  = 20;
-
-    // The block's own volume — the hand that fixes gain staging AT the stage.
-    level.labelFontHeight = 12.0f;
-    level.labelRowHeight  = 16;
-    level.textForValue = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
 
     // Five ways of showing the same device, one at a time. The tone curve comes from the block
     // itself — the same data its filters were designed from, resolved on the processor's pump.
@@ -146,9 +146,6 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::blockGain (blk), gain);
-    levelAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-        amp.apvts, params::blockLevel (blk), level);
-
     deviceAttachment->sendInitialUpdate();
 
     deviceChanged();
@@ -414,6 +411,18 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     setControlsVisible (true);
     eq.setWidgetsVisible (true);
 
+    // ---- the pair of meters, one line under the combo, half the width each. They lead because
+    //      they are the question you ask first about a captured block: is it being fed right. ----
+    {
+        auto line = area.removeFromTop (BlockMeter::designHeight);
+        area.removeFromTop (gap);
+
+        const int half = (line.getWidth() - gap) / 2;
+        inMeter.setBounds (line.removeFromLeft (half));
+        line.removeFromLeft (gap);
+        outMeter.setBounds (line);
+    }
+
     // ---- the EQ console takes the bottom of the face. It is asked for what it needs rather than
     //      given a fraction: the control row is knobs at reading size and does not compress, and
     //      the curve under half a block is still a curve — squeeze either and the console stops
@@ -442,28 +451,25 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     for (auto* sw : picks)
         pickH = juce::jmax (pickH, sw->idealHeight());
 
-    // LEVEL rides the same row for now; it goes when the OUT slider takes its job.
-    const int rowH = juce::jmax (pickH, 74);
-    auto bottomRow = column.removeFromBottom (rowH);
-    column.removeFromBottom (gap);
-
-    const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
-    gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
-
+    // The switches take what they need off the bottom and GAIN gets the rest — so a device with
+    // nothing to switch simply wears a bigger dial, and nothing else on the face moves.
+    if (pickH > 0)
     {
-        const int cells = 1 + (int) picks.size();
-        const int each  = juce::jmax (1, (bottomRow.getWidth() - (cells - 1) * knobGap) / cells);
+        auto swRow = column.removeFromBottom (pickH);
+        column.removeFromBottom (gap);
 
-        level.setBounds (bottomRow.removeFromLeft (each).withHeight (juce::jmin (rowH, maxKnobSide)));
-        bottomRow.removeFromLeft (knobGap);
+        const int each = juce::jmax (1, (swRow.getWidth() - ((int) picks.size() - 1) * knobGap)
+                                            / (int) picks.size());
 
         for (auto* sw : picks)
         {
-            sw->setBounds (bottomRow.removeFromLeft (each)
-                               .withHeight (juce::jmin (bottomRow.getHeight(), sw->idealHeight())));
-            bottomRow.removeFromLeft (knobGap);
+            sw->setBounds (swRow.removeFromLeft (each));
+            swRow.removeFromLeft (knobGap);
         }
     }
+
+    const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
+    gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
 
     layWidget (area);
 }
@@ -471,6 +477,8 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 void CapturedBlockPanel::setControlsVisible (bool v)
 {
     gain.setVisible (v);
+    inMeter.setVisible (v);
+    outMeter.setVisible (v);
     device.setEnabled (v);
 
     for (auto& slot : slots)

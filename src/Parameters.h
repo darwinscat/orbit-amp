@@ -84,7 +84,26 @@ inline juce::String blockOn       (const char* blk) { return juce::String (blk) 
 inline juce::String blockDevice   (const char* blk) { return juce::String (blk) + "_device"; }
 inline juce::String blockGain     (const char* blk) { return juce::String (blk) + "_gain"; }
 inline juce::String blockLevel    (const char* blk) { return juce::String (blk) + "_level"; }
-inline constexpr float blockLevelRangeDb = 12.0f;
+
+/** The block's INPUT trim — how hard the capture is fed, applied immediately before the model and
+    metered right there. It is the other half of the pair the OUT level makes, and the pair is the
+    point: a captured device answers to what goes IN, so a block that only has an output volume
+    lets you fix the loudness while leaving the drive wherever it landed. */
+inline juce::String blockIn (const char* blk) { return juce::String (blk) + "_in"; }
+
+/** Both trims, asymmetric on purpose. Twenty-four down and twelve up: cutting is what gain staging
+    mostly asks for — a hot interface, a hot pack, a boost feeding a preamp — and twelve decibels of
+    boost is already more than a capture wants before it stops being the device that was captured. */
+inline constexpr float blockTrimMinDb = -24.0f;
+inline constexpr float blockTrimMaxDb =  12.0f;
+
+/** Where a captured device likes to be fed, in dBFS peak — the green zone on the IN meter.
+    A CONVENTION, not a measurement: `FileEntry::inputDb` is the alias attenuation between two
+    captures of one device, not the absolute level the hardware was driven at, so there is nothing
+    in the pack to read. This is the window a guitar DI normally peaks in, and it is the honest
+    default until the capture side writes down what it actually used. */
+inline constexpr float captureHotDb  = -6.0f;
+inline constexpr float captureColdDb = -18.0f;
 inline juce::String blockMeasured (const char* blk, int i) { return juce::String (blk) + "_meas" + juce::String (i + 1); }
 
 /** A pedal's MEASURED controls — the ones a player computes rather than selects. How many a device
