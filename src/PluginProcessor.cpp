@@ -201,10 +201,13 @@ void AmpProcessor::pumpDeviceWork()
             selectors[(size_t) i] = juce::roundToInt (
                 apvts.getRawParameterValue (params::selectorId (blk, i))->load());
 
-        // The packs' measured EQ curves are ignored WHOLESALE, his order: a NAM player and
-        // nothing else — no FIRs before or after the model. The raw parameter stays in the tree
-        // for the day this becomes a choice again; the pump simply stops asking it.
-        block.setRaw (true);
+        // WHOSE tone controls this block wears, which is the same question as whether the pack's
+        // measured curves are in the signal at all. OURS bypasses them because our parametric is
+        // standing in their place; NATIVE plays them. They are alternatives, never layers.
+        const auto mode = static_cast<params::EqMode> (juce::roundToInt (
+            apvts.getRawParameterValue (params::blockEqMode (blk))->load()));
+
+        block.setRaw (mode == params::EqMode::ours);
         block.applySelectors (selectors);
         block.loadIfGainMoved (gainParam->load());
 

@@ -118,6 +118,17 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     scopes[(size_t) DeviceScope::Mode::wave]->waveHalf = halfTag.half;   // half is the default
     addChildComponent (halfTag);
 
+    // Whose bands the console wears. Written by the switch on the console and read back here, so a
+    // restored session or an automating host moves the row too.
+    eqModeAttachment = std::make_unique<juce::ParameterAttachment> (
+        *amp.apvts.getParameter (params::blockEqMode (blk)),
+        [this] (float) { applyEqMode(); resized(); repaint(); });
+
+    eq.onModePicked = [this] (int i)
+    {
+        eqModeAttachment->setValueAsCompleteGesture ((float) i);
+    };
+
     attachPower (*amp.apvts.getParameter (params::blockOn (blk)));
 
     // The attachment hears everyone BUT this panel — a restored session, a host automating the
@@ -351,9 +362,69 @@ void CapturedBlockPanel::deviceChanged()
     }
 
     buildSelectors();
+    applyEqMode();
 
     resized();
     repaint();
+}
+
+/** A device's own tone controls, as bands of the console.
+
+    Only the SWEPT ones. A measured control whose positions carry names — SM7's Sharp/Smooth — is a
+    switch rather than a dial, and a two-detent nameless knob in a row of dials would throw both its
+    names away. It keeps the place it already has until the row learns to hold a switch.
+
+    The notch count is the number of positions the pack actually swept: between them there is
+    interpolation, not data, and the detents say so on the dial. */
+std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
+{
+    std::vector<EqSection::Band> out;
+
+    const auto* measured = block.measured();
+    if (measured == nullptr)
+        return out;
+
+    for (int i = 0; i < params::boostNumMeasured && i < (int) measured->size(); ++i)
+    {
+        const auto& m = (*measured)[(size_t) i];
+
+        if (m.positions.size() == 2 && hasNamedPositions (m))
+            continue;
+
+        out.push_back ({ juce::String (m.name).toUpperCase(),
+                         theme::eqNode[(size_t) (out.size() % 5)],
+                         params::blockMeasured (blk, i),
+                         (int) m.positions.size(),
+                         false });
+    }
+
+    return out;
+}
+
+void CapturedBlockPanel::applyEqMode()
+{
+    const auto native = nativeBands();
+    const int  want   = juce::roundToInt (
+        amp.apvts.getRawParameterValue (params::blockEqMode (blk))->load());
+
+    // A device that measured nothing has no native set, so the choice collapses to ours on its own
+    // rather than showing an empty row and asking the player to work out why.
+    const bool wearsNative = native.empty() ? false
+                                            : want == (int) params::EqMode::native;
+
+    eq.setModes (native.empty() ? juce::StringArray { params::eqModes[1] } : params::eqModes,
+                 wearsNative ? 0 : 1);
+
+    if (wearsNative)
+    {
+        eq.setBands (native);
+        eq.setNativeCurve ([this] (double hz) { return block.toneDb (hz); });
+    }
+    else
+    {
+        eq.setBands (eq.ourBandSet());
+        eq.setNativeCurve (nullptr);
+    }
 }
 
 void CapturedBlockPanel::buildSelectors()

@@ -64,6 +64,17 @@ private:
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
 
+    /** The device's OWN tone controls as console bands — one to three of whatever it happened to
+        have, in the order the pack lists them. Empty when it measured nothing, which is what makes
+        the block fall back to ours without being told to. */
+    std::vector<EqSection::Band> nativeBands() const;
+
+    /** Puts the console into whichever set the mode parameter names, falling to ours when the
+        device has no native one to give. */
+    void applyEqMode();
+
+    std::unique_ptr<juce::ParameterAttachment> eqModeAttachment;
+
     static constexpr int headerRow  = 34;
     static constexpr int gap        = 10;
     static constexpr int knobGap    = 10;

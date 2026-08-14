@@ -73,8 +73,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         layout.add (std::make_unique<Float> (juce::ParameterID { blockIn (blk), 1 },
                                              juce::String (blk) + " In", trim, 0.0f));
 
-        layout.add (std::make_unique<Bool> (juce::ParameterID { rawId (blk), 1 },
-                                            juce::String (blk) + " Raw", false));
+        // Native by default: a captured device arrives wearing its own controls, and ours are the
+        // thing you reach for when it did not bring any or when you want a scalpel instead.
+        layout.add (std::make_unique<Choice> (juce::ParameterID { blockEqMode (blk), 1 },
+                                              juce::String (blk) + " EQ", eqModes, 0));
 
         for (int i = 0; i < numSelectors; ++i)
             layout.add (std::make_unique<Int> (juce::ParameterID { selectorId (blk, i), 1 },

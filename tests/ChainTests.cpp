@@ -194,16 +194,10 @@ int main()
 
     // A measured control, through the whole plugin rather than through the filter alone.
     //
-    // ASLEEP, deliberately: the captured blocks are pinned RAW — a NAM player and nothing else,
-    // the measured EQ curves ignored wholesale (the processor's setRaw (true)). While that stands,
-    // a measured knob not reaching the audio is the CONTRACT, not a failure. When the measured
-    // path returns, delete `measuredPinnedRaw` and this check wakes up as written.
-    constexpr bool measuredPinnedRaw = true;
-    if (measuredPinnedRaw)
-    {
-        std::printf ("measured EQ is pinned RAW — the tone check sits out\n");
-    }
-    else
+    // This check sat out for a while behind a `measuredPinnedRaw` flag: the blocks were pinned raw,
+    // a NAM player and nothing else, so a measured knob NOT reaching the audio was the contract.
+    // The contract changed — a block wears the device's own controls unless you ask for ours — and
+    // the check wakes up exactly as it was written.
     {
         const auto* measured = amp.boost.measured();
 

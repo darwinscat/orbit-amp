@@ -57,13 +57,22 @@ inline constexpr const char* gateDecay = "gate_decay";
 inline const juce::StringArray gateDecayModes { "Normal", "Metal" };
 inline constexpr float gateDecayModeMs[] = { 100.0f, 35.0f };
 
-/** TEMPORARY — hear the capture with nothing of ours on it.
+/** WHOSE tone controls a captured block wears — and, because it is the same question, whether the
+    pack's measured curves are in the signal at all.
 
-    Everything a block adds comes off: the measured curves the pack shipped, rebuilt as filters, and
-    our own EQ. What stays is what picks WHICH model plays — the gain dial and the device's selecting
-    controls, an octave switch among them — because those are not treatments, they are the choice of
-    capture. Goes when the question it answers stops being asked. */
-inline juce::String rawId (const char* blk) { return juce::String (blk) + "_raw"; }
+    NATIVE plays the device's own: the curves it was measured with, rebuilt as filters, driven by
+    knobs named after its own controls. OURS bypasses them and puts our parametric there instead.
+    They are alternatives, not layers — the one thing that must never happen is a device wearing its
+    own tone stack and ours at the same time and no way to tell which decibel came from where.
+
+    A pack that measured nothing has no NATIVE to offer, and the block falls to OURS on its own
+    rather than showing an empty row.
+
+    This replaces a temporary `raw` switch that meant "play the capture with nothing of ours on it".
+    That was the same fact asked as a debugging question; asked as a choice it is a control. */
+inline juce::String blockEqMode (const char* blk) { return juce::String (blk) + "_eq_mode"; }
+inline const juce::StringArray eqModes { "Native", "Ours" };
+enum class EqMode { native, ours };
 
 /** A device's OTHER selecting controls — the ones that pick a file and are not the gain dial. Two
     slots, like the measured ones: a fixed set a host can see, filled by whatever the pack declares.

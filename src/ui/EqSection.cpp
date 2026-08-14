@@ -93,6 +93,10 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
 
     presetBtn.onClick = [this] (juce::Point<int> screenPos) { showPresets (screenPos); };
 
+    modeSw.accent = theme::lilac;   // it is a question about the console, not about the sound
+    modeSw.setHorizontal (true);
+    modeSw.onChange = [this] (int i) { if (onModePicked != nullptr) onModePicked (i); };
+
     curve.onHandleDrag       = [this] (int i, double hz, double db) { handleDragged (i, hz, db); };
     curve.onDragActive       = [this] (int i, bool a) { handleDragActive (i, a); };
     curve.onHandleWheel      = [this] (int i, float d) { handleWheel (i, d); };
@@ -133,8 +137,11 @@ void EqSection::buildBands (std::vector<Band> newBands)
 
     for (const auto& b : bands)
     {
-        auto k = std::make_unique<Knob> (b.label, b.colour, 0);
-        k->textForValue    = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
+        auto k = std::make_unique<Knob> (b.label, b.colour, b.notches);
+
+        if (b.showsDb) k->textForValue = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
+        else           k->textForValue = [] (double)   { return juce::String(); };
+
         k->onValueChange   = [this] { refreshCurve(); };
         k->labelFontHeight = 13.0f;
         k->labelRowHeight  = 17;
@@ -142,8 +149,24 @@ void EqSection::buildBands (std::vector<Band> newBands)
         bandAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
             state, b.param, *k));
 
+        if (host != nullptr)
+            host->addAndMakeVisible (*k);
+
         bandKnobs.push_back (std::move (k));
     }
+
+    if (host != nullptr)
+        host->resized();
+}
+
+void EqSection::setModes (const juce::StringArray& names, int selected)
+{
+    // One side is not a choice. A device that measured nothing has no native bands to offer, and a
+    // switch offering only OURS would be a label pretending to be a control.
+    modeSw.setVisible (names.size() > 1);
+
+    if (names.size() > 1)
+        modeSw.setItems (names, selected);
 }
 
 void EqSection::setBandDb (size_t index, double db)
@@ -333,6 +356,11 @@ void EqSection::addTo (juce::Component& parent)
 {
     parent.addAndMakeVisible (curve);
     parent.addAndMakeVisible (presetBtn);
+    parent.addChildComponent (modeSw);
+    host = &parent;
+
+    for (auto& k : bandKnobs)
+        parent.addAndMakeVisible (*k);
     parent.addAndMakeVisible (hpfSw);
     parent.addAndMakeVisible (lpfSw);
     parent.addAndMakeVisible (hpfLabel);
@@ -356,6 +384,7 @@ void EqSection::setWidgetsVisible (bool v)
 
     curve.setVisible (v);
     presetBtn.setVisible (v);
+    modeSw.setVisible (v && modeSw.count() > 1);
     hpfSw.setVisible (v);
     lpfSw.setVisible (v);
     hpfLabel.setVisible (v);
@@ -459,11 +488,17 @@ void EqSection::refreshHandles()
 
     const auto& s = display.getSettings();
 
-    h.getReference (hLo) = { s.loHz, s.loDb, H::Freedom::both, true,   theme::eqNode[0] };
-    h.getReference (hB1) = { s.b1Hz, s.b1Db, H::Freedom::both, true,   theme::eqNode[1] };
-    h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, true,   theme::eqNode[2] };
-    h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, s.b3On, theme::eqNode[4] };
-    h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, true,   theme::eqNode[3] };
+    // OUR bands only, and only while the console is wearing them. In the device's own set our four
+    // are bypassed — the parametric is out of the signal by definition — so a point that still
+    // dragged would be writing to something nobody can hear. The exact bug the EQ's enable was
+    // just deleted for, in a different costume.
+    const bool ours = nativeDb == nullptr;
+
+    h.getReference (hLo) = { s.loHz, s.loDb, H::Freedom::both, ours,   theme::eqNode[0] };
+    h.getReference (hB1) = { s.b1Hz, s.b1Db, H::Freedom::both, ours,   theme::eqNode[1] };
+    h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, ours,   theme::eqNode[2] };
+    h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, ours && s.b3On, theme::eqNode[4] };
+    h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, ours,   theme::eqNode[3] };
 
     // The cuts only exist while they are switched on — a handle for a filter that is not in the
     // chain would be a control over nothing. Orange HPF, violet LPF, same as their switches.
@@ -480,7 +515,8 @@ void EqSection::handleDragged (int index, double hz, double db)
     switch (index)
     {
         // The handles and the row are the same four bands in the same order, so the index IS the
-        // band. A curve that knew four names would be a second place to keep the list.
+        // band. A curve that knew four names would be a second place to keep the list. (A device's
+        // own bands have no handles yet — setBandDb is a no-op past the end of the list.)
         case hLo: setBandDb (0, db); break;
         case hB1: setBandDb (1, db); break;
         case hB2: setBandDb (2, db); break;
@@ -570,27 +606,32 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // The cut cells are narrower than the knob cells on purpose: a switch and "12 DB" need less
     // width than a dial does, and what they give up goes into the dials, which is the only place
     // in this row where extra width becomes something you can aim at.
+    // The cut cells are a fixed width and the bands share what is left, however many there are: a
+    // device that measured one Tone control gets one big centred dial rather than one dial and
+    // three holes where our other three used to be.
     const int cutW  = 50;
-    const int knobW = (row.getWidth() - 2 * cutW) / 4;
+    const int n     = juce::jmax (1, (int) bandKnobs.size());
+    const int knobW = (row.getWidth() - 2 * cutW) / n;
 
     const auto hpfCell = row.removeFromLeft (cutW);
 
-    juce::Rectangle<int> knobCells[4];
-    for (auto& c : knobCells)
-        c = row.removeFromLeft (knobW);
+    juce::Rectangle<int> firstCell = row;
 
-    const auto lpfCell = row;
-
-    for (size_t i = 0; i < bandKnobs.size() && i < 4; ++i)
+    for (size_t i = 0; i < bandKnobs.size(); ++i)
     {
-        const auto cell = knobCells[i];
+        const auto cell = row.removeFromLeft (knobW);
+        if (i == 0)
+            firstCell = cell;
+
         const int side = juce::jmin (cell.getWidth(), cell.getHeight());
         bandKnobs[i]->setBounds (cell.withWidth (side).withHeight (side)
                                      .withX (cell.getCentreX() - side / 2));
     }
 
+    const auto lpfCell = row.removeFromRight (cutW);
+
     // The cuts hang off the first knob's geometry, so an empty row still has to put them somewhere.
-    const auto& first = bandKnobs.empty() ? row : bandKnobs.front()->getBounds();
+    const auto first = bandKnobs.empty() ? firstCell : bandKnobs.front()->getBounds();
     const int labelH  = bandKnobs.empty() ? 17 : bandKnobs.front()->labelRowHeight;
     const int dialAxisY = first.getY() + labelH + (first.getHeight() - labelH) / 2;
 
@@ -608,9 +649,15 @@ void EqSection::layOut (juce::Rectangle<int> content)
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox);
     switchCell (lpfCell, lpfSw, lpfLabel, lpfSlopeBox);
 
-    // The curve gets everything else; the presets overlay its top-right corner.
+    // The curve gets everything else; the two overlays share its top-right corner — whose bands,
+    // then which stamp, reading left to right in the order the questions are asked.
     curve.setBounds (content);
-    presetBtn.setBounds (content.getRight() - 118, content.getY() + 6, 108, 22);
+
+    auto corner = content.withTrimmedTop (6).removeFromTop (24).removeFromRight (232);
+    modeSw.setBounds (corner.removeFromLeft (114).reduced (2, 0));
+    presetBtn.setBounds (corner.removeFromRight (108).withHeight (22));
+
+    modeSw.toFront (false);
     presetBtn.toFront (false);
 }
 

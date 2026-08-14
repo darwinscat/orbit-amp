@@ -123,8 +123,9 @@ public:
         stage.selectGainIndex (index);
     }
 
-    /** Re-designs a measured filter when its knob moved. Message thread — it builds an FIR. */
-    /** TEMPORARY — see params::rawId. Nothing of ours between the model and the output. */
+    /** Whether the pack's own measured curves are bypassed — see `params::blockEqMode`. Raw is
+        what OURS means: our parametric is standing where the device's tone stack used to, and a
+        device wearing both at once is a decibel nobody can trace. */
     void setRaw (bool shouldBeRaw)
     {
         if (raw == shouldBeRaw)
