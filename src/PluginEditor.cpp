@@ -138,6 +138,12 @@ void AmpEditor::paint (juce::Graphics& g)
 
 bool AmpEditor::keyPressed (const juce::KeyPress& key)
 {
+    // Escape is the way out of anything that took the room over. The whole-screen theatre has
+    // always answered it — it holds the keyboard while it runs — and the face-wide picture only
+    // had its own fold glyph, which is a way out you have to go looking for.
+    if (key == juce::KeyPress::escapeKey)
+        return faceplate.foldPicture();
+
     // Space is the transport, like everywhere else sound is judged. Text editors keep their
     // spaces — a focused editor consumes the key before it ever reaches us.
     if (key == juce::KeyPress::spaceKey)

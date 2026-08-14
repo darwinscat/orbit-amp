@@ -153,6 +153,20 @@ CapturedBlockPanel::~CapturedBlockPanel()
     closeTheater();
 }
 
+bool CapturedBlockPanel::foldPicture()
+{
+    if (expandedViz < 0)
+        return false;
+
+    expandedViz = -1;
+    for (auto& t : expandTags)
+        t.expanded = false;
+
+    resized();
+    repaint();
+    return true;
+}
+
 void CapturedBlockPanel::openTheater()
 {
     if (theater != nullptr)

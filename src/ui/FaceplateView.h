@@ -30,6 +30,10 @@ public:
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
     void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); }
 
+    /** Escape's errand: put a thrown-open picture back. One Escape folds one picture, so a player
+        who opened two of them gets out of them one at a time rather than all at once. */
+    bool foldPicture() { return boost.foldPicture() || preamp.foldPicture(); }
+
     void resized() override;
 
     // The faceplate's design size, at 100%. The editor scales from these and never re-lays out.
