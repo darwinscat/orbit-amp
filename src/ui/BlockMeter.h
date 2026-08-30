@@ -62,6 +62,11 @@ public:
         hand lies across it, the green zone runs up its edge. No name and no reading beside it:
         the column is as wide as the bar was tall, and the number rides the hint instead. */
     bool vertical = false;
+
+    /** A switched-off block's meter indicates NOTHING — the slot and the hand stay, dimmed with
+        the block, but a bar that keeps filling on a dead block claims the block is doing
+        something. The owner flips this with the block's power. */
+    bool live = true;
     static constexpr int designWidth = 12;
 
     /** The grip is in the hand — the owner may want to show a ladder beside it. */
@@ -92,7 +97,8 @@ public:
         g.drawRoundedRectangle (track.reduced (0.5f), 2.0f, 1.0f);
 
         // ---- the signal ----
-        paintFill (g, track);
+        if (live)
+            paintFill (g, track);
 
         // ---- the green zone: where this block wants to be fed.
         //
@@ -112,7 +118,7 @@ public:
             g.fillRect (a, track.getY() + 0.5f, b - a, 1.5f);
         }
 
-        if (hold > floorDb + 0.5f)
+        if (live && hold > floorDb + 0.5f)
         {
             const float x = xOfLevel (track, hold);
             g.setColour (juce::Colours::white.withAlpha (0.85f));
@@ -199,6 +205,12 @@ public:
 private:
     void timerCallback() override
     {
+        if (! live)
+        {
+            hold = floorDb;   // a stale peak must not greet the block when it comes back
+            return;
+        }
+
         const float now = levelDb.load();
 
         // The peak hold, decaying: it is here to let a phrase be READ, not to latch forever.
@@ -284,6 +296,7 @@ private:
         g.setColour (theme::bezel.withAlpha (0.75f));
         g.fillRoundedRectangle (t, 2.0f);
 
+        if (live)
         {
             const auto u = [] (float db) { return (double) juce::jlimit (0.0f, 1.0f, (db - floorDb) / (ceilDb - floorDb)); };
 
@@ -306,7 +319,7 @@ private:
             }
         }
 
-        if (hold > floorDb + 0.5f)
+        if (live && hold > floorDb + 0.5f)
             meterrail::paintHold (g, t, yOfLevel (t, hold));
 
         // The hand, lying across the column, with a head at each end.

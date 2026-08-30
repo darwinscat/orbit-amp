@@ -52,6 +52,7 @@ public:
 private:
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
+    void blockOnChanged (bool on) override;
 
     /** Whether a measured control's positions are named rather than numbered — the difference
         between a switch and a knob that happens to have been swept at two points. */

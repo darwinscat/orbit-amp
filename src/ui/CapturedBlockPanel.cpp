@@ -530,6 +530,12 @@ void CapturedBlockPanel::buildSelectors()
     }
 }
 
+void CapturedBlockPanel::blockOnChanged (bool on)
+{
+    inMeter.live = on;
+    inMeter.repaint();
+}
+
 bool CapturedBlockPanel::hasNamedPositions (const namz::rig::Tone& m)
 {
     for (const auto& p : m.positions)

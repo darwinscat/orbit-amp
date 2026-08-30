@@ -53,6 +53,7 @@ public:
 
         on = shouldBeOn;
         dimChildren();   // NOT setAlpha on the whole block: the power switch stays full strength
+        blockOnChanged (on);
 
         // An off block is READ-ONLY: everything stays visible — a control you cannot see is a
         // control you forget you set — but nothing answers, so a dark block can never quietly
@@ -262,6 +263,11 @@ protected:
     virtual void layOutHeader (juce::Rectangle<int>) {}
     virtual void layOutContent (juce::Rectangle<int>) {}
     virtual void paintContent (juce::Graphics&) {}
+
+    /** The power moved — every way it can: a click, the parameter's echo, a restored session. For a
+        subclass whose furniture must go DARK with the block (a meter that would otherwise keep
+        indicating), not merely dim. */
+    virtual void blockOnChanged (bool) {}
 
     /** Blocks rebuild their faces (a device change makes new knobs mid-life) — every child that
         arrives inherits the block's dimming, and the shield stays on top of all of them. */
