@@ -17,18 +17,32 @@ ReverbBlock::ReverbBlock (juce::AudioProcessorValueTreeState& s)
 
     attachPower (*state.getParameter (params::reverbOn));
 
-    character.setItems (params::reverbCharacters, 0);
+    // The character IS the block's name: PLATE or HALL on the border where REVERB stood, set like
+    // a name and in the block's colour. A quarter-width block has no room for both, and the
+    // colour already says which kind of block this is.
+    showTitle = false;
+    {
+        juce::Array<VoicingSelector::Entry> entries;
+        for (const auto& name : params::reverbCharacters)
+            entries.add ({ name, 0, false });
+        character.setEntries (std::move (entries));
+    }
+    character.fontHeight = 16.0f;
+    character.tracking   = 0.15f;
+    character.boxed      = false;
+    character.tint       = theme::lilac;
     mix.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)) + "%"; };
 
     characterAttachment = std::make_unique<juce::ParameterAttachment> (
         *state.getParameter (params::reverbType),
         [this] (float v)
         {
-            character.setSelectedIndex (juce::roundToInt (v), juce::dontSendNotification);
+            character.setSelection (juce::roundToInt (v));
             refreshTail();
+            resized();   // the name on the border is as wide as the name
         });
 
-    character.onChange = [this] (int i) { characterAttachment->setValueAsCompleteGesture ((float) i); };
+    character.onPick = [this] (int i) { characterAttachment->setValueAsCompleteGesture ((float) i); };
 
     mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         state, params::reverbMix, mix);
@@ -40,7 +54,7 @@ ReverbBlock::~ReverbBlock() = default;
 
 void ReverbBlock::refreshTail()
 {
-    const int index = juce::jlimit (0, params::reverbCharacters.size() - 1, character.getSelectedIndex());
+    const int index = juce::jlimit (0, params::reverbCharacters.size() - 1, character.getSelection());
 
     display.setCharacter (static_cast<core::ReverbStage::Character> (index));
     display.setMix ((float) mix.getValue() * 0.01f);
@@ -77,16 +91,18 @@ void ReverbBlock::refreshTail()
 
 void ReverbBlock::layOutContent (juce::Rectangle<int> area)
 {
-    character.setBounds (area.removeFromTop (combosHeight));
-    area.removeFromTop (knobGap);
+    // The character on the border where the name would stand: at the left, sized to itself.
+    {
+        const auto slot = borderSlotArea();
+        character.setBounds (slot.withWidth (juce::jmin (slot.getWidth(), character.idealWidth())));
+        borderSlotUsed = character.getBounds();
+    }
 
-    // The decay lies UNDER the knob, not beside it. A quarter-width block is narrow enough that
-    // standing them side by side left the tail taller than it was wide — and a decay envelope read
-    // in portrait is a decay you have to turn your head for. It is a picture of time passing, so it
-    // gets the width and the knob keeps the height above it.
-    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth(), area.getHeight() / 2));
-    mix.setBounds (area.removeFromTop (side).withSizeKeepingCentre (side, side));
-    area.removeFromTop (knobGap);
+    // The dial on the left, the decay beside it taking the rest — a picture of time passing, as
+    // wide as the box lets it be, and the dial as tall as the box.
+    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight()));
+    mix.setBounds (area.removeFromLeft (side).withSizeKeepingCentre (side, side));
+    area.removeFromLeft (knobGap);
 
     tail.setBounds (area);
 }

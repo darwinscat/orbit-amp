@@ -4,7 +4,7 @@
 #include "BlockFrame.h"
 #include "Knob.h"
 #include "ReverbTailView.h"
-#include "Selector.h"
+#include "VoicingSelector.h"
 
 namespace orbitamp
 {
@@ -12,8 +12,9 @@ namespace orbitamp
 /** The reverb — our own tail on top of the captured voice.
 
     Mix is the whole control surface, per the design's simple case; size and damping follow from the
-    chosen character rather than sitting on the face as loose knobs. Everything the block can do is
-    reachable from what you can see. */
+    chosen character rather than sitting on the face as loose knobs. The character stands on the
+    block's border, the way a captured block's device does, so the box holds the dial and, beside it,
+    the picture of the tail. Everything the block can do is reachable from what you can see. */
 class ReverbBlock final : public BlockFrame
 {
 public:
@@ -27,9 +28,8 @@ private:
         Measuring beats drawing a picture of a room: the shape shown is the shape you hear. */
     void refreshTail();
 
-    static constexpr int combosHeight = 26;
     static constexpr int knobGap      = 10;
-    static constexpr int maxKnobSide  = 96;    // the dial stops growing before it eats the picture
+    static constexpr int maxKnobSide  = 84;    // the dial stops growing before it eats the picture — the tail is the wider of the two
 
     static constexpr double displayRate = 48000.0;
     static constexpr double tailSeconds = 1.5;
@@ -37,7 +37,7 @@ private:
 
     juce::AudioProcessorValueTreeState& state;
 
-    Selector       character { theme::violet, true };
+    VoicingSelector character;
     Knob           mix       { "Mix", theme::violet, 0 };
     ReverbTailView tail;
 

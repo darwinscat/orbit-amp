@@ -2,6 +2,8 @@
 
 #include "Theme.h"
 
+#include <optional>
+
 namespace orbitamp
 {
 
@@ -67,12 +69,17 @@ public:
         the line strike the name through). Hover lifts the text. */
     bool boxed = true;
 
+    /** A list with no character ramp — a DSP block's own choices, PLATE or HALL — wears one colour,
+        the block's accent, instead of a place on the green-to-red. */
+    std::optional<juce::Colour> tint;
+
     //==============================================================================
     void paint (juce::Graphics& g) override
     {
         auto cell = cellArea().toFloat();
-        const auto tint = isValid() ? theme::characterColour (entries.getReference (index).character)
-                                    : theme::txDim;
+        const auto tint = ! isValid() ? theme::txDim
+                        : this->tint.has_value() ? *this->tint
+                        : theme::characterColour (entries.getReference (index).character);
 
         if (boxed)
         {
@@ -135,7 +142,7 @@ public:
 
             juce::PopupMenu::Item item (e2.name);
             item.itemID = i + 1;
-            item.colour = theme::characterColour (e2.character);
+            item.colour = tint.has_value() ? *tint : theme::characterColour (e2.character);
             item.isTicked = (i == index);
             menu.addItem (item);
         }
