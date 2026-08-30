@@ -1,10 +1,89 @@
 #include "Parameters.h"
 
+#include "device/DeviceLibrary.h"
+
+#include <felitronics/rigplayer/ToneKnobs.h>
+
 namespace orbitamp::params
 {
 
+namespace
+{
+    /** The factory defaults of a captured block, read from the PACK it opens on — the device by
+        name in its slot's list, its tone knobs where the pack starts them, its selectors likewise.
+        A parameter's default is what a fresh instance IS, and "the middle of every slot" is not a
+        sound anyone chose. With the pack absent, everything falls back to the old neutral. */
+    struct BlockDefaults
+    {
+        int   device = 0;
+        std::array<float, (size_t) boostNumMeasured> meas;
+        std::array<int,   (size_t) numSelectors>     sel {};
+
+        BlockDefaults() { meas.fill (0.5f); }
+    };
+
+    BlockDefaults blockDefaults (device::DeviceLibrary::Slot slot, const juce::String& wantedName)
+    {
+        BlockDefaults d;
+        const auto packs = device::DeviceLibrary::scan (slot);
+
+        for (int i = 0; i < packs.size(); ++i)
+        {
+            const auto& pack = packs.getReference (i);
+            if (pack.displayName() != wantedName)
+                continue;
+
+            d.device = i;
+
+            for (const auto& st : pack.rig.chain)
+            {
+                if (st.kind != namz::rig::StageKind::Nam)
+                    continue;
+
+                for (int t = 0; t < (int) st.tone.size() && t < boostNumMeasured; ++t)
+                {
+                    const auto& tone = st.tone[(size_t) t];
+                    const auto  start = felitronics::rigplayer::toneStart (tone);
+
+                    if (tone.sweep > 0)
+                    {
+                        double norm = 0.5;
+                        if (felitronics::rigplayer::toneNorm (tone, start, norm))
+                            d.meas[(size_t) t] = (float) norm;
+                    }
+                    else
+                    {
+                        const int n = (int) tone.positions.size();
+                        for (int k = 0; k < n; ++k)
+                            if (tone.positions[(size_t) k].value == start)
+                                d.meas[(size_t) t] = n > 1 ? (float) k / (float) (n - 1) : 0.0f;
+                    }
+                }
+
+                int selSlot = 0;
+                for (const auto& c : st.device.controls)
+                    if (c.role != namz::rig::Role::Gain && c.values.size() > 1 && selSlot < numSelectors)
+                    {
+                        const auto def = namz::rig::defaultValue (c);
+                        for (int k = 0; k < (int) c.values.size(); ++k)
+                            if (c.values[(size_t) k] == def)
+                                d.sel[(size_t) selSlot] = k;
+                        ++selSlot;
+                    }
+                break;
+            }
+            break;
+        }
+
+        return d;
+    }
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
+    // The devices a fresh instance opens on, and everything the packs say about starting them.
+    const auto boostDef  = blockDefaults (device::DeviceLibrary::Slot::pedal,  "TS");
+    const auto preampDef = blockDefaults (device::DeviceLibrary::Slot::preamp, "IR-X Ch2");
     using Bool   = juce::AudioParameterBool;
     using Choice = juce::AudioParameterChoice;
     using Float  = juce::AudioParameterFloat;
@@ -59,10 +138,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     for (int i = 0; i < boostNumMeasured; ++i)
         layout.add (std::make_unique<Float> (juce::ParameterID { boostMeasured (i), 1 },
                                              "Boost " + juce::String (i + 1),
-                                             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+                                             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+                                             boostDef.meas[(size_t) i]));
 
     layout.add (std::make_unique<Int> (juce::ParameterID { boostDevice, 1 }, "Boost Device",
-                                       0, maxDevices - 1, 0));
+                                       0, maxDevices - 1, boostDef.device));
 
     // The raw switch and the selector slots, one set per captured block — and the block's one trim.
     // IN is how hard the capture is fed, and it rides its own meter rather than being a knob among
@@ -74,24 +154,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         layout.add (std::make_unique<Float> (juce::ParameterID { blockIn (blk), 1 },
                                              juce::String (blk) + " In", trim, 0.0f));
 
-        // OURS by default: the console is the one tone control every device answers the same way,
-        // and the device's own knobs are there for whoever wants the pedal's exact tone stack.
+        // The DEVICE's own tone by default: a captured pedal arrives wearing its own knobs, and
+        // the console is the scalpel you reach for past them.
         layout.add (std::make_unique<Choice> (juce::ParameterID { blockEqMode (blk), 1 },
-                                              juce::String (blk) + " EQ", eqModes, 1));
+                                              juce::String (blk) + " EQ", eqModes, 0));
 
-        // The dial's motion between captures. SMOOTH by default — a dial that reaches every angle
-        // is the whole point of mixing — and STEP for whoever wants the captured positions alone.
+        // The dial's motion between captures. STEP by default — the captured positions are the
+        // device as it was shot — and SMOOTH for whoever wants every angle between them.
         layout.add (std::make_unique<Bool> (juce::ParameterID { blockSmooth (blk), 1 },
-                                            juce::String (blk) + " Smooth", true));
+                                            juce::String (blk) + " Smooth", false));
 
+        const auto& def = blk == boostId ? boostDef : blk == preampId ? preampDef : BlockDefaults();
         for (int i = 0; i < numSelectors; ++i)
             layout.add (std::make_unique<Int> (juce::ParameterID { selectorId (blk, i), 1 },
                                                juce::String (blk) + " Select " + juce::String (i + 1),
-                                               0, 15, 0));
+                                               0, 15, def.sel[(size_t) i]));
     }
 
     layout.add (std::make_unique<Int> (juce::ParameterID { preampDevice, 1 }, "Preamp Device",
-                                       0, maxDevices - 1, 0));
+                                       0, maxDevices - 1, preampDef.device));
 
     // The captured power amp's own device, dial and tone slots — the shape the other two have.
     layout.add (std::make_unique<Int>   (juce::ParameterID { blockDevice (powerId), 1 }, "Power Device",
@@ -107,7 +188,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     for (int i = 0; i < preampNumMeasured; ++i)
         layout.add (std::make_unique<Float> (juce::ParameterID { preampMeasured (i), 1 },
                                              "Preamp " + juce::String (i + 1),
-                                             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+                                             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+                                             preampDef.meas[(size_t) i]));
 
     // The hero. 0-10 is the amp-panel scale, not a dB value — it maps onto the captured detents, so
     // the number on the face is the number the capture was taken at.
@@ -206,9 +288,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Choice> (juce::ParameterID { cabIr, 1 }, "Cabinet IR",
                                           cabIrNames, cabIrDefault));
 
-    layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters, 0),
+    // PLATE at thirty: the shipping room.
+    layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters,
+                                          reverbCharacters.indexOf ("Plate")),
                 std::make_unique<Float>  (juce::ParameterID { reverbMix, 1 }, "Mix",
-                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 20.0f));
+                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 30.0f));
 
     return layout;
 }

@@ -339,6 +339,9 @@ int main()
             orbitamp::AmpProcessor solo;
             solo.inlineLoads = true;
             solo.prepareToPlay (sampleRate, blockSize);
+            // The bare pack stands at list position 0; the device parameter's factory default is a
+            // NAMED pack now, and the pump would walk away to it mid-check.
+            set (solo, orbitamp::params::boostDevice, 0.0f);
             set (solo, orbitamp::params::reverbOn, 0.0f);
             set (solo, orbitamp::params::powerOn, 0.0f);
             set (solo, orbitamp::params::preampOn, 0.0f);
