@@ -5,6 +5,7 @@
 
 #include "core/CapturedBlock.h"
 
+#include <cmath>
 #include <cstdio>
 
 int main()
@@ -15,7 +16,7 @@ int main()
     for (auto slotKind : { device::DeviceLibrary::Slot::pedal, device::DeviceLibrary::Slot::preamp })
     {
         core::CapturedBlock block (slotKind);
-        block.prepare (48000.0, 512, 1);
+        block.prepare (48000.0, 512, 2);   // as the plugin does: a stereo bus, of which MONO mode feeds one plane
         block.rescan (0);
 
         std::printf ("=== slot %s: %d packs ===\n",
@@ -49,8 +50,28 @@ int main()
             if (block.tones().empty())
                 std::printf (" -");
 
-            std::printf ("  files=%d  lag=%s\n", (int) player.stage().device.files.size(),
+            std::printf ("  files=%d  lag=%s", (int) player.stage().device.files.size(),
                          player.alignmentFromPack() ? "pack" : "none");
+
+            // ...and what it COSTS: one second of mono audio through the block, after its models have
+            // landed, as a share of real time on this machine. The number the DSP badge shows is this
+            // one plus the scheduler's mood; this one is the block's own.
+            {
+                juce::AudioBuffer<float> buf (1, 512), dry (1, 512);
+                block.setGain (5.0f, true);
+                for (int k = 0; k < 48; ++k) { buf.clear(); block.process (buf, dry); block.pump (nullptr); }
+
+                const auto t0 = juce::Time::getHighResolutionTicks();
+                const int blocks = 48000 / 512;
+                for (int k = 0; k < blocks; ++k)
+                {
+                    for (int n = 0; n < 512; ++n)
+                        buf.setSample (0, n, 0.2f * (float) std::sin (0.03 * (double) (k * 512 + n)));
+                    block.process (buf, dry);
+                }
+                const double secs = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - t0);
+                std::printf ("  cost=%.1f%% of real time (one plane of two)\n", 100.0 * secs / ((double) blocks * 512.0 / 48000.0));
+            }
         }
     }
 
