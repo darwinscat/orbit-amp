@@ -53,7 +53,7 @@ public:
     // toolbar's own ten plus the twelve a frame leaves above its line for the switch riding it —
     // three separate paddings that only ever get added together, and at sixteen they came to
     // thirty-eight units of nothing under the logo.
-    static constexpr int lanePadY = 4;
+    static constexpr int lanePadY = 2;
 
     static constexpr int designHeight = row1H + rowGap + row2H + 2 * lanePadY;
 

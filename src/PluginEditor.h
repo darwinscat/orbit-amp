@@ -40,7 +40,7 @@ public:
 
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
-    static constexpr int headerGap = 2;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
+    static constexpr int headerGap = 0;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
     static constexpr int chromeGap = 10;   // faceplate to tuner to footer
 
     /** Room for the host's or the standalone's own title bar, which the display's user area does not
