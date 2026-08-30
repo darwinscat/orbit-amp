@@ -5,9 +5,9 @@
 #include "VoicingSelector.h"
 #include "ZoneSwitch.h"
 
+#include <felitronics/analysis/PlotMap.h>
+#include <felitronics/analysis/SpectrumPane.h>
 #include <felitronics/appkit/IrWaveView.h>
-
-#include <juce_dsp/juce_dsp.h>
 
 #include <array>
 #include <memory>
@@ -33,11 +33,6 @@ public:
 
 private:
     void timerCallback() override;
-
-    /** One tap's newest window into ~72 log-frequency bins, 0..1 against `ref` — the shared peak,
-        so the pre and the post keep their relative size. */
-    bool binsOf (int tap, std::vector<float>& out, float& ref);
-
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
 
@@ -66,9 +61,8 @@ private:
 
     std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt;
 
-    juce::dsp::FFT     fft;
-    std::vector<float> frame, work, preBins, postBins;
-    float              specRef = 0.0f;
+    /** The same liquid analyser the consoles run — one pane for the IR's door, one for its exit. */
+    std::array<felitronics::analysis::SpectrumPane, 2> panes;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CabinetBlock)
 };
