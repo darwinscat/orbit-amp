@@ -30,4 +30,9 @@ inline void setBool (const juce::Identifier& key, bool value)
 inline const juce::Identifier showDemo   { "show_demo_player" };
 inline const juce::Identifier showGlyphs { "show_device_glyphs" };
 
+/** The power amp block. Off, it is not dimmed — it is GONE: the reverb and the cabinet split the
+    row between them, and the block's power parameter is put out with it, because a hidden block
+    must not colour the sound. Off out of the box: no poweramp pack ships yet. */
+inline const juce::Identifier showPower { "show_power_amp" };
+
 } // namespace orbitamp::prefs

@@ -35,6 +35,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
     showDemo   = prefs::getBool (prefs::showDemo,   false);
     showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+    faceplate.setPowerShown (prefs::getBool (prefs::showPower, false));
     addChildComponent (demoStrip);
     addChildComponent (glyphs);
     addChildComponent (setup);       // hidden until the toolbar's gear opens it
@@ -146,6 +147,7 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
     juce::PopupMenu m;
     m.addItem (1, "SETUP...");
     m.addSeparator();
+    m.addItem (4, "SHOW POWER AMP",     true, prefs::getBool (prefs::showPower, false));
     m.addItem (2, "SHOW DEMO PLAYER",   true, showDemo);
     m.addItem (3, "SHOW DEVICE GLYPHS", true, showGlyphs);
 
@@ -159,6 +161,23 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                          if (r == 1)
                          {
                              safe->setup.open();
+                             return;
+                         }
+
+                         if (r == 4)
+                         {
+                             const bool show = ! prefs::getBool (prefs::showPower, false);
+                             prefs::setBool (prefs::showPower, show);
+                             safe->faceplate.setPowerShown (show);
+
+                             // A hidden block must not colour the sound: its power goes out with it.
+                             if (! show)
+                                 if (auto* p = safe->amp.apvts.getParameter (params::powerOn))
+                                 {
+                                     p->beginChangeGesture();
+                                     p->setValueNotifyingHost (0.0f);
+                                     p->endChangeGesture();
+                                 }
                              return;
                          }
 

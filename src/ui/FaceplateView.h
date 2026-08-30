@@ -30,6 +30,18 @@ public:
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
     void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); power.deviceChanged(); }
 
+    /** Whether the power amp block stands in the lower row at all. Off, the reverb and the cabinet
+        split the row between them. */
+    void setPowerShown (bool shown)
+    {
+        if (powerShown == shown)
+            return;
+
+        powerShown = shown;
+        resized();
+        repaint();
+    }
+
     /** Escape's errand: put a thrown-open picture back. One Escape folds one picture, so a player
         who opened two of them gets out of them one at a time rather than all at once. */
     bool foldPicture() { return boost.foldPicture() || preamp.foldPicture(); }
@@ -71,6 +83,7 @@ private:
     ReverbBlock        reverb;
     PowerAmpBlock      power;
     CabinetBlock       cabinet;
+    bool               powerShown = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FaceplateView)
 };

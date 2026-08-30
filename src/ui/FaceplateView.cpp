@@ -43,10 +43,21 @@ void FaceplateView::resized()
     row2.removeFromLeft (colGap);
     cabinet.setBounds (row2);
 
-    const int quarter = (left.getWidth() - colGap) / 2;
-    reverb.setBounds (left.removeFromLeft (quarter));
-    left.removeFromLeft (colGap);
-    power.setBounds (left);
+    // The power amp stands in the row only when asked for; without it the reverb takes the whole
+    // left half, and the line down the panel's middle still holds.
+    power.setVisible (powerShown);
+
+    if (powerShown)
+    {
+        const int quarter = (left.getWidth() - colGap) / 2;
+        reverb.setBounds (left.removeFromLeft (quarter));
+        left.removeFromLeft (colGap);
+        power.setBounds (left);
+    }
+    else
+    {
+        reverb.setBounds (left);
+    }
 }
 
 } // namespace orbitamp
