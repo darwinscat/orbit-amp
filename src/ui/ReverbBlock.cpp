@@ -98,13 +98,13 @@ void ReverbBlock::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = character.getBounds();
     }
 
-    // The dial on the left, the decay beside it taking the rest — a picture of time passing, as
-    // wide as the box lets it be, and the dial as tall as the box.
-    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight()));
-    mix.setBounds (area.removeFromLeft (side).withSizeKeepingCentre (side, side));
-    area.removeFromLeft (knobGap);
-
+    // The decay takes the whole box — a picture of time passing, as wide as there is — and the
+    // dial rides it, an overlay in the top-right corner, where the tail has already died away.
     tail.setBounds (area);
+
+    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 14));
+    mix.setBounds (area.removeFromTop (side).removeFromRight (side).translated (-2, 2));
+    mix.toFront (false);
 }
 
 } // namespace orbitamp
