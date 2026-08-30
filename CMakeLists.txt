@@ -54,7 +54,7 @@ FetchContent_MakeAvailable(juce)
 # module to target_link_libraries below. Wired now so that's a one-line change, not a rebuild
 # of the dependency graph. Its self-tests do NOT build from here (guarded by PROJECT_IS_TOP_LEVEL).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_FCORE_TAG "v0.9.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+set(ORBITAMP_FCORE_TAG "v0.20.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -94,7 +94,7 @@ FetchContent_MakeAvailable(felitronics_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.9.1" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.9.3" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -217,9 +217,10 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
-    felitronics::lineareq            # measured curves -> minimum-phase FIR (core::MeasuredFilter)
+    felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
     felitronics::measurement         # reference-unity IR normalization (core::CabinetIr)
     felitronics::nam                 # NAM inference — the captured devices actually play
+    felitronics::rigplayer           # the pack player: captures, their crossfade, tone, alignment
     felitronics::poweramp            # white-box tube power amp (core::PowerAmp)
     felitronics::oversampling        # its 4x alias-free path
     felitronics::saturation          # its tube curves
@@ -243,8 +244,8 @@ target_sources(orbitamp_pack_probe PRIVATE tests/PackProbe.cpp)
 target_include_directories(orbitamp_pack_probe PRIVATE src)
 target_compile_definitions(orbitamp_pack_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_pack_probe PRIVATE
-    felitronics::lineareq felitronics::nam
-    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats
+    felitronics::lineareq felitronics::nam felitronics::rigplayer
+    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
 juce_add_console_app(orbitamp_render_probe PRODUCT_NAME "OrbitAmpRenderProbe")
@@ -252,8 +253,8 @@ target_sources(orbitamp_render_probe PRIVATE tests/RenderProbe.cpp)
 target_include_directories(orbitamp_render_probe PRIVATE src)
 target_compile_definitions(orbitamp_render_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_render_probe PRIVATE
-    felitronics::lineareq felitronics::nam
-    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats
+    felitronics::lineareq felitronics::nam felitronics::rigplayer
+    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
 juce_add_console_app(orbitamp_level_probe PRODUCT_NAME "OrbitAmpLevelProbe")
@@ -261,8 +262,8 @@ target_sources(orbitamp_level_probe PRIVATE tests/LevelProbe.cpp)
 target_include_directories(orbitamp_level_probe PRIVATE src)
 target_compile_definitions(orbitamp_level_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_level_probe PRIVATE
-    felitronics::lineareq felitronics::nam
-    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats
+    felitronics::lineareq felitronics::nam felitronics::rigplayer
+    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
 # The NAM bench — not a gate, a measuring instrument: ns/frame through the shipping stage.
@@ -401,6 +402,7 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::lineareq
     felitronics::measurement
     felitronics::nam
+    felitronics::rigplayer
     felitronics::poweramp
     felitronics::oversampling
     felitronics::saturation
@@ -411,31 +413,22 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     juce::juce_recommended_warning_flags)
 
 # ----------------------------------------------------------------------------
-# Gate for the measured controls MAKING SOUND — a pack's magnitude tables become a filter that runs.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_measured_test PRODUCT_NAME "OrbitAmpMeasuredTest")
-target_sources(orbitamp_measured_test PRIVATE tests/MeasuredFilterTests.cpp)
-target_include_directories(orbitamp_measured_test PRIVATE src)
-target_compile_definitions(orbitamp_measured_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_measured_test PRIVATE
-    felitronics::lineareq
-    felitronics::nam                 # brings namz::rig, which the pack types come from
-    juce::juce_dsp
-    juce::juce_events
-    juce::juce_gui_basics
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-
-# ----------------------------------------------------------------------------
-# Gate for reading an .orbitrig pack and playing it. Skips cleanly when no pack is installed.
+# Gate for reading an .orbitrig pack and playing it through the block the plugin plays it with —
+# every installed pack sounds, the dial mixes without a step, a linked position is fed softer, a
+# tone knob of either form reaches the audio, and OURS parks the device's own. Skips cleanly when
+# no pack is installed.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_captured_test PRODUCT_NAME "OrbitAmpCapturedTest")
-target_sources(orbitamp_captured_test PRIVATE tests/CapturedStageTests.cpp)
+target_sources(orbitamp_captured_test PRIVATE tests/CapturedBlockTests.cpp)
 target_include_directories(orbitamp_captured_test PRIVATE src)
 target_compile_definitions(orbitamp_captured_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_captured_test PRIVATE
+    felitronics::lineareq
     felitronics::nam
+    felitronics::rigplayer
     juce::juce_audio_basics
+    juce::juce_audio_processors
+    juce::juce_dsp
     juce::juce_events
     juce::juce_gui_basics
     juce::juce_recommended_config_flags

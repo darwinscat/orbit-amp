@@ -46,10 +46,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Choice> (juce::ParameterID { gateDecay, 1 }, "Gate Decay",
                                           gateDecayModes, 0));
 
-    // Boost. The gain knob is stepped because it selects a capture, not a value — between the
-    // captured positions there is no data. Tone is measured, so it is continuous.
+    // Boost. The gain knob is CONTINUOUS: between two captured positions the player mixes the two
+    // neighbours by angle, and in STEP mode it lands on the nearer one itself — the parameter never
+    // has to know where the captures are.
     layout.add (std::make_unique<Float> (juce::ParameterID { boostGain, 1 }, "Boost Gain",
-                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.5f), 5.0f),
+                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f),
                 std::make_unique<Float> (juce::ParameterID { boostTone, 1 }, "Boost Tone",
                                          juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 10.0f));
 
@@ -73,10 +74,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         layout.add (std::make_unique<Float> (juce::ParameterID { blockIn (blk), 1 },
                                              juce::String (blk) + " In", trim, 0.0f));
 
-        // Native by default: a captured device arrives wearing its own controls, and ours are the
-        // thing you reach for when it did not bring any or when you want a scalpel instead.
+        // OURS by default: the console is the one tone control every device answers the same way,
+        // and the device's own knobs are there for whoever wants the pedal's exact tone stack.
         layout.add (std::make_unique<Choice> (juce::ParameterID { blockEqMode (blk), 1 },
-                                              juce::String (blk) + " EQ", eqModes, 0));
+                                              juce::String (blk) + " EQ", eqModes, 1));
+
+        // The dial's motion between captures. SMOOTH by default — a dial that reaches every angle
+        // is the whole point of mixing — and STEP for whoever wants the captured positions alone.
+        layout.add (std::make_unique<Bool> (juce::ParameterID { blockSmooth (blk), 1 },
+                                            juce::String (blk) + " Smooth", true));
 
         for (int i = 0; i < numSelectors; ++i)
             layout.add (std::make_unique<Int> (juce::ParameterID { selectorId (blk, i), 1 },
@@ -95,7 +101,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // The hero. 0-10 is the amp-panel scale, not a dB value — it maps onto the captured detents, so
     // the number on the face is the number the capture was taken at.
     layout.add (std::make_unique<Float> (juce::ParameterID { preampGain, 1 }, "Gain",
-                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.5f), 5.0f));
+                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f));
 
     // Frequencies are skewed so the useful end of each sweep gets the middle of the travel.
     auto hz = [] (float lo, float hi, float centre)

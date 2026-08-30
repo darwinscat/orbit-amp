@@ -2,7 +2,6 @@
 
 #include "../Parameters.h"
 #include "../core/CapturedBlock.h"
-#include "../core/MeasuredFilter.h"
 #include "BlockFrame.h"
 #include "BlockMeter.h"
 #include "EqSection.h"
@@ -35,9 +34,7 @@ class AmpProcessor;
 class CapturedBlockPanel final : public BlockFrame
 {
 public:
-    using Block = core::CapturedBlock<params::boostNumMeasured>;
-    static_assert (params::preampNumMeasured == params::boostNumMeasured,
-                   "one face serves every captured block, so the slot counts have to agree");
+    using Block = core::CapturedBlock;
 
     /** `eqLink` is which of the two EQ consoles is this block's — they belong to the blocks now,
         and the index is the only thing that still says which is which. */
@@ -60,7 +57,7 @@ private:
 
     /** Whether a measured control's positions are named rather than numbered — the difference
         between a switch and a knob that happens to have been swept at two points. */
-    static bool hasNamedPositions (const namz::rig::Measured&);
+    static bool hasNamedPositions (const namz::rig::Tone&);
 
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
@@ -119,6 +116,37 @@ private:
     EqSection eq;
 
     Knob gain { "Gain", theme::orange, 0 };
+
+    /** SMOOTH or STEP — how the dial moves between the captured positions. A pill in the dial's
+        label row rather than a switch under it: the column's height is the dial's, and a row
+        under it would come out of the dial's diameter. Lit, the dial reaches every angle and the
+        two neighbouring captures play mixed; dark, it lands on the captures alone. */
+    struct SmoothTag final : public juce::Component
+    {
+        bool on = true;
+        std::function<void()> onChange;
+
+        void paint (juce::Graphics& g) override
+        {
+            const auto r = getLocalBounds().toFloat();
+            g.setColour (theme::bezel.withAlpha (0.8f));
+            g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+            g.setColour (on ? theme::orange : theme::txDim);
+            theme::drawTracked (g, "SMOOTH", r, theme::displayFont (9.0f), 0.08f,
+                                juce::Justification::centred);
+        }
+
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            on = ! on;
+            repaint();
+            if (onChange != nullptr)
+                onChange();
+        }
+    };
+
+    SmoothTag smoothTag;
+    std::unique_ptr<juce::ParameterAttachment> smoothAttachment;
 
     /** What the model is being fed, lying down under the combo. One meter, not two: a block's
         output and the next block's input are the same multiplier written twice, and of the two

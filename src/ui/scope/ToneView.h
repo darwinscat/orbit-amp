@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../../core/MeasuredFilter.h"
 #include "../Theme.h"
 #include "ScopeFrame.h"
 
@@ -37,8 +36,10 @@ public:
         if (toneDb == nullptr)
             return;
 
-        const double lo = core::MeasuredFilter::bandLoHz;
-        const double hi = core::MeasuredFilter::bandHiHz;
+        // The player draws its tone on a 20 Hz – 20 kHz grid (felitronics::rigplayer's commonGrid),
+        // so that is the picture's band too — the curve is read off the same grid it is designed on.
+        const double lo = 20.0;
+        const double hi = 20000.0;
 
         drawGrid (g, r, lo, hi);
 

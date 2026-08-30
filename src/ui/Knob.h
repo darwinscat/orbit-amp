@@ -33,6 +33,22 @@ public:
         }
     }
 
+    /** Whether the hand can only land ON a notch. A captured dial in STEP mode: the notches are the
+        captured positions, and between them the player would pick the nearer one anyway — so the
+        knob says so by refusing to stop there. Host automation is not bound by this; the block
+        rounds for it. */
+    bool snapToNotches = false;
+
+    double snapValue (double attemptedValue, DragMode) override
+    {
+        if (! snapToNotches || notches < 2)
+            return attemptedValue;
+
+        const double lo = getMinimum(), hi = getMaximum();
+        const double step = (hi - lo) / (double) (notches - 1);
+        return juce::jlimit (lo, hi, lo + std::round ((attemptedValue - lo) / step) * step);
+    }
+
     /** How the number on the face is written. Defaults to one decimal — the 0-10 amp scale. */
     std::function<juce::String (double)> textForValue = [] (double v) { return juce::String (v, 1); };
 

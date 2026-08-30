@@ -92,6 +92,10 @@ inline constexpr const char* preampId = "preamp";
 inline juce::String blockOn       (const char* blk) { return juce::String (blk) + "_on"; }
 inline juce::String blockDevice   (const char* blk) { return juce::String (blk) + "_device"; }
 inline juce::String blockGain     (const char* blk) { return juce::String (blk) + "_gain"; }
+/** How the gain dial moves between the captured positions. SMOOTH: the two neighbouring captures
+    play together, mixed by angle — a continuous dial, at the price of two models running. STEP:
+    the dial lands only on the captured positions and one capture plays at a time. */
+inline juce::String blockSmooth   (const char* blk) { return juce::String (blk) + "_smooth"; }
 /** The block's INPUT trim — how hard the capture is fed, applied immediately before the model and
     metered right there. ONE per block, and there is deliberately no output volume beside it.
 
@@ -122,11 +126,11 @@ inline constexpr float captureColdDb = -18.0f;
 
 inline juce::String blockMeasured (const char* blk, int i) { return juce::String (blk) + "_meas" + juce::String (i + 1); }
 
-/** A pedal's MEASURED controls — the ones a player computes rather than selects. How many a device
-    has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge), but a host needs a fixed set of
-    parameters, so three slots are reserved and the loaded pack decides what each one drives. A slot
-    with nothing behind it is hidden rather than shown doing nothing. */
-inline constexpr int boostNumMeasured = 3;
+/** A pedal's TONE controls — the ones a player computes rather than selects. How many a device has
+    varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge; a Victory V4 preamp five), but a host
+    needs a fixed set of parameters, so five slots are reserved and the loaded pack decides what each
+    one drives. A slot with nothing behind it is hidden rather than shown doing nothing. */
+inline constexpr int boostNumMeasured = 5;
 inline juce::String boostMeasured (int i) { return "boost_meas" + juce::String (i + 1); }
 /** Which device is loaded, as an index into the scanned list. An index rather than a choice list:
     a host fixes a Choice's names at construction, and this list is whatever the player has on disk
@@ -144,7 +148,7 @@ inline constexpr const char* preampGain   = "preamp_gain";
 
 /** The preamp's measured controls, same arrangement as the boost's: a fixed set of slots, and the
     loaded device decides what each one drives. */
-inline constexpr int preampNumMeasured = 3;
+inline constexpr int preampNumMeasured = 5;
 inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String (i + 1); }
 
 /** The EQ, one per captured block and BELONGING to it — index 0 is the boost's, index 1 the

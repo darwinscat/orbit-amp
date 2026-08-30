@@ -175,6 +175,25 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::blockGain (blk), gain);
+
+    // SMOOTH lit: the dial goes anywhere and the player mixes the neighbours by angle. Dark — STEP:
+    // the dial itself refuses to stop between two captured positions, so what the hand feels is
+    // what the player does.
+    addAndMakeVisible (smoothTag);
+    smoothAttachment = std::make_unique<juce::ParameterAttachment> (
+        *amp.apvts.getParameter (params::blockSmooth (blk)),
+        [this] (float v)
+        {
+            smoothTag.on = v > 0.5f;
+            gain.snapToNotches = ! smoothTag.on;
+            smoothTag.repaint();
+        });
+    smoothTag.onChange = [this]
+    {
+        smoothAttachment->setValueAsCompleteGesture (smoothTag.on ? 1.0f : 0.0f);
+    };
+    smoothAttachment->sendInitialUpdate();
+
     deviceAttachment->sendInitialUpdate();
 
     deviceChanged();
@@ -243,8 +262,8 @@ void CapturedBlockPanel::deviceChanged()
     for (auto& sc : scopes)
         sc->setSampleRate (amp.currentSampleRate());
 
-    const auto* measured = block.measured();
-    const auto  positions = block.gainPositions();
+    const auto tones     = block.tones();
+    const auto positions = block.gainPositions();
 
     // The list IS the combo: what a player has, greenest first. Nothing invented, nothing curated
     // into groups — the character ramp does the ordering a "type" heading used to.
@@ -271,12 +290,8 @@ void CapturedBlockPanel::deviceChanged()
 
     // ...and the DEVICE view carries the paper the badge has no room for.
     //
-    // THE ALIAS, not the gear. `Pack` keeps both on purpose — `name` is the make and model as
-    // captured, `alias` is the identity the voice goes out under — and only one of them belongs on
-    // the face of a public product: printing "Ibanez Tube Screamer" is a claim on somebody's mark,
-    // and it also contradicts what these voices are. The captured thing is material, not an
-    // original we are being faithful to. The combo has always shown the alias; this now agrees
-    // with it rather than quietly saying the other name two inches away.
+    // THE DEVICE, by the name the pack file carries — "IR-X Ch1", "Guitar Butler Clean" — the same
+    // name the combo shows; the voice's alias, when the pack has one, on the line under it.
     auto* devParam = amp.apvts.getParameter (params::blockDevice (blk));
     const int chosen = juce::jlimit (0, juce::jmax (0, block.packs.size() - 1),
                                      juce::roundToInt (devParam->convertFrom0to1 (devParam->getValue())));
@@ -284,7 +299,12 @@ void CapturedBlockPanel::deviceChanged()
     juce::StringArray paper;
 
     if (! block.packs.isEmpty())
-        paper.add (block.packs.getReference (chosen).displayName().toUpperCase());
+    {
+        const auto& pack = block.packs.getReference (chosen);
+        paper.add (pack.displayName().toUpperCase());
+        if (pack.alias.isNotEmpty() && pack.alias != pack.displayName())
+            paper.add (pack.alias.toUpperCase());
+    }
 
     if (const auto circuit = juce::String (block.circuit()).trim(); circuit.isNotEmpty())
         paper.add (circuit.toUpperCase().replace (",", " · "));
@@ -318,68 +338,9 @@ void CapturedBlockPanel::deviceChanged()
         slot.steps.reset();
         slot.measuredIndex = -1;
 
-        // Measured EQ is ignored wholesale (see the pump) — a knob that drives a bypassed
-        // filter is worse than no knob, so none are built.
-        if (true || measured == nullptr || i >= (int) measured->size())
-            continue;
-
-        const auto& m = (*measured)[(size_t) i];
-        slot.measuredIndex = i;
-
-        const auto name = juce::String (m.name).toUpperCase();
-
-        // A switch is a control whose positions have NAMES. Not one with two of them: a measured
-        // control's positions are the points it was measured AT, and the player interpolates between
-        // them — two is a perfectly ordinary number for a knob that was swept at each end. Fur Coat's
-        // EQ says "0" and "300", which are degrees, and counting them turned a tone knob into a
-        // two-position switch stuck at one end.
-        if (m.positions.size() == 2 && hasNamedPositions (m))
-        {
-            juce::StringArray labels;
-            for (const auto& p : m.positions)
-                labels.add (juce::String (p.label.empty() ? p.value : p.label).toUpperCase());
-
-            slot.steps = std::make_unique<VSwitch>();
-            slot.steps->accent = theme::orange;
-            slot.steps->setItems (labels, 0);
-            addAndMakeVisible (*slot.steps);
-
-            slot.stepAtt = std::make_unique<juce::ParameterAttachment> (
-                *amp.apvts.getParameter (params::blockMeasured (blk, i)),
-                [this, i] (float v)
-                {
-                    if (auto* s = slots[(size_t) i].steps.get())
-                        s->setSelectedIndex (v > 0.5f ? 1 : 0, juce::dontSendNotification);
-                });
-
-            slot.steps->onChange = [this, i] (int v)
-            {
-                slots[(size_t) i].stepAtt->setValueAsCompleteGesture (v > 0 ? 1.0f : 0.0f);
-            };
-
-            slot.stepAtt->sendInitialUpdate();
-
-            // A switch has two positions and the parameter defaults to the middle of its range, which
-            // for a knob is sensible and for a switch is a place the hardware cannot be. It played as
-            // half of Smooth while the face lit Sharp, and clicking the lit half writes nothing — so
-            // it could sit there forever. Land it on a real position as the device loads.
-            // The SAME rule the switch lights by, below — off by half a step and the parameter says
-            // Smooth while the face says Sharp, which is exactly the inversion this introduced.
-            if (const float v = amp.apvts.getRawParameterValue (params::blockMeasured (blk, i))->load();
-                v > 0.0f && v < 1.0f)
-                slot.stepAtt->setValueAsCompleteGesture (v > 0.5f ? 1.0f : 0.0f);
-        }
-        else
-        {
-            slot.knob = std::make_unique<Knob> (name, theme::orange, (int) m.positions.size());
-            slot.knob->textForValue = [] (double) { return juce::String(); };   // no numbers here
-            slot.knob->labelFontHeight = 12.0f;   // the checkboxes' size — the reading floor
-            slot.knob->labelRowHeight  = 16;
-            addAndMakeVisible (*slot.knob);
-
-            slot.knobAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-                amp.apvts, params::blockMeasured (blk, i), *slot.knob);
-        }
+        // A swept tone knob is a band of the console (nativeBands), not a knob on the face. A tone
+        // SWITCH — SM7's Sharp/Smooth, a V4's bass cut — has no place on the face yet and stays at
+        // its default until the console's row learns to hold one.
     }
 
     buildSelectors();
@@ -401,24 +362,24 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
 {
     std::vector<EqSection::Band> out;
 
-    const auto* measured = block.measured();
-    if (measured == nullptr)
-        return out;
+    const auto tones = block.tones();
 
-    for (int i = 0; i < params::boostNumMeasured && i < (int) measured->size(); ++i)
+    for (int i = 0; i < params::boostNumMeasured && i < (int) tones.size(); ++i)
     {
-        const auto& m = (*measured)[(size_t) i];
+        const auto& m = tones[(size_t) i];
 
-        if (m.positions.size() == 2 && hasNamedPositions (m))
+        // A SWITCH — no sweep, or two named positions — is not a band: the row holds dials.
+        if (m.sweep <= 0 || (m.positions.size() == 2 && hasNamedPositions (m)))
             continue;
 
         // A control the pack tested and found NOT to be a filter anywhere gets no knob. namz says
-        // so with a collapsed trusted band, and `MeasuredFilter` honours it by refusing to build
-        // anything — so a dial here would turn, look alive, and do nothing at all. That is worse
-        // than a gap, and it is the exact bug we have been pulling out of this face all evening.
-        if (const auto band = core::MeasuredFilter::bandFor (m); band.hi <= band.lo)
+        // so with a collapsed trusted band, and the player honours it by playing silence — so a
+        // dial here would turn, look alive, and do nothing at all. That is worse than a gap.
+        if (Block::trustFailed (m))
             continue;
 
+        // A measured ladder clicks at the positions it was swept at; a knob shipped as bands has
+        // a law for every angle and sweeps freely.
         out.push_back ({ juce::String (m.name).toUpperCase(),
                          theme::eqNode[(size_t) (out.size() % 5)],
                          params::blockMeasured (blk, i),
@@ -473,31 +434,15 @@ void CapturedBlockPanel::resetToPackDefaults()
     // The measured slots. A pack names where its knob starts — and it is NOT the reference
     // position, which is usually an end of travel and therefore the wrong thing to reach for. An
     // unclaimed slot goes to the middle, which is what it means when nothing is behind it.
-    const auto* measured = block.measured();
+    const auto tones = block.tones();
 
     for (int i = 0; i < params::boostNumMeasured; ++i)
-    {
-        double norm = 0.5;
-
-        if (measured != nullptr && i < (int) measured->size())
-        {
-            const auto& m = (*measured)[(size_t) i];
-            const auto  want = juce::String (m.defaultValue).trim();
-
-            for (const auto& pos : m.positions)
-                if (juce::String (pos.value).trim() == want)
-                {
-                    norm = pos.norm;
-                    break;
-                }
-        }
-
-        write (params::blockMeasured (blk, i), (float) norm);
-    }
+        write (params::blockMeasured (blk, i),
+               (float) (i < (int) tones.size() ? Block::defaultNorm (tones[(size_t) i]) : 0.5));
 
     // ...and the selecting ones, which have the same problem for the same reason: slot one is an
     // octave switch on one device and something else entirely on the next.
-    const auto list = block.stage.selectors();
+    const auto list = block.selectors();
 
     for (int i = 0; i < params::numSelectors; ++i)
         write (params::selectorId (blk, i),
@@ -506,7 +451,7 @@ void CapturedBlockPanel::resetToPackDefaults()
 
 void CapturedBlockPanel::buildSelectors()
 {
-    const auto list = block.stage.selectors();
+    const auto list = block.selectors();
 
     for (int i = 0; i < params::numSelectors; ++i)
     {
@@ -551,7 +496,7 @@ void CapturedBlockPanel::buildSelectors()
     }
 }
 
-bool CapturedBlockPanel::hasNamedPositions (const namz::rig::Measured& m)
+bool CapturedBlockPanel::hasNamedPositions (const namz::rig::Tone& m)
 {
     for (const auto& p : m.positions)
     {
@@ -666,12 +611,19 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
     gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
 
+    // The pill stands in the gap at the bottom of the dial's arc — the one place inside the dial's
+    // square that neither the ring nor a notch reaches — so it reads as the dial's own caption.
+    smoothTag.setBounds (juce::Rectangle<int> (46, 14).withCentre ({ gain.getBounds().getCentreX(),
+                                                                     gain.getBottom() - 6 }));
+    smoothTag.toFront (false);
+
     layWidget (top);
 }
 
 void CapturedBlockPanel::setControlsVisible (bool v)
 {
     gain.setVisible (v);
+    smoothTag.setVisible (v);
     inMeter.setVisible (v);
     device.setEnabled (v);
 

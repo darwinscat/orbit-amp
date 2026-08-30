@@ -8,10 +8,25 @@
 
 #include <cstdio>
 
+/** The player asks for its models on the first audio block and a host lands them off a timer; a
+    probe has neither, so it feeds silence and pumps until both blocks have what they asked for. */
+static void settle (orbitamp::core::CapturedBlock& a, orbitamp::core::CapturedBlock& b)
+{
+    juce::AudioBuffer<float> z (1, 512), d (1, 512);
+    for (int k = 0; k < 24; ++k)
+    {
+        z.clear();
+        a.process (z, d);
+        b.process (z, d);
+        a.pump (nullptr);
+        b.pump (nullptr);
+    }
+}
+
 int main (int argc, char** argv)
 {
     using namespace orbitamp;
-    using Block = core::CapturedBlock<params::boostNumMeasured>;
+    using Block = core::CapturedBlock;
 
     constexpr double rate = 48000.0;
     constexpr int    n    = 512;
@@ -63,8 +78,9 @@ int main (int argc, char** argv)
 
         pick (boost, boostName);
         pick (preamp, preampName);
-        boost.loadIfGainMoved (bGain);
-        preamp.loadIfGainMoved (pGain);
+        boost.setGain (bGain, true);
+        preamp.setGain (pGain, true);
+        settle (boost, preamp);
 
         juce::AudioBuffer<float> out (1, loop.getNumSamples()), block (1, n), dry (1, n);
 

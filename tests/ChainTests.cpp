@@ -133,6 +133,7 @@ int main()
     std::printf ("orbitamp chain gate\n\n");
 
     orbitamp::AmpProcessor amp;
+    amp.inlineLoads = true;   // no message loop here: a model lands inside the pump
     amp.prepareToPlay (sampleRate, blockSize);
 
     if (amp.boost.packs.isEmpty())
@@ -199,12 +200,11 @@ int main()
     // The contract changed — a block wears the device's own controls unless you ask for ours — and
     // the check wakes up exactly as it was written.
     {
-        const auto* measured = amp.boost.measured();
+        const auto tones = amp.boost.tones();
 
         int sweep = -1;
-        if (measured != nullptr)
-            for (int i = 0; i < (int) measured->size() && i < orbitamp::params::boostNumMeasured; ++i)
-                if ((*measured)[(size_t) i].positions.size() > 2) { sweep = i; break; }
+        for (int i = 0; i < (int) tones.size() && i < orbitamp::params::boostNumMeasured; ++i)
+            if (tones[(size_t) i].positions.size() > 2) { sweep = i; break; }
 
         if (sweep < 0)
         {
@@ -212,7 +212,7 @@ int main()
         }
         else
         {
-            const auto& m = (*measured)[(size_t) sweep];
+            const auto& m = tones[(size_t) sweep];
 
             // The probe tone goes where the control's own tables promise the biggest swing, inside
             // the trusted band — a fixed 220 Hz hears a Big Muff tone control and is deaf to a low
@@ -332,10 +332,12 @@ int main()
             // One file and no controls: exactly what a dropped-in .nam becomes. Leaving the other
             // twenty in place would leave the stage with nothing it could load at all.
             bareStage->device.controls.clear();
-            bareStage->measured.clear();
+            bareStage->tone.clear();
             bareStage->device.files.resize (1);
+            bareStage->device.files.front().settings.clear();   // …and its one file names no position
 
             orbitamp::AmpProcessor solo;
+            solo.inlineLoads = true;
             solo.prepareToPlay (sampleRate, blockSize);
             set (solo, orbitamp::params::reverbOn, 0.0f);
             set (solo, orbitamp::params::powerOn, 0.0f);

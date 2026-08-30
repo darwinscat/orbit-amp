@@ -55,6 +55,8 @@ AmpProcessor::AmpProcessor()
     cabOnParam         = apvts.getRawParameterValue (params::cabOn);
     boostInParam       = apvts.getRawParameterValue (params::blockIn (params::boostId));
     preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
+    boostSmoothParam   = apvts.getRawParameterValue (params::blockSmooth (params::boostId));
+    preampSmoothParam  = apvts.getRawParameterValue (params::blockSmooth (params::preampId));
     cabIrParam         = apvts.getRawParameterValue (params::cabIr);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
@@ -187,7 +189,7 @@ namespace
 
 void AmpProcessor::pumpDeviceWork()
 {
-    auto pump = [this] (auto& block, auto& gainParam, auto measuredId, const char* blk)
+    auto pump = [this] (auto& block, auto& gainParam, auto& smoothParam, auto measuredId, const char* blk)
     {
         // The device parameter first of all: a restored session or an automating host moves it
         // without calling anyone, and every read below is about whatever pack it names.
@@ -209,18 +211,24 @@ void AmpProcessor::pumpDeviceWork()
 
         block.setRaw (mode == params::EqMode::ours);
         block.applySelectors (selectors);
-        block.loadIfGainMoved (gainParam->load());
+        block.setGain (gainParam->load(), smoothParam->load() > 0.5f);
 
-        std::array<float, (size_t) std::decay_t<decltype (block)>::numMeasured> values {};
+        std::array<float, (size_t) core::CapturedBlock::numMeasured> values {};
         for (int i = 0; i < (int) values.size(); ++i)
             values[(size_t) i] = apvts.getRawParameterValue (measuredId (i))->load();
 
         block.updateToneIfMoved (values);
-        block.collectGarbage();
+
+        // The player's housekeeping and its load jobs — on the pool, or right here for a driver
+        // that has no message loop to bring them back on.
+        block.pump (inlineLoads ? nullptr : &modelPool);
     };
 
-    pump (boost,  boostGainParam,  params::boostMeasured,  params::boostId);
-    pump (preamp, preampGainParam, params::preampMeasured, params::preampId);
+    pump (boost,  boostGainParam,  boostSmoothParam,  params::boostMeasured,  params::boostId);
+    pump (preamp, preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
+
+    // A model that landed may carry rate-matching the host has to know about.
+    reportLatency();
 
     // The gate's Decay: redesigning the close ramp is message-thread work, like every other
     // moved-a-control job on this pump. Rare by nature — it only fires when the switch flipped.
@@ -254,7 +262,17 @@ void AmpProcessor::applyOversamplingIfChanged()
 
     // The factor does not change the round-trip — the module keeps it at tpp-1 across factors — but
     // report it again anyway, so a future module that does cannot silently desync the host.
-    setLatencySamples (power.latencySamples());
+    reportLatency();
+}
+
+void AmpProcessor::reportLatency()
+{
+    // In series: the power amp's oversampling round-trip, then each captured block's models — a
+    // capture taken at another rate is resampled on the way in and out, and that has a length.
+    const int total = power.latencySamples() + boost.latencySamples() + preamp.latencySamples();
+
+    if (total != getLatencySamples())
+        setLatencySamples (total);
 }
 
 void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -305,7 +323,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // Reported ALWAYS, whether the power amp is switched on or not: its bypass path carries the same
     // delay, so a toggle never shifts the timing of everything downstream. A latency that changes
     // with a switch is what makes hosts re-align mid-song.
-    setLatencySamples (power.latencySamples());
+    reportLatency();
 
     updateEqSettings();
     updateReverbSettings();

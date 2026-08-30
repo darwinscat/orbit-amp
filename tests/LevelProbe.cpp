@@ -8,10 +8,25 @@
 #include <cmath>
 #include <cstdio>
 
+/** The player asks for its models on the first audio block and a host lands them off a timer; a
+    probe has neither, so it feeds silence and pumps until both blocks have what they asked for. */
+static void settle (orbitamp::core::CapturedBlock& a, orbitamp::core::CapturedBlock& b)
+{
+    juce::AudioBuffer<float> z (1, 512), d (1, 512);
+    for (int k = 0; k < 24; ++k)
+    {
+        z.clear();
+        a.process (z, d);
+        b.process (z, d);
+        a.pump (nullptr);
+        b.pump (nullptr);
+    }
+}
+
 int main (int argc, char** argv)
 {
     using namespace orbitamp;
-    using Block = core::CapturedBlock<params::boostNumMeasured>;
+    using Block = core::CapturedBlock;
 
     constexpr double rate = 48000.0;
     constexpr int    n    = 512;
@@ -45,8 +60,9 @@ int main (int argc, char** argv)
 
     const float bGain = argc > 1 ? juce::String (argv[1]).getFloatValue() : 5.0f;
     const float pGain = argc > 2 ? juce::String (argv[2]).getFloatValue() : 5.0f;
-    boost.loadIfGainMoved (bGain);
-    preamp.loadIfGainMoved (pGain);
+    boost.setGain (bGain, true);
+    preamp.setGain (pGain, true);
+    settle (boost, preamp);
     std::printf ("gains: boost %.1f  preamp %.1f\n", bGain, pGain);
 
     std::printf ("boost:  %s\npreamp: %s\n",

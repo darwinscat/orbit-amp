@@ -3,7 +3,6 @@
 #include "Parameters.h"
 #include "core/CapturedBlock.h"
 #include "core/DemoPlayer.h"
-#include "core/MeasuredFilter.h"
 #include "core/ScopeTap.h"
 #include "core/TunerEar.h"
 #include "core/TunerTap.h"
@@ -112,16 +111,30 @@ private:
         rather than in the audio callback. */
     void applyOversamplingIfChanged();
 
+    /** The chain's round-trip to the host: the power amp's oversampling plus whatever the two
+        players' models need for rate-matching — reported whenever any of them changes. */
+    void reportLatency();
+
+    /** One thread for both blocks' model builds. One, because a load is twenty milliseconds and
+        two blocks asking at once still finish inside a frame; a second thread would only let two
+        WaveNets fight over the same cores the audio thread wants. */
+    juce::ThreadPool modelPool { 1 };
+
 public:
-    /** Everything a moved control needs done OFF the audio thread, for both captured blocks: loading
-        the capture a gain knob now points at, designing the measured filters, retiring models nobody
-        is playing.
+    /** Everything a moved control needs done OFF the audio thread, for both captured blocks: landing
+        the dial where the gain knob points, the tone knobs where their slots stand, handing the
+        player's load jobs to the pool and its finished models back, retiring what nobody plays.
 
         The timer calls this thirty times a second. It is public because it is the plugin's only
         message-thread heartbeat, and something that is not a host — a test — has to be able to drive
         it; without a driver a knob moves a parameter and nothing ever reads it, which is exactly the
         bug this became. */
     void pumpDeviceWork();
+
+    /** A model is BUILT off the message thread — bytes from the pack, a network parsed and warmed,
+        some twenty milliseconds — and brought back to the player through the message queue. A driver
+        without a message loop (a test) sets this and the jobs run inside pumpDeviceWork instead. */
+    bool inlineLoads = false;
 
 private:
     /** Reads each EQ link's parameters into its stack. Called per block from the audio thread;
@@ -151,8 +164,8 @@ public:
         stage playing what is chosen from it, that device's measured controls as filters, and the taps
         its pictures read. The library and the loading live on the message thread; the audio thread
         only ever meets a model that is already in memory. */
-    core::CapturedBlock<params::boostNumMeasured>  boost  { device::DeviceLibrary::Slot::pedal };
-    core::CapturedBlock<params::preampNumMeasured> preamp { device::DeviceLibrary::Slot::preamp };
+    core::CapturedBlock boost  { device::DeviceLibrary::Slot::pedal };
+    core::CapturedBlock preamp { device::DeviceLibrary::Slot::preamp };
 
     /** Re-scans the devices folder and loads whatever the device parameters point at. Message
         thread. */
@@ -275,6 +288,8 @@ private:
 
     std::atomic<float>* boostInParam  = nullptr;
     std::atomic<float>* preampInParam = nullptr;
+    std::atomic<float>* boostSmoothParam  = nullptr;
+    std::atomic<float>* preampSmoothParam = nullptr;
     float lastBoostInGain  = 1.0f;
     float lastPreampInGain = 1.0f;
     float lastTrimGain = 1.0f;

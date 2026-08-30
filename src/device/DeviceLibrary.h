@@ -37,8 +37,8 @@ public:
 
     struct Pack
     {
-        juce::String  name;       // the gear's own name — make and model, as captured
-        juce::String  alias;      // the name this voice goes out under, when it has one
+        juce::String  name;       // the device as the pack file names it — "IR-X Ch1", "Guitar Butler Clean"
+        juce::String  alias;      // the name the voice goes out under (the manifest's `name`), when it has one
         juce::File    location;   // the folder, the .orbitrig zip, or a lone .nam/.namz
         bool          zipped = false;
         bool          loose  = false;   // a single model file the user dropped in, not a pack
@@ -47,9 +47,10 @@ public:
         Slot          slot = Slot::any; // which block it belongs in front of
         namz::rig::Rig rig;
 
-        /** What a player sees. The alias is the pack's public identity — what a list shows and what
-            people say about it — and the model name is what it falls back to when nobody chose one. */
-        juce::String displayName() const { return alias.isNotEmpty() ? alias : name; }
+        /** What a player sees: the DEVICE, by the name the pack file carries. The manifest's own
+            `name` is the voice's alias and rides along on the paper; two channels of one preamp share
+            a make and a model, and only the file tells them apart. */
+        juce::String displayName() const { return name.isNotEmpty() ? name : alias; }
 
         bool isValid() const { return ! rig.chain.empty(); }
     };
@@ -240,13 +241,13 @@ private:
 
                 bool ok = false;
                 p.rig  = namz::rig::loadRigManifest (manifest.toStdString(), &ok);
-                p.name = p.rig.name.empty() ? f.getFileNameWithoutExtension() : juce::String (p.rig.name);
 
-                // TEMPORARY, until namz carries `alias` on Rig: read the one key rather than the
-                // format. This is a bridge, not a second reader — when Rig has the field this becomes
-                // `p.alias = p.rig.alias;` and the JSON below goes.
-                if (const auto j = juce::JSON::parse (manifest); const auto* obj = j.getDynamicObject())
-                    p.alias = obj->getProperty ("alias").toString().trim();
+                // The file's name up to its first dot — "IR-X Ch1" from "IR-X Ch1.orbitrig.zip", the
+                // folder's own name for a folder — the same cut `uniqueIn` makes when it numbers one.
+                p.name  = f.getFileName().upToFirstOccurrenceOf (".", false, false).trim();
+                p.alias = juce::String (p.rig.name).trim();
+                if (p.name.isEmpty())
+                    p.name = p.alias;
 
                 if (const auto* s = p.rig.firstKnown())
                 {
@@ -289,7 +290,7 @@ private:
                 stage.toneType = value ("tone_type");
                 stage.circuit  = value ("device");
                 stage.device.family = p.displayName().toStdString();
-                stage.device.files.push_back ({ f.getFileName().toStdString(), {}, 0.0 });
+                stage.device.files.push_back ({ f.getFileName().toStdString(), {}, 0.0, {} });
 
                 p.rig.name = p.displayName().toStdString();
                 p.rig.chain.push_back (std::move (stage));
