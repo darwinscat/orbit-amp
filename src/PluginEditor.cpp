@@ -270,7 +270,7 @@ void AmpEditor::resized()
     chrome.setTransform (zoom);
 
     // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
-    const int faceplateY = margin + Chrome::designHeight + chromeGap;
+    const int faceplateY = margin + Chrome::designHeight + headerGap;
 
     // The gutters stand between the SAME two lines the blocks' frames do, not between the
     // faceplate's own edges — a block is inset inside the lane and its box starts lower still,

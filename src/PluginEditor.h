@@ -39,8 +39,9 @@ public:
     void showGearMenu (juce::Point<int> screenPos);
 
 private:
-    static constexpr int margin    = 18;   // the ground the device sits on
-    static constexpr int chromeGap = 10;   // toolbar to faceplate
+    static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
+    static constexpr int headerGap = 2;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
+    static constexpr int chromeGap = 10;   // faceplate to tuner to footer
 
     /** Room for the host's or the standalone's own title bar, which the display's user area does not
         know about. Guessing slightly high costs nothing; guessing low costs a window that opens
@@ -48,7 +49,7 @@ private:
     static constexpr int titleBarAllowance = 60;
 
     static constexpr int baseWidth   = FaceplateView::designWidth + margin * 2;
-    static constexpr int fixedHeight = Chrome::designHeight + chromeGap
+    static constexpr int fixedHeight = Chrome::designHeight + headerGap
                                      + FaceplateView::designHeight
                                      + chromeGap + TunerStrip::designHeight
                                      + chromeGap + Footer::designHeight

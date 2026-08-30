@@ -41,7 +41,7 @@ public:
 
     // OrbitCab's header proportions: a 50-tall strip whose small controls live in a 44-tall band
     // centred in it, so only the brand grows with the strip.
-    static constexpr int designHeight  = 50;
+    static constexpr int designHeight  = 60;   // the brand — cat, mark, wordmark, byline — grows with it
     static constexpr int controlBand   = 44;
 
 private:

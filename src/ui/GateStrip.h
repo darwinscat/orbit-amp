@@ -154,9 +154,6 @@ public:
                                   dragging && grabbedTrim);
         }
 
-        g.setColour (theme::hair2);
-        g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
-
         meterrail::paintName (g, inCol, "IN");
     }
 

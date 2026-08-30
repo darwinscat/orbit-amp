@@ -112,9 +112,25 @@ void Chrome::resized()
 {
     auto header = getLocalBounds();
 
-    // ---- right cluster: the gear at the very edge, file actions, registers, the preset name ----
-    auto right    = header.removeFromRight (486);
-    auto rightBar = right.withSizeKeepingCentre (right.getWidth(), controlBand);
+    // ---- brand on the left, sized to its content so the click area hugs the text.
+    //      ONE unit taller than the strip: the kit's header draws a hairline along its own bottom
+    //      edge, with no way to ask it not to, and that line was cutting under the logo for no
+    //      reason a block below could give — a unit past the strip's edge, the parent clips it. ----
+    brand.setBounds (header.withHeight (header.getHeight() + 1));   // height first: contentRight() reads it
+    const int brandWidth = juce::jmin (header.getWidth() - 360, juce::roundToInt (brand.contentRight()));
+    brand.setBounds (header.removeFromLeft (brandWidth).withHeight (header.getHeight() + 1));
+    brand.clickRight = brandWidth;
+
+    // ---- undo / redo right after the brand ----
+    header.removeFromLeft (10);
+    auto leftBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
+    undo.setBounds (leftBar.removeFromLeft (34).reduced (3, 8));
+    redo.setBounds (leftBar.removeFromLeft (34).reduced (3, 8));
+    header.removeFromLeft (68 + 8);
+
+    // ---- right cluster takes the REST: the gear at the very edge, file actions, registers, and
+    //      the preset name in whatever is left — the one cell here that can give. ----
+    auto rightBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
 
     gear.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     rightBar.removeFromRight (6);   // the gear opens a window, the rest edit the preset — a seam
@@ -130,19 +146,6 @@ void Chrome::resized()
         registers[(size_t) i]->setBounds ((i < count - 1 ? snapArea.removeFromLeft (w) : snapArea).reduced (2, 0));
 
     preset.setBounds (rightBar.reduced (7));
-
-    // ---- brand on the left, sized to its content so the click area hugs the text ----
-    header.removeFromLeft (4);
-    brand.setBounds (header.withWidth (header.getWidth()));   // height first: contentRight() reads it
-    const int brandWidth = juce::jmin (header.getWidth(), juce::roundToInt (brand.contentRight()));
-    brand.setBounds (header.removeFromLeft (brandWidth));
-    brand.clickRight = brandWidth;
-
-    // ---- undo / redo in the gap between the brand and the register cluster ----
-    header.removeFromLeft (14);
-    auto leftBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
-    undo.setBounds (leftBar.removeFromLeft (34).reduced (3, 8));
-    redo.setBounds (leftBar.removeFromLeft (34).reduced (3, 8));
 }
 
 void Chrome::showRegisterMenu (int index)
