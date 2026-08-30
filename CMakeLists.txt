@@ -54,7 +54,7 @@ FetchContent_MakeAvailable(juce)
 # module to target_link_libraries below. Wired now so that's a one-line change, not a rebuild
 # of the dependency graph. Its self-tests do NOT build from here (guarded by PROJECT_IS_TOP_LEVEL).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_FCORE_TAG "v0.20.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+set(ORBITAMP_FCORE_TAG "v0.21.1" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")

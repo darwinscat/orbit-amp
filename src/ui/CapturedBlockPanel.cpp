@@ -200,8 +200,8 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
             smoothTag.on = v > 0.5f;
             gain.snapToNotches = ! smoothTag.on;
             smoothTag.setTooltip (smoothTag.on
-                ? "SMOOTH: between two captures both play, mixed by angle (2x CPU)"
-                : "STEP: the dial lands on the captured positions only");
+                ? "SMOOTH: between two captures both play, mixed by angle (2x CPU while between)"
+                : "STEP: the dial lands on the captured positions; settled, one model runs");
             smoothTag.repaint();
         });
     smoothTag.onChange = [this]

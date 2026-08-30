@@ -59,7 +59,9 @@ int main()
             {
                 juce::AudioBuffer<float> buf (1, 512), dry (1, 512);
                 block.setGain (5.0f, true);
-                for (int k = 0; k < 48; ++k) { buf.clear(); block.process (buf, dry); block.pump (nullptr); }
+                // Long enough for the player's cold threshold to pass: the cost printed is the cost
+                // AT REST, which is the cost a settled session pays.
+                for (int k = 0; k < 260; ++k) { buf.clear(); block.process (buf, dry); block.pump (nullptr); }
 
                 const auto t0 = juce::Time::getHighResolutionTicks();
                 const int blocks = 48000 / 512;
