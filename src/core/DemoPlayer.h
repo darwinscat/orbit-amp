@@ -24,14 +24,14 @@ public:
         position = 0;
     }
 
-    /** Decode a loop from embedded bytes. Message thread. */
-    void setLoop (const void* data, int size, double sourceRate)
+    /** Decode a loop from a file on disk. Message thread. A missing or unreadable file leaves the
+        player as it was — the loops are dev-machine material, not a shipped asset. */
+    void setLoop (const juce::File& file, double sourceRate)
     {
         juce::AudioFormatManager formats;
         formats.registerBasicFormats();
 
-        auto stream = std::make_unique<juce::MemoryInputStream> (data, (size_t) size, false);
-        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (std::move (stream)));
+        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
 
         if (reader == nullptr || reader->lengthInSamples <= 0)
             return;

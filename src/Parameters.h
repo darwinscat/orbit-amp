@@ -240,9 +240,31 @@ inline constexpr const char* stereoMode = "stereo_mode";
 inline const juce::StringArray stereoModes { "Mono", "Stereo", "Stereo Space" };
 enum class StereoMode { mono, stereo, stereoSpace };
 
-/** TEMPORARY — the audition loops, in the order the player offers them. Default is the first. */
+/** TEMPORARY — the audition loops, in the order the player offers them. Default is the first.
+
+    The audio is NOT shipped: it is read at run time from the dev machine's private folder, and
+    when that folder is absent the player and its menu entry are absent with it. The binary is the
+    same either way — presence of the folder is the whole switch. */
 inline const juce::StringArray demoLoops { "GGG", "Eleven Light Years", "Cats Hard Day",
                                            "Deep Space Is My Home", "Fifth Dimension" };
+inline constexpr const char* demoLoopFiles[] = { "ggg.wav", "eleven-light-years.wav",
+                                                 "cats-hard-day.wav", "deep-space-is-my-home.wav",
+                                                 "fifth-dimension.wav" };
+
+inline juce::File demoLoopsDir()
+{
+    return juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+        .getChildFile ("IdeaProjects/orbit-amp/.private/loops");
+}
+
+inline bool demoLoopsPresent()
+{
+    for (auto* name : demoLoopFiles)
+        if (demoLoopsDir().getChildFile (name).existsAsFile())
+            return true;
+
+    return false;
+}
 
 /** Oversampling for the nonlinear stages. Not a per-preset taste: it trades CPU for alias-free
     saturation, and which trade you want depends on the machine you are on. Lives in the footer with

@@ -33,7 +33,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (tunerStrip);
     addAndMakeVisible (footer);
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
-    showDemo   = prefs::getBool (prefs::showDemo,   false);
+    // The demo needs its loops on disk — a machine without them has no player to show.
+    showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
     showGlyphs = prefs::getBool (prefs::showGlyphs, false);
     faceplate.setPowerShown (prefs::getBool (prefs::showPower, false));
     addChildComponent (demoStrip);
@@ -149,7 +150,8 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
     m.addSeparator();
     m.addItem (4, "SHOW POWER AMP",     true, prefs::getBool (prefs::showPower, false));
     m.addItem (5, "SHOW SPECTRA",       true, prefs::spectraShown());
-    m.addItem (2, "SHOW DEMO PLAYER",   true, showDemo);
+    if (params::demoLoopsPresent())     // no loops on disk — no player, and no offer of one
+        m.addItem (2, "SHOW DEMO PLAYER", true, showDemo);
     m.addItem (3, "SHOW DEVICE GLYPHS", true, showGlyphs);
 
     m.showMenuAsync (juce::PopupMenu::Options()

@@ -136,18 +136,9 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void AmpProcessor::selectDemoLoop (int index)
 {
-    struct Entry { const char* data; int size; };
-    const Entry loops[] = {
-        { BinaryData::ggg_wav,                BinaryData::ggg_wavSize },
-        { BinaryData::elevenlightyears_wav,   BinaryData::elevenlightyears_wavSize },
-        { BinaryData::catshardday_wav,        BinaryData::catshardday_wavSize },
-        { BinaryData::deepspaceismyhome_wav,  BinaryData::deepspaceismyhome_wavSize },
-        { BinaryData::fifthdimension_wav,     BinaryData::fifthdimension_wavSize },
-    };
-
-    const int n = (int) (sizeof (loops) / sizeof (loops[0]));
-    const auto& e = loops[juce::jlimit (0, n - 1, index)];
-    demo.setLoop (e.data, e.size, getSampleRate());
+    const int n = (int) std::size (params::demoLoopFiles);
+    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[juce::jlimit (0, n - 1, index)]),
+                  getSampleRate());
 }
 
 void AmpProcessor::rescanDevices()
