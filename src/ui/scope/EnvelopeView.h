@@ -28,6 +28,9 @@ struct EnvelopeView
             const float t = (db - floorDb) / -floorDb;
             g.setColour (theme::hair);
             g.fillRect (r.getX(), r.getBottom() - t * r.getHeight(), r.getWidth(), 1.0f);
+            if (! axesLabelled (r))
+                continue;
+
             g.setColour (theme::txFaint);
             theme::drawTracked (g, juce::String ((int) db),
                                 { r.getX() + 4.0f, r.getBottom() - t * r.getHeight() - 12.0f,

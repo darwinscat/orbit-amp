@@ -71,7 +71,7 @@ inline constexpr float gateDecayModeMs[] = { 100.0f, 35.0f };
     This replaces a temporary `raw` switch that meant "play the capture with nothing of ours on it".
     That was the same fact asked as a debugging question; asked as a choice it is a control. */
 inline juce::String blockEqMode (const char* blk) { return juce::String (blk) + "_eq_mode"; }
-inline const juce::StringArray eqModes { "Native", "Ours" };
+inline const juce::StringArray eqModes { "Device Tone", "Universal EQ" };
 enum class EqMode { native, ours };
 
 /** A device's OTHER selecting controls — the ones that pick a file and are not the gain dial. Two

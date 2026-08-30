@@ -153,6 +153,14 @@ public:
         g.setColour (theme::hair2);
         g.fillRect (r.getX() + 4.0f, r.getCentreY(), r.getWidth() - 8.0f, 1.0f);
 
+        // The numbers only where they have room. Seven frequency labels want some 340 units
+        // between them; the small tile beside a dial has 300, and there they ran into one
+        // another and read as nothing. Below the threshold the grid stands on its own — the
+        // same lines in the same places, so the eye that learned them on the big picture still
+        // knows which is which.
+        if (! axesLabelled (r))
+            return;
+
         g.setColour (theme::txFaint);
 
         static const std::pair<double, const char*> hzLabels[] = {

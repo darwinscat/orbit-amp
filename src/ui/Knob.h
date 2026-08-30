@@ -49,6 +49,13 @@ public:
         return juce::jlimit (lo, hi, lo + std::round ((attemptedValue - lo) / step) * step);
     }
 
+    /** HEAT: the arc wears the character ramp along its travel — clean green at the bottom of the
+        dial through edge and crunch to hi-gain at the top, the colours the device list is written
+        in — and the pointer wears the colour of the place it points at. For the one dial whose position IS a temperature: how
+        hard a capture is driven. Off, the arc is the accent, which for a console band is the
+        colour that ties it to its point on the curve and must stay one colour. */
+    bool heat = false;
+
     /** How the number on the face is written. Defaults to one decimal — the 0-10 amp scale. */
     std::function<juce::String (double)> textForValue = [] (double v) { return juce::String (v, 1); };
 
@@ -96,12 +103,49 @@ public:
         g.setColour (theme::hair2);
         g.strokePath (track, juce::PathStrokeType (arcW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-        if (angle > startAngle)
+        const float upto = (angle - startAngle) / (endAngle - startAngle);   // 0..1 of the travel
+
+        if (angle > startAngle && ! heat)
         {
             juce::Path filled;
             filled.addCentredArc (c.x, c.y, ringR, ringR, 0.0f, startAngle, angle, true);
             g.setColour (accent);
             g.strokePath (filled, juce::PathStrokeType (arcW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        else if (angle > startAngle)
+        {
+            // A gradient along an ARC: JUCE draws them along lines, so the arc is walked in short
+            // butt-ended pieces, each in the colour of its own place on the travel, overlapping by
+            // a hair so no seam shows — and a rounded cap in the end colour closes each end.
+            constexpr int   pieces = 72;
+            const float     span   = endAngle - startAngle;
+            const auto rounded = juce::PathStrokeType (arcW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+            const auto butt    = juce::PathStrokeType (arcW, juce::PathStrokeType::curved, juce::PathStrokeType::butt);
+
+            const auto cap = [&] (float t)
+            {
+                juce::Path p;
+                const float a = startAngle + t * span;
+                p.addCentredArc (c.x, c.y, ringR, ringR, 0.0f, a - 0.002f, a + 0.002f, true);
+                g.setColour (heatAt (t));
+                g.strokePath (p, rounded);
+            };
+
+            cap (0.0f);
+            for (int i = 0; i < pieces; ++i)
+            {
+                const float t0 = (float) i / (float) pieces;
+                if (t0 >= upto)
+                    break;
+                const float t1 = juce::jmin (upto, (float) (i + 1) / (float) pieces);
+
+                juce::Path piece;
+                piece.addCentredArc (c.x, c.y, ringR, ringR, 0.0f,
+                                     startAngle + t0 * span - 0.01f, startAngle + t1 * span + 0.01f, true);
+                g.setColour (heatAt ((t0 + t1) * 0.5f));
+                g.strokePath (piece, butt);
+            }
+            cap (upto);
         }
 
         // The body: a dark disc lit from above, so the face reads as a physical cap.
@@ -115,7 +159,7 @@ public:
         // Pointer.
         const juce::Point<float> pa { c.x + std::sin (angle) * bodyR * 0.55f, c.y - std::cos (angle) * bodyR * 0.55f };
         const juce::Point<float> pb { c.x + std::sin (angle) * bodyR * 0.94f, c.y - std::cos (angle) * bodyR * 0.94f };
-        g.setColour (accent.brighter (0.3f));
+        g.setColour (heat ? heatAt (upto).brighter (0.15f) : accent.brighter (0.3f));
         g.drawLine ({ pa, pb }, d * 0.035f);
 
         g.setColour (juce::Colour (0xfff6f4fd));
@@ -126,6 +170,9 @@ public:
     }
 
 private:
+    /** The temperature of a place on the travel, 0..1 — the family's one heat scale. */
+    static juce::Colour heatAt (float t) { return theme::heatColour (t); }
+
     static constexpr int   labelHeight = 11;
     static constexpr float startAngle  = juce::MathConstants<float>::pi * 1.25f;
     static constexpr float endAngle    = juce::MathConstants<float>::pi * 2.75f;

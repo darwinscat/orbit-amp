@@ -153,6 +153,17 @@ public:
                                 0.15f, juce::Justification::centredLeft);
         }
 
+        // The same gap under whatever the block stood on its border slot. Masked HERE, in the
+        // frame's own layer, and not by the control: a switched-off block draws its children
+        // half-transparent, and a mask painted by one of them let the line show through its name.
+        if (! borderSlotUsed.isEmpty())
+        {
+            g.setColour (topFill);
+            g.fillRect (borderSlotUsed.toFloat().expanded (legendGap, 0.0f)
+                            .withHeight (theme::blockBorder + 2.0f)
+                            .withCentre ({ borderSlotUsed.toFloat().getCentreX(), box.getY() }));
+        }
+
         paintContent (g);
 
         if (dim)
@@ -341,6 +352,27 @@ protected:
 
         return juce::Rectangle<int> (0, 0, switchW, switchH)
                  .withCentre ({ boxArea().getRight() - borderInset - switchW / 2, boxArea().getY() });
+    }
+
+    /** The free run of the top border between the block's name and its switch — where a block may
+        stand its one headline control, the way the captured blocks stand their device combo, so the
+        first row inside the box is not spent on it. A control here covers the line with its own
+        fill, fieldset-style, exactly as the name does. Empty when the name or the switch is not on
+        the border. */
+    /** What the block actually placed on the border — set by the block from its layout, so the
+        frame can open the line under it. Empty: nothing stands there. */
+    juce::Rectangle<int> borderSlotUsed;
+
+    juce::Rectangle<int> borderSlotArea() const
+    {
+        if (! titleInBorder || ! switchInBorder)
+            return {};
+
+        const int left  = (showTitle ? titleArea().getRight() : boxArea().getX() + borderInset) + borderInset / 2;
+        const int right = (hasSwitch ? switchArea().getX() : boxArea().getRight() - borderInset) - borderInset / 2;
+
+        return juce::Rectangle<int> (left, 0, juce::jmax (0, right - left), switchH)
+                 .withCentre ({ (left + right) / 2, boxArea().getY() });
     }
 
 private:

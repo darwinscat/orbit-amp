@@ -117,10 +117,13 @@ private:
                         return display.magnitudeDb (hz) + (nativeDb != nullptr ? nativeDb (hz) : 0.0);
                     } };
 
-    /** The overlay in the curve's corner: the presets menu. Flat (the old reset) leads the list,
-        then the link's own starting points — stamps, not state: pressed, applied, forgotten. */
-    struct PresetButton final : public juce::Component
+    /** The overlay in the curve's corner: WHOSE tone controls the console wears, written on the
+        button itself so the answer is read without opening anything, and the menu under it —
+        the two sets, and RESET. The stamps that used to live here went with the PRESETS name:
+        a console that can be the device's own or ours has one question, not a drawer. */
+    struct ModeButton final : public juce::Component
     {
+        juce::String text;
         std::function<void (juce::Point<int>)> onClick;
         void paint (juce::Graphics&) override;
         void mouseDown (const juce::MouseEvent& e) override
@@ -129,10 +132,8 @@ private:
         }
     };
 
-    void showPresets (juce::Point<int> screenPos);
     void resetLink();
     juce::StringArray linkParamIds() const;
-    bool linkIsFlat() const;
     void setParam (const juce::String& id, float plainValue);
 
     /** The slope readout under a cut's switch: shows the ladder value, click opens the ladder as
@@ -164,11 +165,17 @@ public:
         actually does is the pack's curves and our two walls, so that is what the line has to be. */
     void setNativeCurve (std::function<double (double)> db) { nativeDb = std::move (db); refreshCurve(); }
 
-    /** The one question the console asks about ITSELF: whose bands it is wearing. Asked by
-        right-clicking the curve; silent when the device brought none, because a choice with one
-        side is a label. */
-    void setModes (const juce::StringArray& names, int selected);
+    /** The one question the console asks about ITSELF: whose bands it is wearing. `names` is the
+        whole pair, in the parameter's order; `nativeAvailable` false greys the device's side, for
+        a device that measured nothing. The button in the curve's corner wears the answer, and its
+        menu — also the curve's right-click — offers the other side and RESET. */
+    void setModes (const juce::StringArray& names, int selected, bool nativeAvailable);
+    bool wearsNative() const noexcept { return modeIndex == 0; }
     std::function<void (int)> onModePicked;
+
+    /** RESET, after the console's own parameters went back to default: the block puts whatever
+        else it has on show — the device's tone slots — back where the pack starts them. */
+    std::function<void()> onReset;
 
 private:
     void buildBands (std::vector<Band>);
@@ -181,11 +188,12 @@ private:
     std::vector<std::unique_ptr<Knob>> bandKnobs;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 
-    PresetButton presetBtn;
+    ModeButton modeBtn;
 
     void showModeMenu (juce::Point<int> screenPos);
     juce::StringArray modeNames;
     int               modeIndex = 0;
+    bool              nativeOffered = false;
 
     ZoneSwitch  hpfSw, lpfSw;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };

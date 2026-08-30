@@ -21,6 +21,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (faceplate);
     addAndMakeVisible (gateStrip);
     addAndMakeVisible (outStrip);
+
+    // The hints wear the panel's own colours, not the stock yellow.
+    tooltips.setColour (juce::TooltipWindow::backgroundColourId, theme::panel2);
+    tooltips.setColour (juce::TooltipWindow::textColourId, theme::txDim);
+    tooltips.setColour (juce::TooltipWindow::outlineColourId, theme::hair2);
     addAndMakeVisible (gateBadge);
     addAndMakeVisible (limitBadge);
     addAndMakeVisible (tunerStrip);

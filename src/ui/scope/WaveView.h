@@ -48,6 +48,9 @@ public:
             if (! halfWave)
                 g.fillRect (r.getX(), mid + t * half, r.getWidth(), 1.0f);
 
+            if (! axesLabelled (r))
+                continue;
+
             g.setColour (theme::txFaint);
             theme::drawTracked (g, juce::String ((int) db),
                                 { r.getX() + 4.0f, mid - t * half - 12.0f, 34.0f, 11.0f },

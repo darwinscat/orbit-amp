@@ -50,8 +50,6 @@ public:
     bool foldPicture();
 
 private:
-    int  headerHeight() const override { return headerRow; }
-    void layOutHeader (juce::Rectangle<int>) override;
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
 
@@ -61,6 +59,10 @@ private:
 
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
+
+    /** The tone slots alone back to the pack's defaults — the console's RESET, when the block
+        wears the device's own knobs. */
+    void resetToneSlotsToPackDefaults();
 
     /** Puts every slot back where the loaded pack says a player starts.
 
@@ -83,7 +85,6 @@ private:
 
     std::unique_ptr<juce::ParameterAttachment> eqModeAttachment;
 
-    static constexpr int headerRow  = 34;
     static constexpr int gap        = 10;
     static constexpr int knobGap    = 10;
 
@@ -115,25 +116,40 @@ private:
         block owns it, its switch darkens it, and the curve's spectrum is this block's output. */
     EqSection eq;
 
-    Knob gain { "Gain", theme::orange, 0 };
+    /** No label: the dial is the block's one big control and needs no caption to be found; its
+        name rides the hint. The row a label took is diameter now. */
+    Knob gain { "", theme::orange, 0 };
 
-    /** SMOOTH or STEP — how the dial moves between the captured positions. A pill in the dial's
-        label row rather than a switch under it: the column's height is the dial's, and a row
-        under it would come out of the dial's diameter. Lit, the dial reaches every angle and the
-        two neighbouring captures play mixed; dark, it lands on the captures alone. */
-    struct SmoothTag final : public juce::Component
+    /** SMOOTH or STEP — how the dial moves between the captured positions. A pill in the gap at
+        the bottom of the dial's arc, the one place inside the dial's square nothing else reaches:
+        a little lever and the word. Lit, the dial reaches every angle and the two neighbouring
+        captures play mixed; dark, it lands on the captures alone. What that costs is the hint's
+        to say. */
+    struct SmoothTag final : public juce::Component,
+                             public juce::SettableTooltipClient
     {
         bool on = true;
         std::function<void()> onChange;
 
         void paint (juce::Graphics& g) override
         {
-            const auto r = getLocalBounds().toFloat();
+            auto r = getLocalBounds().toFloat();
             g.setColour (theme::bezel.withAlpha (0.8f));
             g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+            r.reduce (3.0f, 0.0f);
+
+            // The lever: a pill most of the row's height, the knob at the lit end.
+            const auto sw = r.removeFromLeft (r.getHeight() * 1.3f).reduced (0.0f, 2.5f);
+            g.setColour (on ? theme::orange.withAlpha (0.55f).overlaidWith (juce::Colour (0xff26262f))
+                            : juce::Colour (0xff26262f));
+            g.fillRoundedRectangle (sw, sw.getHeight() * 0.5f);
+            const float k = sw.getHeight() - 3.0f;
+            g.setColour (on ? juce::Colours::white : juce::Colour (0xff8a8a96));
+            g.fillEllipse (on ? sw.getRight() - k - 1.5f : sw.getX() + 1.5f, sw.getCentreY() - k * 0.5f, k, k);
+
             g.setColour (on ? theme::orange : theme::txDim);
-            theme::drawTracked (g, "SMOOTH", r, theme::displayFont (9.0f), 0.08f,
-                                juce::Justification::centred);
+            theme::drawTracked (g, "SMOOTH", r.withTrimmedLeft (3.0f), theme::displayFont (8.0f), 0.06f,
+                                juce::Justification::centredLeft);
         }
 
         void mouseDown (const juce::MouseEvent&) override
@@ -171,7 +187,17 @@ private:
     {
         std::unique_ptr<VSwitch> steps;
         std::unique_ptr<juce::ParameterAttachment> attachment;
+        juce::String         name;     // the control, written left of the switch
+        juce::StringArray    values;   // its positions — the chosen one written right of it, all of them in the hint
+        juce::Rectangle<int> row;      // the one line the three share
     };
+
+    /** A selecting control is ONE LINE: its name, the slot with the lever, the chosen position's
+        name. The names under each detent took a second line out of the dial's diameter; the list
+        they made is the switch's hint now. */
+    static constexpr int pickRowH    = 20;
+    static constexpr int pickNameW   = 50;
+    static constexpr int pickSwitchW = 36;
 
     std::array<PickSlot, (size_t) params::numSelectors> selectors;
 

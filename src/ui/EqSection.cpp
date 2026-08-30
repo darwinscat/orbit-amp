@@ -91,7 +91,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     hpfSlopeBox.setIndex = [this] (int i) { hpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
     lpfSlopeBox.setIndex = [this] (int i) { lpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
 
-    presetBtn.onClick = [this] (juce::Point<int> screenPos) { showPresets (screenPos); };
+    modeBtn.onClick = [this] (juce::Point<int> screenPos) { showModeMenu (screenPos); };
 
     curve.onContextMenu = [this] (juce::Point<int> at) { showModeMenu (at); };
 
@@ -157,37 +157,46 @@ void EqSection::buildBands (std::vector<Band> newBands)
         host->resized();
 }
 
-void EqSection::setModes (const juce::StringArray& names, int selected)
+void EqSection::setModes (const juce::StringArray& names, int selected, bool nativeAvailable)
 {
-    modeNames = names;
-    modeIndex = juce::jlimit (0, juce::jmax (0, names.size() - 1), selected);
+    modeNames     = names;
+    modeIndex     = juce::jlimit (0, juce::jmax (0, names.size() - 1), selected);
+    nativeOffered = nativeAvailable;
+    modeBtn.text  = modeNames[modeIndex].toUpperCase();
+    modeBtn.repaint();
 }
 
-/** Whose bands the console wears, asked by right-clicking the curve.
+/** Whose bands the console wears — from the button in the curve's corner, or by right-clicking
+    the curve: the same menu either way, so there is one place the answer changes.
 
-    It was a two-position switch parked over the curve's top edge, which is a lot of furniture for
-    a question asked once per device — and it was standing on the part of the picture the response
-    actually uses. A menu costs nothing until it is wanted, and right-click-a-thing-for-its-choices
-    is already how the block's power and the picture's five views are reached.
-
-    One side is not a choice: a device that measured nothing offers no native set, and the menu
-    simply does not open. */
+    The device's side is offered only when the device measured something; a pack that brought no
+    tone knobs leaves it grey rather than absent, so the row still says what it could have been.
+    RESET closes the list: the console's own knobs back to flat, and — through the block — the
+    device's slots back to where the pack starts them, whichever set is on show. */
 void EqSection::showModeMenu (juce::Point<int> screenPos)
 {
-    if (modeNames.size() < 2)
-        return;
-
     juce::PopupMenu m;
-    m.addSectionHeader ("TONE CONTROLS");
 
     for (int i = 0; i < modeNames.size(); ++i)
-        m.addItem (i + 1, modeNames[i].toUpperCase(), true, i == modeIndex);
+        m.addItem (i + 1, modeNames[i].toUpperCase(), i != 0 || nativeOffered, i == modeIndex);
+
+    m.addSeparator();
+    m.addItem (100, "RESET");
 
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [safe = juce::Component::SafePointer<juce::Component> (&curve), this] (int r)
                      {
-                         if (r > 0 && safe != nullptr && onModePicked != nullptr)
+                         if (safe == nullptr)
+                             return;
+
+                         if (r == 100)
+                         {
+                             resetLink();
+                             if (onReset != nullptr)
+                                 onReset();
+                         }
+                         else if (r > 0 && onModePicked != nullptr)
                              onModePicked (r - 1);
                      });
 }
@@ -241,7 +250,7 @@ std::unique_ptr<juce::ParameterAttachment> EqSection::attach (const juce::String
                                                         [this] (float) { refreshCurve(); });
 }
 
-void EqSection::PresetButton::paint (juce::Graphics& g)
+void EqSection::ModeButton::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat().reduced (0.5f);
     g.setColour (theme::panel.withAlpha (0.85f));
@@ -249,7 +258,7 @@ void EqSection::PresetButton::paint (juce::Graphics& g)
     g.setColour (theme::hair2);
     g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
     g.setColour (theme::txDim);
-    theme::drawTracked (g, "PRESETS", r.withTrimmedRight (14.0f), theme::displayFont (12.0f), 0.14f,
+    theme::drawTracked (g, text, r.withTrimmedRight (14.0f), theme::displayFont (12.0f), 0.14f,
                         juce::Justification::centred);
 
     juce::Path v;
@@ -258,90 +267,6 @@ void EqSection::PresetButton::paint (juce::Graphics& g)
     v.lineTo (cx, cy + 3.0f);
     v.lineTo (cx + 3.0f, cy);
     g.strokePath (v, juce::PathStrokeType (1.2f));
-}
-
-void EqSection::showPresets (juce::Point<int> screenPos)
-{
-    // Stamps, named for the JOB this link does at its place in the chain — eq1 preps the signal
-    // for the boost, eq2 shapes it for the preamp. Each stamp is SURGICAL: it writes only its own
-    // zone, so stamps compose — Rumble cut plus Lead push is both, in any order; rivals in the
-    // same zone simply overwrite each other. Flat stays the one full wipe.
-    //
-    // The ticks are computed, never stored: a stamp shows checked while the parameters it writes
-    // actually hold its values. Turn any of its knobs and the tick honestly goes out — that sound
-    // is yours now, not the preset's.
-    struct Stamp
-    {
-        const char* name;
-        std::vector<std::pair<juce::String, float>> moves;
-    };
-
-    const std::vector<Stamp> stamps = link == 0
-        ? std::vector<Stamp> {
-            { "Rumble cut",   // the infra-low goes before the boost sees it
-              { { params::eqHpfOn (link), 1.0f }, { params::eqHpfHz (link), 75.0f },
-                { params::eqHpfSlope (link), 3.0f } } },
-            { "Tight low",    // higher cut plus a leaner shelf
-              { { params::eqHpfOn (link), 1.0f }, { params::eqHpfHz (link), 110.0f },
-                { params::eqHpfSlope (link), 3.0f }, { params::eqLoDb (link), -2.0f } } },
-            { "Lead push",    // the screamer hump
-              { { params::eqBellDb (link, 0), 4.0f }, { params::eqBellHz (link, 0), 750.0f } } } }
-        : std::vector<Stamp> {
-            { "Tight",        // the preamp gets nothing to flub
-              { { params::eqHpfOn (link), 1.0f }, { params::eqHpfHz (link), 120.0f },
-                { params::eqHpfSlope (link), 3.0f }, { params::eqLoDb (link), -3.0f },
-                { params::eqLoHz (link), 150.0f } } },
-            { "Bright",
-              { { params::eqHiDb (link), 4.0f }, { params::eqHiHz (link), 3500.0f } } },
-            { "Smooth",       // the glass comes off before the drive
-              { { params::eqLpfOn (link), 1.0f }, { params::eqLpfHz (link), 7000.0f },
-                { params::eqLpfSlope (link), 1.0f } } } };
-
-    const auto holds = [this] (const Stamp& st)
-    {
-        for (const auto& [id, v] : st.moves)
-            if (auto* p = state.getParameter (id);
-                p == nullptr || std::abs (p->getValue() - p->convertTo0to1 (v)) > 0.005f)
-                return false;
-        return true;
-    };
-
-    juce::PopupMenu m;
-    m.addItem (1, "Flat", true, linkIsFlat());
-    m.addSeparator();
-
-    for (int i = 0; i < (int) stamps.size(); ++i)
-        m.addItem (i + 2, stamps[(size_t) i].name, true, holds (stamps[(size_t) i]));
-
-    m.showMenuAsync (juce::PopupMenu::Options()
-                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [this, stamps] (int r)
-                     {
-                         if (r == 1)
-                             resetLink();
-                         else if (r >= 2 && r - 2 < (int) stamps.size())
-                             for (const auto& [id, v] : stamps[(size_t) (r - 2)].moves)
-                                 setParam (id, v);
-                     });
-}
-
-bool EqSection::linkIsFlat() const
-{
-    for (const auto& id : linkParamIds())
-        if (auto* p = state.getParameter (id);
-            p != nullptr && std::abs (p->getValue() - p->getDefaultValue()) > 0.005f)
-            return false;
-    return true;
-}
-
-void EqSection::setParam (const juce::String& id, float plainValue)
-{
-    if (auto* p = state.getParameter (id))
-    {
-        p->beginChangeGesture();
-        p->setValueNotifyingHost (p->convertTo0to1 (plainValue));
-        p->endChangeGesture();
-    }
 }
 
 juce::StringArray EqSection::linkParamIds() const
@@ -378,7 +303,7 @@ void EqSection::resetLink()
 void EqSection::addTo (juce::Component& parent)
 {
     parent.addAndMakeVisible (curve);
-    parent.addAndMakeVisible (presetBtn);
+    parent.addAndMakeVisible (modeBtn);
     host = &parent;
 
     for (auto& k : bandKnobs)
@@ -405,7 +330,7 @@ void EqSection::setWidgetsVisible (bool v)
     setSpectrumRunning (v);
 
     curve.setVisible (v);
-    presetBtn.setVisible (v);
+    modeBtn.setVisible (v);
     hpfSw.setVisible (v);
     lpfSw.setVisible (v);
     hpfLabel.setVisible (v);
@@ -674,8 +599,8 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // then which stamp, reading left to right in the order the questions are asked.
     curve.setBounds (content);
 
-    presetBtn.setBounds (content.getRight() - 118, content.getY() + 6, 108, 22);
-    presetBtn.toFront (false);
+    modeBtn.setBounds (content.getRight() - 150, content.getY() + 6, 140, 22);
+    modeBtn.toFront (false);
 }
 
 } // namespace orbitamp

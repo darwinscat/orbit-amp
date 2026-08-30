@@ -42,7 +42,7 @@ public:
     // Row 1 carries a device combo, the in/out meters, the gain column with the picture beside it,
     // and the whole EQ console under them. The console is the part that will not compress: knobs at
     // reading size plus a curve big enough to aim at. Row 2 is a combo and a control or two.
-    static constexpr int row1H  = 460;
+    static constexpr int row1H  = 414;   // the device combo left the box for its border: 460 - 46
     static constexpr int row2H  = 220;
     static constexpr int rowGap = 12;
     // Lane metrics. No horizontal inset: the lane's edges ARE the panel's edges, so nothing is

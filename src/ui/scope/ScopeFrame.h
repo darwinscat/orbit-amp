@@ -10,6 +10,15 @@ namespace orbitamp::scope
     A plain pair of pointers rather than the tap itself: a view should not be able to decide WHEN to
     read, only what to draw with what it was given. The tap is level-matched on the way out, so
     everything here already shows what the pedal DID rather than that it got louder. */
+/** Whether a picture this size gets NUMBERS on its axes. The small tile beside a dial does not:
+    seven frequency labels ran into one another there and read as nothing, and a dB ladder in an
+    eleven-point face was furniture. The grid stays either way, in the same places, so the eye
+    that learned it on the big picture still knows which line is which. */
+inline bool axesLabelled (juce::Rectangle<float> r) noexcept
+{
+    return r.getWidth() >= 360.0f && r.getHeight() >= 120.0f;
+}
+
 struct Frame
 {
     const float* dry = nullptr;

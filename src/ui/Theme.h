@@ -47,16 +47,31 @@ inline const juce::Colour capBot  { 0xff120e17 };
 inline const juce::Colour dspTop  { 0xff181420 };
 inline const juce::Colour dspBot  { 0xff111019 };
 
-/** The character ramp: green through yellow and orange to red, following gain. The colour IS the
-    type, so a voicing list can drop the word and still say what it is at a glance. */
+/** HEAT, 0..1: the one scale for "how hot" wherever the face asks it — cold blue, through the
+    family's violet, to orange and red. The gain dial's arc runs along it, and the character ramp
+    below samples it, so a device's place in the list and the dial that drives it speak one colour. */
+inline juce::Colour heatColour (float t)
+{
+    static const juce::ColourGradient scale = []
+    {
+        juce::ColourGradient g (juce::Colour (0xff4d7cf0), 0.0f, 0.0f, juce::Colour (0xffff3b30), 1.0f, 0.0f, false);
+        g.addColour (0.45, violet);
+        g.addColour (0.80, orange);
+        return g;
+    }();
+    return scale.getColourAtPosition ((double) juce::jlimit (0.0f, 1.0f, t));
+}
+
+/** The character ramp: five stops on the heat scale, following gain. The colour IS the type, so a
+    voicing list can drop the word and still say what it is at a glance. */
 inline juce::Colour characterColour (int typeIndex)
 {
     static const juce::Colour ramp[] = {
-        juce::Colour (0xff5fc97a),   // clean
-        juce::Colour (0xffb8cc5a),   // edge
-        juce::Colour (0xffe8b04a),   // crunch
-        juce::Colour (0xffe8783c),   // high-gain
-        juce::Colour (0xffe0503c),   // modern
+        heatColour (0.00f),   // clean
+        heatColour (0.25f),   // edge
+        heatColour (0.50f),   // crunch
+        heatColour (0.75f),   // high-gain
+        heatColour (1.00f),   // modern
     };
     constexpr int n = (int) (sizeof (ramp) / sizeof (ramp[0]));
     return ramp[juce::jlimit (0, n - 1, typeIndex)];

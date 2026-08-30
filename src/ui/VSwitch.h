@@ -19,7 +19,8 @@ namespace orbitamp
 
     Positions run in item order either way. Scales to any count — a two-way OFF/OCTAVE and a
     five-way rotary both read as the same piece of hardware. */
-class VSwitch final : public juce::Component
+class VSwitch final : public juce::Component,
+                      public juce::SettableTooltipClient
 {
 public:
     VSwitch() = default;   // the non-copyable macro declares a ctor, which suppresses this
@@ -44,6 +45,16 @@ public:
         repaint();
     }
 
+    /** Lying down WITHOUT the names: the slot and its lever alone, one line high — for a row that
+        writes the name and the chosen position beside it and keeps the list for a hint. */
+    void setNamesShown (bool shown)
+    {
+        namesShown = shown;
+        repaint();
+    }
+
+    int selectedIndex() const noexcept { return index; }
+
     void setSelectedIndex (int newIndex, juce::NotificationType notify = juce::sendNotification)
     {
         newIndex = juce::jlimit (0, juce::jmax (0, items.size() - 1), newIndex);
@@ -63,8 +74,9 @@ public:
 
     int idealHeight() const noexcept
     {
-        // Lying down it is one slot plus one line of names, not one row per position.
-        return horizontal ? lyingH : rowH * juce::jmax (1, items.size());
+        // Lying down it is one slot plus one line of names, not one row per position — and
+        // without the names, the slot alone.
+        return horizontal ? (namesShown ? lyingH : slotW + 4) : rowH * juce::jmax (1, items.size());
     }
 
     void paint (juce::Graphics& g) override
@@ -138,8 +150,9 @@ private:
         const auto  r  = getLocalBounds().toFloat();
         const float cw = r.getWidth() / (float) items.size();
 
-        const juce::Rectangle<float> slot (r.getX() + 2.0f, r.getY() + 1.0f,
-                                           r.getWidth() - 4.0f, (float) slotW - 2.0f);
+        // With names under it the slot rides the top; alone, it sits in the middle of its row.
+        const float slotY = namesShown ? r.getY() + 1.0f : r.getCentreY() - ((float) slotW - 2.0f) * 0.5f;
+        const juce::Rectangle<float> slot (r.getX() + 2.0f, slotY, r.getWidth() - 4.0f, (float) slotW - 2.0f);
         g.setColour (theme::bezel);
         g.fillRoundedRectangle (slot, 5.0f);
         g.setColour (theme::hair2);
@@ -157,6 +170,9 @@ private:
                                     3.5f);
         }
 
+        if (! namesShown)
+            return;
+
         for (int i = 0; i < items.size(); ++i)
         {
             const juce::Rectangle<float> cell (r.getX() + cw * (float) i, slot.getBottom() + 1.0f,
@@ -170,6 +186,7 @@ private:
     juce::StringArray items;
     int index = 0;
     bool horizontal = false;
+    bool namesShown = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VSwitch)
 };

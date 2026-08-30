@@ -67,11 +67,18 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     addAndMakeVisible (gain);
     addAndMakeVisible (inMeter);
 
-    device.fontHeight = 16.0f;   // the device's NAME is the face's headline, sized like one
+    device.fontHeight = 16.0f;   // the device's NAME, set exactly like the block's own beside it
+    device.tracking   = 0.15f;
+    device.boxed      = false;   // ...and nothing behind it, the frame opens the line under it
 
-    // The hero's name above the hero: bigger than the rank and file.
-    gain.labelFontHeight = 16.0f;
-    gain.labelRowHeight  = 20;
+    // The hero wears no label — the whole square is dial — and says its name under the mouse:
+    // the PACK's name for it, set when the device loads (Drive, Sustain, Fuzz, Overdrive...).
+    // Its arc runs cold to hot, because that is what this one dial's position is.
+    gain.labelRowHeight = 0;
+    gain.heat = true;
+
+    // The IN meter stands up beside the dial instead of lying across the block above it.
+    inMeter.vertical = true;
 
     // Five ways of showing the same device, one at a time. The tone curve comes from the block
     // itself — the same data its filters were designed from, resolved on the processor's pump.
@@ -123,6 +130,12 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     eqModeAttachment = std::make_unique<juce::ParameterAttachment> (
         *amp.apvts.getParameter (params::blockEqMode (blk)),
         [this] (float) { applyEqMode(); resized(); repaint(); });
+
+    eq.onReset = [this]
+    {
+        if (eq.wearsNative())
+            resetToneSlotsToPackDefaults();
+    };
 
     eq.onModePicked = [this] (int i)
     {
@@ -186,6 +199,9 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         {
             smoothTag.on = v > 0.5f;
             gain.snapToNotches = ! smoothTag.on;
+            smoothTag.setTooltip (smoothTag.on
+                ? "SMOOTH: between two captures both play, mixed by angle (2x CPU)"
+                : "STEP: the dial lands on the captured positions only");
             smoothTag.repaint();
         });
     smoothTag.onChange = [this]
@@ -321,8 +337,9 @@ void CapturedBlockPanel::deviceChanged()
     // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next
     // pack says for the next one. Detented where the pack has positions, continuous where it does
     // not — but always THERE: a knob with nothing to select drives instead, and a device without a
-    // gain knob is not a device.
+    // gain knob is not a device. Its name is the device's own for that dial.
     gain.setNotches (juce::jmax (0, positions.size()));
+    gain.setTooltip (block.dialName().isNotEmpty() ? block.dialName().toUpperCase() : juce::String ("GAIN"));
 
     for (int i = 0; i < params::boostNumMeasured; ++i)
     {
@@ -404,8 +421,8 @@ void CapturedBlockPanel::applyEqMode()
     const bool wearsNative = native.empty() ? false
                                             : want == (int) params::EqMode::native;
 
-    eq.setModes (native.empty() ? juce::StringArray { params::eqModes[1] } : params::eqModes,
-                 wearsNative ? 0 : 1);
+    eq.setModes (params::eqModes, wearsNative ? (int) params::EqMode::native : (int) params::EqMode::ours,
+                 ! native.empty());
 
     if (wearsNative)
     {
@@ -434,11 +451,7 @@ void CapturedBlockPanel::resetToPackDefaults()
     // The measured slots. A pack names where its knob starts — and it is NOT the reference
     // position, which is usually an end of travel and therefore the wrong thing to reach for. An
     // unclaimed slot goes to the middle, which is what it means when nothing is behind it.
-    const auto tones = block.tones();
-
-    for (int i = 0; i < params::boostNumMeasured; ++i)
-        write (params::blockMeasured (blk, i),
-               (float) (i < (int) tones.size() ? Block::defaultNorm (tones[(size_t) i]) : 0.5));
+    resetToneSlotsToPackDefaults();
 
     // ...and the selecting ones, which have the same problem for the same reason: slot one is an
     // octave switch on one device and something else entirely on the next.
@@ -447,6 +460,20 @@ void CapturedBlockPanel::resetToPackDefaults()
     for (int i = 0; i < params::numSelectors; ++i)
         write (params::selectorId (blk, i),
                (float) (i < list.size() ? list.getReference (i).defaultIndex : 0));
+}
+
+void CapturedBlockPanel::resetToneSlotsToPackDefaults()
+{
+    const auto tones = block.tones();
+
+    for (int i = 0; i < params::boostNumMeasured; ++i)
+        if (auto* p = amp.apvts.getParameter (params::blockMeasured (blk, i)))
+        {
+            const float plain = (float) (i < (int) tones.size() ? Block::defaultNorm (tones[(size_t) i]) : 0.5);
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 (plain));
+            p->endChangeGesture();
+        }
 }
 
 void CapturedBlockPanel::buildSelectors()
@@ -469,13 +496,19 @@ void CapturedBlockPanel::buildSelectors()
         for (const auto& v : def.values)
             labels.add (v.toUpperCase());
 
+        sel.name   = def.name.toUpperCase();
+        sel.values = labels;
+
         sel.steps = std::make_unique<VSwitch>();
         sel.steps->accent = theme::orange;
 
-        // Lying down under the GAIN dial: stacked, two positions cost forty-four units of the
-        // column's height and the dial's diameter paid for every one of them.
+        // Lying down under the GAIN dial, one line high: the slot and its lever alone — the name
+        // and the chosen position are written beside it by the panel, and the whole list is the
+        // hint. Names under the detents cost a second line, and the dial's diameter paid for it.
         sel.steps->setHorizontal (true);
+        sel.steps->setNamesShown (false);
         sel.steps->setItems (labels, 0);
+        sel.steps->setTooltip (labels.joinIntoString ("   ·   "));
         addAndMakeVisible (*sel.steps);
 
         sel.attachment = std::make_unique<juce::ParameterAttachment> (
@@ -485,6 +518,7 @@ void CapturedBlockPanel::buildSelectors()
                 if (auto* s = selectors[(size_t) i].steps.get())
                     s->setSelectedIndex (juce::jlimit (0, n - 1, juce::roundToInt (v)),
                                          juce::dontSendNotification);
+                repaint();   // the chosen position's name is the panel's to write
             });
 
         sel.steps->onChange = [this, i] (int v)
@@ -509,13 +543,18 @@ bool CapturedBlockPanel::hasNamedPositions (const namz::rig::Tone& m)
     return false;
 }
 
-void CapturedBlockPanel::layOutHeader (juce::Rectangle<int> area)
-{
-    device.setBounds (area.withTrimmedTop (6));   // the headline sits a touch lower
-}
-
 void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 {
+    // The device combo stands ON the top border, between the block's name and its switch — the row
+    // it used to take inside the box is the height the block gave back. Sized to the name and
+    // centred in the run, so the line shows on both sides of it as it does beside the block's own.
+    {
+        const auto slot = borderSlotArea();
+        device.setBounds (slot.withSizeKeepingCentre (juce::jmin (slot.getWidth(), device.idealWidth()),
+                                                      slot.getHeight()));
+        borderSlotUsed = device.getBounds();   // the frame opens the line under it
+    }
+
     // A thrown-open tile owns the WHOLE face: every control steps aside until the fold glyph
     // brings the room back.
     if (expandedViz >= 0)
@@ -555,12 +594,6 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     setControlsVisible (true);
     eq.setWidgetsVisible (true);
 
-    // ---- the meter, one line under the combo, the whole width. It leads because it is the
-    //      question you ask first about a captured block: is it being fed right. Full width because
-    //      it is the only one now, and a longer bar is a finer scale under the same hand. ----
-    inMeter.setBounds (area.removeFromTop (BlockMeter::designHeight));
-    area.removeFromTop (gap);
-
     // ---- the top zone is CAPPED and the console gets the remainder, not the other way round.
     //
     //      A dial and a picture stop improving once they are big enough to aim at; a curve does
@@ -582,38 +615,31 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     // Only the SELECTING controls stand here — the ones that pick a capture. A measured control is
     // a band of the curve and belongs in the console's row, whatever shape its own control has.
-    std::vector<VSwitch*> picks;
+    // Each takes ONE line off the bottom — name, lever, chosen position — and GAIN gets the rest,
+    // so a device with nothing to switch simply wears a bigger dial, and nothing else on the face
+    // moves.
     for (auto& sel : selectors)
-        if (sel.steps != nullptr)
-            picks.push_back (sel.steps.get());
-
-    int pickH = 0;
-    for (auto* sw : picks)
-        pickH = juce::jmax (pickH, sw->idealHeight());
-
-    // The switches take what they need off the bottom and GAIN gets the rest — so a device with
-    // nothing to switch simply wears a bigger dial, and nothing else on the face moves.
-    if (pickH > 0)
     {
-        auto swRow = column.removeFromBottom (pickH);
+        if (sel.steps == nullptr)
+            continue;
+
+        sel.row = column.removeFromBottom (pickRowH);
         column.removeFromBottom (gap);
-
-        const int each = juce::jmax (1, (swRow.getWidth() - ((int) picks.size() - 1) * knobGap)
-                                            / (int) picks.size());
-
-        for (auto* sw : picks)
-        {
-            sw->setBounds (swRow.removeFromLeft (each));
-            swRow.removeFromLeft (knobGap);
-        }
+        sel.steps->setBounds (sel.row.withX (sel.row.getX() + pickNameW).withWidth (pickSwitchW));
     }
+
+    // The IN meter stands at the column's left edge, as tall as the dial beside it: what the model
+    // is being fed, read against the dial that decides how hard.
+    auto meterCol = column.removeFromLeft (BlockMeter::designWidth);
+    column.removeFromLeft (6);
 
     const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
     gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
+    inMeter.setBounds (meterCol.withY (gain.getY()).withHeight (gainSide));
 
     // The pill stands in the gap at the bottom of the dial's arc — the one place inside the dial's
     // square that neither the ring nor a notch reaches — so it reads as the dial's own caption.
-    smoothTag.setBounds (juce::Rectangle<int> (46, 14).withCentre ({ gain.getBounds().getCentreX(),
+    smoothTag.setBounds (juce::Rectangle<int> (66, 14).withCentre ({ gain.getBounds().getCentreX(),
                                                                      gain.getBottom() - 6 }));
     smoothTag.toFront (false);
 
@@ -678,6 +704,18 @@ void CapturedBlockPanel::layWidget (juce::Rectangle<int> area)
     power menu, which is the one edit that must never need aiming for. */
 void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
 {
+    // A selecting control's line answers on its whole length: the lever goes where it is clicked,
+    // and a click on the name or on the chosen position — the two words either side of it — steps
+    // to the next position round the loop, so a two-way switch is a click wherever the eye lands.
+    if (expandedViz < 0 && ! e.mods.isPopupMenu())
+        for (auto& sel : selectors)
+            if (sel.steps != nullptr && sel.row.contains (e.getPosition())
+                && ! sel.steps->getBounds().contains (e.getPosition()))
+            {
+                sel.steps->setSelectedIndex ((sel.steps->selectedIndex() + 1) % juce::jmax (1, sel.steps->count()));
+                return;
+            }
+
     if (widgetArea.contains (e.getPosition()))
     {
         if (e.mods.isPopupMenu())
@@ -745,6 +783,26 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
         theme::drawTracked (g, "No device loaded", contentArea().toFloat(), theme::displayFont (8.0f),
                             0.1f, juce::Justification::centred);
     }
+
+    // Each selecting control's line: its name to the left of the lever, the chosen position to
+    // the right of it — the lever between them is the switch itself.
+    if (expandedViz < 0)
+        for (const auto& sel : selectors)
+        {
+            if (sel.steps == nullptr || sel.row.isEmpty())
+                continue;
+
+            auto row = sel.row.toFloat();
+            g.setColour (theme::txDim);
+            theme::drawTracked (g, sel.name, row.removeFromLeft ((float) pickNameW - 4.0f),
+                                theme::displayFont (10.0f), 0.08f, juce::Justification::centredLeft);
+
+            row.removeFromLeft ((float) pickSwitchW + 8.0f);
+            const int chosen = sel.steps->selectedIndex();
+            g.setColour (theme::orange);
+            theme::drawTracked (g, chosen < sel.values.size() ? sel.values[chosen] : juce::String(),
+                                row, theme::displayFont (10.0f), 0.08f, juce::Justification::centredLeft);
+        }
 }
 
 } // namespace orbitamp

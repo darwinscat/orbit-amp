@@ -43,14 +43,32 @@ private:
         partly off the bottom of the screen. */
     static constexpr int titleBarAllowance = 60;
 
-    static constexpr int baseWidth  = FaceplateView::designWidth + margin * 2;
-    static constexpr int baseHeight = Chrome::designHeight + chromeGap
-                                    + FaceplateView::designHeight
-                                    + chromeGap + TunerStrip::designHeight
-                                    + chromeGap + Footer::designHeight
-                                    + DemoStrip::designHeight      // TEMPORARY
-                                    + GlyphPreview::designHeight   // TEMPORARY
-                                    + margin * 2;
+    static constexpr int baseWidth   = FaceplateView::designWidth + margin * 2;
+    static constexpr int fixedHeight = Chrome::designHeight + chromeGap
+                                     + FaceplateView::designHeight
+                                     + chromeGap + TunerStrip::designHeight
+                                     + chromeGap + Footer::designHeight
+                                     + margin * 2;
+
+    /** The window is as tall as what it shows: the two strips under the footer are there only when
+        this player switched them on, and the height follows. */
+    bool showDemo   = false;
+    bool showGlyphs = false;
+    int  baseHeight() const noexcept
+    {
+        return fixedHeight + (showDemo ? DemoStrip::designHeight : 0)
+                           + (showGlyphs ? GlyphPreview::designHeight : 0);
+    }
+
+    /** After a strip is switched: the aspect the corner drag keeps, the limits, and the window
+        itself, at the scale it already has. */
+    void applyStripChoice();
+
+    /** Hints. The face has started keeping its captions out of the way — a dial with no label, a
+        meter with no reading, a switch with no names — and this is where they went: a word under
+        the mouse, a moment after it stops. Inside the editor rather than a desktop window, so it
+        goes where the window goes. */
+    juce::TooltipWindow tooltips { this, 450 };
 
     AmpProcessor& amp;              // the base class's `processor` is the AudioProcessor& — this is ours
     Chrome        chrome;
