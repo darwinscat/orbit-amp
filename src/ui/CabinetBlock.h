@@ -7,6 +7,8 @@
 
 #include <felitronics/appkit/IrWaveView.h>
 
+#include <juce_dsp/juce_dsp.h>
+
 #include <array>
 #include <memory>
 
@@ -22,13 +24,20 @@ class AmpProcessor;
     the trim's handle — and under it the four switches: HPF, LPF, TRIM, Ø. What the switches do is
     baked into the IR off the pump; the picture is the family's IrWaveView, fed the same bytes the
     engine convolves. */
-class CabinetBlock final : public BlockFrame
+class CabinetBlock final : public BlockFrame,
+                           private juce::Timer
 {
 public:
     explicit CabinetBlock (AmpProcessor&);
     ~CabinetBlock() override;
 
 private:
+    void timerCallback() override;
+
+    /** One tap's newest window into ~72 log-frequency bins, 0..1 against `ref` — the shared peak,
+        so the pre and the post keep their relative size. */
+    bool binsOf (int tap, std::vector<float>& out, float& ref);
+
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
 
@@ -56,6 +65,10 @@ private:
     std::array<Switch, 4> switches;   // HPF, LPF, TRIM, Ø
 
     std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt;
+
+    juce::dsp::FFT     fft;
+    std::vector<float> frame, work, preBins, postBins;
+    float              specRef = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CabinetBlock)
 };

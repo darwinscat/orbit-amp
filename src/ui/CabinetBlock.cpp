@@ -2,12 +2,25 @@
 
 #include "../PluginProcessor.h"
 
+#include <cmath>
+
 namespace orbitamp
 {
 
-CabinetBlock::CabinetBlock (AmpProcessor& processor)
-    : BlockFrame ("Cab IR", BlockFrame::Kind::captured), amp (processor)
+namespace
 {
+    constexpr int kSpecBins = 72;
+    constexpr float kSpecFloorDb = -54.0f;
+}
+
+CabinetBlock::CabinetBlock (AmpProcessor& processor)
+    : BlockFrame ("Cab IR", BlockFrame::Kind::captured), amp (processor),
+      fft (AmpProcessor::eqSpectrumOrder)
+{
+    (void) 0;
+    frame.resize ((size_t) felitronics::analysis::RollingSpectrumTap::kMaxSize);
+    work.resize ((size_t) (2 << AmpProcessor::eqSpectrumOrder));
+    startTimerHz (30);
     attachPower (*amp.apvts.getParameter (params::cabOn));
 
     // The IR's name on the border beside the block's, set like a name and in the block's colour.
@@ -140,5 +153,82 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 }
 
 void CabinetBlock::paintContent (juce::Graphics&) {}
+
+/** The faint spectra behind the impulse: what walks into the IR and what walks out. Both bins are
+    held against ONE reference — the larger frame's peak, decayed slowly — so the post reads as the
+    pre with the cabinet's opinion, not as two pictures each full of itself. */
+void CabinetBlock::timerCallback()
+{
+    if (! isBlockOn() || ! wave.isShowing())
+        return;
+
+    float ref = specRef * 0.94f;   // the shared peak decays, so a quiet passage regrows the picture
+
+    const bool a = binsOf (0, preBins, ref);
+    const bool b = binsOf (1, postBins, ref);
+
+    if (! a && ! b)
+        return;
+
+    specRef = ref;
+
+    const auto scale = [&] (std::vector<float>& bins)
+    {
+        for (auto& v : bins)
+        {
+            const float db = juce::Decibels::gainToDecibels (v / juce::jmax (1.0e-9f, ref), kSpecFloorDb);
+            v = juce::jlimit (0.0f, 1.0f, (db - kSpecFloorDb) / -kSpecFloorDb);
+        }
+    };
+
+    scale (preBins);
+    scale (postBins);
+    wave.setSpectrum (preBins, postBins);
+}
+
+bool CabinetBlock::binsOf (int tap, std::vector<float>& out, float& ref)
+{
+    auto& t = tap == 0 ? amp.cabSpectrumTap[0] : amp.cabSpectrumTap[1];
+
+    int order = 0;
+    if (! t.tryPull (frame.data(), order) || order != AmpProcessor::eqSpectrumOrder)
+        return false;
+
+    const int n = 1 << order;
+    std::fill (work.begin(), work.end(), 0.0f);
+
+    for (int i = 0; i < n; ++i)
+    {
+        const float w = 0.5f - 0.5f * std::cos (2.0f * juce::MathConstants<float>::pi * (float) i / (float) (n - 1));
+        work[(size_t) i] = frame[(size_t) i] * w;
+    }
+
+    fft.performRealOnlyForwardTransform (work.data(), true);
+
+    // ~72 log-frequency bins, 20 Hz .. 20 kHz, each the loudest FFT bin in its span.
+    out.assign ((size_t) kSpecBins, 0.0f);
+    const double sr = juce::jmax (8000.0, amp.currentSampleRate());
+
+    for (int bIdx = 0; bIdx < kSpecBins; ++bIdx)
+    {
+        const double f0 = 20.0 * std::pow (1000.0, (double) bIdx / (double) kSpecBins);
+        const double f1 = 20.0 * std::pow (1000.0, (double) (bIdx + 1) / (double) kSpecBins);
+        int k0 = (int) std::floor (f0 * n / sr);
+        int k1 = (int) std::ceil  (f1 * n / sr);
+        k0 = juce::jlimit (1, n / 2 - 1, k0);
+        k1 = juce::jlimit (k0 + 1, n / 2, k1);
+
+        float mx = 0.0f;
+        for (int k = k0; k < k1; ++k)
+        {
+            const float re = work[(size_t) (2 * k)], im = work[(size_t) (2 * k + 1)];
+            mx = juce::jmax (mx, std::sqrt (re * re + im * im));
+        }
+        out[(size_t) bIdx] = mx;
+        ref = juce::jmax (ref, mx);
+    }
+
+    return true;
+}
 
 } // namespace orbitamp

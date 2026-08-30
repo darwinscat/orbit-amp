@@ -237,6 +237,10 @@ public:
         a starve-tolerant reader, so several views may sip from it. */
     std::array<felitronics::analysis::RollingSpectrumTap, 2> blockSpectrumTap;
 
+    /** The cabinet's own pair — what goes into the IR and what leaves it, for the picture's faint
+        spectra. Pushed around the convolution, channel 0, only while the cabinet is on. */
+    std::array<felitronics::analysis::RollingSpectrumTap, 2> cabSpectrumTap;
+
     /** One analysis resolution for every consumer of the taps: mixed orders would make the tap
         force-republish on every alternating pull. */
     static constexpr int eqSpectrumOrder = 11;   // 2048

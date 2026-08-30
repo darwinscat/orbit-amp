@@ -570,8 +570,26 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
       nsStage[stPower] = elapsedNs (a); }
 
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
+    // Its picture's spectra tap the door and the exit, channel 0, only while it is on.
     { const auto a = PerfClock::now();
-      cab.process (channels, nchBack, numSamples, cabOnParam->load() > 0.5f);
+      const bool cabOn = cabOnParam->load() > 0.5f;
+      if (cabOn)
+      {
+          const float* d = buffer.getReadPointer (0);
+          for (int i = 0; i < numSamples; ++i)
+              cabSpectrumTap[0].push (d[i]);
+          cabSpectrumTap[0].publishIfDue (eqSpectrumOrder,
+                                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+      }
+      cab.process (channels, nchBack, numSamples, cabOn);
+      if (cabOn)
+      {
+          const float* d = buffer.getReadPointer (0);
+          for (int i = 0; i < numSamples; ++i)
+              cabSpectrumTap[1].push (d[i]);
+          cabSpectrumTap[1].publishIfDue (eqSpectrumOrder,
+                                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+      }
       cabOutDb.store (juce::Decibels::gainToDecibels (
           buffer.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stCab] = elapsedNs (a); }
