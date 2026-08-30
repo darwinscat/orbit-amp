@@ -139,6 +139,11 @@ juce_add_plugin(OrbitAmp
     # audio-input entitlement at signing time. Plug-in formats run in the host and don't.
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "OrbitAmp needs audio input to process your signal."
+    # Bundle / executable icon — the cat on the family ground (resources/icon/OrbitAmp-1024.png).
+    # One 1024-square PNG is enough: juceaide builds the macOS .icns for every bundle and the
+    # Windows .ico from it. No ICON_SMALL on purpose — see OrbitCab: juceaide reads the pair
+    # small-then-big while JUCEUtils appends big-then-small, and passing both can swap the slots.
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/OrbitAmp-1024.png"
     COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN}
 )
 
