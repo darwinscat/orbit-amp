@@ -34,6 +34,10 @@ public:
 
     void showLimiterMenu (juce::Point<int> screenPos);
 
+    /** The gear: Setup, and the window's own switches — the two TEMPORARY strips under the footer,
+        off unless asked for (prefs::showDemo, prefs::showGlyphs). */
+    void showGearMenu (juce::Point<int> screenPos);
+
 private:
     static constexpr int margin    = 18;   // the ground the device sits on
     static constexpr int chromeGap = 10;   // toolbar to faceplate

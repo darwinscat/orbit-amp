@@ -1,5 +1,7 @@
 #include "PluginEditor.h"
 
+#include "ui/Prefs.h"
+
 namespace orbitamp
 {
 
@@ -19,22 +21,25 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     addAndMakeVisible (chrome);
     addAndMakeVisible (faceplate);
-    addAndMakeVisible (gateStrip);
-    addAndMakeVisible (outStrip);
 
     // The hints wear the panel's own colours, not the stock yellow.
     tooltips.setColour (juce::TooltipWindow::backgroundColourId, theme::panel2);
     tooltips.setColour (juce::TooltipWindow::textColourId, theme::txDim);
     tooltips.setColour (juce::TooltipWindow::outlineColourId, theme::hair2);
+    addAndMakeVisible (gateStrip);
+    addAndMakeVisible (outStrip);
     addAndMakeVisible (gateBadge);
     addAndMakeVisible (limitBadge);
     addAndMakeVisible (tunerStrip);
     addAndMakeVisible (footer);
-    addAndMakeVisible (demoStrip);   // TEMPORARY
-    addAndMakeVisible (glyphs);      // TEMPORARY
+    // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
+    showDemo   = prefs::getBool (prefs::showDemo,   false);
+    showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+    addChildComponent (demoStrip);
+    addChildComponent (glyphs);
     addChildComponent (setup);       // hidden until the toolbar's gear opens it
 
-    chrome.onShowSetup = [this] { setup.open(); };
+    chrome.onGear = [this] (juce::Point<int> pos) { showGearMenu (pos); };
 
     // The badges' clicks mean MENU — the whole device in one pick. There is nowhere to "open" any
     // more and nothing to open TO: every block wears its own face on the panel, and the gate's own
@@ -112,11 +117,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     // Dragging the corner IS the zoom: the aspect is locked, so width alone determines the factor.
     setResizable (true, true);
-    getConstrainer()->setFixedAspectRatio ((double) baseWidth / (double) baseHeight);
-    setResizeLimits (juce::roundToInt (baseWidth  * AmpProcessor::minScale),
-                     juce::roundToInt (baseHeight * AmpProcessor::minScale),
-                     juce::roundToInt (baseWidth  * AmpProcessor::maxScale),
-                     juce::roundToInt (baseHeight * AmpProcessor::maxScale));
+    getConstrainer()->setFixedAspectRatio ((double) baseWidth / (double) baseHeight());
+    setResizeLimits (juce::roundToInt (baseWidth    * AmpProcessor::minScale),
+                     juce::roundToInt (baseHeight() * AmpProcessor::minScale),
+                     juce::roundToInt (baseWidth    * AmpProcessor::maxScale),
+                     juce::roundToInt (baseHeight() * AmpProcessor::maxScale));
 
     // As large as the screen allows, up to the size the plugin WANTS to open at. Asking for 2x on a
     // display that cannot hold it does not give 2x — it gives whatever the window manager shrinks it
@@ -128,12 +133,52 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     {
         const auto area = display->userArea;
         const float fits = juce::jmin ((float) area.getWidth()  / (float) baseWidth,
-                                       (float) (area.getHeight() - titleBarAllowance) / (float) baseHeight);
+                                       (float) (area.getHeight() - titleBarAllowance) / (float) baseHeight());
         s = juce::jlimit (AmpProcessor::minScale, s, fits);
         amp.setEditorScale (s);
     }
 
-    setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight * s));
+    setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight() * s));
+}
+
+void AmpEditor::showGearMenu (juce::Point<int> screenPos)
+{
+    juce::PopupMenu m;
+    m.addItem (1, "SETUP...");
+    m.addSeparator();
+    m.addItem (2, "SHOW DEMO PLAYER",   true, showDemo);
+    m.addItem (3, "SHOW DEVICE GLYPHS", true, showGlyphs);
+
+    m.showMenuAsync (juce::PopupMenu::Options()
+                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                     [safe = juce::Component::SafePointer<AmpEditor> (this)] (int r)
+                     {
+                         if (safe == nullptr || r == 0)
+                             return;
+
+                         if (r == 1)
+                         {
+                             safe->setup.open();
+                             return;
+                         }
+
+                         bool& flag = r == 2 ? safe->showDemo : safe->showGlyphs;
+                         flag = ! flag;
+                         prefs::setBool (r == 2 ? prefs::showDemo : prefs::showGlyphs, flag);
+                         safe->applyStripChoice();
+                     });
+}
+
+void AmpEditor::applyStripChoice()
+{
+    const float s = (float) getWidth() / (float) baseWidth;
+
+    getConstrainer()->setFixedAspectRatio ((double) baseWidth / (double) baseHeight());
+    setResizeLimits (juce::roundToInt (baseWidth    * AmpProcessor::minScale),
+                     juce::roundToInt (baseHeight() * AmpProcessor::minScale),
+                     juce::roundToInt (baseWidth    * AmpProcessor::maxScale),
+                     juce::roundToInt (baseHeight() * AmpProcessor::maxScale));
+    setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight() * s));
 }
 
 void AmpEditor::paint (juce::Graphics& g)
@@ -279,17 +324,27 @@ void AmpEditor::resized()
     footer.setBounds (margin, footerY, FaceplateView::designWidth, Footer::designHeight);
     footer.setTransform (zoom);
 
-    // TEMPORARY — the audition player and the glyph review strip, under the footer.
-    const int demoY = footerY + Footer::designHeight;
-    demoStrip.setBounds (margin, demoY, FaceplateView::designWidth, DemoStrip::designHeight);
-    demoStrip.setTransform (zoom);
+    // TEMPORARY — the audition player and the glyph review strip, under the footer, each only
+    // when this player switched it on; the window is as tall as what it shows.
+    int stripY = footerY + Footer::designHeight;
 
-    glyphs.setBounds (margin, demoY + DemoStrip::designHeight,
-                      FaceplateView::designWidth, GlyphPreview::designHeight);
-    glyphs.setTransform (zoom);
+    demoStrip.setVisible (showDemo);
+    if (showDemo)
+    {
+        demoStrip.setBounds (margin, stripY, FaceplateView::designWidth, DemoStrip::designHeight);
+        demoStrip.setTransform (zoom);
+        stripY += DemoStrip::designHeight;
+    }
+
+    glyphs.setVisible (showGlyphs);
+    if (showGlyphs)
+    {
+        glyphs.setBounds (margin, stripY, FaceplateView::designWidth, GlyphPreview::designHeight);
+        glyphs.setTransform (zoom);
+    }
 
     // The overlay covers the whole editor, margins included, in the same design units.
-    setup.setBounds (0, 0, baseWidth, baseHeight);
+    setup.setBounds (0, 0, baseWidth, baseHeight());
     setup.setTransform (zoom);
 }
 

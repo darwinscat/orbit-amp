@@ -32,9 +32,10 @@ public:
     explicit Chrome (AmpProcessor&);
     ~Chrome() override;
 
-    /** The gear was pressed. What opens — the Setup window — is the editor's business; the
-        header only announces, like every other widget here. */
-    std::function<void()> onShowSetup;
+    /** The gear was pressed, at this screen position. What it offers — the Setup window and the
+        window's own switches — is the editor's business; the header only announces, like every
+        other widget here. */
+    std::function<void (juce::Point<int>)> onGear;
 
     void resized() override;
 

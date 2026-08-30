@@ -48,8 +48,8 @@ Chrome::Chrome (AmpProcessor& processor)
 
     gear.onClick = [this]
     {
-        if (onShowSetup)
-            onShowSetup();
+        if (onGear)
+            onGear (gear.getScreenBounds().getBottomLeft());
     };
 
     // Save writes back to the loaded preset; Save As always asks for a name — the same split as the
