@@ -1,88 +1,143 @@
 #include "PowerAmpBlock.h"
 
 #include "../Parameters.h"
+#include "../PluginProcessor.h"
 
 namespace orbitamp
 {
 
-PowerAmpBlock::PowerAmpBlock (juce::AudioProcessorValueTreeState& s)
-    // "Power", not "Power Amp": a quarter-width block's top border carries the name AND the switch,
-    // and at reading size the two words ran into each other. The row it sits in says the rest.
-    : BlockFrame ("Power", BlockFrame::Kind::dsp), state (s)
+PowerAmpBlock::PowerAmpBlock (AmpProcessor& processor, core::CapturedBlock& b)
+    : BlockFrame ("Power", BlockFrame::Kind::captured), amp (processor), block (b)
 {
-    addAndMakeVisible (type);
-    addAndMakeVisible (output);
+    // The pack's name is the block's name, on the border.
+    showTitle = false;
+    device.fontHeight = 16.0f;
+    device.tracking   = 0.15f;
+    device.boxed      = false;
+    addAndMakeVisible (device);
 
-    output.setTubes (params::powerTubes);
+    // The dial wears no label; its name is the pack's own for that axis, under the mouse. Its arc
+    // runs cold to hot, like the other captured dials'.
+    gain.labelRowHeight = 0;
+    gain.heat = true;
+    addChildComponent (gain);
 
-    tubeAttachment = std::make_unique<juce::ParameterAttachment> (
-        *state.getParameter (params::powerTube),
-        [this] (float v) { output.setSelection (juce::roundToInt (v), output.getCount()); });
+    attachPower (*amp.apvts.getParameter (params::powerOn));
 
-    countAttachment = std::make_unique<juce::ParameterAttachment> (
-        *state.getParameter (params::powerCount),
-        [this] (float v) { output.setSelection (output.getTube(), juce::roundToInt (v) + 1); });
-
-    // One pick writes both: they land in the same message-loop turn, so the history folds them into
-    // a single undo step.
-    output.onPick = [this] (int t, int n)
-    {
-        tubeAttachment->setValueAsCompleteGesture ((float) t);
-        countAttachment->setValueAsCompleteGesture ((float) (n - 1));
-    };
-    addAndMakeVisible (drive);
-    addAndMakeVisible (sag);
-
-    driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-        state, params::powerDrive, drive);
-    sagAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-        state, params::powerSag, sag);
-
-    attachPower (*state.getParameter (params::powerOn));
-
-    type.setItems (params::powerTypes, 0);
-
-    typeAttachment = std::make_unique<juce::ParameterAttachment> (
-        *state.getParameter (params::powerType),
+    // The attachment hears everyone BUT this block — a restored session, a host automating the
+    // parameter. Load the device it names before rebuilding the face.
+    deviceAttachment = std::make_unique<juce::ParameterAttachment> (
+        *amp.apvts.getParameter (params::blockDevice (params::powerId)),
         [this] (float v)
         {
-            const int index = juce::roundToInt (v);
-            type.setSelectedIndex (index, juce::dontSendNotification);
-
-            // Index 0 is our simulation, the rest are captures. The frame follows.
-            setKind (index == 0 ? BlockFrame::Kind::dsp : BlockFrame::Kind::captured);
+            const int i = juce::roundToInt (v);
+            device.setSelection (i);
+            block.selectIfMoved (i);
+            deviceChanged();
         });
 
-    type.onChange = [this] (int i) { typeAttachment->setValueAsCompleteGesture ((float) i); };
+    device.onPick = [this] (int i)
+    {
+        deviceAttachment->setValueAsCompleteGesture ((float) i);
+        block.select (i);   // message thread — it reads files
+        deviceChanged();
+    };
 
-    typeAttachment->sendInitialUpdate();
-    tubeAttachment->sendInitialUpdate();
-    countAttachment->sendInitialUpdate();
+    gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        amp.apvts, params::blockGain (params::powerId), gain);
+
+    deviceAttachment->sendInitialUpdate();
+    deviceChanged();
 }
 
 PowerAmpBlock::~PowerAmpBlock() = default;
 
-void PowerAmpBlock::layOutHeader (juce::Rectangle<int> area)
+void PowerAmpBlock::deviceChanged()
 {
-    type.setBounds (area);
+    juce::Array<VoicingSelector::Entry> entries;
+    bool sawUser = false;
+
+    for (const auto& pack : block.packs)
+    {
+        VoicingSelector::Entry e;
+        e.name = pack.displayName();
+        e.character = pack.character;
+        e.startsSection = ! pack.bundled && ! sawUser;
+        sawUser = sawUser || ! pack.bundled;
+        entries.add (std::move (e));
+    }
+
+    device.setEntries (std::move (entries));
+
+    // What was captured: the circuit's glyphs and the gear's full name, the voice's alias under it.
+    spec  = felitronics::appkit::parseDeviceSpec (block.circuit());
+    name  = block.deviceName();
+    alias = {};
+
+    if (auto* devParam = amp.apvts.getParameter (params::blockDevice (params::powerId));
+        devParam != nullptr && ! block.packs.isEmpty())
+    {
+        const int chosen = juce::jlimit (0, block.packs.size() - 1,
+                                         juce::roundToInt (devParam->convertFrom0to1 (devParam->getValue())));
+        alias = block.packs.getReference (chosen).alias;
+    }
+
+    // The dial, only where the pack has an axis to turn: its detents are the captured positions.
+    const auto positions = block.gainPositions();
+    gain.setNotches (positions.size());
+    gain.setVisible (! block.dialName().isEmpty());
+    gain.setTooltip (block.dialName().isNotEmpty() ? block.dialName().toUpperCase() : juce::String ("GAIN"));
+
+    resized();
+    repaint();
 }
 
 void PowerAmpBlock::layOutContent (juce::Rectangle<int> area)
 {
-    // The bottle and how many of it — the amp rather than a setting on it, so they sit above the
-    // knobs with the model's name, not among them.
-    output.setBounds (area.removeFromTop (tubeRow));
-    area.removeFromTop (rowGap);
+    // The pack's name on the border where the block's name would stand: at the left, sized to itself.
+    {
+        const auto slot = borderSlotArea();
+        device.setBounds (slot.withWidth (juce::jmin (slot.getWidth(), device.idealWidth())));
+        borderSlotUsed = device.getBounds();
+    }
 
-    // Two knobs out of the stage's ten controls: Drive is what a power amp is for, Sag is what makes
-    // it feel like one. Everything else is the model, not a setting.
-    const int side  = juce::jmin (area.getHeight(), (area.getWidth() - knobGap) / 2);
-    const int total = side * 2 + knobGap;
+    // The dial takes the right side when there is one; the circuit's glyphs and the name the rest,
+    // glyphs above, words below.
+    if (gain.isVisible())
+    {
+        const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight()));
+        gain.setBounds (area.removeFromRight (side).withSizeKeepingCentre (side, side));
+        area.removeFromRight (gap);
+    }
 
-    auto row = area.withSizeKeepingCentre (total, side);
-    drive.setBounds (row.removeFromLeft (side));
-    row.removeFromLeft (knobGap);
-    sag.setBounds (row.removeFromLeft (side));
+    textArea  = area.removeFromBottom (34);
+    area.removeFromBottom (gap);
+    glyphArea = area;
+}
+
+void PowerAmpBlock::paintContent (juce::Graphics& g)
+{
+    if (block.packs.isEmpty())
+    {
+        g.setColour (theme::txFaint.withAlpha (0.5f));
+        theme::drawTracked (g, "No power amp loaded", contentArea().toFloat(), theme::displayFont (8.0f),
+                            0.1f, juce::Justification::centred);
+        return;
+    }
+
+    felitronics::appkit::drawDeviceSpecStatic (g, glyphArea.toFloat().reduced (4.0f), spec);
+
+    auto t = textArea.toFloat();
+    g.setColour (theme::tx);
+    theme::drawTracked (g, name.toUpperCase(), t.removeFromTop (18.0f), theme::displayFont (12.0f), 0.08f,
+                        juce::Justification::centred);
+
+    if (alias.isNotEmpty())
+    {
+        g.setColour (theme::txDim);
+        theme::drawTracked (g, alias.toUpperCase(), t, theme::displayFont (10.0f), 0.08f,
+                            juce::Justification::centred);
+    }
 }
 
 } // namespace orbitamp

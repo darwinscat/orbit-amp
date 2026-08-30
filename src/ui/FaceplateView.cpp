@@ -9,7 +9,7 @@ namespace orbitamp
 FaceplateView::FaceplateView (AmpProcessor& processor)
     : boost (processor, processor.boost, "Boost", params::boostId, 0, processor.blockSpectrumTap[0]),
       preamp (processor, processor.preamp, "Preamp", params::preampId, 1, processor.blockSpectrumTap[1]),
-      reverb (processor.apvts), power (processor.apvts), cabinet (processor.apvts)
+      reverb (processor.apvts), power (processor, processor.poweramp), cabinet (processor.apvts)
 {
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb,
                      (BlockFrame*) &power, (BlockFrame*) &cabinet })

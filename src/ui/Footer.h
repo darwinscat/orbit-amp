@@ -32,7 +32,6 @@ public:
 
 private:
     void timerCallback() override;
-    void showOversampleMenu();
     void showLoadBreakdown();
 
     static constexpr int itemWidth   = 92;
@@ -41,7 +40,6 @@ private:
 
     AmpProcessor& amp;
 
-    felitronics::appkit::chrome::FlatItem oversample;
     felitronics::appkit::chrome::FlatItem stereo;
 
     /** The DSP number is a door: click it and the per-stage breakdown steps out. */
@@ -53,7 +51,6 @@ private:
 
     LoadBadge loadBadge;
 
-    std::unique_ptr<juce::ParameterAttachment> oversampleAttachment;
     std::unique_ptr<juce::ParameterAttachment> stereoAttachment;
 
     juce::String rateText, loadText;

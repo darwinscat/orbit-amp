@@ -10,7 +10,6 @@
 #include "core/EqLink.h"
 #include "core/CabinetIr.h"
 #include "core/SoftLimiter.h"
-#include "core/PowerAmp.h"
 #include "core/ReverbStage.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
@@ -89,7 +88,6 @@ private:
     {
         history.tick();
         pumpDeviceWork();
-        applyOversamplingIfChanged();
         pumpTuner();
     }
 
@@ -107,12 +105,8 @@ private:
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 
-    /** Re-preparing is a message-thread job, so the footer's oversampling choice is picked up here
-        rather than in the audio callback. */
-    void applyOversamplingIfChanged();
-
-    /** The chain's round-trip to the host: the power amp's oversampling plus whatever the two
-        players' models need for rate-matching — reported whenever any of them changes. */
+    /** The chain's round-trip to the host: whatever the three players' models need for
+        rate-matching — reported whenever any of them changes. */
     void reportLatency();
 
     /** One thread for both blocks' model builds. One, because a load is twenty milliseconds and
@@ -148,7 +142,6 @@ private:
 
     std::array<core::EqLink, params::numEqLinks> eqLinks;
     core::ReverbStage reverb;
-    core::PowerAmp    power;
 
     /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
         raw input at the front of the chain; where it MUTES is the player's parameter. */
@@ -164,8 +157,9 @@ public:
         stage playing what is chosen from it, that device's measured controls as filters, and the taps
         its pictures read. The library and the loading live on the message thread; the audio thread
         only ever meets a model that is already in memory. */
-    core::CapturedBlock boost  { device::DeviceLibrary::Slot::pedal };
-    core::CapturedBlock preamp { device::DeviceLibrary::Slot::preamp };
+    core::CapturedBlock boost    { device::DeviceLibrary::Slot::pedal };
+    core::CapturedBlock preamp   { device::DeviceLibrary::Slot::preamp };
+    core::CapturedBlock poweramp { device::DeviceLibrary::Slot::poweramp };   // a captured power stage, after the reverb
 
     /** Re-scans the devices folder and loads whatever the device parameters point at. Message
         thread. */
@@ -303,12 +297,9 @@ private:
     std::atomic<float>* reverbTypeParam = nullptr;
     std::atomic<float>* reverbMixParam  = nullptr;
 
-    std::atomic<float>* powerOnParam    = nullptr;
-    std::atomic<float>* powerDriveParam = nullptr;
-    std::atomic<float>* powerSagParam   = nullptr;
-    std::atomic<float>* powerTubeParam  = nullptr;
-    std::atomic<float>* powerCountParam = nullptr;
-    std::atomic<float>* oversampleParam = nullptr;
+    std::atomic<float>* powerOnParam     = nullptr;
+    std::atomic<float>* powerGainParam   = nullptr;
+    std::atomic<float>* powerSmoothParam = nullptr;
     std::atomic<float>* boostOnParam    = nullptr;
     std::atomic<float>* boostGainParam  = nullptr;
     std::atomic<float>* preampOnParam   = nullptr;
@@ -322,7 +313,6 @@ public:
 
 private:
     std::atomic<float> dspLoad { 0.0f };
-    int lastOversample = -1;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)

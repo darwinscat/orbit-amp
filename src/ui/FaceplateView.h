@@ -28,7 +28,7 @@ public:
     explicit FaceplateView (AmpProcessor&);
 
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
-    void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); }
+    void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); power.deviceChanged(); }
 
     /** Escape's errand: put a thrown-open picture back. One Escape folds one picture, so a player
         who opened two of them gets out of them one at a time rather than all at once. */

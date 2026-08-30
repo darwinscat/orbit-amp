@@ -85,6 +85,7 @@ inline juce::String selectorId (const char* blk, int i)
 
 inline constexpr const char* boostId  = "boost";
 inline constexpr const char* preampId = "preamp";
+inline constexpr const char* powerId  = "power";    // the captured power amp: the same set of slots as the other two
 
 /** A captured block's own parameters, derived from its id prefix — the same shape for the boost,
     the preamp, and whatever captured block comes next. The named constants around them predate
@@ -237,12 +238,6 @@ inline const juce::StringArray cabMics { "SM57", "MD421" };
 inline const juce::StringArray cabPositions { "Cone Edge", "Center Cone", "Cap Edge", "Center Cap" };
 
 inline constexpr const char* powerOn   = "power_on";
-inline constexpr const char* powerType  = "power_type";
-inline constexpr const char* powerDrive = "power_drive";
-inline constexpr const char* powerSag   = "power_sag";
-inline constexpr const char* powerTube  = "power_tube";
-inline constexpr const char* powerCount = "power_count";
-inline constexpr const char* oversample = "oversample";
 /** How many channels the chain works, and from where. MONO: one signal end to end, the copy to the
     other channel after everything — the truth of a guitar chain, and one neural pass. STEREO: two
     takes on one bus, each through its own amp, everything twice. STEREO SPACE: mono where the
@@ -260,21 +255,6 @@ inline const juce::StringArray demoLoops { "GGG", "Eleven Light Years", "Cats Ha
 /** Oversampling for the nonlinear stages. Not a per-preset taste: it trades CPU for alias-free
     saturation, and which trade you want depends on the machine you are on. Lives in the footer with
     the other facts about the run. */
-inline const juce::StringArray oversampleFactors { "2x", "4x", "8x", "16x" };
-inline constexpr int oversampleValues[] = { 2, 4, 8, 16 };
-
-/** Output bottles, ordered by headroom — least first, which is also the order they break up in.
-    Measured across the Drive sweep an EL84 loses 12.5 dB to compression where a KT88 loses 4.5. */
-inline const juce::StringArray powerTubes { "EL84", "EL34", "6L6", "KT88" };
-
-/** One bottle or two. Not decoration: one output tube IS single-ended class A and two are push-pull,
-    which the stage takes as a first-class parameter and which measures differently. */
-inline const juce::StringArray powerCounts { "1", "2" };
-
-/** What drives the power amp. The block's own switch is the "none" — a second way to turn it off
-    inside the list would be two controls for one state. Simulation is our white-box tube stage;
-    the NAM slots are captures. */
-inline const juce::StringArray powerTypes { "Simulation", "NAM 1", "NAM 2" };
 
 inline constexpr const char* reverbType = "reverb_type";
 inline constexpr const char* reverbMix  = "reverb_mix";

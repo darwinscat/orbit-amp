@@ -1,47 +1,52 @@
 #pragma once
 
+#include "../core/CapturedBlock.h"
 #include "BlockFrame.h"
 #include "Knob.h"
-#include "Selector.h"
-#include "TubeSelector.h"
+#include "VoicingSelector.h"
+
+#include <felitronics/appkit/DeviceGlyph.h>
+#include <felitronics/appkit/DeviceSpec.h>
 
 namespace orbitamp
 {
 
-/** The power amp, first block of the lower row.
+class AmpProcessor;
 
-    It is the one block whose NATURE depends on what is loaded: the simulation is our own white-box
-    tube stage, the NAM slots are captured hardware. So the frame recolours with the choice —
-    violet for rebuilt, orange for captured — rather than claiming one of them permanently.
+/** The power amp, first block of the lower row: a captured one. A pack in the poweramp slot, played
+    by the same block the boost and the preamp are, after the space.
 
-    The illustration below is not designed yet; the space is reserved so the row has its final
-    proportions and whatever lands there does not move everything else. */
+    The pack's name IS the block's name — on the border where POWER would stand, a quarter-width
+    block having no room for both — and the box says what was captured: the circuit's glyphs, tube
+    or transistor, and the gear's full name. A dial, when the pack has an axis to turn. */
 class PowerAmpBlock final : public BlockFrame
 {
 public:
-    explicit PowerAmpBlock (juce::AudioProcessorValueTreeState&);
+    PowerAmpBlock (AmpProcessor&, core::CapturedBlock&);
     ~PowerAmpBlock() override;
 
+    /** Rebuilds the face from whatever pack is loaded. Called when the device changes. */
+    void deviceChanged();
+
 private:
-    int  headerHeight() const override { return headerRow; }
-    void layOutHeader (juce::Rectangle<int>) override;
     void layOutContent (juce::Rectangle<int>) override;
+    void paintContent (juce::Graphics&) override;
 
-    static constexpr int headerRow = 22;
+    static constexpr int gap         = 8;
+    static constexpr int maxKnobSide = 84;
 
-    juce::AudioProcessorValueTreeState& state;
+    AmpProcessor&        amp;
+    core::CapturedBlock& block;
 
-    Selector     type { theme::violet, true };
-    TubeSelector output;   // bottle and count as ONE choice, drawn as the bottles themselves
-    Knob     drive { "Drive", theme::violet, 0 };
-    Knob     sag   { "Sag",   theme::violet, 0 };
+    VoicingSelector device;
+    Knob            gain { "", theme::orange, 0 };
 
-    static constexpr int knobGap = 12;
-    static constexpr int tubeRow = 26;
-    static constexpr int rowGap  = 8;
+    felitronics::appkit::DeviceSpec spec;
+    juce::String name, alias;
+    juce::Rectangle<int> glyphArea, textArea;
 
-    std::unique_ptr<juce::ParameterAttachment> typeAttachment, tubeAttachment, countAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> driveAttachment, sagAttachment;
+    std::unique_ptr<juce::ParameterAttachment> deviceAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PowerAmpBlock)
 };

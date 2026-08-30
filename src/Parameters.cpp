@@ -67,7 +67,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // The raw switch and the selector slots, one set per captured block — and the block's one trim.
     // IN is how hard the capture is fed, and it rides its own meter rather than being a knob among
     // knobs, because it is the question you ask first about a captured device.
-    for (const char* blk : { boostId, preampId })
+    for (const char* blk : { boostId, preampId, powerId })
     {
         const juce::NormalisableRange<float> trim (blockTrimMinDb, blockTrimMaxDb, 0.1f);
 
@@ -92,6 +92,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     layout.add (std::make_unique<Int> (juce::ParameterID { preampDevice, 1 }, "Preamp Device",
                                        0, maxDevices - 1, 0));
+
+    // The captured power amp's own device, dial and tone slots — the shape the other two have.
+    layout.add (std::make_unique<Int>   (juce::ParameterID { blockDevice (powerId), 1 }, "Power Device",
+                                         0, maxDevices - 1, 0),
+                std::make_unique<Float> (juce::ParameterID { blockGain (powerId), 1 }, "Power Gain",
+                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f));
+
+    for (int i = 0; i < boostNumMeasured; ++i)
+        layout.add (std::make_unique<Float> (juce::ParameterID { blockMeasured (powerId, i), 1 },
+                                             "Power " + juce::String (i + 1),
+                                             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
 
     for (int i = 0; i < preampNumMeasured; ++i)
         layout.add (std::make_unique<Float> (juce::ParameterID { preampMeasured (i), 1 },
@@ -185,26 +196,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     }
 
     // The power amp is off by default: it is most useful for leads and least for tight rhythm, so
-    // it should be something you reach for rather than something you find already on.
-    layout.add (std::make_unique<Bool>   (juce::ParameterID { powerOn,   1 }, "Power Amp", false),
-                std::make_unique<Choice> (juce::ParameterID { powerType, 1 }, "Power Amp Type", powerTypes, 0));
-
-    // Two knobs out of the stage's ten controls. The rest is what a power amp IS rather than what
-    // you set on it, and belongs to the model. Continuous, not stepped: this is our own DSP, so
-    // every position between two others is a real one — unlike a captured gain.
-    layout.add (std::make_unique<Float> (juce::ParameterID { powerDrive, 1 }, "Power Drive",
-                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f),
-                std::make_unique<Float> (juce::ParameterID { powerSag, 1 }, "Power Sag",
-                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 3.0f));
-
-    // Which bottle and how many. Both are the amp rather than a setting on it, which is why they sit
-    // with the model's name and not among the knobs.
-    layout.add (std::make_unique<Choice> (juce::ParameterID { powerTube,  1 }, "Power Tube", powerTubes, 2),
-                std::make_unique<Choice> (juce::ParameterID { powerCount, 1 }, "Power Tubes", powerCounts, 1));
-
-    // 4x is the shipping default: enough for the tube stage, cheap enough not to think about.
-    layout.add (std::make_unique<Choice> (juce::ParameterID { oversample, 1 }, "Oversampling",
-                                          oversampleFactors, 1));
+    // it should be something you reach for rather than something you find already on. What it IS
+    // is a captured device now — a pack in the poweramp slot — with the same set of slots the
+    // other two captured blocks have, below.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { powerOn, 1 }, "Power Amp", false));
 
     // MONO is the truth of a guitar chain and half the neural cost; STEREO is the double-track
     // option — two takes on one bus, each through its own amp; STEREO SPACE keeps the amp mono

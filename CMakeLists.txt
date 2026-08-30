@@ -221,9 +221,6 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::measurement         # reference-unity IR normalization (core::CabinetIr)
     felitronics::nam                 # NAM inference — the captured devices actually play
     felitronics::rigplayer           # the pack player: captures, their crossfade, tone, alignment
-    felitronics::poweramp            # white-box tube power amp (core::PowerAmp)
-    felitronics::oversampling        # its 4x alias-free path
-    felitronics::saturation          # its tube curves
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures       # ValueTree behind the workspace / presets
@@ -342,19 +339,6 @@ endif()
 # ----------------------------------------------------------------------------
 # Acceptance gate for the power amp's CALIBRATION — felitronics tests the tube stage itself; what is
 # ours is the knob mapping. Links juce_dsp for the bypass delay line.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_poweramp_test PRODUCT_NAME "OrbitAmpPowerAmpTest")
-target_sources(orbitamp_poweramp_test PRIVATE tests/PowerAmpTests.cpp)
-target_include_directories(orbitamp_poweramp_test PRIVATE src)
-target_compile_definitions(orbitamp_poweramp_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_poweramp_test PRIVATE
-    felitronics::poweramp
-    felitronics::oversampling
-    felitronics::saturation
-    felitronics::eq
-    juce::juce_dsp
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
 
 # ----------------------------------------------------------------------------
 # Gate for the waveform picture's MEMORY — what it recorded must not be rewritten later.
@@ -403,9 +387,6 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::measurement
     felitronics::nam
     felitronics::rigplayer
-    felitronics::poweramp
-    felitronics::oversampling
-    felitronics::saturation
     juce::juce_audio_utils
     juce::juce_dsp
     juce::juce_data_structures
