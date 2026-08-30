@@ -165,6 +165,11 @@ public:
         thread. */
     void rescanDevices();
 
+    /** The cabinet shelf — the embedded IR set, in params::cabIrNames order. The face draws the
+        same bytes the engine convolves. */
+    struct IrBytes { const char* data; int size; };
+    static const IrBytes& cabIrBytes (int index);
+
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
     void selectDemoLoop (int index);
@@ -278,6 +283,13 @@ private:
     core::CabinetIr cab;
     std::atomic<float>* cabOnParam = nullptr;
     std::atomic<float>* cabIrParam = nullptr;
+    std::atomic<float>* cabHpfOnParam = nullptr;
+    std::atomic<float>* cabHpfHzParam = nullptr;
+    std::atomic<float>* cabLpfOnParam = nullptr;
+    std::atomic<float>* cabLpfHzParam = nullptr;
+    std::atomic<float>* cabTrimOnParam = nullptr;
+    std::atomic<float>* cabTrimParam = nullptr;
+    std::atomic<float>* cabPhaseParam = nullptr;
     int lastCabIr = -1;
 
     std::atomic<float>* boostInParam  = nullptr;

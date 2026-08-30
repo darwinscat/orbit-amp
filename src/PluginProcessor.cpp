@@ -58,6 +58,13 @@ AmpProcessor::AmpProcessor()
     boostSmoothParam   = apvts.getRawParameterValue (params::blockSmooth (params::boostId));
     preampSmoothParam  = apvts.getRawParameterValue (params::blockSmooth (params::preampId));
     cabIrParam         = apvts.getRawParameterValue (params::cabIr);
+    cabHpfOnParam      = apvts.getRawParameterValue (params::cabHpfOn);
+    cabHpfHzParam      = apvts.getRawParameterValue (params::cabHpfHz);
+    cabLpfOnParam      = apvts.getRawParameterValue (params::cabLpfOn);
+    cabLpfHzParam      = apvts.getRawParameterValue (params::cabLpfHz);
+    cabTrimOnParam     = apvts.getRawParameterValue (params::cabTrimOn);
+    cabTrimParam       = apvts.getRawParameterValue (params::cabTrim);
+    cabPhaseParam      = apvts.getRawParameterValue (params::cabPhase);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
@@ -150,12 +157,8 @@ void AmpProcessor::rescanDevices()
     poweramp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::blockDevice (params::powerId))->load()));
 }
 
-namespace
+const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
 {
-    struct IrBytes { const char* data; int size; };
-
-    /** The shelf, in cabIrNames order — the embedded orbitcab set. */
-    const IrBytes& cabIrBytes (int index)
     {
         static const IrBytes shelf[] = {
             { BinaryData::_01cookiemonster_wav,       BinaryData::_01cookiemonster_wavSize },
@@ -183,7 +186,8 @@ namespace
 
         return shelf[(size_t) juce::jlimit (0, (int) std::size (shelf) - 1, index)];
     }
-} // namespace
+}
+
 
 void AmpProcessor::pumpDeviceWork()
 {
@@ -247,6 +251,20 @@ void AmpProcessor::pumpDeviceWork()
         lastCabIr = ir;
         const auto& bytes = cabIrBytes (ir);
         cab.load (bytes.data, (size_t) bytes.size);
+    }
+
+    // ...and what the player does to it: baked into the IR off this pump, so the convolution
+    // never learns of it. Rebuilt only when something moved.
+    {
+        core::CabinetIr::Post post;
+        post.trimOn       = cabTrimOnParam->load() > 0.5f;
+        post.trimFraction = cabTrimParam->load();
+        post.hpfOn        = cabHpfOnParam->load() > 0.5f;
+        post.hpfHz        = cabHpfHzParam->load();
+        post.lpfOn        = cabLpfOnParam->load() > 0.5f;
+        post.lpfHz        = cabLpfHzParam->load();
+        post.phase        = cabPhaseParam->load() > 0.5f;
+        cab.setPost (post);
     }
 }
 

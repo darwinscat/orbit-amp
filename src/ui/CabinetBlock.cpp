@@ -1,237 +1,144 @@
 #include "CabinetBlock.h"
 
-#include "../Parameters.h"
+#include "../PluginProcessor.h"
 
 namespace orbitamp
 {
 
-CabinetBlock::CabinetBlock (juce::AudioProcessorValueTreeState& s)
-    : BlockFrame ("Cabinet", BlockFrame::Kind::captured), state (s)
+CabinetBlock::CabinetBlock (AmpProcessor& processor)
+    : BlockFrame ("Cab IR", BlockFrame::Kind::captured), amp (processor)
 {
-    addAndMakeVisible (grid);
-    attachPower (*state.getParameter (params::cabOn));
+    attachPower (*amp.apvts.getParameter (params::cabOn));
 
-    // The cabinet itself, first: which IR speaks. Parameter truth through the attachment echo.
-    ir.setItems (params::cabIrNames, params::cabIrDefault);
+    // The IR's name on the border beside the block's, set like a name and in the block's colour.
+    {
+        juce::Array<VoicingSelector::Entry> entries;
+        for (const auto& name : params::cabIrNames)
+            entries.add ({ name, 0, false });
+        ir.setEntries (std::move (entries));
+    }
+    ir.fontHeight = 16.0f;
+    ir.tracking   = 0.15f;
+    ir.boxed      = false;
+    ir.tint       = theme::orange;
     addAndMakeVisible (ir);
 
     irAtt = std::make_unique<juce::ParameterAttachment> (
-        *state.getParameter (params::cabIr),
+        *amp.apvts.getParameter (params::cabIr),
         [this] (float v)
         {
-            ir.setSelectedIndex (juce::jlimit (0, params::cabIrNames.size() - 1,
-                                               juce::roundToInt (v)),
-                                 juce::dontSendNotification);
+            const int i = juce::jlimit (0, params::cabIrNames.size() - 1, juce::roundToInt (v));
+            ir.setSelection (i);
+            loadWave (i);
+            resized();   // the name on the border is as wide as the name
         });
 
-    ir.onChange = [this] (int i) { irAtt->setValueAsCompleteGesture ((float) i); };
-    irAtt->sendInitialUpdate();
+    ir.onPick = [this] (int i) { irAtt->setValueAsCompleteGesture ((float) i); };
 
-    grid.setUnit ("cm");
+    // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
+    wave.setAccent (theme::orange);
+    wave.setTrimInteractive (true);
+    wave.setEqVisible (true);
+    addAndMakeVisible (wave);
 
-    // Clicking an empty cell moves the ACTIVE mic; clicking a dot makes that mic active; dragging a
-    // dot moves that one. One gesture vocabulary for two mics, no modes.
-    grid.onSelect     = [this] (const juce::String& pos, double d) { placeMic (activeSlot, pos, d); };
-    grid.onDotSelect  = [this] (int id) { activeSlot = id; refreshDots(); };
-    grid.onDotDrag    = [this] (int id, const juce::String& pos, double d) { placeMic (id, pos, d); };
+    // A handle dragged on the picture writes its parameter; the parameter's echo redraws it.
+    wave.onHpfChanged  = [this] (bool, float hz) { hpfHzAtt->setValueAsCompleteGesture (hz); };
+    wave.onLpfChanged  = [this] (bool, float hz) { lpfHzAtt->setValueAsCompleteGesture (hz); };
+    wave.onTrimChanged = [this] (float f)        { trimAtt->setValueAsCompleteGesture (f); };
 
-    for (int i = 0; i < params::cabNumMics; ++i)
+    const auto follow = [this] (const char* id) -> std::unique_ptr<juce::ParameterAttachment>
     {
-        auto& slot = slots[(size_t) i];
+        return std::make_unique<juce::ParameterAttachment> (*amp.apvts.getParameter (id),
+                                                            [this] (float) { pushToWave(); });
+    };
 
-        const auto tint = felitronics::appkit::brand::slotColours[(size_t) i];
+    hpfHzAtt = follow (params::cabHpfHz);
+    lpfHzAtt = follow (params::cabLpfHz);
+    trimAtt  = follow (params::cabTrim);
 
-        slot.pick = std::make_unique<Selector> (tint, true);
-        slot.pick->setItems (params::cabMics, i);
-        addAndMakeVisible (*slot.pick);
+    // The four switches, each the truth of its parameter and nothing of its own.
+    const char* ids[]    = { params::cabHpfOn, params::cabLpfOn, params::cabTrimOn, params::cabPhase };
+    const char* names[]  = { "HPF", "LPF", "TRIM", "\xc3\x98" };
 
-        // Three named angles, all visible at once. There is nothing between them: each one is a
-        // capture that was or was not taken.
-        slot.angle = std::make_unique<StepSwitch>();
-        slot.angle->accent = tint;
-        slot.angle->setItems (params::cabAngles, 1);
-        addAndMakeVisible (*slot.angle);
+    for (size_t i = 0; i < switches.size(); ++i)
+    {
+        auto& s = switches[i];
+        s.sw.accent = theme::orange;
+        addAndMakeVisible (s.sw);
 
-        slot.onParam = state.getParameter (params::cabMicOn (i));
-        slot.onAtt = std::make_unique<juce::ParameterAttachment> (
-            *slot.onParam,
+        s.label.setText (juce::String::fromUTF8 (names[i]), juce::dontSendNotification);
+        s.label.setFont (theme::displayFont (12.0f));
+        s.label.setColour (juce::Label::textColourId, theme::txDim);
+        s.label.setJustificationType (juce::Justification::centredLeft);
+        s.label.setInterceptsMouseClicks (false, false);
+        addAndMakeVisible (s.label);
+
+        s.att = std::make_unique<juce::ParameterAttachment> (
+            *amp.apvts.getParameter (ids[i]),
             [this, i] (float v)
             {
-                slots[(size_t) i].on = v > 0.5f;
-                const float a = slots[(size_t) i].on ? 1.0f : theme::offAlpha;
-                slots[(size_t) i].pick->setAlpha (a);
-                slots[(size_t) i].angle->setAlpha (a);
-                refreshDots();
-                repaint();
+                switches[i].sw.setOn (v > 0.5f, false);
+                pushToWave();
             });
 
-        slot.typeAtt = std::make_unique<juce::ParameterAttachment> (
-            *state.getParameter (params::cabMicType (i)),
-            [this, i] (float v)
-            {
-                slots[(size_t) i].pick->setSelectedIndex (juce::roundToInt (v), juce::dontSendNotification);
-                refreshDots();
-            });
-
-        slot.angleAtt = std::make_unique<juce::ParameterAttachment> (
-            *state.getParameter (params::cabMicAngle (i)),
-            [this, i] (float v) { slots[(size_t) i].angle->setSelectedIndex (juce::roundToInt (v),
-                                                                             juce::dontSendNotification); });
-
-        slot.angle->onChange = [this, i] (int v)
-        {
-            slots[(size_t) i].angleAtt->setValueAsCompleteGesture ((float) v);
-            activeSlot = i;
-            refreshDots();
-        };
-
-        slot.posAtt  = std::make_unique<juce::ParameterAttachment> (
-            *state.getParameter (params::cabMicPos (i)),  [this] (float) { refreshDots(); });
-        slot.distAtt = std::make_unique<juce::ParameterAttachment> (
-            *state.getParameter (params::cabMicDist (i)), [this] (float) { refreshDots(); });
-
-        slot.pick->onChange = [this, i] (int v)
-        {
-            slots[(size_t) i].typeAtt->setValueAsCompleteGesture ((float) v);
-            activeSlot = i;
-            refreshDots();
-        };
+        s.sw.onChange = [this, i] (bool on) { switches[i].att->setValueAsCompleteGesture (on ? 1.0f : 0.0f); };
+        s.att->sendInitialUpdate();
     }
 
-    for (auto& slot : slots)
-        for (auto* a : { &slot.onAtt, &slot.typeAtt, &slot.posAtt, &slot.distAtt, &slot.angleAtt })
-            (*a)->sendInitialUpdate();
+    irAtt->sendInitialUpdate();
+    pushToWave();
 }
 
 CabinetBlock::~CabinetBlock() = default;
 
-void CabinetBlock::placeMic (int slot, const juce::String& position, double distanceCm)
+void CabinetBlock::loadWave (int index)
 {
-    const int index = params::cabPositions.indexOf (position);
-    if (index < 0 || slot < 0 || slot >= params::cabNumMics)
-        return;
-
-    auto& s = slots[(size_t) slot];
-
-    // Both halves of one gesture: they land in the same message-loop turn, so the history's settle
-    // timer folds them into a single undo step.
-    s.posAtt->setValueAsCompleteGesture ((float) index);
-    s.distAtt->setValueAsCompleteGesture ((float) distanceCm);
-    activeSlot = slot;
+    const auto& bytes = AmpProcessor::cabIrBytes (index);
+    wave.setFromMemory (bytes.data, (size_t) bytes.size);
+    pushToWave();
 }
 
-void CabinetBlock::refreshDots()
+void CabinetBlock::pushToWave()
 {
-    std::vector<felitronics::appkit::MicGrid::Dot> dots;
-
-    for (int i = 0; i < params::cabNumMics; ++i)
+    // The PARAMETERS, not the atomics: an attachment callback runs before the atomic is written,
+    // and reading it there leaves the picture exactly one change behind for good.
+    const auto plain = [this] (const char* id)
     {
-        if (! slots[(size_t) i].on)
-            continue;   // a mic that is switched off is not standing anywhere
+        auto* p = amp.apvts.getParameter (id);
+        return p->convertFrom0to1 (p->getValue());
+    };
 
-        const int pos = juce::jlimit (0, params::cabPositions.size() - 1,
-                                      juce::roundToInt (state.getRawParameterValue (params::cabMicPos (i))->load()));
-        const double dist = (double) state.getRawParameterValue (params::cabMicDist (i))->load();
-
-        dots.push_back ({ i, params::cabPositions[pos], dist,
-                          felitronics::appkit::brand::slotColours[(size_t) i], i == activeSlot });
-    }
-
-    grid.setDots (std::move (dots));
-}
-
-/** One mic's cell inside the row the two of them share. The switch's own rectangle is derived from
-    the same split, so the painted toggle and the click target cannot drift apart. */
-juce::Rectangle<int> CabinetBlock::micCell (juce::Rectangle<int> content, int slot)
-{
-    content.removeFromTop (irRow + gap / 2);
-    auto row = content.removeFromTop (micRow + gap / 2 + angleRow);
-
-    const int each = (row.getWidth() - gap) / params::cabNumMics;
-    return row.removeFromLeft (each).translated (slot * (each + gap), 0);
-}
-
-juce::Rectangle<int> CabinetBlock::switchArea (int slot) const
-{
-    return micCell (contentArea(), slot)
-               .removeFromTop (micRow)
-               .removeFromLeft (micSwitchW).withSizeKeepingCentre (micSwitchW, micSwitchH);
+    wave.setFilters (plain (params::cabHpfOn) > 0.5f, plain (params::cabHpfHz), params::cabHpfMinHz, params::cabHpfMaxHz,
+                     plain (params::cabLpfOn) > 0.5f, plain (params::cabLpfHz), params::cabLpfMinHz, params::cabLpfMaxHz);
+    wave.setTrimEnabled (plain (params::cabTrimOn) > 0.5f);
+    wave.setTrimFraction (plain (params::cabTrim));
 }
 
 void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 {
-    // The IR selector rides the top, full width — the cabinet is chosen before it is miked.
-    ir.setBounds (area.removeFromTop (irRow));
-    area.removeFromTop (gap / 2);
-
-    // The two mics stand SIDE BY SIDE in one row rather than stacked in a column down the left.
-    //
-    // The column made sense while the cabinet had most of a wide row. At half of a short one it was
-    // taking a third of the width away from the grid, and the grid is the part that cannot be
-    // narrowed: it carries the driver, four named rows off it and nine distances across, and with a
-    // third gone its labels ran off the edge into the speaker. Two mics abreast fit the width they
-    // are given, and the grid gets all of it underneath.
-    auto row = area.removeFromTop (micRow + gap / 2 + angleRow);
-    area.removeFromTop (gap / 2);
-    grid.setBounds (area);
-
-    const int each = (row.getWidth() - gap) / params::cabNumMics;
-
-    for (int i = 0; i < params::cabNumMics; ++i)
+    // The IR's name on the border, sized to itself and centred in the run.
     {
-        auto cell = row.removeFromLeft (each);
-        row.removeFromLeft (gap);
-
-        auto pick = cell.removeFromTop (micRow);
-        pick.removeFromLeft (micSwitchW + gap);
-        slots[(size_t) i].pick->setBounds (pick);
-
-        cell.removeFromTop (gap / 2);
-        slots[(size_t) i].angle->setBounds (cell.removeFromTop (angleRow)
-                                                .withTrimmedLeft (micSwitchW + gap));
+        const auto slot = borderSlotArea();
+        ir.setBounds (slot.withSizeKeepingCentre (juce::jmin (slot.getWidth(), ir.idealWidth()), slot.getHeight()));
+        borderSlotUsed = ir.getBounds();
     }
-}
 
-void CabinetBlock::paintContent (juce::Graphics& g)
-{
-    for (int i = 0; i < params::cabNumMics; ++i)
+    // The switches along the bottom, four equal cells: a switch and its word.
+    auto row = area.removeFromBottom (switchRow);
+    area.removeFromBottom (gap);
+
+    const int cellW = row.getWidth() / (int) switches.size();
+    for (auto& s : switches)
     {
-        const auto sw = switchArea (i).toFloat();
-        const float r = sw.getHeight() * 0.5f;
-        const bool  on = slots[(size_t) i].on;
-        const auto  tint = felitronics::appkit::brand::slotColours[(size_t) i];
-
-        g.setColour (on ? tint.withAlpha (0.5f).overlaidWith (juce::Colour (0xff26262f))
-                        : juce::Colour (0xff26262f));
-        g.fillRoundedRectangle (sw, r);
-        g.setColour (on ? tint : theme::hair2);
-        g.drawRoundedRectangle (sw.reduced (0.5f), r, 1.0f);
-
-        const float knob = sw.getHeight() - 4.0f;
-        const float kx   = on ? sw.getRight() - knob - 2.0f : sw.getX() + 2.0f;
-        g.setColour (on ? juce::Colours::white : juce::Colour (0xff8a8a96));
-        g.fillEllipse (kx, sw.getCentreY() - knob * 0.5f, knob, knob);
+        auto cell = row.removeFromLeft (cellW);
+        s.sw.setBounds (cell.removeFromLeft (30).withSizeKeepingCentre (30, 16));
+        cell.removeFromLeft (6);
+        s.label.setBounds (cell);
     }
+
+    wave.setBounds (area);
 }
 
-void CabinetBlock::mouseDown (const juce::MouseEvent& e)
-{
-    // The mic switches are edits — read-only while the block is off, and right-clicks belong to
-    // the frame's power menu. The frame's own handler still runs so the power switch works.
-    if (isBlockOn() && ! e.mods.isPopupMenu())
-        for (int i = 0; i < params::cabNumMics; ++i)
-        {
-            if (switchArea (i).contains (e.getPosition()))
-            {
-                // The negation of the PARAMETER, not of the cached flag: a stale cache negated
-                // into the parameter is a click that does nothing, forever (found in review).
-                slots[(size_t) i].onAtt->setValueAsCompleteGesture (
-                    slots[(size_t) i].onParam->getValue() > 0.5f ? 0.0f : 1.0f);
-                return;
-            }
-        }
-
-    BlockFrame::mouseDown (e);
-}
+void CabinetBlock::paintContent (juce::Graphics&) {}
 
 } // namespace orbitamp

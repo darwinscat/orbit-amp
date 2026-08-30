@@ -2,70 +2,60 @@
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
-#include "Selector.h"
-#include "StepSwitch.h"
+#include "VoicingSelector.h"
+#include "ZoneSwitch.h"
 
-#include <felitronics/appkit/MicGrid.h>
+#include <felitronics/appkit/IrWaveView.h>
 
 #include <array>
+#include <memory>
 
 namespace orbitamp
 {
 
-/** The cabinet, filling the rest of the lower row.
+class AmpProcessor;
 
-    Two mic slots, each with a switch and a pick from the same full list, both standing on one
-    grille. The speaker face anchors the grid's rows, so a position is a place on a real driver
-    rather than a word from a list — and it is the same picture the capture tool used, which is what
-    makes a position mean one thing at both ends of the pipeline.
+/** The cabinet, filling the rest of the lower row: ONE impulse response, drawn.
 
-    Distance and position are two halves of one gesture, so a click sets them together. */
+    Half of OrbitCab: one IR, no mix. Its name stands on the border beside the block's; the box is
+    the IR itself — the impulse with its tail, the two cuts' curve over it with a handle per cut,
+    the trim's handle — and under it the four switches: HPF, LPF, TRIM, Ø. What the switches do is
+    baked into the IR off the pump; the picture is the family's IrWaveView, fed the same bytes the
+    engine convolves. */
 class CabinetBlock final : public BlockFrame
 {
 public:
-    explicit CabinetBlock (juce::AudioProcessorValueTreeState&);
+    explicit CabinetBlock (AmpProcessor&);
     ~CabinetBlock() override;
 
 private:
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
-    void mouseDown (const juce::MouseEvent&) override;
 
-    /** Pushes both mics into the grid as its dots — colour per slot, the active one ringed. */
-    void refreshDots();
+    /** The IR parameter moved: the picture decodes the shelf's bytes for that one. */
+    void loadWave (int index);
 
-    /** A cell was clicked or a dot dragged: position and distance move together, as one edit. */
-    void placeMic (int slot, const juce::String& position, double distanceCm);
+    /** The picture wears what the parameters say — the cuts, the trim — so it draws the sound. */
+    void pushToWave();
 
-    juce::Rectangle<int> switchArea (int slot) const;
-    static juce::Rectangle<int> micCell (juce::Rectangle<int> content, int slot);
+    static constexpr int switchRow = 20;
+    static constexpr int gap       = 8;
 
-    static constexpr int irRow      = 24;    // the cabinet is chosen before it is miked
-    static constexpr int micRow     = 24;
-    static constexpr int angleRow   = 16;
-    static constexpr int micSwitchW = 22;
-    static constexpr int micSwitchH = 11;
-    static constexpr int gap        = 8;
+    AmpProcessor& amp;
 
-    struct Slot
+    VoicingSelector ir;
+    felitronics::appkit::IrWaveView wave;
+
+    struct Switch
     {
-        std::unique_ptr<Selector>   pick;
-        std::unique_ptr<StepSwitch> angle;
-        std::unique_ptr<juce::ParameterAttachment> onAtt, typeAtt, posAtt, distAtt, angleAtt;
-        juce::RangedAudioParameter* onParam = nullptr;   // the truth its switch toggles by
-        bool on = false;
+        ZoneSwitch  sw;
+        juce::Label label;
+        std::unique_ptr<juce::ParameterAttachment> att;
     };
 
-    juce::AudioProcessorValueTreeState& state;
+    std::array<Switch, 4> switches;   // HPF, LPF, TRIM, Ø
 
-    /** The cabinet itself — which IR speaks. Every module's grammar: arrows and a name. */
-    Selector ir { theme::orange, true };
-    std::unique_ptr<juce::ParameterAttachment> irAtt;
-
-    std::array<Slot, (size_t) params::cabNumMics> slots;
-    felitronics::appkit::MicGrid grid;
-
-    int activeSlot = 0;   // which mic a click on an empty cell moves
+    std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CabinetBlock)
 };

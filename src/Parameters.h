@@ -214,28 +214,20 @@ inline const juce::StringArray cabIrNames {
 };
 inline constexpr int cabIrDefault = 7;   // BIG BUBBA
 
-/** Two mic slots, each with its own switch, its own pick from the SAME full list, and its own place
-    on the grille. Two mics on one cabinet is how the sound is actually made — one close and bright,
-    one back and thick — so the second is not an extra, it is the other half. */
-inline constexpr int cabNumMics = 2;
-
-inline juce::String cabMicOn   (int i) { return "cab_mic" + juce::String (i + 1) + "_on"; }
-inline juce::String cabMicType (int i) { return "cab_mic" + juce::String (i + 1) + "_type"; }
-inline juce::String cabMicPos  (int i) { return "cab_mic" + juce::String (i + 1) + "_pos"; }
-inline juce::String cabMicDist (int i) { return "cab_mic" + juce::String (i + 1) + "_dist"; }
-inline juce::String cabMicAngle (int i) { return "cab_mic" + juce::String (i + 1) + "_angle"; }
-
-/** Mic angle, as three named positions rather than a sweep. Angle comes from captures, and captures
-    exist at the angles they were taken at — a slider in 15-degree steps would offer thirteen
-    positions where three have anything behind them. */
-inline const juce::StringArray cabAngles { "-30", "0", "+30" };
-
-/** The mics, by the two everyone actually reaches for first. More arrive with the captures. */
-inline const juce::StringArray cabMics { "SM57", "MD421" };
-
-/** The speaker's radial zones, from the rim inwards — the rows of the placement grid. They are the
-    driver's own geometry, which is why the grid draws the speaker beside them. */
-inline const juce::StringArray cabPositions { "Cone Edge", "Center Cone", "Cap Edge", "Center Cap" };
+/** What a player does to the one IR: cuts its bottom and top (a second-order high-pass and
+    low-pass baked INTO the IR, so the convolution costs nothing more), trims its tail (a fraction
+    of its length kept — the room's decay is often more than a guitar wants), and flips it. Each
+    has a switch, so the IR itself is never touched until asked. Ranges are OrbitCab's. */
+inline constexpr const char* cabHpfOn  = "cab_hpf_on";
+inline constexpr const char* cabHpfHz  = "cab_hpf_hz";
+inline constexpr const char* cabLpfOn  = "cab_lpf_on";
+inline constexpr const char* cabLpfHz  = "cab_lpf_hz";
+inline constexpr const char* cabTrimOn = "cab_trim_on";
+inline constexpr const char* cabTrim   = "cab_trim";      // the fraction kept, 0.02..1
+inline constexpr const char* cabPhase  = "cab_phase";
+inline constexpr float cabHpfMinHz = 30.0f,   cabHpfMaxHz = 180.0f,   cabHpfDefaultHz = 80.0f;
+inline constexpr float cabLpfMinHz = 4000.0f, cabLpfMaxHz = 12000.0f, cabLpfDefaultHz = 7000.0f;
+inline constexpr float cabTrimMin  = 0.02f;
 
 inline constexpr const char* powerOn   = "power_on";
 /** How many channels the chain works, and from where. MONO: one signal end to end, the copy to the

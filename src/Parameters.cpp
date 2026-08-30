@@ -178,22 +178,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // in centimetres, matching the grid's own ladder.
     layout.add (std::make_unique<Bool> (juce::ParameterID { cabOn, 1 }, "Cabinet", true));
 
-    for (int i = 0; i < cabNumMics; ++i)
-    {
-        const auto n = juce::String (i + 1);
-
-        // Mic 1 on, mic 2 off: one mic is the normal case and the second is the move you make on
-        // purpose. They start apart — close on the cap edge, further out on the cone — so switching
-        // the second on gives a blend rather than two mics in the same hole.
-        layout.add (std::make_unique<Bool>   (juce::ParameterID { cabMicOn (i),   1 }, "Mic " + n,          i == 0),
-                    std::make_unique<Choice> (juce::ParameterID { cabMicType (i), 1 }, "Mic " + n + " Type", cabMics, i),
-                    std::make_unique<Choice> (juce::ParameterID { cabMicPos (i),  1 }, "Mic " + n + " Position",
-                                              cabPositions, i == 0 ? 2 : 1),
-                    std::make_unique<Float>  (juce::ParameterID { cabMicDist (i), 1 }, "Mic " + n + " Distance",
-                                              juce::NormalisableRange<float> (0.0f, 15.0f, 0.1f), i == 0 ? 2.0f : 5.0f),
-                    std::make_unique<Choice> (juce::ParameterID { cabMicAngle (i), 1 }, "Mic " + n + " Angle",
-                                              cabAngles, 1));
-    }
+    // The IR's own post: two cuts, a trim and a flip, each behind a switch — off, the IR plays as
+    // it was shot. The frequencies are ranged as OrbitCab ranges them.
+    layout.add (std::make_unique<Bool>  (juce::ParameterID { cabHpfOn,  1 }, "Cab HPF", false),
+                std::make_unique<Float> (juce::ParameterID { cabHpfHz,  1 }, "Cab HPF Hz",
+                                         juce::NormalisableRange<float> (cabHpfMinHz, cabHpfMaxHz, 1.0f, 0.5f), cabHpfDefaultHz),
+                std::make_unique<Bool>  (juce::ParameterID { cabLpfOn,  1 }, "Cab LPF", false),
+                std::make_unique<Float> (juce::ParameterID { cabLpfHz,  1 }, "Cab LPF Hz",
+                                         juce::NormalisableRange<float> (cabLpfMinHz, cabLpfMaxHz, 10.0f, 0.5f), cabLpfDefaultHz),
+                std::make_unique<Bool>  (juce::ParameterID { cabTrimOn, 1 }, "Cab Trim", false),
+                std::make_unique<Float> (juce::ParameterID { cabTrim,   1 }, "Cab Trim Length",
+                                         juce::NormalisableRange<float> (cabTrimMin, 1.0f, 0.001f), 1.0f),
+                std::make_unique<Bool>  (juce::ParameterID { cabPhase,  1 }, "Cab Phase", false));
 
     // The power amp is off by default: it is most useful for leads and least for tight rhythm, so
     // it should be something you reach for rather than something you find already on. What it IS
