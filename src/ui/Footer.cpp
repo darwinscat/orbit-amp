@@ -31,18 +31,23 @@ Footer::Footer (AmpProcessor& processor)
 
     oversampleAttachment->sendInitialUpdate();
 
-    // MONO | STEREO: binary, so the click IS the toggle — parameter truth, no local state.
+    // MONO | STEREO | STEREO SPACE: the click walks the loop — parameter truth, no local state.
     stereo.theme = oversample.theme;
     stereo.onClick = [this]
     {
         auto* p = amp.apvts.getParameter (params::stereoMode);
-        stereoAttachment->setValueAsCompleteGesture (p->getValue() > 0.5f ? 0.0f : 1.0f);
+        const int now = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
+        stereoAttachment->setValueAsCompleteGesture ((float) ((now + 1) % params::stereoModes.size()));
     };
     addAndMakeVisible (stereo);
 
     stereoAttachment = std::make_unique<juce::ParameterAttachment> (
         *amp.apvts.getParameter (params::stereoMode),
-        [this] (float v) { stereo.setButtonText (v > 0.5f ? "STEREO" : "MONO"); });
+        [this] (float v)
+        {
+            stereo.setButtonText (params::stereoModes[juce::jlimit (0, params::stereoModes.size() - 1,
+                                                                    juce::roundToInt (v))].toUpperCase());
+        });
 
     stereoAttachment->sendInitialUpdate();
 
@@ -98,7 +103,7 @@ void Footer::paint (juce::Graphics& g)
     g.setColour (theme::hair);
     g.fillRect (r.removeFromTop (1.0f));
 
-    auto right = r.withTrimmedLeft ((float) (itemWidth + 66 + gap * 2));
+    auto right = r.withTrimmedLeft ((float) (itemWidth + stereoWidth + gap * 2));
 
     g.setColour (theme::txFaint);
     theme::drawTracked (g, rateText, right.removeFromLeft (96.0f), theme::displayFont (12.0f), 0.1f,
@@ -116,7 +121,7 @@ void Footer::resized()
 {
     auto row = getLocalBounds().withTrimmedTop (1);
     oversample.setBounds (row.removeFromLeft (itemWidth));
-    stereo.setBounds (row.removeFromLeft (66));
+    stereo.setBounds (row.removeFromLeft (stereoWidth));
 
     // The invisible click target over the painted DSP number.
     row.removeFromLeft (gap + 96);
@@ -169,8 +174,8 @@ void Footer::showLoadBreakdown()
               << "  |  oversample " << params::oversampleFactors[
                      juce::jlimit (0, params::oversampleFactors.size() - 1,
                                    juce::roundToInt (amp.apvts.getRawParameterValue (params::oversample)->load()))]
-              << "  |  " << (amp.apvts.getRawParameterValue (params::stereoMode)->load() > 0.5f
-                                 ? "STEREO" : "MONO")
+              << "  |  " << params::stereoModes[juce::jlimit (0, params::stereoModes.size() - 1,
+                                                              juce::roundToInt (amp.apvts.getRawParameterValue (params::stereoMode)->load()))].toUpperCase()
               << "\n";
             t << juce::String::formatted ("%-8s %8s %8s\n", "STAGE", "MEAN", "WORST");
 

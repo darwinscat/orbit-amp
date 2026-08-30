@@ -486,6 +486,66 @@ int main()
                 juce::String (peakDb (free), 1) + " dBFS");
     }
 
+    // The three channel modes. MONO: one chain, the copy after everything — the channels are
+    // identical. STEREO SPACE: mono up to the reverb, stereo from it — with the reverb on the two
+    // channels differ (the space is wide), with it off they are still identical (the copy at the
+    // seam feeds the power amp and the cabinet the same signal). Measured on the plugin's own
+    // output, both channels kept.
+    {
+        const auto runBoth = [&] (float mode, bool reverbOn)
+        {
+            set (amp, orbitamp::params::stereoMode, mode);
+            set (amp, orbitamp::params::reverbOn, reverbOn ? 1.0f : 0.0f);
+            set (amp, orbitamp::params::limiterOn, 0.0f);
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+            std::vector<float> l, r;
+            int phase = 0;
+
+            for (int block = 0; block < 60; ++block)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                              * 220.0 * phase / sampleRate);
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+                amp.processBlock (buf, midi);
+                amp.pumpDeviceWork();
+                if (block < 30)
+                    continue;
+                for (int i = 0; i < blockSize; ++i)
+                {
+                    l.push_back (buf.getSample (0, i));
+                    r.push_back (buf.getSample (1, i));
+                }
+            }
+            return std::make_pair (l, r);
+        };
+
+        const auto monoWet   = runBoth ((float) orbitamp::params::StereoMode::mono,        true);
+        const auto spaceWet  = runBoth ((float) orbitamp::params::StereoMode::stereoSpace, true);
+        const auto spaceDry  = runBoth ((float) orbitamp::params::StereoMode::stereoSpace, false);
+
+        std::printf ("\nchannels: mono+reverb L/R %.2f%% apart, stereo space+reverb %.2f%%, stereo space dry %.2f%%\n",
+                     differencePercent (monoWet.first, monoWet.second),
+                     differencePercent (spaceWet.first, spaceWet.second),
+                     differencePercent (spaceDry.first, spaceDry.second));
+
+        report ("MONO leaves the two channels identical",
+                differencePercent (monoWet.first, monoWet.second) < 0.01);
+        report ("STEREO SPACE spreads the reverb across the channels",
+                differencePercent (spaceWet.first, spaceWet.second) > 1.0
+                    && rms (spaceWet.second) > 1.0e-4,
+                juce::String (differencePercent (spaceWet.first, spaceWet.second), 2) + "% apart");
+        report ("...and with the reverb off they are one signal again",
+                differencePercent (spaceDry.first, spaceDry.second) < 0.01);
+
+        set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }

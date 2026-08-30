@@ -207,8 +207,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                           oversampleFactors, 1));
 
     // MONO is the truth of a guitar chain and half the neural cost; STEREO is the double-track
-    // option — two takes on one bus, each through its own amp.
-    layout.add (std::make_unique<Bool> (juce::ParameterID { stereoMode, 1 }, "Stereo", false));
+    // option — two takes on one bus, each through its own amp; STEREO SPACE keeps the amp mono
+    // and lets the reverb and everything after it go wide.
+    layout.add (std::make_unique<Choice> (juce::ParameterID { stereoMode, 1 }, "Stereo Mode",
+                                          stereoModes, 0));
 
     layout.add (std::make_unique<Choice> (juce::ParameterID { cabIr, 1 }, "Cabinet IR",
                                           cabIrNames, cabIrDefault));

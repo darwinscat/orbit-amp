@@ -433,9 +433,13 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // MONO by default: a guitar chain is one signal, and running the WaveNets per channel on a
     // duplicated input was paying twice for the same answer. The whole chain works channel 0;
     // the copy to the other channels happens once, after the limiter. STEREO (the double-track
-    // option) restores true per-channel processing.
-    const bool stereo = stereoModeParam->load() > 0.5f;
-    const int  nch    = stereo ? numChannels : juce::jmin (1, numChannels);
+    // option) restores true per-channel processing. STEREO SPACE splits the chain in two: mono
+    // up to the reverb — `nch` — and stereo from the reverb on — `nchBack` — with the one copy
+    // made at the seam, so the space is wide and the amp is paid for once.
+    const auto mode = static_cast<params::StereoMode> (
+        juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
+    const int nch     = mode == params::StereoMode::stereo ? numChannels : juce::jmin (1, numChannels);
+    const int nchBack = mode == params::StereoMode::mono   ? nch         : numChannels;
 
     // The captured blocks take a BUFFER — this alias holds only the channels the chain works.
     juce::AudioBuffer<float> chainView (const_cast<float**> (channels), nch, numSamples);
@@ -545,9 +549,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (! muteAtStart)
         gate.applyGain (channels, nch, numSamples);
 
+    // THE SEAM: where a mono chain becomes a stereo one, in STEREO SPACE — the one copy, right
+    // before the reverb, which spreads the two identical channels into a space.
+    for (int ch = nch; ch < nchBack; ++ch)
+        buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+
     if (reverbOnParam->load() > 0.5f)
         { const auto a = PerfClock::now();
-          reverb.process (channels, nch, numSamples);
+          reverb.process (channels, nchBack, numSamples);
           nsStage[stReverb] = elapsedNs (a); }
     else
         reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
@@ -558,12 +567,12 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     power.setDrive (powerDriveParam->load());
     power.setSag (powerSagParam->load());
     { const auto a = PerfClock::now();
-      power.process (channels, nch, numSamples, powerOnParam->load() > 0.5f);
+      power.process (channels, nchBack, numSamples, powerOnParam->load() > 0.5f);
       nsStage[stPower] = elapsedNs (a); }
 
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
     { const auto a = PerfClock::now();
-      cab.process (channels, nch, numSamples, cabOnParam->load() > 0.5f);
+      cab.process (channels, nchBack, numSamples, cabOnParam->load() > 0.5f);
       cabOutDb.store (juce::Decibels::gainToDecibels (
           buffer.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stCab] = elapsedNs (a); }
@@ -581,15 +590,15 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // ceiling it enforces is the ceiling that leaves the box. The meter reads AFTER it —
         // the truth on the rail is the truth at the jack.
         { const auto a = PerfClock::now();
-          limiter.process (channels, nch, numSamples,
+          limiter.process (channels, nchBack, numSamples,
                            limiterOnParam->load() > 0.5f, limiterCeilParam->load());
           nsStage[stLimit] = elapsedNs (a); }
         limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
 
-        // The mono chain becomes the stereo output HERE — one copy, after everything.
-        if (! stereo)
-            for (int ch = 1; ch < numChannels; ++ch)
-                buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+        // The mono chain becomes the stereo output HERE — one copy, after everything. (In STEREO
+        // SPACE the copy was made at the seam, and there is nothing left to copy.)
+        for (int ch = nchBack; ch < numChannels; ++ch)
+            buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
 
         if (limiter.lastMinGain() < 0.999f)
             limiterWorked.store (true);

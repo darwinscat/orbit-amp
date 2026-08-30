@@ -243,7 +243,15 @@ inline constexpr const char* powerSag   = "power_sag";
 inline constexpr const char* powerTube  = "power_tube";
 inline constexpr const char* powerCount = "power_count";
 inline constexpr const char* oversample = "oversample";
+/** How many channels the chain works, and from where. MONO: one signal end to end, the copy to the
+    other channel after everything — the truth of a guitar chain, and one neural pass. STEREO: two
+    takes on one bus, each through its own amp, everything twice. STEREO SPACE: mono where the
+    sound is made — boost, preamp, their consoles, one neural pass — and stereo from the reverb on,
+    where the space is: the reverb spreads one signal into two, and the power amp, the cabinet and
+    the limiter follow it in stereo. */
 inline constexpr const char* stereoMode = "stereo_mode";
+inline const juce::StringArray stereoModes { "Mono", "Stereo", "Stereo Space" };
+enum class StereoMode { mono, stereo, stereoSpace };
 
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first. */
 inline const juce::StringArray demoLoops { "GGG", "Eleven Light Years", "Cats Hard Day",

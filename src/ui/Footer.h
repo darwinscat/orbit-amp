@@ -35,7 +35,8 @@ private:
     void showOversampleMenu();
     void showLoadBreakdown();
 
-    static constexpr int itemWidth = 92;
+    static constexpr int itemWidth   = 92;
+    static constexpr int stereoWidth = 124;   // room for the longest of the three modes, STEREO SPACE
     static constexpr int gap       = 10;
 
     AmpProcessor& amp;
