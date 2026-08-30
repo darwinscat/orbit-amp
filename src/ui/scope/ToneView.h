@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Prefs.h"
 #include "../Theme.h"
 #include "ScopeFrame.h"
 
@@ -44,8 +45,9 @@ public:
         drawGrid (g, r, lo, hi);
 
         // The EQ's own spectrum when a tap is wired — liquid columns with their peak hold —
-        // mapped onto THIS view's trusted band; the homemade fog only when it is not.
-        if (pane != nullptr)
+        // mapped onto THIS view's trusted band; the homemade fog only when it is not. The gear's
+        // spectra switch silences both.
+        if (pane != nullptr && prefs::spectraShown())
         {
             felitronics::analysis::PlotMap pm;
             pm.width      = r.getWidth();

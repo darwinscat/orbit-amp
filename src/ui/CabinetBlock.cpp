@@ -1,6 +1,7 @@
 #include "CabinetBlock.h"
 
 #include "../PluginProcessor.h"
+#include "Prefs.h"
 
 namespace orbitamp
 {
@@ -45,6 +46,9 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     // ground, what leaves it as the line — the same liquid columns, the same tilt, one renderer.
     wave.paintSpectrumUnder = [this] (juce::Graphics& g, juce::Rectangle<float> r)
     {
+        if (! prefs::spectraShown())
+            return;
+
         felitronics::analysis::PlotMap pm;
         pm.width      = r.getWidth();
         pm.height     = r.getHeight();

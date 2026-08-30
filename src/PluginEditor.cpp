@@ -148,6 +148,7 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
     m.addItem (1, "SETUP...");
     m.addSeparator();
     m.addItem (4, "SHOW POWER AMP",     true, prefs::getBool (prefs::showPower, false));
+    m.addItem (5, "SHOW SPECTRA",       true, prefs::spectraShown());
     m.addItem (2, "SHOW DEMO PLAYER",   true, showDemo);
     m.addItem (3, "SHOW DEVICE GLYPHS", true, showGlyphs);
 
@@ -161,6 +162,13 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                          if (r == 1)
                          {
                              safe->setup.open();
+                             return;
+                         }
+
+                         if (r == 5)
+                         {
+                             prefs::setSpectraShown (! prefs::spectraShown());
+                             safe->repaint();
                              return;
                          }
 

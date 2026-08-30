@@ -35,4 +35,18 @@ inline const juce::Identifier showGlyphs { "show_device_glyphs" };
     must not colour the sound. Off out of the box: no poweramp pack ships yet. */
 inline const juce::Identifier showPower { "show_power_amp" };
 
+/** The analysers — the consoles' ground, the cabinet's pair, the TONE tile's columns. One switch
+    for all of them, read where a spectrum is about to be drawn: cached after the first look,
+    because a paint routine must not open a file. */
+inline const juce::Identifier showSpectra { "show_spectra" };
+
+inline std::atomic<bool>& spectraCache()
+{
+    static std::atomic<bool> cached { getBool (showSpectra, true) };
+    return cached;
+}
+
+inline bool spectraShown()               { return spectraCache().load (std::memory_order_relaxed); }
+inline void setSpectraShown (bool shown) { spectraCache().store (shown, std::memory_order_relaxed); setBool (showSpectra, shown); }
+
 } // namespace orbitamp::prefs

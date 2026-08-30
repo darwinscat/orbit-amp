@@ -1,5 +1,7 @@
 #include "EqSection.h"
 
+#include "Prefs.h"
+
 #include "Theme.h"
 
 namespace orbitamp
@@ -16,6 +18,9 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     // The spectrum behind everything: the signal is the ground the response stands on.
     curve.paintSpectrum = [this] (juce::Graphics& g, juce::Rectangle<float> r)
     {
+        if (! prefs::spectraShown())
+            return;
+
         felitronics::analysis::PlotMap pm;
         pm.width      = r.getWidth();
         pm.height     = r.getHeight();
