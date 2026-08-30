@@ -106,11 +106,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                          juce::NormalisableRange<float> (-inTrimRangeDb, inTrimRangeDb, 0.1f),
                                          0.0f));
 
+    // SAFETY out of the box: the ceiling at -0.3 — the guard rail, not a sound.
     layout.add (std::make_unique<Bool> (juce::ParameterID { limiterOn, 1 }, "Limiter", true),
                 std::make_unique<Float> (juce::ParameterID { limiterCeiling, 1 }, "Limiter Ceiling",
                                          juce::NormalisableRange<float> (limiterCeilingMin,
                                                                          limiterCeilingMax, 0.1f),
-                                         -1.0f));
+                                         -0.3f));
 
     // The noise gate. Off out of the box — a gate is a decision about YOUR noise floor, not part
     // of the voicing. The ceiling is -10, NOT OrbitCab's -20: that range was voiced for a
