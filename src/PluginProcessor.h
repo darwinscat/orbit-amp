@@ -330,6 +330,14 @@ public:
 private:
     std::atomic<float> dspLoad { 0.0f };
 
+    /** The channel mode's default follows the ENVIRONMENT until somebody chooses: the standalone
+        opens on STEREO SPACE (one guitar in, a wide room out), a plugin on a mono bus on MONO, on
+        a stereo bus on STEREO. `modeAutoValue` is what the environment last set — while the
+        parameter still reads that, nobody has chosen and the environment may set it again; one
+        hand-move or one restored session ends it. */
+    bool stateWasRestored = false;
+    int  modeAutoValue    = (int) params::StereoMode::mono;   // the layout's own default
+
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };

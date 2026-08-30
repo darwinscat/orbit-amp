@@ -135,6 +135,7 @@ int main()
     orbitamp::AmpProcessor amp;
     amp.inlineLoads = true;   // no message loop here: a model lands inside the pump
     amp.prepareToPlay (sampleRate, blockSize);
+    set (amp, orbitamp::params::stereoMode, 0.0f);   // the gate measures the chain, not the environment default
 
     if (amp.boost.packs.isEmpty())
     {

@@ -96,6 +96,8 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 
 void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
+    stateWasRestored = true;   // a session's choice outranks the environment's default
+
     auto xml = getXmlFromBinary (data, sizeInBytes);
     if (xml == nullptr)
         return;
@@ -307,6 +309,21 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // over a block of ungated hum.
     gate.prepare (sampleRate, block, channels);
     gate.seedEnabled (gateOnParam->load() > 0.5f);
+
+    // The mode's environment default — see modeAutoValue.
+    if (! stateWasRestored)
+    {
+        const auto want = wrapperType == wrapperType_Standalone ? params::StereoMode::stereoSpace
+                        : getTotalNumInputChannels() >= 2       ? params::StereoMode::stereo
+                                                                : params::StereoMode::mono;
+
+        if (juce::roundToInt (stereoModeParam->load()) == modeAutoValue && (int) want != modeAutoValue)
+        {
+            if (auto* p = apvts.getParameter (params::stereoMode))
+                p->setValueNotifyingHost (p->convertTo0to1 ((float) want));
+            modeAutoValue = (int) want;
+        }
+    }
 
     reverb.prepare (sampleRate);
     boost.prepare (sampleRate, block, channels);
