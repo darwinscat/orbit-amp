@@ -53,7 +53,7 @@ public:
     /** How much of the block's height the control row under the curve wants: a dial, its name above
         it, and the slope combo that hangs a little below the dial's foot. Nothing more — the row
         used to reserve a hundred and twelve and spend the last forty on air. */
-    static constexpr int rowH = 72;
+    static constexpr int rowH = 62;   // a name row of 14 and a dial of 48 — the cuts' stack fits the same height
 
     /** One cell of the control row between the two cuts: what it is called, what colour it wears,
         and the parameter its knob writes.

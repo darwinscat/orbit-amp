@@ -80,7 +80,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
 
     for (auto* l : { &hpfLabel, &lpfLabel })
     {
-        l->setFont (theme::displayFont (14.0f));
+        l->setFont (theme::displayFont (12.0f));
         l->setColour (juce::Label::textColourId, theme::txDim);
         l->setJustificationType (juce::Justification::centred);
         l->setInterceptsMouseClicks (false, false);
@@ -141,8 +141,8 @@ void EqSection::buildBands (std::vector<Band> newBands)
         else           k->textForValue = [] (double)   { return juce::String(); };
 
         k->onValueChange   = [this] { refreshCurve(); };
-        k->labelFontHeight = 13.0f;
-        k->labelRowHeight  = 17;
+        k->labelFontHeight = 11.0f;
+        k->labelRowHeight  = 14;
 
         bandAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
             state, b.param, *k));
@@ -541,7 +541,7 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // at 1x or taking the room from the curve, and the curve IS the readout — a node's frequency is
     // where the node is standing. Dragging it sideways was always the way to set one.
     auto row = content.removeFromBottom (rowH);
-    content.removeFromBottom (6);
+    content.removeFromBottom (4);
 
     // ONE LINE OF NAMES. HPF, LO, L MID, H MID, HI, LPF all begin at the row's top edge, because
     // six labels at three different heights read as three groups rather than one row of controls.
@@ -578,18 +578,19 @@ void EqSection::layOut (juce::Rectangle<int> content)
 
     // The cuts hang off the first knob's geometry, so an empty row still has to put them somewhere.
     const auto first = bandKnobs.empty() ? firstCell : bandKnobs.front()->getBounds();
-    const int labelH  = bandKnobs.empty() ? 17 : bandKnobs.front()->labelRowHeight;
-    const int dialAxisY = first.getY() + labelH + (first.getHeight() - labelH) / 2;
+    const int labelH  = bandKnobs.empty() ? 14 : bandKnobs.front()->labelRowHeight;
 
+    // A cut's cell is a stack — the name, the switch, the slope — standing on the SAME bottom
+    // line as the dials: the slope combo's underside is the dials' underside, so the row is as
+    // tall as a dial and not a combo taller. The switch rides just above the slope.
     const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
                                  SlopeCombo& combo)
     {
         label.setBounds (cell.removeFromTop (labelH));
 
-        sw.setBounds (juce::Rectangle<int> (cell.getX(), dialAxisY - 8, cell.getWidth(), 16)
+        combo.setBounds (juce::Rectangle<int> (cell.getX(), first.getBottom() - 18, cell.getWidth(), 18));
+        sw.setBounds (juce::Rectangle<int> (cell.getX(), combo.getY() - 4 - 16, cell.getWidth(), 16)
                           .withSizeKeepingCentre (juce::jmin (cell.getWidth(), 30), 16));
-        combo.setBounds (juce::Rectangle<int> (cell.getX(), sw.getBottom() + 4,
-                                               cell.getWidth(), 18));
     };
 
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox);
