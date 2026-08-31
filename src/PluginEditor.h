@@ -94,6 +94,10 @@ private:
     /** Whether the tuner's needle stands under the panel — the strip's TUNER arrow. */
     bool tunerShown = true;
 
+    /** The scale to come back to when the full-screen button is pressed the second time;
+        negative while nothing is remembered. */
+    float scaleBeforeFull = -1.0f;
+
     /** The guards' arrows follow their ON parameters — a switched-off guard dims in the strip
         the way a hidden block does. */
     std::unique_ptr<juce::ParameterAttachment> gateRowAtt, limitRowAtt;

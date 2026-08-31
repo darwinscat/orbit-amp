@@ -92,6 +92,42 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     chrome.onGear = [this] (juce::Point<int> pos) { showGearMenu (pos); };
 
+    // FULL SCREEN, the honest kind: the aspect is locked, so a native fullscreen would only
+    // letterbox the device in black. Instead the button jumps to the biggest fit the display
+    // holds — the standalone window centred on its screen — and jumps BACK to where you were
+    // on the second press.
+    chrome.onFullScreen = [this]
+    {
+        auto* tl = getTopLevelComponent();
+        const auto& displays = juce::Desktop::getInstance().getDisplays();
+        const auto* display  = tl != nullptr ? displays.getDisplayForRect (tl->getScreenBounds())
+                                             : displays.getPrimaryDisplay();
+        if (display == nullptr)
+            return;
+
+        const auto area = display->userArea;
+        const float fit = juce::jlimit (AmpProcessor::minScale, AmpProcessor::maxScale,
+                                        juce::jmin ((float) area.getWidth() / (float) baseWidth,
+                                                    (float) (area.getHeight() - titleBarAllowance)
+                                                        / (float) baseHeight()));
+        const float cur = (float) getWidth() / (float) baseWidth;
+
+        if (std::abs (cur - fit) < 0.01f && scaleBeforeFull > 0.0f)
+        {
+            setSize (juce::roundToInt (baseWidth * scaleBeforeFull),
+                     juce::roundToInt (baseHeight() * scaleBeforeFull));
+            scaleBeforeFull = -1.0f;
+        }
+        else
+        {
+            scaleBeforeFull = cur;
+            setSize (juce::roundToInt (baseWidth * fit), juce::roundToInt (baseHeight() * fit));
+        }
+
+        if (auto* window = dynamic_cast<juce::ResizableWindow*> (tl))
+            window->setCentrePosition (area.getCentre());
+    };
+
     // The layout strip: always there, the ONE place anything is stood down and brought back —
     // the whole path as arrows, the service links wearing their own lights.
     tunerShown = prefs::getBool (prefs::showTuner, true);

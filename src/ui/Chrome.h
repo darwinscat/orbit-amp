@@ -40,6 +40,10 @@ public:
         other widget here. */
     std::function<void (juce::Point<int>)> onGear;
 
+    /** FULL SCREEN was pressed. What that means — the standalone's window growing, a hosted
+        editor filling the display — is the editor's business. */
+    std::function<void()> onFullScreen;
+
     void resized() override;
 
     // OrbitCab's header proportions: a 50-tall strip whose small controls live in a 44-tall band
@@ -66,6 +70,42 @@ private:
     felitronics::appkit::IconButton  saveAs { felitronics::appkit::IconButton::Kind::saveAs };
     felitronics::appkit::IconButton  trash  { felitronics::appkit::IconButton::Kind::trash };
     felitronics::appkit::IconButton  gear   { felitronics::appkit::IconButton::Kind::settings };
+
+    /** The full-screen button's face: the four corners of a frame, reaching out. Drawn here —
+        this product's icon until a sibling wants it. */
+    struct FullScreenIcon final : public juce::Button
+    {
+        FullScreenIcon() : juce::Button ("fullscreen")
+        {
+            setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        }
+
+        juce::Colour colour;
+
+        void paintButton (juce::Graphics& g, bool over, bool down) override
+        {
+            const auto r = getLocalBounds().toFloat().withSizeKeepingCentre (15.0f, 13.0f);
+            g.setColour (colour.withAlpha (down ? 1.0f : over ? 0.95f : 0.7f));
+
+            const float arm = 4.5f, t = 1.4f;
+            const auto corner = [&] (float x, float y, float dx, float dy)
+            {
+                juce::Path p;
+                p.startNewSubPath (x + dx * arm, y);
+                p.lineTo (x, y);
+                p.lineTo (x, y + dy * arm);
+                g.strokePath (p, juce::PathStrokeType (t, juce::PathStrokeType::mitered,
+                                                       juce::PathStrokeType::rounded));
+            };
+
+            corner (r.getX(),     r.getY(),      1.0f,  1.0f);
+            corner (r.getRight(), r.getY(),     -1.0f,  1.0f);
+            corner (r.getX(),     r.getBottom(), 1.0f, -1.0f);
+            corner (r.getRight(), r.getBottom(),-1.0f, -1.0f);
+        }
+    };
+
+    FullScreenIcon fullScreen;
 
     std::vector<std::unique_ptr<felitronics::appkit::chrome::RegisterButton>> registers;
     felitronics::appkit::chrome::PresetCell preset;

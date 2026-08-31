@@ -58,6 +58,14 @@ Chrome::Chrome (AmpProcessor& processor)
             onGear (gear.getScreenBounds().getBottomLeft());
     };
 
+    fullScreen.colour = theme::txDim;
+    fullScreen.onClick = [this]
+    {
+        if (onFullScreen)
+            onFullScreen();
+    };
+    addAndMakeVisible (fullScreen);
+
     // Save writes back to the loaded preset; Save As always asks for a name — the same split as the
     // sibling, so a working preset can be updated without a dialog every time.
     save.onClick   = [this] { savePreset (false); };
@@ -140,7 +148,8 @@ void Chrome::resized()
     auto rightBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
 
     gear.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-    rightBar.removeFromRight (6);   // the gear opens a window, the rest edit the preset — a seam
+    fullScreen.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
+    rightBar.removeFromRight (6);   // these two mind the WINDOW, the rest edit the preset — a seam
     trash .setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     saveAs.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     save  .setBounds (rightBar.removeFromRight (40).reduced (4, 7));
