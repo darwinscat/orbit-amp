@@ -183,14 +183,15 @@ public:
         const double db = h.freedom == Handle::Freedom::freq ? h.db : yToDb (r, e.position.y);
 
         // A line has no gain to give the vertical axis, so the vertical axis works the ladder:
-        // every stepPx of travel is one slope notch, up = steeper. Same message as the wheel.
+        // every stepPx of travel is one slope notch, down = steeper — the cut digs in as the hand
+        // digs down. Same message as the wheel.
         if (h.freedom == Handle::Freedom::freq && onHandleStep != nullptr)
         {
             constexpr float stepPx = 28.0f;
-            const int steps = (int) ((stepAnchor - e.position.y) / stepPx);
+            const int steps = (int) ((e.position.y - stepAnchor) / stepPx);
             if (steps != 0)
             {
-                stepAnchor -= (float) steps * stepPx;
+                stepAnchor += (float) steps * stepPx;
                 onHandleStep (dragging, steps);
             }
         }

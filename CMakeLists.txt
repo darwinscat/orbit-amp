@@ -200,9 +200,6 @@ juce_add_binary_data(OrbitAmpData
         "${felitronics_appkit_SOURCE_DIR}/assets/Michroma-Regular.ttf"
         "${felitronics_appkit_SOURCE_DIR}/assets/catlogo.svg"
 
-        # OrbitAmp's own product mark — the Cat's Eye, the header's second sign beside the cat.
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/OrbitAmp-mark.svg"
-
         # The cabinet IRs — orbitcab's, referenced there like everything shared: one copy in the
         # ecosystem.
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/01-cookie-monster.wav"
