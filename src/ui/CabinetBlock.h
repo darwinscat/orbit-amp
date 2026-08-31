@@ -1,71 +1,100 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "../Parameters.h"
 #include "BlockFrame.h"
-#include "Selector.h"
-#include "StepSwitch.h"
+#include "VoicingSelector.h"
+#include "ZoneSwitch.h"
 
-#include <felitronics/appkit/MicGrid.h>
+#include <felitronics/analysis/PlotMap.h>
+#include <felitronics/analysis/SpectrumPane.h>
+#include <felitronics/appkit/IrWaveView.h>
 
 #include <array>
+#include <memory>
 
 namespace orbitamp
 {
 
-/** The cabinet, filling the rest of the lower row.
+class AmpProcessor;
 
-    Two mic slots, each with a switch and a pick from the same full list, both standing on one
-    grille. The speaker face anchors the grid's rows, so a position is a place on a real driver
-    rather than a word from a list — and it is the same picture the capture tool used, which is what
-    makes a position mean one thing at both ends of the pipeline.
+/** The cabinet, filling the rest of the lower row: ONE impulse response, drawn.
 
-    Distance and position are two halves of one gesture, so a click sets them together. */
-class CabinetBlock final : public BlockFrame
+    Half of OrbitCab: one IR, no mix. Its name stands on the border beside the block's; the box is
+    the IR itself — the impulse with its tail, the two cuts' curve over it with a handle per cut,
+    the trim's handle — and under it the four switches: HPF, LPF, TRIM, Ø. What the switches do is
+    baked into the IR off the pump; the picture is the family's IrWaveView, fed the same bytes the
+    engine convolves. */
+class CabinetBlock final : public BlockFrame,
+                           private juce::Timer
 {
 public:
-    explicit CabinetBlock (juce::AudioProcessorValueTreeState&);
+    explicit CabinetBlock (AmpProcessor&);
     ~CabinetBlock() override;
 
 private:
+    void timerCallback() override;
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
-    void mouseDown (const juce::MouseEvent&) override;
 
-    /** Pushes both mics into the grid as its dots — colour per slot, the active one ringed. */
-    void refreshDots();
+    /** The IR parameter moved: the picture decodes the shelf's bytes for that one. */
+    void loadWave (int index);
 
-    /** A cell was clicked or a dot dragged: position and distance move together, as one edit. */
-    void placeMic (int slot, const juce::String& position, double distanceCm);
+    /** The picture wears what the parameters say — the cuts, the trim — so it draws the sound. */
+    void pushToWave();
 
-    juce::Rectangle<int> switchArea (int slot) const;
-    static juce::Rectangle<int> micCell (juce::Rectangle<int> content, int slot);
+    static constexpr int switchRow = 20;
+    static constexpr int gap       = 8;
 
-    static constexpr int irRow      = 24;    // the cabinet is chosen before it is miked
-    static constexpr int micRow     = 24;
-    static constexpr int angleRow   = 16;
-    static constexpr int micSwitchW = 22;
-    static constexpr int micSwitchH = 11;
-    static constexpr int gap        = 8;
+    AmpProcessor& amp;
 
-    struct Slot
+    VoicingSelector ir;
+    felitronics::appkit::IrWaveView wave;
+
+    struct Switch
     {
-        std::unique_ptr<Selector>   pick;
-        std::unique_ptr<StepSwitch> angle;
-        std::unique_ptr<juce::ParameterAttachment> onAtt, typeAtt, posAtt, distAtt, angleAtt;
-        juce::RangedAudioParameter* onParam = nullptr;   // the truth its switch toggles by
-        bool on = false;
+        ZoneSwitch  sw;
+        juce::Label label;
+        std::unique_ptr<juce::ParameterAttachment> att;
     };
 
-    juce::AudioProcessorValueTreeState& state;
+    std::array<Switch, 3> switches;   // HPF, LPF, Ø — TRIM became the combo below
 
-    /** The cabinet itself — which IR speaks. Every module's grammar: arrows and a name. */
-    Selector ir { theme::orange, true };
-    std::unique_ptr<juce::ParameterAttachment> irAtt;
+    /** The trim's whole story in one cell: OFF, a fixed window, or MANUAL. A combo in behaviour,
+        our own face in pixels — the consoles' SlopeCombo grammar. */
+    struct TrimCombo final : public juce::Component
+    {
+        std::function<juce::String()> getText;
+        std::function<void()>         onOpen;
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override { if (onOpen) onOpen(); }
+    };
 
-    std::array<Slot, (size_t) params::cabNumMics> slots;
-    felitronics::appkit::MicGrid grid;
+    enum class TrimMode { off, fixed, manual };
 
-    int activeSlot = 0;   // which mic a click on an empty cell moves
+    void showTrimMenu();
+    void applyTrimPick (int itemId);
+
+    /** Reads the mode off the parameters — for init and outside writes (automation, recall).
+        An explicitly chosen MANUAL survives landing exactly on a mark: the magnet snaps there,
+        and a handle that vanished under the hand would be the bug, not the feature. */
+    void deriveTrimMode();
+
+    TrimCombo trimCombo;
+    TrimMode  trimMode   = TrimMode::off;
+    double    trimModeMs = 0.0;
+
+    /** MANUAL's own place, remembered in ms: a fixed pick moves the parameter, but coming back to
+        MANUAL puts the handle where the hand last left it — the windows never steal its spot. */
+    double manualTrimMs = 0.0;
+
+    std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt, trimOnAtt,
+                                               hpfSlopeAtt, lpfSlopeAtt;
+
+    /** The same liquid analyser the consoles run — one pane for the IR's door, one for its exit. */
+    std::array<felitronics::analysis::SpectrumPane, 2> panes;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CabinetBlock)
 };

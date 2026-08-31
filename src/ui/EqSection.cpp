@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #include "EqSection.h"
+
+#include "Prefs.h"
 
 #include "Theme.h"
 
@@ -8,14 +13,21 @@ namespace orbitamp
 //==============================================================================
 EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
                       felitronics::analysis::RollingSpectrumTap& spectrumTap,
+                      felitronics::analysis::RollingSpectrumTap& inSpectrumTap,
                       std::function<double()> sampleRateGetter)
-    : state (s), link (eqLink), tap (spectrumTap), sampleRate (std::move (sampleRateGetter))
+    : state (s), link (eqLink), tap (spectrumTap), inTap (inSpectrumTap),
+      sampleRate (std::move (sampleRateGetter))
 {
     display.prepare (displayRate, 1);
 
-    // The spectrum behind everything: the signal is the ground the response stands on.
+    // The spectra behind everything: the signal is the ground the response stands on — and it is
+    // a PAIR now, the cabinet picture's grammar: what the console eats as the quiet grey ground,
+    // what it made in the block's own colour over it.
     curve.paintSpectrum = [this] (juce::Graphics& g, juce::Rectangle<float> r)
     {
+        if (! prefs::spectraShown())
+            return;
+
         felitronics::analysis::PlotMap pm;
         pm.width      = r.getWidth();
         pm.height     = r.getHeight();
@@ -25,29 +37,36 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         pm.specTop    = 0.0;
         pm.specBottom = -90.0;
 
-        juce::Path fill, peak;
-        fill.startNewSubPath (r.getX(), r.getBottom());
-        bool first = true;
+        const auto draw = [&] (felitronics::analysis::SpectrumPane& p, juce::Colour tint,
+                               float fillTop, float fillBottom, float line)
+        {
+            juce::Path fill, peak;
+            fill.startNewSubPath (r.getX(), r.getBottom());
+            bool first = true;
 
-        pane.buildColumns (pm, sampleRate(), 4.5, 1000.0,
-                           [&] (int, float x, float yFill, float yPeak)
-                           {
-                               fill.lineTo (r.getX() + x, r.getY() + yFill);
+            p.buildColumns (pm, sampleRate(), 4.5, 1000.0,
+                            [&] (int, float x, float yFill, float yPeak)
+                            {
+                                fill.lineTo (r.getX() + x, r.getY() + yFill);
 
-                               if (first) { peak.startNewSubPath (r.getX() + x, r.getY() + yPeak); first = false; }
-                               else       peak.lineTo (r.getX() + x, r.getY() + yPeak);
-                           });
+                                if (first) { peak.startNewSubPath (r.getX() + x, r.getY() + yPeak); first = false; }
+                                else       peak.lineTo (r.getX() + x, r.getY() + yPeak);
+                            });
 
-        fill.lineTo (r.getRight(), r.getBottom());
-        fill.closeSubPath();
+            fill.lineTo (r.getRight(), r.getBottom());
+            fill.closeSubPath();
 
-        g.setGradientFill (juce::ColourGradient (theme::spectrum.withAlpha (0.22f),
-                                                 0.0f, r.getY() + r.getHeight() * 0.30f,
-                                                 theme::spectrum.withAlpha (0.03f),
-                                                 0.0f, r.getBottom(), false));
-        g.fillPath (fill);
-        g.setColour (theme::spectrum.withAlpha (0.55f));
-        g.strokePath (peak, juce::PathStrokeType (1.0f));
+            g.setGradientFill (juce::ColourGradient (tint.withAlpha (fillTop),
+                                                     0.0f, r.getY() + r.getHeight() * 0.30f,
+                                                     tint.withAlpha (fillBottom),
+                                                     0.0f, r.getBottom(), false));
+            g.fillPath (fill);
+            g.setColour (tint.withAlpha (line));
+            g.strokePath (peak, juce::PathStrokeType (1.0f));
+        };
+
+        draw (inPane, theme::spectrum, 0.14f, 0.02f, 0.30f);   // before: the quiet ground
+        draw (pane,   theme::orange,   0.18f, 0.02f, 0.55f);   // after: the console's own voice
     };
 
     buildBands (ourBands());
@@ -80,7 +99,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
 
     for (auto* l : { &hpfLabel, &lpfLabel })
     {
-        l->setFont (theme::displayFont (14.0f));
+        l->setFont (theme::displayFont (12.0f));
         l->setColour (juce::Label::textColourId, theme::txDim);
         l->setJustificationType (juce::Justification::centred);
         l->setInterceptsMouseClicks (false, false);
@@ -91,7 +110,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     hpfSlopeBox.setIndex = [this] (int i) { hpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
     lpfSlopeBox.setIndex = [this] (int i) { lpfSlopeAtt->setValueAsCompleteGesture ((float) i); };
 
-    presetBtn.onClick = [this] (juce::Point<int> screenPos) { showPresets (screenPos); };
+    modeBtn.onClick = [this] (juce::Point<int> screenPos) { showModeMenu (screenPos); };
 
     curve.onContextMenu = [this] (juce::Point<int> at) { showModeMenu (at); };
 
@@ -141,8 +160,8 @@ void EqSection::buildBands (std::vector<Band> newBands)
         else           k->textForValue = [] (double)   { return juce::String(); };
 
         k->onValueChange   = [this] { refreshCurve(); };
-        k->labelFontHeight = 13.0f;
-        k->labelRowHeight  = 17;
+        k->labelFontHeight = 11.0f;
+        k->labelRowHeight  = 14;
 
         bandAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
             state, b.param, *k));
@@ -157,37 +176,46 @@ void EqSection::buildBands (std::vector<Band> newBands)
         host->resized();
 }
 
-void EqSection::setModes (const juce::StringArray& names, int selected)
+void EqSection::setModes (const juce::StringArray& names, int selected, bool nativeAvailable)
 {
-    modeNames = names;
-    modeIndex = juce::jlimit (0, juce::jmax (0, names.size() - 1), selected);
+    modeNames     = names;
+    modeIndex     = juce::jlimit (0, juce::jmax (0, names.size() - 1), selected);
+    nativeOffered = nativeAvailable;
+    modeBtn.text  = modeNames[modeIndex].toUpperCase();
+    modeBtn.repaint();
 }
 
-/** Whose bands the console wears, asked by right-clicking the curve.
+/** Whose bands the console wears — from the button in the curve's corner, or by right-clicking
+    the curve: the same menu either way, so there is one place the answer changes.
 
-    It was a two-position switch parked over the curve's top edge, which is a lot of furniture for
-    a question asked once per device — and it was standing on the part of the picture the response
-    actually uses. A menu costs nothing until it is wanted, and right-click-a-thing-for-its-choices
-    is already how the block's power and the picture's five views are reached.
-
-    One side is not a choice: a device that measured nothing offers no native set, and the menu
-    simply does not open. */
+    The device's side is offered only when the device measured something; a pack that brought no
+    tone knobs leaves it grey rather than absent, so the row still says what it could have been.
+    RESET closes the list: the console's own knobs back to flat, and — through the block — the
+    device's slots back to where the pack starts them, whichever set is on show. */
 void EqSection::showModeMenu (juce::Point<int> screenPos)
 {
-    if (modeNames.size() < 2)
-        return;
-
     juce::PopupMenu m;
-    m.addSectionHeader ("TONE CONTROLS");
 
     for (int i = 0; i < modeNames.size(); ++i)
-        m.addItem (i + 1, modeNames[i].toUpperCase(), true, i == modeIndex);
+        m.addItem (i + 1, modeNames[i].toUpperCase(), i != 0 || nativeOffered, i == modeIndex);
+
+    m.addSeparator();
+    m.addItem (100, "RESET");
 
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [safe = juce::Component::SafePointer<juce::Component> (&curve), this] (int r)
                      {
-                         if (r > 0 && safe != nullptr && onModePicked != nullptr)
+                         if (safe == nullptr)
+                             return;
+
+                         if (r == 100)
+                         {
+                             resetLink();
+                             if (onReset != nullptr)
+                                 onReset();
+                         }
+                         else if (r > 0 && onModePicked != nullptr)
                              onModePicked (r - 1);
                      });
 }
@@ -216,12 +244,19 @@ void EqSection::timerCallback()
 {
     // Pull a frame if one is waiting; a mismatched order is discarded (another consumer switched
     // resolutions — cannot happen while everyone agrees on spectrumOrder, but the contract stands).
-    int order = 0;
+    const auto pull = [] (felitronics::analysis::RollingSpectrumTap& t,
+                          felitronics::analysis::SpectrumPane& p)
+    {
+        int order = 0;
 
-    if (tap.tryPull (pane.frameInput(), order) && order == spectrumOrder)
-        pane.ingest (order);
-    else
-        pane.starve();
+        if (t.tryPull (p.frameInput(), order) && order == spectrumOrder)
+            p.ingest (order);
+        else
+            p.starve();
+    };
+
+    pull (tap,   pane);
+    pull (inTap, inPane);
 
     curve.repaint();
 }
@@ -241,7 +276,7 @@ std::unique_ptr<juce::ParameterAttachment> EqSection::attach (const juce::String
                                                         [this] (float) { refreshCurve(); });
 }
 
-void EqSection::PresetButton::paint (juce::Graphics& g)
+void EqSection::ModeButton::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat().reduced (0.5f);
     g.setColour (theme::panel.withAlpha (0.85f));
@@ -249,7 +284,7 @@ void EqSection::PresetButton::paint (juce::Graphics& g)
     g.setColour (theme::hair2);
     g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
     g.setColour (theme::txDim);
-    theme::drawTracked (g, "PRESETS", r.withTrimmedRight (14.0f), theme::displayFont (12.0f), 0.14f,
+    theme::drawTracked (g, text, r.withTrimmedRight (14.0f), theme::displayFont (12.0f), 0.14f,
                         juce::Justification::centred);
 
     juce::Path v;
@@ -258,90 +293,6 @@ void EqSection::PresetButton::paint (juce::Graphics& g)
     v.lineTo (cx, cy + 3.0f);
     v.lineTo (cx + 3.0f, cy);
     g.strokePath (v, juce::PathStrokeType (1.2f));
-}
-
-void EqSection::showPresets (juce::Point<int> screenPos)
-{
-    // Stamps, named for the JOB this link does at its place in the chain — eq1 preps the signal
-    // for the boost, eq2 shapes it for the preamp. Each stamp is SURGICAL: it writes only its own
-    // zone, so stamps compose — Rumble cut plus Lead push is both, in any order; rivals in the
-    // same zone simply overwrite each other. Flat stays the one full wipe.
-    //
-    // The ticks are computed, never stored: a stamp shows checked while the parameters it writes
-    // actually hold its values. Turn any of its knobs and the tick honestly goes out — that sound
-    // is yours now, not the preset's.
-    struct Stamp
-    {
-        const char* name;
-        std::vector<std::pair<juce::String, float>> moves;
-    };
-
-    const std::vector<Stamp> stamps = link == 0
-        ? std::vector<Stamp> {
-            { "Rumble cut",   // the infra-low goes before the boost sees it
-              { { params::eqHpfOn (link), 1.0f }, { params::eqHpfHz (link), 75.0f },
-                { params::eqHpfSlope (link), 3.0f } } },
-            { "Tight low",    // higher cut plus a leaner shelf
-              { { params::eqHpfOn (link), 1.0f }, { params::eqHpfHz (link), 110.0f },
-                { params::eqHpfSlope (link), 3.0f }, { params::eqLoDb (link), -2.0f } } },
-            { "Lead push",    // the screamer hump
-              { { params::eqBellDb (link, 0), 4.0f }, { params::eqBellHz (link, 0), 750.0f } } } }
-        : std::vector<Stamp> {
-            { "Tight",        // the preamp gets nothing to flub
-              { { params::eqHpfOn (link), 1.0f }, { params::eqHpfHz (link), 120.0f },
-                { params::eqHpfSlope (link), 3.0f }, { params::eqLoDb (link), -3.0f },
-                { params::eqLoHz (link), 150.0f } } },
-            { "Bright",
-              { { params::eqHiDb (link), 4.0f }, { params::eqHiHz (link), 3500.0f } } },
-            { "Smooth",       // the glass comes off before the drive
-              { { params::eqLpfOn (link), 1.0f }, { params::eqLpfHz (link), 7000.0f },
-                { params::eqLpfSlope (link), 1.0f } } } };
-
-    const auto holds = [this] (const Stamp& st)
-    {
-        for (const auto& [id, v] : st.moves)
-            if (auto* p = state.getParameter (id);
-                p == nullptr || std::abs (p->getValue() - p->convertTo0to1 (v)) > 0.005f)
-                return false;
-        return true;
-    };
-
-    juce::PopupMenu m;
-    m.addItem (1, "Flat", true, linkIsFlat());
-    m.addSeparator();
-
-    for (int i = 0; i < (int) stamps.size(); ++i)
-        m.addItem (i + 2, stamps[(size_t) i].name, true, holds (stamps[(size_t) i]));
-
-    m.showMenuAsync (juce::PopupMenu::Options()
-                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [this, stamps] (int r)
-                     {
-                         if (r == 1)
-                             resetLink();
-                         else if (r >= 2 && r - 2 < (int) stamps.size())
-                             for (const auto& [id, v] : stamps[(size_t) (r - 2)].moves)
-                                 setParam (id, v);
-                     });
-}
-
-bool EqSection::linkIsFlat() const
-{
-    for (const auto& id : linkParamIds())
-        if (auto* p = state.getParameter (id);
-            p != nullptr && std::abs (p->getValue() - p->getDefaultValue()) > 0.005f)
-            return false;
-    return true;
-}
-
-void EqSection::setParam (const juce::String& id, float plainValue)
-{
-    if (auto* p = state.getParameter (id))
-    {
-        p->beginChangeGesture();
-        p->setValueNotifyingHost (p->convertTo0to1 (plainValue));
-        p->endChangeGesture();
-    }
 }
 
 juce::StringArray EqSection::linkParamIds() const
@@ -378,7 +329,7 @@ void EqSection::resetLink()
 void EqSection::addTo (juce::Component& parent)
 {
     parent.addAndMakeVisible (curve);
-    parent.addAndMakeVisible (presetBtn);
+    parent.addAndMakeVisible (modeBtn);
     host = &parent;
 
     for (auto& k : bandKnobs)
@@ -405,7 +356,7 @@ void EqSection::setWidgetsVisible (bool v)
     setSpectrumRunning (v);
 
     curve.setVisible (v);
-    presetBtn.setVisible (v);
+    modeBtn.setVisible (v);
     hpfSw.setVisible (v);
     lpfSw.setVisible (v);
     hpfLabel.setVisible (v);
@@ -509,17 +460,33 @@ void EqSection::refreshHandles()
 
     const auto& s = display.getSettings();
 
-    // OUR bands only, and only while the console is wearing them. In the device's own set our four
-    // are bypassed — the parametric is out of the signal by definition — so a point that still
-    // dragged would be writing to something nobody can hear. The exact bug the EQ's enable was
-    // just deleted for, in a different costume.
+    // OUR bands only while the console is wearing them. In the device's own set the parametric is
+    // out of the signal by definition — its points would be writing to something nobody can hear —
+    // so the same five slots carry the DEVICE's dots instead: one per measured knob, pinned at the
+    // frequency where that knob acts hardest, riding the composite, draggable only up and down.
     const bool ours = nativeDb == nullptr;
 
-    h.getReference (hLo) = { s.loHz, s.loDb, H::Freedom::both, ours,   theme::eqNode[0] };
-    h.getReference (hB1) = { s.b1Hz, s.b1Db, H::Freedom::both, ours,   theme::eqNode[1] };
-    h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, ours,   theme::eqNode[2] };
-    h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, ours && s.b3On, theme::eqNode[4] };
-    h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, ours,   theme::eqNode[3] };
+    if (ours)
+    {
+        h.getReference (hLo) = { s.loHz, s.loDb, H::Freedom::both, true,   theme::eqNode[0] };
+        h.getReference (hB1) = { s.b1Hz, s.b1Db, H::Freedom::both, true,   theme::eqNode[1] };
+        h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, true,   theme::eqNode[2] };
+        h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, s.b3On, theme::eqNode[4] };
+        h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, true,   theme::eqNode[3] };
+    }
+    else
+    {
+        constexpr int slots[] = { hLo, hB1, hB2, hB3, hHi };
+
+        for (size_t j = 0; j < std::size (slots); ++j)
+        {
+            const bool live = j < bands.size() && bands[j].anchorHz > 0.0;
+            auto& hd   = h.getReference (slots[j]);
+            hd         = { live ? bands[j].anchorHz : 1000.0, 0.0, H::Freedom::gain, live,
+                           live ? bands[j].colour : juce::Colour() };
+            hd.rideCurve = true;
+        }
+    }
 
     // The cuts only exist while they are switched on — a handle for a filter that is not in the
     // chain would be a control over nothing. Orange HPF, violet LPF, same as their switches.
@@ -529,15 +496,54 @@ void EqSection::refreshHandles()
     curve.setHandles (std::move (h));
 }
 
+/** Which band a handle slot carries in the device's set — the same five slots, in row order. */
+static int nativeBandFor (int index)
+{
+    switch (index)
+    {
+        case 0 /*hLo*/: return 0;
+        case 1 /*hB1*/: return 1;
+        case 2 /*hB2*/: return 2;
+        case 3 /*hB3*/: return 3;
+        case 4 /*hHi*/: return 4;
+        default:        return -1;
+    }
+}
+
 void EqSection::handleDragged (int index, double hz, double db)
 {
     const auto clampDb = [] (double v) { return juce::jlimit (-15.0, 15.0, v); };
 
+    // The device's dots: the drag is a dB offset at the anchor, converted to knob travel through
+    // the band's measured swing — pull the point down a decibel and the knob turns however far
+    // the device needs to lose a decibel there. Frequency is not on offer.
+    if (nativeDb != nullptr)
+    {
+        const int j = nativeBandFor (index);
+
+        if (j >= 0 && (size_t) j < bands.size() && (size_t) j < bandKnobs.size()
+            && bands[(size_t) j].anchorHz > 0.0)
+        {
+            // A knob that barely moves its anchor would turn end to end inside a couple of
+            // pixels — the floor keeps the hand in charge without lying much.
+            const double swing = bands[(size_t) j].anchorSwingDb;
+            const double slope = std::abs (swing) < 4.0 ? (swing < 0.0 ? -4.0 : 4.0) : swing;
+
+            auto& knob = *bandKnobs[(size_t) j];
+            const double span = knob.getMaximum() - knob.getMinimum();
+            knob.setValue (juce::jlimit (knob.getMinimum(), knob.getMaximum(),
+                                         dragStartVal + (db - dragStartDb) / slope * span),
+                           juce::sendNotificationSync);
+        }
+
+        refreshCurve();
+        return;
+    }
+
     switch (index)
     {
         // The handles and the row are the same four bands in the same order, so the index IS the
-        // band. A curve that knew four names would be a second place to keep the list. (A device's
-        // own bands have no handles yet — setBandDb is a no-op past the end of the list.)
+        // band. A curve that knew four names would be a second place to keep the list.
         case hLo: setBandDb (0, db); break;
         case hB1: setBandDb (1, db); break;
         case hB2: setBandDb (2, db); break;
@@ -552,6 +558,22 @@ void EqSection::handleDragged (int index, double hz, double db)
 
 void EqSection::handleDragActive (int index, bool active)
 {
+    // A device dot's drag starts from where the composite stands at its anchor and where the
+    // knob stands on its dial — the offsets convert between the two for the whole gesture.
+    if (nativeDb != nullptr)
+    {
+        const int j = nativeBandFor (index);
+
+        if (active && j >= 0 && (size_t) j < bands.size() && (size_t) j < bandKnobs.size())
+        {
+            const double hz = bands[(size_t) j].anchorHz;
+            dragStartDb  = display.magnitudeDb (hz) + nativeDb (hz);
+            dragStartVal = bandKnobs[(size_t) j]->getValue();
+        }
+
+        return;
+    }
+
     // One drag is ONE undoable move. The gain knobs bracket their own gestures; the frequencies
     // (and B3's gain, which has no knob) are bracketed here.
     if (active)
@@ -568,6 +590,11 @@ void EqSection::handleDragActive (int index, bool active)
 
 void EqSection::handleWheel (int index, float delta)
 {
+    // A device dot has no Q to give the wheel — and the parametric's params are out of the signal
+    // in that mode, so writing them would be the hidden-band bug again. The walls still answer.
+    if (nativeDb != nullptr && nativeBandFor (index) >= 0)
+        return;
+
     // Over a bell the wheel is Q; over a wall it is the slope ladder.
     if (index == hB1 || index == hB2 || index == hB3)
     {
@@ -616,7 +643,7 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // at 1x or taking the room from the curve, and the curve IS the readout — a node's frequency is
     // where the node is standing. Dragging it sideways was always the way to set one.
     auto row = content.removeFromBottom (rowH);
-    content.removeFromBottom (6);
+    content.removeFromBottom (4);
 
     // ONE LINE OF NAMES. HPF, LO, L MID, H MID, HI, LPF all begin at the row's top edge, because
     // six labels at three different heights read as three groups rather than one row of controls.
@@ -653,18 +680,19 @@ void EqSection::layOut (juce::Rectangle<int> content)
 
     // The cuts hang off the first knob's geometry, so an empty row still has to put them somewhere.
     const auto first = bandKnobs.empty() ? firstCell : bandKnobs.front()->getBounds();
-    const int labelH  = bandKnobs.empty() ? 17 : bandKnobs.front()->labelRowHeight;
-    const int dialAxisY = first.getY() + labelH + (first.getHeight() - labelH) / 2;
+    const int labelH  = bandKnobs.empty() ? 14 : bandKnobs.front()->labelRowHeight;
 
+    // A cut's cell is a stack — the name, the switch, the slope — standing on the SAME bottom
+    // line as the dials: the slope combo's underside is the dials' underside, so the row is as
+    // tall as a dial and not a combo taller. The switch rides just above the slope.
     const auto switchCell = [&] (juce::Rectangle<int> cell, ZoneSwitch& sw, juce::Label& label,
                                  SlopeCombo& combo)
     {
         label.setBounds (cell.removeFromTop (labelH));
 
-        sw.setBounds (juce::Rectangle<int> (cell.getX(), dialAxisY - 8, cell.getWidth(), 16)
+        combo.setBounds (juce::Rectangle<int> (cell.getX(), first.getBottom() - 18, cell.getWidth(), 18));
+        sw.setBounds (juce::Rectangle<int> (cell.getX(), combo.getY() - 4 - 16, cell.getWidth(), 16)
                           .withSizeKeepingCentre (juce::jmin (cell.getWidth(), 30), 16));
-        combo.setBounds (juce::Rectangle<int> (cell.getX(), sw.getBottom() + 4,
-                                               cell.getWidth(), 18));
     };
 
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox);
@@ -674,8 +702,8 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // then which stamp, reading left to right in the order the questions are asked.
     curve.setBounds (content);
 
-    presetBtn.setBounds (content.getRight() - 118, content.getY() + 6, 108, 22);
-    presetBtn.toFront (false);
+    modeBtn.setBounds (content.getRight() - 150, content.getY() + 6, 140, 22);
+    modeBtn.toFront (false);
 }
 
 } // namespace orbitamp

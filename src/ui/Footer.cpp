@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #include "Footer.h"
 
 #include "../Parameters.h"
@@ -11,38 +14,29 @@ namespace chrome = felitronics::appkit::chrome;
 Footer::Footer (AmpProcessor& processor)
     : amp (processor)
 {
-    oversample.theme = chrome::ChromeTheme { .fill       = theme::panel,
-                                             .underline  = theme::hair,
-                                             .accent     = theme::violet,
-                                             .attention  = theme::orange,
-                                             .text       = theme::tx,
-                                             .textDim    = theme::txDim,
-                                             .activeText = juce::Colours::white };
-    oversample.onClick = [this] { showOversampleMenu(); };
-    addAndMakeVisible (oversample);
-
-    oversampleAttachment = std::make_unique<juce::ParameterAttachment> (
-        *amp.apvts.getParameter (params::oversample),
-        [this] (float v)
-        {
-            const int i = juce::jlimit (0, params::oversampleFactors.size() - 1, juce::roundToInt (v));
-            oversample.setButtonText ("OVERSAMPLE  " + params::oversampleFactors[i]);
-        });
-
-    oversampleAttachment->sendInitialUpdate();
-
-    // MONO | STEREO: binary, so the click IS the toggle — parameter truth, no local state.
-    stereo.theme = oversample.theme;
+    // MONO | STEREO | STEREO SPACE: the click walks the loop — parameter truth, no local state.
+    stereo.theme = chrome::ChromeTheme { .fill       = theme::panel,
+                                         .underline  = theme::hair,
+                                         .accent     = theme::violet,
+                                         .attention  = theme::orange,
+                                         .text       = theme::tx,
+                                         .textDim    = theme::txDim,
+                                         .activeText = juce::Colours::white };
     stereo.onClick = [this]
     {
         auto* p = amp.apvts.getParameter (params::stereoMode);
-        stereoAttachment->setValueAsCompleteGesture (p->getValue() > 0.5f ? 0.0f : 1.0f);
+        const int now = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
+        stereoAttachment->setValueAsCompleteGesture ((float) ((now + 1) % params::stereoModes.size()));
     };
     addAndMakeVisible (stereo);
 
     stereoAttachment = std::make_unique<juce::ParameterAttachment> (
         *amp.apvts.getParameter (params::stereoMode),
-        [this] (float v) { stereo.setButtonText (v > 0.5f ? "STEREO" : "MONO"); });
+        [this] (float v)
+        {
+            stereo.setButtonText (params::stereoModes[juce::jlimit (0, params::stereoModes.size() - 1,
+                                                                    juce::roundToInt (v))].toUpperCase());
+        });
 
     stereoAttachment->sendInitialUpdate();
 
@@ -59,7 +53,7 @@ void Footer::timerCallback()
 {
     const double rate = amp.currentSampleRate();
     const auto text = rate > 0.0 ? juce::String (rate / 1000.0, rate < 100000.0 ? 1 : 0) + " KHZ"
-                                 : juce::String ("— KHZ");
+                                 : juce::String ("- KHZ");
 
     loadPercent = amp.dspLoadPercent();
     const auto load = juce::String (juce::roundToInt (loadPercent)) + "%";
@@ -72,25 +66,6 @@ void Footer::timerCallback()
     }
 }
 
-void Footer::showOversampleMenu()
-{
-    const int current = juce::jlimit (0, params::oversampleFactors.size() - 1,
-                                      juce::roundToInt (amp.apvts.getRawParameterValue (params::oversample)->load()));
-
-    juce::PopupMenu menu;
-    for (int i = 0; i < params::oversampleFactors.size(); ++i)
-        menu.addItem (i + 1, params::oversampleFactors[i], true, i == current);
-
-    // Upward, because the strip is at the bottom of the window.
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&oversample)
-                                                  .withPreferredPopupDirection (juce::PopupMenu::Options::PopupDirection::upwards),
-                        [this] (int choice)
-                        {
-                            if (choice > 0)
-                                oversampleAttachment->setValueAsCompleteGesture ((float) (choice - 1));
-                        });
-}
-
 void Footer::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
@@ -98,7 +73,7 @@ void Footer::paint (juce::Graphics& g)
     g.setColour (theme::hair);
     g.fillRect (r.removeFromTop (1.0f));
 
-    auto right = r.withTrimmedLeft ((float) (itemWidth + 66 + gap * 2));
+    auto right = r.withTrimmedLeft ((float) (stereoWidth + gap));
 
     g.setColour (theme::txFaint);
     theme::drawTracked (g, rateText, right.removeFromLeft (96.0f), theme::displayFont (12.0f), 0.1f,
@@ -115,8 +90,7 @@ void Footer::paint (juce::Graphics& g)
 void Footer::resized()
 {
     auto row = getLocalBounds().withTrimmedTop (1);
-    oversample.setBounds (row.removeFromLeft (itemWidth));
-    stereo.setBounds (row.removeFromLeft (66));
+    stereo.setBounds (row.removeFromLeft (stereoWidth));
 
     // The invisible click target over the painted DSP number.
     row.removeFromLeft (gap + 96);
@@ -159,18 +133,17 @@ void Footer::showLoadBreakdown()
         juce::String report() const
         {
             static const char* const names[AmpProcessor::numStages] = {
-                "TOTAL", "TUNER", "GATE", "BOOST", "B·EQ", "PREAMP", "P·EQ", "REVERB", "POWER",
-                "CAB", "LIMIT", "OUT",
+                // ASCII on purpose: these run through formatted ("%-8s"), where a multi-byte
+                // middle dot breaks both the encoding and the column width.
+                "TOTAL", "TUNER", "GATE", "BOOST", "B-EQ", "PREAMP", "P-EQ", "DELAY", "REVERB",
+                "POWER", "CAB", "LIMIT", "OUT",
             };
 
             juce::String t;
             t << "OrbitAmp DSP report  |  " << juce::String (amp.currentSampleRate() / 1000.0, 1)
               << " kHz  |  block " << amp.getBlockSize()
-              << "  |  oversample " << params::oversampleFactors[
-                     juce::jlimit (0, params::oversampleFactors.size() - 1,
-                                   juce::roundToInt (amp.apvts.getRawParameterValue (params::oversample)->load()))]
-              << "  |  " << (amp.apvts.getRawParameterValue (params::stereoMode)->load() > 0.5f
-                                 ? "STEREO" : "MONO")
+              << "  |  " << params::stereoModes[juce::jlimit (0, params::stereoModes.size() - 1,
+                                                              juce::roundToInt (amp.apvts.getRawParameterValue (params::stereoMode)->load()))].toUpperCase()
               << "\n";
             t << juce::String::formatted ("%-8s %8s %8s\n", "STAGE", "MEAN", "WORST");
 
@@ -185,8 +158,8 @@ void Footer::showLoadBreakdown()
         void paint (juce::Graphics& g) override
         {
             static const char* const names[AmpProcessor::numStages] = {
-                "TOTAL", "TUNER", "GATE", "BOOST", "BOOST EQ", "PREAMP", "PREAMP EQ", "REVERB", "POWER",
-                "CAB", "LIMIT", "OUT",
+                "TOTAL", "TUNER", "GATE", "BOOST", "BOOST EQ", "PREAMP", "PREAMP EQ", "DELAY",
+                "REVERB", "POWER", "CAB", "LIMIT", "OUT",
             };
 
             auto r = getLocalBounds().reduced (12, 4);

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "Theme.h"
@@ -13,9 +16,19 @@ namespace orbitamp::meterrail
     hollow sliding frame with a sight: the meter keeps running through it, and the two ticks biting
     in from the sides mark the exact value, which a 10 px-tall frame alone could not. */
 
+using theme::heatFloor;    // the thermometer's stops live in the theme, beside the scale they
+using theme::heatGreen;    // belong to — every heat-telling column and arc reads the same four
+using theme::heatYellow;
+using theme::heatRed;
+
 /** `desat` drains the colour out of the rail, 0..1 — the gate strip uses it to show pressure:
-    the deeper the gate squeezes, the greyer the signal's column, monochrome at full mute. */
-inline void paintFill (juce::Graphics& g, juce::Rectangle<float> r, float yLevel, float desat = 0.0f)
+    the deeper the gate squeezes, the greyer the signal's column, monochrome at full mute.
+
+    `heat` swaps the two-colour corporate flood for the whole thermometer — the GAIN dial's story
+    told on a pole: a dark corporate floor rising through the corporate violet, an honest traffic
+    middle of green and yellow, orange, and past it into red for the truly hot. */
+inline void paintFill (juce::Graphics& g, juce::Rectangle<float> r, float yLevel, float desat = 0.0f,
+                       bool heat = false)
 {
     if (yLevel >= r.getBottom() - 1.0f)
         return;
@@ -25,7 +38,23 @@ inline void paintFill (juce::Graphics& g, juce::Rectangle<float> r, float yLevel
     juce::ColourGradient grad (theme::violet.withMultipliedSaturation (keep).withAlpha (0.50f),
                                0.0f, r.getBottom(),
                                theme::orange.withMultipliedSaturation (keep), 0.0f, r.getY(), false);
-    grad.addColour (0.58, theme::violet.withMultipliedSaturation (keep).withAlpha (0.60f));
+
+    if (heat)
+    {
+        grad = juce::ColourGradient (heatFloor.withMultipliedSaturation (keep).withAlpha (0.55f),
+                                     0.0f, r.getBottom(),
+                                     heatRed.withMultipliedSaturation (keep),
+                                     0.0f, r.getY(), false);
+        // Green is a ZONE, not a waypoint: two stops make a plateau wide enough to live in,
+        // the way the block meters draw their feeding zone.
+        grad.addColour (0.40, theme::violet.withMultipliedSaturation (keep).withAlpha (0.60f));
+        grad.addColour (0.52, heatGreen.withMultipliedSaturation (keep).withAlpha (0.75f));
+        grad.addColour (0.70, heatGreen.withMultipliedSaturation (keep).withAlpha (0.78f));
+        grad.addColour (0.80, heatYellow.withMultipliedSaturation (keep).withAlpha (0.85f));
+        grad.addColour (0.88, theme::orange.withMultipliedSaturation (keep));
+    }
+    else
+        grad.addColour (0.58, theme::violet.withMultipliedSaturation (keep).withAlpha (0.60f));
 
     const juce::Graphics::ScopedSaveState ss (g);
     g.reduceClipRegion ((int) std::floor (r.getX()), (int) yLevel,
@@ -49,12 +78,14 @@ inline void paintClipCap (juce::Graphics& g, juce::Rectangle<float> r, bool clip
 }
 
 /** The unity nubs: a scale mark, deliberately NOT a full line so it never reads as one of the
-    meter's own ticks. */
-inline void paintUnityNubs (juce::Graphics& g, juce::Rectangle<float> track, float y)
+    meter's own ticks. The side flags let a rail that stands against the window's edge keep its
+    marks on the inner side only. */
+inline void paintUnityNubs (juce::Graphics& g, juce::Rectangle<float> track, float y,
+                            bool left = true, bool right = true)
 {
     g.setColour (juce::Colours::white.withAlpha (0.60f));
-    g.fillRect (track.getX(), y - 1.0f, 7.0f, 2.0f);
-    g.fillRect (track.getRight() - 7.0f, y - 1.0f, 7.0f, 2.0f);
+    if (left)  g.fillRect (track.getX(), y - 1.0f, 7.0f, 2.0f);
+    if (right) g.fillRect (track.getRight() - 7.0f, y - 1.0f, 7.0f, 2.0f);
 }
 
 constexpr float gripH = 22.0f;
@@ -139,7 +170,9 @@ struct GripEditor
 /** The METER's ruler: a numbered mark every 6 dBFS of the level scale — the scale is about the
     SIGNAL, not about any runner. Rows that would collide with the rail's name are skipped. */
 inline void paintDbScale (juce::Graphics& g, juce::Rectangle<float> track,
-                          const std::function<float (float)>& yOfDb, float floorDb)
+                          const std::function<float (float)>& yOfDb, float floorDb,
+                          bool leftTicks = true, bool rightTicks = true,
+                          float yLevel = 1.0e9f)
 {
     for (float db = 0.0f; db > floorDb; db -= 6.0f)
     {
@@ -149,13 +182,38 @@ inline void paintDbScale (juce::Graphics& g, juce::Rectangle<float> track,
             continue;
 
         g.setColour (juce::Colours::white.withAlpha (0.30f));
-        g.fillRect (track.getX(), y - 1.0f, 4.5f, 2.0f);
-        g.fillRect (track.getRight() - 4.5f, y - 1.0f, 4.5f, 2.0f);
+        if (leftTicks)  g.fillRect (track.getX(), y - 1.0f, 4.5f, 2.0f);
+        if (rightTicks) g.fillRect (track.getRight() - 4.5f, y - 1.0f, 4.5f, 2.0f);
 
-        g.setColour (juce::Colours::white.withAlpha (0.38f));
-        theme::drawTracked (g, juce::String ((int) db),
-                            { track.getX(), y - 5.5f, track.getWidth(), 11.0f },
-                            theme::displayFont (10.0f), 0.04f, juce::Justification::centred);
+        // No minus — everything under the ceiling is below zero and everyone knows it. The number
+        // wears two inks, split by the LEVEL line: light on the dark rail above it, near-black
+        // over the bright fill below — the boundary is the level itself, so nothing flickers and
+        // a number the level passes through is simply two-toned for the moment.
+        const juce::Rectangle<float> row { track.getX(), y - 5.5f, track.getWidth(), 11.0f };
+        const auto text = juce::String ((int) std::abs (db));
+
+        if (yLevel > row.getY())
+        {
+            const juce::Graphics::ScopedSaveState above (g);
+            g.reduceClipRegion ((int) std::floor (row.getX()), (int) std::floor (row.getY()),
+                                (int) std::ceil (row.getWidth()) + 1,
+                                (int) std::ceil (juce::jmin (yLevel, row.getBottom()) - row.getY()));
+            g.setColour (juce::Colours::white.withAlpha (0.38f));
+            theme::drawTracked (g, text, row, theme::displayFont (10.0f), 0.04f,
+                                juce::Justification::centred);
+        }
+
+        if (yLevel < row.getBottom())
+        {
+            const juce::Graphics::ScopedSaveState below (g);
+            const float top = juce::jmax (yLevel, row.getY());
+            g.reduceClipRegion ((int) std::floor (row.getX()), (int) std::floor (top),
+                                (int) std::ceil (row.getWidth()) + 1,
+                                (int) std::ceil (row.getBottom() - top) + 1);
+            g.setColour (juce::Colour (0xff101014).withAlpha (0.85f));
+            theme::drawTracked (g, text, row, theme::displayFont (10.0f), 0.04f,
+                                juce::Justification::centred);
+        }
     }
 }
 
@@ -171,8 +229,9 @@ inline juce::String trimText (float db)
 inline void paintName (juce::Graphics& g, juce::Rectangle<float> col, const juce::String& name)
 {
     g.setColour (juce::Colours::white.withAlpha (0.55f));
-    theme::drawTracked (g, name, col.withTrimmedTop (col.getHeight() - 20.0f),
-                        theme::displayFont (11.0f), 0.10f, juce::Justification::centred);
+    // Smaller and tighter than it was: the narrowed column has to fit "OUT" whole.
+    theme::drawTracked (g, name, col.withTrimmedTop (col.getHeight() - 18.0f),
+                        theme::displayFont (9.0f), 0.06f, juce::Justification::centred);
 }
 
 } // namespace orbitamp::meterrail

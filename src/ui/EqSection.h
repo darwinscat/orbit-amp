@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "../Parameters.h"
@@ -34,6 +37,7 @@ class EqSection final : private juce::Timer
 public:
     EqSection (juce::AudioProcessorValueTreeState&, int link,
                felitronics::analysis::RollingSpectrumTap& spectrumTap,
+               felitronics::analysis::RollingSpectrumTap& inSpectrumTap,
                std::function<double()> sampleRateGetter);
     ~EqSection() override;
 
@@ -53,7 +57,7 @@ public:
     /** How much of the block's height the control row under the curve wants: a dial, its name above
         it, and the slope combo that hangs a little below the dial's foot. Nothing more — the row
         used to reserve a hundred and twelve and spend the last forty on air. */
-    static constexpr int rowH = 72;
+    static constexpr int rowH = 62;   // a name row of 14 and a dial of 48 — the cuts' stack fits the same height
 
     /** One cell of the control row between the two cuts: what it is called, what colour it wears,
         and the parameter its knob writes.
@@ -78,6 +82,13 @@ public:
             normalised place on somebody's dial, and printing 0.63 under a knob marked TONE is
             worse than printing nothing. */
         bool showsDb = true;
+
+        /** A device knob's point on the curve: the frequency where the knob acts hardest —
+            computed once per device from its measured curves, so the dot never wanders — and the
+            signed dB the knob moves there over its whole travel, which is what a vertical drag of
+            the dot converts through. 0 anchor = no dot (ours place their own handles). */
+        double anchorHz      = 0.0;
+        double anchorSwingDb = 0.0;
     };
 
 
@@ -105,8 +116,10 @@ private:
     static constexpr int spectrumOrder   = 11;      // must agree with every other tap consumer
     core::EqLink display;
 
-    felitronics::analysis::RollingSpectrumTap& tap;
+    felitronics::analysis::RollingSpectrumTap& tap;      // after the console — its own voice
+    felitronics::analysis::RollingSpectrumTap& inTap;    // before it — the quiet ground, like the cab's
     felitronics::analysis::SpectrumPane        pane;
+    felitronics::analysis::SpectrumPane        inPane;
     std::function<double()>                    sampleRate;
 
     std::function<double (double)> nativeDb;
@@ -117,10 +130,13 @@ private:
                         return display.magnitudeDb (hz) + (nativeDb != nullptr ? nativeDb (hz) : 0.0);
                     } };
 
-    /** The overlay in the curve's corner: the presets menu. Flat (the old reset) leads the list,
-        then the link's own starting points — stamps, not state: pressed, applied, forgotten. */
-    struct PresetButton final : public juce::Component
+    /** The overlay in the curve's corner: WHOSE tone controls the console wears, written on the
+        button itself so the answer is read without opening anything, and the menu under it —
+        the two sets, and RESET. The stamps that used to live here went with the PRESETS name:
+        a console that can be the device's own or ours has one question, not a drawer. */
+    struct ModeButton final : public juce::Component
     {
+        juce::String text;
         std::function<void (juce::Point<int>)> onClick;
         void paint (juce::Graphics&) override;
         void mouseDown (const juce::MouseEvent& e) override
@@ -129,10 +145,8 @@ private:
         }
     };
 
-    void showPresets (juce::Point<int> screenPos);
     void resetLink();
     juce::StringArray linkParamIds() const;
-    bool linkIsFlat() const;
     void setParam (const juce::String& id, float plainValue);
 
     /** The slope readout under a cut's switch: shows the ladder value, click opens the ladder as
@@ -164,11 +178,17 @@ public:
         actually does is the pack's curves and our two walls, so that is what the line has to be. */
     void setNativeCurve (std::function<double (double)> db) { nativeDb = std::move (db); refreshCurve(); }
 
-    /** The one question the console asks about ITSELF: whose bands it is wearing. Asked by
-        right-clicking the curve; silent when the device brought none, because a choice with one
-        side is a label. */
-    void setModes (const juce::StringArray& names, int selected);
+    /** The one question the console asks about ITSELF: whose bands it is wearing. `names` is the
+        whole pair, in the parameter's order; `nativeAvailable` false greys the device's side, for
+        a device that measured nothing. The button in the curve's corner wears the answer, and its
+        menu — also the curve's right-click — offers the other side and RESET. */
+    void setModes (const juce::StringArray& names, int selected, bool nativeAvailable);
+    bool wearsNative() const noexcept { return modeIndex == 0; }
     std::function<void (int)> onModePicked;
+
+    /** RESET, after the console's own parameters went back to default: the block puts whatever
+        else it has on show — the device's tone slots — back where the pack starts them. */
+    std::function<void()> onReset;
 
 private:
     void buildBands (std::vector<Band>);
@@ -179,13 +199,18 @@ private:
 
     std::vector<Band> bands;
     std::vector<std::unique_ptr<Knob>> bandKnobs;
+
+    /** A native dot's drag bookkeeping: where the composite stood and where the knob stood when
+        the hand took hold — the drag is a dB offset converted through the band's swing. */
+    double dragStartDb = 0.0, dragStartVal = 0.0;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 
-    PresetButton presetBtn;
+    ModeButton modeBtn;
 
     void showModeMenu (juce::Point<int> screenPos);
     juce::StringArray modeNames;
     int               modeIndex = 0;
+    bool              nativeOffered = false;
 
     ZoneSwitch  hpfSw, lpfSw;
     juce::Label hpfLabel { {}, "HPF" }, lpfLabel { {}, "LPF" };

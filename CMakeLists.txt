@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # ----------------------------------------------------------------------------
 # orbit-amp — the device / voicing PLAYER plugin (C++/JUCE). Felitronics line, by Darwin's Cat.
 #
-# The chain:  eq1 -> boost -> eq2 -> preamp (voicing) -> reverb -> power amp -> cabinet.
+# The chain:  boost -> EQ -> preamp (voicing) -> EQ -> delay -> reverb -> power amp -> cabinet.
 #
 # One CMake config builds VST3 + AU + Standalone. JUCE 8 and the felitronics libraries are
 # fetched by CMake (FetchContent) — NOT vendored, NOT system-installed. Each dependency is
@@ -49,12 +49,24 @@ endif()
 FetchContent_MakeAvailable(juce)
 
 # ----------------------------------------------------------------------------
+# CLAP format via the MIT clap-juce-extensions wrapper (native CLAP is slated for JUCE 9).
+# Pinned like JUCE — the same commit OrbitCab ships. Upstream stopped tagging in 2022, so a
+# commit hash is their de-facto release channel.
+# ----------------------------------------------------------------------------
+set(ORBITAMP_CLAP_EXT_TAG "51a9359315298de632cf44e9d7524940868441e6" CACHE STRING "clap-juce-extensions git commit to build against")
+FetchContent_Declare(
+    clap-juce-extensions
+    GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
+    GIT_TAG        ${ORBITAMP_CLAP_EXT_TAG})
+FetchContent_MakeAvailable(clap-juce-extensions)
+
+# ----------------------------------------------------------------------------
 # felitronics-core — shared, JUCE-free, header-only DSP core (eq / dynamics / saturation /
 # neural / ...). Nothing is linked yet: the chain stages land one at a time and each adds its
 # module to target_link_libraries below. Wired now so that's a one-line change, not a rebuild
 # of the dependency graph. Its self-tests do NOT build from here (guarded by PROJECT_IS_TOP_LEVEL).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_FCORE_TAG "v0.9.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+set(ORBITAMP_FCORE_TAG "v0.21.1" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -94,7 +106,7 @@ FetchContent_MakeAvailable(felitronics_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.9.1" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.10.5" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -117,8 +129,7 @@ FetchContent_MakeAvailable(felitronics_appkit)
 #   PLUGIN_MANUFACTURER_CODE = Dcat  (Darwin's Cat — >=1 uppercase, AU rule; same as OrbitCab)
 #   PLUGIN_CODE              = Oamp  (OrbitAmp — unique per plugin; OrbitCab holds `Orbt`)
 #
-# CLAP comes later via clap-juce-extensions (one extra format, no source changes) — not wired
-# yet so the scaffold stays small.
+# CLAP rides via clap-juce-extensions below — one extra format, no source changes.
 # ----------------------------------------------------------------------------
 juce_add_plugin(OrbitAmp
     PRODUCT_NAME                "OrbitAmp"
@@ -139,6 +150,11 @@ juce_add_plugin(OrbitAmp
     # audio-input entitlement at signing time. Plug-in formats run in the host and don't.
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "OrbitAmp needs audio input to process your signal."
+    # Bundle / executable icon — the cat on the family ground (resources/icon/OrbitAmp-1024.png).
+    # One 1024-square PNG is enough: juceaide builds the macOS .icns for every bundle and the
+    # Windows .ico from it. No ICON_SMALL on purpose — see OrbitCab: juceaide reads the pair
+    # small-then-big while JUCEUtils appends big-then-small, and passing both can swap the slots.
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/OrbitAmp-1024.png"
     COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN}
 )
 
@@ -152,6 +168,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/CabinetBlock.cpp
     src/ui/PowerAmpBlock.cpp
     src/ui/EqSection.cpp
+    src/ui/DelayBlock.cpp
     src/ui/ReverbBlock.cpp
     src/ui/Chrome.cpp
     src/ui/DemoStrip.cpp
@@ -160,6 +177,46 @@ target_sources(OrbitAmp PRIVATE
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp
 )
+
+# Wrap the same JUCE plugin as a CLAP (.clap) — one extra format, no source changes.
+clap_juce_extensions_plugin(TARGET OrbitAmp
+    CLAP_ID       "com.darwinscat.orbitamp"
+    CLAP_FEATURES audio-effect "guitar" "amplifier")
+
+# The CLAP wrapper ships its own default clap.icns (the generic CLAP logo) and JUCE's ICON_BIG
+# does not reach it. Overwrite it in place with the AppIcon.icns juceaide already generated for
+# the JUCE formats, keeping the wrapper's Info.plist CFBundleIconFile=clap.icns reference valid.
+# macOS only — the CLAP on Windows/Linux is a plain shared library, no icon resource.
+if(APPLE)
+    add_custom_command(TARGET OrbitAmp_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:OrbitAmp,JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:OrbitAmp_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
+
+# ----------------------------------------------------------------------------
+# Factory devices. DeviceLibrary::bundledDirectory() looks inside the bundle first
+# (Contents/Resources/Devices) and falls back to the machine's Factory folder only when the build
+# ships nothing. The packs are curated by hand and arrive late, so the rule is a folder, not a
+# list: whatever sits in resources/Devices/ at CONFIGURE time rides into every bundle — drop the
+# packs in and re-run cmake. Absent or empty, the build ships an empty factory. The resources land
+# during bundle assembly, so they are inside every seal that is applied afterwards (dev signing,
+# the copy-plugin step, the release signature).
+# ----------------------------------------------------------------------------
+file(GLOB ORBITAMP_FACTORY_PACKS "${CMAKE_CURRENT_SOURCE_DIR}/resources/Devices/*")
+if(ORBITAMP_FACTORY_PACKS)
+    foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
+        if(TARGET OrbitAmp_${fmt})
+            juce_add_bundle_resources_directory(OrbitAmp_${fmt}
+                "${CMAKE_CURRENT_SOURCE_DIR}/resources/Devices")
+        endif()
+    endforeach()
+    list(LENGTH ORBITAMP_FACTORY_PACKS ORBITAMP_FACTORY_COUNT)
+    message(STATUS "Factory devices: ${ORBITAMP_FACTORY_COUNT} pack(s) ride in the bundles")
+else()
+    message(STATUS "Factory devices: resources/Devices/ is empty or absent — the factory ships empty")
+endif()
 
 # ----------------------------------------------------------------------------
 # Embedded assets. Michroma (OFL) is the family's display face and it lives in felitronics-appkit's
@@ -171,37 +228,30 @@ juce_add_binary_data(OrbitAmpData
     SOURCES
         "${felitronics_appkit_SOURCE_DIR}/assets/Michroma-Regular.ttf"
         "${felitronics_appkit_SOURCE_DIR}/assets/catlogo.svg"
-        # TEMPORARY — audition loops, referenced from the capture tool rather than copied. They go
-        # when the demo player goes.
-        "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/ggg.wav"
-        "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/eleven-light-years.wav"
-        "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/cats-hard-day.wav"
-        "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/deep-space-is-my-home.wav"
-        "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/assets/loops/fifth-dimension.wav"
 
         # The cabinet IRs — orbitcab's, referenced there like everything shared: one copy in the
         # ecosystem.
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/01-cookie-monster.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/02-darth-genocider.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/03-kitten-slayer.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/04-kaiju-tamer.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/05-iceburn-suicide.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/06-vertical-lip-stabber.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/07-manslaughter-joe.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/08-big-bubba.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/09-devils-cunnilingus.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/10-october-32th.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/11-wumbo.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/12-world-collider.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/13-cannibal-choir.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/14-cathode-ray-fleshburn.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/15-impaler-jim.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/16-nacho-guacamole.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/17-pickle-punisher.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/18-wasabi-warrior.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/19-pesto-paladin.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/20-don-spinacio.wav"
-        "$ENV{HOME}/IdeaProjects/orbitcab/resources/ir/21-kill-dill.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/01-cookie-monster.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/02-darth-genocider.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/03-kitten-slayer.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/04-kaiju-tamer.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/05-iceburn-suicide.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/06-vertical-lip-stabber.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/07-manslaughter-joe.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/08-big-bubba.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/09-devils-cunnilingus.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/10-october-32th.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/11-wumbo.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/12-world-collider.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/13-cannibal-choir.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/14-cathode-ray-fleshburn.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/15-impaler-jim.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/16-nacho-guacamole.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/17-pickle-punisher.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/18-wasabi-warrior.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/19-pesto-paladin.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/20-don-spinacio.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav"
 )
 
 target_compile_definitions(OrbitAmp PUBLIC
@@ -217,12 +267,10 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
-    felitronics::lineareq            # measured curves -> minimum-phase FIR (core::MeasuredFilter)
+    felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
     felitronics::measurement         # reference-unity IR normalization (core::CabinetIr)
     felitronics::nam                 # NAM inference — the captured devices actually play
-    felitronics::poweramp            # white-box tube power amp (core::PowerAmp)
-    felitronics::oversampling        # its 4x alias-free path
-    felitronics::saturation          # its tube curves
+    felitronics::rigplayer           # the pack player: captures, their crossfade, tone, alignment
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures       # ValueTree behind the workspace / presets
@@ -243,8 +291,8 @@ target_sources(orbitamp_pack_probe PRIVATE tests/PackProbe.cpp)
 target_include_directories(orbitamp_pack_probe PRIVATE src)
 target_compile_definitions(orbitamp_pack_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_pack_probe PRIVATE
-    felitronics::lineareq felitronics::nam
-    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats
+    felitronics::lineareq felitronics::nam felitronics::rigplayer
+    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
 juce_add_console_app(orbitamp_render_probe PRODUCT_NAME "OrbitAmpRenderProbe")
@@ -252,8 +300,8 @@ target_sources(orbitamp_render_probe PRIVATE tests/RenderProbe.cpp)
 target_include_directories(orbitamp_render_probe PRIVATE src)
 target_compile_definitions(orbitamp_render_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_render_probe PRIVATE
-    felitronics::lineareq felitronics::nam
-    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats
+    felitronics::lineareq felitronics::nam felitronics::rigplayer
+    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
 juce_add_console_app(orbitamp_level_probe PRODUCT_NAME "OrbitAmpLevelProbe")
@@ -261,8 +309,8 @@ target_sources(orbitamp_level_probe PRIVATE tests/LevelProbe.cpp)
 target_include_directories(orbitamp_level_probe PRIVATE src)
 target_compile_definitions(orbitamp_level_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_level_probe PRIVATE
-    felitronics::lineareq felitronics::nam
-    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats
+    felitronics::lineareq felitronics::nam felitronics::rigplayer
+    juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
 # The NAM bench — not a gate, a measuring instrument: ns/frame through the shipping stage.
@@ -290,6 +338,7 @@ target_include_directories(orbitamp_reverb_test PRIVATE src)
 target_compile_definitions(orbitamp_reverb_test PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_reverb_test PRIVATE
+    felitronics::eq
     juce::juce_audio_basics
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
@@ -341,19 +390,6 @@ endif()
 # ----------------------------------------------------------------------------
 # Acceptance gate for the power amp's CALIBRATION — felitronics tests the tube stage itself; what is
 # ours is the knob mapping. Links juce_dsp for the bypass delay line.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_poweramp_test PRODUCT_NAME "OrbitAmpPowerAmpTest")
-target_sources(orbitamp_poweramp_test PRIVATE tests/PowerAmpTests.cpp)
-target_include_directories(orbitamp_poweramp_test PRIVATE src)
-target_compile_definitions(orbitamp_poweramp_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_poweramp_test PRIVATE
-    felitronics::poweramp
-    felitronics::oversampling
-    felitronics::saturation
-    felitronics::eq
-    juce::juce_dsp
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
 
 # ----------------------------------------------------------------------------
 # Gate for the waveform picture's MEMORY — what it recorded must not be rewritten later.
@@ -383,6 +419,7 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/CabinetBlock.cpp
     src/ui/PowerAmpBlock.cpp
     src/ui/EqSection.cpp
+    src/ui/DelayBlock.cpp
     src/ui/ReverbBlock.cpp
     src/ui/Chrome.cpp
     src/ui/DemoStrip.cpp
@@ -401,9 +438,7 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::lineareq
     felitronics::measurement
     felitronics::nam
-    felitronics::poweramp
-    felitronics::oversampling
-    felitronics::saturation
+    felitronics::rigplayer
     juce::juce_audio_utils
     juce::juce_dsp
     juce::juce_data_structures
@@ -411,31 +446,22 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     juce::juce_recommended_warning_flags)
 
 # ----------------------------------------------------------------------------
-# Gate for the measured controls MAKING SOUND — a pack's magnitude tables become a filter that runs.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_measured_test PRODUCT_NAME "OrbitAmpMeasuredTest")
-target_sources(orbitamp_measured_test PRIVATE tests/MeasuredFilterTests.cpp)
-target_include_directories(orbitamp_measured_test PRIVATE src)
-target_compile_definitions(orbitamp_measured_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_measured_test PRIVATE
-    felitronics::lineareq
-    felitronics::nam                 # brings namz::rig, which the pack types come from
-    juce::juce_dsp
-    juce::juce_events
-    juce::juce_gui_basics
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-
-# ----------------------------------------------------------------------------
-# Gate for reading an .orbitrig pack and playing it. Skips cleanly when no pack is installed.
+# Gate for reading an .orbitrig pack and playing it through the block the plugin plays it with —
+# every installed pack sounds, the dial mixes without a step, a linked position is fed softer, a
+# tone knob of either form reaches the audio, and OURS parks the device's own. Skips cleanly when
+# no pack is installed.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_captured_test PRODUCT_NAME "OrbitAmpCapturedTest")
-target_sources(orbitamp_captured_test PRIVATE tests/CapturedStageTests.cpp)
+target_sources(orbitamp_captured_test PRIVATE tests/CapturedBlockTests.cpp)
 target_include_directories(orbitamp_captured_test PRIVATE src)
 target_compile_definitions(orbitamp_captured_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_captured_test PRIVATE
+    felitronics::lineareq
     felitronics::nam
+    felitronics::rigplayer
     juce::juce_audio_basics
+    juce::juce_audio_processors
+    juce::juce_dsp
     juce::juce_events
     juce::juce_gui_basics
     juce::juce_recommended_config_flags

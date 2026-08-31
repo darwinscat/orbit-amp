@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // Gate for the whole plugin, not a part of it: build the processor, move a control, and hear whether
 // the output changed.
 //
@@ -133,7 +136,9 @@ int main()
     std::printf ("orbitamp chain gate\n\n");
 
     orbitamp::AmpProcessor amp;
+    amp.inlineLoads = true;   // no message loop here: a model lands inside the pump
     amp.prepareToPlay (sampleRate, blockSize);
+    set (amp, orbitamp::params::stereoMode, 0.0f);   // the gate measures the chain, not the environment default
 
     if (amp.boost.packs.isEmpty())
     {
@@ -199,12 +204,11 @@ int main()
     // The contract changed — a block wears the device's own controls unless you ask for ours — and
     // the check wakes up exactly as it was written.
     {
-        const auto* measured = amp.boost.measured();
+        const auto tones = amp.boost.tones();
 
         int sweep = -1;
-        if (measured != nullptr)
-            for (int i = 0; i < (int) measured->size() && i < orbitamp::params::boostNumMeasured; ++i)
-                if ((*measured)[(size_t) i].positions.size() > 2) { sweep = i; break; }
+        for (int i = 0; i < (int) tones.size() && i < orbitamp::params::boostNumMeasured; ++i)
+            if (tones[(size_t) i].positions.size() > 2) { sweep = i; break; }
 
         if (sweep < 0)
         {
@@ -212,7 +216,7 @@ int main()
         }
         else
         {
-            const auto& m = (*measured)[(size_t) sweep];
+            const auto& m = tones[(size_t) sweep];
 
             // The probe tone goes where the control's own tables promise the biggest swing, inside
             // the trusted band — a fixed 220 Hz hears a Big Muff tone control and is deaf to a low
@@ -332,11 +336,16 @@ int main()
             // One file and no controls: exactly what a dropped-in .nam becomes. Leaving the other
             // twenty in place would leave the stage with nothing it could load at all.
             bareStage->device.controls.clear();
-            bareStage->measured.clear();
+            bareStage->tone.clear();
             bareStage->device.files.resize (1);
+            bareStage->device.files.front().settings.clear();   // …and its one file names no position
 
             orbitamp::AmpProcessor solo;
+            solo.inlineLoads = true;
             solo.prepareToPlay (sampleRate, blockSize);
+            // The bare pack stands at list position 0; the device parameter's factory default is a
+            // NAMED pack now, and the pump would walk away to it mid-check.
+            set (solo, orbitamp::params::boostDevice, 0.0f);
             set (solo, orbitamp::params::reverbOn, 0.0f);
             set (solo, orbitamp::params::powerOn, 0.0f);
             set (solo, orbitamp::params::preampOn, 0.0f);
@@ -482,6 +491,66 @@ int main()
         report ("...and switched off it does not touch the sound",
                 peakDb (free) > -1.3 && peakDb (free) < -0.5,
                 juce::String (peakDb (free), 1) + " dBFS");
+    }
+
+    // The three channel modes. MONO: one chain, the copy after everything — the channels are
+    // identical. STEREO SPACE: mono up to the reverb, stereo from it — with the reverb on the two
+    // channels differ (the space is wide), with it off they are still identical (the copy at the
+    // seam feeds the power amp and the cabinet the same signal). Measured on the plugin's own
+    // output, both channels kept.
+    {
+        const auto runBoth = [&] (float mode, bool reverbOn)
+        {
+            set (amp, orbitamp::params::stereoMode, mode);
+            set (amp, orbitamp::params::reverbOn, reverbOn ? 1.0f : 0.0f);
+            set (amp, orbitamp::params::limiterOn, 0.0f);
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+            std::vector<float> l, r;
+            int phase = 0;
+
+            for (int block = 0; block < 60; ++block)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                              * 220.0 * phase / sampleRate);
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+                amp.processBlock (buf, midi);
+                amp.pumpDeviceWork();
+                if (block < 30)
+                    continue;
+                for (int i = 0; i < blockSize; ++i)
+                {
+                    l.push_back (buf.getSample (0, i));
+                    r.push_back (buf.getSample (1, i));
+                }
+            }
+            return std::make_pair (l, r);
+        };
+
+        const auto monoWet   = runBoth ((float) orbitamp::params::StereoMode::mono,        true);
+        const auto spaceWet  = runBoth ((float) orbitamp::params::StereoMode::stereoSpace, true);
+        const auto spaceDry  = runBoth ((float) orbitamp::params::StereoMode::stereoSpace, false);
+
+        std::printf ("\nchannels: mono+reverb L/R %.2f%% apart, stereo space+reverb %.2f%%, stereo space dry %.2f%%\n",
+                     differencePercent (monoWet.first, monoWet.second),
+                     differencePercent (spaceWet.first, spaceWet.second),
+                     differencePercent (spaceDry.first, spaceDry.second));
+
+        report ("MONO leaves the two channels identical",
+                differencePercent (monoWet.first, monoWet.second) < 0.01);
+        report ("STEREO SPACE spreads the reverb across the channels",
+                differencePercent (spaceWet.first, spaceWet.second) > 1.0
+                    && rms (spaceWet.second) > 1.0e-4,
+                juce::String (differencePercent (spaceWet.first, spaceWet.second), 2) + "% apart");
+        report ("...and with the reverb off they are one signal again",
+                differencePercent (spaceDry.first, spaceDry.second) < 0.01);
+
+        set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
     }
 
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");

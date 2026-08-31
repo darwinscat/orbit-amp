@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "../Parameters.h"
@@ -84,12 +87,13 @@ public:
         g.setColour (theme::bezel);
         g.fillRoundedRectangle (r, theme::radiusSm);
 
-        const auto inCol = scaleArea();
+        const auto inCol = columnArea();
 
-        // ---- IN: the family meter rail — tabby's dB-anchored gradient, white hold, clip cap.
-        //      The gate's pressure lives on the BADGE now (red by depth); draining the colour
-        //      here hit the eyes and retired. ----
-        meterrail::paintFill (g, inCol, dbToY (inCol, levelDb));
+        // ---- IN: the family meter rail — dB-anchored, white hold, clip cap — wearing the whole
+        //      thermometer (the GAIN dial's ramp on a pole): dark violet floor, corporate violet,
+        //      the traffic middle, orange, red. The gate's pressure lives on the BADGE (red by
+        //      depth); draining the colour here hit the eyes and retired. ----
+        meterrail::paintFill (g, inCol, dbToY (inCol, levelDb), 0.0f, true);
 
         if (holdDb > floorDb + 0.5f)
             meterrail::paintHold (g, inCol, dbToY (inCol, holdDb));
@@ -145,17 +149,16 @@ public:
         // ---- the trim: tabby's hollow sliding frame with its sight, riding the whole rail ----
         {
             const auto area = scaleArea();
+            // No ticks on the window's edge — the marks live on the inner side only.
             meterrail::paintDbScale (g, r.reduced (0.0f, 2.0f),
-                                     [&] (float db) { return dbToY (area, db); }, floorDb);
-            meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (area, 0.0f));
+                                     [&] (float db) { return dbToY (area, db); }, floorDb,
+                                     false, true, dbToY (area, levelDb));
+            meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (area, 0.0f), false, true);
             const float v = trimP.convertFrom0to1 (trimP.getValue());
             meterrail::paintGrip (g, r, trimY (area, v), meterrail::trimText (v),
                                   theme::orange.withMultipliedAlpha (hoverA),
                                   dragging && grabbedTrim);
         }
-
-        g.setColour (theme::hair2);
-        g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
 
         meterrail::paintName (g, inCol, "IN");
     }
@@ -195,7 +198,9 @@ public:
         pressY    = e.position.y;
     }
 
-    void showPresetMenu (juce::Point<int> screenPos)
+    /** `withVolume` — the trim's RESET section rides along only when the menu opens from the
+        COLUMN, where the trim lives; the strip's arrow asks for the gate alone. */
+    void showPresetMenu (juce::Point<int> screenPos, bool withVolume = true)
     {
         const bool  isOn  = onP.getValue() > 0.5f;
         const float th    = param.convertFrom0to1 (param.getValue());
@@ -229,9 +234,12 @@ public:
         where.addItem (13, params::gatePositions[1].toUpperCase(), true, preReverb);
         m.addSubMenu ("MUTES AT", where);
 
-        m.addSeparator();
-        m.addSectionHeader ("VOLUME");
-        m.addItem (7, "RESET");
+        if (withVolume)
+        {
+            m.addSeparator();
+            m.addSectionHeader ("VOLUME");
+            m.addItem (7, "RESET");
+        }
 
         // At the MOUSE, not at the component: a menu summoned from a sliver as tall as the panel
         // would otherwise land wherever the sliver ends.
@@ -446,6 +454,14 @@ private:
     juce::Rectangle<float> scaleArea() const
     {
         return getLocalBounds().toFloat().reduced (2.0f);
+    }
+
+    /** The COLUMN, narrower than the rail it stands in and not moved: cut hard on the window's
+        edge (left, for IN) and a little on the inner side — the grips keep the full rail width,
+        so they now visibly stick out toward the edge, a handle past its slot. */
+    juce::Rectangle<float> columnArea() const
+    {
+        return scaleArea().withTrimmedLeft (10.0f).withTrimmedRight (4.0f);
     }
 
     float dbToY (juce::Rectangle<float> r, float db) const

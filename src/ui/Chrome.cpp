@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #include "Chrome.h"
 
 #include "../PluginProcessor.h"
@@ -35,6 +38,9 @@ Chrome::Chrome (AmpProcessor& processor)
     auto& history = amp.history;
 
     addAndMakeVisible (brand);
+    // The wordmark speaks up without growing the cat or the mark.
+    brand.wordmarkScale = 0.50f;
+    brand.bylineScale   = 0.30f;
 
     for (auto* b : { &undo, &redo, &save, &saveAs, &trash, &gear })
     {
@@ -48,9 +54,17 @@ Chrome::Chrome (AmpProcessor& processor)
 
     gear.onClick = [this]
     {
-        if (onShowSetup)
-            onShowSetup();
+        if (onGear)
+            onGear (gear.getScreenBounds().getBottomLeft());
     };
+
+    fullScreen.colour = theme::txDim;
+    fullScreen.onClick = [this]
+    {
+        if (onFullScreen)
+            onFullScreen();
+    };
+    addAndMakeVisible (fullScreen);
 
     // Save writes back to the loaded preset; Save As always asks for a name — the same split as the
     // sibling, so a working preset can be updated without a dialog every time.
@@ -72,6 +86,7 @@ Chrome::Chrome (AmpProcessor& processor)
         b->setRegisterIndex (i);
         b->setButtonText (juce::String::charToString ((juce::juce_wchar) ('A' + i)));
         b->theme      = theme;
+        b->textHeight = 14.5f;   // louder letters, same cells
         b->onClick    = [&history, i] { history.switchTo (i); };
         b->onPopup    = [this, i] { showRegisterMenu (i); };
         b->onCopyDrop = [&history] (int from, int to) { history.copyRegister (from, to); };
@@ -112,12 +127,29 @@ void Chrome::resized()
 {
     auto header = getLocalBounds();
 
-    // ---- right cluster: the gear at the very edge, file actions, registers, the preset name ----
-    auto right    = header.removeFromRight (486);
-    auto rightBar = right.withSizeKeepingCentre (right.getWidth(), controlBand);
+    // ---- brand on the left, sized to its content so the click area hugs the text.
+    //      ONE unit taller than the strip: the kit's header draws a hairline along its own bottom
+    //      edge, with no way to ask it not to, and that line was cutting under the logo for no
+    //      reason a block below could give — a unit past the strip's edge, the parent clips it. ----
+    brand.setBounds (header.withHeight (header.getHeight() + 1));   // height first: contentRight() reads it
+    const int brandWidth = juce::jmin (header.getWidth() - 360, juce::roundToInt (brand.contentRight()));
+    brand.setBounds (header.removeFromLeft (brandWidth).withHeight (header.getHeight() + 1));
+    brand.clickRight = brandWidth;
+
+    // ---- undo / redo right after the brand ----
+    header.removeFromLeft (10);
+    auto leftBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
+    undo.setBounds (leftBar.removeFromLeft (34).reduced (3, 6));
+    redo.setBounds (leftBar.removeFromLeft (34).reduced (3, 6));
+    header.removeFromLeft (68 + 8);
+
+    // ---- right cluster takes the REST: the gear at the very edge, file actions, registers, and
+    //      the preset name in whatever is left — the one cell here that can give. ----
+    auto rightBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
 
     gear.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-    rightBar.removeFromRight (6);   // the gear opens a window, the rest edit the preset — a seam
+    fullScreen.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
+    rightBar.removeFromRight (6);   // these two mind the WINDOW, the rest edit the preset — a seam
     trash .setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     saveAs.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     save  .setBounds (rightBar.removeFromRight (40).reduced (4, 7));
@@ -130,19 +162,6 @@ void Chrome::resized()
         registers[(size_t) i]->setBounds ((i < count - 1 ? snapArea.removeFromLeft (w) : snapArea).reduced (2, 0));
 
     preset.setBounds (rightBar.reduced (7));
-
-    // ---- brand on the left, sized to its content so the click area hugs the text ----
-    header.removeFromLeft (4);
-    brand.setBounds (header.withWidth (header.getWidth()));   // height first: contentRight() reads it
-    const int brandWidth = juce::jmin (header.getWidth(), juce::roundToInt (brand.contentRight()));
-    brand.setBounds (header.removeFromLeft (brandWidth));
-    brand.clickRight = brandWidth;
-
-    // ---- undo / redo in the gap between the brand and the register cluster ----
-    header.removeFromLeft (14);
-    auto leftBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
-    undo.setBounds (leftBar.removeFromLeft (34).reduced (3, 8));
-    redo.setBounds (leftBar.removeFromLeft (34).reduced (3, 8));
 }
 
 void Chrome::showRegisterMenu (int index)
@@ -185,7 +204,25 @@ void Chrome::showPresetMenu()
         });
 
     menu.addSeparator();
-    menu.addItem ("Reveal preset folder", [] { PresetManager::directory().revealToUser(); });
+
+    // Back to what a fresh instance is — every parameter to its default, through the history, so
+    // the reset is one undoable step like any preset load.
+    menu.addItem ("Reset to default", [this]
+    {
+        auto tree = amp.apvts.copyState();
+
+        for (auto* p : amp.getParameters())
+            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+            {
+                auto child = tree.getChildWithProperty ("id", rp->paramID);
+                if (child.isValid())
+                    child.setProperty ("value", rp->convertFrom0to1 (rp->getDefaultValue()), nullptr);
+            }
+
+        amp.history.applyEdit (amp.history.active(), tree, "Reset to default");
+        presetName = "Default";
+        preset.setCurrentName (presetName);
+    });
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (preset.nameAnchor()));
 }

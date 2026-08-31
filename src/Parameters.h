@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -71,7 +74,7 @@ inline constexpr float gateDecayModeMs[] = { 100.0f, 35.0f };
     This replaces a temporary `raw` switch that meant "play the capture with nothing of ours on it".
     That was the same fact asked as a debugging question; asked as a choice it is a control. */
 inline juce::String blockEqMode (const char* blk) { return juce::String (blk) + "_eq_mode"; }
-inline const juce::StringArray eqModes { "Native", "Ours" };
+inline const juce::StringArray eqModes { "Device Tone", "Universal EQ" };
 enum class EqMode { native, ours };
 
 /** A device's OTHER selecting controls — the ones that pick a file and are not the gain dial. Two
@@ -85,6 +88,7 @@ inline juce::String selectorId (const char* blk, int i)
 
 inline constexpr const char* boostId  = "boost";
 inline constexpr const char* preampId = "preamp";
+inline constexpr const char* powerId  = "power";    // the captured power amp: the same set of slots as the other two
 
 /** A captured block's own parameters, derived from its id prefix — the same shape for the boost,
     the preamp, and whatever captured block comes next. The named constants around them predate
@@ -92,6 +96,10 @@ inline constexpr const char* preampId = "preamp";
 inline juce::String blockOn       (const char* blk) { return juce::String (blk) + "_on"; }
 inline juce::String blockDevice   (const char* blk) { return juce::String (blk) + "_device"; }
 inline juce::String blockGain     (const char* blk) { return juce::String (blk) + "_gain"; }
+/** How the gain dial moves between the captured positions. SMOOTH: the two neighbouring captures
+    play together, mixed by angle — a continuous dial, at the price of two models running. STEP:
+    the dial lands only on the captured positions and one capture plays at a time. */
+inline juce::String blockSmooth   (const char* blk) { return juce::String (blk) + "_smooth"; }
 /** The block's INPUT trim — how hard the capture is fed, applied immediately before the model and
     metered right there. ONE per block, and there is deliberately no output volume beside it.
 
@@ -122,11 +130,11 @@ inline constexpr float captureColdDb = -18.0f;
 
 inline juce::String blockMeasured (const char* blk, int i) { return juce::String (blk) + "_meas" + juce::String (i + 1); }
 
-/** A pedal's MEASURED controls — the ones a player computes rather than selects. How many a device
-    has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge), but a host needs a fixed set of
-    parameters, so three slots are reserved and the loaded pack decides what each one drives. A slot
-    with nothing behind it is hidden rather than shown doing nothing. */
-inline constexpr int boostNumMeasured = 3;
+/** A pedal's TONE controls — the ones a player computes rather than selects. How many a device has
+    varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge; a Victory V4 preamp five), but a host
+    needs a fixed set of parameters, so five slots are reserved and the loaded pack decides what each
+    one drives. A slot with nothing behind it is hidden rather than shown doing nothing. */
+inline constexpr int boostNumMeasured = 5;
 inline juce::String boostMeasured (int i) { return "boost_meas" + juce::String (i + 1); }
 /** Which device is loaded, as an index into the scanned list. An index rather than a choice list:
     a host fixes a Choice's names at construction, and this list is whatever the player has on disk
@@ -144,7 +152,7 @@ inline constexpr const char* preampGain   = "preamp_gain";
 
 /** The preamp's measured controls, same arrangement as the boost's: a fixed set of slots, and the
     loaded device decides what each one drives. */
-inline constexpr int preampNumMeasured = 3;
+inline constexpr int preampNumMeasured = 5;
 inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String (i + 1); }
 
 /** The EQ, one per captured block and BELONGING to it — index 0 is the boost's, index 1 the
@@ -209,67 +217,116 @@ inline const juce::StringArray cabIrNames {
 };
 inline constexpr int cabIrDefault = 7;   // BIG BUBBA
 
-/** Two mic slots, each with its own switch, its own pick from the SAME full list, and its own place
-    on the grille. Two mics on one cabinet is how the sound is actually made — one close and bright,
-    one back and thick — so the second is not an extra, it is the other half. */
-inline constexpr int cabNumMics = 2;
-
-inline juce::String cabMicOn   (int i) { return "cab_mic" + juce::String (i + 1) + "_on"; }
-inline juce::String cabMicType (int i) { return "cab_mic" + juce::String (i + 1) + "_type"; }
-inline juce::String cabMicPos  (int i) { return "cab_mic" + juce::String (i + 1) + "_pos"; }
-inline juce::String cabMicDist (int i) { return "cab_mic" + juce::String (i + 1) + "_dist"; }
-inline juce::String cabMicAngle (int i) { return "cab_mic" + juce::String (i + 1) + "_angle"; }
-
-/** Mic angle, as three named positions rather than a sweep. Angle comes from captures, and captures
-    exist at the angles they were taken at — a slider in 15-degree steps would offer thirteen
-    positions where three have anything behind them. */
-inline const juce::StringArray cabAngles { "-30", "0", "+30" };
-
-/** The mics, by the two everyone actually reaches for first. More arrive with the captures. */
-inline const juce::StringArray cabMics { "SM57", "MD421" };
-
-/** The speaker's radial zones, from the rim inwards — the rows of the placement grid. They are the
-    driver's own geometry, which is why the grid draws the speaker beside them. */
-inline const juce::StringArray cabPositions { "Cone Edge", "Center Cone", "Cap Edge", "Center Cap" };
+/** What a player does to the one IR: cuts its bottom and top (a second-order high-pass and
+    low-pass baked INTO the IR, so the convolution costs nothing more), trims its tail (a fraction
+    of its length kept — the room's decay is often more than a guitar wants), and flips it. Each
+    has a switch, so the IR itself is never touched until asked. Ranges are OrbitCab's. */
+inline constexpr const char* cabHpfOn    = "cab_hpf_on";
+inline constexpr const char* cabHpfHz    = "cab_hpf_hz";
+inline constexpr const char* cabHpfSlope = "cab_hpf_slope";   // the consoles' ladder, baked into the IR
+inline constexpr const char* cabLpfOn    = "cab_lpf_on";
+inline constexpr const char* cabLpfHz    = "cab_lpf_hz";
+inline constexpr const char* cabLpfSlope = "cab_lpf_slope";
+inline constexpr const char* cabTrimOn = "cab_trim_on";
+inline constexpr const char* cabTrim   = "cab_trim";      // the fraction kept, 0.02..1
+inline constexpr const char* cabPhase  = "cab_phase";
+inline constexpr float cabHpfMinHz = 0.0f,    cabHpfMaxHz = 1000.0f,  cabHpfDefaultHz = 80.0f;
+inline constexpr float cabLpfMinHz = 1200.0f, cabLpfMaxHz = 20000.0f, cabLpfDefaultHz = 7000.0f;
+inline constexpr float cabTrimMin  = 0.001f;   // the ms floor lives in the picture (5 ms) — the fraction only guards zero
 
 inline constexpr const char* powerOn   = "power_on";
-inline constexpr const char* powerType  = "power_type";
-inline constexpr const char* powerDrive = "power_drive";
-inline constexpr const char* powerSag   = "power_sag";
-inline constexpr const char* powerTube  = "power_tube";
-inline constexpr const char* powerCount = "power_count";
-inline constexpr const char* oversample = "oversample";
+/** How many channels the chain works, and from where. MONO: one signal end to end, the copy to the
+    other channel after everything — the truth of a guitar chain, and one neural pass. STEREO: two
+    takes on one bus, each through its own amp, everything twice. STEREO SPACE: mono where the
+    sound is made — boost, preamp, their consoles, one neural pass — and stereo from the reverb on,
+    where the space is: the reverb spreads one signal into two, and the power amp, the cabinet and
+    the limiter follow it in stereo. */
 inline constexpr const char* stereoMode = "stereo_mode";
+inline const juce::StringArray stereoModes { "Mono", "Stereo", "Stereo Space" };
+enum class StereoMode { mono, stereo, stereoSpace };
 
-/** TEMPORARY — the audition loops, in the order the player offers them. Default is the first. */
+/** TEMPORARY — the audition loops, in the order the player offers them. Default is the first.
+
+    The audio is NOT shipped: it is read at run time from the dev machine's private folder, and
+    when that folder is absent the player and its menu entry are absent with it. The binary is the
+    same either way — presence of the folder is the whole switch. */
 inline const juce::StringArray demoLoops { "GGG", "Eleven Light Years", "Cats Hard Day",
                                            "Deep Space Is My Home", "Fifth Dimension" };
+inline constexpr const char* demoLoopFiles[] = { "ggg.wav", "eleven-light-years.wav",
+                                                 "cats-hard-day.wav", "deep-space-is-my-home.wav",
+                                                 "fifth-dimension.wav" };
+
+inline juce::File demoLoopsDir()
+{
+    return juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+        .getChildFile ("IdeaProjects/orbit-amp/.private/loops");
+}
+
+inline bool demoLoopsPresent()
+{
+    for (auto* name : demoLoopFiles)
+        if (demoLoopsDir().getChildFile (name).existsAsFile())
+            return true;
+
+    return false;
+}
 
 /** Oversampling for the nonlinear stages. Not a per-preset taste: it trades CPU for alias-free
     saturation, and which trade you want depends on the machine you are on. Lives in the footer with
     the other facts about the run. */
-inline const juce::StringArray oversampleFactors { "2x", "4x", "8x", "16x" };
-inline constexpr int oversampleValues[] = { 2, 4, 8, 16 };
 
-/** Output bottles, ordered by headroom — least first, which is also the order they break up in.
-    Measured across the Drive sweep an EL84 loses 12.5 dB to compression where a KT88 loses 4.5. */
-inline const juce::StringArray powerTubes { "EL84", "EL34", "6L6", "KT88" };
+/** The delay — the echo between the preamp's console and the reverb, repeats the room then
+    rooms. Repitch by design: TIME is a destination the line glides toward and the glide bends
+    pitch, tape-fashion. The loop is dark (DARK is its low pass corner — every pass darkens
+    again) and pressed by a fixed saturator; OFFSET holds one channel's repeats back against
+    the other's, the stereo of the block; MIX adds the wet over an untouched dry. */
+inline constexpr const char* delayOn      = "delay_on";
+inline constexpr const char* delaySync    = "delay_sync";
+inline constexpr const char* delayTimeMs  = "delay_time_ms";
+inline constexpr const char* delayDiv     = "delay_div";
+inline constexpr const char* delayBpm     = "delay_bpm";
+inline constexpr const char* delayRepeats = "delay_repeats";
+inline constexpr const char* delayDark    = "delay_dark";
+inline constexpr const char* delayOffset  = "delay_offset";
+inline constexpr const char* delayMix     = "delay_mix";
 
-/** One bottle or two. Not decoration: one output tube IS single-ended class A and two are push-pull,
-    which the stage takes as a first-class parameter and which measures differently. */
-inline const juce::StringArray powerCounts { "1", "2" };
+/** The sync ladder, longest first, dotted and triplet beside each plain value. The table is
+    the same fact in quarter notes: ms = beats x 60000 / BPM. */
+inline const juce::StringArray delayDivisions { "1/1", "1/2.", "1/2", "1/2T", "1/4.", "1/4",
+                                                "1/4T", "1/8.", "1/8", "1/8T", "1/16.", "1/16",
+                                                "1/16T" };
+inline constexpr float delayDivisionBeats[] = { 4.0f, 3.0f, 2.0f, 4.0f / 3.0f, 1.5f, 1.0f,
+                                                2.0f / 3.0f, 0.75f, 0.5f, 1.0f / 3.0f, 0.375f,
+                                                0.25f, 1.0f / 6.0f };
+inline constexpr int delayDivDefault = 5;   // 1/4
 
-/** What drives the power amp. The block's own switch is the "none" — a second way to turn it off
-    inside the list would be two controls for one state. Simulation is our white-box tube stage;
-    the NAM slots are captures. */
-inline const juce::StringArray powerTypes { "Simulation", "NAM 1", "NAM 2" };
+/** The BPM the sync runs on when no host is conducting — the standalone's field. A host that
+    reports a tempo outranks it. */
+inline constexpr float delayBpmMin = 40.0f, delayBpmMax = 240.0f, delayBpmDefault = 120.0f;
 
-inline constexpr const char* reverbType = "reverb_type";
-inline constexpr const char* reverbMix  = "reverb_mix";
+inline constexpr float delayTimeMinMs = 20.0f, delayTimeMaxMs = 2000.0f;
+inline constexpr float delayOffsetMaxMs = 30.0f;
+/** DARK is a percent of darkness, so the knob's direction tells the truth: clockwise darkens.
+    The engine maps it onto the loop's low pass corner, the bright ceiling falling log-evenly
+    to the dark floor. */
+inline constexpr float delayDarkLoHz = 800.0f, delayDarkHiHz = 16000.0f;
+inline constexpr float delayDarkDefaultPct = 45.0f;   // ~4 kHz — the tape-ish middle
+
+inline constexpr const char* reverbType     = "reverb_type";
+inline constexpr const char* reverbMix      = "reverb_mix";
+
+/** The tail's late refinements. DECAY scales the character's own breath (×0.5..×2 — the character
+    stays the voice); PREDELAY holds the tail back so the attack stays dry (0..100 ms); the HPF
+    cleans the WET only and is ALWAYS in — this reverb feeds a power amp, and a low tail into
+    drive is mud. At its 40 Hz floor it is as good as air; there is nothing to switch. */
+inline constexpr const char* reverbDecay    = "reverb_decay";
+inline constexpr const char* reverbPredelay = "reverb_predelay";
+inline constexpr const char* reverbHpfHz    = "reverb_hpf_hz";
 
 /** Reverb characters, in the order of the design's simple case. Size and damping follow from the
     character rather than being loose knobs — the design calls for Mix only. */
-inline const juce::StringArray reverbCharacters { "Room", "Hall", "Plate", "Spring" };
+inline const juce::StringArray reverbCharacters { "Ambience", "Room", "Hall", "Plate", "Spring",
+                                                  "Modulated" };
 
 /** Tone range. The measured hardware spanned about -10..+8 per control and up to 20 dB of travel on
     presence; the survey's conclusion on the narrower first pass was that the ranges were too small.

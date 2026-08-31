@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #include "SetupPanel.h"
 
 #include "Theme.h"
@@ -20,7 +23,8 @@ SetupPanel::SetupPanel()
 
     tabs.push_back ({ "PREAMP",    &preampDevices, [this] { preampDevices.rebuild(); }, {} });
     tabs.push_back ({ "BOOST",     &boostDevices,  [this] { boostDevices.rebuild(); },  {} });
-    tabs.push_back ({ "POWER AMP", &powerDevices,  [this] { powerDevices.rebuild(); },  {} });
+    // No POWER AMP tab: the block is benched until its packs are real — see the editor's
+    // layout table, which benches it from the panel the same way.
     tabs.push_back ({ "IR",        &irs,           [this] { irs.rebuild(); },           {} });
 
     for (auto& tab : tabs)

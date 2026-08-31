@@ -1,237 +1,445 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #include "CabinetBlock.h"
 
-#include "../Parameters.h"
+#include "../PluginProcessor.h"
+#include "Prefs.h"
 
 namespace orbitamp
 {
 
-CabinetBlock::CabinetBlock (juce::AudioProcessorValueTreeState& s)
-    : BlockFrame ("Cabinet", BlockFrame::Kind::captured), state (s)
+CabinetBlock::CabinetBlock (AmpProcessor& processor)
+    : BlockFrame ("Cab IR", BlockFrame::Kind::captured), amp (processor)
 {
-    addAndMakeVisible (grid);
-    attachPower (*state.getParameter (params::cabOn));
+    startTimerHz (30);
+    attachPower (*amp.apvts.getParameter (params::cabOn));
 
-    // The cabinet itself, first: which IR speaks. Parameter truth through the attachment echo.
-    ir.setItems (params::cabIrNames, params::cabIrDefault);
+    // The IR's name on the border beside the block's, set like a name and in the block's colour.
+    {
+        juce::Array<VoicingSelector::Entry> entries;
+        for (const auto& name : params::cabIrNames)
+            entries.add ({ name, 0, false });
+        ir.setEntries (std::move (entries));
+    }
+    ir.fontHeight = 16.0f;
+    ir.tracking   = 0.15f;
+    ir.boxed      = false;
+    ir.tint       = theme::orange;
     addAndMakeVisible (ir);
 
     irAtt = std::make_unique<juce::ParameterAttachment> (
-        *state.getParameter (params::cabIr),
+        *amp.apvts.getParameter (params::cabIr),
         [this] (float v)
         {
-            ir.setSelectedIndex (juce::jlimit (0, params::cabIrNames.size() - 1,
-                                               juce::roundToInt (v)),
-                                 juce::dontSendNotification);
+            const int i = juce::jlimit (0, params::cabIrNames.size() - 1, juce::roundToInt (v));
+            ir.setSelection (i);
+            loadWave (i);
+            resized();   // the name on the border is as wide as the name
         });
 
-    ir.onChange = [this] (int i) { irAtt->setValueAsCompleteGesture ((float) i); };
-    irAtt->sendInitialUpdate();
+    ir.onPick = [this] (int i) { irAtt->setValueAsCompleteGesture ((float) i); };
 
-    grid.setUnit ("cm");
+    // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
+    wave.setAccent (theme::orange);
+    wave.waveTint = theme::violet;   // the impulse itself in violet — the curve keeps the orange voice
+    // The handle exists only in MANUAL — pushToWave keeps this current with the combo's mode.
+    wave.setEqVisible (true);
 
-    // Clicking an empty cell moves the ACTIVE mic; clicking a dot makes that mic active; dragging a
-    // dot moves that one. One gesture vocabulary for two mics, no modes.
-    grid.onSelect     = [this] (const juce::String& pos, double d) { placeMic (activeSlot, pos, d); };
-    grid.onDotSelect  = [this] (int id) { activeSlot = id; refreshDots(); };
-    grid.onDotDrag    = [this] (int id, const juce::String& pos, double d) { placeMic (id, pos, d); };
-
-    for (int i = 0; i < params::cabNumMics; ++i)
+    // The spectra behind the impulse, in the consoles' own hand: what walks into the IR as the
+    // ground, what leaves it as the line — the same liquid columns, the same tilt, one renderer.
+    wave.paintSpectrumUnder = [this] (juce::Graphics& g, juce::Rectangle<float> r)
     {
-        auto& slot = slots[(size_t) i];
+        if (! prefs::spectraShown())
+            return;
 
-        const auto tint = felitronics::appkit::brand::slotColours[(size_t) i];
+        felitronics::analysis::PlotMap pm;
+        pm.width      = r.getWidth();
+        pm.height     = r.getHeight();
+        pm.plotBottom = r.getHeight();
+        pm.freqMin    = 20.0;
+        pm.freqMax    = 20000.0;
+        pm.specTop    = 0.0;
+        pm.specBottom = -90.0;
 
-        slot.pick = std::make_unique<Selector> (tint, true);
-        slot.pick->setItems (params::cabMics, i);
-        addAndMakeVisible (*slot.pick);
+        const double fs = juce::jmax (8000.0, amp.currentSampleRate());
 
-        // Three named angles, all visible at once. There is nothing between them: each one is a
-        // capture that was or was not taken.
-        slot.angle = std::make_unique<StepSwitch>();
-        slot.angle->accent = tint;
-        slot.angle->setItems (params::cabAngles, 1);
-        addAndMakeVisible (*slot.angle);
-
-        slot.onParam = state.getParameter (params::cabMicOn (i));
-        slot.onAtt = std::make_unique<juce::ParameterAttachment> (
-            *slot.onParam,
-            [this, i] (float v)
-            {
-                slots[(size_t) i].on = v > 0.5f;
-                const float a = slots[(size_t) i].on ? 1.0f : theme::offAlpha;
-                slots[(size_t) i].pick->setAlpha (a);
-                slots[(size_t) i].angle->setAlpha (a);
-                refreshDots();
-                repaint();
-            });
-
-        slot.typeAtt = std::make_unique<juce::ParameterAttachment> (
-            *state.getParameter (params::cabMicType (i)),
-            [this, i] (float v)
-            {
-                slots[(size_t) i].pick->setSelectedIndex (juce::roundToInt (v), juce::dontSendNotification);
-                refreshDots();
-            });
-
-        slot.angleAtt = std::make_unique<juce::ParameterAttachment> (
-            *state.getParameter (params::cabMicAngle (i)),
-            [this, i] (float v) { slots[(size_t) i].angle->setSelectedIndex (juce::roundToInt (v),
-                                                                             juce::dontSendNotification); });
-
-        slot.angle->onChange = [this, i] (int v)
+        const auto draw = [&] (felitronics::analysis::SpectrumPane& pane, juce::Colour tint,
+                               float fillTop, float fillBottom, float line)
         {
-            slots[(size_t) i].angleAtt->setValueAsCompleteGesture ((float) v);
-            activeSlot = i;
-            refreshDots();
+            juce::Path fill, peak;
+            fill.startNewSubPath (r.getX(), r.getBottom());
+            bool first = true;
+
+            pane.buildColumns (pm, fs, 4.5, 1000.0,
+                               [&] (int, float x, float yFill, float yPeak)
+                               {
+                                   fill.lineTo (r.getX() + x, r.getY() + yFill);
+
+                                   if (first) { peak.startNewSubPath (r.getX() + x, r.getY() + yPeak); first = false; }
+                                   else       peak.lineTo (r.getX() + x, r.getY() + yPeak);
+                               });
+
+            fill.lineTo (r.getRight(), r.getBottom());
+            fill.closeSubPath();
+
+            g.setGradientFill (juce::ColourGradient (tint.withAlpha (fillTop),
+                                                     0.0f, r.getY() + r.getHeight() * 0.30f,
+                                                     tint.withAlpha (fillBottom),
+                                                     0.0f, r.getBottom(), false));
+            g.fillPath (fill);
+            g.setColour (tint.withAlpha (line));
+            g.strokePath (peak, juce::PathStrokeType (1.0f));
         };
 
-        slot.posAtt  = std::make_unique<juce::ParameterAttachment> (
-            *state.getParameter (params::cabMicPos (i)),  [this] (float) { refreshDots(); });
-        slot.distAtt = std::make_unique<juce::ParameterAttachment> (
-            *state.getParameter (params::cabMicDist (i)), [this] (float) { refreshDots(); });
+        draw (panes[0], theme::spectrum, 0.14f, 0.02f, 0.30f);   // the door: the consoles' quiet ground
+        draw (panes[1], theme::orange,   0.18f, 0.02f, 0.55f);   // the exit: the cabinet's own voice
+    };
 
-        slot.pick->onChange = [this, i] (int v)
+    addAndMakeVisible (wave);
+
+    // A handle dragged on the picture writes its parameter; the parameter's echo redraws it.
+    wave.onHpfChanged  = [this] (bool, float hz) { hpfHzAtt->setValueAsCompleteGesture (hz); };
+    wave.onLpfChanged  = [this] (bool, float hz) { lpfHzAtt->setValueAsCompleteGesture (hz); };
+    wave.onTrimChanged = [this] (float f)        { trimAtt->setValueAsCompleteGesture (f); };
+    // The picture's right-click menu IS the trim combo's menu — one story, two doors.
+    wave.onMenuRequested = [this]                { showTrimMenu(); };
+
+    // The vertical half of a cut drag: the consoles' slope ladder, one notch per step.
+    const auto stepSlope = [this] (const char* id, juce::ParameterAttachment& att, int steps)
+    {
+        auto* p = amp.apvts.getParameter (id);
+        const int next = juce::jlimit (0, params::eqSlopes.size() - 1,
+                                       juce::roundToInt (p->convertFrom0to1 (p->getValue())) + steps);
+        att.setValueAsCompleteGesture ((float) next);
+    };
+    wave.onHpfSlopeStep = [this, stepSlope] (int n) { stepSlope (params::cabHpfSlope, *hpfSlopeAtt, n); };
+    wave.onLpfSlopeStep = [this, stepSlope] (int n) { stepSlope (params::cabLpfSlope, *lpfSlopeAtt, n); };
+
+    const auto follow = [this] (const char* id) -> std::unique_ptr<juce::ParameterAttachment>
+    {
+        return std::make_unique<juce::ParameterAttachment> (*amp.apvts.getParameter (id),
+                                                            [this] (float) { pushToWave(); });
+    };
+
+    hpfHzAtt    = follow (params::cabHpfHz);
+    lpfHzAtt    = follow (params::cabLpfHz);
+    trimAtt     = follow (params::cabTrim);
+    trimOnAtt   = follow (params::cabTrimOn);
+    hpfSlopeAtt = follow (params::cabHpfSlope);
+    lpfSlopeAtt = follow (params::cabLpfSlope);
+
+    trimCombo.getText = [this]
+    {
+        switch (trimMode)
         {
-            slots[(size_t) i].typeAtt->setValueAsCompleteGesture ((float) v);
-            activeSlot = i;
-            refreshDots();
-        };
+            case TrimMode::fixed:  return "TRIM " + juce::String ((int) trimModeMs);
+            case TrimMode::manual: return juce::String ("TRIM MAN");
+            case TrimMode::off:
+            default:               return juce::String ("TRIM OFF");
+        }
+    };
+    trimCombo.onOpen = [this] { showTrimMenu(); };
+    addAndMakeVisible (trimCombo);
+
+    // The switches, each the truth of its parameter and nothing of its own.
+    const char* ids[]    = { params::cabHpfOn, params::cabLpfOn, params::cabPhase };
+    const char* names[]  = { "HPF", "LPF", "\xc3\x98" };
+
+    for (size_t i = 0; i < switches.size(); ++i)
+    {
+        auto& s = switches[i];
+        // Each cut wears its line's colour, the consoles' grammar — orange HPF, violet LPF;
+        // the trim and the phase stay the block's own orange.
+        s.sw.accent = ids[i] == params::cabLpfOn ? theme::violet : theme::orange;
+        addAndMakeVisible (s.sw);
+
+        s.label.setText (juce::String::fromUTF8 (names[i]), juce::dontSendNotification);
+        s.label.setFont (theme::displayFont (12.0f));
+        s.label.setColour (juce::Label::textColourId, theme::txDim);
+        s.label.setJustificationType (juce::Justification::centredLeft);
+        s.label.setInterceptsMouseClicks (false, false);
+        addAndMakeVisible (s.label);
+
+        s.att = std::make_unique<juce::ParameterAttachment> (
+            *amp.apvts.getParameter (ids[i]),
+            [this, i] (float v)
+            {
+                switches[i].sw.setOn (v > 0.5f, false);
+                pushToWave();
+            });
+
+        s.sw.onChange = [this, i] (bool on) { switches[i].att->setValueAsCompleteGesture (on ? 1.0f : 0.0f); };
+        s.att->sendInitialUpdate();
     }
 
-    for (auto& slot : slots)
-        for (auto* a : { &slot.onAtt, &slot.typeAtt, &slot.posAtt, &slot.distAtt, &slot.angleAtt })
-            (*a)->sendInitialUpdate();
+    irAtt->sendInitialUpdate();
+    pushToWave();
 }
 
 CabinetBlock::~CabinetBlock() = default;
 
-void CabinetBlock::placeMic (int slot, const juce::String& position, double distanceCm)
+void CabinetBlock::loadWave (int index)
 {
-    const int index = params::cabPositions.indexOf (position);
-    if (index < 0 || slot < 0 || slot >= params::cabNumMics)
-        return;
+    const auto& bytes = AmpProcessor::cabIrBytes (index);
+    wave.setFromMemory (bytes.data, (size_t) bytes.size);
 
-    auto& s = slots[(size_t) slot];
+    // A fixed window keeps its WORD across an IR swap: the parameter is a fraction of the shot's
+    // length, so 50 ms of the old cab is not 50 ms of the new — re-assert the milliseconds.
+    if (trimMode == TrimMode::fixed && wave.lengthMs() > 0.0)
+        trimAtt->setValueAsCompleteGesture (
+            (float) juce::jlimit (0.001, 1.0, trimModeMs / wave.lengthMs()));
 
-    // Both halves of one gesture: they land in the same message-loop turn, so the history's settle
-    // timer folds them into a single undo step.
-    s.posAtt->setValueAsCompleteGesture ((float) index);
-    s.distAtt->setValueAsCompleteGesture ((float) distanceCm);
-    activeSlot = slot;
+    pushToWave();
 }
 
-void CabinetBlock::refreshDots()
+void CabinetBlock::pushToWave()
 {
-    std::vector<felitronics::appkit::MicGrid::Dot> dots;
-
-    for (int i = 0; i < params::cabNumMics; ++i)
+    // The PARAMETERS, not the atomics: an attachment callback runs before the atomic is written,
+    // and reading it there leaves the picture exactly one change behind for good.
+    const auto plain = [this] (const char* id)
     {
-        if (! slots[(size_t) i].on)
-            continue;   // a mic that is switched off is not standing anywhere
+        auto* p = amp.apvts.getParameter (id);
+        return p->convertFrom0to1 (p->getValue());
+    };
 
-        const int pos = juce::jlimit (0, params::cabPositions.size() - 1,
-                                      juce::roundToInt (state.getRawParameterValue (params::cabMicPos (i))->load()));
-        const double dist = (double) state.getRawParameterValue (params::cabMicDist (i))->load();
+    const auto slopeDb = [&] (const char* id)
+    { return params::eqSlopeValues[juce::jlimit (0, (int) std::size (params::eqSlopeValues) - 1,
+                                                 juce::roundToInt (plain (id)))]; };
 
-        dots.push_back ({ i, params::cabPositions[pos], dist,
-                          felitronics::appkit::brand::slotColours[(size_t) i], i == activeSlot });
+    wave.setFilters (plain (params::cabHpfOn) > 0.5f, plain (params::cabHpfHz), params::cabHpfMinHz, params::cabHpfMaxHz,
+                     plain (params::cabLpfOn) > 0.5f, plain (params::cabLpfHz), params::cabLpfMinHz, params::cabLpfMaxHz);
+    wave.setSlopes (slopeDb (params::cabHpfSlope), slopeDb (params::cabLpfSlope));
+    wave.setTrimEnabled (plain (params::cabTrimOn) > 0.5f);
+    wave.setTrimFraction (plain (params::cabTrim));
+
+    deriveTrimMode();
+    wave.setTrimInteractive (trimMode == TrimMode::manual);
+
+    // MANUAL's spot follows the hand while MANUAL is worn — so a later fixed pick cannot lose it.
+    if (trimMode == TrimMode::manual && wave.lengthMs() > 0.0)
+        manualTrimMs = (double) plain (params::cabTrim) * wave.lengthMs();
+
+    trimCombo.repaint();
+}
+
+void CabinetBlock::deriveTrimMode()
+{
+    auto* on = amp.apvts.getParameter (params::cabTrimOn);
+
+    if (on->convertFrom0to1 (on->getValue()) < 0.5f)
+    {
+        trimMode = TrimMode::off;
+        return;
     }
 
-    grid.setDots (std::move (dots));
+    // An explicitly chosen MANUAL stays MANUAL even when the magnet lands the handle exactly on
+    // a mark — a handle that vanished under the hand would be a bug wearing a rule's clothes.
+    if (trimMode == TrimMode::manual)
+        return;
+
+    auto* tp = amp.apvts.getParameter (params::cabTrim);
+    const double ms = (double) tp->convertFrom0to1 (tp->getValue()) * wave.lengthMs();
+
+    for (const double mark : { 50.0, 100.0, 200.0, 500.0 })
+        if (std::abs (ms - mark) < 1.0)
+        {
+            trimMode   = TrimMode::fixed;
+            trimModeMs = mark;
+            return;
+        }
+
+    trimMode = TrimMode::manual;
 }
 
-/** One mic's cell inside the row the two of them share. The switch's own rectangle is derived from
-    the same split, so the painted toggle and the click target cannot drift apart. */
-juce::Rectangle<int> CabinetBlock::micCell (juce::Rectangle<int> content, int slot)
+void CabinetBlock::showTrimMenu()
 {
-    content.removeFromTop (irRow + gap / 2);
-    auto row = content.removeFromTop (micRow + gap / 2 + angleRow);
+    juce::PopupMenu m;
+    m.addItem (1, "OFF", true, trimMode == TrimMode::off);
+    m.addSeparator();
 
-    const int each = (row.getWidth() - gap) / params::cabNumMics;
-    return row.removeFromLeft (each).translated (slot * (each + gap), 0);
+    const double marks[] = { 50.0, 100.0, 200.0, 500.0 };
+    const char* labels[] = { "50 MS - DRY", "100 MS", "200 MS - WET", "500 MS" };
+
+    for (int i = 0; i < 4; ++i)
+        m.addItem (i + 2, labels[i], marks[i] < wave.lengthMs(),
+                   trimMode == TrimMode::fixed && juce::approximatelyEqual (trimModeMs, marks[i]));
+
+    m.addSeparator();
+    m.addItem (6, "MANUAL", true, trimMode == TrimMode::manual);
+
+    // The block's other switches live here too — the one door that still works when a narrow
+    // tile has no room for their faces.
+    m.addSeparator();
+    m.addItem (11, "HPF", true, switches[0].sw.isOn());
+    m.addItem (12, "LPF", true, switches[1].sw.isOn());
+    m.addItem (10, juce::String::fromUTF8 ("\xc3\x98 PHASE"), true, switches[2].sw.isOn());
+
+    m.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+                     [safe = juce::Component::SafePointer<CabinetBlock> (this)] (int r)
+                     {
+                         if (safe != nullptr && r > 0)
+                             safe->applyTrimPick (r);
+                     });
 }
 
-juce::Rectangle<int> CabinetBlock::switchArea (int slot) const
+void CabinetBlock::applyTrimPick (int itemId)
 {
-    return micCell (contentArea(), slot)
-               .removeFromTop (micRow)
-               .removeFromLeft (micSwitchW).withSizeKeepingCentre (micSwitchW, micSwitchH);
+    // The switch section: flips through the switch, so the attachment writes the parameter and
+    // the echo redraws face and picture alike.
+    if (itemId >= 10)
+    {
+        switches[itemId == 10 ? 2 : itemId == 11 ? 0 : 1].sw.toggle();
+        return;
+    }
+
+    // The mode first, so the parameter echoes read the chosen story rather than re-deriving it.
+    // And pushToWave LAST, unconditionally: a pick that writes a value the parameter already has
+    // echoes nothing, and the combo and the handle would be left telling yesterday's story.
+    if (itemId == 1)
+    {
+        trimMode = TrimMode::off;
+        trimOnAtt->setValueAsCompleteGesture (0.0f);
+        wave.setViewWindow (0.0);
+    }
+    else if (itemId == 6)
+    {
+        // MANUAL opens on the whole shot and puts the handle back where the hand last left it —
+        // the windows in between never steal its spot. The servo takes the zoom from there.
+        trimMode = TrimMode::manual;
+        trimOnAtt->setValueAsCompleteGesture (1.0f);
+
+        if (manualTrimMs > 0.0 && wave.lengthMs() > 0.0)
+            trimAtt->setValueAsCompleteGesture (
+                (float) juce::jlimit (0.001, 1.0, manualTrimMs / wave.lengthMs()));
+
+        wave.setViewWindow (0.0);
+    }
+    else
+    {
+        const double marks[] = { 50.0, 100.0, 200.0, 500.0 };
+        trimMode   = TrimMode::fixed;
+        trimModeMs = marks[itemId - 2];
+        trimOnAtt->setValueAsCompleteGesture (1.0f);
+
+        if (wave.lengthMs() > 0.0)
+            trimAtt->setValueAsCompleteGesture (
+                (float) juce::jlimit (0.001, 1.0, trimModeMs / wave.lengthMs()));
+
+        wave.setViewWindow (trimModeMs);
+    }
+
+    pushToWave();
+}
+
+void CabinetBlock::TrimCombo::paint (juce::Graphics& g)
+{
+    if (getText == nullptr)
+        return;
+
+    const auto r = getLocalBounds().toFloat();
+
+    g.setColour (theme::txDim);
+    theme::drawTracked (g, getText(), r.withTrimmedRight (11.0f), theme::displayFont (12.0f), 0.04f,
+                        juce::Justification::centredLeft);
+
+    // The chevron that says "this opens" — the consoles' SlopeCombo grammar.
+    juce::Path v;
+    const float cx = r.getRight() - 9.0f, cy = r.getCentreY() - 1.0f;
+    v.startNewSubPath (cx - 3.0f, cy);
+    v.lineTo (cx, cy + 3.0f);
+    v.lineTo (cx + 3.0f, cy);
+    g.strokePath (v, juce::PathStrokeType (1.2f));
 }
 
 void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 {
-    // The IR selector rides the top, full width — the cabinet is chosen before it is miked.
-    ir.setBounds (area.removeFromTop (irRow));
-    area.removeFromTop (gap / 2);
+    // A narrow tile gives its border to the IR's name alone — the orange frame already says
+    // what kind of block this is, and "CAB IR" was spending the name's room.
+    showTitle = area.getWidth() >= 300;
 
-    // The two mics stand SIDE BY SIDE in one row rather than stacked in a column down the left.
-    //
-    // The column made sense while the cabinet had most of a wide row. At half of a short one it was
-    // taking a third of the width away from the grid, and the grid is the part that cannot be
-    // narrowed: it carries the driver, four named rows off it and nine distances across, and with a
-    // third gone its labels ran off the edge into the speaker. Two mics abreast fit the width they
-    // are given, and the grid gets all of it underneath.
-    auto row = area.removeFromTop (micRow + gap / 2 + angleRow);
-    area.removeFromTop (gap / 2);
-    grid.setBounds (area);
-
-    const int each = (row.getWidth() - gap) / params::cabNumMics;
-
-    for (int i = 0; i < params::cabNumMics; ++i)
+    // The IR's name on the border, sized to itself and centred in the run.
     {
-        auto cell = row.removeFromLeft (each);
-        row.removeFromLeft (gap);
-
-        auto pick = cell.removeFromTop (micRow);
-        pick.removeFromLeft (micSwitchW + gap);
-        slots[(size_t) i].pick->setBounds (pick);
-
-        cell.removeFromTop (gap / 2);
-        slots[(size_t) i].angle->setBounds (cell.removeFromTop (angleRow)
-                                                .withTrimmedLeft (micSwitchW + gap));
+        const auto slot = borderSlotArea();
+        ir.setBounds (slot.withSizeKeepingCentre (juce::jmin (slot.getWidth(), ir.idealWidth()), slot.getHeight()));
+        borderSlotUsed = ir.getBounds();
     }
+
+    // The bottom row: HPF holds the left wall and LPF the right — each cut on its own side of
+    // the spectrum, the way they stand on the curve — with the trim combo and the phase centred
+    // between them. A NARROW tile keeps only what a glance needs: the two cut switches without
+    // their words and the trim combo; the phase and the words retreat into the menu, which the
+    // combo (and the picture's right click) still opens at any width.
+    const bool narrow = area.getWidth() < 300;
+
+    switches[0].label.setVisible (! narrow);
+    switches[1].label.setVisible (! narrow);
+    switches[2].sw.setVisible (! narrow);
+    switches[2].label.setVisible (! narrow);
+
+    // With the words gone, the switches whisper them under the mouse instead.
+    switches[0].sw.setTooltip (narrow ? "HPF" : juce::String());
+    switches[1].sw.setTooltip (narrow ? "LPF" : juce::String());
+
+    auto row = area.removeFromBottom (switchRow);
+    area.removeFromBottom (gap);
+
+    const auto place = [] (Switch& s, juce::Rectangle<int> cell)
+    {
+        s.sw.setBounds (cell.removeFromLeft (30).withSizeKeepingCentre (30, 16));
+        cell.removeFromLeft (6);
+        s.label.setBounds (cell);
+    };
+
+    if (narrow)
+    {
+        switches[0].sw.setBounds (row.removeFromLeft (30).withSizeKeepingCentre (30, 16));
+        switches[1].sw.setBounds (row.removeFromRight (30).withSizeKeepingCentre (30, 16));
+        trimCombo.setBounds (row.withSizeKeepingCentre (juce::jmin (90, row.getWidth() - 12),
+                                                        row.getHeight()));
+    }
+    else
+    {
+        place (switches[0], row.removeFromLeft (70));    // HPF
+        place (switches[1], row.removeFromRight (70));   // LPF
+
+        constexpr int comboW = 90, phaseW = 58, midGap = 14;   // the switch takes 36 — the word needs its own room
+        auto mid = row.withSizeKeepingCentre (comboW + midGap + phaseW, row.getHeight());
+        trimCombo.setBounds (mid.removeFromLeft (comboW));
+        mid.removeFromLeft (midGap);
+        place (switches[2], mid);
+    }
+
+    wave.setBounds (area);
 }
 
-void CabinetBlock::paintContent (juce::Graphics& g)
+void CabinetBlock::paintContent (juce::Graphics&) {}
+
+/** The consoles' feeding rule, twice: a fresh window into its pane, a starve when the audio
+    stopped — then one repaint, and the hook above draws both. */
+void CabinetBlock::timerCallback()
 {
-    for (int i = 0; i < params::cabNumMics; ++i)
+    if (! isBlockOn() || ! wave.isShowing())
+        return;
+
+    bool moved = false;
+
+    for (int i = 0; i < 2; ++i)
     {
-        const auto sw = switchArea (i).toFloat();
-        const float r = sw.getHeight() * 0.5f;
-        const bool  on = slots[(size_t) i].on;
-        const auto  tint = felitronics::appkit::brand::slotColours[(size_t) i];
+        auto& pane = panes[(size_t) i];
+        int order = 0;
 
-        g.setColour (on ? tint.withAlpha (0.5f).overlaidWith (juce::Colour (0xff26262f))
-                        : juce::Colour (0xff26262f));
-        g.fillRoundedRectangle (sw, r);
-        g.setColour (on ? tint : theme::hair2);
-        g.drawRoundedRectangle (sw.reduced (0.5f), r, 1.0f);
+        if (amp.cabSpectrumTap[(size_t) i].tryPull (pane.frameInput(), order)
+            && order == AmpProcessor::eqSpectrumOrder)
+            pane.ingest (order);
+        else
+            pane.starve();
 
-        const float knob = sw.getHeight() - 4.0f;
-        const float kx   = on ? sw.getRight() - knob - 2.0f : sw.getX() + 2.0f;
-        g.setColour (on ? juce::Colours::white : juce::Colour (0xff8a8a96));
-        g.fillEllipse (kx, sw.getCentreY() - knob * 0.5f, knob, knob);
+        moved = true;
     }
-}
 
-void CabinetBlock::mouseDown (const juce::MouseEvent& e)
-{
-    // The mic switches are edits — read-only while the block is off, and right-clicks belong to
-    // the frame's power menu. The frame's own handler still runs so the power switch works.
-    if (isBlockOn() && ! e.mods.isPopupMenu())
-        for (int i = 0; i < params::cabNumMics; ++i)
-        {
-            if (switchArea (i).contains (e.getPosition()))
-            {
-                // The negation of the PARAMETER, not of the cached flag: a stale cache negated
-                // into the parameter is a click that does nothing, forever (found in review).
-                slots[(size_t) i].onAtt->setValueAsCompleteGesture (
-                    slots[(size_t) i].onParam->getValue() > 0.5f ? 0.0f : 1.0f);
-                return;
-            }
-        }
-
-    BlockFrame::mouseDown (e);
+    if (moved)
+        wave.repaint();
 }
 
 } // namespace orbitamp

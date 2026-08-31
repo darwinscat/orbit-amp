@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -24,14 +27,14 @@ public:
         position = 0;
     }
 
-    /** Decode a loop from embedded bytes. Message thread. */
-    void setLoop (const void* data, int size, double sourceRate)
+    /** Decode a loop from a file on disk. Message thread. A missing or unreadable file leaves the
+        player as it was — the loops are dev-machine material, not a shipped asset. */
+    void setLoop (const juce::File& file, double sourceRate)
     {
         juce::AudioFormatManager formats;
         formats.registerBasicFormats();
 
-        auto stream = std::make_unique<juce::MemoryInputStream> (data, (size_t) size, false);
-        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (std::move (stream)));
+        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
 
         if (reader == nullptr || reader->lengthInSamples <= 0)
             return;

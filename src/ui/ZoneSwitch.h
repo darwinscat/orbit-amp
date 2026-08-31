@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -20,7 +23,8 @@ namespace orbitamp
     nothing measured applied to it, which is a comparison worth making; switching our EQ off means
     hearing the device without us. Neither hides a control — everything stays on the panel, greyed,
     because a control you cannot see is a control you forget you set. */
-class ZoneSwitch : public juce::Component
+class ZoneSwitch : public juce::Component,
+                   public juce::SettableTooltipClient
 {
 public:
     ZoneSwitch() { setInterceptsMouseClicks (true, false); }

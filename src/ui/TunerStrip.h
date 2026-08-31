@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "../core/TunerEar.h"
@@ -41,12 +44,10 @@ public:
     {
         auto r = getLocalBounds().toFloat();
 
+        // No border any more: the badges it used to match are gone, and a needle needs a well,
+        // not a frame — the quiet fill alone seats it into the panel.
         g.setColour (theme::panel);
         g.fillRoundedRectangle (r, theme::radiusMd);
-        // The quiet border, matched to the badges beside it: the whole guard row is second-rank
-        // furniture until something in it works — then the badges' floods do the shouting.
-        g.setColour (theme::violet.withAlpha (0.36f));
-        g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, theme::blockBorder);
 
         const bool live  = ear.live();
         const auto note  = ear.nearestNote();
@@ -55,7 +56,7 @@ public:
         auto inner = r.reduced (14.0f, 6.0f);
 
         // ---- the note, left ----
-        auto noteArea = inner.removeFromLeft (96.0f);
+        auto noteArea = inner.removeFromLeft (52.0f);
         if (live)
         {
             const auto name = juce::String (core::PitchTracker::noteName (note.midi));
@@ -78,7 +79,7 @@ public:
         }
 
         // ---- the cents, right ----
-        auto centsArea = inner.removeFromRight (96.0f);
+        auto centsArea = inner.removeFromRight (52.0f);
         if (live)
         {
             const auto cents = juce::String (juce::roundToInt (note.cents));
@@ -87,8 +88,9 @@ public:
                                 theme::displayFont (13.0f), 0.12f, juce::Justification::centredRight);
         }
 
-        // ---- the ruler between them ----
-        const auto ruler = inner.reduced (18.0f, 0.0f);
+        // ---- the ruler between them, as wide as the note and the cents allow: the ruler is
+        //      the tuner's actual instrument, the numbers are its captions ----
+        const auto ruler = inner.reduced (9.0f, 0.0f);
         const float midY = ruler.getCentreY();
         const auto centsX = [&ruler] (float cents)
         {

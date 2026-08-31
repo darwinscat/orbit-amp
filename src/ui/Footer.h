@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "Theme.h"
@@ -32,15 +35,14 @@ public:
 
 private:
     void timerCallback() override;
-    void showOversampleMenu();
     void showLoadBreakdown();
 
-    static constexpr int itemWidth = 92;
+    static constexpr int itemWidth   = 92;
+    static constexpr int stereoWidth = 124;   // room for the longest of the three modes, STEREO SPACE
     static constexpr int gap       = 10;
 
     AmpProcessor& amp;
 
-    felitronics::appkit::chrome::FlatItem oversample;
     felitronics::appkit::chrome::FlatItem stereo;
 
     /** The DSP number is a door: click it and the per-stage breakdown steps out. */
@@ -52,7 +54,6 @@ private:
 
     LoadBadge loadBadge;
 
-    std::unique_ptr<juce::ParameterAttachment> oversampleAttachment;
     std::unique_ptr<juce::ParameterAttachment> stereoAttachment;
 
     juce::String rateText, loadText;

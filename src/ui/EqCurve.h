@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "Theme.h"
@@ -24,6 +27,11 @@ public:
         Freedom freedom = Freedom::gain;
         bool    visible = true;
         juce::Colour tint = juce::Colour (0xffb39bff);
+
+        /** The dot sits ON the composite at its frequency instead of at its own `db` — for a
+            handle whose gain is not a parameter of its own (a device knob's point): the curve is
+            the only truth about where it stands, so the dot rides it. */
+        bool rideCurve = false;
     };
 
     explicit EqCurve (std::function<double (double)> magnitudeDbAt)
@@ -141,7 +149,7 @@ public:
             g.setColour (theme::orange.withAlpha (0.22f));
             g.strokePath (curve, juce::PathStrokeType (2.5f));
             g.setColour (theme::orange);
-            g.strokePath (curve, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath (curve, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
         g.setColour (theme::hair2);
@@ -183,14 +191,15 @@ public:
         const double db = h.freedom == Handle::Freedom::freq ? h.db : yToDb (r, e.position.y);
 
         // A line has no gain to give the vertical axis, so the vertical axis works the ladder:
-        // every stepPx of travel is one slope notch, up = steeper. Same message as the wheel.
+        // every stepPx of travel is one slope notch, down = steeper — the cut digs in as the hand
+        // digs down. Same message as the wheel.
         if (h.freedom == Handle::Freedom::freq && onHandleStep != nullptr)
         {
             constexpr float stepPx = 28.0f;
-            const int steps = (int) ((stepAnchor - e.position.y) / stepPx);
+            const int steps = (int) ((e.position.y - stepAnchor) / stepPx);
             if (steps != 0)
             {
-                stepAnchor -= (float) steps * stepPx;
+                stepAnchor += (float) steps * stepPx;
                 onHandleStep (dragging, steps);
             }
         }
@@ -294,8 +303,9 @@ private:
     juce::Point<float> handlePos (juce::Rectangle<float> r, const Handle& h) const
     {
         // A cut has no gain of its own, so its handle rides the curve it produces rather than
-        // floating at 0 dB where nothing is happening.
-        const float db = h.freedom == Handle::Freedom::freq ? (float) magnitudeDb (h.hz) : (float) h.db;
+        // floating at 0 dB where nothing is happening. A rideCurve dot does the same by request.
+        const float db = h.freedom == Handle::Freedom::freq || h.rideCurve
+                             ? (float) magnitudeDb (h.hz) : (float) h.db;
         return { hzToX (r, h.hz), dbToY (r, db) };
     }
 

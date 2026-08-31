@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "../Parameters.h"
@@ -49,9 +52,9 @@ public:
         g.setColour (theme::bezel);
         g.fillRoundedRectangle (r, theme::radiusSm);
 
-        const auto col = scaleArea();
+        const auto col = columnArea();
 
-        meterrail::paintFill (g, col, dbToY (col, levelDb));
+        meterrail::paintFill (g, col, dbToY (col, levelDb), 0.0f, true);
 
         if (holdDb > floorDb + 0.5f)
             meterrail::paintHold (g, col, dbToY (col, holdDb));
@@ -71,9 +74,11 @@ public:
             }
         }
 
+        // No ticks on the window's edge — the marks live on the inner side only.
         meterrail::paintDbScale (g, r.reduced (0.0f, 2.0f),
-                                 [&] (float db) { return dbToY (col, db); }, floorDb);
-        meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (col, 0.0f));
+                                 [&] (float db) { return dbToY (col, db); }, floorDb,
+                                 true, false, dbToY (col, levelDb));
+        meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (col, 0.0f), true, false);
         // The ceiling first (under the trim in z): the limiter's runner in the gate's lilac,
         // living where ceilings live — near the top of the rail. A switched-off limiter's
         // runner dims to read-only strength and will not answer, same law as the gate's.
@@ -93,9 +98,6 @@ public:
                                   theme::orange.withMultipliedAlpha (hoverA),
                                   dragging && ! grabbedCeil);
         }
-
-        g.setColour (theme::hair2);
-        g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
 
         meterrail::paintName (g, col, "OUT");
     }
@@ -240,6 +242,14 @@ private:
     juce::Rectangle<float> scaleArea() const
     {
         return getLocalBounds().toFloat().reduced (2.0f);
+    }
+
+    /** The COLUMN, narrower than the rail and not moved: cut hard on the window's edge (right,
+        for OUT) and a little on the inner side — the runners keep the full rail width and stick
+        out toward the edge. */
+    juce::Rectangle<float> columnArea() const
+    {
+        return scaleArea().withTrimmedRight (10.0f).withTrimmedLeft (4.0f);
     }
 
     float dbToY (juce::Rectangle<float> r, float db) const

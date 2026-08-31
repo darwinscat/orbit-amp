@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "Parameters.h"
 #include "core/CapturedBlock.h"
 #include "core/DemoPlayer.h"
-#include "core/MeasuredFilter.h"
 #include "core/ScopeTap.h"
 #include "core/TunerEar.h"
 #include "core/TunerTap.h"
@@ -11,7 +13,7 @@
 #include "core/EqLink.h"
 #include "core/CabinetIr.h"
 #include "core/SoftLimiter.h"
-#include "core/PowerAmp.h"
+#include "core/DelayStage.h"
 #include "core/ReverbStage.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
@@ -24,7 +26,7 @@
 namespace orbitamp
 {
 
-/** The plugin shell. Deliberately thin: the chain (eq1 -> boost -> eq2 -> preamp -> reverb ->
+/** The plugin shell. Deliberately thin: the chain (boost -> EQ -> preamp -> EQ -> delay -> reverb ->
     power amp -> cabinet) lands in src/core/ behind small engines, and this class only pumps
     buffers into them and owns state. */
 class AmpProcessor final : public juce::AudioProcessor,
@@ -90,7 +92,6 @@ private:
     {
         history.tick();
         pumpDeviceWork();
-        applyOversamplingIfChanged();
         pumpTuner();
     }
 
@@ -108,20 +109,30 @@ private:
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 
-    /** Re-preparing is a message-thread job, so the footer's oversampling choice is picked up here
-        rather than in the audio callback. */
-    void applyOversamplingIfChanged();
+    /** The chain's round-trip to the host: whatever the three players' models need for
+        rate-matching — reported whenever any of them changes. */
+    void reportLatency();
+
+    /** One thread for both blocks' model builds. One, because a load is twenty milliseconds and
+        two blocks asking at once still finish inside a frame; a second thread would only let two
+        WaveNets fight over the same cores the audio thread wants. */
+    juce::ThreadPool modelPool { 1 };
 
 public:
-    /** Everything a moved control needs done OFF the audio thread, for both captured blocks: loading
-        the capture a gain knob now points at, designing the measured filters, retiring models nobody
-        is playing.
+    /** Everything a moved control needs done OFF the audio thread, for both captured blocks: landing
+        the dial where the gain knob points, the tone knobs where their slots stand, handing the
+        player's load jobs to the pool and its finished models back, retiring what nobody plays.
 
         The timer calls this thirty times a second. It is public because it is the plugin's only
         message-thread heartbeat, and something that is not a host — a test — has to be able to drive
         it; without a driver a knob moves a parameter and nothing ever reads it, which is exactly the
         bug this became. */
     void pumpDeviceWork();
+
+    /** A model is BUILT off the message thread — bytes from the pack, a network parsed and warmed,
+        some twenty milliseconds — and brought back to the player through the message queue. A driver
+        without a message loop (a test) sets this and the jobs run inside pumpDeviceWork instead. */
+    bool inlineLoads = false;
 
 private:
     /** Reads each EQ link's parameters into its stack. Called per block from the audio thread;
@@ -131,11 +142,23 @@ private:
     /** Same, for the reverb: character and mix, applied only when they move. */
     void updateReverbSettings() noexcept;
 
+    /** Same, for the delay — including the one computation that needs the PROCESSOR: the sync
+        time in milliseconds, from the host's tempo when it conducts and the BPM field when it
+        does not. */
+    void updateDelaySettings() noexcept;
+
     float editorScale = preferredScale;
 
     std::array<core::EqLink, params::numEqLinks> eqLinks;
+    core::DelayStage  delay;
     core::ReverbStage reverb;
-    core::PowerAmp    power;
+
+public:
+    /** The delay's picture taps, read-only: the face draws its comb from the same numbers the
+        heads are actually standing on. */
+    const core::DelayStage& delayTaps() const noexcept { return delay; }
+
+private:
 
     /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
         raw input at the front of the chain; where it MUTES is the player's parameter. */
@@ -151,12 +174,18 @@ public:
         stage playing what is chosen from it, that device's measured controls as filters, and the taps
         its pictures read. The library and the loading live on the message thread; the audio thread
         only ever meets a model that is already in memory. */
-    core::CapturedBlock<params::boostNumMeasured>  boost  { device::DeviceLibrary::Slot::pedal };
-    core::CapturedBlock<params::preampNumMeasured> preamp { device::DeviceLibrary::Slot::preamp };
+    core::CapturedBlock boost    { device::DeviceLibrary::Slot::pedal };
+    core::CapturedBlock preamp   { device::DeviceLibrary::Slot::preamp };
+    core::CapturedBlock poweramp { device::DeviceLibrary::Slot::poweramp };   // a captured power stage, after the reverb
 
     /** Re-scans the devices folder and loads whatever the device parameters point at. Message
         thread. */
     void rescanDevices();
+
+    /** The cabinet shelf — the embedded IR set, in params::cabIrNames order. The face draws the
+        same bytes the engine convolves. */
+    struct IrBytes { const char* data; int size; };
+    static const IrBytes& cabIrBytes (int index);
 
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
@@ -196,8 +225,8 @@ public:
         the block's real-time budget. Indexed by Stage; the footer badge reads these. */
     // In chain order, which is now also the order the breakdown reads: each captured block is
     // followed by its own EQ.
-    enum Stage { stTotal, stTuner, stGate, stBoost, stEq1, stPreamp, stEq2, stReverb, stPower,
-                 stCab, stLimit, stOut, numStages };
+    enum Stage { stTotal, stTuner, stGate, stBoost, stEq1, stPreamp, stEq2, stDelay, stReverb,
+                 stPower, stCab, stLimit, stOut, numStages };
     std::atomic<float> stageLoad[numStages] {};
 
     /** The dropout evidence: every block that BLEW its budget counts, and each stage keeps the
@@ -224,6 +253,19 @@ public:
         point, and there is one FFT per block rather than two at the same place. Lock-free SPSC with
         a starve-tolerant reader, so several views may sip from it. */
     std::array<felitronics::analysis::RollingSpectrumTap, 2> blockSpectrumTap;
+
+    /** The pair's other half: what the EQ eats — the capture's voice before the console colours
+        it. With the output tap above, an EQ pane shows before and after, the way the cabinet's
+        picture does. */
+    std::array<felitronics::analysis::RollingSpectrumTap, 2> blockInSpectrumTap;
+
+    /** The cabinet's own pair — what goes into the IR and what leaves it, for the picture's faint
+        spectra. Pushed around the convolution, channel 0, only while the cabinet is on. */
+    std::array<felitronics::analysis::RollingSpectrumTap, 2> cabSpectrumTap;
+
+    /** The reverb's pair: the door, and what the room ADDS — the wet alone, post its own HPF, at
+        the mix. Channel 0, only while the reverb is on; the block draws them as its picture. */
+    std::array<felitronics::analysis::RollingSpectrumTap, 2> reverbSpectrumTap;
 
     /** One analysis resolution for every consumer of the taps: mixed orders would make the tap
         force-republish on every alternating pull. */
@@ -271,10 +313,21 @@ private:
     core::CabinetIr cab;
     std::atomic<float>* cabOnParam = nullptr;
     std::atomic<float>* cabIrParam = nullptr;
+    std::atomic<float>* cabHpfOnParam = nullptr;
+    std::atomic<float>* cabHpfHzParam = nullptr;
+    std::atomic<float>* cabHpfSlopeParam = nullptr;
+    std::atomic<float>* cabLpfOnParam = nullptr;
+    std::atomic<float>* cabLpfHzParam = nullptr;
+    std::atomic<float>* cabLpfSlopeParam = nullptr;
+    std::atomic<float>* cabTrimOnParam = nullptr;
+    std::atomic<float>* cabTrimParam = nullptr;
+    std::atomic<float>* cabPhaseParam = nullptr;
     int lastCabIr = -1;
 
     std::atomic<float>* boostInParam  = nullptr;
     std::atomic<float>* preampInParam = nullptr;
+    std::atomic<float>* boostSmoothParam  = nullptr;
+    std::atomic<float>* preampSmoothParam = nullptr;
     float lastBoostInGain  = 1.0f;
     float lastPreampInGain = 1.0f;
     float lastTrimGain = 1.0f;
@@ -284,16 +337,26 @@ private:
     std::atomic<float>* gatePosParam       = nullptr;
     std::atomic<float>* gateDecayParam     = nullptr;
 
+    std::atomic<float>* delayOnParam      = nullptr;
+    std::atomic<float>* delaySyncParam    = nullptr;
+    std::atomic<float>* delayTimeMsParam  = nullptr;
+    std::atomic<float>* delayDivParam     = nullptr;
+    std::atomic<float>* delayBpmParam     = nullptr;
+    std::atomic<float>* delayRepeatsParam = nullptr;
+    std::atomic<float>* delayDarkParam    = nullptr;
+    std::atomic<float>* delayOffsetParam  = nullptr;
+    std::atomic<float>* delayMixParam     = nullptr;
+
     std::atomic<float>* reverbOnParam   = nullptr;
     std::atomic<float>* reverbTypeParam = nullptr;
     std::atomic<float>* reverbMixParam  = nullptr;
+    std::atomic<float>* reverbDecayParam    = nullptr;
+    std::atomic<float>* reverbPredelayParam = nullptr;
+    std::atomic<float>* reverbHpfHzParam    = nullptr;
 
-    std::atomic<float>* powerOnParam    = nullptr;
-    std::atomic<float>* powerDriveParam = nullptr;
-    std::atomic<float>* powerSagParam   = nullptr;
-    std::atomic<float>* powerTubeParam  = nullptr;
-    std::atomic<float>* powerCountParam = nullptr;
-    std::atomic<float>* oversampleParam = nullptr;
+    std::atomic<float>* powerOnParam     = nullptr;
+    std::atomic<float>* powerGainParam   = nullptr;
+    std::atomic<float>* powerSmoothParam = nullptr;
     std::atomic<float>* boostOnParam    = nullptr;
     std::atomic<float>* boostGainParam  = nullptr;
     std::atomic<float>* preampOnParam   = nullptr;
@@ -307,7 +370,14 @@ public:
 
 private:
     std::atomic<float> dspLoad { 0.0f };
-    int lastOversample = -1;
+
+    /** The channel mode's default follows the ENVIRONMENT until somebody chooses: the standalone
+        opens on STEREO SPACE (one guitar in, a wide room out), a plugin on a mono bus on MONO, on
+        a stereo bus on STEREO. `modeAutoValue` is what the environment last set — while the
+        parameter still reads that, nobody has chosen and the environment may set it again; one
+        hand-move or one restored session ends it. */
+    bool stateWasRestored = false;
+    int  modeAutoValue    = (int) params::StereoMode::mono;   // the layout's own default
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)

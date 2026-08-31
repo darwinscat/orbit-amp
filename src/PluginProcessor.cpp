@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "Parameters.h"
@@ -55,23 +58,44 @@ AmpProcessor::AmpProcessor()
     cabOnParam         = apvts.getRawParameterValue (params::cabOn);
     boostInParam       = apvts.getRawParameterValue (params::blockIn (params::boostId));
     preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
+    boostSmoothParam   = apvts.getRawParameterValue (params::blockSmooth (params::boostId));
+    preampSmoothParam  = apvts.getRawParameterValue (params::blockSmooth (params::preampId));
     cabIrParam         = apvts.getRawParameterValue (params::cabIr);
+    cabHpfOnParam      = apvts.getRawParameterValue (params::cabHpfOn);
+    cabHpfHzParam      = apvts.getRawParameterValue (params::cabHpfHz);
+    cabHpfSlopeParam   = apvts.getRawParameterValue (params::cabHpfSlope);
+    cabLpfOnParam      = apvts.getRawParameterValue (params::cabLpfOn);
+    cabLpfHzParam      = apvts.getRawParameterValue (params::cabLpfHz);
+    cabLpfSlopeParam   = apvts.getRawParameterValue (params::cabLpfSlope);
+    cabTrimOnParam     = apvts.getRawParameterValue (params::cabTrimOn);
+    cabTrimParam       = apvts.getRawParameterValue (params::cabTrim);
+    cabPhaseParam      = apvts.getRawParameterValue (params::cabPhase);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
     gateOnParam        = apvts.getRawParameterValue (params::gateOn);
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
     gateDecayParam     = apvts.getRawParameterValue (params::gateDecay);
 
+    delayOnParam      = apvts.getRawParameterValue (params::delayOn);
+    delaySyncParam    = apvts.getRawParameterValue (params::delaySync);
+    delayTimeMsParam  = apvts.getRawParameterValue (params::delayTimeMs);
+    delayDivParam     = apvts.getRawParameterValue (params::delayDiv);
+    delayBpmParam     = apvts.getRawParameterValue (params::delayBpm);
+    delayRepeatsParam = apvts.getRawParameterValue (params::delayRepeats);
+    delayDarkParam    = apvts.getRawParameterValue (params::delayDark);
+    delayOffsetParam  = apvts.getRawParameterValue (params::delayOffset);
+    delayMixParam     = apvts.getRawParameterValue (params::delayMix);
+
     reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
     reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
     reverbMixParam  = apvts.getRawParameterValue (params::reverbMix);
+    reverbDecayParam    = apvts.getRawParameterValue (params::reverbDecay);
+    reverbPredelayParam = apvts.getRawParameterValue (params::reverbPredelay);
+    reverbHpfHzParam    = apvts.getRawParameterValue (params::reverbHpfHz);
 
-    powerOnParam    = apvts.getRawParameterValue (params::powerOn);
-    powerDriveParam = apvts.getRawParameterValue (params::powerDrive);
-    powerSagParam   = apvts.getRawParameterValue (params::powerSag);
-    powerTubeParam  = apvts.getRawParameterValue (params::powerTube);
-    powerCountParam = apvts.getRawParameterValue (params::powerCount);
-    oversampleParam = apvts.getRawParameterValue (params::oversample);
+    powerOnParam     = apvts.getRawParameterValue (params::powerOn);
+    powerGainParam   = apvts.getRawParameterValue (params::blockGain (params::powerId));
+    powerSmoothParam = apvts.getRawParameterValue (params::blockSmooth (params::powerId));
     boostOnParam    = apvts.getRawParameterValue (params::boostOn);
     boostGainParam  = apvts.getRawParameterValue (params::boostGain);
     preampOnParam   = apvts.getRawParameterValue (params::preampOn);
@@ -90,6 +114,8 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 
 void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
+    stateWasRestored = true;   // a session's choice outranks the environment's default
+
     auto xml = getXmlFromBinary (data, sizeInBytes);
     if (xml == nullptr)
         return;
@@ -128,18 +154,9 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void AmpProcessor::selectDemoLoop (int index)
 {
-    struct Entry { const char* data; int size; };
-    const Entry loops[] = {
-        { BinaryData::ggg_wav,                BinaryData::ggg_wavSize },
-        { BinaryData::elevenlightyears_wav,   BinaryData::elevenlightyears_wavSize },
-        { BinaryData::catshardday_wav,        BinaryData::catshardday_wavSize },
-        { BinaryData::deepspaceismyhome_wav,  BinaryData::deepspaceismyhome_wavSize },
-        { BinaryData::fifthdimension_wav,     BinaryData::fifthdimension_wavSize },
-    };
-
-    const int n = (int) (sizeof (loops) / sizeof (loops[0]));
-    const auto& e = loops[juce::jlimit (0, n - 1, index)];
-    demo.setLoop (e.data, e.size, getSampleRate());
+    const int n = (int) std::size (params::demoLoopFiles);
+    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[juce::jlimit (0, n - 1, index)]),
+                  getSampleRate());
 }
 
 void AmpProcessor::rescanDevices()
@@ -148,14 +165,11 @@ void AmpProcessor::rescanDevices()
     // wrong LIST — the block says what it is for, and the list has to agree with it.
     boost.rescan (juce::roundToInt (apvts.getRawParameterValue (params::boostDevice)->load()));
     preamp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::preampDevice)->load()));
+    poweramp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::blockDevice (params::powerId))->load()));
 }
 
-namespace
+const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
 {
-    struct IrBytes { const char* data; int size; };
-
-    /** The shelf, in cabIrNames order — the embedded orbitcab set. */
-    const IrBytes& cabIrBytes (int index)
     {
         static const IrBytes shelf[] = {
             { BinaryData::_01cookiemonster_wav,       BinaryData::_01cookiemonster_wavSize },
@@ -183,11 +197,12 @@ namespace
 
         return shelf[(size_t) juce::jlimit (0, (int) std::size (shelf) - 1, index)];
     }
-} // namespace
+}
+
 
 void AmpProcessor::pumpDeviceWork()
 {
-    auto pump = [this] (auto& block, auto& gainParam, auto measuredId, const char* blk)
+    auto pump = [this] (auto& block, auto& gainParam, auto& smoothParam, auto measuredId, const char* blk)
     {
         // The device parameter first of all: a restored session or an automating host moves it
         // without calling anyone, and every read below is about whatever pack it names.
@@ -209,18 +224,26 @@ void AmpProcessor::pumpDeviceWork()
 
         block.setRaw (mode == params::EqMode::ours);
         block.applySelectors (selectors);
-        block.loadIfGainMoved (gainParam->load());
+        block.setGain (gainParam->load(), smoothParam->load() > 0.5f);
 
-        std::array<float, (size_t) std::decay_t<decltype (block)>::numMeasured> values {};
+        std::array<float, (size_t) core::CapturedBlock::numMeasured> values {};
         for (int i = 0; i < (int) values.size(); ++i)
             values[(size_t) i] = apvts.getRawParameterValue (measuredId (i))->load();
 
         block.updateToneIfMoved (values);
-        block.collectGarbage();
+
+        // The player's housekeeping and its load jobs — on the pool, or right here for a driver
+        // that has no message loop to bring them back on.
+        block.pump (inlineLoads ? nullptr : &modelPool);
     };
 
-    pump (boost,  boostGainParam,  params::boostMeasured,  params::boostId);
-    pump (preamp, preampGainParam, params::preampMeasured, params::preampId);
+    pump (boost,    boostGainParam,  boostSmoothParam,  params::boostMeasured,  params::boostId);
+    pump (preamp,   preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
+    pump (poweramp, powerGainParam,  powerSmoothParam,
+          [] (int i) { return params::blockMeasured (params::powerId, i); }, params::powerId);
+
+    // A model that landed may carry rate-matching the host has to know about.
+    reportLatency();
 
     // The gate's Decay: redesigning the close ramp is message-thread work, like every other
     // moved-a-control job on this pump. Rare by nature — it only fires when the switch flipped.
@@ -240,21 +263,35 @@ void AmpProcessor::pumpDeviceWork()
         const auto& bytes = cabIrBytes (ir);
         cab.load (bytes.data, (size_t) bytes.size);
     }
+
+    // ...and what the player does to it: baked into the IR off this pump, so the convolution
+    // never learns of it. Rebuilt only when something moved.
+    {
+        core::CabinetIr::Post post;
+        post.trimOn       = cabTrimOnParam->load() > 0.5f;
+        post.trimFraction = cabTrimParam->load();
+        const auto slopeDb = [] (float v)
+        { return params::eqSlopeValues[juce::jlimit (0, (int) std::size (params::eqSlopeValues) - 1,
+                                                     juce::roundToInt (v))]; };
+        post.hpfOn        = cabHpfOnParam->load() > 0.5f;
+        post.hpfHz        = cabHpfHzParam->load();
+        post.hpfSlope     = slopeDb (cabHpfSlopeParam->load());
+        post.lpfOn        = cabLpfOnParam->load() > 0.5f;
+        post.lpfHz        = cabLpfHzParam->load();
+        post.lpfSlope     = slopeDb (cabLpfSlopeParam->load());
+        post.phase        = cabPhaseParam->load() > 0.5f;
+        cab.setPost (post);
+    }
 }
 
-void AmpProcessor::applyOversamplingIfChanged()
+void AmpProcessor::reportLatency()
 {
-    const int index = juce::jlimit (0, params::oversampleFactors.size() - 1,
-                                    juce::roundToInt (oversampleParam->load()));
-    if (index == lastOversample || getSampleRate() <= 0.0)
-        return;
+    // In series: each captured block's models — a capture taken at another rate is resampled on
+    // the way in and out, and that has a length.
+    const int total = boost.latencySamples() + preamp.latencySamples() + poweramp.latencySamples();
 
-    lastOversample = index;
-    power.setOversampling (params::oversampleValues[index]);
-
-    // The factor does not change the round-trip — the module keeps it at tpp-1 across factors — but
-    // report it again anyway, so a future module that does cannot silently desync the host.
-    setLatencySamples (power.latencySamples());
+    if (total != getLatencySamples())
+        setLatencySamples (total);
 }
 
 void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -272,6 +309,10 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     for (auto& tap : blockSpectrumTap)
         tap.reset();
+    for (auto& tap : blockInSpectrumTap)
+        tap.reset();
+    for (auto& tap : reverbSpectrumTap)
+        tap.reset();
 
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
     lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
@@ -287,28 +328,74 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     gate.prepare (sampleRate, block, channels);
     gate.seedEnabled (gateOnParam->load() > 0.5f);
 
-    reverb.prepare (sampleRate);
+    // The mode's environment default — see modeAutoValue.
+    if (! stateWasRestored)
+    {
+        const auto want = wrapperType == wrapperType_Standalone ? params::StereoMode::stereoSpace
+                        : getTotalNumInputChannels() >= 2       ? params::StereoMode::stereo
+                                                                : params::StereoMode::mono;
+
+        if (juce::roundToInt (stereoModeParam->load()) == modeAutoValue && (int) want != modeAutoValue)
+        {
+            if (auto* p = apvts.getParameter (params::stereoMode))
+                p->setValueNotifyingHost (p->convertTo0to1 ((float) want));
+            modeAutoValue = (int) want;
+        }
+    }
+
+    delay.prepare (sampleRate, block);
+    reverb.prepare (sampleRate, block);
     boost.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
+    poweramp.prepare (sampleRate, block, channels);
     demo.prepare (sampleRate);
     scopeDry.setSize (1, block);
 
     pumpDeviceWork();
 
-    // Choose the factor BEFORE preparing, so prepare() builds with it and nothing has to re-prepare
-    // from inside a prepare.
-    lastOversample = juce::jlimit (0, params::oversampleFactors.size() - 1,
-                                   juce::roundToInt (oversampleParam->load()));
-    power.setOversampling (params::oversampleValues[lastOversample]);
-    power.prepare (sampleRate, block, channels);
 
     // Reported ALWAYS, whether the power amp is switched on or not: its bypass path carries the same
     // delay, so a toggle never shifts the timing of everything downstream. A latency that changes
     // with a switch is what makes hosts re-align mid-song.
-    setLatencySamples (power.latencySamples());
+    reportLatency();
 
     updateEqSettings();
+    updateDelaySettings();
     updateReverbSettings();
+}
+
+void AmpProcessor::updateDelaySettings() noexcept
+{
+    // The time: the division against the conducting tempo when sync is on, the free knob when it
+    // is off. The host's tempo outranks the BPM field — the field exists for the standalone,
+    // where nobody else is counting.
+    float ms = delayTimeMsParam->load();
+
+    if (delaySyncParam->load() > 0.5f)
+    {
+        double bpm = (double) delayBpmParam->load();
+
+        if (auto* ph = getPlayHead())
+            if (const auto pos = ph->getPosition())
+                if (const auto hostBpm = pos->getBpm(); hostBpm.hasValue() && *hostBpm > 0.0)
+                    bpm = *hostBpm;
+
+        const int div = juce::jlimit (0, params::delayDivisions.size() - 1,
+                                      juce::roundToInt (delayDivParam->load()));
+        ms = (float) ((double) params::delayDivisionBeats[div] * 60000.0 / bpm);
+    }
+
+    delay.setTimeMs (ms);
+    delay.setRepeats (delayRepeatsParam->load() * 0.01f);   // the face reads percent
+
+    // DARK is a percent of darkness; the corner it buys falls log-evenly from the bright
+    // ceiling to the dark floor, so every degree of the knob darkens by the same ear-step.
+    delay.setDarkHz (params::delayDarkHiHz
+                     * std::pow (params::delayDarkLoHz / params::delayDarkHiHz,
+                                 delayDarkParam->load() * 0.01f));
+
+    delay.setOffsetMs (delayOffsetParam->load());
+    delay.setMix (delayMixParam->load() * 0.01f);
 }
 
 void AmpProcessor::updateReverbSettings() noexcept
@@ -318,6 +405,9 @@ void AmpProcessor::updateReverbSettings() noexcept
 
     reverb.setCharacter (static_cast<core::ReverbStage::Character> (index));
     reverb.setMix (reverbMixParam->load() * 0.01f);   // the face reads percent
+    reverb.setDecay (reverbDecayParam->load());
+    reverb.setPredelayMs (reverbPredelayParam->load());
+    reverb.setHpfHz (reverbHpfHzParam->load());
 }
 
 void AmpProcessor::updateEqSettings() noexcept
@@ -406,6 +496,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
       nsStage[stTuner] = elapsedNs (a); }
 
     updateEqSettings();
+    updateDelaySettings();
     updateReverbSettings();
 
     auto* const* channels = buffer.getArrayOfWritePointers();
@@ -415,14 +506,18 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // MONO by default: a guitar chain is one signal, and running the WaveNets per channel on a
     // duplicated input was paying twice for the same answer. The whole chain works channel 0;
     // the copy to the other channels happens once, after the limiter. STEREO (the double-track
-    // option) restores true per-channel processing.
-    const bool stereo = stereoModeParam->load() > 0.5f;
-    const int  nch    = stereo ? numChannels : juce::jmin (1, numChannels);
+    // option) restores true per-channel processing. STEREO SPACE splits the chain in two: mono
+    // up to the reverb — `nch` — and stereo from the reverb on — `nchBack` — with the one copy
+    // made at the seam, so the space is wide and the amp is paid for once.
+    const auto mode = static_cast<params::StereoMode> (
+        juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
+    const int nch     = mode == params::StereoMode::stereo ? numChannels : juce::jmin (1, numChannels);
+    const int nchBack = mode == params::StereoMode::mono   ? nch         : numChannels;
 
     // The captured blocks take a BUFFER — this alias holds only the channels the chain works.
     juce::AudioBuffer<float> chainView (const_cast<float**> (channels), nch, numSamples);
 
-    // gate -> eq1 -> boost -> eq2 -> preamp -> reverb -> power amp. The gate stands at the very
+    // gate -> boost -> EQ -> preamp -> EQ -> delay -> reverb -> power amp. The gate stands at the very
     // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
     // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
     // pop-free, so it runs unconditionally and the switch is an argument.
@@ -497,6 +592,17 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         { const auto a = PerfClock::now();
           // No enable of its own: the block's switch is the EQ's switch, and a flat link is
           // bit-transparent, so a console standing at zero costs what it looks like it costs.
+          // What the EQ eats, tapped before the console runs — the "before" of the pane's pair.
+          if (on)
+          {
+              auto& tin = blockInSpectrumTap[(size_t) l];
+              const float* d = buffer.getReadPointer (0);
+              for (int i = 0; i < numSamples; ++i)
+                  tin.push (d[i]);
+              tin.publishIfDue (eqSpectrumOrder,
+                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+          }
+
           if (on)
               eqLinks[(size_t) l].process (channels, nch, numSamples);
           nsStage[stEq] = elapsedNs (a); }
@@ -527,25 +633,77 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (! muteAtStart)
         gate.applyGain (channels, nch, numSamples);
 
+    // THE SEAM: where a mono chain becomes a stereo one, in STEREO SPACE — the one copy, right
+    // before the wide stages: the delay spreads the two identical channels first, the reverb
+    // rooms what it made.
+    for (int ch = nch; ch < nchBack; ++ch)
+        buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+
+    // The echo before the space: repeats of what the preamp made, which the reverb then rooms.
+    // First of the wide stages — the OFFSET is the block's stereo, so it works the back half's
+    // channels.
+    if (delayOnParam->load() > 0.5f)
+        { const auto a = PerfClock::now();
+          delay.process (channels, nchBack, numSamples);
+          nsStage[stDelay] = elapsedNs (a); }
+    else
+        delay.reset();   // so re-enabling it does not replay the repeats of what came before
+
     if (reverbOnParam->load() > 0.5f)
         { const auto a = PerfClock::now();
-          reverb.process (channels, nch, numSamples);
+
+          // The pair for the block's picture: the door before the room, the ADDED wet after it.
+          { auto& tin = reverbSpectrumTap[0];
+            const float* d = channels[0];
+            for (int i = 0; i < numSamples; ++i)
+                tin.push (d[i]);
+            tin.publishIfDue (eqSpectrumOrder,
+                              juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
+
+          reverb.process (channels, nchBack, numSamples);
+
+          { auto& tout = reverbSpectrumTap[1];
+            const float* w = reverb.addedWet (0);
+            for (int i = 0; i < numSamples; ++i)
+                tout.push (w[i]);
+            tout.publishIfDue (eqSpectrumOrder,
+                               juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
+
           nsStage[stReverb] = elapsedNs (a); }
     else
         reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
 
-    power.setTube (static_cast<core::PowerAmp::Tube> (
-        juce::jlimit (0, (int) core::PowerAmp::Tube::count - 1, juce::roundToInt (powerTubeParam->load()))));
-    power.setTubeCount (juce::roundToInt (powerCountParam->load()) + 1);   // index 0 = one bottle
-    power.setDrive (powerDriveParam->load());
-    power.setSag (powerSagParam->load());
+    // The captured power stage, after the space: a pack in the poweramp slot, played by the same
+    // block the boost and the preamp are — on the back half's channels, stereo when the space is.
     { const auto a = PerfClock::now();
-      power.process (channels, nch, numSamples, powerOnParam->load() > 0.5f);
+      if (powerOnParam->load() > 0.5f)
+      {
+          juce::AudioBuffer<float> backView (const_cast<float**> (channels), nchBack, numSamples);
+          poweramp.process (backView, scopeDry);
+      }
       nsStage[stPower] = elapsedNs (a); }
 
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
+    // Its picture's spectra tap the door and the exit, channel 0, only while it is on.
     { const auto a = PerfClock::now();
-      cab.process (channels, nch, numSamples, cabOnParam->load() > 0.5f);
+      const bool cabOn = cabOnParam->load() > 0.5f;
+      if (cabOn)
+      {
+          const float* d = buffer.getReadPointer (0);
+          for (int i = 0; i < numSamples; ++i)
+              cabSpectrumTap[0].push (d[i]);
+          cabSpectrumTap[0].publishIfDue (eqSpectrumOrder,
+                                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+      }
+      cab.process (channels, nchBack, numSamples, cabOn);
+      if (cabOn)
+      {
+          const float* d = buffer.getReadPointer (0);
+          for (int i = 0; i < numSamples; ++i)
+              cabSpectrumTap[1].push (d[i]);
+          cabSpectrumTap[1].publishIfDue (eqSpectrumOrder,
+                                          juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+      }
       cabOutDb.store (juce::Decibels::gainToDecibels (
           buffer.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stCab] = elapsedNs (a); }
@@ -563,15 +721,15 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // ceiling it enforces is the ceiling that leaves the box. The meter reads AFTER it —
         // the truth on the rail is the truth at the jack.
         { const auto a = PerfClock::now();
-          limiter.process (channels, nch, numSamples,
+          limiter.process (channels, nchBack, numSamples,
                            limiterOnParam->load() > 0.5f, limiterCeilParam->load());
           nsStage[stLimit] = elapsedNs (a); }
         limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
 
-        // The mono chain becomes the stereo output HERE — one copy, after everything.
-        if (! stereo)
-            for (int ch = 1; ch < numChannels; ++ch)
-                buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+        // The mono chain becomes the stereo output HERE — one copy, after everything. (In STEREO
+        // SPACE the copy was made at the seam, and there is nothing left to copy.)
+        for (int ch = nchBack; ch < numChannels; ++ch)
+            buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
 
         if (limiter.lastMinGain() < 0.999f)
             limiterWorked.store (true);

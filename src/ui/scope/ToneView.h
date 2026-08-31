@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
-#include "../../core/MeasuredFilter.h"
+#include "../Prefs.h"
 #include "../Theme.h"
 #include "ScopeFrame.h"
 
@@ -37,14 +40,17 @@ public:
         if (toneDb == nullptr)
             return;
 
-        const double lo = core::MeasuredFilter::bandLoHz;
-        const double hi = core::MeasuredFilter::bandHiHz;
+        // The player draws its tone on a 20 Hz – 20 kHz grid (felitronics::rigplayer's commonGrid),
+        // so that is the picture's band too — the curve is read off the same grid it is designed on.
+        const double lo = 20.0;
+        const double hi = 20000.0;
 
         drawGrid (g, r, lo, hi);
 
         // The EQ's own spectrum when a tap is wired — liquid columns with their peak hold —
-        // mapped onto THIS view's trusted band; the homemade fog only when it is not.
-        if (pane != nullptr)
+        // mapped onto THIS view's trusted band; the homemade fog only when it is not. The gear's
+        // spectra switch silences both.
+        if (pane != nullptr && prefs::spectraShown())
         {
             felitronics::analysis::PlotMap pm;
             pm.width      = r.getWidth();
@@ -151,6 +157,14 @@ public:
 
         g.setColour (theme::hair2);
         g.fillRect (r.getX() + 4.0f, r.getCentreY(), r.getWidth() - 8.0f, 1.0f);
+
+        // The numbers only where they have room. Seven frequency labels want some 340 units
+        // between them; the small tile beside a dial has 300, and there they ran into one
+        // another and read as nothing. Below the threshold the grid stands on its own — the
+        // same lines in the same places, so the eye that learned them on the big picture still
+        // knows which is which.
+        if (! axesLabelled (r))
+            return;
 
         g.setColour (theme::txFaint);
 

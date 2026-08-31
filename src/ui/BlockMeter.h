@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "../Parameters.h"
@@ -35,6 +38,7 @@ namespace orbitamp
     than onto the fill: a wash under the signal reads as a place, a wash over it reads as a state.
     See `params::captureColdDb` for why the numbers are a convention rather than a measurement. */
 class BlockMeter final : public juce::Component,
+                         public juce::SettableTooltipClient,
                          private juce::Timer
 {
 public:
@@ -44,10 +48,29 @@ public:
                 juce::RangedAudioParameter& trimParam, bool showZone)
         : name (std::move (meterName)), levelDb (levelSource), param (trimParam), zone (showZone)
     {
-        trim = std::make_unique<juce::ParameterAttachment> (trimParam, [this] (float) { repaint(); });
+        trim = std::make_unique<juce::ParameterAttachment> (trimParam, [this] (float)
+        {
+            // Standing up there is no room for the reading beside the bar, so it rides the hint —
+            // with the one piece of advice the green is there to give.
+            setTooltip (name + "  " + meterrail::trimText (trimDb())
+                        + (zone ? "   -   keep the level in the green" : juce::String()));
+            repaint();
+        });
+        trim->sendInitialUpdate();
         setRepaintsOnMouseActivity (true);
         startTimerHz (30);
     }
+
+    /** STANDING UP: the same meter as a thin column, for the left of a dial — the fill climbs, the
+        hand lies across it, the green zone runs up its edge. No name and no reading beside it:
+        the column is as wide as the bar was tall, and the number rides the hint instead. */
+    bool vertical = false;
+
+    /** A switched-off block's meter indicates NOTHING — the slot and the hand stay, dimmed with
+        the block, but a bar that keeps filling on a dead block claims the block is doing
+        something. The owner flips this with the block's power. */
+    bool live = true;
+    static constexpr int designWidth = 12;
 
     /** The grip is in the hand — the owner may want to show a ladder beside it. */
     std::function<void (bool)> onDrag;
@@ -58,6 +81,12 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        if (vertical)
+        {
+            paintStanding (g);
+            return;
+        }
+
         const auto r = getLocalBounds().toFloat();
 
         g.setColour (theme::bezel);
@@ -71,7 +100,8 @@ public:
         g.drawRoundedRectangle (track.reduced (0.5f), 2.0f, 1.0f);
 
         // ---- the signal ----
-        paintFill (g, track);
+        if (live)
+            paintFill (g, track);
 
         // ---- the green zone: where this block wants to be fed.
         //
@@ -91,7 +121,7 @@ public:
             g.fillRect (a, track.getY() + 0.5f, b - a, 1.5f);
         }
 
-        if (hold > floorDb + 0.5f)
+        if (live && hold > floorDb + 0.5f)
         {
             const float x = xOfLevel (track, hold);
             g.setColour (juce::Colours::white.withAlpha (0.85f));
@@ -132,7 +162,7 @@ public:
 
         // The reading is not part of the scale — a click on it must not throw the value across the
         // bar on the way to a double-click.
-        if (valueArea().contains (e.position))
+        if (! vertical && valueArea().contains (e.position))
             return;
 
         dragging = true;
@@ -140,13 +170,13 @@ public:
         if (onDrag != nullptr)
             onDrag (true);
 
-        writeFromX ((float) e.position.x);
+        writeFrom (e.position);
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
         if (dragging)
-            writeFromX ((float) e.position.x);
+            writeFrom (e.position);
     }
 
     void mouseUp (const juce::MouseEvent&) override
@@ -163,8 +193,9 @@ public:
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
         // On the number: type one. Anywhere on the bar: home. The same convention the vertical
-        // rails' grips already use, split across the two halves this meter has.
-        if (valueArea().contains (e.position))
+        // rails' grips already use, split across the two halves this meter has. Standing up there
+        // is no number to type into, so a double-click is home.
+        if (! vertical && valueArea().contains (e.position))
         {
             editor.open (*this, valueArea().toNearestInt().expanded (2, 0), trimDb(), theme::orange,
                          [this] (float v) { trim->setValueAsCompleteGesture (v); });
@@ -177,6 +208,12 @@ public:
 private:
     void timerCallback() override
     {
+        if (! live)
+        {
+            hold = floorDb;   // a stale peak must not greet the block when it comes back
+            return;
+        }
+
         const float now = levelDb.load();
 
         // The peak hold, decaying: it is here to let a phrase be READ, not to latch forever.
@@ -223,12 +260,84 @@ private:
 
     float trimDb() const { return param.convertFrom0to1 (param.getValue()); }
 
-    void writeFromX (float x)
+    void writeFrom (juce::Point<float> p)
     {
-        const auto t = trackArea();
-        const float u = juce::jlimit (0.0f, 1.0f, (x - t.getX()) / juce::jmax (1.0f, t.getWidth()));
+        const auto  t = vertical ? columnArea() : trackArea();
+        const float u = vertical ? (t.getBottom() - p.y) / juce::jmax (1.0f, t.getHeight())
+                                 : (p.x - t.getX())      / juce::jmax (1.0f, t.getWidth());
         trim->setValueAsPartOfGesture (params::blockTrimMinDb
-                                       + u * (params::blockTrimMaxDb - params::blockTrimMinDb));
+                                       + juce::jlimit (0.0f, 1.0f, u)
+                                           * (params::blockTrimMaxDb - params::blockTrimMinDb));
+    }
+
+    // ---- standing up ----
+
+    juce::Rectangle<float> columnArea() const { return getLocalBounds().toFloat().reduced (2.0f, 2.0f); }
+
+    static float yOfLevel (juce::Rectangle<float> t, float db)
+    {
+        const float u = juce::jlimit (0.0f, 1.0f, (db - floorDb) / (ceilDb - floorDb));
+        return t.getBottom() - u * t.getHeight();
+    }
+
+    static float yOfTrim (juce::Rectangle<float> t, float db)
+    {
+        const float u = juce::jlimit (0.0f, 1.0f, (db - params::blockTrimMinDb)
+                                                    / (params::blockTrimMaxDb - params::blockTrimMinDb));
+        return t.getBottom() - u * t.getHeight();
+    }
+
+    /** The bar on its feet, and stripped: no bezel, no hairline, no marks on the rail. What the
+        column says it says in COLOUR — the fill climbs from deep blue through the green of where a
+        capture wants to be fed into yellow, orange and red, the gradient anchored to the scale so a
+        given height always reads the same colour, and the level clips it. The hand lies across it;
+        the peak hold is the one white line. The reading, and the advice, ride the hint. */
+    void paintStanding (juce::Graphics& g) const
+    {
+        const auto t = columnArea();
+
+        g.setColour (theme::bezel.withAlpha (0.75f));
+        g.fillRoundedRectangle (t, 2.0f);
+
+        if (live)
+        {
+            const auto u = [] (float db) { return (double) juce::jlimit (0.0f, 1.0f, (db - floorDb) / (ceilDb - floorDb)); };
+
+            // The thermometer, zone-anchored: the same weather as the big rail — dark corporate
+            // ground through the corporate violet, the zone's green, yellow, orange, red — with
+            // the green pinned to where THIS block wants to be fed.
+            juce::ColourGradient grad (meterrail::heatFloor, 0.0f, t.getBottom(),
+                                       meterrail::heatRed,   0.0f, t.getY(), false);
+            grad.addColour (u (params::captureColdDb) - 0.14, theme::violet);                 // corporate, on the way up
+            grad.addColour (u (params::captureColdDb),        inRange);                       // the zone: green...
+            grad.addColour (u (params::captureHotDb),         inRange);                       // ...to green
+            grad.addColour (u (params::captureHotDb) + 0.05,  meterrail::heatYellow);         // then yellow
+            grad.addColour (u (0.0f),                         theme::orange);                 // orange at full scale
+
+            const float y = yOfLevel (t, levelDb.load());
+            if (y < t.getBottom() - 1.0f)
+            {
+                const juce::Graphics::ScopedSaveState ss (g);
+                g.reduceClipRegion ((int) std::floor (t.getX()), (int) y,
+                                    (int) std::ceil (t.getWidth()) + 1, (int) std::ceil (t.getBottom() - y) + 1);
+                g.setGradientFill (grad);
+                g.fillRoundedRectangle (t, 2.0f);
+            }
+        }
+
+        if (live && hold > floorDb + 0.5f)
+            meterrail::paintHold (g, t, yOfLevel (t, hold));
+
+        // The hand, lying across the column, with a head at each end.
+        const float y   = yOfTrim (t, trimDb());
+        const bool  lit = dragging || isMouseOver();
+
+        g.setColour (juce::Colours::black.withAlpha (0.55f));
+        g.fillRect (t.getX() - 1.0f, y - 1.75f, t.getWidth() + 2.0f, 3.5f);
+        g.setColour (lit ? theme::orange.brighter (0.3f) : theme::orange);
+        g.fillRect (t.getX() - 1.0f, y - 0.75f, t.getWidth() + 2.0f, 1.5f);
+        g.fillRect (t.getX() - 1.0f,      y - 2.5f, 2.5f, 5.0f);
+        g.fillRect (t.getRight() - 1.5f,  y - 2.5f, 2.5f, 5.0f);
     }
 
     /** The family gradient, lying down: mostly violet, warming to orange only near the top, and

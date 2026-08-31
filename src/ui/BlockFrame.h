@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 #pragma once
 
 #include "Theme.h"
@@ -53,6 +56,7 @@ public:
 
         on = shouldBeOn;
         dimChildren();   // NOT setAlpha on the whole block: the power switch stays full strength
+        blockOnChanged (on);
 
         // An off block is READ-ONLY: everything stays visible — a control you cannot see is a
         // control you forget you set — but nothing answers, so a dark block can never quietly
@@ -97,6 +101,18 @@ public:
     bool powerParamOn() const noexcept
     {
         return powerParam != nullptr && powerParam->getValue() > 0.5f;
+    }
+
+    /** The frame's own switch leaves the border when the strip owns the block's presence: the
+        pill was the block's on/off, and there is only ONE of those now. */
+    void setSwitchShown (bool shown)
+    {
+        if (hasSwitch == shown)
+            return;
+
+        hasSwitch = shown;
+        resized();
+        repaint();
     }
 
     void togglePowerParam()
@@ -151,6 +167,17 @@ public:
             g.setColour (kind == Kind::captured ? theme::orange : theme::lilac);
             theme::drawTracked (g, title.toUpperCase(), titleBox, theme::displayFont (titleHeight),
                                 0.15f, juce::Justification::centredLeft);
+        }
+
+        // The same gap under whatever the block stood on its border slot. Masked HERE, in the
+        // frame's own layer, and not by the control: a switched-off block draws its children
+        // half-transparent, and a mask painted by one of them let the line show through its name.
+        if (! borderSlotUsed.isEmpty())
+        {
+            g.setColour (topFill);
+            g.fillRect (borderSlotUsed.toFloat().expanded (legendGap, 0.0f)
+                            .withHeight (theme::blockBorder + 2.0f)
+                            .withCentre ({ borderSlotUsed.toFloat().getCentreX(), box.getY() }));
         }
 
         paintContent (g);
@@ -252,6 +279,11 @@ protected:
     virtual void layOutContent (juce::Rectangle<int>) {}
     virtual void paintContent (juce::Graphics&) {}
 
+    /** The power moved — every way it can: a click, the parameter's echo, a restored session. For a
+        subclass whose furniture must go DARK with the block (a meter that would otherwise keep
+        indicating), not merely dim. */
+    virtual void blockOnChanged (bool) {}
+
     /** Blocks rebuild their faces (a device change makes new knobs mid-life) — every child that
         arrives inherits the block's dimming, and the shield stays on top of all of them. */
     void childrenChanged() override
@@ -300,9 +332,10 @@ private:
         frame starts lower than the component. Zero when nothing rides it. */
     int topInset() const
     {
-        // Room above the line only for what actually RIDES the line: a badge with no switch and
-        // its name inside reserves nothing, so its box meets its neighbours edge to edge.
-        return (titleInBorder && showTitle) || (switchInBorder && hasSwitch) ? switchH / 2 + 1 : 0;
+        // One inset for every block, switch or no switch: a row where some boxes start twelve
+        // units higher than their neighbours reads as a mistake, and something — a name, a
+        // combo — rides the line on every block anyway.
+        return switchInBorder || (titleInBorder && showTitle) ? switchH / 2 + 1 : 0;
     }
 
 protected:
@@ -341,6 +374,27 @@ protected:
 
         return juce::Rectangle<int> (0, 0, switchW, switchH)
                  .withCentre ({ boxArea().getRight() - borderInset - switchW / 2, boxArea().getY() });
+    }
+
+    /** The free run of the top border between the block's name and its switch — where a block may
+        stand its one headline control, the way the captured blocks stand their device combo, so the
+        first row inside the box is not spent on it. A control here covers the line with its own
+        fill, fieldset-style, exactly as the name does. Empty when the name or the switch is not on
+        the border. */
+    /** What the block actually placed on the border — set by the block from its layout, so the
+        frame can open the line under it. Empty: nothing stands there. */
+    juce::Rectangle<int> borderSlotUsed;
+
+    juce::Rectangle<int> borderSlotArea() const
+    {
+        if (! titleInBorder || ! switchInBorder)
+            return {};
+
+        const int left  = (showTitle ? titleArea().getRight() : boxArea().getX() + borderInset) + borderInset / 2;
+        const int right = (hasSwitch ? switchArea().getX() : boxArea().getRight() - borderInset) - borderInset / 2;
+
+        return juce::Rectangle<int> (left, 0, juce::jmax (0, right - left), switchH)
+                 .withCentre ({ (left + right) / 2, boxArea().getY() });
     }
 
 private:

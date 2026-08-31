@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // Gate for the library manager's FILE WORK — the part that can quietly eat a collection. The
 // manager window is dumb views over these calls, so what is tested here is the whole risk: an
 // import that lands where it said, a zip that unpacks to a sane folder and nowhere else, a rename

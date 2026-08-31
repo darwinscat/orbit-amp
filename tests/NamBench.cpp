@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // The bench the crew skipped: REAL nanoseconds per frame through the exact stage the plugin
 // runs, on the exact model it ships. Loads a .namz (path as argv[1], or the factory SM7 first
 // capture), prepares at 48 kHz / 512, and times mono processing over enough blocks to trust.
