@@ -358,7 +358,7 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
     place (switches[0], row.removeFromLeft (70));    // HPF
     place (switches[1], row.removeFromRight (70));   // LPF
 
-    constexpr int comboW = 90, phaseW = 44, midGap = 14;
+    constexpr int comboW = 90, phaseW = 58, midGap = 14;   // the switch takes 36 — the word needs its own room
     auto mid = row.withSizeKeepingCentre (comboW + midGap + phaseW, row.getHeight());
     trimCombo.setBounds (mid.removeFromLeft (comboW));
     mid.removeFromLeft (midGap);
