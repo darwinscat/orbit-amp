@@ -1,0 +1,244 @@
+name: release
+
+# Build the bundles/installers on a version tag (vX.Y.Z) and attach them to a GitHub
+# Release — GitHub hosts the binaries, no own download server. A manual run
+# (workflow_dispatch) builds the SAME artifacts but does NOT create a release unless
+# dry_run=false, so you can download + test installers from the run page without publishing.
+#
+#   • macOS  → signed + notarized .pkg + .zip (VST3 + AU + CLAP + Standalone)  [self-hosted runner]
+#   • Windows → Inno Setup .exe + .zip (VST3 + CLAP + Standalone)
+#   • Linux  → .tar.gz (VST3 + CLAP + Standalone)
+#
+# Required (signing only): secrets MACOS_APP_IDENTITY, MACOS_INSTALLER_IDENTITY; var
+# NOTARY_PROFILE. The GitHub Release is published with the built-in GITHUB_TOKEN.
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, e.g. 0.1.0 (manual runs)"
+        required: true
+        default: "0.1.0"
+      dry_run:
+        description: "Build only — do NOT create a GitHub Release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write   # create the GitHub Release + upload assets
+
+jobs:
+  macos:
+    # Self-hosted macOS runner → universal arm64+x86_64 build. arm64 cross-compiles the
+    # x86_64 (Intel) slice fine; we only build/package, not run it.
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+      - name: Version
+        id: v
+        run: |
+          RAW="${{ github.event.inputs.version || github.ref_name }}"
+          echo "version=${RAW#v}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DORBITAMP_JUCE_DIR= -DORBITAMP_FCORE_DIR= -DORBITAMP_APPKIT_DIR= \
+            -DORBITAMP_NAM_CORE_SRC= -DORBITAMP_NAMZ_SRC= \
+            -DORBITAMP_COPY_PLUGIN=OFF
+          cmake --build build --config Release --parallel
+      - name: Gates
+        run: |
+          set -euo pipefail
+          for t in captured chain library reverb ribbon; do
+            bin=$(find "build/orbitamp_${t}_test_artefacts" -type f -perm +111 | head -1)
+            echo "-- gate: $t"; "$bin" > /dev/null
+          done
+          echo "-- gate: eqlink"; ./build/orbitamp_eqlink_test > /dev/null
+          echo "-- gate: tuner";  ./build/orbitamp_tuner_test  > /dev/null
+      # Sign (Developer ID) + notarize + staple. Signing identities + the notarytool
+      # keychain-profile name come from repo secrets/vars; the certs + profile live in the
+      # runner's Keychain.
+      - name: Sign, package, notarize
+        env:
+          APP_ID:  ${{ secrets.MACOS_APP_IDENTITY }}
+          INST_ID: ${{ secrets.MACOS_INSTALLER_IDENTITY }}
+          NOTARY:  ${{ vars.NOTARY_PROFILE }}
+          KCH_PWD: ${{ secrets.KCH_PWD }}
+        run: |
+          set -euo pipefail
+
+          # Let codesign/productsign use the signing keys without a GUI prompt — required
+          # when the runner has no interactive login session. Idempotent per run.
+          KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          security unlock-keychain -p "$KCH_PWD" "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCH_PWD" "$KEYCHAIN" >/dev/null
+
+          VER="${{ steps.v.outputs.version }}"
+          REL="build/OrbitAmp_artefacts/Release"
+          VST3="$REL/VST3/OrbitAmp.vst3"; AU="$REL/AU/OrbitAmp.component"; CLAP="$REL/CLAP/OrbitAmp.clap"
+          SA="$REL/Standalone/OrbitAmp.app"
+          mkdir -p dist stage
+
+          # Plug-ins: hardened-runtime sign (they run inside the host → no own entitlements).
+          BUNDLES=("$VST3" "$AU")
+          if [ -d "$CLAP" ]; then BUNDLES+=("$CLAP"); fi
+          for b in "${BUNDLES[@]}"; do
+            codesign --force --options runtime --timestamp --sign "$APP_ID" "$b"
+            codesign --verify --strict --verbose=1 "$b"
+            cp -R "$b" stage/
+          done
+
+          # Standalone app: its own process → the audio-input entitlement, then notarize +
+          # staple it so it also launches cleanly straight from the .zip.
+          if [ -d "$SA" ]; then
+            codesign --force --options runtime --timestamp \
+                     --entitlements installer/standalone.entitlements --sign "$APP_ID" "$SA"
+            codesign --verify --strict --verbose=1 "$SA"
+            ditto -c -k --keepParent "$SA" dist/_standalone.zip
+            xcrun notarytool submit dist/_standalone.zip --keychain-profile "$NOTARY" --wait
+            xcrun stapler staple "$SA"
+            rm -f dist/_standalone.zip
+            cp -R "$SA" stage/
+          fi
+
+          ditto -c -k stage "dist/OrbitAmp-$VER-macOS.zip"
+
+          # build → sign → notarize → staple the .pkg (one submission carries the bundles)
+          installer/build-pkg.sh "$VER" "$REL" dist
+          productsign --sign "$INST_ID" "dist/OrbitAmp-$VER-macOS.pkg" "dist/OrbitAmp-$VER-macOS-signed.pkg"
+          mv "dist/OrbitAmp-$VER-macOS-signed.pkg" "dist/OrbitAmp-$VER-macOS.pkg"
+          xcrun notarytool submit "dist/OrbitAmp-$VER-macOS.pkg" --keychain-profile "$NOTARY" --wait
+          xcrun stapler staple "dist/OrbitAmp-$VER-macOS.pkg"
+          xcrun stapler validate "dist/OrbitAmp-$VER-macOS.pkg"
+          spctl -a -vvv -t install "dist/OrbitAmp-$VER-macOS.pkg" || true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: dist/*
+
+  windows:
+    # Native x64 + arm64. windows-11-arm is a free hosted runner for public repos.
+    # x64 also gets the Inno installer; arm64 is zip-only (ISCC is x86 + the audience is
+    # technical), which sidesteps running the installer toolchain under ARM.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-latest, arch: x64,   plat: x64,   installer: true  }
+          - { runner: windows-11-arm, arch: arm64, plat: ARM64, installer: false }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Version
+        id: v
+        shell: bash
+        run: |
+          RAW="${{ github.event.inputs.version || github.ref_name }}"
+          echo "version=${RAW#v}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: |
+          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel
+      - name: Inno Setup installer
+        if: ${{ matrix.installer }}
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+              /DAppVersion=${{ steps.v.outputs.version }} installer\orbitamp.iss
+      - name: Zip
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.v.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          if (Test-Path "installer\output\*.exe") { Copy-Item "installer\output\*.exe" dist\ }
+          $rel = "build\OrbitAmp_artefacts\Release"
+          $items = @("$rel\VST3\OrbitAmp.vst3", "$rel\Standalone\OrbitAmp.exe")
+          if (Test-Path "$rel\CLAP\OrbitAmp.clap") { $items += "$rel\CLAP\OrbitAmp.clap" }
+          Compress-Archive -Force -DestinationPath "dist\OrbitAmp-$ver-Windows-${{ matrix.arch }}.zip" -Path $items
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-${{ matrix.arch }}
+          path: dist/*
+
+  linux:
+    # Native x86_64 + arm64 — both are free hosted runners for public repos.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest,    arch: x86_64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64  }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Version
+        id: v
+        run: |
+          RAW="${{ github.event.inputs.version || github.ref_name }}"
+          echo "version=${RAW#v}" >> "$GITHUB_OUTPUT"
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build \
+            libasound2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libglu1-mesa-dev mesa-common-dev
+      - name: Build
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+      - name: Gates
+        run: |
+          set -euo pipefail
+          for t in captured chain library reverb ribbon; do
+            bin=$(find "build/orbitamp_${t}_test_artefacts" -type f -executable | head -1)
+            echo "-- gate: $t"; "$bin" > /dev/null
+          done
+          echo "-- gate: eqlink"; ./build/orbitamp_eqlink_test > /dev/null
+          echo "-- gate: tuner";  ./build/orbitamp_tuner_test  > /dev/null
+      - name: Package (.tar.gz)
+        run: |
+          VER="${{ steps.v.outputs.version }}"
+          REL="build/OrbitAmp_artefacts/Release"
+          mkdir -p stage dist
+          cp -R "$REL/VST3/OrbitAmp.vst3" stage/
+          # -e not -d: a Linux .clap is a single .so-style FILE, not a macOS-style bundle dir.
+          if [ -e "$REL/CLAP/OrbitAmp.clap" ]; then cp -R "$REL/CLAP/OrbitAmp.clap" stage/; fi
+          if [ -f "$REL/Standalone/OrbitAmp" ];  then cp "$REL/Standalone/OrbitAmp" stage/; fi
+          tar -C stage -czf "dist/OrbitAmp-$VER-Linux-${{ matrix.arch }}.tar.gz" .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*
+
+  release:
+    needs: [ macos, windows, linux ]
+    # Tag push → publish. Manual run → only if dry_run=false (default true = build-only).
+    if: ${{ github.event_name == 'push' || github.event.inputs.dry_run == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RAW="${{ github.event.inputs.version || github.ref_name }}"
+          VER="${RAW#v}"
+          mkdir -p out
+          find artifacts -type f -exec cp {} out/ \;
+          ( cd out && sha256sum OrbitAmp-* > SHA256SUMS )
+          gh release create "v$VER" \
+            --repo "${{ github.repository }}" \
+            --title "OrbitAmp v$VER" \
+            --generate-notes \
+            out/*

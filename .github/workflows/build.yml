@@ -1,0 +1,97 @@
+name: build
+
+# Windows-only CI — on purpose. We develop on a Mac, so macOS is built + validated
+# locally; this workflow covers the build we can't make locally: Windows (to hand a
+# tester or cross-check). The universal macOS build happens only in release.yml, on a tag.
+#
+# Runs on demand or on a PR that touches code — not on every commit.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'resources/**'
+      - 'tests/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege for GITHUB_TOKEN: this workflow only reads the repo and uploads
+# build artifacts. Nothing here writes back to the repo.
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60          # safety cap for a hung build (NAM adds cold-compile time)
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@v7
+
+      # Ninja invokes cl.exe directly, so it needs the MSVC toolchain on PATH.
+      - name: MSVC dev environment (vcvars for Ninja)
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756   # v1.13.0
+        with:
+          arch: x64
+
+      # Compiler cache. MUST precede Configure: JUCE builds juceaide at configure time and
+      # passes the compiler launcher through to that sub-build.
+      - name: sccache
+        uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696   # v0.0.10
+
+      - name: Cache FetchContent sources
+        uses: actions/cache@v6
+        with:
+          path: build/_deps
+          key: deps-windows-ninja-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        run: >
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build build
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats
+
+      # The seven acceptance gates — the same ones the local release runs. Console apps land in
+      # <name>_artefacts/Release; the two plain executables sit wherever the generator put them.
+      - name: Gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for t in captured chain library reverb ribbon; do
+            bin=$(find "build/orbitamp_${t}_test_artefacts" -type f -name '*.exe' | head -1)
+            echo "-- gate: $t"; "$bin" > /dev/null
+          done
+          for t in eqlink tuner; do
+            bin=$(find build -maxdepth 2 -type f -name "orbitamp_${t}_test.exe" | head -1)
+            echo "-- gate: $t"; "$bin" > /dev/null
+          done
+
+      - name: Validate (pluginval, VST3)
+        shell: bash
+        run: |
+          curl -L -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_Windows.zip
+          7z x -y pluginval.zip >/dev/null
+          ./pluginval.exe --strictness-level 10 --validate "build/OrbitAmp_artefacts/Release/VST3/OrbitAmp.vst3"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: OrbitAmp-Windows
+          if-no-files-found: ignore
+          path: |
+            build/OrbitAmp_artefacts/Release/VST3/OrbitAmp.vst3
+            build/OrbitAmp_artefacts/Release/CLAP/OrbitAmp.clap
+            build/OrbitAmp_artefacts/Release/Standalone
