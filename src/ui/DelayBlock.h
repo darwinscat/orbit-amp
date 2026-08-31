@@ -16,9 +16,15 @@ class AmpProcessor;
     specialist. Under it, in the corner, the one typed control on the face — the BPM field the
     standalone conducts by (a host's tempo outranks it), which turns into the MS field when the
     time goes free. Mix is the hero; REPEATS and DARK stand small at its left hand, OFFSET —
-    the block's stereo — small in the opposite corner. The picture is the comb of repeats
-    (its own step; the well waits dark for now). */
-class DelayBlock final : public BlockFrame
+    the block's stereo — small in the opposite corner.
+
+    The picture is the COMB: one tooth per repeat, standing where the repeats will land — the
+    spacing is the glided time (turn the knob and the comb slides with the motor), the heights
+    fall by REPEATS, the ink dulls along the tail by DARK, and OFFSET stands a lilac twin
+    beside every tooth. The pulse is live: what walks into the line now lights tooth n when
+    its n-th repeat is due — a note travels down the comb as it echoes. */
+class DelayBlock final : public BlockFrame,
+                         private juce::Timer
 {
 public:
     explicit DelayBlock (AmpProcessor&);
@@ -26,6 +32,8 @@ public:
 
 private:
     void layOutContent (juce::Rectangle<int>) override;
+    void timerCallback() override;
+    void paintComb (juce::Graphics&, juce::Rectangle<float>);
 
     /** Re-reads sync + division into the border pill and the corner field — called from every
         attachment echo, so a restored session and a host automation both redress the face. */
@@ -34,16 +42,14 @@ private:
     bool syncOn() const;
     float plain (const char* id) const;
 
-    /** The comb's future home: the dark well, framed like every picture. */
-    struct WellView final : public juce::Component
+    /** The comb's surface: dumb, the block paints through it — the reverb picture's pattern. */
+    struct CombView final : public juce::Component
     {
+        std::function<void (juce::Graphics&, juce::Rectangle<float>)> paintBody;
+
         void paint (juce::Graphics& g) override
         {
-            const auto r = getLocalBounds().toFloat();
-            g.setColour (juce::Colour (0xff101016));
-            g.fillRoundedRectangle (r, theme::radiusSm);
-            g.setColour (theme::hair2);
-            g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusSm, 1.0f);
+            if (paintBody) paintBody (g, getLocalBounds().toFloat());
         }
     };
 
@@ -139,10 +145,18 @@ private:
     Knob dark    { "Dark",    theme::violet, 0 };
     Knob offset  { "Offset",  theme::violet, 0 };
 
-    WellView    view;
+    CombView    view;
     NumberField field;
 
     float dragStart = 0.0f;
+
+    /** The pulse's memory: the input envelope, one bucket per timer tick. Tooth n reads the
+        bucket n repeats of the current time ago — the note walking down the comb. */
+    static constexpr int envTicksPerSecond = 30;
+    static constexpr int envHistSize = 256;   // ~8.5 s — past that a tooth simply stays quiet
+    std::array<float, (size_t) envHistSize> envHist {};
+    int   envPos = 0;
+    float envSmooth = 0.0f;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment,
                                                                           repeatsAttachment,

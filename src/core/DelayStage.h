@@ -3,6 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -78,7 +79,11 @@ public:
 
     /** The head's destination, in milliseconds — free or computed from BPM by the caller.
         The line glides there; big moves bend. */
-    void setTimeMs (float ms) noexcept { timeMs = juce::jmax (1.0f, ms); }
+    void setTimeMs (float ms) noexcept
+    {
+        timeMs = juce::jmax (1.0f, ms);
+        shownTimeMs.store (timeMs, std::memory_order_relaxed);   // process() overwrites with the glide
+    }
 
     /** Feedback, 0..1. The dark filter and the saturator live inside the loop, so even 1 is a
         long compressed bloom rather than a runaway. */
@@ -100,6 +105,7 @@ public:
     {
         offsetMs = juce::jlimit (-1000.0f * (float) maxOffsetSeconds,
                                   1000.0f * (float) maxOffsetSeconds, ms);
+        shownOffsetMs.store (offsetMs, std::memory_order_relaxed);
     }
 
     /** 0 = fully dry, 1 = the repeats added at unity. Dry never moves. */
@@ -130,6 +136,15 @@ public:
             offsetMs < 0.0f ? -offsetMs * 0.001f * (float) sampleRate : 0.0f,
             offsetMs > 0.0f ?  offsetMs * 0.001f * (float) sampleRate : 0.0f,
         };
+
+        // The comb's pulse listens at the door: the block peak of what the line is being FED,
+        // taken before the loop overwrites the channel in place.
+        {
+            float pk = 0.0f;
+            for (int i = 0; i < numSamples; ++i)
+                pk = juce::jmax (pk, std::abs (channels[0][i]));
+            envIn.store (pk, std::memory_order_relaxed);
+        }
 
         for (int i = 0; i < numSamples; ++i)
         {
@@ -183,7 +198,20 @@ public:
             writePos = writePos + 1 == lineN ? 0 : writePos + 1;
             offPos   = offPos   + 1 == offN  ? 0 : offPos   + 1;
         }
+
+        // Where the heads actually STAND, for the picture: the glided values, so the comb
+        // slides with the motor instead of jumping to the target.
+        shownTimeMs.store ((float) (currentDelay / sampleRate * 1000.0), std::memory_order_relaxed);
+        shownOffsetMs.store ((float) ((currentOff[1] - currentOff[0]) / sampleRate * 1000.0),
+                             std::memory_order_relaxed);
     }
+
+    /** The picture's taps — the glided time and offset while the block runs (the set targets
+        while it does not), and the block peak of what the line is fed. Audio thread writes,
+        the face reads on its repaint clock. */
+    std::atomic<float> shownTimeMs   { 350.0f };
+    std::atomic<float> shownOffsetMs { 0.0f };
+    std::atomic<float> envIn         { 0.0f };
 
     static constexpr double maxDelaySeconds  = 6.1;    // 1/1 at 40 BPM, with margin
     static constexpr double maxOffsetSeconds = 0.031;  // the offset knob's reach

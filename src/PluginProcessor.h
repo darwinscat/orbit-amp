@@ -153,6 +153,13 @@ private:
     core::DelayStage  delay;
     core::ReverbStage reverb;
 
+public:
+    /** The delay's picture taps, read-only: the face draws its comb from the same numbers the
+        heads are actually standing on. */
+    const core::DelayStage& delayTaps() const noexcept { return delay; }
+
+private:
+
     /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
         raw input at the front of the chain; where it MUTES is the player's parameter. */
     felitronics::dynamics::NoiseGate gate;
