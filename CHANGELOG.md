@@ -10,7 +10,7 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 First release. A curated guitar tone player — VST3 / AU / Standalone, macOS.
 
 ### Added
-- **The chain**: EQ → boost → EQ → preamp → reverb → power amp → cabinet, on one compact,
+- **The chain**: boost → EQ → preamp → EQ → reverb → power amp → cabinet, on one compact,
   resizable faceplate. The boost, preamp and power amp are captured neural voices; everything
   linear or time-based around them is honest DSP.
 - **Captured voices** ride in `.orbitrig` device packs (namz schema 3), played through
