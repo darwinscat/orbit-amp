@@ -49,7 +49,7 @@ layers on top.
 ## Signal chain
 
 ```
-tuner → gate → eq1 → boost → eq2 → preamp (voicing) → reverb → power amp → cabinet
+tuner → gate → boost → eq1 → preamp (voicing) → eq2 → reverb → power amp → cabinet
 ```
 
 - **Tuner** — a listener, not a processor: it taps the raw input and never touches
