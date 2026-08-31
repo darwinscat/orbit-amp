@@ -67,17 +67,18 @@ tuner → gate → boost → eq1 → preamp (voicing) → eq2 → reverb → pow
   guess it. One feel control — Decay (30–500 ms), the close ramp: a metal chop at
   the fast end, a natural die-away at the default; attack, hold and hysteresis
   stay the engine's. Off by default.
-- **EQ links (eq1, eq2)** — DSP, and **links of the chain, not sections of any
-  block**. Exactly two, fixed (a host needs an unchanging parameter list): eq1
-  ahead of the boost decides what reaches the first nonlinearity — it changes the
-  *kind* of distortion; eq2 between boost and preamp colours what the boost made.
-  A link's place in the chain answers "pre or post", so there is no placement
-  switch. Low/High are **shelves**, Mid is a peak; HPF/LPF are optional cuts
-  (12 dB/oct). Both links ship off and flat. An FX link will slot in between later.
+- **EQ (eq1, eq2)** — DSP, and **part of the captured block, not a separate link**:
+  each console sits right AFTER its block's nonlinearity, colouring what the device
+  made — the boost's EQ feeds the preamp, the preamp's feeds the power amp, where a
+  real amplifier keeps its tone stack. It goes dark with its block. Two faces per
+  console: DEVICE TONE — the pack's own measured knobs — and UNIVERSAL EQ (the
+  default) — our parametric in their place: two shelves with free corners, two tone
+  bells (a third narrow one switches in), HPF/LPF with a real slope choice
+  (6–48 dB/oct). A pack that measured nothing falls to UNIVERSAL on its own.
 - **Boost** — a separate captured (neural) block in front. Toggleable.
 - **Preamp** — the captured voicing. Gain 0–10 maps to the captured detents; the
-  biggest knob (the hero). Only the device's own (measured) controls live in the
-  block — our EQ does not.
+  biggest knob (the hero). The tone console lives in the block — see the EQ entry
+  above.
 - **Reverb** — DSP (algorithmic); Mix only in the simple case.
 - **Power amp** — optional; simulation (white-box tube stage) or a captured slot.
 - **Cabinet** — IR module (linear), mic placement on the grille.
