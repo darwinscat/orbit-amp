@@ -167,6 +167,29 @@ target_sources(OrbitAmp PRIVATE
 )
 
 # ----------------------------------------------------------------------------
+# Factory devices. DeviceLibrary::bundledDirectory() looks inside the bundle first
+# (Contents/Resources/Devices) and falls back to the machine's Factory folder only when the build
+# ships nothing. The packs are curated by hand and arrive late, so the rule is a folder, not a
+# list: whatever sits in resources/Devices/ at CONFIGURE time rides into every bundle — drop the
+# packs in and re-run cmake. Absent or empty, the build ships an empty factory. The resources land
+# during bundle assembly, so they are inside every seal that is applied afterwards (dev signing,
+# the copy-plugin step, the release signature).
+# ----------------------------------------------------------------------------
+file(GLOB ORBITAMP_FACTORY_PACKS "${CMAKE_CURRENT_SOURCE_DIR}/resources/Devices/*")
+if(ORBITAMP_FACTORY_PACKS)
+    foreach(fmt IN ITEMS VST3 AU Standalone)
+        if(TARGET OrbitAmp_${fmt})
+            juce_add_bundle_resources_directory(OrbitAmp_${fmt}
+                "${CMAKE_CURRENT_SOURCE_DIR}/resources/Devices")
+        endif()
+    endforeach()
+    list(LENGTH ORBITAMP_FACTORY_PACKS ORBITAMP_FACTORY_COUNT)
+    message(STATUS "Factory devices: ${ORBITAMP_FACTORY_COUNT} pack(s) ride in the bundles")
+else()
+    message(STATUS "Factory devices: resources/Devices/ is empty or absent — the factory ships empty")
+endif()
+
+# ----------------------------------------------------------------------------
 # Embedded assets. Michroma (OFL) is the family's display face and it lives in felitronics-appkit's
 # assets/ — referenced there, NOT copied here, so there is one copy of the file in the ecosystem.
 # felitronics_appkit_SOURCE_DIR is set by FetchContent above and points at whichever source won
