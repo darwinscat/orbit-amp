@@ -98,6 +98,8 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     wave.onHpfChanged  = [this] (bool, float hz) { hpfHzAtt->setValueAsCompleteGesture (hz); };
     wave.onLpfChanged  = [this] (bool, float hz) { lpfHzAtt->setValueAsCompleteGesture (hz); };
     wave.onTrimChanged = [this] (float f)        { trimAtt->setValueAsCompleteGesture (f); };
+    // The picture's right-click menu doubles the TRIM switch — index 2 in the switch row below.
+    wave.onTrimToggled = [this] (bool on)        { switches[2].att->setValueAsCompleteGesture (on ? 1.0f : 0.0f); };
 
     // The vertical half of a cut drag: the consoles' slope ladder, one notch per step.
     const auto stepSlope = [this] (const char* id, juce::ParameterAttachment& att, int steps)
