@@ -50,7 +50,7 @@ void Footer::timerCallback()
 {
     const double rate = amp.currentSampleRate();
     const auto text = rate > 0.0 ? juce::String (rate / 1000.0, rate < 100000.0 ? 1 : 0) + " KHZ"
-                                 : juce::String ("— KHZ");
+                                 : juce::String ("- KHZ");
 
     loadPercent = amp.dspLoadPercent();
     const auto load = juce::String (juce::roundToInt (loadPercent)) + "%";
@@ -130,7 +130,9 @@ void Footer::showLoadBreakdown()
         juce::String report() const
         {
             static const char* const names[AmpProcessor::numStages] = {
-                "TOTAL", "TUNER", "GATE", "BOOST", "B·EQ", "PREAMP", "P·EQ", "REVERB", "POWER",
+                // ASCII on purpose: these run through formatted ("%-8s"), where a multi-byte
+                // middle dot breaks both the encoding and the column width.
+                "TOTAL", "TUNER", "GATE", "BOOST", "B-EQ", "PREAMP", "P-EQ", "REVERB", "POWER",
                 "CAB", "LIMIT", "OUT",
             };
 

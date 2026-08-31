@@ -323,7 +323,7 @@ void CapturedBlockPanel::deviceChanged()
     }
 
     if (const auto circuit = juce::String (block.circuit()).trim(); circuit.isNotEmpty())
-        paper.add (circuit.toUpperCase().replace (",", " · "));
+        paper.add (circuit.toUpperCase().replace (",", juce::String::fromUTF8 (" \xc2\xb7 ")));
 
     if (const int n = block.gainPositions().size(); n > 0)
         paper.add (juce::String (n) + (n == 1 ? " CAPTURE" : " CAPTURES") + " ON THE DIAL");
@@ -508,7 +508,7 @@ void CapturedBlockPanel::buildSelectors()
         sel.steps->setHorizontal (true);
         sel.steps->setNamesShown (false);
         sel.steps->setItems (labels, 0);
-        sel.steps->setTooltip (labels.joinIntoString ("   ·   "));
+        sel.steps->setTooltip (labels.joinIntoString (juce::String::fromUTF8 ("   \xc2\xb7   ")));
         addAndMakeVisible (*sel.steps);
 
         sel.attachment = std::make_unique<juce::ParameterAttachment> (

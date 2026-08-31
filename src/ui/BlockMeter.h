@@ -50,7 +50,7 @@ public:
             // Standing up there is no room for the reading beside the bar, so it rides the hint —
             // with the one piece of advice the green is there to give.
             setTooltip (name + "  " + meterrail::trimText (trimDb())
-                        + (zone ? "   —   keep the level in the green" : juce::String()));
+                        + (zone ? "   -   keep the level in the green" : juce::String()));
             repaint();
         });
         trim->sendInitialUpdate();
