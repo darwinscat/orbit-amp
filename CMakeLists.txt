@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # ----------------------------------------------------------------------------
 # orbit-amp — the device / voicing PLAYER plugin (C++/JUCE). Felitronics line, by Darwin's Cat.
 #
-# The chain:  eq1 -> boost -> eq2 -> preamp (voicing) -> reverb -> power amp -> cabinet.
+# The chain:  boost -> EQ -> preamp (voicing) -> EQ -> reverb -> power amp -> cabinet.
 #
 # One CMake config builds VST3 + AU + Standalone. JUCE 8 and the felitronics libraries are
 # fetched by CMake (FetchContent) — NOT vendored, NOT system-installed. Each dependency is
