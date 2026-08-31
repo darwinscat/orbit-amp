@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // Headless acceptance gate for core::ReverbStage — that Mix actually crossfades, that a tail exists
 // and decays, and that disabling the block cannot spill the previous tail back in. Returns non-zero
 // on any failure.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // Headless acceptance gate for core::PitchTracker — the tuner's ear, checked against signals with
 // a KNOWN pitch. Sines because their answer is exact; a sawtooth because a real string is not a
 // sine and a strong harmonic is how tuners read octaves wrong; a Karplus-Strong pluck because it

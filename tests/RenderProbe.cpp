@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // The listening probe: the demo loop through Muff alone, IR-X alone, and both — three wavs on
 // the desktop. If "wrong together" survives OFFLINE, the bug lives in the blocks; if these
 // render clean, it lives in the plugin's wiring. Ears decide.

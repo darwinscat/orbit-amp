@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // The level probe: how HOT does each captured block leave the signal? A -20 dBFS guitar-range
 // sine goes in; the RMS after boost and after preamp comes out. If boost hands the preamp a
 // signal tens of dB above pickup level, "sounds wrong together" stops being a mystery — the

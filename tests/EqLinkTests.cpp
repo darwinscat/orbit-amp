@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // Headless acceptance gate for core::EqLink — the console-grammar link: shelves with free
 // corners, three bells, cut filters with real slopes, an output level. Plus the invariant that
 // matters most: the curve the UI draws is the filter chain that actually runs.

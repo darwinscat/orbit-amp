@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // The captured-block gate: a pack on disk, through the block the plugin plays it with, checked without
 // a sound card. Every installed pack sounds; the dial changes the sound and never steps; a position the
 // pack linked to its neighbour is fed softer, as its own `input_db` says; a tone knob of either form —

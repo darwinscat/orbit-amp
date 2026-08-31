@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
 // Probe: what does the shipping block actually SEE in each installed pack? Prints per pack what the
 // player was handed — the dial and its captured positions, the other selectors, every tone knob and
 // the form it came in, whether the models' offsets came with the pack — straight from the same scan
