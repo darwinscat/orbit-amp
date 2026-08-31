@@ -42,6 +42,11 @@ namespace
                               prefs::getBool (b.pref, b.defaultShown) });
         return rows;
     }
+
+    // The strip's row order: the tuner listening at the door, the gate right after it, the
+    // sound blocks, the limiter before the way out.
+    constexpr int rowTuner = 0, rowGate = 1, rowFirstBlock = 2;
+    inline int rowLimit() { return rowFirstBlock + (int) std::size (layoutBlocks); }
 }
 
 AmpEditor::AmpEditor (AmpProcessor& p)
@@ -52,8 +57,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
       outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim),
                 *p.apvts.getParameter (params::limiterCeiling),
                 *p.apvts.getParameter (params::limiterOn)),
-      gateBadge ("Gate", *p.apvts.getParameter (params::gateOn), p.gateMeterDb, 40.0f),
-      limitBadge ("Limit", *p.apvts.getParameter (params::limiterOn), p.limiterGrDb, 6.0f),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p)
 {
     setWantsKeyboardFocus (true);
@@ -67,8 +70,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     tooltips.setColour (juce::TooltipWindow::outlineColourId, theme::hair2);
     addAndMakeVisible (gateStrip);
     addAndMakeVisible (outStrip);
-    addAndMakeVisible (gateBadge);
-    addAndMakeVisible (limitBadge);
     addAndMakeVisible (tunerStrip);
     addAndMakeVisible (footer);
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
@@ -94,13 +95,72 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     chrome.onGear = [this] (juce::Point<int> pos) { showGearMenu (pos); };
 
-    // The layout strip: always there, the ONE place blocks are stood down and brought back.
-    layoutStrip = std::make_unique<LayoutStrip> (layoutRows());
+    // The layout strip: always there, the ONE place anything is stood down and brought back —
+    // the whole path as arrows, the service links wearing their own lights.
+    tunerShown = prefs::getBool (prefs::showTuner, true);
+
+    {
+        std::vector<LayoutStrip::Row> rows;
+        rows.push_back ({ "TUNER", theme::violet, tunerShown });
+        rows.push_back ({ "GATE", theme::violet, true,
+                          [this]
+                          {
+                              // Silence is not work: with nothing at the key (the -90 floor)
+                              // the gate has nothing to press, and a light that burns all
+                              // night means nothing by morning.
+                              if (amp.gateKeyDb.load() <= -89.5f)
+                                  return 0.0f;
+
+                              return juce::jlimit (0.0f, 1.0f, -amp.gateMeterDb.load() / 40.0f);
+                          },
+                          [this] { return amp.gateWorked.load(); },
+                          true, true });
+        for (auto& r : layoutRows())
+            rows.push_back (std::move (r));
+        rows.push_back ({ "LIMIT", theme::violet, true,
+                          [this] { return juce::jlimit (0.0f, 1.0f, -amp.limiterGrDb.load() / 6.0f); },
+                          [this] { return amp.limiterWorked.load(); },
+                          true, true });
+
+        layoutStrip = std::make_unique<LayoutStrip> (std::move (rows));
+    }
+
     layoutStrip->onToggle = [this] (int i, bool on)
     {
-        applyLayoutToggle (i, on);
+        if (i == rowTuner)
+            applyTunerToggle (on);
+        else
+            applyLayoutToggle (i - rowFirstBlock, on);
+
         layoutStrip->setRowOn (i, on);
     };
+
+    // The guards' arrows ARE their consoles: any click opens the menu (OFF is its first item),
+    // and the look clears the latched dot, the way a look at the badge used to.
+    layoutStrip->onRowMenu = [this] (int i, juce::Point<int> pos)
+    {
+        if (i == rowGate)
+        {
+            amp.gateWorked.store (false);
+            gateStrip.showPresetMenu (pos);
+        }
+        else if (i == rowLimit())
+        {
+            amp.limiterWorked.store (false);
+            showLimiterMenu (pos);
+        }
+    };
+
+    // The guards' arrows dim with their own switches — a guard turned OFF in its menu reads
+    // dark in the strip, the way a hidden block does.
+    gateRowAtt = std::make_unique<juce::ParameterAttachment> (
+        *amp.apvts.getParameter (params::gateOn),
+        [this] (float v) { layoutStrip->setRowOn (rowGate, v > 0.5f); });
+    limitRowAtt = std::make_unique<juce::ParameterAttachment> (
+        *amp.apvts.getParameter (params::limiterOn),
+        [this] (float v) { layoutStrip->setRowOn (rowLimit(), v > 0.5f); });
+    gateRowAtt->sendInitialUpdate();
+    limitRowAtt->sendInitialUpdate();
 
     // The end caps: the side columns, live with the real levels the rails read.
     inColShown  = prefs::getBool (prefs::showInCol, true);
@@ -123,8 +183,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // The badges' clicks mean MENU — the whole device in one pick. There is nowhere to "open" any
     // more and nothing to open TO: every block wears its own face on the panel, and the gate's own
     // controls, position included, live in this menu.
-    gateBadge.onOpen = [this] (juce::Point<int> pos) { gateStrip.showPresetMenu (pos); };
-    gateBadge.latch  = &amp.gateWorked;
 
     // The measurement, projected: the overlay reads the strip's own trace.
     learnOverlay.trace      = &gateStrip.learnTraceRef();
@@ -182,8 +240,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     gateStrip.onTrimDrag = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
     outStrip.onTrimDrag  = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
     outStrip.onCeilDrag  = [this] (bool a) { ceilRuler.setVisible (a); if (a) ceilRuler.toFront (false); };
-    limitBadge.onOpen = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
-    limitBadge.latch  = &amp.limiterWorked;
     outStrip.onMenu   = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
@@ -303,6 +359,16 @@ void AmpEditor::applyColumnToggle (int side, bool on)
         }
 
     layoutStrip->setCapOn (side, on);
+    resized();
+    repaint();
+}
+
+void AmpEditor::applyTunerToggle (bool on)
+{
+    prefs::setBool (prefs::showTuner, on);
+    tunerShown = on;
+
+    applyStripChoice();
     resized();
     repaint();
 }
@@ -454,15 +520,12 @@ void AmpEditor::resized()
     const int badgeInset = edgeInset;
     const int tunerY = faceplateY + faceplateH + chromeGap + tunerDrop;
 
-    // The badges STAY when their columns leave: the gate and the limiter keep working, and a
-    // guard that works deserves its light and its menu.
-    gateBadge.setBounds (margin + badgeInset, tunerY, TallyBadge::designWidth,
-                         TunerStrip::designHeight);
-    gateBadge.setTransform (zoom);
-
-    limitBadge.setBounds (margin + FaceplateView::designWidth - badgeInset - TallyBadge::designWidth,
-                          tunerY, TallyBadge::designWidth, TunerStrip::designHeight);
-    limitBadge.setTransform (zoom);
+    // The row is the tuner, whole: the guards' lights and menus live in the strip's arrows now.
+    tunerStrip.setVisible (tunerShown);
+    tunerStrip.setBounds (margin + badgeInset, tunerY,
+                          FaceplateView::designWidth - 2 * badgeInset,
+                          TunerStrip::designHeight);
+    tunerStrip.setTransform (zoom);
 
     // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
     inRuler.setBounds (margin + colL - chromeGap + 2, gutterY, 56, gutterH);
@@ -478,13 +541,10 @@ void AmpEditor::resized()
                             FaceplateView::designWidth * 2 / 3, 330);
     learnOverlay.setTransform (zoom);
 
-    tunerStrip.setBounds (margin + badgeInset + TallyBadge::designWidth + chromeGap, tunerY,
-                          FaceplateView::designWidth
-                              - 2 * (badgeInset + TallyBadge::designWidth + chromeGap),
-                          TunerStrip::designHeight);
-    tunerStrip.setTransform (zoom);
-
-    const int footerY = tunerY - tunerDrop + TunerStrip::designHeight + chromeGap;
+    // The row is as gone as the tuner: hidden, the footer moves up whole.
+    const int footerY = tunerShown
+                            ? tunerY - tunerDrop + TunerStrip::designHeight + chromeGap
+                            : faceplateY + faceplateH + chromeGap;
     footer.setBounds (margin, footerY, FaceplateView::designWidth, Footer::designHeight);
     footer.setTransform (zoom);
 

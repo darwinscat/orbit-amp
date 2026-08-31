@@ -39,6 +39,18 @@ public:
         juce::String name;
         juce::Colour accent;
         bool on = true;
+
+        /** The service links' lights, optional: how hard the guard presses (floods the arrow,
+            solid) and the latched "worked while you were away" mark. A sound block has none. */
+        std::function<float()> depth;
+        std::function<bool()>  dot;
+
+        /** Whether a right click means a menu — the editor answers through onRowMenu. */
+        bool hasMenu = false;
+
+        /** The guards' arrows are their CONSOLES: any click opens the menu (OFF lives inside),
+            nothing toggles — there is no badge left to hide. */
+        bool clickIsMenu = false;
     };
 
     /** The strip's height, in design units — the window budgets for it like for any strip. */
@@ -46,11 +58,17 @@ public:
 
     explicit LayoutStrip (std::vector<Row> blockRows) : rows (std::move (blockRows))
     {
+        shownDepth.assign (rows.size(), 0.0f);
+        shownDot.assign (rows.size(), false);
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
-        startTimerHz (20);   // the caps' breath; they only repaint when a level actually moved
+        startTimerHz (20);   // the lights' breath; they only repaint what actually moved
     }
 
     std::function<void (int index, bool on)> onToggle;
+
+    /** A right click on a row that carries a menu — the guards' way to their settings when
+        their badges are hidden. */
+    std::function<void (int index, juce::Point<int> screenPos)> onRowMenu;
 
     /** The end caps: side 0 is the IN column, side 1 the OUT. */
     std::function<void (int side, bool on)> onCapToggle;
@@ -61,6 +79,7 @@ public:
         capOn[(size_t) side] = on;
         repaint();
     }
+
 
     /** Redress one row from outside — the editor answers a toggle through here, so the strip
         only ever shows what was actually applied. */
@@ -119,17 +138,30 @@ public:
 
             const float a = rows[i].on ? 1.0f : theme::offAlpha;
 
-            g.setColour (juce::Colour (0xff1b1b22));
+            // A guard's arrow floods with its press — SOLID, interpolated toward the violet
+            // (orange is a line here, never a wash) — and the flood stays live even when the
+            // row below lost its badge: the light moved here, it did not go out.
+            const float d = juce::jlimit (0.0f, 1.0f, shownDepth[i]);
+            g.setColour (juce::Colour (0xff1b1b22).interpolatedWith (theme::violet, d));
             g.fillPath (arrow);
+
             g.setColour (rows[i].accent.withAlpha (0.8f * a));
             g.strokePath (arrow, juce::PathStrokeType (1.5f, juce::PathStrokeType::mitered,
                                                        juce::PathStrokeType::rounded));
 
-            g.setColour ((rows[i].on ? theme::tx : theme::txDim).withAlpha (a));
+            g.setColour ((rows[i].on ? theme::tx : theme::txDim)
+                             .interpolatedWith (juce::Colours::white, d).withAlpha (a));
             theme::drawTracked (g, rows[i].name,
                                 { x0 + (float) tipW, y0, x1 - x0 - 2.0f * (float) tipW,
                                   tile.getHeight() },
                                 theme::displayFont (10.0f), 0.12f, juce::Justification::centred);
+
+            // The latched mark: it worked while you were away.
+            if (shownDot[i])
+            {
+                g.setColour (theme::orange);
+                g.fillEllipse (x1 - (float) tipW - 7.0f, y0 + 2.0f, 4.5f, 4.5f);
+            }
         }
     }
 
@@ -146,7 +178,12 @@ public:
         for (size_t i = 0; i < rows.size(); ++i)
             if (tileArea ((int) i).contains (e.getPosition()))
             {
-                if (onToggle)
+                if (rows[i].clickIsMenu || e.mods.isPopupMenu())
+                {
+                    if (rows[i].hasMenu && onRowMenu)
+                        onRowMenu ((int) i, e.getScreenPosition());
+                }
+                else if (onToggle)
                     onToggle ((int) i, ! rows[i].on);
                 return;
             }
@@ -173,6 +210,26 @@ private:
             {
                 shownLevel[(size_t) side] = lvl;
                 repaint (capArea (side));
+            }
+        }
+
+        for (size_t i = 0; i < rows.size(); ++i)
+        {
+            if (rows[i].depth == nullptr && rows[i].dot == nullptr)
+                continue;
+
+            const float d   = rows[i].depth != nullptr ? rows[i].depth() : 0.0f;
+            const bool  dot = rows[i].dot   != nullptr && rows[i].dot();
+
+            if (std::abs (d - shownDepth[i]) > 0.02f || dot != shownDot[i])
+            {
+                shownDepth[i] = d;
+                shownDot[i]   = (char) dot;
+
+                // The arrow's NOSE reaches one tip past its cell, into the neighbour's notch —
+                // repaint it too, or a flood lights everything but the nose and a fading one
+                // leaves the nose burning.
+                repaint (tileArea ((int) i).withTrimmedRight (-tipW));
             }
         }
     }
@@ -202,6 +259,8 @@ private:
     std::vector<Row> rows;
     bool  capOn[2]      = { true, true };
     float shownLevel[2] = { 0.0f, 0.0f };
+    std::vector<float> shownDepth;
+    std::vector<char>  shownDot;   // char, not bool: vector<bool> has no honest references
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LayoutStrip)
 };

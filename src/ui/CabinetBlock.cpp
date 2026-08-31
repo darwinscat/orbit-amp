@@ -268,6 +268,13 @@ void CabinetBlock::showTrimMenu()
     m.addSeparator();
     m.addItem (6, "MANUAL", true, trimMode == TrimMode::manual);
 
+    // The block's other switches live here too — the one door that still works when a narrow
+    // tile has no room for their faces.
+    m.addSeparator();
+    m.addItem (11, "HPF", true, switches[0].sw.isOn());
+    m.addItem (12, "LPF", true, switches[1].sw.isOn());
+    m.addItem (10, juce::String::fromUTF8 ("\xc3\x98 PHASE"), true, switches[2].sw.isOn());
+
     m.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
                      [safe = juce::Component::SafePointer<CabinetBlock> (this)] (int r)
                      {
@@ -278,6 +285,14 @@ void CabinetBlock::showTrimMenu()
 
 void CabinetBlock::applyTrimPick (int itemId)
 {
+    // The switch section: flips through the switch, so the attachment writes the parameter and
+    // the echo redraws face and picture alike.
+    if (itemId >= 10)
+    {
+        switches[itemId == 10 ? 2 : itemId == 11 ? 0 : 1].sw.toggle();
+        return;
+    }
+
     // The mode first, so the parameter echoes read the chosen story rather than re-deriving it.
     // And pushToWave LAST, unconditionally: a pick that writes a value the parameter already has
     // echoes nothing, and the combo and the handle would be left telling yesterday's story.
@@ -339,6 +354,10 @@ void CabinetBlock::TrimCombo::paint (juce::Graphics& g)
 
 void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 {
+    // A narrow tile gives its border to the IR's name alone — the orange frame already says
+    // what kind of block this is, and "CAB IR" was spending the name's room.
+    showTitle = area.getWidth() >= 300;
+
     // The IR's name on the border, sized to itself and centred in the run.
     {
         const auto slot = borderSlotArea();
@@ -348,7 +367,20 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
 
     // The bottom row: HPF holds the left wall and LPF the right — each cut on its own side of
     // the spectrum, the way they stand on the curve — with the trim combo and the phase centred
-    // between them.
+    // between them. A NARROW tile keeps only what a glance needs: the two cut switches without
+    // their words and the trim combo; the phase and the words retreat into the menu, which the
+    // combo (and the picture's right click) still opens at any width.
+    const bool narrow = area.getWidth() < 300;
+
+    switches[0].label.setVisible (! narrow);
+    switches[1].label.setVisible (! narrow);
+    switches[2].sw.setVisible (! narrow);
+    switches[2].label.setVisible (! narrow);
+
+    // With the words gone, the switches whisper them under the mouse instead.
+    switches[0].sw.setTooltip (narrow ? "HPF" : juce::String());
+    switches[1].sw.setTooltip (narrow ? "LPF" : juce::String());
+
     auto row = area.removeFromBottom (switchRow);
     area.removeFromBottom (gap);
 
@@ -359,14 +391,24 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
         s.label.setBounds (cell);
     };
 
-    place (switches[0], row.removeFromLeft (70));    // HPF
-    place (switches[1], row.removeFromRight (70));   // LPF
+    if (narrow)
+    {
+        switches[0].sw.setBounds (row.removeFromLeft (30).withSizeKeepingCentre (30, 16));
+        switches[1].sw.setBounds (row.removeFromRight (30).withSizeKeepingCentre (30, 16));
+        trimCombo.setBounds (row.withSizeKeepingCentre (juce::jmin (90, row.getWidth() - 12),
+                                                        row.getHeight()));
+    }
+    else
+    {
+        place (switches[0], row.removeFromLeft (70));    // HPF
+        place (switches[1], row.removeFromRight (70));   // LPF
 
-    constexpr int comboW = 90, phaseW = 58, midGap = 14;   // the switch takes 36 — the word needs its own room
-    auto mid = row.withSizeKeepingCentre (comboW + midGap + phaseW, row.getHeight());
-    trimCombo.setBounds (mid.removeFromLeft (comboW));
-    mid.removeFromLeft (midGap);
-    place (switches[2], mid);
+        constexpr int comboW = 90, phaseW = 58, midGap = 14;   // the switch takes 36 — the word needs its own room
+        auto mid = row.withSizeKeepingCentre (comboW + midGap + phaseW, row.getHeight());
+        trimCombo.setBounds (mid.removeFromLeft (comboW));
+        mid.removeFromLeft (midGap);
+        place (switches[2], mid);
+    }
 
     wave.setBounds (area);
 }

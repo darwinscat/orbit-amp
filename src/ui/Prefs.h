@@ -52,6 +52,10 @@ inline const juce::Identifier showCab    { "show_cab" };
 inline const juce::Identifier showInCol  { "show_in_column" };
 inline const juce::Identifier showOutCol { "show_out_column" };
 
+/** The tuner's needle — the whole row under the panel now: hidden, the row collapses and the
+    window follows. The guards' lights and menus live in the strip's arrows. */
+inline const juce::Identifier showTuner { "show_tuner" };
+
 /** The analysers — the consoles' ground, the cabinet's pair, the TONE tile's columns. One switch
     for all of them, read where a spectrum is about to be drawn: cached after the first look,
     because a paint routine must not open a file. */

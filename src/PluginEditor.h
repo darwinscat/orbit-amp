@@ -10,7 +10,6 @@
 #include "ui/Footer.h"
 #include "ui/GateStrip.h"
 #include "ui/OutStrip.h"
-#include "ui/TallyBadge.h"
 #include "ui/LearnOverlay.h"
 #include "ui/DragRuler.h"
 #include "ui/TunerStrip.h"
@@ -51,6 +50,9 @@ public:
         unity — a hand nobody can see must not keep pressing. */
     void applyColumnToggle (int side, bool on);
 
+    /** The tuner's needle clicked in or out — it is the whole row now, and the window follows. */
+    void applyTunerToggle (bool on);
+
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
     static constexpr int headerGap = 0;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
@@ -76,7 +78,9 @@ private:
     bool showGlyphs = false;
     int  baseHeight() const noexcept
     {
+        // The tuner IS the row now: hidden, it collapses whole, gap included.
         return fixedHeight + LayoutStrip::designHeight + faceplate.currentHeight()
+                           - (tunerShown ? 0 : TunerStrip::designHeight + chromeGap)
                            + (showDemo ? DemoStrip::designHeight : 0)
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }
@@ -88,6 +92,13 @@ private:
     /** Whether the side columns stand on the panel — the strip's end caps. */
     bool inColShown  = true;
     bool outColShown = true;
+
+    /** Whether the tuner's needle stands under the panel — the strip's TUNER arrow. */
+    bool tunerShown = true;
+
+    /** The guards' arrows follow their ON parameters — a switched-off guard dims in the strip
+        the way a hidden block does. */
+    std::unique_ptr<juce::ParameterAttachment> gateRowAtt, limitRowAtt;
 
     /** After a strip is switched: the aspect the corner drag keeps, the limits, and the window
         itself, at the scale it already has. */
@@ -109,8 +120,6 @@ private:
     std::unique_ptr<LayoutStrip> layoutStrip;
     GateStrip     gateStrip;        // the IN sliver with the gate's story, left of the faceplate
     OutStrip      outStrip;         // the OUT sliver with the master's hand, right of it
-    TallyBadge    gateBadge;        // the gate's door and tally light, left of the tuner
-    TallyBadge    limitBadge;       // the limiter's tally, right of it — the other guard
     TunerStrip    tunerStrip;       // the always-on needle, between the guards
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player
