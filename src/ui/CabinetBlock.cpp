@@ -342,29 +342,27 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = ir.getBounds();
     }
 
-    // The bottom row, four equal cells: HPF and LPF switches, the trim combo in the third — the
-    // trim's whole story where its toggle used to sit — and the phase switch last.
+    // The bottom row: HPF holds the left wall and LPF the right — each cut on its own side of
+    // the spectrum, the way they stand on the curve — with the trim combo and the phase centred
+    // between them.
     auto row = area.removeFromBottom (switchRow);
     area.removeFromBottom (gap);
 
-    const int cellW = row.getWidth() / 4;
-
-    for (size_t i = 0; i < 2; ++i)
+    const auto place = [] (Switch& s, juce::Rectangle<int> cell)
     {
-        auto cell = row.removeFromLeft (cellW);
-        switches[i].sw.setBounds (cell.removeFromLeft (30).withSizeKeepingCentre (30, 16));
+        s.sw.setBounds (cell.removeFromLeft (30).withSizeKeepingCentre (30, 16));
         cell.removeFromLeft (6);
-        switches[i].label.setBounds (cell);
-    }
+        s.label.setBounds (cell);
+    };
 
-    trimCombo.setBounds (row.removeFromLeft (cellW));
+    place (switches[0], row.removeFromLeft (70));    // HPF
+    place (switches[1], row.removeFromRight (70));   // LPF
 
-    {
-        auto cell = row.removeFromLeft (cellW);
-        switches[2].sw.setBounds (cell.removeFromLeft (30).withSizeKeepingCentre (30, 16));
-        cell.removeFromLeft (6);
-        switches[2].label.setBounds (cell);
-    }
+    constexpr int comboW = 90, phaseW = 44, midGap = 14;
+    auto mid = row.withSizeKeepingCentre (comboW + midGap + phaseW, row.getHeight());
+    trimCombo.setBounds (mid.removeFromLeft (comboW));
+    mid.removeFromLeft (midGap);
+    place (switches[2], mid);
 
     wave.setBounds (area);
 }
