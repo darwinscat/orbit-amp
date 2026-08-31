@@ -33,15 +33,17 @@ inline void setBool (const juce::Identifier& key, bool value)
 inline const juce::Identifier showDemo   { "show_demo_player" };
 inline const juce::Identifier showGlyphs { "show_device_glyphs" };
 
-/** The power amp block. Off, it is not dimmed — it is GONE: the reverb and the cabinet split the
-    row between them, and the block's power parameter is put out with it, because a hidden block
-    must not colour the sound. Off out of the box: no poweramp pack ships yet. */
-inline const juce::Identifier showPower { "show_power_amp" };
-
-/** The delay block, the same law: hidden is GONE — the row re-splits without it and its power
-    parameter is put out, because a hidden block must not colour the sound. Off out of the box:
-    an echo is a choice, not a starting point. */
-inline const juce::Identifier showDelay { "show_delay" };
+/** Which blocks stand on the panel — the LAYOUT popup's six switches. A hidden block is GONE,
+    not dimmed: its row re-splits evenly among whoever remains and its power parameter is put out
+    with it, because a hidden block must not colour the sound. The core four ship shown; the
+    power amp (no pack ships yet) and the delay (an echo is a choice, not a starting point)
+    ship hidden. */
+inline const juce::Identifier showBoost  { "show_boost" };
+inline const juce::Identifier showPreamp { "show_preamp" };
+inline const juce::Identifier showDelay  { "show_delay" };
+inline const juce::Identifier showReverb { "show_reverb" };
+inline const juce::Identifier showPower  { "show_power_amp" };
+inline const juce::Identifier showCab    { "show_cab" };
 
 /** The analysers — the consoles' ground, the cabinet's pair, the TONE tile's columns. One switch
     for all of them, read where a spectrum is about to be drawn: cached after the first look,

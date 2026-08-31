@@ -40,6 +40,10 @@ public:
         other widget here. */
     std::function<void (juce::Point<int>)> onGear;
 
+    /** LAYOUT was pressed — the popup with the panel's six block switches. The header hands over
+        the button's screen bounds so the popup can stand beside it. */
+    std::function<void (juce::Rectangle<int>)> onLayout;
+
     void resized() override;
 
     // OrbitCab's header proportions: a 50-tall strip whose small controls live in a 44-tall band
@@ -66,6 +70,38 @@ private:
     felitronics::appkit::IconButton  saveAs { felitronics::appkit::IconButton::Kind::saveAs };
     felitronics::appkit::IconButton  trash  { felitronics::appkit::IconButton::Kind::trash };
     felitronics::appkit::IconButton  gear   { felitronics::appkit::IconButton::Kind::settings };
+
+    /** The LAYOUT button's face: a miniature of the panel itself — two rows, the pair above,
+        the split tail below. Drawn here rather than as an appkit Kind because it is THIS
+        product's icon (build it here first; it moves to the kit if a sibling wants it). */
+    struct LayoutIcon final : public juce::Button
+    {
+        LayoutIcon() : juce::Button ("layout")
+        {
+            setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        }
+
+        juce::Colour colour;
+
+        void paintButton (juce::Graphics& g, bool over, bool down) override
+        {
+            const auto r = getLocalBounds().toFloat().withSizeKeepingCentre (17.0f, 15.0f);
+            g.setColour (colour.withAlpha (down ? 1.0f : over ? 0.95f : 0.7f));
+
+            g.drawRoundedRectangle (r, 2.5f, 1.4f);
+
+            // The rows split where the panel's do: the tall pair over the shorter tail.
+            const float midY = r.getY() + r.getHeight() * 0.58f;
+            g.drawLine (r.getX(), midY, r.getRight(), midY, 1.2f);
+            g.drawLine (r.getCentreX(), r.getY(), r.getCentreX(), midY, 1.2f);
+            g.drawLine (r.getX() + r.getWidth() / 3.0f, midY,
+                        r.getX() + r.getWidth() / 3.0f, r.getBottom(), 1.2f);
+            g.drawLine (r.getX() + r.getWidth() * 2.0f / 3.0f, midY,
+                        r.getX() + r.getWidth() * 2.0f / 3.0f, r.getBottom(), 1.2f);
+        }
+    };
+
+    LayoutIcon layoutBtn;
 
     std::vector<std::unique_ptr<felitronics::appkit::chrome::RegisterButton>> registers;
     felitronics::appkit::chrome::PresetCell preset;

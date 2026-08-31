@@ -3,10 +3,37 @@
 
 #include "PluginEditor.h"
 
+#include "ui/LayoutPanel.h"
 #include "ui/Prefs.h"
 
 namespace orbitamp
 {
+
+namespace
+{
+    /** The LAYOUT popup's subjects, in chain order: the pref that remembers the choice, the name
+        on the row, the faceplate's block, which side of the colour grammar its switch wears, the
+        power to put out when it hides, and whether it ships shown. */
+    struct LayoutBlock
+    {
+        const juce::Identifier& pref;
+        const char* name;
+        FaceplateView::Block block;
+        bool captured;
+        const char* onParam;
+        bool defaultShown;
+        bool startsGroup;
+    };
+
+    const LayoutBlock layoutBlocks[] = {
+        { prefs::showBoost,  "BOOST",     FaceplateView::Block::boost,   true,  params::boostOn,  true,  false },
+        { prefs::showPreamp, "PREAMP",    FaceplateView::Block::preamp,  true,  params::preampOn, true,  false },
+        { prefs::showDelay,  "DELAY",     FaceplateView::Block::delay,   false, params::delayOn,  false, true  },
+        { prefs::showReverb, "REVERB",    FaceplateView::Block::reverb,  false, params::reverbOn, true,  false },
+        { prefs::showPower,  "POWER AMP", FaceplateView::Block::power,   true,  params::powerOn,  false, false },
+        { prefs::showCab,    "CAB IR",    FaceplateView::Block::cabinet, true,  params::cabOn,    true,  false },
+    };
+}
 
 AmpEditor::AmpEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p),
@@ -39,13 +66,16 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // The demo needs its loops on disk — a machine without them has no player to show.
     showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
     showGlyphs = prefs::getBool (prefs::showGlyphs, false);
-    faceplate.setDelayShown (prefs::getBool (prefs::showDelay, false));
-    faceplate.setPowerShown (prefs::getBool (prefs::showPower, false));
+
+    for (const auto& b : layoutBlocks)
+        faceplate.setShown (b.block, prefs::getBool (b.pref, b.defaultShown));
+
     addChildComponent (demoStrip);
     addChildComponent (glyphs);
     addChildComponent (setup);       // hidden until the toolbar's gear opens it
 
-    chrome.onGear = [this] (juce::Point<int> pos) { showGearMenu (pos); };
+    chrome.onGear   = [this] (juce::Point<int> pos)       { showGearMenu (pos); };
+    chrome.onLayout = [this] (juce::Rectangle<int> area)  { showLayoutPanel (area); };
 
     // The badges' clicks mean MENU — the whole device in one pick. There is nowhere to "open" any
     // more and nothing to open TO: every block wears its own face on the panel, and the gate's own
@@ -152,8 +182,7 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
     juce::PopupMenu m;
     m.addItem (1, "SETUP...");
     m.addSeparator();
-    m.addItem (6, "SHOW DELAY",         true, prefs::getBool (prefs::showDelay, false));
-    m.addItem (4, "SHOW POWER AMP",     true, prefs::getBool (prefs::showPower, false));
+    // The blocks' own switches moved to the LAYOUT popup beside the gear.
     m.addItem (5, "SHOW SPECTRA",       true, prefs::spectraShown());
     if (params::demoLoopsPresent())     // no loops on disk — no player, and no offer of one
         m.addItem (2, "SHOW DEMO PLAYER", true, showDemo);
@@ -179,34 +208,51 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                              return;
                          }
 
-                         if (r == 4 || r == 6)
-                         {
-                             const auto& key = r == 4 ? prefs::showPower : prefs::showDelay;
-                             const bool show = ! prefs::getBool (key, false);
-                             prefs::setBool (key, show);
-
-                             if (r == 4)
-                                 safe->faceplate.setPowerShown (show);
-                             else
-                                 safe->faceplate.setDelayShown (show);
-
-                             // A hidden block must not colour the sound: its power goes out with it.
-                             if (! show)
-                                 if (auto* p = safe->amp.apvts.getParameter (
-                                         r == 4 ? params::powerOn : params::delayOn))
-                                 {
-                                     p->beginChangeGesture();
-                                     p->setValueNotifyingHost (0.0f);
-                                     p->endChangeGesture();
-                                 }
-                             return;
-                         }
-
                          bool& flag = r == 2 ? safe->showDemo : safe->showGlyphs;
                          flag = ! flag;
                          prefs::setBool (r == 2 ? prefs::showDemo : prefs::showGlyphs, flag);
                          safe->applyStripChoice();
                      });
+}
+
+void AmpEditor::showLayoutPanel (juce::Rectangle<int> anchor)
+{
+    std::vector<LayoutPanel::Row> rows;
+    for (const auto& b : layoutBlocks)
+        rows.push_back ({ b.name, b.captured ? theme::orange : theme::violet,
+                          prefs::getBool (b.pref, b.defaultShown), b.startsGroup });
+
+    auto panel = std::make_unique<LayoutPanel> (std::move (rows));
+
+    panel->onToggle = [safe = juce::Component::SafePointer<AmpEditor> (this),
+                       panelSafe = juce::Component::SafePointer<LayoutPanel> (panel.get())]
+                      (int i, bool on)
+    {
+        if (safe == nullptr)
+            return;
+
+        const auto& b = layoutBlocks[(size_t) i];
+        prefs::setBool (b.pref, on);
+        safe->faceplate.setShown (b.block, on);
+        safe->applyStripChoice();   // a row that emptied (or refilled) collapses the window with it
+
+        // A hidden block must not colour the sound: its power goes out with it.
+        if (! on)
+            if (auto* p = safe->amp.apvts.getParameter (b.onParam))
+            {
+                p->beginChangeGesture();
+                p->setValueNotifyingHost (0.0f);
+                p->endChangeGesture();
+            }
+
+        if (panelSafe != nullptr)
+            panelSafe->setRowOn (i, on);
+    };
+
+    // A CallOutBox, like the footer's breakdown: the popup stands beside its button and any
+    // click elsewhere dismisses it — a player flips a few switches, watching the panel re-split
+    // live behind it, and clicks away.
+    juce::CallOutBox::launchAsynchronously (std::move (panel), anchor, nullptr);
 }
 
 void AmpEditor::applyStripChoice()
@@ -312,12 +358,14 @@ void AmpEditor::resized()
     // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
     const int faceplateY = margin + Chrome::designHeight + headerGap;
 
+    // The faceplate is only as tall as its LAYOUT stands it — a collapsed row is not here.
+    const int faceplateH = faceplate.currentHeight();
+
     // The gutters stand between the SAME two lines the blocks' frames do, not between the
     // faceplate's own edges — a block is inset inside the lane and its box starts lower still,
     // under the switch that rides the top border.
     const int gutterY = faceplateY + FaceplateView::contentTop;
-    const int gutterH = FaceplateView::designHeight - FaceplateView::contentTop
-                                                    - FaceplateView::contentBottom;
+    const int gutterH = faceplateH - FaceplateView::contentTop - FaceplateView::contentBottom;
 
     gateStrip.setBounds (margin, gutterY, GateStrip::designWidth, gutterH);
     gateStrip.setTransform (zoom);
@@ -329,11 +377,11 @@ void AmpEditor::resized()
     faceplate.setBounds (margin + GateStrip::designWidth + chromeGap, faceplateY,
                          FaceplateView::designWidth - GateStrip::designWidth - OutStrip::designWidth
                              - 2 * chromeGap,
-                         FaceplateView::designHeight);
+                         faceplateH);
     faceplate.setTransform (zoom);
 
     // The always-on needle, full width, above the footer's facts.
-    const int tunerY = faceplateY + FaceplateView::designHeight + chromeGap;
+    const int tunerY = faceplateY + faceplateH + chromeGap;
     gateBadge.setBounds (margin, tunerY, TallyBadge::designWidth, TunerStrip::designHeight);
     gateBadge.setTransform (zoom);
 

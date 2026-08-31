@@ -58,6 +58,15 @@ Chrome::Chrome (AmpProcessor& processor)
             onGear (gear.getScreenBounds().getBottomLeft());
     };
 
+    // LAYOUT beside the gear: both open windows about THIS window, not the preset.
+    layoutBtn.colour = theme::txDim;
+    layoutBtn.onClick = [this]
+    {
+        if (onLayout)
+            onLayout (layoutBtn.getScreenBounds());
+    };
+    addAndMakeVisible (layoutBtn);
+
     // Save writes back to the loaded preset; Save As always asks for a name — the same split as the
     // sibling, so a working preset can be updated without a dialog every time.
     save.onClick   = [this] { savePreset (false); };
@@ -140,7 +149,8 @@ void Chrome::resized()
     auto rightBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
 
     gear.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-    rightBar.removeFromRight (6);   // the gear opens a window, the rest edit the preset — a seam
+    layoutBtn.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
+    rightBar.removeFromRight (6);   // the window-openers stand apart from the preset's editors — a seam
     trash .setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     saveAs.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     save  .setBounds (rightBar.removeFromRight (40).reduced (4, 7));

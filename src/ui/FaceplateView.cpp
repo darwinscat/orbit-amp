@@ -24,63 +24,62 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     // Every block binds its own power.
 }
 
+BlockFrame& FaceplateView::frame (Block b)
+{
+    switch (b)
+    {
+        case Block::boost:   return boost;
+        case Block::preamp:  return preamp;
+        case Block::delay:   return delay;
+        case Block::reverb:  return reverb;
+        case Block::power:   return power;
+        case Block::cabinet: return cabinet;
+    }
+
+    return cabinet;   // unreachable; keeps the compiler calm
+}
+
 void FaceplateView::resized()
 {
     auto lane = getLocalBounds().reduced (0, lanePadY);
 
-    auto row1 = lane.removeFromTop (row1H);
-    lane.removeFromTop (rowGap);
-    auto row2 = lane.removeFromTop (row2H);
+    // An unpopulated row takes no space at all — the component is only as tall as
+    // currentHeight() says, so what remains stacks from the top.
+    auto row1 = rowPopulated (0) ? lane.removeFromTop (row1H) : juce::Rectangle<int>();
+    if (rowPopulated (0) && rowPopulated (1))
+        lane.removeFromTop (rowGap);
+    auto row2 = rowPopulated (1) ? lane.removeFromTop (row2H) : juce::Rectangle<int>();
 
-    // The pair that makes the sound, an even half each.
-    const int half = (row1.getWidth() - colGap) / 2;
-    boost.setBounds (row1.removeFromLeft (half));
-    row1.removeFromLeft (colGap);
-    preamp.setBounds (row1);
-
-    // Row two is cut from the SAME halves, not from its own quarters.
-    //
-    // Dividing each row on its own arithmetic looks equivalent and is not: row one spends one gap
-    // and row two spends two, so a quarter came out at 188 while a half came out at 383, and the
-    // cabinet's left edge missed the preamp's by seven units. Seven is exactly the distance at
-    // which an edge stops being aligned and starts being a mistake nobody can name. The panel has
-    // ONE line down its middle now, and everything either sits on it or spans it.
-    auto left = row2.removeFromLeft (half);
-    row2.removeFromLeft (colGap);
-
-    // The optional blocks stand in the row only when asked for, and the row keeps the chain's
-    // order: delay, reverb, power amp, cabinet. The line down the panel's middle still holds —
-    // the delay shares the LEFT half with the reverb, the power amp cuts its quarter from the
-    // cabinet's half, so with everything on the row is four even quarters.
-    delay.setVisible (delayShown);
-    power.setVisible (powerShown);
-
-    const int quarter = (left.getWidth() - colGap) / 2;
-
-    if (delayShown)
+    // ONE law for both rows: the width splits evenly among the blocks that stand in the row, in
+    // chain order. The share is recomputed as the walk goes, so the rounding remainder never
+    // piles up against the right edge — and the arithmetic keeps the panel's ONE middle line
+    // whenever the counts are even: a half is (W-g)/2, and the first two of four quarters spend
+    // exactly a half plus its gap, so the third quarter starts where the preamp does. An odd
+    // count (thirds) has no middle to keep, which is the price of an odd count.
+    const auto lay = [this] (juce::Rectangle<int> row, std::initializer_list<Block> order)
     {
-        delay.setBounds (left.removeFromLeft (quarter));
-        left.removeFromLeft (colGap);
-        reverb.setBounds (left);
+        int standing = 0;
+        for (auto b : order)
+            if (shownFlags[(size_t) b])
+                ++standing;
 
-        if (powerShown)
+        for (auto b : order)
         {
-            power.setBounds (row2.removeFromLeft (quarter));
-            row2.removeFromLeft (colGap);
-        }
-    }
-    else if (powerShown)
-    {
-        reverb.setBounds (left.removeFromLeft (quarter));
-        left.removeFromLeft (colGap);
-        power.setBounds (left);
-    }
-    else
-    {
-        reverb.setBounds (left);
-    }
+            auto& blk = frame (b);
+            blk.setVisible (shownFlags[(size_t) b]);
 
-    cabinet.setBounds (row2);
+            if (! shownFlags[(size_t) b])
+                continue;
+
+            blk.setBounds (row.removeFromLeft ((row.getWidth() - (standing - 1) * colGap) / standing));
+
+            if (--standing > 0)
+                row.removeFromLeft (colGap);
+        }
+    };
+
+    lay (row1, { Block::boost, Block::preamp });
+    lay (row2, { Block::delay, Block::reverb, Block::power, Block::cabinet });
 }
 
 } // namespace orbitamp

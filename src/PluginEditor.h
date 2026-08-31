@@ -41,6 +41,9 @@ public:
         off unless asked for (prefs::showDemo, prefs::showGlyphs). */
     void showGearMenu (juce::Point<int> screenPos);
 
+    /** The LAYOUT popup beside its toolbar button: the panel's six block switches. */
+    void showLayoutPanel (juce::Rectangle<int> anchor);
+
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
     static constexpr int headerGap = 0;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
@@ -52,19 +55,22 @@ private:
     static constexpr int titleBarAllowance = 60;
 
     static constexpr int baseWidth   = FaceplateView::designWidth + margin * 2;
+
+    /** Everything around the faceplate — the faceplate itself answers for its own height now,
+        because a LAYOUT choice can collapse a whole row. */
     static constexpr int fixedHeight = Chrome::designHeight + headerGap
-                                     + FaceplateView::designHeight
                                      + chromeGap + TunerStrip::designHeight
                                      + chromeGap + Footer::designHeight
                                      + margin * 2;
 
-    /** The window is as tall as what it shows: the two strips under the footer are there only when
-        this player switched them on, and the height follows. */
+    /** The window is as tall as what it shows: the faceplate as its LAYOUT stands it, and the
+        two strips under the footer only when this player switched them on. */
     bool showDemo   = false;
     bool showGlyphs = false;
     int  baseHeight() const noexcept
     {
-        return fixedHeight + (showDemo ? DemoStrip::designHeight : 0)
+        return fixedHeight + faceplate.currentHeight()
+                           + (showDemo ? DemoStrip::designHeight : 0)
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }
 
