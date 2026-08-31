@@ -23,7 +23,8 @@ SetupPanel::SetupPanel()
 
     tabs.push_back ({ "PREAMP",    &preampDevices, [this] { preampDevices.rebuild(); }, {} });
     tabs.push_back ({ "BOOST",     &boostDevices,  [this] { boostDevices.rebuild(); },  {} });
-    tabs.push_back ({ "POWER AMP", &powerDevices,  [this] { powerDevices.rebuild(); },  {} });
+    // No POWER AMP tab: the block is benched until its packs are real — see the editor's
+    // layout table, which benches it from the panel the same way.
     tabs.push_back ({ "IR",        &irs,           [this] { irs.rebuild(); },           {} });
 
     for (auto& tab : tabs)

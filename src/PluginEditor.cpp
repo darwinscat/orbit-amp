@@ -3,7 +3,6 @@
 
 #include "PluginEditor.h"
 
-#include "ui/LayoutPanel.h"
 #include "ui/Prefs.h"
 
 namespace orbitamp
@@ -22,17 +21,27 @@ namespace
         bool captured;
         const char* onParam;
         bool defaultShown;
-        bool startsGroup;
     };
 
+    // The power amp is NOT in the table: it is not ready — no pack ships — so it is benched
+    // whole: no tile in the chooser, no tab in Setup, its power forced out at open. It returns
+    // here when it returns for real.
     const LayoutBlock layoutBlocks[] = {
-        { prefs::showBoost,  "BOOST",     FaceplateView::Block::boost,   true,  params::boostOn,  true,  false },
-        { prefs::showPreamp, "PREAMP",    FaceplateView::Block::preamp,  true,  params::preampOn, true,  false },
-        { prefs::showDelay,  "DELAY",     FaceplateView::Block::delay,   false, params::delayOn,  false, true  },
-        { prefs::showReverb, "REVERB",    FaceplateView::Block::reverb,  false, params::reverbOn, true,  false },
-        { prefs::showPower,  "POWER AMP", FaceplateView::Block::power,   true,  params::powerOn,  false, false },
-        { prefs::showCab,    "CAB IR",    FaceplateView::Block::cabinet, true,  params::cabOn,    true,  false },
+        { prefs::showBoost,  "BOOST",  FaceplateView::Block::boost,   true,  params::boostOn,  true  },
+        { prefs::showPreamp, "PREAMP", FaceplateView::Block::preamp,  true,  params::preampOn, true  },
+        { prefs::showDelay,  "DELAY",  FaceplateView::Block::delay,   false, params::delayOn,  false },
+        { prefs::showReverb, "REVERB", FaceplateView::Block::reverb,  false, params::reverbOn, true  },
+        { prefs::showCab,    "CAB IR", FaceplateView::Block::cabinet, true,  params::cabOn,    true  },
     };
+
+    std::vector<LayoutStrip::Row> layoutRows()
+    {
+        std::vector<LayoutStrip::Row> rows;
+        for (const auto& b : layoutBlocks)
+            rows.push_back ({ b.name, b.captured ? theme::orange : theme::violet,
+                              prefs::getBool (b.pref, b.defaultShown) });
+        return rows;
+    }
 }
 
 AmpEditor::AmpEditor (AmpProcessor& p)
@@ -70,12 +79,29 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     for (const auto& b : layoutBlocks)
         faceplate.setShown (b.block, prefs::getBool (b.pref, b.defaultShown));
 
+    // The benched power amp: never shown, and its power put out even if a session saved it on —
+    // an invisible block must not colour the sound either.
+    if (auto* p = amp.apvts.getParameter (params::powerOn); p != nullptr && p->getValue() > 0.5f)
+    {
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (0.0f);
+        p->endChangeGesture();
+    }
+
     addChildComponent (demoStrip);
     addChildComponent (glyphs);
     addChildComponent (setup);       // hidden until the toolbar's gear opens it
 
-    chrome.onGear   = [this] (juce::Point<int> pos)       { showGearMenu (pos); };
-    chrome.onLayout = [this] (juce::Rectangle<int> area)  { showLayoutPanel (area); };
+    chrome.onGear = [this] (juce::Point<int> pos) { showGearMenu (pos); };
+
+    // The layout strip: always there, the ONE place blocks are stood down and brought back.
+    layoutStrip = std::make_unique<LayoutStrip> (layoutRows());
+    layoutStrip->onToggle = [this] (int i, bool on)
+    {
+        applyLayoutToggle (i, on);
+        layoutStrip->setRowOn (i, on);
+    };
+    addAndMakeVisible (*layoutStrip);
 
     // The badges' clicks mean MENU — the whole device in one pick. There is nowhere to "open" any
     // more and nothing to open TO: every block wears its own face on the panel, and the gate's own
@@ -182,7 +208,6 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
     juce::PopupMenu m;
     m.addItem (1, "SETUP...");
     m.addSeparator();
-    // The blocks' own switches moved to the LAYOUT popup beside the gear.
     m.addItem (5, "SHOW SPECTRA",       true, prefs::spectraShown());
     if (params::demoLoopsPresent())     // no loops on disk — no player, and no offer of one
         m.addItem (2, "SHOW DEMO PLAYER", true, showDemo);
@@ -215,44 +240,33 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                      });
 }
 
-void AmpEditor::showLayoutPanel (juce::Rectangle<int> anchor)
+void AmpEditor::applyLayoutToggle (int index, bool on)
 {
-    std::vector<LayoutPanel::Row> rows;
-    for (const auto& b : layoutBlocks)
-        rows.push_back ({ b.name, b.captured ? theme::orange : theme::violet,
-                          prefs::getBool (b.pref, b.defaultShown), b.startsGroup });
+    const auto& b = layoutBlocks[(size_t) index];
+    prefs::setBool (b.pref, on);
+    faceplate.setShown (b.block, on);
+    applyStripChoice();   // a row that emptied (or refilled) collapses the window with it
 
-    auto panel = std::make_unique<LayoutPanel> (std::move (rows));
-
-    panel->onToggle = [safe = juce::Component::SafePointer<AmpEditor> (this),
-                       panelSafe = juce::Component::SafePointer<LayoutPanel> (panel.get())]
-                      (int i, bool on)
+    // A hidden block must not colour the sound: its power goes out with it — but it REMEMBERS.
+    // A block that was playing when it left the panel comes back playing; one that stood dark
+    // comes back dark. A block this session never hid comes back ON: you just added it to the
+    // chain, and a chain link that arrives dead is a puzzle, not a feature.
+    if (auto* p = amp.apvts.getParameter (b.onParam))
     {
-        if (safe == nullptr)
-            return;
-
-        const auto& b = layoutBlocks[(size_t) i];
-        prefs::setBool (b.pref, on);
-        safe->faceplate.setShown (b.block, on);
-        safe->applyStripChoice();   // a row that emptied (or refilled) collapses the window with it
-
-        // A hidden block must not colour the sound: its power goes out with it.
         if (! on)
-            if (auto* p = safe->amp.apvts.getParameter (b.onParam))
-            {
-                p->beginChangeGesture();
-                p->setValueNotifyingHost (0.0f);
-                p->endChangeGesture();
-            }
-
-        if (panelSafe != nullptr)
-            panelSafe->setRowOn (i, on);
-    };
-
-    // A CallOutBox, like the footer's breakdown: the popup stands beside its button and any
-    // click elsewhere dismisses it — a player flips a few switches, watching the panel re-split
-    // live behind it, and clicks away.
-    juce::CallOutBox::launchAsynchronously (std::move (panel), anchor, nullptr);
+        {
+            blockWasOn[(size_t) index] = p->getValue() > 0.5f;
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (0.0f);
+            p->endChangeGesture();
+        }
+        else
+        {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (blockWasOn[(size_t) index] ? 1.0f : 0.0f);
+            p->endChangeGesture();
+        }
+    }
 }
 
 void AmpEditor::applyStripChoice()
@@ -356,7 +370,13 @@ void AmpEditor::resized()
     chrome.setTransform (zoom);
 
     // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
-    const int faceplateY = margin + Chrome::designHeight + headerGap;
+    int faceplateY = margin + Chrome::designHeight + headerGap;
+
+    // The layout strip: the chain laid flat between the toolbar and the device, always there.
+    layoutStrip->setBounds (margin, faceplateY, FaceplateView::designWidth,
+                            LayoutStrip::designHeight);
+    layoutStrip->setTransform (zoom);
+    faceplateY += LayoutStrip::designHeight;
 
     // The faceplate is only as tall as its LAYOUT stands it — a collapsed row is not here.
     const int faceplateH = faceplate.currentHeight();

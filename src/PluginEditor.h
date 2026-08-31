@@ -15,6 +15,7 @@
 #include "ui/DragRuler.h"
 #include "ui/TunerStrip.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
+#include "ui/LayoutStrip.h"
 #include "ui/SetupPanel.h"
 
 namespace orbitamp
@@ -41,8 +42,9 @@ public:
         off unless asked for (prefs::showDemo, prefs::showGlyphs). */
     void showGearMenu (juce::Point<int> screenPos);
 
-    /** The LAYOUT popup beside its toolbar button: the panel's six block switches. */
-    void showLayoutPanel (juce::Rectangle<int> anchor);
+    /** One block clicked in or out of the chain: the pref, the panel, the window's height, and
+        the hidden block's power going out with it (and coming back as it was). */
+    void applyLayoutToggle (int index, bool on);
 
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
@@ -69,10 +71,14 @@ private:
     bool showGlyphs = false;
     int  baseHeight() const noexcept
     {
-        return fixedHeight + faceplate.currentHeight()
+        return fixedHeight + LayoutStrip::designHeight + faceplate.currentHeight()
                            + (showDemo ? DemoStrip::designHeight : 0)
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }
+
+    /** What each block's power was when the chooser hid it, so coming back restores it. All
+        true until a hide records otherwise: a block ADDED to the chain arrives playing. */
+    std::array<bool, 8> blockWasOn { true, true, true, true, true, true, true, true };
 
     /** After a strip is switched: the aspect the corner drag keeps, the limits, and the window
         itself, at the scale it already has. */
@@ -87,6 +93,11 @@ private:
     AmpProcessor& amp;              // the base class's `processor` is the AudioProcessor& — this is ours
     Chrome        chrome;
     FaceplateView faceplate;        // the whole chain, five blocks in two rows
+
+    /** The layout strip — the chain laid flat between the toolbar and the device, always there:
+        the ONE place blocks are stood down and brought back. Built in the constructor because
+        its rows come from a table the header cannot see. */
+    std::unique_ptr<LayoutStrip> layoutStrip;
     GateStrip     gateStrip;        // the IN sliver with the gate's story, left of the faceplate
     OutStrip      outStrip;         // the OUT sliver with the master's hand, right of it
     TallyBadge    gateBadge;        // the gate's door and tally light, left of the tuner
