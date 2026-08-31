@@ -286,6 +286,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     for (auto& tap : blockSpectrumTap)
         tap.reset();
+    for (auto& tap : blockInSpectrumTap)
+        tap.reset();
 
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
     lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
@@ -525,6 +527,17 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         { const auto a = PerfClock::now();
           // No enable of its own: the block's switch is the EQ's switch, and a flat link is
           // bit-transparent, so a console standing at zero costs what it looks like it costs.
+          // What the EQ eats, tapped before the console runs — the "before" of the pane's pair.
+          if (on)
+          {
+              auto& tin = blockInSpectrumTap[(size_t) l];
+              const float* d = buffer.getReadPointer (0);
+              for (int i = 0; i < numSamples; ++i)
+                  tin.push (d[i]);
+              tin.publishIfDue (eqSpectrumOrder,
+                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
+          }
+
           if (on)
               eqLinks[(size_t) l].process (channels, nch, numSamples);
           nsStage[stEq] = elapsedNs (a); }

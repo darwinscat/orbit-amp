@@ -50,10 +50,11 @@ private:
 CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
                                         const juce::String& title, const char* blockId,
                                         int eqLink,
-                                        felitronics::analysis::RollingSpectrumTap& toneSpectrumTap)
+                                        felitronics::analysis::RollingSpectrumTap& toneSpectrumTap,
+                                        felitronics::analysis::RollingSpectrumTap& toneInSpectrumTap)
     : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId),
       toneTap (toneSpectrumTap),
-      eq (processor.apvts, eqLink, toneSpectrumTap,
+      eq (processor.apvts, eqLink, toneSpectrumTap, toneInSpectrumTap,
           [&processor] { return processor.currentSampleRate(); }),
       inMeter ("IN", processor.blockInDb[(size_t) eqLink],
                *processor.apvts.getParameter (params::blockIn (blockId)), true)

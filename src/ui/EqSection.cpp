@@ -10,12 +10,16 @@ namespace orbitamp
 //==============================================================================
 EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
                       felitronics::analysis::RollingSpectrumTap& spectrumTap,
+                      felitronics::analysis::RollingSpectrumTap& inSpectrumTap,
                       std::function<double()> sampleRateGetter)
-    : state (s), link (eqLink), tap (spectrumTap), sampleRate (std::move (sampleRateGetter))
+    : state (s), link (eqLink), tap (spectrumTap), inTap (inSpectrumTap),
+      sampleRate (std::move (sampleRateGetter))
 {
     display.prepare (displayRate, 1);
 
-    // The spectrum behind everything: the signal is the ground the response stands on.
+    // The spectra behind everything: the signal is the ground the response stands on — and it is
+    // a PAIR now, the cabinet picture's grammar: what the console eats as the quiet grey ground,
+    // what it made in the block's own colour over it.
     curve.paintSpectrum = [this] (juce::Graphics& g, juce::Rectangle<float> r)
     {
         if (! prefs::spectraShown())
@@ -30,29 +34,36 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
         pm.specTop    = 0.0;
         pm.specBottom = -90.0;
 
-        juce::Path fill, peak;
-        fill.startNewSubPath (r.getX(), r.getBottom());
-        bool first = true;
+        const auto draw = [&] (felitronics::analysis::SpectrumPane& p, juce::Colour tint,
+                               float fillTop, float fillBottom, float line)
+        {
+            juce::Path fill, peak;
+            fill.startNewSubPath (r.getX(), r.getBottom());
+            bool first = true;
 
-        pane.buildColumns (pm, sampleRate(), 4.5, 1000.0,
-                           [&] (int, float x, float yFill, float yPeak)
-                           {
-                               fill.lineTo (r.getX() + x, r.getY() + yFill);
+            p.buildColumns (pm, sampleRate(), 4.5, 1000.0,
+                            [&] (int, float x, float yFill, float yPeak)
+                            {
+                                fill.lineTo (r.getX() + x, r.getY() + yFill);
 
-                               if (first) { peak.startNewSubPath (r.getX() + x, r.getY() + yPeak); first = false; }
-                               else       peak.lineTo (r.getX() + x, r.getY() + yPeak);
-                           });
+                                if (first) { peak.startNewSubPath (r.getX() + x, r.getY() + yPeak); first = false; }
+                                else       peak.lineTo (r.getX() + x, r.getY() + yPeak);
+                            });
 
-        fill.lineTo (r.getRight(), r.getBottom());
-        fill.closeSubPath();
+            fill.lineTo (r.getRight(), r.getBottom());
+            fill.closeSubPath();
 
-        g.setGradientFill (juce::ColourGradient (theme::spectrum.withAlpha (0.22f),
-                                                 0.0f, r.getY() + r.getHeight() * 0.30f,
-                                                 theme::spectrum.withAlpha (0.03f),
-                                                 0.0f, r.getBottom(), false));
-        g.fillPath (fill);
-        g.setColour (theme::spectrum.withAlpha (0.55f));
-        g.strokePath (peak, juce::PathStrokeType (1.0f));
+            g.setGradientFill (juce::ColourGradient (tint.withAlpha (fillTop),
+                                                     0.0f, r.getY() + r.getHeight() * 0.30f,
+                                                     tint.withAlpha (fillBottom),
+                                                     0.0f, r.getBottom(), false));
+            g.fillPath (fill);
+            g.setColour (tint.withAlpha (line));
+            g.strokePath (peak, juce::PathStrokeType (1.0f));
+        };
+
+        draw (inPane, theme::spectrum, 0.14f, 0.02f, 0.30f);   // before: the quiet ground
+        draw (pane,   theme::orange,   0.18f, 0.02f, 0.55f);   // after: the console's own voice
     };
 
     buildBands (ourBands());
@@ -230,12 +241,19 @@ void EqSection::timerCallback()
 {
     // Pull a frame if one is waiting; a mismatched order is discarded (another consumer switched
     // resolutions — cannot happen while everyone agrees on spectrumOrder, but the contract stands).
-    int order = 0;
+    const auto pull = [] (felitronics::analysis::RollingSpectrumTap& t,
+                          felitronics::analysis::SpectrumPane& p)
+    {
+        int order = 0;
 
-    if (tap.tryPull (pane.frameInput(), order) && order == spectrumOrder)
-        pane.ingest (order);
-    else
-        pane.starve();
+        if (t.tryPull (p.frameInput(), order) && order == spectrumOrder)
+            p.ingest (order);
+        else
+            p.starve();
+    };
+
+    pull (tap,   pane);
+    pull (inTap, inPane);
 
     curve.repaint();
 }

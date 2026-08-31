@@ -34,6 +34,7 @@ class EqSection final : private juce::Timer
 public:
     EqSection (juce::AudioProcessorValueTreeState&, int link,
                felitronics::analysis::RollingSpectrumTap& spectrumTap,
+               felitronics::analysis::RollingSpectrumTap& inSpectrumTap,
                std::function<double()> sampleRateGetter);
     ~EqSection() override;
 
@@ -105,8 +106,10 @@ private:
     static constexpr int spectrumOrder   = 11;      // must agree with every other tap consumer
     core::EqLink display;
 
-    felitronics::analysis::RollingSpectrumTap& tap;
+    felitronics::analysis::RollingSpectrumTap& tap;      // after the console — its own voice
+    felitronics::analysis::RollingSpectrumTap& inTap;    // before it — the quiet ground, like the cab's
     felitronics::analysis::SpectrumPane        pane;
+    felitronics::analysis::SpectrumPane        inPane;
     std::function<double()>                    sampleRate;
 
     std::function<double (double)> nativeDb;

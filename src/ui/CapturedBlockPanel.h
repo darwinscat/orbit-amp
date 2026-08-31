@@ -39,7 +39,8 @@ public:
     /** `eqLink` is which of the two EQ consoles is this block's — they belong to the blocks now,
         and the index is the only thing that still says which is which. */
     CapturedBlockPanel (AmpProcessor&, Block&, const juce::String& title, const char* blockId,
-                        int eqLink, felitronics::analysis::RollingSpectrumTap& toneSpectrumTap);
+                        int eqLink, felitronics::analysis::RollingSpectrumTap& toneSpectrumTap,
+                        felitronics::analysis::RollingSpectrumTap& toneInSpectrumTap);
     ~CapturedBlockPanel() override;
 
     /** Rebuilds the face from whatever pack is loaded. Called when the device changes. */

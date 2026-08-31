@@ -237,6 +237,11 @@ public:
         a starve-tolerant reader, so several views may sip from it. */
     std::array<felitronics::analysis::RollingSpectrumTap, 2> blockSpectrumTap;
 
+    /** The pair's other half: what the EQ eats — the capture's voice before the console colours
+        it. With the output tap above, an EQ pane shows before and after, the way the cabinet's
+        picture does. */
+    std::array<felitronics::analysis::RollingSpectrumTap, 2> blockInSpectrumTap;
+
     /** The cabinet's own pair — what goes into the IR and what leaves it, for the picture's faint
         spectra. Pushed around the convolution, channel 0, only while the cabinet is on. */
     std::array<felitronics::analysis::RollingSpectrumTap, 2> cabSpectrumTap;
