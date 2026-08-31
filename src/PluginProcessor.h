@@ -13,6 +13,7 @@
 #include "core/EqLink.h"
 #include "core/CabinetIr.h"
 #include "core/SoftLimiter.h"
+#include "core/DelayStage.h"
 #include "core/ReverbStage.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
@@ -141,9 +142,15 @@ private:
     /** Same, for the reverb: character and mix, applied only when they move. */
     void updateReverbSettings() noexcept;
 
+    /** Same, for the delay — including the one computation that needs the PROCESSOR: the sync
+        time in milliseconds, from the host's tempo when it conducts and the BPM field when it
+        does not. */
+    void updateDelaySettings() noexcept;
+
     float editorScale = preferredScale;
 
     std::array<core::EqLink, params::numEqLinks> eqLinks;
+    core::DelayStage  delay;
     core::ReverbStage reverb;
 
     /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
@@ -211,8 +218,8 @@ public:
         the block's real-time budget. Indexed by Stage; the footer badge reads these. */
     // In chain order, which is now also the order the breakdown reads: each captured block is
     // followed by its own EQ.
-    enum Stage { stTotal, stTuner, stGate, stBoost, stEq1, stPreamp, stEq2, stReverb, stPower,
-                 stCab, stLimit, stOut, numStages };
+    enum Stage { stTotal, stTuner, stGate, stBoost, stEq1, stPreamp, stEq2, stDelay, stReverb,
+                 stPower, stCab, stLimit, stOut, numStages };
     std::atomic<float> stageLoad[numStages] {};
 
     /** The dropout evidence: every block that BLEW its budget counts, and each stage keeps the
@@ -322,6 +329,16 @@ private:
     std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* gatePosParam       = nullptr;
     std::atomic<float>* gateDecayParam     = nullptr;
+
+    std::atomic<float>* delayOnParam      = nullptr;
+    std::atomic<float>* delaySyncParam    = nullptr;
+    std::atomic<float>* delayTimeMsParam  = nullptr;
+    std::atomic<float>* delayDivParam     = nullptr;
+    std::atomic<float>* delayBpmParam     = nullptr;
+    std::atomic<float>* delayRepeatsParam = nullptr;
+    std::atomic<float>* delayDarkParam    = nullptr;
+    std::atomic<float>* delayOffsetParam  = nullptr;
+    std::atomic<float>* delayMixParam     = nullptr;
 
     std::atomic<float>* reverbOnParam   = nullptr;
     std::atomic<float>* reverbTypeParam = nullptr;

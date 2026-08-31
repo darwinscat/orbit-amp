@@ -39,6 +39,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // The demo needs its loops on disk — a machine without them has no player to show.
     showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
     showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+    faceplate.setDelayShown (prefs::getBool (prefs::showDelay, false));
     faceplate.setPowerShown (prefs::getBool (prefs::showPower, false));
     addChildComponent (demoStrip);
     addChildComponent (glyphs);
@@ -151,6 +152,7 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
     juce::PopupMenu m;
     m.addItem (1, "SETUP...");
     m.addSeparator();
+    m.addItem (6, "SHOW DELAY",         true, prefs::getBool (prefs::showDelay, false));
     m.addItem (4, "SHOW POWER AMP",     true, prefs::getBool (prefs::showPower, false));
     m.addItem (5, "SHOW SPECTRA",       true, prefs::spectraShown());
     if (params::demoLoopsPresent())     // no loops on disk — no player, and no offer of one
@@ -177,15 +179,21 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                              return;
                          }
 
-                         if (r == 4)
+                         if (r == 4 || r == 6)
                          {
-                             const bool show = ! prefs::getBool (prefs::showPower, false);
-                             prefs::setBool (prefs::showPower, show);
-                             safe->faceplate.setPowerShown (show);
+                             const auto& key = r == 4 ? prefs::showPower : prefs::showDelay;
+                             const bool show = ! prefs::getBool (key, false);
+                             prefs::setBool (key, show);
+
+                             if (r == 4)
+                                 safe->faceplate.setPowerShown (show);
+                             else
+                                 safe->faceplate.setDelayShown (show);
 
                              // A hidden block must not colour the sound: its power goes out with it.
                              if (! show)
-                                 if (auto* p = safe->amp.apvts.getParameter (params::powerOn))
+                                 if (auto* p = safe->amp.apvts.getParameter (
+                                         r == 4 ? params::powerOn : params::delayOn))
                                  {
                                      p->beginChangeGesture();
                                      p->setValueNotifyingHost (0.0f);

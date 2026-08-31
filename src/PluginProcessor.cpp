@@ -76,6 +76,16 @@ AmpProcessor::AmpProcessor()
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
     gateDecayParam     = apvts.getRawParameterValue (params::gateDecay);
 
+    delayOnParam      = apvts.getRawParameterValue (params::delayOn);
+    delaySyncParam    = apvts.getRawParameterValue (params::delaySync);
+    delayTimeMsParam  = apvts.getRawParameterValue (params::delayTimeMs);
+    delayDivParam     = apvts.getRawParameterValue (params::delayDiv);
+    delayBpmParam     = apvts.getRawParameterValue (params::delayBpm);
+    delayRepeatsParam = apvts.getRawParameterValue (params::delayRepeats);
+    delayDarkParam    = apvts.getRawParameterValue (params::delayDark);
+    delayOffsetParam  = apvts.getRawParameterValue (params::delayOffset);
+    delayMixParam     = apvts.getRawParameterValue (params::delayMix);
+
     reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
     reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
     reverbMixParam  = apvts.getRawParameterValue (params::reverbMix);
@@ -333,6 +343,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         }
     }
 
+    delay.prepare (sampleRate, block);
     reverb.prepare (sampleRate, block);
     boost.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
@@ -349,7 +360,42 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     reportLatency();
 
     updateEqSettings();
+    updateDelaySettings();
     updateReverbSettings();
+}
+
+void AmpProcessor::updateDelaySettings() noexcept
+{
+    // The time: the division against the conducting tempo when sync is on, the free knob when it
+    // is off. The host's tempo outranks the BPM field — the field exists for the standalone,
+    // where nobody else is counting.
+    float ms = delayTimeMsParam->load();
+
+    if (delaySyncParam->load() > 0.5f)
+    {
+        double bpm = (double) delayBpmParam->load();
+
+        if (auto* ph = getPlayHead())
+            if (const auto pos = ph->getPosition())
+                if (const auto hostBpm = pos->getBpm(); hostBpm.hasValue() && *hostBpm > 0.0)
+                    bpm = *hostBpm;
+
+        const int div = juce::jlimit (0, params::delayDivisions.size() - 1,
+                                      juce::roundToInt (delayDivParam->load()));
+        ms = (float) ((double) params::delayDivisionBeats[div] * 60000.0 / bpm);
+    }
+
+    delay.setTimeMs (ms);
+    delay.setRepeats (delayRepeatsParam->load() * 0.01f);   // the face reads percent
+
+    // DARK is a percent of darkness; the corner it buys falls log-evenly from the bright
+    // ceiling to the dark floor, so every degree of the knob darkens by the same ear-step.
+    delay.setDarkHz (params::delayDarkHiHz
+                     * std::pow (params::delayDarkLoHz / params::delayDarkHiHz,
+                                 delayDarkParam->load() * 0.01f));
+
+    delay.setOffsetMs (delayOffsetParam->load());
+    delay.setMix (delayMixParam->load() * 0.01f);
 }
 
 void AmpProcessor::updateReverbSettings() noexcept
@@ -450,6 +496,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
       nsStage[stTuner] = elapsedNs (a); }
 
     updateEqSettings();
+    updateDelaySettings();
     updateReverbSettings();
 
     auto* const* channels = buffer.getArrayOfWritePointers();
@@ -587,9 +634,20 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         gate.applyGain (channels, nch, numSamples);
 
     // THE SEAM: where a mono chain becomes a stereo one, in STEREO SPACE — the one copy, right
-    // before the reverb, which spreads the two identical channels into a space.
+    // before the wide stages: the delay spreads the two identical channels first, the reverb
+    // rooms what it made.
     for (int ch = nch; ch < nchBack; ++ch)
         buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+
+    // The echo before the space: repeats of what the preamp made, which the reverb then rooms.
+    // First of the wide stages — the OFFSET is the block's stereo, so it works the back half's
+    // channels.
+    if (delayOnParam->load() > 0.5f)
+        { const auto a = PerfClock::now();
+          delay.process (channels, nchBack, numSamples);
+          nsStage[stDelay] = elapsedNs (a); }
+    else
+        delay.reset();   // so re-enabling it does not replay the repeats of what came before
 
     if (reverbOnParam->load() > 0.5f)
         { const auto a = PerfClock::now();

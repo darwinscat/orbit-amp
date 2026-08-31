@@ -38,6 +38,11 @@ inline const juce::Identifier showGlyphs { "show_device_glyphs" };
     must not colour the sound. Off out of the box: no poweramp pack ships yet. */
 inline const juce::Identifier showPower { "show_power_amp" };
 
+/** The delay block, the same law: hidden is GONE — the row re-splits without it and its power
+    parameter is put out, because a hidden block must not colour the sound. Off out of the box:
+    an echo is a choice, not a starting point. */
+inline const juce::Identifier showDelay { "show_delay" };
+
 /** The analysers — the consoles' ground, the cabinet's pair, the TONE tile's columns. One switch
     for all of them, read where a spectrum is about to be drawn: cached after the first look,
     because a paint routine must not open a file. */

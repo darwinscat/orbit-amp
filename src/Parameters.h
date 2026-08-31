@@ -275,6 +275,43 @@ inline bool demoLoopsPresent()
     saturation, and which trade you want depends on the machine you are on. Lives in the footer with
     the other facts about the run. */
 
+/** The delay — the echo between the preamp's console and the reverb, repeats the room then
+    rooms. Repitch by design: TIME is a destination the line glides toward and the glide bends
+    pitch, tape-fashion. The loop is dark (DARK is its low pass corner — every pass darkens
+    again) and pressed by a fixed saturator; OFFSET holds one channel's repeats back against
+    the other's, the stereo of the block; MIX adds the wet over an untouched dry. */
+inline constexpr const char* delayOn      = "delay_on";
+inline constexpr const char* delaySync    = "delay_sync";
+inline constexpr const char* delayTimeMs  = "delay_time_ms";
+inline constexpr const char* delayDiv     = "delay_div";
+inline constexpr const char* delayBpm     = "delay_bpm";
+inline constexpr const char* delayRepeats = "delay_repeats";
+inline constexpr const char* delayDark    = "delay_dark";
+inline constexpr const char* delayOffset  = "delay_offset";
+inline constexpr const char* delayMix     = "delay_mix";
+
+/** The sync ladder, longest first, dotted and triplet beside each plain value. The table is
+    the same fact in quarter notes: ms = beats x 60000 / BPM. */
+inline const juce::StringArray delayDivisions { "1/1", "1/2.", "1/2", "1/2T", "1/4.", "1/4",
+                                                "1/4T", "1/8.", "1/8", "1/8T", "1/16.", "1/16",
+                                                "1/16T" };
+inline constexpr float delayDivisionBeats[] = { 4.0f, 3.0f, 2.0f, 4.0f / 3.0f, 1.5f, 1.0f,
+                                                2.0f / 3.0f, 0.75f, 0.5f, 1.0f / 3.0f, 0.375f,
+                                                0.25f, 1.0f / 6.0f };
+inline constexpr int delayDivDefault = 5;   // 1/4
+
+/** The BPM the sync runs on when no host is conducting — the standalone's field. A host that
+    reports a tempo outranks it. */
+inline constexpr float delayBpmMin = 40.0f, delayBpmMax = 240.0f, delayBpmDefault = 120.0f;
+
+inline constexpr float delayTimeMinMs = 20.0f, delayTimeMaxMs = 2000.0f;
+inline constexpr float delayOffsetMaxMs = 30.0f;
+/** DARK is a percent of darkness, so the knob's direction tells the truth: clockwise darkens.
+    The engine maps it onto the loop's low pass corner, the bright ceiling falling log-evenly
+    to the dark floor. */
+inline constexpr float delayDarkLoHz = 800.0f, delayDarkHiHz = 16000.0f;
+inline constexpr float delayDarkDefaultPct = 45.0f;   // ~4 kHz — the tape-ish middle
+
 inline constexpr const char* reverbType     = "reverb_type";
 inline constexpr const char* reverbMix      = "reverb_mix";
 

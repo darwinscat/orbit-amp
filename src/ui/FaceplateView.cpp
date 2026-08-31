@@ -14,10 +14,11 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
              processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
       preamp (processor, processor.preamp, "Preamp", params::preampId, 1,
               processor.blockSpectrumTap[1], processor.blockInSpectrumTap[1]),
-      reverb (processor), power (processor, processor.poweramp), cabinet (processor)
+      delay (processor), reverb (processor), power (processor, processor.poweramp),
+      cabinet (processor)
 {
-    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb,
-                     (BlockFrame*) &power, (BlockFrame*) &cabinet })
+    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &delay,
+                     (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })
         addAndMakeVisible (*b);
 
     // Every block binds its own power.
@@ -46,15 +47,30 @@ void FaceplateView::resized()
     // ONE line down its middle now, and everything either sits on it or spans it.
     auto left = row2.removeFromLeft (half);
     row2.removeFromLeft (colGap);
-    cabinet.setBounds (row2);
 
-    // The power amp stands in the row only when asked for; without it the reverb takes the whole
-    // left half, and the line down the panel's middle still holds.
+    // The optional blocks stand in the row only when asked for, and the row keeps the chain's
+    // order: delay, reverb, power amp, cabinet. The line down the panel's middle still holds —
+    // the delay shares the LEFT half with the reverb, the power amp cuts its quarter from the
+    // cabinet's half, so with everything on the row is four even quarters.
+    delay.setVisible (delayShown);
     power.setVisible (powerShown);
 
-    if (powerShown)
+    const int quarter = (left.getWidth() - colGap) / 2;
+
+    if (delayShown)
     {
-        const int quarter = (left.getWidth() - colGap) / 2;
+        delay.setBounds (left.removeFromLeft (quarter));
+        left.removeFromLeft (colGap);
+        reverb.setBounds (left);
+
+        if (powerShown)
+        {
+            power.setBounds (row2.removeFromLeft (quarter));
+            row2.removeFromLeft (colGap);
+        }
+    }
+    else if (powerShown)
+    {
         reverb.setBounds (left.removeFromLeft (quarter));
         left.removeFromLeft (colGap);
         power.setBounds (left);
@@ -63,6 +79,8 @@ void FaceplateView::resized()
     {
         reverb.setBounds (left);
     }
+
+    cabinet.setBounds (row2);
 }
 
 } // namespace orbitamp

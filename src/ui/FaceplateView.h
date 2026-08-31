@@ -6,6 +6,7 @@
 #include "BlockFrame.h"
 #include "CabinetBlock.h"
 #include "CapturedBlockPanel.h"
+#include "DelayBlock.h"
 #include "PowerAmpBlock.h"
 #include "ReverbBlock.h"
 
@@ -22,9 +23,10 @@ class AmpProcessor;
     order, and what a block is set to is written on its face.
 
     Row one is the pair that makes the sound — the captured pedal and the captured preamp, an even
-    half each, because neither is a layer on the other. Row two is what happens to it afterwards:
-    reverb and power amp at a quarter, the cabinet at a half, because the cabinet has a grille to
-    draw and mics to place on it and the other two have a knob apiece. */
+    half each, because neither is a layer on the other. Row two is what happens to it afterwards,
+    in chain order: delay, reverb, power amp, cabinet. The cabinet holds a half — it has a grille
+    to draw and mics to place on it — until the optional blocks claim their quarters; with
+    everything shown the row is four even quarters. */
 class FaceplateView : public juce::Component
 {
 public:
@@ -41,6 +43,18 @@ public:
             return;
 
         powerShown = shown;
+        resized();
+        repaint();
+    }
+
+    /** The delay, the same law: shown, it takes the row's first quarter and the row re-splits
+        around it — with everything on, four even quarters. Hidden, the row closes as before. */
+    void setDelayShown (bool shown)
+    {
+        if (delayShown == shown)
+            return;
+
+        delayShown = shown;
         resized();
         repaint();
     }
@@ -83,10 +97,12 @@ private:
 
     CapturedBlockPanel boost;
     CapturedBlockPanel preamp;
+    DelayBlock         delay;
     ReverbBlock        reverb;
     PowerAmpBlock      power;
     CabinetBlock       cabinet;
     bool               powerShown = false;
+    bool               delayShown = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FaceplateView)
 };

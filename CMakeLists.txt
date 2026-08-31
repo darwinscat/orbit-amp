@@ -168,6 +168,7 @@ target_sources(OrbitAmp PRIVATE
     src/ui/CabinetBlock.cpp
     src/ui/PowerAmpBlock.cpp
     src/ui/EqSection.cpp
+    src/ui/DelayBlock.cpp
     src/ui/ReverbBlock.cpp
     src/ui/Chrome.cpp
     src/ui/DemoStrip.cpp
@@ -418,6 +419,7 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/CabinetBlock.cpp
     src/ui/PowerAmpBlock.cpp
     src/ui/EqSection.cpp
+    src/ui/DelayBlock.cpp
     src/ui/ReverbBlock.cpp
     src/ui/Chrome.cpp
     src/ui/DemoStrip.cpp

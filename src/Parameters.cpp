@@ -294,6 +294,32 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Choice> (juce::ParameterID { cabIr, 1 }, "Cabinet IR",
                                           cabIrNames, cabIrDefault));
 
+    // The delay, off by default — an echo is a choice, not a starting point. Sync ships ON at a
+    // quarter note: the free milliseconds are the specialist's mode, the division is the player's.
+    // The BPM field is the standalone's conductor; a host that reports a tempo outranks it.
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", false),
+                std::make_unique<Bool>   (juce::ParameterID { delaySync, 1 }, "Delay Sync", true),
+                std::make_unique<Choice> (juce::ParameterID { delayDiv, 1 }, "Delay Division",
+                                          delayDivisions, delayDivDefault),
+                std::make_unique<Float>  (juce::ParameterID { delayBpm, 1 }, "Delay BPM",
+                                          juce::NormalisableRange<float> (delayBpmMin, delayBpmMax, 0.1f),
+                                          delayBpmDefault),
+                std::make_unique<Float>  (juce::ParameterID { delayTimeMs, 1 }, "Delay Time",
+                                          juce::NormalisableRange<float> (delayTimeMinMs, delayTimeMaxMs,
+                                                                          1.0f, 0.5f),
+                                          350.0f),
+                std::make_unique<Float>  (juce::ParameterID { delayRepeats, 1 }, "Delay Repeats",
+                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 35.0f),
+                std::make_unique<Float>  (juce::ParameterID { delayDark, 1 }, "Delay Dark",
+                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f),
+                                          delayDarkDefaultPct),
+                std::make_unique<Float>  (juce::ParameterID { delayOffset, 1 }, "Delay Offset",
+                                          juce::NormalisableRange<float> (-delayOffsetMaxMs,
+                                                                          delayOffsetMaxMs, 0.1f),
+                                          0.0f),
+                std::make_unique<Float>  (juce::ParameterID { delayMix, 1 }, "Delay Mix",
+                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 25.0f));
+
     // PLATE at thirty: the shipping room. DECAY breathes around unity, PREDELAY ships at zero,
     // and the tail's HPF waits switched off at a bass-cleaning corner.
     layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters,
