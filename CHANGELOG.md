@@ -7,10 +7,10 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 
 ## [0.1.0] — 2026-08-31 — the player leaves the bench
 
-First release. A curated guitar tone player — VST3 / AU / Standalone, macOS.
+First release. A curated guitar tone player — VST3 / AU / CLAP / Standalone; macOS, Windows, Linux.
 
 ### Added
-- **The chain**: boost → EQ → preamp → EQ → reverb → power amp → cabinet, on one compact,
+- **The chain**: boost → EQ → preamp → EQ → delay → reverb → power amp → cabinet, on one compact,
   resizable faceplate. The boost, preamp and power amp are captured neural voices; everything
   linear or time-based around them is honest DSP.
 - **Captured voices** ride in `.orbitrig` device packs (namz schema 3), played through
@@ -21,6 +21,10 @@ First release. A curated guitar tone player — VST3 / AU / Standalone, macOS.
   a factory layer inside the bundle sits underneath it. Files in a folder — no ceremony.
 - **The cabinet**: a single impulse response with HPF / LPF / trim / phase baked into it,
   drawn as the IR's waveform. 21 cabinet IRs ship in the box.
+- **The echo before the space**: a delay ahead of the reverb — repeats of what the preamp
+  made, free or host-clocked, with a darkness on the repeats and a stereo offset that widens
+  the back half. The reverb speaks six characters — Ambience · Room · Hall · Plate · Spring ·
+  Modulated — with DECAY, PREDELAY and an always-in tail HPF as its late refinements.
 - **Stereo** three ways: MONO, STEREO (everything twice), STEREO SPACE — mono where the sound
   is made, stereo from the reverb on, where the space is. A fresh instance follows its bus.
 - **Around the sound**: input gate, tuner, output limiter (opens on SAFETY), A/B/C/D compare

@@ -26,7 +26,7 @@
 namespace orbitamp
 {
 
-/** The plugin shell. Deliberately thin: the chain (boost -> EQ -> preamp -> EQ -> reverb ->
+/** The plugin shell. Deliberately thin: the chain (boost -> EQ -> preamp -> EQ -> delay -> reverb ->
     power amp -> cabinet) lands in src/core/ behind small engines, and this class only pumps
     buffers into them and owns state. */
 class AmpProcessor final : public juce::AudioProcessor,

@@ -16,8 +16,7 @@
 
 ## What orbit-amp is
 
-A guitar tone plugin (VST3 / AU / standalone; JUCE; macOS-first, other platforms
-later). It plays captured neural voicings through a full chain — boost and preamp,
+A guitar tone plugin (VST3 / AU / CLAP / standalone; JUCE; macOS, Windows, Linux). It plays captured neural voicings through a full chain — boost and preamp,
 each with its own EQ, then reverb, power amp and cabinet — on a compact, resizable
 faceplate. AGPL-3.0-or-later.
 
@@ -50,7 +49,7 @@ layers on top.
 ## Signal chain
 
 ```
-tuner → gate → boost → EQ → preamp (voicing) → EQ → reverb → power amp → cabinet → limiter
+tuner → gate → boost → EQ → preamp (voicing) → EQ → delay → reverb → power amp → cabinet → limiter
 ```
 
 - **Tuner** — a listener, not a processor: it taps the raw input and never touches
@@ -78,8 +77,15 @@ tuner → gate → boost → EQ → preamp (voicing) → EQ → reverb → power
 - **Preamp** — the captured voicing. Gain 0–10 maps to the captured positions —
   SMOOTH crossfades between them, STEP lands the dial on them; the biggest knob
   (the hero). The tone console lives in the block — see the EQ entry above.
-- **Reverb** — DSP (algorithmic). The character is the title — Room · Hall ·
-  Plate · Spring — size and damping follow from it; Mix is the one knob.
+- **Delay** — the echo before the space: repeats of what the preamp made, free or
+  host-clocked (divisions, with a BPM of its own when nothing conducts), a darkness
+  on the repeats, a stereo offset that widens the back half — and the reverb then
+  rooms what the echo made.
+- **Reverb** — DSP (algorithmic). The character is the title — Ambience · Room ·
+  Hall · Plate · Spring · Modulated — size and damping follow from it; Mix is the
+  hero, DECAY scales the character's breath, PREDELAY keeps the attack dry, and the
+  tail's own HPF is always in (this reverb feeds a power amp — a low tail into
+  drive is mud).
 - **Power amp** — optional, a captured slot like the boost and the preamp; off and
   hidden behind the gear until asked for, and a hidden block does not colour the
   sound.

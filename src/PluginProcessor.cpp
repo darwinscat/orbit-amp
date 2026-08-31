@@ -517,7 +517,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The captured blocks take a BUFFER — this alias holds only the channels the chain works.
     juce::AudioBuffer<float> chainView (const_cast<float**> (channels), nch, numSamples);
 
-    // gate -> boost -> EQ -> preamp -> EQ -> reverb -> power amp. The gate stands at the very
+    // gate -> boost -> EQ -> preamp -> EQ -> delay -> reverb -> power amp. The gate stands at the very
     // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
     // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
     // pop-free, so it runs unconditionally and the switch is an argument.
