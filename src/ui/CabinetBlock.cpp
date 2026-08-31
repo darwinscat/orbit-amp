@@ -39,6 +39,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
 
     // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
     wave.setAccent (theme::orange);
+    wave.waveTint = theme::violet;   // the impulse itself in violet — the curve keeps the orange voice
     // The handle exists only in MANUAL — pushToWave keeps this current with the combo's mode.
     wave.setEqVisible (true);
 
