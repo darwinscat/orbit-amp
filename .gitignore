@@ -6,6 +6,8 @@ CLAUDE.md
 # ── build ──
 build/
 build-*/
+dist/
+stage/
 cmake-build-*/
 *.o
 *.a
