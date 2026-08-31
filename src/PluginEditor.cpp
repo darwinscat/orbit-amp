@@ -10,36 +10,36 @@ namespace orbitamp
 
 namespace
 {
-    /** The LAYOUT popup's subjects, in chain order: the pref that remembers the choice, the name
-        on the row, the faceplate's block, which side of the colour grammar its switch wears, the
-        power to put out when it hides, and whether it ships shown. */
+    /** The strip's block rows, in chain order: the name on the arrow, the faceplate's block,
+        which side of the colour grammar it wears, and the parameter that IS its presence — one
+        flag for standing-on-the-panel and being-in-the-sound, carried by the save, the history,
+        and the registers alike. */
     struct LayoutBlock
     {
-        const juce::Identifier& pref;
         const char* name;
         FaceplateView::Block block;
         bool captured;
         const char* onParam;
-        bool defaultShown;
     };
 
     // The power amp is NOT in the table: it is not ready — no pack ships — so it is benched
     // whole: no tile in the chooser, no tab in Setup, its power forced out at open. It returns
     // here when it returns for real.
     const LayoutBlock layoutBlocks[] = {
-        { prefs::showBoost,  "BOOST",  FaceplateView::Block::boost,   true,  params::boostOn,  true  },
-        { prefs::showPreamp, "PREAMP", FaceplateView::Block::preamp,  true,  params::preampOn, true  },
-        { prefs::showDelay,  "DELAY",  FaceplateView::Block::delay,   false, params::delayOn,  false },
-        { prefs::showReverb, "REVERB", FaceplateView::Block::reverb,  false, params::reverbOn, true  },
-        { prefs::showCab,    "CAB IR", FaceplateView::Block::cabinet, true,  params::cabOn,    true  },
+        { "BOOST",  FaceplateView::Block::boost,   true,  params::boostOn  },
+        { "PREAMP", FaceplateView::Block::preamp,  true,  params::preampOn },
+        { "DELAY",  FaceplateView::Block::delay,   false, params::delayOn  },
+        { "REVERB", FaceplateView::Block::reverb,  false, params::reverbOn },
+        { "CAB IR", FaceplateView::Block::cabinet, true,  params::cabOn    },
     };
 
     std::vector<LayoutStrip::Row> layoutRows()
     {
+        // The initial `on` is a placeholder: the attachments' first echo dresses every row and
+        // the panel from the parameters the moment the strip stands.
         std::vector<LayoutStrip::Row> rows;
         for (const auto& b : layoutBlocks)
-            rows.push_back ({ b.name, b.captured ? theme::orange : theme::violet,
-                              prefs::getBool (b.pref, b.defaultShown) });
+            rows.push_back ({ b.name, b.captured ? theme::orange : theme::violet, true });
         return rows;
     }
 
@@ -76,9 +76,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // The demo needs its loops on disk — a machine without them has no player to show.
     showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
     showGlyphs = prefs::getBool (prefs::showGlyphs, false);
-
-    for (const auto& b : layoutBlocks)
-        faceplate.setShown (b.block, prefs::getBool (b.pref, b.defaultShown));
 
     // The benched power amp: never shown, and its power put out even if a session saved it on —
     // an invisible block must not colour the sound either.
@@ -128,12 +125,38 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     layoutStrip->onToggle = [this] (int i, bool on)
     {
         if (i == rowTuner)
+        {
             applyTunerToggle (on);
-        else
-            applyLayoutToggle (i - rowFirstBlock, on);
+            layoutStrip->setRowOn (i, on);
+            return;
+        }
 
-        layoutStrip->setRowOn (i, on);
+        // THE switch: the arrow writes the block's own parameter, so the save, the history,
+        // and the registers all carry the click — the panel follows through the echo below.
+        if (auto* p = amp.apvts.getParameter (layoutBlocks[(size_t) (i - rowFirstBlock)].onParam))
+        {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+            p->endChangeGesture();
+        }
     };
+
+    // The echo that makes it ONE fact: wherever a block's power moves — the strip, an undo, a
+    // loaded preset, a register switch, host automation — the panel re-splits to match.
+    for (int i = 0; i < (int) std::size (layoutBlocks); ++i)
+    {
+        blockRowAtts.push_back (std::make_unique<juce::ParameterAttachment> (
+            *amp.apvts.getParameter (layoutBlocks[(size_t) i].onParam),
+            [this, i] (float v)
+            {
+                const bool on = v > 0.5f;
+                faceplate.setShown (layoutBlocks[(size_t) i].block, on);
+                layoutStrip->setRowOn (rowFirstBlock + i, on);
+                applyStripChoice();   // an emptied or refilled row moves the window with it
+            }));
+
+        blockRowAtts.back()->sendInitialUpdate();
+    }
 
     // The guards' arrows ARE their consoles: any click opens the menu (OFF is its first item),
     // and the look clears the latched dot, the way a look at the badge used to.
@@ -311,35 +334,6 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                          prefs::setBool (r == 2 ? prefs::showDemo : prefs::showGlyphs, flag);
                          safe->applyStripChoice();
                      });
-}
-
-void AmpEditor::applyLayoutToggle (int index, bool on)
-{
-    const auto& b = layoutBlocks[(size_t) index];
-    prefs::setBool (b.pref, on);
-    faceplate.setShown (b.block, on);
-    applyStripChoice();   // a row that emptied (or refilled) collapses the window with it
-
-    // A hidden block must not colour the sound: its power goes out with it — but it REMEMBERS.
-    // A block that was playing when it left the panel comes back playing; one that stood dark
-    // comes back dark. A block this session never hid comes back ON: you just added it to the
-    // chain, and a chain link that arrives dead is a puzzle, not a feature.
-    if (auto* p = amp.apvts.getParameter (b.onParam))
-    {
-        if (! on)
-        {
-            blockWasOn[(size_t) index] = p->getValue() > 0.5f;
-            p->beginChangeGesture();
-            p->setValueNotifyingHost (0.0f);
-            p->endChangeGesture();
-        }
-        else
-        {
-            p->beginChangeGesture();
-            p->setValueNotifyingHost (blockWasOn[(size_t) index] ? 1.0f : 0.0f);
-            p->endChangeGesture();
-        }
-    }
 }
 
 void AmpEditor::applyColumnToggle (int side, bool on)

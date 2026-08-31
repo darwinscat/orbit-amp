@@ -33,17 +33,9 @@ inline void setBool (const juce::Identifier& key, bool value)
 inline const juce::Identifier showDemo   { "show_demo_player" };
 inline const juce::Identifier showGlyphs { "show_device_glyphs" };
 
-/** Which blocks stand on the panel — the LAYOUT popup's six switches. A hidden block is GONE,
-    not dimmed: its row re-splits evenly among whoever remains and its power parameter is put out
-    with it, because a hidden block must not colour the sound. The core four ship shown; the
-    power amp (no pack ships yet) and the delay (an echo is a choice, not a starting point)
-    ship hidden. */
-inline const juce::Identifier showBoost  { "show_boost" };
-inline const juce::Identifier showPreamp { "show_preamp" };
-inline const juce::Identifier showDelay  { "show_delay" };
-inline const juce::Identifier showReverb { "show_reverb" };
-inline const juce::Identifier showPower  { "show_power_amp" };
-inline const juce::Identifier showCab    { "show_cab" };
+// The blocks' presence needs no prefs any more: a block's `*_on` PARAMETER is its presence —
+// the strip writes it, the panel follows it, and the save, the history, and the registers all
+// carry it. Only the instruments below keep machine-level switches.
 
 /** The side columns — the IN rail with the gate's hand, the OUT rail with the master's. The
     strip's end caps toggle them. Hiding one is about the INSTRUMENTS, not the sound: the gate

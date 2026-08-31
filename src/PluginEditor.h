@@ -42,9 +42,6 @@ public:
         off unless asked for (prefs::showDemo, prefs::showGlyphs). */
     void showGearMenu (juce::Point<int> screenPos);
 
-    /** One block clicked in or out of the chain: the pref, the panel, the window's height, and
-        the hidden block's power going out with it (and coming back as it was). */
-    void applyLayoutToggle (int index, bool on);
 
     /** A side column clicked in or out (side 0 = IN, 1 = OUT). The instruments are the point:
         the gate and the limiter keep working as set, but the hidden column's TRIM returns to
@@ -86,9 +83,9 @@ private:
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }
 
-    /** What each block's power was when the chooser hid it, so coming back restores it. All
-        true until a hide records otherwise: a block ADDED to the chain arrives playing. */
-    std::array<bool, 8> blockWasOn { true, true, true, true, true, true, true, true };
+    /** One attachment per chain block: its `*_on` parameter IS its presence, and wherever the
+        power moves — the strip, an undo, a preset, a register, automation — the panel follows. */
+    std::vector<std::unique_ptr<juce::ParameterAttachment>> blockRowAtts;
 
     /** Whether the side columns stand on the panel — the strip's end caps. */
     bool inColShown  = true;

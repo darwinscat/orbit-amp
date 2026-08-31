@@ -103,6 +103,18 @@ public:
         return powerParam != nullptr && powerParam->getValue() > 0.5f;
     }
 
+    /** The frame's own switch leaves the border when the strip owns the block's presence: the
+        pill was the block's on/off, and there is only ONE of those now. */
+    void setSwitchShown (bool shown)
+    {
+        if (hasSwitch == shown)
+            return;
+
+        hasSwitch = shown;
+        resized();
+        repaint();
+    }
+
     void togglePowerParam()
     {
         if (power != nullptr)
@@ -320,9 +332,10 @@ private:
         frame starts lower than the component. Zero when nothing rides it. */
     int topInset() const
     {
-        // Room above the line only for what actually RIDES the line: a badge with no switch and
-        // its name inside reserves nothing, so its box meets its neighbours edge to edge.
-        return (titleInBorder && showTitle) || (switchInBorder && hasSwitch) ? switchH / 2 + 1 : 0;
+        // One inset for every block, switch or no switch: a row where some boxes start twelve
+        // units higher than their neighbours reads as a mistake, and something — a name, a
+        // combo — rides the line on every block anyway.
+        return switchInBorder || (titleInBorder && showTitle) ? switchH / 2 + 1 : 0;
     }
 
 protected:

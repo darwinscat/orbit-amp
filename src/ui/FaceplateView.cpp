@@ -19,9 +19,15 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
 {
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &delay,
                      (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })
+    {
         addAndMakeVisible (*b);
 
-    // Every block binds its own power.
+        // No pill on the border: the strip's arrow IS the block's one switch now — presence
+        // and power are the same parameter, and two doors to one fact is how they drift.
+        b->setSwitchShown (false);
+    }
+
+    // Every block still binds its power parameter — the frames follow it for their own state.
 }
 
 BlockFrame& FaceplateView::frame (Block b)
