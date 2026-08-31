@@ -86,10 +86,11 @@ public:
 
         const auto inCol = scaleArea();
 
-        // ---- IN: the family meter rail — tabby's dB-anchored gradient, white hold, clip cap.
-        //      The gate's pressure lives on the BADGE now (red by depth); draining the colour
-        //      here hit the eyes and retired. ----
-        meterrail::paintFill (g, inCol, dbToY (inCol, levelDb));
+        // ---- IN: the family meter rail — dB-anchored, white hold, clip cap — wearing the whole
+        //      thermometer (the GAIN dial's ramp on a pole): dark violet floor, corporate violet,
+        //      the traffic middle, orange, red. The gate's pressure lives on the BADGE (red by
+        //      depth); draining the colour here hit the eyes and retired. ----
+        meterrail::paintFill (g, inCol, dbToY (inCol, levelDb), 0.0f, true);
 
         if (holdDb > floorDb + 0.5f)
             meterrail::paintHold (g, inCol, dbToY (inCol, holdDb));

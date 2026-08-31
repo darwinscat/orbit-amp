@@ -300,13 +300,16 @@ private:
         {
             const auto u = [] (float db) { return (double) juce::jlimit (0.0f, 1.0f, (db - floorDb) / (ceilDb - floorDb)); };
 
-            juce::ColourGradient grad (juce::Colour (0xff1c2a6e), 0.0f, t.getBottom(),
-                                       juce::Colour (0xffff3b30), 0.0f, t.getY(), false);
-            grad.addColour (u (params::captureColdDb) - 0.14, juce::Colour (0xff2f56c8));   // blue, on the way up
-            grad.addColour (u (params::captureColdDb),        inRange);                      // the zone: green...
-            grad.addColour (u (params::captureHotDb),         inRange);                      // ...to green
-            grad.addColour (u (params::captureHotDb) + 0.05,  juce::Colour (0xffe6d34a));    // then yellow
-            grad.addColour (u (0.0f),                         theme::orange);                // orange at full scale
+            // The thermometer, zone-anchored: the same weather as the big rail — dark corporate
+            // ground through the corporate violet, the zone's green, yellow, orange, red — with
+            // the green pinned to where THIS block wants to be fed.
+            juce::ColourGradient grad (meterrail::heatFloor, 0.0f, t.getBottom(),
+                                       meterrail::heatRed,   0.0f, t.getY(), false);
+            grad.addColour (u (params::captureColdDb) - 0.14, theme::violet);                 // corporate, on the way up
+            grad.addColour (u (params::captureColdDb),        inRange);                       // the zone: green...
+            grad.addColour (u (params::captureHotDb),         inRange);                       // ...to green
+            grad.addColour (u (params::captureHotDb) + 0.05,  meterrail::heatYellow);         // then yellow
+            grad.addColour (u (0.0f),                         theme::orange);                 // orange at full scale
 
             const float y = yOfLevel (t, levelDb.load());
             if (y < t.getBottom() - 1.0f)

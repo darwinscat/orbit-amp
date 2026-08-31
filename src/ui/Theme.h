@@ -47,9 +47,19 @@ inline const juce::Colour capBot  { 0xff120e17 };
 inline const juce::Colour dspTop  { 0xff181420 };
 inline const juce::Colour dspBot  { 0xff111019 };
 
+/** The thermometer's fixed colours — the heat scale's own stops, shared by every column and arc
+    that tells heat, so the whole face warms up through the same weather. */
+inline const juce::Colour heatFloor  { 0xff443a7d };   // the dark corporate ground
+inline const juce::Colour heatGreen  { 0xff5fc97a };   // the zone worth living in
+inline const juce::Colour heatYellow { 0xffe9c94c };
+inline const juce::Colour heatRed    { 0xffff4646 };   // past orange — the truly hot
+
 /** HEAT, 0..1: the one scale for "how hot" wherever the face asks it — cold blue, through the
     family's violet, to orange and red. The gain dial's arc runs along it, and the character ramp
-    below samples it, so a device's place in the list and the dial that drives it speak one colour. */
+    below samples it, so a device's place in the list and the dial that drives it speak one colour.
+    The METER columns tell a different half of the story and wear the thermometer stops above —
+    the two scales share their green, yellow and red, not their floor: a dial's bottom is a
+    character (cold), a column's bottom is silence. */
 inline juce::Colour heatColour (float t)
 {
     static const juce::ColourGradient scale = []

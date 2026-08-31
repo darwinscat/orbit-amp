@@ -13,9 +13,19 @@ namespace orbitamp::meterrail
     hollow sliding frame with a sight: the meter keeps running through it, and the two ticks biting
     in from the sides mark the exact value, which a 10 px-tall frame alone could not. */
 
+using theme::heatFloor;    // the thermometer's stops live in the theme, beside the scale they
+using theme::heatGreen;    // belong to — every heat-telling column and arc reads the same four
+using theme::heatYellow;
+using theme::heatRed;
+
 /** `desat` drains the colour out of the rail, 0..1 — the gate strip uses it to show pressure:
-    the deeper the gate squeezes, the greyer the signal's column, monochrome at full mute. */
-inline void paintFill (juce::Graphics& g, juce::Rectangle<float> r, float yLevel, float desat = 0.0f)
+    the deeper the gate squeezes, the greyer the signal's column, monochrome at full mute.
+
+    `heat` swaps the two-colour corporate flood for the whole thermometer — the GAIN dial's story
+    told on a pole: a dark corporate floor rising through the corporate violet, an honest traffic
+    middle of green and yellow, orange, and past it into red for the truly hot. */
+inline void paintFill (juce::Graphics& g, juce::Rectangle<float> r, float yLevel, float desat = 0.0f,
+                       bool heat = false)
 {
     if (yLevel >= r.getBottom() - 1.0f)
         return;
@@ -25,7 +35,23 @@ inline void paintFill (juce::Graphics& g, juce::Rectangle<float> r, float yLevel
     juce::ColourGradient grad (theme::violet.withMultipliedSaturation (keep).withAlpha (0.50f),
                                0.0f, r.getBottom(),
                                theme::orange.withMultipliedSaturation (keep), 0.0f, r.getY(), false);
-    grad.addColour (0.58, theme::violet.withMultipliedSaturation (keep).withAlpha (0.60f));
+
+    if (heat)
+    {
+        grad = juce::ColourGradient (heatFloor.withMultipliedSaturation (keep).withAlpha (0.55f),
+                                     0.0f, r.getBottom(),
+                                     heatRed.withMultipliedSaturation (keep),
+                                     0.0f, r.getY(), false);
+        // Green is a ZONE, not a waypoint: two stops make a plateau wide enough to live in,
+        // the way the block meters draw their feeding zone.
+        grad.addColour (0.40, theme::violet.withMultipliedSaturation (keep).withAlpha (0.60f));
+        grad.addColour (0.52, heatGreen.withMultipliedSaturation (keep).withAlpha (0.75f));
+        grad.addColour (0.70, heatGreen.withMultipliedSaturation (keep).withAlpha (0.78f));
+        grad.addColour (0.80, heatYellow.withMultipliedSaturation (keep).withAlpha (0.85f));
+        grad.addColour (0.88, theme::orange.withMultipliedSaturation (keep));
+    }
+    else
+        grad.addColour (0.58, theme::violet.withMultipliedSaturation (keep).withAlpha (0.60f));
 
     const juce::Graphics::ScopedSaveState ss (g);
     g.reduceClipRegion ((int) std::floor (r.getX()), (int) yLevel,
