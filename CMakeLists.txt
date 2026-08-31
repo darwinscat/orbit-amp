@@ -49,6 +49,18 @@ endif()
 FetchContent_MakeAvailable(juce)
 
 # ----------------------------------------------------------------------------
+# CLAP format via the MIT clap-juce-extensions wrapper (native CLAP is slated for JUCE 9).
+# Pinned like JUCE — the same commit OrbitCab ships. Upstream stopped tagging in 2022, so a
+# commit hash is their de-facto release channel.
+# ----------------------------------------------------------------------------
+set(ORBITAMP_CLAP_EXT_TAG "51a9359315298de632cf44e9d7524940868441e6" CACHE STRING "clap-juce-extensions git commit to build against")
+FetchContent_Declare(
+    clap-juce-extensions
+    GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
+    GIT_TAG        ${ORBITAMP_CLAP_EXT_TAG})
+FetchContent_MakeAvailable(clap-juce-extensions)
+
+# ----------------------------------------------------------------------------
 # felitronics-core — shared, JUCE-free, header-only DSP core (eq / dynamics / saturation /
 # neural / ...). Nothing is linked yet: the chain stages land one at a time and each adds its
 # module to target_link_libraries below. Wired now so that's a one-line change, not a rebuild
@@ -117,8 +129,7 @@ FetchContent_MakeAvailable(felitronics_appkit)
 #   PLUGIN_MANUFACTURER_CODE = Dcat  (Darwin's Cat — >=1 uppercase, AU rule; same as OrbitCab)
 #   PLUGIN_CODE              = Oamp  (OrbitAmp — unique per plugin; OrbitCab holds `Orbt`)
 #
-# CLAP comes later via clap-juce-extensions (one extra format, no source changes) — not wired
-# yet so the scaffold stays small.
+# CLAP rides via clap-juce-extensions below — one extra format, no source changes.
 # ----------------------------------------------------------------------------
 juce_add_plugin(OrbitAmp
     PRODUCT_NAME                "OrbitAmp"
@@ -166,6 +177,23 @@ target_sources(OrbitAmp PRIVATE
     src/ui/library/IrTreeView.cpp
 )
 
+# Wrap the same JUCE plugin as a CLAP (.clap) — one extra format, no source changes.
+clap_juce_extensions_plugin(TARGET OrbitAmp
+    CLAP_ID       "com.darwinscat.orbitamp"
+    CLAP_FEATURES audio-effect "guitar" "amplifier")
+
+# The CLAP wrapper ships its own default clap.icns (the generic CLAP logo) and JUCE's ICON_BIG
+# does not reach it. Overwrite it in place with the AppIcon.icns juceaide already generated for
+# the JUCE formats, keeping the wrapper's Info.plist CFBundleIconFile=clap.icns reference valid.
+# macOS only — the CLAP on Windows/Linux is a plain shared library, no icon resource.
+if(APPLE)
+    add_custom_command(TARGET OrbitAmp_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:OrbitAmp,JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:OrbitAmp_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
+
 # ----------------------------------------------------------------------------
 # Factory devices. DeviceLibrary::bundledDirectory() looks inside the bundle first
 # (Contents/Resources/Devices) and falls back to the machine's Factory folder only when the build
@@ -177,7 +205,7 @@ target_sources(OrbitAmp PRIVATE
 # ----------------------------------------------------------------------------
 file(GLOB ORBITAMP_FACTORY_PACKS "${CMAKE_CURRENT_SOURCE_DIR}/resources/Devices/*")
 if(ORBITAMP_FACTORY_PACKS)
-    foreach(fmt IN ITEMS VST3 AU Standalone)
+    foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
         if(TARGET OrbitAmp_${fmt})
             juce_add_bundle_resources_directory(OrbitAmp_${fmt}
                 "${CMAKE_CURRENT_SOURCE_DIR}/resources/Devices")

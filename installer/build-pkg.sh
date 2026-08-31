@@ -23,6 +23,11 @@ mkdir -p "$PLUG/VST3" "$PLUG/Components" "$stage/Applications" "$OUT"
 
 cp -R "$REL/VST3/OrbitAmp.vst3"    "$PLUG/VST3/"
 cp -R "$REL/AU/OrbitAmp.component" "$PLUG/Components/"
+# CLAP is a bundle dir on macOS, like VST3 — lands in /Library/Audio/Plug-Ins/CLAP.
+if [ -d "$REL/CLAP/OrbitAmp.clap" ]; then
+  mkdir -p "$PLUG/CLAP"
+  cp -R "$REL/CLAP/OrbitAmp.clap"  "$PLUG/CLAP/"
+fi
 # Standalone app → /Applications (already signed + stapled by release.sh).
 if [ -d "$REL/Standalone/OrbitAmp.app" ]; then
   cp -R "$REL/Standalone/OrbitAmp.app" "$stage/Applications/"

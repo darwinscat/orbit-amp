@@ -54,12 +54,15 @@ echo "-- gate: eqlink"; "$BUILD/orbitamp_eqlink_test" > /dev/null
 echo "-- gate: tuner";  "$BUILD/orbitamp_tuner_test"  > /dev/null
 
 REL="$BUILD/OrbitAmp_artefacts/Release"
-VST3="$REL/VST3/OrbitAmp.vst3"; AU="$REL/AU/OrbitAmp.component"; SA="$REL/Standalone/OrbitAmp.app"
+VST3="$REL/VST3/OrbitAmp.vst3"; AU="$REL/AU/OrbitAmp.component"; CLAP="$REL/CLAP/OrbitAmp.clap"
+SA="$REL/Standalone/OrbitAmp.app"
 lipo -info "$SA/Contents/MacOS/OrbitAmp"
 rm -rf dist stage; mkdir -p dist stage
 
 # 3. Plug-ins: hardened-runtime sign (they run inside the host → no entitlements of their own).
-for b in "$VST3" "$AU"; do
+BUNDLES=("$VST3" "$AU")
+if [ -d "$CLAP" ]; then BUNDLES+=("$CLAP"); fi
+for b in "${BUNDLES[@]}"; do
   codesign --force --options runtime --timestamp --sign "$APP_ID" "$b"
   codesign --verify --strict --verbose=1 "$b"
   cp -R "$b" stage/
