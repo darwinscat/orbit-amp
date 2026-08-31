@@ -84,7 +84,7 @@ public:
         g.setColour (theme::bezel);
         g.fillRoundedRectangle (r, theme::radiusSm);
 
-        const auto inCol = scaleArea();
+        const auto inCol = columnArea();
 
         // ---- IN: the family meter rail — dB-anchored, white hold, clip cap — wearing the whole
         //      thermometer (the GAIN dial's ramp on a pole): dark violet floor, corporate violet,
@@ -146,9 +146,11 @@ public:
         // ---- the trim: tabby's hollow sliding frame with its sight, riding the whole rail ----
         {
             const auto area = scaleArea();
+            // No ticks on the window's edge — the marks live on the inner side only.
             meterrail::paintDbScale (g, r.reduced (0.0f, 2.0f),
-                                     [&] (float db) { return dbToY (area, db); }, floorDb);
-            meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (area, 0.0f));
+                                     [&] (float db) { return dbToY (area, db); }, floorDb,
+                                     false, true, dbToY (area, levelDb));
+            meterrail::paintUnityNubs (g, r.reduced (0.0f, 2.0f), trimY (area, 0.0f), false, true);
             const float v = trimP.convertFrom0to1 (trimP.getValue());
             meterrail::paintGrip (g, r, trimY (area, v), meterrail::trimText (v),
                                   theme::orange.withMultipliedAlpha (hoverA),
@@ -444,6 +446,14 @@ private:
     juce::Rectangle<float> scaleArea() const
     {
         return getLocalBounds().toFloat().reduced (2.0f);
+    }
+
+    /** The COLUMN, narrower than the rail it stands in and not moved: cut hard on the window's
+        edge (left, for IN) and a little on the inner side — the grips keep the full rail width,
+        so they now visibly stick out toward the edge, a handle past its slot. */
+    juce::Rectangle<float> columnArea() const
+    {
+        return scaleArea().withTrimmedLeft (10.0f).withTrimmedRight (4.0f);
     }
 
     float dbToY (juce::Rectangle<float> r, float db) const

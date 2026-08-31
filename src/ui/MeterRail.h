@@ -75,12 +75,14 @@ inline void paintClipCap (juce::Graphics& g, juce::Rectangle<float> r, bool clip
 }
 
 /** The unity nubs: a scale mark, deliberately NOT a full line so it never reads as one of the
-    meter's own ticks. */
-inline void paintUnityNubs (juce::Graphics& g, juce::Rectangle<float> track, float y)
+    meter's own ticks. The side flags let a rail that stands against the window's edge keep its
+    marks on the inner side only. */
+inline void paintUnityNubs (juce::Graphics& g, juce::Rectangle<float> track, float y,
+                            bool left = true, bool right = true)
 {
     g.setColour (juce::Colours::white.withAlpha (0.60f));
-    g.fillRect (track.getX(), y - 1.0f, 7.0f, 2.0f);
-    g.fillRect (track.getRight() - 7.0f, y - 1.0f, 7.0f, 2.0f);
+    if (left)  g.fillRect (track.getX(), y - 1.0f, 7.0f, 2.0f);
+    if (right) g.fillRect (track.getRight() - 7.0f, y - 1.0f, 7.0f, 2.0f);
 }
 
 constexpr float gripH = 22.0f;
@@ -165,7 +167,9 @@ struct GripEditor
 /** The METER's ruler: a numbered mark every 6 dBFS of the level scale — the scale is about the
     SIGNAL, not about any runner. Rows that would collide with the rail's name are skipped. */
 inline void paintDbScale (juce::Graphics& g, juce::Rectangle<float> track,
-                          const std::function<float (float)>& yOfDb, float floorDb)
+                          const std::function<float (float)>& yOfDb, float floorDb,
+                          bool leftTicks = true, bool rightTicks = true,
+                          float yLevel = 1.0e9f)
 {
     for (float db = 0.0f; db > floorDb; db -= 6.0f)
     {
@@ -175,13 +179,38 @@ inline void paintDbScale (juce::Graphics& g, juce::Rectangle<float> track,
             continue;
 
         g.setColour (juce::Colours::white.withAlpha (0.30f));
-        g.fillRect (track.getX(), y - 1.0f, 4.5f, 2.0f);
-        g.fillRect (track.getRight() - 4.5f, y - 1.0f, 4.5f, 2.0f);
+        if (leftTicks)  g.fillRect (track.getX(), y - 1.0f, 4.5f, 2.0f);
+        if (rightTicks) g.fillRect (track.getRight() - 4.5f, y - 1.0f, 4.5f, 2.0f);
 
-        g.setColour (juce::Colours::white.withAlpha (0.38f));
-        theme::drawTracked (g, juce::String ((int) db),
-                            { track.getX(), y - 5.5f, track.getWidth(), 11.0f },
-                            theme::displayFont (10.0f), 0.04f, juce::Justification::centred);
+        // No minus — everything under the ceiling is below zero and everyone knows it. The number
+        // wears two inks, split by the LEVEL line: light on the dark rail above it, near-black
+        // over the bright fill below — the boundary is the level itself, so nothing flickers and
+        // a number the level passes through is simply two-toned for the moment.
+        const juce::Rectangle<float> row { track.getX(), y - 5.5f, track.getWidth(), 11.0f };
+        const auto text = juce::String ((int) std::abs (db));
+
+        if (yLevel > row.getY())
+        {
+            const juce::Graphics::ScopedSaveState above (g);
+            g.reduceClipRegion ((int) std::floor (row.getX()), (int) std::floor (row.getY()),
+                                (int) std::ceil (row.getWidth()) + 1,
+                                (int) std::ceil (juce::jmin (yLevel, row.getBottom()) - row.getY()));
+            g.setColour (juce::Colours::white.withAlpha (0.38f));
+            theme::drawTracked (g, text, row, theme::displayFont (10.0f), 0.04f,
+                                juce::Justification::centred);
+        }
+
+        if (yLevel < row.getBottom())
+        {
+            const juce::Graphics::ScopedSaveState below (g);
+            const float top = juce::jmax (yLevel, row.getY());
+            g.reduceClipRegion ((int) std::floor (row.getX()), (int) std::floor (top),
+                                (int) std::ceil (row.getWidth()) + 1,
+                                (int) std::ceil (row.getBottom() - top) + 1);
+            g.setColour (juce::Colour (0xff101014).withAlpha (0.85f));
+            theme::drawTracked (g, text, row, theme::displayFont (10.0f), 0.04f,
+                                juce::Justification::centred);
+        }
     }
 }
 
@@ -197,8 +226,9 @@ inline juce::String trimText (float db)
 inline void paintName (juce::Graphics& g, juce::Rectangle<float> col, const juce::String& name)
 {
     g.setColour (juce::Colours::white.withAlpha (0.55f));
-    theme::drawTracked (g, name, col.withTrimmedTop (col.getHeight() - 20.0f),
-                        theme::displayFont (11.0f), 0.10f, juce::Justification::centred);
+    // Smaller and tighter than it was: the narrowed column has to fit "OUT" whole.
+    theme::drawTracked (g, name, col.withTrimmedTop (col.getHeight() - 18.0f),
+                        theme::displayFont (9.0f), 0.06f, juce::Justification::centred);
 }
 
 } // namespace orbitamp::meterrail
