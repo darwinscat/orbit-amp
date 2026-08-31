@@ -256,7 +256,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         // The output level — a fader on the link, because every boost here is also "+drive into
         // the next nonlinearity", and shape deserves a say separate from push.
         layout.add (std::make_unique<Float> (juce::ParameterID { eqLevel (l), 1 }, name + "Level",
-                                             juce::NormalisableRange<float> (-eqLevelRangeDb, eqLevelRangeDb, 0.1f),
+                                             juce::NormalisableRange<float> (eqLevelMinDb, eqLevelMaxDb, 0.1f),
                                              0.0f));
     }
 
@@ -290,6 +290,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // and lets the reverb and everything after it go wide.
     layout.add (std::make_unique<Choice> (juce::ParameterID { stereoMode, 1 }, "Stereo Mode",
                                           stereoModes, 0));
+
+    // ON ships as the packs' stated law; a library captured at one honest level switches it off
+    // and feeds every model exactly what the chain hands over.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { packLevelComp, 1 }, "Pack Level Comp",
+                                        true));
 
     layout.add (std::make_unique<Choice> (juce::ParameterID { cabIr, 1 }, "Cabinet IR",
                                           cabIrNames, cabIrDefault));

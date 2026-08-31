@@ -60,7 +60,12 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
       eq (processor.apvts, eqLink, toneSpectrumTap, toneInSpectrumTap,
           [&processor] { return processor.currentSampleRate(); }),
       inMeter ("IN", processor.blockInDb[(size_t) eqLink],
-               *processor.apvts.getParameter (params::blockIn (blockId)), true)
+               *processor.apvts.getParameter (params::blockIn (blockId)), true),
+      // The OUT wall's hand IS the console's LEVEL fader — one parameter, two doors: the fader
+      // in the console's row and the grip on the wall move together, the attachment's echo
+      // keeping them honest.
+      outMeter ("OUT", eqLink == 0 ? processor.boostOutDb : processor.preampOutDb,
+                *processor.apvts.getParameter (params::eqLevel (eqLink)), false)
 {
     // The console's widgets become children of this block, which places them. The spectrum behind
     // its curve is the block's own output tap — the same one the TONE picture reads, because after
@@ -70,6 +75,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
     addAndMakeVisible (inMeter);
+    addAndMakeVisible (outMeter);
 
     device.fontHeight = 16.0f;   // the device's NAME, set exactly like the block's own beside it
     device.tracking   = 0.15f;
@@ -81,8 +87,9 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     gain.labelRowHeight = 0;
     gain.heat = true;
 
-    // The IN meter stands up beside the dial instead of lying across the block above it.
-    inMeter.vertical = true;
+    // Both walls stand up: IN at the block's left, OUT at its right.
+    inMeter.vertical  = true;
+    outMeter.vertical = true;
 
     // Five ways of showing the same device, one at a time. The tone curve comes from the block
     // itself — the same data its filters were designed from, resolved on the processor's pump.
@@ -421,7 +428,10 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
 
             for (int p = 0; p < m.grid.points; ++p)
             {
-                const double swing = (hi.db[(size_t) p] + hi.levelDb) - (lo.db[(size_t) p] + lo.levelDb);
+                // db[] already CARRIES the position's broadband level (level_db is a derived
+                // annotation, equal to the curve's 80 Hz-12 kHz mean) — adding it again was a
+                // double count that inflated every swing by the knob's whole loudness ride.
+                const double swing = hi.db[(size_t) p] - lo.db[(size_t) p];
                 if (std::abs (swing) > std::abs (bestSwing)) { bestSwing = swing; bestIdx = p; }
             }
 
@@ -576,6 +586,8 @@ void CapturedBlockPanel::blockOnChanged (bool on)
 {
     inMeter.live = on;
     inMeter.repaint();
+    outMeter.live = on;
+    outMeter.repaint();
 }
 
 bool CapturedBlockPanel::hasNamedPositions (const namz::rig::Tone& m)
@@ -642,6 +654,24 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     setControlsVisible (true);
     eq.setWidgetsVisible (true);
 
+    // ---- the IN meter runs the block's WHOLE height, at its left wall — beside the console
+    //      too: what the model is fed is the block's first fact, and now it reads at any
+    //      glance. The component is wider than its bar; the margin is where the dB appears
+    //      while the hand drags, click-through for the console beneath it otherwise. ----
+    {
+        auto meterCol = area.removeFromLeft (BlockMeter::designWidth);
+        area.removeFromLeft (6);
+        inMeter.setBounds (meterCol.withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
+        inMeter.toFront (false);   // over the console, so the dragged reading paints on top
+
+        auto outCol = area.removeFromRight (BlockMeter::designWidth);
+        area.removeFromRight (6);
+        outMeter.valueOnLeft = true;
+        outMeter.setBounds (outCol.withX (outCol.getX() - BlockMeter::standingValueW)
+                                  .withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
+        outMeter.toFront (false);   // the mirrored reading paints over the console's right edge
+    }
+
     // ---- the top zone is CAPPED and the console gets the remainder, not the other way round.
     //
     //      A dial and a picture stop improving once they are big enough to aim at; a curve does
@@ -676,14 +706,8 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         sel.steps->setBounds (sel.row.withX (sel.row.getX() + pickNameW).withWidth (pickSwitchW));
     }
 
-    // The IN meter stands at the column's left edge, as tall as the dial beside it: what the model
-    // is being fed, read against the dial that decides how hard.
-    auto meterCol = column.removeFromLeft (BlockMeter::designWidth);
-    column.removeFromLeft (6);
-
     const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
     gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
-    inMeter.setBounds (meterCol.withY (gain.getY()).withHeight (gainSide));
 
     // The pill stands in the gap at the bottom of the dial's arc — the one place inside the dial's
     // square that neither the ring nor a notch reaches — so it reads as the dial's own caption.
@@ -699,6 +723,7 @@ void CapturedBlockPanel::setControlsVisible (bool v)
     gain.setVisible (v);
     smoothTag.setVisible (v);
     inMeter.setVisible (v);
+    outMeter.setVisible (v);
     device.setEnabled (v);
 
     for (auto& slot : slots)

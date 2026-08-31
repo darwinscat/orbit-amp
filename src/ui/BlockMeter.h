@@ -46,20 +46,38 @@ public:
         whatever the next block wants, and there is no window that is right for it. */
     BlockMeter (juce::String meterName, const std::atomic<float>& levelSource,
                 juce::RangedAudioParameter& trimParam, bool showZone)
-        : name (std::move (meterName)), levelDb (levelSource), param (trimParam), zone (showZone)
+        : name (std::move (meterName)), levelDb (levelSource), param (&trimParam), zone (showZone)
     {
-        trim = std::make_unique<juce::ParameterAttachment> (trimParam, [this] (float)
-        {
-            // Standing up there is no room for the reading beside the bar, so it rides the hint —
-            // with the one piece of advice the green is there to give.
-            setTooltip (name + "  " + meterrail::trimText (trimDb())
-                        + (zone ? "   -   keep the level in the green" : juce::String()));
-            repaint();
-        });
+        trim = std::make_unique<juce::ParameterAttachment> (trimParam, [this] (float) { repaint(); });
         trim->sendInitialUpdate();
         setRepaintsOnMouseActivity (true);
         startTimerHz (30);
     }
+
+    /** A meter ALONE — no hand, because there is nothing for one to hold: a block deliberately
+        has no output volume, so its OUT column only answers "what leaves". Not interactive. */
+    BlockMeter (juce::String meterName, const std::atomic<float>& levelSource)
+        : name (std::move (meterName)), levelDb (levelSource), param (nullptr), zone (false)
+    {
+        startTimerHz (30);
+    }
+
+    /** The hint is a RULER, not a report: one number — what the scale says at the cursor's own
+        height. Composed on demand, so it moves with the hand that hovers. */
+    juce::String getTooltip() override
+    {
+        const auto  t = vertical ? columnArea() : trackArea();
+        const auto  p = getMouseXYRelative().toFloat();
+        const float u = vertical ? (t.getBottom() - p.y) / juce::jmax (1.0f, t.getHeight())
+                                 : (p.x - t.getX())      / juce::jmax (1.0f, t.getWidth());
+        const float db = floorDb + juce::jlimit (0.0f, 1.0f, u) * (ceilDb - floorDb);
+
+        return juce::String (db, 1) + " dB";
+    }
+
+    /** The right-wall meter: the bar stands at the component's right edge and the dragged
+        reading appears to its LEFT — the mirror of the IN wall. */
+    bool valueOnLeft = false;
 
     /** STANDING UP: the same meter as a thin column, for the left of a dial — the fill climbs, the
         hand lies across it, the green zone runs up its edge. No name and no reading beside it:
@@ -71,6 +89,19 @@ public:
         something. The owner flips this with the block's power. */
     bool live = true;
     static constexpr int designWidth = 12;
+
+    /** Standing, the component is wider than its bar by this margin: the dB reading appears
+        there while the hand drags. Empty and CLICK-THROUGH otherwise — see hitTest. */
+    static constexpr int standingValueW = 48;
+
+    bool hitTest (int x, int y) override
+    {
+        if (vertical && ! dragging)
+            return valueOnLeft ? x >= getWidth() - designWidth - 2
+                               : x <= designWidth + 2;
+
+        return juce::Component::hitTest (x, y);
+    }
 
     /** The grip is in the hand — the owner may want to show a ladder beside it. */
     std::function<void (bool)> onDrag;
@@ -141,18 +172,24 @@ public:
         theme::drawTracked (g, name, r.withTrimmedLeft (6.0f).withWidth (nameW - 8.0f),
                             theme::displayFont (10.0f), 0.08f, juce::Justification::centredLeft);
 
-        // ---- unity, and the hand ----
-        const float unityX = xOfTrim (track, 0.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.55f));
-        g.fillRect (unityX - 1.0f, track.getY(), 2.0f, 5.0f);
-        g.fillRect (unityX - 1.0f, track.getBottom() - 5.0f, 2.0f, 5.0f);
+        // ---- unity, and the hand — only where there IS one ----
+        if (param != nullptr)
+        {
+            const float unityX = xOfTrim (track, 0.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.55f));
+            g.fillRect (unityX - 1.0f, track.getY(), 2.0f, 5.0f);
+            g.fillRect (unityX - 1.0f, track.getBottom() - 5.0f, 2.0f, 5.0f);
 
-        paintNail (g, track);
-        paintValue (g);
+            paintNail (g, track);
+            paintValue (g);
+        }
     }
 
     void mouseDown (const juce::MouseEvent& e) override
     {
+        if (param == nullptr)
+            return;
+
         if (e.mods.isPopupMenu())
         {
             // The one thing a trim is always asked for: put it back.
@@ -166,7 +203,7 @@ public:
             return;
 
         dragging = true;
-        param.beginChangeGesture();
+        param->beginChangeGesture();
         if (onDrag != nullptr)
             onDrag (true);
 
@@ -185,13 +222,16 @@ public:
             return;
 
         dragging = false;
-        param.endChangeGesture();
+        param->endChangeGesture();
         if (onDrag != nullptr)
             onDrag (false);
     }
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
+        if (param == nullptr)
+            return;
+
         // On the number: type one. Anywhere on the bar: home. The same convention the vertical
         // rails' grips already use, split across the two halves this meter has. Standing up there
         // is no number to type into, so a double-click is home.
@@ -237,12 +277,11 @@ private:
     static constexpr float nameW  = 26.0f;
     static constexpr float valueW = 40.0f;
 
-    // The scale, and it is not the usual sixty decibels. Two of these live side by side inside half
-    // a block, so the bar is short and every unit of it has to be worth something: a floor at -60
-    // spends four fifths of the width on "far too quiet" and squeezes the window that matters into
-    // the last inch. -42 to +6 puts the green zone in the middle of the bar where it can be aimed
-    // at, and keeps a little room above zero so a clip is visible rather than merely full.
-    static constexpr float floorDb = -42.0f;
+    // The scale: -72 like the big rails, now that the column runs the block's whole height —
+    // there is finally enough bar for the quiet four fifths to cost nothing, and one floor
+    // across every meter in the window beats a shorter, private one. A little room above zero
+    // stays, so a clip is visible rather than merely full.
+    static constexpr float floorDb = -72.0f;
     static constexpr float ceilDb  =   6.0f;
 
     static float xOfLevel (juce::Rectangle<float> t, float db)
@@ -251,28 +290,38 @@ private:
         return t.getX() + u * t.getWidth();
     }
 
-    static float xOfTrim (juce::Rectangle<float> t, float db)
+    /** The hand's place comes from ITS parameter's range, not a baked scale: the IN wall holds
+        a -24..+12 trim, the OUT wall the console's ±12 LEVEL — one meter, either hand. */
+    float xOfTrim (juce::Rectangle<float> t, float db) const
     {
-        const float u = juce::jlimit (0.0f, 1.0f, (db - params::blockTrimMinDb)
-                                                    / (params::blockTrimMaxDb - params::blockTrimMinDb));
-        return t.getX() + u * t.getWidth();
+        const float u = param != nullptr ? param->convertTo0to1 (db) : 0.0f;
+        return t.getX() + juce::jlimit (0.0f, 1.0f, u) * t.getWidth();
     }
 
-    float trimDb() const { return param.convertFrom0to1 (param.getValue()); }
+    float trimDb() const { return param != nullptr ? param->convertFrom0to1 (param->getValue()) : 0.0f; }
 
     void writeFrom (juce::Point<float> p)
     {
         const auto  t = vertical ? columnArea() : trackArea();
         const float u = vertical ? (t.getBottom() - p.y) / juce::jmax (1.0f, t.getHeight())
                                  : (p.x - t.getX())      / juce::jmax (1.0f, t.getWidth());
-        trim->setValueAsPartOfGesture (params::blockTrimMinDb
-                                       + juce::jlimit (0.0f, 1.0f, u)
-                                           * (params::blockTrimMaxDb - params::blockTrimMinDb));
+        trim->setValueAsPartOfGesture (param->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, u)));
     }
 
     // ---- standing up ----
 
-    juce::Rectangle<float> columnArea() const { return getLocalBounds().toFloat().reduced (2.0f, 2.0f); }
+    juce::Rectangle<float> columnArea() const
+    {
+        // Standing, only the bar's strip is the meter — the rest of the width belongs to the
+        // dragged reading, on whichever side the wall faces.
+        auto r = getLocalBounds().toFloat();
+
+        if (vertical)
+            r = valueOnLeft ? r.withTrimmedLeft (r.getWidth() - (float) designWidth)
+                            : r.withWidth ((float) designWidth);
+
+        return r.reduced (2.0f, 2.0f);
+    }
 
     static float yOfLevel (juce::Rectangle<float> t, float db)
     {
@@ -280,11 +329,10 @@ private:
         return t.getBottom() - u * t.getHeight();
     }
 
-    static float yOfTrim (juce::Rectangle<float> t, float db)
+    float yOfTrim (juce::Rectangle<float> t, float db) const
     {
-        const float u = juce::jlimit (0.0f, 1.0f, (db - params::blockTrimMinDb)
-                                                    / (params::blockTrimMaxDb - params::blockTrimMinDb));
-        return t.getBottom() - u * t.getHeight();
+        const float u = param != nullptr ? param->convertTo0to1 (db) : 0.0f;
+        return t.getBottom() - juce::jlimit (0.0f, 1.0f, u) * t.getHeight();
     }
 
     /** The bar on its feet, and stripped: no bezel, no hairline, no marks on the rail. What the
@@ -328,6 +376,10 @@ private:
         if (live && hold > floorDb + 0.5f)
             meterrail::paintHold (g, t, yOfLevel (t, hold));
 
+        // A meter without a hand said everything already.
+        if (param == nullptr)
+            return;
+
         // The hand, lying across the column, with a head at each end.
         const float y   = yOfTrim (t, trimDb());
         const bool  lit = dragging || isMouseOver();
@@ -338,6 +390,24 @@ private:
         g.fillRect (t.getX() - 1.0f, y - 0.75f, t.getWidth() + 2.0f, 1.5f);
         g.fillRect (t.getX() - 1.0f,      y - 2.5f, 2.5f, 5.0f);
         g.fillRect (t.getRight() - 1.5f,  y - 2.5f, 2.5f, 5.0f);
+
+        // The reading, in the hand's own colour, riding beside the grip while it drags — the
+        // component's extra width is exactly this label's room, on the side the wall faces.
+        if (dragging)
+        {
+            const float ly = juce::jlimit (t.getY() + 8.0f, t.getBottom() - 8.0f, y);
+            const auto  label = valueOnLeft
+                ? juce::Rectangle<float> (t.getX() - (float) standingValueW + 3.0f, ly - 8.0f,
+                                          (float) standingValueW - 8.0f, 16.0f)
+                : juce::Rectangle<float> (t.getRight() + 5.0f, ly - 8.0f,
+                                          (float) standingValueW - 8.0f, 16.0f);
+
+            g.setColour (theme::orange);
+            theme::drawTracked (g, meterrail::trimText (trimDb()), label,
+                                theme::displayFont (11.0f), 0.02f,
+                                valueOnLeft ? juce::Justification::centredRight
+                                            : juce::Justification::centredLeft);
+        }
     }
 
     /** The family gradient, lying down: mostly violet, warming to orange only near the top, and
@@ -392,7 +462,7 @@ private:
 
     juce::String name;
     const std::atomic<float>& levelDb;
-    juce::RangedAudioParameter& param;
+    juce::RangedAudioParameter* param;   // null = a meter alone, no hand
     bool zone = true;
 
     std::unique_ptr<juce::ParameterAttachment> trim;
