@@ -37,6 +37,9 @@ Chrome::Chrome (AmpProcessor& processor)
     addAndMakeVisible (brand);
     mark = juce::Drawable::createFromImageData (BinaryData::OrbitAmpmark_svg,
                                                 (size_t) BinaryData::OrbitAmpmark_svgSize);
+    // The wordmark speaks up without growing the cat or the mark.
+    brand.wordmarkScale = 0.50f;
+    brand.bylineScale   = 0.30f;
 
     for (auto* b : { &undo, &redo, &save, &saveAs, &trash, &gear })
     {
@@ -74,6 +77,7 @@ Chrome::Chrome (AmpProcessor& processor)
         b->setRegisterIndex (i);
         b->setButtonText (juce::String::charToString ((juce::juce_wchar) ('A' + i)));
         b->theme      = theme;
+        b->textHeight = 14.5f;   // louder letters, same cells
         b->onClick    = [&history, i] { history.switchTo (i); };
         b->onPopup    = [this, i] { showRegisterMenu (i); };
         b->onCopyDrop = [&history] (int from, int to) { history.copyRegister (from, to); };
@@ -142,8 +146,8 @@ void Chrome::resized()
     // ---- undo / redo right after the brand ----
     header.removeFromLeft (10);
     auto leftBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
-    undo.setBounds (leftBar.removeFromLeft (34).reduced (3, 8));
-    redo.setBounds (leftBar.removeFromLeft (34).reduced (3, 8));
+    undo.setBounds (leftBar.removeFromLeft (34).reduced (3, 6));
+    redo.setBounds (leftBar.removeFromLeft (34).reduced (3, 6));
     header.removeFromLeft (68 + 8);
 
     // ---- right cluster takes the REST: the gear at the very edge, file actions, registers, and
@@ -206,7 +210,25 @@ void Chrome::showPresetMenu()
         });
 
     menu.addSeparator();
-    menu.addItem ("Reveal preset folder", [] { PresetManager::directory().revealToUser(); });
+
+    // Back to what a fresh instance is — every parameter to its default, through the history, so
+    // the reset is one undoable step like any preset load.
+    menu.addItem ("Reset to default", [this]
+    {
+        auto tree = amp.apvts.copyState();
+
+        for (auto* p : amp.getParameters())
+            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+            {
+                auto child = tree.getChildWithProperty ("id", rp->paramID);
+                if (child.isValid())
+                    child.setProperty ("value", rp->convertFrom0to1 (rp->getDefaultValue()), nullptr);
+            }
+
+        amp.history.applyEdit (amp.history.active(), tree, "Reset to default");
+        presetName = "Default";
+        preset.setCurrentName (presetName);
+    });
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (preset.nameAnchor()));
 }
