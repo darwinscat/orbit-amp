@@ -39,7 +39,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
 
     // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
     wave.setAccent (theme::orange);
-    wave.setTrimInteractive (true);
+    // The handle exists only in MANUAL — pushToWave keeps this current with the combo's mode.
     wave.setEqVisible (true);
 
     // The spectra behind the impulse, in the consoles' own hand: what walks into the IR as the
@@ -98,8 +98,8 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     wave.onHpfChanged  = [this] (bool, float hz) { hpfHzAtt->setValueAsCompleteGesture (hz); };
     wave.onLpfChanged  = [this] (bool, float hz) { lpfHzAtt->setValueAsCompleteGesture (hz); };
     wave.onTrimChanged = [this] (float f)        { trimAtt->setValueAsCompleteGesture (f); };
-    // The picture's right-click menu doubles the TRIM switch — index 2 in the switch row below.
-    wave.onTrimToggled = [this] (bool on)        { switches[2].att->setValueAsCompleteGesture (on ? 1.0f : 0.0f); };
+    // The picture's right-click menu IS the trim combo's menu — one story, two doors.
+    wave.onMenuRequested = [this]                { showTrimMenu(); };
 
     // The vertical half of a cut drag: the consoles' slope ladder, one notch per step.
     const auto stepSlope = [this] (const char* id, juce::ParameterAttachment& att, int steps)
@@ -121,12 +121,26 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     hpfHzAtt    = follow (params::cabHpfHz);
     lpfHzAtt    = follow (params::cabLpfHz);
     trimAtt     = follow (params::cabTrim);
+    trimOnAtt   = follow (params::cabTrimOn);
     hpfSlopeAtt = follow (params::cabHpfSlope);
     lpfSlopeAtt = follow (params::cabLpfSlope);
 
-    // The four switches, each the truth of its parameter and nothing of its own.
-    const char* ids[]    = { params::cabHpfOn, params::cabLpfOn, params::cabTrimOn, params::cabPhase };
-    const char* names[]  = { "HPF", "LPF", "TRIM", "\xc3\x98" };
+    trimCombo.getText = [this]
+    {
+        switch (trimMode)
+        {
+            case TrimMode::fixed:  return "TRIM " + juce::String ((int) trimModeMs);
+            case TrimMode::manual: return juce::String ("TRIM MAN");
+            case TrimMode::off:
+            default:               return juce::String ("TRIM OFF");
+        }
+    };
+    trimCombo.onOpen = [this] { showTrimMenu(); };
+    addAndMakeVisible (trimCombo);
+
+    // The switches, each the truth of its parameter and nothing of its own.
+    const char* ids[]    = { params::cabHpfOn, params::cabLpfOn, params::cabPhase };
+    const char* names[]  = { "HPF", "LPF", "\xc3\x98" };
 
     for (size_t i = 0; i < switches.size(); ++i)
     {
@@ -165,6 +179,13 @@ void CabinetBlock::loadWave (int index)
 {
     const auto& bytes = AmpProcessor::cabIrBytes (index);
     wave.setFromMemory (bytes.data, (size_t) bytes.size);
+
+    // A fixed window keeps its WORD across an IR swap: the parameter is a fraction of the shot's
+    // length, so 50 ms of the old cab is not 50 ms of the new — re-assert the milliseconds.
+    if (trimMode == TrimMode::fixed && wave.lengthMs() > 0.0)
+        trimAtt->setValueAsCompleteGesture (
+            (float) juce::jlimit (0.02, 1.0, trimModeMs / wave.lengthMs()));
+
     pushToWave();
 }
 
@@ -187,6 +208,113 @@ void CabinetBlock::pushToWave()
     wave.setSlopes (slopeDb (params::cabHpfSlope), slopeDb (params::cabLpfSlope));
     wave.setTrimEnabled (plain (params::cabTrimOn) > 0.5f);
     wave.setTrimFraction (plain (params::cabTrim));
+
+    deriveTrimMode();
+    wave.setTrimInteractive (trimMode == TrimMode::manual);
+    trimCombo.repaint();
+}
+
+void CabinetBlock::deriveTrimMode()
+{
+    auto* on = amp.apvts.getParameter (params::cabTrimOn);
+
+    if (on->convertFrom0to1 (on->getValue()) < 0.5f)
+    {
+        trimMode = TrimMode::off;
+        return;
+    }
+
+    // An explicitly chosen MANUAL stays MANUAL even when the magnet lands the handle exactly on
+    // a mark — a handle that vanished under the hand would be a bug wearing a rule's clothes.
+    if (trimMode == TrimMode::manual)
+        return;
+
+    auto* tp = amp.apvts.getParameter (params::cabTrim);
+    const double ms = (double) tp->convertFrom0to1 (tp->getValue()) * wave.lengthMs();
+
+    for (const double mark : { 50.0, 100.0, 200.0, 500.0 })
+        if (std::abs (ms - mark) < 1.0)
+        {
+            trimMode   = TrimMode::fixed;
+            trimModeMs = mark;
+            return;
+        }
+
+    trimMode = TrimMode::manual;
+}
+
+void CabinetBlock::showTrimMenu()
+{
+    juce::PopupMenu m;
+    m.addItem (1, "OFF", true, trimMode == TrimMode::off);
+    m.addSeparator();
+
+    const double marks[] = { 50.0, 100.0, 200.0, 500.0 };
+    const char* labels[] = { "50 MS - DRY", "100 MS", "200 MS - WET", "500 MS" };
+
+    for (int i = 0; i < 4; ++i)
+        m.addItem (i + 2, labels[i], marks[i] < wave.lengthMs(),
+                   trimMode == TrimMode::fixed && juce::approximatelyEqual (trimModeMs, marks[i]));
+
+    m.addSeparator();
+    m.addItem (6, "MANUAL", true, trimMode == TrimMode::manual);
+
+    m.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+                     [safe = juce::Component::SafePointer<CabinetBlock> (this)] (int r)
+                     {
+                         if (safe != nullptr && r > 0)
+                             safe->applyTrimPick (r);
+                     });
+}
+
+void CabinetBlock::applyTrimPick (int itemId)
+{
+    // The mode first, so the parameter echoes read the chosen story rather than re-deriving it.
+    if (itemId == 1)
+    {
+        trimMode = TrimMode::off;
+        trimOnAtt->setValueAsCompleteGesture (0.0f);
+        wave.setViewWindow (0.0);
+        return;
+    }
+
+    if (itemId == 6)
+    {
+        trimMode = TrimMode::manual;
+        trimOnAtt->setValueAsCompleteGesture (1.0f);
+        return;
+    }
+
+    const double marks[] = { 50.0, 100.0, 200.0, 500.0 };
+    trimMode   = TrimMode::fixed;
+    trimModeMs = marks[itemId - 2];
+    trimOnAtt->setValueAsCompleteGesture (1.0f);
+
+    if (wave.lengthMs() > 0.0)
+        trimAtt->setValueAsCompleteGesture (
+            (float) juce::jlimit (0.02, 1.0, trimModeMs / wave.lengthMs()));
+
+    wave.setViewWindow (trimModeMs);
+}
+
+void CabinetBlock::TrimCombo::paint (juce::Graphics& g)
+{
+    if (getText == nullptr)
+        return;
+
+    const auto r = getLocalBounds().toFloat();
+
+    g.setColour (theme::txDim);
+    theme::drawTracked (g, getText(), r.withTrimmedRight (11.0f), theme::displayFont (12.0f), 0.04f,
+                        juce::Justification::centredLeft);
+
+    // The chevron that says "this opens" — the consoles' SlopeCombo grammar.
+    juce::Path v;
+    const float cx = r.getRight() - 9.0f, cy = r.getCentreY() - 1.0f;
+    v.startNewSubPath (cx - 3.0f, cy);
+    v.lineTo (cx, cy + 3.0f);
+    v.lineTo (cx + 3.0f, cy);
+    g.strokePath (v, juce::PathStrokeType (1.2f));
 }
 
 void CabinetBlock::layOutContent (juce::Rectangle<int> area)
@@ -198,17 +326,28 @@ void CabinetBlock::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = ir.getBounds();
     }
 
-    // The switches along the bottom, four equal cells: a switch and its word.
+    // The bottom row, four equal cells: HPF and LPF switches, the trim combo in the third — the
+    // trim's whole story where its toggle used to sit — and the phase switch last.
     auto row = area.removeFromBottom (switchRow);
     area.removeFromBottom (gap);
 
-    const int cellW = row.getWidth() / (int) switches.size();
-    for (auto& s : switches)
+    const int cellW = row.getWidth() / 4;
+
+    for (size_t i = 0; i < 2; ++i)
     {
         auto cell = row.removeFromLeft (cellW);
-        s.sw.setBounds (cell.removeFromLeft (30).withSizeKeepingCentre (30, 16));
+        switches[i].sw.setBounds (cell.removeFromLeft (30).withSizeKeepingCentre (30, 16));
         cell.removeFromLeft (6);
-        s.label.setBounds (cell);
+        switches[i].label.setBounds (cell);
+    }
+
+    trimCombo.setBounds (row.removeFromLeft (cellW));
+
+    {
+        auto cell = row.removeFromLeft (cellW);
+        switches[2].sw.setBounds (cell.removeFromLeft (30).withSizeKeepingCentre (30, 16));
+        cell.removeFromLeft (6);
+        switches[2].label.setBounds (cell);
     }
 
     wave.setBounds (area);

@@ -57,9 +57,33 @@ private:
         std::unique_ptr<juce::ParameterAttachment> att;
     };
 
-    std::array<Switch, 4> switches;   // HPF, LPF, TRIM, Ø
+    std::array<Switch, 3> switches;   // HPF, LPF, Ø — TRIM became the combo below
 
-    std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt,
+    /** The trim's whole story in one cell: OFF, a fixed window, or MANUAL. A combo in behaviour,
+        our own face in pixels — the consoles' SlopeCombo grammar. */
+    struct TrimCombo final : public juce::Component
+    {
+        std::function<juce::String()> getText;
+        std::function<void()>         onOpen;
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override { if (onOpen) onOpen(); }
+    };
+
+    enum class TrimMode { off, fixed, manual };
+
+    void showTrimMenu();
+    void applyTrimPick (int itemId);
+
+    /** Reads the mode off the parameters — for init and outside writes (automation, recall).
+        An explicitly chosen MANUAL survives landing exactly on a mark: the magnet snaps there,
+        and a handle that vanished under the hand would be the bug, not the feature. */
+    void deriveTrimMode();
+
+    TrimCombo trimCombo;
+    TrimMode  trimMode   = TrimMode::off;
+    double    trimModeMs = 0.0;
+
+    std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt, trimOnAtt,
                                                hpfSlopeAtt, lpfSlopeAtt;
 
     /** The same liquid analyser the consoles run — one pane for the IR's door, one for its exit. */
