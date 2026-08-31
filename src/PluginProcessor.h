@@ -246,6 +246,10 @@ public:
         spectra. Pushed around the convolution, channel 0, only while the cabinet is on. */
     std::array<felitronics::analysis::RollingSpectrumTap, 2> cabSpectrumTap;
 
+    /** The reverb's pair: the door, and what the room ADDS — the wet alone, post its own HPF, at
+        the mix. Channel 0, only while the reverb is on; the block draws them as its picture. */
+    std::array<felitronics::analysis::RollingSpectrumTap, 2> reverbSpectrumTap;
+
     /** One analysis resolution for every consumer of the taps: mixed orders would make the tap
         force-republish on every alternating pull. */
     static constexpr int eqSpectrumOrder = 11;   // 2048

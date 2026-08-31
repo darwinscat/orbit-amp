@@ -11,7 +11,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
              processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
       preamp (processor, processor.preamp, "Preamp", params::preampId, 1,
               processor.blockSpectrumTap[1], processor.blockInSpectrumTap[1]),
-      reverb (processor.apvts), power (processor, processor.poweramp), cabinet (processor)
+      reverb (processor), power (processor, processor.poweramp), cabinet (processor)
 {
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &reverb,
                      (BlockFrame*) &power, (BlockFrame*) &cabinet })

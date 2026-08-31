@@ -45,6 +45,8 @@ public:
 
         for (auto& b : wet)
             b.assign ((size_t) juce::jmax (1, maxBlockSize), 0.0f);
+        for (auto& b : wetOut)
+            b.assign ((size_t) juce::jmax (1, maxBlockSize), 0.0f);
 
         const auto preMax = (size_t) std::ceil (0.1 * sampleRate) + 8;   // 100 ms of predelay
         const auto modMax = (size_t) std::ceil (0.02 * sampleRate) + 8;  // 12 ms base + depth
@@ -96,6 +98,14 @@ public:
             decayScale = s;
             apply();
         }
+    }
+
+    /** What the stage ADDED last block, per channel — for the picture that shows the pair: the
+        door and the tail, the cab grammar on the frequency axis. Message-thread read of an
+        audio-thread buffer is the taps' business; this just hands the pointer. */
+    const float* addedWet (int ch) const noexcept
+    {
+        return wetOut[(size_t) juce::jlimit (0, 1, ch)].data();
     }
 
     /** How long the attack stays dry before the tail arrives, 0..100 ms. */
@@ -157,7 +167,9 @@ public:
                 if (hpfOn)
                     s = hpf.processSample (ch, s);
 
-                channels[ch][i] += s * mix;
+                const float added = s * mix;
+                wetOut[(size_t) ch][(size_t) i] = added;
+                channels[ch][i] += added;
             }
 
             prePos = (prePos + 1) % (int) preLine[0].size();
@@ -248,7 +260,7 @@ private:
 
     double sampleRate = 48000.0;
 
-    std::array<std::vector<float>, 2> wet;
+    std::array<std::vector<float>, 2> wet, wetOut;
     std::array<std::vector<float>, 2> preLine, modLine;
     int   prePos = 0, modPos = 0;
     float lfoPhase = 0.0f;

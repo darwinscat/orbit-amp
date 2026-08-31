@@ -299,6 +299,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         tap.reset();
     for (auto& tap : blockInSpectrumTap)
         tap.reset();
+    for (auto& tap : reverbSpectrumTap)
+        tap.reset();
 
     lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
     lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
@@ -589,7 +591,24 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     if (reverbOnParam->load() > 0.5f)
         { const auto a = PerfClock::now();
+
+          // The pair for the block's picture: the door before the room, the ADDED wet after it.
+          { auto& tin = reverbSpectrumTap[0];
+            const float* d = channels[0];
+            for (int i = 0; i < numSamples; ++i)
+                tin.push (d[i]);
+            tin.publishIfDue (eqSpectrumOrder,
+                              juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
+
           reverb.process (channels, nchBack, numSamples);
+
+          { auto& tout = reverbSpectrumTap[1];
+            const float* w = reverb.addedWet (0);
+            for (int i = 0; i < numSamples; ++i)
+                tout.push (w[i]);
+            tout.publishIfDue (eqSpectrumOrder,
+                               juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
+
           nsStage[stReverb] = elapsedNs (a); }
     else
         reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
