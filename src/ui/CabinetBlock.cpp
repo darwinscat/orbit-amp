@@ -184,7 +184,7 @@ void CabinetBlock::loadWave (int index)
     // length, so 50 ms of the old cab is not 50 ms of the new — re-assert the milliseconds.
     if (trimMode == TrimMode::fixed && wave.lengthMs() > 0.0)
         trimAtt->setValueAsCompleteGesture (
-            (float) juce::jlimit (0.02, 1.0, trimModeMs / wave.lengthMs()));
+            (float) juce::jlimit (0.001, 1.0, trimModeMs / wave.lengthMs()));
 
     pushToWave();
 }
@@ -211,6 +211,11 @@ void CabinetBlock::pushToWave()
 
     deriveTrimMode();
     wave.setTrimInteractive (trimMode == TrimMode::manual);
+
+    // MANUAL's spot follows the hand while MANUAL is worn — so a later fixed pick cannot lose it.
+    if (trimMode == TrimMode::manual && wave.lengthMs() > 0.0)
+        manualTrimMs = (double) plain (params::cabTrim) * wave.lengthMs();
+
     trimCombo.repaint();
 }
 
@@ -270,31 +275,42 @@ void CabinetBlock::showTrimMenu()
 void CabinetBlock::applyTrimPick (int itemId)
 {
     // The mode first, so the parameter echoes read the chosen story rather than re-deriving it.
+    // And pushToWave LAST, unconditionally: a pick that writes a value the parameter already has
+    // echoes nothing, and the combo and the handle would be left telling yesterday's story.
     if (itemId == 1)
     {
         trimMode = TrimMode::off;
         trimOnAtt->setValueAsCompleteGesture (0.0f);
         wave.setViewWindow (0.0);
-        return;
     }
-
-    if (itemId == 6)
+    else if (itemId == 6)
     {
+        // MANUAL opens on the whole shot and puts the handle back where the hand last left it —
+        // the windows in between never steal its spot. The servo takes the zoom from there.
         trimMode = TrimMode::manual;
         trimOnAtt->setValueAsCompleteGesture (1.0f);
-        return;
+
+        if (manualTrimMs > 0.0 && wave.lengthMs() > 0.0)
+            trimAtt->setValueAsCompleteGesture (
+                (float) juce::jlimit (0.001, 1.0, manualTrimMs / wave.lengthMs()));
+
+        wave.setViewWindow (0.0);
+    }
+    else
+    {
+        const double marks[] = { 50.0, 100.0, 200.0, 500.0 };
+        trimMode   = TrimMode::fixed;
+        trimModeMs = marks[itemId - 2];
+        trimOnAtt->setValueAsCompleteGesture (1.0f);
+
+        if (wave.lengthMs() > 0.0)
+            trimAtt->setValueAsCompleteGesture (
+                (float) juce::jlimit (0.001, 1.0, trimModeMs / wave.lengthMs()));
+
+        wave.setViewWindow (trimModeMs);
     }
 
-    const double marks[] = { 50.0, 100.0, 200.0, 500.0 };
-    trimMode   = TrimMode::fixed;
-    trimModeMs = marks[itemId - 2];
-    trimOnAtt->setValueAsCompleteGesture (1.0f);
-
-    if (wave.lengthMs() > 0.0)
-        trimAtt->setValueAsCompleteGesture (
-            (float) juce::jlimit (0.02, 1.0, trimModeMs / wave.lengthMs()));
-
-    wave.setViewWindow (trimModeMs);
+    pushToWave();
 }
 
 void CabinetBlock::TrimCombo::paint (juce::Graphics& g)

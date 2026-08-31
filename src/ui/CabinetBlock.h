@@ -83,6 +83,10 @@ private:
     TrimMode  trimMode   = TrimMode::off;
     double    trimModeMs = 0.0;
 
+    /** MANUAL's own place, remembered in ms: a fixed pick moves the parameter, but coming back to
+        MANUAL puts the handle where the hand last left it — the windows never steal its spot. */
+    double manualTrimMs = 0.0;
+
     std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt, trimOnAtt,
                                                hpfSlopeAtt, lpfSlopeAtt;
 

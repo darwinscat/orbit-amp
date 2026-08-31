@@ -229,7 +229,7 @@ inline constexpr const char* cabTrim   = "cab_trim";      // the fraction kept, 
 inline constexpr const char* cabPhase  = "cab_phase";
 inline constexpr float cabHpfMinHz = 0.0f,    cabHpfMaxHz = 1000.0f,  cabHpfDefaultHz = 80.0f;
 inline constexpr float cabLpfMinHz = 1200.0f, cabLpfMaxHz = 20000.0f, cabLpfDefaultHz = 7000.0f;
-inline constexpr float cabTrimMin  = 0.02f;
+inline constexpr float cabTrimMin  = 0.001f;   // the ms floor lives in the picture (5 ms) — the fraction only guards zero
 
 inline constexpr const char* powerOn   = "power_on";
 /** How many channels the chain works, and from where. MONO: one signal end to end, the copy to the
