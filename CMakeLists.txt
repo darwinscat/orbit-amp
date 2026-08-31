@@ -316,7 +316,10 @@ target_link_libraries(orbitamp_level_probe PRIVATE
 # The NAM bench — not a gate, a measuring instrument: ns/frame through the shipping stage.
 add_executable(orbitamp_nam_bench tests/NamBench.cpp)
 target_link_libraries(orbitamp_nam_bench PRIVATE felitronics::nam juce::juce_dsp juce::juce_core)
-target_compile_definitions(orbitamp_nam_bench PRIVATE JUCE_STANDALONE_APPLICATION=1)
+# WEB_BROWSER/CURL off like every other juce-linking gate: without it juce_core reaches for
+# curl/curl.h, which a bare Linux CI runner does not have — the first Linux build found it.
+target_compile_definitions(orbitamp_nam_bench PRIVATE JUCE_STANDALONE_APPLICATION=1
+                                                       JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 
 add_executable(orbitamp_eqlink_test tests/EqLinkTests.cpp)
 target_include_directories(orbitamp_eqlink_test PRIVATE src)
