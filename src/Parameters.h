@@ -241,6 +241,12 @@ inline constexpr const char* powerOn   = "power_on";
     sound is made — boost, preamp, their consoles, one neural pass — and stereo from the reverb on,
     where the space is: the reverb spreads one signal into two, and the power amp, the cabinet and
     the limiter follow it in stereo. */
+/** The pack's own level story: per-file `input_db` trims played before each model — the alias
+    attenuation the pack states between captures. For a library captured at ONE honest level
+    those trims only push a capture's drive around, so the comp is switchable: off, every model
+    eats exactly what the chain feeds it. */
+inline constexpr const char* packLevelComp = "pack_level_comp";
+
 inline constexpr const char* stereoMode = "stereo_mode";
 inline const juce::StringArray stereoModes { "Mono", "Stereo", "Stereo Space" };
 enum class StereoMode { mono, stereo, stereoSpace };

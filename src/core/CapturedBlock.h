@@ -208,6 +208,11 @@ public:
         player.setDial (dial, deg);
     }
 
+    /** The pack's per-file input trims (`input_db`), see RigPlayer::setInputTrims: off, every
+        capture eats exactly what the chain feeds it — for a library shot at one honest level
+        the stated attenuations are somebody else's story. Atomic underneath; any thread. */
+    void setInputTrims (bool on) { player.setInputTrims (on); }
+
     /** Whether the pack's own tone controls are out of the signal — see `params::blockEqMode`. Raw
         is what OURS means: our parametric is standing where the device's tone stack used to, and a
         device wearing both at once is a decibel nobody can trace. Parked, not bypassed: every tone

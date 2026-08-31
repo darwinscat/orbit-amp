@@ -340,6 +340,10 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
     juce::PopupMenu m;
     m.addItem (1, "SETUP...");
     m.addSeparator();
+    // A PARAMETER behind a menu item, deliberately: the comp changes the sound, so it belongs
+    // to the session, not the machine — the tick just reads it, the click just writes it.
+    m.addItem (8, "PACK LEVEL COMP",    true,
+               amp.apvts.getParameter (params::packLevelComp)->getValue() > 0.5f);
     m.addItem (5, "SHOW SPECTRA",       true, prefs::spectraShown());
     if (params::demoLoopsPresent())     // no loops on disk — no player, and no offer of one
         m.addItem (2, "SHOW DEMO PLAYER", true, showDemo);
@@ -362,6 +366,17 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                          {
                              prefs::setSpectraShown (! prefs::spectraShown());
                              safe->repaint();
+                             return;
+                         }
+
+                         if (r == 8)
+                         {
+                             if (auto* p = safe->amp.apvts.getParameter (params::packLevelComp))
+                             {
+                                 p->beginChangeGesture();
+                                 p->setValueNotifyingHost (p->getValue() > 0.5f ? 0.0f : 1.0f);
+                                 p->endChangeGesture();
+                             }
                              return;
                          }
 

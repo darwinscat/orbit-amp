@@ -291,6 +291,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Choice> (juce::ParameterID { stereoMode, 1 }, "Stereo Mode",
                                           stereoModes, 0));
 
+    // ON ships as the packs' stated law; a library captured at one honest level switches it off
+    // and feeds every model exactly what the chain hands over.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { packLevelComp, 1 }, "Pack Level Comp",
+                                        true));
+
     layout.add (std::make_unique<Choice> (juce::ParameterID { cabIr, 1 }, "Cabinet IR",
                                           cabIrNames, cabIrDefault));
 

@@ -93,6 +93,7 @@ AmpProcessor::AmpProcessor()
     reverbPredelayParam = apvts.getRawParameterValue (params::reverbPredelay);
     reverbHpfHzParam    = apvts.getRawParameterValue (params::reverbHpfHz);
 
+    packCompParam    = apvts.getRawParameterValue (params::packLevelComp);
     powerOnParam     = apvts.getRawParameterValue (params::powerOn);
     powerGainParam   = apvts.getRawParameterValue (params::blockGain (params::powerId));
     powerSmoothParam = apvts.getRawParameterValue (params::blockSmooth (params::powerId));
@@ -498,6 +499,15 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     updateEqSettings();
     updateDelaySettings();
     updateReverbSettings();
+
+    // The pack's input trims, as a flag the players read at their own gains — one atomic store
+    // per block per player, live from the next block.
+    {
+        const bool comp = packCompParam->load() > 0.5f;
+        boost.setInputTrims (comp);
+        preamp.setInputTrims (comp);
+        poweramp.setInputTrims (comp);
+    }
 
     auto* const* channels = buffer.getArrayOfWritePointers();
     const int numChannels = buffer.getNumChannels();
