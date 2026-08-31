@@ -457,17 +457,33 @@ void EqSection::refreshHandles()
 
     const auto& s = display.getSettings();
 
-    // OUR bands only, and only while the console is wearing them. In the device's own set our four
-    // are bypassed — the parametric is out of the signal by definition — so a point that still
-    // dragged would be writing to something nobody can hear. The exact bug the EQ's enable was
-    // just deleted for, in a different costume.
+    // OUR bands only while the console is wearing them. In the device's own set the parametric is
+    // out of the signal by definition — its points would be writing to something nobody can hear —
+    // so the same five slots carry the DEVICE's dots instead: one per measured knob, pinned at the
+    // frequency where that knob acts hardest, riding the composite, draggable only up and down.
     const bool ours = nativeDb == nullptr;
 
-    h.getReference (hLo) = { s.loHz, s.loDb, H::Freedom::both, ours,   theme::eqNode[0] };
-    h.getReference (hB1) = { s.b1Hz, s.b1Db, H::Freedom::both, ours,   theme::eqNode[1] };
-    h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, ours,   theme::eqNode[2] };
-    h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, ours && s.b3On, theme::eqNode[4] };
-    h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, ours,   theme::eqNode[3] };
+    if (ours)
+    {
+        h.getReference (hLo) = { s.loHz, s.loDb, H::Freedom::both, true,   theme::eqNode[0] };
+        h.getReference (hB1) = { s.b1Hz, s.b1Db, H::Freedom::both, true,   theme::eqNode[1] };
+        h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, true,   theme::eqNode[2] };
+        h.getReference (hB3) = { s.b3Hz, s.b3Db, H::Freedom::both, s.b3On, theme::eqNode[4] };
+        h.getReference (hHi) = { s.hiHz, s.hiDb, H::Freedom::both, true,   theme::eqNode[3] };
+    }
+    else
+    {
+        constexpr int slots[] = { hLo, hB1, hB2, hB3, hHi };
+
+        for (size_t j = 0; j < std::size (slots); ++j)
+        {
+            const bool live = j < bands.size() && bands[j].anchorHz > 0.0;
+            auto& hd   = h.getReference (slots[j]);
+            hd         = { live ? bands[j].anchorHz : 1000.0, 0.0, H::Freedom::gain, live,
+                           live ? bands[j].colour : juce::Colour() };
+            hd.rideCurve = true;
+        }
+    }
 
     // The cuts only exist while they are switched on — a handle for a filter that is not in the
     // chain would be a control over nothing. Orange HPF, violet LPF, same as their switches.
@@ -477,15 +493,54 @@ void EqSection::refreshHandles()
     curve.setHandles (std::move (h));
 }
 
+/** Which band a handle slot carries in the device's set — the same five slots, in row order. */
+static int nativeBandFor (int index)
+{
+    switch (index)
+    {
+        case 0 /*hLo*/: return 0;
+        case 1 /*hB1*/: return 1;
+        case 2 /*hB2*/: return 2;
+        case 3 /*hB3*/: return 3;
+        case 4 /*hHi*/: return 4;
+        default:        return -1;
+    }
+}
+
 void EqSection::handleDragged (int index, double hz, double db)
 {
     const auto clampDb = [] (double v) { return juce::jlimit (-15.0, 15.0, v); };
 
+    // The device's dots: the drag is a dB offset at the anchor, converted to knob travel through
+    // the band's measured swing — pull the point down a decibel and the knob turns however far
+    // the device needs to lose a decibel there. Frequency is not on offer.
+    if (nativeDb != nullptr)
+    {
+        const int j = nativeBandFor (index);
+
+        if (j >= 0 && (size_t) j < bands.size() && (size_t) j < bandKnobs.size()
+            && bands[(size_t) j].anchorHz > 0.0)
+        {
+            // A knob that barely moves its anchor would turn end to end inside a couple of
+            // pixels — the floor keeps the hand in charge without lying much.
+            const double swing = bands[(size_t) j].anchorSwingDb;
+            const double slope = std::abs (swing) < 4.0 ? (swing < 0.0 ? -4.0 : 4.0) : swing;
+
+            auto& knob = *bandKnobs[(size_t) j];
+            const double span = knob.getMaximum() - knob.getMinimum();
+            knob.setValue (juce::jlimit (knob.getMinimum(), knob.getMaximum(),
+                                         dragStartVal + (db - dragStartDb) / slope * span),
+                           juce::sendNotificationSync);
+        }
+
+        refreshCurve();
+        return;
+    }
+
     switch (index)
     {
         // The handles and the row are the same four bands in the same order, so the index IS the
-        // band. A curve that knew four names would be a second place to keep the list. (A device's
-        // own bands have no handles yet — setBandDb is a no-op past the end of the list.)
+        // band. A curve that knew four names would be a second place to keep the list.
         case hLo: setBandDb (0, db); break;
         case hB1: setBandDb (1, db); break;
         case hB2: setBandDb (2, db); break;
@@ -500,6 +555,22 @@ void EqSection::handleDragged (int index, double hz, double db)
 
 void EqSection::handleDragActive (int index, bool active)
 {
+    // A device dot's drag starts from where the composite stands at its anchor and where the
+    // knob stands on its dial — the offsets convert between the two for the whole gesture.
+    if (nativeDb != nullptr)
+    {
+        const int j = nativeBandFor (index);
+
+        if (active && j >= 0 && (size_t) j < bands.size() && (size_t) j < bandKnobs.size())
+        {
+            const double hz = bands[(size_t) j].anchorHz;
+            dragStartDb  = display.magnitudeDb (hz) + nativeDb (hz);
+            dragStartVal = bandKnobs[(size_t) j]->getValue();
+        }
+
+        return;
+    }
+
     // One drag is ONE undoable move. The gain knobs bracket their own gestures; the frequencies
     // (and B3's gain, which has no knob) are bracketed here.
     if (active)
@@ -516,6 +587,11 @@ void EqSection::handleDragActive (int index, bool active)
 
 void EqSection::handleWheel (int index, float delta)
 {
+    // A device dot has no Q to give the wheel — and the parametric's params are out of the signal
+    // in that mode, so writing them would be the hidden-band bug again. The walls still answer.
+    if (nativeDb != nullptr && nativeBandFor (index) >= 0)
+        return;
+
     // Over a bell the wheel is Q; over a wall it is the slope ladder.
     if (index == hB1 || index == hB2 || index == hB3)
     {

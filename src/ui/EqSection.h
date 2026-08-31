@@ -79,6 +79,13 @@ public:
             normalised place on somebody's dial, and printing 0.63 under a knob marked TONE is
             worse than printing nothing. */
         bool showsDb = true;
+
+        /** A device knob's point on the curve: the frequency where the knob acts hardest —
+            computed once per device from its measured curves, so the dot never wanders — and the
+            signed dB the knob moves there over its whole travel, which is what a vertical drag of
+            the dot converts through. 0 anchor = no dot (ours place their own handles). */
+        double anchorHz      = 0.0;
+        double anchorSwingDb = 0.0;
     };
 
 
@@ -189,6 +196,10 @@ private:
 
     std::vector<Band> bands;
     std::vector<std::unique_ptr<Knob>> bandKnobs;
+
+    /** A native dot's drag bookkeeping: where the composite stood and where the knob stood when
+        the hand took hold — the drag is a dB offset converted through the band's swing. */
+    double dragStartDb = 0.0, dragStartVal = 0.0;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 
     ModeButton modeBtn;

@@ -24,6 +24,11 @@ public:
         Freedom freedom = Freedom::gain;
         bool    visible = true;
         juce::Colour tint = juce::Colour (0xffb39bff);
+
+        /** The dot sits ON the composite at its frequency instead of at its own `db` — for a
+            handle whose gain is not a parameter of its own (a device knob's point): the curve is
+            the only truth about where it stands, so the dot rides it. */
+        bool rideCurve = false;
     };
 
     explicit EqCurve (std::function<double (double)> magnitudeDbAt)
@@ -295,8 +300,9 @@ private:
     juce::Point<float> handlePos (juce::Rectangle<float> r, const Handle& h) const
     {
         // A cut has no gain of its own, so its handle rides the curve it produces rather than
-        // floating at 0 dB where nothing is happening.
-        const float db = h.freedom == Handle::Freedom::freq ? (float) magnitudeDb (h.hz) : (float) h.db;
+        // floating at 0 dB where nothing is happening. A rideCurve dot does the same by request.
+        const float db = h.freedom == Handle::Freedom::freq || h.rideCurve
+                             ? (float) magnitudeDb (h.hz) : (float) h.db;
         return { hzToX (r, h.hz), dbToY (r, db) };
     }
 

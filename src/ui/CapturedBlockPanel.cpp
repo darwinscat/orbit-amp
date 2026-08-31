@@ -398,11 +398,49 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
 
         // A measured ladder clicks at the positions it was swept at; a knob shipped as bands has
         // a law for every angle and sweeps freely.
-        out.push_back ({ juce::String (m.name).toUpperCase(),
-                         theme::eqNode[(size_t) (out.size() % 5)],
-                         params::blockMeasured (blk, i),
-                         (int) m.positions.size(),
-                         false });
+        auto band = EqSection::Band { juce::String (m.name).toUpperCase(),
+                                      theme::eqNode[(size_t) (out.size() % 5)],
+                                      params::blockMeasured (blk, i),
+                                      (int) m.positions.size(),
+                                      false };
+
+        // The knob's point on the curve: where it acts hardest, from the manifest alone — the
+        // extremes of its measured travel diffed on the shipped grid, or the strongest section's
+        // centre. Fixed per device, so the dot stands still while the knob rides the curve.
+        if (m.positions.size() >= 2 && m.grid.points > 1
+            && (int) m.positions.front().db.size() == m.grid.points
+            && (int) m.positions.back().db.size() == m.grid.points)
+        {
+            const auto& lo = m.positions.front();
+            const auto& hi = m.positions.back();
+            int    bestIdx   = 0;
+            double bestSwing = 0.0;
+
+            for (int p = 0; p < m.grid.points; ++p)
+            {
+                const double swing = (hi.db[(size_t) p] + hi.levelDb) - (lo.db[(size_t) p] + lo.levelDb);
+                if (std::abs (swing) > std::abs (bestSwing)) { bestSwing = swing; bestIdx = p; }
+            }
+
+            band.anchorHz      = m.grid.fLo * std::pow (m.grid.fHi / m.grid.fLo,
+                                                        (double) bestIdx / (double) (m.grid.points - 1));
+            band.anchorSwingDb = bestSwing;
+        }
+        else if (! m.sections.empty())
+        {
+            const auto* best = &m.sections.front();
+            for (const auto& sec : m.sections)
+                if (std::abs (sec.dbAtMax - sec.dbAtMin) > std::abs (best->dbAtMax - best->dbAtMin))
+                    best = &sec;
+
+            if (best->hz > 0.0)
+            {
+                band.anchorHz      = best->hz;
+                band.anchorSwingDb = best->dbAtMax - best->dbAtMin;
+            }
+        }
+
+        out.push_back (std::move (band));
     }
 
     return out;
