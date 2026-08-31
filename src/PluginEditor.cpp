@@ -101,6 +101,23 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         applyLayoutToggle (i, on);
         layoutStrip->setRowOn (i, on);
     };
+
+    // The end caps: the side columns, live with the real levels the rails read.
+    inColShown  = prefs::getBool (prefs::showInCol, true);
+    outColShown = prefs::getBool (prefs::showOutCol, true);
+    layoutStrip->setCapOn (0, inColShown);
+    layoutStrip->setCapOn (1, outColShown);
+    layoutStrip->onCapToggle = [this] (int side, bool on) { applyColumnToggle (side, on); };
+
+    // The rails' own scale (their floor is -80): the caps wear the same gradient, so they must
+    // stand on the same ruler or the green lands in the wrong place.
+    const auto levelOf = [] (const std::atomic<float>& db)
+    {
+        return juce::jlimit (0.0f, 1.0f, (db.load (std::memory_order_relaxed) + 80.0f) / 80.0f);
+    };
+    layoutStrip->capLevel[0] = [this, levelOf] { return levelOf (amp.gateKeyDb); };
+    layoutStrip->capLevel[1] = [this, levelOf] { return levelOf (amp.outDb); };
+
     addAndMakeVisible (*layoutStrip);
 
     // The badges' clicks mean MENU — the whole device in one pick. There is nowhere to "open" any
@@ -269,6 +286,27 @@ void AmpEditor::applyLayoutToggle (int index, bool on)
     }
 }
 
+void AmpEditor::applyColumnToggle (int side, bool on)
+{
+    prefs::setBool (side == 0 ? prefs::showInCol : prefs::showOutCol, on);
+    (side == 0 ? inColShown : outColShown) = on;
+
+    // The gate and the limiter keep working as set — a safety that dies with its meter is no
+    // safety. Only the column's TRIM returns to unity: a hand nobody can see must not keep
+    // pressing on the signal.
+    if (! on)
+        if (auto* p = amp.apvts.getParameter (side == 0 ? params::inTrim : params::outTrim))
+        {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 (0.0f));
+            p->endChangeGesture();
+        }
+
+    layoutStrip->setCapOn (side, on);
+    resized();
+    repaint();
+}
+
 void AmpEditor::applyStripChoice()
 {
     const float s = (float) getWidth() / (float) baseWidth;
@@ -387,6 +425,16 @@ void AmpEditor::resized()
     const int gutterY = faceplateY + FaceplateView::contentTop;
     const int gutterH = faceplateH - FaceplateView::contentTop - FaceplateView::contentBottom;
 
+    // The side columns stand only when the strip's end caps say so; a hidden column hands its
+    // width to the faceplate — all but the edge inset the badges keep, so the outermost block
+    // never presses against the window's own edge.
+    const int edgeInset = 12;
+    const int colL = inColShown  ? GateStrip::designWidth + chromeGap : edgeInset;
+    const int colR = outColShown ? OutStrip::designWidth  + chromeGap : edgeInset;
+
+    gateStrip.setVisible (inColShown);
+    outStrip.setVisible (outColShown);
+
     gateStrip.setBounds (margin, gutterY, GateStrip::designWidth, gutterH);
     gateStrip.setTransform (zoom);
 
@@ -394,23 +442,30 @@ void AmpEditor::resized()
                         OutStrip::designWidth, gutterH);
     outStrip.setTransform (zoom);
 
-    faceplate.setBounds (margin + GateStrip::designWidth + chromeGap, faceplateY,
-                         FaceplateView::designWidth - GateStrip::designWidth - OutStrip::designWidth
-                             - 2 * chromeGap,
-                         faceplateH);
+    faceplate.setBounds (margin + colL, faceplateY,
+                         FaceplateView::designWidth - colL - colR, faceplateH);
     faceplate.setTransform (zoom);
 
-    // The always-on needle, full width, above the footer's facts.
-    const int tunerY = faceplateY + faceplateH + chromeGap;
-    gateBadge.setBounds (margin, tunerY, TallyBadge::designWidth, TunerStrip::designHeight);
+    // The always-on needle, full width, above the footer's facts — dropped a hair below its
+    // gap's centre, which reads better than the arithmetic middle; the footer keeps its place,
+    // so the window's height is untouched. The badges stand off the window's edge the way the
+    // rails above them do, and the tuner takes whatever the badges leave it.
+    const int tunerDrop  = 3;
+    const int badgeInset = edgeInset;
+    const int tunerY = faceplateY + faceplateH + chromeGap + tunerDrop;
+
+    // The badges STAY when their columns leave: the gate and the limiter keep working, and a
+    // guard that works deserves its light and its menu.
+    gateBadge.setBounds (margin + badgeInset, tunerY, TallyBadge::designWidth,
+                         TunerStrip::designHeight);
     gateBadge.setTransform (zoom);
 
-    limitBadge.setBounds (margin + FaceplateView::designWidth - TallyBadge::designWidth, tunerY,
-                          TallyBadge::designWidth, TunerStrip::designHeight);
+    limitBadge.setBounds (margin + FaceplateView::designWidth - badgeInset - TallyBadge::designWidth,
+                          tunerY, TallyBadge::designWidth, TunerStrip::designHeight);
     limitBadge.setTransform (zoom);
 
     // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
-    inRuler.setBounds (margin + GateStrip::designWidth + 2, gutterY, 56, gutterH);
+    inRuler.setBounds (margin + colL - chromeGap + 2, gutterY, 56, gutterH);
     inRuler.setTransform (zoom);
     outRuler.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth - 58, gutterY,
                         56, gutterH);
@@ -423,12 +478,13 @@ void AmpEditor::resized()
                             FaceplateView::designWidth * 2 / 3, 330);
     learnOverlay.setTransform (zoom);
 
-    tunerStrip.setBounds (margin + TallyBadge::designWidth + chromeGap, tunerY,
-                          FaceplateView::designWidth - 2 * (TallyBadge::designWidth + chromeGap),
+    tunerStrip.setBounds (margin + badgeInset + TallyBadge::designWidth + chromeGap, tunerY,
+                          FaceplateView::designWidth
+                              - 2 * (badgeInset + TallyBadge::designWidth + chromeGap),
                           TunerStrip::designHeight);
     tunerStrip.setTransform (zoom);
 
-    const int footerY = tunerY + TunerStrip::designHeight + chromeGap;
+    const int footerY = tunerY - tunerDrop + TunerStrip::designHeight + chromeGap;
     footer.setBounds (margin, footerY, FaceplateView::designWidth, Footer::designHeight);
     footer.setTransform (zoom);
 

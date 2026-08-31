@@ -46,6 +46,11 @@ public:
         the hidden block's power going out with it (and coming back as it was). */
     void applyLayoutToggle (int index, bool on);
 
+    /** A side column clicked in or out (side 0 = IN, 1 = OUT). The instruments are the point:
+        the gate and the limiter keep working as set, but the hidden column's TRIM returns to
+        unity — a hand nobody can see must not keep pressing. */
+    void applyColumnToggle (int side, bool on);
+
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
     static constexpr int headerGap = 0;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
@@ -79,6 +84,10 @@ private:
     /** What each block's power was when the chooser hid it, so coming back restores it. All
         true until a hide records otherwise: a block ADDED to the chain arrives playing. */
     std::array<bool, 8> blockWasOn { true, true, true, true, true, true, true, true };
+
+    /** Whether the side columns stand on the panel — the strip's end caps. */
+    bool inColShown  = true;
+    bool outColShown = true;
 
     /** After a strip is switched: the aspect the corner drag keeps, the limits, and the window
         itself, at the scale it already has. */

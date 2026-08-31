@@ -58,7 +58,7 @@ public:
         auto inner = r.reduced (14.0f, 6.0f);
 
         // ---- the note, left ----
-        auto noteArea = inner.removeFromLeft (96.0f);
+        auto noteArea = inner.removeFromLeft (52.0f);
         if (live)
         {
             const auto name = juce::String (core::PitchTracker::noteName (note.midi));
@@ -81,7 +81,7 @@ public:
         }
 
         // ---- the cents, right ----
-        auto centsArea = inner.removeFromRight (96.0f);
+        auto centsArea = inner.removeFromRight (52.0f);
         if (live)
         {
             const auto cents = juce::String (juce::roundToInt (note.cents));
@@ -90,8 +90,9 @@ public:
                                 theme::displayFont (13.0f), 0.12f, juce::Justification::centredRight);
         }
 
-        // ---- the ruler between them ----
-        const auto ruler = inner.reduced (18.0f, 0.0f);
+        // ---- the ruler between them, as wide as the note and the cents allow: the ruler is
+        //      the tuner's actual instrument, the numbers are its captions ----
+        const auto ruler = inner.reduced (9.0f, 0.0f);
         const float midY = ruler.getCentreY();
         const auto centsX = [&ruler] (float cents)
         {
