@@ -117,6 +117,22 @@ private:
         for (int ch = 0; ch < ir.getNumChannels(); ++ch)
             ir.copyFrom (ch, 0, raw, ch, 0, keep);
 
+        // The trimmed edge leaves on a half-cosine, a few milliseconds wide: an abrupt cut rings
+        // as spectral ripple, and the trim is meant to remove room, not to add zipper.
+        if (keep < full)
+        {
+            const int fade = juce::jmin (keep / 4, juce::roundToInt (0.004 * rawRate));
+            for (int ch = 0; ch < ir.getNumChannels(); ++ch)
+            {
+                float* d = ir.getWritePointer (ch);
+                for (int i = 0; i < fade; ++i)
+                {
+                    const float t = (float) (i + 1) / (float) fade;
+                    d[keep - fade + i] *= 0.5f + 0.5f * std::cos (t * juce::MathConstants<float>::pi);
+                }
+            }
+        }
+
         // The cuts, run over the impulse itself: matched-biquad Butterworth cascades — the same
         // ladder EqLink runs live (odd slopes lead with a first-order section), so the picture,
         // the consoles and the baked IR all mean the same steepness.
