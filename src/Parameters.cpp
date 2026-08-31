@@ -303,7 +303,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                           1.0f),
                 std::make_unique<Float>  (juce::ParameterID { reverbPredelay, 1 }, "Reverb Predelay",
                                           juce::NormalisableRange<float> (0.0f, 100.0f, 1.0f), 0.0f),
-                std::make_unique<Bool>   (juce::ParameterID { reverbHpfOn, 1 }, "Reverb HPF", false),
                 std::make_unique<Float>  (juce::ParameterID { reverbHpfHz, 1 }, "Reverb HPF Hz",
                                           hz (40.0f, 500.0f, 120.0f), 120.0f));
 

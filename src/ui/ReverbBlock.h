@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/ReverbStage.h"
 #include "BlockFrame.h"
 #include "Knob.h"
 #include "VoicingSelector.h"
@@ -38,6 +39,7 @@ private:
         std::function<void (juce::Graphics&, juce::Rectangle<float>)> paintBody;
         std::function<bool (juce::Point<float>)> hitCut;
         std::function<void (float x, int phase)> onCut;   // 0 = down, 1 = drag, 2 = up
+        std::function<void()> onMenu;                     // right-click: the block's own gear
 
         void paint (juce::Graphics& g) override
         {
@@ -46,6 +48,8 @@ private:
 
         void mouseDown (const juce::MouseEvent& e) override
         {
+            if (e.mods.isPopupMenu()) { if (onMenu) onMenu(); return; }
+
             dragging = hitCut != nullptr && hitCut (e.position);
             if (dragging && onCut) onCut (e.position.x, 0);
         }
@@ -55,7 +59,7 @@ private:
         bool dragging = false;
     };
 
-    static constexpr int maxKnobSide = 84;
+    static constexpr int maxKnobSide = 96;   // the hero got louder — побольше, by request
 
     AmpProcessor& amp;
 
@@ -65,16 +69,26 @@ private:
     Knob pre   { "Pre",   theme::violet, 0 };
 
     SpectraView view;
-    ZoneSwitch  hpfSw;
-    juce::Label hpfLabel { {}, "HPF" };
 
     /** The pair's readers — the door and the added tail, same liquid pane as everywhere. */
     std::array<felitronics::analysis::SpectrumPane, 2> panes;
 
+    /** The decay envelope, back as an OVERLAY: an impulse through a display-only stage, its peak
+        level over time — the reverb's signature silhouette over the live spectra. Measuring beats
+        drawing a picture of a room: the shape shown is the shape you hear. */
+    void refreshTail();
+
+    static constexpr double displayRate = 48000.0;
+    static constexpr double tailSeconds = 1.5;
+    static constexpr int    tailBuckets = 240;
+
+    core::ReverbStage  display;   // drawing only; never sees the audio thread
+    std::vector<float> tailEnv;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment,
                                                                           decayAttachment,
                                                                           preAttachment;
-    std::unique_ptr<juce::ParameterAttachment> characterAttachment, hpfHzAtt, hpfRepaintAtt;
+    std::unique_ptr<juce::ParameterAttachment> characterAttachment, hpfHzAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ReverbBlock)
 };

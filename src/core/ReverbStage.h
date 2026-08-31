@@ -111,12 +111,12 @@ public:
     /** How long the attack stays dry before the tail arrives, 0..100 ms. */
     void setPredelayMs (float ms) noexcept { predelayMs = juce::jlimit (0.0f, 100.0f, ms); }
 
-    /** The tail's own high-pass — the WET only. A low tail into a driven power amp is mud. */
-    void setHpf (bool on, float hz) noexcept
+    /** The tail's own high-pass — the WET only, always in: a low tail into a driven power amp is
+        mud, and at the 40 Hz floor the filter is as good as air. */
+    void setHpfHz (float hz) noexcept
     {
-        if (on != hpfOn || ! juce::approximatelyEqual (hz, hpfHz))
+        if (! juce::approximatelyEqual (hz, hpfHz))
         {
-            hpfOn = on;
             hpfHz = hz;
             applyHpf();
         }
@@ -164,8 +164,7 @@ public:
                 preLine[(size_t) ch][(size_t) prePos] = w[i];
                 float s = preLine[(size_t) ch][(size_t) rd];
 
-                if (hpfOn)
-                    s = hpf.processSample (ch, s);
+                s = hpf.processSample (ch, s);
 
                 const float added = s * mix;
                 wetOut[(size_t) ch][(size_t) i] = added;
@@ -255,7 +254,6 @@ private:
     float     mix        = 0.2f;
     float     decayScale = 1.0f;
     float     predelayMs = 0.0f;
-    bool      hpfOn      = false;
     float     hpfHz      = 120.0f;
 
     double sampleRate = 48000.0;

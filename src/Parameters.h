@@ -277,10 +277,10 @@ inline constexpr const char* reverbMix      = "reverb_mix";
 
 /** The tail's late refinements. DECAY scales the character's own breath (×0.5..×2 — the character
     stays the voice); PREDELAY holds the tail back so the attack stays dry (0..100 ms); the HPF
-    cleans the WET only — this reverb feeds a power amp, and a low tail into drive is mud. */
+    cleans the WET only and is ALWAYS in — this reverb feeds a power amp, and a low tail into
+    drive is mud. At its 40 Hz floor it is as good as air; there is nothing to switch. */
 inline constexpr const char* reverbDecay    = "reverb_decay";
 inline constexpr const char* reverbPredelay = "reverb_predelay";
-inline constexpr const char* reverbHpfOn    = "reverb_hpf_on";
 inline constexpr const char* reverbHpfHz    = "reverb_hpf_hz";
 
 /** Reverb characters, in the order of the design's simple case. Size and damping follow from the
