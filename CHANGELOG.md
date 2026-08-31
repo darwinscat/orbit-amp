@@ -7,7 +7,7 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 
 ## [0.1.0] — 2026-08-31 — the player leaves the bench
 
-First release. A curated guitar & bass tone player — VST3 / AU / Standalone, macOS.
+First release. A curated guitar tone player — VST3 / AU / Standalone, macOS.
 
 ### Added
 - **The chain**: EQ → boost → EQ → preamp → reverb → power amp → cabinet, on one compact,
