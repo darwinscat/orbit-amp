@@ -44,12 +44,10 @@ public:
     {
         auto r = getLocalBounds().toFloat();
 
+        // No border any more: the badges it used to match are gone, and a needle needs a well,
+        // not a frame — the quiet fill alone seats it into the panel.
         g.setColour (theme::panel);
         g.fillRoundedRectangle (r, theme::radiusMd);
-        // The quiet border, matched to the badges beside it: the whole guard row is second-rank
-        // furniture until something in it works — then the badges' floods do the shouting.
-        g.setColour (theme::violet.withAlpha (0.36f));
-        g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, theme::blockBorder);
 
         const bool live  = ear.live();
         const auto note  = ear.nearestNote();

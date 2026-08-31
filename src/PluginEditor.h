@@ -35,7 +35,8 @@ public:
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    void showLimiterMenu (juce::Point<int> screenPos);
+    /** `withVolume` — the OUT trim's RESET section belongs to the column's door alone. */
+    void showLimiterMenu (juce::Point<int> screenPos, bool withVolume = true);
 
     /** The gear: Setup, and the window's own switches — the two TEMPORARY strips under the footer,
         off unless asked for (prefs::showDemo, prefs::showGlyphs). */

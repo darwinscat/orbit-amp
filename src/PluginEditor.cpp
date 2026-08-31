@@ -142,12 +142,12 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         if (i == rowGate)
         {
             amp.gateWorked.store (false);
-            gateStrip.showPresetMenu (pos);
+            gateStrip.showPresetMenu (pos, false);   // the trim's RESET stays the column's door
         }
         else if (i == rowLimit())
         {
             amp.limiterWorked.store (false);
-            showLimiterMenu (pos);
+            showLimiterMenu (pos, false);
         }
     };
 
@@ -409,7 +409,7 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
-void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
+void AmpEditor::showLimiterMenu (juce::Point<int> screenPos, bool withVolume)
 {
     auto* on   = amp.apvts.getParameter (params::limiterOn);
     auto* ceil = amp.apvts.getParameter (params::limiterCeiling);
@@ -426,9 +426,12 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
     m.addItem (3, "NORMAL  -1.0",  true, matches (-1.0f));
     m.addItem (4, "TIGHT   -3.0",  true, matches (-3.0f));
 
-    m.addSeparator();
-    m.addSectionHeader ("VOLUME");
-    m.addItem (7, "RESET");
+    if (withVolume)
+    {
+        m.addSeparator();
+        m.addSectionHeader ("VOLUME");
+        m.addItem (7, "RESET");
+    }
 
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),

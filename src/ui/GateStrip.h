@@ -198,7 +198,9 @@ public:
         pressY    = e.position.y;
     }
 
-    void showPresetMenu (juce::Point<int> screenPos)
+    /** `withVolume` — the trim's RESET section rides along only when the menu opens from the
+        COLUMN, where the trim lives; the strip's arrow asks for the gate alone. */
+    void showPresetMenu (juce::Point<int> screenPos, bool withVolume = true)
     {
         const bool  isOn  = onP.getValue() > 0.5f;
         const float th    = param.convertFrom0to1 (param.getValue());
@@ -232,9 +234,12 @@ public:
         where.addItem (13, params::gatePositions[1].toUpperCase(), true, preReverb);
         m.addSubMenu ("MUTES AT", where);
 
-        m.addSeparator();
-        m.addSectionHeader ("VOLUME");
-        m.addItem (7, "RESET");
+        if (withVolume)
+        {
+            m.addSeparator();
+            m.addSectionHeader ("VOLUME");
+            m.addItem (7, "RESET");
+        }
 
         // At the MOUSE, not at the component: a menu summoned from a sliver as tall as the panel
         // would otherwise land wherever the sliver ends.
