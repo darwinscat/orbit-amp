@@ -114,10 +114,12 @@ inline juce::String blockSmooth   (const char* blk) { return juce::String (blk) 
     block's output is caught by the master volume, and what the power amp is fed by its own DRIVE. */
 inline juce::String blockIn (const char* blk) { return juce::String (blk) + "_in"; }
 
-/** Asymmetric on purpose. Twenty-four down and twelve up: cutting is what gain staging mostly asks
-    for — a hot interface, a hot pack, a boost feeding a preamp — and twelve decibels of boost is
-    already more than a capture wants before it stops being the device that was captured. */
-inline constexpr float blockTrimMinDb = -24.0f;
+/** Asymmetric on purpose. Forty-eight down and twelve up: cutting is what gain staging mostly
+    asks for — a hot interface, a hot pack, a boost feeding a preamp — and now that the hand
+    rides a full-height wall there is room for a real cut; twelve decibels of boost is already
+    more than a capture wants before it stops being the device that was captured. The SAME
+    reach on both walls: the IN trim and the console's LEVEL move over one ladder. */
+inline constexpr float blockTrimMinDb = -48.0f;
 inline constexpr float blockTrimMaxDb =  12.0f;
 
 /** Where a captured device likes to be fed, in dBFS peak — the green zone on the IN meter.
@@ -201,7 +203,7 @@ inline const juce::StringArray eqSlopes { "6", "12", "18", "24", "48" };
 inline constexpr int eqSlopeValues[] = { 6, 12, 18, 24, 48 };
 inline constexpr int eqSlopeDefault  = 1;
 
-inline constexpr float eqLevelRangeDb = 12.0f;
+inline constexpr float eqLevelMinDb = -48.0f, eqLevelMaxDb = 12.0f;   // the walls' shared ladder
 
 inline constexpr const char* cabOn = "cab_on";
 inline constexpr const char* cabIr = "cab_ir";

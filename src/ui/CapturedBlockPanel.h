@@ -169,10 +169,11 @@ private:
     SmoothTag smoothTag;
     std::unique_ptr<juce::ParameterAttachment> smoothAttachment;
 
-    /** What the model is being fed, lying down under the combo. One meter, not two: a block's
-        output and the next block's input are the same multiplier written twice, and of the two
-        names for it the INPUT is the one whose meter answers a question — see `params::blockIn`. */
+    /** The block's two walls: IN at the left — what the model is being fed, with the trim's
+        hand on it (see `params::blockIn`) — and OUT at the right, a meter alone: what leaves,
+        EQ and level included, with no hand because a block deliberately has no output volume. */
     BlockMeter inMeter;
+    BlockMeter outMeter;
 
     struct Slot
     {

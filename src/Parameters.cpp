@@ -256,7 +256,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         // The output level — a fader on the link, because every boost here is also "+drive into
         // the next nonlinearity", and shape deserves a say separate from push.
         layout.add (std::make_unique<Float> (juce::ParameterID { eqLevel (l), 1 }, name + "Level",
-                                             juce::NormalisableRange<float> (-eqLevelRangeDb, eqLevelRangeDb, 0.1f),
+                                             juce::NormalisableRange<float> (eqLevelMinDb, eqLevelMaxDb, 0.1f),
                                              0.0f));
     }
 
