@@ -99,15 +99,28 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     wave.onLpfChanged  = [this] (bool, float hz) { lpfHzAtt->setValueAsCompleteGesture (hz); };
     wave.onTrimChanged = [this] (float f)        { trimAtt->setValueAsCompleteGesture (f); };
 
+    // The vertical half of a cut drag: the consoles' slope ladder, one notch per step.
+    const auto stepSlope = [this] (const char* id, juce::ParameterAttachment& att, int steps)
+    {
+        auto* p = amp.apvts.getParameter (id);
+        const int next = juce::jlimit (0, params::eqSlopes.size() - 1,
+                                       juce::roundToInt (p->convertFrom0to1 (p->getValue())) + steps);
+        att.setValueAsCompleteGesture ((float) next);
+    };
+    wave.onHpfSlopeStep = [this, stepSlope] (int n) { stepSlope (params::cabHpfSlope, *hpfSlopeAtt, n); };
+    wave.onLpfSlopeStep = [this, stepSlope] (int n) { stepSlope (params::cabLpfSlope, *lpfSlopeAtt, n); };
+
     const auto follow = [this] (const char* id) -> std::unique_ptr<juce::ParameterAttachment>
     {
         return std::make_unique<juce::ParameterAttachment> (*amp.apvts.getParameter (id),
                                                             [this] (float) { pushToWave(); });
     };
 
-    hpfHzAtt = follow (params::cabHpfHz);
-    lpfHzAtt = follow (params::cabLpfHz);
-    trimAtt  = follow (params::cabTrim);
+    hpfHzAtt    = follow (params::cabHpfHz);
+    lpfHzAtt    = follow (params::cabLpfHz);
+    trimAtt     = follow (params::cabTrim);
+    hpfSlopeAtt = follow (params::cabHpfSlope);
+    lpfSlopeAtt = follow (params::cabLpfSlope);
 
     // The four switches, each the truth of its parameter and nothing of its own.
     const char* ids[]    = { params::cabHpfOn, params::cabLpfOn, params::cabTrimOn, params::cabPhase };
@@ -116,7 +129,9 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     for (size_t i = 0; i < switches.size(); ++i)
     {
         auto& s = switches[i];
-        s.sw.accent = theme::orange;
+        // Each cut wears its line's colour, the consoles' grammar — orange HPF, violet LPF;
+        // the trim and the phase stay the block's own orange.
+        s.sw.accent = ids[i] == params::cabLpfOn ? theme::violet : theme::orange;
         addAndMakeVisible (s.sw);
 
         s.label.setText (juce::String::fromUTF8 (names[i]), juce::dontSendNotification);
@@ -161,8 +176,13 @@ void CabinetBlock::pushToWave()
         return p->convertFrom0to1 (p->getValue());
     };
 
+    const auto slopeDb = [&] (const char* id)
+    { return params::eqSlopeValues[juce::jlimit (0, (int) std::size (params::eqSlopeValues) - 1,
+                                                 juce::roundToInt (plain (id)))]; };
+
     wave.setFilters (plain (params::cabHpfOn) > 0.5f, plain (params::cabHpfHz), params::cabHpfMinHz, params::cabHpfMaxHz,
                      plain (params::cabLpfOn) > 0.5f, plain (params::cabLpfHz), params::cabLpfMinHz, params::cabLpfMaxHz);
+    wave.setSlopes (slopeDb (params::cabHpfSlope), slopeDb (params::cabLpfSlope));
     wave.setTrimEnabled (plain (params::cabTrimOn) > 0.5f);
     wave.setTrimFraction (plain (params::cabTrim));
 }

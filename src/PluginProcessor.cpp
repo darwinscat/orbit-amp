@@ -60,8 +60,10 @@ AmpProcessor::AmpProcessor()
     cabIrParam         = apvts.getRawParameterValue (params::cabIr);
     cabHpfOnParam      = apvts.getRawParameterValue (params::cabHpfOn);
     cabHpfHzParam      = apvts.getRawParameterValue (params::cabHpfHz);
+    cabHpfSlopeParam   = apvts.getRawParameterValue (params::cabHpfSlope);
     cabLpfOnParam      = apvts.getRawParameterValue (params::cabLpfOn);
     cabLpfHzParam      = apvts.getRawParameterValue (params::cabLpfHz);
+    cabLpfSlopeParam   = apvts.getRawParameterValue (params::cabLpfSlope);
     cabTrimOnParam     = apvts.getRawParameterValue (params::cabTrimOn);
     cabTrimParam       = apvts.getRawParameterValue (params::cabTrim);
     cabPhaseParam      = apvts.getRawParameterValue (params::cabPhase);
@@ -252,10 +254,15 @@ void AmpProcessor::pumpDeviceWork()
         core::CabinetIr::Post post;
         post.trimOn       = cabTrimOnParam->load() > 0.5f;
         post.trimFraction = cabTrimParam->load();
+        const auto slopeDb = [] (float v)
+        { return params::eqSlopeValues[juce::jlimit (0, (int) std::size (params::eqSlopeValues) - 1,
+                                                     juce::roundToInt (v))]; };
         post.hpfOn        = cabHpfOnParam->load() > 0.5f;
         post.hpfHz        = cabHpfHzParam->load();
+        post.hpfSlope     = slopeDb (cabHpfSlopeParam->load());
         post.lpfOn        = cabLpfOnParam->load() > 0.5f;
         post.lpfHz        = cabLpfHzParam->load();
+        post.lpfSlope     = slopeDb (cabLpfSlopeParam->load());
         post.phase        = cabPhaseParam->load() > 0.5f;
         cab.setPost (post);
     }

@@ -141,7 +141,7 @@ public:
             g.setColour (theme::orange.withAlpha (0.22f));
             g.strokePath (curve, juce::PathStrokeType (2.5f));
             g.setColour (theme::orange);
-            g.strokePath (curve, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath (curve, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
         g.setColour (theme::hair2);

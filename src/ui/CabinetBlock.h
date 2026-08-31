@@ -59,7 +59,8 @@ private:
 
     std::array<Switch, 4> switches;   // HPF, LPF, TRIM, Ø
 
-    std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt;
+    std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt,
+                                               hpfSlopeAtt, lpfSlopeAtt;
 
     /** The same liquid analyser the consoles run — one pane for the IR's door, one for its exit. */
     std::array<felitronics::analysis::SpectrumPane, 2> panes;

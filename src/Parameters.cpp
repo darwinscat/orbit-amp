@@ -217,12 +217,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         // specific rig, not part of the voicing.
         layout.add (std::make_unique<Bool>   (juce::ParameterID { eqHpfOn (l),    1 }, name + "HPF", false),
                     std::make_unique<Float>  (juce::ParameterID { eqHpfHz (l),    1 }, name + "HPF Freq",
-                                              hz (20.0f, 800.0f, 80.0f), 80.0f),
+                                              hz (0.0f, 1000.0f, 80.0f), 80.0f),
                     std::make_unique<Choice> (juce::ParameterID { eqHpfSlope (l), 1 }, name + "HPF Slope",
                                               eqSlopes, eqSlopeDefault),
                     std::make_unique<Bool>   (juce::ParameterID { eqLpfOn (l),    1 }, name + "LPF", false),
                     std::make_unique<Float>  (juce::ParameterID { eqLpfHz (l),    1 }, name + "LPF Freq",
-                                              hz (1000.0f, 20000.0f, 8000.0f), 10000.0f),
+                                              hz (1200.0f, 20000.0f, 8000.0f), 10000.0f),
                     std::make_unique<Choice> (juce::ParameterID { eqLpfSlope (l), 1 }, name + "LPF Slope",
                                               eqSlopes, eqSlopeDefault));
 
@@ -266,9 +266,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Bool>  (juce::ParameterID { cabHpfOn,  1 }, "Cab HPF", false),
                 std::make_unique<Float> (juce::ParameterID { cabHpfHz,  1 }, "Cab HPF Hz",
                                          juce::NormalisableRange<float> (cabHpfMinHz, cabHpfMaxHz, 1.0f, 0.5f), cabHpfDefaultHz),
+                std::make_unique<Choice> (juce::ParameterID { cabHpfSlope, 1 }, "Cab HPF Slope", eqSlopes, 1),
                 std::make_unique<Bool>  (juce::ParameterID { cabLpfOn,  1 }, "Cab LPF", false),
                 std::make_unique<Float> (juce::ParameterID { cabLpfHz,  1 }, "Cab LPF Hz",
                                          juce::NormalisableRange<float> (cabLpfMinHz, cabLpfMaxHz, 10.0f, 0.5f), cabLpfDefaultHz),
+                std::make_unique<Choice> (juce::ParameterID { cabLpfSlope, 1 }, "Cab LPF Slope", eqSlopes, 1),
                 std::make_unique<Bool>  (juce::ParameterID { cabTrimOn, 1 }, "Cab Trim", false),
                 std::make_unique<Float> (juce::ParameterID { cabTrim,   1 }, "Cab Trim Length",
                                          juce::NormalisableRange<float> (cabTrimMin, 1.0f, 0.001f), 1.0f),

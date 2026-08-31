@@ -218,15 +218,17 @@ inline constexpr int cabIrDefault = 7;   // BIG BUBBA
     low-pass baked INTO the IR, so the convolution costs nothing more), trims its tail (a fraction
     of its length kept — the room's decay is often more than a guitar wants), and flips it. Each
     has a switch, so the IR itself is never touched until asked. Ranges are OrbitCab's. */
-inline constexpr const char* cabHpfOn  = "cab_hpf_on";
-inline constexpr const char* cabHpfHz  = "cab_hpf_hz";
-inline constexpr const char* cabLpfOn  = "cab_lpf_on";
-inline constexpr const char* cabLpfHz  = "cab_lpf_hz";
+inline constexpr const char* cabHpfOn    = "cab_hpf_on";
+inline constexpr const char* cabHpfHz    = "cab_hpf_hz";
+inline constexpr const char* cabHpfSlope = "cab_hpf_slope";   // the consoles' ladder, baked into the IR
+inline constexpr const char* cabLpfOn    = "cab_lpf_on";
+inline constexpr const char* cabLpfHz    = "cab_lpf_hz";
+inline constexpr const char* cabLpfSlope = "cab_lpf_slope";
 inline constexpr const char* cabTrimOn = "cab_trim_on";
 inline constexpr const char* cabTrim   = "cab_trim";      // the fraction kept, 0.02..1
 inline constexpr const char* cabPhase  = "cab_phase";
-inline constexpr float cabHpfMinHz = 30.0f,   cabHpfMaxHz = 180.0f,   cabHpfDefaultHz = 80.0f;
-inline constexpr float cabLpfMinHz = 4000.0f, cabLpfMaxHz = 12000.0f, cabLpfDefaultHz = 7000.0f;
+inline constexpr float cabHpfMinHz = 0.0f,    cabHpfMaxHz = 1000.0f,  cabHpfDefaultHz = 80.0f;
+inline constexpr float cabLpfMinHz = 1200.0f, cabLpfMaxHz = 20000.0f, cabLpfDefaultHz = 7000.0f;
 inline constexpr float cabTrimMin  = 0.02f;
 
 inline constexpr const char* powerOn   = "power_on";

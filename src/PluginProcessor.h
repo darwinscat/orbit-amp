@@ -294,8 +294,10 @@ private:
     std::atomic<float>* cabIrParam = nullptr;
     std::atomic<float>* cabHpfOnParam = nullptr;
     std::atomic<float>* cabHpfHzParam = nullptr;
+    std::atomic<float>* cabHpfSlopeParam = nullptr;
     std::atomic<float>* cabLpfOnParam = nullptr;
     std::atomic<float>* cabLpfHzParam = nullptr;
+    std::atomic<float>* cabLpfSlopeParam = nullptr;
     std::atomic<float>* cabTrimOnParam = nullptr;
     std::atomic<float>* cabTrimParam = nullptr;
     std::atomic<float>* cabPhaseParam = nullptr;

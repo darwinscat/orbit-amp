@@ -1,10 +1,12 @@
 #pragma once
 
-#include <felitronics/eq/Svf.h>
+#include <felitronics/eq/MatchedBiquad.h>
 #include <felitronics/measurement/ReferenceUnity.h>
 
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_dsp/juce_dsp.h>
+
+#include <algorithm>
 
 namespace orbitamp::core
 {
@@ -37,15 +39,19 @@ public:
         float trimFraction = 1.0f;     // of the IR's length, kept
         bool  hpfOn        = false;
         float hpfHz        = 80.0f;
+        int   hpfSlope     = 12;       // dB/oct: 6, 12, 18, 24 or 48 — the consoles' ladder
         bool  lpfOn        = false;
         float lpfHz        = 7000.0f;
+        int   lpfSlope     = 12;
         bool  phase        = false;    // flipped
 
         bool operator== (const Post& o) const noexcept
         {
             return trimOn == o.trimOn && juce::approximatelyEqual (trimFraction, o.trimFraction)
                 && hpfOn == o.hpfOn && juce::approximatelyEqual (hpfHz, o.hpfHz)
+                && hpfSlope == o.hpfSlope
                 && lpfOn == o.lpfOn && juce::approximatelyEqual (lpfHz, o.lpfHz)
+                && lpfSlope == o.lpfSlope
                 && phase == o.phase;
         }
     };
@@ -111,24 +117,48 @@ private:
         for (int ch = 0; ch < ir.getNumChannels(); ++ch)
             ir.copyFrom (ch, 0, raw, ch, 0, keep);
 
-        // The cuts, run over the impulse itself: a TPT state-variable filter at Butterworth Q, the
-        // same second-order shape the picture draws.
-        const auto run = [&] (felitronics::eq::FilterType type, float hz)
+        // The cuts, run over the impulse itself: matched-biquad Butterworth cascades — the same
+        // ladder EqLink runs live (odd slopes lead with a first-order section), so the picture,
+        // the consoles and the baked IR all mean the same steepness.
+        const auto run = [&] (bool isHighpass, float hz, int slopeDb)
         {
-            felitronics::eq::Svf f;
-            f.prepare (rawRate, ir.getNumChannels());
-            f.setParams (type, (double) hz, 0.7071, 0.0);
-            f.reset();
-            for (int ch = 0; ch < ir.getNumChannels(); ++ch)
+            namespace m = felitronics::eq::matched;
+            const double f = std::clamp ((double) hz, 10.0, 0.49 * rawRate);
+
+            felitronics::eq::BiquadCoeffs sections[4];
+            int count = 0;
+
+            const auto fo = [&] { return isHighpass ? m::highpass1 (f, rawRate) : m::lowpass1 (f, rawRate); };
+            const auto bq = [&] (double q) { return isHighpass ? m::highpass (f, rawRate, q) : m::lowpass (f, rawRate, q); };
+
+            switch (slopeDb)
             {
-                float* d = ir.getWritePointer (ch);
-                for (int i = 0; i < keep; ++i)
-                    d[i] = f.processSample (ch, d[i]);
+                case 6:  sections[count++] = fo(); break;
+                default:
+                case 12: sections[count++] = bq (0.70710678); break;
+                case 18: sections[count++] = fo();
+                         sections[count++] = bq (1.0); break;
+                case 24: sections[count++] = bq (0.54119610);
+                         sections[count++] = bq (1.30656296); break;
+                case 48: sections[count++] = bq (0.50979558);
+                         sections[count++] = bq (0.60134489);
+                         sections[count++] = bq (0.89997622);
+                         sections[count++] = bq (2.56291545); break;
             }
+
+            for (int s = 0; s < count; ++s)
+                for (int ch = 0; ch < ir.getNumChannels(); ++ch)
+                {
+                    felitronics::eq::Biquad biquad;
+                    biquad.setCoeffs (sections[s]);
+                    float* d = ir.getWritePointer (ch);
+                    for (int i = 0; i < keep; ++i)
+                        d[i] = biquad.processSample (d[i]);
+                }
         };
 
-        if (post.hpfOn) run (felitronics::eq::FilterType::HighPass, post.hpfHz);
-        if (post.lpfOn) run (felitronics::eq::FilterType::LowPass,  post.lpfHz);
+        if (post.hpfOn) run (true,  post.hpfHz, post.hpfSlope);
+        if (post.lpfOn) run (false, post.lpfHz, post.lpfSlope);
 
         if (post.phase)
             ir.applyGain (-1.0f);
