@@ -10,10 +10,14 @@ ReverbBlock::ReverbBlock (juce::AudioProcessorValueTreeState& s)
 {
     addAndMakeVisible (character);
     addAndMakeVisible (mix);
+    addAndMakeVisible (decay);
+    addAndMakeVisible (pre);
     addAndMakeVisible (tail);
 
-    display.prepare (displayRate);
-    mix.onValueChange = [this] { refreshTail(); };
+    display.prepare (displayRate, (int) (displayRate * tailSeconds));
+    mix.onValueChange   = [this] { refreshTail(); };
+    decay.onValueChange = [this] { refreshTail(); };
+    pre.onValueChange   = [this] { refreshTail(); };
 
     attachPower (*state.getParameter (params::reverbOn));
 
@@ -31,7 +35,11 @@ ReverbBlock::ReverbBlock (juce::AudioProcessorValueTreeState& s)
     character.tracking   = 0.15f;
     character.boxed      = false;
     character.tint       = theme::lilac;
-    mix.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)) + "%"; };
+    mix.textForValue   = [] (double v) { return juce::String (juce::roundToInt (v)) + "%"; };
+    decay.textForValue = [] (double v) { return juce::String (v, 1) + "x"; };
+    pre.textForValue   = [] (double v) { return juce::String (juce::roundToInt (v)); };
+    decay.labelFontHeight = 7.0f;
+    pre.labelFontHeight   = 7.0f;
 
     characterAttachment = std::make_unique<juce::ParameterAttachment> (
         *state.getParameter (params::reverbType),
@@ -46,6 +54,10 @@ ReverbBlock::ReverbBlock (juce::AudioProcessorValueTreeState& s)
 
     mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         state, params::reverbMix, mix);
+    decayAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        state, params::reverbDecay, decay);
+    preAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        state, params::reverbPredelay, pre);
 
     characterAttachment->sendInitialUpdate();
 }
@@ -58,6 +70,8 @@ void ReverbBlock::refreshTail()
 
     display.setCharacter (static_cast<core::ReverbStage::Character> (index));
     display.setMix ((float) mix.getValue() * 0.01f);
+    display.setDecay ((float) decay.getValue());
+    display.setPredelayMs ((float) pre.getValue());
     display.reset();
 
     // juce::Reverb ramps its gains over ~10 ms, so a fresh setting has to be run in before the
@@ -103,8 +117,19 @@ void ReverbBlock::layOutContent (juce::Rectangle<int> area)
     tail.setBounds (area);
 
     const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 14));
-    mix.setBounds (area.removeFromTop (side).removeFromRight (side).translated (-2, 2));
+    auto row = area.removeFromTop (side);
+    mix.setBounds (row.removeFromRight (side).translated (-2, 2));
     mix.toFront (false);
+
+    // The two refinements, deliberately small at the hero's left hand, on one centre line.
+    const int mini = 42;
+    auto miniRow = row.removeFromRight (mini * 2 + 6).withHeight (mini + 11)
+                       .translated (0, (side - mini) / 2 - 4);
+    decay.setBounds (miniRow.removeFromLeft (mini));
+    miniRow.removeFromLeft (6);
+    pre.setBounds (miniRow);
+    decay.toFront (false);
+    pre.toFront (false);
 }
 
 } // namespace orbitamp

@@ -291,11 +291,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Choice> (juce::ParameterID { cabIr, 1 }, "Cabinet IR",
                                           cabIrNames, cabIrDefault));
 
-    // PLATE at thirty: the shipping room.
+    // PLATE at thirty: the shipping room. DECAY breathes around unity, PREDELAY ships at zero,
+    // and the tail's HPF waits switched off at a bass-cleaning corner.
     layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters,
                                           reverbCharacters.indexOf ("Plate")),
                 std::make_unique<Float>  (juce::ParameterID { reverbMix, 1 }, "Mix",
-                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 30.0f));
+                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 30.0f),
+                std::make_unique<Float>  (juce::ParameterID { reverbDecay, 1 }, "Reverb Decay",
+                                          juce::NormalisableRange<float> (0.5f, 2.0f, 0.01f,
+                                                                          std::log (0.5f) / std::log ((1.0f - 0.5f) / (2.0f - 0.5f))),
+                                          1.0f),
+                std::make_unique<Float>  (juce::ParameterID { reverbPredelay, 1 }, "Reverb Predelay",
+                                          juce::NormalisableRange<float> (0.0f, 100.0f, 1.0f), 0.0f),
+                std::make_unique<Bool>   (juce::ParameterID { reverbHpfOn, 1 }, "Reverb HPF", false),
+                std::make_unique<Float>  (juce::ParameterID { reverbHpfHz, 1 }, "Reverb HPF Hz",
+                                          hz (40.0f, 500.0f, 120.0f), 120.0f));
 
     return layout;
 }

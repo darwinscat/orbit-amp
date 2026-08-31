@@ -309,6 +309,7 @@ target_include_directories(orbitamp_reverb_test PRIVATE src)
 target_compile_definitions(orbitamp_reverb_test PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_reverb_test PRIVATE
+    felitronics::eq
     juce::juce_audio_basics
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)

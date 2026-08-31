@@ -48,7 +48,7 @@ namespace
 int main()
 {
     ReverbStage r;
-    r.prepare (sampleRate);
+    r.prepare (sampleRate, (int) sampleRate * 3);   // the tests hand whole seconds in one call
 
     // An amp's reverb ADDS to the dry signal, it does not crossfade away from it. So the dry path
     // must sit at unity at EVERY mix setting — including the maximum. This is the behaviour the

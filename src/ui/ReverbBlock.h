@@ -39,11 +39,19 @@ private:
 
     VoicingSelector character;
     Knob           mix       { "Mix", theme::violet, 0 };
+
+    /** The late refinements, deliberately small beside the hero: the tail's breath and its
+        holding-back. They overlay the picture like the dial does. */
+    Knob decay { "Decay", theme::violet, 0 };
+    Knob pre   { "Pre",   theme::violet, 0 };
+
     ReverbTailView tail;
 
     core::ReverbStage display;   // drawing only; never sees the audio thread
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment,
+                                                                          decayAttachment,
+                                                                          preAttachment;
     std::unique_ptr<juce::ParameterAttachment> characterAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ReverbBlock)

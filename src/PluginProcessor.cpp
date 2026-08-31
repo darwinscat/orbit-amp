@@ -76,6 +76,10 @@ AmpProcessor::AmpProcessor()
     reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
     reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
     reverbMixParam  = apvts.getRawParameterValue (params::reverbMix);
+    reverbDecayParam    = apvts.getRawParameterValue (params::reverbDecay);
+    reverbPredelayParam = apvts.getRawParameterValue (params::reverbPredelay);
+    reverbHpfOnParam    = apvts.getRawParameterValue (params::reverbHpfOn);
+    reverbHpfHzParam    = apvts.getRawParameterValue (params::reverbHpfHz);
 
     powerOnParam     = apvts.getRawParameterValue (params::powerOn);
     powerGainParam   = apvts.getRawParameterValue (params::blockGain (params::powerId));
@@ -325,7 +329,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         }
     }
 
-    reverb.prepare (sampleRate);
+    reverb.prepare (sampleRate, block);
     boost.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
     poweramp.prepare (sampleRate, block, channels);
@@ -351,6 +355,9 @@ void AmpProcessor::updateReverbSettings() noexcept
 
     reverb.setCharacter (static_cast<core::ReverbStage::Character> (index));
     reverb.setMix (reverbMixParam->load() * 0.01f);   // the face reads percent
+    reverb.setDecay (reverbDecayParam->load());
+    reverb.setPredelayMs (reverbPredelayParam->load());
+    reverb.setHpf (reverbHpfOnParam->load() > 0.5f, reverbHpfHzParam->load());
 }
 
 void AmpProcessor::updateEqSettings() noexcept

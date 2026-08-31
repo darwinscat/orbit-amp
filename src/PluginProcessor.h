@@ -319,6 +319,10 @@ private:
     std::atomic<float>* reverbOnParam   = nullptr;
     std::atomic<float>* reverbTypeParam = nullptr;
     std::atomic<float>* reverbMixParam  = nullptr;
+    std::atomic<float>* reverbDecayParam    = nullptr;
+    std::atomic<float>* reverbPredelayParam = nullptr;
+    std::atomic<float>* reverbHpfOnParam    = nullptr;
+    std::atomic<float>* reverbHpfHzParam    = nullptr;
 
     std::atomic<float>* powerOnParam     = nullptr;
     std::atomic<float>* powerGainParam   = nullptr;

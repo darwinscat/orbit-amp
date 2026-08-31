@@ -272,12 +272,21 @@ inline bool demoLoopsPresent()
     saturation, and which trade you want depends on the machine you are on. Lives in the footer with
     the other facts about the run. */
 
-inline constexpr const char* reverbType = "reverb_type";
-inline constexpr const char* reverbMix  = "reverb_mix";
+inline constexpr const char* reverbType     = "reverb_type";
+inline constexpr const char* reverbMix      = "reverb_mix";
+
+/** The tail's late refinements. DECAY scales the character's own breath (×0.5..×2 — the character
+    stays the voice); PREDELAY holds the tail back so the attack stays dry (0..100 ms); the HPF
+    cleans the WET only — this reverb feeds a power amp, and a low tail into drive is mud. */
+inline constexpr const char* reverbDecay    = "reverb_decay";
+inline constexpr const char* reverbPredelay = "reverb_predelay";
+inline constexpr const char* reverbHpfOn    = "reverb_hpf_on";
+inline constexpr const char* reverbHpfHz    = "reverb_hpf_hz";
 
 /** Reverb characters, in the order of the design's simple case. Size and damping follow from the
     character rather than being loose knobs — the design calls for Mix only. */
-inline const juce::StringArray reverbCharacters { "Room", "Hall", "Plate", "Spring" };
+inline const juce::StringArray reverbCharacters { "Ambience", "Room", "Hall", "Plate", "Spring",
+                                                  "Modulated" };
 
 /** Tone range. The measured hardware spanned about -10..+8 per control and up to 20 dB of travel on
     presence; the survey's conclusion on the narrower first pass was that the ranges were too small.
