@@ -38,6 +38,7 @@ public:
     std::function<void (juce::Point<int>)> onGear;
 
     void resized() override;
+    void paintOverChildren (juce::Graphics&) override;
 
     // OrbitCab's header proportions: a 50-tall strip whose small controls live in a 44-tall band
     // centred in it, so only the brand grows with the strip.
@@ -57,6 +58,7 @@ private:
     felitronics::appkit::chrome::ChromeTheme theme;
 
     felitronics::appkit::BrandHeader brand;
+    std::unique_ptr<juce::Drawable>  mark;   // OrbitAmp's own — painted over the header's shared one
     felitronics::appkit::IconButton  undo   { felitronics::appkit::IconButton::Kind::undo };
     felitronics::appkit::IconButton  redo   { felitronics::appkit::IconButton::Kind::redo };
     felitronics::appkit::IconButton  save   { felitronics::appkit::IconButton::Kind::save };

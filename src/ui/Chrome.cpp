@@ -35,6 +35,8 @@ Chrome::Chrome (AmpProcessor& processor)
     auto& history = amp.history;
 
     addAndMakeVisible (brand);
+    mark = juce::Drawable::createFromImageData (BinaryData::OrbitAmpmark_svg,
+                                                (size_t) BinaryData::OrbitAmpmark_svgSize);
 
     for (auto* b : { &undo, &redo, &save, &saveAs, &trash, &gear })
     {
@@ -106,6 +108,22 @@ void Chrome::refreshModel()
 
     undo.setEnabled (history.canUndo());
     redo.setEnabled (history.canRedo());
+}
+
+void Chrome::paintOverChildren (juce::Graphics& g)
+{
+    // BrandHeader still paints the family's FIRST product mark — orbit-capture's chevrons, hardcoded
+    // (see appkit Brand.h drawOrbit). Until the header takes a per-product painter, OrbitAmp lays
+    // its own mark over that slot: the same disc, the same geometry as BrandHeader::paint, so the
+    // cover is exact and nothing of the borrowed mark survives.
+    if (mark == nullptr)
+        return;
+
+    const auto b  = brand.getBounds().toFloat();
+    const float h = b.getHeight();
+    const float d = h * 0.86f;
+    mark->drawWithin (g, { b.getX() + h + 6.0f, b.getCentreY() - d * 0.5f, d, d },
+                      juce::RectanglePlacement::centred, 1.0f);
 }
 
 void Chrome::resized()
