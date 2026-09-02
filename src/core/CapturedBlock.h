@@ -394,6 +394,38 @@ public:
 
     bool isReady() const noexcept { return player.loaded(); }
 
+    /** Whether a measured control's positions are NAMED rather than numbered — the difference
+        between a switch and a knob that happened to be swept at two points. */
+    static bool namedPositions (const namz::rig::Tone& t)
+    {
+        for (const auto& p : t.positions)
+        {
+            const auto s = juce::String (p.label.empty() ? p.value : p.label).trim();
+
+            if (s.isNotEmpty() && ! s.containsOnly ("0123456789.+-"))
+                return true;
+        }
+
+        return false;
+    }
+
+    /** Whether this device brought a tone stack a console can WEAR: at least one swept dial that is
+        not a switch and not a control the pack tested and found flat.
+
+        ONE function, asked from both sides. The face uses it to decide whether the choice between
+        the two tone stacks exists at all — a device that measured nothing collapses to ours rather
+        than showing an empty row — and the DSP has to reach the same verdict, or a block whose
+        parameter says NATIVE while its face wears OURS would have its own bands parked in favour
+        of a tone stack that does not exist, and end up with no tone at all. */
+    bool hasWearableTone() const
+    {
+        for (const auto& t : tones())
+            if (t.sweep > 0 && ! (t.positions.size() == 2 && namedPositions (t)) && ! trustFailed (t))
+                return true;
+
+        return false;
+    }
+
     /** A control the pack tested and found NOT to be a filter anywhere: a collapsed trusted band.
         The player plays it as silence; a face should not build a knob for it. Bands are played
         whole — for them `trusted` is provenance, never a verdict. */

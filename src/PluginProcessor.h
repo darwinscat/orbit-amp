@@ -271,6 +271,23 @@ public:
         force-republish on every alternating pull. */
     static constexpr int eqSpectrumOrder = 11;   // 2048
 
+    /** ...and the resolution a block's tap runs at while its TONE picture is THROWN OPEN.
+
+        The tile's 2048 points are 23 Hz a bin: between 20 and 100 Hz that is three and a half bins,
+        which is why the bottom of the spectrum reads as mush no matter how many pixels it is given.
+        8192 makes it fourteen. The window grows with it — 43 ms to 171 — and a picture being read
+        rather than reacted to is better for it, but a tile that has to follow a hand is not, which
+        is why this is the big view's resolution and not everyone's.
+
+        No second tap: `RollingSpectrumTap` decouples cadence from window on purpose, so one ring
+        serves any order and the switch is click-free — it force-publishes at the new size and the
+        reader discards frames of the wrong one. What it does NOT do is serve two orders at once,
+        and it need not: the console stops pulling when a picture is thrown open over it. */
+    static constexpr int eqSpectrumOrderBig = 13;   // 8192
+
+    /** What resolution each block's pair is publishing at, written by that block's face. */
+    std::array<std::atomic<int>, 2> blockSpectrumOrder;
+
     /** The raw input's peak this block, in dB — the level the gate KEYS off, for the meter the
         thresholds are drawn on. Same writer, same readers. */
     std::atomic<float> gateKeyDb { -90.0f };

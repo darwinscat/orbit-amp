@@ -27,6 +27,9 @@ AmpProcessor::AmpProcessor()
     // burst commits about 0.4 s after you stop moving.
     startTimerHz (30);
 
+    for (auto& order : blockSpectrumOrder)
+        order.store (eqSpectrumOrder);
+
     for (int l = 0; l < params::numEqLinks; ++l)
     {
         auto& p = eqParams[(size_t) l];
@@ -445,6 +448,34 @@ void AmpProcessor::updateEqSettings() noexcept
         s.lpfSlope = slope (p.lpfSlope->load());
         s.levelDb  = (double) p.level->load();
 
+        // WHOSE TONE STACK IS IN THE SIGNAL. The two are alternatives, and until now only half of
+        // that was true: `setRaw` parked the device's curves when ours was chosen, but ours went on
+        // filtering when the device's was — active, and with no controls on the face, because the
+        // console had swapped its row for the device's knobs. A shape somebody dialled in and left
+        // behind kept playing where nothing could reach it.
+        //
+        // Only the TONE sections step aside. The cut filters and the level belong to the BLOCK
+        // whichever tone is playing: the walls are utility, and the level is the block's output —
+        // the grip on the OUT meter writes it, and it would go dead here.
+        //
+        // Asked of the block, not of the parameter alone: a device that measured nothing has no
+        // native stack to hand over, its face collapses the choice to ours, and the DSP has to
+        // reach the same verdict or the block ends up with no tone stack at all.
+        const auto mode = static_cast<params::EqMode> (juce::roundToInt (
+            apvts.getRawParameterValue (params::blockEqMode (params::eqBlockId (l)))->load()));
+
+        const auto& blockFor = l == 0 ? boost : preamp;
+
+        if (mode == params::EqMode::native && blockFor.hasWearableTone())
+        {
+            s.loDb = 0.0;
+            s.b1Db = 0.0;
+            s.b2Db = 0.0;
+            s.b3On = false;
+            s.b3Db = 0.0;
+            s.hiDb = 0.0;
+        }
+
         eqLinks[(size_t) l].setSettings (s);
     }
 }
@@ -609,7 +640,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
               const float* d = buffer.getReadPointer (0);
               for (int i = 0; i < numSamples; ++i)
                   tin.push (d[i]);
-              tin.publishIfDue (eqSpectrumOrder,
+              tin.publishIfDue (blockSpectrumOrder[(size_t) l].load (std::memory_order_relaxed),
                                 juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
           }
 
@@ -630,7 +661,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             const float* d = buffer.getReadPointer (0);
             for (int i = 0; i < numSamples; ++i)
                 tap.push (d[i]);
-            tap.publishIfDue (eqSpectrumOrder,
+            // The face's own resolution: the pair follows the picture that is up over it.
+            tap.publishIfDue (blockSpectrumOrder[(size_t) l].load (std::memory_order_relaxed),
                               juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
         }
     };

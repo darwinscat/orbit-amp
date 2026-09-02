@@ -125,10 +125,7 @@ private:
     std::function<double (double)> nativeDb;
     juce::Component* host = nullptr;   // whoever the widgets were handed to, for rebuilt rows
 
-    EqCurve curve { [this] (double hz)
-                    {
-                        return display.magnitudeDb (hz) + (nativeDb != nullptr ? nativeDb (hz) : 0.0);
-                    } };
+    EqCurve curve { [this] (double hz) { return drawnDb (hz); } };
 
     /** The overlay in the curve's corner: WHOSE tone controls the console wears, written on the
         button itself so the answer is read without opening anything, and the menu under it —
@@ -177,6 +174,22 @@ public:
         It is added rather than switched to because the cuts are OURS in both modes: what the block
         actually does is the pack's curves and our two walls, so that is what the line has to be. */
     void setNativeCurve (std::function<double (double)> db) { nativeDb = std::move (db); refreshCurve(); }
+
+    /** WHAT THE BLOCK ACTUALLY DOES TO THE BALANCE — the one function every picture of this
+        console's effect should call, so the curve here and the curve in the block's tile can never
+        describe different halves of the same signal.
+
+        The two tone stacks are alternatives: wearing the device's, ours is parked in the DSP, so
+        only our cut FILTERS remain in the path — the walls belong to the block whichever tone is
+        playing, and so does the level, which is not in this sum at all because it is not a balance.
+
+        `EqLink` was already split along this seam (filterMagnitudeDb / toneMagnitudeDb); nothing
+        needs re-designing to ask it the question. */
+    double drawnDb (double hz) const
+    {
+        return nativeDb != nullptr ? display.filterMagnitudeDb (hz) + nativeDb (hz)
+                                   : display.magnitudeDb (hz);
+    }
 
     /** The one question the console asks about ITSELF: whose bands it is wearing. `names` is the
         whole pair, in the parameter's order; `nativeAvailable` false greys the device's side, for

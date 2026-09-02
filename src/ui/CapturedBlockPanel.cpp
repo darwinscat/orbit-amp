@@ -17,7 +17,7 @@ class CapturedBlockPanel::ScopeTheater final : public juce::Component
 public:
     ScopeTheater (Block& b, std::function<double (double)> toneDb, DeviceScope::Mode mode,
                   bool waveHalf, double sampleRate,
-                  felitronics::analysis::RollingSpectrumTap* tap, int tapOrder,
+                  felitronics::analysis::RollingSpectrumTap* tapIn, int tapOrder,
                   felitronics::appkit::DeviceSpec spec, juce::StringArray paper,
                   juce::StringArray credit, juce::Image picture,
                   std::function<void()> dismiss)
@@ -26,8 +26,10 @@ public:
         scope.setMode (mode);
         scope.waveHalf = waveHalf;
         scope.setSampleRate (sampleRate);
-        if (mode == DeviceScope::Mode::tone && tap != nullptr)
-            scope.setSpectrumTap (tap, tapOrder);
+        if (mode == DeviceScope::Mode::tone && tapIn != nullptr)
+            scope.setSpectrumTap (tapIn, tapOrder);
+
+        tap = mode == DeviceScope::Mode::tone ? tapIn : nullptr;
 
         // The moving pictures read a tap and need nothing carried in; the STATIC pages are all
         // carried-in content, and a fresh scope knows none of it. Without this the whole monitor
@@ -39,6 +41,14 @@ public:
         addAndMakeVisible (scope);
         setOpaque (true);
         setWantsKeyboardFocus (true);
+    }
+
+    /** The face's resolution request reaches the theatre's own scope too: it is the picture that
+        owns the monitor, so it is the one the long window was raised for. */
+    void setSpectrumOrder (int order)
+    {
+        if (tap != nullptr)
+            scope.setSpectrumTap (tap, order);
     }
 
     void resized() override { scope.setBounds (getLocalBounds().reduced (24)); }
@@ -59,6 +69,7 @@ public:
 
 private:
     DeviceScope scope;
+    felitronics::analysis::RollingSpectrumTap* tap = nullptr;   // null unless this is the TONE page
     std::function<void()> onDismiss;
 };
 
@@ -68,7 +79,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
                                         felitronics::analysis::RollingSpectrumTap& toneSpectrumTap,
                                         felitronics::analysis::RollingSpectrumTap& toneInSpectrumTap)
     : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId),
-      toneTap (toneSpectrumTap),
+      link (eqLink), toneTap (toneSpectrumTap),
       eq (processor.apvts, eqLink, toneSpectrumTap, toneInSpectrumTap,
           [&processor] { return processor.currentSampleRate(); }),
       inMeter ("IN", processor.blockInDb[(size_t) eqLink],
@@ -108,7 +119,12 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     for (int i = 0; i < numViz; ++i)
     {
         scopes[(size_t) i] = std::make_unique<DeviceScope> (
-            b.scope, b.ribbon, [this] (double hz) { return block.toneDb (hz); });
+            // THE PICTURE DRAWS WHAT THE BLOCK DOES, not half of it. It used to be handed the
+            // device's measured curve alone, so in UNIVERSAL EQ — where that curve is parked — it
+            // drew a flat line under a console showing a mountain: two descriptions of one signal,
+            // and the tile's was of the half that was switched off. One function now, the same the
+            // console's own curve calls.
+            b.scope, b.ribbon, [this] (double hz) { return eq.drawnDb (hz); });
         scopes[(size_t) i]->setMode ((DeviceScope::Mode) i);
         scopes[(size_t) i]->setSampleRate (amp.currentSampleRate());
         if ((DeviceScope::Mode) i == DeviceScope::Mode::tone)
@@ -131,6 +147,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
             expandedViz = expandedViz == i ? -1 : i;
             for (int j = 0; j < numViz; ++j)
                 expandTags[(size_t) j].expanded = expandedViz == j;
+            applySpectrumResolution();
             resized();
             repaint();
         };
@@ -254,6 +271,7 @@ bool CapturedBlockPanel::foldPicture()
     for (auto& t : expandTags)
         t.expanded = false;
 
+    applySpectrumResolution();
     resized();
     repaint();
     return true;
@@ -272,7 +290,7 @@ void CapturedBlockPanel::openTheater()
     const auto& from = *scopes[(size_t) shown];
 
     theater = std::make_unique<ScopeTheater> (
-        block, [this] (double hz) { return block.toneDb (hz); },
+        block, [this] (double hz) { return eq.drawnDb (hz); },
         (DeviceScope::Mode) shown,
         halfTag.half, amp.currentSampleRate(),
         &toneTap, AmpProcessor::eqSpectrumOrder,
@@ -289,6 +307,7 @@ void CapturedBlockPanel::openTheater()
     theater->setVisible (true);
     juce::Desktop::getInstance().setKioskModeComponent (theater.get(), false);
     theater->grabKeyboardFocus();
+    applySpectrumResolution();
 }
 
 void CapturedBlockPanel::closeTheater()
@@ -298,7 +317,26 @@ void CapturedBlockPanel::closeTheater()
 
     juce::Desktop::getInstance().setKioskModeComponent (nullptr);
     theater.reset();
+    applySpectrumResolution();
     resized();   // the face's copy comes back
+}
+
+/** The long window is for the pictures that own the face. Anywhere else the console is pulling from
+    the same tap and expects the standing size — a mixed order is not a compromise there, it is a
+    starved reader, because a frame of the wrong size is discarded rather than resampled. */
+void CapturedBlockPanel::applySpectrumResolution()
+{
+    const int shown = expandedViz >= 0 ? expandedViz : vizPick;
+    const bool big  = (theater != nullptr || expandedViz >= 0)
+                       && shown == (int) DeviceScope::Mode::tone;
+
+    const int order = big ? AmpProcessor::eqSpectrumOrderBig : AmpProcessor::eqSpectrumOrder;
+
+    amp.blockSpectrumOrder[(size_t) link].store (order, std::memory_order_relaxed);
+    scopes[(size_t) DeviceScope::Mode::tone]->setSpectrumTap (&toneTap, order);
+
+    if (theater != nullptr)
+        theater->setSpectrumOrder (order);
 }
 
 void CapturedBlockPanel::deviceChanged()
@@ -488,7 +526,7 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
         const auto& m = tones[(size_t) i];
 
         // A SWITCH — no sweep, or two named positions — is not a band: the row holds dials.
-        if (m.sweep <= 0 || (m.positions.size() == 2 && hasNamedPositions (m)))
+        if (m.sweep <= 0 || (m.positions.size() == 2 && Block::namedPositions (m)))
             continue;
 
         // A control the pack tested and found NOT to be a filter anywhere gets no knob. namz says
@@ -679,19 +717,6 @@ void CapturedBlockPanel::blockOnChanged (bool on)
     inMeter.repaint();
     outMeter.live = on;
     outMeter.repaint();
-}
-
-bool CapturedBlockPanel::hasNamedPositions (const namz::rig::Tone& m)
-{
-    for (const auto& p : m.positions)
-    {
-        const auto s = juce::String (p.label.empty() ? p.value : p.label).trim();
-
-        if (s.isNotEmpty() && ! s.containsOnly ("0123456789.+-"))
-            return true;
-    }
-
-    return false;
 }
 
 void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
@@ -992,6 +1017,7 @@ void CapturedBlockPanel::setViz (int which)
     // not something a host should be automating.
     amp.apvts.state.setProperty (vizProperty(), vizPick, nullptr);
 
+    applySpectrumResolution();
     resized();
     repaint();
 }
