@@ -95,12 +95,17 @@ jobs:
             # exec emulation giving up — it cannot tell us WHY. Windows can. Run it again through
             # cmd, which reports the real NTSTATUS: 0xC0000135 is a DLL the loader could not find,
             # 0xC0000005 an access violation, and a small number is the program's own answer.
-            echo "   --- what Windows says ---"
-            cmd //c "$(cygpath -w "$bin") & echo exit code: %ERRORLEVEL%" 2>&1 | tail -5
+            # THREE WAYS IN, because the last round proved the binary itself is healthy — a valid
+            # PE32+ console image with every import resolved — so what fails is how bash reaches it.
+            # `%ERRORLEVEL%` inside a cmd string is expanded BEFORE the command runs, so the previous
+            # probe reported a stale zero; the status is taken from the launcher here instead.
+            local win; win="$(cygpath -w "$bin")"
+            echo "   --- as a Windows path, from bash ---"
+            "$win"; echo "   status: $?"
+            echo "   --- through cmd ---"
+            cmd //c "$win"; echo "   status: $?"
             echo "   --- subsystem ---"
             file "$bin" 2>&1 | head -2
-            echo "   --- imports MSYS can resolve ---"
-            ldd "$bin" 2>&1 | grep -i "not found" || echo "   (all resolved by ldd)"
             return 1
           }
           for t in captured chain library reverb ribbon; do
