@@ -1,3 +1,12 @@
 # OrbitAmp
 
 A NAM-based guitar rig with Darwin's Cat's favourite sounds.
+
+## Trademarks
+
+The names of manufacturers and products are used only for descriptive identification of the
+physical equipment from which the included models were captured.
+
+No affiliation, sponsorship, endorsement, or licensing by the respective manufacturers is implied.
+
+All trademarks are property of their respective owners.

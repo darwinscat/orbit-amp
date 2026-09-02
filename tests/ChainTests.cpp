@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <memory>
 #include <vector>
 
 namespace
@@ -132,12 +133,32 @@ namespace
 
 int main()
 {
-    const juce::ScopedJuceInitialiser_GUI juceInit;
-    std::printf ("orbitamp chain gate\n\n");
+    // UNBUFFERED, and the steps named as they pass. printf to a pipe or a file is block-buffered, so
+    // a gate that dies takes everything it said with it — which is how this one spent days failing
+    // on Windows CI with an empty log and a bare exit code, indistinguishable from a missing binary.
+    // A gate's first duty when it falls over is to say where.
+    std::setvbuf (stdout, nullptr, _IONBF, 0);
 
-    orbitamp::AmpProcessor amp;
+    std::printf ("orbitamp chain gate\n");
+
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+    std::printf ("  juce initialised\n");
+
+    // ON THE HEAP, and it has to be. The processor is a megabyte and a half of taps, delay lines,
+    // ribbons and IR buffers; Windows gives a main thread ONE megabyte of stack where macOS gives
+    // eight. As a local it overflowed the stack in main's prologue — before a single statement ran,
+    // which is why this gate died silently, with no output at all, on every Windows CI run there has
+    // ever been. A host allocates the processor on the heap; so does its gate.
+    std::printf ("  sizeof(AmpProcessor) = %.2f MB\n",
+                 (double) sizeof (orbitamp::AmpProcessor) / (1024.0 * 1024.0));
+
+    const auto ampOwned = std::make_unique<orbitamp::AmpProcessor>();
+    auto& amp = *ampOwned;
+    std::printf ("  processor constructed\n");
+
     amp.inlineLoads = true;   // no message loop here: a model lands inside the pump
     amp.prepareToPlay (sampleRate, blockSize);
+    std::printf ("  prepared\n\n");
     set (amp, orbitamp::params::stereoMode, 0.0f);   // the gate measures the chain, not the environment default
 
     if (amp.boost.packs.isEmpty())
@@ -340,7 +361,10 @@ int main()
             bareStage->device.files.resize (1);
             bareStage->device.files.front().settings.clear();   // …and its one file names no position
 
-            orbitamp::AmpProcessor solo;
+            // The heap, for the reason the one in main() is there: a megabyte and a half does not
+            // fit a Windows stack, and this one is nested deeper still.
+            const auto soloOwned = std::make_unique<orbitamp::AmpProcessor>();
+            auto& solo = *soloOwned;
             solo.inlineLoads = true;
             solo.prepareToPlay (sampleRate, blockSize);
             // The bare pack stands at list position 0; the device parameter's factory default is a

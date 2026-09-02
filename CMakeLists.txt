@@ -98,6 +98,14 @@ if(EXISTS "${ORBITAMP_NAMZ_SRC}/include/namz.h")
     set(FELITRONICS_NAMZ_SRC "${ORBITAMP_NAMZ_SRC}" CACHE PATH "" FORCE)
 endif()
 
+# ...and when there is NO local checkout — CI — the tag core would otherwise pin. The device page
+# reads a pack's photograph and the box's own history (`Rig::picture`, `gear.year`, `serial_number`,
+# `designed_in`, `made_in`), all of which are newer than the commit felitronics-core carries. Pinned
+# HERE rather than waited for: a core release exists to move core's own code, and holding this
+# behind one would leave the plugin unbuildable on CI for no reason of its own.
+set(ORBITAMP_NAMZ_TAG "v3.3.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
+
 FetchContent_MakeAvailable(felitronics_core)
 
 # ----------------------------------------------------------------------------
@@ -119,6 +127,12 @@ else()
         GIT_TAG        ${ORBITAMP_APPKIT_TAG}
         GIT_SHALLOW    TRUE)
 endif()
+
+# A pack ships its device's photograph as WebP (rig.json's `picture`), and an include path cannot
+# carry a codec — appkit's opt-in half brings libwebp, pinned and fetched like JUCE. The capture
+# app that WRITES the picture turns the same switch on; this is the reading end of it.
+set(FELITRONICS_APPKIT_WEBP ON CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(felitronics_appkit)
 
 # ----------------------------------------------------------------------------
@@ -254,7 +268,12 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav"
 )
 
+# THE PRODUCT'S version, not the plugin wrapper's. `JucePlugin_VersionString` exists only inside a
+# target juce_add_plugin built, and the headless gates compile the very same UI sources without it —
+# so a face that read it built as a plugin and failed as a test. This one is the project's, defined
+# for everything that compiles a face.
 target_compile_definitions(OrbitAmp PUBLIC
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
@@ -265,6 +284,7 @@ target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
     felitronics::analysis            # spectrum taps + panes behind the EQ curves
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
+    felitronics::appkit_webp         # juce::Image <- WebP, for the picture a pack ships
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
@@ -431,11 +451,13 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp)
 target_include_directories(orbitamp_chain_test PRIVATE src)
-target_compile_definitions(orbitamp_chain_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(orbitamp_chain_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                      JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE
     OrbitAmpData
     felitronics::analysis
     felitronics::appkit
+    felitronics::appkit_webp         # the panel decodes a pack's photograph — same half the plugin links
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq

@@ -5,6 +5,8 @@
 
 #include "../PluginProcessor.h"
 
+#include <felitronics/appkit/WebpImage.h>
+
 namespace orbitamp
 {
 
@@ -16,6 +18,8 @@ public:
     ScopeTheater (Block& b, std::function<double (double)> toneDb, DeviceScope::Mode mode,
                   bool waveHalf, double sampleRate,
                   felitronics::analysis::RollingSpectrumTap* tap, int tapOrder,
+                  felitronics::appkit::DeviceSpec spec, juce::StringArray paper,
+                  juce::StringArray credit, juce::Image picture,
                   std::function<void()> dismiss)
         : scope (b.scope, b.ribbon, std::move (toneDb)), onDismiss (std::move (dismiss))
     {
@@ -24,6 +28,14 @@ public:
         scope.setSampleRate (sampleRate);
         if (mode == DeviceScope::Mode::tone && tap != nullptr)
             scope.setSpectrumTap (tap, tapOrder);
+
+        // The moving pictures read a tap and need nothing carried in; the STATIC pages are all
+        // carried-in content, and a fresh scope knows none of it. Without this the whole monitor
+        // went black on the two pages that have the most to show on it.
+        scope.setSpec (std::move (spec));
+        scope.setInfo (std::move (paper));
+        scope.setCredit (std::move (credit));
+        scope.setPicture (std::move (picture));
         addAndMakeVisible (scope);
         setOpaque (true);
         setWantsKeyboardFocus (true);
@@ -130,6 +142,8 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         scopes[(size_t) DeviceScope::Mode::wave]->waveHalf = halfTag.half;
         repaint();
     };
+
+    startTimerHz (30);   // the hand's whereabouts, for the corner glyphs
 
     screenTag.onClick = [this] { openTheater(); };
     addChildComponent (screenTag);
@@ -255,11 +269,14 @@ void CapturedBlockPanel::openTheater()
     // had a reason to start.
     const int shown = expandedViz >= 0 ? expandedViz : vizPick;
 
+    const auto& from = *scopes[(size_t) shown];
+
     theater = std::make_unique<ScopeTheater> (
         block, [this] (double hz) { return block.toneDb (hz); },
         (DeviceScope::Mode) shown,
         halfTag.half, amp.currentSampleRate(),
         &toneTap, AmpProcessor::eqSpectrumOrder,
+        from.deviceSpec(), from.paper(), from.creditLines(), from.picture(),
         [this] { closeTheater(); });
 
     // The face's own copy stops while the theatre runs — the wave ribbon must have ONE
@@ -323,14 +340,56 @@ void CapturedBlockPanel::deviceChanged()
     const int chosen = juce::jlimit (0, juce::jmax (0, block.packs.size() - 1),
                                      juce::roundToInt (devParam->convertFrom0to1 (devParam->getValue())));
 
-    juce::StringArray paper;
+    juce::StringArray paper, credit;
 
     if (! block.packs.isEmpty())
     {
         const auto& pack = block.packs.getReference (chosen);
         paper.add (pack.displayName().toUpperCase());
-        if (pack.alias.isNotEmpty() && pack.alias != pack.displayName())
-            paper.add (pack.alias.toUpperCase());
+
+        // The MAKER, not the voice's alias. «Snow Leopard» named the sound and told you nothing you
+        // could act on; «Electro-Harmonix» tells you whose circuit this is, which is the fact a
+        // player is actually checking when they open this page.
+        if (const auto* stage = pack.rig.firstKnown())
+            if (const auto make = juce::String (stage->make).trim(); make.isNotEmpty())
+                paper.add (make.toUpperCase());
+
+        // ...and on the card, the PARTICULAR BOX and the hands that took it.
+        //
+        // A model name is a family: "Big Muff Pi" has been a dozen circuits over fifty years, and
+        // the year and the serial number are the only things that say which one played into the
+        // microphone. Where it was drawn up and where it was screwed together is often the variant
+        // itself — a Japanese TS808 and a Taiwanese one are different pedals under one name.
+        if (const auto* stage = pack.rig.firstKnown())
+        {
+            juce::StringArray box;
+
+            if (stage->year > 0)
+                box.add (juce::String (stage->year));
+
+            if (const auto sn = juce::String (stage->serialNumber).trim(); sn.isNotEmpty())
+                box.add ("S/N " + sn.toUpperCase());
+
+            if (! box.isEmpty())
+                credit.add (box.joinIntoString (juce::String::fromUTF8 (" \xc2\xb7 ")));
+
+            // One line, and it says only what it has: a box designed and built in the same place
+            // says «MADE IN USA» rather than the same country twice.
+            const auto designed = juce::String (stage->designedIn).trim().toUpperCase();
+            const auto made     = juce::String (stage->madeIn).trim().toUpperCase();
+
+            if (made.isNotEmpty() && (designed.isEmpty() || designed == made))
+                credit.add ("MADE IN " + made);
+            else if (made.isNotEmpty())
+                credit.add ("DESIGNED IN " + designed
+                            + juce::String::fromUTF8 (" \xc2\xb7 ") + "MADE IN " + made);
+            else if (designed.isNotEmpty())
+                credit.add ("DESIGNED IN " + designed);
+        }
+
+        // A captured device with no maker named is an anonymous file. This one is ours and says so.
+        if (const auto by = juce::String (pack.rig.modeledBy).trim(); by.isNotEmpty())
+            credit.add ("CAPTURED BY " + by.toUpperCase());
     }
 
     if (const auto circuit = juce::String (block.circuit()).trim(); circuit.isNotEmpty())
@@ -339,11 +398,43 @@ void CapturedBlockPanel::deviceChanged()
     if (const int n = block.gainPositions().size(); n > 0)
         paper.add (juce::String (n) + (n == 1 ? " CAPTURE" : " CAPTURES") + " ON THE DIAL");
 
+    // ...and the BOX itself, when the pack ships one. `picture` is a file name in the pack root
+    // (see namz's Rig::picture) — WebP, a cut-out with its alpha kept. Decoded HERE, once per
+    // device change on the message thread: ~4 ms for a 600-square, and the view keeps the result
+    // rather than touching the codec again.
+    //
+    // WebP is what the format states and what the capture app writes; the fallback exists because a
+    // hand-assembled pack naming a PNG is a reasonable thing to do and refusing it would be pedantry.
+    juce::Image photo;
+
+    if (! block.packs.isEmpty())
+    {
+        const auto& pack = block.packs.getReference (chosen);
+
+        if (const auto entry = juce::String (pack.rig.picture).trim(); entry.isNotEmpty())
+            if (const auto bytes = device::DeviceLibrary::readBinaryEntry (pack, entry);
+                bytes.getSize() > 0)
+            {
+                photo = felitronics::appkit::decodeWebp (bytes.getData(), bytes.getSize());
+
+                if (! photo.isValid())
+                    photo = juce::ImageFileFormat::loadFrom (bytes.getData(), bytes.getSize());
+            }
+    }
+
     for (auto& sc : scopes)
     {
         sc->setSpec (spec);
         sc->setInfo (paper);
+        sc->setCredit (credit);
+        sc->setPicture (photo);
     }
+
+    // A device with no photograph must not leave the face staring at an empty page — the one the
+    // last device filled. The paper is what every pack has, so that is where it steps back to.
+    if (! hasPicture() && (vizPick == (int) DeviceScope::Mode::photo
+                            || expandedViz == (int) DeviceScope::Mode::photo))
+        setViz ((int) DeviceScope::Mode::device);
 
     // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next
     // pack says for the next one. Detented where the pack has positions, continuous where it does
@@ -794,12 +885,93 @@ void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
         if (e.mods.isPopupMenu())
             showVizMenu (e.getScreenPosition());
         else
-            setViz ((vizPick + 1) % numViz);   // round the loop, one click at a time
+            setViz (nextViz (vizPick));   // round the loop, one click at a time
 
         return;
     }
 
     BlockFrame::mouseDown (e);
+}
+
+/** Whether the pointer is over the picture — asked of the desktop, so it is also false when the
+    mouse has left the window, which no enter/exit pair would have told us. */
+bool CapturedBlockPanel::handIsOnThePicture() const
+{
+    if (widgetArea.isEmpty() || ! isShowing())
+        return false;
+
+    return widgetArea.contains (getMouseXYRelative());
+}
+
+void CapturedBlockPanel::setCornerAlpha (float a)
+{
+    cornerAlpha = a;
+
+    const bool lit = a > 0.01f;
+
+    for (auto& t : expandTags)
+        if (t.isVisible() || lit)
+            t.setAlpha (a);
+
+    screenTag.setAlpha (a);
+    halfTag.setAlpha (a);
+
+    // Transparent is still clickable in JUCE, and a glyph nobody can see must not answer a click
+    // meant for the picture underneath it.
+    for (auto& t : expandTags)
+        t.setInterceptsMouseClicks (lit, lit);
+
+    screenTag.setInterceptsMouseClicks (lit, lit);
+    halfTag.setInterceptsMouseClicks (lit, lit);
+}
+
+void CapturedBlockPanel::timerCallback()
+{
+    // The theatre owns the whole screen and its own way out; while it runs the face beneath is not
+    // being pointed at, whatever the coordinates say.
+    const bool want = theater == nullptr && handIsOnThePicture();
+    const float step = want ? 1.0f / (0.25f * 30.0f) : -1.0f / (0.5f * 30.0f);
+    const float next = juce::jlimit (0.0f, 1.0f, cornerAlpha + step);
+
+    if (next != cornerAlpha)
+        setCornerAlpha (next);
+}
+
+bool CapturedBlockPanel::hasPicture() const
+{
+    const auto& sc = scopes[(size_t) DeviceScope::Mode::photo];
+    return sc != nullptr && sc->hasPicture();
+}
+
+/** Only the SHOWN scope is given bounds — the others keep whatever they had last — so the room is
+    asked of the one actually standing in it. They all answer the same when they are the same size,
+    which is the point: the question is about the room, not about which page is up. */
+bool CapturedBlockPanel::pairsAsCard() const
+{
+    const auto& sc = scopes[(size_t) (expandedViz >= 0 ? expandedViz : vizPick)];
+    return sc != nullptr && sc->pairsAsCard();
+}
+
+/** The loop walks PAGES THAT HAVE SOMETHING OF THEIR OWN TO SHOW.
+
+    Two reasons a page steps out of it. Most packs ship no photograph — the field is newer than they
+    are — and a click that lands on a blank page is a click the player has to undo. And wherever the
+    room seats the pair, DEVICE and PHOTO draw the SAME card, so a loop that visited both would stop
+    twice on one picture and read as a stutter. DEVICE is the one that survives the pair: every pack
+    has paper, and only some have a photograph. */
+int CapturedBlockPanel::nextViz (int from) const
+{
+    for (int i = 1; i <= numViz; ++i)
+    {
+        const int j = (from + i) % numViz;
+
+        if (j == (int) DeviceScope::Mode::photo && (! hasPicture() || pairsAsCard()))
+            continue;
+
+        return j;
+    }
+
+    return from;
 }
 
 /** Both ways of choosing land here, so the choice is remembered whichever was used. */
@@ -824,18 +996,42 @@ void CapturedBlockPanel::setViz (int which)
     repaint();
 }
 
-/** Which of the five is up. A menu rather than five checkboxes: the block carries a whole EQ
+/** Which of them is up. A menu rather than a row of checkboxes: the block carries a whole EQ
     console now and has room for one picture, and choosing is the honest verb — you look at the
-    envelope INSTEAD of the transfer curve, not as well as. */
+    envelope INSTEAD of the transfer curve, not as well as.
+
+    Where the room seats the pair the list is one shorter, because DEVICE and PHOTO have become one
+    card and offering them as two entries that draw the same thing is a choice with no difference in
+    it. Where it does not, PHOTO stays on the list even when the pack ships none — greyed, so a
+    missing photograph is a fact you can see rather than a page you cannot find. */
 void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
 {
     static const char* const names[numViz] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE",
-                                              "DEVICE" };
+                                              "DEVICE", "PHOTO" };
+
+    const int photoIdx  = (int) DeviceScope::Mode::photo;
+    const int deviceIdx = (int) DeviceScope::Mode::device;
+    const bool paired   = pairsAsCard();
 
     juce::PopupMenu m;
+
+    // The way to the whole screen, in words. It used to live only in the corner brackets, and the
+    // corner brackets now come and go with the hand — a door that is only visible while you are
+    // already reaching for it is a door somebody never finds.
+    m.addItem (numViz + 1, "WHOLE SCREEN");
+    m.addSeparator();
+
     m.addSectionHeader ("PICTURE");
     for (int i = 0; i < numViz; ++i)
-        m.addItem (i + 1, names[i], true, i == vizPick);
+    {
+        if (i == photoIdx && paired)
+            continue;
+
+        // Paired, the DEVICE entry answers for whichever of the two the loop is standing on.
+        const bool ticked = i == vizPick || (paired && i == deviceIdx && vizPick == photoIdx);
+
+        m.addItem (i + 1, names[i], i != photoIdx || hasPicture(), ticked);
+    }
 
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
@@ -843,6 +1039,12 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
                      {
                          if (r == 0 || safe == nullptr)
                              return;
+
+                         if (r == numViz + 1)
+                         {
+                             safe->openTheater();
+                             return;
+                         }
 
                          safe->setViz (r - 1);
                      });
