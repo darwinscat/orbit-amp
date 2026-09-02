@@ -99,13 +99,17 @@ jobs:
             # PE32+ console image with every import resolved — so what fails is how bash reaches it.
             # `%ERRORLEVEL%` inside a cmd string is expanded BEFORE the command runs, so the previous
             # probe reported a stale zero; the status is taken from the launcher here instead.
+            # EVERY probe runs. `set -e` killed the last round on the first one, so the rest never
+            # spoke — which is how two rounds went by learning one fact each.
+            set +e
             local win; win="$(cygpath -w "$bin")"
-            echo "   --- as a Windows path, from bash ---"
-            "$win"; echo "   status: $?"
-            echo "   --- through cmd ---"
-            cmd //c "$win"; echo "   status: $?"
-            echo "   --- subsystem ---"
-            file "$bin" 2>&1 | head -2
+            echo "   --- the file itself ---"
+            ls -l "$bin"; stat -c '%s bytes' "$bin" 2>/dev/null
+            echo "   --- msys path ---";  "$bin";        echo "   status: $?"
+            echo "   --- windows path ---"; "$win";      echo "   status: $?"
+            echo "   --- through cmd ---";  cmd //c "$win"; echo "   status: $?"
+            echo "   --- subsystem ---";    file "$bin" 2>&1 | head -2
+            set -e
             return 1
           }
           for t in captured chain library reverb ribbon; do
