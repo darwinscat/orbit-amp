@@ -34,7 +34,8 @@ class AmpProcessor;
     switch — nothing in this file names any of that.
 
     A control slot with nothing behind it is hidden. A knob doing nothing is worse than a gap. */
-class CapturedBlockPanel final : public BlockFrame
+class CapturedBlockPanel final : public BlockFrame,
+                                 private juce::Timer
 {
 public:
     using Block = core::CapturedBlock;
@@ -108,7 +109,7 @@ private:
         decibels you would otherwise have to guess at. */
     static constexpr int topZoneH = 118;
 
-    static constexpr int numViz = 6;
+    static constexpr int numViz = 7;
 
     AmpProcessor& amp;
     Block&        block;
@@ -219,6 +220,19 @@ private:
     void mouseDown (const juce::MouseEvent&) override;
     void showVizMenu (juce::Point<int> screenPos);
     void setViz (int which);
+
+    /** Whether the loaded pack ships a photograph of its box. Most do not — the field is newer than
+        the packs — and a page with nothing behind it is the gap this face already refuses to have
+        anywhere else. */
+    bool hasPicture() const;
+
+    /** The next page the loop should land on, skipping any that has nothing of its own to show. */
+    int nextViz (int from) const;
+
+    /** Whether the picture standing here is big enough that DEVICE and PHOTO have become one card.
+        Asked of the scope rather than deduced from the expanded flag: the wide tile a lone block
+        gets is a card too, and one question is better than two rules. */
+    bool pairsAsCard() const;
     juce::Identifier vizProperty() const { return juce::Identifier (juce::String (blk) + "_viz"); }
 
     /** The little overlay on the WAVE tile: half-wave against the mirrored band. */
@@ -321,6 +335,23 @@ private:
     };
 
     ScreenTag screenTag;
+
+    /** THE GLYPHS COME WHEN THE HAND DOES. A photograph is the one thing on this face that is
+        better with nothing on it, and three orange marks sitting permanently on a picture of a
+        pedal are three marks that are always in the way. Every player and every image viewer works
+        this way, so the hand looks for them there by reflex.
+
+        Polled rather than driven by enter and exit: the glyphs are children that take their own
+        mouse, so entering one is LEAVING the picture as far as the panel is concerned, and the
+        mouse can also leave the window without a single event arriving. One question asked thirty
+        times a second answers all of it and costs nothing.
+
+        The fade is short — a quarter of a second in, half out. Instant is a flicker when the hand
+        crosses the tile on its way somewhere else; slow reads as lag. */
+    float cornerAlpha = 0.0f;
+    void timerCallback() override;
+    void setCornerAlpha (float);
+    bool handIsOnThePicture() const;
 
     void openTheater();
     void closeTheater();

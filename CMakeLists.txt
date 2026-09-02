@@ -119,6 +119,12 @@ else()
         GIT_TAG        ${ORBITAMP_APPKIT_TAG}
         GIT_SHALLOW    TRUE)
 endif()
+
+# A pack ships its device's photograph as WebP (rig.json's `picture`), and an include path cannot
+# carry a codec — appkit's opt-in half brings libwebp, pinned and fetched like JUCE. The capture
+# app that WRITES the picture turns the same switch on; this is the reading end of it.
+set(FELITRONICS_APPKIT_WEBP ON CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(felitronics_appkit)
 
 # ----------------------------------------------------------------------------
@@ -265,6 +271,7 @@ target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
     felitronics::analysis            # spectrum taps + panes behind the EQ curves
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
+    felitronics::appkit_webp         # juce::Image <- WebP, for the picture a pack ships
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
