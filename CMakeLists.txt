@@ -268,7 +268,12 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav"
 )
 
+# THE PRODUCT'S version, not the plugin wrapper's. `JucePlugin_VersionString` exists only inside a
+# target juce_add_plugin built, and the headless gates compile the very same UI sources without it —
+# so a face that read it built as a plugin and failed as a test. This one is the project's, defined
+# for everything that compiles a face.
 target_compile_definitions(OrbitAmp PUBLIC
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
@@ -446,11 +451,13 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp)
 target_include_directories(orbitamp_chain_test PRIVATE src)
-target_compile_definitions(orbitamp_chain_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(orbitamp_chain_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                      JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE
     OrbitAmpData
     felitronics::analysis
     felitronics::appkit
+    felitronics::appkit_webp         # the panel decodes a pack's photograph — same half the plugin links
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq

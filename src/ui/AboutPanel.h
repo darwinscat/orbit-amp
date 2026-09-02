@@ -101,7 +101,7 @@ public:
         r.removeFromTop ((float) brandH + 16.0f);   // the header is a child and paints itself
 
         g.setColour (theme::txDim);
-        theme::drawTracked (g, juce::String ("VERSION ") + JucePlugin_VersionString
+        theme::drawTracked (g, juce::String ("VERSION ") + ORBITAMP_VERSION
                                 + juce::String::fromUTF8 ("  \xc2\xb7  AGPL-3.0-OR-LATER"),
                             r.removeFromTop (18.0f), theme::displayFont (11.0f), 0.08f,
                             juce::Justification::centredLeft);
