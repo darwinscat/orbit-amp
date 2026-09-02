@@ -82,11 +82,13 @@ jobs:
             echo "   $bin"
             # Both streams, and to a FILE: printf to a pipe is block-buffered, so a process that
             # dies before it flushes tells you nothing at all — which is exactly what `chain` did.
-            if "$bin" > "gate-$name.log" 2>&1; then
-              cat "gate-$name.log"; return 0
-            fi
-            local code=$?
+            # The status is captured on the line that RUNS it. After an `if`, `$?` is the status of
+            # the `if` itself — 0 when the condition was false and there is no else — so reading it
+            # there reported a crashed gate as "exited 0".
+            local code=0
+            "$bin" > "gate-$name.log" 2>&1 || code=$?
             cat "gate-$name.log"
+            [ "$code" -eq 0 ] && return 0
             echo "   ^ gate $name exited $code"
             # 127 from a file that exists is the loader failing to resolve an import, not a missing
             # command — so say which import.
