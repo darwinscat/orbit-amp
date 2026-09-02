@@ -89,6 +89,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (demoStrip);
     addChildComponent (glyphs);
     addChildComponent (setup);       // hidden until the toolbar's gear opens it
+    addChildComponent (about);       // ...and so is ABOUT, from the same menu
 
     chrome.onGear = [this] (juce::Point<int> pos) { showGearMenu (pos); };
 
@@ -339,6 +340,9 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
 {
     juce::PopupMenu m;
     m.addItem (1, "SETUP...");
+    // Beside Setup, not inside it: the trademark notice is one click from anywhere, and Setup is
+    // the pack manager rather than a place anybody goes to read.
+    m.addItem (9, "ABOUT...");
     m.addSeparator();
     // A PARAMETER behind a menu item, deliberately: the comp changes the sound, so it belongs
     // to the session, not the machine — the tick just reads it, the click just writes it.
@@ -359,6 +363,12 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                          if (r == 1)
                          {
                              safe->setup.open();
+                             return;
+                         }
+
+                         if (r == 9)
+                         {
+                             safe->about.open();
                              return;
                          }
 
@@ -618,6 +628,9 @@ void AmpEditor::resized()
     // The overlay covers the whole editor, margins included, in the same design units.
     setup.setBounds (0, 0, baseWidth, baseHeight());
     setup.setTransform (zoom);
+
+    about.setBounds (0, 0, baseWidth, baseHeight());
+    about.setTransform (zoom);
 }
 
 } // namespace orbitamp
