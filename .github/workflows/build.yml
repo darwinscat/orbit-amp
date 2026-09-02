@@ -90,9 +90,17 @@ jobs:
             cat "gate-$name.log"
             [ "$code" -eq 0 ] && return 0
             echo "   ^ gate $name exited $code"
-            # 127 from a file that exists is the loader failing to resolve an import, not a missing
-            # command — so say which import.
-            ldd "$bin" 2>&1 | grep -i "not found" || ldd "$bin" 2>&1 | head -20
+
+            # 127 out of bash, from a file that demonstrably exists and printed nothing, is bash's
+            # exec emulation giving up — it cannot tell us WHY. Windows can. Run it again through
+            # cmd, which reports the real NTSTATUS: 0xC0000135 is a DLL the loader could not find,
+            # 0xC0000005 an access violation, and a small number is the program's own answer.
+            echo "   --- what Windows says ---"
+            cmd //c "$(cygpath -w "$bin") & echo exit code: %ERRORLEVEL%" 2>&1 | tail -5
+            echo "   --- subsystem ---"
+            file "$bin" 2>&1 | head -2
+            echo "   --- imports MSYS can resolve ---"
+            ldd "$bin" 2>&1 | grep -i "not found" || echo "   (all resolved by ldd)"
             return 1
           }
           for t in captured chain library reverb ribbon; do
