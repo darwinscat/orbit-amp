@@ -5,6 +5,55 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-09-02 — the box on the page
+
+The device pages learn what a pack actually ships, the two tone stacks stop playing at once, and the
+repository gets its first green build.
+
+### Added
+- **The BOX.** A pack ships a photograph of the thing it was captured off — namz's `picture`, a WebP
+  cut-out in the pack root — and nothing read it. PHOTO is a page of its own beside the five scopes
+  and the paper: the box alone, filling the tile.
+- **The CARD.** Where the room seats them — a lone block's wide tile, a thrown-open face, the whole
+  monitor — the box and its paper become one page, side by side, with the circuit standing between
+  them as the divider. The tile keeps two pages, because 106 points cannot hold both.
+- **What the paper says.** The MAKER instead of the voice's alias, and on the card the box's own
+  history: the year it was built, the serial number stamped on it, where it was designed and made,
+  and who made the capture. All from `gear` (namz v3.3.0); a pack that does not say shows nothing.
+- **ABOUT**, from the gear menu — the product, its version and licence, the cat at a size worth
+  looking at, the link home, and the trademark notice in one canonical wording the README carries
+  verbatim. Names of other people's equipment identify the equipment; this page says so.
+- **The corner glyphs come with the hand** and fade when it leaves, so a photograph is a photograph.
+  The whole-screen view keeps a door in words at the top of the picture menu.
+- **The spectrum reads in BANDS** on a picture that owns the face: `MultiResSpectrumPane`
+  (felitronics-core v0.22) feeds three window lengths from one frame and reports a twenty-fourth of
+  an octave — fifty-six readings between 20 and 100 Hz where a 2048-point window gave three and a
+  half. Only there: it costs about fifteen times the classic pane, and the face runs six to eight.
+
+### Changed
+- **The two tone stacks are alternatives, and now they behave like it.** Choosing the device's own
+  parked ours in name only — our bands went on filtering with no controls on the face to reach them.
+  Only the tone sections step aside now; the cut filters and the level belong to the block whichever
+  tone is playing. Where a device measured nothing there is no choice, so there is no chooser.
+- **Every picture draws what the block does.** The tile was handed the device's measured curve alone
+  and drew a flat line under a console showing a mountain. Both call one function now.
+- The circuit symbols are drawn PER PART — four diodes are four diodes, which is what the line under
+  them says.
+
+### Fixed
+- **The Windows gate had never run.** `AmpProcessor` is 1.5 MB and stood on the stack; Windows gives
+  a main thread one megabyte where macOS gives eight, so the gate died in `main`'s prologue on every
+  CI run this repository has ever had — reported as `127`, the low byte of `STATUS_STACK_OVERFLOW`,
+  which reads as "command not found" and points the other way. The processors move to the heap, and
+  the gates now say what they found and what they printed.
+- The DEVICE page overflowed its own tile, printing its last two lines on top of each other.
+- The whole-screen view opened blank on the two pages that carry no audio.
+
+### Build
+- libwebp builds for a universal macOS binary (felitronics-appkit v0.11.2): its SIMD probe compiles,
+  and a two-architecture compile answered with one voice.
+- Pins: felitronics-core v0.23.0, felitronics-appkit v0.11.2, namz v3.3.0.
+
 ## [0.1.0] — 2026-08-31 — the player leaves the bench
 
 First release. A curated guitar tone player — VST3 / AU / CLAP / Standalone; macOS, Windows, Linux.
