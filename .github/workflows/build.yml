@@ -69,13 +69,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The gates SAY WHAT THEY FOUND and what they printed. Swallowing stdout into /dev/null
+          # turned every failure into a bare exit code — 127 read as "no such command" for two days
+          # when `main()` returns the number of failed checks, so it may equally have been 127 of
+          # them. A gate whose output is thrown away can only ever tell you that something is wrong.
+          run_gate() {
+            local name="$1" bin="$2"
+            echo "-- gate: $name"
+            if [ -z "$bin" ] || [ ! -f "$bin" ]; then
+              echo "   NOT FOUND (nothing matched under build/)"; return 1
+            fi
+            echo "   $bin"
+            "$bin" || { echo "   ^ gate $name exited $?"; return 1; }
+          }
           for t in captured chain library reverb ribbon; do
-            bin=$(find "build/orbitamp_${t}_test_artefacts" -type f -name '*.exe' | head -1)
-            echo "-- gate: $t"; "$bin" > /dev/null
+            run_gate "$t" "$(find "build/orbitamp_${t}_test_artefacts" -type f -name '*.exe' | head -1)"
           done
           for t in eqlink tuner; do
-            bin=$(find build -maxdepth 2 -type f -name "orbitamp_${t}_test.exe" | head -1)
-            echo "-- gate: $t"; "$bin" > /dev/null
+            run_gate "$t" "$(find build -maxdepth 2 -type f -name "orbitamp_${t}_test.exe" | head -1)"
           done
 
       - name: Validate (pluginval, VST3)
