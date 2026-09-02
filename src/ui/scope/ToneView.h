@@ -33,9 +33,14 @@ namespace orbitamp::scope
 class ToneView
 {
 public:
+    /** WHICH pane is the caller's business, not this view's. The classic one and the constant-Q
+        multi-resolution one expose the same `buildColumns (map, rate, tilt, pivot, emit)`, and this
+        view wants nothing else from either — so it takes whichever it is handed rather than growing
+        a second copy of the drawing to go with the second analyser. */
+    template <typename Pane>
     void paint (juce::Graphics& g, juce::Rectangle<float> r,
                 const std::function<double (double)>& toneDb, const Frame& f,
-                felitronics::analysis::SpectrumPane* pane = nullptr, double paneRate = 48000.0)
+                Pane* pane, double paneRate = 48000.0)
     {
         if (toneDb == nullptr)
             return;

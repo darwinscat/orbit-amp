@@ -9,6 +9,7 @@
 #include "EnvelopeView.h"
 #include "PhotoView.h"
 #include "ShapeView.h"
+#include <felitronics/analysis/MultiResSpectrumPane.h>
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/analysis/SpectrumPane.h>
 #include "ToneView.h"
@@ -50,7 +51,29 @@ public:
     void setSpectrumTap (const felitronics::analysis::RollingSpectrumTap* tap, int order)
     {
         specTap   = tap;
+
+        if (order == specOrder)
+            return;
+
         specOrder = order;
+
+        // THE ANALYSER FOLLOWS THE ROOM. A tile shows one fixed window because six panes at a
+        // constant-Q reading would cost the face fifteen times what the classic ones do — and the
+        // eye cannot spend it there anyway. A picture that owns the face is ONE pane, looked at,
+        // and it gets the analyser a log axis actually wants: several window lengths at once, read
+        // in bands of a twenty-fourth of an octave, so the bottom two decades stop being three bins
+        // in a row.
+        if (order >= felitronics::analysis::MultiResSpectrumPane::kMaxOrder)
+        {
+            const int tiers[] = { 14, 12, 10 };
+            multi.setTiers (tiers, 3);
+        }
+    }
+
+    /** Whether the reading is the constant-Q one. The tile's fixed window is the other. */
+    bool readsInBands() const noexcept
+    {
+        return specOrder >= felitronics::analysis::MultiResSpectrumPane::kMaxOrder;
     }
 
     explicit DeviceScope (const core::ScopeTap& source, core::WaveRibbon& ribbonSource,
@@ -178,9 +201,15 @@ public:
                 case Mode::shape:    scope::ShapeView::paint (g, area, frame); break;
                 case Mode::envelope: scope::EnvelopeView::paint (g, area, frame); break;
                 case Mode::transfer: scope::TransferView::paint (g, area, frame); break;
-                case Mode::tone:     toneView.paint (g, area, toneDb, frame,
-                                                     specTap != nullptr ? &pane : nullptr,
-                                                     sampleRateNow()); break;
+                case Mode::tone:
+                    if (specTap == nullptr)
+                        toneView.paint (g, area, toneDb, frame, (felitronics::analysis::SpectrumPane*) nullptr,
+                                        sampleRateNow());
+                    else if (readsInBands())
+                        toneView.paint (g, area, toneDb, frame, &multi, sampleRateNow());
+                    else
+                        toneView.paint (g, area, toneDb, frame, &pane, sampleRateNow());
+                    break;
                 case Mode::wave:     waveView.paint (g, area, ribbon, waveHalf); break;
                 // ONE PAIR, two doors. Small, they are two pages because the tile cannot hold
                 // both; big, they are the card they always were.
@@ -199,6 +228,10 @@ private:
     int    specOrder = 11;
     double rate      = 48000.0;
     felitronics::analysis::SpectrumPane pane;
+
+    /** The constant-Q reading, for the picture that owns the face. Its FFT plans are built once,
+        when the room first asks for it — never per tick. */
+    felitronics::analysis::MultiResSpectrumPane multi;
 
     /** DEVICE and PHOTO, resolved against the room they were given.
 
@@ -488,9 +521,17 @@ private:
     {
         if (specTap != nullptr && mode == Mode::tone && isShowing())
         {
+            auto* tap = const_cast<felitronics::analysis::RollingSpectrumTap*> (specTap);
             int order = 0;
-            if (const_cast<felitronics::analysis::RollingSpectrumTap*> (specTap)
-                    ->tryPull (pane.frameInput(), order) && order == specOrder)
+
+            if (readsInBands())
+            {
+                if (tap->tryPull (multi.frameInput(), order) && order == specOrder)
+                    multi.ingest (order);
+                else
+                    multi.starve();
+            }
+            else if (tap->tryPull (pane.frameInput(), order) && order == specOrder)
                 pane.ingest (order);
             else
                 pane.starve();
