@@ -80,7 +80,18 @@ jobs:
               echo "   NOT FOUND (nothing matched under build/)"; return 1
             fi
             echo "   $bin"
-            "$bin" || { echo "   ^ gate $name exited $?"; return 1; }
+            # Both streams, and to a FILE: printf to a pipe is block-buffered, so a process that
+            # dies before it flushes tells you nothing at all — which is exactly what `chain` did.
+            if "$bin" > "gate-$name.log" 2>&1; then
+              cat "gate-$name.log"; return 0
+            fi
+            local code=$?
+            cat "gate-$name.log"
+            echo "   ^ gate $name exited $code"
+            # 127 from a file that exists is the loader failing to resolve an import, not a missing
+            # command — so say which import.
+            ldd "$bin" 2>&1 | grep -i "not found" || ldd "$bin" 2>&1 | head -20
+            return 1
           }
           for t in captured chain library reverb ribbon; do
             run_gate "$t" "$(find "build/orbitamp_${t}_test_artefacts" -type f -name '*.exe' | head -1)"
