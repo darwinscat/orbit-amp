@@ -9,7 +9,7 @@
 #include "EnvelopeView.h"
 #include "PhotoView.h"
 #include "ShapeView.h"
-#include <felitronics/analysis/MultiResSpectrumPane.h>
+#include <felitronics/analysis/MultiResSpectrumPaneFast.h>
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/analysis/SpectrumPane.h>
 #include "ToneView.h"
@@ -63,7 +63,7 @@ public:
         // and it gets the analyser a log axis actually wants: several window lengths at once, read
         // in bands of a twenty-fourth of an octave, so the bottom two decades stop being three bins
         // in a row.
-        if (order >= felitronics::analysis::MultiResSpectrumPane::kMaxOrder)
+        if (order >= felitronics::analysis::MultiResSpectrumPaneFast::kMaxOrder)
         {
             const int tiers[] = { 14, 12, 10 };
             multi.setTiers (tiers, 3);
@@ -73,7 +73,7 @@ public:
     /** Whether the reading is the constant-Q one. The tile's fixed window is the other. */
     bool readsInBands() const noexcept
     {
-        return specOrder >= felitronics::analysis::MultiResSpectrumPane::kMaxOrder;
+        return specOrder >= felitronics::analysis::MultiResSpectrumPaneFast::kMaxOrder;
     }
 
     explicit DeviceScope (const core::ScopeTap& source, core::WaveRibbon& ribbonSource,
@@ -230,8 +230,15 @@ private:
     felitronics::analysis::SpectrumPane pane;
 
     /** The constant-Q reading, for the picture that owns the face. Its FFT plans are built once,
-        when the room first asks for it — never per tick. */
-    felitronics::analysis::MultiResSpectrumPane multi;
+        when the room first asks for it — never per tick.
+
+        The FAST sibling: the same pane, computed differently. A profile of the original found 44%
+        of a tick inside libm and almost none of it in the arithmetic anyone would have guessed —
+        the peak trace was kept in decibels, which cost a log10 per bin to compare and an exp per
+        bin to undo, and the fill and the peak each rebuilt the same column geometry. Holding the
+        peak in power, deriving that geometry once, and peeling DC and Nyquist out of the loop take
+        it to roughly half the cost, with the fill bit-identical to the pane it replaces. */
+    felitronics::analysis::MultiResSpectrumPaneFast multi;
 
     /** DEVICE and PHOTO, resolved against the room they were given.
 
