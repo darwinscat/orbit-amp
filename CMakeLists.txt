@@ -98,6 +98,14 @@ if(EXISTS "${ORBITAMP_NAMZ_SRC}/include/namz.h")
     set(FELITRONICS_NAMZ_SRC "${ORBITAMP_NAMZ_SRC}" CACHE PATH "" FORCE)
 endif()
 
+# ...and when there is NO local checkout — CI — the tag core would otherwise pin. The device page
+# reads a pack's photograph and the box's own history (`Rig::picture`, `gear.year`, `serial_number`,
+# `designed_in`, `made_in`), all of which are newer than the commit felitronics-core carries. Pinned
+# HERE rather than waited for: a core release exists to move core's own code, and holding this
+# behind one would leave the plugin unbuildable on CI for no reason of its own.
+set(ORBITAMP_NAMZ_TAG "v3.3.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
+
 FetchContent_MakeAvailable(felitronics_core)
 
 # ----------------------------------------------------------------------------
