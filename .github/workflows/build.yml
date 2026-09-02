@@ -108,6 +108,13 @@ jobs:
             echo "   --- msys path ---";  "$bin";        echo "   status: $?"
             echo "   --- windows path ---"; "$win";      echo "   status: $?"
             echo "   --- through cmd ---";  cmd //c "$win"; echo "   status: $?"
+
+            # THE FULL 32-BIT CODE. bash and cmd both hand back a byte, and a byte cannot tell the
+            # program's own 127 from the low byte of an NTSTATUS — 0xC0000xxx means the process died
+            # before it could answer, and every guess so far has hung on which of the two it is.
+            echo "   --- raw exit code, from PowerShell ---"
+            GATEBIN="$win" powershell -NoProfile -Command '& { & $env:GATEBIN; Write-Host ("raw exit: {0} = 0x{0:X8}" -f $LASTEXITCODE) }' 2>&1 | tail -6
+
             echo "   --- subsystem ---";    file "$bin" 2>&1 | head -2
             set -e
             return 1
