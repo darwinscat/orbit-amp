@@ -59,10 +59,6 @@ private:
     void paintContent (juce::Graphics&) override;
     void blockOnChanged (bool on) override;
 
-    /** Whether a measured control's positions are named rather than numbered — the difference
-        between a switch and a knob that happens to have been swept at two points. */
-    static bool hasNamedPositions (const namz::rig::Tone&);
-
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
 
@@ -114,6 +110,7 @@ private:
     AmpProcessor& amp;
     Block&        block;
     const char*   blk;
+    const int     link;   // which of the two consoles/taps is this block's
     felitronics::analysis::RollingSpectrumTap& toneTap;
 
     VoicingSelector device;
@@ -352,6 +349,11 @@ private:
     void timerCallback() override;
     void setCornerAlpha (float);
     bool handIsOnThePicture() const;
+
+    /** How finely this block's tap is asked to analyse. The tile gets the standing resolution;
+        a TONE picture thrown open — or on the whole monitor — gets the long window, because there
+        the console that shares the tap has stopped pulling and the picture is being READ. */
+    void applySpectrumResolution();
 
     void openTheater();
     void closeTheater();

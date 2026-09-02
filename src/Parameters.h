@@ -176,9 +176,14 @@ inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String
     indexed 0..2 for the id helpers. */
 inline constexpr int numEqLinks = 2;
 
+/** Which block a console belongs to. The two have always been the same question asked twice — the
+    id helper below already answered it — and the DSP now has to ask it too, to know whose tone
+    stack is in the signal. */
+inline constexpr const char* eqBlockId (int l) { return l == 0 ? boostId : preampId; }
+
 inline juce::String eqId (int l, const char* leaf)
 {
-    return juce::String (l == 0 ? boostId : preampId) + "_eq_" + leaf;
+    return juce::String (eqBlockId (l)) + "_eq_" + leaf;
 }
 
 inline juce::String eqHpfOn    (int l) { return eqId (l, "hpf_on"); }

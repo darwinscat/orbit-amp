@@ -182,24 +182,36 @@ void EqSection::setModes (const juce::StringArray& names, int selected, bool nat
     modeIndex     = juce::jlimit (0, juce::jmax (0, names.size() - 1), selected);
     nativeOffered = nativeAvailable;
     modeBtn.text  = modeNames[modeIndex].toUpperCase();
+
+    // NO CHOICE, NO CHOOSER. A pack that measured no tone leaves the console only ours to wear, and
+    // a button that can be pressed to reach one option is furniture — on the curve's best corner at
+    // that. It used to stay and grey the device's side «so the row still says what it could have
+    // been»; what it actually said was that something here is unavailable, on every device that
+    // never had it, forever.
+    modeBtn.setVisible (nativeOffered && curve.isVisible());
     modeBtn.repaint();
 }
 
 /** Whose bands the console wears — from the button in the curve's corner, or by right-clicking
     the curve: the same menu either way, so there is one place the answer changes.
 
-    The device's side is offered only when the device measured something; a pack that brought no
-    tone knobs leaves it grey rather than absent, so the row still says what it could have been.
-    RESET closes the list: the console's own knobs back to flat, and — through the block — the
-    device's slots back to where the pack starts them, whichever set is on show. */
+    A pack that brought no tone knobs offers no choice at all: the button goes, and this menu is
+    RESET alone. RESET closes the list either way — the console's own knobs back to flat, and,
+    through the block, the device's slots back to where the pack starts them. */
 void EqSection::showModeMenu (juce::Point<int> screenPos)
 {
     juce::PopupMenu m;
 
-    for (int i = 0; i < modeNames.size(); ++i)
-        m.addItem (i + 1, modeNames[i].toUpperCase(), i != 0 || nativeOffered, i == modeIndex);
+    // The same rule as the button: with one set to wear there is nothing to pick, and the menu is
+    // RESET alone — which is still worth a right-click.
+    if (nativeOffered)
+    {
+        for (int i = 0; i < modeNames.size(); ++i)
+            m.addItem (i + 1, modeNames[i].toUpperCase(), true, i == modeIndex);
 
-    m.addSeparator();
+        m.addSeparator();
+    }
+
     m.addItem (100, "RESET");
 
     m.showMenuAsync (juce::PopupMenu::Options()
@@ -356,7 +368,7 @@ void EqSection::setWidgetsVisible (bool v)
     setSpectrumRunning (v);
 
     curve.setVisible (v);
-    modeBtn.setVisible (v);
+    modeBtn.setVisible (v && nativeOffered);   // ...and only when there is a choice to make
     hpfSw.setVisible (v);
     lpfSw.setVisible (v);
     hpfLabel.setVisible (v);
@@ -567,7 +579,7 @@ void EqSection::handleDragActive (int index, bool active)
         if (active && j >= 0 && (size_t) j < bands.size() && (size_t) j < bandKnobs.size())
         {
             const double hz = bands[(size_t) j].anchorHz;
-            dragStartDb  = display.magnitudeDb (hz) + nativeDb (hz);
+            dragStartDb  = drawnDb (hz);
             dragStartVal = bandKnobs[(size_t) j]->getValue();
         }
 
