@@ -132,12 +132,23 @@ namespace
 
 int main()
 {
+    // UNBUFFERED, and the steps named as they pass. printf to a pipe or a file is block-buffered, so
+    // a gate that dies takes everything it said with it — which is how this one spent days failing
+    // on Windows CI with an empty log and a bare exit code, indistinguishable from a missing binary.
+    // A gate's first duty when it falls over is to say where.
+    std::setvbuf (stdout, nullptr, _IONBF, 0);
+
+    std::printf ("orbitamp chain gate\n");
+
     const juce::ScopedJuceInitialiser_GUI juceInit;
-    std::printf ("orbitamp chain gate\n\n");
+    std::printf ("  juce initialised\n");
 
     orbitamp::AmpProcessor amp;
+    std::printf ("  processor constructed\n");
+
     amp.inlineLoads = true;   // no message loop here: a model lands inside the pump
     amp.prepareToPlay (sampleRate, blockSize);
+    std::printf ("  prepared\n\n");
     set (amp, orbitamp::params::stereoMode, 0.0f);   // the gate measures the chain, not the environment default
 
     if (amp.boost.packs.isEmpty())
