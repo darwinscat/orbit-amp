@@ -47,6 +47,12 @@ namespace
         // JUCE names its own version at compile time — "JUCE v8.0.14"; the row wants the tag alone.
         const juce::String juceVersion = juce::SystemStats::getJUCEVersion().fromFirstOccurrenceOf (" ", false, false);
 
+        // The maker's mark beside the product's, the way the window header carries both: the same
+        // embedded cat, drawn from the same bytes. The popover outlives the badge that launched it,
+        // so the drawable is shared rather than borrowed.
+        std::shared_ptr<juce::Drawable> cat { juce::Drawable::createFromImageData (
+            BinaryData::catlogo_svg, (size_t) BinaryData::catlogo_svgSize).release() };
+
         return { .productName  = "OrbitAmp",
                  .productUrl   = "https://darwinscat.com/orbitamp?utm_source=orbitamp&utm_medium=plugin",
                  .gitHash      = version::kGitHash,
@@ -56,7 +62,7 @@ namespace
                  .os           = version::kOS,
                  .arch         = version::kArch,
                  .builder      = version::kBuilder,
-                 .licence      = "AGPL-3.0-or-later",
+                 .licence      = "AGPL-3.0+",   // the row is one line: the long spelling truncates
                  // What this binary was actually built against — sibling checkout or pin, and the
                  // commit when there was a checkout to ask. The stamp header bakes it at build time.
                  .dependencies = { { .label     = "felitronics-core",
@@ -69,9 +75,25 @@ namespace
                                      .ownerRepo = "darwinscat/felitronics-appkit",
                                      .commit    = version::kAppkitCommit,
                                      .state     = version::kAppkitState },
+                                   { .label     = "namz",
+                                     .version   = version::kNamzVersion,
+                                     .ownerRepo = "darwinscat/namz",
+                                     .commit    = version::kNamzCommit,
+                                     .state     = version::kNamzState },
+                                   { .label     = "NeuralAmpModelerCore",
+                                     .version   = version::kNamCoreVersion,
+                                     .ownerRepo = "sdatkinson/NeuralAmpModelerCore",
+                                     .commit    = version::kNamCoreCommit,
+                                     .state     = "pin" },
                                    { .label     = "JUCE",
                                      .version   = juceVersion,
                                      .ownerRepo = "juce-framework/JUCE" } },
+                 .drawByline   = [cat] (juce::Graphics& g, float cx, float cy, float d)
+                                 {
+                                     if (cat != nullptr)
+                                         cat->drawWithin (g, { cx - d * 0.5f, cy - d * 0.5f, d, d },
+                                                          juce::RectanglePlacement::centred, 1.0f);
+                                 },
                  .accent       = theme::violet,
                  .accentHover  = theme::lilac,
                  .accentB      = theme::orange,
