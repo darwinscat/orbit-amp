@@ -11,7 +11,7 @@ cmake_minimum_required(VERSION 3.22)
 # release is fetched, so a clean clone still configures.
 # ----------------------------------------------------------------------------
 
-project(OrbitAmp VERSION 0.2.0 LANGUAGES C CXX)
+project(OrbitAmp VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -66,7 +66,7 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # module to target_link_libraries below. Wired now so that's a one-line change, not a rebuild
 # of the dependency graph. Its self-tests do NOT build from here (guarded by PROJECT_IS_TOP_LEVEL).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_FCORE_TAG "v0.24.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+set(ORBITAMP_FCORE_TAG "v0.25.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -91,8 +91,46 @@ set(ORBITAMP_NAM_CORE_SRC "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/build-h
 set(ORBITAMP_NAMZ_SRC "$ENV{HOME}/IdeaProjects/namz"
     CACHE PATH "Local namz checkout; empty fetches the pin")
 
-if(EXISTS "${ORBITAMP_NAM_CORE_SRC}")
-    set(FELITRONICS_NAM_CORE_SRC "${ORBITAMP_NAM_CORE_SRC}" CACHE PATH "" FORCE)
+# The local NAM copy is a SHORTCUT, not a source of truth: felitronics-core pins the engine, and a
+# copy sitting on a different commit would silently build a different DSP than the pin says. So the
+# shortcut is taken only when it agrees with the pin — read out of core's own CMakeLists, since the
+# pin is not known to us until core is configured, which is after this must be decided.
+if(EXISTS "${ORBITAMP_NAM_CORE_SRC}/.git")
+    set(_oa_nam_pin "")
+    if(EXISTS "${ORBITAMP_FCORE_DIR}/modules/nam/CMakeLists.txt")
+        file(READ "${ORBITAMP_FCORE_DIR}/modules/nam/CMakeLists.txt" _oa_nam_cml)
+        string(REGEX MATCH "FELITRONICS_NAM_CORE_TAG \"([^\"]+)\"" _oa_nam_match "${_oa_nam_cml}")
+        set(_oa_nam_pin "${CMAKE_MATCH_1}")
+    endif()
+
+    # ...and a build directory that was configured before the pin moved keeps the OLD value in its
+    # cache, because core declares the pin as a CACHE variable and a cache entry wins over a new
+    # default. Same failure, one layer down: the build would still compile the engine we replaced.
+    if(_oa_nam_pin AND DEFINED FELITRONICS_NAM_CORE_TAG AND NOT FELITRONICS_NAM_CORE_TAG STREQUAL _oa_nam_pin)
+        message(STATUS "NeuralAmpModelerCore: cached pin ${FELITRONICS_NAM_CORE_TAG} is stale — core pins ${_oa_nam_pin}")
+        set(FELITRONICS_NAM_CORE_TAG "${_oa_nam_pin}" CACHE STRING "" FORCE)
+    endif()
+
+    find_package(Git QUIET)
+    set(_oa_nam_here "")
+    if(GIT_EXECUTABLE AND _oa_nam_pin)
+        execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+            WORKING_DIRECTORY "${ORBITAMP_NAM_CORE_SRC}"
+            OUTPUT_VARIABLE _oa_nam_here OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse "${_oa_nam_pin}^{commit}"
+            WORKING_DIRECTORY "${ORBITAMP_NAM_CORE_SRC}"
+            OUTPUT_VARIABLE _oa_nam_want OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    endif()
+
+    if(_oa_nam_here AND _oa_nam_want AND _oa_nam_here STREQUAL _oa_nam_want)
+        message(STATUS "NeuralAmpModelerCore: local copy is on the pin (${_oa_nam_pin}) — using it")
+        set(FELITRONICS_NAM_CORE_SRC "${ORBITAMP_NAM_CORE_SRC}" CACHE PATH "" FORCE)
+        set(ORBITAMP_NAM_CORE_USED "${ORBITAMP_NAM_CORE_SRC}")
+    else()
+        message(STATUS "NeuralAmpModelerCore: local copy is NOT on core's pin (${_oa_nam_pin}) — fetching the pin instead")
+        set(FELITRONICS_NAM_CORE_SRC "" CACHE PATH "" FORCE)
+        set(ORBITAMP_NAM_CORE_USED "${CMAKE_BINARY_DIR}/_deps/nam_core_src-src")
+    endif()
 endif()
 if(EXISTS "${ORBITAMP_NAMZ_SRC}/include/namz.h")
     set(FELITRONICS_NAMZ_SRC "${ORBITAMP_NAMZ_SRC}" CACHE PATH "" FORCE)
@@ -103,7 +141,7 @@ endif()
 # `designed_in`, `made_in`), all of which are newer than the commit felitronics-core carries. Pinned
 # HERE rather than waited for: a core release exists to move core's own code, and holding this
 # behind one would leave the plugin unbuildable on CI for no reason of its own.
-set(ORBITAMP_NAMZ_TAG "v3.3.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+set(ORBITAMP_NAMZ_TAG "v4.0.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
 set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_core)
@@ -187,12 +225,11 @@ else()
     set(_oa_appkit_local OFF)
 endif()
 
-# The inference engine is nobody's checkout: felitronics-core pins a COMMIT of upstream's
-# NeuralAmpModelerCore, and we only point the fetch at a copy that is already unpacked next door.
-# So the row is always "pin", and the directory is whichever of the two the build actually used.
-if(ORBITAMP_NAM_CORE_SRC AND EXISTS "${ORBITAMP_NAM_CORE_SRC}/.git")
-    set(_oa_namcore_dir "${ORBITAMP_NAM_CORE_SRC}")
-else()
+# The engine's sources as the build ACTUALLY resolved them — the local copy only when it agreed
+# with core's pin, the fetched pin otherwise (see the guard above). The stamp must name what was
+# compiled, not what was nearby.
+set(_oa_namcore_dir "${ORBITAMP_NAM_CORE_USED}")
+if(NOT _oa_namcore_dir)
     set(_oa_namcore_dir "${CMAKE_BINARY_DIR}/_deps/nam_core_src-src")
 endif()
 

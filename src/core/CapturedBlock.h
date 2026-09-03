@@ -233,6 +233,56 @@ public:
 
     bool isRaw() const noexcept { return raw; }
 
+    /** THE POSITION A SWITCH SLOT STANDS ON, BY NAME — message thread.
+
+        A session must save the name, never the fraction. The fraction is an index into the pack's
+        position list, so a device repacked one position shorter reopens an old session on a
+        different position, silently and with no way to notice. The name is the pack's own address
+        for that position (namz addresses a switch by `value`, and since schema 4 there is no `norm`
+        on a switch at all — the array order IS the panel order).
+
+        Empty when the slot is not a switch, or when no pack is loaded yet. */
+    juce::String switchValueAt (int slot, float parameterValue) const
+    {
+        const auto tones = player.tones();
+
+        if (slot < 0 || slot >= (int) tones.size())
+            return {};
+
+        const auto& t = tones[(size_t) slot];
+
+        if (t.sweep > 0 || t.positions.empty())
+            return {};
+
+        const int n     = (int) t.positions.size();
+        const int index = juce::jlimit (0, n - 1, juce::roundToInt (parameterValue * (float) (n - 1)));
+        return juce::String (t.positions[(size_t) index].value);
+    }
+
+    /** The parameter value that lands on a NAMED position, or -1 when this pack has no position by
+        that name (including "the pack is not here yet" — the caller retries while `isReady()` is
+        false and gives up once it is true). */
+    float switchParameterFor (int slot, const juce::String& value) const
+    {
+        const auto tones = player.tones();
+
+        if (slot < 0 || slot >= (int) tones.size())
+            return -1.0f;
+
+        const auto& t = tones[(size_t) slot];
+
+        if (t.sweep > 0 || t.positions.empty())
+            return -1.0f;
+
+        const int n = (int) t.positions.size();
+
+        for (int i = 0; i < n; ++i)
+            if (value == juce::String (t.positions[(size_t) i].value))
+                return n > 1 ? (float) i / (float) (n - 1) : 0.0f;
+
+        return -1.0f;
+    }
+
     /** The tone slots, 0..1 each, onto the pack's knobs in the order it lists them: a swept knob
         takes the value as a fraction of its rotation, a switch takes the position nearest to it. */
     void updateToneIfMoved (const std::array<float, (size_t) numMeasured>& values)
@@ -398,15 +448,11 @@ public:
         between a switch and a knob that happened to be swept at two points. */
     static bool namedPositions (const namz::rig::Tone& t)
     {
-        for (const auto& p : t.positions)
-        {
-            const auto s = juce::String (p.label.empty() ? p.value : p.label).trim();
-
-            if (s.isNotEmpty() && ! s.containsOnly ("0123456789.+-"))
-                return true;
-        }
-
-        return false;
+        // ROTATION OR NOT — that is the whole question, and since schema 4 it is the only signal
+        // there is: a switch has an order and no angle, so it states no `sweep` and its positions
+        // carry no `norm`. Sniffing the labels for letters was a guess, and it rules the wrong way
+        // on a selector whose legends read "1 / 2 / 3".
+        return t.sweep <= 0 && ! t.positions.empty();
     }
 
     /** Whether this device brought a tone stack a console can WEAR: at least one swept dial that is
@@ -420,7 +466,27 @@ public:
     bool hasWearableTone() const
     {
         for (const auto& t : tones())
-            if (t.sweep > 0 && ! (t.positions.size() == 2 && namedPositions (t)) && ! trustFailed (t))
+        {
+            if (t.sweep > 0 && ! trustFailed (t))
+                return true;
+
+            // ...and since schema 4, a knob that CLICKS can be a tone control too: its positions
+            // state the filter each one IS. A device whose only tone is a two-position Bright now
+            // genuinely HAS a tone stack, and the face must be allowed to offer it — a switch that
+            // shapes the sound and is judged "not tone" leaves the block wearing ours over a stack
+            // that exists.
+            if (t.sweep <= 0 && switchCarriesBands (t))
+                return true;
+        }
+
+        return false;
+    }
+
+    /** A switch whose positions declare filters rather than merely selecting captures. */
+    static bool switchCarriesBands (const namz::rig::Tone& t)
+    {
+        for (const auto& p : t.positions)
+            if (! p.sections.empty())
                 return true;
 
         return false;

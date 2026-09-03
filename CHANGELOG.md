@@ -5,9 +5,27 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] — 2026-09-03 — the papers, and the devices they name
+
+The plugin learns to say what it is: which build is running, what it was built against, whose
+equipment it names and on what terms. It also learns the rig format's new shape — a knob that
+clicks can carry bands — and ships with an empty factory, so what a player hears is what a player
+put there.
 
 ### Added
+- **The rig format's clicking knob** (namz v4.0.0, felitronics-core v0.25.0). A switch position now
+  states the filter it IS, with no law of travel, because a switch has no rotation for a gain to
+  ride. Schema 4 is a breaking read, so the pins move before the capture app writes it: a session
+  saves a switch by NAME rather than by its place in the list, a switch is judged by the absence of
+  rotation rather than by letters in its legends, and a switch that carries bands counts as a tone
+  stack the face may offer.
+- **The engine the build actually compiled.** The local NeuralAmpModelerCore copy is a shortcut, and
+  a shortcut that changes what you build is not one: it is taken only when it sits on the commit
+  felitronics-core pins, and a build directory holding a stale cached pin heals itself instead of
+  quietly compiling the engine we replaced. The version window names what was compiled, from the
+  same directory the compiler read.
+- **An empty factory.** This release ships no packs at all: the device list says so, and every
+  device a player drops into the Devices folder is theirs and named as such.
 - **The build stamp, at the end of the footer.** `V0.2.0 · STANDALONE` in the strip's own voice,
   beside the sample rate and the DSP figure — a fact about the run, like everything else on that
   line. Click it and appkit's version popover steps out: the whole stamp (commit, build number,

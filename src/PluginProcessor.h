@@ -96,7 +96,14 @@ public:
         shrank it the value stuck. A wanted size and a current size are two different facts. */
     static constexpr float preferredScale = 1.0f;
 
+    /** The suffix a switch slot's saved position name wears in the state tree. */
+    static constexpr const char* switchAimSuffix = "_pos";
+
 private:
+    static constexpr int aimWindowFrames = 150;   // ~5 s at the 30 Hz pump
+
+    int switchAimFrames = 0;                      // ticks left to keep aiming after a state change
+
     // MUST precede `updater`: the checker takes the store by reference and is destroyed before it.
     juce::SharedResourcePointer<prefs::UpdateStore> updateStore;
     felitronics::appkit::UpdateChecker updater;   // built in the ctor: it needs the store above
@@ -108,7 +115,96 @@ private:
         history.tick();
         pumpDeviceWork();
         pumpTuner();
+        applySwitchAims();
     }
+
+    /** A SWITCH IS SAVED BY NAME, and this is the half that puts it back.
+
+        The parameter a host sees is a fraction, and a fraction is an index into the pack's position
+        list: repack a device one position shorter and every old session reopens on a different
+        position, silently. So the session also carries the position's NAME, and on the way back the
+        name decides — as soon as the pack it belongs to is actually here, which is not the moment
+        the state arrives (models load on the pool). Until then the aim stands.
+
+        It stops standing after a few seconds. A player who reaches for that switch before the pack
+        lands must win: an aim that outlived its window and overwrote a live hand would be worse than
+        the drift it was fixing. */
+    void applySwitchAims()
+    {
+        if (switchAimFrames <= 0)
+            return;
+
+        --switchAimFrames;
+        bool waiting = false;
+
+        const auto aim = [&] (core::CapturedBlock& block, auto idFor)
+        {
+            for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
+            {
+                const auto id = idFor (i);
+                const juce::Identifier key (id + switchAimSuffix);
+
+                if (! apvts.state.hasProperty (key))
+                    continue;
+
+                const auto want = apvts.state.getProperty (key).toString();
+
+                if (want.isEmpty())
+                    continue;
+
+                const float v = block.switchParameterFor (i, want);
+
+                if (v < 0.0f)
+                {
+                    if (! block.isReady())      // the pack is still on its way — ask again next tick
+                        waiting = true;
+                    else                        // it is here and has no such position: let it go
+                        apvts.state.removeProperty (key, nullptr);
+
+                    continue;
+                }
+
+                if (auto* p = apvts.getParameter (id); p != nullptr && ! juce::approximatelyEqual (p->getValue(), v))
+                {
+                    p->beginChangeGesture();
+                    p->setValueNotifyingHost (v);
+                    p->endChangeGesture();
+                }
+            }
+        };
+
+        aim (boost,  [] (int i) { return params::boostMeasured (i); });
+        aim (preamp, [] (int i) { return params::preampMeasured (i); });
+
+        if (! waiting)
+            switchAimFrames = 0;
+    }
+
+    /** Writes each switch slot's position NAME into the state tree, so what is saved says which
+        position rather than how far along the list it was. Message thread, at save time. */
+    void stampSwitchAims()
+    {
+        const auto stamp = [this] (core::CapturedBlock& block, auto idFor)
+        {
+            for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
+            {
+                const auto id = idFor (i);
+                const juce::Identifier key (id + switchAimSuffix);
+                const auto name = block.switchValueAt (i, apvts.getRawParameterValue (id)->load());
+
+                if (name.isNotEmpty())
+                    apvts.state.setProperty (key, name, nullptr);
+                else
+                    apvts.state.removeProperty (key, nullptr);   // a swept knob owns no name
+            }
+        };
+
+        stamp (boost,  [] (int i) { return params::boostMeasured (i); });
+        stamp (preamp, [] (int i) { return params::preampMeasured (i); });
+    }
+
+    /** The state changed under us — a session opened, a register recalled: aim the switches again. */
+    void markSwitchAimsPending() noexcept { switchAimFrames = aimWindowFrames; }
 
     /** Listens only while someone is watching: with no editor there is no needle, and an MPM pass
         thirty times a second for nobody is the definition of waste. */

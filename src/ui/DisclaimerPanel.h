@@ -236,7 +236,8 @@ private:
         {
             const int rows = (int) shipped.size() + (int) added.size();
             const int heads = (shipped.isEmpty() ? 0 : 1) + (added.isEmpty() ? 0 : 1);
-            setSize (width, headerH + rows * rowH + heads * (sectionH + 6) + 8);
+            const int empty = rows == 0 ? 10 + rowH * 2 : 0;   // the "no packs" line
+            setSize (width, headerH + rows * rowH + heads * (sectionH + 6) + empty + 8);
             repaint();
         }
 
@@ -254,6 +255,18 @@ private:
 
             section (g, r, "SHIPPED WITH ORBITAMP", shipped);
             section (g, r, "ADDED BY YOU", added);
+
+            // A page about named devices, with no devices named: say so, rather than leave a reader
+            // staring at column heads over nothing. This build ships an empty factory on purpose.
+            if (shipped.isEmpty() && added.isEmpty())
+            {
+                r.removeFromTop (10);
+                g.setColour (theme::txFaint);
+                g.setFont (juce::FontOptions (textH));
+                g.drawFittedText ("No packs installed. Drop an .orbitrig pack into the Devices folder "
+                                  "and every device it names appears here.",
+                                  r.removeFromTop (rowH * 2), juce::Justification::topLeft, 2);
+            }
         }
 
         void section (juce::Graphics& g, juce::Rectangle<int>& r,
