@@ -66,7 +66,7 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # module to target_link_libraries below. Wired now so that's a one-line change, not a rebuild
 # of the dependency graph. Its self-tests do NOT build from here (guarded by PROJECT_IS_TOP_LEVEL).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_FCORE_TAG "v0.24.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+set(ORBITAMP_FCORE_TAG "v0.25.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -103,7 +103,7 @@ endif()
 # `designed_in`, `made_in`), all of which are newer than the commit felitronics-core carries. Pinned
 # HERE rather than waited for: a core release exists to move core's own code, and holding this
 # behind one would leave the plugin unbuildable on CI for no reason of its own.
-set(ORBITAMP_NAMZ_TAG "v3.3.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+set(ORBITAMP_NAMZ_TAG "v4.0.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
 set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_core)
