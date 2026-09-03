@@ -14,9 +14,12 @@ All notable changes to **OrbitAmp** are documented here. The format follows
   the machine it was built on), what it was built against — felitronics-core, felitronics-appkit
   and JUCE, each naming its tag, whether it came from a sibling checkout or the pin, and its
   commit — the licence, and the links home.
-- **namz in the dependency rows** — the codec the packs are written in, beside felitronics-core,
-  felitronics-appkit and JUCE. Its tag is matched as `v[0-9]*` on purpose: namz carries per-language
-  release tags for its ports, and "the nearest tag" would name one of those as the codec version.
+- **namz and NeuralAmpModelerCore in the dependency rows** — the codec the packs are written in and
+  the engine that runs them, beside felitronics-core, felitronics-appkit and JUCE. namz's tag is
+  matched as `v[0-9]*` on purpose: it carries per-language release tags for its ports, and "the
+  nearest tag" would name one of those as the codec version. The engine is a pinned commit of
+  somebody else's repository, so its row says where that pin sits between releases — `v0.5.3+11 ·
+  pin · gb5a68c3`.
 - **An update check that asks first.** The popover's button queries this repository's latest
   release; a switch beside it lets the check run once a day on its own, off until it is ticked.
   Nothing reaches us either way: the request goes to GitHub, and the versions are compared on the

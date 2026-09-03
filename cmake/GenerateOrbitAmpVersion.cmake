@@ -22,6 +22,8 @@
 #   FCORE_TAG        the pinned felitronics-core tag (used when fetched, or as a local fallback)
 #   APPKIT_LOCAL / APPKIT_DIR / APPKIT_TAG   the same three for felitronics-appkit
 #   NAMZ_LOCAL / NAMZ_DIR / NAMZ_TAG         the same three for namz, the pack codec
+#   NAMCORE_DIR      the NeuralAmpModelerCore sources the build used (a git checkout or not)
+#   NAMCORE_TAG      the commit felitronics-core pins it at
 # ----------------------------------------------------------------------------
 
 # --- kBuildNumber: 14-digit UTC YYYYMMDDHHMMSS -----------------------------------------------
@@ -142,6 +144,34 @@ _orbitamp_resolve_dep("${FCORE_LOCAL}"  "${FCORE_DIR}"  "${FCORE_TAG}"  _core   
 _orbitamp_resolve_dep("${APPKIT_LOCAL}" "${APPKIT_DIR}" "${APPKIT_TAG}" _appkit _appkit_commit _appkit_state)
 _orbitamp_resolve_dep("${NAMZ_LOCAL}"   "${NAMZ_DIR}"   "${NAMZ_TAG}"   _namz   _namz_commit   _namz_state)
 
+# --- NeuralAmpModelerCore: a PINNED COMMIT of somebody else's repository ------------------------
+# Not a checkout of ours and not on a release, so the row says where the pin sits between releases:
+# `git describe` reads "v0.5.3-11-gb5a68c3" and the badge shows "v0.5.3+11" with the hash beside it.
+# Without a describe (a shallow fetch, no tags) the bare pin is all there is, and it says so.
+set(_namcore "unknown")
+set(_namcore_commit "")
+if(NAMCORE_TAG)
+    string(SUBSTRING "${NAMCORE_TAG}" 0 7 _namcore_short)
+    set(_namcore_commit "g${_namcore_short}")
+endif()
+if(GIT_EXECUTABLE AND NAMCORE_DIR AND EXISTS "${NAMCORE_DIR}/.git")
+    execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --match "v[0-9]*" --always
+        WORKING_DIRECTORY "${NAMCORE_DIR}"
+        RESULT_VARIABLE _n_rc OUTPUT_VARIABLE _n_out
+        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(_n_rc EQUAL 0 AND NOT _n_out STREQUAL "")
+        if(_n_out MATCHES "^(v[0-9][^-]*)-([0-9]+)-g([0-9a-fA-F]+)$")
+            set(_namcore "${CMAKE_MATCH_1}+${CMAKE_MATCH_2}")   # between releases: v0.5.3+11
+            set(_namcore_commit "g${CMAKE_MATCH_3}")
+        else()
+            set(_namcore "${_n_out}")                            # exactly on a tag, or a bare hash
+        endif()
+    endif()
+endif()
+if(_namcore STREQUAL "unknown" AND _namcore_commit)
+    set(_namcore "${_namcore_commit}")   # no tags to describe against: the pin names itself
+endif()
+
 # --- escape the collected values for C++ double-quoted string literals -----------------------
 # git tags may legally carry '"' or '\' and ORBITAMP_BUILDER / USER are arbitrary env text —
 # unescaped they would break the emitted header's compilation. Backslash and quote are escaped;
@@ -166,6 +196,8 @@ _orbitamp_cxx_escape(_appkit_state)
 _orbitamp_cxx_escape(_namz)
 _orbitamp_cxx_escape(_namz_commit)
 _orbitamp_cxx_escape(_namz_state)
+_orbitamp_cxx_escape(_namcore)
+_orbitamp_cxx_escape(_namcore_commit)
 _orbitamp_cxx_escape(_arch)
 _orbitamp_cxx_escape(_os)
 
@@ -201,6 +233,8 @@ namespace orbitamp::version
     inline constexpr const char* kNamzVersion   = \"${_namz}\";
     inline constexpr const char* kNamzCommit    = \"${_namz_commit}\";
     inline constexpr const char* kNamzState     = \"${_namz_state}\";
+    inline constexpr const char* kNamCoreVersion = \"${_namcore}\";
+    inline constexpr const char* kNamCoreCommit  = \"${_namcore_commit}\";
     inline constexpr const char* kArch        = \"${_arch}\";    // build arch (arm64 / x86_64 / Universal)
     inline constexpr const char* kOS          = \"${_os}\";      // build OS   (macOS / Windows / Linux)
 }
