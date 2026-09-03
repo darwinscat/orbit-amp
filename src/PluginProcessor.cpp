@@ -20,7 +20,11 @@ AmpProcessor::AmpProcessor()
       // attachment survives an undo.
       history (felitronics::appkit::CompareHistory::Mode::PerRegister,
                [this] { return apvts.copyState(); },
-               [this] (const juce::ValueTree& t) { apvts.replaceState (t.createCopy()); },
+               [this] (const juce::ValueTree& t)
+               {
+                   apvts.replaceState (t.createCopy());
+                   markSwitchAimsPending();   // a recalled register carries its own named positions
+               },
                felitronics::appkit::CompareHistory::Config {}),
       // GitHub's release list for THIS repo, the running version, and the badge's own settings file.
       // The checker asks nothing on its own — see updateChecker().
@@ -116,6 +120,10 @@ AmpProcessor::AmpProcessor()
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
+    // Switches ride in the tree by NAME, not by their place in the list — stamped here, on the
+    // message thread, from what each block's pack actually says (see applySwitchAims).
+    stampSwitchAims();
+
     // The workspace envelope already contains the live parameter tree, so saving it saves
     // everything: the sound, the other three registers, and each register's undo history.
     if (auto xml = history.toTree().createXml())
@@ -125,6 +133,7 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     stateWasRestored = true;   // a session's choice outranks the environment's default
+    markSwitchAimsPending();   // ...and its switches are named, not numbered — put them back by name
 
     auto xml = getXmlFromBinary (data, sizeInBytes);
     if (xml == nullptr)

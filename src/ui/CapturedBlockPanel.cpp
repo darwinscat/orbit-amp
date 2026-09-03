@@ -526,7 +526,8 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
         const auto& m = tones[(size_t) i];
 
         // A SWITCH — no sweep, or two named positions — is not a band: the row holds dials.
-        if (m.sweep <= 0 || (m.positions.size() == 2 && Block::namedPositions (m)))
+        // A switch, whatever its legends read: no rotation is the whole test since schema 4.
+        if (m.sweep <= 0)
             continue;
 
         // A control the pack tested and found NOT to be a filter anywhere gets no knob. namz says
