@@ -187,6 +187,14 @@ else()
     set(_oa_appkit_local OFF)
 endif()
 
+# ...and namz, the codec the packs are written in — mirroring the override test above, which keys on
+# the header rather than a CMakeLists (namz is consumed by felitronics-core's nam module, not by us).
+if(ORBITAMP_NAMZ_SRC AND EXISTS "${ORBITAMP_NAMZ_SRC}/include/namz.h")
+    set(_oa_namz_local ON)
+else()
+    set(_oa_namz_local OFF)
+endif()
+
 set(_oa_ver_args
     -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
     -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}
@@ -198,7 +206,10 @@ set(_oa_ver_args
     -DFCORE_TAG=${ORBITAMP_FCORE_TAG}
     -DAPPKIT_LOCAL=${_oa_appkit_local}
     -DAPPKIT_DIR=${ORBITAMP_APPKIT_DIR}
-    -DAPPKIT_TAG=${ORBITAMP_APPKIT_TAG})
+    -DAPPKIT_TAG=${ORBITAMP_APPKIT_TAG}
+    -DNAMZ_LOCAL=${_oa_namz_local}
+    -DNAMZ_DIR=${ORBITAMP_NAMZ_SRC}
+    -DNAMZ_TAG=${ORBITAMP_NAMZ_TAG})
 
 # Generate once at configure time too, so the header exists for IDEs / clangd before the first build.
 execute_process(COMMAND ${CMAKE_COMMAND} ${_oa_ver_args}

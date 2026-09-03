@@ -21,6 +21,7 @@
 #   FCORE_DIR        the sibling checkout path (only read when FCORE_LOCAL)
 #   FCORE_TAG        the pinned felitronics-core tag (used when fetched, or as a local fallback)
 #   APPKIT_LOCAL / APPKIT_DIR / APPKIT_TAG   the same three for felitronics-appkit
+#   NAMZ_LOCAL / NAMZ_DIR / NAMZ_TAG         the same three for namz, the pack codec
 # ----------------------------------------------------------------------------
 
 # --- kBuildNumber: 14-digit UTC YYYYMMDDHHMMSS -----------------------------------------------
@@ -106,7 +107,9 @@ function(_orbitamp_resolve_dep is_local dir tag out_version out_commit out_state
     if(is_local AND dir AND EXISTS "${dir}/.git")
         set(_s "local")
         if(GIT_EXECUTABLE)
-            execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --abbrev=0
+            # --match: namz carries per-language tags (js-v1.1.0, py-v…) beside the product's own
+            # vX.Y.Z, and "the nearest tag" would happily name a port's release as the codec version.
+            execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --abbrev=0 --match "v[0-9]*"
                 WORKING_DIRECTORY "${dir}"
                 RESULT_VARIABLE _t_rc OUTPUT_VARIABLE _t_out
                 OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
@@ -137,6 +140,7 @@ endfunction()
 
 _orbitamp_resolve_dep("${FCORE_LOCAL}"  "${FCORE_DIR}"  "${FCORE_TAG}"  _core   _core_commit   _core_state)
 _orbitamp_resolve_dep("${APPKIT_LOCAL}" "${APPKIT_DIR}" "${APPKIT_TAG}" _appkit _appkit_commit _appkit_state)
+_orbitamp_resolve_dep("${NAMZ_LOCAL}"   "${NAMZ_DIR}"   "${NAMZ_TAG}"   _namz   _namz_commit   _namz_state)
 
 # --- escape the collected values for C++ double-quoted string literals -----------------------
 # git tags may legally carry '"' or '\' and ORBITAMP_BUILDER / USER are arbitrary env text —
@@ -159,6 +163,9 @@ _orbitamp_cxx_escape(_core_state)
 _orbitamp_cxx_escape(_appkit)
 _orbitamp_cxx_escape(_appkit_commit)
 _orbitamp_cxx_escape(_appkit_state)
+_orbitamp_cxx_escape(_namz)
+_orbitamp_cxx_escape(_namz_commit)
+_orbitamp_cxx_escape(_namz_state)
 _orbitamp_cxx_escape(_arch)
 _orbitamp_cxx_escape(_os)
 
@@ -191,6 +198,9 @@ namespace orbitamp::version
     inline constexpr const char* kAppkitVersion = \"${_appkit}\";
     inline constexpr const char* kAppkitCommit  = \"${_appkit_commit}\";
     inline constexpr const char* kAppkitState   = \"${_appkit_state}\";
+    inline constexpr const char* kNamzVersion   = \"${_namz}\";
+    inline constexpr const char* kNamzCommit    = \"${_namz_commit}\";
+    inline constexpr const char* kNamzState     = \"${_namz_state}\";
     inline constexpr const char* kArch        = \"${_arch}\";    // build arch (arm64 / x86_64 / Universal)
     inline constexpr const char* kOS          = \"${_os}\";      // build OS   (macOS / Windows / Linux)
 }
