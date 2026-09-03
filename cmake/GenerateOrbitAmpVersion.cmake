@@ -144,15 +144,21 @@ _orbitamp_resolve_dep("${FCORE_LOCAL}"  "${FCORE_DIR}"  "${FCORE_TAG}"  _core   
 _orbitamp_resolve_dep("${APPKIT_LOCAL}" "${APPKIT_DIR}" "${APPKIT_TAG}" _appkit _appkit_commit _appkit_state)
 _orbitamp_resolve_dep("${NAMZ_LOCAL}"   "${NAMZ_DIR}"   "${NAMZ_TAG}"   _namz   _namz_commit   _namz_state)
 
-# --- NeuralAmpModelerCore: a PINNED COMMIT of somebody else's repository ------------------------
-# Not a checkout of ours and not on a release, so the row says where the pin sits between releases:
-# `git describe` reads "v0.5.3-11-gb5a68c3" and the badge shows "v0.5.3+11" with the hash beside it.
-# Without a describe (a shallow fetch, no tags) the bare pin is all there is, and it says so.
+# --- NeuralAmpModelerCore: somebody else's repository, PINNED ------------------------------------
+# The pin may be either kind, and the row has to read right for both: a RELEASE TAG ("v0.5.4") or a
+# bare COMMIT caught mid-air ("b5a68c3…", which is what it was until the pin moved). `git describe`
+# settles it — exactly on a tag it returns the tag and the hash comes from rev-parse; between tags it
+# returns "v0.5.3-11-gb5a68c3" and the row shows "v0.5.3+11" with the hash beside it.
+#
+# The tag is only ever used AS a commit when it actually looks like one: "v0.5.4" truncated to seven
+# characters would otherwise have printed the nonsense hash "gv0.5.4" the day the pin became a tag.
 set(_namcore "unknown")
 set(_namcore_commit "")
-if(NAMCORE_TAG)
+if(NAMCORE_TAG MATCHES "^[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]+$")
     string(SUBSTRING "${NAMCORE_TAG}" 0 7 _namcore_short)
     set(_namcore_commit "g${_namcore_short}")
+elseif(NAMCORE_TAG)
+    set(_namcore "${NAMCORE_TAG}")   # a release tag: it names itself, with no hash to show yet
 endif()
 if(GIT_EXECUTABLE AND NAMCORE_DIR AND EXISTS "${NAMCORE_DIR}/.git")
     execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --match "v[0-9]*" --always
@@ -165,6 +171,16 @@ if(GIT_EXECUTABLE AND NAMCORE_DIR AND EXISTS "${NAMCORE_DIR}/.git")
             set(_namcore_commit "g${CMAKE_MATCH_3}")
         else()
             set(_namcore "${_n_out}")                            # exactly on a tag, or a bare hash
+
+            # On a tag, describe says nothing about the commit — ask for it outright, so the row can
+            # link the source as precisely as every other row does.
+            execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
+                WORKING_DIRECTORY "${NAMCORE_DIR}"
+                RESULT_VARIABLE _nh_rc OUTPUT_VARIABLE _nh_out
+                OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+            if(_nh_rc EQUAL 0 AND NOT _nh_out STREQUAL "")
+                set(_namcore_commit "g${_nh_out}")
+            endif()
         endif()
     endif()
 endif()
