@@ -5,6 +5,8 @@
 
 #include <felitronics/appkit/SettingsStore.h>
 
+#include <juce_data_structures/juce_data_structures.h>
+
 namespace orbitamp::prefs
 {
 
@@ -17,6 +19,43 @@ inline const felitronics::appkit::SettingsStore& store()
     static const felitronics::appkit::SettingsStore s ("Darwin's Cat", "OrbitAmp");
     return s;
 }
+
+/** The update badge's own store — `update.settings`, beside the settings.json above.
+
+    The switches above live in the family's JSON, written by appkit's SettingsStore; appkit's
+    UpdateChecker persists the last seen release and the auto-check consent through a
+    juce::PropertiesFile instead, so it gets its own small file in the SAME folder rather than a
+    second copy of anything. (The family fix is teaching UpdateChecker the SettingsStore; until a
+    second product wants it, this is one file.)
+
+    Ownership follows OrbitCab's: the PROCESSOR holds it through a juce::SharedResourcePointer, so
+    every instance in a host process shares one object — no two racing on a save, and a badge stored
+    by one instance is visible to the rest at once. The InterProcessLock serialises writes between
+    host processes. Never a function-local static: that would outlive the MessageManager and be
+    destroyed on library unload, which is not a place to be touching timers and files.
+
+    Message thread only — a PropertiesFile is not thread-safe, and the checker touches it nowhere
+    else (see UpdateChecker::Config::settings). */
+class UpdateStore
+{
+public:
+    UpdateStore()
+    {
+        juce::PropertiesFile::Options o;
+        o.applicationName     = "update";
+        o.folderName          = "Darwin's Cat" + juce::String (juce::File::getSeparatorString()) + "OrbitAmp";
+        o.filenameSuffix      = "settings";
+        o.osxLibrarySubFolder = "Application Support";
+        o.processLock         = &ipLock;
+        props.setStorageParameters (o);
+    }
+
+    juce::PropertiesFile* file() { return props.getUserSettings(); }
+
+private:
+    juce::InterProcessLock    ipLock { "OrbitAmp.update.settings" };
+    juce::ApplicationProperties props;
+};
 
 inline bool getBool (const juce::Identifier& key, bool fallback)
 {

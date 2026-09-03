@@ -21,7 +21,13 @@ AmpProcessor::AmpProcessor()
       history (felitronics::appkit::CompareHistory::Mode::PerRegister,
                [this] { return apvts.copyState(); },
                [this] (const juce::ValueTree& t) { apvts.replaceState (t.createCopy()); },
-               felitronics::appkit::CompareHistory::Config {})
+               felitronics::appkit::CompareHistory::Config {}),
+      // GitHub's release list for THIS repo, the running version, and the badge's own settings file.
+      // The checker asks nothing on its own — see updateChecker().
+      updater ({ .ownerRepo      = "darwinscat/orbit-amp",
+                 .productName    = "OrbitAmp",
+                 .currentVersion = ORBITAMP_VERSION,
+                 .settings       = [this] { return updateStore->file(); } })
 {
     // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
     // burst commits about 0.4 s after you stop moving.

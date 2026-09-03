@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Parameters.h"
+#include "ui/Prefs.h"
 #include "core/CapturedBlock.h"
 #include "core/DemoPlayer.h"
 #include "core/ScopeTap.h"
@@ -18,6 +19,7 @@
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/appkit/CompareHistory.h>
+#include <felitronics/appkit/UpdateChecker.h>
 #include <felitronics/dynamics/NoiseGate.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -70,6 +72,15 @@ public:
         opposite of OrbitCab, whose whole workspace is one timeline. */
     felitronics::appkit::CompareHistory history;
 
+    /** The release check behind the footer's version badge. OPT-IN and offline-safe: nothing reaches
+        the network until a player presses "Check for updates" in the badge's popover — the dot only
+        reports a release seen by an earlier, deliberate check. It sits on the processor for the same
+        reason the history does: the window comes and goes, and this outlives it. */
+    felitronics::appkit::UpdateChecker& updateChecker() noexcept { return updater; }
+
+    /** Which wrapper is actually running — VST3 / AU / CLAP / Standalone — the badge's second line. */
+    juce::String pluginFormat() const { return juce::AudioProcessor::getWrapperTypeDescription (wrapperType); }
+
     /** The editor's zoom, 50-200%. It lives here rather than in the editor so it survives closing
         and reopening the window; it is message-thread only and never read by the audio path.
         Persisting it across sessions comes with the state work. */
@@ -86,6 +97,10 @@ public:
     static constexpr float preferredScale = 1.0f;
 
 private:
+    // MUST precede `updater`: the checker takes the store by reference and is destroyed before it.
+    juce::SharedResourcePointer<prefs::UpdateStore> updateStore;
+    felitronics::appkit::UpdateChecker updater;   // built in the ctor: it needs the store above
+
     /** Pumps the history's settle timer — a burst of edits that has been quiet for a moment commits
         as ONE undo step, so dragging a knob is not fifty of them. */
     void timerCallback() override

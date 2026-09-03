@@ -334,6 +334,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     }
 
     setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight() * s));
+
+    // The one place this plugin may reach the network without a click, and only because a player
+    // ticked the switch in the version popover: once a day at most, on the message thread, never in
+    // a constructor a scanner runs. Not ticked, or checked already today — nothing happens at all.
+    amp.updateChecker().checkIfDue();
 }
 
 void AmpEditor::showGearMenu (juce::Point<int> screenPos)

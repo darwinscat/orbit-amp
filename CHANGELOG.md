@@ -5,6 +5,28 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **The build stamp, at the end of the footer.** `V0.2.0 · STANDALONE` in the strip's own voice,
+  beside the sample rate and the DSP figure — a fact about the run, like everything else on that
+  line. Click it and appkit's version popover steps out: the whole stamp (commit, build number,
+  the machine it was built on), what it was built against — felitronics-core, felitronics-appkit
+  and JUCE, each naming its tag, whether it came from a sibling checkout or the pin, and its
+  commit — the licence, and the links home.
+- **An update check that asks first.** The popover's button queries this repository's latest
+  release; a switch beside it lets the check run once a day on its own, off until it is ticked.
+  Nothing reaches us either way: the request goes to GitHub, and the versions are compared on the
+  machine. When a release seen by a check is newer than the running build, an orange dot lights
+  beside the stamp and stays lit across sessions until the build catches up.
+- **Feed the Cat**, at the foot of the same popover — the suite's one tip jar, reached through
+  darwinscat.com's steerable hop, signed `?from=orbitamp&platform=<os>` so the access log can tell
+  which app and which machine fed the cat. Neither parameter reaches the payment page.
+- **`OrbitAmpVersion.h`**, baked on every build (`cmake/GenerateOrbitAmpVersion.cmake`): git
+  describe, short hash, dirty flag, commits past the tag, a 14-digit UTC build number, the build
+  OS/arch/builder, and the resolved dependency rows. End users have no repository; the binary
+  carries its own stamp.
+
 ## [0.2.0] — 2026-09-02 — the box on the page
 
 The device pages learn what a pack actually ships, the two tone stacks stop playing at once, and the

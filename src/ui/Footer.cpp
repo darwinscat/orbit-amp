@@ -6,13 +6,83 @@
 #include "../Parameters.h"
 #include "../PluginProcessor.h"
 
+#include <BinaryData.h>
+#include <OrbitAmpVersion.h>
+
 namespace orbitamp
 {
 
+namespace appkit = felitronics::appkit;
 namespace chrome = felitronics::appkit::chrome;
 
+namespace
+{
+    /** The tip jar the badge's foot offers — ONE hop for the whole suite, darwinscat.com's
+        deliberate 302, whose target the site steers server-side: a URL baked into a build that
+        ships today still lands on the right jar years from now.
+
+        `platform` says which machine fed the cat; the badge adds `from=orbitamp` itself. Neither
+        parameter reaches the payment page — the hop logs them and redirects clean — so they are
+        access-log statistics and nothing more. Written here first (house rule): the OS split
+        belongs in appkit's brand::feedTheCatLink once a second product wants it. */
+    juce::String feedTheCatBase()
+    {
+       #if JUCE_MAC
+        const char* const platform = "macos";
+       #elif JUCE_WINDOWS
+        const char* const platform = "windows";
+       #elif JUCE_LINUX
+        const char* const platform = "linux";
+       #else
+        const char* const platform = "other";
+       #endif
+
+        return juce::String (appkit::brand::feedTheCatUrl) + "?platform=" + platform;
+    }
+
+    /** Everything the badge cannot know: who we are, what this build is, and the palette it draws
+        in. The version and the GitHub slug come from the checker, so they can never drift. */
+    appkit::VersionBadge::Config badgeConfig()
+    {
+        // JUCE names its own version at compile time — "JUCE v8.0.14"; the row wants the tag alone.
+        const juce::String juceVersion = juce::SystemStats::getJUCEVersion().fromFirstOccurrenceOf (" ", false, false);
+
+        return { .productName  = "OrbitAmp",
+                 .productUrl   = "https://darwinscat.com/orbitamp?utm_source=orbitamp&utm_medium=plugin",
+                 .gitHash      = version::kGitHash,
+                 .buildNumber  = version::kBuildNumber,
+                 .buildCount   = version::kBuildCount,
+                 .gitDirty     = version::kGitDirty,
+                 .os           = version::kOS,
+                 .arch         = version::kArch,
+                 .builder      = version::kBuilder,
+                 .licence      = "AGPL-3.0-or-later",
+                 // What this binary was actually built against — sibling checkout or pin, and the
+                 // commit when there was a checkout to ask. The stamp header bakes it at build time.
+                 .dependencies = { { .label     = "felitronics-core",
+                                     .version   = version::kCoreVersion,
+                                     .ownerRepo = "darwinscat/felitronics-core",
+                                     .commit    = version::kCoreCommit,
+                                     .state     = version::kCoreState },
+                                   { .label     = "felitronics-appkit",
+                                     .version   = version::kAppkitVersion,
+                                     .ownerRepo = "darwinscat/felitronics-appkit",
+                                     .commit    = version::kAppkitCommit,
+                                     .state     = version::kAppkitState },
+                                   { .label     = "JUCE",
+                                     .version   = juceVersion,
+                                     .ownerRepo = "juce-framework/JUCE" } },
+                 .accent       = theme::violet,
+                 .accentHover  = theme::lilac,
+                 .accentB      = theme::orange,
+                 .text         = theme::tx,
+                 .feedUrl      = feedTheCatBase() };
+    }
+}
+
 Footer::Footer (AmpProcessor& processor)
-    : amp (processor)
+    : amp (processor),
+      versionBadge (processor.updateChecker(), badgeConfig(), processor.pluginFormat())
 {
     // MONO | STEREO | STEREO SPACE: the click walks the loop — parameter truth, no local state.
     stereo.theme = chrome::ChromeTheme { .fill       = theme::panel,
@@ -43,6 +113,22 @@ Footer::Footer (AmpProcessor& processor)
     loadBadge.onClick = [this] { showLoadBreakdown(); };
     addAndMakeVisible (loadBadge);
 
+    // The popover wears the header's wordmark, so the two read as one product. appkit keeps
+    // BrandHeader's own typeface private, so this is the same embedded bytes, loaded once per window.
+    versionBadge.setBrandTypeface (juce::Typeface::createSystemTypefaceFor (
+        BinaryData::MichromaRegular_ttf, (size_t) BinaryData::MichromaRegular_ttfSize));
+    addChildComponent (versionBadge);   // never shown: the strip paints the line, the badge holds the popover
+
+    // The line this strip draws for itself, in the strip's own voice — the version as the toolbar
+    // would say it, the running wrapper after it.
+    stampText = "V" + amp.updateChecker().currentVersion() + juce::String::fromUTF8 (" \xc2\xb7 ")
+                    + amp.pluginFormat().toUpperCase();
+
+    stampBadge.onClick = [this] { versionBadge.showPopup(); };
+    stampBadge.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    stampBadge.setTooltip ("Version, build stamp and updates");
+    addAndMakeVisible (stampBadge);
+
     timerCallback();
     startTimerHz (4);   // nobody needs the sample rate or the load sooner than that
 }
@@ -58,10 +144,15 @@ void Footer::timerCallback()
     loadPercent = amp.dspLoadPercent();
     const auto load = juce::String (juce::roundToInt (loadPercent)) + "%";
 
-    if (text != rateText || load != loadText)
+    // The dot only ever moves after a deliberate check — reading it is a lookup in the badge's own
+    // settings file, on this thread, four times a second.
+    const bool upd = amp.updateChecker().updateAvailable();
+
+    if (text != rateText || load != loadText || upd != updateDot)
     {
-        rateText = text;
-        loadText = load;
+        rateText  = text;
+        loadText  = load;
+        updateDot = upd;
         repaint();
     }
 }
@@ -72,6 +163,21 @@ void Footer::paint (juce::Graphics& g)
 
     g.setColour (theme::hair);
     g.fillRect (r.removeFromTop (1.0f));
+
+    // The build stamp, right-aligned at the far end. Its dot is the family's "needs a look": a
+    // release seen by an earlier, deliberate check is newer than what is running.
+    auto stamp = r.removeFromRight ((float) stampWidth).withTrimmedRight (8.0f);
+    const auto dot = stamp.removeFromRight (12.0f);
+
+    if (updateDot)
+    {
+        g.setColour (theme::orange);
+        g.fillEllipse (dot.getCentreX() - 3.0f, dot.getCentreY() - 3.0f, 6.0f, 6.0f);
+    }
+
+    g.setColour (stampBadge.isMouseOver() ? theme::tx : theme::txFaint);
+    theme::drawTracked (g, stampText, stamp, theme::displayFont (12.0f), 0.1f,
+                        juce::Justification::centredRight);
 
     auto right = r.withTrimmedLeft ((float) (stereoWidth + gap));
 
@@ -91,6 +197,12 @@ void Footer::resized()
 {
     auto row = getLocalBounds().withTrimmedTop (1);
     stereo.setBounds (row.removeFromLeft (stereoWidth));
+
+    // The stamp's click target, and under it the badge that owns the popover — same rectangle, so
+    // the callout's arrow points at the words that opened it.
+    const auto stamp = row.removeFromRight (stampWidth).withTrimmedRight (8);
+    stampBadge  .setBounds (stamp);
+    versionBadge.setBounds (stamp);
 
     // The invisible click target over the painted DSP number.
     row.removeFromLeft (gap + 96);
