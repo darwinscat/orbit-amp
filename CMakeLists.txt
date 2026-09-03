@@ -11,7 +11,7 @@ cmake_minimum_required(VERSION 3.22)
 # release is fetched, so a clean clone still configures.
 # ----------------------------------------------------------------------------
 
-project(OrbitAmp VERSION 0.2.0 LANGUAGES C CXX)
+project(OrbitAmp VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
