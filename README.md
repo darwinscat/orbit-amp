@@ -2,11 +2,13 @@
 
 A NAM-based guitar rig with Darwin's Cat's favourite sounds.
 
-## Trademarks
+## Third-party hardware
 
-The names of manufacturers and products are used only for descriptive identification of the
-physical equipment from which the included models were captured.
+Third-party manufacturer and product names are used solely to identify the physical hardware
+captured. Equipment photos are our own photographs of the actual captured units. All trademarks
+belong to their respective owners. OrbitAmp is not affiliated with or endorsed by those
+manufacturers.
 
-No affiliation, sponsorship, endorsement, or licensing by the respective manufacturers is implied.
-
-All trademarks are property of their respective owners.
+The full notice is [docs/THIRD-PARTY-NOTICE.md](docs/THIRD-PARTY-NOTICE.md), and the plugin carries
+it verbatim: the short form above at the foot of the version window, the full text under
+**DEVICES & TRADEMARKS** in the gear menu, beside the list of every device the installed packs name.

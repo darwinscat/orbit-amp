@@ -24,6 +24,10 @@ All notable changes to **OrbitAmp** are documented here. The format follows
   cat and "by Darwin's Cat" open darwinscat.com. Both carry the plugin's campaign tag, and the tip
   jar carries it too — beside the `from` / `platform` / `format` signature appkit adds for the
   access log (felitronics-appkit v0.13.0).
+- **DEVICES & TRADEMARKS**, from the gear: the full third-party hardware notice above, and below it
+  every device the installed packs name — maker, model, slot, points on the gain dial, year, serial
+  and where it was built — with what shipped in the installer kept apart from what a player added.
+  Each half scrolls on its own, and the list is re-read on every open.
 - **One window for the product's papers.** The gear's ABOUT and a click on the footer's stamp open
   the same panel: the build stamp, the dependency rows, the licence, the opt-in update check, the
   tip jar — and now the trademark notice, carried at its foot from `resources/notice.txt`. The

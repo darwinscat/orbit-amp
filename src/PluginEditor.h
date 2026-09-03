@@ -5,6 +5,7 @@
 
 #include "PluginProcessor.h"
 #include "ui/Chrome.h"
+#include "ui/DisclaimerPanel.h"
 #include "ui/FaceplateView.h"
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
 #include "ui/Footer.h"
@@ -134,7 +135,9 @@ private:
     DragRuler     outRuler;         // the OUT trim's, mirrored
     DragRuler     ceilRuler;        // the limiter ceiling's, lilac, top-third ladder
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
-    SetupPanel    setup;            // the Setup overlay — last member, so it sits on top
+    SetupPanel    setup;
+    DisclaimerPanel devices;        // DEVICES & TRADEMARKS: the long notice and the list it is about
+            // the Setup overlay — last member, so it sits on top
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpEditor)
 };
