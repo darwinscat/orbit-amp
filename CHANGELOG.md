@@ -19,6 +19,11 @@ put there.
   saves a switch by NAME rather than by its place in the list, a switch is judged by the absence of
   rotation rather than by letters in its legends, and a switch that carries bands counts as a tone
   stack the face may offer.
+- **The engine the build actually compiled.** The local NeuralAmpModelerCore copy is a shortcut, and
+  a shortcut that changes what you build is not one: it is taken only when it sits on the commit
+  felitronics-core pins, and a build directory holding a stale cached pin heals itself instead of
+  quietly compiling the engine we replaced. The version window names what was compiled, from the
+  same directory the compiler read.
 - **An empty factory.** This release ships no packs at all: the device list says so, and every
   device a player drops into the Devices folder is theirs and named as such.
 - **The build stamp, at the end of the footer.** `V0.2.0 · STANDALONE` in the strip's own voice,
