@@ -15,7 +15,6 @@
 #include "ui/TunerStrip.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 #include "ui/LayoutStrip.h"
-#include "ui/AboutPanel.h"
 #include "ui/SetupPanel.h"
 
 namespace orbitamp
@@ -136,7 +135,6 @@ private:
     DragRuler     ceilRuler;        // the limiter ceiling's, lilac, top-third ladder
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;            // the Setup overlay — last member, so it sits on top
-    AboutPanel    about;            // ...and ABOUT over even that: it is opened FROM the gear, not from Setup
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpEditor)
 };

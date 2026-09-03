@@ -1,0 +1,11 @@
+OrbitAmp uses manufacturer and product names only to identify the physical equipment from which particular neural captures and cabinet impulse responses were made. These names describe what was recorded; they do not indicate that OrbitAmp, Darwin's Cat, or any capture originates from, is associated with, or is endorsed by the named manufacturer.
+
+All manufacturer names, product names, trademarks, and registered trademarks are the property of their respective owners. Their appearance in OrbitAmp is for identification and description only.
+
+All neural captures and cabinet impulse responses supplied by Darwin's Cat were created by us from recordings and measurements of physical units that we own or that were made available to us. No manufacturer software, firmware, schematics, source files, or other manufacturer-supplied proprietary materials have been copied into or are distributed with the capture files.
+
+All device photographs shown in OrbitAmp are original photographs taken by us of the specific physical units used to make the captures. They are used to identify the recorded equipment. No manufacturer press images, stock images, or third-party photographs are used. Copyright in these photographs is owned by Darwin's Cat.
+
+Darwin's Cat is not affiliated with, sponsored by, endorsed by, or licensed by any manufacturer named in OrbitAmp. No such relationship is claimed or implied.
+
+The following list identifies, by manufacturer and model, every named device represented in the OrbitAmp packs currently installed.

@@ -89,7 +89,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (demoStrip);
     addChildComponent (glyphs);
     addChildComponent (setup);       // hidden until the toolbar's gear opens it
-    addChildComponent (about);       // ...and so is ABOUT, from the same menu
 
     chrome.onGear = [this] (juce::Point<int> pos) { showGearMenu (pos); };
 
@@ -373,7 +372,9 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
 
                          if (r == 9)
                          {
-                             safe->about.open();
+                             // The family's own About window: the whole build stamp, the licence,
+                             // the trademark notice and the tip jar, centred over the editor.
+                             safe->footer.showAbout();
                              return;
                          }
 
@@ -634,8 +635,6 @@ void AmpEditor::resized()
     setup.setBounds (0, 0, baseWidth, baseHeight());
     setup.setTransform (zoom);
 
-    about.setBounds (0, 0, baseWidth, baseHeight());
-    about.setTransform (zoom);
 }
 
 } // namespace orbitamp

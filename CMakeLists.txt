@@ -341,6 +341,10 @@ juce_add_binary_data(OrbitAmpData
         "${felitronics_appkit_SOURCE_DIR}/assets/Michroma-Regular.ttf"
         "${felitronics_appkit_SOURCE_DIR}/assets/catlogo.svg"
 
+        # The trademark notice, as text rather than as a string literal: it is a legal sentence that
+        # the README carries word for word, and a file can be diffed against that one.
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/notice.txt"
+
         # The cabinet IRs — orbitcab's, referenced there like everything shared: one copy in the
         # ecosystem.
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/01-cookie-monster.wav"

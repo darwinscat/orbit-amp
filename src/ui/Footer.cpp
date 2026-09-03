@@ -82,6 +82,10 @@ namespace
                  .accentHover  = theme::lilac,
                  .accentB      = theme::orange,
                  .text         = theme::tx,
+                 // The trademark notice, from resources/notice.txt — a file rather than a string
+                 // literal, because it is a legal sentence the README carries word for word and a
+                 // file can be diffed against that one.
+                 .notice       = juce::String::fromUTF8 (BinaryData::notice_txt, BinaryData::notice_txtSize).trim(),
                  .feedUrl      = juce::String (appkit::brand::feedTheCatUrl) + "?" + campaign };
     }
 }
@@ -130,7 +134,9 @@ Footer::Footer (AmpProcessor& processor)
     stampText = "V" + amp.updateChecker().currentVersion() + juce::String::fromUTF8 (" \xc2\xb7 ")
                     + amp.pluginFormat().toUpperCase();
 
-    stampBadge.onClick = [this] { versionBadge.showPopup(); };
+    // The SAME window the gear opens: centred, opaque, on its own dimmed ground. A call-out here
+    // hung a half-transparent card over the faceplate and read as a tooltip that would not go away.
+    stampBadge.onClick = [this] { versionBadge.showAbout(); };
     stampBadge.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     stampBadge.setTooltip ("Version, build stamp and updates");
     addAndMakeVisible (stampBadge);
