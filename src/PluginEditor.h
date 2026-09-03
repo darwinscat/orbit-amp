@@ -111,7 +111,11 @@ private:
         meter with no reading, a switch with no names — and this is where they went: a word under
         the mouse, a moment after it stops. Inside the editor rather than a desktop window, so it
         goes where the window goes. */
-    juce::TooltipWindow tooltips { this, 450 };
+    /** ON THE DESKTOP, not inside the editor. A tooltip parented here is a child of the editor, and
+        appkit's popovers are children of the TOP-LEVEL window — so every tip raised over one of them
+        (the version stamp's hashes, the update note) drew UNDERNEATH it, showing as a sliver poking
+        out from behind the panel. On the desktop it floats above both. One per app, as JUCE asks. */
+    juce::TooltipWindow tooltips { nullptr, 450 };
 
     AmpProcessor& amp;              // the base class's `processor` is the AudioProcessor& — this is ours
     Chrome        chrome;
