@@ -20,6 +20,10 @@ All notable changes to **OrbitAmp** are documented here. The format follows
   nearest tag" would name one of those as the codec version. The engine is a pinned commit of
   somebody else's repository, so its row says where that pin sits between releases — `v0.5.3+11 ·
   pin · gb5a68c3`.
+- **The title row leads in two directions.** The product's mark and name open OrbitAmp's page; the
+  cat and "by Darwin's Cat" open darwinscat.com. Both carry the plugin's campaign tag, and the tip
+  jar carries it too — beside the `from` / `platform` / `format` signature appkit adds for the
+  access log (felitronics-appkit v0.13.0).
 - **The cat in the popover.** The maker's mark stands beside the product's on the title row, the way
   the window header carries both — the same embedded SVG, not a second drawing of it.
 - **An update check that asks first.** The popover's button queries this repository's latest

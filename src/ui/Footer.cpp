@@ -17,28 +17,11 @@ namespace chrome = felitronics::appkit::chrome;
 
 namespace
 {
-    /** The tip jar the badge's foot offers — ONE hop for the whole suite, darwinscat.com's
-        deliberate 302, whose target the site steers server-side: a URL baked into a build that
-        ships today still lands on the right jar years from now.
-
-        `platform` says which machine fed the cat; the badge adds `from=orbitamp` itself. Neither
-        parameter reaches the payment page — the hop logs them and redirects clean — so they are
-        access-log statistics and nothing more. Written here first (house rule): the OS split
-        belongs in appkit's brand::feedTheCatLink once a second product wants it. */
-    juce::String feedTheCatBase()
-    {
-       #if JUCE_MAC
-        const char* const platform = "macos";
-       #elif JUCE_WINDOWS
-        const char* const platform = "windows";
-       #elif JUCE_LINUX
-        const char* const platform = "linux";
-       #else
-        const char* const platform = "other";
-       #endif
-
-        return juce::String (appkit::brand::feedTheCatUrl) + "?platform=" + platform;
-    }
+    /** The product's own tag on a family link, for the SITE's analytics — the same pair OrbitAmp's
+        plugin links have always carried. Everything that describes the BUILD is added by appkit:
+        `from` (the product slug), `platform` (the machine) and `format` (the wrapper). None of it
+        reaches the payment page — the hop logs the query and redirects clean. */
+    inline constexpr const char* campaign = "utm_source=orbitamp&utm_medium=plugin";
 
     /** Everything the badge cannot know: who we are, what this build is, and the palette it draws
         in. The version and the GitHub slug come from the checker, so they can never drift. */
@@ -54,7 +37,8 @@ namespace
             BinaryData::catlogo_svg, (size_t) BinaryData::catlogo_svgSize).release() };
 
         return { .productName  = "OrbitAmp",
-                 .productUrl   = "https://darwinscat.com/orbitamp?utm_source=orbitamp&utm_medium=plugin",
+                 .productUrl   = juce::String ("https://darwinscat.com/orbitamp?") + campaign,
+                 .makerUrl     = juce::String ("https://darwinscat.com?") + campaign,
                  .gitHash      = version::kGitHash,
                  .buildNumber  = version::kBuildNumber,
                  .buildCount   = version::kBuildCount,
@@ -98,7 +82,7 @@ namespace
                  .accentHover  = theme::lilac,
                  .accentB      = theme::orange,
                  .text         = theme::tx,
-                 .feedUrl      = feedTheCatBase() };
+                 .feedUrl      = juce::String (appkit::brand::feedTheCatUrl) + "?" + campaign };
     }
 }
 
