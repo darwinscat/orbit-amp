@@ -136,7 +136,7 @@ private:
     {
         juce::String maker, model, slot, serial, origin;
         int          year = 0;
-        int          captures = 0;   // points on the gain dial — what the block's paper counts
+        int          captures = 0;   // model files in the pack — one per captured setting
 
         bool operator< (const Named& o) const
         {
@@ -202,14 +202,11 @@ private:
                         n.serial = juce::String (stage.serialNumber).trim();
                         n.year   = stage.year;
 
-                        // The dial's points: how many times the box was recorded across its gain
-                        // range. The same count the block's paper prints as "N CAPTURES ON THE DIAL".
-                        for (const auto& c : stage.device.controls)
-                            if (c.role == namz::rig::Role::Gain)
-                            {
-                                n.captures = (int) c.values.size();
-                                break;
-                            }
+                        // How many times the box was actually recorded: one file per captured
+                        // setting. NOT the gain dial's declared points — a dial can state eleven
+                        // positions and be captured at nine, and this column is about the work done,
+                        // not about what the knob says.
+                        n.captures = (int) stage.device.files.size();
 
                         const auto designed = juce::String (stage.designedIn).trim();
                         const auto made     = juce::String (stage.madeIn).trim();
