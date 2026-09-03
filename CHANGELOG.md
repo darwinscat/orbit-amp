@@ -20,6 +20,18 @@ All notable changes to **OrbitAmp** are documented here. The format follows
   nearest tag" would name one of those as the codec version. The engine is a pinned commit of
   somebody else's repository, so its row says where that pin sits between releases — `v0.5.3+11 ·
   pin · gb5a68c3`.
+- **The title row leads in two directions.** The product's mark and name open OrbitAmp's page; the
+  cat and "by Darwin's Cat" open darwinscat.com. Both carry the plugin's campaign tag, and the tip
+  jar carries it too — beside the `from` / `platform` / `format` signature appkit adds for the
+  access log (felitronics-appkit v0.13.0).
+- **DEVICES & TRADEMARKS**, from the gear: the full third-party hardware notice above, and below it
+  every device the installed packs name — maker, model, slot, points on the gain dial, year, serial
+  and where it was built — with what shipped in the installer kept apart from what a player added.
+  Each half scrolls on its own, and the list is re-read on every open.
+- **One window for the product's papers.** The gear's ABOUT and a click on the footer's stamp open
+  the same panel: the build stamp, the dependency rows, the licence, the opt-in update check, the
+  tip jar — and now the trademark notice, carried at its foot from `resources/notice.txt`. The
+  plugin's own About overlay is gone; there is one place a player looks and one text to keep right.
 - **The cat in the popover.** The maker's mark stands beside the product's on the title row, the way
   the window header carries both — the same embedded SVG, not a second drawing of it.
 - **An update check that asks first.** The popover's button queries this repository's latest

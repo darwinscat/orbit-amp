@@ -34,6 +34,11 @@ public:
 
     static constexpr int designHeight = 22;
 
+    /** The OTHER door to the version window: the gear's ABOUT opens it centred over the editor,
+        where a page that carries a legal notice belongs, while a click on the stamp opens the same
+        content as a call-out pointing at the words that opened it. One panel, two ways in. */
+    void showAbout() { versionBadge.showAbout(); }
+
 private:
     void timerCallback() override;
     void showLoadBreakdown();
@@ -65,7 +70,7 @@ private:
     ClickTarget loadBadge;
     ClickTarget stampBadge;
 
-    /** appkit's version badge, kept INVISIBLE and only for its popover — the whole build stamp, the
+    /** appkit's version badge, kept INVISIBLE and only for its window — the whole build stamp, the
         opt-in update check and the family's tip jar, one `showPopup()` away (public since appkit
         v0.11.3). Its own face paints two lines, which is right for a toolbar corner and wrong for a
         22 px strip: the second line would sit on the window's bottom edge. So this strip paints the

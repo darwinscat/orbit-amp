@@ -114,7 +114,7 @@ FetchContent_MakeAvailable(felitronics_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.12.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.14.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -340,6 +340,11 @@ juce_add_binary_data(OrbitAmpData
     SOURCES
         "${felitronics_appkit_SOURCE_DIR}/assets/Michroma-Regular.ttf"
         "${felitronics_appkit_SOURCE_DIR}/assets/catlogo.svg"
+
+        # The trademark notice, as text rather than as a string literal: it is a legal sentence that
+        # the README carries word for word, and a file can be diffed against that one.
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/notice.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/disclaimer.txt"   # ...and its long form, with the list
 
         # The cabinet IRs — orbitcab's, referenced there like everything shared: one copy in the
         # ecosystem.
