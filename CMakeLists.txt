@@ -114,7 +114,7 @@ FetchContent_MakeAvailable(felitronics_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.11.2" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.12.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -134,6 +134,82 @@ endif()
 set(FELITRONICS_APPKIT_WEBP ON CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_appkit)
+
+# ----------------------------------------------------------------------------
+# OrbitAmpVersion.h — git-describe build stamp, baked into the binary (end users have no repo).
+# Regenerated on EVERY build (the target is always out-of-date) so the stamp reflects the tree AT
+# BUILD TIME; also generated once at configure so clangd + the first compile have the header. Never
+# fails the build (missing git => "0.0.0-dev"/"unknown"). It feeds the footer's version stamp — the
+# popover's commit / build / environment lines and the dependency rows.
+# ----------------------------------------------------------------------------
+find_package(Git QUIET)
+set(ORBITAMP_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${ORBITAMP_GENERATED_DIR}")
+set(ORBITAMP_VERSION_HEADER "${ORBITAMP_GENERATED_DIR}/OrbitAmpVersion.h")
+
+# Build architecture label for the stamp (Universal when a fat binary, else the single arch).
+if(APPLE)
+    list(LENGTH CMAKE_OSX_ARCHITECTURES _oa_narch)
+    if(_oa_narch GREATER 1)
+        set(_oa_arch "Universal")
+    elseif(CMAKE_OSX_ARCHITECTURES)
+        set(_oa_arch "${CMAKE_OSX_ARCHITECTURES}")
+    else()
+        set(_oa_arch "${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+else()
+    set(_oa_arch "${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+# Build OS label for the stamp.
+if(APPLE)
+    set(_oa_os "macOS")
+elseif(WIN32)
+    set(_oa_os "Windows")
+elseif(UNIX)
+    set(_oa_os "Linux")
+else()
+    set(_oa_os "${CMAKE_SYSTEM_NAME}")
+endif()
+
+# Mirror the felitronics-core FetchContent decision above so kCoreVersion names the checkout used.
+if(ORBITAMP_FCORE_DIR AND EXISTS "${ORBITAMP_FCORE_DIR}/CMakeLists.txt")
+    set(_oa_fcore_local ON)
+else()
+    set(_oa_fcore_local OFF)
+endif()
+
+# ...and the same for felitronics-appkit: the badge's dependency rows name what was actually built
+# against, sibling or pin, never the other one.
+if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
+    set(_oa_appkit_local ON)
+else()
+    set(_oa_appkit_local OFF)
+endif()
+
+set(_oa_ver_args
+    -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
+    -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+    -DOUT_FILE=${ORBITAMP_VERSION_HEADER}
+    -DARCH=${_oa_arch}
+    -DOS=${_oa_os}
+    -DFCORE_LOCAL=${_oa_fcore_local}
+    -DFCORE_DIR=${ORBITAMP_FCORE_DIR}
+    -DFCORE_TAG=${ORBITAMP_FCORE_TAG}
+    -DAPPKIT_LOCAL=${_oa_appkit_local}
+    -DAPPKIT_DIR=${ORBITAMP_APPKIT_DIR}
+    -DAPPKIT_TAG=${ORBITAMP_APPKIT_TAG})
+
+# Generate once at configure time too, so the header exists for IDEs / clangd before the first build.
+execute_process(COMMAND ${CMAKE_COMMAND} ${_oa_ver_args}
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateOrbitAmpVersion.cmake")
+
+add_custom_target(OrbitAmpVersionGen ALL
+    COMMAND ${CMAKE_COMMAND} ${_oa_ver_args}
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateOrbitAmpVersion.cmake"
+    BYPRODUCTS "${ORBITAMP_VERSION_HEADER}"
+    COMMENT "OrbitAmp: baking OrbitAmpVersion.h build stamp"
+    VERBATIM)
 
 # ----------------------------------------------------------------------------
 # The plugin target.
@@ -279,6 +355,9 @@ target_compile_definitions(OrbitAmp PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0   # JUCE 8 has no splash requirement on any tier, incl. AGPLv3
 )
+
+target_include_directories(OrbitAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")   # OrbitAmpVersion.h
+add_dependencies(OrbitAmp OrbitAmpVersionGen)                            # ...rebaked before every build
 
 target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
@@ -451,6 +530,8 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp)
 target_include_directories(orbitamp_chain_test PRIVATE src)
+target_include_directories(orbitamp_chain_test PRIVATE "${ORBITAMP_GENERATED_DIR}")   # the same faces, the same stamp
+add_dependencies(orbitamp_chain_test OrbitAmpVersionGen)
 target_compile_definitions(orbitamp_chain_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
                                                       JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE

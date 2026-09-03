@@ -5,6 +5,7 @@
 
 #include "Theme.h"
 
+#include <felitronics/appkit/VersionBadge.h>
 #include <felitronics/appkit/chrome/FlatButtons.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -40,23 +41,46 @@ private:
     static constexpr int itemWidth   = 92;
     static constexpr int stereoWidth = 124;   // room for the longest of the three modes, STEREO SPACE
     static constexpr int gap       = 10;
+    static constexpr int stampWidth = 170;    // the version + format line at the far right
 
     AmpProcessor& amp;
 
     felitronics::appkit::chrome::FlatItem stereo;
 
-    /** The DSP number is a door: click it and the per-stage breakdown steps out. */
-    struct LoadBadge final : public juce::Component
+    /** Numbers on this strip are doors: an invisible target over the painted text, and the click
+        opens what the number is about. The DSP figure opens the per-stage breakdown; the stamp
+        opens appkit's version popover. */
+    struct ClickTarget final : public juce::Component,
+                              public juce::SettableTooltipClient
     {
         std::function<void()> onClick;
-        void mouseDown (const juce::MouseEvent&) override { if (onClick) onClick(); }
+        void mouseDown  (const juce::MouseEvent&) override { if (onClick) onClick(); }
+
+        // The painted text lives in the parent, so the parent is what repaints: the strip lifts the
+        // words under the cursor, which is the only thing here that says they can be pressed.
+        void mouseEnter (const juce::MouseEvent&) override { if (auto* p = getParentComponent()) p->repaint(); }
+        void mouseExit  (const juce::MouseEvent&) override { if (auto* p = getParentComponent()) p->repaint(); }
     };
 
-    LoadBadge loadBadge;
+    ClickTarget loadBadge;
+    ClickTarget stampBadge;
+
+    /** appkit's version badge, kept INVISIBLE and only for its popover — the whole build stamp, the
+        opt-in update check and the family's tip jar, one `showPopup()` away (public since appkit
+        v0.11.3). Its own face paints two lines, which is right for a toolbar corner and wrong for a
+        22 px strip: the second line would sit on the window's bottom edge. So this strip paints the
+        stamp itself, in its own voice and one line — and the badge stays as the popover's anchor,
+        sized to that text so the callout points at it.
+
+        The strip, not the toolbar, for the reason everything else on this line is here: it is a fact
+        about the RUN, not about the sound — and the toolbar has no room to spare either. */
+    felitronics::appkit::VersionBadge versionBadge;
 
     std::unique_ptr<juce::ParameterAttachment> stereoAttachment;
 
     juce::String rateText, loadText;
+    juce::String stampText;            // "V0.2.0 · STANDALONE" — fixed for the life of the window
+    bool  updateDot  = false;          // a stored release is newer than this build
     float loadPercent = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Footer)
