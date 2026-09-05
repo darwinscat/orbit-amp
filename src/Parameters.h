@@ -109,9 +109,14 @@ inline juce::String blockSmooth   (const char* blk) { return juce::String (blk) 
     is being fed, which is the question the green zone answers.
 
     The price, and it is the hardware's rather than ours: on a captured device this is a DRIVE
-    control, so every loudness fix between two blocks is also a tone change. Between a real pedal
-    and a real amp there is exactly one knob and turning it up is both louder and dirtier. The last
-    block's output is caught by the master volume, and what the power amp is fed by its own DRIVE. */
+    control, so every loudness fix made HERE is also a tone change. Between a real pedal and a real
+    amp there is exactly one knob and turning it up is both louder and dirtier. The last block's
+    output is caught by the master volume, and what the power amp is fed by its own DRIVE.
+
+    …which is why the loudness fix stopped living here. A pack now states its own output level
+    (`chain[].output_db`, namz schema 4) and the player applies it after everything: that is the
+    number that makes a boost stop cooking the preamp it feeds, and it changes volume and nothing
+    else. This hand is for drive; that one is for balance. */
 inline juce::String blockIn (const char* blk) { return juce::String (blk) + "_in"; }
 
 /** Asymmetric on purpose. Forty-eight down and twelve up: cutting is what gain staging mostly
@@ -123,10 +128,14 @@ inline constexpr float blockTrimMinDb = -48.0f;
 inline constexpr float blockTrimMaxDb =  12.0f;
 
 /** Where a captured device likes to be fed, in dBFS peak — the green zone on the IN meter.
-    A CONVENTION, not a measurement: `FileEntry::inputDb` is the alias attenuation between two
-    captures of one device, not the absolute level the hardware was driven at, so there is nothing
-    in the pack to read. This is the window a guitar DI normally peaks in, and it is the honest
-    default until the capture side writes down what it actually used. */
+    Still a CONVENTION: it is the window a guitar DI normally peaks in, not a level anyone measured.
+
+    What HAS changed is what the zone is read against. `FileEntry::inputDb` is the alias attenuation
+    between two captures of one device and never said how hard the hardware was driven — but a pack
+    now states its own working point in the manifest (`chain[].input_db`, namz schema 4), and the
+    player applies it before the network. So the level entering the block and the level the network
+    eats are two different numbers, and the IN meter shows BOTH: this zone belongs to the second of
+    them, the one that is actually the network's input. */
 inline constexpr float captureHotDb  = -6.0f;
 inline constexpr float captureColdDb = -18.0f;
 
@@ -248,10 +257,16 @@ inline constexpr const char* powerOn   = "power_on";
     sound is made — boost, preamp, their consoles, one neural pass — and stereo from the reverb on,
     where the space is: the reverb spreads one signal into two, and the power amp, the cabinet and
     the limiter follow it in stereo. */
-/** The pack's own level story: per-file `input_db` trims played before each model — the alias
-    attenuation the pack states between captures. For a library captured at ONE honest level
-    those trims only push a capture's drive around, so the comp is switchable: off, every model
-    eats exactly what the chain feeds it. */
+/** A BYPASS FOR THE ALIAS TRIMS, and for nothing else. `files[].input_db` is what a pack says about
+    ONE borrowed setting — the bottom notches of a gain dial, where a linked capture is played softer
+    than the model it borrows — and for a library captured at one honest level those trims only push
+    a capture's drive around. Off, every model eats exactly what the chain feeds it, which is a
+    diagnostic position rather than a way to play.
+
+    It does NOT touch the pack's own two levels. `chain[].input_db` and `chain[].output_db` are the
+    author's statement about the whole device and are applied always, by the player, with no switch
+    anywhere: see felitronics::rigplayer's README. Nor does it touch normalization, which is a
+    contract and has no switch here either. */
 inline constexpr const char* packLevelComp = "pack_level_comp";
 
 inline constexpr const char* stereoMode = "stereo_mode";
