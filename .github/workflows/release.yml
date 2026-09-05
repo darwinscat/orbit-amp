@@ -33,7 +33,14 @@ jobs:
   macos:
     # Self-hosted macOS runner → universal arm64+x86_64 build. arm64 cross-compiles the
     # x86_64 (Intel) slice fine; we only build/package, not run it.
-    runs-on: [self-hosted, macOS]
+    #
+    # The `signing` label is REQUIRED, not decorative: more than one self-hosted macOS
+    # runner is registered, and only that one carries the Developer ID certs + the
+    # notarytool keychain profile. Without it GitHub hands the job to whichever runner is
+    # free, and on the wrong machine the release dies at `security unlock-keychain` with
+    # "The user name or passphrase you entered is not correct" — which reads like a bad
+    # KCH_PWD secret but is really the wrong host.
+    runs-on: [self-hosted, macOS, signing]
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v7
