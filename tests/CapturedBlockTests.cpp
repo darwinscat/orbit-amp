@@ -282,6 +282,24 @@ int main()
                         (shapeDifference (soft, loud) > 1.0 || softRms < loudRms * 0.9)
                             && toDb (softRms / loudRms) <= 0.5,
                         juce::String (toDb (softRms / loudRms), 1) + " dB");
+
+                // …AND THE METER'S NUMBER HAS TO CARRY IT. `modelFeed` is what the IN wall adds
+                // before its green zone means anything: the zone describes the MODEL's door, and on
+                // this rung the alias trim is the last gain standing in front of it. The wall used
+                // to be told the pack's stated input level and nothing else, so here it was drawing
+                // the zone against a number the pack's own attenuation away from the door.
+                const auto withComp = b.modelFeed();
+                b.setInputTrims (false);
+                const auto without = b.modelFeed();
+                b.setInputTrims (true);
+
+                const double stated = dev.files[(size_t) linked].inputDb;
+                report ("...and the meter's number carries that trim",
+                        withComp.single && without.single
+                            && std::abs ((withComp.db - without.db) - stated) < 1.0e-9,
+                        juce::String (withComp.db - without.db, 2) + " dB of the stated "
+                            + juce::String (stated, 2)
+                            + (withComp.single && without.single ? "" : " — and it split"));
             }
         }
 
@@ -402,6 +420,112 @@ int main()
         }
         if (done)
             break;
+    }
+
+    // ---- THE PACK'S OWN TWO LEVELS, which this repo does not implement and must not undo ----
+    //
+    // `chain[].input_db` and `chain[].output_db` are applied by felitronics::rigplayer, always, with
+    // no switch anywhere. Nothing here had to be written for them — which is exactly why they need a
+    // gate here: what arrives through a pin can leave through one, and a single stray setNormalize or
+    // a level added a second time in this repo would be invisible until somebody exported a pack and
+    // wondered why it sounded different in the plugin.
+    {
+        std::printf ("\n");
+        report ("normalizing is the default, and nothing here turns it off", boost.player.normalize());
+
+        Block& lv = boost.packs.isEmpty() ? preamp : boost;
+        if (lv.packs.isEmpty())
+        {
+            std::printf ("no pack to state a level with — the level checks are skipped\n");
+        }
+        else
+        {
+            lv.select (0);
+            const auto& pk = lv.packs.getReference (0);
+            const auto bytesOfPack = [&pk] (const std::string& id) -> std::vector<std::byte>
+            {
+                const auto blk = orbitamp::device::DeviceLibrary::readBinaryEntry (pk, juce::String (id));
+                const auto* p = static_cast<const std::byte*> (blk.getData());
+                return std::vector<std::byte> (p, p + blk.getSize());
+            };
+
+            const auto plain = lv.player.stage();
+            const double quiet = toDb (rms (run (lv, 0.1)));
+
+            // 1. The pack's OUTPUT level reaches the block's output — the whole point of the release:
+            //    a boost that stops cooking the preamp it feeds.
+            auto lower = plain;
+            lower.outputDb = -6.0;
+            lv.player.load (lower, bytesOfPack);
+            const double after = toDb (rms (run (lv, 0.1)));
+            report ("output_db -6 leaves the block 6 dB down", std::abs ((quiet - after) - 6.0) < 0.35,
+                    juce::String (quiet - after, 2) + " dB");
+
+            // 2. …and the meters can say both numbers, which is what the second needle draws.
+            report ("the face reads the pack's two levels",
+                    std::abs (lv.packOutputDb() + 6.0) < 1.0e-9 && std::abs (lv.packInputDb()) < 1.0e-9,
+                    juce::String (lv.packInputDb(), 2) + " / " + juce::String (lv.packOutputDb(), 2) + " dB");
+
+            // 3. The pack's INPUT level lands at the NETWORK's door — asserted as an equivalence, not
+            //    as a level: on a captured device this is a drive control, and a compressive pedal
+            //    turns 6 dB of input into a fraction of a decibel out (the first pack here does
+            //    exactly that: 0.29 dB). So the claim is the one that is true whatever the device
+            //    does with it — `input_db` of -6 is the same thing as feeding the block 6 dB less.
+            constexpr float minus6 = 0.5011872f;
+            auto softer = plain;
+            softer.inputDb = -6.0;
+            lv.player.load (softer, bytesOfPack);
+            const double byPack = toDb (rms (run (lv, 0.1)));
+            lv.player.load (plain, bytesOfPack);
+            const double byHand = toDb (rms (run (lv, 0.1, 220.0, 0.25f * minus6)));
+            report ("input_db -6 is the same as feeding the block 6 dB less",
+                    std::abs (byPack - byHand) < 0.35,
+                    juce::String (byPack - byHand, 2) + " dB apart");
+
+            // 4. Pack Level Comp is a bypass for the ALIAS trims and for NOTHING else. Both readings
+            //    below are taken with it off, so whatever the trims were doing cancels between them
+            //    and the only difference left is where the 6 dB came from. If the comp had taken the
+            //    pack's own level out with the trims, the first would stand 6 dB above the second.
+            lv.setInputTrims (false);
+            lv.player.load (softer, bytesOfPack);
+            const double offByPack = toDb (rms (run (lv, 0.1)));
+            lv.player.load (plain, bytesOfPack);
+            const double offByHand = toDb (rms (run (lv, 0.1, 220.0, 0.25f * minus6)));
+            report ("Pack Level Comp bypasses the alias trims, never the pack's own level",
+                    std::abs (offByPack - offByHand) < 0.35,
+                    juce::String (offByPack - offByHand, 2) + " dB apart");
+            lv.setInputTrims (true);
+
+            // 5. …AND THE IN WALL'S NUMBER IS THE WHOLE STACK. `modelFeed` is what the meter adds
+            //    before its green zone means anything: the zone describes the MODEL's door, and the
+            //    wall used to be told the pack's stated input level and nothing else — so on a
+            //    linked rung it was drawing the zone against a number the alias trim away from the
+            //    door. Asserted as two DIFFERENCES, so whatever else stands in the chain here (the
+            //    dial's own extend, a device with no captured axis) cancels between the readings and
+            //    only the two gains under test are left.
+            lv.setInputTrims (false);
+            lv.player.load (plain, bytesOfPack);
+            const double bare = lv.modelFeed().db;    // no stated level, no alias trim
+
+            auto stated = plain;
+            stated.inputDb = -3.0;
+            for (auto& f : stated.device.files)       // every capture, so whichever one sounds says it
+                f.inputDb = -6.0;
+
+            lv.player.load (stated, bytesOfPack);
+            const auto byLevel = lv.modelFeed();      // the pack's own level, the comp still off
+            lv.setInputTrims (true);
+            const auto byBoth = lv.modelFeed();       // …and the alias trim on top of it
+
+            report ("the IN wall's number carries the level AND the alias trim",
+                    byLevel.single && byBoth.single
+                        && std::abs ((byLevel.db - bare) + 3.0) < 1.0e-9
+                        && std::abs ((byBoth.db - byLevel.db) + 6.0) < 1.0e-9,
+                    juce::String (byLevel.db - bare, 2) + " of the stated -3, "
+                        + juce::String (byBoth.db - byLevel.db, 2) + " of the trimmed -6");
+
+            lv.player.load (plain, bytesOfPack);      // …and the device is left as it was found
+        }
     }
 
     std::printf ("\n%s\n", failures == 0 ? "all checks passed" : "FAILURES");

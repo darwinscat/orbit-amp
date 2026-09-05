@@ -62,8 +62,10 @@ public:
         startTimerHz (30);
     }
 
-    /** The hint is a RULER, not a report: one number — what the scale says at the cursor's own
-        height. Composed on demand, so it moves with the hand that hovers. */
+    /** The hint is a RULER first: one number — what the scale says at the cursor's own height,
+        composed on demand so it moves with the hand that hovers. Standing up, the column has no room
+        beside it for a word, so `offsetNote` rides here under the reading — what the two marks are,
+        which is the only place that can be said at all. */
     juce::String getTooltip() override
     {
         const auto  t = vertical ? columnArea() : trackArea();
@@ -72,12 +74,41 @@ public:
                                  : (p.x - t.getX())      / juce::jmax (1.0f, t.getWidth());
         const float db = floorDb + juce::jlimit (0.0f, 1.0f, u) * (ceilDb - floorDb);
 
-        return juce::String (db, 1) + " dB";
+        auto hint = juce::String (db, 1) + " dB";
+
+        if (offsetNote.isNotEmpty())
+            hint << "\n" << offsetNote;
+
+        return hint;
     }
 
     /** The right-wall meter: the bar stands at the component's right edge and the dragged
         reading appears to its LEFT — the mirror of the IN wall. */
     bool valueOnLeft = false;
+
+    /** TWO READINGS, ONE MEASUREMENT. A meter can only stand where the audio thread taps, and what
+        each of these bars is ASKED is about a point the tap is not at: what the model eats is
+        several gains further on, and what a block would hand over without the pack's own output
+        level is one gain back. Both differences are scalars, both known on the message thread — so
+        rather than make somebody add two numbers on screen (the very thing the capture app has just
+        spent a release removing) the meter draws BOTH marks: the filled bar at one reading, a thin
+        line at the other.
+
+        These are the dB from the measurement to each mark. IN puts the MODEL'S INPUT in the fill,
+        because that is the reading the green zone describes, and what enters the block on the line —
+        and the fill's offset is the whole stack of them (see `CapturedBlock::modelFeed`), not the
+        pack's stated input level alone. OUT fills with what actually leaves and lines what would
+        leave with the pack's output level taken back out. Both at zero is the honest picture of a
+        pack that states no levels: the two marks coincide.
+
+        `offsetNote` is what the hint has to add for the marks to be read at all — which of them is
+        which and, on IN, that the number is a LEVEL: the pack's pre-model tone is a filter and has
+        no decibel to put here. When two models sound at two different levels the note says so and
+        the marks become one model each, because an average of them would be a number true of
+        neither. */
+    float fillOffsetDb  = 0.0f;
+    float ghostOffsetDb = 0.0f;
+    juce::String offsetNote;
 
     /** STANDING UP: the same meter as a thin column, for the left of a dial — the fill climbs, the
         hand lies across it, the green zone runs up its edge. No name and no reading beside it:
@@ -246,6 +277,33 @@ public:
     }
 
 private:
+    /** What the bar fills to, and the thin line beside it — see `fillOffsetDb`.
+
+        SILENCE TAKES NO OFFSET. The level arrives already clamped at the audio thread's own floor,
+        and that reading is not a level — it is the absence of one. Adding a positive offset to it
+        (a device with no captured axis drives up to +20 dB) would lift a dead block onto the scale:
+        a sliver of fill and a peak-hold line drawn on nothing at all. */
+    static constexpr float tapFloorDb = -89.5f;   // the tap clamps at -90; at it, nothing is playing
+
+    float withOffset (float offsetDb) const
+    {
+        const float m = levelDb.load();
+        return m <= tapFloorDb ? m : m + offsetDb;
+    }
+
+    float shownDb() const { return withOffset (fillOffsetDb); }
+    float ghostDb() const { return withOffset (ghostOffsetDb); }
+
+    /** The second mark, drawn wherever the fill does not reach: thinner and dimmer than the peak
+        hold, because it is a statement about where the signal is being READ and not about the
+        playing. */
+    void paintGhost (juce::Graphics& g, juce::Rectangle<float> t, float pos, bool horizontal) const
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.32f));
+        if (horizontal) g.fillRect (t.getX(), pos - 0.5f, t.getWidth(), 1.0f);
+        else            g.fillRect (pos - 0.5f, t.getY(), 1.0f, t.getHeight());
+    }
+
     void timerCallback() override
     {
         if (! live)
@@ -254,7 +312,7 @@ private:
             return;
         }
 
-        const float now = levelDb.load();
+        const float now = shownDb();
 
         // The peak hold, decaying: it is here to let a phrase be READ, not to latch forever.
         if (now > hold)  hold = now;
@@ -362,7 +420,7 @@ private:
             grad.addColour (u (params::captureHotDb) + 0.05,  meterrail::heatYellow);         // then yellow
             grad.addColour (u (0.0f),                         theme::orange);                 // orange at full scale
 
-            const float y = yOfLevel (t, levelDb.load());
+            const float y = yOfLevel (t, shownDb());
             if (y < t.getBottom() - 1.0f)
             {
                 const juce::Graphics::ScopedSaveState ss (g);
@@ -372,6 +430,9 @@ private:
                 g.fillRoundedRectangle (t, 2.0f);
             }
         }
+
+        if (live)
+            paintGhost (g, t, yOfLevel (t, ghostDb()), true);
 
         if (live && hold > floorDb + 0.5f)
             meterrail::paintHold (g, t, yOfLevel (t, hold));
@@ -414,20 +475,26 @@ private:
         the level CLIPS it — so a given length always reads the same colour. */
     void paintFill (juce::Graphics& g, juce::Rectangle<float> t) const
     {
-        const float x = xOfLevel (t, levelDb.load());
+        const float x = xOfLevel (t, shownDb());
 
         if (x <= t.getX() + 1.0f)
+        {
+            paintGhost (g, t, xOfLevel (t, ghostDb()), false);
             return;
+        }
 
         juce::ColourGradient grad (theme::violet.withAlpha (0.50f), t.getX(), 0.0f,
                                    theme::orange, t.getRight(), 0.0f, false);
         grad.addColour (0.58, theme::violet.withAlpha (0.60f));
 
-        const juce::Graphics::ScopedSaveState ss (g);
-        g.reduceClipRegion ((int) std::floor (t.getX()), (int) std::floor (t.getY()),
-                            (int) std::ceil (x - t.getX()), (int) std::ceil (t.getHeight()) + 1);
-        g.setGradientFill (grad);
-        g.fillRoundedRectangle (t, 2.0f);
+        {   // its own scope: the clip below must not swallow the pack's line, which is drawn on top
+            const juce::Graphics::ScopedSaveState ss (g);
+            g.reduceClipRegion ((int) std::floor (t.getX()), (int) std::floor (t.getY()),
+                                (int) std::ceil (x - t.getX()), (int) std::ceil (t.getHeight()) + 1);
+            g.setGradientFill (grad);
+            g.fillRoundedRectangle (t, 2.0f);
+        }
+        paintGhost (g, t, xOfLevel (t, ghostDb()), false);
     }
 
     /** The hand: one line standing across the bar, with a head at each end so it reads as
