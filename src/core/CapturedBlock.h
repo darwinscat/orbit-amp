@@ -15,6 +15,7 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -212,6 +213,80 @@ public:
         capture eats exactly what the chain feeds it — for a library shot at one honest level
         the stated attenuations are somebody else's story. Atomic underneath; any thread. */
     void setInputTrims (bool on) { player.setInputTrims (on); }
+
+    /** THE PACK'S OWN TWO LEVELS, as it states them — `chain[].input_db` and `chain[].output_db`.
+        The player applies both itself, always, with no switch anywhere (setInputTrims above gates
+        the per-FILE alias trims and nothing else). They are readable here because both land where
+        no meter can stand — the input before the network, the output after the mix — so a face that
+        could not say them would be showing a level nobody can account for. Message thread. */
+    double packInputDb()  const { return player.stageInputDb(); }
+    double packOutputDb() const { return player.stageOutputDb(); }
+
+    /** WHAT THE MODEL IS ACTUALLY EATING, in dB from the block's own input.
+
+        The IN meter taps right after the block's trim and before `process` below, and the green zone
+        beside it describes the NETWORK's door — so between the two stands a stack of gains the meter
+        has to be told about, of which `packInputDb` above is only the first. In order from the tap:
+        the DRIVE of a device with no captured axis (applied in `process` below), the pack's
+        `chain[].input_db`, the pre-model tone, the chain's `extendDb` past the ends of the captured
+        range, and — under Pack Level Comp — the sounding capture's own `files[].input_db`, which on a
+        linked bottom rung is commonly 6 dB.
+
+        Every one of those is a plain gain except THE TONE, which is a filter: it has no decibel to
+        give, so it is not in this number, and the face says the number is a LEVEL rather than
+        pretending the spectrum is in it.
+
+        TWO MODELS CAN BE SOUNDING. When the pack feeds them at different trims there is no single
+        number true of both — `single` is false then and `otherDb` carries the second, so a face can
+        draw one mark each instead of an average, which would describe neither. The weight is the one
+        read back from the audio thread, so a slot the crossfade has left at zero does not count:
+        what is answered is what is being HEARD.
+
+        Message thread, like every read-out here. */
+    struct Feed
+    {
+        double db      = 0.0;    // the block's input → the model's input
+        double otherDb = 0.0;    // …and the second model's, when there are two; == db otherwise
+        bool   single  = true;   // false: two models, two levels, and no average between them
+    };
+
+    Feed modelFeed() const
+    {
+        if (! player.loaded())
+            return {};
+
+        const double base = (double) juce::Decibels::gainToDecibels (drive.load(), -120.0f)
+                          + player.stageInputDb()
+                          + player.selection().extendDb;
+
+        const auto&  p     = player.plan();
+        const bool   trims = player.inputTrims();
+        const double a     = base + (trims ? p.inputDb[0] : 0.0);
+        const double b     = base + (trims ? p.inputDb[1] : 0.0);
+
+        // ONE NUMBER WHENEVER ONE IS TRUE, and it usually is. Both slots holding a capture is NOT a
+        // crossfade: at either end of the dial the plan puts the same file in both, and a pack whose
+        // two captures state the same trim feeds them alike. What actually splits the answer is two
+        // DIFFERENT levels with both models audible. A thousandth of a decibel is not two levels:
+        // the player's own gain rounds anything under half of that away to unity.
+        if (std::abs (a - b) < 1.0e-3)
+            return { a, a, true };
+
+        // THE APPLIED WEIGHT, not the asked-for one: a switch or a selector moves the target in one
+        // jump while the law ramps across it, and a slot that is still loading is held at zero with
+        // the target already past it. Both rails are exact — the player itself steers by `<= 0`.
+        const double w = (double) player.liveMix();
+        if (w <= 0.0) return { a, a, true };
+        if (w >= 1.0) return { b, b, true };
+
+        return { a, b, false };
+    }
+
+    /** The loudness tag of the model sounding now, and whether it has one. Normalizing by it is a
+        contract — nothing here turns it off — so the case worth saying aloud is a model WITHOUT the
+        tag: it plays raw, some 8-10 dB away from every neighbour, and nothing else would report it.
+        Message thread. */
+    RigPlayer::SoundingLoudness loudness() const { return player.soundingLoudness(); }
 
     /** Whether the pack's own tone controls are out of the signal — see `params::blockEqMode`. Raw
         is what OURS means: our parametric is standing where the device's tone stack used to, and a

@@ -62,6 +62,15 @@ private:
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
 
+    /** The IN wall's two marks, from the player's own read-outs: what the MODEL is being fed, and
+        what enters the block. On this face's own tick, because the gains it adds up are recomputed
+        by the PROCESSOR's pump — a callback fired by the dial's own write would read the selection
+        from before the move. */
+    void refreshMeterOffsets();
+
+    Block::Feed lastFeed;           // the marks as the hint last put them into words…
+    bool        saidFeed = false;   // …and whether it has put them into any yet
+
     /** The tone slots alone back to the pack's defaults — the console's RESET, when the block
         wears the device's own knobs. */
     void resetToneSlotsToPackDefaults();

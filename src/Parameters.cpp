@@ -291,8 +291,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Choice> (juce::ParameterID { stereoMode, 1 }, "Stereo Mode",
                                           stereoModes, 0));
 
-    // ON ships as the packs' stated law; a library captured at one honest level switches it off
-    // and feeds every model exactly what the chain hands over.
+    // ON ships as the pack's stated law for its ALIASES; a library captured at one honest level
+    // switches it off and feeds every model exactly what the chain hands over. It bypasses
+    // `files[].input_db` and nothing else — the pack's own two levels are applied whatever this says.
     layout.add (std::make_unique<Bool> (juce::ParameterID { packLevelComp, 1 }, "Pack Level Comp",
                                         true));
 

@@ -7,8 +7,23 @@
 
 #include <felitronics/appkit/WebpImage.h>
 
+#include <cmath>
+
 namespace orbitamp
 {
+
+namespace
+{
+    /** A decibel written the way a DIFFERENCE has to be written: with its sign. "6 dB below" and
+        "6 dB" are not the same sentence, and the meters' hints are nothing but differences. A
+        number that rounds to nothing loses the sign with the rest of it — a direction printed on a
+        zero is a direction that is not there. */
+    juce::String signed1 (double db)
+    {
+        const double v = std::abs (db) < 0.05 ? 0.0 : db;
+        return (v > 0.0 ? "+" : "") + juce::String (v, 1);
+    }
+}
 
 /** The whole monitor, one picture: a kiosk component of its own with a fresh DeviceScope inside,
     black to the edges. A click anywhere or Escape hands the screen back. */
@@ -111,6 +126,10 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     gain.heat = true;
 
     // Both walls stand up: IN at the block's left, OUT at its right.
+    //
+    // What each wall's two marks MEAN is set with the pack (deviceChanged) and, on IN, kept current
+    // by this face's own tick (refreshMeterOffsets): the fill is the model's input, because the
+    // green zone describes that door and nothing else, and the line is what enters the block.
     inMeter.vertical  = true;
     outMeter.vertical = true;
 
@@ -339,8 +358,75 @@ void CapturedBlockPanel::applySpectrumResolution()
         theater->setSpectrumOrder (order);
 }
 
+/** THE IN WALL'S TWO MARKS, from the player's own read-outs.
+
+    The green zone describes the level at the MODEL'S DOOR, and between the meter's tap and that
+    door stands a whole stack of gains — the pack's stated input level, the chain's trim past the
+    ends of the captured range, the alias trim of the capture that is sounding, the drive of a
+    device that has no captured axis. The wall used to be told only the first of them, so on a
+    linked bottom rung the zone was being read against a number six decibels out.
+
+    ON THE FACE'S OWN TICK rather than on a parameter callback, and that is deliberate: `selection()`
+    and `plan()` are recomputed inside the PROCESSOR's pump, so a callback fired by the dial's own
+    write would read the selection from before the move and the mark would sit one dial position
+    behind the hand for as long as the hand stayed still. Thirty times a second buys a handful of
+    atomic loads and two struct fields read, and it is right whatever moved — the dial, the Pack
+    Level Comp switch, a selector, or a pack that has only just finished loading. */
+void CapturedBlockPanel::refreshMeterOffsets()
+{
+    const auto fed = block.modelFeed();
+
+    inMeter.fillOffsetDb  = (float) fed.db;
+    inMeter.ghostOffsetDb = fed.single ? 0.0f : (float) fed.otherDb;
+
+    // The WORDS, though, are rebuilt only when the numbers move — this runs for as long as the
+    // window is open.
+    if (saidFeed && fed.single == lastFeed.single
+        && std::abs (fed.db - lastFeed.db) < 0.05
+        && std::abs (fed.otherDb - lastFeed.otherDb) < 0.05)
+        return;
+
+    lastFeed = fed;
+    saidFeed = true;
+
+    // NO AVERAGE, EVER. Two models fed at two different levels are two numbers, and the one number
+    // between them would be true of neither — so the marks become one model each and the hint says
+    // which. The pre-model tone is missing from both on purpose: it is a filter, it has no decibel,
+    // and a level that quietly included a spectrum would be the same lie in a longer coat.
+    inMeter.offsetNote = ! fed.single
+        ? "Two models are sounding, fed " + signed1 (fed.db) + " and " + signed1 (fed.otherDb)
+          + " dB from what enters the block — the bar is one of them, the line the other. No single "
+            "number is true of both."
+        : std::abs (fed.db) < 0.05                       // …and the same nothing `signed1` prints
+            ? juce::String ("The bar is what the model eats, and nothing stands between it and what "
+                            "enters the block. Level only: whatever pre-model tone this "
+                            "pack has is a filter, and a filter has no decibel to add.")
+            : "The bar is what the model eats: " + signed1 (fed.db) + " dB from what enters the "
+              "block, which is the line. Level only: whatever pre-model tone this pack has is a "
+              "filter, and a filter has no decibel to add.";
+}
+
 void CapturedBlockPanel::deviceChanged()
 {
+    // A new pack, new levels — and the meters have to say them, because the player applies them
+    // where neither meter stands.
+    //
+    // THE OUT WALL IS ARITHMETIC AND NOTHING ELSE. Its tap is taken after the block's own console,
+    // and the pack's output level is applied before it — but a console is a LINEAR filter and a
+    // scalar walks straight through one, so peak(EQ(g·y)) is exactly g·peak(EQ(y)) and the line at
+    // `measured − output_db` is the block's output as it would be if the pack stated no output
+    // level. Which is what the line is CALLED now: the earlier wording named the stage's own output,
+    // a point in the signal the line does not describe, since the console stands in between.
+    outMeter.fillOffsetDb  = 0.0f;
+    outMeter.ghostOffsetDb = -(float) block.packOutputDb();
+    outMeter.offsetNote    = juce::approximatelyEqual (block.packOutputDb(), 0.0)
+        ? juce::String ("The bar is what leaves the block, this block's EQ and level included. "
+                        "This pack states no output level, so there is nothing else to show.")
+        : "The bar is what leaves the block, this block's EQ and level included. The line is the "
+          "same output without the pack's own output level (" + signed1 (block.packOutputDb()) + " dB).";
+
+    refreshMeterOffsets();
+
     for (auto& sc : scopes)
         sc->setSampleRate (amp.currentSampleRate());
 
@@ -953,6 +1039,12 @@ void CapturedBlockPanel::setCornerAlpha (float a)
 
 void CapturedBlockPanel::timerCallback()
 {
+    // What the model is being fed moves with the dial, with the Pack Level Comp switch, with a
+    // selector and with a pack that has only just landed — none of which is one event to hang a
+    // callback on, and the one that looks like it (the dial's own parameter) fires BEFORE the pump
+    // that recomputes the answer. So it is read here, every tick.
+    refreshMeterOffsets();
+
     // The theatre owns the whole screen and its own way out; while it runs the face beneath is not
     // being pointed at, whatever the coordinates say.
     const bool want = theater == nullptr && handIsOnThePicture();
@@ -1079,6 +1171,28 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
 
 void CapturedBlockPanel::paintContent (juce::Graphics& g)
 {
+    // THE MODEL'S LOUDNESS TAG, and the one case worth saying aloud. Every player normalizes by it —
+    // there is no switch here and there is not going to be one — so a model that carries NO tag plays
+    // at whatever level the hardware happened to give it, some 8-10 dB away from every neighbour, and
+    // nothing else on this face would report it. The number itself is indication; the missing one is
+    // a warning, and it is written in the hand's own colour so it cannot be mistaken for furniture.
+    if (block.isReady())
+    {
+        // …OF THE MODEL THAT IS SOUNDING. The player used to answer for slot 0 whatever was audible,
+        // and slots go by knot parity: on an odd capture the whole sound comes out of slot 1, so this
+        // line named a silent neighbour's tag — or called a tagged model untagged. Between two
+        // captures there are two tags in the sound and no single number is the answer, which is what
+        // the "of two" says rather than picking one and keeping quiet about it.
+        const auto tag = block.loudness();
+        auto line = contentArea().toFloat().removeFromBottom (11.0f);
+        g.setColour (tag.tagged ? theme::txFaint.withAlpha (0.55f) : theme::orange);
+        theme::drawTracked (g, tag.tagged ? juce::String (tag.db, 1) + (tag.blended ? " dB tagged, of two"
+                                                                                    : " dB tagged")
+                                          : juce::String (tag.blended ? "no loudness tag on the louder of two - plays raw"
+                                                                      : "no loudness tag - plays raw"),
+                            line, theme::displayFont (8.0f), 0.09f, juce::Justification::centredLeft);
+    }
+
     if (caption.isEmpty())
     {
         g.setColour (theme::txFaint.withAlpha (0.5f));
