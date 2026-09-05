@@ -5,6 +5,43 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-09-06 — a pack states how hard it is fed and how loud it leaves
+
+The case this release exists for: a boost was too hot for the preamp it fed, and the only thing to
+fix it with was the block's IN hand — which is a DRIVE control, so correcting a volume changed a
+tone. A pack now carries its own two levels and the player applies both, so balancing one device
+against the next costs nothing in character.
+
+### Added
+- **The pack's own levels** — `chain[].input_db` and `chain[].output_db` (namz schema 4), applied by
+  felitronics::rigplayer with no switch anywhere. Nothing in this plugin implements them: the pin
+  brought them, and what this release adds is the honesty around them.
+- **The IN wall shows both sides of that level.** The bar fills to what the network is actually
+  eating; a thin line marks what entered the block. Between the two stand the pack's `input_db`, the
+  chain trim past the ends of the captured range, the active slot's alias trim, and an uncaptured
+  device's drive — on a linked notch usually six decibels of daylight between the number drawn and
+  the number meant. At 0 the two marks coincide, which is the honest picture of a pack that states
+  no level. Between two DIFFERENT captures there is no single "network input" at all, and the panel
+  says so rather than averaging two into a number true of neither.
+- **The model's loudness tag, under every captured block** — the number when it carries one, and a
+  warning in the hand's own colour when it does not, because such a model plays raw, some 8–10 dB
+  from its neighbours, and nothing else on the face would report it.
+
+### Fixed
+- **The loudness tag named the wrong model.** It read slot 0 always, and slots go by knot parity: on
+  an odd capture the whole sound comes out of slot 1, so the face named a silent neighbour's tag —
+  or called a tagged model untagged. It now names what is sounding, and says "of two" mid-crossfade.
+- **A silent block could draw a level.** The meter tap is clamped at −90 in the audio thread and the
+  offset was added after that clamp, so a positive one lifted silence onto the scale and drew a
+  sliver of fill and a peak-hold line on a block that was not playing.
+- **Text that had become false.** `captureHotDb` said there was nothing in the pack to read about
+  level; `blockIn` implied the only loudness fix between blocks is a drive change; `Pack Level Comp`
+  claimed to be about the pack's level story when it bypasses the ALIAS trims and nothing else.
+
+### Changed
+- felitronics-core **v0.29.0**, namz **v4.1.0**. Normalizing by a model's loudness tag is on by
+  default in the player and there is no switch here — it is a contract, not a listener's option.
+
 ## [0.3.0] — 2026-09-03 — the papers, and the devices they name
 
 The plugin learns to say what it is: which build is running, what it was built against, whose
