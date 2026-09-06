@@ -117,10 +117,15 @@ AmpProcessor::AmpProcessor()
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // Switches ride in the tree by NAME, not by their place in the list — and they are already
-    // there: `pumpSwitchNames` writes the name when the switch MOVES, so a save has nothing to
-    // stamp and no reason to touch the live tree. (It used to stamp here, which edited the state
-    // behind the player and cost an undo step nobody had earned.)
+    // Switches and devices ride in the tree by NAME, and the names are written when they MOVE, so
+    // a save normally has nothing to do here. The one gap is the tick: a switch moved in the 33 ms
+    // before the pump next runs would be saved as a new NUMBER beside its old NAME, and the name
+    // wins on the way back — so the session would reopen one position behind. Closing that gap is
+    // this call, and it writes only what the move already earned. Guarded because a host may save
+    // from any thread and a ValueTree is the message thread's.
+    if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+        pumpSwitchNames();
+
 
     // The workspace envelope carries the live parameter tree and the other three registers, so
     // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
@@ -182,8 +187,22 @@ void AmpProcessor::rescanDevices()
 {
     // Each block asks for its own kind. A preamp offered as a pedal is not a wrong sound, it is a
     // wrong LIST — the block says what it is for, and the list has to agree with it.
-    boost.rescan (juce::roundToInt (apvts.getRawParameterValue (params::boostDevice)->load()));
-    preamp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::preampDevice)->load()));
+    // And the block STAYS on the device it is playing: a rescan happens when a pack has just been
+    // imported, an import re-sorts the list, and re-selecting by the old number is how a block ends
+    // up playing its new neighbour. The block answers where it now stands and the parameter follows
+    // it — quietly, because nothing about the sound changed and there is nothing to undo.
+    const auto follow = [this] (core::CapturedBlock& block, const char* id)
+    {
+        auto* p = apvts.getParameter (id);
+        const int was = juce::roundToInt (apvts.getRawParameterValue (id)->load());
+        const int now = block.rescan (was);
+
+        if (now >= 0 && now != was && p != nullptr)
+            p->setValueNotifyingHost (p->convertTo0to1 ((float) now));
+    };
+
+    follow (boost,  params::boostDevice);
+    follow (preamp, params::preampDevice);
 }
 
 const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
@@ -689,13 +708,27 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // IN: how hard the capture is fed. Metered immediately after, at the model's own door, so
         // the grip on the meter and the fill under it answer about one point.
         //
-        // It follows `on`, not `works`: while the fade is still running the block is still being
-        // heard, so its trim stays where the player put it. Only when the fade is over does the
-        // trim ramp to unity — and by then nothing of this path is in the sum, so the ramp is
-        // silent. A bypassed block has to be a wire, but it becomes one at the END of the fade.
-        const float inTarget = on ? juce::Decibels::decibelsToGain (inParam->load()) : 1.0f;
-        chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
-        lastInGain = inTarget;
+        // It applies only while the block is being HEARD — which includes the whole fade, so the
+        // trim stays where the player put it for as long as any of the model is in the sum. Once
+        // the fade is over the block is not run at all and this buffer IS the through-path: a
+        // trim on it would be a trim on the bypass, which is not what a bypass is.
+        //
+        // The `lastInGain` reset is the whole point and cost me a click to learn. Ramping to unity
+        // on the first fully-bypassed block ramps the DRY signal from the trim down to 1.0 — at
+        // +12 dB that is a four-times burst decaying over one block, which is exactly the kind of
+        // step this crossfade exists to remove. There is nothing to ramp: the previous block's
+        // trim was applied to what fed the model, and the blend has already weighed that away.
+        // So the gain simply IS unity here, with no ramp and no memory of the trim.
+        if (on)
+        {
+            const float inTarget = juce::Decibels::decibelsToGain (inParam->load());
+            chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
+            lastInGain = inTarget;
+        }
+        else
+        {
+            lastInGain = 1.0f;   // a bypassed block is a wire, and a wire has no trim to ramp from
+        }
 
         // A block that is not working meters nothing: two full passes over the buffer for a needle
         // nobody reads, and a needle still moving on a dark face is the exception this whole rework

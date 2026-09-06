@@ -63,11 +63,25 @@ public:
         lastTone.fill (-1.0f);
     }
 
-    /** Re-reads the folder and loads whatever `index` now points at. Message thread. */
-    void rescan (int index)
+    /** Re-reads the folder and STAYS ON THE DEVICE THAT IS PLAYING. Message thread.
+
+        It used to re-select by the index it was handed, which is the one thing an index cannot
+        survive: the list is sorted bundled-first and then along the gain ramp, so importing a pack
+        that sorts earlier moves everything after it down one — and a rescan happens exactly when
+        a pack has just been imported. The block would come back playing its neighbour.
+
+        Returns where the loaded device now stands, so the caller can put the parameter there; -1
+        when nothing is loaded or the device that was playing has gone from the folder, in which
+        case the index it was handed stands as before. */
+    int rescan (int index)
     {
+        const auto playing = loadedName;
         packs = device::DeviceLibrary::scan (slot);
-        select (index);
+
+        const int moved = playing.isNotEmpty() ? indexOfName (playing) : -1;
+
+        select (moved >= 0 ? moved : index);
+        return moved;
     }
 
     /** Loads the device at `index` — the HOST's handle on the choice, and only that.

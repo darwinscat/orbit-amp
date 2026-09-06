@@ -386,7 +386,11 @@ void Footer::showLoadBreakdown()
                 const bool working = stageWorking (i);
 
                 g.setColour (total ? theme::tx : working ? theme::txDim : theme::txFaint);
-                theme::drawTracked (g, params::stageNames[i].full, row.removeFromLeft (72).toFloat(),
+                // Wide enough for the longest name there is — PREAMP EQ, which at 13 px with this
+                // tracking is a shade under ninety. `drawTracked` does not clip, and the bar is
+                // painted after the label, so a column measured for the SECOND longest name reads
+                // as a bar that has eaten the end of a word.
+                theme::drawTracked (g, params::stageNames[i].full, row.removeFromLeft (96).toFloat(),
                                     theme::displayFont (13.0f), 0.08f, juce::Justification::centredLeft);
 
                 const float w = amp.stageWorst[i].load();

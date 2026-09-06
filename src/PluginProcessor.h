@@ -123,6 +123,23 @@ private:
 
     int switchAimFrames = 0;                      // ticks left to keep aiming after a state change
 
+    /** WHAT THE NAME PUMP LAST SAW. A name is written when the PARAMETER moves and at no other
+        moment, which is the whole of what keeps this out of the undo timeline: a pack finishing
+        its load, a rescan, a block coming back into the rig — none of them are edits, and none of
+        them may leave a mark the player then has to press Cmd-Z through. Writing on a move also
+        puts the name in the same settle burst as the move itself, so the two can never be
+        committed apart and can never disagree inside one undo step.
+
+        `namesPrimed` is the first tick, which only takes the baseline. */
+    bool  namesPrimed = false;
+    float lastDeviceValue[2] { -1.0f, -1.0f };
+    float lastSwitchValue[2][core::CapturedBlock::numMeasured] { };
+
+    /** What the aim itself last wrote, so a value that no longer reads it can be told from one
+        that does — which is how a hand on the control wins against an aim still in flight. */
+    float aimWroteDevice[2] { -1.0f, -1.0f };
+    float aimWroteSwitch[2][core::CapturedBlock::numMeasured] { };
+
     // MUST precede `updater`: the checker takes the store by reference and is destroyed before it.
     juce::SharedResourcePointer<prefs::UpdateStore> updateStore;
     felitronics::appkit::UpdateChecker updater;   // built in the ctor: it needs the store above
@@ -163,12 +180,23 @@ private:
         --switchAimFrames;
         bool waiting = false;
 
-        // THE DEVICE FIRST, and by name for the same reason. Its parameter is an index into a list
-        // sorted bundled-first and then along the gain ramp, so one pack dropped into the folder
-        // renumbers everything after it: every session and every preset that named a device by
-        // number now names a different one. The list itself is scanned on this thread and is
-        // therefore always here — unlike the models, which is why this half needs no waiting.
-        const auto aimDevice = [&] (core::CapturedBlock& block, const char* id)
+        // Everything this pass wants to change, decided before anything is written. Two reasons.
+        // A suppression scope flushes whatever burst is open when it starts, so opening one on a
+        // tick with nothing to write would chop a player's knob move into one undo step per tick
+        // for five seconds. And the writes have to go in TOGETHER, because they are one
+        // reconciliation, not twelve.
+        std::vector<std::pair<juce::RangedAudioParameter*, float>> writes;
+
+        // A HAND OUTRANKS THE AIM. If a parameter no longer reads what this aim last put there,
+        // somebody moved it — a player auditioning devices the moment a session opens, or host
+        // automation — and the aim stands down for that parameter rather than dragging it back
+        // five seconds later. The document promised this; the code did not do it.
+        const auto stolen = [] (const juce::RangedAudioParameter* p, float wrote)
+        {
+            return p != nullptr && wrote >= 0.0f && ! juce::approximatelyEqual (p->getValue(), wrote);
+        };
+
+        const auto aimDevice = [&] (core::CapturedBlock& block, size_t b, const char* id)
         {
             const juce::Identifier key (juce::String (id) + deviceAimSuffix);
 
@@ -180,42 +208,47 @@ private:
             if (want.isEmpty())
                 return;
 
+            auto* p = apvts.getParameter (id);
+
+            if (stolen (p, aimWroteDevice[b]))
+                return;
+
             const int index = block.indexOfName (want);
 
             if (index < 0)
             {
-                // This machine has no such device. Let the name go rather than keep aiming at
-                // something that is not here: the number stands, the block says whose voice is
-                // actually playing, and the next move writes an honest name.
-                apvts.state.removeProperty (key, nullptr);
+                // This machine has no such device — TODAY. The name STAYS: it is the identity the
+                // player chose, and a folder is a thing that gets filled in later. Deleting it
+                // here would mean that opening a project before installing its pack, or on a
+                // machine whose Devices folder is still empty, silently replaces the chosen device
+                // with the fallback for ever. The number stands, the block prints whose voice is
+                // actually playing, and the moment the pack arrives the name resolves on its own.
                 return;
             }
 
-            if (auto* p = apvts.getParameter (id); p != nullptr)
+            if (p != nullptr)
             {
                 const float v = p->convertTo0to1 ((float) index);
 
                 if (! juce::approximatelyEqual (p->getValue(), v))
                 {
-                    p->beginChangeGesture();
-                    p->setValueNotifyingHost (v);
-                    p->endChangeGesture();
+                    writes.emplace_back (p, v);
+                    aimWroteDevice[b] = v;
                 }
             }
 
-            // The aim is satisfied only when the block is actually PLAYING the named device, not
-            // when the number has been written. Setting the parameter is one tick; the pump that
-            // watches it and loads the pack is the next. Without this the window would close in
-            // between, and the half that writes names back would immediately record the device
-            // that was still loaded — overwriting the aim with what it was aiming away from.
+            // Satisfied only when the block is actually PLAYING the named device, not when the
+            // number has been written: setting the parameter is one tick and the pump that loads
+            // the pack is the next. A window that closed in between would let the half that
+            // writes names back record the device it was aiming away from.
             if (block.selectedName() != want)
                 waiting = true;
         };
 
-        aimDevice (boost,  params::boostDevice);
-        aimDevice (preamp, params::preampDevice);
+        aimDevice (boost,  0, params::boostDevice);
+        aimDevice (preamp, 1, params::preampDevice);
 
-        const auto aim = [&] (core::CapturedBlock& block, auto idFor)
+        const auto aim = [&] (core::CapturedBlock& block, size_t b, auto idFor)
         {
             for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
             {
@@ -230,110 +263,121 @@ private:
                 if (want.isEmpty())
                     continue;
 
+                auto* p = apvts.getParameter (id);
+
+                if (stolen (p, aimWroteSwitch[b][(size_t) i]))
+                    continue;
+
                 const float v = block.switchParameterFor (i, want);
 
                 if (v < 0.0f)
                 {
-                    if (! block.isReady())      // the pack is still on its way — ask again next tick
+                    // Still on its way: ask again next tick. Here and with no position by that
+                    // name — a pack updated since the session was saved — leave the name where it
+                    // is, for the same reason the device's stays: it is what the player chose, it
+                    // costs nothing to keep, and a pack put back the way it was resolves it again.
+                    // These never leak to another device: changing the device drops them.
+                    if (! block.isReady())
                         waiting = true;
-                    else                        // it is here and has no such position: let it go
-                        apvts.state.removeProperty (key, nullptr);
 
                     continue;
                 }
 
-                if (auto* p = apvts.getParameter (id); p != nullptr && ! juce::approximatelyEqual (p->getValue(), v))
+                if (p != nullptr && ! juce::approximatelyEqual (p->getValue(), v))
                 {
-                    p->beginChangeGesture();
-                    p->setValueNotifyingHost (v);
-                    p->endChangeGesture();
+                    writes.emplace_back (p, v);
+                    aimWroteSwitch[b][(size_t) i] = v;
                 }
             }
         };
 
-        aim (boost,  [] (int i) { return params::boostMeasured (i); });
-        aim (preamp, [] (int i) { return params::preampMeasured (i); });
+        aim (boost,  0, [] (int i) { return params::boostMeasured (i); });
+        aim (preamp, 1, [] (int i) { return params::preampMeasured (i); });
+
+        if (! writes.empty())
+        {
+            // NOT an edit, and not a gesture. Putting a number back where its name says it belongs
+            // is the plugin agreeing with the state it was handed — so it must not become an undo
+            // step the player has to press Cmd-Z through on a session they just opened, and it
+            // must not look to a host in automation Write mode like a hand on the control. The
+            // suppression scope absorbs the drift into the baseline and leaves the workspace
+            // marked dirty, which is honest: what is in memory no longer matches what is on disk.
+            const felitronics::appkit::CompareHistory::ScopedSuppress hush (history);
+
+            for (auto& [p, v] : writes)
+                p->setValueNotifyingHost (v);
+        }
 
         if (! waiting)
             switchAimFrames = 0;
     }
 
-    /** THE OTHER HALF: the name is written WHEN THE SWITCH MOVES, not when a project is saved.
-
-        It used to be stamped from `getStateInformation`, and that was wrong twice over. The tree it
-        stamped into is the LIVE one, so a host's save edited the state behind the player's back —
-        the settle timer saw a change nobody had made and committed an undo step for it, and the
-        next Cmd-Z moved a switch on the device. And saving a PRESET does not go through the host at
-        all: it copies the live tree, which by then had either no names in it or the ones left over
-        from the last project save. A preset made on this machine could open on another one holding
-        a position it never had.
-
-        Doing it here fixes both by having nothing to fix: the name is simply always in the tree, so
-        the preset, the session, the four registers and every undo step carry it for free, and the
-        write lands inside the same settle burst as the switch move that caused it — one edit, one
-        step.
-
-        Cheap enough to do on every tick: ten slots, ten string compares, and a write only when the
-        answer actually differs — which the history's contract requires, since a capture that is not
-        byte-stable for an unchanged state never settles at all.
-
-        Two silences, both deliberate. While an aim is in flight the tree already holds the wanted
-        names and the pack may not be here yet — stamping then would overwrite an aim with whatever
-        the fraction happens to point at today. And a block whose pack has not loaded knows no
-        names: it is not that the slot has none, it is that nobody can say yet. */
     void pumpSwitchNames()
     {
-        if (switchAimFrames > 0)
-            return;
+        // While an aim is in flight the STORED names are the truth and the parameters are being
+        // moved to match them: read the values as the new baseline and write nothing at all.
+        const bool quiet = switchAimFrames > 0 || ! namesPrimed;
 
-        const auto noteDevice = [this] (core::CapturedBlock& block, const char* id)
+        const auto note = [&] (core::CapturedBlock& block, size_t b, const char* devId, auto idFor)
         {
-            const juce::Identifier key (juce::String (id) + deviceAimSuffix);
-            const auto name = block.selectedName();
+            const float dv = apvts.getRawParameterValue (devId)->load();
+            const bool deviceMoved = ! quiet && ! juce::approximatelyEqual (dv, lastDeviceValue[b]);
+            lastDeviceValue[b] = dv;
 
-            if (name.isEmpty())
+            if (deviceMoved)
             {
-                if (apvts.state.hasProperty (key))     // nothing loaded owns no name
+                const juce::Identifier key (juce::String (devId) + deviceAimSuffix);
+
+                if (const auto name = block.selectedName(); name.isNotEmpty())
+                    apvts.state.setProperty (key, name, nullptr);
+                else
                     apvts.state.removeProperty (key, nullptr);
-            }
-            else if (apvts.state.getProperty (key).toString() != name)
-            {
-                apvts.state.setProperty (key, name, nullptr);
-            }
-        };
 
-        noteDevice (boost,  params::boostDevice);
-        noteDevice (preamp, params::preampDevice);
-
-        const auto note = [this] (core::CapturedBlock& block, auto idFor)
-        {
-            if (! block.isReady())
-                return;
+                // A position name is only ever about the device it was read from, so the device
+                // leaving takes all of them with it. This is what keeps a name from resolving on
+                // some later pack that happens to have a position spelled the same way.
+                for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
+                    apvts.state.removeProperty (juce::Identifier (idFor (i) + switchAimSuffix), nullptr);
+            }
 
             for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
             {
-                const auto id = idFor (i);
-                const juce::Identifier key (id + switchAimSuffix);
-                const auto name = block.switchValueAt (i, apvts.getRawParameterValue (id)->load());
+                const auto  id = idFor (i);
+                const float v  = apvts.getRawParameterValue (id)->load();
+                const bool moved = ! quiet && ! deviceMoved
+                                     && ! juce::approximatelyEqual (v, lastSwitchValue[b][(size_t) i]);
+                lastSwitchValue[b][(size_t) i] = v;
 
-                if (name.isEmpty())
-                {
-                    if (apvts.state.hasProperty (key))      // a swept knob owns no name
-                        apvts.state.removeProperty (key, nullptr);
-                }
-                else if (apvts.state.getProperty (key).toString() != name)
-                {
+                if (! moved)
+                    continue;
+
+                const juce::Identifier key (id + switchAimSuffix);
+
+                if (const auto name = block.switchValueAt (i, v); name.isNotEmpty())
                     apvts.state.setProperty (key, name, nullptr);
-                }
+                else
+                    apvts.state.removeProperty (key, nullptr);   // a swept knob owns no name
             }
         };
 
-        note (boost,  [] (int i) { return params::boostMeasured (i); });
-        note (preamp, [] (int i) { return params::preampMeasured (i); });
+        note (boost,  0, params::boostDevice,  [] (int i) { return params::boostMeasured (i); });
+        note (preamp, 1, params::preampDevice, [] (int i) { return params::preampMeasured (i); });
+
+        namesPrimed = true;
     }
 
     /** The state changed under us — a session opened, a register recalled: aim the switches again. */
-    void markSwitchAimsPending() noexcept { switchAimFrames = aimWindowFrames; }
+    void markSwitchAimsPending() noexcept
+    {
+        switchAimFrames = aimWindowFrames;
+
+        // Nothing has been written by THIS aim yet, so nothing can have been taken from under it.
+        aimWroteDevice[0] = aimWroteDevice[1] = -1.0f;
+
+        for (auto& block : aimWroteSwitch)
+            for (auto& v : block)
+                v = -1.0f;
+    }
 
     /** Listens only while someone is watching: with no editor there is no needle, and an MPM pass
         thirty times a second for nobody is the definition of waste. */

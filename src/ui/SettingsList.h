@@ -142,17 +142,29 @@ private:
         stale in exactly half its rows. */
     void timerCallback() override
     {
-        if (! isShowing())
-            return;
+        // The cache is kept current even while the page is hidden, and only the REPAINT waits for
+        // it to be on screen. Stopping the read as well would let a switch move twice behind the
+        // page's back and come out looking unchanged — cache false, value flips true, the page is
+        // shown and paints true, the value flips back to false, and the first tick then finds
+        // false where it remembers false and asks for nothing while a lit row sits there.
+        const bool visible = isShowing();
 
+        // `rows.size()` is re-read every step and `shown` is bounds-checked, because a getter is
+        // somebody else's lambda: nothing here may assume the list it started walking is the list
+        // it is still walking.
         for (size_t i = 0; i < rows.size(); ++i)
         {
             const char now = (char) (rows[i].get != nullptr && rows[i].get());
 
+            if (i >= shown.size())
+                break;
+
             if (now != shown[i])
             {
                 shown[i] = now;
-                repaint (getLocalBounds().withY ((int) i * rowH).withHeight (rowH));
+
+                if (visible)
+                    repaint (getLocalBounds().withY ((int) i * rowH).withHeight (rowH));
             }
         }
     }
