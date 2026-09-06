@@ -252,8 +252,9 @@ private:
                 // for the switches, whose stored positions belong to the device that just left,
                 // which is why this drops them and writes the new pack's instead. That also
                 // leaves the switch half below nothing of the old device's to aim.
-                noteBlockNames (b, true);
-                aimWroteDevice[b] = p->getValue();
+                if (noteBlockNames (b, true))
+                    aimWroteDevice[b] = p->getValue();   // else the next tick sees the theft again
+
                 return;
             }
 
@@ -395,10 +396,17 @@ private:
         back from the new pack in the same pass — `RigPlayer` reads its manifest synchronously, so
         they are knowable at once, and a device that arrives with no names is a device saved by
         number until every one of its switches has been touched. */
-    void noteBlockNames (size_t b, bool dropPositions)
+    bool noteBlockNames (size_t b, bool dropPositions)
     {
         auto& block = blockAt (b);
         const auto* devId = deviceIdOf (b);
+
+        // WHAT IS LOADED HAS TO BE AN ANSWER ABOUT THIS NUMBER. The device parameter can move from
+        // the audio thread between the pass that loads it and this one, and naming the block in
+        // between writes the leaving device's name beside the arriving device's number — a
+        // disagreement nothing afterwards would notice. The caller asks again next tick.
+        if (juce::roundToInt (apvts.getRawParameterValue (devId)->load()) != block.selectedIndex())
+            return false;
 
         const juce::Identifier devKey (juce::String (devId) + deviceAimSuffix);
 
@@ -425,6 +433,8 @@ private:
 
             lastSwitchValue[b][(size_t) i] = v;
         }
+
+        return true;
     }
 
     /** One switch slot, when that slot alone is what moved. */
@@ -454,8 +464,10 @@ private:
 
             if (! quiet && ! juce::approximatelyEqual (dv, lastDeviceValue[b]))
             {
+                // The baseline is only taken when the write actually happened; otherwise the next
+                // tick asks again, by which time the pack has been selected.
                 noteBlockNames (b, true);
-                continue;                     // the pass above took every baseline in this block
+                continue;
             }
 
             lastDeviceValue[b] = dv;
@@ -486,7 +498,7 @@ private:
     void seedSwitchNames()
     {
         for (size_t b = 0; b < numCaptured; ++b)
-            noteBlockNames (b, false);
+            noteBlockNames (b, false);   // the ctor has just selected: number and pack agree
 
         // The seed took every baseline, so the pump is primed: a device or switch moved between
         // construction and the first tick is a real move and has to be written, not swallowed as

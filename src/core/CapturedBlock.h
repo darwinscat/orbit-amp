@@ -144,6 +144,12 @@ public:
         say so. Empty when nothing is loaded. */
     juce::String selectedName() const { return loadedName; }
 
+    /** WHICH INDEX THE LOADED PACK CAME FROM — so a caller can tell whether the name above is an
+        answer about the number it is holding, or about the one before it. The device parameter can
+        move from the audio thread between two message-thread passes; naming the block then would
+        write the leaving device's name beside the arriving device's number. */
+    int selectedIndex() const noexcept { return lastSelected; }
+
     /** Where a NAMED device stands in the list as it is right now, or -1 when this machine has
         nothing by that name. Message thread — the list is rescanned there. */
     int indexOfName (const juce::String& name) const

@@ -253,7 +253,7 @@ void AmpProcessor::rescanDevices()
 
         for (size_t b = 0; b < numCaptured; ++b)
             if (nameFirstDevice[b])
-                noteBlockNames (b, false);
+                noteBlockNames (b, false);   // the rescan has just selected: they agree
     }
 
     // A NAME THAT CAN BE HONOURED NOW. A session opened before its pack was installed keeps the
