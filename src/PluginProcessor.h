@@ -88,7 +88,7 @@ public:
     /** Which wrapper is actually running — VST3 / AU / CLAP / Standalone — the badge's second line. */
     juce::String pluginFormat() const { return juce::AudioProcessor::getWrapperTypeDescription (wrapperType); }
 
-    /** The editor's zoom, 50-200%. It lives here rather than in the editor so it survives closing
+    /** The editor's zoom, 50-400%. It lives here rather than in the editor so it survives closing
         and reopening the window; it is message-thread only and never read by the audio path.
         Persisting it across sessions comes with the state work. */
     float getEditorScale() const noexcept { return editorScale; }

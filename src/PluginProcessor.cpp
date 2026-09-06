@@ -576,8 +576,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // duplicated input was paying twice for the same answer. The whole chain works channel 0;
     // the copy to the other channels happens once, after the limiter. STEREO (the double-track
     // option) restores true per-channel processing. STEREO SPACE splits the chain in two: mono
-    // up to the reverb — `nch` — and stereo from the reverb on — `nchBack` — with the one copy
-    // made at the seam, so the space is wide and the amp is paid for once.
+    // up to the delay — `nch` — and stereo from the delay on — `nchBack` — with the one copy
+    // made at the seam, so the space is wide and the amp is paid for once. The seam stands BEFORE
+    // the delay, not before the reverb: the delay's OFFSET is a stereo of its own, and a spread
+    // the room then works on is wider than a spread the room has to make alone.
     const auto mode = static_cast<params::StereoMode> (
         juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
     const int nch     = mode == params::StereoMode::stereo ? numChannels : juce::jmin (1, numChannels);
@@ -624,9 +626,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // A captured block, whole: the capture, then its own EQ, then its own volume.
     //
     // The EQ sits AFTER the nonlinearity because that is what it is for here — colouring what the
-    // device made, not deciding what the device eats. The boost's lands in front of the preamp and
-    // the preamp's in front of the power amp, which is where a real amplifier keeps its tone stack,
-    // so nothing in the chain is left unfed.
+    // device made, not deciding what the device eats. The boost's lands in front of the preamp,
+    // which is where a real amplifier keeps its tone stack; the preamp's stands after the last
+    // nonlinearity, colouring what the amp made before the room and the speaker have it.
     //
     // It also goes dark with the block. The EQ is part of the block now, not a link that happens to
     // be drawn inside one, and a switch that leaves half of what it names still cutting is a switch

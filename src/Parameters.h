@@ -114,7 +114,7 @@ inline juce::String blockSmooth   (const char* blk) { return juce::String (blk) 
     The price, and it is the hardware's rather than ours: on a captured device this is a DRIVE
     control, so every loudness fix made HERE is also a tone change. Between a real pedal and a real
     amp there is exactly one knob and turning it up is both louder and dirtier. The last block's
-    output is caught by the master volume, and what the power amp is fed by its own DRIVE.
+    output is caught by the master volume, and what the next block is fed by its own DRIVE.
 
     …which is why the loudness fix stopped living here. A pack now states its own output level
     (`chain[].output_db`, namz schema 4) and the player applies it after everything: that is the
@@ -173,9 +173,10 @@ inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String
     preamp's. Each sits after its block's nonlinearity, which is what makes it a colour control
     rather than a distortion-character one, and each goes dark with its block's switch.
 
-    Their places in the chain are not arbitrary: the boost's lands in front of the preamp and the
-    preamp's in front of the power amp, which is where a real amplifier keeps its tone stack. So
-    there is no PRE/POST switch — every nonlinearity downstream is already being fed by one.
+    Their places in the chain are not arbitrary: the boost's lands in front of the preamp, which
+    is where a real amplifier keeps its tone stack, so there is no PRE/POST switch — the
+    nonlinearity downstream is already being fed by one. The preamp's stands after the last
+    nonlinearity in the chain, shaping what the amp MADE before the room and the speaker have it.
 
     THERE IS NO ENABLE. The block's switch is the EQ's switch, and a flat link is bit-transparent
     anyway — `core::EqLink` skips a band sitting at exactly 0 dB — so "off" and "flat" were the same
@@ -256,9 +257,9 @@ inline constexpr float cabTrimMin  = 0.001f;   // the ms floor lives in the pict
 /** How many channels the chain works, and from where. MONO: one signal end to end, the copy to the
     other channel after everything — the truth of a guitar chain, and one neural pass. STEREO: two
     takes on one bus, each through its own amp, everything twice. STEREO SPACE: mono where the
-    sound is made — boost, preamp, their consoles, one neural pass — and stereo from the reverb on,
-    where the space is: the reverb spreads one signal into two, and the power amp, the cabinet and
-    the limiter follow it in stereo. */
+    sound is made — boost, preamp, their consoles, one neural pass — and stereo from the delay on,
+    where the space is: the delay's OFFSET spreads one signal into two, the reverb rooms what it
+    made, and the cabinet, the master and the limiter follow in stereo. */
 /** A BYPASS FOR THE ALIAS TRIMS, and for nothing else. `files[].input_db` is what a pack says about
     ONE borrowed setting — the bottom notches of a gain dial, where a linked capture is played softer
     than the model it borrows — and for a library captured at one honest level those trims only push
@@ -347,8 +348,9 @@ inline constexpr const char* reverbMix      = "reverb_mix";
 
 /** The tail's late refinements. DECAY scales the character's own breath (×0.5..×2 — the character
     stays the voice); PREDELAY holds the tail back so the attack stays dry (0..100 ms); the HPF
-    cleans the WET only and is ALWAYS in — this reverb feeds a power amp, and a low tail into
-    drive is mud. At its 40 Hz floor it is as good as air; there is nothing to switch. */
+    cleans the WET only and is ALWAYS in — a low tail muddies everything downstream of it and
+    nothing downstream takes it back out. At its 40 Hz floor it is as good as air; there is
+    nothing to switch. */
 inline constexpr const char* reverbDecay    = "reverb_decay";
 inline constexpr const char* reverbPredelay = "reverb_predelay";
 inline constexpr const char* reverbHpfHz    = "reverb_hpf_hz";
