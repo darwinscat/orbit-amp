@@ -89,11 +89,6 @@ AmpProcessor::AmpProcessor()
         rowPresent[(size_t) i] = link.presentParam != nullptr ? apvts.getRawParameterValue (link.presentParam) : nullptr;
     }
 
-    inOnParam       = apvts.getRawParameterValue (params::inOn);
-    inPresentParam  = apvts.getRawParameterValue (params::inPresent);
-    outOnParam      = apvts.getRawParameterValue (params::outOn);
-    outPresentParam = apvts.getRawParameterValue (params::outPresent);
-
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
     gateDecayParam     = apvts.getRawParameterValue (params::gateDecay);
@@ -542,7 +537,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // the last gain applied to the previous block and none to this one, which is a step in the
     // waveform, which is a click. The same shape the captured blocks' trims already use.
     {
-        const float target = endWorks (inOnParam, inPresentParam)
+        const float target = linkWorks (params::rowIn)
                                  ? juce::Decibels::decibelsToGain (inTrimParam->load()) : 1.0f;
         buffer.applyGainRamp (0, buffer.getNumSamples(), lastTrimGain, target);
         lastTrimGain = target;
@@ -811,7 +806,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The output trim closes the chain — the master's hand on the way out, ramped per block
     // against zipper noise — and the OUT rail reads the result, clip cap latched past 0 dBFS.
     {
-        const float target = endWorks (outOnParam, outPresentParam)
+        const float target = linkWorks (params::rowOut)
                                  ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
         buffer.applyGainRamp (0, numSamples, lastOutGain, target);
         lastOutGain = target;

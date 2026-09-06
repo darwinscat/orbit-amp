@@ -446,8 +446,8 @@ inline constexpr StageName stageNames[numStages] = {
 /** A link's place in the chain — by NAME, not by arithmetic. The order is the chain's order and
     doubles as the index into `chainLinks`; naming the places is what lets one stand down without
     every row after it sliding under somebody's `i - first` sum. */
-enum ChainRow { rowTuner, rowGate, rowBoost, rowPreamp, rowDelay, rowReverb, rowCab, rowLimit,
-                numChainRows };
+enum ChainRow { rowIn, rowTuner, rowGate, rowBoost, rowPreamp, rowDelay, rowReverb, rowCab,
+                rowLimit, rowOut, numChainRows };
 
 /** One link of the chain. */
 struct ChainLink
@@ -462,6 +462,7 @@ struct ChainLink
 };
 
 inline constexpr ChainLink chainLinks[numChainRows] = {
+    /* IN     */ { "IN",     false, true,  inOn,      inPresent,     numStages, numStages },
     /* TUNER  */ { "TUNER",  false, true,  tunerOn,   tunerPresent,  stTuner,  numStages },
     /* GATE   */ { "GATE",   false, false, gateOn,    gatePresent,   stGate,   numStages },
     /* BOOST  */ { "BOOST",  true,  true,  boostOn,   boostPresent,  stBoost,  stEq1     },
@@ -470,13 +471,8 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* REVERB */ { "REVERB", false, true,  reverbOn,  reverbPresent, stReverb, numStages },
     /* CAB IR */ { "CAB IR", true,  true,  cabOn,     cabPresent,    stCab,    numStages },
     /* LIMIT  */ { "LIMIT",  false, false, limiterOn, limitPresent,  stLimit,  numStages },
+    /* OUT    */ { "OUT",    false, true,  outOn,     outPresent,    stOut,    numStages },
 };
-
-/** The two ends, not yet rows: the strip still draws them as end caps and the columns still take
-    their visibility from a machine preference. Their switches exist from here on so that the step
-    which turns the caps into arrows only has to move pixels. */
-inline constexpr ChainLink inLink  { "IN",  false, true, inOn,  inPresent,  numStages, numStages };
-inline constexpr ChainLink outLink { "OUT", false, true, outOn, outPresent, stOut,     numStages };
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 

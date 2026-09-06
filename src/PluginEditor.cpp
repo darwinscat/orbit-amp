@@ -104,8 +104,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     };
 
     // The layout strip: always there, the ONE place anything is stood down and brought back —
-    // the whole path as arrows, the service links wearing their own lights.
-    tunerShown = prefs::getBool (prefs::showTuner, true);
+    // the whole path as arrows, the two ends among them.
 
     {
         // Straight off the one list. The initial `on` is a placeholder for everyone the
@@ -119,7 +118,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
             LayoutStrip::Row row { link.name,
                                    link.captured ? theme::orange : theme::violet,
-                                   i == params::rowTuner ? tunerShown : true };
+                                   i == params::rowTuner ? tunerStands : true };
 
             // A link with no face on the panel has nothing for a click to reveal, so its click
             // opens its menu instead — the law is READ off the list rather than written out for
@@ -153,13 +152,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     layoutStrip->onToggle = [this] (int i, bool on)
     {
-        if (i == params::rowTuner)
-        {
-            applyTunerToggle (on);
-            layoutStrip->setRowOn (i, on);
-            return;
-        }
-
         // THE switch: the arrow writes the link's own parameter, so the save, the history, and
         // the registers all carry the click — the panel follows through the echo below.
         if (const char* id = params::chainLinks[(size_t) i].onParam)
@@ -178,29 +170,21 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // attachments written out by hand.
     for (int i = 0; i < params::numChainRows; ++i)
     {
-        const char* id = params::chainLinks[(size_t) i].onParam;
+        const auto& link = params::chainLinks[(size_t) i];
 
-        if (id == nullptr)
-            continue;
+        if (link.onParam != nullptr)
+            blockRowAtts.push_back (std::make_unique<juce::ParameterAttachment> (
+                *amp.apvts.getParameter (link.onParam),
+                [this, i] (float v) { layoutStrip->setRowOn (i, v > 0.5f); applyRowStates(); }));
 
-        const auto block = faceplateBlockFor (i);
-
-        blockRowAtts.push_back (std::make_unique<juce::ParameterAttachment> (
-            *amp.apvts.getParameter (id),
-            [this, i, block] (float v)
-            {
-                const bool on = v > 0.5f;
-                layoutStrip->setRowOn (i, on);
-
-                if (! block.has_value())
-                    return;   // a guard has no tile to stand down, and moves no window
-
-                faceplate.setShown (*block, on);
-                applyStripChoice();   // an emptied or refilled row moves the window with it
-            }));
-
-        blockRowAtts.back()->sendInitialUpdate();
+        if (link.presentParam != nullptr)
+            blockRowAtts.push_back (std::make_unique<juce::ParameterAttachment> (
+                *amp.apvts.getParameter (link.presentParam),
+                [this, i] (float v) { layoutStrip->setRowPresent (i, v > 0.5f); applyRowStates(); }));
     }
+
+    for (auto& att : blockRowAtts)
+        att->sendInitialUpdate();
 
     // The guards' arrows ARE their consoles: any click opens the menu (OFF is its first item),
     // and the look clears the latched dot, the way a look at the badge used to.
@@ -217,22 +201,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
             showLimiterMenu (pos, false);
         }
     };
-
-    // The end caps: the side columns, live with the real levels the rails read.
-    inColShown  = prefs::getBool (prefs::showInCol, true);
-    outColShown = prefs::getBool (prefs::showOutCol, true);
-    layoutStrip->setCapOn (0, inColShown);
-    layoutStrip->setCapOn (1, outColShown);
-    layoutStrip->onCapToggle = [this] (int side, bool on) { applyColumnToggle (side, on); };
-
-    // The rails' own scale (their floor is -80): the caps wear the same gradient, so they must
-    // stand on the same ruler or the green lands in the wrong place.
-    const auto levelOf = [] (const std::atomic<float>& db)
-    {
-        return juce::jlimit (0.0f, 1.0f, (db.load (std::memory_order_relaxed) + 80.0f) / 80.0f);
-    };
-    layoutStrip->capLevel[0] = [this, levelOf] { return levelOf (amp.gateKeyDb); };
-    layoutStrip->capLevel[1] = [this, levelOf] { return levelOf (amp.outDb); };
 
     addAndMakeVisible (*layoutStrip);
 
@@ -337,6 +305,34 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     amp.updateChecker().checkIfDue();
 }
 
+/** What the two switches of every row mean to the WINDOW, read in one place after any of them
+    moves. A tile, a column and the tuner's row are all "stands on the panel or does not", and the
+    answer is the same sentence for all three: in the rig, and either on or dimmed rather than
+    removed. */
+void AmpEditor::applyRowStates()
+{
+    const auto stands = [this] (params::ChainRow row)
+    {
+        const auto* in = amp.apvts.getParameter (params::chainLinks[(size_t) row].presentParam);
+        const auto* on = amp.apvts.getParameter (params::chainLinks[(size_t) row].onParam);
+
+        if (in != nullptr && in->getValue() <= 0.5f)
+            return false;                               // out of the rig: gone, whatever the eye prefers
+
+        return on == nullptr || on->getValue() > 0.5f || dimRatherThanRemove;
+    };
+
+    for (int i = 0; i < params::numChainRows; ++i)
+        if (const auto block = faceplateBlockFor (i))
+            faceplate.setShown (*block, stands ((params::ChainRow) i));
+
+    inColStands  = stands (params::rowIn);
+    outColStands = stands (params::rowOut);
+    tunerStands  = stands (params::rowTuner);
+
+    applyStripChoice();   // an emptied row, a column, the tuner's row — the window follows them all
+}
+
 void AmpEditor::showGearMenu (juce::Point<int> screenPos)
 {
     juce::PopupMenu m;
@@ -419,37 +415,6 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                          prefs::setBool (r == 2 ? prefs::showDemo : prefs::showGlyphs, flag);
                          safe->applyStripChoice();
                      });
-}
-
-void AmpEditor::applyColumnToggle (int side, bool on)
-{
-    prefs::setBool (side == 0 ? prefs::showInCol : prefs::showOutCol, on);
-    (side == 0 ? inColShown : outColShown) = on;
-
-    // The gate and the limiter keep working as set — a safety that dies with its meter is no
-    // safety. Only the column's TRIM returns to unity: a hand nobody can see must not keep
-    // pressing on the signal.
-    if (! on)
-        if (auto* p = amp.apvts.getParameter (side == 0 ? params::inTrim : params::outTrim))
-        {
-            p->beginChangeGesture();
-            p->setValueNotifyingHost (p->convertTo0to1 (0.0f));
-            p->endChangeGesture();
-        }
-
-    layoutStrip->setCapOn (side, on);
-    resized();
-    repaint();
-}
-
-void AmpEditor::applyTunerToggle (bool on)
-{
-    prefs::setBool (prefs::showTuner, on);
-    tunerShown = on;
-
-    applyStripChoice();
-    resized();
-    repaint();
 }
 
 void AmpEditor::applyStripChoice()
@@ -585,11 +550,11 @@ void AmpEditor::resized()
     // width to the faceplate — all but the edge inset the badges keep, so the outermost block
     // never presses against the window's own edge.
     const int edgeInset = 12;
-    const int colL = inColShown  ? GateStrip::designWidth + chromeGap : edgeInset;
-    const int colR = outColShown ? OutStrip::designWidth  + chromeGap : edgeInset;
+    const int colL = inColStands  ? GateStrip::designWidth + chromeGap : edgeInset;
+    const int colR = outColStands ? OutStrip::designWidth  + chromeGap : edgeInset;
 
-    gateStrip.setVisible (inColShown);
-    outStrip.setVisible (outColShown);
+    gateStrip.setVisible (inColStands);
+    outStrip.setVisible (outColStands);
 
     gateStrip.setBounds (margin, gutterY, GateStrip::designWidth, gutterH);
     gateStrip.setTransform (zoom);
@@ -611,7 +576,7 @@ void AmpEditor::resized()
     const int tunerY = faceplateY + faceplateH + chromeGap + tunerDrop;
 
     // The row is the tuner, whole: the guards' lights and menus live in the strip's arrows now.
-    tunerStrip.setVisible (tunerShown);
+    tunerStrip.setVisible (tunerStands);
     tunerStrip.setBounds (margin + badgeInset, tunerY,
                           FaceplateView::designWidth - 2 * badgeInset,
                           TunerStrip::designHeight);
@@ -632,7 +597,7 @@ void AmpEditor::resized()
     learnOverlay.setTransform (zoom);
 
     // The row is as gone as the tuner: hidden, the footer moves up whole.
-    const int footerY = tunerShown
+    const int footerY = tunerStands
                             ? tunerY - tunerDrop + TunerStrip::designHeight + chromeGap
                             : faceplateY + faceplateH + chromeGap;
     footer.setBounds (margin, footerY, FaceplateView::designWidth, Footer::designHeight);
