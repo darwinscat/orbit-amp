@@ -34,10 +34,17 @@ public:
 
     static constexpr int designHeight = 22;
 
-    /** The OTHER door to the version window: the gear's ABOUT opens it centred over the editor,
-        where a page that carries a legal notice belongs, while a click on the stamp opens the same
-        content as a call-out pointing at the words that opened it. One panel, two ways in. */
+    /** The version window — the build stamp, the licence, the short trademark notice and the tip
+        jar — opened by a click on the stamp itself. It used to have a second door in the gear's
+        menu, and the menu is a window now; nothing was lost, because the door that remains is the
+        one that was always right: the words the page is ABOUT. */
     void showAbout() { versionBadge.showAbout(); }
+
+    /** DEVICES & TRADEMARKS was reached from the gear's menu, and the gear is a window now. Its
+        door belongs down here anyway: the page is a LIST of what is installed on this machine,
+        which is a fact about the run, like the sample rate and the load beside it — and it ends
+        up next to the build stamp, the other page that is only ever read. */
+    std::function<void()> onDevices;
 
 private:
     void timerCallback() override;
@@ -47,6 +54,7 @@ private:
     static constexpr int stereoWidth = 124;   // room for the longest of the three modes, STEREO SPACE
     static constexpr int gap       = 10;
     static constexpr int stampWidth = 170;    // the version + format line at the far right
+    static constexpr int devicesWidth = 84;   // the DEVICES door, just left of the stamp
 
     AmpProcessor& amp;
 
@@ -68,6 +76,7 @@ private:
     };
 
     ClickTarget loadBadge;
+    ClickTarget devicesBadge;
     ClickTarget stampBadge;
 
     /** appkit's version badge, kept INVISIBLE and only for its window — the whole build stamp, the

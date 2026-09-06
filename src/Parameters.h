@@ -417,6 +417,9 @@ inline constexpr const char* outOn         = "out_on";
 // link states about ITSELF — whether it is a captured device, whether it has a face at all, which
 // switch it answers to, what it costs — belongs with the parameters, not with the paint.
 
+/** Which link a cost entry belongs to, or `numChainRows` for one that belongs to nobody (TOTAL,
+    and any stage no link has claimed). Declared after the table below — see `rowForStage`. */
+
 /** The DSP cost entries, in the order the chain runs them: a captured block is followed by its own
     console. Here rather than in the processor so a link can name its stage and the footer can
     label one, without either of them having to know about the other. */
@@ -446,8 +449,8 @@ inline constexpr StageName stageNames[numStages] = {
 /** A link's place in the chain — by NAME, not by arithmetic. The order is the chain's order and
     doubles as the index into `chainLinks`; naming the places is what lets one stand down without
     every row after it sliding under somebody's `i - first` sum. */
-enum ChainRow { rowTuner, rowGate, rowBoost, rowPreamp, rowDelay, rowReverb, rowCab, rowLimit,
-                numChainRows };
+enum ChainRow { rowIn, rowTuner, rowGate, rowBoost, rowPreamp, rowDelay, rowReverb, rowCab,
+                rowLimit, rowOut, numChainRows };
 
 /** One link of the chain. */
 struct ChainLink
@@ -462,6 +465,7 @@ struct ChainLink
 };
 
 inline constexpr ChainLink chainLinks[numChainRows] = {
+    /* IN     */ { "IN",     false, true,  inOn,      inPresent,     numStages, numStages },
     /* TUNER  */ { "TUNER",  false, true,  tunerOn,   tunerPresent,  stTuner,  numStages },
     /* GATE   */ { "GATE",   false, false, gateOn,    gatePresent,   stGate,   numStages },
     /* BOOST  */ { "BOOST",  true,  true,  boostOn,   boostPresent,  stBoost,  stEq1     },
@@ -470,13 +474,20 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* REVERB */ { "REVERB", false, true,  reverbOn,  reverbPresent, stReverb, numStages },
     /* CAB IR */ { "CAB IR", true,  true,  cabOn,     cabPresent,    stCab,    numStages },
     /* LIMIT  */ { "LIMIT",  false, false, limiterOn, limitPresent,  stLimit,  numStages },
+    /* OUT    */ { "OUT",    false, true,  outOn,     outPresent,    stOut,    numStages },
 };
 
-/** The two ends, not yet rows: the strip still draws them as end caps and the columns still take
-    their visibility from a machine preference. Their switches exist from here on so that the step
-    which turns the caps into arrows only has to move pixels. */
-inline constexpr ChainLink inLink  { "IN",  false, true, inOn,  inPresent,  numStages, numStages };
-inline constexpr ChainLink outLink { "OUT", false, true, outOn, outPresent, stOut,     numStages };
+/** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL
+    belongs to nobody, so it is always shown. Walked rather than tabulated: ten links, twelve
+    stages, and one table that cannot fall out of step with itself. */
+inline constexpr int rowForStage (Stage s)
+{
+    for (int i = 0; i < numChainRows; ++i)
+        if (chainLinks[(size_t) i].stage == s || chainLinks[(size_t) i].eqStage == s)
+            return i;
+
+    return numChainRows;
+}
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 

@@ -41,18 +41,10 @@ public:
     /** `withVolume` — the OUT trim's RESET section belongs to the column's door alone. */
     void showLimiterMenu (juce::Point<int> screenPos, bool withVolume = true);
 
-    /** The gear: Setup, and the window's own switches — the two TEMPORARY strips under the footer,
-        off unless asked for (prefs::showDemo, prefs::showGlyphs). */
-    void showGearMenu (juce::Point<int> screenPos);
 
-
-    /** A side column clicked in or out (side 0 = IN, 1 = OUT). The instruments are the point:
-        the gate and the limiter keep working as set, but the hidden column's TRIM returns to
-        unity — a hand nobody can see must not keep pressing. */
-    void applyColumnToggle (int side, bool on);
-
-    /** The tuner's needle clicked in or out — it is the whole row now, and the window follows. */
-    void applyTunerToggle (bool on);
+    /** What the two switches of every row mean to the WINDOW — the tiles, the two columns and
+        the tuner's row — read in one place after any of them moves. */
+    void applyRowStates();
 
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
@@ -81,7 +73,7 @@ private:
     {
         // The tuner IS the row now: hidden, it collapses whole, gap included.
         return fixedHeight + LayoutStrip::designHeight + faceplate.currentHeight()
-                           - (tunerShown ? 0 : TunerStrip::designHeight + chromeGap)
+                           - (tunerStands ? 0 : TunerStrip::designHeight + chromeGap)
                            + (showDemo ? DemoStrip::designHeight : 0)
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }
@@ -91,12 +83,16 @@ private:
         automation — the arrow and, for a link with a face, the panel follow. */
     std::vector<std::unique_ptr<juce::ParameterAttachment>> blockRowAtts;
 
-    /** Whether the side columns stand on the panel — the strip's end caps. */
-    bool inColShown  = true;
-    bool outColShown = true;
+    /** Whether the two columns and the tuner's row stand on the panel. Not preferences any more:
+        `applyRowStates` reads them off the same two switches every other link answers to. */
+    bool inColStands  = true;
+    bool outColStands = true;
+    bool tunerStands  = true;
 
-    /** Whether the tuner's needle stands under the panel — the strip's TUNER arrow. */
-    bool tunerShown = true;
+    /** How a link standing by is SHOWN: removed from the panel, or left in place and dimmed. The
+        eye's business, not the sound's — a machine preference. Wired to its switch in the step
+        that gives it one; until then the panel does what it has always done. */
+    bool dimRatherThanRemove = false;
 
     /** The scale to come back to when the full-screen button is pressed the second time;
         negative while nothing is remembered. */
@@ -134,7 +130,7 @@ private:
     DragRuler     outRuler;         // the OUT trim's, mirrored
     DragRuler     ceilRuler;        // the limiter ceiling's, lilac, top-third ladder
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
-    SetupPanel    setup;
+    SetupPanel    setup;   // constructed with the processor: its EDITOR page writes parameters
     DisclaimerPanel devices;        // DEVICES & TRADEMARKS: the long notice and the list it is about
             // the Setup overlay — last member, so it sits on top
 

@@ -245,10 +245,6 @@ private:
         return in == nullptr || in->load() > 0.5f;
     }
 
-    bool endWorks (const std::atomic<float>* on, const std::atomic<float>* in) const noexcept
-    {
-        return (on == nullptr || on->load() > 0.5f) && (in == nullptr || in->load() > 0.5f);
-    }
 
     /** The chain's round-trip to the host: whatever the three players' models need for
         rate-matching — reported whenever any of them changes. */
@@ -496,8 +492,6 @@ private:
         Filled once in prepare; read on the audio thread like every other parameter. */
     std::atomic<float>* rowOn[params::numChainRows]      { };
     std::atomic<float>* rowPresent[params::numChainRows] { };
-    std::atomic<float>* inOnParam = nullptr,  *inPresentParam  = nullptr;
-    std::atomic<float>* outOnParam = nullptr, *outPresentParam = nullptr;
 
     std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* gatePosParam       = nullptr;

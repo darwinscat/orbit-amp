@@ -123,6 +123,11 @@ Footer::Footer (AmpProcessor& processor)
     loadBadge.onClick = [this] { showLoadBreakdown(); };
     addAndMakeVisible (loadBadge);
 
+    devicesBadge.onClick = [this] { if (onDevices) onDevices(); };
+    devicesBadge.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    devicesBadge.setTooltip ("Devices and trademarks: every device the installed packs name");
+    addAndMakeVisible (devicesBadge);
+
     // The popover wears the header's wordmark, so the two read as one product. appkit keeps
     // BrandHeader's own typeface private, so this is the same embedded bytes, loaded once per window.
     versionBadge.setBrandTypeface (juce::Typeface::createSystemTypefaceFor (
@@ -191,6 +196,15 @@ void Footer::paint (juce::Graphics& g)
     theme::drawTracked (g, stampText, stamp, theme::displayFont (12.0f), 0.1f,
                         juce::Justification::centredRight);
 
+    // The other page that is only read, beside the one that is: what is installed, and what
+    // this build is.
+    {
+        auto d = r.removeFromRight ((float) devicesWidth).withTrimmedRight (14.0f);
+        g.setColour (devicesBadge.isMouseOver() ? theme::tx : theme::txFaint);
+        theme::drawTracked (g, "DEVICES", d, theme::displayFont (12.0f), 0.1f,
+                            juce::Justification::centredRight);
+    }
+
     auto right = r.withTrimmedLeft ((float) (stereoWidth + gap));
 
     g.setColour (theme::txFaint);
@@ -216,6 +230,8 @@ void Footer::resized()
     stampBadge  .setBounds (stamp);
     versionBadge.setBounds (stamp);
 
+    devicesBadge.setBounds (row.removeFromRight (devicesWidth).withTrimmedRight (14));
+
     // The invisible click target over the painted DSP number.
     row.removeFromLeft (gap + 96);
     loadBadge.setBounds (row.removeFromLeft (100));
@@ -229,8 +245,44 @@ void Footer::showLoadBreakdown()
     {
         explicit Panel (AmpProcessor& p) : amp (p)
         {
-            setSize (320, 24 + graphH + 6 + AmpProcessor::numStages * rowH + 30 + 26);
+            setSize (320, 24 + graphH + 6 + shownStages() * rowH + 30 + 26);
             startTimerHz (15);
+        }
+
+        /** THE LIST IS THE RIG. A link out of the rig has no cost entry, because it has no cost:
+            it is not in the chain at all. A link STANDING BY keeps its row and keeps its real
+            number — a bypassed insert costs what it costs in any DAW — but reads faint, which is
+            the useful truth: the bypass bought you nothing, and taking it out of the rig will. */
+        bool stageInRig (int stage) const
+        {
+            const int row = params::rowForStage ((params::Stage) stage);
+
+            if (row >= params::numChainRows)
+                return true;                     // TOTAL belongs to nobody and is always there
+
+            const auto* p = amp.apvts.getParameter (params::chainLinks[(size_t) row].presentParam);
+            return p == nullptr || p->getValue() > 0.5f;
+        }
+
+        bool stageWorking (int stage) const
+        {
+            const int row = params::rowForStage ((params::Stage) stage);
+
+            if (row >= params::numChainRows)
+                return true;
+
+            const auto* p = amp.apvts.getParameter (params::chainLinks[(size_t) row].onParam);
+            return p == nullptr || p->getValue() > 0.5f;
+        }
+
+        int shownStages() const
+        {
+            int n = 0;
+            for (int i = 0; i < AmpProcessor::numStages; ++i)
+                if (stageInRig (i))
+                    ++n;
+
+            return n;
         }
 
         void mouseDown (const juce::MouseEvent& e) override
@@ -265,8 +317,13 @@ void Footer::showLoadBreakdown()
             t << juce::String::formatted ("%-8s %8s %8s\n", "STAGE", "MEAN", "WORST");
 
             for (int i = 0; i < AmpProcessor::numStages; ++i)
+            {
+                if (! stageInRig (i))
+                    continue;
+
                 t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", params::stageNames[i].brief,
                                               amp.stageLoad[i].load(), amp.stageWorst[i].load());
+            }
 
             t << "OVERRUNS " << (int) amp.overruns.load() << "\n";
             return t;
@@ -321,11 +378,15 @@ void Footer::showLoadBreakdown()
 
             for (int i = 0; i < AmpProcessor::numStages; ++i)
             {
+                if (! stageInRig (i))
+                    continue;
+
                 auto row = r.removeFromTop (rowH);
                 const float v = amp.stageLoad[i].load();
-                const bool total = i == AmpProcessor::stTotal;
+                const bool total   = i == AmpProcessor::stTotal;
+                const bool working = stageWorking (i);
 
-                g.setColour (total ? theme::tx : theme::txDim);
+                g.setColour (total ? theme::tx : working ? theme::txDim : theme::txFaint);
                 theme::drawTracked (g, params::stageNames[i].full, row.removeFromLeft (64).toFloat(),
                                     theme::displayFont (11.0f), 0.08f, juce::Justification::centredLeft);
 
@@ -337,7 +398,8 @@ void Footer::showLoadBreakdown()
                                     theme::displayFont (11.0f), 0.06f, juce::Justification::centredRight);
 
                 auto num = row.removeFromRight (46);
-                g.setColour (v > 50.0f ? theme::orange : total ? theme::tx : theme::txDim);
+                g.setColour (v > 50.0f ? theme::orange
+                           : total ? theme::tx : working ? theme::txDim : theme::txFaint);
                 theme::drawTracked (g, juce::String (v, 1) + "%", num.toFloat(),
                                     theme::displayFont (11.0f), 0.06f, juce::Justification::centredRight);
 

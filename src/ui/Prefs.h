@@ -72,16 +72,19 @@ inline void setBool (const juce::Identifier& key, bool value)
 inline const juce::Identifier showDemo   { "show_demo_player" };
 inline const juce::Identifier showGlyphs { "show_device_glyphs" };
 
-// The blocks' presence needs no prefs any more: a block's `*_on` PARAMETER is its presence —
-// the strip writes it, the panel follows it, and the save, the history, and the registers all
-// carry it. Only the instruments below keep machine-level switches.
+// NOTHING about the chain lives here any more. Every link — the blocks, the two volume columns,
+// the tuner — answers to its own two PARAMETERS, so what a player's rig is travels in the preset,
+// the session, the registers and undo, and this file is left with what it always claimed to be:
+// what the WINDOW shows, never what the sound is.
 
-/** The side columns — the IN rail with the gate's hand, the OUT rail with the master's. The
-    strip's end caps toggle them. Hiding one is about the INSTRUMENTS, not the sound: the gate
-    and the limiter keep working as set (a safety that dies with its meter is no safety), but
-    the column's TRIM returns to unity — a hidden hand must not keep pressing. */
-inline const juce::Identifier showInCol  { "show_in_column" };
-inline const juce::Identifier showOutCol { "show_out_column" };
+/** How a link STANDING BY is shown: off (the default), its tile leaves the panel and the rest
+    re-split, the way it always has; on, the tile keeps its place and goes dark.
+
+    Purely the eye's business — the sound is the same either way, and the preset does not carry
+    an opinion about it any more than it carries a colour. Removing gives the room to whoever is
+    left; dimming keeps the panel still, so nothing under your hands moves while you A/B a block
+    in and out. Neither is right, which is why it is a switch. */
+inline const juce::Identifier dimStandby { "dim_standby" };
 
 /** What an emptied row does to the WINDOW. On (the default): the window holds its height and
     whoever is left grows into the space — nothing on screen moves except the block that got
@@ -92,10 +95,6 @@ inline const juce::Identifier showOutCol { "show_out_column" };
     play. Holding the height takes that away entirely — but a lone block stretched over both rows
     may read as empty, which is why this is a switch and not a decision. */
 inline const juce::Identifier growBlocks { "grow_blocks" };
-
-/** The tuner's needle — the whole row under the panel now: hidden, the row collapses and the
-    window follows. The guards' lights and menus live in the strip's arrows. */
-inline const juce::Identifier showTuner { "show_tuner" };
 
 /** The analysers — the consoles' ground, the cabinet's pair, the TONE tile's columns. One switch
     for all of them, read where a spectrum is about to be drawn: cached after the first look,
