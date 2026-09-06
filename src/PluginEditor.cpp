@@ -35,7 +35,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
       outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim),
                 *p.apvts.getParameter (params::limiterCeiling),
                 *p.apvts.getParameter (params::limiterOn)),
-      tunerStrip (p.tunerEar), footer (p), demoStrip (p)
+      tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
 
@@ -66,7 +66,23 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (setup);       // hidden until the toolbar's gear opens it
     addChildComponent (devices);     // ...and DEVICES & TRADEMARKS, from the same menu
 
-    chrome.onGear = [this] (juce::Point<int> pos) { showGearMenu (pos); };
+    // THE GEAR IS THE WINDOW. It used to drop a popup with a door to Setup, two doors to pages
+    // nobody sets anything on, and four switches — which is how a settings menu becomes a place
+    // things are hidden. One window, three pages, and the two pages that are only read reached
+    // from where they are ABOUT: the version stamp and DEVICES, both at the bottom.
+    chrome.onGear = [this] (juce::Point<int>) { setup.open(); };
+
+    footer.onDevices = [this] { devices.open(); };
+
+    setup.onViewChanged = [this]
+    {
+        faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
+        dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
+        showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
+        showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+        applyRowStates();
+        repaint();
+    };
 
     // FULL SCREEN, the honest kind: the aspect is locked, so a native fullscreen would only
     // letterbox the device in black. Instead the button jumps to the biggest fit the display
@@ -332,99 +348,6 @@ void AmpEditor::applyRowStates()
     tunerStands  = stands (params::rowTuner);
 
     applyStripChoice();   // an emptied row, a column, the tuner's row — the window follows them all
-}
-
-void AmpEditor::showGearMenu (juce::Point<int> screenPos)
-{
-    juce::PopupMenu m;
-    m.addItem (1, "SETUP...");
-    // Beside Setup, not inside it: the trademark notice is one click from anywhere, and Setup is
-    // the pack manager rather than a place anybody goes to read.
-    m.addItem (9, "ABOUT...");
-    // The long notice lives beside the short one, not inside it: this page has a LIST, and a list
-    // that grows with every pack a player drops in has no business in a build-stamp window.
-    m.addItem (11, "DEVICES & TRADEMARKS...");
-    m.addSeparator();
-    // A PARAMETER behind a menu item, deliberately: the comp changes the sound, so it belongs
-    // to the session, not the machine — the tick just reads it, the click just writes it.
-    m.addItem (8, "PACK LEVEL COMP",    true,
-               amp.apvts.getParameter (params::packLevelComp)->getValue() > 0.5f);
-    // What an emptied row does: give its height away, or take it out of the window. Here for
-    // now, with the rest of the window's switches; it moves into Setup's VIEW page with them.
-    m.addItem (13, "STANDBY KEEPS ITS PLACE", true, dimRatherThanRemove);
-    m.addItem (12, "KEEP WINDOW HEIGHT", true, prefs::getBool (prefs::growBlocks, true));
-    m.addItem (5, "SHOW SPECTRA",       true, prefs::spectraShown());
-    if (params::demoLoopsPresent())     // no loops on disk — no player, and no offer of one
-        m.addItem (2, "SHOW DEMO PLAYER", true, showDemo);
-    m.addItem (3, "SHOW DEVICE GLYPHS", true, showGlyphs);
-
-    m.showMenuAsync (juce::PopupMenu::Options()
-                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [safe = juce::Component::SafePointer<AmpEditor> (this)] (int r)
-                     {
-                         if (safe == nullptr || r == 0)
-                             return;
-
-                         if (r == 1)
-                         {
-                             safe->setup.open();
-                             return;
-                         }
-
-                         if (r == 9)
-                         {
-                             // The family's own About window: the whole build stamp, the licence,
-                             // the trademark notice and the tip jar, centred over the editor.
-                             safe->footer.showAbout();
-                             return;
-                         }
-
-                         if (r == 11)
-                         {
-                             safe->devices.open();
-                             return;
-                         }
-
-                         if (r == 13)
-                         {
-                             safe->dimRatherThanRemove = ! safe->dimRatherThanRemove;
-                             prefs::setBool (prefs::dimStandby, safe->dimRatherThanRemove);
-                             safe->applyRowStates();   // the panel re-splits, or stops doing so
-                             return;
-                         }
-
-                         if (r == 12)
-                         {
-                             const bool fill = ! prefs::getBool (prefs::growBlocks, true);
-                             prefs::setBool (prefs::growBlocks, fill);
-                             safe->faceplate.setFillsHeight (fill);
-                             safe->applyStripChoice();   // the window either holds or gives way
-                             return;
-                         }
-
-                         if (r == 5)
-                         {
-                             prefs::setSpectraShown (! prefs::spectraShown());
-                             safe->repaint();
-                             return;
-                         }
-
-                         if (r == 8)
-                         {
-                             if (auto* p = safe->amp.apvts.getParameter (params::packLevelComp))
-                             {
-                                 p->beginChangeGesture();
-                                 p->setValueNotifyingHost (p->getValue() > 0.5f ? 0.0f : 1.0f);
-                                 p->endChangeGesture();
-                             }
-                             return;
-                         }
-
-                         bool& flag = r == 2 ? safe->showDemo : safe->showGlyphs;
-                         flag = ! flag;
-                         prefs::setBool (r == 2 ? prefs::showDemo : prefs::showGlyphs, flag);
-                         safe->applyStripChoice();
-                     });
 }
 
 void AmpEditor::applyStripChoice()

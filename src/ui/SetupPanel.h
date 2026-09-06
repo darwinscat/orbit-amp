@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "SettingsList.h"
 #include "library/DeviceListView.h"
 #include "library/IrTreeView.h"
 #include "library/MiniClose.h"
@@ -12,10 +13,22 @@
 namespace orbitamp
 {
 
-/** The SETUP window, opened from the toolbar gear: an overlay over the whole editor, one panel on
-    a scrim, its pages behind tabs across the top. One tab per library a block draws from —
-    PREAMP, BOOST, and the cabinet's IR tree — so each list is curated where it plays,
-    and the strip is built for the pages that follow. Closes on ✕, Esc, or a click on the scrim.
+class AmpProcessor;
+
+/** SETUP — the one window, opened by the toolbar's gear. Three pages across the top:
+
+        LIBRARY   the packs and the IRs, one sub-tab per list
+        EDITOR    which links the rig has at all
+        VIEW      what this window shows — the eye's business, and only the eye's
+
+    The libraries used to BE this window, one tab each, and there was nowhere for a setting to
+    live except a popup menu hanging off the gear. They are one page now with their own sub-tabs,
+    which is what freed the top row for the two pages that matter.
+
+    The two lifetimes sit side by side on purpose, and each page says which it is: EDITOR travels
+    with the preset because a rig is part of a sound, VIEW stays on this machine because the shape
+    of a window is not. A player should not have to guess which of their changes will follow a
+    patch to somebody else's computer.
 
     An overlay rather than a desktop window because a plugin editor is a guest: hosts reparent,
     hide, and destroy it freely, and a floating window can outlive or lose the editor it belongs
@@ -23,13 +36,17 @@ namespace orbitamp
 class SetupPanel final : public juce::Component
 {
 public:
-    SetupPanel();
+    explicit SetupPanel (AmpProcessor&);
 
     /** Shows, refreshing the visible page — folders change behind a closed window. */
     void open();
 
-    /** Forwarded from the device tabs: devices came or went under the running blocks. */
+    /** Forwarded from the device lists: devices came or went under the running blocks. */
     std::function<void()> onDevicesChanged;
+
+    /** A switch on the VIEW page moved. What it means to the window — a resize, a relayout — is
+        the editor's business; this page only writes the preference and says so. */
+    std::function<void()> onViewChanged;
 
     void resized() override;
     void paint (juce::Graphics&) override;
@@ -37,29 +54,49 @@ public:
     bool keyPressed (const juce::KeyPress&) override;
 
 private:
-    /** One page: its name in the strip, the component that is the page, and how it re-reads. */
+    /** One tab, at either level: its name, the component it shows, how it re-reads, and the cell
+        it was given so a click can find it. */
     struct Tab
     {
         juce::String          title;
         juce::Component*      view;
         std::function<void()> refresh;
-        juce::Rectangle<int>  area;   // the strip cell, for hit-testing and the underline
+        juce::Rectangle<int>  area;
     };
 
-    void selectTab (int index);
+    void selectPage (int index);
+    void selectLibrary (int index);
+    void buildEditorPage();
+    void buildViewPage();
+    void layOutTabs (juce::Rectangle<int>& header, std::vector<Tab>& tabs, float height);
+    void paintTabs (juce::Graphics&, const std::vector<Tab>&, int current, float height,
+                    juce::Point<int> offset = {}) const;
 
-    std::vector<Tab> tabs;
-    int current = 0;
+    AmpProcessor& amp;
 
-    juce::Rectangle<int> panel;   // centred; the rest of the bounds is scrim
+    std::vector<Tab> pages, libraries;
+    int currentPage = 0, currentLibrary = 0;
 
-    DeviceListView preampDevices { device::DeviceLibrary::Slot::preamp };
-    DeviceListView boostDevices  { device::DeviceLibrary::Slot::pedal };
-    IrTreeView     irs;
-    MiniClose      closeButton;
+    juce::Rectangle<int> panel;   // centred and CLAMPED; the rest of the bounds is scrim
+
+    /** LIBRARY's own body: the sub-tabs pick which of these shows, and the one switch that is
+        about the packs rather than about the window sits under them. */
+    juce::Component libraryPage;
+    DeviceListView  preampDevices { device::DeviceLibrary::Slot::preamp };
+    DeviceListView  boostDevices  { device::DeviceLibrary::Slot::pedal };
+    IrTreeView      irs;
+    SettingsList    packSwitches;
+
+    /** The two switch pages scroll: ten links plus whatever VIEW grows to is more than a 440-tall
+        window holds, and a page that cannot reach its own last row is a page with a hidden switch. */
+    SettingsList editorPage, viewPage;
+    juce::Viewport editorView, viewView;
+    MiniClose    closeButton;
 
     static constexpr int panelW = 720;
     static constexpr int panelH = 440;
+    static constexpr int headerH = 30;
+    static constexpr int subHeaderH = 24;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SetupPanel)
 };

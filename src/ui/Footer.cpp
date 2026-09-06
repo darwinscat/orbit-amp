@@ -123,6 +123,11 @@ Footer::Footer (AmpProcessor& processor)
     loadBadge.onClick = [this] { showLoadBreakdown(); };
     addAndMakeVisible (loadBadge);
 
+    devicesBadge.onClick = [this] { if (onDevices) onDevices(); };
+    devicesBadge.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    devicesBadge.setTooltip ("Devices and trademarks: every device the installed packs name");
+    addAndMakeVisible (devicesBadge);
+
     // The popover wears the header's wordmark, so the two read as one product. appkit keeps
     // BrandHeader's own typeface private, so this is the same embedded bytes, loaded once per window.
     versionBadge.setBrandTypeface (juce::Typeface::createSystemTypefaceFor (
@@ -191,6 +196,15 @@ void Footer::paint (juce::Graphics& g)
     theme::drawTracked (g, stampText, stamp, theme::displayFont (12.0f), 0.1f,
                         juce::Justification::centredRight);
 
+    // The other page that is only read, beside the one that is: what is installed, and what
+    // this build is.
+    {
+        auto d = r.removeFromRight ((float) devicesWidth).withTrimmedRight (14.0f);
+        g.setColour (devicesBadge.isMouseOver() ? theme::tx : theme::txFaint);
+        theme::drawTracked (g, "DEVICES", d, theme::displayFont (12.0f), 0.1f,
+                            juce::Justification::centredRight);
+    }
+
     auto right = r.withTrimmedLeft ((float) (stereoWidth + gap));
 
     g.setColour (theme::txFaint);
@@ -215,6 +229,8 @@ void Footer::resized()
     const auto stamp = row.removeFromRight (stampWidth).withTrimmedRight (8);
     stampBadge  .setBounds (stamp);
     versionBadge.setBounds (stamp);
+
+    devicesBadge.setBounds (row.removeFromRight (devicesWidth).withTrimmedRight (14));
 
     // The invisible click target over the painted DSP number.
     row.removeFromLeft (gap + 96);

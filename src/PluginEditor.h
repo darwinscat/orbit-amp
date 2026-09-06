@@ -41,10 +41,6 @@ public:
     /** `withVolume` — the OUT trim's RESET section belongs to the column's door alone. */
     void showLimiterMenu (juce::Point<int> screenPos, bool withVolume = true);
 
-    /** The gear: Setup, and the window's own switches — the two TEMPORARY strips under the footer,
-        off unless asked for (prefs::showDemo, prefs::showGlyphs). */
-    void showGearMenu (juce::Point<int> screenPos);
-
 
     /** What the two switches of every row mean to the WINDOW — the tiles, the two columns and
         the tuner's row — read in one place after any of them moves. */
@@ -134,7 +130,7 @@ private:
     DragRuler     outRuler;         // the OUT trim's, mirrored
     DragRuler     ceilRuler;        // the limiter ceiling's, lilac, top-third ladder
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
-    SetupPanel    setup;
+    SetupPanel    setup;   // constructed with the processor: its EDITOR page writes parameters
     DisclaimerPanel devices;        // DEVICES & TRADEMARKS: the long notice and the list it is about
             // the Setup overlay — last member, so it sits on top
 
