@@ -516,15 +516,20 @@ int main()
     }
 
     // The three channel modes. MONO: one chain, the copy after everything — the channels are
-    // identical. STEREO SPACE: mono up to the reverb, stereo from it — with the reverb on the two
-    // channels differ (the space is wide), with it off they are still identical (the copy at the
-    // seam feeds the power amp and the cabinet the same signal). Measured on the plugin's own
-    // output, both channels kept.
+    // identical. STEREO SPACE: mono up to the reverb, stereo from it — with the reverb in the rig
+    // the two channels differ (the space is wide), with it OUT of the rig they are identical (the
+    // copy at the seam feeds the cabinet the same signal). Measured on the plugin's own output,
+    // both channels kept.
+    //
+    // Out of the RIG, not merely standing by: standing by is the insert's bypass, and a bypassed
+    // room rings out instead of being cut, so its tail would still be spreading the channels for
+    // as long as it takes to decay. That is the next check's job, not this one's.
     {
-        const auto runBoth = [&] (float mode, bool reverbOn)
+        const auto runBoth = [&] (float mode, bool reverbIn)
         {
             set (amp, orbitamp::params::stereoMode, mode);
-            set (amp, orbitamp::params::reverbOn, reverbOn ? 1.0f : 0.0f);
+            set (amp, orbitamp::params::reverbPresent, reverbIn ? 1.0f : 0.0f);
+            set (amp, orbitamp::params::reverbOn, 1.0f);
             set (amp, orbitamp::params::limiterOn, 0.0f);
 
             juce::AudioBuffer<float> buf (2, blockSize);
@@ -569,10 +574,133 @@ int main()
                 differencePercent (spaceWet.first, spaceWet.second) > 1.0
                     && rms (spaceWet.second) > 1.0e-4,
                 juce::String (differencePercent (spaceWet.first, spaceWet.second), 2) + "% apart");
-        report ("...and with the reverb off they are one signal again",
+        report ("...and with the reverb out of the rig they are one signal again",
                 differencePercent (spaceDry.first, spaceDry.second) < 0.01);
 
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
+    }
+
+    // STANDBY IS THE INSERT'S BYPASS. Stand the room down and it stops taking new signal, but what
+    // is already ringing rings OUT — it is not chopped. Measured in STEREO SPACE, where the room is
+    // the only thing that can tell the two channels apart: right after the switch they still
+    // differ, because the tail is still spreading; long after it, they are one signal again.
+    //
+    // The old contract was the opposite — off meant cleared, every block — so this is the check
+    // that says which of the two the plugin is.
+    {
+        set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::stereoSpace);
+        set (amp, orbitamp::params::reverbPresent, 1.0f);
+        set (amp, orbitamp::params::reverbOn, 1.0f);
+        set (amp, orbitamp::params::limiterOn, 0.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        int phase = 0;
+
+        const auto run = [&] (int blocks, bool silentInput, std::vector<float>* l, std::vector<float>* r)
+        {
+            for (int block = 0; block < blocks; ++block)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = silentInput ? 0.0f
+                                  : 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                              * 220.0 * phase / sampleRate);
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+                amp.processBlock (buf, midi);
+                amp.pumpDeviceWork();
+
+                if (l == nullptr)
+                    continue;
+
+                for (int i = 0; i < blockSize; ++i)
+                {
+                    l->push_back (buf.getSample (0, i));
+                    r->push_back (buf.getSample (1, i));
+                }
+            }
+        };
+
+        run (40, false, nullptr, nullptr);          // fill the room
+
+        // Standing by, on silence: whatever is heard now is the tail alone.
+        set (amp, orbitamp::params::reverbOn, 0.0f);
+
+        std::vector<float> ringL, ringR;
+        run (6, true, &ringL, &ringR);
+
+        std::vector<float> goneL, goneR;
+        run (400, true, nullptr, nullptr);          // ...and long enough for it to die
+        run (6, true, &goneL, &goneR);
+
+        std::printf ("\nbypass: tail right after standby %.2f%% apart, after it decays %.2f%%\n",
+                     differencePercent (ringL, ringR), differencePercent (goneL, goneR));
+
+        report ("a room on standby rings OUT instead of being cut",
+                rms (ringL) > 1.0e-5 && differencePercent (ringL, ringR) > 1.0,
+                juce::String (differencePercent (ringL, ringR), 2) + "% apart");
+
+        report ("...and once it has decayed there is nothing left of it",
+                rms (goneL) < 1.0e-5,
+                juce::String (juce::Decibels::gainToDecibels ((double) rms (goneL), -120.0), 1) + " dBFS");
+
+        set (amp, orbitamp::params::reverbOn, 1.0f);
+        set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
+    }
+
+    // A LINK THAT REPLACES has no tail to ride out, so standing it down is a crossfade against
+    // what it was handed. The proof is the waveform: measured as the biggest jump between two
+    // neighbouring samples across the switch. A 220 Hz sine at 0.25 climbs about 0.0072 per sample
+    // of its own accord; dropping a cabinet out of the path in one sample steps by a good fraction
+    // of the signal, which is an order of magnitude more and is what a click IS.
+    {
+        set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
+        set (amp, orbitamp::params::cabPresent, 1.0f);
+        set (amp, orbitamp::params::cabOn, 1.0f);
+        set (amp, orbitamp::params::limiterOn, 0.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        int phase = 0;
+        float last = 0.0f, biggestJump = 0.0f;
+        bool  measuring = false;
+
+        for (int block = 0; block < 40; ++block)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float s = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                          * 220.0 * phase / sampleRate);
+                buf.setSample (0, i, s);
+                buf.setSample (1, i, s);
+            }
+
+            if (block == 20)
+            {
+                set (amp, orbitamp::params::cabOn, 0.0f);   // stand it down mid-note
+                measuring = true;
+            }
+
+            amp.processBlock (buf, midi);
+            amp.pumpDeviceWork();
+
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const float v = buf.getSample (0, i);
+                if (measuring)
+                    biggestJump = juce::jmax (biggestJump, std::abs (v - last));
+                last = v;
+            }
+        }
+
+        std::printf ("\nbypass: biggest sample-to-sample jump across the switch %.5f\n", biggestJump);
+
+        report ("standing a cabinet down does not step the waveform",
+                biggestJump < 0.02f, juce::String (biggestJump, 5));
+
+        set (amp, orbitamp::params::cabOn, 1.0f);
     }
 
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");

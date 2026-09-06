@@ -12,6 +12,7 @@
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
+#include "core/BypassFade.h"
 #include "core/CabinetIr.h"
 #include "core/SoftLimiter.h"
 #include "core/DelayStage.h"
@@ -233,6 +234,15 @@ private:
         const auto* in = rowPresent[(size_t) row];
 
         return (on == nullptr || on->load() > 0.5f) && (in == nullptr || in->load() > 0.5f);
+    }
+
+    /** IN THE RIG, on its own — for the links that keep running while they stand by. An additive
+        block out of the rig is unplugged: cleared, and costing nothing. In the rig it runs whether
+        it is on or not, and `linkWorks` decides only whether it is being FED. */
+    bool linkInRig (params::ChainRow row) const noexcept
+    {
+        const auto* in = rowPresent[(size_t) row];
+        return in == nullptr || in->load() > 0.5f;
     }
 
     bool endWorks (const std::atomic<float>* on, const std::atomic<float>* in) const noexcept
@@ -512,6 +522,12 @@ private:
     std::atomic<float>* boostGainParam  = nullptr;
     std::atomic<float>* preampGainParam = nullptr;
     juce::AudioBuffer<float> scopeDry;   // a block's input, kept for its pictures
+
+    /** The crossfade of every link that REPLACES the signal, and the one buffer they share to do
+        it: what the block was handed, kept only while a fade is actually running. Indexed by row,
+        so a link asks for its own by name. */
+    core::BypassFade         blockFade[params::numChainRows];
+    juce::AudioBuffer<float> fadeDry;
 
 public:
     /** What the footer reports: the run's own facts, not the sound's. */
