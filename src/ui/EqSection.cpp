@@ -480,6 +480,8 @@ void EqSection::refreshHandles()
 
     if (ours)
     {
+        curve.setMarkers ({});   // a device's dots do not survive the switch back to our own set
+
         h.getReference (hLo) = { s.loHz, s.loDb, H::Freedom::both, true,   theme::eqNode[0] };
         h.getReference (hB1) = { s.b1Hz, s.b1Db, H::Freedom::both, true,   theme::eqNode[1] };
         h.getReference (hB2) = { s.b2Hz, s.b2Db, H::Freedom::both, true,   theme::eqNode[2] };
@@ -488,16 +490,25 @@ void EqSection::refreshHandles()
     }
     else
     {
-        constexpr int slots[] = { hLo, hB1, hB2, hB3, hHi };
+        // The device's own tone is not ours to grab. Its points are MARKERS — they say where each
+        // knob acts hardest, and the knob in the row below is the hand. A dot was a poor hand
+        // anyway: its drag converted decibels into knob travel through a single measured swing,
+        // and the code said so out loud — "the floor keeps the hand in charge without lying much".
+        // As an indicator the anchor is honest; as a control it was not.
+        juce::Array<EqCurve::Marker> markers;
 
-        for (size_t j = 0; j < std::size (slots); ++j)
-        {
-            const bool live = j < bands.size() && bands[j].anchorHz > 0.0;
-            auto& hd   = h.getReference (slots[j]);
-            hd         = { live ? bands[j].anchorHz : 1000.0, 0.0, H::Freedom::gain, live,
-                           live ? bands[j].colour : juce::Colour() };
-            hd.rideCurve = true;
-        }
+        for (size_t j = 0; j < bands.size(); ++j)
+            if (bands[j].anchorHz > 0.0)
+                markers.add ({ bands[j].anchorHz, bands[j].colour });
+
+        curve.setMarkers (std::move (markers));
+
+        // And the five slots those dots used to occupy are hidden BY NAME. `Handle::visible`
+        // defaults to true, so merely not filling them in would leave five default handles
+        // standing at 1 kHz — grabbable, and wired to our parametric, which in this mode is not
+        // even in the signal. That is the hidden-band bug, back through the door it left by.
+        for (int slot : { hLo, hB1, hB2, hB3, hHi })
+            h.getReference (slot).visible = false;
     }
 
     // The cuts only exist while they are switched on — a handle for a filter that is not in the
@@ -508,49 +519,9 @@ void EqSection::refreshHandles()
     curve.setHandles (std::move (h));
 }
 
-/** Which band a handle slot carries in the device's set — the same five slots, in row order. */
-static int nativeBandFor (int index)
-{
-    switch (index)
-    {
-        case 0 /*hLo*/: return 0;
-        case 1 /*hB1*/: return 1;
-        case 2 /*hB2*/: return 2;
-        case 3 /*hB3*/: return 3;
-        case 4 /*hHi*/: return 4;
-        default:        return -1;
-    }
-}
-
 void EqSection::handleDragged (int index, double hz, double db)
 {
     const auto clampDb = [] (double v) { return juce::jlimit (-15.0, 15.0, v); };
-
-    // The device's dots: the drag is a dB offset at the anchor, converted to knob travel through
-    // the band's measured swing — pull the point down a decibel and the knob turns however far
-    // the device needs to lose a decibel there. Frequency is not on offer.
-    if (nativeDb != nullptr)
-    {
-        const int j = nativeBandFor (index);
-
-        if (j >= 0 && (size_t) j < bands.size() && (size_t) j < bandKnobs.size()
-            && bands[(size_t) j].anchorHz > 0.0)
-        {
-            // A knob that barely moves its anchor would turn end to end inside a couple of
-            // pixels — the floor keeps the hand in charge without lying much.
-            const double swing = bands[(size_t) j].anchorSwingDb;
-            const double slope = std::abs (swing) < 4.0 ? (swing < 0.0 ? -4.0 : 4.0) : swing;
-
-            auto& knob = *bandKnobs[(size_t) j];
-            const double span = knob.getMaximum() - knob.getMinimum();
-            knob.setValue (juce::jlimit (knob.getMinimum(), knob.getMaximum(),
-                                         dragStartVal + (db - dragStartDb) / slope * span),
-                           juce::sendNotificationSync);
-        }
-
-        refreshCurve();
-        return;
-    }
 
     switch (index)
     {
@@ -570,22 +541,6 @@ void EqSection::handleDragged (int index, double hz, double db)
 
 void EqSection::handleDragActive (int index, bool active)
 {
-    // A device dot's drag starts from where the composite stands at its anchor and where the
-    // knob stands on its dial — the offsets convert between the two for the whole gesture.
-    if (nativeDb != nullptr)
-    {
-        const int j = nativeBandFor (index);
-
-        if (active && j >= 0 && (size_t) j < bands.size() && (size_t) j < bandKnobs.size())
-        {
-            const double hz = bands[(size_t) j].anchorHz;
-            dragStartDb  = drawnDb (hz);
-            dragStartVal = bandKnobs[(size_t) j]->getValue();
-        }
-
-        return;
-    }
-
     // One drag is ONE undoable move. The gain knobs bracket their own gestures; the frequencies
     // (and B3's gain, which has no knob) are bracketed here.
     if (active)
@@ -602,11 +557,6 @@ void EqSection::handleDragActive (int index, bool active)
 
 void EqSection::handleWheel (int index, float delta)
 {
-    // A device dot has no Q to give the wheel — and the parametric's params are out of the signal
-    // in that mode, so writing them would be the hidden-band bug again. The walls still answer.
-    if (nativeDb != nullptr && nativeBandFor (index) >= 0)
-        return;
-
     // Over a bell the wheel is Q; over a wall it is the slope ladder.
     if (index == hB1 || index == hB2 || index == hB3)
     {
@@ -634,6 +584,13 @@ void EqSection::stepSlope (int index, int steps)
 
 void EqSection::curveDoubleClicked (double hz)
 {
+    // Only in OUR set. Wearing the device's tone the parametric is out of the signal entirely, so
+    // summoning the scalpel there was a gesture with no consequence — and now that the device's
+    // dots are markers, a double-click ON one of them reads as a double-click on empty curve,
+    // which would have made that silent gesture easy to trip over by accident.
+    if (nativeDb != nullptr)
+        return;
+
     // The surgical bell lands where you asked for it, switched on, flat — pull it down.
     freqAtt[hB3]->setValueAsCompleteGesture ((float) hz);
     b3OnAtt->setValueAsCompleteGesture (1.0f);
@@ -654,8 +611,16 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // not half a panel: keeping the numbers meant either shrinking the type below what can be read
     // at 1x or taking the room from the curve, and the curve IS the readout — a node's frequency is
     // where the node is standing. Dragging it sideways was always the way to set one.
-    auto row = content.removeFromBottom (rowH);
-    content.removeFromBottom (4);
+    // Under the curve or over it — the player's choice, and the ONLY thing it changes. The row's
+    // own arrangement does not mirror: names along its top edge, the cuts' stacks standing on the
+    // dials' bottom line, both ways round. A row that rearranged itself with the preference would
+    // have to be re-learnt every time the switch moved.
+    auto row = rowOnTop ? content.removeFromTop (rowH) : content.removeFromBottom (rowH);
+
+    if (rowOnTop)
+        content.removeFromTop (4);
+    else
+        content.removeFromBottom (4);
 
     // ONE LINE OF NAMES. HPF, LO, L MID, H MID, HI, LPF all begin at the row's top edge, because
     // six labels at three different heights read as three groups rather than one row of controls.

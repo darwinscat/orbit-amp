@@ -50,6 +50,9 @@ public:
     /** Rebuilds the face from whatever pack is loaded. Called when the device changes. */
     void deviceChanged();
 
+    /** The EQ console's row of hands moved to the other side of its curve. */
+    void setEqRowOnTop (bool onTop) { eq.setRowOnTop (onTop); resized(); }
+
     /** Puts a thrown-open picture back in its corner. Returns whether there was one — the editor
         asks both blocks and stops at the first that answers, so one Escape closes one thing. */
     bool foldPicture();

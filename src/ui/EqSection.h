@@ -47,6 +47,9 @@ public:
     /** Places everything inside the block's content area. */
     void layOut (juce::Rectangle<int> content);
 
+    /** Which side of the curve the row of hands sits on. The block re-lays itself out after. */
+    void setRowOnTop (bool onTop) { rowOnTop = onTop; }
+
     /** The spectrum only listens while the block is on screen. */
     void setSpectrumRunning (bool shouldRun);
 
@@ -83,12 +86,11 @@ public:
             worse than printing nothing. */
         bool showsDb = true;
 
-        /** A device knob's point on the curve: the frequency where the knob acts hardest —
-            computed once per device from its measured curves, so the dot never wanders — and the
-            signed dB the knob moves there over its whole travel, which is what a vertical drag of
-            the dot converts through. 0 anchor = no dot (ours place their own handles). */
-        double anchorHz      = 0.0;
-        double anchorSwingDb = 0.0;
+        /** A device knob's point on the curve: the frequency where the knob acts hardest,
+            computed once per device from its measured curves, so the dot never wanders. It is a
+            MARKER — it says where the knob works, and the knob says how much. 0 = no dot (ours
+            place their own handles). */
+        double anchorHz = 0.0;
     };
 
 
@@ -124,6 +126,7 @@ private:
 
     std::function<double (double)> nativeDb;
     juce::Component* host = nullptr;   // whoever the widgets were handed to, for rebuilt rows
+    bool rowOnTop = false;             // see setRowOnTop
 
     EqCurve curve { [this] (double hz) { return drawnDb (hz); } };
 
@@ -213,9 +216,6 @@ private:
     std::vector<Band> bands;
     std::vector<std::unique_ptr<Knob>> bandKnobs;
 
-    /** A native dot's drag bookkeeping: where the composite stood and where the knob stood when
-        the hand took hold — the drag is a dB offset converted through the band's swing. */
-    double dragStartDb = 0.0, dragStartVal = 0.0;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 
     ModeButton modeBtn;

@@ -59,6 +59,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // takes it out of the window. See prefs::growBlocks.
     faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
     dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
+    faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
 
 
     addChildComponent (demoStrip);
@@ -77,6 +78,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     setup.onViewChanged = [this]
     {
         faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
+        faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
         dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
         showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
         showGlyphs = prefs::getBool (prefs::showGlyphs, false);

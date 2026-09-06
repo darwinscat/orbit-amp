@@ -131,6 +131,9 @@ void SetupPanel::buildViewPage()
     if (params::demoLoopsPresent())   // no loops on disk: no player, and no offer of one
         add ("SHOW DEMO PLAYER", "the audition strip under the footer", prefs::showDemo, false);
 
+    add ("EQ HANDS OVER THE CURVE", "the console's row of knobs sits above its picture, not below",
+         prefs::eqRowOnTop, false);
+
     add ("SHOW DEVICE GLYPHS", "the device-glyph review strip", prefs::showGlyphs, false);
 
     viewPage.setRows (std::move (rows));

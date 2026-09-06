@@ -34,6 +34,10 @@ public:
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
     void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); }
 
+    /** Both consoles at once: two blocks wearing their hands on different sides of their curves
+        is not a choice, it is a rig that has come apart. */
+    void setEqRowOnTop (bool onTop) { boost.setEqRowOnTop (onTop); preamp.setEqRowOnTop (onTop); }
+
     /** The blocks the LAYOUT popup can stand down, in chain order. */
     enum class Block { boost, preamp, delay, reverb, cabinet };
 

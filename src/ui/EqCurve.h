@@ -28,10 +28,19 @@ public:
         bool    visible = true;
         juce::Colour tint = juce::Colour (0xffb39bff);
 
-        /** The dot sits ON the composite at its frequency instead of at its own `db` — for a
-            handle whose gain is not a parameter of its own (a device knob's point): the curve is
-            the only truth about where it stands, so the dot rides it. */
-        bool rideCurve = false;
+    };
+
+    /** A dot that is ONLY a dot. It rides the composite at its frequency and answers to nothing:
+        no drag, no wheel, no double-click, no cursor, no lighting up under the mouse.
+
+        A separate list rather than a flag on `Handle`, and that is the whole point. With a flag,
+        every one of `handleAt`, `mouseDrag`, `mouseMove`, `mouseWheelMove` and `mouseDoubleClick`
+        would need an "unless it cannot be grabbed" branch, and the one that got forgotten would be
+        a dot that quietly still moved something. The hit test never sees these at all. */
+    struct Marker
+    {
+        double       hz = 1000.0;
+        juce::Colour tint;
     };
 
     explicit EqCurve (std::function<double (double)> magnitudeDbAt)
@@ -42,6 +51,12 @@ public:
     void setHandles (juce::Array<Handle> newHandles)
     {
         handles = std::move (newHandles);
+        repaint();
+    }
+
+    void setMarkers (juce::Array<Marker> newMarkers)
+    {
+        markers = std::move (newMarkers);
         repaint();
     }
 
@@ -156,6 +171,7 @@ public:
         g.drawRoundedRectangle (r.reduced (0.5f), theme::radiusMd, 1.0f);
 
         paintHandles (g, r);
+        paintMarkers (g, r);
     }
 
     //==============================================================================
@@ -303,10 +319,29 @@ private:
     juce::Point<float> handlePos (juce::Rectangle<float> r, const Handle& h) const
     {
         // A cut has no gain of its own, so its handle rides the curve it produces rather than
-        // floating at 0 dB where nothing is happening. A rideCurve dot does the same by request.
-        const float db = h.freedom == Handle::Freedom::freq || h.rideCurve
+        // floating at 0 dB where nothing is happening.
+        const float db = h.freedom == Handle::Freedom::freq
                              ? (float) magnitudeDb (h.hz) : (float) h.db;
         return { hzToX (r, h.hz), dbToY (r, db) };
+    }
+
+    /** Small, filled, and riding the line. A halo of the well's own colour underneath so the dot
+        does not vanish where the curve passes through it. No growth under the mouse — there is
+        nothing to reach for. */
+    void paintMarkers (juce::Graphics& g, juce::Rectangle<float> r) const
+    {
+        constexpr float rad = 3.0f;
+
+        for (const auto& m : markers)
+        {
+            const float x = hzToX (r, m.hz);
+            const float y = dbToY (r, (float) magnitudeDb (m.hz));
+
+            g.setColour (theme::bezel);
+            g.fillEllipse (x - rad - 1.2f, y - rad - 1.2f, (rad + 1.2f) * 2.0f, (rad + 1.2f) * 2.0f);
+            g.setColour (m.tint);
+            g.fillEllipse (x - rad, y - rad, rad * 2.0f, rad * 2.0f);
+        }
     }
 
     void paintHandles (juce::Graphics& g, juce::Rectangle<float> r) const
@@ -429,6 +464,7 @@ private:
     std::function<double (double)> magnitudeDb;
 
     juce::Array<Handle> handles;
+    juce::Array<Marker> markers;
     int hovered  = -1;
     int dragging = -1;
     float stepAnchor = 0.0f;
