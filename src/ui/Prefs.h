@@ -77,6 +77,16 @@ inline const juce::Identifier showGlyphs { "show_device_glyphs" };
 // the session, the registers and undo, and this file is left with what it always claimed to be:
 // what the WINDOW shows, never what the sound is.
 
+/** Which side of the curve the EQ console's row of hands sits on: under it (the default) or over
+    it. Two blocks inside the console swap places and nothing else changes — the picture keeps its
+    contents, the row keeps its arrangement, only the order changes.
+
+    Over the curve puts every hand of the block together — the GAIN dial, the device's selectors,
+    the tone knobs — and leaves the whole bottom of the block as one uninterrupted picture. Under
+    it puts the result between the device and the hands that shape it. Both read; which one reads
+    BETTER is a thing about eyes, so it is a switch. */
+inline const juce::Identifier eqRowOnTop { "eq_row_on_top" };
+
 /** How a link STANDING BY is shown: off (the default), its tile leaves the panel and the rest
     re-split, the way it always has; on, the tile keeps its place and goes dark.
 

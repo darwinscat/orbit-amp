@@ -654,8 +654,16 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // not half a panel: keeping the numbers meant either shrinking the type below what can be read
     // at 1x or taking the room from the curve, and the curve IS the readout — a node's frequency is
     // where the node is standing. Dragging it sideways was always the way to set one.
-    auto row = content.removeFromBottom (rowH);
-    content.removeFromBottom (4);
+    // Under the curve or over it — the player's choice, and the ONLY thing it changes. The row's
+    // own arrangement does not mirror: names along its top edge, the cuts' stacks standing on the
+    // dials' bottom line, both ways round. A row that rearranged itself with the preference would
+    // have to be re-learnt every time the switch moved.
+    auto row = rowOnTop ? content.removeFromTop (rowH) : content.removeFromBottom (rowH);
+
+    if (rowOnTop)
+        content.removeFromTop (4);
+    else
+        content.removeFromBottom (4);
 
     // ONE LINE OF NAMES. HPF, LO, L MID, H MID, HI, LPF all begin at the row's top edge, because
     // six labels at three different heights read as three groups rather than one row of controls.

@@ -47,6 +47,9 @@ public:
     /** Places everything inside the block's content area. */
     void layOut (juce::Rectangle<int> content);
 
+    /** Which side of the curve the row of hands sits on. The block re-lays itself out after. */
+    void setRowOnTop (bool onTop) { rowOnTop = onTop; }
+
     /** The spectrum only listens while the block is on screen. */
     void setSpectrumRunning (bool shouldRun);
 
@@ -124,6 +127,7 @@ private:
 
     std::function<double (double)> nativeDb;
     juce::Component* host = nullptr;   // whoever the widgets were handed to, for rebuilt rows
+    bool rowOnTop = false;             // see setRowOnTop
 
     EqCurve curve { [this] (double hz) { return drawnDb (hz); } };
 
