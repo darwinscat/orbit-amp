@@ -77,6 +77,15 @@ inline const juce::Identifier showGlyphs { "show_device_glyphs" };
 // the session, the registers and undo, and this file is left with what it always claimed to be:
 // what the WINDOW shows, never what the sound is.
 
+/** How a link STANDING BY is shown: off (the default), its tile leaves the panel and the rest
+    re-split, the way it always has; on, the tile keeps its place and goes dark.
+
+    Purely the eye's business — the sound is the same either way, and the preset does not carry
+    an opinion about it any more than it carries a colour. Removing gives the room to whoever is
+    left; dimming keeps the panel still, so nothing under your hands moves while you A/B a block
+    in and out. Neither is right, which is why it is a switch. */
+inline const juce::Identifier dimStandby { "dim_standby" };
+
 /** What an emptied row does to the WINDOW. On (the default): the window holds its height and
     whoever is left grows into the space — nothing on screen moves except the block that got
     taller. Off: the old way, the row collapses and the window shrinks with it.

@@ -124,7 +124,9 @@ public:
             // A guard's arrow floods with its press — SOLID, interpolated toward the violet
             // (orange is a line here, never a wash) — and the flood stays live even when the
             // row below lost its badge: the light moved here, it did not go out.
-            const float d = juce::jlimit (0.0f, 1.0f, shownDepth[i]);
+            // Only a WORKING link floods. A guard standing by is not pressing on anything, and
+            // its last reading has no business burning on in a dark arrow.
+            const float d = rows[i].on ? juce::jlimit (0.0f, 1.0f, shownDepth[i]) : 0.0f;
             g.setColour (juce::Colour (0xff1b1b22).interpolatedWith (theme::violet, d));
             g.fillPath (arrow);
 

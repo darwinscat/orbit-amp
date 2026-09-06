@@ -58,6 +58,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // Before the first layout: whether an emptied row hands its height to whoever is left, or
     // takes it out of the window. See prefs::growBlocks.
     faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
+    dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
 
 
     addChildComponent (demoStrip);
@@ -350,6 +351,7 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                amp.apvts.getParameter (params::packLevelComp)->getValue() > 0.5f);
     // What an emptied row does: give its height away, or take it out of the window. Here for
     // now, with the rest of the window's switches; it moves into Setup's VIEW page with them.
+    m.addItem (13, "STANDBY KEEPS ITS PLACE", true, dimRatherThanRemove);
     m.addItem (12, "KEEP WINDOW HEIGHT", true, prefs::getBool (prefs::growBlocks, true));
     m.addItem (5, "SHOW SPECTRA",       true, prefs::spectraShown());
     if (params::demoLoopsPresent())     // no loops on disk — no player, and no offer of one
@@ -380,6 +382,14 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                          if (r == 11)
                          {
                              safe->devices.open();
+                             return;
+                         }
+
+                         if (r == 13)
+                         {
+                             safe->dimRatherThanRemove = ! safe->dimRatherThanRemove;
+                             prefs::setBool (prefs::dimStandby, safe->dimRatherThanRemove);
+                             safe->applyRowStates();   // the panel re-splits, or stops doing so
                              return;
                          }
 
