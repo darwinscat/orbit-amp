@@ -114,6 +114,16 @@ public:
         shrank it the value stuck. A wanted size and a current size are two different facts. */
     static constexpr float preferredScale = 1.0f;
 
+    /** The two captured blocks, addressed by number, so the aim, the name pump and the seed can
+        all walk them the same way instead of each carrying its own pair of lambdas. */
+    static constexpr size_t numCaptured = 2;
+
+    core::CapturedBlock& blockAt (size_t b) noexcept { return b == 0 ? boost : preamp; }
+    static const char*   deviceIdOf (size_t b) noexcept
+    { return b == 0 ? params::boostDevice : params::preampDevice; }
+    static juce::String  measuredIdOf (size_t b, int i)
+    { return b == 0 ? params::boostMeasured (i) : params::preampMeasured (i); }
+
     /** The suffix a switch slot's saved position name wears in the state tree. */
     static constexpr const char* switchAimSuffix = "_pos";
 
@@ -134,13 +144,13 @@ private:
 
         `namesPrimed` is the first tick, which only takes the baseline. */
     bool  namesPrimed = false;
-    float lastDeviceValue[2] { -1.0f, -1.0f };
-    float lastSwitchValue[2][core::CapturedBlock::numMeasured] { };
+    float lastDeviceValue[numCaptured] { -1.0f, -1.0f };
+    float lastSwitchValue[numCaptured][core::CapturedBlock::numMeasured] { };
 
     /** What the aim itself last wrote, so a value that no longer reads it can be told from one
         that does — which is how a hand on the control wins against an aim still in flight. */
-    float aimWroteDevice[2] { -1.0f, -1.0f };
-    float aimWroteSwitch[2][core::CapturedBlock::numMeasured] { };
+    float aimWroteDevice[numCaptured] { -1.0f, -1.0f };
+    float aimWroteSwitch[numCaptured][core::CapturedBlock::numMeasured] { };
 
     // MUST precede `updater`: the checker takes the store by reference and is destroyed before it.
     juce::SharedResourcePointer<prefs::UpdateStore> updateStore;
@@ -201,27 +211,22 @@ private:
         // Standing down is not enough on its own. The name pump is quiet while an aim is running
         // and takes each tick's values as its baseline, so a hand that moved a control mid-window
         // would leave the STORED name still describing what the aim wanted — the player's choice
-        // would sound now and be gone at the next load. Closing the window and forgetting the
-        // baseline makes the next pump tick see the move for what it is and write it down.
-        const auto yieldToTheHand = [this]
-        {
-            switchAimFrames = 0;
-
-            lastDeviceValue[0] = lastDeviceValue[1] = -2.0f;   // outside 0..1: never equal to a value
-
-            for (auto& block : lastSwitchValue)
-                for (auto& v : block)
-                    v = -2.0f;
-        };
+        // would sound now and be gone at the next load. So the theft is written down where it
+        // happens, and ONLY for the thing that was taken: the other block may still be waiting for
+        // its pack, and recording what it is playing at this instant would replace the name it is
+        // still trying to reach with the name of whatever the stale number loaded.
 
         // Whether this block's DEVICE is where its name says it should be. The switch half must
         // not run until it is: the positions being aimed at belong to the named pack, and asking
         // the pack that happens to be loaded whether it has a position called "Lead" is asking
         // the wrong device a question about the right one.
-        bool deviceSettled[2] = { true, true };
+        bool deviceSettled[numCaptured] = { true, true };
 
-        const auto aimDevice = [&] (core::CapturedBlock& block, size_t b, const char* id)
+        const auto aimDevice = [&] (size_t b)
         {
+            auto& block = blockAt (b);
+            const auto* id = deviceIdOf (b);
+
             const juce::Identifier key (juce::String (id) + deviceAimSuffix);
 
             if (! apvts.state.hasProperty (key))
@@ -236,7 +241,12 @@ private:
 
             if (stolen (p, aimWroteDevice[b]))
             {
-                yieldToTheHand();
+                // A hand picked a different device. What it picked is the answer now — including
+                // for the switches, whose stored positions belong to the device that just left,
+                // which is why this drops them and writes the new pack's instead. That also
+                // leaves the switch half below nothing of the old device's to aim.
+                noteBlockNames (b, true);
+                aimWroteDevice[b] = -1.0f;
                 return;
             }
 
@@ -275,11 +285,13 @@ private:
             }
         };
 
-        aimDevice (boost,  0, params::boostDevice);
-        aimDevice (preamp, 1, params::preampDevice);
+        for (size_t b = 0; b < numCaptured; ++b)
+            aimDevice (b);
 
-        const auto aim = [&] (core::CapturedBlock& block, size_t b, auto idFor)
+        const auto aim = [&] (size_t b)
         {
+            auto& block = blockAt (b);
+
             if (! deviceSettled[b])
             {
                 waiting = true;   // ask again once the named device is the one that is playing
@@ -288,7 +300,7 @@ private:
 
             for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
             {
-                const auto id = idFor (i);
+                const auto id = measuredIdOf (b, i);
                 const juce::Identifier key (id + switchAimSuffix);
 
                 if (! apvts.state.hasProperty (key))
@@ -303,7 +315,8 @@ private:
 
                 if (stolen (p, aimWroteSwitch[b][(size_t) i]))
                 {
-                    yieldToTheHand();
+                    noteSwitchName (b, i);            // the hand's answer, written where it happened
+                    aimWroteSwitch[b][(size_t) i] = -1.0f;
                     continue;
                 }
 
@@ -330,8 +343,8 @@ private:
             }
         };
 
-        aim (boost,  0, [] (int i) { return params::boostMeasured (i); });
-        aim (preamp, 1, [] (int i) { return params::preampMeasured (i); });
+        for (size_t b = 0; b < numCaptured; ++b)
+            aim (b);
 
         if (! writes.empty())
         {
@@ -351,59 +364,91 @@ private:
             switchAimFrames = 0;
     }
 
+    /** WRITES DOWN WHAT A BLOCK IS PLAYING — its device, and where each of its switches stands —
+        and moves the pump's baselines with it, so what was just written counts as recorded rather
+        than still pending. The one place any of these names is produced.
+
+        `dropPositions` is for a device CHANGE: a position name is only ever about the device it
+        was read from, so the old device leaving takes all of them with it, which is what stops a
+        name resolving later on some other pack that spells a position the same way. They are put
+        back from the new pack in the same pass — `RigPlayer` reads its manifest synchronously, so
+        they are knowable at once, and a device that arrives with no names is a device saved by
+        number until every one of its switches has been touched. */
+    void noteBlockNames (size_t b, bool dropPositions)
+    {
+        auto& block = blockAt (b);
+        const auto* devId = deviceIdOf (b);
+
+        const juce::Identifier devKey (juce::String (devId) + deviceAimSuffix);
+
+        if (const auto name = block.selectedName(); name.isNotEmpty())
+            apvts.state.setProperty (devKey, name, nullptr);
+        else
+            apvts.state.removeProperty (devKey, nullptr);
+
+        lastDeviceValue[b] = apvts.getRawParameterValue (devId)->load();
+
+        for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
+        {
+            const auto id = measuredIdOf (b, i);
+            const juce::Identifier key (id + switchAimSuffix);
+            const float v = apvts.getRawParameterValue (id)->load();
+
+            if (dropPositions)
+                apvts.state.removeProperty (key, nullptr);
+
+            if (const auto n = block.switchValueAt (i, v); n.isNotEmpty())
+                apvts.state.setProperty (key, n, nullptr);
+            else if (! dropPositions)
+                apvts.state.removeProperty (key, nullptr);   // a swept knob owns no name
+
+            lastSwitchValue[b][(size_t) i] = v;
+        }
+    }
+
+    /** One switch slot, when that slot alone is what moved. */
+    void noteSwitchName (size_t b, int i)
+    {
+        const auto id = measuredIdOf (b, i);
+        const juce::Identifier key (id + switchAimSuffix);
+        const float v = apvts.getRawParameterValue (id)->load();
+
+        if (const auto n = blockAt (b).switchValueAt (i, v); n.isNotEmpty())
+            apvts.state.setProperty (key, n, nullptr);
+        else
+            apvts.state.removeProperty (key, nullptr);
+
+        lastSwitchValue[b][(size_t) i] = v;
+    }
+
     void pumpSwitchNames()
     {
         // While an aim is in flight the STORED names are the truth and the parameters are being
         // moved to match them: read the values as the new baseline and write nothing at all.
         const bool quiet = switchAimFrames > 0 || ! namesPrimed;
 
-        const auto note = [&] (core::CapturedBlock& block, size_t b, const char* devId, auto idFor)
+        for (size_t b = 0; b < numCaptured; ++b)
         {
-            const float dv = apvts.getRawParameterValue (devId)->load();
-            const bool deviceMoved = ! quiet && ! juce::approximatelyEqual (dv, lastDeviceValue[b]);
-            lastDeviceValue[b] = dv;
+            const float dv = apvts.getRawParameterValue (deviceIdOf (b))->load();
 
-            if (deviceMoved)
+            if (! quiet && ! juce::approximatelyEqual (dv, lastDeviceValue[b]))
             {
-                const juce::Identifier key (juce::String (devId) + deviceAimSuffix);
-
-                if (const auto name = block.selectedName(); name.isNotEmpty())
-                    apvts.state.setProperty (key, name, nullptr);
-                else
-                    apvts.state.removeProperty (key, nullptr);
-
-                // A position name is only ever about the device it was read from, so the device
-                // leaving takes all of them with it — that is what stops a name resolving on some
-                // later pack that happens to spell a position the same way. They are written again
-                // from the NEW pack in the same breath, below, because a device that arrives with
-                // no names is a device saved by number until every switch has been touched.
-                for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
-                    apvts.state.removeProperty (juce::Identifier (idFor (i) + switchAimSuffix), nullptr);
+                noteBlockNames (b, true);
+                continue;                     // the pass above took every baseline in this block
             }
+
+            lastDeviceValue[b] = dv;
 
             for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
             {
-                const auto  id = idFor (i);
-                const float v  = apvts.getRawParameterValue (id)->load();
-                const bool moved = ! quiet
-                                     && (deviceMoved
-                                          || ! juce::approximatelyEqual (v, lastSwitchValue[b][(size_t) i]));
-                lastSwitchValue[b][(size_t) i] = v;
+                const float v = apvts.getRawParameterValue (measuredIdOf (b, i))->load();
 
-                if (! moved)
-                    continue;
-
-                const juce::Identifier key (id + switchAimSuffix);
-
-                if (const auto name = block.switchValueAt (i, v); name.isNotEmpty())
-                    apvts.state.setProperty (key, name, nullptr);
+                if (! quiet && ! juce::approximatelyEqual (v, lastSwitchValue[b][(size_t) i]))
+                    noteSwitchName (b, i);
                 else
-                    apvts.state.removeProperty (key, nullptr);   // a swept knob owns no name
+                    lastSwitchValue[b][(size_t) i] = v;
             }
-        };
-
-        note (boost,  0, params::boostDevice,  [] (int i) { return params::boostMeasured (i); });
-        note (preamp, 1, params::preampDevice, [] (int i) { return params::preampMeasured (i); });
+        }
 
         namesPrimed = true;
     }
@@ -414,34 +459,13 @@ private:
         Without it a fresh instance has no names in it at all, because the pump only writes when a
         parameter MOVES and nothing has moved yet. A player who opens the plugin, likes what the
         default device does, dials a sound around it and saves that as a preset would get a preset
-        that identifies its device by number — which is the whole disease. The seed costs one pass
-        and, because the baseline is taken after it, it is not an edit and leaves no undo step.
-
-        `RigPlayer::load` reads the manifest synchronously, so the positions are knowable here even
-        though the model bytes are not. */
+        that identifies its device by number — which is the whole disease, in the commonest case
+        there is. The seed costs one pass and, because the baseline is taken after it, it is not an
+        edit and leaves no undo step. */
     void seedSwitchNames()
     {
-        const auto seed = [this] (core::CapturedBlock& block, const char* devId, auto idFor)
-        {
-            if (const auto name = block.selectedName(); name.isNotEmpty())
-                apvts.state.setProperty (juce::Identifier (juce::String (devId) + deviceAimSuffix),
-                                         name, nullptr);
-
-            if (! block.isReady())
-                return;
-
-            for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
-            {
-                const auto id = idFor (i);
-
-                if (const auto n = block.switchValueAt (i, apvts.getRawParameterValue (id)->load());
-                    n.isNotEmpty())
-                    apvts.state.setProperty (juce::Identifier (id + switchAimSuffix), n, nullptr);
-            }
-        };
-
-        seed (boost,  params::boostDevice,  [] (int i) { return params::boostMeasured (i); });
-        seed (preamp, params::preampDevice, [] (int i) { return params::preampMeasured (i); });
+        for (size_t b = 0; b < numCaptured; ++b)
+            noteBlockNames (b, false);
     }
 
     /** The state changed under us — a session opened, a register recalled: aim the switches again. */
