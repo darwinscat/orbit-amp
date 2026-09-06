@@ -47,12 +47,22 @@ void FaceplateView::resized()
 {
     auto lane = getLocalBounds().reduced (0, lanePadY);
 
-    // An unpopulated row takes no space at all — the component is only as tall as
-    // currentHeight() says, so what remains stacks from the top.
-    auto row1 = rowPopulated (0) ? lane.removeFromTop (row1H) : juce::Rectangle<int>();
-    if (rowPopulated (0) && rowPopulated (1))
+    // Both rows standing is the design's own proportions, and there is only one way to draw it.
+    // A row standing ALONE takes the whole lane it was handed — which is the full panel when the
+    // height is being given away and just its own height when it is not, so this routine needs to
+    // know nothing about the choice: `currentHeight()` already made it.
+    const bool r1 = rowPopulated (0), r2 = rowPopulated (1);
+
+    juce::Rectangle<int> row1, row2;
+
+    if (r1 && r2)
+    {
+        row1 = lane.removeFromTop (row1H);
         lane.removeFromTop (rowGap);
-    auto row2 = rowPopulated (1) ? lane.removeFromTop (row2H) : juce::Rectangle<int>();
+        row2 = lane.removeFromTop (row2H);
+    }
+    else if (r1) row1 = lane;
+    else if (r2) row2 = lane;
 
     // ONE law for both rows: the width splits evenly among the blocks that stand in the row, in
     // chain order. The share is recomputed as the walk goes, so the rounding remainder never
