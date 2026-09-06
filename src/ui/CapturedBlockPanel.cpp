@@ -651,9 +651,11 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
                 if (std::abs (swing) > std::abs (bestSwing)) { bestSwing = swing; bestIdx = p; }
             }
 
-            band.anchorHz      = m.grid.fLo * std::pow (m.grid.fHi / m.grid.fLo,
-                                                        (double) bestIdx / (double) (m.grid.points - 1));
-            band.anchorSwingDb = bestSwing;
+            // The swing is only how the strongest point is CHOSEN; it is not kept. It used to
+            // be, to convert a drag of the dot into knob travel — and the dot does not drag any
+            // more.
+            band.anchorHz = m.grid.fLo * std::pow (m.grid.fHi / m.grid.fLo,
+                                                   (double) bestIdx / (double) (m.grid.points - 1));
         }
         else if (! m.sections.empty())
         {
@@ -663,10 +665,7 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
                     best = &sec;
 
             if (best->hz > 0.0)
-            {
-                band.anchorHz      = best->hz;
-                band.anchorSwingDb = best->dbAtMax - best->dbAtMin;
-            }
+                band.anchorHz = best->hz;
         }
 
         out.push_back (std::move (band));
