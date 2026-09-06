@@ -142,8 +142,27 @@ private:
         stale in exactly half its rows. */
     void timerCallback() override
     {
-        if (! isShowing())
+        const bool showing = isShowing();
+
+        // THE MOMENT THE PAGE COMES BACK. The cache is only true of when it was taken, and while
+        // the page was away the world moved: a switch that went off and on again behind its back
+        // would match the cache and never be repainted. Watching the transition here rather than
+        // in `visibilityChanged` because JUCE calls that only when the component's OWN flag moves,
+        // and these lists are shown and hidden by their viewport — the override never fired.
+        const bool arriving = showing && ! wasShowing;
+        wasShowing = showing;
+
+        if (! showing)
             return;
+
+        if (arriving)
+        {
+            for (size_t i = 0; i < rows.size() && i < shown.size(); ++i)
+                shown[i] = (char) (rows[i].get != nullptr && rows[i].get());
+
+            repaint();
+            return;
+        }
 
         // `rows.size()` is re-read every step and `shown` is bounds-checked, because a getter is
         // somebody else's lambda: nothing here may assume the list it started walking is the list
@@ -161,21 +180,6 @@ private:
                 repaint (getLocalBounds().withY ((int) i * rowH).withHeight (rowH));
             }
         }
-    }
-
-    /** The cache is only true of the moment it was taken, and while the page was away the world
-        moved. Re-reading on the way IN is what stops a switch that moved twice behind this page's
-        back — off to on while hidden, back to off before the first tick — from being painted lit
-        and then found to "match" the cache and left there. */
-    void visibilityChanged() override
-    {
-        if (! isShowing())
-            return;
-
-        for (size_t i = 0; i < rows.size() && i < shown.size(); ++i)
-            shown[i] = (char) (rows[i].get != nullptr && rows[i].get());
-
-        repaint();
     }
 
     int rowAt (int y) const
@@ -205,6 +209,7 @@ private:
 
     std::vector<Row> rows;
     std::vector<char> shown;   // char, not bool: vector<bool> has no honest references
+    bool wasShowing = false;
     int hovered = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SettingsList)

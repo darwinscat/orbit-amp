@@ -166,10 +166,11 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
         // the top of setStateInformation also means it is armed AFTER the tree has landed, which
         // is what lets it take the restored values as its baseline instead of the outgoing ones.
-        self.markSwitchAimsPending();
-
         if (self.history.fromTree (t))
+        {
+            self.markSwitchAimsPending();
             return;
+        }
 
         // Sessions saved before the workspace existed hold a bare parameter tree. Load the sound
         // and start a fresh history around it rather than dropping the session on the floor.
@@ -177,6 +178,7 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         {
             self.apvts.replaceState (t);
             self.history.reset();
+            self.markSwitchAimsPending();   // after the tree lands, like the path above
         }
     };
 
@@ -798,6 +800,17 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         if (on)
         {
             const float inTarget = juce::Decibels::decibelsToGain (inParam->load());
+
+            // ARRIVING, not sliding. Coming back from a bypass the trim would otherwise ramp from
+            // unity to what the player set across ONE block — and a block can be longer than the
+            // fade. At 2048 samples the crossfade is over by sample 720, so the model spends the
+            // rest of the block fully audible and still climbing toward the trim: a drive swell,
+            // which is the same family of artefact as the burst this replaced. There is nothing to
+            // ramp INTO: the blend weighs this path at nothing for the first sample, so the trim
+            // simply starts where it belongs.
+            if (! blockWasOn[(size_t) l])
+                lastInGain = inTarget;
+
             chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
             lastInGain = inTarget;
         }
@@ -805,6 +818,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         {
             lastInGain = 1.0f;   // a bypassed block is a wire, and a wire has no trim to ramp from
         }
+
+        blockWasOn[(size_t) l] = on;
 
         // A block that is not working meters nothing: two full passes over the buffer for a needle
         // nobody reads, and a needle still moving on a dark face is the exception this whole rework

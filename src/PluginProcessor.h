@@ -161,9 +161,16 @@ private:
     void timerCallback() override
     {
         history.tick();
+
+        // THE AIM GOES FIRST, and the order is load-bearing. It writes the device NUMBER; the pump
+        // below is what notices and loads it. Run the other way round, every restore of a session
+        // whose numbering had drifted played the wrong pack for a whole tick — a real load and a
+        // real crossfade — before being corrected. This way the number is right before anyone
+        // reads it, and the only cost is that the aim's first tick judges `selectedName()` from
+        // the previous one, which it already had to.
+        applySwitchAims();
         pumpDeviceWork();
         pumpTuner();
-        applySwitchAims();
         pumpSwitchNames();
     }
 
@@ -324,6 +331,15 @@ private:
                     aimWroteSwitch[b][(size_t) i] = p->getValue();
                     continue;
                 }
+
+                // ALREADY THERE, judged by the position rather than by the number. A switch's
+                // parameter is quantised to a thousandth, and a three-position switch's middle is
+                // a third — a number the grid cannot hold. Comparing floats, the aim found a
+                // difference on every single restore and wrote one every time, and each write
+                // opens a suppression scope, which commits whatever burst is open and can drop a
+                // redo. Asking which POSITION the value lands on is the question that was meant.
+                if (block.isReady() && block.switchValueAt (i, p->getValue()) == want)
+                    continue;
 
                 const float v = block.switchParameterFor (i, want);
 
@@ -490,13 +506,24 @@ private:
         // `lastValue` left over from before the restore made the pump read the restored numbers as
         // a hand's move the moment the window closed, and write the fallback's name over the one
         // the aim had been trying to reach. Same fix, twice: start from where we actually are.
+        // THE TWO BASELINES ARE NOT IN THE SAME UNIT, and writing them from one number was a bug
+        // that inverted this whole feature for every device but the first. `aimWrote*` is compared
+        // against `RangedAudioParameter::getValue()`, which is NORMALISED — the device's index 5
+        // reads 5/127 there. `lastValue*` is compared against `getRawParameterValue()`, which is
+        // the plain index. Seeded from the plain index, the theft test answered "a hand moved
+        // this" on the first tick of every restore of any device but index 0, and the aim wrote
+        // down whatever the stale number had loaded — destroying the name it was about to honour.
         for (size_t b = 0; b < numCaptured; ++b)
         {
-            const float dv = apvts.getRawParameterValue (deviceIdOf (b))->load();
-            aimWroteDevice[b] = lastDeviceValue[b] = dv;
+            const auto* devId = deviceIdOf (b);
+            lastDeviceValue[b] = apvts.getRawParameterValue (devId)->load();
+
+            if (const auto* p = apvts.getParameter (devId); p != nullptr)
+                aimWroteDevice[b] = p->getValue();
 
             for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
             {
+                // A switch's parameter is a Float over 0..1, so its two units are the same number.
                 const float v = apvts.getRawParameterValue (measuredIdOf (b, i))->load();
                 aimWroteSwitch[b][(size_t) i] = lastSwitchValue[b][(size_t) i] = v;
             }
@@ -781,6 +808,10 @@ private:
     std::atomic<float>* preampSmoothParam = nullptr;
     float lastBoostInGain  = 1.0f;
     float lastPreampInGain = 1.0f;
+
+    /** Whether each captured block was in the path last block — so the trim can ARRIVE at what
+        the player set instead of sliding up to it while the block is already audible. */
+    bool blockWasOn[2] { true, true };
     float lastTrimGain = 1.0f;
 
     /** The two switches of every link, straight off `params::chainLinks` — plus the two ends,
