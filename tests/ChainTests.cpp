@@ -173,7 +173,6 @@ int main()
     // The EQ consoles have no enable of their own — they ship flat, and a flat link is
     // bit-transparent, so there is nothing to switch off here.
     set (amp, orbitamp::params::reverbOn, 0.0f);
-    set (amp, orbitamp::params::powerOn, 0.0f);
 
     // Both younger than this gate, both in every path, both OFF here for the same reason the
     // reverb is. The cabinet's convolution tail rings for over a second — longer than a run's
@@ -371,7 +370,6 @@ int main()
             // NAMED pack now, and the pump would walk away to it mid-check.
             set (solo, orbitamp::params::boostDevice, 0.0f);
             set (solo, orbitamp::params::reverbOn, 0.0f);
-            set (solo, orbitamp::params::powerOn, 0.0f);
             set (solo, orbitamp::params::preampOn, 0.0f);
             set (solo, orbitamp::params::boostOn, 1.0f);
 

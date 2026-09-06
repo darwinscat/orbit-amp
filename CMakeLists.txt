@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # ----------------------------------------------------------------------------
 # orbit-amp — the device / voicing PLAYER plugin (C++/JUCE). Felitronics line, by Darwin's Cat.
 #
-# The chain:  boost -> EQ -> preamp (voicing) -> EQ -> delay -> reverb -> power amp -> cabinet.
+# The chain:  boost -> EQ -> preamp (voicing) -> EQ -> delay -> reverb -> cabinet.
 #
 # One CMake config builds VST3 + AU + Standalone. JUCE 8 and the felitronics libraries are
 # fetched by CMake (FetchContent) — NOT vendored, NOT system-installed. Each dependency is
@@ -315,7 +315,6 @@ target_sources(OrbitAmp PRIVATE
     src/ui/FaceplateView.cpp
     src/ui/CapturedBlockPanel.cpp
     src/ui/CabinetBlock.cpp
-    src/ui/PowerAmpBlock.cpp
     src/ui/EqSection.cpp
     src/ui/DelayBlock.cpp
     src/ui/ReverbBlock.cpp
@@ -554,10 +553,6 @@ if(APPLE)
 endif()
 
 # ----------------------------------------------------------------------------
-# Acceptance gate for the power amp's CALIBRATION — felitronics tests the tube stage itself; what is
-# ours is the knob mapping. Links juce_dsp for the bypass delay line.
-
-# ----------------------------------------------------------------------------
 # Gate for the waveform picture's MEMORY — what it recorded must not be rewritten later.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_ribbon_test PRODUCT_NAME "OrbitAmpRibbonTest")
@@ -583,7 +578,6 @@ target_sources(orbitamp_chain_test PRIVATE
     src/ui/FaceplateView.cpp
     src/ui/CapturedBlockPanel.cpp
     src/ui/CabinetBlock.cpp
-    src/ui/PowerAmpBlock.cpp
     src/ui/EqSection.cpp
     src/ui/DelayBlock.cpp
     src/ui/ReverbBlock.cpp

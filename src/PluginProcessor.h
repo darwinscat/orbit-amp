@@ -29,7 +29,7 @@ namespace orbitamp
 {
 
 /** The plugin shell. Deliberately thin: the chain (boost -> EQ -> preamp -> EQ -> delay -> reverb ->
-    power amp -> cabinet) lands in src/core/ behind small engines, and this class only pumps
+    cabinet) lands in src/core/ behind small engines, and this class only pumps
     buffers into them and owns state. */
 class AmpProcessor final : public juce::AudioProcessor,
                            private juce::Timer
@@ -287,7 +287,6 @@ public:
         only ever meets a model that is already in memory. */
     core::CapturedBlock boost    { device::DeviceLibrary::Slot::pedal };
     core::CapturedBlock preamp   { device::DeviceLibrary::Slot::preamp };
-    core::CapturedBlock poweramp { device::DeviceLibrary::Slot::poweramp };   // a captured power stage, after the reverb
 
     /** Re-scans the devices folder and loads whatever the device parameters point at. Message
         thread. */
@@ -337,7 +336,7 @@ public:
     // In chain order, which is now also the order the breakdown reads: each captured block is
     // followed by its own EQ.
     enum Stage { stTotal, stTuner, stGate, stBoost, stEq1, stPreamp, stEq2, stDelay, stReverb,
-                 stPower, stCab, stLimit, stOut, numStages };
+                 stCab, stLimit, stOut, numStages };
     std::atomic<float> stageLoad[numStages] {};
 
     /** The dropout evidence: every block that BLEW its budget counts, and each stage keeps the
@@ -487,9 +486,6 @@ private:
     std::atomic<float>* reverbHpfHzParam    = nullptr;
 
     std::atomic<float>* packCompParam    = nullptr;
-    std::atomic<float>* powerOnParam     = nullptr;
-    std::atomic<float>* powerGainParam   = nullptr;
-    std::atomic<float>* powerSmoothParam = nullptr;
     std::atomic<float>* boostOnParam    = nullptr;
     std::atomic<float>* boostGainParam  = nullptr;
     std::atomic<float>* preampOnParam   = nullptr;

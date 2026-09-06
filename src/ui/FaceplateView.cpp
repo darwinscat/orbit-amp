@@ -14,11 +14,10 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
              processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
       preamp (processor, processor.preamp, "Preamp", params::preampId, 1,
               processor.blockSpectrumTap[1], processor.blockInSpectrumTap[1]),
-      delay (processor), reverb (processor), power (processor, processor.poweramp),
-      cabinet (processor)
+      delay (processor), reverb (processor), cabinet (processor)
 {
     for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &delay,
-                     (BlockFrame*) &reverb, (BlockFrame*) &power, (BlockFrame*) &cabinet })
+                     (BlockFrame*) &reverb, (BlockFrame*) &cabinet })
     {
         addAndMakeVisible (*b);
 
@@ -38,7 +37,6 @@ BlockFrame& FaceplateView::frame (Block b)
         case Block::preamp:  return preamp;
         case Block::delay:   return delay;
         case Block::reverb:  return reverb;
-        case Block::power:   return power;
         case Block::cabinet: return cabinet;
     }
 
@@ -85,7 +83,7 @@ void FaceplateView::resized()
     };
 
     lay (row1, { Block::boost, Block::preamp });
-    lay (row2, { Block::delay, Block::reverb, Block::power, Block::cabinet });
+    lay (row2, { Block::delay, Block::reverb, Block::cabinet });
 }
 
 } // namespace orbitamp

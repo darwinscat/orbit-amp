@@ -151,7 +151,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // The raw switch and the selector slots, one set per captured block — and the block's one trim.
     // IN is how hard the capture is fed, and it rides its own meter rather than being a knob among
     // knobs, because it is the question you ask first about a captured device.
-    for (const char* blk : { boostId, preampId, powerId })
+    for (const char* blk : { boostId, preampId })
     {
         const juce::NormalisableRange<float> trim (blockTrimMinDb, blockTrimMaxDb, 0.1f);
 
@@ -177,17 +177,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     layout.add (std::make_unique<Int> (juce::ParameterID { preampDevice, 1 }, "Preamp Device",
                                        0, maxDevices - 1, preampDef.device));
-
-    // The captured power amp's own device, dial and tone slots — the shape the other two have.
-    layout.add (std::make_unique<Int>   (juce::ParameterID { blockDevice (powerId), 1 }, "Power Device",
-                                         0, maxDevices - 1, 0),
-                std::make_unique<Float> (juce::ParameterID { blockGain (powerId), 1 }, "Power Gain",
-                                         juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f));
-
-    for (int i = 0; i < boostNumMeasured; ++i)
-        layout.add (std::make_unique<Float> (juce::ParameterID { blockMeasured (powerId, i), 1 },
-                                             "Power " + juce::String (i + 1),
-                                             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
 
     for (int i = 0; i < preampNumMeasured; ++i)
         layout.add (std::make_unique<Float> (juce::ParameterID { preampMeasured (i), 1 },
@@ -279,11 +268,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                          juce::NormalisableRange<float> (cabTrimMin, 1.0f, 0.001f), 1.0f),
                 std::make_unique<Bool>  (juce::ParameterID { cabPhase,  1 }, "Cab Phase", false));
 
-    // The power amp is off by default: it is most useful for leads and least for tight rhythm, so
-    // it should be something you reach for rather than something you find already on. What it IS
-    // is a captured device now — a pack in the poweramp slot — with the same set of slots the
-    // other two captured blocks have, below.
-    layout.add (std::make_unique<Bool> (juce::ParameterID { powerOn, 1 }, "Power Amp", false));
 
     // MONO is the truth of a guitar chain and half the neural cost; STEREO is the double-track
     // option — two takes on one bus, each through its own amp; STEREO SPACE keeps the amp mono

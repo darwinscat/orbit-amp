@@ -260,7 +260,7 @@ void Footer::showLoadBreakdown()
                 // ASCII on purpose: these run through formatted ("%-8s"), where a multi-byte
                 // middle dot breaks both the encoding and the column width.
                 "TOTAL", "TUNER", "GATE", "BOOST", "B-EQ", "PREAMP", "P-EQ", "DELAY", "REVERB",
-                "POWER", "CAB", "LIMIT", "OUT",
+                "CAB", "LIMIT", "OUT",
             };
 
             juce::String t;
@@ -283,7 +283,7 @@ void Footer::showLoadBreakdown()
         {
             static const char* const names[AmpProcessor::numStages] = {
                 "TOTAL", "TUNER", "GATE", "BOOST", "BOOST EQ", "PREAMP", "PREAMP EQ", "DELAY",
-                "REVERB", "POWER", "CAB", "LIMIT", "OUT",
+                "REVERB", "CAB", "LIMIT", "OUT",
             };
 
             auto r = getLocalBounds().reduced (12, 4);

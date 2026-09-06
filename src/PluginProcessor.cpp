@@ -107,9 +107,6 @@ AmpProcessor::AmpProcessor()
     reverbHpfHzParam    = apvts.getRawParameterValue (params::reverbHpfHz);
 
     packCompParam    = apvts.getRawParameterValue (params::packLevelComp);
-    powerOnParam     = apvts.getRawParameterValue (params::powerOn);
-    powerGainParam   = apvts.getRawParameterValue (params::blockGain (params::powerId));
-    powerSmoothParam = apvts.getRawParameterValue (params::blockSmooth (params::powerId));
     boostOnParam    = apvts.getRawParameterValue (params::boostOn);
     boostGainParam  = apvts.getRawParameterValue (params::boostGain);
     preampOnParam   = apvts.getRawParameterValue (params::preampOn);
@@ -184,7 +181,6 @@ void AmpProcessor::rescanDevices()
     // wrong LIST — the block says what it is for, and the list has to agree with it.
     boost.rescan (juce::roundToInt (apvts.getRawParameterValue (params::boostDevice)->load()));
     preamp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::preampDevice)->load()));
-    poweramp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::blockDevice (params::powerId))->load()));
 }
 
 const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
@@ -258,8 +254,6 @@ void AmpProcessor::pumpDeviceWork()
 
     pump (boost,    boostGainParam,  boostSmoothParam,  params::boostMeasured,  params::boostId);
     pump (preamp,   preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
-    pump (poweramp, powerGainParam,  powerSmoothParam,
-          [] (int i) { return params::blockMeasured (params::powerId, i); }, params::powerId);
 
     // A model that landed may carry rate-matching the host has to know about.
     reportLatency();
@@ -307,7 +301,7 @@ void AmpProcessor::reportLatency()
 {
     // In series: each captured block's models — a capture taken at another rate is resampled on
     // the way in and out, and that has a length.
-    const int total = boost.latencySamples() + preamp.latencySamples() + poweramp.latencySamples();
+    const int total = boost.latencySamples() + preamp.latencySamples();
 
     if (total != getLatencySamples())
         setLatencySamples (total);
@@ -366,14 +360,13 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     reverb.prepare (sampleRate, block);
     boost.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
-    poweramp.prepare (sampleRate, block, channels);
     demo.prepare (sampleRate);
     scopeDry.setSize (1, block);
 
     pumpDeviceWork();
 
 
-    // Reported ALWAYS, whether the power amp is switched on or not: its bypass path carries the same
+    // Reported ALWAYS, whether a block is switched on or not: a bypass path carries the same
     // delay, so a toggle never shifts the timing of everything downstream. A latency that changes
     // with a switch is what makes hosts re-align mid-song.
     reportLatency();
@@ -552,7 +545,6 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         const bool comp = packCompParam->load() > 0.5f;
         boost.setInputTrims (comp);
         preamp.setInputTrims (comp);
-        poweramp.setInputTrims (comp);
     }
 
     auto* const* channels = buffer.getArrayOfWritePointers();
@@ -573,7 +565,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The captured blocks take a BUFFER — this alias holds only the channels the chain works.
     juce::AudioBuffer<float> chainView (const_cast<float**> (channels), nch, numSamples);
 
-    // gate -> boost -> EQ -> preamp -> EQ -> delay -> reverb -> power amp. The gate stands at the very
+    // gate -> boost -> EQ -> preamp -> EQ -> delay -> reverb. The gate stands at the very
     // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
     // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
     // pop-free, so it runs unconditionally and the switch is an argument.
@@ -729,16 +721,6 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
           nsStage[stReverb] = elapsedNs (a); }
     else
         reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
-
-    // The captured power stage, after the space: a pack in the poweramp slot, played by the same
-    // block the boost and the preamp are — on the back half's channels, stereo when the space is.
-    { const auto a = PerfClock::now();
-      if (powerOnParam->load() > 0.5f)
-      {
-          juce::AudioBuffer<float> backView (const_cast<float**> (channels), nchBack, numSamples);
-          poweramp.process (backView, scopeDry);
-      }
-      nsStage[stPower] = elapsedNs (a); }
 
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
     // Its picture's spectra tap the door and the exit, channel 0, only while it is on.

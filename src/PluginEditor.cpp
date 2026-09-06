@@ -22,9 +22,6 @@ namespace
         const char* onParam;
     };
 
-    // The power amp is NOT in the table: it is not ready — no pack ships — so it is benched
-    // whole: no tile in the chooser, no tab in Setup, its power forced out at open. It returns
-    // here when it returns for real.
     const LayoutBlock layoutBlocks[] = {
         { "BOOST",  FaceplateView::Block::boost,   true,  params::boostOn  },
         { "PREAMP", FaceplateView::Block::preamp,  true,  params::preampOn },
@@ -77,14 +74,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
     showGlyphs = prefs::getBool (prefs::showGlyphs, false);
 
-    // The benched power amp: never shown, and its power put out even if a session saved it on —
-    // an invisible block must not colour the sound either.
-    if (auto* p = amp.apvts.getParameter (params::powerOn); p != nullptr && p->getValue() > 0.5f)
-    {
-        p->beginChangeGesture();
-        p->setValueNotifyingHost (0.0f);
-        p->endChangeGesture();
-    }
 
     addChildComponent (demoStrip);
     addChildComponent (glyphs);

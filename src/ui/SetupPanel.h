@@ -14,7 +14,7 @@ namespace orbitamp
 
 /** The SETUP window, opened from the toolbar gear: an overlay over the whole editor, one panel on
     a scrim, its pages behind tabs across the top. One tab per library a block draws from —
-    PREAMP, BOOST, POWER AMP, and the cabinet's IR tree — so each list is curated where it plays,
+    PREAMP, BOOST, and the cabinet's IR tree — so each list is curated where it plays,
     and the strip is built for the pages that follow. Closes on ✕, Esc, or a click on the scrim.
 
     An overlay rather than a desktop window because a plugin editor is a guest: hosts reparent,
@@ -55,7 +55,6 @@ private:
 
     DeviceListView preampDevices { device::DeviceLibrary::Slot::preamp };
     DeviceListView boostDevices  { device::DeviceLibrary::Slot::pedal };
-    DeviceListView powerDevices  { device::DeviceLibrary::Slot::poweramp };
     IrTreeView     irs;
     MiniClose      closeButton;
 
