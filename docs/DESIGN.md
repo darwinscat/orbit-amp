@@ -16,9 +16,9 @@
 
 ## What orbit-amp is
 
-A guitar tone plugin (VST3 / AU / CLAP / standalone; JUCE; macOS, Windows, Linux). It plays captured neural voicings through a full chain — boost and preamp,
-each with its own EQ, then reverb, power amp and cabinet — on a compact, resizable
-faceplate. AGPL-3.0-or-later.
+A guitar tone plugin (VST3 / AU / CLAP / standalone; JUCE; macOS, Windows, Linux). It plays
+captured neural voicings through a full chain — boost and preamp, each with its own EQ, then
+delay, reverb and cabinet — on a compact, resizable faceplate. AGPL-3.0-or-later.
 
 ## Philosophy
 
@@ -46,34 +46,84 @@ the gain→loudness ramp; the gain knob becomes a set of discrete captured profi
 The capture holds the nonlinear *voice*; loudness, EQ and reverb are our own
 layers on top.
 
+## The rig, and the two switches every link has
+
+The chain is laid flat across the top of the window as a strip of arrows — one per link, in order,
+the shape itself saying the sequence. **The strip is a picture of the RIG as a player sees it, not
+a diagram of the pipeline**: its two ends, IN and OUT, are the way in and the way out rather than
+links, which is why `… LIMIT · OUT` is honest even though the output volume is applied before the
+limiter — a master that could push past the ceiling would not be a ceiling.
+
+Every link has **three states**, and both switches are ordinary automatable parameters, so a rig
+travels in the preset, the session, the A/B/C/D registers and undo without a line of code about
+storage:
+
+| | what you see | what it does |
+|---|---|---|
+| **ON** | standing, working | sounds |
+| **STANDBY** | in the strip, arrow dark; on the panel either gone or dimmed, your choice | does not sound; its action is IGNORED |
+| **OFF** | no row in the strip, nothing on the panel | not there: not processed, not in the cost list |
+
+The arrow switches STANDBY ↔ ON. Setup's EDITOR page decides what the rig HAS at all.
+
+**STANDBY is an insert's bypass, exactly as a DAW means it.** A link stops taking new signal but
+keeps running, so a delay's repeats and a reverb's tail ring OUT instead of being chopped; a link
+that *replaces* the signal rather than adding to it — boost, preamp, cabinet — crossfades to the
+signal it was handed over fifteen milliseconds. Nothing is ever cut: switching, and leaving the rig,
+both fade.
+
+Two consequences worth stating out loud, because both are the model working rather than failing:
+
+- **a bypassed link still costs CPU**, precisely as a bypassed insert does in any DAW. Taking a link
+  out of the RIG is what gives the processor back — and that is what the cost breakdown shows: a
+  link standing by keeps its row and its real number, faintly, so the bypass cannot pretend to have
+  bought anything;
+- **a bypassed link keeps whatever latency it had.** A rate-matching model reports one, and dropping
+  it out of the path would make the chain arrive early for as long as it stayed bypassed, so the
+  bypass path carries the same delay the model would have.
+
 ## Signal chain
 
 ```
-tuner → gate → boost → EQ → preamp (voicing) → EQ → delay → reverb → power amp → cabinet → limiter
+IN → tuner → gate → boost → EQ → preamp (voicing) → EQ → delay → reverb → cabinet → limiter → OUT
 ```
 
-- **Tuner** — a listener, not a processor: it taps the raw input and never touches
-  the signal, so it has no switch. It sits FIRST because that is what it hears —
-  and it must stay ahead of the gate, or a closed gate blinds the needle on a
-  decaying note, which is exactly when you tune. MPM (McLeod) pitch.
+- **IN / OUT** — the input's level and its volume, the output's mirrored: one rail each, one hand
+  each. **Out of the rig by default**: the volumes that matter are the captured blocks' own IN trims
+  — how hard each model is fed — and a global fader is what a player reaches for when a rig needs
+  fixing, not what a rig needs to start with.
+- **Tuner** — a listener: it taps the raw input, ahead of the gate, because a closed gate would
+  blind the needle on a decaying note, which is exactly when you tune. MPM (McLeod) pitch. It is a
+  link like any other — out of the rig it does not even listen — and it will grow a mute, at which
+  point it stops being only a listener.
 - **Noise gate** — `felitronics::dynamics::NoiseGate`, the engine OrbitCab ships:
   Schmitt + hold, transient-safe open, pop-free enable. Dual detection: it always
   KEYS off the raw guitar, and the MUTE lands where the player says — at the
   start, or pre-reverb (the default: the hiss the boost and preamp ADD dies too,
-  the clean key never pumps, the reverb tail rings out). Indicated the way gates
-  are: a live key-level meter with both decision marks on it — OPEN (the
-  threshold, draggable) and CLOSE (the engine's hysteresis under it). One feel
-  control — Decay, the close ramp: Normal is a natural die-away, Metal is the
-  chop. Attack, hold and hysteresis stay the engine's. Off by default.
+  the clean key never pumps, the tail rings out). Its positions are named for the CHAIN — START and
+  END — because a rig may have no reverb in it.
+
+  Its console is its own arrow in the strip: OFF, three named thresholds, LEARN (three seconds of
+  listening that sets one for you), DECAY and where it mutes. It used to ride the IN column as a
+  second runner on the same rail as the input volume, and a drag moved whichever runner was nearer
+  the grab — two hands on one scale, told apart by proximity, which is not something anyone can aim.
+  The menu's header carries the current number, because the threshold is continuous and three
+  positions are three points on it. Off by default.
 - **EQ** — DSP, and **part of the captured block, not a separate link**: each
   console sits right AFTER its block's nonlinearity, colouring what the device
-  made — the boost's EQ feeds the preamp, the preamp's feeds the power amp, where
-  a real amplifier keeps its tone stack. It goes dark with its block. Two faces
+  made — the boost's EQ feeds the preamp, and the preamp's sits where a real amplifier keeps its
+  tone stack. It goes dark with its block. Its row of hands sits under the curve or over it, a
+  choice in Setup. Two faces
   per console: DEVICE TONE — the pack's own measured knobs — and UNIVERSAL EQ
   (the default) — our parametric in their place: two shelves with free corners,
   two tone bells (a third narrow one switches in), HPF/LPF with a real slope
   choice (6–48 dB/oct). A pack that measured nothing falls to UNIVERSAL on its own.
-- **Boost** — a separate captured (neural) block in front. Toggleable.
+
+  Wearing the device's own tone, its points on the curve are **markers, not handles**: they say
+  where each measured knob acts hardest, and the knob below is the hand. They used to drag, and the
+  drag converted decibels into knob travel through a single measured swing — honest as an indicator,
+  not as a control, because a tone stack's response is not linear in its dial.
+- **Boost** — a separate captured (neural) block in front.
 - **Preamp** — the captured voicing. Gain 0–10 maps to the captured positions —
   SMOOTH crossfades between them, STEP lands the dial on them; the biggest knob
   (the hero). The tone console lives in the block — see the EQ entry above.
@@ -84,15 +134,14 @@ tuner → gate → boost → EQ → preamp (voicing) → EQ → delay → reverb
 - **Reverb** — DSP (algorithmic). The character is the title — Ambience · Room ·
   Hall · Plate · Spring · Modulated — size and damping follow from it; Mix is the
   hero, DECAY scales the character's breath, PREDELAY keeps the attack dry, and the
-  tail's own HPF is always in (this reverb feeds a power amp — a low tail into
-  drive is mud).
-- **Power amp** — optional, a captured slot like the boost and the preamp; off and
-  hidden behind the gear until asked for, and a hidden block does not colour the
-  sound.
+  tail's own HPF is always in (a low tail into what follows is mud).
 - **Cabinet** — one impulse response, drawn as its waveform; HPF / LPF / trim /
   phase are baked into the IR itself, so the convolution stays one clean pass.
-- **Limiter** — the safety at the door on the way out: on by default, because
-  protection you must remember to switch on protects nobody.
+- **Limiter** — the safety at the door on the way out: on by default, because protection you must
+  remember to switch on protects nobody. Its console is its own arrow in the strip — OFF and three
+  ceilings — and, like the gate's, its header carries the current number, because the ceiling is
+  continuous and three positions are three points on it. Letting it go is a crossfade, not a
+  release: three decibels of grip handed back between two samples is a step, and a step is a click.
 
 **Stereo, three ways**: MONO; STEREO (everything twice, each side through its own
 amp); STEREO SPACE — mono where the sound is made, stereo from the reverb on,
@@ -104,7 +153,7 @@ on STEREO.
 
 | thing | how |
 |---|---|
-| boost / preamp / power amp nonlinearity | neural profile (captured) |
+| boost / preamp nonlinearity | neural profile (captured) |
 | gain positions | discrete captured profiles, 0–10 |
 | tone / EQ | the device's measured knobs, or our parametric in their place |
 | loudness-vs-gain | our own curve (capture normalises it away) |
@@ -116,17 +165,39 @@ on STEREO.
 Futuristic, not retro — no grilles / tolex / glowing tubes; a dark, "instrument"
 feel. Brand tokens: a violet accent (per-device overridable), an orange "spark"
 constant for the captured neural core, the cat mark. Knobs are the heroes (value on
-the face, 0–10 numeric with notches). The blocks are framed, toggleable modules,
-colour-coded: **orange = captured**, **violet = DSP**. Real device names title the
-captured blocks; the Darwin's Cat voice name rides the paper line beneath.
+the face, 0–10 numeric with notches). The blocks are framed modules, colour-coded:
+**orange = captured**, **violet = DSP**. Real device names title the captured blocks;
+the Darwin's Cat voice name rides the paper line beneath.
 
-**One layout — no zoom, no modes.** Everything is readable at 1×: the captured
-blocks with their consoles in the upper row, reverb and cabinet below, the power
-amp joining when shown. IN and OUT meter rails flank the face; the gate and the
-limiter sit as badges at the bottom with the wave ribbon between them. A top
-chrome carries undo / redo · A/B/C/D · presets · the gear; the footer states the
-facts of the run — stereo mode, sample rate, DSP cost. The whole editor scales
-50–400% from a single factor.
+**One layout — no zoom, no modes.** Everything is readable at 1×: the captured blocks with their
+consoles in the upper row, what happens afterwards below. The chain strip runs across the top under
+the chrome; the volume columns stand at the sides when the rig has them. A top chrome carries
+undo / redo · A/B/C/D · presets · the gear; the footer states the facts of the run — stereo mode,
+sample rate, DSP cost — and beside them the two pages that are only ever READ: the build stamp, and
+DEVICES & TRADEMARKS. The whole editor scales 50–400% from a single factor.
+
+An emptied row does not shrink the window by default: its height is handed to whoever is left, so
+nothing under your hands moves while you put a block in and out to hear it. Both that and how a
+standing-by link is shown — removed from the panel, or left in place and dark — are the eye's
+business, so they live on the machine and never in a preset.
+
+**Nothing a player reads is smaller than 13 px** at 1×. The only exception is numerals and short
+labels inside strip miniatures, where small type is a diagram rather than prose.
+
+## Setup — one window, three pages
+
+The gear opens a window, not a menu. It used to drop a popup carrying a door to Setup, two doors to
+pages nobody sets anything on, and a handful of switches — which is how a settings menu becomes the
+place things are hidden.
+
+| page | what | whose life |
+|---|---|---|
+| **LIBRARY** | the packs and the IRs, one sub-tab each, and the one switch that is about packs | folders are the machine's; the switch travels with the preset |
+| **EDITOR** | which links the rig has at all — the chain in order, each row wearing its link's accent | **travels with the preset** |
+| **VIEW** | what this window shows, and only that | **this machine only** |
+
+Each page says which of those two lifetimes it has, quietly, beside its own tabs. Nobody should
+have to discover it by watching their patch rearrange somebody else's window.
 
 The pixel-level reference is a set of HTML mockups produced during design (kept
 outside this repo). Rebuild the faceplate natively — the mockups are a spec, not
