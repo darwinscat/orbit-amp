@@ -32,9 +32,7 @@ class AmpEditor final : public juce::AudioProcessorEditor
 {
 public:
     explicit AmpEditor (AmpProcessor&);
-    /** Not defaulted: this window hangs a callback on the processor's history, and the history
-        outlives every editor that ever opens on it. Chrome clears its own for the same reason. */
-    ~AmpEditor() override;
+    ~AmpEditor() override = default;
 
     void paint (juce::Graphics&) override;
     void resized() override;

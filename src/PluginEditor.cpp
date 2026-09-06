@@ -233,15 +233,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     gateConsole.onLearnBegin = [this] { learnOverlay.begin(); };
     gateConsole.onLearnDone  = [this] (const juce::String& v) { learnOverlay.finish (v); };
 
-    // A measurement runs for three seconds, and three seconds is long enough to switch a register,
-    // load a preset or undo. Anything that replaces the live patch stops it: finishing into a patch
-    // that changed underneath would set a threshold nobody asked for and switch on a gate somebody
-    // had just switched off. Only stops a timer — no write, so the engine's read-only contract for
-    // this hook holds.
-    amp.history.onAfterApply = [this] (felitronics::appkit::CompareHistory::Reason)
-    {
-        gateConsole.cancel();
-    };
     addChildComponent (learnOverlay);
 
     // The rulers the runners summon: IN's stands right of its column, OUT's and the ceiling's
@@ -321,13 +312,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     moves. A tile, a column and the tuner's row are all "stands on the panel or does not", and the
     answer is the same sentence for all three: in the rig, and either on or dimmed rather than
     removed. */
-AmpEditor::~AmpEditor()
-{
-    // The history is the PROCESSOR's, and it will outlive this window. A callback into a destroyed
-    // editor is what a closed plugin window plus one undo looks like from the crash report.
-    amp.history.onAfterApply = nullptr;
-}
-
 void AmpEditor::applyRowStates()
 {
     const auto stands = [this] (params::ChainRow row)

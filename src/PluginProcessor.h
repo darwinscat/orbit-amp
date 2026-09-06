@@ -51,7 +51,12 @@ public:
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }
-    double getTailLengthSeconds() const override             { return 0.0; }
+    /** NOT zero any more. Standing a room or an echo by leaves it ringing on purpose — that is
+        what an insert's bypass does — so a host told there is no tail may cut an offline render or
+        a freeze exactly where we started holding one. The longest thing in here is the delay's own
+        line; the reverb's decay is shorter than that. Declared generously: the cost of over-stating
+        a tail is a little extra rendering, and the cost of under-stating it is a truncated one. */
+    double getTailLengthSeconds() const override             { return 8.0; }
 
     int getNumPrograms() override                            { return 1; }
     int getCurrentProgram() override                         { return 0; }

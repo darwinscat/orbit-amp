@@ -549,7 +549,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The tuner listens HERE — the raw input (or the loop standing in for it), before any block
     // colours it.
     { const auto a = PerfClock::now();
-      tunerTap.write (buffer.getReadPointer (0), buffer.getNumSamples());
+      if (linkWorks (params::rowTuner))
+          tunerTap.write (buffer.getReadPointer (0), buffer.getNumSamples());
       nsStage[stTuner] = elapsedNs (a); }
 
     updateEqSettings();
@@ -804,6 +805,12 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
       if (cabFade)
           core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(), nchBack, numSamples, cabSpan);
 
+      // Once the fade is over and nothing of the cabinet is in the sum, drop what it remembers.
+      // Otherwise the first IR-length after it comes back convolves what was played BEFORE it
+      // stood down — a ghost, faded in over fifteen milliseconds, of a phrase from minutes ago.
+      if (! cabOn)
+          cab.reset();
+
       if (cabOn)
       {
           const float* d = buffer.getReadPointer (0);
@@ -852,7 +859,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             outClip.store (true);
     }
 
-    nsStage[stOut]   = elapsedNs (tOut);
+    // MINUS the limiter, which was measured separately inside this same scope. Left in, the two
+    // rows double-counted and the breakdown stopped adding up — which is the one thing a breakdown
+    // is for.
+    nsStage[stOut]   = juce::jmax (0.0, elapsedNs (tOut) - nsStage[stLimit]);
     nsStage[stTotal] = elapsedNs (tStart);
 
     // The per-stage publication: one-pole EMA at orbitcab's coefficient, so the two meters

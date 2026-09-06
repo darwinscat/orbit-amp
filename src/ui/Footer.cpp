@@ -245,7 +245,10 @@ void Footer::showLoadBreakdown()
     {
         explicit Panel (AmpProcessor& p) : amp (p)
         {
-            setSize (320, 24 + graphH + 6 + shownStages() * rowH + 30 + 26);
+            // Sized for EVERY stage, not for the ones standing when it opened: presence can be
+            // switched while this callout is up, and a panel that grew a row would spill into its
+            // own buttons. The unused rows cost a little air and nothing else.
+            setSize (320, 24 + graphH + 6 + AmpProcessor::numStages * rowH + 30 + 26);
             startTimerHz (15);
         }
 
@@ -275,15 +278,6 @@ void Footer::showLoadBreakdown()
             return p == nullptr || p->getValue() > 0.5f;
         }
 
-        int shownStages() const
-        {
-            int n = 0;
-            for (int i = 0; i < AmpProcessor::numStages; ++i)
-                if (stageInRig (i))
-                    ++n;
-
-            return n;
-        }
 
         void mouseDown (const juce::MouseEvent& e) override
         {

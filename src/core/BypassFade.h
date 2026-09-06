@@ -48,6 +48,11 @@ public:
     {
         float from = 1.0f, to = 1.0f;
         bool  moving = false;
+
+        /** How many samples OF THIS BLOCK the fade actually occupies. Interpolating across the
+            whole block instead stretched the last stretch of every fade to the block's length:
+            at four thousand samples a fifteen-millisecond fade became eighty-five. */
+        int   ramp = 0;
     };
 
     Span advance (int numSamples, bool target) noexcept
@@ -57,11 +62,13 @@ public:
         if (juce::approximatelyEqual (g, want))
             return { g, g, false };
 
-        const float from = g;
-        const float step = perSample * (float) numSamples;
+        const float from   = g;
+        const float needed = std::abs (want - g) / juce::jmax (1.0e-9f, perSample);
+        const int   ramp   = juce::jlimit (1, numSamples, (int) std::ceil (needed));
+        const float step   = perSample * (float) ramp;
 
         g = target ? juce::jmin (want, g + step) : juce::jmax (want, g - step);
-        return { from, g, true };
+        return { from, g, true, ramp };
     }
 
     /** Is the block's output wanted at all this block — because it is in, or because it is still
@@ -76,16 +83,21 @@ public:
         if (numSamples <= 0)
             return;
 
-        const float step = (s.to - s.from) / (float) numSamples;
+        const int   ramp = juce::jlimit (1, numSamples, s.ramp);
+        const float step = (s.to - s.from) / (float) ramp;
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
             float*       w = wet[ch];
             const float* d = dry[ch];
-            float        g = s.from;
 
-            for (int i = 0; i < numSamples; ++i, g += step)
+            // Walk for as long as the fade actually lasts, then HOLD. A fade that finishes a
+            // fifth of the way into a big block must not go on sliding for the other four.
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float g = i < ramp ? s.from + step * (float) i : s.to;
                 w[i] = d[i] + (w[i] - d[i]) * g;
+            }
         }
     }
 
