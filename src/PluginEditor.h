@@ -9,6 +9,7 @@
 #include "ui/FaceplateView.h"
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
 #include "ui/Footer.h"
+#include "ui/GateConsole.h"
 #include "ui/GateStrip.h"
 #include "ui/OutStrip.h"
 #include "ui/LearnOverlay.h"
@@ -32,7 +33,9 @@ class AmpEditor final : public juce::AudioProcessorEditor
 {
 public:
     explicit AmpEditor (AmpProcessor&);
-    ~AmpEditor() override = default;
+    /** Not defaulted: this window hangs a callback on the processor's history, and the history
+        outlives every editor that ever opens on it. Chrome clears its own for the same reason. */
+    ~AmpEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -120,7 +123,11 @@ private:
         the ONE place blocks are stood down and brought back. Built in the constructor because
         its rows come from a table the header cannot see. */
     std::unique_ptr<LayoutStrip> layoutStrip;
-    GateStrip     gateStrip;        // the IN sliver with the gate's story, left of the faceplate
+    /** The gate, with no face of its own — its door is the strip's arrow. DECLARED BEFORE the
+        overlay on purpose: the overlay draws LEARN's trace from a pointer into this object, and
+        members die in reverse order, so the reader has to go first. */
+    GateConsole   gateConsole;
+    GateStrip     gateStrip;        // the IN sliver, left of the faceplate
     OutStrip      outStrip;         // the OUT sliver with the master's hand, right of it
     TunerStrip    tunerStrip;       // the always-on needle, between the guards
     Footer        footer;

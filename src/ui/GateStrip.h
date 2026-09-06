@@ -15,68 +15,33 @@
 namespace orbitamp
 {
 
-/** The gate as a sliver: a thin IN meter standing left of the faceplate with the gate's whole
-    story on it.
+/** The IN column: the input's level, and the input's volume. One rail, ONE hand.
 
-    The input climbs a FIXED meter scale — violet through magenta into orange, the classic
-    green-to-red told in this face's colours; the bar reveals the scale rather than carrying its
-    own. The threshold runner rides the same scale and DRAGS — it writes the same parameter every
-    other gate control writes. The gate's pressure descends the right lane in the ramp's red,
-    solid — the one colour family this panel lets be a fill — meeting the input it is squeezing.
+    It used to carry the gate as well — a lilac threshold caret beside the orange trim caret, both
+    on this scale, and a drag moved whichever was nearer the grab. Two hands on one rail told apart
+    by proximity, which is not something a player can aim; the class said so itself and it stayed
+    true for a year. The gate has its own console now, opened from its own arrow in the strip.
 
-    Two runners share the column, told apart by side and colour: the lilac threshold caret on the
-    left, the orange INPUT TRIM caret on the right — its own ±24 scale, unity notched at the
-    middle. A drag moves whichever runner is nearer to the grab; a clean click opens the zoom. */
+    What is left is what a column is: the level on the family rail with its hold and its clip cap,
+    and the trim riding it as tabby's hollow sliding frame. Drag it, double-click it for unity,
+    double-click its grip to type a number. */
 class GateStrip final : public juce::Component,
                         private juce::Timer
 {
 public:
-    GateStrip (const std::atomic<float>& keyDbSource, const std::atomic<float>& pressureDbSource,
-               std::atomic<bool>& clipLatch,
-               juce::RangedAudioParameter& thresholdParam, juce::RangedAudioParameter& trimParam,
-               juce::RangedAudioParameter& gateOnParam, juce::RangedAudioParameter& decayParam,
-               juce::RangedAudioParameter& posParam)
-        : keyDb (keyDbSource), pressureDb (pressureDbSource), clip (clipLatch),
-          param (thresholdParam), trimP (trimParam), onP (gateOnParam), decayP (decayParam),
-          posP (posParam)
+    GateStrip (const std::atomic<float>& keyDbSource, std::atomic<bool>& clipLatch,
+               juce::RangedAudioParameter& trimParam)
+        : keyDb (keyDbSource), clip (clipLatch), trimP (trimParam)
     {
-        posAtt = std::make_unique<juce::ParameterAttachment> (posParam, [] (float) {});
-
-        threshold = std::make_unique<juce::ParameterAttachment> (thresholdParam,
-                                                                 [this] (float) { repaint(); });
         trim = std::make_unique<juce::ParameterAttachment> (trimParam,
                                                             [this] (float) { repaint(); });
-        onAtt = std::make_unique<juce::ParameterAttachment> (gateOnParam,
-                                                             [this] (float) { repaint(); });
-        decayAtt = std::make_unique<juce::ParameterAttachment> (decayParam, [] (float) {});
 
-        setRepaintsOnMouseActivity (true);   // the runners fade in under the mouse
+        setRepaintsOnMouseActivity (true);   // the runner fades in under the mouse
         startTimerHz (30);
     }
 
-    /** A clean click (no drag) opens the big gate — the sliver is the glance. */
-    std::function<void()> onClick;
-
     /** The trim runner entered/left the hand — the editor slides the drag ruler out beside us. */
     std::function<void (bool)> onTrimDrag;
-
-    /** The big LEARN overlay's hooks: measurement started; measurement spoke its verdict. */
-    std::function<void()>             onLearnBegin;
-    std::function<void (juce::String)> onLearnDone;
-
-    const std::vector<float>& learnTraceRef() const { return learnTrace; }
-
-    /** The threshold LEARN would set if it ended now — the overlay's live dashed line.
-        -999 while the trusted window has heard nothing yet. */
-    float learnPendingDb() const
-    {
-        if (! learning || learnPeak <= -119.0f)
-            return -999.0f;
-
-        return juce::jlimit (-80.0f, -10.0f, learnPeak + params::gateHysteresisDb);
-    }
-
-    static constexpr int learnTotalTicks = 90;     // 3 s at 30 Hz
 
     static constexpr int designWidth = 38;
 
@@ -103,7 +68,7 @@ public:
         // ---- the ghost: while the trim is in hand, the peak-hold's FUTURE — where the last
         //      phrase's peak will land with the new gain — walks the scale as a dashed line.
         //      This is what puts the runner IN the column's grid: you see the consequence. ----
-        if (dragging && grabbedTrim)
+        if (dragging)
         {
             const float delta = trimP.convertFrom0to1 (trimP.getValue()) - trimStartDb;
             if (holdAtGrab > floorDb + 0.5f && std::abs (delta) > 0.05f)
@@ -115,36 +80,9 @@ public:
             }
         }
 
-        // ---- learning: an orange fuse burning up the left edge — the measurement's progress ----
-        if (learning)
-        {
-            const float frac = (float) learnTicks / (float) learnTotalTicks;
-            g.setColour (theme::orange);
-            g.fillRect (inCol.getX(), inCol.getBottom() - inCol.getHeight() * frac,
-                        2.0f, inCol.getHeight() * frac);
-        }
-
-        // ---- the threshold: the same grip instrument as the trim, in the gate's violet — its
-        //      number aboard, the derived CLOSE line the hysteresis under it. A switched-off
-        //      gate is read-only here like everywhere: its runner dims and will not answer.
-        // The runners live half-ghosted until the hand comes near: the column is a METER first,
-        // its controls surface when wanted. (His own ask — the no-hover law covers lighting,
-        // not decluttering.)
+        // The runner lives half-ghosted until the hand comes near: the column is a METER first,
+        // and its one control surfaces when wanted.
         const float hoverA = isMouseOverOrDragging (true) ? 1.0f : 0.3f;
-
-        {
-            const float dimmed  = (onP.getValue() > 0.5f ? 1.0f : 0.35f) * hoverA;
-            const float openDb  = param.convertFrom0to1 (param.getValue());
-            const float openY   = dbToY (inCol, openDb);
-            const float closeY  = dbToY (inCol, openDb - params::gateHysteresisDb);
-
-            g.setColour (theme::lilac.withAlpha (0.45f * dimmed));
-            g.fillRect (inCol.getX(), closeY - 0.5f, inCol.getWidth(), 1.0f);
-
-            meterrail::paintGrip (g, r, openY, juce::String (juce::roundToInt (openDb)),
-                                  theme::lilac.withMultipliedAlpha (dimmed),
-                                  dragging && ! grabbedTrim);
-        }
 
         // ---- the trim: tabby's hollow sliding frame with its sight, riding the whole rail ----
         {
@@ -157,7 +95,7 @@ public:
             const float v = trimP.convertFrom0to1 (trimP.getValue());
             meterrail::paintGrip (g, r, trimY (area, v), meterrail::trimText (v),
                                   theme::orange.withMultipliedAlpha (hoverA),
-                                  dragging && grabbedTrim);
+                                  dragging);
         }
 
         meterrail::paintName (g, inCol, "IN");
@@ -175,16 +113,6 @@ public:
             return;
         }
 
-        // Right-click: the gate presets — the whole gate in one pick for whoever never opens
-        // the zoom. The release of that same button must NOT count as the click that opens the
-        // lens, so it is swallowed whole.
-        if (e.mods.isPopupMenu())
-        {
-            swallowUp = true;
-            showPresetMenu (e.getScreenPosition());
-            return;
-        }
-
         if (clip.load() && e.position.y <= scaleArea().getY() + 5.0f)
         {
             clip.store (false);
@@ -196,110 +124,6 @@ public:
         swallowUp = false;
         dragging  = false;
         pressY    = e.position.y;
-    }
-
-    /** `withVolume` — the trim's RESET section rides along only when the menu opens from the
-        COLUMN, where the trim lives; the strip's arrow asks for the gate alone. */
-    void showPresetMenu (juce::Point<int> screenPos, bool withVolume = true)
-    {
-        const bool  isOn  = onP.getValue() > 0.5f;
-        const float th    = param.convertFrom0to1 (param.getValue());
-        const bool  metal = decayP.getValue() > 0.5f;
-
-        const auto matches = [&] (float t, bool m)
-        {
-            return isOn && std::abs (th - t) < 0.5f && metal == m;
-        };
-
-        juce::PopupMenu m;
-        m.addSectionHeader ("GATE");
-        m.addItem (1, "OFF",         true, ! isOn);
-        m.addItem (2, "SOFT   -60",  true, matches (-60.0f, false));
-        m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
-        m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
-        m.addItem (5, "LEARN",       true, learning);
-
-        juce::PopupMenu decay;
-        decay.addItem (10, "NORMAL", true, ! metal);
-        decay.addItem (11, "METAL",  true, metal);
-        m.addSubMenu ("DECAY", decay);
-
-        // WHERE the gate mutes. It always keys off the raw input; the VCA can stand at the front or
-        // after the preamp. This lived on the gate's big face, and the big face is gone — a control
-        // with no door is a control that does not exist, so it moves in here.
-        const bool preReverb = posP.getValue() > 0.5f;
-
-        juce::PopupMenu where;
-        where.addItem (12, params::gatePositions[0].toUpperCase(), true, ! preReverb);
-        where.addItem (13, params::gatePositions[1].toUpperCase(), true, preReverb);
-        m.addSubMenu ("MUTES AT", where);
-
-        if (withVolume)
-        {
-            m.addSeparator();
-            m.addSectionHeader ("VOLUME");
-            m.addItem (7, "RESET");
-        }
-
-        // At the MOUSE, not at the component: a menu summoned from a sliver as tall as the panel
-        // would otherwise land wherever the sliver ends.
-        m.showMenuAsync (juce::PopupMenu::Options()
-                             .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                         [safe = juce::Component::SafePointer<GateStrip> (this)] (int r)
-                         {
-                             if (safe != nullptr)
-                                 safe->applyPreset (r);
-                         });
-    }
-
-    void applyPreset (int choice)
-    {
-        if (choice == 0)
-            return;
-
-        // OFF is a TOGGLE, not a one-way door: picking it on a silent gate turns the gate on —
-        // the item must be un-pickable or the menu can only ever kill.
-        if (choice == 1)
-        {
-            onAtt->setValueAsCompleteGesture (onP.getValue() > 0.5f ? 0.0f : 1.0f);
-            return;
-        }
-
-        if (choice == 12 || choice == 13)
-        {
-            posAtt->setValueAsCompleteGesture (choice == 13 ? 1.0f : 0.0f);
-            return;
-        }
-
-        if (choice == 10 || choice == 11)
-        {
-            decayAtt->setValueAsCompleteGesture (choice == 11 ? 1.0f : 0.0f);
-            return;
-        }
-
-        if (choice == 7)
-        {
-            trim->setValueAsCompleteGesture (0.0f);
-            return;
-        }
-
-        if (choice == 5)
-        {
-            // The measurement the zoom's LEARN makes, from the sliver: stay quiet, the fuse burns
-            // up the edge, and the threshold lands the full hysteresis above the measured floor.
-            learning   = true;
-            learnTicks = 0;
-            learnPeak  = -120.0f;
-            learnTrace.clear();
-            learnTrace.reserve ((size_t) learnTotalTicks);
-            if (onLearnBegin != nullptr)
-                onLearnBegin();
-            return;
-        }
-
-        onAtt->setValueAsCompleteGesture (1.0f);
-        threshold->setValueAsCompleteGesture (choice == 2 ? -60.0f : choice == 3 ? -50.0f : -40.0f);
-        decayAtt->setValueAsCompleteGesture (choice == 4 ? 1.0f : 0.0f);   // HARD is the metal chop
     }
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
@@ -316,14 +140,6 @@ public:
             return;
         }
 
-        if (onP.getValue() > 0.5f && thGripRect().contains (e.position))
-        {
-            gripEd.open (*this, thGripRect().toNearestInt(),
-                         param.convertFrom0to1 (param.getValue()), theme::lilac,
-                         [this] (float v) { threshold->setValueAsCompleteGesture (v); });
-            return;
-        }
-
         trim->setValueAsCompleteGesture (0.0f);
     }
 
@@ -334,47 +150,25 @@ public:
         return { 0.0f, y - meterrail::gripH * 0.5f, (float) getWidth(), meterrail::gripH };
     }
 
-    juce::Rectangle<float> thGripRect() const
-    {
-        const auto area = scaleArea();
-        const float y   = dbToY (area, param.convertFrom0to1 (param.getValue()));
-        return { 0.0f, y - meterrail::gripH * 0.5f, (float) getWidth(), meterrail::gripH };
-    }
-
     void mouseDrag (const juce::MouseEvent& e) override
     {
         if (! dragging && e.getDistanceFromDragStart() > 4)
         {
             dragging = true;
 
-            // Whichever runner was nearer to the grab is the one that moves — on a sliver this
-            // wide, the Y axis is the only aim anyone has.
-            const auto  area = scaleArea();
-            const float thY  = dbToY (area, param.convertFrom0to1 (param.getValue()));
-            const float trY  = trimY (area, trimP.convertFrom0to1 (trimP.getValue()));
-
-            // A dark gate's runner does not answer — the grab falls through to the trim,
-            // which is the input's own and never sleeps.
-            grabbedTrim = onP.getValue() <= 0.5f
-                       || std::abs (pressY - trY) < std::abs (pressY - thY);
-            (grabbedTrim ? trim : threshold)->beginGesture();
+            trim->beginGesture();
 
             // The ghost's anchors: the trim AND the hold as they stood when the hand closed —
             // a hold that keeps decaying under the drag would melt the ghost mid-thought.
             trimStartDb = trimP.convertFrom0to1 (trimP.getValue());
             holdAtGrab  = holdDb;
 
-            if (grabbedTrim && onTrimDrag != nullptr)
+            if (onTrimDrag != nullptr)
                 onTrimDrag (true);
         }
 
         if (dragging)
-        {
-            if (grabbedTrim)
-                trim->setValueAsPartOfGesture (trimFromY (scaleArea(), e.position.y));
-            else
-                threshold->setValueAsPartOfGesture (yToDb (scaleArea(), e.position.y));
-        }
+            trim->setValueAsPartOfGesture (trimFromY (scaleArea(), e.position.y));
     }
 
     void mouseUp (const juce::MouseEvent&) override
@@ -387,15 +181,11 @@ public:
 
         if (dragging)
         {
-            (grabbedTrim ? trim : threshold)->endGesture();
-            if (grabbedTrim && onTrimDrag != nullptr)
+            trim->endGesture();
+            if (onTrimDrag != nullptr)
                 onTrimDrag (false);
             dragging = false;
-            return;
         }
-
-        if (onClick != nullptr)
-            onClick();
     }
 
 private:
@@ -415,37 +205,6 @@ private:
         else if (++holdAge > holdTicks)
         {
             holdDb = juce::jmax (floorDb, holdDb - holdReleasePerTick);
-        }
-
-        if (learning)
-        {
-            ++learnTicks;
-            learnTrace.push_back (now);   // the waveform on the overlay IS the progress
-
-            // The window's edges are thrown away: the menu click itself, and the hand leaving the
-            // mouse, are not the noise floor.
-            if (learnTicks > learnEdgeTicks && learnTicks <= learnTotalTicks - learnEdgeTicks)
-                learnPeak = juce::jmax (learnPeak, now);
-
-            if (learnTicks >= learnTotalTicks)
-            {
-                learning = false;
-
-                // Nothing arrived: a muted input teaches nothing.
-                juce::String verdict = "NOTHING HEARD";
-
-                if (learnPeak >= -75.0f)
-                {
-                    const float th = juce::jlimit (-80.0f, -10.0f,
-                                                   learnPeak + params::gateHysteresisDb);
-                    threshold->setValueAsCompleteGesture (th);
-                    onAtt->setValueAsCompleteGesture (1.0f);
-                    verdict = "SET " + juce::String (juce::roundToInt (th)) + " DB";
-                }
-
-                if (onLearnDone != nullptr)
-                    onLearnDone (verdict);
-            }
         }
 
         repaint();
@@ -491,29 +250,18 @@ private:
     static constexpr float releasePerTick     = 1.4f;   // ~42 dB/s at 30 Hz
     static constexpr int   holdTicks          = 60;     // 2 s of steady hold...
     static constexpr float holdReleasePerTick = 0.8f;   // ...then ~24 dB/s down
-    static constexpr int   learnEdgeTicks     = 15;     // half a second each end, thrown away
 
     const std::atomic<float>& keyDb;
-    const std::atomic<float>& pressureDb;
     std::atomic<bool>&        clip;
-    juce::RangedAudioParameter& param;
     juce::RangedAudioParameter& trimP;
-    juce::RangedAudioParameter& onP;
-    juce::RangedAudioParameter& decayP;
-    juce::RangedAudioParameter& posP;
-    std::unique_ptr<juce::ParameterAttachment> threshold, trim, onAtt, decayAtt, posAtt;
+    std::unique_ptr<juce::ParameterAttachment> trim;
 
     meterrail::GripEditor gripEd;
 
     float levelDb = -90.0f;
     float holdDb  = -90.0f;
     int   holdAge = 0;
-    bool  learning   = false;
-    int   learnTicks = 0;
-    float learnPeak  = -120.0f;
-    std::vector<float> learnTrace;
     bool  dragging    = false;
-    bool  grabbedTrim = false;
     float trimStartDb = 0.0f;
     float holdAtGrab  = -90.0f;
     bool  swallowUp   = false;

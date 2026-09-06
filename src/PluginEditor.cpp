@@ -29,12 +29,11 @@ namespace
 
 AmpEditor::AmpEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p),
-      gateStrip (p.gateKeyDb, p.gateMeterDb, p.inClip, *p.apvts.getParameter (params::gateThreshold),
-                 *p.apvts.getParameter (params::inTrim), *p.apvts.getParameter (params::gateOn),
-                 *p.apvts.getParameter (params::gateDecay), *p.apvts.getParameter (params::gatePos)),
+      gateStrip (p.gateKeyDb, p.inClip, *p.apvts.getParameter (params::inTrim)),
       outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim),
                 *p.apvts.getParameter (params::limiterCeiling),
                 *p.apvts.getParameter (params::limiterOn)),
+      gateConsole (p.apvts, p.gateKeyDb),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
@@ -212,7 +211,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         if (i == params::rowGate)
         {
             amp.gateWorked.store (false);
-            gateStrip.showPresetMenu (pos, false);   // the trim's RESET stays the column's door
+            gateConsole.showMenu (pos);
         }
         else if (i == params::rowLimit)
         {
@@ -228,11 +227,21 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // controls, position included, live in this menu.
 
     // The measurement, projected: the overlay reads the strip's own trace.
-    learnOverlay.trace      = &gateStrip.learnTraceRef();
-    learnOverlay.totalTicks = GateStrip::learnTotalTicks;
-    learnOverlay.pendingDb  = [this] { return gateStrip.learnPendingDb(); };
-    gateStrip.onLearnBegin  = [this] { learnOverlay.begin(); };
-    gateStrip.onLearnDone   = [this] (const juce::String& v) { learnOverlay.finish (v); };
+    learnOverlay.trace       = &gateConsole.learnTraceRef();
+    learnOverlay.totalTicks  = GateConsole::learnTotalTicks;
+    learnOverlay.pendingDb   = [this] { return gateConsole.learnPendingDb(); };
+    gateConsole.onLearnBegin = [this] { learnOverlay.begin(); };
+    gateConsole.onLearnDone  = [this] (const juce::String& v) { learnOverlay.finish (v); };
+
+    // A measurement runs for three seconds, and three seconds is long enough to switch a register,
+    // load a preset or undo. Anything that replaces the live patch stops it: finishing into a patch
+    // that changed underneath would set a threshold nobody asked for and switch on a gate somebody
+    // had just switched off. Only stops a timer — no write, so the engine's read-only contract for
+    // this hook holds.
+    amp.history.onAfterApply = [this] (felitronics::appkit::CompareHistory::Reason)
+    {
+        gateConsole.cancel();
+    };
     addChildComponent (learnOverlay);
 
     // The rulers the runners summon: IN's stands right of its column, OUT's and the ceiling's
@@ -328,6 +337,13 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     moves. A tile, a column and the tuner's row are all "stands on the panel or does not", and the
     answer is the same sentence for all three: in the rig, and either on or dimmed rather than
     removed. */
+AmpEditor::~AmpEditor()
+{
+    // The history is the PROCESSOR's, and it will outlive this window. A callback into a destroyed
+    // editor is what a closed plugin window plus one undo looks like from the crash report.
+    amp.history.onAfterApply = nullptr;
+}
+
 void AmpEditor::applyRowStates()
 {
     const auto stands = [this] (params::ChainRow row)
