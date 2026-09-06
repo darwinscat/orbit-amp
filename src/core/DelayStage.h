@@ -114,7 +114,11 @@ public:
     /** 0 = fully dry, 1 = the repeats added at unity. Dry never moves. */
     void setMix (float newMix) noexcept { mix = juce::jlimit (0.0f, 1.0f, newMix); }
 
-    void process (float* const* channels, int numChannels, int numSamples) noexcept
+    /** `feed` false is the INSERT'S BYPASS: the record head stops taking new signal, but the
+        recirculation keeps going round, so the repeats already in the line ring out into the dry
+        instead of being chopped. The line is only cleared by `reset()`, which is what leaving the
+        rig does — the difference between standing a pedal by and unplugging it. */
+    void process (float* const* channels, int numChannels, int numSamples, bool feed = true) noexcept
     {
         if (numChannels < 1 || numSamples <= 0)
             return;
@@ -173,7 +177,7 @@ public:
 
                 // The record head: input plus the recirculation, darkened and pressed — the
                 // first echo already wears one pass, the n-th wears n.
-                float v = x + tap * repeats;
+                float v = (feed ? x : 0.0f) + tap * repeats;
                 lpfState[ch] += lpfCoeff * (v - lpfState[ch]);
                 v = std::tanh (lpfState[ch] * satDrive) * satNorm;
                 line[(size_t) ch][(size_t) writePos] = v;

@@ -702,25 +702,32 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The echo before the space: repeats of what the preamp made, which the reverb then rooms.
     // First of the wide stages — the OFFSET is the block's stereo, so it works the back half's
     // channels.
-    if (linkWorks (params::rowDelay))
+    // STANDBY is the insert's bypass: the block keeps running, it just stops being fed, and the
+    // repeats already in the line ring out into the dry. Only leaving the RIG clears it — that is
+    // unplugging, not standing by. Which is also why a bypassed block still costs: so does a
+    // bypassed insert, in every DAW there is.
+    if (linkInRig (params::rowDelay))
         { const auto a = PerfClock::now();
-          delay.process (channels, nchBack, numSamples);
+          delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
           nsStage[stDelay] = elapsedNs (a); }
     else
-        delay.reset();   // so re-enabling it does not replay the repeats of what came before
+        delay.reset();
 
-    if (linkWorks (params::rowReverb))
+    // The room stands by the same way the echo does: unfed, still ringing out. See the delay above.
+    if (linkInRig (params::rowReverb))
         { const auto a = PerfClock::now();
+          const bool fed = linkWorks (params::rowReverb);
 
           // The pair for the block's picture: the door before the room, the ADDED wet after it.
+          // A room nobody is feeding hears silence at its door, and the picture says so.
           { auto& tin = reverbSpectrumTap[0];
             const float* d = channels[0];
             for (int i = 0; i < numSamples; ++i)
-                tin.push (d[i]);
+                tin.push (fed ? d[i] : 0.0f);
             tin.publishIfDue (eqSpectrumOrder,
                               juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
 
-          reverb.process (channels, nchBack, numSamples);
+          reverb.process (channels, nchBack, numSamples, fed);
 
           { auto& tout = reverbSpectrumTap[1];
             const float* w = reverb.addedWet (0);
@@ -731,7 +738,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
           nsStage[stReverb] = elapsedNs (a); }
     else
-        reverb.reset();   // so re-enabling it does not spill the tail of what was playing before
+        reverb.reset();
 
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
     // Its picture's spectra tap the door and the exit, channel 0, only while it is on.

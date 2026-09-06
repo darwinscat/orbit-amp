@@ -125,7 +125,10 @@ public:
         }
     }
 
-    void process (float* const* channels, int numChannels, int numSamples) noexcept
+    /** `feed` false is the INSERT'S BYPASS: nothing new enters the wet chain, so the room that is
+        already ringing decays into the dry rather than being cut. The dry is untouched either way —
+        it always was; this stage only ever ADDS. */
+    void process (float* const* channels, int numChannels, int numSamples, bool feed = true) noexcept
     {
         if (numChannels < 1 || numSamples <= 0)
             return;
@@ -140,7 +143,7 @@ public:
             const float* d = channels[ch];
 
             for (int i = 0; i < n; ++i)
-                w[i] = d[i];
+                w[i] = feed ? d[i] : 0.0f;
         }
 
         // The room itself, 100% wet (the constants undo Freeverb's internal ×3 on wet).
