@@ -7,7 +7,6 @@
 #include "CabinetBlock.h"
 #include "CapturedBlockPanel.h"
 #include "DelayBlock.h"
-#include "PowerAmpBlock.h"
 #include "ReverbBlock.h"
 
 namespace orbitamp
@@ -23,7 +22,7 @@ class AmpProcessor;
     order, and what a block is set to is written on its face.
 
     Row one is the pair that makes the sound — the captured pedal and the captured preamp. Row two
-    is what happens to it afterwards, in chain order: delay, reverb, power amp, cabinet. ONE law
+    is what happens to it afterwards, in chain order: delay, reverb, cabinet. ONE law
     for both rows: the width splits evenly among the blocks that STAND in the row — halves or the
     whole of row one, quarters up to the whole of row two — because which blocks a player keeps on
     the panel is the player's own business, chosen in the LAYOUT popup. */
@@ -33,10 +32,10 @@ public:
     explicit FaceplateView (AmpProcessor&);
 
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
-    void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); power.deviceChanged(); }
+    void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); }
 
     /** The blocks the LAYOUT popup can stand down, in chain order. */
-    enum class Block { boost, preamp, delay, reverb, power, cabinet };
+    enum class Block { boost, preamp, delay, reverb, cabinet };
 
     /** Show or hide one block. Hidden is GONE, not dimmed: the row re-splits evenly among
         whoever remains, and the CALLER puts the block's power parameter out with it — a hidden
@@ -59,7 +58,7 @@ public:
     bool rowPopulated (int row) const
     {
         return row == 0 ? shownFlags[0] || shownFlags[1]
-                        : shownFlags[2] || shownFlags[3] || shownFlags[4] || shownFlags[5];
+                        : shownFlags[2] || shownFlags[3] || shownFlags[4];
     }
 
     /** The faceplate's height as laid out RIGHT NOW: an unpopulated row COLLAPSES — its space
@@ -109,12 +108,11 @@ private:
     CapturedBlockPanel preamp;
     DelayBlock         delay;
     ReverbBlock        reverb;
-    PowerAmpBlock      power;
     CabinetBlock       cabinet;
 
-    /** Who stands on the panel, indexed by Block. The core four out of the box; the delay and
-        the power amp are reached for, not found already on. */
-    std::array<bool, 6> shownFlags { true, true, false, true, false, true };
+    /** Who stands on the panel, indexed by Block. The core four out of the box; the delay is
+        reached for, not found already on. */
+    std::array<bool, 5> shownFlags { true, true, false, true, true };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FaceplateView)
 };

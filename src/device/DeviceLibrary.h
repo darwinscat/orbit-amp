@@ -22,11 +22,11 @@ class DeviceLibrary
 public:
     /** Which block a device belongs in front of.
 
-        A pack names it (`pedal`, `preamp`, `amp`, `poweramp`), and a lone .nam carries the same word
+        A pack names it (`pedal`, `preamp`, `amp`), and a lone .nam carries the same word
         in its header. Without this every list shows every device: pedals offered as preamps, preamps
         as pedals. `any` is the honest answer for a file that says nothing — it goes in every list
         rather than in none, because a model somebody dropped in is a model they want to hear. */
-    enum class Slot { pedal, preamp, poweramp, any };
+    enum class Slot { pedal, preamp, any };
 
     static Slot slotFromString (const std::string& s)
     {
@@ -34,7 +34,6 @@ public:
 
         if (l == "pedal")                    return Slot::pedal;
         if (l == "preamp" || l == "amp")     return Slot::preamp;
-        if (l == "poweramp" || l == "power") return Slot::poweramp;
         return Slot::any;
     }
 

@@ -88,7 +88,6 @@ inline juce::String selectorId (const char* blk, int i)
 
 inline constexpr const char* boostId  = "boost";
 inline constexpr const char* preampId = "preamp";
-inline constexpr const char* powerId  = "power";    // the captured power amp: the same set of slots as the other two
 
 /** A captured block's own parameters, derived from its id prefix — the same shape for the boost,
     the preamp, and whatever captured block comes next. The named constants around them predate
@@ -250,7 +249,6 @@ inline constexpr float cabHpfMinHz = 0.0f,    cabHpfMaxHz = 1000.0f,  cabHpfDefa
 inline constexpr float cabLpfMinHz = 1200.0f, cabLpfMaxHz = 20000.0f, cabLpfDefaultHz = 7000.0f;
 inline constexpr float cabTrimMin  = 0.001f;   // the ms floor lives in the picture (5 ms) — the fraction only guards zero
 
-inline constexpr const char* powerOn   = "power_on";
 /** How many channels the chain works, and from where. MONO: one signal end to end, the copy to the
     other channel after everything — the truth of a guitar chain, and one neural pass. STEREO: two
     takes on one bus, each through its own amp, everything twice. STEREO SPACE: mono where the

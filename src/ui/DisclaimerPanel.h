@@ -331,7 +331,6 @@ private:
             {
                 case Slot::pedal:    return "PEDAL";
                 case Slot::preamp:   return "PREAMP";
-                case Slot::poweramp: return "POWER";
                 case Slot::any:      break;
             }
             return {};
