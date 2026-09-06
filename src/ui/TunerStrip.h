@@ -151,6 +151,29 @@ public:
 private:
     void timerCallback() override { repaint(); }
 
+public:
+    /** WORKING or standing by — see VolumeColumn::setLive. A tuner standing by hears nothing (the
+        processor stops pumping its ear), so a needle left running would be drawing the last note
+        it caught, for ever, on a face that is supposed to read as off. */
+    void setLive (bool nowLive)
+    {
+        if (live == nowLive)
+            return;
+
+        live = nowLive;
+        setAlpha (live ? 1.0f : theme::offAlpha);
+
+        if (live)
+            startTimerHz (30);
+        else
+            stopTimer();
+
+        repaint();
+    }
+
+private:
+    bool live = true;
+
     inline static const juce::Colour inTune { 0xff5fc97a };   // the character ramp's clean green
 
     const core::TunerEar& ear;

@@ -22,19 +22,26 @@ class DeviceLibrary
 public:
     /** Which block a device belongs in front of.
 
-        A pack names it (`pedal`, `preamp`, `amp`), and a lone .nam carries the same word
-        in its header. Without this every list shows every device: pedals offered as preamps, preamps
-        as pedals. `any` is the honest answer for a file that says nothing — it goes in every list
-        rather than in none, because a model somebody dropped in is a model they want to hear. */
-    enum class Slot { pedal, preamp, any };
+        A pack names it (`pedal`, `preamp`, `amp`), and a lone .nam carries the same word in its
+        header. Without this every list shows every device: pedals offered as preamps, preamps as
+        pedals.
+
+        SAYING NOTHING and SAYING SOMETHING WE DO NOT HAVE are different answers, and conflating
+        them is how a pack that calls itself a power amp turned up in the BOOST list. `any` is for
+        a file that names no slot at all — a model somebody dropped in is a model they want to
+        hear, so it is offered everywhere. `none` is for a file that names a slot this instrument
+        does not have: it is not ours to place, so it is offered nowhere. */
+    enum class Slot { pedal, preamp, any, none };
 
     static Slot slotFromString (const std::string& s)
     {
         const auto l = juce::String (s).trim().toLowerCase();
 
+        if (l.isEmpty())                     return Slot::any;
         if (l == "pedal")                    return Slot::pedal;
         if (l == "preamp" || l == "amp")     return Slot::preamp;
-        return Slot::any;
+
+        return Slot::none;
     }
 
     struct Pack
@@ -121,6 +128,10 @@ public:
 
         scanFolder (bundledDirectory(), true, packs);
         scanFolder (directory(), false, packs);
+
+        // A pack that names a slot we do not have belongs in no list at all, whatever is being
+        // asked for — including a scan that asks for `any`.
+        packs.removeIf ([] (const Pack& p) { return p.slot == Slot::none; });
 
         if (wanted != Slot::any)
             packs.removeIf ([wanted] (const Pack& p)

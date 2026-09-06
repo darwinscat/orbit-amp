@@ -16,6 +16,7 @@
 #include <juce_events/juce_events.h>
 
 #include "PluginProcessor.h"
+#include "core/BypassWire.h"
 
 #include <algorithm>
 #include <cmath>
@@ -449,7 +450,14 @@ int main()
 
     // The input trim, through the whole plugin: a linear gain ahead of everything, so on a bare
     // wire it must arrive as exactly itself.
+    //
+    // IN has to be put in the RIG first. It is not there out of the box any more — the volumes
+    // that matter are the captured blocks' own, and a global input fader is a thing a player
+    // reaches for when a rig needs fixing. A trim that is not in the rig is not applied, which is
+    // the whole point of the switch, so a test that did not ask for it was testing the default
+    // rather than the trim.
     {
+        set (amp, orbitamp::params::inPresent, 1.0f);
         set (amp, orbitamp::params::inTrim, 0.0f);
         const auto unity = run (amp);
 
@@ -701,6 +709,121 @@ int main()
                 biggestJump < 0.02f, juce::String (biggestJump, 5));
 
         set (amp, orbitamp::params::cabOn, 1.0f);
+    }
+
+    // THE SAFETY, released. A limiter switched off used to hand back whatever it was holding in
+    // ONE sample — three decibels of grip returned instantly is a step upward, and a step is a
+    // click. Driven hard enough to be gripping, then switched off mid-note.
+    {
+        set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
+        set (amp, orbitamp::params::limitPresent, 1.0f);
+        set (amp, orbitamp::params::limiterOn, 1.0f);
+        set (amp, orbitamp::params::limiterCeiling, -6.0f);
+        set (amp, orbitamp::params::boostOn, 1.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        int   phase = 0;
+        float last = 0.0f, quietJump = 0.0f, switchJump = 0.0f;
+        int   measuring = 0;   // 1 = the calm before, 2 = across the switch
+
+        for (int block = 0; block < 40; ++block)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float v = 0.9f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                         * 220.0 * phase / sampleRate);
+                buf.setSample (0, i, v);
+                buf.setSample (1, i, v);
+            }
+
+            // The baseline has to be the SAME signal: a gripped sine is quieter and therefore
+            // flatter, so measuring the calm while the limiter still held it would compare a
+            // released waveform against a squashed one and call the difference a step.
+            if (block == 20)
+            {
+                set (amp, orbitamp::params::limiterOn, 0.0f);   // let go, mid-note
+                measuring = 2;                                  // across the release
+            }
+
+            if (block == 24) measuring = 1;                     // ...and long after it, settled
+
+            amp.processBlock (buf, midi);
+            amp.pumpDeviceWork();
+
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const float v = buf.getSample (0, i);
+                const float jump = std::abs (v - last);
+
+                if (measuring == 1) quietJump  = juce::jmax (quietJump, jump);
+                if (measuring == 2) switchJump = juce::jmax (switchJump, jump);
+
+                last = v;
+            }
+        }
+
+        // Against ITSELF, not against a number I picked: a driven sine through a boost has a slope
+        // of its own, and what matters is whether letting go adds to it.
+        std::printf ("\nlimiter: biggest jump settled %.5f, across the release %.5f\n",
+                     quietJump, switchJump);
+
+        report ("letting the safety go does not step the waveform",
+                switchJump < quietJump * 1.4f,
+                juce::String (switchJump, 5) + " vs " + juce::String (quietJump, 5));
+
+        set (amp, orbitamp::params::limiterOn, 1.0f);
+        set (amp, orbitamp::params::boostOn, 0.0f);
+        set (amp, orbitamp::params::limiterCeiling, -0.3f);
+    }
+
+    // THE BYPASS WIRE, on its own. It only runs when a pack's rate differs from the session's, so
+    // the chain above — at 48 kHz against 48 kHz packs — never touches it. And it is hand-rolled
+    // index arithmetic across block boundaries, which is exactly the kind of code that is right
+    // until it is not.
+    //
+    // Feed it a ramp in two blocks and every output sample must be the input six samples earlier,
+    // including across the seam, where the second block has to read the first block's tail.
+    {
+        orbitamp::core::BypassWire w;
+        w.prepare();
+
+        constexpr int d = 6, n = 32;
+        std::vector<float> a (n), b (n), outA (n), outB (n);
+
+        for (int i = 0; i < n; ++i) { a[(size_t) i] = (float) i; b[(size_t) i] = (float) (n + i); }
+
+        const float* inA[1]  { a.data() };
+        float*       oA[1]   { outA.data() };
+        const float* inB[1]  { b.data() };
+        float*       oB[1]   { outB.data() };
+
+        w.process (inA, oA, 1, n, d);
+        w.process (inB, oB, 1, n, d);
+
+        bool ok = true;
+
+        for (int i = d; i < n; ++i)                 // inside the first block
+            ok = ok && juce::approximatelyEqual (outA[(size_t) i], (float) (i - d));
+
+        for (int i = 0; i < d; ++i)                 // its head: nothing came before, so silence
+            ok = ok && juce::approximatelyEqual (outA[(size_t) i], 0.0f);
+
+        for (int i = 0; i < n; ++i)                 // the second block, seam included
+            ok = ok && juce::approximatelyEqual (outB[(size_t) i], (float) (n + i - d));
+
+        // In place, which is what a fully bypassed block asks for.
+        orbitamp::core::BypassWire w2;
+        w2.prepare();
+        std::vector<float> c = a;
+        float* inPlace[1] { c.data() };
+        w2.process (inPlace, inPlace, 1, n, d);
+
+        for (int i = d; i < n; ++i)
+            ok = ok && juce::approximatelyEqual (c[(size_t) i], (float) (i - d));
+
+        std::printf ("\nwire: %d samples of delay, two blocks and one in place\n", d);
+        report ("a bypassed block still carries the delay it would have had", ok);
     }
 
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");

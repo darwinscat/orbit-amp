@@ -102,13 +102,27 @@ public:
         juce::dsp::AudioBlock<float> block (const_cast<float**> (io),
                                             (size_t) juce::jmin (channels, numChannels),
                                             (size_t) numSamples);
+        cleared = false;   // there is history in the tail again
+
         juce::dsp::ProcessContextReplacing<float> ctx (block);
         conv.process (ctx);
     }
 
-    void reset() { conv.reset(); }
+    /** Idempotent, like the room's and the echo's: the chain calls this while the cabinet is out
+        of the path, and the clear underneath is a memset of the whole convolution state. Without
+        the guard it would run every block for a link nobody is listening to. */
+    void reset()
+    {
+        if (cleared)
+            return;
+
+        cleared = true;
+        conv.reset();
+    }
 
 private:
+    bool cleared = true;   // see reset()
+
     void rebuild()
     {
         const int full = raw.getNumSamples();

@@ -329,8 +329,11 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& tap : reverbSpectrumTap)
         tap.reset();
 
-    lastTrimGain = juce::Decibels::decibelsToGain (inTrimParam->load());
-    lastOutGain  = juce::Decibels::decibelsToGain (outTrimParam->load());
+    // Seeded through the same question the chain asks, not from the parameter alone: a link that
+    // arrives standing by must not apply its stored gain to the first block and then ramp out of
+    // it — a bypassed +24 dB would open playback at nearly sixteen times.
+    lastTrimGain = linkWorks (params::rowIn)  ? juce::Decibels::decibelsToGain (inTrimParam->load())  : 1.0f;
+    lastOutGain  = linkWorks (params::rowOut) ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
     lastBoostInGain  = juce::Decibels::decibelsToGain (boostInParam->load());
     lastPreampInGain = juce::Decibels::decibelsToGain (preampInParam->load());
     limiter.prepare (sampleRate);
@@ -365,6 +368,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     demo.prepare (sampleRate);
     scopeDry.setSize (1, block);
     fadeDry.setSize (juce::jmax (2, channels), block);
+
+    for (auto& w : wire)
+        w.prepare();
 
     // Snapped, not faded: a chain that arrives switched off is silent from its first sample.
     for (int i = 0; i < params::numChainRows; ++i)
@@ -546,7 +552,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The tuner listens HERE — the raw input (or the loop standing in for it), before any block
     // colours it.
     { const auto a = PerfClock::now();
-      tunerTap.write (buffer.getReadPointer (0), buffer.getNumSamples());
+      if (linkWorks (params::rowTuner))
+          tunerTap.write (buffer.getReadPointer (0), buffer.getNumSamples());
       nsStage[stTuner] = elapsedNs (a); }
 
     updateEqSettings();
@@ -638,26 +645,61 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         const bool works = linkWorks (row);
         const auto span  = blockFade[(size_t) row].advance (numSamples, works);
         const bool on    = core::BypassFade::runs (span, works);
+        const bool fade  = span.moving && canFade (numSamples, nch);
 
-        // IN, first of all: how hard the capture is fed. Metered immediately after, at the model's
-        // own door, so the grip on the meter and the fill under it are answering about one point.
+        // THE WIRE a bypassed block has to BE — and a wire the same LENGTH as the block it
+        // replaces. A rate-matching model reports a latency the host compensates for; drop it out
+        // of the path and the signal arrives early by exactly that much, for as long as it is
+        // bypassed. Three to fifteen samples, and none at all when the pack's rate is the
+        // session's — which is the usual case, and why this costs nothing there.
         //
-        // It ramps to UNITY when the block is off rather than simply not being applied — a bypassed
-        // block has to be a wire, and a switch that leaves a hand still pressing on the signal is a
-        // switch that lies.
-        const float inTarget = works ? juce::Decibels::decibelsToGain (inParam->load()) : 1.0f;
+        // It is also what makes the crossfade honest: blending a block's output against an
+        // UNDELAYED copy of its own input is blending a signal with an early copy of itself, and
+        // that is a comb — six samples at 44.1 kHz puts the first notch near 3.7 kHz, in the
+        // presence region. Swept over fifteen milliseconds it reads as a tick rather than a
+        // filter, but it is a tick that need not exist.
+        //
+        // Taken BEFORE this block's own IN trim: the dry end has to be the signal as it arrived.
+        // Copied after the trim, the two ends of the fade differed by the trim as well as by the
+        // block, and at -24 dB that is not a click, it is a bark.
+        const int lat = blk.latencySamples();
+
+        if (fade)
+        {
+            // `on` is always true while a fade runs, so this is the only place the dry is kept.
+            if (lat > 0)
+                wire[(size_t) l].process (chainView.getArrayOfReadPointers(),
+                                          fadeDry.getArrayOfWritePointers(), nch, numSamples, lat);
+            else
+                for (int ch = 0; ch < nch; ++ch)
+                    juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                       chainView.getReadPointer (ch), numSamples);
+        }
+        else if (! on && lat > 0)
+        {
+            // Standing by for good: the block is not run at all below, so the signal in the buffer
+            // IS the output — and it has to carry the delay the model would have.
+            wire[(size_t) l].process (chainView.getArrayOfReadPointers(),
+                                      chainView.getArrayOfWritePointers(), nch, numSamples, lat);
+        }
+
+        // IN: how hard the capture is fed. Metered immediately after, at the model's own door, so
+        // the grip on the meter and the fill under it answer about one point.
+        //
+        // It follows `on`, not `works`: while the fade is still running the block is still being
+        // heard, so its trim stays where the player put it. Only when the fade is over does the
+        // trim ramp to unity — and by then nothing of this path is in the sum, so the ramp is
+        // silent. A bypassed block has to be a wire, but it becomes one at the END of the fade.
+        const float inTarget = on ? juce::Decibels::decibelsToGain (inParam->load()) : 1.0f;
         chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
         lastInGain = inTarget;
 
-        blockInDb[(size_t) l].store (juce::Decibels::gainToDecibels (
-            chainView.getMagnitude (0, 0, numSamples), -90.0f));
-
-        // The one end of the crossfade, kept only while one is running: what the block was handed,
-        // after its own IN trim, so both ends start from the same signal.
-        if (span.moving)
-            for (int ch = 0; ch < nch; ++ch)
-                juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
-                                                   chainView.getReadPointer (ch), numSamples);
+        // A block that is not working meters nothing: two full passes over the buffer for a needle
+        // nobody reads, and a needle still moving on a dark face is the exception this whole rework
+        // set out to delete.
+        blockInDb[(size_t) l].store (on ? juce::Decibels::gainToDecibels (
+                                              chainView.getMagnitude (0, 0, numSamples), -90.0f)
+                                        : -90.0f);
 
         { const auto a = PerfClock::now();
           if (on)
@@ -682,12 +724,13 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
               eqLinks[(size_t) l].process (channels, nch, numSamples);
           nsStage[stEq] = elapsedNs (a); }
 
-        if (span.moving)
+        if (fade)
             core::BypassFade::blend (chainView.getArrayOfWritePointers(),
                                      fadeDry.getArrayOfReadPointers(), nch, numSamples, span);
 
-        blockOutDb.store (juce::Decibels::gainToDecibels (
-            chainView.getMagnitude (0, 0, numSamples), -90.0f));
+        blockOutDb.store (on ? juce::Decibels::gainToDecibels (
+                                   chainView.getMagnitude (0, 0, numSamples), -90.0f)
+                             : -90.0f);
 
         // ONE tap per block, at the block's output, which is now also the EQ's output — the curve
         // and the spectrum drawn under it finally describe the same point. A switched-off block
@@ -726,17 +769,52 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // repeats already in the line ring out into the dry. Only leaving the RIG clears it — that is
     // unplugging, not standing by. Which is also why a bypassed block still costs: so does a
     // bypassed insert, in every DAW there is.
-    if (linkInRig (params::rowDelay))
-        { const auto a = PerfClock::now();
-          delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
-          nsStage[stDelay] = elapsedNs (a); }
-    else
-        delay.reset();
+    // STANDBY is unfed-and-ringing (see the engine). Leaving the RIG is the other thing: the line
+    // is cleared, and a ringing tail cut in one sample is a click. So the whole contribution is
+    // crossfaded out first, and only then cleared.
+    {
+        const bool inRig = linkInRig (params::rowDelay);
+        const auto span  = blockFade[(size_t) params::rowDelay].advance (numSamples, inRig);
+        const bool run   = core::BypassFade::runs (span, inRig);
+        const bool fade  = span.moving && canFade (numSamples, nchBack);
 
-    // The room stands by the same way the echo does: unfed, still ringing out. See the delay above.
-    if (linkInRig (params::rowReverb))
+        if (run)
+        {
+            const auto a = PerfClock::now();
+
+            if (fade)
+                for (int ch = 0; ch < nchBack; ++ch)
+                    juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                       buffer.getReadPointer (ch), numSamples);
+
+            delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
+
+            if (fade)
+                core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
+                                         nchBack, numSamples, span);
+
+            nsStage[stDelay] = elapsedNs (a);
+        }
+        else
+        {
+            delay.reset();
+        }
+    }
+
+    // The room stands by the same way the echo does: unfed, still ringing out — and leaves the rig
+    // the same way too, faded rather than cut. See the delay above.
+    const bool reverbInRig = linkInRig (params::rowReverb);
+    const auto reverbSpan  = blockFade[(size_t) params::rowReverb].advance (numSamples, reverbInRig);
+    const bool reverbFade  = reverbSpan.moving && canFade (numSamples, nchBack);
+
+    if (core::BypassFade::runs (reverbSpan, reverbInRig))
         { const auto a = PerfClock::now();
           const bool fed = linkWorks (params::rowReverb);
+
+          if (reverbFade)
+              for (int ch = 0; ch < nchBack; ++ch)
+                  juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                     buffer.getReadPointer (ch), numSamples);
 
           // The pair for the block's picture: the door before the room, the ADDED wet after it.
           // A room nobody is feeding hears silence at its door, and the picture says so.
@@ -756,6 +834,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             tout.publishIfDue (eqSpectrumOrder,
                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
 
+          if (reverbFade)
+              core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
+                                       nchBack, numSamples, reverbSpan);
+
           nsStage[stReverb] = elapsedNs (a); }
     else
         reverb.reset();
@@ -770,8 +852,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
       const bool cabWorks = linkWorks (params::rowCab);
       const auto cabSpan  = blockFade[(size_t) params::rowCab].advance (numSamples, cabWorks);
       const bool cabOn    = core::BypassFade::runs (cabSpan, cabWorks);
+      const bool cabFade  = cabSpan.moving && canFade (numSamples, nchBack);
 
-      if (cabSpan.moving)
+      if (cabFade)
           for (int ch = 0; ch < nchBack; ++ch)
               juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                  buffer.getReadPointer (ch), numSamples);
@@ -786,8 +869,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
       }
       cab.process (channels, nchBack, numSamples, cabOn);
 
-      if (cabSpan.moving)
+      if (cabFade)
           core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(), nchBack, numSamples, cabSpan);
+
+      // Once the fade is over and nothing of the cabinet is in the sum, drop what it remembers.
+      // Otherwise the first IR-length after it comes back convolves what was played BEFORE it
+      // stood down — a ghost, faded in over fifteen milliseconds, of a phrase from minutes ago.
+      if (! cabOn)
+          cab.reset();
 
       if (cabOn)
       {
@@ -815,8 +904,25 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // ceiling it enforces is the ceiling that leaves the box. The meter reads AFTER it —
         // the truth on the rail is the truth at the jack.
         { const auto a = PerfClock::now();
+          // Switching a limiter off returns whatever it was holding down in ONE sample: three
+          // decibels of grip released instantly is a step upward, which is a click. Its grip is
+          // crossfaded off like any other replacing link.
+          const bool limWorks = linkWorks (params::rowLimit);
+          const auto limSpan  = blockFade[(size_t) params::rowLimit].advance (numSamples, limWorks);
+          const bool limFade  = limSpan.moving && canFade (numSamples, nchBack);
+
+          if (limFade)
+              for (int ch = 0; ch < nchBack; ++ch)
+                  juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                     buffer.getReadPointer (ch), numSamples);
+
           limiter.process (channels, nchBack, numSamples,
-                           linkWorks (params::rowLimit), limiterCeilParam->load());
+                           core::BypassFade::runs (limSpan, limWorks), limiterCeilParam->load());
+
+          if (limFade)
+              core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
+                                       nchBack, numSamples, limSpan);
+
           nsStage[stLimit] = elapsedNs (a); }
         limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
 
@@ -837,7 +943,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             outClip.store (true);
     }
 
-    nsStage[stOut]   = elapsedNs (tOut);
+    // MINUS the limiter, which was measured separately inside this same scope. Left in, the two
+    // rows double-counted and the breakdown stopped adding up — which is the one thing a breakdown
+    // is for.
+    nsStage[stOut]   = juce::jmax (0.0, elapsedNs (tOut) - nsStage[stLimit]);
     nsStage[stTotal] = elapsedNs (tStart);
 
     // The per-stage publication: one-pole EMA at orbitcab's coefficient, so the two meters

@@ -37,6 +37,7 @@ class GateConsole final : private juce::Timer
 public:
     GateConsole (juce::AudioProcessorValueTreeState& state, const std::atomic<float>& keyDbSource)
         : keyDb (keyDbSource),
+          presentP (*state.getParameter (params::gatePresent)),
           onP    (*state.getParameter (params::gateOn)),
           thP    (*state.getParameter (params::gateThreshold)),
           decayP (*state.getParameter (params::gateDecay)),
@@ -48,7 +49,15 @@ public:
         posAtt   = std::make_unique<juce::ParameterAttachment> (posP,   [] (float) {});
     }
 
-    ~GateConsole() override { stopTimer(); }
+    ~GateConsole() override
+    {
+        stopTimer();
+
+        // WITHOUT THIS THE WEAK REFERENCE IS A LIE. `WeakReference::Master`'s destructor only
+        // asserts (in debug); in a release build the shared holder keeps the dead pointer and
+        // every `safe != nullptr` still answers true. The menu's guard is this line.
+        masterReference.clear();
+    }
 
     /** The big LEARN overlay's hooks: measurement started, measurement spoke its verdict. */
     std::function<void()>              onLearnBegin;
@@ -84,6 +93,7 @@ public:
     {
         if (! learning)
             return;
+
 
         learning = false;
         stopTimer();
@@ -133,9 +143,16 @@ public:
         where.addItem (13, params::gatePositions[1].toUpperCase(), true, preReverb);
         m.addSubMenu ("MUTES AT", where);
 
+        // The menu outlives the click that opened it, and this console dies with its window.
+        // Same guard the gear's and the limiter's menus carry — a weak reference rather than a
+        // SafePointer only because this has no pixels and is not a Component.
         m.showMenuAsync (juce::PopupMenu::Options()
                              .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                         [this] (int r) { apply (r); });
+                         [safe = juce::WeakReference<GateConsole> (this)] (int r)
+                         {
+                             if (safe != nullptr)
+                                 safe->apply (r);
+                         });
     }
 
 private:
@@ -173,6 +190,16 @@ private:
             learnPeak  = -120.0f;
             learnTrace.clear();
             learnTrace.reserve ((size_t) learnTotalTicks);
+
+            // What the patch looked like when the measurement began. If any of it moves while we
+            // are counting, somebody else is driving — a register recalled, a preset loaded, an
+            // undo, the gate taken out of the rig — and finishing would write into a patch that
+            // is no longer the one that asked. Watched HERE rather than through a hook on the
+            // history, because a hook is one slot and a host may open two editors.
+            watchPresent = presentP.getValue();
+            watchOn      = onP.getValue();
+            watchTh      = thP.getValue();
+
             startTimerHz (30);
 
             if (onLearnBegin != nullptr)
@@ -193,6 +220,15 @@ private:
         if (! learning)
         {
             stopTimer();
+            return;
+        }
+
+        // Somebody else moved the gate while we were counting. Stop, and write nothing.
+        if (! juce::approximatelyEqual (presentP.getValue(), watchPresent)
+            || ! juce::approximatelyEqual (onP.getValue(), watchOn)
+            || ! juce::approximatelyEqual (thP.getValue(), watchTh))
+        {
+            cancel();
             return;
         }
 
@@ -228,6 +264,7 @@ private:
     }
 
     const std::atomic<float>& keyDb;
+    juce::RangedAudioParameter& presentP;
     juce::RangedAudioParameter& onP;
     juce::RangedAudioParameter& thP;
     juce::RangedAudioParameter& decayP;
@@ -238,7 +275,9 @@ private:
     int   learnTicks = 0;
     float learnPeak  = -120.0f;
     std::vector<float> learnTrace;
+    float watchPresent = 0.0f, watchOn = 0.0f, watchTh = 0.0f;
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE (GateConsole)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateConsole)
 };
 

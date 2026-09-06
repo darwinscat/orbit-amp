@@ -13,6 +13,7 @@
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
 #include "core/BypassFade.h"
+#include "core/BypassWire.h"
 #include "core/CabinetIr.h"
 #include "core/SoftLimiter.h"
 #include "core/DelayStage.h"
@@ -51,7 +52,12 @@ public:
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }
-    double getTailLengthSeconds() const override             { return 0.0; }
+    /** NOT zero any more. Standing a room or an echo by leaves it ringing on purpose — that is
+        what an insert's bypass does — so a host told there is no tail may cut an offline render or
+        a freeze exactly where we started holding one. The longest thing in here is the delay's own
+        line; the reverb's decay is shorter than that. Declared generously: the cost of over-stating
+        a tail is a little extra rendering, and the cost of under-stating it is a truncated one. */
+    double getTailLengthSeconds() const override             { return 8.0; }
 
     int getNumPrograms() override                            { return 1; }
     int getCurrentProgram() override                         { return 0; }
@@ -522,6 +528,21 @@ private:
         so a link asks for its own by name. */
     core::BypassFade         blockFade[params::numChainRows];
     juce::AudioBuffer<float> fadeDry;
+
+    /** One per captured block: the delay a BYPASSED block still has to carry, so the chain does
+        not arrive early the moment somebody stands a rate-matching model down. Only runs when the
+        block is not working — while it is working the model carries its own latency and there is
+        nothing to imitate. */
+    core::BypassWire wire[2];
+
+    /** Can a crossfade actually run this block? The buffer was sized in prepare, and a host may
+        hand over a bigger block than it promised — copying into it on that block would walk off
+        the end of the heap. Without room we simply do not blend: the switch lands hard, which is
+        a click, and a click is a great deal better than a corrupted heap. */
+    bool canFade (int numSamples, int numChannels) const noexcept
+    {
+        return numSamples <= fadeDry.getNumSamples() && numChannels <= fadeDry.getNumChannels();
+    }
 
 public:
     /** What the footer reports: the run's own facts, not the sound's. */

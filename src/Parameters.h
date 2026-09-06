@@ -49,7 +49,11 @@ inline constexpr float gateHysteresisDb = 6.0f;
     sustain, and the reverb tail rings out past it. Start remains for the player who wants the
     nonlinearity itself to fall silent between notes. */
 inline constexpr const char* gatePos = "gate_pos";
-inline const juce::StringArray gatePositions { "Start", "Pre-Reverb" };
+/** WHERE the gate mutes: at the head of the chain, or at its tail. Named for the CHAIN, not for
+    one block in it — "Pre-Reverb" was a strange thing to read on a rig with no reverb in it, and
+    the reverb is one of the links a player can take out. START and END are true whatever is
+    standing. The position itself has not moved. */
+inline const juce::StringArray gatePositions { "Start", "End" };
 
 /** The gate's one FEEL control: how the VCA closes once the hold has run out. Two ways, not a
     dial — the choice is between two intents, not along an axis: NORMAL (the OrbitCab-shipped

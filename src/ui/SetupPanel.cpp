@@ -25,6 +25,9 @@ SetupPanel::SetupPanel (AmpProcessor& processor) : amp (processor)
 
     // ---- LIBRARY: the three lists behind their own sub-tabs, and the one switch that is about
     //      the packs rather than about the window. ----
+    // It is a HOLDER, not a surface: its own sub-tabs are painted by the panel behind it, so a
+    // click in that strip has to fall through to the panel or the tabs cannot be picked at all.
+    libraryPage.setInterceptsMouseClicks (false, true);
     addAndMakeVisible (libraryPage);
     for (auto* v : { (juce::Component*) &preampDevices, (juce::Component*) &boostDevices,
                      (juce::Component*) &irs })
@@ -213,7 +216,7 @@ void SetupPanel::resized()
     {
         auto lib = libraryPage.getLocalBounds();
         auto sub = lib.removeFromTop (subHeaderH);
-        layOutTabs (sub, libraries, 11.0f);
+        layOutTabs (sub, libraries, 13.0f);
 
         auto packRow = lib.removeFromBottom (SettingsList::rowH);
         packSwitches.setBounds (packRow);
@@ -271,15 +274,15 @@ void SetupPanel::paint (juce::Graphics& g)
 
     if (lifetime.isNotEmpty())
     {
-        auto note = panel.reduced (16, 12).removeFromTop (headerH).removeFromRight (240)
+        auto note = panel.reduced (16, 12).removeFromTop (headerH).removeFromRight (330)
                          .withTrimmedRight (30);
         g.setColour (theme::txFaint);
-        theme::drawTracked (g, lifetime, note.toFloat(), theme::displayFont (9.0f), 0.15f,
+        theme::drawTracked (g, lifetime, note.toFloat(), theme::displayFont (13.0f), 0.15f,
                             juce::Justification::centredRight);
     }
 
     if (currentPage == 0)
-        paintTabs (g, libraries, currentLibrary, 11.0f, libraryPage.getPosition());
+        paintTabs (g, libraries, currentLibrary, 13.0f, libraryPage.getPosition());
 }
 
 void SetupPanel::mouseDown (const juce::MouseEvent& e)
