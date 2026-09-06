@@ -369,6 +369,14 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     preamp.prepare (sampleRate, block, channels);
     demo.prepare (sampleRate);
     scopeDry.setSize (1, block);
+    fadeDry.setSize (juce::jmax (2, channels), block);
+
+    // Snapped, not faded: a chain that arrives switched off is silent from its first sample.
+    for (int i = 0; i < params::numChainRows; ++i)
+    {
+        blockFade[(size_t) i].prepare (sampleRate);
+        blockFade[(size_t) i].snapTo (linkWorks ((params::ChainRow) i));
+    }
 
     pumpDeviceWork();
 
@@ -628,7 +636,13 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                                std::atomic<float>* inParam, float& lastInGain,
                                std::atomic<float>& blockOutDb, int stBlock, int stEq)
     {
-        const bool on = linkWorks (row);
+        // A link that REPLACES the signal has no tail of its own to ride out, so dropping it out
+        // of the path would be a step in the waveform. It is crossfaded against what it was
+        // handed instead — and while nothing is moving the crossfade costs nothing at all: no
+        // copy, no per-sample multiply, just the plain `if` this used to be.
+        const bool works = linkWorks (row);
+        const auto span  = blockFade[(size_t) row].advance (numSamples, works);
+        const bool on    = core::BypassFade::runs (span, works);
 
         // IN, first of all: how hard the capture is fed. Metered immediately after, at the model's
         // own door, so the grip on the meter and the fill under it are answering about one point.
@@ -636,12 +650,19 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // It ramps to UNITY when the block is off rather than simply not being applied — a bypassed
         // block has to be a wire, and a switch that leaves a hand still pressing on the signal is a
         // switch that lies.
-        const float inTarget = on ? juce::Decibels::decibelsToGain (inParam->load()) : 1.0f;
+        const float inTarget = works ? juce::Decibels::decibelsToGain (inParam->load()) : 1.0f;
         chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
         lastInGain = inTarget;
 
         blockInDb[(size_t) l].store (juce::Decibels::gainToDecibels (
             chainView.getMagnitude (0, 0, numSamples), -90.0f));
+
+        // The one end of the crossfade, kept only while one is running: what the block was handed,
+        // after its own IN trim, so both ends start from the same signal.
+        if (span.moving)
+            for (int ch = 0; ch < nch; ++ch)
+                juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                   chainView.getReadPointer (ch), numSamples);
 
         { const auto a = PerfClock::now();
           if (on)
@@ -665,6 +686,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
           if (on)
               eqLinks[(size_t) l].process (channels, nch, numSamples);
           nsStage[stEq] = elapsedNs (a); }
+
+        if (span.moving)
+            core::BypassFade::blend (chainView.getArrayOfWritePointers(),
+                                     fadeDry.getArrayOfReadPointers(), nch, numSamples, span);
 
         blockOutDb.store (juce::Decibels::gainToDecibels (
             chainView.getMagnitude (0, 0, numSamples), -90.0f));
@@ -742,8 +767,20 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
     // Its picture's spectra tap the door and the exit, channel 0, only while it is on.
+    // The IR is a replacing link too: its own tail is not separable from the signal, so standing
+    // it down is a crossfade to what it was handed, not a ring-out. (A cab sim in a DAW bypasses
+    // exactly this way, and the alternative — dry plus a ghost of the cabinet — is a third sound
+    // rather than a bypass.)
     { const auto a = PerfClock::now();
-      const bool cabOn = linkWorks (params::rowCab);
+      const bool cabWorks = linkWorks (params::rowCab);
+      const auto cabSpan  = blockFade[(size_t) params::rowCab].advance (numSamples, cabWorks);
+      const bool cabOn    = core::BypassFade::runs (cabSpan, cabWorks);
+
+      if (cabSpan.moving)
+          for (int ch = 0; ch < nchBack; ++ch)
+              juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                 buffer.getReadPointer (ch), numSamples);
+
       if (cabOn)
       {
           const float* d = buffer.getReadPointer (0);
@@ -753,6 +790,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                                           juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0));
       }
       cab.process (channels, nchBack, numSamples, cabOn);
+
+      if (cabSpan.moving)
+          core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(), nchBack, numSamples, cabSpan);
+
       if (cabOn)
       {
           const float* d = buffer.getReadPointer (0);

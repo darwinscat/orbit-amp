@@ -650,6 +650,59 @@ int main()
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
     }
 
+    // A LINK THAT REPLACES has no tail to ride out, so standing it down is a crossfade against
+    // what it was handed. The proof is the waveform: measured as the biggest jump between two
+    // neighbouring samples across the switch. A 220 Hz sine at 0.25 climbs about 0.0072 per sample
+    // of its own accord; dropping a cabinet out of the path in one sample steps by a good fraction
+    // of the signal, which is an order of magnitude more and is what a click IS.
+    {
+        set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
+        set (amp, orbitamp::params::cabPresent, 1.0f);
+        set (amp, orbitamp::params::cabOn, 1.0f);
+        set (amp, orbitamp::params::limiterOn, 0.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        int phase = 0;
+        float last = 0.0f, biggestJump = 0.0f;
+        bool  measuring = false;
+
+        for (int block = 0; block < 40; ++block)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float s = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                          * 220.0 * phase / sampleRate);
+                buf.setSample (0, i, s);
+                buf.setSample (1, i, s);
+            }
+
+            if (block == 20)
+            {
+                set (amp, orbitamp::params::cabOn, 0.0f);   // stand it down mid-note
+                measuring = true;
+            }
+
+            amp.processBlock (buf, midi);
+            amp.pumpDeviceWork();
+
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const float v = buf.getSample (0, i);
+                if (measuring)
+                    biggestJump = juce::jmax (biggestJump, std::abs (v - last));
+                last = v;
+            }
+        }
+
+        std::printf ("\nbypass: biggest sample-to-sample jump across the switch %.5f\n", biggestJump);
+
+        report ("standing a cabinet down does not step the waveform",
+                biggestJump < 0.02f, juce::String (biggestJump, 5));
+
+        set (amp, orbitamp::params::cabOn, 1.0f);
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }

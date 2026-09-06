@@ -12,6 +12,7 @@
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
+#include "core/BypassFade.h"
 #include "core/CabinetIr.h"
 #include "core/SoftLimiter.h"
 #include "core/DelayStage.h"
@@ -521,6 +522,12 @@ private:
     std::atomic<float>* boostGainParam  = nullptr;
     std::atomic<float>* preampGainParam = nullptr;
     juce::AudioBuffer<float> scopeDry;   // a block's input, kept for its pictures
+
+    /** The crossfade of every link that REPLACES the signal, and the one buffer they share to do
+        it: what the block was handed, kept only while a fade is actually running. Indexed by row,
+        so a link asks for its own by name. */
+    core::BypassFade         blockFade[params::numChainRows];
+    juce::AudioBuffer<float> fadeDry;
 
 public:
     /** What the footer reports: the run's own facts, not the sound's. */
