@@ -10,8 +10,7 @@
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
 #include "ui/Footer.h"
 #include "ui/GateConsole.h"
-#include "ui/GateStrip.h"
-#include "ui/OutStrip.h"
+#include "ui/VolumeColumn.h"
 #include "ui/LearnOverlay.h"
 #include "ui/DragRuler.h"
 #include "ui/TunerStrip.h"
@@ -41,8 +40,10 @@ public:
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    /** `withVolume` — the OUT trim's RESET section belongs to the column's door alone. */
-    void showLimiterMenu (juce::Point<int> screenPos, bool withVolume = true);
+    /** The limiter's whole console, opened from its arrow. The OUT trim's RESET used to ride
+        along when this opened from the COLUMN; the column has no menu of its own any more, and
+        the trim's reset is its own double-click. */
+    void showLimiterMenu (juce::Point<int> screenPos);
 
 
     /** What the two switches of every row mean to the WINDOW — the tiles, the two columns and
@@ -127,15 +128,14 @@ private:
         overlay on purpose: the overlay draws LEARN's trace from a pointer into this object, and
         members die in reverse order, so the reader has to go first. */
     GateConsole   gateConsole;
-    GateStrip     gateStrip;        // the IN sliver, left of the faceplate
-    OutStrip      outStrip;         // the OUT sliver with the master's hand, right of it
+    VolumeColumn  inColumn;         // the input's level and its hand, left of the faceplate
+    VolumeColumn  outColumn;        // the output's, mirrored, right of it
     TunerStrip    tunerStrip;       // the always-on needle, between the guards
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player
     LearnOverlay  learnOverlay;     // the LEARN measurement, projected large over the faceplate
     DragRuler     inRuler;          // the IN trim's own ladder, summoned by the hand
     DragRuler     outRuler;         // the OUT trim's, mirrored
-    DragRuler     ceilRuler;        // the limiter ceiling's, lilac, top-third ladder
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;   // constructed with the processor: its EDITOR page writes parameters
     DisclaimerPanel devices;        // DEVICES & TRADEMARKS: the long notice and the list it is about

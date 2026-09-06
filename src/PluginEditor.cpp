@@ -29,10 +29,10 @@ namespace
 
 AmpEditor::AmpEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p),
-      gateStrip (p.gateKeyDb, p.inClip, *p.apvts.getParameter (params::inTrim)),
-      outStrip (p.outDb, p.outClip, *p.apvts.getParameter (params::outTrim),
-                *p.apvts.getParameter (params::limiterCeiling),
-                *p.apvts.getParameter (params::limiterOn)),
+      inColumn  (VolumeColumn::Side::in,  p.gateKeyDb, p.inClip,
+                 *p.apvts.getParameter (params::inTrim)),
+      outColumn (VolumeColumn::Side::out, p.outDb,     p.outClip,
+                 *p.apvts.getParameter (params::outTrim)),
       gateConsole (p.apvts, p.gateKeyDb),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
 {
@@ -45,8 +45,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     tooltips.setColour (juce::TooltipWindow::backgroundColourId, theme::panel2);
     tooltips.setColour (juce::TooltipWindow::textColourId, theme::txDim);
     tooltips.setColour (juce::TooltipWindow::outlineColourId, theme::hair2);
-    addAndMakeVisible (gateStrip);
-    addAndMakeVisible (outStrip);
+    addAndMakeVisible (inColumn);
+    addAndMakeVisible (outColumn);
     addAndMakeVisible (tunerStrip);
     addAndMakeVisible (footer);
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
@@ -216,7 +216,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         else if (i == params::rowLimit)
         {
             amp.limiterWorked.store (false);
-            showLimiterMenu (pos, false);
+            showLimiterMenu (pos);
         }
     };
 
@@ -271,28 +271,9 @@ AmpEditor::AmpEditor (AmpProcessor& p)
                                   return p->convertFrom0to1 (p->getValue()); };
 
     // The ceiling's own ladder: -0.1 at the top of the rail's top third, halves down to -3.
-    ceilRuler.ticksOnLeft   = false;
-    ceilRuler.labelDecimals = 1;
-    ceilRuler.accent        = theme::lilac;
-    ceilRuler.marks = { { -0.1f, true }, { -0.5f, false }, { -1.0f, true }, { -1.5f, false },
-                        { -2.0f, true }, { -2.5f, false }, { -3.0f, true } };
-    ceilRuler.yOfDb = [] (juce::Rectangle<float> r, float v)
-    {
-        const float t = (params::limiterCeilingMax - v)
-                      / (params::limiterCeilingMax - params::limiterCeilingMin);
-        return r.getY() + 14.0f + t * (r.getHeight() / 3.0f);
-    };
-    ceilRuler.currentDb = [this] { auto* p = amp.apvts.getParameter (params::limiterCeiling);
-                                   return p->convertFrom0to1 (p->getValue()); };
 
-    addChildComponent (inRuler);
-    addChildComponent (outRuler);
-    addChildComponent (ceilRuler);
-
-    gateStrip.onTrimDrag = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
-    outStrip.onTrimDrag  = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
-    outStrip.onCeilDrag  = [this] (bool a) { ceilRuler.setVisible (a); if (a) ceilRuler.toFront (false); };
-    outStrip.onMenu   = [this] (juce::Point<int> pos) { showLimiterMenu (pos); };
+    inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
+    outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
     // captured blocks rebuild their selectors from the lists that changed under them.
@@ -404,7 +385,7 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
-void AmpEditor::showLimiterMenu (juce::Point<int> screenPos, bool withVolume)
+void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
 {
     auto* on   = amp.apvts.getParameter (params::limiterOn);
     auto* ceil = amp.apvts.getParameter (params::limiterCeiling);
@@ -415,18 +396,16 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos, bool withVolume)
     const auto matches = [&] (float v) { return isOn && std::abs (c - v) < 0.05f; };
 
     juce::PopupMenu m;
-    m.addSectionHeader ("LIMITER");
+    // The number in the header, for the same reason the gate's carries one: the ceiling is
+    // continuous and these are three points on it, so a value from a preset or an automation lane
+    // can sit between them with no item ticked and nothing anywhere to say what it is.
+    m.addSectionHeader (isOn ? "LIMITER  " + juce::String (c, 1) + " DB"
+                             : juce::String ("LIMITER  OFF"));
     m.addItem (1, "OFF",           true, ! isOn);
     m.addItem (2, "SAFETY  -0.3",  true, matches (-0.3f));
     m.addItem (3, "NORMAL  -1.0",  true, matches (-1.0f));
     m.addItem (4, "TIGHT   -3.0",  true, matches (-3.0f));
 
-    if (withVolume)
-    {
-        m.addSeparator();
-        m.addSectionHeader ("VOLUME");
-        m.addItem (7, "RESET");
-    }
 
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
@@ -452,13 +431,6 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos, bool withVolume)
                              return;
                          }
 
-                         if (r == 7)
-                         {
-                             if (safe != nullptr)
-                                 set (safe->amp.apvts.getParameter (params::outTrim), 0.0f);
-
-                             return;
-                         }
 
                          set (on, 1.0f);
                          set (ceil, r == 2 ? -0.3f : r == 3 ? -1.0f : -3.0f);
@@ -501,18 +473,18 @@ void AmpEditor::resized()
     // width to the faceplate — all but the edge inset the badges keep, so the outermost block
     // never presses against the window's own edge.
     const int edgeInset = 12;
-    const int colL = inColStands  ? GateStrip::designWidth + chromeGap : edgeInset;
-    const int colR = outColStands ? OutStrip::designWidth  + chromeGap : edgeInset;
+    const int colL = inColStands  ? VolumeColumn::designWidth + chromeGap : edgeInset;
+    const int colR = outColStands ? VolumeColumn::designWidth  + chromeGap : edgeInset;
 
-    gateStrip.setVisible (inColStands);
-    outStrip.setVisible (outColStands);
+    inColumn.setVisible (inColStands);
+    outColumn.setVisible (outColStands);
 
-    gateStrip.setBounds (margin, gutterY, GateStrip::designWidth, gutterH);
-    gateStrip.setTransform (zoom);
+    inColumn.setBounds (margin, gutterY, VolumeColumn::designWidth, gutterH);
+    inColumn.setTransform (zoom);
 
-    outStrip.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth, gutterY,
-                        OutStrip::designWidth, gutterH);
-    outStrip.setTransform (zoom);
+    outColumn.setBounds (margin + FaceplateView::designWidth - VolumeColumn::designWidth, gutterY,
+                        VolumeColumn::designWidth, gutterH);
+    outColumn.setTransform (zoom);
 
     faceplate.setBounds (margin + colL, faceplateY,
                          FaceplateView::designWidth - colL - colR, faceplateH);
@@ -536,11 +508,9 @@ void AmpEditor::resized()
     // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
     inRuler.setBounds (margin + colL - chromeGap + 2, gutterY, 56, gutterH);
     inRuler.setTransform (zoom);
-    outRuler.setBounds (margin + FaceplateView::designWidth - OutStrip::designWidth - 58, gutterY,
+    outRuler.setBounds (margin + FaceplateView::designWidth - VolumeColumn::designWidth - 58, gutterY,
                         56, gutterH);
     outRuler.setTransform (zoom);
-    ceilRuler.setBounds (outRuler.getBounds());
-    ceilRuler.setTransform (zoom);
 
     // The learn sheet: half the plugin, centred over the faceplate.
     learnOverlay.setBounds (margin + FaceplateView::designWidth / 6, faceplateY + 60,
