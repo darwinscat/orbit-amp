@@ -115,6 +115,9 @@ public:
     /** The suffix a switch slot's saved position name wears in the state tree. */
     static constexpr const char* switchAimSuffix = "_pos";
 
+    /** And the one a captured block's saved DEVICE name wears, beside its index parameter. */
+    static constexpr const char* deviceAimSuffix = "_dev";
+
 private:
     static constexpr int aimWindowFrames = 150;   // ~5 s at the 30 Hz pump
 
@@ -132,15 +135,22 @@ private:
         pumpDeviceWork();
         pumpTuner();
         applySwitchAims();
+        pumpSwitchNames();
     }
 
-    /** A SWITCH IS SAVED BY NAME, and this is the half that puts it back.
+    /** A DEVICE AND ITS SWITCHES ARE SAVED BY NAME, and this is the half that puts them back.
 
-        The parameter a host sees is a fraction, and a fraction is an index into the pack's position
-        list: repack a device one position shorter and every old session reopens on a different
-        position, silently. So the session also carries the position's NAME, and on the way back the
-        name decides — as soon as the pack it belongs to is actually here, which is not the moment
-        the state arrives (models load on the pool). Until then the aim stands.
+        Both parameters a host sees are numbers, and both numbers are places in a list that belongs
+        to this machine on this day. The device's is an index into whatever packs are on disk,
+        sorted bundled-first and then along the gain ramp — drop one new pack in and everything
+        after it renumbers. A switch's is a fraction, an index into the pack's own position list —
+        repack a device one position shorter and every old session reopens on a different position.
+        Both drift silently, and the second is the one a player would never think to check.
+
+        So the state carries NAMES beside the numbers, and on the way back the name decides. The
+        device first, because the positions belong to its pack; then the switches, as soon as that
+        pack is actually here, which is not the moment the state arrives — models load on the pool.
+        Until then the aim stands.
 
         It stops standing after a few seconds. A player who reaches for that switch before the pack
         lands must win: an aim that outlived its window and overwrote a live hand would be worse than
@@ -152,6 +162,58 @@ private:
 
         --switchAimFrames;
         bool waiting = false;
+
+        // THE DEVICE FIRST, and by name for the same reason. Its parameter is an index into a list
+        // sorted bundled-first and then along the gain ramp, so one pack dropped into the folder
+        // renumbers everything after it: every session and every preset that named a device by
+        // number now names a different one. The list itself is scanned on this thread and is
+        // therefore always here — unlike the models, which is why this half needs no waiting.
+        const auto aimDevice = [&] (core::CapturedBlock& block, const char* id)
+        {
+            const juce::Identifier key (juce::String (id) + deviceAimSuffix);
+
+            if (! apvts.state.hasProperty (key))
+                return;
+
+            const auto want = apvts.state.getProperty (key).toString();
+
+            if (want.isEmpty())
+                return;
+
+            const int index = block.indexOfName (want);
+
+            if (index < 0)
+            {
+                // This machine has no such device. Let the name go rather than keep aiming at
+                // something that is not here: the number stands, the block says whose voice is
+                // actually playing, and the next move writes an honest name.
+                apvts.state.removeProperty (key, nullptr);
+                return;
+            }
+
+            if (auto* p = apvts.getParameter (id); p != nullptr)
+            {
+                const float v = p->convertTo0to1 ((float) index);
+
+                if (! juce::approximatelyEqual (p->getValue(), v))
+                {
+                    p->beginChangeGesture();
+                    p->setValueNotifyingHost (v);
+                    p->endChangeGesture();
+                }
+            }
+
+            // The aim is satisfied only when the block is actually PLAYING the named device, not
+            // when the number has been written. Setting the parameter is one tick; the pump that
+            // watches it and loads the pack is the next. Without this the window would close in
+            // between, and the half that writes names back would immediately record the device
+            // that was still loaded — overwriting the aim with what it was aiming away from.
+            if (block.selectedName() != want)
+                waiting = true;
+        };
+
+        aimDevice (boost,  params::boostDevice);
+        aimDevice (preamp, params::preampDevice);
 
         const auto aim = [&] (core::CapturedBlock& block, auto idFor)
         {
@@ -196,27 +258,78 @@ private:
             switchAimFrames = 0;
     }
 
-    /** Writes each switch slot's position NAME into the state tree, so what is saved says which
-        position rather than how far along the list it was. Message thread, at save time. */
-    void stampSwitchAims()
+    /** THE OTHER HALF: the name is written WHEN THE SWITCH MOVES, not when a project is saved.
+
+        It used to be stamped from `getStateInformation`, and that was wrong twice over. The tree it
+        stamped into is the LIVE one, so a host's save edited the state behind the player's back —
+        the settle timer saw a change nobody had made and committed an undo step for it, and the
+        next Cmd-Z moved a switch on the device. And saving a PRESET does not go through the host at
+        all: it copies the live tree, which by then had either no names in it or the ones left over
+        from the last project save. A preset made on this machine could open on another one holding
+        a position it never had.
+
+        Doing it here fixes both by having nothing to fix: the name is simply always in the tree, so
+        the preset, the session, the four registers and every undo step carry it for free, and the
+        write lands inside the same settle burst as the switch move that caused it — one edit, one
+        step.
+
+        Cheap enough to do on every tick: ten slots, ten string compares, and a write only when the
+        answer actually differs — which the history's contract requires, since a capture that is not
+        byte-stable for an unchanged state never settles at all.
+
+        Two silences, both deliberate. While an aim is in flight the tree already holds the wanted
+        names and the pack may not be here yet — stamping then would overwrite an aim with whatever
+        the fraction happens to point at today. And a block whose pack has not loaded knows no
+        names: it is not that the slot has none, it is that nobody can say yet. */
+    void pumpSwitchNames()
     {
-        const auto stamp = [this] (core::CapturedBlock& block, auto idFor)
+        if (switchAimFrames > 0)
+            return;
+
+        const auto noteDevice = [this] (core::CapturedBlock& block, const char* id)
         {
+            const juce::Identifier key (juce::String (id) + deviceAimSuffix);
+            const auto name = block.selectedName();
+
+            if (name.isEmpty())
+            {
+                if (apvts.state.hasProperty (key))     // nothing loaded owns no name
+                    apvts.state.removeProperty (key, nullptr);
+            }
+            else if (apvts.state.getProperty (key).toString() != name)
+            {
+                apvts.state.setProperty (key, name, nullptr);
+            }
+        };
+
+        noteDevice (boost,  params::boostDevice);
+        noteDevice (preamp, params::preampDevice);
+
+        const auto note = [this] (core::CapturedBlock& block, auto idFor)
+        {
+            if (! block.isReady())
+                return;
+
             for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
             {
                 const auto id = idFor (i);
                 const juce::Identifier key (id + switchAimSuffix);
                 const auto name = block.switchValueAt (i, apvts.getRawParameterValue (id)->load());
 
-                if (name.isNotEmpty())
+                if (name.isEmpty())
+                {
+                    if (apvts.state.hasProperty (key))      // a swept knob owns no name
+                        apvts.state.removeProperty (key, nullptr);
+                }
+                else if (apvts.state.getProperty (key).toString() != name)
+                {
                     apvts.state.setProperty (key, name, nullptr);
-                else
-                    apvts.state.removeProperty (key, nullptr);   // a swept knob owns no name
+                }
             }
         };
 
-        stamp (boost,  [] (int i) { return params::boostMeasured (i); });
-        stamp (preamp, [] (int i) { return params::preampMeasured (i); });
+        note (boost,  [] (int i) { return params::boostMeasured (i); });
+        note (preamp, [] (int i) { return params::preampMeasured (i); });
     }
 
     /** The state changed under us — a session opened, a register recalled: aim the switches again. */

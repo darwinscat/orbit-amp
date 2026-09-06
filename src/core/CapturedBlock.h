@@ -70,9 +70,15 @@ public:
         select (index);
     }
 
-    /** Loads the device at `index`. A saved session names a device by position in a list that is
-        whatever is on disk today; if it is gone, the first one stands in rather than nothing loading,
-        since silence is a worse answer than the wrong device and the name says which it is. */
+    /** Loads the device at `index` — the HOST's handle on the choice, and only that.
+
+        The index is not an identity and cannot be one: the list is whatever is on disk today,
+        sorted bundled-first and then along the gain ramp, so dropping one new pack into the folder
+        renumbers everything after it. What the state carries is the NAME (see `selectedName` and
+        `AmpProcessor::applySwitchAims`); this takes the number the name resolved to.
+
+        When the number points nowhere the first device stands in rather than nothing loading, since
+        silence is a worse answer than the wrong device and the name on the block says which it is. */
     void select (int index)
     {
         lastSelected = index;
@@ -83,9 +89,12 @@ public:
 
         if (pack == nullptr)
         {
+            loadedName.clear();
             player.unload();
             return;
         }
+
+        loadedName = pack->displayName();
 
         // The bytes come by `files[].id`, from whatever thread the host runs the load job on — not
         // the one that opened the pack. So the source owns what it needs to find them, and the
@@ -109,6 +118,27 @@ public:
         lastGain = -1.0f;
         lastTone.fill (-1.0f);
         lastSelector.fill (-1);
+    }
+
+    /** WHICH DEVICE IS ACTUALLY LOADED, BY NAME — the pack file's own name for it, which is what
+        the list shows and what travels with the file when it is copied to another machine.
+
+        This is the identity the state saves. The parameter beside it is an index into a list that
+        is sorted bundled-first and then along the gain ramp, so ONE new pack dropped into the
+        folder renumbers every device after it and every session that named one by number now names
+        a different one — silently, and with the loaded device's name still printed on the block to
+        say so. Empty when nothing is loaded. */
+    juce::String selectedName() const { return loadedName; }
+
+    /** Where a NAMED device stands in the list as it is right now, or -1 when this machine has
+        nothing by that name. Message thread — the list is rescanned there. */
+    int indexOfName (const juce::String& name) const
+    {
+        for (int i = 0; i < packs.size(); ++i)
+            if (packs.getReference (i).displayName() == name)
+                return i;
+
+        return -1;
     }
 
     /** Loads what the device parameter now points at, when it moved. This is how a restored session
@@ -653,6 +683,7 @@ private:
     float lastGain    = -1.0f;
     bool  lastSmooth  = true;
     int   lastSelected = -1;
+    juce::String loadedName;   // the name of the pack actually playing — the state's identity
     bool  raw = false;
 
     std::atomic<float> drive { 1.0f };

@@ -117,9 +117,10 @@ AmpProcessor::AmpProcessor()
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // Switches ride in the tree by NAME, not by their place in the list — stamped here, on the
-    // message thread, from what each block's pack actually says (see applySwitchAims).
-    stampSwitchAims();
+    // Switches ride in the tree by NAME, not by their place in the list — and they are already
+    // there: `pumpSwitchNames` writes the name when the switch MOVES, so a save has nothing to
+    // stamp and no reason to touch the live tree. (It used to stamp here, which edited the state
+    // behind the player and cost an undo step nobody had earned.)
 
     // The workspace envelope carries the live parameter tree and the other three registers, so
     // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's

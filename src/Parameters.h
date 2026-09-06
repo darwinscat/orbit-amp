@@ -152,7 +152,12 @@ inline constexpr int boostNumMeasured = 5;
 inline juce::String boostMeasured (int i) { return "boost_meas" + juce::String (i + 1); }
 /** Which device is loaded, as an index into the scanned list. An index rather than a choice list:
     a host fixes a Choice's names at construction, and this list is whatever the player has on disk
-    the moment the plugin opens. */
+    the moment the plugin opens.
+
+    THE INDEX IS THE HOST'S HANDLE, NOT THE IDENTITY. The list is sorted bundled-first and then
+    along the gain ramp, so one new pack dropped into the Devices folder renumbers every device
+    after it. What the state actually carries is the device's NAME, in a property beside this
+    parameter (`AmpProcessor::deviceAimSuffix`), and the name is what decides on the way back. */
 inline constexpr const char* boostDevice = "boost_device";
 inline constexpr int maxDevices = 128;
 
