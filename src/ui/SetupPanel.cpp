@@ -53,7 +53,13 @@ void SetupPanel::selectTab (int index)
 
 void SetupPanel::resized()
 {
-    panel = getLocalBounds().withSizeKeepingCentre (panelW, panelH);
+    // FITS, always. The panel used to be centred at its full size whatever the editor's size —
+    // and the editor shrinks: with only the chain's tail standing it is barely four hundred units
+    // tall, and the header with the tabs and the ✕ went off the top. That is the worst possible
+    // thing to clip, because this window is how a player puts the missing rows back. Clamped to
+    // what there is, the way DisclaimerPanel already does it.
+    panel = getLocalBounds().withSizeKeepingCentre (juce::jmin (getWidth()  - 24, panelW),
+                                                    juce::jmin (getHeight() - 24, panelH));
 
     auto r = panel.reduced (16, 12);
 
