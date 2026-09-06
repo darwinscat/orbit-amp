@@ -113,6 +113,14 @@ AmpProcessor::AmpProcessor()
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
     rescanDevices();
+
+    // The names go in BEFORE the history looks, so a plugin that has just opened already knows
+    // which device it is playing — and knows it without that knowledge being an edit. Resetting
+    // takes the baseline over the seeded tree; marking it saved undoes the dirty flag the reset
+    // raises, which is right: nothing has been changed, the state was merely completed.
+    seedSwitchNames();
+    history.reset();
+    history.markSaved();
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -191,6 +199,11 @@ void AmpProcessor::rescanDevices()
     // imported, an import re-sorts the list, and re-selecting by the old number is how a block ends
     // up playing its new neighbour. The block answers where it now stands and the parameter follows
     // it — quietly, because nothing about the sound changed and there is nothing to undo.
+    // Suppressed for the same reason the aim is: following a device that the FOLDER moved is the
+    // plugin agreeing with itself, not an edit. Recorded, it would be an undo step whose undo puts
+    // the number back on the wrong pack.
+    const felitronics::appkit::CompareHistory::ScopedSuppress hush (history);
+
     const auto follow = [this] (core::CapturedBlock& block, const char* id)
     {
         auto* p = apvts.getParameter (id);

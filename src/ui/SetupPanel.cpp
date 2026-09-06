@@ -108,12 +108,21 @@ void SetupPanel::buildViewPage()
 {
     std::vector<SettingsList::Row> rows;
 
+    // A ROW'S GETTER IS POLLED, so it has to be cheap, and `prefs::getBool` is not: every call
+    // takes the family's inter-process lock, reads the JSON off disk and parses it. Five rows at
+    // ten a second is fifty locked file reads a second on the message thread, and a contended
+    // lock can hold that thread for as long as its timeout. The value is read once, here, and
+    // again whenever this window writes it — which is the only way it changes while the page is
+    // open, since these live on the machine and no automation or preset can touch them.
     const auto add = [&] (juce::String name, juce::String note, juce::Identifier key, bool fallback)
     {
+        auto held = std::make_shared<bool> (prefs::getBool (key, fallback));
+
         rows.push_back ({ std::move (name), std::move (note),
-                          [key, fallback] { return prefs::getBool (key, fallback); },
-                          [this, key, fallback] (bool on)
+                          [held] { return *held; },
+                          [this, key, held] (bool on)
                           {
+                              *held = on;
                               prefs::setBool (key, on);
                               if (onViewChanged)
                                   onViewChanged();

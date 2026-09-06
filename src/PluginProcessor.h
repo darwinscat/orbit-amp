@@ -38,16 +38,18 @@ class AmpProcessor final : public juce::AudioProcessor,
 {
 public:
     AmpProcessor();
-    /** NOT defaulted, and the body is one line that must not be deleted.
+    /** Defaulted, and it is worth writing down WHY, because it looks like the place a weak
+        reference has to be cleared and it is not.
 
-        `setStateInformation` may arrive on any thread, so it marshals the restore to the message
-        thread behind a `juce::WeakReference<AmpProcessor>` — the host can destroy the plugin while
-        that call is still queued. `WeakReference::Master`'s own destructor only ASSERTS: in a
-        release build it leaves the shared holder pointing at freed memory, every `weak.get()`
-        answers with a live-looking pointer, and the guard guards nothing. Clearing the master is
-        what actually arms it. (The same line was missing in GateConsole, and the same review
-        caught it there.) */
-    ~AmpProcessor() override { masterReference.clear(); }
+        `setStateInformation` can arrive on any thread, so it marshals the restore to the message
+        thread behind a `juce::WeakReference<AmpProcessor>`, and the host may destroy the plugin
+        while that call is still queued. The guard against that is real — but it is already armed:
+        `JUCE_DECLARE_WEAK_REFERENCEABLE` does not declare a bare `WeakReference::Master` (whose
+        destructor only asserts). It declares a `WeakRefMaster` whose destructor calls `clear()`,
+        and declares it LAST, so it is the first member destroyed. Adding a clear here changes
+        nothing at all. I wrote one anyway, on a reading of the wrong destructor, and the review
+        caught it. */
+    ~AmpProcessor() override = default;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -196,6 +198,28 @@ private:
             return p != nullptr && wrote >= 0.0f && ! juce::approximatelyEqual (p->getValue(), wrote);
         };
 
+        // Standing down is not enough on its own. The name pump is quiet while an aim is running
+        // and takes each tick's values as its baseline, so a hand that moved a control mid-window
+        // would leave the STORED name still describing what the aim wanted — the player's choice
+        // would sound now and be gone at the next load. Closing the window and forgetting the
+        // baseline makes the next pump tick see the move for what it is and write it down.
+        const auto yieldToTheHand = [this]
+        {
+            switchAimFrames = 0;
+
+            lastDeviceValue[0] = lastDeviceValue[1] = -2.0f;   // outside 0..1: never equal to a value
+
+            for (auto& block : lastSwitchValue)
+                for (auto& v : block)
+                    v = -2.0f;
+        };
+
+        // Whether this block's DEVICE is where its name says it should be. The switch half must
+        // not run until it is: the positions being aimed at belong to the named pack, and asking
+        // the pack that happens to be loaded whether it has a position called "Lead" is asking
+        // the wrong device a question about the right one.
+        bool deviceSettled[2] = { true, true };
+
         const auto aimDevice = [&] (core::CapturedBlock& block, size_t b, const char* id)
         {
             const juce::Identifier key (juce::String (id) + deviceAimSuffix);
@@ -211,7 +235,10 @@ private:
             auto* p = apvts.getParameter (id);
 
             if (stolen (p, aimWroteDevice[b]))
+            {
+                yieldToTheHand();
                 return;
+            }
 
             const int index = block.indexOfName (want);
 
@@ -242,7 +269,10 @@ private:
             // the pack is the next. A window that closed in between would let the half that
             // writes names back record the device it was aiming away from.
             if (block.selectedName() != want)
+            {
                 waiting = true;
+                deviceSettled[b] = false;
+            }
         };
 
         aimDevice (boost,  0, params::boostDevice);
@@ -250,6 +280,12 @@ private:
 
         const auto aim = [&] (core::CapturedBlock& block, size_t b, auto idFor)
         {
+            if (! deviceSettled[b])
+            {
+                waiting = true;   // ask again once the named device is the one that is playing
+                return;
+            }
+
             for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
             {
                 const auto id = idFor (i);
@@ -266,7 +302,10 @@ private:
                 auto* p = apvts.getParameter (id);
 
                 if (stolen (p, aimWroteSwitch[b][(size_t) i]))
+                {
+                    yieldToTheHand();
                     continue;
+                }
 
                 const float v = block.switchParameterFor (i, want);
 
@@ -334,8 +373,10 @@ private:
                     apvts.state.removeProperty (key, nullptr);
 
                 // A position name is only ever about the device it was read from, so the device
-                // leaving takes all of them with it. This is what keeps a name from resolving on
-                // some later pack that happens to have a position spelled the same way.
+                // leaving takes all of them with it — that is what stops a name resolving on some
+                // later pack that happens to spell a position the same way. They are written again
+                // from the NEW pack in the same breath, below, because a device that arrives with
+                // no names is a device saved by number until every switch has been touched.
                 for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
                     apvts.state.removeProperty (juce::Identifier (idFor (i) + switchAimSuffix), nullptr);
             }
@@ -344,8 +385,9 @@ private:
             {
                 const auto  id = idFor (i);
                 const float v  = apvts.getRawParameterValue (id)->load();
-                const bool moved = ! quiet && ! deviceMoved
-                                     && ! juce::approximatelyEqual (v, lastSwitchValue[b][(size_t) i]);
+                const bool moved = ! quiet
+                                     && (deviceMoved
+                                          || ! juce::approximatelyEqual (v, lastSwitchValue[b][(size_t) i]));
                 lastSwitchValue[b][(size_t) i] = v;
 
                 if (! moved)
@@ -364,6 +406,42 @@ private:
         note (preamp, 1, params::preampDevice, [] (int i) { return params::preampMeasured (i); });
 
         namesPrimed = true;
+    }
+
+    /** WRITES EVERY NAME, ONCE, BEFORE ANYBODY IS WATCHING — called from the constructor, after
+        the first scan and before the history takes its baseline.
+
+        Without it a fresh instance has no names in it at all, because the pump only writes when a
+        parameter MOVES and nothing has moved yet. A player who opens the plugin, likes what the
+        default device does, dials a sound around it and saves that as a preset would get a preset
+        that identifies its device by number — which is the whole disease. The seed costs one pass
+        and, because the baseline is taken after it, it is not an edit and leaves no undo step.
+
+        `RigPlayer::load` reads the manifest synchronously, so the positions are knowable here even
+        though the model bytes are not. */
+    void seedSwitchNames()
+    {
+        const auto seed = [this] (core::CapturedBlock& block, const char* devId, auto idFor)
+        {
+            if (const auto name = block.selectedName(); name.isNotEmpty())
+                apvts.state.setProperty (juce::Identifier (juce::String (devId) + deviceAimSuffix),
+                                         name, nullptr);
+
+            if (! block.isReady())
+                return;
+
+            for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
+            {
+                const auto id = idFor (i);
+
+                if (const auto n = block.switchValueAt (i, apvts.getRawParameterValue (id)->load());
+                    n.isNotEmpty())
+                    apvts.state.setProperty (juce::Identifier (id + switchAimSuffix), n, nullptr);
+            }
+        };
+
+        seed (boost,  params::boostDevice,  [] (int i) { return params::boostMeasured (i); });
+        seed (preamp, params::preampDevice, [] (int i) { return params::preampMeasured (i); });
     }
 
     /** The state changed under us — a session opened, a register recalled: aim the switches again. */

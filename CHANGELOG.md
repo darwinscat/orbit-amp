@@ -89,10 +89,6 @@ picture of the rig rather than a list of things that happen to be here.
   next Cmd-Z moved a switch on the device. And saving a preset never goes through the host at all,
   so a preset carried either no names or the ones left from the last project save. They are written
   when a switch MOVES now, which leaves nothing to fix at save time.
-- **The processor declared a weak reference and never armed it.** A state restore marshals itself to
-  the message thread behind one, and the host may destroy the plugin while that call is queued —
-  but `WeakReference::Master` only asserts, so in a release build the guard passed a dead pointer
-  through. One line, and the same line was missing in the gate console.
 - **A settings page could not see a switch move.** It read every row's state when it painted and
   nothing asked it to paint, so automation, an undo, a preset or a second editor left the toggle
   showing yesterday's answer.
