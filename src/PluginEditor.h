@@ -9,8 +9,8 @@
 #include "ui/FaceplateView.h"
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
 #include "ui/Footer.h"
-#include "ui/GateStrip.h"
-#include "ui/OutStrip.h"
+#include "ui/GateConsole.h"
+#include "ui/VolumeColumn.h"
 #include "ui/LearnOverlay.h"
 #include "ui/DragRuler.h"
 #include "ui/TunerStrip.h"
@@ -32,14 +32,18 @@ class AmpEditor final : public juce::AudioProcessorEditor
 {
 public:
     explicit AmpEditor (AmpProcessor&);
-    ~AmpEditor() override = default;
+    /** Not defaulted: this window hangs a callback on the processor's history, and the history
+        outlives every editor that ever opens on it. Chrome clears its own for the same reason. */
+    ~AmpEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    /** `withVolume` — the OUT trim's RESET section belongs to the column's door alone. */
-    void showLimiterMenu (juce::Point<int> screenPos, bool withVolume = true);
+    /** The limiter's whole console, opened from its arrow. The OUT trim's RESET used to ride
+        along when this opened from the COLUMN; the column has no menu of its own any more, and
+        the trim's reset is its own double-click. */
+    void showLimiterMenu (juce::Point<int> screenPos);
 
 
     /** What the two switches of every row mean to the WINDOW — the tiles, the two columns and
@@ -120,15 +124,18 @@ private:
         the ONE place blocks are stood down and brought back. Built in the constructor because
         its rows come from a table the header cannot see. */
     std::unique_ptr<LayoutStrip> layoutStrip;
-    GateStrip     gateStrip;        // the IN sliver with the gate's story, left of the faceplate
-    OutStrip      outStrip;         // the OUT sliver with the master's hand, right of it
+    /** The gate, with no face of its own — its door is the strip's arrow. DECLARED BEFORE the
+        overlay on purpose: the overlay draws LEARN's trace from a pointer into this object, and
+        members die in reverse order, so the reader has to go first. */
+    GateConsole   gateConsole;
+    VolumeColumn  inColumn;         // the input's level and its hand, left of the faceplate
+    VolumeColumn  outColumn;        // the output's, mirrored, right of it
     TunerStrip    tunerStrip;       // the always-on needle, between the guards
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player
     LearnOverlay  learnOverlay;     // the LEARN measurement, projected large over the faceplate
     DragRuler     inRuler;          // the IN trim's own ladder, summoned by the hand
     DragRuler     outRuler;         // the OUT trim's, mirrored
-    DragRuler     ceilRuler;        // the limiter ceiling's, lilac, top-third ladder
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;   // constructed with the processor: its EDITOR page writes parameters
     DisclaimerPanel devices;        // DEVICES & TRADEMARKS: the long notice and the list it is about
