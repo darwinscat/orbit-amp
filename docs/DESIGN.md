@@ -61,8 +61,8 @@ storage:
 | | what you see | what it does |
 |---|---|---|
 | **ON** | standing, working | sounds |
-| **STANDBY** | in the strip, arrow dark; on the panel either gone or dimmed, your choice | does not sound; its action is IGNORED |
-| **OFF** | no row in the strip, nothing on the panel | not there: not processed, not in the cost list |
+| **STANDBY** | in the strip, arrow dark; on the panel either gone or dimmed, your choice | stops being FED — what it was already holding rings out |
+| **OFF** | no row in the strip, nothing on the panel | not in the chain: nothing of it is applied, and it has no row in the cost list |
 
 The arrow switches STANDBY ↔ ON. Setup's EDITOR page decides what the rig HAS at all.
 
@@ -74,10 +74,12 @@ both fade.
 
 Two consequences worth stating out loud, because both are the model working rather than failing:
 
-- **a bypassed link still costs CPU**, precisely as a bypassed insert does in any DAW. Taking a link
-  out of the RIG is what gives the processor back — and that is what the cost breakdown shows: a
-  link standing by keeps its row and its real number, faintly, so the bypass cannot pretend to have
-  bought anything;
+- **what a link standing by costs depends on what kind of link it is**, and the breakdown says which
+  rather than making you guess. A link that ADDS — the delay, the room — keeps running, because
+  that is what lets its tail finish, so it keeps costing what it costs. A link that REPLACES stops
+  once its fifteen milliseconds are over: the model is not asked, and a preamp standing by is very
+  nearly free. Both keep their ROW, and the row carries the real number, faintly — which is the
+  useful truth in either direction. Taking a link out of the rig is what removes the row;
 - **a bypassed link keeps whatever latency it had.** A rate-matching model reports one, and dropping
   it out of the path would make the chain arrive early for as long as it stayed bypassed, so the
   bypass path carries the same delay the model would have.
@@ -98,10 +100,13 @@ IN → tuner → gate → boost → EQ → preamp (voicing) → EQ → delay →
   point it stops being only a listener.
 - **Noise gate** — `felitronics::dynamics::NoiseGate`, the engine OrbitCab ships:
   Schmitt + hold, transient-safe open, pop-free enable. Dual detection: it always
-  KEYS off the raw guitar, and the MUTE lands where the player says — at the
-  start, or pre-reverb (the default: the hiss the boost and preamp ADD dies too,
-  the clean key never pumps, the tail rings out). Its positions are named for the CHAIN — START and
-  END — because a rig may have no reverb in it.
+  KEYS off the raw guitar, and the MUTE lands where the player says — at the START
+  of the chain, or at its END, which is the default: it falls after the preamp and
+  its console, so the hiss the boost and the preamp ADD dies too, the clean key
+  never pumps, and whatever the delay and the room are still holding rings out
+  under it. Named for the chain rather than for one block, because a rig may have
+  no reverb in it — it used to read "pre-reverb", which was a strange thing to see
+  on a rig that has no reverb to be before.
 
   Its console is its own arrow in the strip: OFF, three named thresholds, LEARN (three seconds of
   listening that sets one for you), DECAY and where it mutes. It used to ride the IN column as a
@@ -114,10 +119,12 @@ IN → tuner → gate → boost → EQ → preamp (voicing) → EQ → delay →
   made — the boost's EQ feeds the preamp, and the preamp's sits where a real amplifier keeps its
   tone stack. It goes dark with its block. Its row of hands sits under the curve or over it, a
   choice in Setup. Two faces
-  per console: DEVICE TONE — the pack's own measured knobs — and UNIVERSAL EQ
-  (the default) — our parametric in their place: two shelves with free corners,
-  two tone bells (a third narrow one switches in), HPF/LPF with a real slope
-  choice (6–48 dB/oct). A pack that measured nothing falls to UNIVERSAL on its own.
+  per console: DEVICE TONE — the pack's own measured knobs, and the one a block
+  wears until you say otherwise — and UNIVERSAL EQ, our parametric in their place:
+  two shelves with free corners, two tone bells (a third narrow one switches in),
+  HPF/LPF with a real slope choice (6–48 dB/oct). A pack that measured nothing
+  falls to UNIVERSAL on its own. The device's own knobs come first because a
+  captured device that does not answer to its own controls is not the device.
 
   Wearing the device's own tone, its points on the curve are **markers, not handles**: they say
   where each measured knob acts hardest, and the knob below is the hand. They used to drag, and the
@@ -140,12 +147,16 @@ IN → tuner → gate → boost → EQ → preamp (voicing) → EQ → delay →
 - **Limiter** — the safety at the door on the way out: on by default, because protection you must
   remember to switch on protects nobody. Its console is its own arrow in the strip — OFF and three
   ceilings — and, like the gate's, its header carries the current number, because the ceiling is
-  continuous and three positions are three points on it. Letting it go is a crossfade, not a
+  continuous and three positions are three points on it. The word on that item is OFF, and it
+  means STANDBY in the table above: a guard has no tile to dim, so its arrow going dark IS the
+  whole of it, and "off" is what a player calls a limiter that is not limiting. Taking it out of
+  the rig — the row itself — is Setup's business, as it is for every other link. Letting it go is a crossfade, not a
   release: three decibels of grip handed back between two samples is a step, and a step is a click.
 
 **Stereo, three ways**: MONO; STEREO (everything twice, each side through its own
-amp); STEREO SPACE — mono where the sound is made, stereo from the reverb on,
-where the space is. Until somebody chooses, the environment decides: the
+amp); STEREO SPACE — mono where the sound is MADE, stereo from the delay on,
+where the space is: the amp is paid for once, the delay's offset spreads the one
+signal into two, and the room then works on a picture that is already wide. Until somebody chooses, the environment decides: the
 standalone opens on STEREO SPACE, a plugin on a mono bus on MONO, on a stereo bus
 on STEREO.
 
@@ -181,8 +192,11 @@ nothing under your hands moves while you put a block in and out to hear it. Both
 standing-by link is shown — removed from the panel, or left in place and dark — are the eye's
 business, so they live on the machine and never in a preset.
 
-**Nothing a player reads is smaller than 13 px** at 1×. The only exception is numerals and short
-labels inside strip miniatures, where small type is a diagram rather than prose.
+**Nothing a player reads is smaller than 13 px** at 1×. That covers every sentence, every caption
+under a control, every row of a popover and every fact on the footer strip. The one exception is
+the numerals and short labels that belong to an instrument's own scales — a meter's ladder, a
+curve's axis, the names inside a strip miniature — where small type is a diagram rather than
+prose, and making it bigger would make the diagram worse.
 
 ## Setup — one window, three pages
 
@@ -192,7 +206,7 @@ place things are hidden.
 
 | page | what | whose life |
 |---|---|---|
-| **LIBRARY** | the packs and the IRs, one sub-tab each, and the one switch that is about packs | folders are the machine's; the switch travels with the preset |
+| **LIBRARY** | a sub-tab each for the preamp packs, the boost packs and the IRs, and the one switch that is about packs | folders are the machine's; the switch travels with the preset |
 | **EDITOR** | which links the rig has at all — the chain in order, each row wearing its link's accent | **travels with the preset** |
 | **VIEW** | what this window shows, and only that | **this machine only** |
 

@@ -268,11 +268,13 @@ void SetupPanel::paint (juce::Graphics& g)
 
     // Which lifetime this page has, said quietly under its own tabs rather than left to be
     // discovered when somebody's preset rearranges somebody else's window.
+    // LIBRARY is the one page with two answers — the folders are this machine's, the one switch
+    // on it rides in the preset — and saying NOTHING was the worst of the three: a page with no
+    // note reads as a page nobody thought about, not as a page whose answer is "both".
     const juce::String lifetime = currentPage == 1 ? "TRAVELS WITH THE PRESET"
                                 : currentPage == 2 ? "THIS MACHINE ONLY"
-                                                   : juce::String();
+                                                   : juce::String ("FOLDERS: THIS MACHINE");
 
-    if (lifetime.isNotEmpty())
     {
         auto note = panel.reduced (16, 12).removeFromTop (headerH).removeFromRight (330)
                          .withTrimmedRight (30);
