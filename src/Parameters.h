@@ -417,6 +417,9 @@ inline constexpr const char* outOn         = "out_on";
 // link states about ITSELF — whether it is a captured device, whether it has a face at all, which
 // switch it answers to, what it costs — belongs with the parameters, not with the paint.
 
+/** Which link a cost entry belongs to, or `numChainRows` for one that belongs to nobody (TOTAL,
+    and any stage no link has claimed). Declared after the table below — see `rowForStage`. */
+
 /** The DSP cost entries, in the order the chain runs them: a captured block is followed by its own
     console. Here rather than in the processor so a link can name its stage and the footer can
     label one, without either of them having to know about the other. */
@@ -473,6 +476,18 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* LIMIT  */ { "LIMIT",  false, false, limiterOn, limitPresent,  stLimit,  numStages },
     /* OUT    */ { "OUT",    false, true,  outOn,     outPresent,    stOut,    numStages },
 };
+
+/** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL
+    belongs to nobody, so it is always shown. Walked rather than tabulated: ten links, twelve
+    stages, and one table that cannot fall out of step with itself. */
+inline constexpr int rowForStage (Stage s)
+{
+    for (int i = 0; i < numChainRows; ++i)
+        if (chainLinks[(size_t) i].stage == s || chainLinks[(size_t) i].eqStage == s)
+            return i;
+
+    return numChainRows;
+}
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
