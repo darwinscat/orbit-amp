@@ -333,10 +333,10 @@ public:
 
     /** The per-stage DSP load, orbitcab's grammar: each stage's wall-clock as a smoothed % of
         the block's real-time budget. Indexed by Stage; the footer badge reads these. */
-    // In chain order, which is now also the order the breakdown reads: each captured block is
-    // followed by its own EQ.
-    enum Stage { stTotal, stTuner, stGate, stBoost, stEq1, stPreamp, stEq2, stDelay, stReverb,
-                 stCab, stLimit, stOut, numStages };
+    // The list itself lives with the parameters now — see params::Stage. Pulled in whole so
+    // every `nsStage[stBoost]` in this class still reads the way it always did.
+    using Stage = params::Stage;
+    using enum params::Stage;
     std::atomic<float> stageLoad[numStages] {};
 
     /** The dropout evidence: every block that BLEW its budget counts, and each stage keeps the

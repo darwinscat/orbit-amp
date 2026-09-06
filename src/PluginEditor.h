@@ -18,6 +18,8 @@
 #include "ui/LayoutStrip.h"
 #include "ui/SetupPanel.h"
 
+#include <optional>
+
 namespace orbitamp
 {
 
@@ -84,8 +86,9 @@ private:
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }
 
-    /** One attachment per chain block: its `*_on` parameter IS its presence, and wherever the
-        power moves — the strip, an undo, a preset, a register, automation — the panel follows. */
+    /** One attachment per chain link that HAS a switch, guards included — built in one loop off
+        `params::chainLinks`. Wherever a switch moves — the strip, an undo, a preset, a register,
+        automation — the arrow and, for a link with a face, the panel follow. */
     std::vector<std::unique_ptr<juce::ParameterAttachment>> blockRowAtts;
 
     /** Whether the side columns stand on the panel — the strip's end caps. */
@@ -98,10 +101,6 @@ private:
     /** The scale to come back to when the full-screen button is pressed the second time;
         negative while nothing is remembered. */
     float scaleBeforeFull = -1.0f;
-
-    /** The guards' arrows follow their ON parameters — a switched-off guard dims in the strip
-        the way a hidden block does. */
-    std::unique_ptr<juce::ParameterAttachment> gateRowAtt, limitRowAtt;
 
     /** After a strip is switched: the aspect the corner drag keeps, the limits, and the window
         itself, at the scale it already has. */

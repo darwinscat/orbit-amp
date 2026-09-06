@@ -367,6 +367,73 @@ inline const juce::StringArray typeNames { "Clean", "Edge", "Crunch", "High-gain
     names differ per type and a host-visible choice list has to be fixed at construction. */
 inline constexpr int maxVoicesPerType = 8;
 
+
+//==============================================================================
+// THE CHAIN, AS ONE LIST.
+//
+// The same links used to be written out in four places — the strip's own table in the editor, the
+// cost stages in the processor, and the breakdown's names TWICE in the footer. Four copies of one
+// list are four chances to disagree, and they had already started to. This is the list; all four
+// read it now.
+//
+// Nothing visual lives here: a colour and a face on the panel are the editor's business. What a
+// link states about ITSELF — whether it is a captured device, whether it has a face at all, which
+// switch it answers to, what it costs — belongs with the parameters, not with the paint.
+
+/** The DSP cost entries, in the order the chain runs them: a captured block is followed by its own
+    console. Here rather than in the processor so a link can name its stage and the footer can
+    label one, without either of them having to know about the other. */
+enum Stage { stTotal, stTuner, stGate, stBoost, stEq1, stPreamp, stEq2, stDelay, stReverb,
+             stCab, stLimit, stOut, numStages };
+
+/** What the breakdown calls a stage. TWO spellings, both ASCII on purpose: the copied report runs
+    through `formatted ("%-8s")`, where a multi-byte character breaks the encoding and the column
+    width together, while the drawn list has room for the longer word. */
+struct StageName { const char* brief; const char* full; };
+
+inline constexpr StageName stageNames[numStages] = {
+    { "TOTAL",  "TOTAL"     },
+    { "TUNER",  "TUNER"     },
+    { "GATE",   "GATE"      },
+    { "BOOST",  "BOOST"     },
+    { "B-EQ",   "BOOST EQ"  },
+    { "PREAMP", "PREAMP"    },
+    { "P-EQ",   "PREAMP EQ" },
+    { "DELAY",  "DELAY"     },
+    { "REVERB", "REVERB"    },
+    { "CAB",    "CAB"       },
+    { "LIMIT",  "LIMIT"     },
+    { "OUT",    "OUT"       },
+};
+
+/** A link's place in the chain — by NAME, not by arithmetic. The order is the chain's order and
+    doubles as the index into `chainLinks`; naming the places is what lets one stand down without
+    every row after it sliding under somebody's `i - first` sum. */
+enum ChainRow { rowTuner, rowGate, rowBoost, rowPreamp, rowDelay, rowReverb, rowCab, rowLimit,
+                numChainRows };
+
+/** One link of the chain. */
+struct ChainLink
+{
+    const char* name;       // what its arrow says
+    bool        captured;   // wears the captured accent rather than ours
+    bool        hasTile;    // a face on the panel; a link without one answers with its menu
+    const char* onParam;    // the switch its arrow writes; null while a link has none yet
+    Stage       stage;      // the cost entry it owns
+    Stage       eqStage;    // a captured block's console; `numStages` for everyone else
+};
+
+inline constexpr ChainLink chainLinks[numChainRows] = {
+    /* TUNER  */ { "TUNER",  false, true,  nullptr,   stTuner,  numStages },
+    /* GATE   */ { "GATE",   false, false, gateOn,    stGate,   numStages },
+    /* BOOST  */ { "BOOST",  true,  true,  boostOn,   stBoost,  stEq1     },
+    /* PREAMP */ { "PREAMP", true,  true,  preampOn,  stPreamp, stEq2     },
+    /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages },
+    /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages },
+    /* CAB IR */ { "CAB IR", true,  true,  cabOn,     stCab,    numStages },
+    /* LIMIT  */ { "LIMIT",  false, false, limiterOn, stLimit,  numStages },
+};
+
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
 } // namespace orbitamp::params

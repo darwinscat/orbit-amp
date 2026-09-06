@@ -256,13 +256,6 @@ void Footer::showLoadBreakdown()
 
         juce::String report() const
         {
-            static const char* const names[AmpProcessor::numStages] = {
-                // ASCII on purpose: these run through formatted ("%-8s"), where a multi-byte
-                // middle dot breaks both the encoding and the column width.
-                "TOTAL", "TUNER", "GATE", "BOOST", "B-EQ", "PREAMP", "P-EQ", "DELAY", "REVERB",
-                "CAB", "LIMIT", "OUT",
-            };
-
             juce::String t;
             t << "OrbitAmp DSP report  |  " << juce::String (amp.currentSampleRate() / 1000.0, 1)
               << " kHz  |  block " << amp.getBlockSize()
@@ -272,7 +265,7 @@ void Footer::showLoadBreakdown()
             t << juce::String::formatted ("%-8s %8s %8s\n", "STAGE", "MEAN", "WORST");
 
             for (int i = 0; i < AmpProcessor::numStages; ++i)
-                t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", names[i],
+                t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", params::stageNames[i].brief,
                                               amp.stageLoad[i].load(), amp.stageWorst[i].load());
 
             t << "OVERRUNS " << (int) amp.overruns.load() << "\n";
@@ -281,11 +274,6 @@ void Footer::showLoadBreakdown()
 
         void paint (juce::Graphics& g) override
         {
-            static const char* const names[AmpProcessor::numStages] = {
-                "TOTAL", "TUNER", "GATE", "BOOST", "BOOST EQ", "PREAMP", "PREAMP EQ", "DELAY",
-                "REVERB", "CAB", "LIMIT", "OUT",
-            };
-
             auto r = getLocalBounds().reduced (12, 4);
 
             {
@@ -338,7 +326,7 @@ void Footer::showLoadBreakdown()
                 const bool total = i == AmpProcessor::stTotal;
 
                 g.setColour (total ? theme::tx : theme::txDim);
-                theme::drawTracked (g, names[i], row.removeFromLeft (64).toFloat(),
+                theme::drawTracked (g, params::stageNames[i].full, row.removeFromLeft (64).toFloat(),
                                     theme::displayFont (11.0f), 0.08f, juce::Justification::centredLeft);
 
                 const float w = amp.stageWorst[i].load();

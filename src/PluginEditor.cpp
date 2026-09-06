@@ -10,40 +10,21 @@ namespace orbitamp
 
 namespace
 {
-    /** The strip's block rows, in chain order: the name on the arrow, the faceplate's block,
-        which side of the colour grammar it wears, and the parameter that IS its presence — one
-        flag for standing-on-the-panel and being-in-the-sound, carried by the save, the history,
-        and the registers alike. */
-    struct LayoutBlock
+    /** Which face on the panel a link owns, if any. `params::chainLinks` is deliberately free of
+        anything visual, so this is the ONE place that knows about both — and it is a switch over
+        NAMED rows, not a sum over positions, so a row standing down moves nothing. */
+    std::optional<FaceplateView::Block> faceplateBlockFor (int row)
     {
-        const char* name;
-        FaceplateView::Block block;
-        bool captured;
-        const char* onParam;
-    };
-
-    const LayoutBlock layoutBlocks[] = {
-        { "BOOST",  FaceplateView::Block::boost,   true,  params::boostOn  },
-        { "PREAMP", FaceplateView::Block::preamp,  true,  params::preampOn },
-        { "DELAY",  FaceplateView::Block::delay,   false, params::delayOn  },
-        { "REVERB", FaceplateView::Block::reverb,  false, params::reverbOn },
-        { "CAB IR", FaceplateView::Block::cabinet, true,  params::cabOn    },
-    };
-
-    std::vector<LayoutStrip::Row> layoutRows()
-    {
-        // The initial `on` is a placeholder: the attachments' first echo dresses every row and
-        // the panel from the parameters the moment the strip stands.
-        std::vector<LayoutStrip::Row> rows;
-        for (const auto& b : layoutBlocks)
-            rows.push_back ({ b.name, b.captured ? theme::orange : theme::violet, true });
-        return rows;
+        switch (row)
+        {
+            case params::rowBoost:  return FaceplateView::Block::boost;
+            case params::rowPreamp: return FaceplateView::Block::preamp;
+            case params::rowDelay:  return FaceplateView::Block::delay;
+            case params::rowReverb: return FaceplateView::Block::reverb;
+            case params::rowCab:    return FaceplateView::Block::cabinet;
+            default:                return {};
+        }
     }
-
-    // The strip's row order: the tuner listening at the door, the gate right after it, the
-    // sound blocks, the limiter before the way out.
-    constexpr int rowTuner = 0, rowGate = 1, rowFirstBlock = 2;
-    inline int rowLimit() { return rowFirstBlock + (int) std::size (layoutBlocks); }
 }
 
 AmpEditor::AmpEditor (AmpProcessor& p)
@@ -123,61 +104,94 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     tunerShown = prefs::getBool (prefs::showTuner, true);
 
     {
+        // Straight off the one list. The initial `on` is a placeholder for everyone the
+        // parameters answer for: the attachments' first echo dresses the row and the panel the
+        // moment the strip stands.
         std::vector<LayoutStrip::Row> rows;
-        rows.push_back ({ "TUNER", theme::violet, tunerShown });
-        rows.push_back ({ "GATE", theme::violet, true,
-                          [this]
-                          {
-                              // Silence is not work: with nothing at the key (the -90 floor)
-                              // the gate has nothing to press, and a light that burns all
-                              // night means nothing by morning.
-                              if (amp.gateKeyDb.load() <= -89.5f)
-                                  return 0.0f;
 
-                              return juce::jlimit (0.0f, 1.0f, -amp.gateMeterDb.load() / 40.0f);
-                          },
-                          [this] { return amp.gateWorked.load(); },
-                          true, true });
-        for (auto& r : layoutRows())
-            rows.push_back (std::move (r));
-        rows.push_back ({ "LIMIT", theme::violet, true,
-                          [this] { return juce::jlimit (0.0f, 1.0f, -amp.limiterGrDb.load() / 6.0f); },
-                          [this] { return amp.limiterWorked.load(); },
-                          true, true });
+        for (int i = 0; i < params::numChainRows; ++i)
+        {
+            const auto& link = params::chainLinks[(size_t) i];
+
+            LayoutStrip::Row row { link.name,
+                                   link.captured ? theme::orange : theme::violet,
+                                   i == params::rowTuner ? tunerShown : true };
+
+            // A link with no face on the panel has nothing for a click to reveal, so its click
+            // opens its menu instead — the law is READ off the list rather than written out for
+            // the two rows it happens to catch today.
+            row.hasMenu = row.clickIsMenu = ! link.hasTile;
+
+            if (i == params::rowGate)
+            {
+                // Silence is not work: with nothing at the key (the -90 floor) the gate has
+                // nothing to press, and a light that burns all night means nothing by morning.
+                row.depth = [this]
+                {
+                    if (amp.gateKeyDb.load() <= -89.5f)
+                        return 0.0f;
+
+                    return juce::jlimit (0.0f, 1.0f, -amp.gateMeterDb.load() / 40.0f);
+                };
+                row.dot = [this] { return amp.gateWorked.load(); };
+            }
+            else if (i == params::rowLimit)
+            {
+                row.depth = [this] { return juce::jlimit (0.0f, 1.0f, -amp.limiterGrDb.load() / 6.0f); };
+                row.dot   = [this] { return amp.limiterWorked.load(); };
+            }
+
+            rows.push_back (std::move (row));
+        }
 
         layoutStrip = std::make_unique<LayoutStrip> (std::move (rows));
     }
 
     layoutStrip->onToggle = [this] (int i, bool on)
     {
-        if (i == rowTuner)
+        if (i == params::rowTuner)
         {
             applyTunerToggle (on);
             layoutStrip->setRowOn (i, on);
             return;
         }
 
-        // THE switch: the arrow writes the block's own parameter, so the save, the history,
-        // and the registers all carry the click — the panel follows through the echo below.
-        if (auto* p = amp.apvts.getParameter (layoutBlocks[(size_t) (i - rowFirstBlock)].onParam))
-        {
-            p->beginChangeGesture();
-            p->setValueNotifyingHost (on ? 1.0f : 0.0f);
-            p->endChangeGesture();
-        }
+        // THE switch: the arrow writes the link's own parameter, so the save, the history, and
+        // the registers all carry the click — the panel follows through the echo below.
+        if (const char* id = params::chainLinks[(size_t) i].onParam)
+            if (auto* p = amp.apvts.getParameter (id))
+            {
+                p->beginChangeGesture();
+                p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+                p->endChangeGesture();
+            }
     };
 
-    // The echo that makes it ONE fact: wherever a block's power moves — the strip, an undo, a
-    // loaded preset, a register switch, host automation — the panel re-splits to match.
-    for (int i = 0; i < (int) std::size (layoutBlocks); ++i)
+    // The echo that makes it ONE fact: wherever a link's switch moves — the strip, an undo, a
+    // loaded preset, a register switch, host automation — the arrow and the panel follow. ONE
+    // loop for every link that has a switch, guards included: a guard turned off in its menu
+    // reads dark in the strip the way a stood-down block does, and that used to be two more
+    // attachments written out by hand.
+    for (int i = 0; i < params::numChainRows; ++i)
     {
+        const char* id = params::chainLinks[(size_t) i].onParam;
+
+        if (id == nullptr)
+            continue;
+
+        const auto block = faceplateBlockFor (i);
+
         blockRowAtts.push_back (std::make_unique<juce::ParameterAttachment> (
-            *amp.apvts.getParameter (layoutBlocks[(size_t) i].onParam),
-            [this, i] (float v)
+            *amp.apvts.getParameter (id),
+            [this, i, block] (float v)
             {
                 const bool on = v > 0.5f;
-                faceplate.setShown (layoutBlocks[(size_t) i].block, on);
-                layoutStrip->setRowOn (rowFirstBlock + i, on);
+                layoutStrip->setRowOn (i, on);
+
+                if (! block.has_value())
+                    return;   // a guard has no tile to stand down, and moves no window
+
+                faceplate.setShown (*block, on);
                 applyStripChoice();   // an emptied or refilled row moves the window with it
             }));
 
@@ -188,28 +202,17 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // and the look clears the latched dot, the way a look at the badge used to.
     layoutStrip->onRowMenu = [this] (int i, juce::Point<int> pos)
     {
-        if (i == rowGate)
+        if (i == params::rowGate)
         {
             amp.gateWorked.store (false);
             gateStrip.showPresetMenu (pos, false);   // the trim's RESET stays the column's door
         }
-        else if (i == rowLimit())
+        else if (i == params::rowLimit)
         {
             amp.limiterWorked.store (false);
             showLimiterMenu (pos, false);
         }
     };
-
-    // The guards' arrows dim with their own switches — a guard turned OFF in its menu reads
-    // dark in the strip, the way a hidden block does.
-    gateRowAtt = std::make_unique<juce::ParameterAttachment> (
-        *amp.apvts.getParameter (params::gateOn),
-        [this] (float v) { layoutStrip->setRowOn (rowGate, v > 0.5f); });
-    limitRowAtt = std::make_unique<juce::ParameterAttachment> (
-        *amp.apvts.getParameter (params::limiterOn),
-        [this] (float v) { layoutStrip->setRowOn (rowLimit(), v > 0.5f); });
-    gateRowAtt->sendInitialUpdate();
-    limitRowAtt->sendInitialUpdate();
 
     // The end caps: the side columns, live with the real levels the rails read.
     inColShown  = prefs::getBool (prefs::showInCol, true);
