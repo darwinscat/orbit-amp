@@ -495,7 +495,10 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos, bool withVolume)
 
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [this, on, ceil] (int r)
+                     // The parameters outlive this window — the processor owns them — but the
+                     // editor does not: closing it with the menu open would leave the RESET branch
+                     // reaching through a dead `this`. Guarded the way the gear's menu already is.
+                     [safe = juce::Component::SafePointer<AmpEditor> (this), on, ceil] (int r)
                      {
                          if (r == 0)
                              return;
@@ -516,7 +519,9 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos, bool withVolume)
 
                          if (r == 7)
                          {
-                             set (amp.apvts.getParameter (params::outTrim), 0.0f);
+                             if (safe != nullptr)
+                                 set (safe->amp.apvts.getParameter (params::outTrim), 0.0f);
+
                              return;
                          }
 
