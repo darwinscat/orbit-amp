@@ -121,8 +121,10 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
     // message thread, from what each block's pack actually says (see applySwitchAims).
     stampSwitchAims();
 
-    // The workspace envelope already contains the live parameter tree, so saving it saves
-    // everything: the sound, the other three registers, and each register's undo history.
+    // The workspace envelope carries the live parameter tree and the other three registers, so
+    // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
+    // envelope holds the live capture and the register snapshots and nothing else, so undo starts
+    // fresh on reopen. (It said otherwise here for a long time — it never did.)
     if (auto xml = history.toTree().createXml())
         copyXmlToBinary (*xml, destData);
 }
