@@ -102,6 +102,11 @@ Footer::Footer (AmpProcessor& processor)
                                          .text       = theme::tx,
                                          .textDim    = theme::txDim,
                                          .activeText = juce::Colours::white };
+
+    // appkit's flat item opens at 12 px. The word it wears — MONO, STEREO, STEREO SPACE — is read
+    // like every other fact on this strip, so it stands at the floor with them.
+    stereo.textHeight = 13.0f;
+
     stereo.onClick = [this]
     {
         auto* p = amp.apvts.getParameter (params::stereoMode);
@@ -193,7 +198,7 @@ void Footer::paint (juce::Graphics& g)
     }
 
     g.setColour (stampBadge.isMouseOver() ? theme::tx : theme::txFaint);
-    theme::drawTracked (g, stampText, stamp, theme::displayFont (12.0f), 0.1f,
+    theme::drawTracked (g, stampText, stamp, theme::displayFont (13.0f), 0.1f,
                         juce::Justification::centredRight);
 
     // The other page that is only read, beside the one that is: what is installed, and what
@@ -201,21 +206,21 @@ void Footer::paint (juce::Graphics& g)
     {
         auto d = r.removeFromRight ((float) devicesWidth).withTrimmedRight (14.0f);
         g.setColour (devicesBadge.isMouseOver() ? theme::tx : theme::txFaint);
-        theme::drawTracked (g, "DEVICES", d, theme::displayFont (12.0f), 0.1f,
+        theme::drawTracked (g, "DEVICES", d, theme::displayFont (13.0f), 0.1f,
                             juce::Justification::centredRight);
     }
 
     auto right = r.withTrimmedLeft ((float) (stereoWidth + gap));
 
     g.setColour (theme::txFaint);
-    theme::drawTracked (g, rateText, right.removeFromLeft (96.0f), theme::displayFont (12.0f), 0.1f,
+    theme::drawTracked (g, rateText, right.removeFromLeft ((float) rateWidth), theme::displayFont (13.0f), 0.1f,
                         juce::Justification::centredLeft);
 
     // The load turns warm as it climbs — a number you only notice when it starts to matter.
     g.setColour (loadPercent > 80.0f ? theme::orange
                : loadPercent > 50.0f ? theme::lilac
                                      : theme::txFaint);
-    theme::drawTracked (g, "DSP " + loadText, right.removeFromLeft (100.0f), theme::displayFont (12.0f), 0.1f,
+    theme::drawTracked (g, "DSP " + loadText, right.removeFromLeft ((float) loadWidth), theme::displayFont (13.0f), 0.1f,
                         juce::Justification::centredLeft);
 }
 
@@ -233,8 +238,8 @@ void Footer::resized()
     devicesBadge.setBounds (row.removeFromRight (devicesWidth).withTrimmedRight (14));
 
     // The invisible click target over the painted DSP number.
-    row.removeFromLeft (gap + 96);
-    loadBadge.setBounds (row.removeFromLeft (100));
+    row.removeFromLeft (gap + rateWidth);
+    loadBadge.setBounds (row.removeFromLeft (loadWidth));
 }
 
 void Footer::showLoadBreakdown()
@@ -248,7 +253,7 @@ void Footer::showLoadBreakdown()
             // Sized for EVERY stage, not for the ones standing when it opened: presence can be
             // switched while this callout is up, and a panel that grew a row would spill into its
             // own buttons. The unused rows cost a little air and nothing else.
-            setSize (320, 24 + graphH + 6 + AmpProcessor::numStages * rowH + 30 + 26);
+            setSize (360, 26 + graphH + 6 + AmpProcessor::numStages * rowH + 34 + 34);
             startTimerHz (15);
         }
 
@@ -328,13 +333,13 @@ void Footer::showLoadBreakdown()
             auto r = getLocalBounds().reduced (12, 4);
 
             {
-                auto head = r.removeFromTop (22);
+                auto head = r.removeFromTop (24);
                 g.setColour (theme::tx);
                 theme::drawTracked (g, "DSP LOAD", head.toFloat(),
-                                    theme::displayFont (12.0f), 0.1f, juce::Justification::centredLeft);
+                                    theme::displayFont (13.0f), 0.1f, juce::Justification::centredLeft);
                 g.setColour (theme::txDim);
                 theme::drawTracked (g, "MEAN / WORST", head.toFloat(),
-                                    theme::displayFont (10.0f), 0.08f, juce::Justification::centredRight);
+                                    theme::displayFont (13.0f), 0.08f, juce::Justification::centredRight);
             }
 
             // The strip chart: ~12 s of worst-in-column shares, the budget line at 100% —
@@ -381,21 +386,21 @@ void Footer::showLoadBreakdown()
                 const bool working = stageWorking (i);
 
                 g.setColour (total ? theme::tx : working ? theme::txDim : theme::txFaint);
-                theme::drawTracked (g, params::stageNames[i].full, row.removeFromLeft (64).toFloat(),
-                                    theme::displayFont (11.0f), 0.08f, juce::Justification::centredLeft);
+                theme::drawTracked (g, params::stageNames[i].full, row.removeFromLeft (72).toFloat(),
+                                    theme::displayFont (13.0f), 0.08f, juce::Justification::centredLeft);
 
                 const float w = amp.stageWorst[i].load();
 
-                auto worst = row.removeFromRight (52);
+                auto worst = row.removeFromRight (58);
                 g.setColour (w > 100.0f ? theme::orange : theme::txFaint);
                 theme::drawTracked (g, juce::String (juce::roundToInt (w)) + "%", worst.toFloat(),
-                                    theme::displayFont (11.0f), 0.06f, juce::Justification::centredRight);
+                                    theme::displayFont (13.0f), 0.06f, juce::Justification::centredRight);
 
-                auto num = row.removeFromRight (46);
+                auto num = row.removeFromRight (52);
                 g.setColour (v > 50.0f ? theme::orange
                            : total ? theme::tx : working ? theme::txDim : theme::txFaint);
                 theme::drawTracked (g, juce::String (v, 1) + "%", num.toFloat(),
-                                    theme::displayFont (11.0f), 0.06f, juce::Justification::centredRight);
+                                    theme::displayFont (13.0f), 0.06f, juce::Justification::centredRight);
 
                 auto bar = row.reduced (6, 7).toFloat();
                 g.setColour (theme::hair);
@@ -408,12 +413,12 @@ void Footer::showLoadBreakdown()
 
             // The verdict line: blown blocks ARE the audible drops.
             {
-                auto foot = r.removeFromTop (24);
+                auto foot = r.removeFromTop (26);
                 const auto n = amp.overruns.load();
                 g.setColour (n > 0 ? theme::orange : theme::txDim);
                 theme::drawTracked (g, "OVERRUNS  " + juce::String ((int) n)
                                         + juce::String (n > 0 ? "  = AUDIBLE DROPS" : ""),
-                                    foot.toFloat(), theme::displayFont (11.0f), 0.08f,
+                                    foot.toFloat(), theme::displayFont (13.0f), 0.08f,
                                     juce::Justification::centredLeft);
             }
 
@@ -425,7 +430,7 @@ void Footer::showLoadBreakdown()
                 g.setColour (lit ? theme::orange : theme::hair2);
                 g.drawRoundedRectangle (b.toFloat().reduced (0.5f), b.getHeight() * 0.5f, 1.0f);
                 g.setColour (lit ? theme::orange : theme::txDim);
-                theme::drawTracked (g, text, b.toFloat(), theme::displayFont (11.0f), 0.1f,
+                theme::drawTracked (g, text, b.toFloat(), theme::displayFont (13.0f), 0.1f,
                                     juce::Justification::centred);
             };
 
@@ -433,8 +438,8 @@ void Footer::showLoadBreakdown()
             pill (copyArea(), copied > 0 ? "COPIED" : "COPY", copied > 0);
         }
 
-        juce::Rectangle<int> resetArea() const { return { 12, getHeight() - 28, 70, 20 }; }
-        juce::Rectangle<int> copyArea()  const { return { 90, getHeight() - 28, 70, 20 }; }
+        juce::Rectangle<int> resetArea() const { return { 12, getHeight() - 32, 78, 24 }; }
+        juce::Rectangle<int> copyArea()  const { return { 98, getHeight() - 32, 78, 24 }; }
 
         void timerCallback() override
         {
@@ -443,7 +448,7 @@ void Footer::showLoadBreakdown()
             repaint();
         }
 
-        enum { rowH = 19, graphH = 64 };
+        enum { rowH = 22, graphH = 64 };   // rowH is 13 px of type and the air around it
         AmpProcessor& amp;
         int copied = 0;
     };
