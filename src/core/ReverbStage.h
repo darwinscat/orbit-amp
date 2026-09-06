@@ -69,8 +69,17 @@ public:
         apply();
     }
 
+    /** Idempotent on purpose. The chain calls this every block a room is out of the rig, and the
+        clear underneath is eight combs, four allpasses and two delay lines — about a hundred and
+        fifty kilobytes. At sixty-four samples that is a hundred and twenty megabytes a second of
+        memset for a block nobody is listening to, and it is not even timed, because the row it
+        belongs to is not in the cost list. The delay next door already guarded itself. */
     void reset() noexcept
     {
+        if (cleared)
+            return;
+
+        cleared = true;
         reverb.reset();
         hpf.reset();
         for (size_t ch = 0; ch < 2; ++ch)
@@ -135,6 +144,8 @@ public:
 
         const int nch = juce::jmin (2, numChannels);
         const int n   = juce::jmin (numSamples, (int) wet[0].size());
+
+        cleared = false;   // there is state in here again; the next reset() has work to do
 
         // The wet copy: the whole wet chain runs on it, and the dry never enters.
         for (int ch = 0; ch < nch; ++ch)
@@ -266,6 +277,7 @@ private:
 
     std::array<std::vector<float>, 2> wet, wetOut;
     std::array<std::vector<float>, 2> preLine, modLine;
+    bool cleared = true;   // see reset(): the clear underneath is ~150 KB and must not be per-block
     int   prePos = 0, modPos = 0;
     float lfoPhase = 0.0f;
 };

@@ -449,7 +449,14 @@ int main()
 
     // The input trim, through the whole plugin: a linear gain ahead of everything, so on a bare
     // wire it must arrive as exactly itself.
+    //
+    // IN has to be put in the RIG first. It is not there out of the box any more — the volumes
+    // that matter are the captured blocks' own, and a global input fader is a thing a player
+    // reaches for when a rig needs fixing. A trim that is not in the rig is not applied, which is
+    // the whole point of the switch, so a test that did not ask for it was testing the default
+    // rather than the trim.
     {
+        set (amp, orbitamp::params::inPresent, 1.0f);
         set (amp, orbitamp::params::inTrim, 0.0f);
         const auto unity = run (amp);
 

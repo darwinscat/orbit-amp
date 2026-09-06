@@ -272,6 +272,9 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     // The ceiling's own ladder: -0.1 at the top of the rail's top third, halves down to -3.
 
+    addChildComponent (inRuler);    // went missing with the ceiling's ruler: a ladder with no
+    addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
+
     inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
     outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
@@ -346,7 +349,29 @@ void AmpEditor::applyRowStates()
     outColStands = stands (params::rowOut);
     tunerStands  = stands (params::rowTuner);
 
-    applyStripChoice();   // an emptied row, a column, the tuner's row — the window follows them all
+    // Standing on the panel is not the same as WORKING. A link that kept its place while standing
+    // by has to READ as standing by: dimmed, and its instrument stopped where it stood. The blocks
+    // do this for themselves — every one of them binds its own switch — and these three are the
+    // ones that are not blocks.
+    const auto works = [this] (params::ChainRow row)
+    {
+        const auto* in = amp.apvts.getParameter (params::chainLinks[(size_t) row].presentParam);
+        const auto* on = amp.apvts.getParameter (params::chainLinks[(size_t) row].onParam);
+
+        return (in == nullptr || in->getValue() > 0.5f) && (on == nullptr || on->getValue() > 0.5f);
+    };
+
+    inColumn .setLive (works (params::rowIn));
+    outColumn.setLive (works (params::rowOut));
+    tunerStrip.setLive (works (params::rowTuner));
+
+    // BOTH, and in this order. `applyStripChoice` only asks for a new SIZE, and a column leaving
+    // does not change the window's height — so `setSize` was a no-op and the column stayed on
+    // screen until something else resized the window. (Which is why switching the TUNER appeared
+    // to switch off a column: the tuner DOES change the height, and the pending relayout landed
+    // with it.)
+    applyStripChoice();
+    resized();
 }
 
 void AmpEditor::applyStripChoice()

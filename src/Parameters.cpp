@@ -97,7 +97,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // IN THE RIG, one per link — see the pair's note in Parameters.h. All true out of the box:
     // a fresh instance is the whole chain, and taking a link out of the rig is a thing the player
     // does deliberately in Setup, never a thing they find already done.
-    layout.add (std::make_unique<Bool> (juce::ParameterID { inPresent,     1 }, "Input In Rig",    true),
+    // IN and OUT are OUT of the rig out of the box. The volumes that matter are the captured
+    // blocks' own IN trims — how hard each model is fed — and those live on the blocks. A global
+    // input and output fader is a thing a player reaches for when a rig needs fixing, not a thing
+    // a rig needs to start with; the two columns are one click away in Setup for whoever wants
+    // them, and their absence gives their width back to the panel.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { inPresent,     1 }, "Input In Rig",    false),
                 std::make_unique<Bool> (juce::ParameterID { tunerPresent,  1 }, "Tuner In Rig",    true),
                 std::make_unique<Bool> (juce::ParameterID { gatePresent,   1 }, "Gate In Rig",     true),
                 std::make_unique<Bool> (juce::ParameterID { boostPresent,  1 }, "Boost In Rig",    true),
@@ -106,7 +111,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Rig",   true),
                 std::make_unique<Bool> (juce::ParameterID { cabPresent,    1 }, "Cabinet In Rig",  true),
                 std::make_unique<Bool> (juce::ParameterID { limitPresent,  1 }, "Limiter In Rig",  true),
-                std::make_unique<Bool> (juce::ParameterID { outPresent,    1 }, "Output In Rig",   true));
+                std::make_unique<Bool> (juce::ParameterID { outPresent,    1 }, "Output In Rig",   false));
 
     // STANDBY/ON for the three links that never had one: the two volume columns and the tuner.
     // ON out of the box — a column that does not apply its volume is a column nobody asked for.

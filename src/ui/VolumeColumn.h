@@ -52,6 +52,42 @@ public:
 
     static constexpr int designWidth = 38;
 
+    /** WORKING or standing by. A link standing by is not applying its volume, so its column must
+        not go on looking like it is: it dims, its meter FREEZES where it stood, and it stops
+        answering the mouse. Freezing rather than falling to silence is the point — a needle that
+        keeps twitching on a dark face is the one exception this whole rework set out to delete.
+
+        Only matters when a standing-by link keeps its place on the panel; under the other setting
+        the column is not there at all. */
+    void setLive (bool nowLive)
+    {
+        if (live == nowLive)
+            return;
+
+        live = nowLive;
+
+        // Going dark under a hand that is still down: the mouse stops being intercepted, so no
+        // mouseUp will ever arrive and the automation gesture would stay open for ever.
+        if (! live && dragging)
+        {
+            trim->endGesture();
+            dragging = false;
+
+            if (onTrimDrag != nullptr)
+                onTrimDrag (false);
+        }
+
+        setAlpha (live ? 1.0f : theme::offAlpha);
+        setInterceptsMouseClicks (live, live);
+
+        if (live)
+            startTimerHz (30);
+        else
+            stopTimer();      // the reading stops where it stood
+
+        repaint();
+    }
+
     /** The runner entered or left the hand — the editor slides the drag ruler out beside us. */
     std::function<void (bool)> onTrimDrag;
 
@@ -134,6 +170,12 @@ public:
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
+        // A click that meant something else — clearing the clip cap, closing the grip editor —
+        // must not become a fader drag when the hand moves before it lifts. mouseUp swallows the
+        // release, so a gesture begun here would never have been ended either.
+        if (swallow)
+            return;
+
         if (! dragging && e.getDistanceFromDragStart() > 4)
         {
             dragging = true;
@@ -269,6 +311,7 @@ private:
     bool  swallow  = false;
     float trimStartDb = 0.0f;
     float holdAtGrab  = -90.0f;
+    bool  live        = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VolumeColumn)
 };

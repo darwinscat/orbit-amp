@@ -523,6 +523,15 @@ private:
     core::BypassFade         blockFade[params::numChainRows];
     juce::AudioBuffer<float> fadeDry;
 
+    /** Can a crossfade actually run this block? The buffer was sized in prepare, and a host may
+        hand over a bigger block than it promised — copying into it on that block would walk off
+        the end of the heap. Without room we simply do not blend: the switch lands hard, which is
+        a click, and a click is a great deal better than a corrupted heap. */
+    bool canFade (int numSamples, int numChannels) const noexcept
+    {
+        return numSamples <= fadeDry.getNumSamples() && numChannels <= fadeDry.getNumChannels();
+    }
+
 public:
     /** What the footer reports: the run's own facts, not the sound's. */
     double currentSampleRate() const noexcept { return getSampleRate(); }
