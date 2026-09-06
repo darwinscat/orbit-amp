@@ -210,7 +210,9 @@ private:
         thirty times a second for nobody is the definition of waste. */
     void pumpTuner()
     {
-        if (getActiveEditor() == nullptr)
+        // Nobody watching, or the tuner is not in the rig: an MPM pass thirty times a second
+        // for a needle that is not there is the definition of waste.
+        if (getActiveEditor() == nullptr || ! linkWorks (params::rowTuner))
             return;
 
         if (const double sr = getSampleRate();
@@ -218,6 +220,24 @@ private:
             tunerEar.prepare (sr);
 
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
+    }
+
+    /** IS THIS LINK WORKING — the one question the chain asks, and the only shape of it.
+
+        In the rig AND on. Out of the rig is nothing at all; STANDBY is here but not taking new
+        signal. Both are ordinary parameters, so this reads like any other switch — no mirror to
+        keep, nothing to normalise, and no way to express "not in the rig but playing". */
+    bool linkWorks (params::ChainRow row) const noexcept
+    {
+        const auto* on = rowOn[(size_t) row];
+        const auto* in = rowPresent[(size_t) row];
+
+        return (on == nullptr || on->load() > 0.5f) && (in == nullptr || in->load() > 0.5f);
+    }
+
+    bool endWorks (const std::atomic<float>* on, const std::atomic<float>* in) const noexcept
+    {
+        return (on == nullptr || on->load() > 0.5f) && (in == nullptr || in->load() > 0.5f);
     }
 
     /** The chain's round-trip to the host: whatever the three players' models need for
@@ -433,7 +453,6 @@ private:
 
     std::atomic<float>* inTrimParam        = nullptr;
     std::atomic<float>* outTrimParam       = nullptr;
-    std::atomic<float>* limiterOnParam     = nullptr;
     std::atomic<float>* stereoModeParam    = nullptr;
     float histWorst   = 0.0f;
     int   histSamples = 0;
@@ -442,7 +461,6 @@ private:
     core::SoftLimiter limiter;
 
     core::CabinetIr cab;
-    std::atomic<float>* cabOnParam = nullptr;
     std::atomic<float>* cabIrParam = nullptr;
     std::atomic<float>* cabHpfOnParam = nullptr;
     std::atomic<float>* cabHpfHzParam = nullptr;
@@ -463,12 +481,18 @@ private:
     float lastPreampInGain = 1.0f;
     float lastTrimGain = 1.0f;
 
-    std::atomic<float>* gateOnParam        = nullptr;
+    /** The two switches of every link, straight off `params::chainLinks` — plus the two ends,
+        which are not rows in the strip yet but have had their switches since they were declared.
+        Filled once in prepare; read on the audio thread like every other parameter. */
+    std::atomic<float>* rowOn[params::numChainRows]      { };
+    std::atomic<float>* rowPresent[params::numChainRows] { };
+    std::atomic<float>* inOnParam = nullptr,  *inPresentParam  = nullptr;
+    std::atomic<float>* outOnParam = nullptr, *outPresentParam = nullptr;
+
     std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* gatePosParam       = nullptr;
     std::atomic<float>* gateDecayParam     = nullptr;
 
-    std::atomic<float>* delayOnParam      = nullptr;
     std::atomic<float>* delaySyncParam    = nullptr;
     std::atomic<float>* delayTimeMsParam  = nullptr;
     std::atomic<float>* delayDivParam     = nullptr;
@@ -478,7 +502,6 @@ private:
     std::atomic<float>* delayOffsetParam  = nullptr;
     std::atomic<float>* delayMixParam     = nullptr;
 
-    std::atomic<float>* reverbOnParam   = nullptr;
     std::atomic<float>* reverbTypeParam = nullptr;
     std::atomic<float>* reverbMixParam  = nullptr;
     std::atomic<float>* reverbDecayParam    = nullptr;
@@ -486,9 +509,7 @@ private:
     std::atomic<float>* reverbHpfHzParam    = nullptr;
 
     std::atomic<float>* packCompParam    = nullptr;
-    std::atomic<float>* boostOnParam    = nullptr;
     std::atomic<float>* boostGainParam  = nullptr;
-    std::atomic<float>* preampOnParam   = nullptr;
     std::atomic<float>* preampGainParam = nullptr;
     juce::AudioBuffer<float> scopeDry;   // a block's input, kept for its pictures
 

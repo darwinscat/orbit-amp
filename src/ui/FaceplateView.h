@@ -61,12 +61,34 @@ public:
                         : shownFlags[2] || shownFlags[3] || shownFlags[4];
     }
 
-    /** The faceplate's height as laid out RIGHT NOW: an unpopulated row COLLAPSES — its space
-        leaves with it and the window follows. The editor sizes from this, never from
-        designHeight, which stays as the both-rows constant it always was. */
+/** Whether an emptied row's height is GIVEN to whoever is left (the default) or leaves with it.
+        The editor sets it from the player's preference; the faceplate only has to answer for its
+        own height, and `resized()` needs to know nothing — a row standing alone takes the lane it
+        was handed, tall or short. */
+    void setFillsHeight (bool shouldFill)
+    {
+        if (fillsHeight == shouldFill)
+            return;
+
+        fillsHeight = shouldFill;
+        resized();
+        repaint();
+    }
+
+    /** The faceplate's height as laid out RIGHT NOW. Filling: always the full design height, so
+        the window never moves and the row that stands grows instead. Not filling: an unpopulated
+        row collapses and its space leaves with it. Either way, with NOTHING standing there is
+        nobody to give the height to, and the panel closes up. */
     int currentHeight() const
     {
         const bool r1 = rowPopulated (0), r2 = rowPopulated (1);
+
+        if (! r1 && ! r2)
+            return 2 * lanePadY;
+
+        if (fillsHeight)
+            return designHeight;
+
         return 2 * lanePadY + (r1 ? row1H : 0) + (r2 ? row2H : 0) + (r1 && r2 ? rowGap : 0);
     }
 
@@ -113,6 +135,8 @@ private:
     /** Who stands on the panel, indexed by Block. The core four out of the box; the delay is
         reached for, not found already on. */
     std::array<bool, 5> shownFlags { true, true, false, true, true };
+
+    bool fillsHeight = true;   // see setFillsHeight
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FaceplateView)
 };

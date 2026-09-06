@@ -83,6 +83,16 @@ inline const juce::Identifier showGlyphs { "show_device_glyphs" };
 inline const juce::Identifier showInCol  { "show_in_column" };
 inline const juce::Identifier showOutCol { "show_out_column" };
 
+/** What an emptied row does to the WINDOW. On (the default): the window holds its height and
+    whoever is left grows into the space — nothing on screen moves except the block that got
+    taller. Off: the old way, the row collapses and the window shrinks with it.
+
+    It matters more than it looks. A link's place in the rig is an automatable parameter, so with
+    the window following the layout a host automation lane RESIZES THE PLUGIN WINDOW while you
+    play. Holding the height takes that away entirely — but a lone block stretched over both rows
+    may read as empty, which is why this is a switch and not a decision. */
+inline const juce::Identifier growBlocks { "grow_blocks" };
+
 /** The tuner's needle — the whole row under the panel now: hidden, the row collapses and the
     window follows. The guards' lights and menus live in the strip's arrows. */
 inline const juce::Identifier showTuner { "show_tuner" };

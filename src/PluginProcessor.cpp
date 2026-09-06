@@ -66,9 +66,7 @@ AmpProcessor::AmpProcessor()
 
     inTrimParam        = apvts.getRawParameterValue (params::inTrim);
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
-    limiterOnParam     = apvts.getRawParameterValue (params::limiterOn);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
-    cabOnParam         = apvts.getRawParameterValue (params::cabOn);
     boostInParam       = apvts.getRawParameterValue (params::blockIn (params::boostId));
     preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
     boostSmoothParam   = apvts.getRawParameterValue (params::blockSmooth (params::boostId));
@@ -84,12 +82,22 @@ AmpProcessor::AmpProcessor()
     cabTrimParam       = apvts.getRawParameterValue (params::cabTrim);
     cabPhaseParam      = apvts.getRawParameterValue (params::cabPhase);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
-    gateOnParam        = apvts.getRawParameterValue (params::gateOn);
+    for (int i = 0; i < params::numChainRows; ++i)
+    {
+        const auto& link = params::chainLinks[(size_t) i];
+        rowOn[(size_t) i]      = link.onParam      != nullptr ? apvts.getRawParameterValue (link.onParam)      : nullptr;
+        rowPresent[(size_t) i] = link.presentParam != nullptr ? apvts.getRawParameterValue (link.presentParam) : nullptr;
+    }
+
+    inOnParam       = apvts.getRawParameterValue (params::inOn);
+    inPresentParam  = apvts.getRawParameterValue (params::inPresent);
+    outOnParam      = apvts.getRawParameterValue (params::outOn);
+    outPresentParam = apvts.getRawParameterValue (params::outPresent);
+
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
     gateDecayParam     = apvts.getRawParameterValue (params::gateDecay);
 
-    delayOnParam      = apvts.getRawParameterValue (params::delayOn);
     delaySyncParam    = apvts.getRawParameterValue (params::delaySync);
     delayTimeMsParam  = apvts.getRawParameterValue (params::delayTimeMs);
     delayDivParam     = apvts.getRawParameterValue (params::delayDiv);
@@ -99,7 +107,6 @@ AmpProcessor::AmpProcessor()
     delayOffsetParam  = apvts.getRawParameterValue (params::delayOffset);
     delayMixParam     = apvts.getRawParameterValue (params::delayMix);
 
-    reverbOnParam   = apvts.getRawParameterValue (params::reverbOn);
     reverbTypeParam = apvts.getRawParameterValue (params::reverbType);
     reverbMixParam  = apvts.getRawParameterValue (params::reverbMix);
     reverbDecayParam    = apvts.getRawParameterValue (params::reverbDecay);
@@ -107,9 +114,7 @@ AmpProcessor::AmpProcessor()
     reverbHpfHzParam    = apvts.getRawParameterValue (params::reverbHpfHz);
 
     packCompParam    = apvts.getRawParameterValue (params::packLevelComp);
-    boostOnParam    = apvts.getRawParameterValue (params::boostOn);
     boostGainParam  = apvts.getRawParameterValue (params::boostGain);
-    preampOnParam   = apvts.getRawParameterValue (params::preampOn);
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
     rescanDevices();
@@ -341,7 +346,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // Seeded from the parameter: a session saved gate-ON has to start already gated, not fade in
     // over a block of ungated hum.
     gate.prepare (sampleRate, block, channels);
-    gate.seedEnabled (gateOnParam->load() > 0.5f);
+    gate.seedEnabled (linkWorks (params::rowGate));
 
     // The mode's environment default — see modeAutoValue.
     if (! stateWasRestored)
@@ -525,8 +530,12 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The input trim FIRST — ahead of the tuner's ear and the gate's key, like the interface
     // knob it stands in for: everything downstream, meters included, hears the trimmed level,
     // which is what closes the gain-staging loop. Ramped per block against zipper noise.
+    // A volume that is not working ramps to UNITY — it is never simply skipped. Skipping leaves
+    // the last gain applied to the previous block and none to this one, which is a step in the
+    // waveform, which is a click. The same shape the captured blocks' trims already use.
     {
-        const float target = juce::Decibels::decibelsToGain (inTrimParam->load());
+        const float target = endWorks (inOnParam, inPresentParam)
+                                 ? juce::Decibels::decibelsToGain (inTrimParam->load()) : 1.0f;
         buffer.applyGainRamp (0, buffer.getNumSamples(), lastTrimGain, target);
         lastTrimGain = target;
     }
@@ -586,7 +595,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // raw input, the attenuation lands where the parameter says. The enable crossfade makes the
     // toggle pop-free, so analyse runs unconditionally and the switch is an argument.
     gate.analyse (channels, nch, numSamples,
-                  gateOnParam->load() > 0.5f, gateThresholdParam->load());
+                  linkWorks (params::rowGate), gateThresholdParam->load());
     gateMeterDb.store (juce::Decibels::gainToDecibels (gate.currentGain(), -90.0f));
 
     // The accident latch: pressing while the key stands above the threshold means a live note
@@ -615,11 +624,11 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     //
     // LEVEL comes last for the same reason: it is the block's output volume, and the OUT meter
     // beside it has to be metering everything the block did — the EQ included.
-    const auto captured = [&] (auto& blk, int l, std::atomic<float>* onParam,
+    const auto captured = [&] (auto& blk, int l, params::ChainRow row,
                                std::atomic<float>* inParam, float& lastInGain,
                                std::atomic<float>& blockOutDb, int stBlock, int stEq)
     {
-        const bool on = onParam->load() > 0.5f;
+        const bool on = linkWorks (row);
 
         // IN, first of all: how hard the capture is fed. Metered immediately after, at the model's
         // own door, so the grip on the meter and the fill under it are answering about one point.
@@ -676,8 +685,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         }
     };
 
-    captured (boost,  0, boostOnParam,  boostInParam,  lastBoostInGain,  boostOutDb,  stBoost,  stEq1);
-    captured (preamp, 1, preampOnParam, preampInParam, lastPreampInGain, preampOutDb, stPreamp, stEq2);
+    captured (boost,  0, params::rowBoost,  boostInParam,  lastBoostInGain,  boostOutDb,  stBoost,  stEq1);
+    captured (preamp, 1, params::rowPreamp, preampInParam, lastPreampInGain, preampOutDb, stPreamp, stEq2);
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
     // (boost hiss, preamp hiss) dies here too, and the reverb tail past it rings out.
@@ -693,14 +702,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The echo before the space: repeats of what the preamp made, which the reverb then rooms.
     // First of the wide stages — the OFFSET is the block's stereo, so it works the back half's
     // channels.
-    if (delayOnParam->load() > 0.5f)
+    if (linkWorks (params::rowDelay))
         { const auto a = PerfClock::now();
           delay.process (channels, nchBack, numSamples);
           nsStage[stDelay] = elapsedNs (a); }
     else
         delay.reset();   // so re-enabling it does not replay the repeats of what came before
 
-    if (reverbOnParam->load() > 0.5f)
+    if (linkWorks (params::rowReverb))
         { const auto a = PerfClock::now();
 
           // The pair for the block's picture: the door before the room, the ADDED wet after it.
@@ -727,7 +736,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The cabinet closes the tone: the IR speaks last, before the master's hand and the safety.
     // Its picture's spectra tap the door and the exit, channel 0, only while it is on.
     { const auto a = PerfClock::now();
-      const bool cabOn = cabOnParam->load() > 0.5f;
+      const bool cabOn = linkWorks (params::rowCab);
       if (cabOn)
       {
           const float* d = buffer.getReadPointer (0);
@@ -754,7 +763,8 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // The output trim closes the chain — the master's hand on the way out, ramped per block
     // against zipper noise — and the OUT rail reads the result, clip cap latched past 0 dBFS.
     {
-        const float target = juce::Decibels::decibelsToGain (outTrimParam->load());
+        const float target = endWorks (outOnParam, outPresentParam)
+                                 ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
         buffer.applyGainRamp (0, numSamples, lastOutGain, target);
         lastOutGain = target;
 
@@ -763,7 +773,7 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // the truth on the rail is the truth at the jack.
         { const auto a = PerfClock::now();
           limiter.process (channels, nchBack, numSamples,
-                           limiterOnParam->load() > 0.5f, limiterCeilParam->load());
+                           linkWorks (params::rowLimit), limiterCeilParam->load());
           nsStage[stLimit] = elapsedNs (a); }
         limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
 

@@ -55,6 +55,10 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
     showGlyphs = prefs::getBool (prefs::showGlyphs, false);
 
+    // Before the first layout: whether an emptied row hands its height to whoever is left, or
+    // takes it out of the window. See prefs::growBlocks.
+    faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
+
 
     addChildComponent (demoStrip);
     addChildComponent (glyphs);
@@ -348,6 +352,9 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
     // to the session, not the machine — the tick just reads it, the click just writes it.
     m.addItem (8, "PACK LEVEL COMP",    true,
                amp.apvts.getParameter (params::packLevelComp)->getValue() > 0.5f);
+    // What an emptied row does: give its height away, or take it out of the window. Here for
+    // now, with the rest of the window's switches; it moves into Setup's VIEW page with them.
+    m.addItem (12, "KEEP WINDOW HEIGHT", true, prefs::getBool (prefs::growBlocks, true));
     m.addItem (5, "SHOW SPECTRA",       true, prefs::spectraShown());
     if (params::demoLoopsPresent())     // no loops on disk — no player, and no offer of one
         m.addItem (2, "SHOW DEMO PLAYER", true, showDemo);
@@ -377,6 +384,15 @@ void AmpEditor::showGearMenu (juce::Point<int> screenPos)
                          if (r == 11)
                          {
                              safe->devices.open();
+                             return;
+                         }
+
+                         if (r == 12)
+                         {
+                             const bool fill = ! prefs::getBool (prefs::growBlocks, true);
+                             prefs::setBool (prefs::growBlocks, fill);
+                             safe->faceplate.setFillsHeight (fill);
+                             safe->applyStripChoice();   // the window either holds or gives way
                              return;
                          }
 
@@ -560,7 +576,10 @@ void AmpEditor::resized()
     // faceplate's own edges — a block is inset inside the lane and its box starts lower still,
     // under the switch that rides the top border.
     const int gutterY = faceplateY + FaceplateView::contentTop;
-    const int gutterH = faceplateH - FaceplateView::contentTop - FaceplateView::contentBottom;
+    // Never negative: with every block stood down the panel closes up, and a column asked for a
+    // negative height is a component with no honest size.
+    const int gutterH = juce::jmax (0, faceplateH - FaceplateView::contentTop
+                                                  - FaceplateView::contentBottom);
 
     // The side columns stand only when the strip's end caps say so; a hidden column hands its
     // width to the faceplate — all but the edge inset the badges keep, so the outermost block

@@ -94,6 +94,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
+    // IN THE RIG, one per link — see the pair's note in Parameters.h. All true out of the box:
+    // a fresh instance is the whole chain, and taking a link out of the rig is a thing the player
+    // does deliberately in Setup, never a thing they find already done.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { inPresent,     1 }, "Input In Rig",    true),
+                std::make_unique<Bool> (juce::ParameterID { tunerPresent,  1 }, "Tuner In Rig",    true),
+                std::make_unique<Bool> (juce::ParameterID { gatePresent,   1 }, "Gate In Rig",     true),
+                std::make_unique<Bool> (juce::ParameterID { boostPresent,  1 }, "Boost In Rig",    true),
+                std::make_unique<Bool> (juce::ParameterID { preampPresent, 1 }, "Preamp In Rig",   true),
+                std::make_unique<Bool> (juce::ParameterID { delayPresent,  1 }, "Delay In Rig",    true),
+                std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Rig",   true),
+                std::make_unique<Bool> (juce::ParameterID { cabPresent,    1 }, "Cabinet In Rig",  true),
+                std::make_unique<Bool> (juce::ParameterID { limitPresent,  1 }, "Limiter In Rig",  true),
+                std::make_unique<Bool> (juce::ParameterID { outPresent,    1 }, "Output In Rig",   true));
+
+    // STANDBY/ON for the three links that never had one: the two volume columns and the tuner.
+    // ON out of the box — a column that does not apply its volume is a column nobody asked for.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { inOn,    1 }, "Input",  true),
+                std::make_unique<Bool> (juce::ParameterID { outOn,   1 }, "Output", true),
+                std::make_unique<Bool> (juce::ParameterID { tunerOn, 1 }, "Tuner",  true));
+
     // Block power. A boost is an addition to the sound, so it starts off; the rest are the sound.
     layout.add (std::make_unique<Bool> (juce::ParameterID { boostOn,  1 }, "Boost",  false),
                 std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, "Preamp", true),

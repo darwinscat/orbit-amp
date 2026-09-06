@@ -40,6 +40,13 @@ public:
         juce::Colour accent;
         bool on = true;
 
+        /** Whether this link is in the rig at all. A row that is not present takes no width, no
+            paint, no click and no repaint — it is ABSENT, which is a different thing from `on`
+            being false: that one is still here, standing by. Rows keep their places in this
+            vector whatever happens, so an index stays the same row forever and no callback ever
+            has to be rebound. */
+        bool present = true;
+
         /** The service links' lights, optional: how hard the guard presses (floods the arrow,
             solid) and the latched "worked while you were away" mark. A sound block has none. */
         std::function<float()> depth;
@@ -89,6 +96,13 @@ public:
         repaint();
     }
 
+    /** In or out of the rig. The whole strip repaints: everyone after this row moves. */
+    void setRowPresent (int index, bool present)
+    {
+        rows[(size_t) index].present = present;
+        repaint();
+    }
+
     void paint (juce::Graphics& g) override
     {
         // The ground: the panel's own colour and a hairline underneath — the strips' family.
@@ -123,6 +137,9 @@ public:
 
         for (size_t i = 0; i < rows.size(); ++i)
         {
+            if (! rows[i].present)
+                continue;
+
             const auto tile = tileArea ((int) i).toFloat();
             const float x0 = tile.getX() + airX, x1 = tile.getRight() + (float) tipW - airX;
             const float y0 = tile.getY(), y1 = tile.getBottom(), cy = tile.getCentreY();
@@ -176,7 +193,7 @@ public:
             }
 
         for (size_t i = 0; i < rows.size(); ++i)
-            if (tileArea ((int) i).contains (e.getPosition()))
+            if (rows[i].present && tileArea ((int) i).contains (e.getPosition()))
             {
                 if (rows[i].clickIsMenu || e.mods.isPopupMenu())
                 {
@@ -215,7 +232,7 @@ private:
 
         for (size_t i = 0; i < rows.size(); ++i)
         {
-            if (rows[i].depth == nullptr && rows[i].dot == nullptr)
+            if (! rows[i].present || (rows[i].depth == nullptr && rows[i].dot == nullptr))
                 continue;
 
             const float d   = rows[i].depth != nullptr ? rows[i].depth() : 0.0f;
@@ -242,17 +259,46 @@ private:
         return { x, lane.getCentreY() - capH / 2, capW, capH };
     }
 
+    /** How many links stand in the rig, and where this one stands among them. The width is shared
+        by the PRESENT rows only, so a row leaving the rig gives its width to the rest rather than
+        leaving a hole — while its index in `rows` never moves, which is what keeps every callback
+        and every `setRowOn` pointing at the row it was bound to. */
+    int presentCount() const
+    {
+        int n = 0;
+        for (const auto& r : rows)
+            if (r.present)
+                ++n;
+
+        return n;
+    }
+
+    int placeOf (int index) const
+    {
+        int place = 0;
+        for (int i = 0; i < index; ++i)
+            if (rows[(size_t) i].present)
+                ++place;
+
+        return place;
+    }
+
     /** An arrow's cell: even steps between the caps, each shape reaching one tip past its cell
         into the next block's notch. The rectangle is the HIT area and the name's home; the
         point is drawn beyond its right edge, in the neighbour's notch, where a click means the
-        neighbour. */
+        neighbour. An absent row has no cell at all — an empty rectangle contains no click and
+        paints nothing, so every walk over the rows is safe even when nobody checks the flag. */
     juce::Rectangle<int> tileArea (int index) const
     {
-        const int n     = (int) rows.size();
+        const int n = presentCount();
+
+        if (n <= 0 || ! rows[(size_t) index].present)
+            return {};
+
         const auto lane = getLocalBounds().reduced (padX + capW + capGap, 0);
         const int  step = (lane.getWidth() - tipW) / n;
 
-        return juce::Rectangle<int> (lane.getX() + index * step,
+        return juce::Rectangle<int> (lane.getX() + placeOf (index) * step,
                                      lane.getCentreY() - tileH / 2, step, tileH);
     }
 
