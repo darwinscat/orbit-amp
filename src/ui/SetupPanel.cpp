@@ -112,8 +112,12 @@ void SetupPanel::buildViewPage()
     // takes the family's inter-process lock, reads the JSON off disk and parses it. Five rows at
     // ten a second is fifty locked file reads a second on the message thread, and a contended
     // lock can hold that thread for as long as its timeout. The value is read once, here, and
-    // again whenever this window writes it — which is the only way it changes while the page is
-    // open, since these live on the machine and no automation or preset can touch them.
+    // again whenever this window writes it.
+    //
+    // The trade, stated: a SECOND instance that has this page open at the same time will not see
+    // the change until its own page is reopened, since `open()` and `selectPage()` rebuild these
+    // rows. Two Setup windows side by side is a rarer thing than a locked file read fifty times a
+    // second, and the stale one is a checkbox, not a sound.
     const auto add = [&] (juce::String name, juce::String note, juce::Identifier key, bool fallback)
     {
         auto held = std::make_shared<bool> (prefs::getBool (key, fallback));

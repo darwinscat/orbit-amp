@@ -203,9 +203,9 @@ private:
         // somebody moved it — a player auditioning devices the moment a session opens, or host
         // automation — and the aim stands down for that parameter rather than dragging it back
         // five seconds later. The document promised this; the code did not do it.
-        const auto stolen = [] (const juce::RangedAudioParameter* p, float wrote)
+        const auto stolen = [] (const juce::RangedAudioParameter* p, float known)
         {
-            return p != nullptr && wrote >= 0.0f && ! juce::approximatelyEqual (p->getValue(), wrote);
+            return p != nullptr && ! juce::approximatelyEqual (p->getValue(), known);
         };
 
         // Standing down is not enough on its own. The name pump is quiet while an aim is running
@@ -246,7 +246,7 @@ private:
                 // which is why this drops them and writes the new pack's instead. That also
                 // leaves the switch half below nothing of the old device's to aim.
                 noteBlockNames (b, true);
-                aimWroteDevice[b] = -1.0f;
+                aimWroteDevice[b] = p->getValue();
                 return;
             }
 
@@ -254,6 +254,11 @@ private:
 
             if (index < 0)
             {
+                // ...and its switch positions are not asked about either. They belong to the pack
+                // that is missing, and the pack standing in for it may spell a position the same
+                // way — aiming them would move a control on a device the player never chose.
+                deviceSettled[b] = false;
+
                 // This machine has no such device — TODAY. The name STAYS: it is the identity the
                 // player chose, and a folder is a thing that gets filled in later. Deleting it
                 // here would mean that opening a project before installing its pack, or on a
@@ -316,7 +321,7 @@ private:
                 if (stolen (p, aimWroteSwitch[b][(size_t) i]))
                 {
                     noteSwitchName (b, i);            // the hand's answer, written where it happened
-                    aimWroteSwitch[b][(size_t) i] = -1.0f;
+                    aimWroteSwitch[b][(size_t) i] = p->getValue();
                     continue;
                 }
 
@@ -466,19 +471,36 @@ private:
     {
         for (size_t b = 0; b < numCaptured; ++b)
             noteBlockNames (b, false);
+
+        // The seed took every baseline, so the pump is primed: a device or switch moved between
+        // construction and the first tick is a real move and has to be written, not swallowed as
+        // "the first tick only looks".
+        namesPrimed = true;
     }
 
     /** The state changed under us — a session opened, a register recalled: aim the switches again. */
-    void markSwitchAimsPending() noexcept
+    void markSwitchAimsPending()
     {
         switchAimFrames = aimWindowFrames;
 
-        // Nothing has been written by THIS aim yet, so nothing can have been taken from under it.
-        aimWroteDevice[0] = aimWroteDevice[1] = -1.0f;
+        // BOTH baselines are taken from what the tree has just become, and that is the whole of
+        // how a hand wins. `aimWrote*` starting at "nothing written yet" meant theft could only be
+        // seen on a parameter the aim had already moved — so a player who reached for a control
+        // whose saved number happened to be right was quietly overruled a tick later. And
+        // `lastValue` left over from before the restore made the pump read the restored numbers as
+        // a hand's move the moment the window closed, and write the fallback's name over the one
+        // the aim had been trying to reach. Same fix, twice: start from where we actually are.
+        for (size_t b = 0; b < numCaptured; ++b)
+        {
+            const float dv = apvts.getRawParameterValue (deviceIdOf (b))->load();
+            aimWroteDevice[b] = lastDeviceValue[b] = dv;
 
-        for (auto& block : aimWroteSwitch)
-            for (auto& v : block)
-                v = -1.0f;
+            for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
+            {
+                const float v = apvts.getRawParameterValue (measuredIdOf (b, i))->load();
+                aimWroteSwitch[b][(size_t) i] = lastSwitchValue[b][(size_t) i] = v;
+            }
+        }
     }
 
     /** Listens only while someone is watching: with no editor there is no needle, and an MPM pass

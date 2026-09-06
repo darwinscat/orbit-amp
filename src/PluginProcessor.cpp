@@ -126,13 +126,21 @@ AmpProcessor::AmpProcessor()
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     // Switches and devices ride in the tree by NAME, and the names are written when they MOVE, so
-    // a save normally has nothing to do here. The one gap is the tick: a switch moved in the 33 ms
-    // before the pump next runs would be saved as a new NUMBER beside its old NAME, and the name
-    // wins on the way back — so the session would reopen one position behind. Closing that gap is
-    // this call, and it writes only what the move already earned. Guarded because a host may save
-    // from any thread and a ValueTree is the message thread's.
+    // a save normally has nothing to do here. The one gap is the tick: a control moved in the
+    // 33 ms before the pump next runs would be saved as a new NUMBER beside its old NAME, and the
+    // name wins on the way back — so the session would reopen one position behind. Closing that
+    // gap is this pair, and it writes only what the move already earned.
+    //
+    // The device pump goes FIRST and it is not optional: naming a device from what is loaded,
+    // when the number has moved and nothing has loaded it yet, writes the name of the device that
+    // is leaving beside the number of the one arriving — which is worse than the gap it closes.
+    //
+    // Guarded because a host may save from any thread and a ValueTree is the message thread's.
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+    {
+        pumpDeviceWork();
         pumpSwitchNames();
+    }
 
 
     // The workspace envelope carries the live parameter tree and the other three registers, so
@@ -146,7 +154,6 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     stateWasRestored = true;   // a session's choice outranks the environment's default
-    markSwitchAimsPending();   // ...and its switches are named, not numbered — put them back by name
 
     auto xml = getXmlFromBinary (data, sizeInBytes);
     if (xml == nullptr)
@@ -156,6 +163,11 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     const auto apply = [] (AmpProcessor& self, const juce::ValueTree& t)
     {
+        // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
+        // the top of setStateInformation also means it is armed AFTER the tree has landed, which
+        // is what lets it take the restored values as its baseline instead of the outgoing ones.
+        self.markSwitchAimsPending();
+
         if (self.history.fromTree (t))
             return;
 
@@ -199,23 +211,65 @@ void AmpProcessor::rescanDevices()
     // imported, an import re-sorts the list, and re-selecting by the old number is how a block ends
     // up playing its new neighbour. The block answers where it now stands and the parameter follows
     // it — quietly, because nothing about the sound changed and there is nothing to undo.
-    // Suppressed for the same reason the aim is: following a device that the FOLDER moved is the
-    // plugin agreeing with itself, not an edit. Recorded, it would be an undo step whose undo puts
-    // the number back on the wrong pack.
-    const felitronics::appkit::CompareHistory::ScopedSuppress hush (history);
+    // What the rescan wants to change, decided before anything is written. The suppression scope
+    // has a cost of its own — it commits whatever burst is open when it starts and can drop a redo
+    // when it ends — so it is opened only when there is actually something to suppress, and a
+    // rescan that changes nothing (the usual one) leaves the timeline exactly as it found it.
+    std::vector<std::pair<juce::RangedAudioParameter*, float>> writes;
+    bool nameFirstDevice[numCaptured] = { false, false };
 
-    const auto follow = [this] (core::CapturedBlock& block, const char* id)
+    for (size_t b = 0; b < numCaptured; ++b)
     {
+        const auto* id = deviceIdOf (b);
         auto* p = apvts.getParameter (id);
         const int was = juce::roundToInt (apvts.getRawParameterValue (id)->load());
-        const int now = block.rescan (was);
+        const int now = blockAt (b).rescan (was);
 
-        if (now >= 0 && now != was && p != nullptr)
-            p->setValueNotifyingHost (p->convertTo0to1 ((float) now));
-    };
+        // Out of the parameter's reach: a folder can hold more devices than this can address, and
+        // writing a clamped number would land on the neighbour. The block keeps playing the right
+        // pack; only the number cannot say so.
+        if (now >= 0 && now != was && now < params::maxDevices && p != nullptr)
+            writes.emplace_back (p, p->convertTo0to1 ((float) now));
 
-    follow (boost,  params::boostDevice);
-    follow (preamp, params::preampDevice);
+        // A device that has a name for the first time: the folder was empty when this instance
+        // was built, so the seed had nothing to write, and nothing has MOVED since — the parameter
+        // still reads the same number it always did. Without this the first pack a player installs
+        // is saved by number until they change the selector, which is the whole disease.
+        nameFirstDevice[b] = ! apvts.state.hasProperty (juce::Identifier (juce::String (id) + deviceAimSuffix))
+                             && blockAt (b).selectedName().isNotEmpty();
+    }
+
+    if (! writes.empty() || nameFirstDevice[0] || nameFirstDevice[1])
+    {
+        // Following a device that the FOLDER moved is the plugin agreeing with itself, not an
+        // edit: recorded, it would be an undo step whose undo puts the number back on the wrong
+        // pack.
+        const felitronics::appkit::CompareHistory::ScopedSuppress hush (history);
+
+        for (auto& [p, v] : writes)
+            p->setValueNotifyingHost (v);
+
+        for (size_t b = 0; b < numCaptured; ++b)
+            if (nameFirstDevice[b])
+                noteBlockNames (b, false);
+    }
+
+    // A NAME THAT CAN BE HONOURED NOW. A session opened before its pack was installed keeps the
+    // name it could not reach; installing the pack is a rescan, and this is the moment the name
+    // becomes answerable. Without it the player would have to reopen the session to hear the
+    // device they just installed.
+    for (size_t b = 0; b < numCaptured; ++b)
+    {
+        const juce::Identifier key (juce::String (deviceIdOf (b)) + deviceAimSuffix);
+        const auto want = apvts.state.getProperty (key).toString();
+
+        if (want.isNotEmpty() && want != blockAt (b).selectedName()
+            && blockAt (b).indexOfName (want) >= 0)
+        {
+            markSwitchAimsPending();
+            break;
+        }
+    }
 }
 
 const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
@@ -710,7 +764,16 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                     juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                        chainView.getReadPointer (ch), numSamples);
         }
-        else if (! on && lat > 0)
+        else if (on)
+        {
+            // Fully in the path: the model carries its own delay and there is nothing to imitate.
+            // The wire is CLEARED rather than left holding whatever it last saw, because the next
+            // fade-out reads that history for its first `lat` samples — and a handful of samples
+            // from minutes ago, even weighted at the fraction of a per-cent the fade has moved by
+            // then, is a ghost. A dozen floats to make it impossible.
+            wire[(size_t) l].reset();
+        }
+        else if (lat > 0)
         {
             // Standing by for good: the block is not run at all below, so the signal in the buffer
             // IS the output — and it has to carry the delay the model would have.
