@@ -369,6 +369,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     scopeDry.setSize (1, block);
     fadeDry.setSize (juce::jmax (2, channels), block);
 
+    for (auto& w : wire)
+        w.prepare();
+
     // Snapped, not faded: a chain that arrives switched off is silent from its first sample.
     for (int i = 0; i < params::numChainRows; ++i)
     {
@@ -644,16 +647,41 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         const bool on    = core::BypassFade::runs (span, works);
         const bool fade  = span.moving && canFade (numSamples, nch);
 
-        // THE WIRE, kept BEFORE anything touches it. The crossfade's dry end has to be the signal
-        // as it arrived — not the signal after this block's own IN trim. Copying it after the trim
-        // made the two ends differ by the trim as well as by the block, and at -24 dB that is not
-        // a click, it is a bark: the trim collapsed to unity in ONE block while the fade still had
-        // fourteen milliseconds to run, so the model spent them being fed a signal sixteen times
-        // hotter than the player set.
+        // THE WIRE a bypassed block has to BE — and a wire the same LENGTH as the block it
+        // replaces. A rate-matching model reports a latency the host compensates for; drop it out
+        // of the path and the signal arrives early by exactly that much, for as long as it is
+        // bypassed. Three to fifteen samples, and none at all when the pack's rate is the
+        // session's — which is the usual case, and why this costs nothing there.
+        //
+        // It is also what makes the crossfade honest: blending a block's output against an
+        // UNDELAYED copy of its own input is blending a signal with an early copy of itself, and
+        // that is a comb — six samples at 44.1 kHz puts the first notch near 3.7 kHz, in the
+        // presence region. Swept over fifteen milliseconds it reads as a tick rather than a
+        // filter, but it is a tick that need not exist.
+        //
+        // Taken BEFORE this block's own IN trim: the dry end has to be the signal as it arrived.
+        // Copied after the trim, the two ends of the fade differed by the trim as well as by the
+        // block, and at -24 dB that is not a click, it is a bark.
+        const int lat = blk.latencySamples();
+
         if (fade)
-            for (int ch = 0; ch < nch; ++ch)
-                juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
-                                                   chainView.getReadPointer (ch), numSamples);
+        {
+            // `on` is always true while a fade runs, so this is the only place the dry is kept.
+            if (lat > 0)
+                wire[(size_t) l].process (chainView.getArrayOfReadPointers(),
+                                          fadeDry.getArrayOfWritePointers(), nch, numSamples, lat);
+            else
+                for (int ch = 0; ch < nch; ++ch)
+                    juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                       chainView.getReadPointer (ch), numSamples);
+        }
+        else if (! on && lat > 0)
+        {
+            // Standing by for good: the block is not run at all below, so the signal in the buffer
+            // IS the output — and it has to carry the delay the model would have.
+            wire[(size_t) l].process (chainView.getArrayOfReadPointers(),
+                                      chainView.getArrayOfWritePointers(), nch, numSamples, lat);
+        }
 
         // IN: how hard the capture is fed. Metered immediately after, at the model's own door, so
         // the grip on the meter and the fill under it answer about one point.

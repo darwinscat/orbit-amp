@@ -13,6 +13,7 @@
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
 #include "core/BypassFade.h"
+#include "core/BypassWire.h"
 #include "core/CabinetIr.h"
 #include "core/SoftLimiter.h"
 #include "core/DelayStage.h"
@@ -527,6 +528,12 @@ private:
         so a link asks for its own by name. */
     core::BypassFade         blockFade[params::numChainRows];
     juce::AudioBuffer<float> fadeDry;
+
+    /** One per captured block: the delay a BYPASSED block still has to carry, so the chain does
+        not arrive early the moment somebody stands a rate-matching model down. Only runs when the
+        block is not working — while it is working the model carries its own latency and there is
+        nothing to imitate. */
+    core::BypassWire wire[2];
 
     /** Can a crossfade actually run this block? The buffer was sized in prepare, and a host may
         hand over a bigger block than it promised — copying into it on that block would walk off

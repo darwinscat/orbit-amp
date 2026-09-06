@@ -16,6 +16,7 @@
 #include <juce_events/juce_events.h>
 
 #include "PluginProcessor.h"
+#include "core/BypassWire.h"
 
 #include <algorithm>
 #include <cmath>
@@ -708,6 +709,55 @@ int main()
                 biggestJump < 0.02f, juce::String (biggestJump, 5));
 
         set (amp, orbitamp::params::cabOn, 1.0f);
+    }
+
+    // THE BYPASS WIRE, on its own. It only runs when a pack's rate differs from the session's, so
+    // the chain above — at 48 kHz against 48 kHz packs — never touches it. And it is hand-rolled
+    // index arithmetic across block boundaries, which is exactly the kind of code that is right
+    // until it is not.
+    //
+    // Feed it a ramp in two blocks and every output sample must be the input six samples earlier,
+    // including across the seam, where the second block has to read the first block's tail.
+    {
+        orbitamp::core::BypassWire w;
+        w.prepare();
+
+        constexpr int d = 6, n = 32;
+        std::vector<float> a (n), b (n), outA (n), outB (n);
+
+        for (int i = 0; i < n; ++i) { a[(size_t) i] = (float) i; b[(size_t) i] = (float) (n + i); }
+
+        const float* inA[1]  { a.data() };
+        float*       oA[1]   { outA.data() };
+        const float* inB[1]  { b.data() };
+        float*       oB[1]   { outB.data() };
+
+        w.process (inA, oA, 1, n, d);
+        w.process (inB, oB, 1, n, d);
+
+        bool ok = true;
+
+        for (int i = d; i < n; ++i)                 // inside the first block
+            ok = ok && juce::approximatelyEqual (outA[(size_t) i], (float) (i - d));
+
+        for (int i = 0; i < d; ++i)                 // its head: nothing came before, so silence
+            ok = ok && juce::approximatelyEqual (outA[(size_t) i], 0.0f);
+
+        for (int i = 0; i < n; ++i)                 // the second block, seam included
+            ok = ok && juce::approximatelyEqual (outB[(size_t) i], (float) (n + i - d));
+
+        // In place, which is what a fully bypassed block asks for.
+        orbitamp::core::BypassWire w2;
+        w2.prepare();
+        std::vector<float> c = a;
+        float* inPlace[1] { c.data() };
+        w2.process (inPlace, inPlace, 1, n, d);
+
+        for (int i = d; i < n; ++i)
+            ok = ok && juce::approximatelyEqual (c[(size_t) i], (float) (i - d));
+
+        std::printf ("\nwire: %d samples of delay, two blocks and one in place\n", d);
+        report ("a bypassed block still carries the delay it would have had", ok);
     }
 
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
