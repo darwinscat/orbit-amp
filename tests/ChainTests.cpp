@@ -711,6 +711,72 @@ int main()
         set (amp, orbitamp::params::cabOn, 1.0f);
     }
 
+    // THE SAFETY, released. A limiter switched off used to hand back whatever it was holding in
+    // ONE sample — three decibels of grip returned instantly is a step upward, and a step is a
+    // click. Driven hard enough to be gripping, then switched off mid-note.
+    {
+        set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
+        set (amp, orbitamp::params::limitPresent, 1.0f);
+        set (amp, orbitamp::params::limiterOn, 1.0f);
+        set (amp, orbitamp::params::limiterCeiling, -6.0f);
+        set (amp, orbitamp::params::boostOn, 1.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        int   phase = 0;
+        float last = 0.0f, quietJump = 0.0f, switchJump = 0.0f;
+        int   measuring = 0;   // 1 = the calm before, 2 = across the switch
+
+        for (int block = 0; block < 40; ++block)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float v = 0.9f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                         * 220.0 * phase / sampleRate);
+                buf.setSample (0, i, v);
+                buf.setSample (1, i, v);
+            }
+
+            // The baseline has to be the SAME signal: a gripped sine is quieter and therefore
+            // flatter, so measuring the calm while the limiter still held it would compare a
+            // released waveform against a squashed one and call the difference a step.
+            if (block == 20)
+            {
+                set (amp, orbitamp::params::limiterOn, 0.0f);   // let go, mid-note
+                measuring = 2;                                  // across the release
+            }
+
+            if (block == 24) measuring = 1;                     // ...and long after it, settled
+
+            amp.processBlock (buf, midi);
+            amp.pumpDeviceWork();
+
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const float v = buf.getSample (0, i);
+                const float jump = std::abs (v - last);
+
+                if (measuring == 1) quietJump  = juce::jmax (quietJump, jump);
+                if (measuring == 2) switchJump = juce::jmax (switchJump, jump);
+
+                last = v;
+            }
+        }
+
+        // Against ITSELF, not against a number I picked: a driven sine through a boost has a slope
+        // of its own, and what matters is whether letting go adds to it.
+        std::printf ("\nlimiter: biggest jump settled %.5f, across the release %.5f\n",
+                     quietJump, switchJump);
+
+        report ("letting the safety go does not step the waveform",
+                switchJump < quietJump * 1.4f,
+                juce::String (switchJump, 5) + " vs " + juce::String (quietJump, 5));
+
+        set (amp, orbitamp::params::limiterOn, 1.0f);
+        set (amp, orbitamp::params::boostOn, 0.0f);
+        set (amp, orbitamp::params::limiterCeiling, -0.3f);
+    }
+
     // THE BYPASS WIRE, on its own. It only runs when a pack's rate differs from the session's, so
     // the chain above — at 48 kHz against 48 kHz packs — never touches it. And it is hand-rolled
     // index arithmetic across block boundaries, which is exactly the kind of code that is right

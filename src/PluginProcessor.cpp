@@ -769,17 +769,52 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // repeats already in the line ring out into the dry. Only leaving the RIG clears it — that is
     // unplugging, not standing by. Which is also why a bypassed block still costs: so does a
     // bypassed insert, in every DAW there is.
-    if (linkInRig (params::rowDelay))
-        { const auto a = PerfClock::now();
-          delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
-          nsStage[stDelay] = elapsedNs (a); }
-    else
-        delay.reset();
+    // STANDBY is unfed-and-ringing (see the engine). Leaving the RIG is the other thing: the line
+    // is cleared, and a ringing tail cut in one sample is a click. So the whole contribution is
+    // crossfaded out first, and only then cleared.
+    {
+        const bool inRig = linkInRig (params::rowDelay);
+        const auto span  = blockFade[(size_t) params::rowDelay].advance (numSamples, inRig);
+        const bool run   = core::BypassFade::runs (span, inRig);
+        const bool fade  = span.moving && canFade (numSamples, nchBack);
 
-    // The room stands by the same way the echo does: unfed, still ringing out. See the delay above.
-    if (linkInRig (params::rowReverb))
+        if (run)
+        {
+            const auto a = PerfClock::now();
+
+            if (fade)
+                for (int ch = 0; ch < nchBack; ++ch)
+                    juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                       buffer.getReadPointer (ch), numSamples);
+
+            delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
+
+            if (fade)
+                core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
+                                         nchBack, numSamples, span);
+
+            nsStage[stDelay] = elapsedNs (a);
+        }
+        else
+        {
+            delay.reset();
+        }
+    }
+
+    // The room stands by the same way the echo does: unfed, still ringing out — and leaves the rig
+    // the same way too, faded rather than cut. See the delay above.
+    const bool reverbInRig = linkInRig (params::rowReverb);
+    const auto reverbSpan  = blockFade[(size_t) params::rowReverb].advance (numSamples, reverbInRig);
+    const bool reverbFade  = reverbSpan.moving && canFade (numSamples, nchBack);
+
+    if (core::BypassFade::runs (reverbSpan, reverbInRig))
         { const auto a = PerfClock::now();
           const bool fed = linkWorks (params::rowReverb);
+
+          if (reverbFade)
+              for (int ch = 0; ch < nchBack; ++ch)
+                  juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                     buffer.getReadPointer (ch), numSamples);
 
           // The pair for the block's picture: the door before the room, the ADDED wet after it.
           // A room nobody is feeding hears silence at its door, and the picture says so.
@@ -798,6 +833,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                 tout.push (w[i]);
             tout.publishIfDue (eqSpectrumOrder,
                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
+
+          if (reverbFade)
+              core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
+                                       nchBack, numSamples, reverbSpan);
 
           nsStage[stReverb] = elapsedNs (a); }
     else
@@ -865,8 +904,25 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // ceiling it enforces is the ceiling that leaves the box. The meter reads AFTER it —
         // the truth on the rail is the truth at the jack.
         { const auto a = PerfClock::now();
+          // Switching a limiter off returns whatever it was holding down in ONE sample: three
+          // decibels of grip released instantly is a step upward, which is a click. Its grip is
+          // crossfaded off like any other replacing link.
+          const bool limWorks = linkWorks (params::rowLimit);
+          const auto limSpan  = blockFade[(size_t) params::rowLimit].advance (numSamples, limWorks);
+          const bool limFade  = limSpan.moving && canFade (numSamples, nchBack);
+
+          if (limFade)
+              for (int ch = 0; ch < nchBack; ++ch)
+                  juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                     buffer.getReadPointer (ch), numSamples);
+
           limiter.process (channels, nchBack, numSamples,
-                           linkWorks (params::rowLimit), limiterCeilParam->load());
+                           core::BypassFade::runs (limSpan, limWorks), limiterCeilParam->load());
+
+          if (limFade)
+              core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
+                                       nchBack, numSamples, limSpan);
+
           nsStage[stLimit] = elapsedNs (a); }
         limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
 
