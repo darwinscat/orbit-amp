@@ -38,7 +38,16 @@ class AmpProcessor final : public juce::AudioProcessor,
 {
 public:
     AmpProcessor();
-    ~AmpProcessor() override = default;
+    /** NOT defaulted, and the body is one line that must not be deleted.
+
+        `setStateInformation` may arrive on any thread, so it marshals the restore to the message
+        thread behind a `juce::WeakReference<AmpProcessor>` — the host can destroy the plugin while
+        that call is still queued. `WeakReference::Master`'s own destructor only ASSERTS: in a
+        release build it leaves the shared holder pointing at freed memory, every `weak.get()`
+        answers with a live-looking pointer, and the guard guards nothing. Clearing the master is
+        what actually arms it. (The same line was missing in GateConsole, and the same review
+        caught it there.) */
+    ~AmpProcessor() override { masterReference.clear(); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
