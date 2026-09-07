@@ -90,6 +90,27 @@ jobs:
           mkdir -p dist
           rm -rf stage && mkdir -p stage   # `cp -R a b/` where `b/a` exists nests instead of replacing
 
+          # A TICKET TAKES A MOMENT TO REACH THE REPLICA STAPLER ASKS. `notarytool --wait` returns
+          # Accepted once the ticket is written in Apple's notary database; `stapler` then makes a
+          # SEPARATE request to a CloudKit endpoint to fetch it, and between those two there is a
+          # propagation delay — usually seconds, sometimes minutes, longer when Apple's service is
+          # having a bad afternoon. It reads as `The staple and validate action failed! Error 65`,
+          # which means "no such ticket", on a submission that was accepted.
+          #
+          # This block staples FIVE things — four bundles and the package — where it used to staple
+          # two, so it has five chances to land inside that window, and `set -e` would end the
+          # release on the first one, after both notarization round trips are already paid for.
+          # Waiting costs nothing on the day it works, which is most days.
+          staple_retry() {
+            local item="$1" i
+            for i in 1 2 3 4 5; do
+              xcrun stapler staple "$item" && return 0
+              echo "staple: no ticket yet for $item (attempt $i of 5) — waiting for it to propagate"
+              sleep 20
+            done
+            return 1
+          }
+
           # Plug-ins: hardened-runtime sign (they run inside the host → no own entitlements).
           BUNDLES=("$VST3" "$AU")
           if [ -d "$CLAP" ]; then BUNDLES+=("$CLAP"); fi
@@ -125,7 +146,7 @@ jobs:
 
           rm -rf stage && mkdir -p stage
           for b in "${BUNDLES[@]}"; do
-            xcrun stapler staple "$b"
+            staple_retry "$b"
             xcrun stapler validate "$b"
             codesign --verify --deep --strict "$b"
             cp -R "$b" stage/
@@ -138,7 +159,7 @@ jobs:
           productsign --sign "$INST_ID" "dist/OrbitAmp-$VER-macOS.pkg" "dist/OrbitAmp-$VER-macOS-signed.pkg"
           mv "dist/OrbitAmp-$VER-macOS-signed.pkg" "dist/OrbitAmp-$VER-macOS.pkg"
           xcrun notarytool submit "dist/OrbitAmp-$VER-macOS.pkg" --keychain-profile "$NOTARY" --wait
-          xcrun stapler staple "dist/OrbitAmp-$VER-macOS.pkg"
+          staple_retry "dist/OrbitAmp-$VER-macOS.pkg"
           xcrun stapler validate "dist/OrbitAmp-$VER-macOS.pkg"
           spctl -a -vvv -t install "dist/OrbitAmp-$VER-macOS.pkg" || true
       - uses: actions/upload-artifact@v7
