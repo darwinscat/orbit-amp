@@ -87,7 +87,8 @@ jobs:
           REL="build/OrbitAmp_artefacts/Release"
           VST3="$REL/VST3/OrbitAmp.vst3"; AU="$REL/AU/OrbitAmp.component"; CLAP="$REL/CLAP/OrbitAmp.clap"
           SA="$REL/Standalone/OrbitAmp.app"
-          mkdir -p dist stage
+          mkdir -p dist
+          rm -rf stage && mkdir -p stage   # `cp -R a b/` where `b/a` exists nests instead of replacing
 
           # Plug-ins: hardened-runtime sign (they run inside the host → no own entitlements).
           BUNDLES=("$VST3" "$AU")
@@ -95,21 +96,40 @@ jobs:
           for b in "${BUNDLES[@]}"; do
             codesign --force --options runtime --timestamp --sign "$APP_ID" "$b"
             codesign --verify --strict --verbose=1 "$b"
-            cp -R "$b" stage/
           done
 
-          # Standalone app: its own process → the audio-input entitlement, then notarize +
-          # staple it so it also launches cleanly straight from the .zip.
+          # Standalone app: its own process → the audio-input entitlement.
           if [ -d "$SA" ]; then
             codesign --force --options runtime --timestamp \
                      --entitlements installer/standalone.entitlements --sign "$APP_ID" "$SA"
             codesign --verify --strict --verbose=1 "$SA"
-            ditto -c -k --keepParent "$SA" dist/_standalone.zip
-            xcrun notarytool submit dist/_standalone.zip --keychain-profile "$NOTARY" --wait
-            xcrun stapler staple "$SA"
-            rm -f dist/_standalone.zip
-            cp -R "$SA" stage/
+            BUNDLES+=("$SA")
           fi
+
+          # ONE SUBMISSION FOR EVERYTHING, AND A TICKET ON EACH BUNDLE.
+          #
+          # It used to submit the standalone alone, so only the app came back with a ticket
+          # stapled to it — the three plug-ins in the .zip had none, and the .pkg's own
+          # submission staples the PACKAGE, not what is inside it. Notarized they were, and
+          # Gatekeeper would fetch the verdict over the network on first load; a stapled ticket
+          # is the same verdict already in the bundle, which is what a machine with no network,
+          # or Apple having a bad afternoon, needs.
+          #
+          # Stapling does not disturb the signature — the ticket lands beside the seal, not
+          # inside it — so the originals are stapled and everything downstream, the .zip and the
+          # .pkg alike, is built from bundles that already carry theirs.
+          for b in "${BUNDLES[@]}"; do cp -R "$b" stage/; done
+          ditto -c -k stage dist/_bundles.zip
+          xcrun notarytool submit dist/_bundles.zip --keychain-profile "$NOTARY" --wait
+          rm -f dist/_bundles.zip
+
+          rm -rf stage && mkdir -p stage
+          for b in "${BUNDLES[@]}"; do
+            xcrun stapler staple "$b"
+            xcrun stapler validate "$b"
+            codesign --verify --deep --strict "$b"
+            cp -R "$b" stage/
+          done
 
           ditto -c -k stage "dist/OrbitAmp-$VER-macOS.zip"
 

@@ -826,6 +826,58 @@ int main()
         report ("a bypassed block still carries the delay it would have had", ok);
     }
 
+    // WHAT THE PLUGIN TELLS A HOST ABOUT ITS OWN TAIL. It used to be a flat eight seconds, which
+    // is wrong in both directions: a big room rings longer than that, and a rig with neither the
+    // room nor the echo in it rings for no time at all while the host renders eight seconds of
+    // silence onto every bounce.
+    {
+        const auto tailOwned = std::make_unique<orbitamp::AmpProcessor>();
+        auto& amp = *tailOwned;
+        amp.prepareToPlay (sampleRate, blockSize);
+
+        const auto tailWith = [&amp] (bool delayIn, bool reverbIn)
+        {
+            set (amp, orbitamp::params::delayPresent,  delayIn  ? 1.0f : 0.0f);
+            set (amp, orbitamp::params::reverbPresent, reverbIn ? 1.0f : 0.0f);
+            return amp.getTailLengthSeconds();
+        };
+
+        // A HALL breathing at double: room 0.98, 0.974 per pass round a 36.7 ms comb.
+        set (amp, orbitamp::params::reverbType, 2.0f);   // Hall
+        set (amp, orbitamp::params::reverbDecay, 2.0f);
+        set (amp, orbitamp::params::reverbPredelay, 0.0f);
+
+        // Two seconds of echo at 95%: a hundred and thirty times round before a thousandth.
+        set (amp, orbitamp::params::delaySync, 0.0f);
+        set (amp, orbitamp::params::delayTimeMs, 2000.0f);
+        set (amp, orbitamp::params::delayRepeats, 95.0f);
+
+        // The stages take their settings from the pump, not from the parameter write.
+        for (int i = 0; i < 8; ++i)
+        {
+            juce::AudioBuffer<float> b (2, blockSize);
+            juce::MidiBuffer m;
+            b.clear();
+            amp.processBlock (b, m);
+        }
+
+        const double bare  = tailWith (false, false);
+        const double room  = tailWith (false, true);
+        const double echo  = tailWith (true,  false);
+        const double both  = tailWith (true,  true);
+
+        std::printf ("\ntail: nothing %.2f s | room %.2f s | echo %.2f s | both %.2f s\n",
+                     bare, room, echo, both);
+
+        report ("nothing that rings asks the host for nothing", bare < 1.0, juce::String (bare, 2) + " s");
+        report ("a hall at double decay outlives the old eight", room > 9.0 && room < 12.0,
+                juce::String (room, 2) + " s");
+        report ("a long echo at 95% asks for far more than eight", echo > 60.0 || echo >= 30.0,
+                juce::String (echo, 2) + " s");
+        report ("and no more than the cap, however long it rings", both <= 30.0 + 1.0e-6,
+                juce::String (both, 2) + " s");
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }

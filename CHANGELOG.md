@@ -5,6 +5,28 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] — 2026-09-07 — the plugin stops guessing how long it rings
+
+Two things 0.5.0 was not telling the truth about, both found by reading it back the morning after.
+
+### Fixed
+- **The declared tail was a flat eight seconds, and eight is wrong in both directions.** A host asks
+  how long this keeps sounding after the input goes quiet — for an offline bounce, for a freeze,
+  for deciding when it may stop calling us — and it asks about every silence, not only about a
+  block standing by. Eight was too SHORT: a HALL at double decay rings for nearly ten, and a
+  two-second echo at 95% repeats takes over four minutes to fall to a thousandth of itself, so a
+  bounce could end mid-tail. It was also too LONG: with the room and the echo out of the rig there
+  is nothing here that rings at all, and every bounce still had eight seconds of silence rendered
+  onto the end of it. The two links that have tails are asked what theirs currently is, and only
+  while they are in the rig — capped at thirty seconds, because a delay at a hundred per cent
+  repeats never decays and no honest number exists for it.
+- **The plug-ins in the macOS .zip carried no stapled notarization ticket.** They were notarized —
+  they went up with the installer — but only the standalone was submitted on its own and so only
+  the standalone came back with a ticket attached, and stapling the .pkg staples the package, not
+  what is inside it. Gatekeeper would fetch the verdict over the network on first load; a stapled
+  ticket is that same verdict already in the bundle, which is what a machine with no network needs.
+  One submission now carries all four, and each is stapled before anything is packed.
+
 ## [0.5.0] — 2026-09-07 — a rig you assemble, and a bypass that behaves like an insert
 
 The case this one exists for: a player could switch a block off, but not decide which blocks their

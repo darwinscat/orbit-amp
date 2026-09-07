@@ -63,12 +63,36 @@ public:
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }
-    /** NOT zero any more. Standing a room or an echo by leaves it ringing on purpose — that is
-        what an insert's bypass does — so a host told there is no tail may cut an offline render or
-        a freeze exactly where we started holding one. The longest thing in here is the delay's own
-        line; the reverb's decay is shorter than that. Declared generously: the cost of over-stating
-        a tail is a little extra rendering, and the cost of under-stating it is a truncated one. */
-    double getTailLengthSeconds() const override             { return 8.0; }
+    /** HOW LONG THIS GOES ON SOUNDING after the last note went in — asked by a host that is
+        rendering offline, freezing a track, or deciding when it may stop calling us.
+
+        It is not about the bypass, though that is where it was noticed. It is about every moment
+        the input goes quiet while something in here is still ringing, which is most of the time a
+        player stops playing.
+
+        It used to be a flat eight seconds, and eight is the wrong number in both directions. Too
+        short: a HALL at DECAY ×2 rings for nearly ten, and a two-second echo at 95% repeats takes
+        over four minutes to reach a thousandth of itself. Too long: with the room and the echo out
+        of the rig there is nothing here to ring at all, and a host was still rendering eight
+        seconds of silence onto the end of every bounce. So the two links that HAVE tails are asked
+        what theirs currently is, and only while they are in the rig.
+
+        Capped, because a delay at a hundred per cent repeats never decays and no honest number
+        exists for it: thirty seconds is far past any musical use of an echo and still nothing to
+        render. The floor covers what has no tail worth computing — the cabinet's impulse and the
+        smoothing everywhere. */
+    double getTailLengthSeconds() const override
+    {
+        double tail = 0.25;   // the cabinet's impulse and every ramp in here
+
+        if (linkInRig (params::rowDelay))
+            tail = juce::jmax (tail, (double) delay.tailSeconds());
+
+        if (linkInRig (params::rowReverb))
+            tail = juce::jmax (tail, (double) reverb.tailSeconds());
+
+        return juce::jmin (tail, 30.0);
+    }
 
     int getNumPrograms() override                            { return 1; }
     int getCurrentProgram() override                         { return 0; }

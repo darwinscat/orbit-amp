@@ -82,15 +82,33 @@ public:
 
     /** The head's destination, in milliseconds — free or computed from BPM by the caller.
         The line glides there; big moves bend. */
+    /** HOW LONG THE LINE GOES ON SOUNDING after the last note went in, in seconds — what the
+        plugin has to be able to tell a host that is rendering offline.
+
+        A recirculating line loses `repeats` of itself every time round, so reaching a thousandth
+        of what went in takes `time × ln(0.001) / ln(repeats)` — a hundred and thirty times round
+        at 95%, which at two seconds is over four minutes. At zero it is one echo and done; at one
+        it never decays at all, and the answer is whatever ceiling the caller is willing to name.
+
+        Deliberately the LONG estimate: the record head's darkening and its saturator both bleed
+        the loop further, so the real tail is shorter than this. Erring long costs a host a little
+        silence at the end of a bounce; erring short costs the end of the sound. */
+    float tailSeconds() const noexcept { return tailSec.load (std::memory_order_relaxed); }
+
     void setTimeMs (float ms) noexcept
     {
         timeMs = juce::jmax (1.0f, ms);
+        refreshTail();
         shownTimeMs.store (timeMs, std::memory_order_relaxed);   // process() overwrites with the glide
     }
 
     /** Feedback, 0..1. The dark filter and the saturator live inside the loop, so even 1 is a
         long compressed bloom rather than a runaway. */
-    void setRepeats (float amount) noexcept { repeats = juce::jlimit (0.0f, 1.0f, amount); }
+    void setRepeats (float amount) noexcept
+    {
+        repeats = juce::jlimit (0.0f, 1.0f, amount);
+        refreshTail();
+    }
 
     /** The loop low pass corner — LOWER is darker, and every pass darkens again. */
     void setDarkHz (float hz) noexcept
@@ -241,6 +259,22 @@ private:
     // The saturator, fixed by taste: gentle at echo level, a press at full recirculation.
     static constexpr float satDrive = 1.2f;
     static constexpr float satNorm  = 1.0f / satDrive;
+
+    /** Worked out where the two numbers it depends on are set, rather than where it is asked:
+        the asker is the message thread and these are the audio thread's. Two logarithms on a knob
+        move, and an atomic to read. */
+    void refreshTail() noexcept
+    {
+        const double t = (double) timeMs * 0.001;
+        const double g = (double) repeats;
+
+        tailSec.store ((float) (g <= 0.0   ? t
+                              : g >= 1.0   ? 1.0e6            // never decays; the caller caps it
+                                           : t * std::log (0.001) / std::log (g)),
+                       std::memory_order_relaxed);
+    }
+
+    std::atomic<float> tailSec { 0.35f };
 
     float timeMs   = 350.0f;
     float repeats  = 0.35f;
