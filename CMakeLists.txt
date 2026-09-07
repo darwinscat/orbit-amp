@@ -152,7 +152,7 @@ FetchContent_MakeAvailable(felitronics_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.19.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.20.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -367,14 +367,15 @@ else()
 endif()
 
 # ----------------------------------------------------------------------------
-# Embedded assets. Michroma (OFL) is the family's display face and it lives in felitronics-appkit's
-# assets/ — referenced there, NOT copied here, so there is one copy of the file in the ecosystem.
+# Embedded assets. The display FACE is not among them: appkit carries Michroma itself, whole, as
+# code, so a product that embedded it too was putting a second copy of the same font in every
+# binary and parsing both at startup. The mark still comes from appkit's assets/ — referenced
+# there, NOT copied here, so there is one copy of the file in the ecosystem.
 # felitronics_appkit_SOURCE_DIR is set by FetchContent above and points at whichever source won
 # (local checkout or fetched release).
 # ----------------------------------------------------------------------------
 juce_add_binary_data(OrbitAmpData
     SOURCES
-        "${felitronics_appkit_SOURCE_DIR}/assets/Michroma-Regular.ttf"
         "${felitronics_appkit_SOURCE_DIR}/assets/catlogo.svg"
 
         # The trademark notice, as text rather than as a string literal: it is a legal sentence that
@@ -423,7 +424,7 @@ target_include_directories(OrbitAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")   # Orbi
 add_dependencies(OrbitAmp OrbitAmpVersionGen)                            # ...rebaked before every build
 
 target_link_libraries(OrbitAmp PRIVATE
-    OrbitAmpData                     # embedded Michroma — BinaryData::* symbols
+    OrbitAmpData                     # the mark, the notice, the demo loops — BinaryData::*
     felitronics::analysis            # spectrum taps + panes behind the EQ curves
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::appkit_webp         # juce::Image <- WebP, for the picture a pack ships

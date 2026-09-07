@@ -30,9 +30,8 @@ Chrome::Chrome (AmpProcessor& processor)
               .text       = theme::tx,
               .textDim    = theme::txDim,
               .activeText = juce::Colours::white },
-      brand (BinaryData::catlogo_svg, (size_t) BinaryData::catlogo_svgSize,
-             BinaryData::MichromaRegular_ttf, (size_t) BinaryData::MichromaRegular_ttfSize,
-             "OrbitAmp", "https://darwinscat.com/orbitamp?utm_source=orbitamp&utm_medium=plugin"),
+      // The family's own kit: appkit carries the mark and the face, so nothing here embeds either.
+      brand ("OrbitAmp", "https://darwinscat.com/orbitamp?utm_source=orbitamp&utm_medium=plugin"),
       preset (theme)
 {
     auto& history = amp.history;
