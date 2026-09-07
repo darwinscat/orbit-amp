@@ -17,8 +17,10 @@ Two things 0.5.0 was not telling the truth about, both found by reading it back 
   two-second echo at 95% repeats takes over four minutes to fall to a thousandth of itself, so a
   bounce could end mid-tail. It was also too LONG: with the room and the echo out of the rig there
   is nothing here that rings at all, and every bounce still had eight seconds of silence rendered
-  onto the end of it. The two links that have tails are asked what theirs currently is, and only
-  while they are in the rig — capped at thirty seconds, because a delay at a hundred per cent
+  onto the end of it. The three links that have tails — the echo, the room and the speaker's own
+  impulse — are asked what theirs currently is, and only while they are in the rig. They ADD UP
+  rather than compete, because they are in series: an echo leaving two seconds after the note is
+  what the room then rings about. Capped at thirty seconds, because a delay at a hundred per cent
   repeats never decays and no honest number exists for it.
 - **The plug-ins in the macOS .zip carried no stapled notarization ticket.** They were notarized —
   they went up with the installer — but only the standalone was submitted on its own and so only

@@ -135,9 +135,13 @@ public:
         left. Dry never moves. */
     void setOffsetMs (float ms) noexcept
     {
+        const float before = offsetMs;
         offsetMs = juce::jlimit (-1000.0f * (float) maxOffsetSeconds,
                                   1000.0f * (float) maxOffsetSeconds, ms);
         shownOffsetMs.store (offsetMs, std::memory_order_relaxed);
+
+        if (! juce::approximatelyEqual (before, offsetMs))
+            refreshTail();
     }
 
     /** 0 = fully dry, 1 = the repeats added at unity. Dry never moves. */
@@ -278,12 +282,17 @@ private:
         nobody touched. */
     void refreshTail() noexcept
     {
-        const double t = (double) timeMs * 0.001;
-        const double g = (double) repeats;
+        const double t   = (double) timeMs * 0.001;
+        const double g    = (double) repeats;
+        const double off  = std::abs ((double) offsetMs) * 0.001;   // one side arrives this much later
 
-        tailSec.store ((float) (g <= 0.0   ? t
-                              : g >= 1.0   ? 1.0e6            // never decays; the caller caps it
-                                           : t * std::log (0.001) / std::log (g)),
+        // The echoes are DISCRETE, and the n-th of them leaves at n·t carrying g^(n-1). So the one
+        // that first falls under a thousandth is `1 + ln(0.001)/ln(g)` of them, not `ln/ln` — the
+        // envelope's answer is one whole traversal early, and at two seconds that is two seconds
+        // of missing tail.
+        tailSec.store ((float) (off + (g <= 0.0 ? t
+                                     : g >= 1.0 ? 1.0e6            // never decays; the caller caps it
+                                                : t * (1.0 + std::log (0.001) / std::log (g)))),
                        std::memory_order_relaxed);
     }
 

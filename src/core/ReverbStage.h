@@ -244,7 +244,9 @@ private:
     void refreshTail() noexcept
     {
         const double g    = (double) roomSizeNow() * 0.28 + 0.7;   // juce::Reverb's own room scaling
-        const double comb = 1617.0 / 44100.0;                      // its longest comb, in seconds
+        // Its longest comb, in seconds — the RIGHT channel's, which JUCE spreads 23 samples past
+        // the left one's 1617. Rate-independent: the tunings are scaled by the sample rate.
+        const double comb = (1617.0 + 23.0) / 44100.0;
         tailSec.store ((float) ((double) predelayMs * 0.001 + comb * std::log (0.001) / std::log (g)),
                        std::memory_order_relaxed);
     }

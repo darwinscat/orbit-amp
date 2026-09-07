@@ -77,19 +77,26 @@ public:
         seconds of silence onto the end of every bounce. So the two links that HAVE tails are asked
         what theirs currently is, and only while they are in the rig.
 
+        THEY ADD UP, they do not compete. The links are in SERIES: an echo that leaves the delay
+        two seconds after the note is what the room then has to ring about, and the speaker is
+        still saying its piece after that. Taking the longest of the three would report two seconds
+        for a rig that is audibly going for six.
+
         Capped, because a delay at a hundred per cent repeats never decays and no honest number
         exists for it: thirty seconds is far past any musical use of an echo and still nothing to
-        render. The floor covers what has no tail worth computing — the cabinet's impulse and the
-        smoothing everywhere. */
+        render. Floored at a tenth for the ramps and the models' own few milliseconds. */
     double getTailLengthSeconds() const override
     {
-        double tail = 0.25;   // the cabinet's impulse and every ramp in here
+        double tail = 0.1;   // every ramp in here, and the models' handful of milliseconds
 
         if (linkInRig (params::rowDelay))
-            tail = juce::jmax (tail, (double) delay.tailSeconds());
+            tail += (double) delay.tailSeconds();
 
         if (linkInRig (params::rowReverb))
-            tail = juce::jmax (tail, (double) reverb.tailSeconds());
+            tail += (double) reverb.tailSeconds();
+
+        if (linkInRig (params::rowCab))
+            tail += (double) cab.tailSeconds();
 
         return juce::jmin (tail, 30.0);
     }
