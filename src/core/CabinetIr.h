@@ -10,6 +10,7 @@
 #include <juce_dsp/juce_dsp.h>
 
 #include <algorithm>
+#include <atomic>
 
 namespace orbitamp::core
 {
@@ -199,11 +200,25 @@ private:
         ir.applyGain (felitronics::measurement::referenceUnityGain (
             ir.getArrayOfReadPointers(), ir.getNumChannels(), ir.getNumSamples(), rawRate));
 
+        // What this speaker goes on saying after the guitar stops — the plugin has to be able to
+        // tell a host, and an impulse is exactly as long as it is. `Trim::yes` may shorten it
+        // further at the tail; taking the length before that errs long, which is the side to be
+        // wrong on. Stored where the load happens, read from wherever the host asks.
+        tailSec.store ((float) ((double) ir.getNumSamples() / juce::jmax (1.0, rawRate)),
+                       std::memory_order_relaxed);
+
         conv.loadImpulseResponse (std::move (ir), rawRate,
                                   juce::dsp::Convolution::Stereo::no,
                                   juce::dsp::Convolution::Trim::yes,
                                   juce::dsp::Convolution::Normalise::no);
     }
+
+public:
+    /** How long the loaded impulse is, in seconds — this block's whole tail. */
+    float tailSeconds() const noexcept { return tailSec.load (std::memory_order_relaxed); }
+
+private:
+    std::atomic<float> tailSec { 0.0f };
 
     juce::dsp::Convolution conv;
     int channels = 2;

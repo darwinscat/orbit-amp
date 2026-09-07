@@ -82,15 +82,44 @@ public:
 
     /** The head's destination, in milliseconds — free or computed from BPM by the caller.
         The line glides there; big moves bend. */
+    /** HOW LONG THE LINE GOES ON SOUNDING after the last note went in, in seconds — what the
+        plugin has to be able to tell a host that is rendering offline.
+
+        A recirculating line loses `repeats` of itself every time round, so reaching a thousandth
+        of what went in takes `time × ln(0.001) / ln(repeats)` — a hundred and thirty times round
+        at 95%, which at two seconds is over four minutes. At zero it is one echo and done; at one
+        it never decays at all, and the answer is whatever ceiling the caller is willing to name.
+
+        Deliberately the LONG estimate: the record head's darkening and its saturator both bleed
+        the loop further, so the real tail is shorter than this. Erring long costs a host a little
+        silence at the end of a bounce; erring short costs the end of the sound. */
+    float tailSeconds() const noexcept { return tailSec.load (std::memory_order_relaxed); }
+
     void setTimeMs (float ms) noexcept
     {
-        timeMs = juce::jmax (1.0f, ms);
+        const float want = juce::jmax (1.0f, ms);
+
+        if (! juce::approximatelyEqual (want, timeMs))
+        {
+            timeMs = want;
+            refreshTail();
+        }
+
         shownTimeMs.store (timeMs, std::memory_order_relaxed);   // process() overwrites with the glide
     }
 
     /** Feedback, 0..1. The dark filter and the saturator live inside the loop, so even 1 is a
         long compressed bloom rather than a runaway. */
-    void setRepeats (float amount) noexcept { repeats = juce::jlimit (0.0f, 1.0f, amount); }
+    void setRepeats (float amount) noexcept
+    {
+        const float want = juce::jlimit (0.0f, 1.0f, amount);
+
+        if (juce::approximatelyEqual (want, repeats))
+            return;
+
+        repeats = want;
+        refreshTail();
+    }
 
     /** The loop low pass corner — LOWER is darker, and every pass darkens again. */
     void setDarkHz (float hz) noexcept
@@ -106,9 +135,13 @@ public:
         left. Dry never moves. */
     void setOffsetMs (float ms) noexcept
     {
+        const float before = offsetMs;
         offsetMs = juce::jlimit (-1000.0f * (float) maxOffsetSeconds,
                                   1000.0f * (float) maxOffsetSeconds, ms);
         shownOffsetMs.store (offsetMs, std::memory_order_relaxed);
+
+        if (! juce::approximatelyEqual (before, offsetMs))
+            refreshTail();
     }
 
     /** 0 = fully dry, 1 = the repeats added at unity. Dry never moves. */
@@ -241,6 +274,29 @@ private:
     // The saturator, fixed by taste: gentle at echo level, a press at full recirculation.
     static constexpr float satDrive = 1.2f;
     static constexpr float satNorm  = 1.0f / satDrive;
+
+    /** Worked out where the two numbers it depends on are set, rather than where it is asked: the
+        asker may be any thread the host likes and these are the audio thread's. Both setters are
+        called every block from `processBlock`, so both check first — two logarithms are nothing
+        against a neural model, and they are still two logarithms in the audio path for a knob
+        nobody touched. */
+    void refreshTail() noexcept
+    {
+        const double t   = (double) timeMs * 0.001;
+        const double g    = (double) repeats;
+        const double off  = std::abs ((double) offsetMs) * 0.001;   // one side arrives this much later
+
+        // The echoes are DISCRETE, and the n-th of them leaves at n·t carrying g^(n-1). So the one
+        // that first falls under a thousandth is `1 + ln(0.001)/ln(g)` of them, not `ln/ln` — the
+        // envelope's answer is one whole traversal early, and at two seconds that is two seconds
+        // of missing tail.
+        tailSec.store ((float) (off + (g <= 0.0 ? t
+                                     : g >= 1.0 ? 1.0e6            // never decays; the caller caps it
+                                                : t * (1.0 + std::log (0.001) / std::log (g)))),
+                       std::memory_order_relaxed);
+    }
+
+    std::atomic<float> tailSec { 0.35f };
 
     float timeMs   = 350.0f;
     float repeats  = 0.35f;

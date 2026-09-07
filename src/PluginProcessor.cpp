@@ -121,6 +121,12 @@ AmpProcessor::AmpProcessor()
     seedSwitchNames();
     history.reset();
     history.markSaved();
+
+    // The two links that HAVE a tail are told what their knobs say before anyone can ask how long
+    // this rings. `prepareToPlay` does this too, but a VST3 host may ask before it activates the
+    // plugin at all, and an answer built out of the stages' constructor defaults is not an answer.
+    updateDelaySettings();
+    updateReverbSettings();
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)

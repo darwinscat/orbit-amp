@@ -8,6 +8,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -121,7 +122,32 @@ public:
     }
 
     /** How long the attack stays dry before the tail arrives, 0..100 ms. */
-    void setPredelayMs (float ms) noexcept { predelayMs = juce::jlimit (0.0f, 100.0f, ms); }
+    void setPredelayMs (float ms) noexcept
+    {
+        const float want = juce::jlimit (0.0f, 100.0f, ms);
+
+        // Guarded because `processBlock` sets this every block and `refreshTail` takes a
+        // logarithm. `apply()` needs no such check: its own two setters already have one.
+        if (juce::approximatelyEqual (want, predelayMs))
+            return;
+
+        predelayMs = want;
+        refreshTail();
+    }
+
+    /** HOW LONG THE ROOM GOES ON SOUNDING after the last note went in, in seconds — what the
+        plugin has to be able to tell a host that is rendering offline.
+
+        Freeverb is a bank of combs, and the longest of them is 1617 samples of the 44.1 kHz it was
+        written for — 36.7 ms, whatever this session runs at, because JUCE scales the tuning with
+        the rate. Each pass round loses `roomSize × 0.28 + 0.7` of itself, so reaching a thousandth
+        takes that comb's length times `ln(0.001) / ln(g)`. A HALL at DECAY ×2 clamps the room to
+        0.98, which is 0.974 per pass and a shade under ten seconds — longer than the flat eight
+        this used to be declared as.
+
+        The damping in each comb's loop takes the top off faster than this, so the estimate is long
+        rather than short, which is the side to be wrong on. */
+    float tailSeconds() const noexcept { return tailSec.load (std::memory_order_relaxed); }
 
     /** The tail's own high-pass — the WET only, always in: a low tail is mud in any speaker, and
         at the 40 Hz floor the filter is as good as air. */
@@ -193,25 +219,60 @@ public:
     }
 
 private:
-    void apply() noexcept
+    /** The room the character asks for, as DECAY leaves it — the one place this is worked out. */
+    float roomSizeNow() const noexcept
     {
-        juce::Reverb::Parameters p;
+        float room = 0.35f;
 
         switch (character)
         {
             // The room you don't hear as an effect: tiny, dark, gone before the next note.
-            case Character::ambience: p.roomSize = 0.15f; p.damping = 0.85f; p.width = 0.90f; break;
-            case Character::room:     p.roomSize = 0.35f; p.damping = 0.50f; p.width = 0.80f; break;
-            case Character::hall:     p.roomSize = 0.85f; p.damping = 0.30f; p.width = 1.00f; break;
-            case Character::plate:    p.roomSize = 0.60f; p.damping = 0.15f; p.width = 1.00f; break;
-            case Character::spring:   p.roomSize = 0.25f; p.damping = 0.70f; p.width = 0.45f; break;
+            case Character::ambience:  room = 0.15f; break;
+            case Character::room:      room = 0.35f; break;
+            case Character::hall:      room = 0.85f; break;
+            case Character::plate:     room = 0.60f; break;
+            case Character::spring:    room = 0.25f; break;
             // The dressed tail: a big smooth room the chorus will ride.
-            case Character::modulated: p.roomSize = 0.70f; p.damping = 0.25f; p.width = 1.00f; break;
+            case Character::modulated: room = 0.70f; break;
         }
 
         // DECAY breathes through the room size: half-to-double maps to a quarter of the scale
         // either way, clamped clear of runaway.
-        p.roomSize = juce::jlimit (0.05f, 0.98f, p.roomSize + std::log2 (decayScale) * 0.25f);
+        return juce::jlimit (0.05f, 0.98f, room + std::log2 (decayScale) * 0.25f);
+    }
+
+    void refreshTail() noexcept
+    {
+        const double g    = (double) roomSizeNow() * 0.28 + 0.7;   // juce::Reverb's own room scaling
+        // Its longest comb, in seconds — the RIGHT channel's, which JUCE spreads 23 samples past
+        // the left one's 1617. Rate-independent: the tunings are scaled by the sample rate.
+        const double comb = (1617.0 + 23.0) / 44100.0;
+        // The same off-by-one the echo has, for the same reason: the energy of the k-th pass sits
+        // in the interval that ENDS at (k+1) combs, so the last one still above a thousandth runs
+        // one comb longer than the envelope's answer.
+        tailSec.store ((float) ((double) predelayMs * 0.001
+                                  + comb * (1.0 + std::log (0.001) / std::log (g))),
+                       std::memory_order_relaxed);
+    }
+
+    void apply() noexcept
+    {
+        juce::Reverb::Parameters p;
+        p.roomSize = roomSizeNow();
+
+        switch (character)
+        {
+            // The room you don't hear as an effect: tiny, dark, gone before the next note.
+            case Character::ambience:  p.damping = 0.85f; p.width = 0.90f; break;
+            case Character::room:      p.damping = 0.50f; p.width = 0.80f; break;
+            case Character::hall:      p.damping = 0.30f; p.width = 1.00f; break;
+            case Character::plate:     p.damping = 0.15f; p.width = 1.00f; break;
+            case Character::spring:    p.damping = 0.70f; p.width = 0.45f; break;
+            // The dressed tail: a big smooth room the chorus will ride.
+            case Character::modulated: p.damping = 0.25f; p.width = 1.00f; break;
+        }
+
+        refreshTail();
 
         // The wet path is OURS now: Freeverb runs fully wet (1/3 undoes its ×3), the dry never
         // enters it, and the ADD at the mix happens in process().
@@ -270,6 +331,7 @@ private:
     Character character  = Character::room;
     float     mix        = 0.2f;
     float     decayScale = 1.0f;
+    std::atomic<float> tailSec { 1.0f };   // see tailSeconds()
     float     predelayMs = 0.0f;
     float     hpfHz      = 120.0f;
 

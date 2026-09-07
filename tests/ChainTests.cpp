@@ -826,6 +826,85 @@ int main()
         report ("a bypassed block still carries the delay it would have had", ok);
     }
 
+    // WHAT THE PLUGIN TELLS A HOST ABOUT ITS OWN TAIL. It used to be a flat eight seconds, which
+    // is wrong in both directions: a big room rings longer than that, a long echo very much
+    // longer, and a rig with none of the ringing links in it rings for no time at all while the
+    // host renders eight seconds of silence onto every bounce.
+    {
+        const auto tailOwned = std::make_unique<orbitamp::AmpProcessor>();
+        auto& amp = *tailOwned;
+        amp.prepareToPlay (sampleRate, blockSize);
+
+        const auto tailWith = [&amp] (bool delayIn, bool reverbIn, bool cabIn)
+        {
+            set (amp, orbitamp::params::delayPresent,  delayIn  ? 1.0f : 0.0f);
+            set (amp, orbitamp::params::reverbPresent, reverbIn ? 1.0f : 0.0f);
+            set (amp, orbitamp::params::cabPresent,    cabIn    ? 1.0f : 0.0f);
+            return amp.getTailLengthSeconds();
+        };
+
+        // A HALL breathing at double: room 0.98, 0.974 per pass round a 37.2 ms comb.
+        set (amp, orbitamp::params::reverbType, 2.0f);   // Hall
+        set (amp, orbitamp::params::reverbDecay, 2.0f);
+        set (amp, orbitamp::params::reverbPredelay, 0.0f);
+
+        // Two seconds of echo, and NO repeats: one echo, so the delay's own tail is exactly its
+        // time — the number that makes the serial sum easy to read.
+        set (amp, orbitamp::params::delaySync, 0.0f);
+        set (amp, orbitamp::params::delayTimeMs, 2000.0f);
+        set (amp, orbitamp::params::delayRepeats, 0.0f);
+        set (amp, orbitamp::params::delayOffset, 0.0f);
+
+        // The stages take their settings from the pump, not from the parameter write.
+        for (int i = 0; i < 8; ++i)
+        {
+            juce::AudioBuffer<float> b (2, blockSize);
+            juce::MidiBuffer m;
+            b.clear();
+            amp.processBlock (b, m);
+        }
+
+        const double bare  = tailWith (false, false, false);
+        const double spkr  = tailWith (false, false, true);
+        const double room  = tailWith (false, true,  false);
+        const double echo  = tailWith (true,  false, false);
+        const double two   = tailWith (true,  true,  false);
+
+        set (amp, orbitamp::params::delayRepeats, 95.0f);
+        for (int i = 0; i < 4; ++i)
+        {
+            juce::AudioBuffer<float> b (2, blockSize);
+            juce::MidiBuffer m;
+            b.clear();
+            amp.processBlock (b, m);
+        }
+        const double runaway = tailWith (true, true, true);
+
+        std::printf ("\ntail: nothing %.2f | speaker %.2f | room %.2f | echo %.2f | echo+room %.2f"
+                     " | 95%% repeats %.2f  (seconds)\n", bare, spkr, room, echo, two, runaway);
+
+        report ("nothing that rings asks the host for nothing", bare < 0.5,
+                juce::String (bare, 2) + " s");
+        report ("the speaker alone asks for its own impulse", spkr > bare + 0.5 && spkr < 3.0,
+                juce::String (spkr, 2) + " s");
+        report ("a hall at double decay outlives the old eight", room > 9.0 && room < 12.0,
+                juce::String (room, 2) + " s");
+        // Nothing can tell a host this number moved, so while a link that CAN be set to ring long
+        // is in the rig the answer never drops below the flat eight that shipped before it. A
+        // single two-second echo is really 2.1; a host that asked once and cached it would be
+        // told 8, which is what it used to be told anyway.
+        report ("a link that can ring long never asks below the old eight",
+                echo >= 8.0 && echo < 8.01, juce::String (echo, 2) + " s");
+
+        // The links are in SERIES: the echo is what the room rings ABOUT, so the two add rather
+        // than compete. Taking the longest of them would report the room's number and cut the
+        // echo's own two seconds off the end of every bounce.
+        report ("an echo into a room asks for both, not the longer", two > room + 1.5,
+                juce::String (two, 2) + " s vs " + juce::String (room, 2));
+        report ("and never more than the cap, however long it rings", runaway <= 30.0 + 1.0e-6,
+                juce::String (runaway, 2) + " s");
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }

@@ -63,12 +63,60 @@ public:
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }
-    /** NOT zero any more. Standing a room or an echo by leaves it ringing on purpose — that is
-        what an insert's bypass does — so a host told there is no tail may cut an offline render or
-        a freeze exactly where we started holding one. The longest thing in here is the delay's own
-        line; the reverb's decay is shorter than that. Declared generously: the cost of over-stating
-        a tail is a little extra rendering, and the cost of under-stating it is a truncated one. */
-    double getTailLengthSeconds() const override             { return 8.0; }
+    /** HOW LONG THIS GOES ON SOUNDING after the last note went in — asked by a host that is
+        rendering offline, freezing a track, or deciding when it may stop calling us.
+
+        It is not about the bypass, though that is where it was noticed. It is about every moment
+        the input goes quiet while something in here is still ringing, which is most of the time a
+        player stops playing.
+
+        It used to be a flat eight seconds, and eight is the wrong number in both directions. Too
+        short: a HALL at DECAY ×2 rings for nearly ten, and a two-second echo at 95% repeats takes
+        over four minutes to reach a thousandth of itself. Too long: with the room and the echo out
+        of the rig there is nothing here to ring at all, and a host was still rendering eight
+        seconds of silence onto the end of every bounce. So the two links that HAVE tails are asked
+        what theirs currently is, and only while they are in the rig.
+
+        THEY ADD UP, they do not compete. The links are in SERIES: an echo that leaves the delay
+        two seconds after the note is what the room then has to ring about, and the speaker is
+        still saying its piece after that. Taking the longest of the three would report two seconds
+        for a rig that is audibly going for six.
+
+        Capped, because a delay at a hundred per cent repeats never decays and no honest number
+        exists for it: thirty seconds is far past any musical use of an echo and still nothing to
+        render. Floored at a tenth for the ramps and the models' own few milliseconds. */
+    double getTailLengthSeconds() const override
+    {
+        double tail = 0.1;   // every ramp in here, and the models' handful of milliseconds
+
+        if (linkInRig (params::rowDelay))
+            tail += (double) delay.tailSeconds();
+
+        if (linkInRig (params::rowReverb))
+            tail += (double) reverb.tailSeconds();
+
+        if (linkInRig (params::rowCab))
+            tail += (double) cab.tailSeconds();
+
+        // A FLOOR, BECAUSE NOTHING CAN TELL A HOST THIS NUMBER MOVED. There is no such message in
+        // any of the three wrappers — JUCE's change notifications carry latency, programs, state
+        // and parameter info, and nothing for a tail — so a host that asks once, when it activates
+        // the plugin, keeps whatever answer it got. If it asked while the echo was at its default
+        // and the player then dials two seconds at ninety per cent, the honest live number never
+        // reaches it, and one host at least stops calling a plugin at all after `tail` seconds of
+        // silence: that would cut a tail while PLAYING, not only in a bounce.
+        //
+        // So while either link that can be set to ring long is in the rig, the answer is never
+        // below the flat eight this used to be. Both of the wins survive it — a rig with neither
+        // of them asks for a second and a bit instead of eight, and a hall breathing at double is
+        // no longer cut at eight — and the one case that stays wrong in a caching host is one
+        // where the old constant was exactly as wrong. Lifting the floor is a thing to do after
+        // watching a real session in Cubase and Logic, not before.
+        if (linkInRig (params::rowDelay) || linkInRig (params::rowReverb))
+            tail = juce::jmax (tail, 8.0);
+
+        return juce::jmin (tail, 30.0);
+    }
 
     int getNumPrograms() override                            { return 1; }
     int getCurrentProgram() override                         { return 0; }
