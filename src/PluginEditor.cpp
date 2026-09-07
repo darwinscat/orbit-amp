@@ -68,22 +68,13 @@ AmpEditor::AmpEditor (AmpProcessor& p)
 
     // THE GEAR IS THE WINDOW. It used to drop a popup with a door to Setup, two doors to pages
     // nobody sets anything on, and four switches — which is how a settings menu becomes a place
-    // things are hidden. One window, three pages, and the two pages that are only read reached
+    // things are hidden. One window, two pages, and the two pages that are only read reached
     // from where they are ABOUT: the version stamp and DEVICES, both at the bottom.
     chrome.onGear = [this] (juce::Point<int>) { setup.open(); };
 
     footer.onDevices = [this] { devices.open(); };
 
-    setup.onViewChanged = [this]
-    {
-        faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
-        faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
-        dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
-        showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
-        showGlyphs = prefs::getBool (prefs::showGlyphs, false);
-        applyRowStates();
-        repaint();
-    };
+    setup.onViewChanged = [this] { applyViewPrefs(); };
 
     // FULL SCREEN, the honest kind: the aspect is locked, so a native fullscreen would only
     // letterbox the device in black. Instead the button jumps to the biggest fit the display
@@ -219,6 +210,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
             showLimiterMenu (pos);
         }
     };
+
+    layoutStrip->onChainMenu = [this] (juce::Component& anchor) { showChainMenu (anchor); };
 
     addAndMakeVisible (*layoutStrip);
 
@@ -392,6 +385,95 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     }
 
     return false;
+}
+
+/** The checklist menu's two window switches. The links take 1..numChainRows — off their own
+    indices, so the ids stay right whatever the chain grows into — and these sit well clear. */
+static constexpr int itemGrowBlocks = 101, itemDimStandby = 102;
+
+void AmpEditor::applyViewPrefs()
+{
+    faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
+    faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
+    dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
+    showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
+    showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+    applyRowStates();
+    repaint();
+}
+
+void AmpEditor::showChainMenu (juce::Component& anchor)
+{
+    // The rig itself, straight off the one list and in chain order, so the menu reads as the strip
+    // it edits. The tick is PRESENCE — in the rig or not at all — which is a different question
+    // from standby: that one stays the arrow's own click, and the two must not look alike.
+    juce::PopupMenu m;
+
+    for (int i = 0; i < params::numChainRows; ++i)
+    {
+        const auto& link = params::chainLinks[(size_t) i];
+
+        if (auto* p = amp.apvts.getParameter (link.presentParam))
+            m.addItem (i + 1, link.name, true, p->getValue() > 0.5f);
+    }
+
+    m.addSeparator();
+
+    // What an emptied row does — the eye's business, this machine only, so these two write the
+    // preferences rather than any parameter. They live HERE and nowhere else: they only mean
+    // anything while a link is being taken out, which is the list above.
+    m.addItem (itemGrowBlocks, "KEEP WINDOW HEIGHT", true, prefs::getBool (prefs::growBlocks, true));
+    m.addItem (itemDimStandby, "STANDBY KEEPS ITS PLACE", true, prefs::getBool (prefs::dimStandby, false));
+
+    // ATTACHED to the button, not hung at a point: a menu that does not know its launcher
+    // dismisses synchronously and lets the click through to it, so a second press on the checklist
+    // would close the menu and reopen it in the same breath — JUCE spells this out at
+    // juce_PopupMenu.cpp:724. With the target named, the second press just closes it.
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&anchor),
+                     // Guarded like the limiter's: the parameters outlive this window, the editor
+                     // does not, and this callback reaches back through `this` twice.
+                     [safe = juce::Component::SafePointer<AmpEditor> (this),
+                      home = juce::Component::SafePointer<juce::Component> (&anchor)] (int r)
+                     {
+                         if (safe == nullptr || r == 0)
+                             return;
+
+                         if (r <= params::numChainRows)
+                         {
+                             const auto& link = params::chainLinks[(size_t) (r - 1)];
+
+                             if (auto* p = safe->amp.apvts.getParameter (link.presentParam))
+                             {
+                                 // THE switch: a link's place in the rig is a parameter, so the
+                                 // pick travels in the preset, the undo history and the registers
+                                 // exactly as the Setup page's does.
+                                 const bool on = p->getValue() > 0.5f;
+                                 p->beginChangeGesture();
+                                 p->setValueNotifyingHost (on ? 0.0f : 1.0f);
+                                 p->endChangeGesture();
+                             }
+                         }
+                         else if (r == itemGrowBlocks || r == itemDimStandby)
+                         {
+                             const auto& key = r == itemGrowBlocks ? prefs::growBlocks : prefs::dimStandby;
+                             const bool fallback = r == itemGrowBlocks;
+
+                             prefs::setBool (key, ! prefs::getBool (key, fallback));
+                             safe->applyViewPrefs();
+                         }
+
+                         // Ten ticks in one list: a menu that shuts on every pick would have to be
+                         // opened ten times to build a rig. It comes straight back, on the same
+                         // button, so the whole visit is one visit. Through the message queue, not
+                         // straight from here: JUCE does delete the old menu window before this
+                         // callback runs, but that is its own dismissal order, and a reopen has no
+                         // business depending on it.
+                         juce::MessageManager::callAsync ([safe, home]
+                         {
+                             if (safe != nullptr && home != nullptr)
+                                 safe->showChainMenu (*home);
+                         });
+                     });
 }
 
 void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)

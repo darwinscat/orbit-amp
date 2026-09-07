@@ -43,6 +43,15 @@ public:
         the trim's reset is its own double-click. */
     void showLimiterMenu (juce::Point<int> screenPos);
 
+    /** The strip's checklist: which links are in the rig at all, and — after the separator — the
+        two switches that decide what an emptied row does to the window. */
+    void showChainMenu (juce::Component& anchor);
+
+    /** Re-read the window preferences and lay the editor out to match. Setup's VIEW page and the
+        strip's checklist both write the same prefs, so they both come through here — the panel
+        must not have two opinions about what a pref means. */
+    void applyViewPrefs();
+
 
     /** What the two switches of every row mean to the WINDOW — the tiles, the two columns and
         the tuner's row — read in one place after any of them moves. */
@@ -135,7 +144,7 @@ private:
     DragRuler     inRuler;          // the IN trim's own ladder, summoned by the hand
     DragRuler     outRuler;         // the OUT trim's, mirrored
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
-    SetupPanel    setup;   // constructed with the processor: its EDITOR page writes parameters
+    SetupPanel    setup;   // constructed with the processor: its LIBRARY page reads the packs
     DisclaimerPanel devices;        // DEVICES & TRADEMARKS: the long notice and the list it is about
             // the Setup overlay — last member, so it sits on top
 
