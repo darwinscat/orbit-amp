@@ -32,7 +32,10 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    static constexpr int designHeight = 22;
+    /** Four taller than it was. The strip carries FACTS a player reads — the build, the rate, the
+        cost — and it was setting them at 12 px, under the house floor of 13. The floor won; the
+        strip grew to hold it. */
+    static constexpr int designHeight = 26;
 
     /** The version window — the build stamp, the licence, the short trademark notice and the tip
         jar — opened by a click on the stamp itself. It used to have a second door in the gear's
@@ -50,11 +53,17 @@ private:
     void timerCallback() override;
     void showLoadBreakdown();
 
-    static constexpr int itemWidth   = 92;
-    static constexpr int stereoWidth = 124;   // room for the longest of the three modes, STEREO SPACE
+    // Every width here is the 12 px one scaled by the 13/12 the type grew by: the same words,
+    // the same air around them. `rateWidth` and `loadWidth` are constants rather than literals
+    // because paint() draws in them and resized() puts the click target over them — two places
+    // that must never disagree, and did, as two bare numbers.
+    static constexpr int itemWidth   = 100;
+    static constexpr int stereoWidth = 134;   // room for the longest of the three modes, STEREO SPACE
     static constexpr int gap       = 10;
-    static constexpr int stampWidth = 170;    // the version + format line at the far right
-    static constexpr int devicesWidth = 84;   // the DEVICES door, just left of the stamp
+    static constexpr int stampWidth = 184;    // the version + format line at the far right
+    static constexpr int devicesWidth = 92;   // the DEVICES door, just left of the stamp
+    static constexpr int rateWidth = 104;     // the host's sample rate
+    static constexpr int loadWidth = 108;     // "DSP 12%", and the door to the breakdown
 
     AmpProcessor& amp;
 

@@ -113,13 +113,35 @@ AmpProcessor::AmpProcessor()
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
     rescanDevices();
+
+    // The names go in BEFORE the history looks, so a plugin that has just opened already knows
+    // which device it is playing — and knows it without that knowledge being an edit. Resetting
+    // takes the baseline over the seeded tree; marking it saved undoes the dirty flag the reset
+    // raises, which is right: nothing has been changed, the state was merely completed.
+    seedSwitchNames();
+    history.reset();
+    history.markSaved();
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // Switches ride in the tree by NAME, not by their place in the list — stamped here, on the
-    // message thread, from what each block's pack actually says (see applySwitchAims).
-    stampSwitchAims();
+    // Switches and devices ride in the tree by NAME, and the names are written when they MOVE, so
+    // a save normally has nothing to do here. The one gap is the tick: a control moved in the
+    // 33 ms before the pump next runs would be saved as a new NUMBER beside its old NAME, and the
+    // name wins on the way back — so the session would reopen one position behind. Closing that
+    // gap is this pair, and it writes only what the move already earned.
+    //
+    // The device pump goes FIRST and it is not optional: naming a device from what is loaded,
+    // when the number has moved and nothing has loaded it yet, writes the name of the device that
+    // is leaving beside the number of the one arriving — which is worse than the gap it closes.
+    //
+    // Guarded because a host may save from any thread and a ValueTree is the message thread's.
+    if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+    {
+        pumpDeviceWork();
+        pumpSwitchNames();
+    }
+
 
     // The workspace envelope carries the live parameter tree and the other three registers, so
     // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
@@ -132,7 +154,6 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     stateWasRestored = true;   // a session's choice outranks the environment's default
-    markSwitchAimsPending();   // ...and its switches are named, not numbered — put them back by name
 
     auto xml = getXmlFromBinary (data, sizeInBytes);
     if (xml == nullptr)
@@ -142,8 +163,14 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     const auto apply = [] (AmpProcessor& self, const juce::ValueTree& t)
     {
+        // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
+        // the top of setStateInformation also means it is armed AFTER the tree has landed, which
+        // is what lets it take the restored values as its baseline instead of the outgoing ones.
         if (self.history.fromTree (t))
+        {
+            self.markSwitchAimsPending();
             return;
+        }
 
         // Sessions saved before the workspace existed hold a bare parameter tree. Load the sound
         // and start a fresh history around it rather than dropping the session on the floor.
@@ -151,6 +178,7 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         {
             self.apvts.replaceState (t);
             self.history.reset();
+            self.markSwitchAimsPending();   // after the tree lands, like the path above
         }
     };
 
@@ -181,8 +209,72 @@ void AmpProcessor::rescanDevices()
 {
     // Each block asks for its own kind. A preamp offered as a pedal is not a wrong sound, it is a
     // wrong LIST — the block says what it is for, and the list has to agree with it.
-    boost.rescan (juce::roundToInt (apvts.getRawParameterValue (params::boostDevice)->load()));
-    preamp.rescan (juce::roundToInt (apvts.getRawParameterValue (params::preampDevice)->load()));
+    // And the block STAYS on the device it is playing: a rescan happens when a pack has just been
+    // imported, an import re-sorts the list, and re-selecting by the old number is how a block ends
+    // up playing its new neighbour. The block answers where it now stands and the parameter follows
+    // it — quietly, because nothing about the sound changed and there is nothing to undo.
+    // What the rescan wants to change, decided before anything is written. The suppression scope
+    // has a cost of its own — it commits whatever burst is open when it starts and can drop a redo
+    // when it ends — so it is opened only when there is actually something to suppress, and a
+    // rescan that changes nothing (the usual one) leaves the timeline exactly as it found it.
+    std::vector<std::pair<juce::RangedAudioParameter*, float>> writes;
+    bool nameFirstDevice[numCaptured] = { false, false };
+
+    for (size_t b = 0; b < numCaptured; ++b)
+    {
+        const auto* id = deviceIdOf (b);
+        auto* p = apvts.getParameter (id);
+        const int was = juce::roundToInt (apvts.getRawParameterValue (id)->load());
+        const int now = blockAt (b).rescan (was);
+
+        // Out of the parameter's reach: a folder can hold more devices than this can address, and
+        // writing a clamped number would land on the neighbour. Nothing good happens past here —
+        // the block is playing the right pack for one moment and the next pump reloads whatever
+        // the unchanged number points at — but a clamped write would be wrong immediately and
+        // permanently. A folder of more than a hundred and twenty-eight devices is a limit of the
+        // parameter, and it is on the list to be lifted rather than papered over.
+        if (now >= 0 && now != was && now < params::maxDevices && p != nullptr)
+            writes.emplace_back (p, p->convertTo0to1 ((float) now));
+
+        // A device that has a name for the first time: the folder was empty when this instance
+        // was built, so the seed had nothing to write, and nothing has MOVED since — the parameter
+        // still reads the same number it always did. Without this the first pack a player installs
+        // is saved by number until they change the selector, which is the whole disease.
+        nameFirstDevice[b] = ! apvts.state.hasProperty (juce::Identifier (juce::String (id) + deviceAimSuffix))
+                             && blockAt (b).selectedName().isNotEmpty();
+    }
+
+    if (! writes.empty() || nameFirstDevice[0] || nameFirstDevice[1])
+    {
+        // Following a device that the FOLDER moved is the plugin agreeing with itself, not an
+        // edit: recorded, it would be an undo step whose undo puts the number back on the wrong
+        // pack.
+        const felitronics::appkit::CompareHistory::ScopedSuppress hush (history);
+
+        for (auto& [p, v] : writes)
+            p->setValueNotifyingHost (v);
+
+        for (size_t b = 0; b < numCaptured; ++b)
+            if (nameFirstDevice[b])
+                noteBlockNames (b, false);   // the rescan has just selected: they agree
+    }
+
+    // A NAME THAT CAN BE HONOURED NOW. A session opened before its pack was installed keeps the
+    // name it could not reach; installing the pack is a rescan, and this is the moment the name
+    // becomes answerable. Without it the player would have to reopen the session to hear the
+    // device they just installed.
+    for (size_t b = 0; b < numCaptured; ++b)
+    {
+        const juce::Identifier key (juce::String (deviceIdOf (b)) + deviceAimSuffix);
+        const auto want = apvts.state.getProperty (key).toString();
+
+        if (want.isNotEmpty() && want != blockAt (b).selectedName()
+            && blockAt (b).indexOfName (want) >= 0)
+        {
+            markSwitchAimsPending();
+            break;
+        }
+    }
 }
 
 const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
@@ -576,8 +668,10 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // duplicated input was paying twice for the same answer. The whole chain works channel 0;
     // the copy to the other channels happens once, after the limiter. STEREO (the double-track
     // option) restores true per-channel processing. STEREO SPACE splits the chain in two: mono
-    // up to the reverb — `nch` — and stereo from the reverb on — `nchBack` — with the one copy
-    // made at the seam, so the space is wide and the amp is paid for once.
+    // up to the delay — `nch` — and stereo from the delay on — `nchBack` — with the one copy
+    // made at the seam, so the space is wide and the amp is paid for once. The seam stands BEFORE
+    // the delay, not before the reverb: the delay's OFFSET is a stereo of its own, and a spread
+    // the room then works on is wider than a spread the room has to make alone.
     const auto mode = static_cast<params::StereoMode> (
         juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
     const int nch     = mode == params::StereoMode::stereo ? numChannels : juce::jmin (1, numChannels);
@@ -624,9 +718,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     // A captured block, whole: the capture, then its own EQ, then its own volume.
     //
     // The EQ sits AFTER the nonlinearity because that is what it is for here — colouring what the
-    // device made, not deciding what the device eats. The boost's lands in front of the preamp and
-    // the preamp's in front of the power amp, which is where a real amplifier keeps its tone stack,
-    // so nothing in the chain is left unfed.
+    // device made, not deciding what the device eats. The boost's lands in front of the preamp,
+    // which is where a real amplifier keeps its tone stack; the preamp's stands after the last
+    // nonlinearity, colouring what the amp made before the room and the speaker have it.
     //
     // It also goes dark with the block. The EQ is part of the block now, not a link that happens to
     // be drawn inside one, and a switch that leaves half of what it names still cutting is a switch
@@ -675,7 +769,16 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                     juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                        chainView.getReadPointer (ch), numSamples);
         }
-        else if (! on && lat > 0)
+        else if (on)
+        {
+            // Fully in the path: the model carries its own delay and there is nothing to imitate.
+            // The wire is CLEARED rather than left holding whatever it last saw, because the next
+            // fade-out reads that history for its first `lat` samples — and a handful of samples
+            // from minutes ago, even weighted at the fraction of a per-cent the fade has moved by
+            // then, is a ghost. A dozen floats to make it impossible.
+            wire[(size_t) l].reset();
+        }
+        else if (lat > 0)
         {
             // Standing by for good: the block is not run at all below, so the signal in the buffer
             // IS the output — and it has to carry the delay the model would have.
@@ -686,13 +789,40 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // IN: how hard the capture is fed. Metered immediately after, at the model's own door, so
         // the grip on the meter and the fill under it answer about one point.
         //
-        // It follows `on`, not `works`: while the fade is still running the block is still being
-        // heard, so its trim stays where the player put it. Only when the fade is over does the
-        // trim ramp to unity — and by then nothing of this path is in the sum, so the ramp is
-        // silent. A bypassed block has to be a wire, but it becomes one at the END of the fade.
-        const float inTarget = on ? juce::Decibels::decibelsToGain (inParam->load()) : 1.0f;
-        chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
-        lastInGain = inTarget;
+        // It applies only while the block is being HEARD — which includes the whole fade, so the
+        // trim stays where the player put it for as long as any of the model is in the sum. Once
+        // the fade is over the block is not run at all and this buffer IS the through-path: a
+        // trim on it would be a trim on the bypass, which is not what a bypass is.
+        //
+        // The `lastInGain` reset is the whole point and cost me a click to learn. Ramping to unity
+        // on the first fully-bypassed block ramps the DRY signal from the trim down to 1.0 — at
+        // +12 dB that is a four-times burst decaying over one block, which is exactly the kind of
+        // step this crossfade exists to remove. There is nothing to ramp: the previous block's
+        // trim was applied to what fed the model, and the blend has already weighed that away.
+        // So the gain simply IS unity here, with no ramp and no memory of the trim.
+        if (on)
+        {
+            const float inTarget = juce::Decibels::decibelsToGain (inParam->load());
+
+            // ARRIVING, not sliding. Coming back from a bypass the trim would otherwise ramp from
+            // unity to what the player set across ONE block — and a block can be longer than the
+            // fade. At 2048 samples the crossfade is over by sample 720, so the model spends the
+            // rest of the block fully audible and still climbing toward the trim: a drive swell,
+            // which is the same family of artefact as the burst this replaced. There is nothing to
+            // ramp INTO: the blend weighs this path at nothing for the first sample, so the trim
+            // simply starts where it belongs.
+            if (! blockWasOn[(size_t) l])
+                lastInGain = inTarget;
+
+            chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
+            lastInGain = inTarget;
+        }
+        else
+        {
+            lastInGain = 1.0f;   // a bypassed block is a wire, and a wire has no trim to ramp from
+        }
+
+        blockWasOn[(size_t) l] = on;
 
         // A block that is not working meters nothing: two full passes over the buffer for a needle
         // nobody reads, and a needle still moving on a dark face is the exception this whole rework

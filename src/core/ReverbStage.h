@@ -14,7 +14,7 @@
 namespace orbitamp::core
 {
 
-/** The reverb tail — the last of our own layers before the signal leaves for the power amp.
+/** The reverb tail — the last of our own layers before the signal leaves for the speaker.
 
     Built on juce::Reverb (Freeverb), which is simply the right tool here: the plugin is a JUCE
     application and has no reason to avoid it. The only consequence worth recording is placement —
@@ -23,8 +23,8 @@ namespace orbitamp::core
 
     The design calls for Mix as the hero, the character as the title, and everything else as a
     late refinement: DECAY scales the chosen character's tail rather than replacing it, PREDELAY
-    holds the tail back so the attack stays dry, and the HPF cleans the WET only — this reverb
-    feeds a power amp, and a low tail into distortion is mud multiplied.
+    holds the tail back so the attack stays dry, and the HPF cleans the WET only — a low tail is
+    mud, and every layer after this one can only pass it on.
 
     The dry path is the amp's law: an amp's reverb control ADDS the tank return to the dry signal —
     it does not crossfade away from it. Dry stays at unity at every setting; the whole wet chain
@@ -123,8 +123,8 @@ public:
     /** How long the attack stays dry before the tail arrives, 0..100 ms. */
     void setPredelayMs (float ms) noexcept { predelayMs = juce::jlimit (0.0f, 100.0f, ms); }
 
-    /** The tail's own high-pass — the WET only, always in: a low tail into a driven power amp is
-        mud, and at the 40 Hz floor the filter is as good as air. */
+    /** The tail's own high-pass — the WET only, always in: a low tail is mud in any speaker, and
+        at the 40 Hz floor the filter is as good as air. */
     void setHpfHz (float hz) noexcept
     {
         if (! juce::approximatelyEqual (hz, hpfHz))

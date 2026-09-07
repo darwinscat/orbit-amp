@@ -38,6 +38,17 @@ class AmpProcessor final : public juce::AudioProcessor,
 {
 public:
     AmpProcessor();
+    /** Defaulted, and it is worth writing down WHY, because it looks like the place a weak
+        reference has to be cleared and it is not.
+
+        `setStateInformation` can arrive on any thread, so it marshals the restore to the message
+        thread behind a `juce::WeakReference<AmpProcessor>`, and the host may destroy the plugin
+        while that call is still queued. The guard against that is real — but it is already armed:
+        `JUCE_DECLARE_WEAK_REFERENCEABLE` does not declare a bare `WeakReference::Master` (whose
+        destructor only asserts). It declares a `WeakRefMaster` whose destructor calls `clear()`,
+        and declares it LAST, so it is the first member destroyed. Adding a clear here changes
+        nothing at all. I wrote one anyway, on a reading of the wrong destructor, and the review
+        caught it. */
     ~AmpProcessor() override = default;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -88,7 +99,7 @@ public:
     /** Which wrapper is actually running — VST3 / AU / CLAP / Standalone — the badge's second line. */
     juce::String pluginFormat() const { return juce::AudioProcessor::getWrapperTypeDescription (wrapperType); }
 
-    /** The editor's zoom, 50-200%. It lives here rather than in the editor so it survives closing
+    /** The editor's zoom, 50-400%. It lives here rather than in the editor so it survives closing
         and reopening the window; it is message-thread only and never read by the audio path.
         Persisting it across sessions comes with the state work. */
     float getEditorScale() const noexcept { return editorScale; }
@@ -103,13 +114,72 @@ public:
         shrank it the value stuck. A wanted size and a current size are two different facts. */
     static constexpr float preferredScale = 1.0f;
 
+    /** The two captured blocks, addressed by number, so the aim, the name pump and the seed can
+        all walk them the same way instead of each carrying its own pair of lambdas. */
+    static constexpr size_t numCaptured = 2;
+
+    core::CapturedBlock& blockAt (size_t b) noexcept { return b == 0 ? boost : preamp; }
+    static const char*   deviceIdOf (size_t b) noexcept
+    { return b == 0 ? params::boostDevice : params::preampDevice; }
+    static juce::String  measuredIdOf (size_t b, int i)
+    { return b == 0 ? params::boostMeasured (i) : params::preampMeasured (i); }
+
+    /** THE STATE AS IT SHOULD BE WRITTEN DOWN — the live tree with its names reconciled first.
+
+        Anything that copies `apvts.copyState()` straight out can catch the one-tick gap between a
+        control moving and the pump writing its name: a preset saved in that window carries a new
+        NUMBER beside an old NAME, and the name wins on the way back, so the preset reopens on the
+        device the player had just moved away from. Every path that persists the tree goes through
+        here. Message thread only.
+
+        `forgetIdentity` is for a factory reset: every parameter is about to be set to its default,
+        and a name left over from the outgoing device would be aimed straight back over it. */
+    juce::ValueTree stateForSaving (bool forgetIdentity = false)
+    {
+        pumpDeviceWork();
+        pumpSwitchNames();
+
+        auto tree = apvts.copyState();
+
+        if (forgetIdentity)
+            for (size_t b = 0; b < numCaptured; ++b)
+            {
+                tree.removeProperty (juce::Identifier (juce::String (deviceIdOf (b)) + deviceAimSuffix), nullptr);
+
+                for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
+                    tree.removeProperty (juce::Identifier (measuredIdOf (b, i) + switchAimSuffix), nullptr);
+            }
+
+        return tree;
+    }
+
     /** The suffix a switch slot's saved position name wears in the state tree. */
     static constexpr const char* switchAimSuffix = "_pos";
+
+    /** And the one a captured block's saved DEVICE name wears, beside its index parameter. */
+    static constexpr const char* deviceAimSuffix = "_dev";
 
 private:
     static constexpr int aimWindowFrames = 150;   // ~5 s at the 30 Hz pump
 
     int switchAimFrames = 0;                      // ticks left to keep aiming after a state change
+
+    /** WHAT THE NAME PUMP LAST SAW. A name is written when the PARAMETER moves and at no other
+        moment, which is the whole of what keeps this out of the undo timeline: a pack finishing
+        its load, a rescan, a block coming back into the rig — none of them are edits, and none of
+        them may leave a mark the player then has to press Cmd-Z through. Writing on a move also
+        puts the name in the same settle burst as the move itself, so the two can never be
+        committed apart and can never disagree inside one undo step.
+
+        `namesPrimed` is the first tick, which only takes the baseline. */
+    bool  namesPrimed = false;
+    float lastDeviceValue[numCaptured] { -1.0f, -1.0f };
+    float lastSwitchValue[numCaptured][core::CapturedBlock::numMeasured] { };
+
+    /** What the aim itself last wrote, so a value that no longer reads it can be told from one
+        that does — which is how a hand on the control wins against an aim still in flight. */
+    float aimWroteDevice[numCaptured] { -1.0f, -1.0f };
+    float aimWroteSwitch[numCaptured][core::CapturedBlock::numMeasured] { };
 
     // MUST precede `updater`: the checker takes the store by reference and is destroyed before it.
     juce::SharedResourcePointer<prefs::UpdateStore> updateStore;
@@ -120,18 +190,32 @@ private:
     void timerCallback() override
     {
         history.tick();
+
+        // THE AIM GOES FIRST, and the order is load-bearing. It writes the device NUMBER; the pump
+        // below is what notices and loads it. Run the other way round, every restore of a session
+        // whose numbering had drifted played the wrong pack for a whole tick — a real load and a
+        // real crossfade — before being corrected. This way the number is right before anyone
+        // reads it, and the only cost is that the aim's first tick judges `selectedName()` from
+        // the previous one, which it already had to.
+        applySwitchAims();
         pumpDeviceWork();
         pumpTuner();
-        applySwitchAims();
+        pumpSwitchNames();
     }
 
-    /** A SWITCH IS SAVED BY NAME, and this is the half that puts it back.
+    /** A DEVICE AND ITS SWITCHES ARE SAVED BY NAME, and this is the half that puts them back.
 
-        The parameter a host sees is a fraction, and a fraction is an index into the pack's position
-        list: repack a device one position shorter and every old session reopens on a different
-        position, silently. So the session also carries the position's NAME, and on the way back the
-        name decides — as soon as the pack it belongs to is actually here, which is not the moment
-        the state arrives (models load on the pool). Until then the aim stands.
+        Both parameters a host sees are numbers, and both numbers are places in a list that belongs
+        to this machine on this day. The device's is an index into whatever packs are on disk,
+        sorted bundled-first and then along the gain ramp — drop one new pack in and everything
+        after it renumbers. A switch's is a fraction, an index into the pack's own position list —
+        repack a device one position shorter and every old session reopens on a different position.
+        Both drift silently, and the second is the one a player would never think to check.
+
+        So the state carries NAMES beside the numbers, and on the way back the name decides. The
+        device first, because the positions belong to its pack; then the switches, as soon as that
+        pack is actually here, which is not the moment the state arrives — models load on the pool.
+        Until then the aim stands.
 
         It stops standing after a few seconds. A player who reaches for that switch before the pack
         lands must win: an aim that outlived its window and overwrote a live hand would be worse than
@@ -144,11 +228,131 @@ private:
         --switchAimFrames;
         bool waiting = false;
 
-        const auto aim = [&] (core::CapturedBlock& block, auto idFor)
+        // Everything this pass wants to change, decided before anything is written. Two reasons.
+        // A suppression scope flushes whatever burst is open when it starts, so opening one on a
+        // tick with nothing to write would chop a player's knob move into one undo step per tick
+        // for five seconds. And the writes have to go in TOGETHER, because they are one
+        // reconciliation, not twelve.
+        std::vector<std::pair<juce::RangedAudioParameter*, float>> writes;
+
+        // A HAND OUTRANKS THE AIM. If a parameter no longer reads what this aim last put there,
+        // somebody moved it — a player auditioning devices the moment a session opens, or host
+        // automation — and the aim stands down for that parameter rather than dragging it back
+        // five seconds later. The document promised this; the code did not do it.
+        const auto stolen = [] (const juce::RangedAudioParameter* p, float known)
         {
+            return p != nullptr && ! juce::approximatelyEqual (p->getValue(), known);
+        };
+
+        // Standing down is not enough on its own. The name pump is quiet while an aim is running
+        // and takes each tick's values as its baseline, so a hand that moved a control mid-window
+        // would leave the STORED name still describing what the aim wanted — the player's choice
+        // would sound now and be gone at the next load. So the theft is written down where it
+        // happens, and ONLY for the thing that was taken: the other block may still be waiting for
+        // its pack, and recording what it is playing at this instant would replace the name it is
+        // still trying to reach with the name of whatever the stale number loaded.
+
+        // Whether this block's DEVICE is where its name says it should be. The switch half must
+        // not run until it is: the positions being aimed at belong to the named pack, and asking
+        // the pack that happens to be loaded whether it has a position called "Lead" is asking
+        // the wrong device a question about the right one.
+        bool deviceSettled[numCaptured] = { true, true };
+
+        const auto aimDevice = [&] (size_t b)
+        {
+            auto& block = blockAt (b);
+            const auto* id = deviceIdOf (b);
+
+            const juce::Identifier key (juce::String (id) + deviceAimSuffix);
+
+            if (! apvts.state.hasProperty (key))
+                return;
+
+            const auto want = apvts.state.getProperty (key).toString();
+
+            if (want.isEmpty())
+                return;
+
+            auto* p = apvts.getParameter (id);
+
+            if (stolen (p, aimWroteDevice[b]))
+            {
+                // A hand picked a different device. What it picked is the answer now — including
+                // for the switches, whose stored positions belong to the device that just left,
+                // which is why this drops them and writes the new pack's instead. That also
+                // leaves the switch half below nothing of the old device's to aim.
+                if (noteBlockNames (b, true))
+                {
+                    aimWroteDevice[b] = p->getValue();
+                }
+                else
+                {
+                    // The hand's device has not been loaded yet, so this block's switches must not
+                    // be aimed either: the names below still describe the pack that is leaving, and
+                    // the pack standing here may spell a position the same way.
+                    deviceSettled[b] = false;
+                    waiting = true;
+                }
+
+                return;
+            }
+
+            const int index = block.indexOfName (want);
+
+            if (index < 0)
+            {
+                // ...and its switch positions are not asked about either. They belong to the pack
+                // that is missing, and the pack standing in for it may spell a position the same
+                // way — aiming them would move a control on a device the player never chose.
+                deviceSettled[b] = false;
+
+                // This machine has no such device — TODAY. The name STAYS: it is the identity the
+                // player chose, and a folder is a thing that gets filled in later. Deleting it
+                // here would mean that opening a project before installing its pack, or on a
+                // machine whose Devices folder is still empty, silently replaces the chosen device
+                // with the fallback for ever. The number stands, the block prints whose voice is
+                // actually playing, and the moment the pack arrives the name resolves on its own.
+                return;
+            }
+
+            if (p != nullptr)
+            {
+                const float v = p->convertTo0to1 ((float) index);
+
+                if (! juce::approximatelyEqual (p->getValue(), v))
+                {
+                    writes.emplace_back (p, v);
+                    aimWroteDevice[b] = v;
+                }
+            }
+
+            // Satisfied only when the block is actually PLAYING the named device, not when the
+            // number has been written: setting the parameter is one tick and the pump that loads
+            // the pack is the next. A window that closed in between would let the half that
+            // writes names back record the device it was aiming away from.
+            if (block.selectedName() != want)
+            {
+                waiting = true;
+                deviceSettled[b] = false;
+            }
+        };
+
+        for (size_t b = 0; b < numCaptured; ++b)
+            aimDevice (b);
+
+        const auto aim = [&] (size_t b)
+        {
+            auto& block = blockAt (b);
+
+            if (! deviceSettled[b])
+            {
+                waiting = true;   // ask again once the named device is the one that is playing
+                return;
+            }
+
             for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
             {
-                const auto id = idFor (i);
+                const auto id = measuredIdOf (b, i);
                 const juce::Identifier key (id + switchAimSuffix);
 
                 if (! apvts.state.hasProperty (key))
@@ -159,59 +363,237 @@ private:
                 if (want.isEmpty())
                     continue;
 
+                auto* p = apvts.getParameter (id);
+
+                if (stolen (p, aimWroteSwitch[b][(size_t) i]))
+                {
+                    noteSwitchName (b, i);            // the hand's answer, written where it happened
+                    aimWroteSwitch[b][(size_t) i] = p->getValue();
+                    continue;
+                }
+
+                // ALREADY THERE, judged by the position rather than by the number. A switch's
+                // parameter is quantised to a thousandth, and a three-position switch's middle is
+                // a third — a number the grid cannot hold. Comparing floats, the aim found a
+                // difference on every single restore and wrote one every time, and each write
+                // opens a suppression scope, which commits whatever burst is open and can drop a
+                // redo. Asking which POSITION the value lands on is the question that was meant.
+                if (block.isReady() && block.switchValueAt (i, p->getValue()) == want)
+                    continue;
+
                 const float v = block.switchParameterFor (i, want);
 
                 if (v < 0.0f)
                 {
-                    if (! block.isReady())      // the pack is still on its way — ask again next tick
+                    // Nothing loaded at all: ask again next tick. (This is a narrower window than
+                    // it looks — `RigPlayer::load` reads the manifest synchronously, so a block
+                    // knows its positions the instant its device is selected, long before the
+                    // model bytes arrive.) A pack that IS here and has no position by that name —
+                    // one updated since the session was saved — keeps the name where it is, for
+                    // the same reason the device's stays: it is what the player chose, it costs
+                    // nothing to keep, and a pack put back as it was resolves it again. These
+                    // never leak to another device: changing the device drops them.
+                    if (! block.isReady())
                         waiting = true;
-                    else                        // it is here and has no such position: let it go
-                        apvts.state.removeProperty (key, nullptr);
 
                     continue;
                 }
 
-                if (auto* p = apvts.getParameter (id); p != nullptr && ! juce::approximatelyEqual (p->getValue(), v))
+                if (p != nullptr && ! juce::approximatelyEqual (p->getValue(), v))
                 {
-                    p->beginChangeGesture();
-                    p->setValueNotifyingHost (v);
-                    p->endChangeGesture();
+                    writes.emplace_back (p, v);
+
+                    // The baseline is what the parameter will BECOME, not what we asked for: a
+                    // switch's range snaps to a thousandth, and a three-position middle is a third,
+                    // so asking for 0.33333 leaves 0.333 behind. Storing the ask made the next tick
+                    // read a theft that never happened. It rewrote the same name and was harmless,
+                    // and it was still a lie in a variable whose whole job is to tell the truth.
+                    aimWroteSwitch[b][(size_t) i] = p->convertTo0to1 (p->convertFrom0to1 (v));
                 }
             }
         };
 
-        aim (boost,  [] (int i) { return params::boostMeasured (i); });
-        aim (preamp, [] (int i) { return params::preampMeasured (i); });
+        for (size_t b = 0; b < numCaptured; ++b)
+            aim (b);
+
+        if (! writes.empty())
+        {
+            // NOT an edit, and not a gesture. Putting a number back where its name says it belongs
+            // is the plugin agreeing with the state it was handed — so it must not become an undo
+            // step the player has to press Cmd-Z through on a session they just opened, and it
+            // must not look to a host in automation Write mode like a hand on the control. The
+            // suppression scope absorbs the drift into the baseline and leaves the workspace
+            // marked dirty, which is honest: what is in memory no longer matches what is on disk.
+            const felitronics::appkit::CompareHistory::ScopedSuppress hush (history);
+
+            for (auto& [p, v] : writes)
+                p->setValueNotifyingHost (v);
+        }
 
         if (! waiting)
             switchAimFrames = 0;
     }
 
-    /** Writes each switch slot's position NAME into the state tree, so what is saved says which
-        position rather than how far along the list it was. Message thread, at save time. */
-    void stampSwitchAims()
+    /** WRITES DOWN WHAT A BLOCK IS PLAYING — its device, and where each of its switches stands —
+        and moves the pump's baselines with it, so what was just written counts as recorded rather
+        than still pending. The one place any of these names is produced.
+
+        `dropPositions` is for a device CHANGE: a position name is only ever about the device it
+        was read from, so the old device leaving takes all of them with it, which is what stops a
+        name resolving later on some other pack that spells a position the same way. They are put
+        back from the new pack in the same pass — `RigPlayer` reads its manifest synchronously, so
+        they are knowable at once, and a device that arrives with no names is a device saved by
+        number until every one of its switches has been touched. */
+    bool noteBlockNames (size_t b, bool dropPositions)
     {
-        const auto stamp = [this] (core::CapturedBlock& block, auto idFor)
+        auto& block = blockAt (b);
+        const auto* devId = deviceIdOf (b);
+
+        // WHAT IS LOADED HAS TO BE AN ANSWER ABOUT THIS NUMBER. The device parameter can move from
+        // the audio thread between the pass that loads it and this one, and naming the block in
+        // between writes the leaving device's name beside the arriving device's number — a
+        // disagreement nothing afterwards would notice. The caller asks again next tick.
+        // Read ONCE. Reading again for the baseline lets automation change the number between the
+        // two, so the name written is about the number that was here and the baseline is about the
+        // number that arrived — the disagreement this guard exists to prevent, moved four lines.
+        const float dv = apvts.getRawParameterValue (devId)->load();
+
+        if (juce::roundToInt (dv) != block.selectedIndex())
+            return false;
+
+        const juce::Identifier devKey (juce::String (devId) + deviceAimSuffix);
+
+        if (const auto name = block.selectedName(); name.isNotEmpty())
+            apvts.state.setProperty (devKey, name, nullptr);
+        else
+            apvts.state.removeProperty (devKey, nullptr);
+
+        lastDeviceValue[b] = dv;
+
+        for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
         {
+            const auto id = measuredIdOf (b, i);
+            const juce::Identifier key (id + switchAimSuffix);
+            const float v = apvts.getRawParameterValue (id)->load();
+
+            if (dropPositions)
+                apvts.state.removeProperty (key, nullptr);
+
+            if (const auto n = block.switchValueAt (i, v); n.isNotEmpty())
+                apvts.state.setProperty (key, n, nullptr);
+            else if (! dropPositions)
+                apvts.state.removeProperty (key, nullptr);   // a swept knob owns no name
+
+            lastSwitchValue[b][(size_t) i] = v;
+        }
+
+        return true;
+    }
+
+    /** One switch slot, when that slot alone is what moved. */
+    void noteSwitchName (size_t b, int i)
+    {
+        const auto id = measuredIdOf (b, i);
+        const juce::Identifier key (id + switchAimSuffix);
+        const float v = apvts.getRawParameterValue (id)->load();
+
+        if (const auto n = blockAt (b).switchValueAt (i, v); n.isNotEmpty())
+            apvts.state.setProperty (key, n, nullptr);
+        else
+            apvts.state.removeProperty (key, nullptr);
+
+        lastSwitchValue[b][(size_t) i] = v;
+    }
+
+    void pumpSwitchNames()
+    {
+        // While an aim is in flight the STORED names are the truth and the parameters are being
+        // moved to match them: read the values as the new baseline and write nothing at all.
+        const bool quiet = switchAimFrames > 0 || ! namesPrimed;
+
+        for (size_t b = 0; b < numCaptured; ++b)
+        {
+            const float dv = apvts.getRawParameterValue (deviceIdOf (b))->load();
+
+            if (! quiet && ! juce::approximatelyEqual (dv, lastDeviceValue[b]))
+            {
+                // The baseline is only taken when the write actually happened; otherwise the next
+                // tick asks again, by which time the pack has been selected.
+                noteBlockNames (b, true);
+                continue;
+            }
+
+            lastDeviceValue[b] = dv;
+
             for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
             {
-                const auto id = idFor (i);
-                const juce::Identifier key (id + switchAimSuffix);
-                const auto name = block.switchValueAt (i, apvts.getRawParameterValue (id)->load());
+                const float v = apvts.getRawParameterValue (measuredIdOf (b, i))->load();
 
-                if (name.isNotEmpty())
-                    apvts.state.setProperty (key, name, nullptr);
+                if (! quiet && ! juce::approximatelyEqual (v, lastSwitchValue[b][(size_t) i]))
+                    noteSwitchName (b, i);
                 else
-                    apvts.state.removeProperty (key, nullptr);   // a swept knob owns no name
+                    lastSwitchValue[b][(size_t) i] = v;
             }
-        };
+        }
 
-        stamp (boost,  [] (int i) { return params::boostMeasured (i); });
-        stamp (preamp, [] (int i) { return params::preampMeasured (i); });
+        namesPrimed = true;
+    }
+
+    /** WRITES EVERY NAME, ONCE, BEFORE ANYBODY IS WATCHING — called from the constructor, after
+        the first scan and before the history takes its baseline.
+
+        Without it a fresh instance has no names in it at all, because the pump only writes when a
+        parameter MOVES and nothing has moved yet. A player who opens the plugin, likes what the
+        default device does, dials a sound around it and saves that as a preset would get a preset
+        that identifies its device by number — which is the whole disease, in the commonest case
+        there is. The seed costs one pass and, because the baseline is taken after it, it is not an
+        edit and leaves no undo step. */
+    void seedSwitchNames()
+    {
+        for (size_t b = 0; b < numCaptured; ++b)
+            noteBlockNames (b, false);   // the ctor has just selected: number and pack agree
+
+        // The seed took every baseline, so the pump is primed: a device or switch moved between
+        // construction and the first tick is a real move and has to be written, not swallowed as
+        // "the first tick only looks".
+        namesPrimed = true;
     }
 
     /** The state changed under us — a session opened, a register recalled: aim the switches again. */
-    void markSwitchAimsPending() noexcept { switchAimFrames = aimWindowFrames; }
+    void markSwitchAimsPending()
+    {
+        switchAimFrames = aimWindowFrames;
+
+        // BOTH baselines are taken from what the tree has just become, and that is the whole of
+        // how a hand wins. `aimWrote*` starting at "nothing written yet" meant theft could only be
+        // seen on a parameter the aim had already moved — so a player who reached for a control
+        // whose saved number happened to be right was quietly overruled a tick later. And
+        // `lastValue` left over from before the restore made the pump read the restored numbers as
+        // a hand's move the moment the window closed, and write the fallback's name over the one
+        // the aim had been trying to reach. Same fix, twice: start from where we actually are.
+        // THE TWO BASELINES ARE NOT IN THE SAME UNIT, and writing them from one number was a bug
+        // that inverted this whole feature for every device but the first. `aimWrote*` is compared
+        // against `RangedAudioParameter::getValue()`, which is NORMALISED — the device's index 5
+        // reads 5/127 there. `lastValue*` is compared against `getRawParameterValue()`, which is
+        // the plain index. Seeded from the plain index, the theft test answered "a hand moved
+        // this" on the first tick of every restore of any device but index 0, and the aim wrote
+        // down whatever the stale number had loaded — destroying the name it was about to honour.
+        for (size_t b = 0; b < numCaptured; ++b)
+        {
+            const auto* devId = deviceIdOf (b);
+            lastDeviceValue[b] = apvts.getRawParameterValue (devId)->load();
+
+            if (const auto* p = apvts.getParameter (devId); p != nullptr)
+                aimWroteDevice[b] = p->getValue();
+
+            for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
+            {
+                // A switch's parameter is a Float over 0..1, so its two units are the same number.
+                const float v = apvts.getRawParameterValue (measuredIdOf (b, i))->load();
+                aimWroteSwitch[b][(size_t) i] = lastSwitchValue[b][(size_t) i] = v;
+            }
+        }
+    }
 
     /** Listens only while someone is watching: with no editor there is no needle, and an MPM pass
         thirty times a second for nobody is the definition of waste. */
@@ -491,6 +873,10 @@ private:
     std::atomic<float>* preampSmoothParam = nullptr;
     float lastBoostInGain  = 1.0f;
     float lastPreampInGain = 1.0f;
+
+    /** Whether each captured block was in the path last block — so the trim can ARRIVE at what
+        the player set instead of sliding up to it while the block is already audible. */
+    bool blockWasOn[2] { true, true };
     float lastTrimGain = 1.0f;
 
     /** The two switches of every link, straight off `params::chainLinks` — plus the two ends,

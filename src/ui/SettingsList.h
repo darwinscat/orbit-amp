@@ -23,11 +23,12 @@ namespace orbitamp
     Nothing here reads or writes anything: a row is handed a getter and a setter. What lives on the
     machine and what lives in the preset is the caller's business, and both kinds sit on this page
     looking the same, because to the hand they ARE the same. */
-class SettingsList final : public juce::Component
+class SettingsList final : public juce::Component,
+                           private juce::Timer
 {
 public:
     // Declaring the deleted copy constructor below suppresses the implicit default one.
-    SettingsList() = default;
+    SettingsList() { startTimerHz (10); }
 
     struct Row
     {
@@ -42,12 +43,16 @@ public:
     void setRows (std::vector<Row> newRows)
     {
         rows = std::move (newRows);
+        shown.assign (rows.size(), (char) 0);
+
+        for (size_t i = 0; i < rows.size(); ++i)
+            shown[i] = (char) (rows[i].get != nullptr && rows[i].get());
+
         setSize (getWidth(), (int) rows.size() * rowH);
         repaint();
     }
 
-    /** Rows read their own state on every paint, so anything that moves them from elsewhere —
-        an undo, a register, a preset, the strip — shows here without being told. */
+    /** Rows read their own state on every paint — see `timerCallback` for what asks them to. */
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds();
@@ -58,6 +63,13 @@ public:
             const auto& row = rows[i];
             const bool on = row.get != nullptr && row.get();
             const bool over = (int) i == hovered;
+
+            // What was PAINTED is what the cache must remember. A repaint asked for by something
+            // else — a hover, a resize — draws the current answer without the timer's knowledge,
+            // and a value that then goes back to what the cache still holds would never be found
+            // changed, leaving a lit row that is off.
+            if (i < shown.size())
+                shown[i] = (char) on;
 
             if (over)
             {
@@ -124,6 +136,59 @@ public:
     static constexpr int rowH = 40;   // two lines of 13 and air: the floor is what a player READS
 
 private:
+    /** WHAT ASKS FOR THE REPAINT. Reading the state in `paint` is right — a row can never show a
+        stale copy of something it did not write — but reading it there does not make the paint
+        HAPPEN, and half of these switches are parameters: host automation, an undo, a register, a
+        preset, the strip's own arrow, or simply a second editor open on the same plugin all move
+        them with nobody here to notice. A tick that reads the getters and repaints only the rows
+        whose answer actually changed costs a few boolean compares while the window is open, and
+        nothing at all while it is not.
+
+        Not attachments: a row's getter is a `std::function<bool()>` that may read a preference in
+        a JSON file rather than a parameter, and a page that watched only its parameters would go
+        stale in exactly half its rows. */
+    void timerCallback() override
+    {
+        const bool showing = isShowing();
+
+        // THE MOMENT THE PAGE COMES BACK. The cache is only true of when it was taken, and while
+        // the page was away the world moved: a switch that went off and on again behind its back
+        // would match the cache and never be repainted. Watching the transition here rather than
+        // in `visibilityChanged` because JUCE calls that only when the component's OWN flag moves,
+        // and these lists are shown and hidden by their viewport — the override never fired.
+        const bool arriving = showing && ! wasShowing;
+        wasShowing = showing;
+
+        if (! showing)
+            return;
+
+        if (arriving)
+        {
+            for (size_t i = 0; i < rows.size() && i < shown.size(); ++i)
+                shown[i] = (char) (rows[i].get != nullptr && rows[i].get());
+
+            repaint();
+            return;
+        }
+
+        // `rows.size()` is re-read every step and `shown` is bounds-checked, because a getter is
+        // somebody else's lambda: nothing here may assume the list it started walking is the list
+        // it is still walking.
+        for (size_t i = 0; i < rows.size(); ++i)
+        {
+            const char now = (char) (rows[i].get != nullptr && rows[i].get());
+
+            if (i >= shown.size())
+                break;
+
+            if (now != shown[i])
+            {
+                shown[i] = now;
+                repaint (getLocalBounds().withY ((int) i * rowH).withHeight (rowH));
+            }
+        }
+    }
+
     int rowAt (int y) const
     {
         const int i = y / rowH;
@@ -150,6 +215,8 @@ private:
     static constexpr int switchW = 34, switchH = 18;
 
     std::vector<Row> rows;
+    std::vector<char> shown;   // char, not bool: vector<bool> has no honest references
+    bool wasShowing = false;
     int hovered = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SettingsList)

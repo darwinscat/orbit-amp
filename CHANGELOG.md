@@ -5,6 +5,107 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-09-07 — a rig you assemble, and a bypass that behaves like an insert
+
+The case this one exists for: a player could switch a block off, but not decide which blocks their
+instrument HAS — and every switch in the window meant something slightly different depending on
+what it sat next to. There are two switches now, the same two on every link, and the strip is a
+picture of the rig rather than a list of things that happen to be here.
+
+### Added
+- **Three states on every link — ON, STANDBY, OFF.** Two ordinary automatable parameters,
+  `*_present` and `*_on`, so a rig travels in the preset, the session, the A/B/C/D registers and
+  undo with no code about storage. The arrow switches standby and on; Setup's EDITOR page decides
+  what the rig has at all. Two switches rather than one three-position control because the two
+  actions are not the same weight: bypassing is something players automate, removing is not, and on
+  one lane aiming at the middle of three and landing on the end takes a block out of the rig when
+  you meant to step it aside.
+- **Standby is an insert's bypass, as a DAW means it.** A link stops taking new signal but keeps
+  running, so a delay's repeats and a reverb's tail ring OUT instead of being chopped. Links that
+  replace the signal — boost, preamp, cabinet — crossfade to what they were handed over 15 ms.
+  Nothing is cut any more: switching, letting the safety go, and leaving the rig all fade.
+- **Setup is a window with three pages** — LIBRARY, EDITOR, VIEW — opened by the gear, which used
+  to drop a menu carrying a door to Setup, two doors to pages nobody sets anything on, and four
+  switches. Each page says whether it travels with the preset or stays on this machine.
+- **The chain strip is one grammar.** The end caps became rows like any other, so IN and OUT answer
+  to the same two switches as everything else, and the gate and the limiter have consoles on their
+  own arrows instead of riding somebody else's rail.
+- **DEVICES & TRADEMARKS moved to the footer**, beside the build stamp: the two pages that are only
+  ever read, together, reached from what they are about.
+- **`KEEP WINDOW HEIGHT`, `STANDBY KEEPS ITS PLACE`, `EQ HANDS OVER THE CURVE`** — an emptied row
+  can hand its height to whoever is left rather than shrink the window; a link standing by can keep
+  its place and go dark; the EQ console's row of hands can sit over its curve. All three are about
+  the eye, so all three stay on the machine and never enter a preset.
+
+### Changed
+- **The power amp is gone from the code.** It had no button — no arrow, no tile, no tab — because
+  no pack ever shipped for it, and a block a player cannot see is a block that is not in the
+  instrument. The history has it.
+- **IN and OUT start out of the rig.** The volumes that matter are the captured blocks' own IN
+  trims; a global fader is what a player reaches for when a rig needs fixing.
+- **The gate's mute position is named for the chain** — START and END. "Pre-Reverb" was a strange
+  thing to read on a rig that may have no reverb in it. The position itself has not moved: END
+  falls after the preamp and its console, so the hiss those two add dies with it and whatever the
+  delay and the room are holding rings out underneath.
+- **The footer stands at the house floor of 13 px** and grew four pixels to hold it. The four facts
+  on that strip — the build, what is installed, the host's rate, the cost — are read as sentences,
+  and they were set at 12, with the cost breakdown behind them at 11 and its heading at 10.
+- **A device's tone points are markers, not handles.** They say where each measured knob acts
+  hardest; the knob below is the hand. Their drag converted decibels into knob travel through a
+  single measured swing, which is honest as an indicator and was not as a control.
+- **A bypassed link keeps its latency**, deliberately, because that is what a bypassed insert does:
+  a rate-matching model reports a delay the host compensates for, so the bypass path carries the
+  same delay rather than letting the chain arrive early.
+- **What standing by COSTS depends on the kind of link, and the breakdown says which.** A link that
+  adds — the delay, the room — keeps running, because that is what lets its tail finish, so it goes
+  on costing what it costs. A link that replaces stops once its fifteen milliseconds are over: the
+  model is not asked, and a preamp standing by is very nearly free. Both keep their row and both
+  read their real number, faintly.
+- **The cost list is the rig.** A link out of it has no row, because it is not in the chain.
+
+### Fixed
+- **The plugin declared no tail** while a room and an echo now ring on purpose — a host told there
+  is no tail may cut an offline render exactly where we started holding one.
+- **The cabinet kept its convolution across standby**, so the first IR-length after it came back
+  convolved what was played before it stood down.
+- **A room out of the rig cleared itself every block** — about 150 KB, some 120 MB/s at 64 samples,
+  untimed and invisible because its row was not in the list.
+- **The OUT cost row carried the limiter's time as well as its own**, so the breakdown did not add
+  up — which is the one thing a breakdown is for.
+- **Fifteen milliseconds means fifteen milliseconds.** The fade interpolated across the whole block,
+  so at 4096 samples it took eighty-five.
+- **A pack naming a slot this instrument does not have is offered nowhere.** Saying nothing and
+  saying something we do not have had been given one answer, so a pack calling itself a power amp
+  turned up in the boost list.
+- **A device and its switches were remembered by NUMBER.** A device's parameter is an index into
+  the scanned packs, and the scan sorts bundled-first and then along the gain ramp — so dropping one
+  new pack into the folder renumbered every device after it, and every session and preset that named
+  one by number named a different one. Its switches had the same disease a floor down: a fraction is
+  an index into the pack's own position list, so a device repacked one position shorter reopened
+  every old session on a different position. Both now carry the NAME beside the number, and the name
+  decides on the way back — the device first, because the positions belong to its pack.
+- **The names were written at save time, into the live tree.** That edited the state behind the
+  player: the settle timer saw a change nobody had made and committed an undo step for it, so the
+  next Cmd-Z moved a switch on the device. And saving a preset never goes through the host at all,
+  so a preset carried either no names or the ones left from the last project save. They are written
+  when a switch MOVES now, which leaves nothing to fix at save time.
+- **A settings page could not see a switch move.** It read every row's state when it painted and
+  nothing asked it to paint, so automation, an undo, a preset or a second editor left the toggle
+  showing yesterday's answer.
+- **Setup's LIBRARY page said nothing about its own lifetime** while both of its neighbours did.
+  It is the one page with two answers — the folders are this machine's, the switch on it rides in
+  the preset — and saying nothing read as a page nobody had thought about.
+- **Two editors shared one LEARN.** The compare history had a single after-apply hook, and a host
+  may open two windows on the same plugin — so whichever closed first silently disarmed the other's
+  measurement. The gate console watches its own three parameters instead, which catches more than
+  the hook did: a register recall, a preset, an undo, a hand on the switch, host automation.
+- **Hiding a column no longer destroys its trim.** It used to write the value to zero so an unseen
+  hand could not keep pressing; the chain simply does not apply a volume that is standing by, so the
+  number stays where the player left it.
+- Two menus outlived their windows; a column going dark under a held mouse left an automation
+  gesture open; the drag rulers had lost their parent; Setup's sub-tabs could not be clicked and its
+  small print was under the type floor.
+
 ## [0.4.0] — 2026-09-06 — a pack states how hard it is fed and how loud it leaves
 
 The case this release exists for: a boost was too hot for the preamp it fed, and the only thing to

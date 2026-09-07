@@ -53,10 +53,10 @@ public:
     {
         stopTimer();
 
-        // WITHOUT THIS THE WEAK REFERENCE IS A LIE. `WeakReference::Master`'s destructor only
-        // asserts (in debug); in a release build the shared holder keeps the dead pointer and
-        // every `safe != nullptr` still answers true. The menu's guard is this line.
-        masterReference.clear();
+        // The menu's weak reference needs nothing here: `JUCE_DECLARE_WEAK_REFERENCEABLE` declares
+        // a `WeakRefMaster` whose own destructor clears, and declares it last, so it is the first
+        // member to go. (The bare `WeakReference::Master` is the one that only asserts — reading
+        // that destructor instead of the macro is how a redundant clear got written here.)
     }
 
     /** The big LEARN overlay's hooks: measurement started, measurement spoke its verdict. */

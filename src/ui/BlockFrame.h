@@ -36,8 +36,8 @@ public:
         return kind == Kind::captured ? theme::orange : theme::violet;
     }
 
-    /** A block whose nature depends on what is loaded into it — a power amp is a capture or our own
-        DSP depending on the choice — recolours itself, so the frame keeps telling the truth. */
+    /** A block whose nature depends on what is loaded into it — a boost is a captured pedal or our
+        own DSP depending on the choice — recolours itself, so the frame keeps telling the truth. */
     void setKind (Kind newKind)
     {
         if (kind == newKind)

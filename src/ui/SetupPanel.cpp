@@ -108,12 +108,25 @@ void SetupPanel::buildViewPage()
 {
     std::vector<SettingsList::Row> rows;
 
+    // A ROW'S GETTER IS POLLED, so it has to be cheap, and `prefs::getBool` is not: every call
+    // takes the family's inter-process lock, reads the JSON off disk and parses it. Five rows at
+    // ten a second is fifty locked file reads a second on the message thread, and a contended
+    // lock can hold that thread for as long as its timeout. The value is read once, here, and
+    // again whenever this window writes it.
+    //
+    // The trade, stated: a SECOND instance that has this page open at the same time will not see
+    // the change until its own page is reopened, since `open()` and `selectPage()` rebuild these
+    // rows. Two Setup windows side by side is a rarer thing than a locked file read fifty times a
+    // second, and the stale one is a checkbox, not a sound.
     const auto add = [&] (juce::String name, juce::String note, juce::Identifier key, bool fallback)
     {
+        auto held = std::make_shared<bool> (prefs::getBool (key, fallback));
+
         rows.push_back ({ std::move (name), std::move (note),
-                          [key, fallback] { return prefs::getBool (key, fallback); },
-                          [this, key, fallback] (bool on)
+                          [held] { return *held; },
+                          [this, key, held] (bool on)
                           {
+                              *held = on;
                               prefs::setBool (key, on);
                               if (onViewChanged)
                                   onViewChanged();
@@ -268,11 +281,13 @@ void SetupPanel::paint (juce::Graphics& g)
 
     // Which lifetime this page has, said quietly under its own tabs rather than left to be
     // discovered when somebody's preset rearranges somebody else's window.
+    // LIBRARY is the one page with two answers — the folders are this machine's, the one switch
+    // on it rides in the preset — and saying NOTHING was the worst of the three: a page with no
+    // note reads as a page nobody thought about, not as a page whose answer is "both".
     const juce::String lifetime = currentPage == 1 ? "TRAVELS WITH THE PRESET"
                                 : currentPage == 2 ? "THIS MACHINE ONLY"
-                                                   : juce::String();
+                                                   : juce::String ("FOLDERS: THIS MACHINE");
 
-    if (lifetime.isNotEmpty())
     {
         auto note = panel.reduced (16, 12).removeFromTop (headerH).removeFromRight (330)
                          .withTrimmedRight (30);

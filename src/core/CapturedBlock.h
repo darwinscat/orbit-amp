@@ -63,16 +63,36 @@ public:
         lastTone.fill (-1.0f);
     }
 
-    /** Re-reads the folder and loads whatever `index` now points at. Message thread. */
-    void rescan (int index)
+    /** Re-reads the folder and STAYS ON THE DEVICE THAT IS PLAYING. Message thread.
+
+        It used to re-select by the index it was handed, which is the one thing an index cannot
+        survive: the list is sorted bundled-first and then along the gain ramp, so importing a pack
+        that sorts earlier moves everything after it down one — and a rescan happens exactly when
+        a pack has just been imported. The block would come back playing its neighbour.
+
+        Returns where the loaded device now stands, so the caller can put the parameter there; -1
+        when nothing is loaded or the device that was playing has gone from the folder, in which
+        case the index it was handed stands as before. */
+    int rescan (int index)
     {
+        const auto playing = loadedName;
         packs = device::DeviceLibrary::scan (slot);
-        select (index);
+
+        const int moved = playing.isNotEmpty() ? indexOfName (playing) : -1;
+
+        select (moved >= 0 ? moved : index);
+        return moved;
     }
 
-    /** Loads the device at `index`. A saved session names a device by position in a list that is
-        whatever is on disk today; if it is gone, the first one stands in rather than nothing loading,
-        since silence is a worse answer than the wrong device and the name says which it is. */
+    /** Loads the device at `index` — the HOST's handle on the choice, and only that.
+
+        The index is not an identity and cannot be one: the list is whatever is on disk today,
+        sorted bundled-first and then along the gain ramp, so dropping one new pack into the folder
+        renumbers everything after it. What the state carries is the NAME (see `selectedName` and
+        `AmpProcessor::applySwitchAims`); this takes the number the name resolved to.
+
+        When the number points nowhere the first device stands in rather than nothing loading, since
+        silence is a worse answer than the wrong device and the name on the block says which it is. */
     void select (int index)
     {
         lastSelected = index;
@@ -83,9 +103,13 @@ public:
 
         if (pack == nullptr)
         {
+            loadedName.clear();
             player.unload();
+            refreshWearableTone();
             return;
         }
+
+        loadedName = pack->displayName();
 
         // The bytes come by `files[].id`, from whatever thread the host runs the load job on — not
         // the one that opened the pack. So the source owns what it needs to find them, and the
@@ -109,6 +133,35 @@ public:
         lastGain = -1.0f;
         lastTone.fill (-1.0f);
         lastSelector.fill (-1);
+
+        refreshWearableTone();
+    }
+
+    /** WHICH DEVICE IS ACTUALLY LOADED, BY NAME — the pack file's own name for it, which is what
+        the list shows and what travels with the file when it is copied to another machine.
+
+        This is the identity the state saves. The parameter beside it is an index into a list that
+        is sorted bundled-first and then along the gain ramp, so ONE new pack dropped into the
+        folder renumbers every device after it and every session that named one by number now names
+        a different one — silently, and with the loaded device's name still printed on the block to
+        say so. Empty when nothing is loaded. */
+    juce::String selectedName() const { return loadedName; }
+
+    /** WHICH INDEX THE LOADED PACK CAME FROM — so a caller can tell whether the name above is an
+        answer about the number it is holding, or about the one before it. The device parameter can
+        move from the audio thread between two message-thread passes; naming the block then would
+        write the leaving device's name beside the arriving device's number. */
+    int selectedIndex() const noexcept { return lastSelected; }
+
+    /** Where a NAMED device stands in the list as it is right now, or -1 when this machine has
+        nothing by that name. Message thread — the list is rescanned there. */
+    int indexOfName (const juce::String& name) const
+    {
+        for (int i = 0; i < packs.size(); ++i)
+            if (packs.getReference (i).displayName() == name)
+                return i;
+
+        return -1;
     }
 
     /** Loads what the device parameter now points at, when it moved. This is how a restored session
@@ -335,8 +388,9 @@ public:
     }
 
     /** The parameter value that lands on a NAMED position, or -1 when this pack has no position by
-        that name (including "the pack is not here yet" — the caller retries while `isReady()` is
-        false and gives up once it is true). */
+        that name — including "no pack at all", which the caller tells apart with `isReady()`. That
+        second case is narrow: `RigPlayer::load` reads the manifest synchronously, so the positions
+        are knowable from the instant a device is selected and long before its models arrive. */
     float switchParameterFor (int slot, const juce::String& value) const
     {
         const auto tones = player.tones();
@@ -538,7 +592,24 @@ public:
         than showing an empty row — and the DSP has to reach the same verdict, or a block whose
         parameter says NATIVE while its face wears OURS would have its own bands parked in favour
         of a tone stack that does not exist, and end up with no tone at all. */
-    bool hasWearableTone() const
+    bool hasWearableTone() const noexcept { return wearable.load (std::memory_order_relaxed); }
+
+    /** Works it out again, on the message thread, and stores the answer for the audio thread.
+
+        THE ANSWER IS CACHED BECAUSE THE QUESTION IS NOT CHEAP AND THE ASKER IS THE AUDIO THREAD.
+        `processBlock` needs this verdict for every block, and `RigPlayer::tones()` builds and
+        returns a whole vector — a heap allocation and a copy of every tone's name and positions,
+        thousands of times a second on the one thread that must never allocate. Worse, it walks
+        the player's tone list while the message thread may be replacing it, which is a race with
+        a dangling read at the end of it. Neither cost buys anything: the answer only changes when
+        a pack is loaded, and this is called from where that happens. */
+    void refreshWearableTone()
+    {
+        wearable.store (computeWearableTone(), std::memory_order_relaxed);
+    }
+
+private:
+    bool computeWearableTone() const
     {
         for (const auto& t : tones())
         {
@@ -557,6 +628,7 @@ public:
         return false;
     }
 
+public:
     /** A switch whose positions declare filters rather than merely selecting captures. */
     static bool switchCarriesBands (const namz::rig::Tone& t)
     {
@@ -653,6 +725,10 @@ private:
     float lastGain    = -1.0f;
     bool  lastSmooth  = true;
     int   lastSelected = -1;
+    juce::String loadedName;   // the name of the pack actually playing — the state's identity
+
+    /** Whether the loaded pack has a tone stack worth wearing — see `refreshWearableTone`. */
+    std::atomic<bool> wearable { false };
     bool  raw = false;
 
     std::atomic<float> drive { 1.0f };
