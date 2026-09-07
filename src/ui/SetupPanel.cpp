@@ -53,55 +53,19 @@ SetupPanel::SetupPanel (AmpProcessor& processor) : amp (processor)
                                   {}, false } });
     }
 
-    buildEditorPage();
     buildViewPage();
 
-    for (auto* pair : { &editorView, &viewView })
-    {
-        pair->setScrollBarsShown (true, false);
-        pair->setScrollBarThickness (8);
-        addAndMakeVisible (*pair);
-    }
-
-    editorView.setViewedComponent (&editorPage, false);
-    viewView  .setViewedComponent (&viewPage,   false);
+    viewView.setScrollBarsShown (true, false);
+    viewView.setScrollBarThickness (8);
+    viewView.setViewedComponent (&viewPage, false);
+    addAndMakeVisible (viewView);
 
     pages.push_back ({ "LIBRARY", &libraryPage, [this] { libraries[(size_t) currentLibrary].refresh(); }, {} });
-    pages.push_back ({ "EDITOR",  &editorView,  [this] { editorPage.repaint(); }, {} });
-    pages.push_back ({ "VIEW",    &viewView,    [this] { buildViewPage(); },      {} });
+    pages.push_back ({ "VIEW",    &viewView,    [this] { buildViewPage(); }, {} });
 
     addAndMakeVisible (closeButton);
     selectLibrary (0);
     selectPage (0);
-}
-
-void SetupPanel::buildEditorPage()
-{
-    // Straight off the one list, in chain order, each row wearing its link's own accent — so the
-    // page reads as the strip it edits rather than as a form about it.
-    std::vector<SettingsList::Row> rows;
-
-    for (int i = 0; i < params::numChainRows; ++i)
-    {
-        const auto& link = params::chainLinks[(size_t) i];
-        auto* p = amp.apvts.getParameter (link.presentParam);
-
-        if (p == nullptr)
-            continue;
-
-        rows.push_back ({ link.name,
-                          link.captured ? "a captured device" : "",
-                          [p] { return p->getValue() > 0.5f; },
-                          [p] (bool on)
-                          {
-                              p->beginChangeGesture();
-                              p->setValueNotifyingHost (on ? 1.0f : 0.0f);
-                              p->endChangeGesture();
-                          },
-                          link.captured ? theme::orange : theme::violet, true });
-    }
-
-    editorPage.setRows (std::move (rows));
 }
 
 void SetupPanel::buildViewPage()
@@ -138,11 +102,6 @@ void SetupPanel::buildViewPage()
                       [] { return prefs::spectraShown(); },
                       [this] (bool on) { prefs::setSpectraShown (on); if (onViewChanged) onViewChanged(); },
                       {}, false });
-
-    add ("KEEP WINDOW HEIGHT", "an emptied row hands its height to whoever is left",
-         prefs::growBlocks, true);
-    add ("STANDBY KEEPS ITS PLACE", "a link standing by stays on the panel, dark, instead of leaving",
-         prefs::dimStandby, false);
 
     if (params::demoLoopsPresent())   // no loops on disk: no player, and no offer of one
         add ("SHOW DEMO PLAYER", "the audition strip under the footer", prefs::showDemo, false);
@@ -222,8 +181,7 @@ void SetupPanel::resized()
         page.view->setBounds (r);
 
     // The scrolled pages are as tall as their rows; the viewport is the window onto them.
-    editorPage.setSize (r.getWidth() - 10, editorPage.getHeight());
-    viewPage  .setSize (r.getWidth() - 10, viewPage.getHeight());
+    viewPage.setSize (r.getWidth() - 10, viewPage.getHeight());
 
     // LIBRARY's own body: its sub-tabs, then whichever list they picked, then the pack switch.
     {
@@ -281,11 +239,10 @@ void SetupPanel::paint (juce::Graphics& g)
 
     // Which lifetime this page has, said quietly under its own tabs rather than left to be
     // discovered when somebody's preset rearranges somebody else's window.
-    // LIBRARY is the one page with two answers — the folders are this machine's, the one switch
-    // on it rides in the preset — and saying NOTHING was the worst of the three: a page with no
-    // note reads as a page nobody thought about, not as a page whose answer is "both".
-    const juce::String lifetime = currentPage == 1 ? "TRAVELS WITH THE PRESET"
-                                : currentPage == 2 ? "THIS MACHINE ONLY"
+    // LIBRARY is the page with two answers — the folders are this machine's, the one switch on it
+    // rides in the preset — and saying NOTHING was the worst of the answers: a page with no note
+    // reads as a page nobody thought about, not as a page whose answer is "both".
+    const juce::String lifetime = currentPage == 1 ? juce::String ("THIS MACHINE ONLY")
                                                    : juce::String ("FOLDERS: THIS MACHINE");
 
     {

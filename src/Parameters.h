@@ -381,7 +381,7 @@ inline constexpr int maxVoicesPerType = 8;
 
 /** THE TWO SWITCHES EVERY LINK HAS.
 
-    `*_present` — is this link in the rig at all. Set in Setup's EDITOR page; a link that is not
+    `*_present` — is this link in the rig at all. Set in the strip's checklist; a link that is not
     in the rig has no arrow in the strip, no face on the panel, no entry in the cost breakdown,
     and is not processed.
 
@@ -470,7 +470,7 @@ struct ChainLink
     bool        captured;   // wears the captured accent rather than ours
     bool        hasTile;    // a face on the panel; a link without one answers with its menu
     const char* onParam;      // STANDBY/ON — the switch its arrow writes
-    const char* presentParam; // in the rig or not — the switch Setup's EDITOR page writes
+    const char* presentParam; // in the rig or not — the switch the strip's checklist writes
     Stage       stage;        // the cost entry it owns
     Stage       eqStage;    // a captured block's console; `numStages` for everyone else
 };

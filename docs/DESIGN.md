@@ -64,7 +64,8 @@ storage:
 | **STANDBY** | in the strip, arrow dark; on the panel either gone or dimmed, your choice | stops being FED — what it was already holding rings out |
 | **OFF** | no row in the strip, nothing on the panel | not in the chain: nothing of it is applied, and it has no row in the cost list |
 
-The arrow switches STANDBY ↔ ON. Setup's EDITOR page decides what the rig HAS at all.
+The arrow switches STANDBY ↔ ON. The checklist at the strip's right end decides what the rig
+HAS at all.
 
 **STANDBY is an insert's bypass, exactly as a DAW means it.** A link stops taking new signal but
 keeps running, so a delay's repeats and a reverb's tail ring OUT instead of being chopped; a link
@@ -198,7 +199,7 @@ the numerals and short labels that belong to an instrument's own scales — a me
 curve's axis, the names inside a strip miniature — where small type is a diagram rather than
 prose, and making it bigger would make the diagram worse.
 
-## Setup — one window, three pages
+## Setup — one window, two pages
 
 The gear opens a window, not a menu. It used to drop a popup carrying a door to Setup, two doors to
 pages nobody sets anything on, and a handful of switches — which is how a settings menu becomes the
@@ -207,11 +208,15 @@ place things are hidden.
 | page | what | whose life |
 |---|---|---|
 | **LIBRARY** | a sub-tab each for the preamp packs, the boost packs and the IRs, and the one switch that is about packs | folders are the machine's; the switch travels with the preset |
-| **EDITOR** | which links the rig has at all — the chain in order, each row wearing its link's accent | **travels with the preset** |
 | **VIEW** | what this window shows, and only that | **this machine only** |
 
 Each page says which of those two lifetimes it has, quietly, beside its own tabs. Nobody should
 have to discover it by watching their patch rearrange somebody else's window.
+
+There was a third page, EDITOR — which links the rig has at all. It lives in the strip's own
+checklist now, beside the chain it edits, and the two switches for what an emptied row does to the
+window went with it: they only mean anything while a link is being taken out. A setting with two
+homes is a setting that will read wrong in one of them.
 
 The pixel-level reference is a set of HTML mockups produced during design (kept
 outside this repo). Rebuild the faceplate natively — the mockups are a spec, not

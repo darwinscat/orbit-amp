@@ -15,20 +15,21 @@ namespace orbitamp
 
 class AmpProcessor;
 
-/** SETUP — the one window, opened by the toolbar's gear. Three pages across the top:
+/** SETUP — the one window, opened by the toolbar's gear. Two pages across the top:
 
         LIBRARY   the packs and the IRs, one sub-tab per list
-        EDITOR    which links the rig has at all
         VIEW      what this window shows — the eye's business, and only the eye's
 
     The libraries used to BE this window, one tab each, and there was nowhere for a setting to
     live except a popup menu hanging off the gear. They are one page now with their own sub-tabs,
-    which is what freed the top row for the two pages that matter.
+    which is what freed the top row.
 
-    The two lifetimes sit side by side on purpose, and each page says which it is: EDITOR travels
-    with the preset because a rig is part of a sound, VIEW stays on this machine because the shape
-    of a window is not. A player should not have to guess which of their changes will follow a
-    patch to somebody else's computer.
+    There was a third page, EDITOR — which links the rig has at all. It has gone to the strip's
+    own checklist, next to the chain it edits, which is where a rig is actually built: the two
+    switches for what an emptied row does to the window went with it, since they only mean
+    anything while a link is being taken out. Nothing here is a second copy of a switch that
+    lives somewhere else; a setting with two homes is a setting that will read wrong in one of
+    them.
 
     An overlay rather than a desktop window because a plugin editor is a guest: hosts reparent,
     hide, and destroy it freely, and a floating window can outlive or lose the editor it belongs
@@ -66,7 +67,6 @@ private:
 
     void selectPage (int index);
     void selectLibrary (int index);
-    void buildEditorPage();
     void buildViewPage();
     void layOutTabs (juce::Rectangle<int>& header, std::vector<Tab>& tabs, float height);
     void paintTabs (juce::Graphics&, const std::vector<Tab>&, int current, float height,
@@ -87,10 +87,10 @@ private:
     IrTreeView      irs;
     SettingsList    packSwitches;
 
-    /** The two switch pages scroll: ten links plus whatever VIEW grows to is more than a 440-tall
-        window holds, and a page that cannot reach its own last row is a page with a hidden switch. */
-    SettingsList editorPage, viewPage;
-    juce::Viewport editorView, viewView;
+    /** VIEW scrolls: whatever it grows to is more than a 440-tall window holds, and a page that
+        cannot reach its own last row is a page with a hidden switch. */
+    SettingsList   viewPage;
+    juce::Viewport viewView;
     MiniClose    closeButton;
 
     static constexpr int panelW = 720;

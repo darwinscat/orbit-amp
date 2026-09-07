@@ -68,6 +68,14 @@ public:
         shownDepth.assign (rows.size(), 0.0f);
         shownDot.assign (rows.size(), false);
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
+
+        menuButton.onClick = [this]
+        {
+            if (onChainMenu)
+                onChainMenu (menuButton);
+        };
+        addAndMakeVisible (menuButton);
+
         startTimerHz (20);   // the lights' breath; they only repaint what actually moved
     }
 
@@ -76,6 +84,15 @@ public:
     /** A right click on a row that carries a menu — the guards' way to their settings when
         their badges are hidden. */
     std::function<void (int index, juce::Point<int> screenPos)> onRowMenu;
+
+    /** The checklist at the strip's right end was pressed, and here is the button it was pressed
+        on. What the list OFFERS — which links are in the rig at all, and what an emptied row does
+        to the window — is the editor's business; the strip only hands over what it hangs off.
+
+        The BUTTON, not a point: a menu that does not know its launcher dismisses synchronously and
+        lets the click through, so pressing the button a second time closes the menu and instantly
+        reopens it (juce_PopupMenu.cpp says so in as many words). It would never shut. */
+    std::function<void (juce::Component& anchor)> onChainMenu;
 
 
     /** Redress one row from outside — the editor answers a toggle through here, so the strip
@@ -150,6 +167,12 @@ public:
         }
     }
 
+    void resized() override
+    {
+        auto lane = getLocalBounds().reduced (padX, 0);
+        menuButton.setBounds (lane.removeFromRight (menuW).withSizeKeepingCentre (menuW, menuW));
+    }
+
     void mouseDown (const juce::MouseEvent& e) override
     {
         for (size_t i = 0; i < rows.size(); ++i)
@@ -167,10 +190,63 @@ public:
     }
 
 private:
+    /** The strip's menu handle: a checklist — two ticked rows and an empty one — because that is
+        literally what opens under it. NOT a gear: the toolbar already wears one and it means the
+        Setup window; a second one would be the same mark for two different promises.
+
+        Drawn here, in a 24x24 design box fitted to the button the way appkit's icons are, so it
+        keeps its proportions at any zoom. It lives in this file until the shape settles, then it
+        moves to `felitronics::appkit::IconButton` as one more Kind. */
+    class ChecklistButton final : public juce::Button
+    {
+    public:
+        ChecklistButton() : juce::Button ("chain")
+        {
+            setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        }
+
+        void paintButton (juce::Graphics& g, bool over, bool down) override
+        {
+            const auto r = getLocalBounds().toFloat();
+
+            if (over || down)
+            {
+                g.setColour (juce::Colour (over ? 0x1effffff : 0x14ffffff));
+                g.fillRoundedRectangle (r.reduced (0.5f), 4.0f);
+            }
+
+            const auto fit = juce::RectanglePlacement (juce::RectanglePlacement::centred)
+                                 .getTransformToFit ({ 0.0f, 0.0f, 24.0f, 24.0f }, r.reduced (2.0f));
+
+            juce::Path p;
+
+            for (int row = 0; row < 3; ++row)
+            {
+                const float y = 5.0f + (float) row * 7.0f;
+
+                if (row < 2)   // some links are in, one is not — that is the whole picture
+                {
+                    p.startNewSubPath (2.0f, y);
+                    p.lineTo (4.5f, y + 2.5f);
+                    p.lineTo (8.5f, y - 3.0f);
+                }
+
+                p.startNewSubPath (11.5f, y);
+                p.lineTo (22.0f, y);
+            }
+
+            g.setColour (over || down ? theme::tx : theme::txDim);
+            g.strokePath (p, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved,
+                                                   juce::PathStrokeType::rounded), fit);
+        }
+    };
+
     static constexpr int   padX   = 14;
     static constexpr int   tileH  = 22;
     static constexpr int   tipW   = 8;      // the arrow's point, and the notch it nests into
     static constexpr float airX   = 2.0f;   // breathing room in the nest, each side
+    static constexpr int   menuW  = 20;     // the checklist's square, at the right end of the lane
+    static constexpr int   menuGap = 8;     // and the air the last arrow's point keeps from it
 
     void timerCallback() override
     {
@@ -231,12 +307,15 @@ private:
         if (n <= 0 || ! rows[(size_t) index].present)
             return {};
 
-        const auto lane = getLocalBounds().reduced (padX, 0);
+        const auto lane = getLocalBounds().reduced (padX, 0)
+                              .withTrimmedRight (menuW + menuGap);
         const int  step = (lane.getWidth() - tipW) / n;
 
         return juce::Rectangle<int> (lane.getX() + placeOf (index) * step,
                                      lane.getCentreY() - tileH / 2, step, tileH);
     }
+
+    ChecklistButton  menuButton;
 
     std::vector<Row> rows;
     std::vector<float> shownDepth;
