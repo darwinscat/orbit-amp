@@ -124,6 +124,35 @@ public:
     static juce::String  measuredIdOf (size_t b, int i)
     { return b == 0 ? params::boostMeasured (i) : params::preampMeasured (i); }
 
+    /** THE STATE AS IT SHOULD BE WRITTEN DOWN — the live tree with its names reconciled first.
+
+        Anything that copies `apvts.copyState()` straight out can catch the one-tick gap between a
+        control moving and the pump writing its name: a preset saved in that window carries a new
+        NUMBER beside an old NAME, and the name wins on the way back, so the preset reopens on the
+        device the player had just moved away from. Every path that persists the tree goes through
+        here. Message thread only.
+
+        `forgetIdentity` is for a factory reset: every parameter is about to be set to its default,
+        and a name left over from the outgoing device would be aimed straight back over it. */
+    juce::ValueTree stateForSaving (bool forgetIdentity = false)
+    {
+        pumpDeviceWork();
+        pumpSwitchNames();
+
+        auto tree = apvts.copyState();
+
+        if (forgetIdentity)
+            for (size_t b = 0; b < numCaptured; ++b)
+            {
+                tree.removeProperty (juce::Identifier (juce::String (deviceIdOf (b)) + deviceAimSuffix), nullptr);
+
+                for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
+                    tree.removeProperty (juce::Identifier (measuredIdOf (b, i) + switchAimSuffix), nullptr);
+            }
+
+        return tree;
+    }
+
     /** The suffix a switch slot's saved position name wears in the state tree. */
     static constexpr const char* switchAimSuffix = "_pos";
 
@@ -253,7 +282,17 @@ private:
                 // which is why this drops them and writes the new pack's instead. That also
                 // leaves the switch half below nothing of the old device's to aim.
                 if (noteBlockNames (b, true))
-                    aimWroteDevice[b] = p->getValue();   // else the next tick sees the theft again
+                {
+                    aimWroteDevice[b] = p->getValue();
+                }
+                else
+                {
+                    // The hand's device has not been loaded yet, so this block's switches must not
+                    // be aimed either: the names below still describe the pack that is leaving, and
+                    // the pack standing here may spell a position the same way.
+                    deviceSettled[b] = false;
+                    waiting = true;
+                }
 
                 return;
             }
@@ -346,11 +385,14 @@ private:
 
                 if (v < 0.0f)
                 {
-                    // Still on its way: ask again next tick. Here and with no position by that
-                    // name — a pack updated since the session was saved — leave the name where it
-                    // is, for the same reason the device's stays: it is what the player chose, it
-                    // costs nothing to keep, and a pack put back the way it was resolves it again.
-                    // These never leak to another device: changing the device drops them.
+                    // Nothing loaded at all: ask again next tick. (This is a narrower window than
+                    // it looks — `RigPlayer::load` reads the manifest synchronously, so a block
+                    // knows its positions the instant its device is selected, long before the
+                    // model bytes arrive.) A pack that IS here and has no position by that name —
+                    // one updated since the session was saved — keeps the name where it is, for
+                    // the same reason the device's stays: it is what the player chose, it costs
+                    // nothing to keep, and a pack put back as it was resolves it again. These
+                    // never leak to another device: changing the device drops them.
                     if (! block.isReady())
                         waiting = true;
 
@@ -360,7 +402,13 @@ private:
                 if (p != nullptr && ! juce::approximatelyEqual (p->getValue(), v))
                 {
                     writes.emplace_back (p, v);
-                    aimWroteSwitch[b][(size_t) i] = v;
+
+                    // The baseline is what the parameter will BECOME, not what we asked for: a
+                    // switch's range snaps to a thousandth, and a three-position middle is a third,
+                    // so asking for 0.33333 leaves 0.333 behind. Storing the ask made the next tick
+                    // read a theft that never happened. It rewrote the same name and was harmless,
+                    // and it was still a lie in a variable whose whole job is to tell the truth.
+                    aimWroteSwitch[b][(size_t) i] = p->convertTo0to1 (p->convertFrom0to1 (v));
                 }
             }
         };
@@ -405,7 +453,12 @@ private:
         // the audio thread between the pass that loads it and this one, and naming the block in
         // between writes the leaving device's name beside the arriving device's number — a
         // disagreement nothing afterwards would notice. The caller asks again next tick.
-        if (juce::roundToInt (apvts.getRawParameterValue (devId)->load()) != block.selectedIndex())
+        // Read ONCE. Reading again for the baseline lets automation change the number between the
+        // two, so the name written is about the number that was here and the baseline is about the
+        // number that arrived — the disagreement this guard exists to prevent, moved four lines.
+        const float dv = apvts.getRawParameterValue (devId)->load();
+
+        if (juce::roundToInt (dv) != block.selectedIndex())
             return false;
 
         const juce::Identifier devKey (juce::String (devId) + deviceAimSuffix);
@@ -415,7 +468,7 @@ private:
         else
             apvts.state.removeProperty (devKey, nullptr);
 
-        lastDeviceValue[b] = apvts.getRawParameterValue (devId)->load();
+        lastDeviceValue[b] = dv;
 
         for (int i = 0; i < core::CapturedBlock::numMeasured; ++i)
         {

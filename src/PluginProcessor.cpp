@@ -228,8 +228,11 @@ void AmpProcessor::rescanDevices()
         const int now = blockAt (b).rescan (was);
 
         // Out of the parameter's reach: a folder can hold more devices than this can address, and
-        // writing a clamped number would land on the neighbour. The block keeps playing the right
-        // pack; only the number cannot say so.
+        // writing a clamped number would land on the neighbour. Nothing good happens past here —
+        // the block is playing the right pack for one moment and the next pump reloads whatever
+        // the unchanged number points at — but a clamped write would be wrong immediately and
+        // permanently. A folder of more than a hundred and twenty-eight devices is a limit of the
+        // parameter, and it is on the list to be lifted rather than papered over.
         if (now >= 0 && now != was && now < params::maxDevices && p != nullptr)
             writes.emplace_back (p, p->convertTo0to1 ((float) now));
 

@@ -209,7 +209,10 @@ void Chrome::showPresetMenu()
     // the reset is one undoable step like any preset load.
     menu.addItem ("Reset to default", [this]
     {
-        auto tree = amp.apvts.copyState();
+        // ...and back to a fresh instance's IDENTITY too. The device and switch names are not
+        // parameters, so setting every parameter to its default leaves them behind — and the aim
+        // would then put the outgoing device straight back over the default one.
+        auto tree = amp.stateForSaving (true);
 
         for (auto* p : amp.getParameters())
             if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
@@ -231,7 +234,7 @@ void Chrome::savePreset (bool forceNewName)
 {
     auto store = [this] (const juce::String& name)
     {
-        if (! PresetManager::write (name, amp.apvts.copyState()))
+        if (! PresetManager::write (name, amp.stateForSaving()))
             return;
 
         presetName = name;

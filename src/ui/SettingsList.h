@@ -64,6 +64,13 @@ public:
             const bool on = row.get != nullptr && row.get();
             const bool over = (int) i == hovered;
 
+            // What was PAINTED is what the cache must remember. A repaint asked for by something
+            // else — a hover, a resize — draws the current answer without the timer's knowledge,
+            // and a value that then goes back to what the cache still holds would never be found
+            // changed, leaving a lit row that is off.
+            if (i < shown.size())
+                shown[i] = (char) on;
+
             if (over)
             {
                 g.setColour (theme::panel2);

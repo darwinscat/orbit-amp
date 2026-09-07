@@ -105,6 +105,7 @@ public:
         {
             loadedName.clear();
             player.unload();
+            refreshWearableTone();
             return;
         }
 
@@ -132,6 +133,8 @@ public:
         lastGain = -1.0f;
         lastTone.fill (-1.0f);
         lastSelector.fill (-1);
+
+        refreshWearableTone();
     }
 
     /** WHICH DEVICE IS ACTUALLY LOADED, BY NAME — the pack file's own name for it, which is what
@@ -385,8 +388,9 @@ public:
     }
 
     /** The parameter value that lands on a NAMED position, or -1 when this pack has no position by
-        that name (including "the pack is not here yet" — the caller retries while `isReady()` is
-        false and gives up once it is true). */
+        that name — including "no pack at all", which the caller tells apart with `isReady()`. That
+        second case is narrow: `RigPlayer::load` reads the manifest synchronously, so the positions
+        are knowable from the instant a device is selected and long before its models arrive. */
     float switchParameterFor (int slot, const juce::String& value) const
     {
         const auto tones = player.tones();
@@ -588,7 +592,24 @@ public:
         than showing an empty row — and the DSP has to reach the same verdict, or a block whose
         parameter says NATIVE while its face wears OURS would have its own bands parked in favour
         of a tone stack that does not exist, and end up with no tone at all. */
-    bool hasWearableTone() const
+    bool hasWearableTone() const noexcept { return wearable.load (std::memory_order_relaxed); }
+
+    /** Works it out again, on the message thread, and stores the answer for the audio thread.
+
+        THE ANSWER IS CACHED BECAUSE THE QUESTION IS NOT CHEAP AND THE ASKER IS THE AUDIO THREAD.
+        `processBlock` needs this verdict for every block, and `RigPlayer::tones()` builds and
+        returns a whole vector — a heap allocation and a copy of every tone's name and positions,
+        thousands of times a second on the one thread that must never allocate. Worse, it walks
+        the player's tone list while the message thread may be replacing it, which is a race with
+        a dangling read at the end of it. Neither cost buys anything: the answer only changes when
+        a pack is loaded, and this is called from where that happens. */
+    void refreshWearableTone()
+    {
+        wearable.store (computeWearableTone(), std::memory_order_relaxed);
+    }
+
+private:
+    bool computeWearableTone() const
     {
         for (const auto& t : tones())
         {
@@ -607,6 +628,7 @@ public:
         return false;
     }
 
+public:
     /** A switch whose positions declare filters rather than merely selecting captures. */
     static bool switchCarriesBands (const namz::rig::Tone& t)
     {
@@ -704,6 +726,9 @@ private:
     bool  lastSmooth  = true;
     int   lastSelected = -1;
     juce::String loadedName;   // the name of the pack actually playing — the state's identity
+
+    /** Whether the loaded pack has a tone stack worth wearing — see `refreshWearableTone`. */
+    std::atomic<bool> wearable { false };
     bool  raw = false;
 
     std::atomic<float> drive { 1.0f };
