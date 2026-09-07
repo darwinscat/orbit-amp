@@ -86,6 +86,25 @@ private:
     TrimMode  trimMode   = TrimMode::off;
     double    trimModeMs = 0.0;
 
+    /** The mode is HELD — nothing may re-derive it until the writes underneath have landed.
+
+        A parameter attachment does not silence its own write: each `setValueAsCompleteGesture`
+        comes straight back through `pushToWave` as it lands, so the FIRST of a pair is read while
+        the second value is still yesterday's. That was enough to lose a mode. Asking for a fixed
+        window from OFF turned the switch on, the mode was derived from the old fraction, missed
+        every mark, landed on MANUAL — and MANUAL is sticky by design, so the value that arrived a
+        line later could not take it back. It read as "sometimes it works", because sometimes the
+        old fraction WAS on a mark.
+
+        A chosen mode is not derivable in the first place — MANUAL sitting exactly on a mark is the
+        same two numbers as a fixed pick — so while it is held, the mode is what it was set to, and
+        derivation is left to what it is for: recall and automation. */
+    bool modeIsHeld = false;
+
+    /** Whether the trim was on at the last push. The view window has to be squared with the mode
+        on the OFF->ON edge and only there — see `pushToWave`. */
+    bool trimWasOn = false;
+
     /** MANUAL's own place, remembered in ms: a fixed pick moves the parameter, but coming back to
         MANUAL puts the handle where the hand last left it — the windows never steal its spot. */
     double manualTrimMs = 0.0;

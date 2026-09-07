@@ -186,6 +186,8 @@ void CabinetBlock::loadWave (int index)
 
     // A fixed window keeps its WORD across an IR swap: the parameter is a fraction of the shot's
     // length, so 50 ms of the old cab is not 50 ms of the new — re-assert the milliseconds.
+    // A shot too short to hold the window shows all of itself and keeps the word anyway — see the
+    // STILL OURS test in `deriveTrimMode`, which is what makes that survive the swap.
     if (trimMode == TrimMode::fixed && wave.lengthMs() > 0.0)
         trimAtt->setValueAsCompleteGesture (
             (float) juce::jlimit (0.001, 1.0, trimModeMs / wave.lengthMs()));
@@ -210,10 +212,28 @@ void CabinetBlock::pushToWave()
     wave.setFilters (plain (params::cabHpfOn) > 0.5f, plain (params::cabHpfHz), params::cabHpfMinHz, params::cabHpfMaxHz,
                      plain (params::cabLpfOn) > 0.5f, plain (params::cabLpfHz), params::cabLpfMinHz, params::cabLpfMaxHz);
     wave.setSlopes (slopeDb (params::cabHpfSlope), slopeDb (params::cabLpfSlope));
-    wave.setTrimEnabled (plain (params::cabTrimOn) > 0.5f);
-    wave.setTrimFraction (plain (params::cabTrim));
+    // The VALUE first, then the switch. Turning the trim on is what puts the handle under the view
+    // window's rule, and that rule WRITES: `setTrimEnabled` calls `clampTrimToWindow`, which pulls
+    // a handle standing outside the window onto its edge through `onTrimChanged` — a real gesture
+    // on the parameter. Enabled first, the clamp judged the OLD fraction and could overwrite the
+    // one arriving a line later.
+    const bool trimOn = plain (params::cabTrimOn) > 0.5f;
 
+    wave.setTrimFraction (plain (params::cabTrim));
     deriveTrimMode();
+
+    // Coming ON from OUTSIDE — a preset, a register, an automation lane — the picture is still
+    // wearing whatever window the last look left, and the clamp above would judge the recalled
+    // length against it and write the window's edge over it. Give the window the mode's own answer
+    // first and the clamp has nothing to pull. Only on the edge: setting it on every push would
+    // fight the servo that zooms under a dragging hand. A menu pick sets its own window and holds
+    // the mode, so it is not this code's business either.
+    if (trimOn && ! trimWasOn && ! modeIsHeld)
+        wave.setViewWindow (trimMode == TrimMode::fixed ? trimModeMs : 0.0);
+
+    wave.setTrimEnabled (trimOn);
+    trimWasOn = trimOn;
+
     wave.setTrimInteractive (trimMode == TrimMode::manual);
 
     // MANUAL's spot follows the hand while MANUAL is worn — so a later fixed pick cannot lose it.
@@ -225,6 +245,11 @@ void CabinetBlock::pushToWave()
 
 void CabinetBlock::deriveTrimMode()
 {
+    // Something already SAID what the mode is; re-deriving it from half-written values is how it
+    // used to be lost. See `modeIsHeld`.
+    if (modeIsHeld)
+        return;
+
     auto* on = amp.apvts.getParameter (params::cabTrimOn);
 
     if (on->convertFrom0to1 (on->getValue()) < 0.5f)
@@ -233,6 +258,14 @@ void CabinetBlock::deriveTrimMode()
         return;
     }
 
+    // NOTHING TO DERIVE FROM is not a verdict. With no shot loaded there are no milliseconds to
+    // compare: every mark misses, the answer is MANUAL, and MANUAL sticks. The editor opens that
+    // way — the switches' initial updates all run through here before the IR arrives, since
+    // `irAtt->sendInitialUpdate()` is the last of them — so a clean 100 MS used to come back as
+    // TRIM MAN on every single open. Say nothing and wait for the shot.
+    if (wave.lengthMs() <= 0.0)
+        return;
+
     // An explicitly chosen MANUAL stays MANUAL even when the magnet lands the handle exactly on
     // a mark — a handle that vanished under the hand would be a bug wearing a rule's clothes.
     if (trimMode == TrimMode::manual)
@@ -240,6 +273,15 @@ void CabinetBlock::deriveTrimMode()
 
     auto* tp = amp.apvts.getParameter (params::cabTrim);
     const double ms = (double) tp->convertFrom0to1 (tp->getValue()) * wave.lengthMs();
+
+    // STILL OURS: the window already worn, measured on THIS shot. A fixed pick too long for a
+    // short cab shows the whole thing, and the whole thing is not a mark — but the pick has not
+    // changed, and reading it as MANUAL here is what used to lose it for good on the next
+    // unrelated repaint, an HPF toggle being enough. Compare against the pick clamped to the shot
+    // and a 500 ms window survives a 183 ms cab and comes back whole on the next long one.
+    if (trimMode == TrimMode::fixed
+        && std::abs (ms - juce::jmin (trimModeMs, wave.lengthMs())) < 1.0)
+        return;
 
     for (const double mark : { 50.0, 100.0, 200.0, 500.0 })
         if (std::abs (ms - mark) < 1.0)
@@ -254,7 +296,11 @@ void CabinetBlock::deriveTrimMode()
 
 void CabinetBlock::showTrimMenu()
 {
+    // The groups are NAMED. This menu carries the block's cuts and its phase as well, so a bare
+    // OFF at the top has no owner and reads as the whole cabinet standing down — which is the
+    // strip's arrow, not this. A header costs one row and says whose switch each one is.
     juce::PopupMenu m;
+    m.addSectionHeader ("TRIM");
     m.addItem (1, "OFF", true, trimMode == TrimMode::off);
     m.addSeparator();
 
@@ -270,7 +316,7 @@ void CabinetBlock::showTrimMenu()
 
     // The block's other switches live here too — the one door that still works when a narrow
     // tile has no room for their faces.
-    m.addSeparator();
+    m.addSectionHeader ("CUTS & PHASE");
     m.addItem (11, "HPF", true, switches[0].sw.isOn());
     m.addItem (12, "LPF", true, switches[1].sw.isOn());
     m.addItem (10, juce::String::fromUTF8 ("\xc3\x98 PHASE"), true, switches[2].sw.isOn());
@@ -293,40 +339,56 @@ void CabinetBlock::applyTrimPick (int itemId)
         return;
     }
 
-    // The mode first, so the parameter echoes read the chosen story rather than re-deriving it.
-    // And pushToWave LAST, unconditionally: a pick that writes a value the parameter already has
+    // From here down the MODE is chosen, not derived: the two writes below echo back through
+    // `pushToWave` as they land, and a half-written pair is no basis for reading a mode off.
+    const juce::ScopedValueSetter<bool> held (modeIsHeld, true);
+
+    // pushToWave runs LAST, unconditionally: a pick that writes a value the parameter already has
     // echoes nothing, and the combo and the handle would be left telling yesterday's story.
+    //
+    // ONE ORDER for all three: the VALUE, then the WINDOW, then the SWITCH — and the switch last
+    // because turning the trim on is what makes the window rule the handle. `setTrimEnabled` and
+    // `setViewWindow` both call `clampTrimToWindow`, which pulls a handle standing outside the
+    // window onto its edge AND WRITES THAT — a real gesture on the parameter, through
+    // `onTrimChanged`. Turn the switch on while the old value and a stale window are still in
+    // place and the clamp fires on numbers nobody asked for: it used to cost MANUAL its
+    // remembered spot outright, and a fixed pick a spurious write into the host's automation.
+    // With the value and the window already what the pick says, the clamp has nothing to pull.
     if (itemId == 1)
     {
         trimMode = TrimMode::off;
-        trimOnAtt->setValueAsCompleteGesture (0.0f);
         wave.setViewWindow (0.0);
+        trimOnAtt->setValueAsCompleteGesture (0.0f);
     }
     else if (itemId == 6)
     {
         // MANUAL opens on the whole shot and puts the handle back where the hand last left it —
         // the windows in between never steal its spot. The servo takes the zoom from there.
-        trimMode = TrimMode::manual;
-        trimOnAtt->setValueAsCompleteGesture (1.0f);
+        // Read into a local first: `pushToWave` keeps `manualTrimMs` current while MANUAL is worn,
+        // so the writes below feed it, and the place must be taken before that starts.
+        const double remembered = manualTrimMs;
 
-        if (manualTrimMs > 0.0 && wave.lengthMs() > 0.0)
+        trimMode = TrimMode::manual;
+
+        if (remembered > 0.0 && wave.lengthMs() > 0.0)
             trimAtt->setValueAsCompleteGesture (
-                (float) juce::jlimit (0.001, 1.0, manualTrimMs / wave.lengthMs()));
+                (float) juce::jlimit (0.001, 1.0, remembered / wave.lengthMs()));
 
         wave.setViewWindow (0.0);
+        trimOnAtt->setValueAsCompleteGesture (1.0f);
     }
     else
     {
         const double marks[] = { 50.0, 100.0, 200.0, 500.0 };
         trimMode   = TrimMode::fixed;
         trimModeMs = marks[itemId - 2];
-        trimOnAtt->setValueAsCompleteGesture (1.0f);
 
         if (wave.lengthMs() > 0.0)
             trimAtt->setValueAsCompleteGesture (
                 (float) juce::jlimit (0.001, 1.0, trimModeMs / wave.lengthMs()));
 
         wave.setViewWindow (trimModeMs);
+        trimOnAtt->setValueAsCompleteGesture (1.0f);
     }
 
     pushToWave();
