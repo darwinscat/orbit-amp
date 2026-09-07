@@ -21,7 +21,10 @@ Two things 0.5.0 was not telling the truth about, both found by reading it back 
   impulse — are asked what theirs currently is, and only while they are in the rig. They ADD UP
   rather than compete, because they are in series: an echo leaving two seconds after the note is
   what the room then rings about. Capped at thirty seconds, because a delay at a hundred per cent
-  repeats never decays and no honest number exists for it.
+  repeats never decays and no honest number exists for it — and floored at the old eight while
+  either the echo or the room is in the rig, because there is no message in any plugin format that
+  says "my tail changed": a host that asks once, when it loads the session, keeps that answer. So
+  the number is honest when a host re-asks and never worse than 0.5.0's when it does not.
 - **The plug-ins in the macOS .zip carried no stapled notarization ticket.** They were notarized —
   they went up with the installer — but only the standalone was submitted on its own and so only
   the standalone came back with a ticket attached, and stapling the .pkg staples the package, not

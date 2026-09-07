@@ -889,8 +889,12 @@ int main()
                 juce::String (spkr, 2) + " s");
         report ("a hall at double decay outlives the old eight", room > 9.0 && room < 12.0,
                 juce::String (room, 2) + " s");
-        report ("one echo two seconds out asks for two seconds", echo > 2.0 && echo < 2.5,
-                juce::String (echo, 2) + " s");
+        // Nothing can tell a host this number moved, so while a link that CAN be set to ring long
+        // is in the rig the answer never drops below the flat eight that shipped before it. A
+        // single two-second echo is really 2.1; a host that asked once and cached it would be
+        // told 8, which is what it used to be told anyway.
+        report ("a link that can ring long never asks below the old eight",
+                echo >= 8.0 && echo < 8.01, juce::String (echo, 2) + " s");
 
         // The links are in SERIES: the echo is what the room rings ABOUT, so the two add rather
         // than compete. Taking the longest of them would report the room's number and cut the

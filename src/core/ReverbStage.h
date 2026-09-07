@@ -247,7 +247,11 @@ private:
         // Its longest comb, in seconds — the RIGHT channel's, which JUCE spreads 23 samples past
         // the left one's 1617. Rate-independent: the tunings are scaled by the sample rate.
         const double comb = (1617.0 + 23.0) / 44100.0;
-        tailSec.store ((float) ((double) predelayMs * 0.001 + comb * std::log (0.001) / std::log (g)),
+        // The same off-by-one the echo has, for the same reason: the energy of the k-th pass sits
+        // in the interval that ENDS at (k+1) combs, so the last one still above a thousandth runs
+        // one comb longer than the envelope's answer.
+        tailSec.store ((float) ((double) predelayMs * 0.001
+                                  + comb * (1.0 + std::log (0.001) / std::log (g))),
                        std::memory_order_relaxed);
     }
 

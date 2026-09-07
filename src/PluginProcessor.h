@@ -98,6 +98,23 @@ public:
         if (linkInRig (params::rowCab))
             tail += (double) cab.tailSeconds();
 
+        // A FLOOR, BECAUSE NOTHING CAN TELL A HOST THIS NUMBER MOVED. There is no such message in
+        // any of the three wrappers — JUCE's change notifications carry latency, programs, state
+        // and parameter info, and nothing for a tail — so a host that asks once, when it activates
+        // the plugin, keeps whatever answer it got. If it asked while the echo was at its default
+        // and the player then dials two seconds at ninety per cent, the honest live number never
+        // reaches it, and one host at least stops calling a plugin at all after `tail` seconds of
+        // silence: that would cut a tail while PLAYING, not only in a bounce.
+        //
+        // So while either link that can be set to ring long is in the rig, the answer is never
+        // below the flat eight this used to be. Both of the wins survive it — a rig with neither
+        // of them asks for a second and a bit instead of eight, and a hall breathing at double is
+        // no longer cut at eight — and the one case that stays wrong in a caching host is one
+        // where the old constant was exactly as wrong. Lifting the floor is a thing to do after
+        // watching a real session in Cubase and Logic, not before.
+        if (linkInRig (params::rowDelay) || linkInRig (params::rowReverb))
+            tail = juce::jmax (tail, 8.0);
+
         return juce::jmin (tail, 30.0);
     }
 
