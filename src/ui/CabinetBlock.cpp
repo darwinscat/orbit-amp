@@ -133,7 +133,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     {
         switch (trimMode)
         {
-            case TrimMode::fixed:  return "TRIM " + juce::String ((int) trimModeMs);
+            case TrimMode::fixed:  return "TRIM " + juce::String (juce::roundToInt (trimModeMs));
             case TrimMode::manual: return juce::String ("TRIM MAN");
             case TrimMode::off:
             default:               return juce::String ("TRIM OFF");
@@ -237,11 +237,20 @@ void CabinetBlock::pushToWave()
     // first and the clamp has nothing to pull. Only on the edge: setting it on every push would
     // fight the servo that zooms under a dragging hand. A menu pick sets its own window and holds
     // the mode, so it is not this code's business either.
-    if (trimOn && ! trimWasOn && ! modeIsHeld)
-        wave.frameTrim();
+    // ...and only once there IS a shot. Until the IR lands there is nothing to frame and nothing
+    // worth remembering: an editor opening on a saved trim runs through here first with a length
+    // of zero, and latching the switch's state there spent the edge on nothing — the picture then
+    // stayed on the whole shot with the trim a sliver at the far edge, which is the very thing the
+    // framing law exists to prevent.
+    if (wave.lengthMs() > 0.0)
+    {
+        if (trimOn && ! trimWasOn && ! modeIsHeld)
+            wave.frameTrim();
+
+        trimWasOn = trimOn;
+    }
 
     wave.setTrimEnabled (trimOn);
-    trimWasOn = trimOn;
 
     wave.setTrimInteractive (trimMode == TrimMode::manual);
 
@@ -296,7 +305,18 @@ void CabinetBlock::deriveTrimMode()
             return;
         }
 
-    trimMode = TrimMode::manual;
+    // A NUMBER NOBODY CLAIMED is a fixed window on its own number. It used to be read as MANUAL,
+    // and that was the last place a mode could be invented rather than found: a session saved
+    // mid-drag came back manual, the same session saved on a mark came back fixed, and which one
+    // you got depended on where the hand happened to stop. The mode is not stored anywhere — the
+    // two parameters are the whole truth — so the only honest reading is the one that says the
+    // same thing every time.
+    //
+    // The combo shows the number, no window in the menu is ticked (none IS chosen), and the
+    // handle waits for MANUAL to be asked for. One click, and the sound never moved: the value is
+    // already exactly where it was saved.
+    trimMode   = TrimMode::fixed;
+    trimModeMs = ms;
 }
 
 /** The trim menu's ids: OFF, then one per fixed mark, then MANUAL well clear of them, and the
