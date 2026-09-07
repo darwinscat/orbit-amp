@@ -105,10 +105,6 @@ private:
         on the OFF->ON edge and only there — see `pushToWave`. */
     bool trimWasOn = false;
 
-    /** MANUAL's own place, remembered in ms: a fixed pick moves the parameter, but coming back to
-        MANUAL puts the handle where the hand last left it — the windows never steal its spot. */
-    double manualTrimMs = 0.0;
-
     std::unique_ptr<juce::ParameterAttachment> irAtt, hpfHzAtt, lpfHzAtt, trimAtt, trimOnAtt,
                                                hpfSlopeAtt, lpfSlopeAtt;
 
