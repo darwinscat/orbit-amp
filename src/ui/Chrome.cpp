@@ -3,6 +3,8 @@
 
 #include "Chrome.h"
 
+#include <felitronics/appkit/BrandTextFace.h>
+
 #include "../PluginProcessor.h"
 #include "../PresetManager.h"
 
@@ -29,7 +31,15 @@ Chrome::Chrome (AmpProcessor& processor)
               .attention  = theme::orange,
               .text       = theme::tx,
               .textDim    = theme::txDim,
-              .activeText = juce::Colours::white },
+              .activeText = juce::Colours::white,
+              // THE CHROME'S FACE. Not Michroma: the preset name is typed by a player and Michroma
+              // has no Cyrillic at all, so half a Russian name would fall back to the host's font
+              // mid-word. Science Gothic sets all twelve languages the family offers and was
+              // pinned to Michroma's own proportions for exactly this seat — 0.3% on the width,
+              // 5% on the stroke — so the registers and the name stand beside the wordmark
+              // without the toolbar reading as two typefaces having an argument.
+              .display    = felitronics::appkit::brand::textTypeface(),
+              .tracking   = 0.06f },
       // The family's own kit: appkit carries the mark and the face, so nothing here embeds either.
       brand ("OrbitAmp", "https://darwinscat.com/orbitamp?utm_source=orbitamp&utm_medium=plugin"),
       preset (theme)
@@ -41,7 +51,7 @@ Chrome::Chrome (AmpProcessor& processor)
     brand.wordmarkScale = 0.50f;
     brand.bylineScale   = 0.30f;
 
-    for (auto* b : { &undo, &redo, &save, &saveAs, &trash, &gear })
+    for (auto* b : { &undo, &redo, &gear })
     {
         b->colour      = theme::txDim;
         b->panelColour = theme::panel;
@@ -65,19 +75,6 @@ Chrome::Chrome (AmpProcessor& processor)
     };
     addAndMakeVisible (fullScreen);
 
-    // Save writes back to the loaded preset; Save As always asks for a name — the same split as the
-    // sibling, so a working preset can be updated without a dialog every time.
-    save.onClick   = [this] { savePreset (false); };
-    saveAs.onClick = [this] { savePreset (true); };
-    trash.onClick  = [this]
-    {
-        if (! PresetManager::names().contains (presetName))
-            return;
-
-        PresetManager::remove (presetName);
-        presetName = "Default";
-        preset.setCurrentName (presetName);
-    };
 
     for (int i = 0; i < history.numRegisters(); ++i)
     {
@@ -142,17 +139,15 @@ void Chrome::resized()
     redo.setBounds (leftBar.removeFromLeft (34).reduced (3, 6));
     header.removeFromLeft (68 + 8);
 
-    // ---- right cluster takes the REST: the gear at the very edge, file actions, registers, and
-    //      the preset name in whatever is left — the one cell here that can give. ----
+    // ---- right cluster takes the REST: the two window controls at the very edge, the registers,
+    //      and the preset NAME in everything left over. It gets the lot because it is the only cell
+    //      here whose content is not ours: a name is typed by a player and can be any length in any
+    //      language, and three file icons used to stand where those letters needed to be. ----
     auto rightBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
 
     gear.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
     fullScreen.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-    rightBar.removeFromRight (6);   // these two mind the WINDOW, the rest edit the preset — a seam
-    trash .setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-    saveAs.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-    save  .setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-
+    rightBar.removeFromRight (6);
     auto snapArea = rightBar.removeFromLeft (124).reduced (6, 8);
     const int count = (int) registers.size();
     const int w     = count > 0 ? snapArea.getWidth() / count : 0;
@@ -201,6 +196,27 @@ void Chrome::showPresetMenu()
             presetName = n;
             preset.setCurrentName (presetName);
         });
+
+    // THE PRESET EDITOR LIVES HERE, not on the bar. Three icons stood in the toolbar where the
+    // name's letters needed to be, and a name is the one thing up there we do not choose: it is
+    // typed by a player, in any language, at any length. Save, Save As and Delete are one visit
+    // each and belong with the list they act on.
+    menu.addSeparator();
+
+    // Save writes back to the loaded preset; Save As always asks for a name — the same split as the
+    // sibling, so a working preset can be updated without a dialog every time.
+    menu.addItem ("Save", [this] { savePreset (false); });
+    menu.addItem (juce::String::fromUTF8 ("Save as\xe2\x80\xa6"), [this] { savePreset (true); });
+
+    // GREY, not absent, when the loaded name is not a saved preset: a row that vanishes says
+    // nothing about why it is gone, and "Default" is exactly the state a player will ask about.
+    menu.addSeparator();
+    menu.addItem ("Delete", names.contains (presetName), false, [this]
+    {
+        PresetManager::remove (presetName);
+        presetName = "Default";
+        preset.setCurrentName (presetName);
+    });
 
     menu.addSeparator();
 

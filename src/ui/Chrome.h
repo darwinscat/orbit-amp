@@ -20,7 +20,7 @@ class AmpProcessor;
 
 /** The header, laid out as OrbitCab's:
 
-        [cat + mark + OrbitAmp by Darwin's Cat]  undo redo ....  A B C D  [preset]  save saveAs trash
+        [cat + mark + OrbitAmp by Darwin's Cat]  undo redo ....  A B C D  [ preset name ]
 
     Brand hugging its content on the left, undo/redo in the gap after it, and a right cluster of
     registers, the preset name, and the file actions. Every piece comes from felitronics-appkit —
@@ -66,9 +66,6 @@ private:
     felitronics::appkit::BrandHeader brand;
     felitronics::appkit::IconButton  undo   { felitronics::appkit::IconButton::Kind::undo };
     felitronics::appkit::IconButton  redo   { felitronics::appkit::IconButton::Kind::redo };
-    felitronics::appkit::IconButton  save   { felitronics::appkit::IconButton::Kind::save };
-    felitronics::appkit::IconButton  saveAs { felitronics::appkit::IconButton::Kind::saveAs };
-    felitronics::appkit::IconButton  trash  { felitronics::appkit::IconButton::Kind::trash };
     felitronics::appkit::IconButton  gear   { felitronics::appkit::IconButton::Kind::settings };
 
     /** The full-screen button's face: the four corners of a frame, reaching out. Drawn here —
