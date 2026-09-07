@@ -3,17 +3,19 @@
 
 #include "Theme.h"
 
-#include <BinaryData.h>
+#include <felitronics/appkit/BrandAssets.h>
+
 
 namespace orbitamp::theme
 {
 
 juce::Typeface::Ptr displayTypeface()
 {
-    // Parsed once for the process — every label on every open editor shares it.
-    static juce::Typeface::Ptr tf = juce::Typeface::createSystemTypefaceFor (
-        BinaryData::MichromaRegular_ttf, (size_t) BinaryData::MichromaRegular_ttfSize);
-    return tf;
+    // APPKIT'S copy, not a second one. The face used to arrive twice in every binary — the whole
+    // ttf through `juce_add_binary_data` for the panel, and appkit's own base64 for the version
+    // popover — parsed into two unrelated Typefaces at startup. One face, one path: appkit is the
+    // brand's home and now carries it whole, so there is nothing left for a product to embed.
+    return felitronics::appkit::brand::wordmarkTypeface();
 }
 
 namespace

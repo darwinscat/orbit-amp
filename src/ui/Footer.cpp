@@ -133,10 +133,10 @@ Footer::Footer (AmpProcessor& processor)
     devicesBadge.setTooltip ("Devices and trademarks: every device the installed packs name");
     addAndMakeVisible (devicesBadge);
 
-    // The popover wears the header's wordmark, so the two read as one product. appkit keeps
-    // BrandHeader's own typeface private, so this is the same embedded bytes, loaded once per window.
-    versionBadge.setBrandTypeface (juce::Typeface::createSystemTypefaceFor (
-        BinaryData::MichromaRegular_ttf, (size_t) BinaryData::MichromaRegular_ttfSize));
+    // The popover wears the header's wordmark, so the two read as one product — and it is now the
+    // SAME object, not a second parse of the same bytes: appkit hands out one Typeface for the
+    // family's face and everything that wants it asks for that one.
+    versionBadge.setBrandTypeface (theme::displayTypeface());
     addChildComponent (versionBadge);   // never shown: the strip paints the line, the badge holds the popover
 
     // The line this strip draws for itself, in the strip's own voice — the version as the toolbar
