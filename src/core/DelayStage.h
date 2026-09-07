@@ -97,8 +97,14 @@ public:
 
     void setTimeMs (float ms) noexcept
     {
-        timeMs = juce::jmax (1.0f, ms);
-        refreshTail();
+        const float want = juce::jmax (1.0f, ms);
+
+        if (! juce::approximatelyEqual (want, timeMs))
+        {
+            timeMs = want;
+            refreshTail();
+        }
+
         shownTimeMs.store (timeMs, std::memory_order_relaxed);   // process() overwrites with the glide
     }
 
@@ -106,7 +112,12 @@ public:
         long compressed bloom rather than a runaway. */
     void setRepeats (float amount) noexcept
     {
-        repeats = juce::jlimit (0.0f, 1.0f, amount);
+        const float want = juce::jlimit (0.0f, 1.0f, amount);
+
+        if (juce::approximatelyEqual (want, repeats))
+            return;
+
+        repeats = want;
         refreshTail();
     }
 
@@ -260,9 +271,11 @@ private:
     static constexpr float satDrive = 1.2f;
     static constexpr float satNorm  = 1.0f / satDrive;
 
-    /** Worked out where the two numbers it depends on are set, rather than where it is asked:
-        the asker is the message thread and these are the audio thread's. Two logarithms on a knob
-        move, and an atomic to read. */
+    /** Worked out where the two numbers it depends on are set, rather than where it is asked: the
+        asker may be any thread the host likes and these are the audio thread's. Both setters are
+        called every block from `processBlock`, so both check first — two logarithms are nothing
+        against a neural model, and they are still two logarithms in the audio path for a knob
+        nobody touched. */
     void refreshTail() noexcept
     {
         const double t = (double) timeMs * 0.001;

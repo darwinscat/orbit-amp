@@ -124,7 +124,14 @@ public:
     /** How long the attack stays dry before the tail arrives, 0..100 ms. */
     void setPredelayMs (float ms) noexcept
     {
-        predelayMs = juce::jlimit (0.0f, 100.0f, ms);
+        const float want = juce::jlimit (0.0f, 100.0f, ms);
+
+        // Guarded because `processBlock` sets this every block and `refreshTail` takes a
+        // logarithm. `apply()` needs no such check: its own two setters already have one.
+        if (juce::approximatelyEqual (want, predelayMs))
+            return;
+
+        predelayMs = want;
         refreshTail();
     }
 
