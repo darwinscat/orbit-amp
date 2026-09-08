@@ -29,30 +29,74 @@
 #include <memory>
 #include <vector>
 
-// EVERY ALLOCATION IN THIS BINARY, COUNTED. RT-safety claims are worth what their instrument is
-// worth, and "I read the code and saw no `new`" is not an instrument: `std::vector::assign` on a
-// larger size allocates, `juce::String` allocates, and a lambda that captures by value can. Global
-// `operator new` is the only place that sees all of them.
-static std::atomic<long long> gAllocations { 0 };
+// EVERY ALLOCATION THIS THREAD MAKES, COUNTED. RT-safety claims are worth what their instrument
+// is worth, and "I read the code and saw no `new`" is not an instrument: `std::vector::assign` on a
+// larger size allocates, `juce::String` allocates, a capturing lambda can.
+//
+// 🔴 WHAT THIS COUNTS, EXACTLY, because an instrument that overstates its reach is worse than none.
+// It counts every `operator new` form the standard defines — plain, array, nothrow and aligned —
+// so it sees what `std::vector` does, which is what `BypassWire` is made of. It does NOT count
+// `malloc`/`calloc`/`realloc`, so a class built on JUCE's `HeapBlock` would slip past it; that is
+// stated rather than glossed, and it is why the claim below is about THIS class and not about the
+// binary.
+//
+// The counter is THREAD-LOCAL. A shared one would have been simpler and would have made every
+// background thread's allocation look like this thread's — a false non-zero, i.e. a red test with
+// no defect under it.
+//
+// And it is compiled out under a sanitizer. Overriding only some of the `operator new` family
+// leaves the rest coming from the sanitizer's runtime while every `delete` goes to this file's —
+// an allocator mismatch invented by the instrument, in the build whose whole job is to find those.
+#if defined(__has_feature)
+  #if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
+    #define ORBITAMP_COUNT_ALLOCATIONS 0
+  #endif
+#endif
+#if ! defined(ORBITAMP_COUNT_ALLOCATIONS)
+  #if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    #define ORBITAMP_COUNT_ALLOCATIONS 0
+  #else
+    #define ORBITAMP_COUNT_ALLOCATIONS 1
+  #endif
+#endif
 
-void* operator new (std::size_t n)
+static thread_local long long gAllocations = 0;
+
+#if ORBITAMP_COUNT_ALLOCATIONS
+static void* countedAlloc (std::size_t n)
 {
-    gAllocations.fetch_add (1, std::memory_order_relaxed);
+    ++gAllocations;
     if (void* p = std::malloc (n ? n : 1)) return p;
     throw std::bad_alloc();
 }
 
-void* operator new[] (std::size_t n)
+static void* countedAlignedAlloc (std::size_t n, std::align_val_t a)
 {
-    gAllocations.fetch_add (1, std::memory_order_relaxed);
-    if (void* p = std::malloc (n ? n : 1)) return p;
-    throw std::bad_alloc();
+    ++gAllocations;
+    void* p = nullptr;
+    const std::size_t al = (std::size_t) a < sizeof (void*) ? sizeof (void*) : (std::size_t) a;
+    if (::posix_memalign (&p, al, n ? n : 1) != 0) throw std::bad_alloc();
+    return p;
 }
 
-void operator delete (void* p) noexcept { std::free (p); }
+void* operator new   (std::size_t n) { return countedAlloc (n); }
+void* operator new[] (std::size_t n) { return countedAlloc (n); }
+void* operator new   (std::size_t n, const std::nothrow_t&) noexcept { ++gAllocations; return std::malloc (n ? n : 1); }
+void* operator new[] (std::size_t n, const std::nothrow_t&) noexcept { ++gAllocations; return std::malloc (n ? n : 1); }
+void* operator new   (std::size_t n, std::align_val_t a) { return countedAlignedAlloc (n, a); }
+void* operator new[] (std::size_t n, std::align_val_t a) { return countedAlignedAlloc (n, a); }
+
+void operator delete   (void* p) noexcept { std::free (p); }
 void operator delete[] (void* p) noexcept { std::free (p); }
-void operator delete (void* p, std::size_t) noexcept { std::free (p); }
+void operator delete   (void* p, std::size_t) noexcept { std::free (p); }
 void operator delete[] (void* p, std::size_t) noexcept { std::free (p); }
+void operator delete   (void* p, const std::nothrow_t&) noexcept { std::free (p); }
+void operator delete[] (void* p, const std::nothrow_t&) noexcept { std::free (p); }
+void operator delete   (void* p, std::align_val_t) noexcept { std::free (p); }
+void operator delete[] (void* p, std::align_val_t) noexcept { std::free (p); }
+void operator delete   (void* p, std::size_t, std::align_val_t) noexcept { std::free (p); }
+void operator delete[] (void* p, std::size_t, std::align_val_t) noexcept { std::free (p); }
+#endif
 
 namespace
 {
@@ -212,6 +256,11 @@ int main()
                 felitronics::core::StreamResampler::pairDelayHostSamples (host, pack));
         };
 
+        // TAKING A GROWTH, the way the audio thread takes one: a block. A zero-length block is the
+        // cheapest real one — `process` adopts before it looks at `numSamples` — so the fixtures
+        // below can hand the growth over without also sliding the window they are about to check.
+        const auto takeGrowth = [] (Wire& w) { w.advance (nullptr, 0, 0); };
+
         // 1 · THERE IS NO BOUND ANY MORE — the wire GROWS to whatever the geometry produces, and
         //     the window survives the growth. This section used to assert that a computed ceiling
         //     covered every rate pair; the ceiling is gone, because one derived from a model rate
@@ -245,7 +294,7 @@ int main()
                     w.advance (sp, 1, 8);
 
                     if (w.reserve (ask))
-                        w.commit();
+                        takeGrowth (w);
 
                     grows = grows && w.capacity() >= ask;
 
@@ -554,97 +603,148 @@ int main()
 
             w.process (rp, wp, 2, n, 96);                     // once to touch every path first
 
-            const long long beforeProcess = gAllocations.load();
+            const long long beforeProcess = gAllocations;
             for (int i = 0; i < 500; ++i)
             {
                 w.process (rp, wp, 2, n, 96);
                 w.advance (rp, 2, n);
                 w.process (rp, wp, 2, n, 0);
             }
-            const long long inProcess = gAllocations.load() - beforeProcess;
+            const long long inProcess = gAllocations - beforeProcess;
 
             const bool owed = w.reserve (4096);               // ALLOCATES — and is meant to
-            const long long beforeCommit = gAllocations.load();
-            w.commit();
-            const long long inCommit = gAllocations.load() - beforeCommit;
+            const long long beforeAdopt = gAllocations;
+            w.process (rp, wp, 2, n, 96);                     // the audio thread takes the growth
+            const long long inAdopt = gAllocations - beforeAdopt;
 
-            std::printf ("\nwire: 1500 process/advance calls allocated %lld times; commit allocated"
-                         " %lld\n", inProcess, inCommit);
+            std::printf ("\nwire: 1500 process/advance calls allocated %lld times; the block that"
+                         " ADOPTS a growth allocated %lld\n", inProcess, inAdopt);
 
-            report ("process allocates nothing, counted", inProcess == 0,
+            report ("process allocates nothing, counted",
+                    ORBITAMP_COUNT_ALLOCATIONS == 0 || inProcess == 0,
                     juce::String (inProcess) + " allocations in 1500 calls");
-            report ("commit allocates nothing under the lock, counted",
-                    owed && inCommit == 0 && w.capacity() == 4096,
-                    juce::String (inCommit) + " allocations, capacity now "
+            report ("the audio thread adopts a growth without allocating, counted",
+                    owed && w.capacity() == 4096
+                      && (ORBITAMP_COUNT_ALLOCATIONS == 0 || inAdopt == 0),
+                    juce::String (inAdopt) + " allocations, capacity now "
                       + juce::String (w.capacity()));
         }
 
-        // 2g · THE RESIDUAL, MEASURED. Growth brings the old window across, so a delay born inside
-        //      what the wire already remembered is seamless — but a delay born LONGER than that
-        //      reaches back further than the wire has ever heard, and those samples are silence.
-        //      That is the one hole left, and the point of this block is to put a number on it
-        //      rather than a word.
+        // 2g · THE RESIDUAL, MEASURED — and measured as a STEP, which is what a listener hears.
+        //      Growth brings the old window across, so a delay born inside what the wire already
+        //      remembered is seamless; born LONGER, it reaches further back than the wire has ever
+        //      heard, and those samples are silence.
         //
-        //      🔴 THE CEILING IS FROM CONSTRUCTION, NOT FROM ONE RUN: the wire resumes at whatever
-        //      the signal happens to be doing, so the worst step is a full-scale one — 0 dBFS — and
-        //      the phase of the resume decides how close a given run gets. Swept over a full cycle,
-        //      so the number below is a bound reached, not a value observed.
+        //      🔴 TWO CEILINGS, BOTH FROM CONSTRUCTION, and the first version of this block had
+        //      only one and had it wrong. Coming OUT of the hole is a jump from zero to a sample of
+        //      magnitude at most one: ceiling 1.0, which is 0 dBFS. But a delay that CHANGES at all
+        //      — cold window or not — can put +1 next to −1, and that is a jump of 2.0, +6.02 dBFS.
+        //      Reporting only the first would have called the smaller number the worst case.
         {
             constexpr int remembered = 64, born = 96, n = 256;
-            const int cold = born - remembered;               // samples the wire cannot know
+            const int cold = born - remembered;
 
-            double worstStepDb = -200.0;
+            // The step across an index, in dBFS relative to full scale. `20·log10(2)` is +6.02, so
+            // this scale says exactly what the ceilings above say.
+            const auto stepDb = [] (float a, float b)
+            {
+                return 20.0 * std::log10 (std::max (1.0e-12, (double) std::abs (a - b)));
+            };
+
+            double worstOut = -200.0, worstWarm = -200.0;
             int    coldSamples = -1;
+            bool   coldIsConstant = true;
 
             for (int phase = 0; phase < 360; ++phase)
             {
-                Wire w;
-                w.prepare (remembered);
-
-                std::vector<float> sig ((size_t) n), out ((size_t) n);
+                std::vector<float> sig ((size_t) n), out ((size_t) n), warm ((size_t) n);
                 for (int i = 0; i < n; ++i)
                     sig[(size_t) i] = (float) std::sin (2.0 * juce::MathConstants<double>::pi
                                                           * (0.01 * (double) i
                                                              + (double) phase / 360.0));
 
                 const float* sp[1] { sig.data() };
-                w.advance (sp, 1, n);                          // everything it ever heard
 
-                if (w.reserve (born))
-                    w.commit();
+                // (a) THE COLD CASE: grown past what it remembered.
+                {
+                    Wire w;
+                    w.prepare (remembered);
+                    w.advance (sp, 1, n);
 
-                std::vector<float> quiet ((size_t) n, 0.0f);
-                const float* qp[1] { quiet.data() };
-                float*       op[1] { out.data() };
-                w.process (qp, op, 1, n, born);
+                    if (w.reserve (born))
+                        takeGrowth (w);
 
-                int silent = 0;
-                while (silent < n && juce::approximatelyEqual (out[(size_t) silent], 0.0f))
-                    ++silent;
+                    std::vector<float> quiet ((size_t) n, 0.0f);
+                    const float* qp[1] { quiet.data() };
+                    float*       op[1] { out.data() };
+                    w.process (qp, op, 1, n, born);
 
-                if (coldSamples < 0) coldSamples = silent;
+                    int silent = 0;
+                    while (silent < n && juce::approximatelyEqual (out[(size_t) silent], 0.0f))
+                        ++silent;
 
-                // The step out of the hole: how far the first non-zero sample is from the silence
-                // in front of it, which is what a listener hears as the click.
-                if (silent < n)
-                    worstStepDb = std::max (worstStepDb,
-                                            20.0 * std::log10 (std::max (1.0e-12,
-                                                                         (double) std::abs (out[(size_t) silent]))));
+                    if (coldSamples < 0) coldSamples = silent;
+                    coldIsConstant = coldIsConstant && silent == coldSamples;   // EVERY phase, not the first
+
+                    if (silent > 0 && silent < n)
+                        worstOut = std::max (worstOut, stepDb (out[(size_t) silent],
+                                                               out[(size_t) (silent - 1)]));
+                }
+
+                // (b) THE WARM CASE: the same delay change with nothing cold about it. This is the
+                //     discontinuity the wire has always had and did not invent, and it is the
+                //     bigger of the two — worth publishing next to the other rather than omitted.
+                //
+                //     🔴 ITS SIGNAL IS CHOSEN SO THE CEILING IS REACHABLE, and that is the fixture
+                //     doing its job rather than the threshold being loosened. At the seam the wire
+                //     puts x[0] next to x[n-1], so the step is |x[0] − x[n-1]| and the sweep can
+                //     only reach 2·|sin(pi·f·(n-1))| — with an arbitrary frequency that is a number
+                //     like 1.975, and calling THAT the worst case would have been a fixture's
+                //     accident published as a bound. Half a cycle across those n-1 samples makes
+                //     the two ends antiphase, and then the ceiling is the topological one.
+                {
+                    std::vector<float> anti ((size_t) n);
+                    for (int i = 0; i < n; ++i)
+                        anti[(size_t) i] = (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                               * (0.5 * (double) i / (double) (n - 1)
+                                                                  + (double) phase / 360.0));
+
+                    const float* ap[1] { anti.data() };
+
+                    Wire w;
+                    w.prepare (born);
+                    w.advance (ap, 1, n);
+
+                    float* wp[1] { warm.data() };
+                    w.process (ap, wp, 1, n, 0);        // no delay…
+                    w.process (ap, wp, 1, n, born);     // …and then all of it, between two blocks
+
+                    for (int i = 1; i < n; ++i)
+                        worstWarm = std::max (worstWarm, stepDb (warm[(size_t) i], warm[(size_t) (i - 1)]));
+                }
             }
 
-            std::printf ("wire: a delay born %d samples deep into a wire that remembered %d —"
-                         " %d cold samples, worst step %.2f dBFS over 360 phases (ceiling 0.00)\n",
-                         born, remembered, coldSamples, worstStepDb);
+            std::printf ("\nwire: a delay born %d deep into a wire that remembered %d — %d cold"
+                         " samples on every one of 360 phases\n"
+                         "      worst step OUT of the hole   %8.4f dBFS   (ceiling  0.00, a jump from"
+                         " zero to |x| <= 1)\n"
+                         "      worst step of the CHANGE     %8.4f dBFS   (ceiling +6.02, +1 against"
+                         " -1; not new, and the larger)\n",
+                         born, remembered, coldSamples, worstOut, worstWarm);
 
-            report ("the residual is exactly the part the wire never heard",
-                    coldSamples == cold,
+            report ("the residual is exactly the part the wire never heard, on every phase",
+                    coldSamples == cold && coldIsConstant,
                     juce::String (coldSamples) + " cold, arithmetic says " + juce::String (cold));
 
-            // Reached the topological ceiling: a full-scale resume is 0 dBFS, and the sweep gets
-            // within a hundredth of a dB of it. One run would have been a lower bound, not a size.
-            report ("and the worst step it can make is the full-scale one, reached by sweeping",
-                    worstStepDb > -0.05,
-                    juce::String (worstStepDb, 3) + " dBFS against a ceiling of 0.000");
+            // BOTH BOUNDS. Reached, so the number is a size and not a lower bound; and not
+            // exceeded, so the construction ceiling is a ceiling and not a hope.
+            report ("the step out of the hole reaches its ceiling and does not pass it",
+                    worstOut > -0.01 && worstOut <= 0.0001,
+                    juce::String (worstOut, 4) + " dBFS against 0.0000");
+
+            report ("the step of the change itself reaches +6.02 and does not pass it",
+                    worstWarm > 6.0 && worstWarm <= 6.0206,
+                    juce::String (worstWarm, 4) + " dBFS against 6.0206");
         }
 
         // 3 · THE REFUSAL IS VISIBLE. The wire's domain is bounded — the delay grows without limit
@@ -1804,6 +1904,45 @@ int main()
                     buf.clear();
                     hi.processBlock (buf, midi);
                 }
+            }
+
+            // 🔴 GROWTH THROUGH THE PROCESSOR, WITH THE FLOOR OUT OF THE WAY. Everything above ran
+            //    at a 512-sample block, so the memory floor was 512 and both delays were 96: the
+            //    wire never had to grow, and `fitWire` could have been deleted entirely without a
+            //    single check noticing. A small block puts the floor UNDER the delay, and then the
+            //    only way the numbers come out right is if the growth path actually runs.
+            {
+                constexpr int tiny = 64;                    // below the 96 a 48 kHz pack asks for
+
+                const auto smallOwned = std::make_unique<orbitamp::AmpProcessor>();
+                auto& sm = *smallOwned;
+                sm.inlineLoads = true;
+                sm.prepareToPlay (96000.0, tiny);
+
+                juce::AudioBuffer<float> tb (2, tiny);
+                for (int i = 0; i < 80; ++i)
+                {
+                    tb.clear();
+                    sm.processBlock (tb, midi);
+                    sm.pumpDeviceWork();
+                    juce::Thread::sleep (2);
+                }
+
+                const int smLat = juce::jmax (sm.boost.latencySamples(), sm.preamp.latencySamples());
+                const int smCap = juce::jmax (sm.bypassWireCapacity (0), sm.bypassWireCapacity (1));
+
+                std::printf ("wire: at a %d-sample block the floor is under the delay — longest"
+                             " delay %d, wire grew to %d\n", tiny, smLat, smCap);
+
+                // PRECONDITION: the floor really is under the delay, or this measures the floor.
+                report ("a small block really does put the memory floor under the delay",
+                        smLat > tiny, juce::String (smLat) + " against a floor of "
+                                        + juce::String (tiny));
+
+                report ("and the wire grew through the processor to reach it",
+                        smLat > tiny && smCap == smLat,
+                        juce::String (smCap) + " carried against " + juce::String (smLat)
+                          + " asked");
             }
 
             // 🔴 THE MOMENT THE DELAY IS BORN, through the real plugin. A block that stands

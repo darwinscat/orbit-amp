@@ -399,18 +399,19 @@ void AmpProcessor::pumpDeviceWork()
 
 void AmpProcessor::fitWire (int index, int lat)
 {
-    // ALLOCATE FIRST, PUBLISH SECOND, and the split is the whole point: `reserve` builds the bigger
-    // rows here, on the message thread, with nothing waiting on it; the lock is taken only for the
-    // swap, which copies `capacity()` floats per channel and allocates nothing at all.
+    // ALLOCATE HERE, ADOPT THERE. This builds the bigger rows on the message thread, where nothing
+    // waits on it; the audio thread takes them itself, at the top of its next block, with pointer
+    // swaps and one copy of the window and no allocation at all.
     //
-    // `suspendProcessing` would have been shorter and is wrong: it hands the host silence for a
-    // block, which is exactly the click the warm window was added to remove. Trading a comb for a
-    // hole is not a fix.
-    if (! wire[(size_t) index].reserve (lat))
-        return;
-
-    const juce::ScopedLock sl (getCallbackLock());
-    wire[(size_t) index].commit();
+    // 🔴 AND NO LOCK, on purpose. The first version of this held `getCallbackLock()` for the swap —
+    // which VST3, AU and the standalone do hold around `processBlock`, and **CLAP does not**: the
+    // shipped wrapper calls it with no lock of any kind. A lock only some of the shipped formats
+    // take is not a lock, it is a data race with a comment on it.
+    //
+    // `suspendProcessing` was the other short answer and is also wrong: it hands the host a block
+    // of silence, which is exactly the click the warm window was added to remove. Trading a comb
+    // for a hole is not a fix.
+    (void) wire[(size_t) index].reserve (lat);
 }
 
 void AmpProcessor::reportLatency()
@@ -435,22 +436,28 @@ void AmpProcessor::reportLatency()
     // THE WIRE'S REFUSAL, PICKED UP OFF THE AUDIO THREAD. `BypassWire` cannot say anything from
     // inside `process` without allocating or writing to a stream on the audio thread, so it
     // latches a flag and this pump — the same one that noticed the latency — is what reads it.
-    // Once, and it means something narrower than it used to. The wire is no longer sized from a
-    // guessed rate, so this cannot fire because a capture was "below the domain" — there is no
-    // domain. What it reports is the one window that remains: a block whose delay grew between the
-    // moment the model went live and the moment this pump made the wire long enough for it. Those
-    // blocks are short by the difference, and the whole point of the latch is that "short" is a
-    // thing somebody can find out about rather than a thing that just sounds wrong.
+    // Once, and it says WHAT WAS ASKED rather than what probably happened. An earlier draft of this
+    // line explained every refusal as a moment's lag and announced that the wire had caught up —
+    // which is true of the ordinary case and false of the one that matters: a delay past
+    // `maxSaneDelay` is shortened for good, pump or no pump, and the two read identically once the
+    // message stops naming numbers. So both numbers go in, and whether it fits now is a comparison
+    // the reader can make instead of a claim they have to take.
     if (! wireRefusalSeen)
         for (int i = 0; i < 2; ++i)
             if (wire[(size_t) i].everShortened())
             {
                 wireRefusalSeen = true;
+
+                const int asked   = i == 0 ? bo : pr;
+                const int carries = wire[(size_t) i].capacity();
+
                 juce::Logger::writeToLog (
-                    "OrbitAmp: bypass wire " + juce::String (i) + " was asked for more delay than "
-                    "it carried, at " + juce::String (getSampleRate(), 0) + " Hz — a model landed "
-                    "and the wire caught up one pump later. It now carries "
-                      + juce::String (wire[(size_t) i].capacity()) + " samples.");
+                    "OrbitAmp: bypass wire " + juce::String (i) + " was asked for more delay than it"
+                    " carried, at " + juce::String (getSampleRate(), 0) + " Hz. It was asked for "
+                      + juce::String (asked) + " and now carries " + juce::String (carries)
+                      + (carries >= asked ? " — it has caught up, so the shortfall was the blocks"
+                                            " between a model landing and this pump."
+                                          : " — it has NOT caught up, so the shortfall is standing."));
                 break;
             }
 

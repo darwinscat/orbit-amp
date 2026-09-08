@@ -63,29 +63,39 @@ public:
         moving is not a shortened delay any more, it is a read past the end. */
     void prepare (int maxDelay)
     {
-        cap = clampDelay (maxDelay);
+        const int n = clampDelay (maxDelay);
 
         for (auto& h : hist)
-            h.assign ((size_t) cap, 0.0f);
+            h.assign ((size_t) n, 0.0f);
 
-        prevScratch.assign ((size_t) cap, 0.0f);
-        nextScratch.assign ((size_t) cap, 0.0f);
-        spareCap = 0;
+        prevScratch.assign ((size_t) n, 0.0f);
+        nextScratch.assign ((size_t) n, 0.0f);
+
+        cap.store (n, std::memory_order_relaxed);
+        pending.store (0, std::memory_order_release);   // any growth in flight is void now
         shortened.store (false, std::memory_order_relaxed);
     }
 
-    /** GROWING A LIVE WIRE, HALF ONE: build the bigger buffers. Message thread. ALLOCATES — all
-        of it, every row, which is the entire reason this is a separate call from `commit`. Get
-        this wrong and the growth walks straight into the defect it exists to remove: a heap
-        touched with the audio callback waiting on it.
+    /** GROWING A LIVE WIRE, HALF ONE: build the bigger rows. Message thread. ALLOCATES — all of
+        it, which is the entire reason this is a separate call from the adoption below.
 
-        Returns true when a `commit` is owed. False means the wire already carries `maxDelay` and
-        nothing was built — the answer on every pump of an ordinary session. */
+        Returns false when nothing was built: the wire already carries `maxDelay`, or a growth is
+        still in flight and the audio thread has not taken it yet. Either way the caller simply
+        asks again on its next pump, thirty times a second.
+
+        🔴 NO LOCK ANYWHERE IN THIS CLASS, and that is not simplification, it is correctness. The
+        first version of this handed the swap to the message thread under
+        `AudioProcessor::getCallbackLock()` — which VST3, AU and the standalone do hold around
+        `processBlock`, and **CLAP does not**: the shipped wrapper calls `processBlock` with no lock
+        of any kind. A lock only some of the shipped formats take is not a lock; it is a data race
+        with a comment on it. So the audio thread adopts its own buffers, and the message thread
+        never touches live state at all. */
     [[nodiscard]] bool reserve (int maxDelay)
     {
         const int want = clampDelay (maxDelay);
 
-        if (want <= cap)
+        if (want <= cap.load (std::memory_order_relaxed)
+             || pending.load (std::memory_order_acquire) != 0)
             return false;
 
         for (auto& h : spareHist)
@@ -93,42 +103,16 @@ public:
 
         spareA.assign ((size_t) want, 0.0f);
         spareB.assign ((size_t) want, 0.0f);
-        spareCap = want;
+
+        // Publish LAST: everything above has to be visible to the audio thread before the flag
+        // that tells it to look.
+        pending.store (want, std::memory_order_release);
         return true;
     }
 
-    /** GROWING A LIVE WIRE, HALF TWO: publish it. **Call with the audio callback's lock held.**
-
-        🔴 NOT ONE ALLOCATION AND NOT ONE FREE HAPPENS HERE — `swap` moves pointers, and the small
-        buffers it hands back are released later, on the message thread, by the next `reserve`. All
-        that runs under the lock is `capacity()` floats of copying per channel, which is
-        microseconds; the callback waits for that and never for a heap.
-
-        The window comes across, and that is why growth is a swap rather than a re-prepare: the
-        wire stays WARM through its own growth, so the block that finally carries the bigger delay
-        looks back into the signal that just went past instead of into the silence a fresh buffer
-        would hand it. The old window lands at the RECENT end of the new one — the tail — because
-        that is where "the samples immediately before this block" have to be. What the wire
-        genuinely has not heard, the stretch older than the window it used to have, stays zero. */
-    void commit() noexcept
-    {
-        if (spareCap <= cap)
-            return;
-
-        for (size_t ch = 0; ch < hist.size(); ++ch)
-        {
-            std::fill (spareHist[ch].begin(), spareHist[ch].end(), 0.0f);
-            std::copy (hist[ch].begin(), hist[ch].end(),
-                       spareHist[ch].begin() + (spareCap - cap));
-            hist[ch].swap (spareHist[ch]);
-        }
-
-        prevScratch.swap (spareA);      // contents are rewritten every block; only the SIZE matters
-        nextScratch.swap (spareB);
-
-        cap      = spareCap;
-        spareCap = 0;
-    }
+    /** True while `reserve` has built something the audio thread has not taken yet. The message
+        thread must leave the spare rows alone until this clears — `reserve` enforces it. */
+    bool growthInFlight() const noexcept { return pending.load (std::memory_order_acquire) != 0; }
 
     /** FED EVERY BLOCK, WHATEVER THE BLOCK IS DOING — the window takes the signal and writes
         nothing. This is the half that keeps the wire WARM.
@@ -154,7 +138,7 @@ public:
     }
 
     /** The longest delay this wire can actually carry right now. */
-    int capacity() const noexcept { return cap; }
+    int capacity() const noexcept { return cap.load (std::memory_order_relaxed); }
 
     /** 🔴 THE REFUSAL, MADE VISIBLE. True once the wire has been asked for more delay than it was
         prepared for and has handed back less — which puts a comb in the crossfade. Latched until
@@ -186,10 +170,18 @@ public:
     void process (const float* const* in, float* const* out, int numChannels, int numSamples,
                   int delay) noexcept
     {
-        const int want = juce::jmax (0, delay);
-        const int d    = juce::jmin (want, cap);
+        // GROWING A LIVE WIRE, HALF TWO — and the audio thread does it itself, because it is the
+        // only thread that can do it without a lock. Pointer swaps and one copy of the window;
+        // not one allocation and not one free. The small rows it hands back are released later, on
+        // the message thread, by the next `reserve`.
+        if (const int want = pending.load (std::memory_order_acquire); want > cap.load (std::memory_order_relaxed))
+            adopt (want);
 
-        if (d != want)
+        const int c    = cap.load (std::memory_order_relaxed);
+        const int ask  = juce::jmax (0, delay);
+        const int d    = juce::jmin (ask, c);
+
+        if (d != ask)
             shortened.store (true, std::memory_order_relaxed);
 
         if (numSamples <= 0)
@@ -203,17 +195,17 @@ public:
         // window that simply stops being written is a window holding whatever the last STEREO
         // stretch left in it. That is a ghost, and it is the one the old `reset()` used to sweep up
         // on this very path.
-        const auto slide = [this, numSamples] (std::vector<float>& h, const float* src)
+        const auto slide = [this, numSamples, c] (std::vector<float>& h, const float* src)
         {
             // The window after this block: the last `cap` samples of (h ++ src). Taken before a
             // single byte of `out` is written, because `out` may be `in`. Kept even at zero delay:
             // the wire SAW those samples, and throwing them away is what makes the first block
             // after a model lands open on silence instead of on the signal.
-            for (int i = 0; i < cap; ++i)
+            for (int i = 0; i < c; ++i)
             {
-                const int at = numSamples - cap + i;     // position of this sample in `src`
+                const int at = numSamples - c + i;     // position of this sample in `src`
                 nextScratch[(size_t) i] = at >= 0 ? (src != nullptr ? src[at] : 0.0f)
-                                                  : h[(size_t) (at + cap)];
+                                                  : h[(size_t) (at + c)];
             }
         };
 
@@ -225,7 +217,7 @@ public:
             // not its head. Reading the head is what made a delay that moved replay the wrong
             // samples for one block.
             for (int i = 0; i < d; ++i)
-                prevScratch[(size_t) i] = h[(size_t) (cap - d + i)];
+                prevScratch[(size_t) i] = h[(size_t) (c - d + i)];
 
             slide (h, in[ch]);
 
@@ -246,7 +238,7 @@ public:
                 }
             }
 
-            for (int i = 0; i < cap; ++i)
+            for (int i = 0; i < c; ++i)
                 h[(size_t) i] = nextScratch[(size_t) i];
         }
 
@@ -259,7 +251,7 @@ public:
             auto& h = hist[(size_t) ch];
             slide (h, nullptr);
 
-            for (int i = 0; i < cap; ++i)
+            for (int i = 0; i < c; ++i)
                 h[(size_t) i] = nextScratch[(size_t) i];
         }
 
@@ -282,7 +274,32 @@ private:
         return d < 0 ? 0 : (d > maxSaneDelay ? maxSaneDelay : d);
     }
 
-    int cap = 0, spareCap = 0;
+    /** ADOPTION — audio thread only, and it allocates nothing. The old window lands at the RECENT
+        end of the new one, because that is where "the samples immediately before this block" have
+        to be; what the wire has genuinely never heard stays zero, which `reserve` already made it. */
+    void adopt (int want) noexcept
+    {
+        const int old = cap.load (std::memory_order_relaxed);
+
+        for (size_t ch = 0; ch < hist.size(); ++ch)
+        {
+            std::copy (hist[ch].begin(), hist[ch].end(), spareHist[ch].begin() + (want - old));
+            hist[ch].swap (spareHist[ch]);
+        }
+
+        prevScratch.swap (spareA);      // contents are rewritten every block; only the SIZE matters
+        nextScratch.swap (spareB);
+
+        cap.store (want, std::memory_order_relaxed);
+        pending.store (0, std::memory_order_release);   // the spare rows are the message thread's again
+    }
+
+    std::atomic<int> cap { 0 };
+
+    /** Non-zero while `reserve` has built rows the audio thread has not taken. Written by both,
+        which is why it is the only handshake: message thread sets it after building, audio thread
+        clears it after adopting, and `reserve` refuses to build while it is set. */
+    std::atomic<int> pending { 0 };
 
     std::array<std::vector<float>, 2> hist {};
     std::vector<float> prevScratch, nextScratch;
