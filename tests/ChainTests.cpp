@@ -449,6 +449,44 @@ int main()
                       + juce::String ((float) (n - d + 1), 1));
         }
 
+        // 2e · A CHANNEL THAT STOPPED BEING HANDED OVER. The chain drops to ONE channel in MONO,
+        //      and a window that simply stops being written is not empty — it holds whatever the
+        //      last STEREO stretch left in it. Feed one channel long enough to bury the other's
+        //      window, come back to two, and the second one must be silent rather than replaying
+        //      what it heard before the switch. (Clearing the wire used to sweep this up; feeding
+        //      it is what put the ghost back, so this is the check that came with the cure.)
+        {
+            Wire w;
+            w.prepare (96000.0);
+
+            constexpr int n = 256, d = 96;
+            std::vector<float> loud ((size_t) n, 5.0f), ramp ((size_t) n), silent ((size_t) n, 0.0f);
+            std::vector<float> outL ((size_t) n), outR ((size_t) n);
+
+            for (int i = 0; i < n; ++i)
+                ramp[(size_t) i] = (float) (i + 1);
+
+            const float* stereo[2] { ramp.data(), loud.data() };
+            const float* mono[1]   { ramp.data() };
+            float*       out[2]    { outL.data(), outR.data() };
+
+            w.advance (stereo, 2, n);                      // STEREO: the right channel is loud
+
+            for (int k = 0; k * n < w.capacity() + n; ++k) // MONO for longer than the window
+                w.advance (mono, 1, n);
+
+            const float* back[2] { silent.data(), silent.data() };
+            w.process (back, out, 2, n, d);                // and STEREO again, now carrying a delay
+
+            bool quiet = true;
+            for (int i = 0; i < n; ++i)
+                quiet = quiet && juce::approximatelyEqual (outR[(size_t) i], 0.0f);
+
+            report ("a channel that went away comes back silent, not haunted", quiet,
+                    "right channel peaks at "
+                      + juce::String (*std::max_element (outR.begin(), outR.end()), 3));
+        }
+
         // 3 · THE REFUSAL IS VISIBLE. The wire's domain is bounded — the delay grows without limit
         //     as a pack's rate falls — so a refusal can still happen. What may never happen again
         //     is a refusal nobody can see.
