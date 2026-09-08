@@ -123,6 +123,11 @@ public:
 
     /** Allocates. Message thread / `prepareToPlay` only — `process` never does.
 
+        ⚠️ AND NOT WHILE AUDIO RUNS. The buffers were fixed arrays before this and were immune to
+        being re-prepared under the audio thread's feet; vectors are not, so the host contract that
+        `prepareToPlay` and `processBlock` never overlap is now load-bearing rather than merely
+        true. Nothing inside the plugin calls this from anywhere else.
+
         The history and the two scratch rows are sized TOGETHER and from the same number, because
         the failure they replace was exactly that: a capacity raised without the buffer under it
         moving is not a shortened delay any more, it is a read past the end. */
