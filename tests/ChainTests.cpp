@@ -1483,6 +1483,93 @@ int main()
                         onTime > 0.05f && early < 0.1f * onTime,
                         juce::String (early, 4) + " early against " + juce::String (onTime, 4));
             }
+
+            // 🔴 THE MOMENT THE DELAY IS BORN, through the real plugin. A block that stands
+            //    bypassed with no model yet costs nothing — and then a model lands at another rate
+            //    and it costs 96 samples, between one block and the next, with nobody re-preparing
+            //    anything. If the wire was only being CLEARED while it cost nothing, its first
+            //    delayed block is 96 samples of silence: a millisecond of hole in the through-path,
+            //    on the ordinary path where a player picks a device with the block still switched
+            //    off. Fed instead, it has the signal that just went past and there is no hole.
+            {
+                const auto lateOwned = std::make_unique<orbitamp::AmpProcessor>();
+                auto& late = *lateOwned;
+                // The load is deferred on purpose: with `inlineLoads` off it goes to the pool and
+                // does not land, so the first blocks really do run at zero delay. Turning it on
+                // afterwards is what lets the model arrive between two blocks, which is the whole
+                // sequence being pinned.
+                late.inlineLoads = false;
+                late.prepareToPlay (96000.0, blockSize);
+                set (late, orbitamp::params::stereoMode, 0.0f);
+
+                for (const char* off : { orbitamp::params::boostOn,   orbitamp::params::preampOn,
+                                         orbitamp::params::gateOn,    orbitamp::params::delayOn,
+                                         orbitamp::params::reverbOn,  orbitamp::params::cabOn,
+                                         orbitamp::params::limiterOn, orbitamp::params::delayPresent,
+                                         orbitamp::params::reverbPresent, orbitamp::params::cabPresent,
+                                         orbitamp::params::gatePresent })
+                    set (late, off, 0.0f);
+
+                juce::AudioBuffer<float> b (2, blockSize);
+
+                // Every one of those switches CROSSFADES, and a fade still in flight colours the
+                // through-path with whatever it is fading out of. Let them all land first — with no
+                // pump, so the model stays where it is and the delay stays at zero.
+                for (int i = 0; i < 8; ++i)
+                {
+                    b.clear();
+                    late.processBlock (b, midi);
+                }
+
+                const bool bornCold = late.getLatencySamples() == 0;
+
+                // The last block before the model lands, with a mark near its end: at zero delay it
+                // goes straight through, and the wire — if it is being fed — has it.
+                constexpr int mark = 472;
+                b.clear();
+                b.setSample (0, mark, 1.0f);
+                b.setSample (1, mark, 1.0f);
+                late.processBlock (b, midi);
+
+                late.inlineLoads = true;
+
+                for (int i = 0; i < 200 && late.getLatencySamples() == 0; ++i)
+                {
+                    late.pumpDeviceWork();
+                    juce::Thread::sleep (5);
+                }
+
+                const int born = late.getLatencySamples();
+
+                b.clear();                    // silence in — everything out came from the window
+                late.processBlock (b, midi);
+
+                const int want = mark + born - blockSize;
+                float here = 0.0f, anywhere = 0.0f;
+                int   at = -1;
+
+                for (int i = 0; i < blockSize; ++i)
+                    if (const float v = std::abs (b.getSample (0, i)); v > anywhere)
+                    { anywhere = v; at = i; }
+
+                if (want >= 0 && want < blockSize)
+                    here = std::abs (b.getSample (0, want));
+
+                std::printf ("wire: a delay BORN mid-session — 0 samples, then %d; the mark from the"
+                             " block before comes back at %d (wanted %d), %.3f\n",
+                             born, at, want, here);
+
+                // PRECONDITIONS: the block really did start with no delay, and really did acquire
+                // one. Without both, this measures a plugin that never changed and passes for it.
+                report ("a block really can acquire its delay mid-session",
+                        bornCold && born > 0 && want >= 0 && want < blockSize,
+                        bornCold ? juce::String ("0 -> ") + juce::String (born)
+                                 : "it was never cold — this check would be blind");
+
+                report ("the block after the delay is born looks back, not into silence",
+                        bornCold && born > 0 && here > 0.5f && at == want,
+                        juce::String (here, 3) + " at " + juce::String (at));
+            }
         }
         }
 
