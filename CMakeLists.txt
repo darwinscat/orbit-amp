@@ -66,6 +66,12 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # module to target_link_libraries below. Wired now so that's a one-line change, not a rebuild
 # of the dependency graph. Its self-tests do NOT build from here (guarded by PROJECT_IS_TOP_LEVEL).
 # ----------------------------------------------------------------------------
+# TODO: raise to the first tag carrying core::StreamResampler::roundTripDelaySamples() — the
+# round-trip rate-match delay, which core::BypassWire has to ask for rather than restate. No such
+# tag exists yet (the kernel that needs it is on core's main, unreleased; the function itself is
+# P36). Until then this tag is DELIBERATELY not moved: a sibling ../felitronics-core checkout wins
+# over it anyway, so the dev loop already builds against the new geometry while CI keeps building
+# the released one.
 set(ORBITAMP_FCORE_TAG "v0.29.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
@@ -428,6 +434,7 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::analysis            # spectrum taps + panes behind the EQ curves
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::appkit_webp         # juce::Image <- WebP, for the picture a pack ships
+    felitronics::core                # core::BypassWire reads the resampler's delay geometry
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
@@ -598,6 +605,7 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::analysis
     felitronics::appkit
     felitronics::appkit_webp         # the panel decodes a pack's photograph — same half the plugin links
+    felitronics::core                # core::BypassWire reads the resampler's delay geometry
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq

@@ -400,7 +400,10 @@ void AmpProcessor::pumpDeviceWork()
 void AmpProcessor::reportLatency()
 {
     // In series: each captured block's models — a capture taken at another rate is resampled on
-    // the way in and out, and that has a length.
+    // the way in and out, and that has a length. TWO stages sum here, so a 44.1 kHz session on
+    // 48 kHz packs reports 122 samples, and a 96 kHz one 192. It was eight until the kernel behind
+    // the rate match was replaced; the number is the resampler's geometry and it will move again,
+    // which is why nothing downstream of here may write it down.
     const int total = boost.latencySamples() + preamp.latencySamples();
 
     if (total != getLatencySamples())
@@ -467,8 +470,11 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     scopeDry.setSize (1, block);
     fadeDry.setSize (juce::jmax (2, channels), block);
 
+    // Sized from the GEOMETRY of the rate match, not from a constant with room to spare: see
+    // BypassWire::rateMatchDelay. At 48 kHz that is 224 samples of history per channel, at 192 kHz
+    // 800 — against the 61 and the 160 a 48 kHz pack actually asks for.
     for (auto& w : wire)
-        w.prepare();
+        w.prepare (sampleRate);
 
     // Snapped, not faded: a chain that arrives switched off is silent from its first sample.
     for (int i = 0; i < params::numChainRows; ++i)
@@ -750,13 +756,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // THE WIRE a bypassed block has to BE — and a wire the same LENGTH as the block it
         // replaces. A rate-matching model reports a latency the host compensates for; drop it out
         // of the path and the signal arrives early by exactly that much, for as long as it is
-        // bypassed. Three to fifteen samples, and none at all when the pack's rate is the
-        // session's — which is the usual case, and why this costs nothing there.
+        // bypassed. Sixty-one samples at 44.1 kHz against a 48 kHz pack, ninety-six at 96 kHz, and
+        // none at all when the pack's rate is the session's — which is the usual case, and why
+        // this costs nothing there.
         //
         // It is also what makes the crossfade honest: blending a block's output against an
         // UNDELAYED copy of its own input is blending a signal with an early copy of itself, and
-        // that is a comb — six samples at 44.1 kHz puts the first notch near 3.7 kHz, in the
-        // presence region. Swept over fifteen milliseconds it reads as a tick rather than a
+        // that is a comb — sixty-one samples at 44.1 kHz puts the first notch near 362 Hz, in the
+        // body of the guitar. Swept over fifteen milliseconds it reads as a tick rather than a
         // filter, but it is a tick that need not exist.
         //
         // Taken BEFORE this block's own IN trim: the dry end has to be the signal as it arrived.

@@ -18,6 +18,8 @@
 #include "PluginProcessor.h"
 #include "core/BypassWire.h"
 
+#include <felitronics/core/StreamResampler.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -777,53 +779,424 @@ int main()
         set (amp, orbitamp::params::limiterCeiling, -0.3f);
     }
 
-    // THE BYPASS WIRE, on its own. It only runs when a pack's rate differs from the session's, so
-    // the chain above — at 48 kHz against 48 kHz packs — never touches it. And it is hand-rolled
-    // index arithmetic across block boundaries, which is exactly the kind of code that is right
-    // until it is not.
-    //
-    // Feed it a ramp in two blocks and every output sample must be the input six samples earlier,
-    // including across the seam, where the second block has to read the first block's tail.
+    // THE BYPASS WIRE, on its own — the delay it carries, the geometry it is SIZED from, and the
+    // comb that appears the moment the two disagree. It only runs when a pack's rate differs from
+    // the session's, so the chain above — at 48 kHz against 48 kHz packs — never touches it, and
+    // that is exactly why the last defect here lived for two kernel generations: a constant
+    // `maxDelay = 64`, justified in a comment by a formula that had been replaced twice, clamping
+    // silently on every session above 48 kHz.
     {
-        orbitamp::core::BypassWire w;
-        w.prepare();
+        using Wire = orbitamp::core::BypassWire;
 
-        constexpr int d = 6, n = 32;
-        std::vector<float> a (n), b (n), outA (n), outB (n);
+        // WHAT THE LIVE BLOCK ACTUALLY ASKS THE WIRE FOR: `nam::NamStage::latencySamples()`,
+        // spelled here in its own words — `lround`, where the wire's bound uses `ceil` — so that a
+        // change of geometry has to disagree with two independent spellings before it can pass.
+        // `D` is read from the core header in BOTH; neither writes a number down.
+        const auto stageLatency = [] (double host, double pack)
+        {
+            const double d = felitronics::core::StreamResampler::delayInputSamples();
+            return (int) std::lround (d + d * host / pack);
+        };
 
-        for (int i = 0; i < n; ++i) { a[(size_t) i] = (float) i; b[(size_t) i] = (float) (n + i); }
+        // 1 · THE BOUND COVERS THE DOMAIN — every session rate a host can name against every pack
+        //     rate the wire promises to carry, not three points of it.
+        {
+            static const double hosts[] { 8000.0, 22050.0, 32000.0, 44100.0, 48000.0, 48001.0,
+                                          88200.0, 96000.0, 176400.0, 192000.0, 384000.0 };
+            static const double packs[] { Wire::lowestPackRate, 11025.0, 16000.0, 22050.0, 32000.0,
+                                          44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0 };
 
-        const float* inA[1]  { a.data() };
-        float*       oA[1]   { outA.data() };
-        const float* inB[1]  { b.data() };
-        float*       oB[1]   { outB.data() };
+            bool   covers = true;
+            int    pairs = 0, tightAsk = 0, tightCap = 0;
+            double tightest = 0.0, tightHost = 0.0, tightPack = 0.0;
 
-        w.process (inA, oA, 1, n, d);
-        w.process (inB, oB, 1, n, d);
+            for (const double h : hosts)
+                for (const double p : packs)
+                {
+                    ++pairs;
+                    const int ask = stageLatency (h, p);
+                    const int cap = Wire::capacityFor (h);
+                    covers = covers && cap >= ask;
 
-        bool ok = true;
+                    if (const double ratio = (double) ask / (double) juce::jmax (1, cap); ratio > tightest)
+                    { tightest = ratio; tightHost = h; tightPack = p; tightAsk = ask; tightCap = cap; }
+                }
 
-        for (int i = d; i < n; ++i)                 // inside the first block
-            ok = ok && juce::approximatelyEqual (outA[(size_t) i], (float) (i - d));
+            report ("the wire is long enough for every rate pair it promises", covers,
+                    juce::String (pairs) + " pairs, tightest "
+                      + juce::String (tightHost, 0) + " Hz on a " + juce::String (tightPack, 0)
+                      + " Hz pack: asks " + juce::String (tightAsk) + ", carries "
+                      + juce::String (tightCap));
 
-        for (int i = 0; i < d; ++i)                 // its head: nothing came before, so silence
-            ok = ok && juce::approximatelyEqual (outA[(size_t) i], 0.0f);
+            // The table F28 measured, kept as a REGRESSION and printed: what the old constant
+            // would have handed back at each of these session rates against a 48 kHz pack.
+            std::printf ("\nwire: session   asks   old 64   short by   first null of that comb\n");
+            bool oldWasShort = false, nowIsNot = true;
 
-        for (int i = 0; i < n; ++i)                 // the second block, seam included
-            ok = ok && juce::approximatelyEqual (outB[(size_t) i], (float) (n + i - d));
+            for (const double h : { 44100.0, 48001.0, 88200.0, 96000.0, 192000.0 })
+            {
+                const int ask   = stageLatency (h, 48000.0);
+                const int old   = juce::jmin (ask, 64);
+                const int shortBy = ask - old;
+                oldWasShort = oldWasShort || shortBy > 0;
+                nowIsNot    = nowIsNot && Wire::capacityFor (h) >= ask;
 
-        // In place, which is what a fully bypassed block asks for.
-        orbitamp::core::BypassWire w2;
-        w2.prepare();
-        std::vector<float> c = a;
-        float* inPlace[1] { c.data() };
-        w2.process (inPlace, inPlace, 1, n, d);
+                std::printf ("      %8.0f %6d %8d %10d   %s\n", h, ask, old, shortBy,
+                             shortBy > 0 ? juce::String (h / (2.0 * (double) shortBy), 1).toRawUTF8()
+                                         : "none");
+            }
 
-        for (int i = d; i < n; ++i)
-            ok = ok && juce::approximatelyEqual (c[(size_t) i], (float) (i - d));
+            report ("the constant DID cut above 48 kHz, and the geometry does not",
+                    oldWasShort && nowIsNot);
+        }
 
-        std::printf ("\nwire: %d samples of delay, two blocks and one in place\n", d);
-        report ("a bypassed block still carries the delay it would have had", ok);
+        // 2 · THE WIRE CARRIES EXACTLY WHAT IT IS ASKED FOR — a property over the accepted domain,
+        //     swept: every session rate, delays from nothing to the whole capacity, block sizes
+        //     coprime with the delay and shorter than it, one channel and two, separate buffers
+        //     and in place. Hand-rolled index arithmetic across block seams is exactly the kind of
+        //     code that is right until it is not.
+        {
+            // A signal with no period at all, so a wrong delay cannot look right: the ramp is
+            // strictly increasing and each channel is offset, which also catches a wire that
+            // crosses channels.
+            const auto carries = [] (double host, int d, int chunk, int channels, bool inPlace) -> bool
+            {
+                Wire w;
+                w.prepare (host);
+
+                if (d > w.capacity())
+                    return false;
+
+                const int n = 4 * chunk + 2 * d + 13;
+                std::vector<std::vector<float>> in ((size_t) channels), out ((size_t) channels);
+
+                for (int ch = 0; ch < channels; ++ch)
+                {
+                    in[(size_t) ch].resize ((size_t) n);
+                    for (int i = 0; i < n; ++i)
+                        in[(size_t) ch][(size_t) i] = (float) (i + 1) + 1000.0f * (float) ch;
+                    out[(size_t) ch] = in[(size_t) ch];      // in place starts as a copy of the input
+                }
+
+                for (int at = 0; at < n; at += chunk)
+                {
+                    const int len = juce::jmin (chunk, n - at);
+                    std::vector<const float*> rp ((size_t) channels);
+                    std::vector<float*>       wp ((size_t) channels);
+
+                    for (int ch = 0; ch < channels; ++ch)
+                    {
+                        rp[(size_t) ch] = (inPlace ? out : in)[(size_t) ch].data() + at;
+                        wp[(size_t) ch] = out[(size_t) ch].data() + at;
+                    }
+
+                    w.process (rp.data(), wp.data(), channels, len, d);
+                }
+
+                if (w.everShortened())
+                    return false;
+
+                for (int ch = 0; ch < channels; ++ch)
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float want = i >= d ? (float) (i - d + 1) + 1000.0f * (float) ch : 0.0f;
+                        if (! juce::approximatelyEqual (out[(size_t) ch][(size_t) i], want))
+                            return false;
+                    }
+
+                return true;
+            };
+
+            static const double hosts[] { 44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0 };
+            static const int    chunks[] { 1, 7, 32, 64, 100, 512 };
+
+            bool ok = true;
+            int  cases = 0;
+            juce::String firstBad;
+
+            for (const double h : hosts)
+            {
+                std::vector<int> delays { 0, 1, 2, 3, 63, 64, 65, Wire::capacityFor (h) - 1,
+                                          Wire::capacityFor (h) };
+
+                for (const double p : { 8000.0, 22050.0, 32000.0, 44100.0, 48000.0, 96000.0, 192000.0 })
+                    delays.push_back (stageLatency (h, p));
+
+                for (const int d : delays)
+                    for (const int c : chunks)
+                        for (const int ch : { 1, 2 })
+                            for (const bool inPlace : { false, true })
+                            {
+                                ++cases;
+                                if (! carries (h, d, c, ch, inPlace))
+                                {
+                                    ok = false;
+                                    if (firstBad.isEmpty())
+                                        firstBad = juce::String (h, 0) + " Hz, d=" + juce::String (d)
+                                                     + ", block " + juce::String (c) + ", "
+                                                     + juce::String (ch) + " ch"
+                                                     + (inPlace ? ", in place" : "");
+                                }
+                            }
+            }
+
+            report ("a bypassed block carries the delay it would have had", ok,
+                    ok ? juce::String (cases) + " configurations"
+                       : "first failure: " + firstBad);
+        }
+
+        // 3 · THE REFUSAL IS VISIBLE. The wire's domain is bounded — the delay grows without limit
+        //     as a pack's rate falls — so a refusal can still happen. What may never happen again
+        //     is a refusal nobody can see.
+        {
+            Wire w;
+            w.prepare (48000.0);
+
+            std::vector<float> x (256, 1.0f);
+            const float* rp[1] { x.data() };
+            float*       wp[1] { x.data() };
+
+            const bool freshIsQuiet = ! w.everShortened();
+
+            w.process (rp, wp, 1, 256, w.capacity());
+            const bool legalStaysQuiet = ! w.everShortened();
+
+            w.process (rp, wp, 1, 256, w.capacity() + 1);
+            const bool refusalSpeaks = w.everShortened();
+
+            w.prepare (48000.0);
+            const bool prepareClears = ! w.everShortened();
+
+            report ("a wire asked for more than it carries says so",
+                    freshIsQuiet && legalStaysQuiet && refusalSpeaks && prepareClears,
+                    "capacity " + juce::String (w.capacity()) + " at 48 kHz");
+        }
+
+        // 4 · THE COMB — the thing this class exists to prevent, measured rather than reasoned
+        //     about. The block's output is late by the model's own latency; the bypass copy is
+        //     late by whatever the wire hands back. Aligned, the sum is one signal twice over and
+        //     the response is flat. Short by `r`, it is 0.5·x(t-lat) + 0.5·x(t-lat+r), whose
+        //     magnitude is |cos(pi·f·r/fs)| — a comb with its first null at fs/(2r).
+        //
+        //     🔴 THE FIXTURE IS ASSERTED LIVE BEFORE ANY OF IT IS BELIEVED: that the model delay
+        //     is not zero, that the dry half is really in the sum, and that this instrument can
+        //     SEE a comb when it is shown one. A flat sweep from an instrument that measures
+        //     nothing is the failure P34 caught in its own bench, not a pass.
+        {
+            // Every probe is a whole number of periods long, so the rms is exact and no window,
+            // bin or bucket is involved: the grid is 20 Hz and a probe is one twentieth of a
+            // second, which is `k` periods of `20·k` Hz exactly, at any session rate here.
+            constexpr int binHz = 20;
+
+            const auto responseDb = [] (double fs, int modelDelay, int askOfWire, int k) -> double
+            {
+                const int n     = (int) (fs / (double) binHz);
+                const int prime = modelDelay + askOfWire + 64;
+                const int total = n + prime;
+                const double hz = (double) binHz * (double) k;
+
+                std::vector<float> x ((size_t) total), dry ((size_t) total);
+
+                for (int i = 0; i < total; ++i)
+                    x[(size_t) i] = (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                        * hz * (double) i / fs);
+
+                Wire w;
+                w.prepare (fs);
+
+                for (int at = 0; at < total; at += 256)
+                {
+                    const int len = juce::jmin (256, total - at);
+                    const float* r[1] { x.data() + at };
+                    float*       o[1] { dry.data() + at };
+                    w.process (r, o, 1, len, askOfWire);
+                }
+
+                double sum = 0.0, ref = 0.0;
+
+                for (int i = prime; i < total; ++i)
+                {
+                    const double wet = 0.5 * (double) x[(size_t) (i - modelDelay)];
+                    const double s   = wet + 0.5 * (double) dry[(size_t) i];
+                    sum += s * s;
+                    ref += (double) x[(size_t) i] * (double) x[(size_t) i];
+                }
+
+                return 20.0 * std::log10 (std::sqrt (sum / juce::jmax (1.0e-30, ref)));
+            };
+
+            // The same thing in closed form — a SECOND oracle of a different construction, because
+            // one oracle is one grid. |0.5 + 0.5·e^{-j·2pi·f·r/fs}| = |cos(pi·f·r/fs)|.
+            const auto predictedDb = [] (double fs, int residual, int hz)
+            {
+                const double c = std::cos (juce::MathConstants<double>::pi * (double) hz
+                                             * (double) residual / fs);
+                return 20.0 * std::log10 (std::max (1.0e-12, std::abs (c)));
+            };
+
+            constexpr int kLow = 100 / binHz, kHigh = 10000 / binHz;   // 100 Hz ... 10 kHz
+
+            // WHERE THE FIRST NULL IS, found as a null and not as a corner: the first run of bins
+            // that goes past -20 dB, and the deepest bin inside it. Zero means the sweep never
+            // dipped that far — which is what a wire the right length is supposed to give.
+            const auto firstNullHz = [&] (double fs, int modelDelay, int askOfWire)
+            {
+                for (int k = kLow; k <= kHigh; ++k)
+                    if (responseDb (fs, modelDelay, askOfWire, k) < -20.0)
+                    {
+                        int best = k;
+                        double deepest = responseDb (fs, modelDelay, askOfWire, k);
+
+                        for (int j = k + 1; j <= kHigh; ++j)
+                        {
+                            const double db = responseDb (fs, modelDelay, askOfWire, j);
+                            if (db >= -20.0)
+                                break;
+                            if (db < deepest) { deepest = db; best = j; }
+                        }
+
+                        return best * binHz;
+                    }
+
+                return 0;
+            };
+
+            std::printf ("\nwire: the comb, swept 100 Hz - 10 kHz on a %d Hz grid\n", binHz);
+            std::printf ("      session   model   no wire at all      the old 64        the wire now\n");
+
+            bool preconditionsHold = true, flatEverywhere = true, oracleAgrees = true;
+            juce::String why;
+
+            for (const double fs : { 44100.0, 96000.0 })
+            {
+                const int lat = stageLatency (fs, 48000.0);
+                const int old = juce::jmin (lat, 64);          // what the constant used to allow
+
+                // PRECONDITION A: there IS a rate match. A fixture whose model delay is zero is
+                // flat for the wrong reason and proves nothing at all.
+                if (lat <= 0)
+                { preconditionsHold = false; why = "model delay is zero — the fixture is blind"; }
+
+                // PRECONDITION B: the dry half is really in the sum. Drop it and the sum is the
+                // wet alone, 6.02 dB down; if this reads 0 dB the two halves are not being added.
+                const double both    = responseDb (fs, lat, lat, kLow);
+                const double wetOnly = 20.0 * std::log10 (0.5);
+                if (! (both - wetOnly > 5.5 && both - wetOnly < 6.5))
+                { preconditionsHold = false; why = "the dry path is not in the sum"; }
+
+                // PRECONDITION C: this instrument can see a comb. The old clamp is driven through
+                // the very same measurement, and its null had better land where the arithmetic
+                // says it does.
+                const int    residual   = lat - old;
+                const int    nullBefore = residual > 0 ? firstNullHz (fs, lat, old) : 0;
+                const double predicted  = residual > 0 ? fs / (2.0 * (double) residual) : 0.0;
+
+                if (residual > 0
+                     && ! (nullBefore > 0 && std::abs ((double) nullBefore - predicted) <= 1.5 * binHz))
+                { preconditionsHold = false; why = "the instrument cannot see a comb it is shown"; }
+
+                if (residual > 0)
+                {
+                    const double measured = responseDb (fs, lat, old, 150);         // 3 kHz
+                    if (std::abs (measured - predictedDb (fs, residual, 150 * binHz)) > 0.05)
+                        oracleAgrees = false;
+                }
+
+                // AND THE ANSWER: with the wire the length of the block, nothing dips.
+                double worst = 0.0;
+                for (int k = kLow; k <= kHigh; ++k)
+                    worst = std::min (worst, responseDb (fs, lat, lat, k));
+
+                const int nullNow = firstNullHz (fs, lat, lat);
+                flatEverywhere = flatEverywhere && worst > -0.001 && nullNow == 0;
+
+                // AND THE SAME MEASUREMENT WITH NO WIRE AT ALL, which is what a bypassed block
+                // was before this class existed and what the stale comment beside the constant
+                // described as "six samples, first notch near 3.7 kHz". It is not: at 44.1 kHz
+                // against a 48 kHz pack it is sixty-one samples and the notch is in the body of
+                // the guitar. This row is why the class is here at all, and it gives 44.1 kHz —
+                // the one rate the old constant still fitted — a number of its own.
+                const int    nullNone      = firstNullHz (fs, lat, 0);
+                const double predictedNone = fs / (2.0 * (double) lat);
+
+                if (! (nullNone > 0 && std::abs ((double) nullNone - predictedNone) <= 1.5 * binHz))
+                { preconditionsHold = false; why = "no wire at all does not comb — the fixture is blind"; }
+
+                const auto cell = [] (int hz, double want)
+                {
+                    return hz > 0 ? juce::String (hz) + " Hz (calc " + juce::String (want, 1) + ")"
+                                  : juce::String ("no null");
+                };
+
+                std::printf ("      %7.0f %7d   %-18s %-18s %s, worst %.4f dB\n",
+                             fs, lat,
+                             cell (nullNone, predictedNone).toRawUTF8(),
+                             residual > 0 ? cell (nullBefore, predicted).toRawUTF8()
+                                          : "fitted, no null",
+                             cell (nullNow, 0.0).toRawUTF8(), worst);
+            }
+
+            report ("the comb fixture is live: delay, dry path, and a comb it can see",
+                    preconditionsHold, why);
+            report ("the closed form agrees with the swept measurement", oracleAgrees);
+            report ("with the wire the block's length, the blend has no comb", flatEverywhere);
+        }
+
+        // 5 · THE LIVE CONSUMER — because everything above is this TEST's own spelling of the
+        //     geometry, and a spelling cannot catch a change of geometry. `stageLatency` here and
+        //     `rateMatchDelay` in the wire agree because I wrote both; that proves arithmetic, not
+        //     alignment. So the number is taken from the shipping stage instead: a processor
+        //     prepared at 96 kHz against the packs actually installed on this machine reports a
+        //     PDC that came out of `nam::NamStage::latencySamples()`, and the wire the plugin
+        //     prepares at that rate has to be longer than it — whatever the kernel decides that
+        //     number is next.
+        {
+            const auto hiOwned = std::make_unique<orbitamp::AmpProcessor>();
+            auto& hi = *hiOwned;
+            hi.inlineLoads = true;
+            hi.prepareToPlay (96000.0, blockSize);
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+
+            for (int i = 0; i < 40; ++i)      // let the models land, the way the 30 Hz pump does
+            {
+                buf.clear();
+                hi.processBlock (buf, midi);
+                hi.pumpDeviceWork();
+                juce::Thread::sleep (2);
+            }
+
+            const int pdc      = hi.getLatencySamples();
+            const int cap      = Wire::capacityFor (96000.0);
+            const int perStage = stageLatency (96000.0, 48000.0);   // what THIS test would predict
+
+            // The PDC is the SUM over the blocks that actually hold a rate-matching model, and how
+            // many that is depends on what is installed — so the number to compare is not the sum
+            // but whether the sum is built out of this stage figure at all.
+            std::printf ("\nwire: a live 96 kHz session reports %d samples of PDC = %d stage(s) of"
+                         " %d; this test's own arithmetic says %d a stage, wire carries %d\n",
+                         pdc, perStage > 0 ? pdc / perStage : 0, perStage, perStage, cap);
+
+            // PRECONDITION: there has to BE a rate match, or this check passes by measuring
+            // nothing — which is the failure mode the whole comb bench above is built to refuse.
+            report ("the live 96 kHz session really is rate-matching", pdc > 0,
+                    pdc > 0 ? juce::String (pdc) + " samples of PDC"
+                            : "PDC is zero: no installed pack is off the session rate, so this "
+                              "check would be blind");
+
+            // 🔴 THE ONE CHECK IN THIS FILE THAT A CHANGE OF GEOMETRY CANNOT WALK PAST. Both
+            // numbers describe the same rate match, and they were written by different hands:
+            // `pdc` came out of nam::NamStage, `perStage` out of this test. Move the kernel and
+            // only one of them follows.
+            report ("the live stage's own number is built from the geometry this test uses",
+                    pdc > 0 && perStage > 0 && pdc % perStage == 0,
+                    juce::String (pdc) + " against " + juce::String (perStage) + " a stage");
+
+            report ("the wire the plugin prepares outlasts what the live stage asks of it",
+                    pdc > 0 && cap >= pdc,
+                    "capacity " + juce::String (cap) + " vs " + juce::String (pdc));
+        }
     }
 
     // WHAT THE PLUGIN TELLS A HOST ABOUT ITS OWN TAIL. It used to be a flat eight seconds, which
