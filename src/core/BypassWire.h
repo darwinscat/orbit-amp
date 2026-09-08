@@ -33,102 +33,101 @@ namespace orbitamp::core
     milliseconds it reads as a tick rather than a filter, but it is a tick that need not exist.
 
     Small, but no longer a handful: the history is `capacity()` floats per channel and the whole
-    thing is two copies. At zero delay the caller skips it entirely. */
+    thing is two copies.
+
+    🔴 AND IT KNOWS NOTHING ABOUT SAMPLE RATES. It is told a DELAY — the one the block actually
+    reports, derived by `nam::NamStage::rateMatch` from the rates that are really in play — and it
+    is sized from that same number. Every earlier version of this class sized itself from a rate it
+    ASSUMED: first `ceil (3 * hostSR / modelSR) + 3` behind a constant 64, then a computed bound
+    against a guessed lowest pack rate. Both are the same mistake, and the second is not a smaller
+    version of the first: a ceiling derived from a model rate nobody promised is not too low, it is
+    WRONG — the run rate can walk, without limit while audio runs, and no static number survives
+    that. So there is no ceiling here at all; there is a capacity, and it follows the delay. */
 class BypassWire
 {
 public:
-    /** THE LOWEST RATE A CAPTURE MAY HAVE BEEN RECORDED AT and still be given a wire the full
-        length of its own delay — the wire's DOMAIN, which is where the one remaining constant in
-        this file belongs. It is not the bound on the delay; the bound is `rateMatchDelay` below,
-        and that one moves with the kernel.
-
-        It has to be stated rather than derived, because the pair delay has no supremum: it grows
-        without limit as a capture's rate falls, and nothing upstream closes that. Checked in the
-        core rather than assumed — `nam::NamStage` takes `GetExpectedSampleRate()` from the file as
-        it comes and runs at any positive rate; the `8000.0` that does appear there is a floor on
-        the HOST rate inside its own scratch arithmetic and says nothing whatever about a model, so
-        it is deliberately NOT what this number leans on.
-
-        Why eight kilohertz: below it a capture's own Nyquist is under 4 kHz — beneath the top of
-        the instrument it claims to be a capture of — so a file below this is not a rig. And
-        covering the whole of it costs nothing worth counting: 800 samples per channel at a 192 kHz
-        session, six kilobytes for a stereo pair.
-
-        If the core ever declares a minimum model rate of its own, this stops being a product
-        number and becomes that one — the domain follows, and nothing else in this file changes.
-        Until then, outside this domain the wire refuses OUT LOUD; see `everShortened()`. */
-    static constexpr double lowestPackRate = 8000.0;
-
-    /** WHAT A RATE-MATCHING CAPTURE COSTS, in host samples, at `hostRate` against a pack recorded
-        at `packRate` — asked of the core, never restated here.
-
-        `StreamResampler::pairDelayHostSamples` owns the composition: a round trip is two stages,
-        each costing its own input samples, so the pair is the down leg plus the up leg converted
-        into host samples. `nam::NamStage` derives the number it reports from the same call, so the
-        wire and the block it stands for cannot drift apart by arithmetic.
-
-        🔴 NOTHING ABOUT THE GEOMETRY IS WRITTEN DOWN HERE, and that is the whole repair. The
-        comment that used to stand where this one does claimed `ceil (3 * hostSR / modelSR) + 3` and
-        "sixty-four is room to spare" — true of a kernel two generations dead, and the clamp below
-        went on cutting silently through both replacements. Even the corrected `D * (1 + h/m)` was
-        only the third generation of the same restatement, and it dies the day the kernel scales its
-        taps with the ratio: the two legs of a round trip stop being equal, and every consumer that
-        had multiplied one number by two is quietly wrong. One call, in one place, is the defence.
-
-        Rounds UP where the stage rounds to nearest: the stage reports a length, this reserves room
-        for one, and a wire half a sample too long costs nothing while one half a sample too short
-        is the comb this class exists to prevent. */
-    static int rateMatchDelay (double hostRate, double packRate) noexcept
-    {
-        // The rates are VALIDATED, not merely nudged. `jmax (1.0, rate)` reads like a guard and is
-        // not one: NaN comes back as 1 through the comparison, a rate between 0 and 1 is silently
-        // promoted, and an infinity sails straight into a double-to-int conversion that is
-        // undefined once the value leaves int's range — and `prepare` hands that result to
-        // `std::vector::assign` as a size.
-        if (! (std::isfinite (hostRate) && std::isfinite (packRate) && hostRate > 0.0 && packRate > 0.0))
-            return 0;
-
-        const double n = std::ceil (felitronics::core::StreamResampler::pairDelayHostSamples (hostRate, packRate));
-
-        // A session rate a million times a pack's is not a session, it is a corrupt manifest. The
-        // cap is on the CONVERSION, not on the geometry: past it the wire refuses out loud rather
-        // than allocating whatever the arithmetic came to.
-        return n >= (double) maxSaneDelay ? maxSaneDelay : (int) n;
-    }
-
-    /** The largest delay this class will ever build a buffer for. Not a bound on the formula —
-        the formula has none — but a bound on believing its input: a megabyte of history per
-        channel is already past the point where the number came from a real capture. */
+    /** The largest delay this class will build a buffer for. NOT a bound on what a rate match can
+        cost — nothing bounds that — but a bound on believing a number: a megabyte of history per
+        channel is already past the point where the figure came from a real capture, and past it
+        the wire refuses out loud rather than allocating whatever arrived. */
     static constexpr int maxSaneDelay = 1 << 18;
 
-    /** The longest delay a wire prepared for `hostRate` can be: the formula above against the
-        lowest pack rate the wire promises to cover. 224 samples at 48 kHz, 800 at 192 kHz — six
-        kilobytes of history for a stereo pair at the worst of it. */
-    static int capacityFor (double hostRate) noexcept
-    {
-        return rateMatchDelay (hostRate, lowestPackRate);
-    }
+    /** Allocates, and forgets everything. Message thread / `prepareToPlay` only.
 
-    /** Allocates. Message thread / `prepareToPlay` only — `process` never does.
-
-        ⚠️ AND NOT WHILE AUDIO RUNS. The buffers were fixed arrays before this and were immune to
-        being re-prepared under the audio thread's feet; vectors are not, so the host contract that
-        `prepareToPlay` and `processBlock` never overlap is now load-bearing rather than merely
-        true. Nothing inside the plugin calls this from anywhere else.
+        ⚠️ AND NOT WHILE AUDIO RUNS. The buffers were fixed arrays once and were immune to being
+        re-prepared under the audio thread's feet; vectors are not. Growing a LIVE wire is what
+        `reserve` + `commit` are for, and they exist precisely so this one never has to run twice.
 
         The history and the two scratch rows are sized TOGETHER and from the same number, because
         the failure they replace was exactly that: a capacity raised without the buffer under it
         moving is not a shortened delay any more, it is a read past the end. */
-    void prepare (double hostRate)
+    void prepare (int maxDelay)
     {
-        cap = juce::jmax (0, capacityFor (hostRate));
+        cap = clampDelay (maxDelay);
 
         for (auto& h : hist)
             h.assign ((size_t) cap, 0.0f);
 
         prevScratch.assign ((size_t) cap, 0.0f);
         nextScratch.assign ((size_t) cap, 0.0f);
+        spareCap = 0;
         shortened.store (false, std::memory_order_relaxed);
+    }
+
+    /** GROWING A LIVE WIRE, HALF ONE: build the bigger buffers. Message thread. ALLOCATES — all
+        of it, every row, which is the entire reason this is a separate call from `commit`. Get
+        this wrong and the growth walks straight into the defect it exists to remove: a heap
+        touched with the audio callback waiting on it.
+
+        Returns true when a `commit` is owed. False means the wire already carries `maxDelay` and
+        nothing was built — the answer on every pump of an ordinary session. */
+    [[nodiscard]] bool reserve (int maxDelay)
+    {
+        const int want = clampDelay (maxDelay);
+
+        if (want <= cap)
+            return false;
+
+        for (auto& h : spareHist)
+            h.assign ((size_t) want, 0.0f);
+
+        spareA.assign ((size_t) want, 0.0f);
+        spareB.assign ((size_t) want, 0.0f);
+        spareCap = want;
+        return true;
+    }
+
+    /** GROWING A LIVE WIRE, HALF TWO: publish it. **Call with the audio callback's lock held.**
+
+        🔴 NOT ONE ALLOCATION AND NOT ONE FREE HAPPENS HERE — `swap` moves pointers, and the small
+        buffers it hands back are released later, on the message thread, by the next `reserve`. All
+        that runs under the lock is `capacity()` floats of copying per channel, which is
+        microseconds; the callback waits for that and never for a heap.
+
+        The window comes across, and that is why growth is a swap rather than a re-prepare: the
+        wire stays WARM through its own growth, so the block that finally carries the bigger delay
+        looks back into the signal that just went past instead of into the silence a fresh buffer
+        would hand it. The old window lands at the RECENT end of the new one — the tail — because
+        that is where "the samples immediately before this block" have to be. What the wire
+        genuinely has not heard, the stretch older than the window it used to have, stays zero. */
+    void commit() noexcept
+    {
+        if (spareCap <= cap)
+            return;
+
+        for (size_t ch = 0; ch < hist.size(); ++ch)
+        {
+            std::fill (spareHist[ch].begin(), spareHist[ch].end(), 0.0f);
+            std::copy (hist[ch].begin(), hist[ch].end(),
+                       spareHist[ch].begin() + (spareCap - cap));
+            hist[ch].swap (spareHist[ch]);
+        }
+
+        prevScratch.swap (spareA);      // contents are rewritten every block; only the SIZE matters
+        nextScratch.swap (spareB);
+
+        cap      = spareCap;
+        spareCap = 0;
     }
 
     /** FED EVERY BLOCK, WHATEVER THE BLOCK IS DOING — the window takes the signal and writes
@@ -276,10 +275,21 @@ private:
     static_assert (std::atomic<bool>::is_always_lock_free,
                    "BypassWire's refusal latch is written from the audio thread");
 
-    int cap = 0;
+    /** A delay, believed only as far as it can be built. Negative is nothing; absurd is refused
+        rather than allocated for — see `maxSaneDelay`. */
+    static int clampDelay (int d) noexcept
+    {
+        return d < 0 ? 0 : (d > maxSaneDelay ? maxSaneDelay : d);
+    }
+
+    int cap = 0, spareCap = 0;
 
     std::array<std::vector<float>, 2> hist {};
     std::vector<float> prevScratch, nextScratch;
+
+    // Built by `reserve` on the message thread, swapped in by `commit` under the callback's lock.
+    std::array<std::vector<float>, 2> spareHist {};
+    std::vector<float> spareA, spareB;
 
     std::atomic<bool> shortened { false };
 };

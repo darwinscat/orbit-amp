@@ -686,6 +686,9 @@ private:
         rate-matching — reported whenever any of them changes. */
     void reportLatency();
 
+    /** Makes wire `index` long enough for a block that reports `lat` samples. Message thread. */
+    void fitWire (int index, int lat);
+
     /** One thread for both blocks' model builds. One, because a load is twenty milliseconds and
         two blocks asking at once still finish inside a frame; a second thread would only let two
         WaveNets fight over the same cores the audio thread wants. */
@@ -979,6 +982,13 @@ public:
     bool bypassWireRefused() const noexcept
     {
         return wire[0].everShortened() || wire[1].everShortened();
+    }
+
+    /** How long wire `index` currently is, in samples. Sized from the delay its block reports and
+        from nothing else — no ceiling is computed anywhere — so this reads back as that delay. */
+    int bypassWireCapacity (int index) const noexcept
+    {
+        return wire[(size_t) juce::jlimit (0, 1, index)].capacity();
     }
 
 private:

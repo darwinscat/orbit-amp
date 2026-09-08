@@ -21,10 +21,38 @@
 #include <felitronics/core/StreamResampler.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstdlib>
+#include <new>
 #include <cstdio>
 #include <memory>
 #include <vector>
+
+// EVERY ALLOCATION IN THIS BINARY, COUNTED. RT-safety claims are worth what their instrument is
+// worth, and "I read the code and saw no `new`" is not an instrument: `std::vector::assign` on a
+// larger size allocates, `juce::String` allocates, and a lambda that captures by value can. Global
+// `operator new` is the only place that sees all of them.
+static std::atomic<long long> gAllocations { 0 };
+
+void* operator new (std::size_t n)
+{
+    gAllocations.fetch_add (1, std::memory_order_relaxed);
+    if (void* p = std::malloc (n ? n : 1)) return p;
+    throw std::bad_alloc();
+}
+
+void* operator new[] (std::size_t n)
+{
+    gAllocations.fetch_add (1, std::memory_order_relaxed);
+    if (void* p = std::malloc (n ? n : 1)) return p;
+    throw std::bad_alloc();
+}
+
+void operator delete (void* p) noexcept { std::free (p); }
+void operator delete[] (void* p) noexcept { std::free (p); }
+void operator delete (void* p, std::size_t) noexcept { std::free (p); }
+void operator delete[] (void* p, std::size_t) noexcept { std::free (p); }
 
 namespace
 {
@@ -184,40 +212,68 @@ int main()
                 felitronics::core::StreamResampler::pairDelayHostSamples (host, pack));
         };
 
-        // 1 · THE BOUND COVERS THE DOMAIN — every session rate a host can name against every pack
-        //     rate the wire promises to carry, not three points of it.
+        // 1 · THERE IS NO BOUND ANY MORE — the wire GROWS to whatever the geometry produces, and
+        //     the window survives the growth. This section used to assert that a computed ceiling
+        //     covered every rate pair; the ceiling is gone, because one derived from a model rate
+        //     nobody promised is not too low, it is wrong. What is checked instead is the property
+        //     that replaced it: for every pair, `reserve` + `commit` leaves the wire carrying
+        //     exactly what the stage asks — and still holding what it had heard.
         {
             static const double hosts[] { 8000.0, 22050.0, 32000.0, 44100.0, 48000.0, 48001.0,
                                           88200.0, 96000.0, 176400.0, 192000.0, 384000.0 };
-            static const double packs[] { Wire::lowestPackRate, 11025.0, 16000.0, 22050.0, 32000.0,
+            static const double packs[] { 4000.0, 8000.0, 11025.0, 16000.0, 22050.0, 32000.0,
                                           44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0 };
 
-            bool   covers = true;
-            int    pairs = 0, tightAsk = 0, tightCap = 0;
-            double tightest = 0.0, tightHost = 0.0, tightPack = 0.0;
+            bool grows = true, staysWarm = true;
+            int  pairs = 0, biggest = 0;
+            double biggestHost = 0.0, biggestPack = 0.0;
 
             for (const double h : hosts)
                 for (const double p : packs)
                 {
                     ++pairs;
                     const int ask = stageLatency (h, p);
-                    const int cap = Wire::capacityFor (h);
-                    covers = covers && cap >= ask;
 
-                    if (const double ratio = (double) ask / (double) juce::jmax (1, cap); ratio > tightest)
-                    { tightest = ratio; tightHost = h; tightPack = p; tightAsk = ask; tightCap = cap; }
+                    Wire w;
+                    w.prepare (8);                     // deliberately far too small to begin with
+
+                    // Something in the window BEFORE the growth, so the copy across can be checked
+                    // rather than assumed: eight samples the wire has genuinely heard.
+                    std::vector<float> seed (8);
+                    for (int i = 0; i < 8; ++i) seed[(size_t) i] = (float) (i + 1);
+                    const float* sp[1] { seed.data() };
+                    w.advance (sp, 1, 8);
+
+                    if (w.reserve (ask))
+                        w.commit();
+
+                    grows = grows && w.capacity() >= ask;
+
+                    // The eight it heard have to come back out of the grown wire, at the delay that
+                    // reaches back to them — otherwise growth is a re-prepare wearing a swap's coat.
+                    std::vector<float> quiet (8, 0.0f), out (8);
+                    const float* qp[1] { quiet.data() };
+                    float*       op[1] { out.data() };
+                    w.process (qp, op, 1, 8, 8);
+
+                    for (int i = 0; i < 8; ++i)
+                        staysWarm = staysWarm && juce::approximatelyEqual (out[(size_t) i],
+                                                                           (float) (i + 1));
+
+                    if (ask > biggest) { biggest = ask; biggestHost = h; biggestPack = p; }
                 }
 
-            report ("the wire is long enough for every rate pair it promises", covers,
-                    juce::String (pairs) + " pairs, tightest "
-                      + juce::String (tightHost, 0) + " Hz on a " + juce::String (tightPack, 0)
-                      + " Hz pack: asks " + juce::String (tightAsk) + ", carries "
-                      + juce::String (tightCap));
+            report ("the wire grows to whatever the geometry asks, for every rate pair", grows,
+                    juce::String (pairs) + " pairs, largest "
+                      + juce::String (biggestHost, 0) + " Hz on a " + juce::String (biggestPack, 0)
+                      + " Hz pack: " + juce::String (biggest) + " samples");
+
+            report ("...and comes out of the growth still holding what it had heard", staysWarm);
 
             // The table F28 measured, kept as a REGRESSION and printed: what the old constant
             // would have handed back at each of these session rates against a 48 kHz pack.
             std::printf ("\nwire: session   asks   old 64   short by   first null of that comb\n");
-            bool oldWasShort = false, nowIsNot = true;
+            bool oldWasShort = false;
 
             for (const double h : { 44100.0, 48001.0, 88200.0, 96000.0, 192000.0 })
             {
@@ -225,15 +281,14 @@ int main()
                 const int old   = juce::jmin (ask, 64);
                 const int shortBy = ask - old;
                 oldWasShort = oldWasShort || shortBy > 0;
-                nowIsNot    = nowIsNot && Wire::capacityFor (h) >= ask;
 
                 std::printf ("      %8.0f %6d %8d %10d   %s\n", h, ask, old, shortBy,
                              shortBy > 0 ? juce::String (h / (2.0 * (double) shortBy), 1).toRawUTF8()
                                          : "none");
             }
 
-            report ("the constant DID cut above 48 kHz, and the geometry does not",
-                    oldWasShort && nowIsNot);
+            report ("the constant DID cut above 48 kHz, and nothing computes a ceiling now",
+                    oldWasShort && grows);
         }
 
         // 2 · THE WIRE CARRIES EXACTLY WHAT IT IS ASKED FOR — a property over the accepted domain,
@@ -248,10 +303,8 @@ int main()
             const auto carries = [] (double host, int d, int chunk, int channels, bool inPlace) -> bool
             {
                 Wire w;
-                w.prepare (host);
-
-                if (d > w.capacity())
-                    return false;
+                w.prepare (d);
+                juce::ignoreUnused (host);
 
                 const int n = 4 * chunk + 2 * d + 13;
                 std::vector<std::vector<float>> in ((size_t) channels), out ((size_t) channels);
@@ -306,8 +359,7 @@ int main()
 
             for (const double h : hosts)
             {
-                std::vector<int> delays { 0, 1, 2, 3, 63, 64, 65, Wire::capacityFor (h) - 1,
-                                          Wire::capacityFor (h) };
+                std::vector<int> delays { 0, 1, 2, 3, 63, 64, 65, 223, 224, 415, 416, 800 };
 
                 for (const double p : { 8000.0, 22050.0, 32000.0, 44100.0, 48000.0, 96000.0, 192000.0 })
                     delays.push_back (stageLatency (h, p));
@@ -344,10 +396,8 @@ int main()
             const auto movesCleanly = [] (double host, int d1, int d2, int chunk) -> bool
             {
                 Wire w;
-                w.prepare (host);
-
-                if (d1 > w.capacity() || d2 > w.capacity())
-                    return false;
+                w.prepare (juce::jmax (d1, d2));
+                juce::ignoreUnused (host);
 
                 const int n = 6 * chunk;
                 std::vector<float> in ((size_t) n), out ((size_t) n);
@@ -398,7 +448,7 @@ int main()
         //      whenever the wire last ran. Nothing else in the suite would notice if it stopped.
         {
             Wire w;
-            w.prepare (48000.0);
+            w.prepare (61);
 
             constexpr int d = 61, n = 256;
             std::vector<float> loud ((size_t) n, 1.0f), quiet ((size_t) n, 0.0f), out ((size_t) n);
@@ -425,7 +475,7 @@ int main()
         //      bypassed block is the ordinary way this happens.
         {
             Wire w;
-            w.prepare (96000.0);
+            w.prepare (96);
 
             constexpr int n = 256, d = 96;
             std::vector<float> in ((size_t) n), out ((size_t) n);
@@ -458,7 +508,7 @@ int main()
         //      it is what put the ghost back, so this is the check that came with the cure.)
         {
             Wire w;
-            w.prepare (96000.0);
+            w.prepare (96);
 
             constexpr int n = 256, d = 96;
             std::vector<float> loud ((size_t) n, 5.0f), ramp ((size_t) n), silent ((size_t) n, 0.0f);
@@ -488,12 +538,121 @@ int main()
                       + juce::String (*std::max_element (outR.begin(), outR.end()), 3));
         }
 
+        // 2f · RT-SAFETY, COUNTED RATHER THAN READ. Every allocation in this binary passes through
+        //      a global `operator new` this file replaces, so these are not claims about the code,
+        //      they are numbers. Two of them, because the law has two halves: `process` must not
+        //      allocate at all, and `commit` — which runs with the audio callback's lock held —
+        //      must not allocate either, or the callback ends up waiting on a heap.
+        {
+            Wire w;
+            w.prepare (96);
+
+            constexpr int n = 256;
+            std::vector<float> a ((size_t) n, 0.25f), b ((size_t) n);
+            const float* rp[2] { a.data(), a.data() };
+            float*       wp[2] { b.data(), b.data() };
+
+            w.process (rp, wp, 2, n, 96);                     // once to touch every path first
+
+            const long long beforeProcess = gAllocations.load();
+            for (int i = 0; i < 500; ++i)
+            {
+                w.process (rp, wp, 2, n, 96);
+                w.advance (rp, 2, n);
+                w.process (rp, wp, 2, n, 0);
+            }
+            const long long inProcess = gAllocations.load() - beforeProcess;
+
+            const bool owed = w.reserve (4096);               // ALLOCATES — and is meant to
+            const long long beforeCommit = gAllocations.load();
+            w.commit();
+            const long long inCommit = gAllocations.load() - beforeCommit;
+
+            std::printf ("\nwire: 1500 process/advance calls allocated %lld times; commit allocated"
+                         " %lld\n", inProcess, inCommit);
+
+            report ("process allocates nothing, counted", inProcess == 0,
+                    juce::String (inProcess) + " allocations in 1500 calls");
+            report ("commit allocates nothing under the lock, counted",
+                    owed && inCommit == 0 && w.capacity() == 4096,
+                    juce::String (inCommit) + " allocations, capacity now "
+                      + juce::String (w.capacity()));
+        }
+
+        // 2g · THE RESIDUAL, MEASURED. Growth brings the old window across, so a delay born inside
+        //      what the wire already remembered is seamless — but a delay born LONGER than that
+        //      reaches back further than the wire has ever heard, and those samples are silence.
+        //      That is the one hole left, and the point of this block is to put a number on it
+        //      rather than a word.
+        //
+        //      🔴 THE CEILING IS FROM CONSTRUCTION, NOT FROM ONE RUN: the wire resumes at whatever
+        //      the signal happens to be doing, so the worst step is a full-scale one — 0 dBFS — and
+        //      the phase of the resume decides how close a given run gets. Swept over a full cycle,
+        //      so the number below is a bound reached, not a value observed.
+        {
+            constexpr int remembered = 64, born = 96, n = 256;
+            const int cold = born - remembered;               // samples the wire cannot know
+
+            double worstStepDb = -200.0;
+            int    coldSamples = -1;
+
+            for (int phase = 0; phase < 360; ++phase)
+            {
+                Wire w;
+                w.prepare (remembered);
+
+                std::vector<float> sig ((size_t) n), out ((size_t) n);
+                for (int i = 0; i < n; ++i)
+                    sig[(size_t) i] = (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                          * (0.01 * (double) i
+                                                             + (double) phase / 360.0));
+
+                const float* sp[1] { sig.data() };
+                w.advance (sp, 1, n);                          // everything it ever heard
+
+                if (w.reserve (born))
+                    w.commit();
+
+                std::vector<float> quiet ((size_t) n, 0.0f);
+                const float* qp[1] { quiet.data() };
+                float*       op[1] { out.data() };
+                w.process (qp, op, 1, n, born);
+
+                int silent = 0;
+                while (silent < n && juce::approximatelyEqual (out[(size_t) silent], 0.0f))
+                    ++silent;
+
+                if (coldSamples < 0) coldSamples = silent;
+
+                // The step out of the hole: how far the first non-zero sample is from the silence
+                // in front of it, which is what a listener hears as the click.
+                if (silent < n)
+                    worstStepDb = std::max (worstStepDb,
+                                            20.0 * std::log10 (std::max (1.0e-12,
+                                                                         (double) std::abs (out[(size_t) silent]))));
+            }
+
+            std::printf ("wire: a delay born %d samples deep into a wire that remembered %d —"
+                         " %d cold samples, worst step %.2f dBFS over 360 phases (ceiling 0.00)\n",
+                         born, remembered, coldSamples, worstStepDb);
+
+            report ("the residual is exactly the part the wire never heard",
+                    coldSamples == cold,
+                    juce::String (coldSamples) + " cold, arithmetic says " + juce::String (cold));
+
+            // Reached the topological ceiling: a full-scale resume is 0 dBFS, and the sweep gets
+            // within a hundredth of a dB of it. One run would have been a lower bound, not a size.
+            report ("and the worst step it can make is the full-scale one, reached by sweeping",
+                    worstStepDb > -0.05,
+                    juce::String (worstStepDb, 3) + " dBFS against a ceiling of 0.000");
+        }
+
         // 3 · THE REFUSAL IS VISIBLE. The wire's domain is bounded — the delay grows without limit
         //     as a pack's rate falls — so a refusal can still happen. What may never happen again
         //     is a refusal nobody can see.
         {
             Wire w;
-            w.prepare (48000.0);
+            w.prepare (224);          // a stated capacity, so "more than it carries" has a meaning
 
             constexpr int n = 256;
             std::vector<float> in ((size_t) n), out ((size_t) n);
@@ -525,12 +684,12 @@ int main()
             w.process (rp, wp, 1, n, 4);
             const bool latchHolds = w.everShortened();
 
-            w.prepare (48000.0);
+            w.prepare (224);
             const bool prepareClears = ! w.everShortened();
 
             report ("a wire asked for more than it carries says so",
                     freshIsQuiet && legalStaysQuiet && refusalSpeaks && latchHolds && prepareClears,
-                    "capacity " + juce::String (cap) + " at 48 kHz");
+                    "capacity " + juce::String (cap));
 
             report ("...and still carries every sample it does have", carriesWhatItHas);
         }
@@ -565,7 +724,7 @@ int main()
                                                         * hz * (double) i / fs);
 
                 Wire w;
-                w.prepare (fs);
+                w.prepare (askOfWire);
 
                 for (int at = 0; at < total; at += 256)
                 {
@@ -1378,15 +1537,16 @@ int main()
             }
 
             const int pdc      = hi.getLatencySamples();
-            const int cap      = Wire::capacityFor (96000.0);
             const int perStage = stageLatency (96000.0, 48000.0);   // what THIS test would predict
+            const int cap      = juce::jmax (hi.bypassWireCapacity (0), hi.bypassWireCapacity (1));
 
             // The PDC is the SUM over the blocks that actually hold a rate-matching model, and how
             // many that is depends on what is installed — so the number to compare is not the sum
             // but whether the sum is built out of this stage figure at all.
             std::printf ("\nwire: a live 96 kHz session reports %d samples of PDC = %d stage(s) of"
-                         " %d; this test's own arithmetic says %d a stage, wire carries %d\n",
-                         pdc, perStage > 0 ? pdc / perStage : 0, perStage, perStage, cap);
+                         " %d; this test's own arithmetic says %d a stage, the wires carry %d / %d\n",
+                         pdc, perStage > 0 ? pdc / perStage : 0, perStage, perStage,
+                         hi.bypassWireCapacity (0), hi.bypassWireCapacity (1));
 
             // PRECONDITION: there has to BE a rate match, or this check passes by measuring
             // nothing — which is the failure mode the whole comb bench above is built to refuse.
@@ -1429,14 +1589,26 @@ int main()
                     juce::String (pdc) + " reported, " + juce::String (boostLat + preampLat)
                       + " summed");
 
-            report ("every live latency belongs to a rate the wire promises to carry",
+            report ("every live latency belongs to a rate the geometry can produce",
                     longest > 0
-                      && (boostLat  == 0 || rateBehind (96000.0, boostLat)  >= Wire::lowestPackRate)
-                      && (preampLat == 0 || rateBehind (96000.0, preampLat) >= Wire::lowestPackRate));
+                      && (boostLat  == 0 || rateBehind (96000.0, boostLat)  > 0.0)
+                      && (preampLat == 0 || rateBehind (96000.0, preampLat) > 0.0));
 
-            report ("the wire the plugin prepares outlasts the longest block it stands for",
-                    longest > 0 && cap >= longest,
-                    "capacity " + juce::String (cap) + " vs " + juce::String (longest));
+            // 🔴 EXACTLY, not "at least", and the invariant has two terms because the wire has two
+            //    jobs: it CARRIES the delay its block reports, and it REMEMBERS a block's worth of
+            //    past so a delay born later has something to come back to. So the length is the
+            //    larger of those, and nothing else — a rate-derived ceiling would read 224 at
+            //    48 kHz or 416 at 96, and that is precisely what no longer exists.
+            const int floorSamples = blockSize;
+            report ("each wire is the larger of its block's delay and one block of memory",
+                    hi.bypassWireCapacity (0) == juce::jmax (floorSamples, boostLat)
+                      && hi.bypassWireCapacity (1) == juce::jmax (floorSamples, preampLat),
+                    juce::String (hi.bypassWireCapacity (0)) + " and "
+                      + juce::String (hi.bypassWireCapacity (1)) + " against delays "
+                      + juce::String (boostLat) + "/" + juce::String (preampLat)
+                      + ", floor " + juce::String (floorSamples));
+
+            juce::ignoreUnused (cap);
 
             // 🔴 AND THE PRODUCT PROMISE ITSELF, THROUGH THE WHOLE PLUGIN: a bypassed block is a
             //    wire the same length as the block it replaces, so a session whose blocks are both

@@ -397,6 +397,22 @@ void AmpProcessor::pumpDeviceWork()
     }
 }
 
+void AmpProcessor::fitWire (int index, int lat)
+{
+    // ALLOCATE FIRST, PUBLISH SECOND, and the split is the whole point: `reserve` builds the bigger
+    // rows here, on the message thread, with nothing waiting on it; the lock is taken only for the
+    // swap, which copies `capacity()` floats per channel and allocates nothing at all.
+    //
+    // `suspendProcessing` would have been shorter and is wrong: it hands the host silence for a
+    // block, which is exactly the click the warm window was added to remove. Trading a comb for a
+    // hole is not a fix.
+    if (! wire[(size_t) index].reserve (lat))
+        return;
+
+    const juce::ScopedLock sl (getCallbackLock());
+    wire[(size_t) index].commit();
+}
+
 void AmpProcessor::reportLatency()
 {
     // In series: each captured block's models — a capture taken at another rate is resampled on
@@ -404,23 +420,37 @@ void AmpProcessor::reportLatency()
     // 48 kHz packs reports 122 samples, and a 96 kHz one 192. It was eight until the kernel behind
     // the rate match was replaced; the number is the resampler's geometry and it will move again,
     // which is why nothing downstream of here may write it down.
-    const int total = boost.latencySamples() + preamp.latencySamples();
+    const int bo = boost.latencySamples();
+    const int pr = preamp.latencySamples();
+    const int total = bo + pr;
+
+    // 🔴 THE WIRE IS SIZED FROM THE NUMBER THE BLOCK ACTUALLY REPORTS, here and nowhere else.
+    // `latencySamples()` came out of `NamStage::rateMatch` and therefore out of the rates that are
+    // really in play; every ceiling this class used to carry was computed from a model rate NOBODY
+    // PROMISED, and such a ceiling is not too low, it is wrong — the run rate can walk, without
+    // limit while audio runs, and no static number survives that.
+    fitWire (0, bo);
+    fitWire (1, pr);
 
     // THE WIRE'S REFUSAL, PICKED UP OFF THE AUDIO THREAD. `BypassWire` cannot say anything from
     // inside `process` without allocating or writing to a stream on the audio thread, so it
     // latches a flag and this pump — the same one that noticed the latency — is what reads it.
-    // Once: a capture below the rate the wire covers stays below it, and a line per block would
-    // be a line per block.
+    // Once, and it means something narrower than it used to. The wire is no longer sized from a
+    // guessed rate, so this cannot fire because a capture was "below the domain" — there is no
+    // domain. What it reports is the one window that remains: a block whose delay grew between the
+    // moment the model went live and the moment this pump made the wire long enough for it. Those
+    // blocks are short by the difference, and the whole point of the latch is that "short" is a
+    // thing somebody can find out about rather than a thing that just sounds wrong.
     if (! wireRefusalSeen)
-        for (const auto& w : wire)
-            if (w.everShortened())
+        for (int i = 0; i < 2; ++i)
+            if (wire[(size_t) i].everShortened())
             {
                 wireRefusalSeen = true;
                 juce::Logger::writeToLog (
-                    "OrbitAmp: a captured block asks for more bypass delay than the wire carries — "
-                    "a capture below " + juce::String (core::BypassWire::lowestPackRate, 0)
-                      + " Hz at " + juce::String (getSampleRate(), 0)
-                      + " Hz. The bypassed path will be short, and a crossfade through it will comb.");
+                    "OrbitAmp: bypass wire " + juce::String (i) + " was asked for more delay than "
+                    "it carried, at " + juce::String (getSampleRate(), 0) + " Hz — a model landed "
+                    "and the wire caught up one pump later. It now carries "
+                      + juce::String (wire[(size_t) i].capacity()) + " samples.");
                 break;
             }
 
@@ -488,11 +518,19 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     scopeDry.setSize (1, block);
     fadeDry.setSize (juce::jmax (2, channels), block);
 
-    // Sized from the GEOMETRY of the rate match, not from a constant with room to spare: see
-    // BypassWire::rateMatchDelay. At 48 kHz that is 224 samples of history per channel, at 192 kHz
-    // 800 — against the 61 and the 160 a 48 kHz pack actually asks for.
+    // ONE BLOCK OF PAST, AND THAT IS A FLOOR ON MEMORY — not a ceiling on delay. The two are
+    // different numbers and confusing them is the defect this branch removed: what the wire has to
+    // CARRY is the delay its block reports, which does not exist at this line (the models are
+    // pumped below) and is `reportLatency`'s to fit. What the wire has to REMEMBER is another
+    // matter — a wire holding nothing has nothing to bring across when it grows, so a delay born
+    // mid-session would open on silence however promptly the growth happened.
+    //
+    // A block is the honest amount, because it is the one length the host actually promised us and
+    // it costs exactly what a block costs. It bounds nothing: a delay born longer than this still
+    // grows the wire, it just brings less across, and that residual is measured rather than
+    // claimed away.
     for (auto& w : wire)
-        w.prepare (sampleRate);
+        w.prepare (block);
 
     // Snapped, not faded: a chain that arrives switched off is silent from its first sample.
     for (int i = 0; i < params::numChainRows; ++i)
