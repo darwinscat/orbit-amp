@@ -683,8 +683,13 @@ int main()
 
     if (amp.boost.packs.isEmpty())
     {
-        std::printf ("no packs installed — nothing to check\n");
-        return 0;
+        // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench
+        // and needs no library at all — it was moved in front of this exit precisely so a machine
+        // without packs still runs it. Returning zero here threw its verdict away: the whole
+        // geometry could fail and the process would still exit green, which is the exact shape of
+        // the hole this branch exists to close.
+        std::printf ("no packs installed — the library half is skipped, the bench above is not\n");
+        return failures == 0 ? 0 : 1;
     }
 
     std::printf ("device: %s\n\n", amp.boost.packs.getReference (0).displayName().toRawUTF8());
@@ -1390,20 +1395,47 @@ int main()
             //    switched off has to delay by exactly the PDC it reports — no more, no less. This
             //    is the only check here that LISTENS, and it is the one that a wire quietly
             //    shortened back to 64 samples, or a PDC quietly doubled, cannot survive.
-            // Which of the two blocks actually carries the rate match, so the crossfade check
-            // below drives the one that has a delay to hide.
-            const int   lat  = longest;
-            const char* onId = boostLat > 0 ? orbitamp::params::boostOn : orbitamp::params::preampOn;
+            //
+            //    🔴 BOTH BLOCKS FIRST. A model is not loaded until its block is RUN, so leaving
+            //    the boost switched off left it at zero latency and this measured ONE wire while
+            //    claiming to measure two — deleting the boost's compensation would have gone
+            //    unnoticed. They are both switched on, both made to report a delay, and only then
+            //    stood down.
+            const auto blocksOut = [&] ()
+            {
+                for (const char* off : { orbitamp::params::boostOn,   orbitamp::params::preampOn,
+                                         orbitamp::params::gateOn,    orbitamp::params::delayOn,
+                                         orbitamp::params::reverbOn,  orbitamp::params::cabOn,
+                                         orbitamp::params::limiterOn, orbitamp::params::delayPresent,
+                                         orbitamp::params::reverbPresent, orbitamp::params::cabPresent,
+                                         orbitamp::params::gatePresent })
+                    set (hi, off, 0.0f);
+            };
 
-            for (const char* off : { orbitamp::params::boostOn,   orbitamp::params::preampOn,
-                                     orbitamp::params::gateOn,    orbitamp::params::delayOn,
-                                     orbitamp::params::reverbOn,  orbitamp::params::cabOn,
-                                     orbitamp::params::limiterOn, orbitamp::params::delayPresent,
-                                     orbitamp::params::reverbPresent, orbitamp::params::cabPresent,
-                                     orbitamp::params::gatePresent })
-                set (hi, off, 0.0f);
+            set (hi, orbitamp::params::boostOn,  1.0f);
+            set (hi, orbitamp::params::preampOn, 1.0f);
 
-            for (int i = 0; i < 8; ++i)          // let the switches settle: every one crossfades
+            for (int i = 0; i < 60 && (hi.boost.latencySamples() == 0
+                                        || hi.preamp.latencySamples() == 0); ++i)
+            {
+                buf.clear();
+                hi.processBlock (buf, midi);
+                hi.pumpDeviceWork();
+                juce::Thread::sleep (5);
+            }
+
+            const int bothBoost  = hi.boost.latencySamples();
+            const int bothPreamp = hi.preamp.latencySamples();
+            const int bothTotal  = bothBoost + bothPreamp;
+
+            // PRECONDITION: two wires, both with something to carry. Without this the check below
+            // passes on a chain where only one block was ever compensated.
+            report ("both captured blocks really are rate-matching", bothBoost > 0 && bothPreamp > 0,
+                    juce::String (bothBoost) + " + " + juce::String (bothPreamp));
+
+            blocksOut();
+
+            for (int i = 0; i < 12; ++i)     // every switch crossfades; let them all land
             {
                 buf.clear();
                 hi.processBlock (buf, midi);
@@ -1412,20 +1444,32 @@ int main()
 
             const int reported = hi.getLatencySamples();
 
+            // COLLECTED ACROSS BLOCKS, not inside one. A legal configuration can delay by more than
+            // a block — an 8 kHz pack at 96 kHz asks 416 a stage — and a window that stops at the
+            // block boundary would fail a wire that was doing its job.
+            std::vector<float> tail;
             buf.clear();
             buf.setSample (0, 0, 1.0f);
             buf.setSample (1, 0, 1.0f);
-            hi.processBlock (buf, midi);
 
-            int landedAt = -1;
+            for (int b = 0; b < 4; ++b)
+            {
+                if (b > 0)
+                    buf.clear();
+
+                hi.processBlock (buf, midi);
+                tail.insert (tail.end(), buf.getReadPointer (0), buf.getReadPointer (0) + blockSize);
+            }
+
+            int   landedAt = -1;
             float peak = 0.0f;
-            for (int i = 0; i < blockSize; ++i)
-                if (const float v = std::abs (buf.getSample (0, i)); v > peak)
-                { peak = v; landedAt = i; }
+            for (size_t i = 0; i < tail.size(); ++i)
+                if (const float v = std::abs (tail[i]); v > peak)
+                { peak = v; landedAt = (int) i; }
 
             std::printf ("wire: an impulse through two bypassed blocks at 96 kHz lands at sample %d"
-                         " (peak %.3f); the plugin reports %d samples of PDC\n",
-                         landedAt, peak, reported);
+                         " (peak %.3f); the plugin reports %d samples of PDC, the blocks cost"
+                         " %d + %d\n", landedAt, peak, reported, bothBoost, bothPreamp);
 
             // PRECONDITION: the impulse has to have SURVIVED. A chain that swallowed it would
             // report `landedAt == 0` off a peak of nothing and look like zero delay.
@@ -1433,8 +1477,9 @@ int main()
                     juce::String (peak, 3) + " out of 1.0");
 
             report ("a bypassed block delays by exactly what the host is told it does",
-                    peak > 0.5f && landedAt == reported,
-                    "landed at " + juce::String (landedAt) + ", reported " + juce::String (reported));
+                    peak > 0.5f && landedAt == reported && reported == bothTotal,
+                    "landed at " + juce::String (landedAt) + ", reported " + juce::String (reported)
+                      + ", blocks cost " + juce::String (bothTotal));
 
             // 🔴 AND THE CROSSFADE, which is the other half of the wire and the half the comb bench
             //    above only simulates. A block on its way out blends what the model made against
@@ -1444,7 +1489,7 @@ int main()
             //    before its latency, so anything of size at the impulse's own position is the dry
             //    copy arriving undelayed.
             {
-                set (hi, onId, 1.0f);
+                set (hi, orbitamp::params::preampOn, 1.0f);
 
                 for (int i = 0; i < 16; ++i)     // let the fade-IN finish: g has to reach 1
                 {
@@ -1453,35 +1498,79 @@ int main()
                     hi.pumpDeviceWork();
                 }
 
-                set (hi, onId, 0.0f);            // and now the fade-out, which runs ~15 ms
+                // WHERE THE MARK IS EXPECTED, and it is not the preamp's latency alone: the boost
+                // stands bypassed in front of it and its wire is a real delay, so the mark arrives
+                // after BOTH. Reading only the preamp's number is what made the first version of
+                // this probe measure an empty stretch of buffer and call it silence.
+                const int ahead = hi.boost.latencySamples();
+                const int lat   = hi.preamp.latencySamples();
+                const int when  = ahead + lat;
+
+                set (hi, orbitamp::params::preampOn, 0.0f);      // and now the ~15 ms fade-out
+
+                // The impulse goes in twice, one block apart, and BOTH readings are collected past
+                // the block boundary. Two of them, because one proves only that something delayed
+                // came back — an instant switch, or a fade that had already finished, would give
+                // exactly that. A fade in flight is the one thing that makes the second reading
+                // BIGGER than the first: the dry's weight grows as the blend walks across.
+                const auto probe = [&] (int at)
+                {
+                    std::vector<float> got;
+                    buf.clear();
+                    buf.setSample (0, at, 1.0f);
+                    buf.setSample (1, at, 1.0f);
+
+                    for (int b = 0; b < 2; ++b)
+                    {
+                        if (b > 0)
+                            buf.clear();
+
+                        hi.processBlock (buf, midi);
+                        got.insert (got.end(), buf.getReadPointer (0),
+                                    buf.getReadPointer (0) + blockSize);
+                    }
+
+                    float early = 0.0f, onTime = 0.0f;
+
+                    // EARLY is everything before the mark is due. A dry copy that skipped the wire
+                    // arrives `lat` samples ahead of that, which is inside this window.
+                    for (int i = 0; i < at + when - 2; ++i)
+                        early = juce::jmax (early, std::abs (got[(size_t) i]));
+                    for (int i = at + when - 2; i <= juce::jmin ((int) got.size() - 1, at + when + 2); ++i)
+                        onTime = juce::jmax (onTime, std::abs (got[(size_t) i]));
+
+                    return std::pair<float, float> { early, onTime };
+                };
 
                 buf.clear();
-                hi.processBlock (buf, midi);     // the first block of it: g leaves 1.0
+                hi.processBlock (buf, midi);     // the first block of the fade: g leaves 1.0
 
-                constexpr int at = 100;
-                buf.clear();
-                buf.setSample (0, at, 1.0f);
-                buf.setSample (1, at, 1.0f);
-                hi.processBlock (buf, midi);     // and the impulse, well inside the blend
+                const auto [early1, onTime1] = probe (100);
+                const auto [early2, onTime2] = probe (100);
 
-                float early = 0.0f, onTime = 0.0f;
-                for (int i = 0; i <= at; ++i)
-                    early = juce::jmax (early, std::abs (buf.getSample (0, i)));
-                for (int i = at + lat - 2; i <= juce::jmin (blockSize - 1, at + lat + 2); ++i)
-                    onTime = juce::jmax (onTime, std::abs (buf.getSample (0, i)));
+                std::printf ("wire: mid-crossfade, an impulse at 100 reads %.4f / %.4f before it is"
+                             " due and %.4f -> %.4f at +%d (%d bypassed ahead + %d fading)\n",
+                             early1, early2, onTime1, onTime2, when, ahead, lat);
 
-                std::printf ("wire: mid-crossfade, an impulse at %d reads %.4f at its own position"
-                             " and %.4f %d samples later\n", at, early, onTime, lat);
-
-                // PRECONDITION: the blend has to be MOVING and the dry has to be in it — a fade
-                // that had already finished, or one whose dry weight was still zero, would read
-                // nothing early for the wrong reason.
-                report ("the crossfade is actually running when the impulse goes in", onTime > 0.05f,
-                        juce::String (onTime, 4) + " at the delayed position");
+                // PRECONDITIONS, both of them: the delayed signal is really there, and the blend is
+                // really MOVING. A finished fade, or a switch with no fade at all, hands back the
+                // dry at full amplitude and unchanging — which is what `onTime > 0.05` alone was
+                // happy to accept.
+                report ("the crossfade is actually running when the impulse goes in",
+                        onTime1 > 0.05f && onTime1 < 0.95f && onTime2 > onTime1 * 1.05f,
+                        juce::String (onTime1, 4) + " then " + juce::String (onTime2, 4));
 
                 report ("the dry side of a crossfade is delayed too, so the fade cannot comb",
-                        onTime > 0.05f && early < 0.1f * onTime,
-                        juce::String (early, 4) + " early against " + juce::String (onTime, 4));
+                        onTime1 > 0.05f && early1 < 0.1f * onTime1 && early2 < 0.1f * onTime2,
+                        juce::String (early1, 4) + " / " + juce::String (early2, 4) + " early");
+
+                blocksOut();
+
+                for (int i = 0; i < 12; ++i)
+                {
+                    buf.clear();
+                    hi.processBlock (buf, midi);
+                }
             }
 
             // 🔴 THE MOMENT THE DELAY IS BORN, through the real plugin. A block that stands
@@ -1494,10 +1583,13 @@ int main()
             {
                 const auto lateOwned = std::make_unique<orbitamp::AmpProcessor>();
                 auto& late = *lateOwned;
-                // The load is deferred on purpose: with `inlineLoads` off it goes to the pool and
-                // does not land, so the first blocks really do run at zero delay. Turning it on
-                // afterwards is what lets the model arrive between two blocks, which is the whole
-                // sequence being pinned.
+                // WHAT ACTUALLY HOLDS THE LOAD BACK, said plainly because the first version of this
+                // comment claimed the wrong mechanism: `inlineLoads = false` sends the request to
+                // the pool, and delivering a pool result needs a pump that never comes — turning
+                // the flag on later does not reclaim work already handed over, it makes the NEXT
+                // request run inline. Either way the first blocks genuinely run at zero delay and
+                // the model lands afterwards, which is the sequence being pinned; the two
+                // preconditions below are what make that a checked fact rather than a hope.
                 late.inlineLoads = false;
                 late.prepareToPlay (96000.0, blockSize);
                 set (late, orbitamp::params::stereoMode, 0.0f);
@@ -1541,19 +1633,27 @@ int main()
 
                 const int born = late.getLatencySamples();
 
-                b.clear();                    // silence in — everything out came from the window
-                late.processBlock (b, midi);
+                // Collected across blocks: the delay a block acquires can be longer than one, and
+                // a window that stopped at the seam would fail a wire that was doing its job.
+                std::vector<float> after;
+                for (int k = 0; k < 3; ++k)
+                {
+                    b.clear();                // silence in — everything out came from the window
+                    late.processBlock (b, midi);
+                    after.insert (after.end(), b.getReadPointer (0),
+                                  b.getReadPointer (0) + blockSize);
+                }
 
                 const int want = mark + born - blockSize;
                 float here = 0.0f, anywhere = 0.0f;
                 int   at = -1;
 
-                for (int i = 0; i < blockSize; ++i)
-                    if (const float v = std::abs (b.getSample (0, i)); v > anywhere)
-                    { anywhere = v; at = i; }
+                for (size_t i = 0; i < after.size(); ++i)
+                    if (const float v = std::abs (after[i]); v > anywhere)
+                    { anywhere = v; at = (int) i; }
 
-                if (want >= 0 && want < blockSize)
-                    here = std::abs (b.getSample (0, want));
+                if (want >= 0 && want < (int) after.size())
+                    here = std::abs (after[(size_t) want]);
 
                 std::printf ("wire: a delay BORN mid-session — 0 samples, then %d; the mark from the"
                              " block before comes back at %d (wanted %d), %.3f\n",
@@ -1562,7 +1662,7 @@ int main()
                 // PRECONDITIONS: the block really did start with no delay, and really did acquire
                 // one. Without both, this measures a plugin that never changed and passes for it.
                 report ("a block really can acquire its delay mid-session",
-                        bornCold && born > 0 && want >= 0 && want < blockSize,
+                        bornCold && born > 0 && want >= 0 && want < (int) after.size(),
                         bornCold ? juce::String ("0 -> ") + juce::String (born)
                                  : "it was never cold — this check would be blind");
 

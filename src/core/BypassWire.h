@@ -210,6 +210,26 @@ public:
 
         const int paired = juce::jmin (numChannels, (int) hist.size());
 
+        // ONE window formula, used by every channel — the ones the caller handed over and the ones
+        // it did not. `src == nullptr` is a channel that carried SILENCE this block, which is what
+        // a channel outside `numChannels` did: the chain drops to one channel in MONO, and a
+        // window that simply stops being written is a window holding whatever the last STEREO
+        // stretch left in it. That is a ghost, and it is the one the old `reset()` used to sweep up
+        // on this very path.
+        const auto slide = [this, numSamples] (std::vector<float>& h, const float* src)
+        {
+            // The window after this block: the last `cap` samples of (h ++ src). Taken before a
+            // single byte of `out` is written, because `out` may be `in`. Kept even at zero delay:
+            // the wire SAW those samples, and throwing them away is what makes the first block
+            // after a model lands open on silence instead of on the signal.
+            for (int i = 0; i < cap; ++i)
+            {
+                const int at = numSamples - cap + i;     // position of this sample in `src`
+                nextScratch[(size_t) i] = at >= 0 ? (src != nullptr ? src[at] : 0.0f)
+                                                  : h[(size_t) (at + cap)];
+            }
+        };
+
         for (int ch = 0; ch < paired; ++ch)
         {
             auto& h = hist[(size_t) ch];
@@ -220,16 +240,7 @@ public:
             for (int i = 0; i < d; ++i)
                 prevScratch[(size_t) i] = h[(size_t) (cap - d + i)];
 
-            // The window after this block: the last `cap` samples of (h ++ in). Taken before a
-            // single byte of `out` is written, because `out` may be `in`. Kept even at zero delay:
-            // the wire SAW those samples, and throwing them away is what makes the first block
-            // after a model lands open on silence instead of on the signal. (What the wire has
-            // genuinely not seen is another matter, and the caller's `reset` is that.)
-            for (int i = 0; i < cap; ++i)
-            {
-                const int at = numSamples - cap + i;     // position of this sample in `in`
-                nextScratch[(size_t) i] = at >= 0 ? in[ch][at] : h[(size_t) (at + cap)];
-            }
+            slide (h, in[ch]);
 
             if (out != nullptr)
             {
@@ -247,6 +258,19 @@ public:
                     juce::FloatVectorOperations::copy (out[ch], in[ch], numSamples);
                 }
             }
+
+            for (int i = 0; i < cap; ++i)
+                h[(size_t) i] = nextScratch[(size_t) i];
+        }
+
+        // A channel the caller did not hand over this block still has a window, and it has to go on
+        // moving — filled with the silence that channel actually carried. Otherwise MONO freezes
+        // the right-hand window, and the next STEREO block reads a stretch of audio from before the
+        // switch. Costs one slide of a channel nobody is listening to.
+        for (int ch = paired; ch < (int) hist.size(); ++ch)
+        {
+            auto& h = hist[(size_t) ch];
+            slide (h, nullptr);
 
             for (int i = 0; i < cap; ++i)
                 h[(size_t) i] = nextScratch[(size_t) i];
