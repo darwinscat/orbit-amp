@@ -969,6 +969,20 @@ private:
         nothing to imitate. */
     core::BypassWire wire[2];
 
+    /** Set once `reportLatency` has seen a wire refuse and has said so. Message thread only. */
+    bool wireRefusalSeen = false;
+
+public:
+    /** Has a bypass wire ever been asked for more delay than it carries — which is a capture
+        recorded below `BypassWire::lowestPackRate` at this session rate, and a bypass path that
+        will comb. Latched; a `prepareToPlay` clears the wires and this follows on the next pump. */
+    bool bypassWireRefused() const noexcept
+    {
+        return wire[0].everShortened() || wire[1].everShortened();
+    }
+
+private:
+
     /** Can a crossfade actually run this block? The buffer was sized in prepare, and a host may
         hand over a bigger block than it promised — copying into it on that block would walk off
         the end of the heap. Without room we simply do not blend: the switch lands hard, which is

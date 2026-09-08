@@ -91,9 +91,27 @@ public:
         short is the comb this class exists to prevent. */
     static int rateMatchDelay (double hostRate, double packRate) noexcept
     {
+        // The rates are VALIDATED, not merely nudged. `jmax (1.0, rate)` reads like a guard and is
+        // not one: NaN comes back as 1 through the comparison, a rate between 0 and 1 is silently
+        // promoted, and an infinity sails straight through into a double-to-int conversion that is
+        // undefined once the value leaves int's range — and `prepare` hands that result to
+        // `std::vector::assign` as a size.
+        if (! (std::isfinite (hostRate) && std::isfinite (packRate) && hostRate > 0.0 && packRate > 0.0))
+            return 0;
+
         const double d = felitronics::core::StreamResampler::delayInputSamples();
-        return (int) std::ceil (d * (1.0 + juce::jmax (1.0, hostRate) / juce::jmax (1.0, packRate)));
+        const double n = std::ceil (d * (1.0 + hostRate / packRate));
+
+        // A session rate a million times a pack's is not a session, it is a corrupt manifest. The
+        // cap is on the CONVERSION, not on the geometry: past it the wire refuses out loud rather
+        // than allocating whatever the arithmetic came to.
+        return n >= (double) maxSaneDelay ? maxSaneDelay : (int) n;
     }
+
+    /** The largest delay this class will ever build a buffer for. Not a bound on the formula —
+        the formula has none — but a bound on believing its input: a megabyte of history per
+        channel is already past the point where the number came from a real capture. */
+    static constexpr int maxSaneDelay = 1 << 18;
 
     /** The longest delay a wire prepared for `hostRate` can be: the formula above against the
         lowest pack rate the wire promises to cover. 224 samples at 48 kHz, 800 at 192 kHz — six
@@ -120,6 +138,10 @@ public:
         shortened.store (false, std::memory_order_relaxed);
     }
 
+    /** Forgets what it has heard. The caller runs this on every block the wire is NOT carrying —
+        while the block is in the path, and while it stands bypassed at zero delay — because a
+        window nobody is filling goes stale, and a stale window is a handful of samples from
+        minutes ago played back the moment a model lands and the delay becomes real again. */
     void reset()
     {
         for (auto& h : hist)
@@ -130,8 +152,10 @@ public:
     int capacity() const noexcept { return cap; }
 
     /** 🔴 THE REFUSAL, MADE VISIBLE. True once the wire has been asked for more delay than it was
-        prepared for and has handed back less — which puts a comb in the crossfade. Latched, and
-        cleared only by `prepare`.
+        prepared for and has handed back less — which puts a comb in the crossfade. Latched until
+        the next `prepare`, and read OFF the audio thread: `AmpProcessor::reportLatency` picks it
+        up on the same message-thread pump that noticed the latency, so the refusal reaches a log
+        in a release build and not only an assertion in a debug one.
 
         The clamp it replaces was `jlimit` and nothing else: a session above 48 kHz got a bypass
         path shorter than the block it stood for, and no line of code anywhere could tell. Inside
@@ -140,67 +164,81 @@ public:
     bool everShortened() const noexcept { return shortened.load (std::memory_order_relaxed); }
 
     /** Writes `in` delayed by `delay` into `out`. In-place is allowed (`out == in`) — that is what
-        a fully bypassed block wants; a crossfading one hands its own scratch instead. */
+        a fully bypassed block wants; a crossfading one hands its own scratch instead.
+
+        `delay` may CHANGE from block to block and does: a model landing at another rate moves it
+        without anybody re-preparing anything. That is why the history is a window of the last
+        `capacity()` samples rather than of the last `delay` of them — the window does not know
+        what the delay is, so a delay that moves reads the right samples on its very first block
+        instead of replaying the tail of the old alignment.
+
+        TWO CHANNELS. That is what the wire carries, and what the chain hands it; anything past the
+        pair passes through UNDELAYED rather than being left untouched, because an untouched output
+        buffer is a silent lie and undelayed is at least an audible one. */
     void process (const float* const* in, float* const* out, int numChannels, int numSamples,
                   int delay) noexcept
     {
         const int want = juce::jmax (0, delay);
         const int d    = juce::jmin (want, cap);
 
-        if (d != want && ! shortened.exchange (true, std::memory_order_relaxed))
-        {
-            // A capture below `lowestPackRate` at this session rate. The bypass path is about to
-            // be short by `want - d` samples, which is a comb whose first null sits at
-            // hostRate / (2 * (want - d)). Nothing on the audio thread can fix it — it can only
-            // stop being silent about it, which is the flag above and this line. Not `jassertfalse`
-            // on purpose: the test that PINS this behaviour has to be able to reach it, and an
-            // assertion that aborts a debug build is an assertion the pin cannot survive.
-            DBG ("BypassWire: asked for " << want << " samples of delay, carries " << d
-                 << " — the bypass path will comb");
-        }
+        if (d != want)
+            shortened.store (true, std::memory_order_relaxed);
 
         if (numSamples <= 0)
             return;
 
-        if (d == 0)
-        {
-            for (int ch = 0; ch < numChannels; ++ch)
-                if (out[ch] != in[ch])
-                    juce::FloatVectorOperations::copy (out[ch], in[ch], numSamples);
+        const int paired = juce::jmin (numChannels, (int) hist.size());
 
-            return;
-        }
-
-        for (int ch = 0; ch < juce::jmin (numChannels, (int) hist.size()); ++ch)
+        for (int ch = 0; ch < paired; ++ch)
         {
             auto& h = hist[(size_t) ch];
 
-            // `h[k]` is the input sample that stood at position `k - d` — the d samples that came
-            // before this block, oldest first.
+            // The `d` samples that stood immediately before this block are the TAIL of the window,
+            // not its head. Reading the head is what made a delay that moved replay the wrong
+            // samples for one block.
             for (int i = 0; i < d; ++i)
-                prevScratch[(size_t) i] = h[(size_t) i];
+                prevScratch[(size_t) i] = h[(size_t) (cap - d + i)];
 
-            // What the NEXT block will need: the last d samples of (prev ++ in). Taken before a
-            // single byte of `out` is written, because `out` may be `in`.
-            for (int i = 0; i < d; ++i)
+            // The window after this block: the last `cap` samples of (h ++ in). Taken before a
+            // single byte of `out` is written, because `out` may be `in`. Kept even at zero delay:
+            // the wire SAW those samples, and throwing them away is what makes the first block
+            // after a model lands open on silence instead of on the signal. (What the wire has
+            // genuinely not seen is another matter, and the caller's `reset` is that.)
+            for (int i = 0; i < cap; ++i)
             {
-                const int at = numSamples - d + i;     // position of this sample in `in`
-                nextScratch[(size_t) i] = at >= 0 ? in[ch][at] : prevScratch[(size_t) (at + d)];
+                const int at = numSamples - cap + i;     // position of this sample in `in`
+                nextScratch[(size_t) i] = at >= 0 ? in[ch][at] : h[(size_t) (at + cap)];
             }
 
-            // Backwards, so an in-place shift never eats what it has not read yet.
-            for (int i = numSamples - 1; i >= d; --i)
-                out[ch][i] = in[ch][i - d];
+            if (d > 0)
+            {
+                // Backwards, so an in-place shift never eats what it has not read yet.
+                for (int i = numSamples - 1; i >= d; --i)
+                    out[ch][i] = in[ch][i - d];
 
-            for (int i = juce::jmin (d, numSamples) - 1; i >= 0; --i)
-                out[ch][i] = prevScratch[(size_t) i];
+                for (int i = juce::jmin (d, numSamples) - 1; i >= 0; --i)
+                    out[ch][i] = prevScratch[(size_t) i];
+            }
+            else if (out[ch] != in[ch])
+            {
+                juce::FloatVectorOperations::copy (out[ch], in[ch], numSamples);
+            }
 
-            for (int i = 0; i < d; ++i)
+            for (int i = 0; i < cap; ++i)
                 h[(size_t) i] = nextScratch[(size_t) i];
         }
+
+        for (int ch = paired; ch < numChannels; ++ch)
+            if (out[ch] != in[ch])
+                juce::FloatVectorOperations::copy (out[ch], in[ch], numSamples);
     }
 
 private:
+    // The latch is read from the message thread while the audio thread writes it, so it has to be
+    // a real atomic and not a lock the audio thread might wait on.
+    static_assert (std::atomic<bool>::is_always_lock_free,
+                   "BypassWire's refusal latch is written from the audio thread");
+
     int cap = 0;
 
     std::array<std::vector<float>, 2> hist {};

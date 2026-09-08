@@ -406,6 +406,24 @@ void AmpProcessor::reportLatency()
     // which is why nothing downstream of here may write it down.
     const int total = boost.latencySamples() + preamp.latencySamples();
 
+    // THE WIRE'S REFUSAL, PICKED UP OFF THE AUDIO THREAD. `BypassWire` cannot say anything from
+    // inside `process` without allocating or writing to a stream on the audio thread, so it
+    // latches a flag and this pump — the same one that noticed the latency — is what reads it.
+    // Once: a capture below the rate the wire covers stays below it, and a line per block would
+    // be a line per block.
+    if (! wireRefusalSeen)
+        for (const auto& w : wire)
+            if (w.everShortened())
+            {
+                wireRefusalSeen = true;
+                juce::Logger::writeToLog (
+                    "OrbitAmp: a captured block asks for more bypass delay than the wire carries — "
+                    "a capture below " + juce::String (core::BypassWire::lowestPackRate, 0)
+                      + " Hz at " + juce::String (getSampleRate(), 0)
+                      + " Hz. The bypassed path will be short, and a crossfade through it will comb.");
+                break;
+            }
+
     if (total != getLatencySamples())
         setLatencySamples (total);
 }
@@ -778,9 +796,13 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                 wire[(size_t) l].process (chainView.getArrayOfReadPointers(),
                                           fadeDry.getArrayOfWritePointers(), nch, numSamples, lat);
             else
+            {
                 for (int ch = 0; ch < nch; ++ch)
                     juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                        chainView.getReadPointer (ch), numSamples);
+
+                wire[(size_t) l].reset();
+            }
         }
         else if (on)
         {
@@ -797,6 +819,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             // IS the output — and it has to carry the delay the model would have.
             wire[(size_t) l].process (chainView.getArrayOfReadPointers(),
                                       chainView.getArrayOfWritePointers(), nch, numSamples, lat);
+        }
+        else
+        {
+            // Bypassed AND costing nothing — the pack plays at the session's own rate, so there is
+            // no delay to imitate. The wire is cleared for the same reason it is cleared while the
+            // block is working: it is not being filled, so what it holds is only getting older,
+            // and a model landing at another rate an hour from now would open by playing it.
+            wire[(size_t) l].reset();
         }
 
         // IN: how hard the capture is fed. Metered immediately after, at the model's own door, so
