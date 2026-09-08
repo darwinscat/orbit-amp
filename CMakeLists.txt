@@ -67,18 +67,19 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # of the dependency graph. Its self-tests do NOT build from here (guarded by PROJECT_IS_TOP_LEVEL).
 # ----------------------------------------------------------------------------
 # 🔴 THIS TAG NO LONGER BUILDS THIS TREE, AND THAT IS DELIBERATE, NOT AN OVERSIGHT.
-# core::BypassWire reads StreamResampler::delayInputSamples(), which v0.29.0 does not have — that
-# tag still carries the cubic and the ceil(3*h/m)+3 geometry the wire was written against and has
-# now outgrown. Verified, not assumed: replaying CI's own compile command with no sibling checkout
-# gives `no member named 'delayInputSamples'`. CI (windows-latest, checkout of this repo only, so
-# ../felitronics-core does not exist there) is therefore RED on this branch by construction, while
-# every local build is green because the sibling checkout wins over the tag.
+# core::BypassWire asks StreamResampler::pairDelayHostSamples() for the round-trip cost of a rate
+# match. v0.29.0 has neither that function nor the kernel behind it — it still carries the cubic and
+# the ceil(3*h/m)+3 geometry this wire was written against and has now outgrown. Verified, not
+# assumed: replaying CI's own compile command with no sibling checkout fails on the missing symbol,
+# and PR #32's first run failed the same way at the same line. CI (windows-latest, checkout of this
+# repo only, so ../felitronics-core does not exist there) is therefore RED on this branch by
+# construction, while every local build is green because the sibling checkout wins over the tag.
 #
-# Raise it to the first tag carrying core::StreamResampler::roundTripDelaySamples() — the round
-# trip itself, which the wire has to ask for rather than restate. No such tag exists yet: the
-# kernel is on core's main, unreleased, and releases are held until NAM moves out of OrbitCab.
-# Moving the pin to a bare commit was considered and declined — a release is followed by building
-# every consumer against it, and this branch is one of those consumers, not the thing that decides.
+# Raise it to the first tag carrying pairDelayHostSamples(). No such tag exists yet: the function
+# lands with core PR #151 and releases are held until NAM moves out of OrbitCab. Moving the pin to a
+# bare commit was considered and declined — a release is followed by building every consumer against
+# it, and this branch is one of those consumers, not the thing that decides. One pin move, once,
+# after that lands: a green CI against an API that is about to change is a deferred red, not a green.
 set(ORBITAMP_FCORE_TAG "v0.29.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"

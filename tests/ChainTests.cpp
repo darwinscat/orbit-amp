@@ -173,14 +173,15 @@ int main()
     {
         using Wire = orbitamp::core::BypassWire;
 
-        // WHAT THE LIVE BLOCK ACTUALLY ASKS THE WIRE FOR: `nam::NamStage::latencySamples()`,
-        // spelled here in its own words — `lround`, where the wire's bound uses `ceil` — so that a
-        // change of geometry has to disagree with two independent spellings before it can pass.
-        // `D` is read from the core header in BOTH; neither writes a number down.
+        // WHAT THE LIVE BLOCK ACTUALLY ASKS THE WIRE FOR. `nam::NamStage` rounds the same core
+        // geometry to nearest where the wire's bound rounds up, and THAT — the rounding policy —
+        // is the only thing spelled here. The composition itself is asked of the same function the
+        // stage asks, because a test that restates it stops being able to notice when it moves;
+        // that is how the constant this branch removed survived two kernels.
         const auto stageLatency = [] (double host, double pack)
         {
-            const double d = felitronics::core::StreamResampler::delayInputSamples();
-            return (int) std::lround (d + d * host / pack);
+            return (int) std::lround (
+                felitronics::core::StreamResampler::pairDelayHostSamples (host, pack));
         };
 
         // 1 · THE BOUND COVERS THE DOMAIN — every session rate a host can name against every pack
@@ -1347,8 +1348,8 @@ int main()
 
         const auto stageLatency = [] (double host, double pack)
         {
-            const double d = felitronics::core::StreamResampler::delayInputSamples();
-            return (int) std::lround (d + d * host / pack);
+            return (int) std::lround (
+                felitronics::core::StreamResampler::pairDelayHostSamples (host, pack));
         };
 
         // 5 · THE LIVE CONSUMER — because everything above is this TEST's own spelling of the
@@ -1402,27 +1403,36 @@ int main()
             const int preampLat = hi.preamp.latencySamples();
             const int longest   = juce::jmax (boostLat, preampLat);
 
-            // What pack rate each live latency IMPLIES, by inverting the geometry. It is a reading,
-            // not an assumption about what is installed: L = D·(1 + host/m) → m = D·host/(L − D).
-            const auto impliedPackRate = [] (double host, int lat)
+            // WHICH RATE EACH LIVE LATENCY BELONGS TO, found by asking the geometry forward rather
+            // than inverting it by hand. The inversion `m = D·host/(L − D)` that used to stand here
+            // was itself a restatement, and one that stops being true the day the two legs of a
+            // round trip differ — exactly the change the core signature is now shaped to absorb.
+            const auto rateBehind = [&] (double host, int lat)
             {
-                const double d = felitronics::core::StreamResampler::delayInputSamples();
-                return (double) lat > d ? d * host / ((double) lat - d) : 0.0;
+                if (lat <= 0)
+                    return 0.0;
+
+                for (const double m : { 8000.0, 11025.0, 16000.0, 22050.0, 32000.0, 44100.0,
+                                        48000.0, 88200.0, 96000.0, 176400.0, 192000.0 })
+                    if (stageLatency (host, m) == lat)
+                        return m;
+
+                return -1.0;   // a rate outside the grid: reported, never guessed at
             };
 
             std::printf ("      boost %d samples (a %.0f Hz pack), preamp %d (%.0f Hz)\n",
-                         boostLat,  impliedPackRate (96000.0, boostLat),
-                         preampLat, impliedPackRate (96000.0, preampLat));
+                         boostLat,  rateBehind (96000.0, boostLat),
+                         preampLat, rateBehind (96000.0, preampLat));
 
             report ("what the host is told is what the blocks actually cost",
                     pdc == boostLat + preampLat,
                     juce::String (pdc) + " reported, " + juce::String (boostLat + preampLat)
                       + " summed");
 
-            report ("every live latency inverts to a rate the wire promises to carry",
+            report ("every live latency belongs to a rate the wire promises to carry",
                     longest > 0
-                      && (boostLat  == 0 || impliedPackRate (96000.0, boostLat)  >= Wire::lowestPackRate)
-                      && (preampLat == 0 || impliedPackRate (96000.0, preampLat) >= Wire::lowestPackRate));
+                      && (boostLat  == 0 || rateBehind (96000.0, boostLat)  >= Wire::lowestPackRate)
+                      && (preampLat == 0 || rateBehind (96000.0, preampLat) >= Wire::lowestPackRate));
 
             report ("the wire the plugin prepares outlasts the longest block it stands for",
                     longest > 0 && cap >= longest,
@@ -1546,61 +1556,74 @@ int main()
 
                 set (hi, orbitamp::params::preampOn, 0.0f);      // and now the ~15 ms fade-out
 
-                // The impulse goes in twice, one block apart, and BOTH readings are collected past
-                // the block boundary. Two of them, because one proves only that something delayed
-                // came back — an instant switch, or a fade that had already finished, would give
-                // exactly that. A fade in flight is the one thing that makes the second reading
-                // BIGGER than the first: the dry's weight grows as the blend walks across.
-                const auto probe = [&] (int at)
-                {
-                    std::vector<float> got;
-                    buf.clear();
-                    buf.setSample (0, at, 1.0f);
-                    buf.setSample (1, at, 1.0f);
+                // TWO MARKS IN ONE PASS, 300 samples apart, and both timed to land INSIDE the
+                // fade. One mark proves only that something delayed came back — an instant switch,
+                // or a fade that had already finished, gives exactly that. A blend in flight is the
+                // one thing that makes the later mark read BIGGER: the dry's weight grows as the
+                // blend walks across. Sending them a whole probe apart (which is what this did
+                // before) put the second one PAST the end of a 15 ms fade, so the pair proved
+                // "mid-fade, then bypass" rather than "the fade moved" — and with a legal 8 kHz
+                // pack even the first one landed past the end and failed healthy code.
+                constexpr int gap = 300;
+                const int fadeLen = (int) std::ceil (orbitamp::core::BypassFade::lengthMs
+                                                       * 96000.0 / 1000.0);
 
-                    for (int b = 0; b < 2; ++b)
-                    {
-                        if (b > 0)
-                            buf.clear();
+                // PRECONDITION: both marks are due before the fade is over. Stated rather than
+                // assumed, because it is a fact about the installed library — a pack low enough
+                // makes `when` outrun the fade, and then this fixture is measuring the bypass.
+                report ("both crossfade marks are due while the blend is still moving",
+                        gap + when + 2 < fadeLen,
+                        juce::String (gap + when + 2) + " of " + juce::String (fadeLen) + " samples");
 
-                        hi.processBlock (buf, midi);
-                        got.insert (got.end(), buf.getReadPointer (0),
-                                    buf.getReadPointer (0) + blockSize);
-                    }
-
-                    float early = 0.0f, onTime = 0.0f;
-
-                    // EARLY is everything before the mark is due. A dry copy that skipped the wire
-                    // arrives `lat` samples ahead of that, which is inside this window.
-                    for (int i = 0; i < at + when - 2; ++i)
-                        early = juce::jmax (early, std::abs (got[(size_t) i]));
-                    for (int i = at + when - 2; i <= juce::jmin ((int) got.size() - 1, at + when + 2); ++i)
-                        onTime = juce::jmax (onTime, std::abs (got[(size_t) i]));
-
-                    return std::pair<float, float> { early, onTime };
-                };
+                const int need = (gap + when + 3) / blockSize + 1;
+                std::vector<float> got;
 
                 buf.clear();
-                hi.processBlock (buf, midi);     // the first block of the fade: g leaves 1.0
+                hi.processBlock (buf, midi);      // the fade's first block, so the marks sit inside it
 
-                const auto [early1, onTime1] = probe (100);
-                const auto [early2, onTime2] = probe (100);
+                buf.clear();
+                buf.setSample (0, 0,   1.0f);
+                buf.setSample (1, 0,   1.0f);
+                buf.setSample (0, gap, 1.0f);
+                buf.setSample (1, gap, 1.0f);
 
-                std::printf ("wire: mid-crossfade, an impulse at 100 reads %.4f / %.4f before it is"
-                             " due and %.4f -> %.4f at +%d (%d bypassed ahead + %d fading)\n",
-                             early1, early2, onTime1, onTime2, when, ahead, lat);
+                for (int b = 0; b < need; ++b)
+                {
+                    if (b > 0)
+                        buf.clear();
 
-                // PRECONDITIONS, both of them: the delayed signal is really there, and the blend is
-                // really MOVING. A finished fade, or a switch with no fade at all, hands back the
-                // dry at full amplitude and unchanging — which is what `onTime > 0.05` alone was
-                // happy to accept.
-                report ("the crossfade is actually running when the impulse goes in",
-                        onTime1 > 0.05f && onTime1 < 0.95f && onTime2 > onTime1 * 1.05f,
+                    hi.processBlock (buf, midi);
+                    got.insert (got.end(), buf.getReadPointer (0), buf.getReadPointer (0) + blockSize);
+                }
+
+                // Every window is clamped to what was actually collected. The bound used to be
+                // computed from the declared delays alone, so a low enough pack read past the end
+                // of this vector — an out-of-bounds read in the instrument that exists to catch
+                // out-of-bounds reads.
+                const auto peakOver = [&got] (int from, int to)
+                {
+                    float m = 0.0f;
+                    for (int i = juce::jmax (0, from); i <= juce::jmin ((int) got.size() - 1, to); ++i)
+                        m = juce::jmax (m, std::abs (got[(size_t) i]));
+                    return m;
+                };
+
+                const float early   = peakOver (0, when - 3);              // before anything is due
+                const float onTime1 = peakOver (when - 2, when + 2);
+                const float onTime2 = peakOver (gap + when - 2, gap + when + 2);
+
+                std::printf ("wire: mid-crossfade, two marks 300 apart read %.4f before either is"
+                             " due, then %.4f -> %.4f at +%d (%d bypassed ahead + %d fading,"
+                             " fade is %d)\n",
+                             early, onTime1, onTime2, when, ahead, lat, fadeLen);
+
+                report ("the crossfade is actually running when the marks go in",
+                        onTime1 > 0.05f && onTime2 > onTime1 * 1.05f,
                         juce::String (onTime1, 4) + " then " + juce::String (onTime2, 4));
 
                 report ("the dry side of a crossfade is delayed too, so the fade cannot comb",
-                        onTime1 > 0.05f && early1 < 0.1f * onTime1 && early2 < 0.1f * onTime2,
-                        juce::String (early1, 4) + " / " + juce::String (early2, 4) + " early");
+                        onTime1 > 0.05f && early < 0.1f * onTime1,
+                        juce::String (early, 4) + " early against " + juce::String (onTime1, 4));
 
                 blocksOut();
 

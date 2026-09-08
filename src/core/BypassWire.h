@@ -42,10 +42,10 @@ public:
         this file belongs. It is not the bound on the delay; the bound is `rateMatchDelay` below,
         and that one moves with the kernel.
 
-        It has to be stated rather than derived, because `D · (1 + h/m)` has no supremum: the delay
-        grows without limit as a capture's rate falls, and nothing upstream closes that. Checked in
-        the core rather than assumed — `nam::NamStage` takes `GetExpectedSampleRate()` from the file
-        as it comes and runs at any positive rate; the `8000.0` that does appear there is a floor on
+        It has to be stated rather than derived, because the pair delay has no supremum: it grows
+        without limit as a capture's rate falls, and nothing upstream closes that. Checked in the
+        core rather than assumed — `nam::NamStage` takes `GetExpectedSampleRate()` from the file as
+        it comes and runs at any positive rate; the `8000.0` that does appear there is a floor on
         the HOST rate inside its own scratch arithmetic and says nothing whatever about a model, so
         it is deliberately NOT what this number leans on.
 
@@ -60,47 +60,35 @@ public:
     static constexpr double lowestPackRate = 8000.0;
 
     /** WHAT A RATE-MATCHING CAPTURE COSTS, in host samples, at `hostRate` against a pack recorded
-        at `packRate`:
+        at `packRate` — asked of the core, never restated here.
 
-            D · (1 + hostRate / packRate),  D = StreamResampler::delayInputSamples()
+        `StreamResampler::pairDelayHostSamples` owns the composition: a round trip is two stages,
+        each costing its own input samples, so the pair is the down leg plus the up leg converted
+        into host samples. `nam::NamStage` derives the number it reports from the same call, so the
+        wire and the block it stands for cannot drift apart by arithmetic.
 
-        A round trip is two stages: down to the model's rate and back. Each costs `D` of ITS OWN
-        input samples, so the pair costs `D` host samples plus `D` model samples expressed in host
-        ones — which is where the `(1 + hostRate/packRate)` comes from, and why it is not twice one
-        number. Derived in `felitronics/core/StreamResampler.h`; `nam::NamStage::latencySamples()`
-        is the same arithmetic and is what actually reaches this class.
-
-        🔴 `D` IS ASKED FOR AT THE MOMENT OF THE CALCULATION, never copied here as a number and
-        never read once into a constant of our own. This bound has already outlived its
-        justification twice — the comment that used to stand where this one does claimed
-        `ceil (3·hostSR/modelSR) + 3` and "sixty-four is room to spare", which was true of a kernel
-        two generations dead, and the clamp below went on cutting silently after both replacements.
-        A bound derived from a formula has to NAME the formula and be re-derived with it, or it
-        becomes a lie that compiles.
-
-        ⚠️ THIS BODY IS A PLACEHOLDER FOR ONE CALL. The composition below is the third generation of
-        the same retelling, and the cure is that the core owns it: P36 puts it in the core header as
-        `StreamResampler::roundTripDelaySamples (hostRate, packRate)`. When that lands, the two
-        lines below become one call to it and NOTHING ELSE IN THIS FILE MOVES — including if the
-        kernel starts scaling its taps with the ratio, which makes `D` a function of the rates
-        rather than a number. Written this way on purpose: a temporary retelling outlives its
-        reason, which is the whole lesson this class was rewritten to carry.
+        🔴 NOTHING ABOUT THE GEOMETRY IS WRITTEN DOWN HERE, and that is the whole repair. The
+        comment that used to stand where this one does claimed `ceil (3 * hostSR / modelSR) + 3` and
+        "sixty-four is room to spare" — true of a kernel two generations dead, and the clamp below
+        went on cutting silently through both replacements. Even the corrected `D * (1 + h/m)` was
+        only the third generation of the same restatement, and it dies the day the kernel scales its
+        taps with the ratio: the two legs of a round trip stop being equal, and every consumer that
+        had multiplied one number by two is quietly wrong. One call, in one place, is the defence.
 
         Rounds UP where the stage rounds to nearest: the stage reports a length, this reserves room
-        for one, and a wire that is half a sample too long costs nothing while one half a sample too
-        short is the comb this class exists to prevent. */
+        for one, and a wire half a sample too long costs nothing while one half a sample too short
+        is the comb this class exists to prevent. */
     static int rateMatchDelay (double hostRate, double packRate) noexcept
     {
         // The rates are VALIDATED, not merely nudged. `jmax (1.0, rate)` reads like a guard and is
         // not one: NaN comes back as 1 through the comparison, a rate between 0 and 1 is silently
-        // promoted, and an infinity sails straight through into a double-to-int conversion that is
+        // promoted, and an infinity sails straight into a double-to-int conversion that is
         // undefined once the value leaves int's range — and `prepare` hands that result to
         // `std::vector::assign` as a size.
         if (! (std::isfinite (hostRate) && std::isfinite (packRate) && hostRate > 0.0 && packRate > 0.0))
             return 0;
 
-        const double d = felitronics::core::StreamResampler::delayInputSamples();
-        const double n = std::ceil (d * (1.0 + hostRate / packRate));
+        const double n = std::ceil (felitronics::core::StreamResampler::pairDelayHostSamples (hostRate, packRate));
 
         // A session rate a million times a pack's is not a session, it is a corrupt manifest. The
         // cap is on the CONVERSION, not on the geometry: past it the wire refuses out loud rather
