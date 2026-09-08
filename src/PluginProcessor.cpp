@@ -801,17 +801,19 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                     juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                        chainView.getReadPointer (ch), numSamples);
 
-                wire[(size_t) l].reset();
+                wire[(size_t) l].advance (chainView.getArrayOfReadPointers(), nch, numSamples);
             }
         }
         else if (on)
         {
             // Fully in the path: the model carries its own delay and there is nothing to imitate.
-            // The wire is CLEARED rather than left holding whatever it last saw, because the next
-            // fade-out reads that history for its first `lat` samples — and a handful of samples
-            // from minutes ago, even weighted at the fraction of a per-cent the fade has moved by
-            // then, is a ghost. A dozen floats to make it impossible.
-            wire[(size_t) l].reset();
+            // The wire is still FED, though, and that is the whole difference between a wire and a
+            // hole. It used to be cleared here — the worry being a ghost, a handful of samples from
+            // minutes ago read by the next fade-out — but a window that is never filled is not
+            // ghost-free, it is COLD, and a cold window hands out its own length in silence the
+            // first time the delay becomes real. Fed every block there is neither: what it holds
+            // is always the signal that just went past, which is exactly what a bypass wire is.
+            wire[(size_t) l].advance (chainView.getArrayOfReadPointers(), nch, numSamples);
         }
         else if (lat > 0)
         {
@@ -823,10 +825,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         else
         {
             // Bypassed AND costing nothing — the pack plays at the session's own rate, so there is
-            // no delay to imitate. The wire is cleared for the same reason it is cleared while the
-            // block is working: it is not being filled, so what it holds is only getting older,
-            // and a model landing at another rate an hour from now would open by playing it.
-            wire[(size_t) l].reset();
+            // no delay to imitate yet. Fed anyway: a model landing at another rate turns `lat`
+            // positive between two blocks, and the block after that has to be able to look back.
+            wire[(size_t) l].advance (chainView.getArrayOfReadPointers(), nch, numSamples);
         }
 
         // IN: how hard the capture is fed. Metered immediately after, at the model's own door, so

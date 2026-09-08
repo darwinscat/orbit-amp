@@ -417,6 +417,38 @@ int main()
             report ("reset really forgets — no ghost from the last time it ran", clean);
         }
 
+        // 2d · A WARM WINDOW. The wire is fed on every block, including the ones where it carries
+        //      nothing, because a window filled only while the delay is live is EMPTY the first
+        //      time the delay becomes live — and hands out its own length in silence. That is not
+        //      a corner: the boost ships switched off, so a model landing at another rate into a
+        //      bypassed block is the ordinary way this happens.
+        {
+            Wire w;
+            w.prepare (96000.0);
+
+            constexpr int n = 256, d = 96;
+            std::vector<float> in ((size_t) n), out ((size_t) n);
+            for (int i = 0; i < n; ++i)
+                in[(size_t) i] = (float) (i + 1);
+
+            const float* r0[1] { in.data() };
+            const float* r1[1] { in.data() };
+            float*       o[1]  { out.data() };
+
+            w.advance (r0, 1, n);                       // a block where the delay was still zero
+            w.process (r1, o, 1, n, d);                 // and now a model has landed
+
+            // The block after the model lands must look BACK into what already went past, not into
+            // silence: the first `d` samples out are the last `d` samples of the block before.
+            bool warm = true;
+            for (int i = 0; i < d; ++i)
+                warm = warm && juce::approximatelyEqual (out[(size_t) i], (float) (n - d + i + 1));
+
+            report ("a wire fed while it carried nothing is warm when it starts to carry", warm,
+                    "first sample out " + juce::String (out[0], 1) + ", wanted "
+                      + juce::String ((float) (n - d + 1), 1));
+        }
+
         // 3 · THE REFUSAL IS VISIBLE. The wire's domain is bounded — the delay grows without limit
         //     as a pack's rate falls — so a refusal can still happen. What may never happen again
         //     is a refusal nobody can see.
@@ -587,17 +619,30 @@ int main()
                      && ! (nullBefore > 0 && std::abs ((double) nullBefore - predicted) <= 1.5 * binHz))
                 { preconditionsHold = false; why = "the instrument cannot see a comb it is shown"; }
 
+                // 🔴 ACROSS THE WHOLE SWEEP, not at one bin. It used to check a single bin at
+                //    3 kHz, and 32 samples at 96 kHz is exactly one period of 3 kHz — so both
+                //    oracles said 0 dB and would have gone on saying it with the closed form
+                //    replaced by `return 0`. An oracle sampled at the period of the thing it
+                //    measures does not measure it.
                 if (residual > 0)
-                {
-                    const double measured = responseDb (fs, lat, old, 150);         // 3 kHz
-                    if (std::abs (measured - predictedDb (fs, residual, 150 * binHz)) > 0.05)
-                        oracleAgrees = false;
-                }
+                    for (int k = kLow; k <= kHigh; ++k)
+                    {
+                        const double measured = responseDb (fs, lat, old, k);
+                        const double want     = predictedDb (fs, residual, k * binHz);
 
-                // AND THE ANSWER: with the wire the length of the block, nothing dips.
+                        // Only where the closed form is not falling off a cliff: within a bin of a
+                        // null the two disagree by however steep the null is, which is arithmetic
+                        // about the grid rather than about the wire.
+                        if (want > -20.0 && std::abs (measured - want) > 0.05)
+                        { oracleAgrees = false; break; }
+                    }
+
+                // AND THE ANSWER: with the wire the length of the block, nothing MOVES — in
+                // either direction. Taking the minimum alone called a wire that delivered the
+                // right delay at half again the gain "flat", because +3.5 dB is not a dip.
                 double worst = 0.0;
                 for (int k = kLow; k <= kHigh; ++k)
-                    worst = std::min (worst, responseDb (fs, lat, lat, k));
+                    worst = std::min (worst, -std::abs (responseDb (fs, lat, lat, k)));
 
                 const int nullNow = firstNullHz (fs, lat, lat);
                 flatEverywhere = flatEverywhere && worst > -0.001 && nullNow == 0;
@@ -1306,23 +1351,50 @@ int main()
                             : "PDC is zero: no installed pack is off the session rate, so this "
                               "check would be blind");
 
-            // 🔴 THE ONE CHECK IN THIS FILE THAT A CHANGE OF GEOMETRY CANNOT WALK PAST. Both
-            // numbers describe the same rate match, and they were written by different hands:
-            // `pdc` came out of nam::NamStage, `perStage` out of this test. Move the kernel and
-            // only one of them follows.
-            report ("the live stage's own number is built from the geometry this test uses",
-                    pdc > 0 && perStage > 0 && pdc % perStage == 0,
-                    juce::String (pdc) + " against " + juce::String (perStage) + " a stage");
+            // PER BLOCK, not against the sum. Each captured block has its OWN wire, so a wire has
+            // to outlast the longest single block and not the two of them added together — the
+            // comparison against the sum both under- and over-states it, and two 16 kHz packs at
+            // 96 kHz would have failed it while every wire was long enough.
+            const int boostLat  = hi.boost.latencySamples();
+            const int preampLat = hi.preamp.latencySamples();
+            const int longest   = juce::jmax (boostLat, preampLat);
 
-            report ("the wire the plugin prepares outlasts what the live stage asks of it",
-                    pdc > 0 && cap >= pdc,
-                    "capacity " + juce::String (cap) + " vs " + juce::String (pdc));
+            // What pack rate each live latency IMPLIES, by inverting the geometry. It is a reading,
+            // not an assumption about what is installed: L = D·(1 + host/m) → m = D·host/(L − D).
+            const auto impliedPackRate = [] (double host, int lat)
+            {
+                const double d = felitronics::core::StreamResampler::delayInputSamples();
+                return (double) lat > d ? d * host / ((double) lat - d) : 0.0;
+            };
+
+            std::printf ("      boost %d samples (a %.0f Hz pack), preamp %d (%.0f Hz)\n",
+                         boostLat,  impliedPackRate (96000.0, boostLat),
+                         preampLat, impliedPackRate (96000.0, preampLat));
+
+            report ("what the host is told is what the blocks actually cost",
+                    pdc == boostLat + preampLat,
+                    juce::String (pdc) + " reported, " + juce::String (boostLat + preampLat)
+                      + " summed");
+
+            report ("every live latency inverts to a rate the wire promises to carry",
+                    longest > 0
+                      && (boostLat  == 0 || impliedPackRate (96000.0, boostLat)  >= Wire::lowestPackRate)
+                      && (preampLat == 0 || impliedPackRate (96000.0, preampLat) >= Wire::lowestPackRate));
+
+            report ("the wire the plugin prepares outlasts the longest block it stands for",
+                    longest > 0 && cap >= longest,
+                    "capacity " + juce::String (cap) + " vs " + juce::String (longest));
 
             // 🔴 AND THE PRODUCT PROMISE ITSELF, THROUGH THE WHOLE PLUGIN: a bypassed block is a
             //    wire the same length as the block it replaces, so a session whose blocks are both
             //    switched off has to delay by exactly the PDC it reports — no more, no less. This
             //    is the only check here that LISTENS, and it is the one that a wire quietly
             //    shortened back to 64 samples, or a PDC quietly doubled, cannot survive.
+            // Which of the two blocks actually carries the rate match, so the crossfade check
+            // below drives the one that has a delay to hide.
+            const int   lat  = longest;
+            const char* onId = boostLat > 0 ? orbitamp::params::boostOn : orbitamp::params::preampOn;
+
             for (const char* off : { orbitamp::params::boostOn,   orbitamp::params::preampOn,
                                      orbitamp::params::gateOn,    orbitamp::params::delayOn,
                                      orbitamp::params::reverbOn,  orbitamp::params::cabOn,
@@ -1363,6 +1435,54 @@ int main()
             report ("a bypassed block delays by exactly what the host is told it does",
                     peak > 0.5f && landedAt == reported,
                     "landed at " + juce::String (landedAt) + ", reported " + juce::String (reported));
+
+            // 🔴 AND THE CROSSFADE, which is the other half of the wire and the half the comb bench
+            //    above only simulates. A block on its way out blends what the model made against
+            //    the signal it was handed; if the wire is skipped on THAT path, the dry copy is
+            //    early by the model's whole latency and the blend is the comb this class exists to
+            //    prevent. The pin does not need a spectrum: the model's own output cannot begin
+            //    before its latency, so anything of size at the impulse's own position is the dry
+            //    copy arriving undelayed.
+            {
+                set (hi, onId, 1.0f);
+
+                for (int i = 0; i < 16; ++i)     // let the fade-IN finish: g has to reach 1
+                {
+                    buf.clear();
+                    hi.processBlock (buf, midi);
+                    hi.pumpDeviceWork();
+                }
+
+                set (hi, onId, 0.0f);            // and now the fade-out, which runs ~15 ms
+
+                buf.clear();
+                hi.processBlock (buf, midi);     // the first block of it: g leaves 1.0
+
+                constexpr int at = 100;
+                buf.clear();
+                buf.setSample (0, at, 1.0f);
+                buf.setSample (1, at, 1.0f);
+                hi.processBlock (buf, midi);     // and the impulse, well inside the blend
+
+                float early = 0.0f, onTime = 0.0f;
+                for (int i = 0; i <= at; ++i)
+                    early = juce::jmax (early, std::abs (buf.getSample (0, i)));
+                for (int i = at + lat - 2; i <= juce::jmin (blockSize - 1, at + lat + 2); ++i)
+                    onTime = juce::jmax (onTime, std::abs (buf.getSample (0, i)));
+
+                std::printf ("wire: mid-crossfade, an impulse at %d reads %.4f at its own position"
+                             " and %.4f %d samples later\n", at, early, onTime, lat);
+
+                // PRECONDITION: the blend has to be MOVING and the dry has to be in it — a fade
+                // that had already finished, or one whose dry weight was still zero, would read
+                // nothing early for the wrong reason.
+                report ("the crossfade is actually running when the impulse goes in", onTime > 0.05f,
+                        juce::String (onTime, 4) + " at the delayed position");
+
+                report ("the dry side of a crossfade is delayed too, so the fade cannot comb",
+                        onTime > 0.05f && early < 0.1f * onTime,
+                        juce::String (early, 4) + " early against " + juce::String (onTime, 4));
+            }
         }
         }
 

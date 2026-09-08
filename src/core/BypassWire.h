@@ -138,10 +138,23 @@ public:
         shortened.store (false, std::memory_order_relaxed);
     }
 
-    /** Forgets what it has heard. The caller runs this on every block the wire is NOT carrying —
-        while the block is in the path, and while it stands bypassed at zero delay — because a
-        window nobody is filling goes stale, and a stale window is a handful of samples from
-        minutes ago played back the moment a model lands and the delay becomes real again. */
+    /** FED EVERY BLOCK, WHATEVER THE BLOCK IS DOING — the window takes the signal and writes
+        nothing. This is the half that keeps the wire WARM.
+
+        It replaces clearing the wire whenever it was not carrying, and the difference is a click.
+        A window filled only while the delay is live is COLD the first time the delay becomes live:
+        a model landing at another rate into a block that stands bypassed made the through-path
+        open with `delay` samples of silence — 96 of them at 96 kHz, and the boost ships switched
+        off, so that is an ordinary Tuesday and not a corner. Fed every block there is nothing to
+        go cold. `felitronics::core::DryAligner` learned this first and states the same rule: a
+        ring fed only while a stage runs emits its latency in zeros. */
+    void advance (const float* const* in, int numChannels, int numSamples) noexcept
+    {
+        process (in, nullptr, numChannels, numSamples, 0);
+    }
+
+    /** Forgets what it has heard. `prepare` does this; the audio path does NOT — see `advance`.
+        A test that wants to prove the window is real clears it and listens for the silence. */
     void reset()
     {
         for (auto& h : hist)
@@ -174,7 +187,10 @@ public:
 
         TWO CHANNELS. That is what the wire carries, and what the chain hands it; anything past the
         pair passes through UNDELAYED rather than being left untouched, because an untouched output
-        buffer is a silent lie and undelayed is at least an audible one. */
+        buffer is a silent lie and undelayed is at least an audible one.
+
+        `out` may be null, which means FEED THE WINDOW AND WRITE NOTHING — that is `advance`, and
+        it shares this body rather than copying the window formula into a second one. */
     void process (const float* const* in, float* const* out, int numChannels, int numSamples,
                   int delay) noexcept
     {
@@ -210,27 +226,31 @@ public:
                 nextScratch[(size_t) i] = at >= 0 ? in[ch][at] : h[(size_t) (at + cap)];
             }
 
-            if (d > 0)
+            if (out != nullptr)
             {
-                // Backwards, so an in-place shift never eats what it has not read yet.
-                for (int i = numSamples - 1; i >= d; --i)
-                    out[ch][i] = in[ch][i - d];
+                if (d > 0)
+                {
+                    // Backwards, so an in-place shift never eats what it has not read yet.
+                    for (int i = numSamples - 1; i >= d; --i)
+                        out[ch][i] = in[ch][i - d];
 
-                for (int i = juce::jmin (d, numSamples) - 1; i >= 0; --i)
-                    out[ch][i] = prevScratch[(size_t) i];
-            }
-            else if (out[ch] != in[ch])
-            {
-                juce::FloatVectorOperations::copy (out[ch], in[ch], numSamples);
+                    for (int i = juce::jmin (d, numSamples) - 1; i >= 0; --i)
+                        out[ch][i] = prevScratch[(size_t) i];
+                }
+                else if (out[ch] != in[ch])
+                {
+                    juce::FloatVectorOperations::copy (out[ch], in[ch], numSamples);
+                }
             }
 
             for (int i = 0; i < cap; ++i)
                 h[(size_t) i] = nextScratch[(size_t) i];
         }
 
-        for (int ch = paired; ch < numChannels; ++ch)
-            if (out[ch] != in[ch])
-                juce::FloatVectorOperations::copy (out[ch], in[ch], numSamples);
+        if (out != nullptr)
+            for (int ch = paired; ch < numChannels; ++ch)
+                if (out[ch] != in[ch])
+                    juce::FloatVectorOperations::copy (out[ch], in[ch], numSamples);
     }
 
 private:
