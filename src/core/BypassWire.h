@@ -147,9 +147,10 @@ public:
         in a release build and not only an assertion in a debug one.
 
         The clamp it replaces was `jlimit` and nothing else: a session above 48 kHz got a bypass
-        path shorter than the block it stood for, and no line of code anywhere could tell. Inside
-        the domain this wire states (`lowestPackRate` and up, at any session rate) this can no
-        longer be true; outside it, the wire says so instead of combing quietly. */
+        path shorter than the block it stood for, and no line of code anywhere could tell. There is
+        no domain any more to be inside or outside of — the wire grows to whatever it is asked for.
+        What this reports is what is left: the blocks between a model landing and the wire being
+        told, and an ask past `maxSaneDelay`, which is refused rather than believed. */
     bool everShortened() const noexcept { return shortened.load (std::memory_order_relaxed); }
 
     /** Writes `in` delayed by `delay` into `out`. In-place is allowed (`out == in`) — that is what

@@ -539,6 +539,14 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     for (auto& w : wire)
         w.prepare (block);
 
+    // AND THE WIRE IS TOLD THE MOMENT A MODEL LANDS, not at the next tick. `deliver` runs on the
+    // message thread inside the loader's own callback; the 30 Hz pump that used to be the only
+    // place this happened is up to 33 ms later, which at 96 kHz is about fifty blocks of bypass
+    // path short by the difference — or a whole fifteen-millisecond crossfade combing inside that
+    // window. Reassigned on every prepare because `this` is what they capture.
+    boost .onLanded = [this] { reportLatency(); };
+    preamp.onLanded = [this] { reportLatency(); };
+
     // Snapped, not faded: a chain that arrives switched off is silent from its first sample.
     for (int i = 0; i < params::numChainRows; ++i)
     {

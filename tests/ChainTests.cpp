@@ -757,9 +757,35 @@ int main()
                     juce::String (worstWarm, 4) + " dBFS against 6.0206");
         }
 
-        // 3 · THE REFUSAL IS VISIBLE. The wire's domain is bounded — the delay grows without limit
-        //     as a pack's rate falls — so a refusal can still happen. What may never happen again
-        //     is a refusal nobody can see.
+        // 2h · THE ABSURD ASK. `maxSaneDelay` is the one number left in the class, and it is not a
+        //      bound on what a rate match can cost — nothing bounds that — but a bound on believing
+        //      a figure. Nothing checked it, so "refuses out loud" was a claim about a path with no
+        //      test on it.
+        {
+            Wire w;
+            w.prepare (Wire::maxSaneDelay + 1000);
+            const bool cappedAtPrepare = w.capacity() == Wire::maxSaneDelay;
+
+            Wire g;
+            g.prepare (64);
+            const bool grewToTheCap = g.reserve (Wire::maxSaneDelay * 4);
+            g.advance (nullptr, 0, 0);
+
+            std::vector<float> x (128, 1.0f);
+            const float* rp[1] { x.data() };
+            float*       wp[1] { x.data() };
+            g.process (rp, wp, 1, 128, Wire::maxSaneDelay * 4);
+
+            report ("an absurd delay is refused at the cap, and said out loud",
+                    cappedAtPrepare && grewToTheCap
+                      && g.capacity() == Wire::maxSaneDelay && g.everShortened(),
+                    "capped at " + juce::String (g.capacity()) + ", latch "
+                      + juce::String (g.everShortened() ? "set" : "clear"));
+        }
+
+        // 3 · THE REFUSAL IS VISIBLE. There is no domain any more, so this is no longer about a
+        //     pack rate falling out of one: what remains is a wire asked for more than it has YET
+        //     grown to. What may never happen again is a refusal nobody can see.
         {
             Wire w;
             w.prepare (224);          // a stated capacity, so "more than it carries" has a meaning

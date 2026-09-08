@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cmath>
 #include <memory>
+#include <functional>
 #include <vector>
 
 namespace orbitamp::core
@@ -478,6 +479,7 @@ public:
         {
             while (auto job = player.takeLoadJob())
                 player.deliver (RigPlayer::run (std::move (*job)));
+                if (onLanded) onLanded();
             return;
         }
 
@@ -497,11 +499,26 @@ public:
                 juce::MessageManager::callAsync ([self, token, loaded]
                 {
                     if (token.lock() != nullptr)
+                    {
                         self->player.deliver (std::move (*loaded));
+
+                        // 🔴 IN THIS CALLBACK, NOT AT THE NEXT TICK. `deliver` is the instant the
+                        // block's latency becomes real, and anything that has to be as long as that
+                        // latency — the bypass wire — has to be told here. Left to the 30 Hz pump
+                        // it is told up to 33 ms later, which at 96 kHz is about fifty blocks of a
+                        // bypass path short by the difference, or a whole 15 ms crossfade combing
+                        // inside that window.
+                        if (self->onLanded) self->onLanded();
+                    }
                 });
             });
         }
     }
+
+    /** Called on the MESSAGE THREAD the moment a model has landed and `latencySamples()` has
+        changed — before the next pump, because up to a pump's worth of blocks is what the
+        difference costs. Set by the owner; empty by default. */
+    std::function<void()> onLanded;
 
     /** Host-rate latency of the models — their rate-matching, when a capture's rate is not the
         host's. Zero for a pack captured at the session's rate. */
