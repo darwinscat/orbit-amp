@@ -287,11 +287,19 @@ int main()
                     w.prepare (8);                     // deliberately far too small to begin with
 
                     // Something in the window BEFORE the growth, so the copy across can be checked
-                    // rather than assumed: eight samples the wire has genuinely heard.
-                    std::vector<float> seed (8);
-                    for (int i = 0; i < 8; ++i) seed[(size_t) i] = (float) (i + 1);
-                    const float* sp[1] { seed.data() };
-                    w.advance (sp, 1, 8);
+                    // rather than assumed: eight samples the wire has genuinely heard — and TWO
+                    // CHANNELS carrying different eights, because a growth that copied the left
+                    // history into both would pass a mono fixture and take the right channel's
+                    // past away silently.
+                    std::vector<float> seedL (8), seedR (8);
+                    for (int i = 0; i < 8; ++i)
+                    {
+                        seedL[(size_t) i] = (float) (i + 1);
+                        seedR[(size_t) i] = (float) (i + 1) + 1000.0f;
+                    }
+
+                    const float* sp[2] { seedL.data(), seedR.data() };
+                    w.advance (sp, 2, 8);
 
                     if (w.reserve (ask))
                         takeGrowth (w);
@@ -300,14 +308,16 @@ int main()
 
                     // The eight it heard have to come back out of the grown wire, at the delay that
                     // reaches back to them — otherwise growth is a re-prepare wearing a swap's coat.
-                    std::vector<float> quiet (8, 0.0f), out (8);
-                    const float* qp[1] { quiet.data() };
-                    float*       op[1] { out.data() };
-                    w.process (qp, op, 1, 8, 8);
+                    std::vector<float> quiet (8, 0.0f), outL (8), outR (8);
+                    const float* qp[2] { quiet.data(), quiet.data() };
+                    float*       op[2] { outL.data(), outR.data() };
+                    w.process (qp, op, 2, 8, 8);
 
                     for (int i = 0; i < 8; ++i)
-                        staysWarm = staysWarm && juce::approximatelyEqual (out[(size_t) i],
-                                                                           (float) (i + 1));
+                        staysWarm = staysWarm
+                                      && juce::approximatelyEqual (outL[(size_t) i], (float) (i + 1))
+                                      && juce::approximatelyEqual (outR[(size_t) i],
+                                                                   (float) (i + 1) + 1000.0f);
 
                     if (ask > biggest) { biggest = ask; biggestHost = h; biggestPack = p; }
                 }
