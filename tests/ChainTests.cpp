@@ -25,6 +25,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <new>
+#if defined(_WIN32)
+  #include <malloc.h>
+#endif
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -70,13 +73,33 @@ static void* countedAlloc (std::size_t n)
     throw std::bad_alloc();
 }
 
+// Over-aligned allocation has no portable spelling: POSIX has `posix_memalign`, MSVC has
+// `_aligned_malloc` and REQUIRES `_aligned_free` to undo it — mixing them is a heap corruption, not
+// a warning. Both halves are switched together for that reason, and the free below is the only
+// thing allowed to release what this returns.
 static void* countedAlignedAlloc (std::size_t n, std::align_val_t a)
 {
     ++gAllocations;
+    const std::size_t want = (std::size_t) a;
+    const std::size_t al   = want < sizeof (void*) ? sizeof (void*) : want;
+
+   #if defined(_WIN32)
+    if (void* p = _aligned_malloc (n ? n : 1, al)) return p;
+    throw std::bad_alloc();
+   #else
     void* p = nullptr;
-    const std::size_t al = (std::size_t) a < sizeof (void*) ? sizeof (void*) : (std::size_t) a;
     if (::posix_memalign (&p, al, n ? n : 1) != 0) throw std::bad_alloc();
     return p;
+   #endif
+}
+
+static void countedAlignedFree (void* p) noexcept
+{
+   #if defined(_WIN32)
+    _aligned_free (p);
+   #else
+    std::free (p);
+   #endif
 }
 
 void* operator new   (std::size_t n) { return countedAlloc (n); }
@@ -92,10 +115,10 @@ void operator delete   (void* p, std::size_t) noexcept { std::free (p); }
 void operator delete[] (void* p, std::size_t) noexcept { std::free (p); }
 void operator delete   (void* p, const std::nothrow_t&) noexcept { std::free (p); }
 void operator delete[] (void* p, const std::nothrow_t&) noexcept { std::free (p); }
-void operator delete   (void* p, std::align_val_t) noexcept { std::free (p); }
-void operator delete[] (void* p, std::align_val_t) noexcept { std::free (p); }
-void operator delete   (void* p, std::size_t, std::align_val_t) noexcept { std::free (p); }
-void operator delete[] (void* p, std::size_t, std::align_val_t) noexcept { std::free (p); }
+void operator delete   (void* p, std::align_val_t) noexcept { countedAlignedFree (p); }
+void operator delete[] (void* p, std::align_val_t) noexcept { countedAlignedFree (p); }
+void operator delete   (void* p, std::size_t, std::align_val_t) noexcept { countedAlignedFree (p); }
+void operator delete[] (void* p, std::size_t, std::align_val_t) noexcept { countedAlignedFree (p); }
 #endif
 
 namespace
