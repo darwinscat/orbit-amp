@@ -5,6 +5,59 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-09-11 — every capture that plays off its own rate sounds like itself again
+
+The headline is not a feature. It is that a captured device playing at a session rate other than
+the one it was captured at has been quietly wrong since the first release, in two ways at once, and
+both are gone.
+
+### Changed
+- **The top octave is back.** A capture is resampled on the way into its model and back out again,
+  and the interpolator doing that was a cubic — cheap, and audibly not transparent. One round trip
+  at 44.1 kHz against a 48 kHz capture cost **4.17 dB at 17.6 kHz**. That is not a subtlety on a
+  high-gain amp: it is the difference between a capture that keeps its air and one that arrives
+  dulled, every time the session is not at the pack's own rate. The new kernel measures
+  **+0.0002 dB** in the same place.
+- **And the bass is clean.** Worse than the missing top was what the missing top turned into. The
+  resampler's error was not a fixed filter — it changed with the phase of each sample, at the rate
+  of the conversion, so a driven nonlinear stage folded it down into a **100 Hz line at −17.65
+  dBFS: fourteen and a half decibels LOUDER than the tone that produced it.** A rumble that no
+  amplifier in the chain put there. It now measures **−96.54 dBFS**, sixty decibels under its own
+  carrier.
+- ⚠️ **The latency the plugin reports to your host has changed, and by a lot: 8 samples to 122 at
+  44.1 kHz** with two captured blocks in the rig. That is the honest cost of the new kernel's
+  geometry, and the host will compensate for it — but a session saved with 0.5.x will have its
+  track re-aligned by that difference when it reopens. Nothing is lost; it moves once.
+
+### Fixed
+- **A bypassed block above 48 kHz was not the wire it claimed to be.** Switching a captured block
+  out is supposed to leave a delay exactly as long as the block it replaces, so the chain does not
+  jump forward and so the fifteen-millisecond crossfade is not a signal blended against an early
+  copy of itself. The delay it left was capped at 64 samples by a constant whose comment justified
+  it with arithmetic two kernel generations old. At 88.2 kHz the block asks for 91, at 96 kHz for
+  96, at 192 kHz for 160 — and the cap cut silently. What that sounds like: a comb through the
+  switch, first null at **1500 Hz** at 96 kHz, and a bypassed block sitting permanently early
+  against anything you have the track bussed to in parallel. The length is computed from the
+  geometry now, asked of the resampler rather than restated, so it cannot fall behind the kernel
+  again.
+- **A block that has just been switched out no longer opens on silence, and one switched in no
+  longer leaves a ghost.** The delay line is fed on every block rather than cleared when idle, so a
+  capture landing mid-session — picking a device with the block still switched off — does not cost
+  a millisecond of hole in the through-path.
+- **In MONO, the right channel no longer keeps what it heard in STEREO.** Its history had simply
+  stopped being written, so the next stereo block replayed a stretch from before the switch.
+
+### Added
+- The rig lives in the strip, and the cabinet stops guessing (#28).
+- A restored trim is a window, never a hand (#29).
+- The display face arrives once, from the library that owns it (#30).
+- The toolbar sets a player's words in a face that can spell them (#31).
+
+### Dependencies
+- `felitronics-core` **v0.29.0 → v0.30.0** — the resampler kernel above, its round-trip delay
+  published as one function so no consumer restates it, and the same cure applied to the player's
+  own dry alignment.
+
 ## [0.5.1] — 2026-09-07 — the plugin stops guessing how long it rings
 
 Two things 0.5.0 was not telling the truth about, both found by reading it back the morning after.
