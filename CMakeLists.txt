@@ -66,7 +66,23 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # module to target_link_libraries below. Wired now so that's a one-line change, not a rebuild
 # of the dependency graph. Its self-tests do NOT build from here (guarded by PROJECT_IS_TOP_LEVEL).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_FCORE_TAG "v0.29.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+# THE TAG THAT CARRIES THE GEOMETRY. core::BypassWire asks
+# StreamResampler::pairDelayHostSamples() for the round-trip cost of a rate match, and v0.30.0 is the
+# first release with it — v0.29.0 had neither that function nor the kernel behind it, still carrying
+# the cubic and the ceil(3*h/m)+3 arithmetic this wire was written against and outgrew.
+#
+# That gap was not a footnote while it lasted: it is why this branch's CI was red BY CONSTRUCTION for
+# its whole life, which was documented here rather than worked around. Measured twice, not assumed —
+# replaying CI's own compile command with no sibling checkout failed on the missing symbol, and PR
+# #32's first run failed the same way at the same line. The pin moves ONCE, here, inside the PR that
+# needs it, so that landing the fix and landing its dependency are one commit and never a window
+# where main builds against a core that cannot answer.
+#
+# ⚠️ AND IT IS THE TAG CI USES, NOT WHAT YOU SEE LOCALLY. The hybrid override below prefers a sibling
+# ../felitronics-core checkout, so a local build shows that checkout's HEAD however this line reads.
+# Proving anything about the pin means emptying the override — all five of them, not this one — and
+# letting FetchContent take the tag.
+set(ORBITAMP_FCORE_TAG "v0.30.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -428,6 +444,7 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::analysis            # spectrum taps + panes behind the EQ curves
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::appkit_webp         # juce::Image <- WebP, for the picture a pack ships
+    felitronics::core                # core::BypassWire reads the resampler's delay geometry
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
@@ -598,6 +615,7 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::analysis
     felitronics::appkit
     felitronics::appkit_webp         # the panel decodes a pack's photograph — same half the plugin links
+    felitronics::core                # core::BypassWire reads the resampler's delay geometry
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq

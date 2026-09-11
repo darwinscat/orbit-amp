@@ -397,11 +397,69 @@ void AmpProcessor::pumpDeviceWork()
     }
 }
 
+void AmpProcessor::fitWire (int index, int lat)
+{
+    // ALLOCATE HERE, ADOPT THERE. This builds the bigger rows on the message thread, where nothing
+    // waits on it; the audio thread takes them itself, at the top of its next block, with pointer
+    // swaps and one copy of the window and no allocation at all.
+    //
+    // 🔴 AND NO LOCK, on purpose. The first version of this held `getCallbackLock()` for the swap —
+    // which VST3, AU and the standalone do hold around `processBlock`, and **CLAP does not**: the
+    // shipped wrapper calls it with no lock of any kind. A lock only some of the shipped formats
+    // take is not a lock, it is a data race with a comment on it.
+    //
+    // `suspendProcessing` was the other short answer and is also wrong: it hands the host a block
+    // of silence, which is exactly the click the warm window was added to remove. Trading a comb
+    // for a hole is not a fix.
+    (void) wire[(size_t) index].reserve (lat);
+}
+
 void AmpProcessor::reportLatency()
 {
     // In series: each captured block's models — a capture taken at another rate is resampled on
-    // the way in and out, and that has a length.
-    const int total = boost.latencySamples() + preamp.latencySamples();
+    // the way in and out, and that has a length. TWO stages sum here, so a 44.1 kHz session on
+    // 48 kHz packs reports 122 samples, and a 96 kHz one 192. It was eight until the kernel behind
+    // the rate match was replaced; the number is the resampler's geometry and it will move again,
+    // which is why nothing downstream of here may write it down.
+    const int bo = boost.latencySamples();
+    const int pr = preamp.latencySamples();
+    const int total = bo + pr;
+
+    // 🔴 THE WIRE IS SIZED FROM THE NUMBER THE BLOCK ACTUALLY REPORTS, here and nowhere else.
+    // `latencySamples()` came out of `NamStage::rateMatch` and therefore out of the rates that are
+    // really in play; every ceiling this class used to carry was computed from a model rate NOBODY
+    // PROMISED, and such a ceiling is not too low, it is wrong — the run rate can walk, without
+    // limit while audio runs, and no static number survives that.
+    fitWire (0, bo);
+    fitWire (1, pr);
+
+    // THE WIRE'S REFUSAL, PICKED UP OFF THE AUDIO THREAD. `BypassWire` cannot say anything from
+    // inside `process` without allocating or writing to a stream on the audio thread, so it
+    // latches a flag and this pump — the same one that noticed the latency — is what reads it.
+    // Once, and it says WHAT WAS ASKED rather than what probably happened. An earlier draft of this
+    // line explained every refusal as a moment's lag and announced that the wire had caught up —
+    // which is true of the ordinary case and false of the one that matters: a delay past
+    // `maxSaneDelay` is shortened for good, pump or no pump, and the two read identically once the
+    // message stops naming numbers. So both numbers go in, and whether it fits now is a comparison
+    // the reader can make instead of a claim they have to take.
+    if (! wireRefusalSeen)
+        for (int i = 0; i < 2; ++i)
+            if (wire[(size_t) i].everShortened())
+            {
+                wireRefusalSeen = true;
+
+                const int asked   = i == 0 ? bo : pr;
+                const int carries = wire[(size_t) i].capacity();
+
+                juce::Logger::writeToLog (
+                    "OrbitAmp: bypass wire " + juce::String (i) + " was asked for more delay than it"
+                    " carried, at " + juce::String (getSampleRate(), 0) + " Hz. It was asked for "
+                      + juce::String (asked) + " and now carries " + juce::String (carries)
+                      + (carries >= asked ? " — it has caught up, so the shortfall was the blocks"
+                                            " between a model landing and this pump."
+                                          : " — it has NOT caught up, so the shortfall is standing."));
+                break;
+            }
 
     if (total != getLatencySamples())
         setLatencySamples (total);
@@ -467,8 +525,27 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     scopeDry.setSize (1, block);
     fadeDry.setSize (juce::jmax (2, channels), block);
 
+    // ONE BLOCK OF PAST, AND THAT IS A FLOOR ON MEMORY — not a ceiling on delay. The two are
+    // different numbers and confusing them is the defect this branch removed: what the wire has to
+    // CARRY is the delay its block reports, which does not exist at this line (the models are
+    // pumped below) and is `reportLatency`'s to fit. What the wire has to REMEMBER is another
+    // matter — a wire holding nothing has nothing to bring across when it grows, so a delay born
+    // mid-session would open on silence however promptly the growth happened.
+    //
+    // A block is the honest amount, because it is the one length the host actually promised us and
+    // it costs exactly what a block costs. It bounds nothing: a delay born longer than this still
+    // grows the wire, it just brings less across, and that residual is measured rather than
+    // claimed away.
     for (auto& w : wire)
-        w.prepare();
+        w.prepare (block);
+
+    // AND THE WIRE IS TOLD THE MOMENT A MODEL LANDS, not at the next tick. `deliver` runs on the
+    // message thread inside the loader's own callback; the 30 Hz pump that used to be the only
+    // place this happened is up to 33 ms later, which at 96 kHz is about fifty blocks of bypass
+    // path short by the difference — or a whole fifteen-millisecond crossfade combing inside that
+    // window. Reassigned on every prepare because `this` is what they capture.
+    boost .onLanded = [this] { reportLatency(); };
+    preamp.onLanded = [this] { reportLatency(); };
 
     // Snapped, not faded: a chain that arrives switched off is silent from its first sample.
     for (int i = 0; i < params::numChainRows; ++i)
@@ -750,13 +827,14 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // THE WIRE a bypassed block has to BE — and a wire the same LENGTH as the block it
         // replaces. A rate-matching model reports a latency the host compensates for; drop it out
         // of the path and the signal arrives early by exactly that much, for as long as it is
-        // bypassed. Three to fifteen samples, and none at all when the pack's rate is the
-        // session's — which is the usual case, and why this costs nothing there.
+        // bypassed. Sixty-one samples at 44.1 kHz against a 48 kHz pack, ninety-six at 96 kHz, and
+        // none at all when the pack's rate is the session's — which is the usual case, and why
+        // this costs nothing there.
         //
         // It is also what makes the crossfade honest: blending a block's output against an
         // UNDELAYED copy of its own input is blending a signal with an early copy of itself, and
-        // that is a comb — six samples at 44.1 kHz puts the first notch near 3.7 kHz, in the
-        // presence region. Swept over fifteen milliseconds it reads as a tick rather than a
+        // that is a comb — sixty-one samples at 44.1 kHz puts the first notch near 362 Hz, in the
+        // body of the guitar. Swept over fifteen milliseconds it reads as a tick rather than a
         // filter, but it is a tick that need not exist.
         //
         // Taken BEFORE this block's own IN trim: the dry end has to be the signal as it arrived.
@@ -771,18 +849,24 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                 wire[(size_t) l].process (chainView.getArrayOfReadPointers(),
                                           fadeDry.getArrayOfWritePointers(), nch, numSamples, lat);
             else
+            {
                 for (int ch = 0; ch < nch; ++ch)
                     juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                        chainView.getReadPointer (ch), numSamples);
+
+                wire[(size_t) l].advance (chainView.getArrayOfReadPointers(), nch, numSamples);
+            }
         }
         else if (on)
         {
             // Fully in the path: the model carries its own delay and there is nothing to imitate.
-            // The wire is CLEARED rather than left holding whatever it last saw, because the next
-            // fade-out reads that history for its first `lat` samples — and a handful of samples
-            // from minutes ago, even weighted at the fraction of a per-cent the fade has moved by
-            // then, is a ghost. A dozen floats to make it impossible.
-            wire[(size_t) l].reset();
+            // The wire is still FED, though, and that is the whole difference between a wire and a
+            // hole. It used to be cleared here — the worry being a ghost, a handful of samples from
+            // minutes ago read by the next fade-out — but a window that is never filled is not
+            // ghost-free, it is COLD, and a cold window hands out its own length in silence the
+            // first time the delay becomes real. Fed every block there is neither: what it holds
+            // is always the signal that just went past, which is exactly what a bypass wire is.
+            wire[(size_t) l].advance (chainView.getArrayOfReadPointers(), nch, numSamples);
         }
         else if (lat > 0)
         {
@@ -790,6 +874,13 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             // IS the output — and it has to carry the delay the model would have.
             wire[(size_t) l].process (chainView.getArrayOfReadPointers(),
                                       chainView.getArrayOfWritePointers(), nch, numSamples, lat);
+        }
+        else
+        {
+            // Bypassed AND costing nothing — the pack plays at the session's own rate, so there is
+            // no delay to imitate yet. Fed anyway: a model landing at another rate turns `lat`
+            // positive between two blocks, and the block after that has to be able to look back.
+            wire[(size_t) l].advance (chainView.getArrayOfReadPointers(), nch, numSamples);
         }
 
         // IN: how hard the capture is fed. Metered immediately after, at the model's own door, so
