@@ -266,6 +266,32 @@ int main()
                                                        && fresh.find (EmbeddedIrs::keyOf (bytesOf ("impostor"))) != nullptr);
     }
 
+    // ---- IR group move: a selection, planned before anything moves ------------------------------
+    {
+        const auto root = work.getChildFile ("irs-group");
+        makeWav (root.getChildFile ("Pack/a.wav"));
+        makeWav (root.getChildFile ("Pack/b.wav"));
+        makeWav (root.getChildFile ("Pack/Deep/c.wav"));
+        makeWav (root.getChildFile ("loose.wav"));
+        root.getChildFile ("Dest").createDirectory();
+
+        const auto pack = root.getChildFile ("Pack");
+        const auto plan = IrLibrary::planMove (root, { pack, pack.getChildFile ("a.wav"), pack.getChildFile ("Deep/c.wav"),
+                                                       root.getChildFile ("loose.wav") }, root.getChildFile ("Dest"));
+        report ("a folder and what is inside it move once", plan.size() == 2 && plan.contains (pack)
+                                                              && plan.contains (root.getChildFile ("loose.wav")),
+                juce::String (plan.size()) + " moves");
+
+        report ("what is already there stays",           IrLibrary::planMove (root, { root.getChildFile ("loose.wav") }, root).isEmpty());
+        report ("a folder is not taken into itself",     IrLibrary::planMove (root, { pack }, pack.getChildFile ("Deep")).isEmpty());
+        report ("...but its neighbour in the group goes", IrLibrary::planMove (root, { pack, root.getChildFile ("loose.wav") },
+                                                                              pack.getChildFile ("Deep"))
+                                                            == juce::Array<juce::File> { root.getChildFile ("loose.wav") });
+        report ("out to the top level",                  IrLibrary::planMove (root, { pack.getChildFile ("b.wav") }, root)
+                                                            == juce::Array<juce::File> { pack.getChildFile ("b.wav") });
+        report ("a stranger's file is not planned",      IrLibrary::planMove (root, { work.getChildFile ("src/Cab 4x12.wav") }, root).isEmpty());
+    }
+
     // ---- IR remove: only the guard is ours -----------------------------------------------------
     {
         const auto root = work.getChildFile ("irs-remove");
