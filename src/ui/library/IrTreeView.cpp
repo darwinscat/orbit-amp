@@ -150,7 +150,7 @@ private:
         explicit RowComponent (Item& i) : item (i)
         {
             name.setText (item.node.name(), juce::dontSendNotification);
-            name.setFont (juce::FontOptions (12.5f));
+            name.setFont (juce::FontOptions (13.0f));
             name.setColour (juce::Label::textColourId, item.node.folder ? theme::tx : theme::txDim);
             name.setColour (juce::Label::textWhenEditingColourId, theme::tx);
             name.setColour (juce::TextEditor::highlightColourId, theme::violet.withAlpha (0.4f));
@@ -216,7 +216,7 @@ private:
             count.removeFromRight (48);   // the + and the ✕
 
             g.setColour (theme::txFaint);
-            g.setFont (juce::FontOptions (9.5f));
+            g.setFont (juce::FontOptions (13.0f));   // a count is read too: the 13 px floor
             g.drawText (juce::String (filesBeneath (item.node)),
                         count.removeFromRight (34).reduced (0, 2),
                         juce::Justification::centredRight);
@@ -381,7 +381,7 @@ void IrTreeView::paint (juce::Graphics& g)
     if (! anythingYet)
     {
         g.setColour (theme::txFaint);
-        g.setFont (juce::FontOptions (11.5f));
+        g.setFont (juce::FontOptions (13.0f));
         g.drawText (juce::String::fromUTF8 ("No IRs yet \xe2\x80\x94 Add\xe2\x80\xa6 "
                                             "or drop wavs, folders, or zips here."),
                     tree.getBounds(), juce::Justification::centred);
