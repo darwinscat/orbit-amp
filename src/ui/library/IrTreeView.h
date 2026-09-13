@@ -15,14 +15,17 @@ namespace orbitamp
     files have. So the tree shows disk truth, folders rename in place (double-click), and an
     imported zip or folder lands as a folder node.
 
-    The shelf is shaped here too, not in Finder: `New folder…` makes one at the top, a folder's
-    right-click makes one inside it, and dropping files ONTO a folder row imports into that
-    folder — a drop on the tree at large still lands at the root.
+    The shelf is shaped here too, not in Finder: `New folder…` makes one at the top; a folder row's +
+    adds IRs into it, and its right-click renames it, adds into it or makes a folder inside it;
+    dropping files ONTO a folder row imports into that folder — a drop on the tree at large still
+    lands at the root. What is already on the shelf moves by dragging its row onto a folder.
 
-    Dumb view over IrLibrary. Nothing plays from here yet — the cabinet's DSP meets these files in
-    its own step; this is the shelf, kept orderly. */
+    Dumb view over IrLibrary. Nothing plays from here — the cabinet picks from this shelf in its own
+    menu and takes the file's bytes with it, so nothing done here can silence a preset; this is the
+    shelf, kept orderly. */
 class IrTreeView final : public juce::Component,
-                         public juce::FileDragAndDropTarget
+                         public juce::FileDragAndDropTarget,
+                         public juce::DragAndDropContainer   // the tree's own row drags need a container
 {
 public:
     IrTreeView();
@@ -45,7 +48,8 @@ private:
     class Item;
     friend class Item;
 
-    void addClicked();
+    /** Asks for files, folders or zips and imports them into `into`. */
+    void addClicked (const juce::File& into);
     void importPaths (const juce::StringArray&, const juce::File& into);
 
     /** Prompts for a name and makes the folder under `parent`. */

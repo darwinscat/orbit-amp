@@ -145,6 +145,29 @@ public:
         return item.moveFileTo (target);
     }
 
+    /** Moves a file or folder into another folder of the library, or up to the root. It keeps its
+        name, numbered when the name is taken there — the same rule as an import, so a move never
+        overwrites. Returns where it landed: the item itself when it is already there, an invalid
+        File when refused — anything not the library's, a destination that is not a folder of it,
+        or a folder moved into itself or anywhere beneath itself. */
+    static juce::File move (const juce::File& root, const juce::File& item, const juce::File& into)
+    {
+        if (! isManaged (root, item))
+            return {};
+
+        if ((into != root && ! isManaged (root, into)) || ! into.isDirectory())
+            return {};
+
+        if (item.getParentDirectory() == into)
+            return item;
+
+        if (item.isDirectory() && (into == item || into.isAChildOf (item)))
+            return {};
+
+        const auto target = uniqueIn (into, item.getFileName());
+        return item.moveFileTo (target) ? target : juce::File();
+    }
+
     /** To the Trash, not gone — a slip of the mouse should cost a trip to the bin, not a pack. */
     static bool remove (const juce::File& root, const juce::File& item)
     {

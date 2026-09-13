@@ -185,6 +185,39 @@ int main()
                                                                               "Hijack") == juce::File());
     }
 
+    // ---- IR move: rearranging what is already on the shelf -------------------------------------
+    {
+        const auto root = work.getChildFile ("irs-move");
+        makeWav (root.getChildFile ("loose.wav"));
+        makeWav (root.getChildFile ("Mine/loose.wav"));
+        makeWav (root.getChildFile ("Pack/Close/57.wav"));
+        root.getChildFile ("Mine").createDirectory();
+
+        const auto moved = IrLibrary::move (root, root.getChildFile ("Pack/Close/57.wav"), root.getChildFile ("Mine"));
+        report ("a file moves into a folder",        moved == root.getChildFile ("Mine/57.wav") && moved.existsAsFile()
+                                                       && ! root.getChildFile ("Pack/Close/57.wav").exists());
+        report ("a taken name there gets numbered",  IrLibrary::move (root, root.getChildFile ("loose.wav"), root.getChildFile ("Mine"))
+                                                       == root.getChildFile ("Mine/loose 2.wav"));
+        report ("a folder moves, contents and all",  IrLibrary::move (root, root.getChildFile ("Pack/Close"), root.getChildFile ("Mine"))
+                                                       .isDirectory());
+        report ("...and back up to the root",        IrLibrary::move (root, root.getChildFile ("Mine/Close"), root)
+                                                       == root.getChildFile ("Close"));
+        report ("where it already is, it stays",     IrLibrary::move (root, root.getChildFile ("Close"), root)
+                                                       == root.getChildFile ("Close"));
+        report ("a folder into itself is refused",   IrLibrary::move (root, root.getChildFile ("Mine"), root.getChildFile ("Mine"))
+                                                       == juce::File());
+
+        root.getChildFile ("Mine/Deep").createDirectory();
+        report ("...and into its own child",         IrLibrary::move (root, root.getChildFile ("Mine"), root.getChildFile ("Mine/Deep"))
+                                                       == juce::File() && root.getChildFile ("Mine/Deep").isDirectory());
+        report ("into a file is refused",            IrLibrary::move (root, root.getChildFile ("Mine/57.wav"), root.getChildFile ("Mine/loose.wav"))
+                                                       == juce::File());
+        report ("out of the library is refused",     IrLibrary::move (root, root.getChildFile ("Mine/57.wav"), work)
+                                                       == juce::File() && root.getChildFile ("Mine/57.wav").existsAsFile());
+        report ("a stranger's file is refused",      IrLibrary::move (root, work.getChildFile ("src/Cab 4x12.wav"), root)
+                                                       == juce::File());
+    }
+
     // ---- Embedded IRs: the bytes travel with a preset, not the path ----------------------------
     {
         const auto bytesOf = [] (const char* text) { return juce::MemoryBlock (text, std::strlen (text)); };
