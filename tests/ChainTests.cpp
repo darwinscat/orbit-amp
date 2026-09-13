@@ -1674,6 +1674,155 @@ int main()
                 juce::String (standby, 3));
     }
 
+    // A SAVE FROM A HOST'S WORKER THREAD hands out the session the message thread wrote down, and
+    // never walks the live state. Driven the way the pump drives it — unforced refreshes, one per
+    // tick — so the change detection is what is under test, not a forced write.
+    {
+        struct Worker final : juce::Thread
+        {
+            std::function<void()> job;
+            bool loop = false;
+            std::atomic<int> runs { 0 };
+
+            Worker (std::function<void()> j, bool keepGoing) : juce::Thread ("host worker"), job (std::move (j)), loop (keepGoing) {}
+
+            void run() override
+            {
+                do { job(); ++runs; } while (loop && ! threadShouldExit());
+            }
+        };
+
+        const auto onWorker = [] (std::function<void()> job)
+        {
+            Worker w (std::move (job), false);
+            w.startThread();
+            w.waitForThreadToExit (5000);
+        };
+
+        const auto readMix = [] (orbitamp::AmpProcessor& p)
+        {
+            auto* prm = p.apvts.getParameter (orbitamp::params::reverbMix);
+            return prm->convertFrom0to1 (prm->getValue());
+        };
+
+        const auto ticks = [] (orbitamp::AmpProcessor& p, int n)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                p.history.tick();          // what the pump does first: it flushes the knobs into the tree
+                p.refreshSavedState();
+            }
+        };
+
+        const auto c = std::make_unique<orbitamp::AmpProcessor>();
+        set (*c, orbitamp::params::reverbMix, 37.0f);
+        ticks (*c, 12);
+
+        juce::MemoryBlock fromWorker;
+        onWorker ([&] { c->getStateInformation (fromWorker); });
+
+        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        d->setStateInformation (fromWorker.getData(), (int) fromWorker.getSize());
+        report ("a worker's save carries what the pump wrote down", std::abs (readMix (*d) - 37.0f) < 0.01f,
+                "mix " + juce::String (readMix (*d), 2));
+
+        // A register copy changes no parameter and no tree — the copy notices by the register.
+        {
+            juce::MemoryBlock before, after;
+            onWorker ([&] { c->getStateInformation (before); });
+            set (*c, orbitamp::params::reverbMix, 11.0f);
+            ticks (*c, 12);
+            c->history.copyRegister (c->history.active(), 2);
+            set (*c, orbitamp::params::reverbMix, 37.0f);
+            ticks (*c, 12);
+            onWorker ([&] { c->getStateInformation (after); });
+
+            const auto e = std::make_unique<orbitamp::AmpProcessor>();
+            e->setStateInformation (after.getData(), (int) after.getSize());
+            e->history.switchTo (2);
+            report ("...a copy into a register reaches it",  std::abs (readMix (*e) - 11.0f) < 0.01f,
+                    "register C mix " + juce::String (readMix (*e), 2));
+        }
+
+        // Restored from a worker — queued for a message thread that is busy — while the pump keeps
+        // ticking over a live state that has just changed: the save must still be what came in.
+        {
+            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            set (*r, orbitamp::params::reverbMix, 90.0f);   // the live state the restore replaces, dirty
+            onWorker ([&] { r->setStateInformation (fromWorker.getData(), (int) fromWorker.getSize()); });
+            ticks (*r, 30);
+
+            juce::MemoryBlock back;
+            onWorker ([&] { r->getStateInformation (back); });
+            report ("...a pending restore is not written over by the pump", back == fromWorker);
+
+            juce::MemoryBlock backHere;
+            r->getStateInformation (backHere);   // the message thread, the restore still queued
+            report ("...nor by a save on the message thread", backHere == fromWorker);
+        }
+
+        // What neither load path takes is not a session, and does not become the saved one.
+        {
+            juce::MemoryBlock junk;
+            juce::XmlElement workspaceWithoutLive ("Workspace");
+            c->copyXmlToBinary (workspaceWithoutLive, junk);
+
+            onWorker ([&] { c->setStateInformation (junk.getData(), (int) junk.getSize()); });
+            juce::MemoryBlock back;
+            onWorker ([&] { c->getStateInformation (back); });
+
+            const auto f = std::make_unique<orbitamp::AmpProcessor>();
+            f->setStateInformation (back.getData(), (int) back.getSize());
+            report ("...an unloadable blob never becomes the saved session", std::abs (readMix (*f) - 37.0f) < 0.01f,
+                    "mix " + juce::String (readMix (*f), 2));
+
+            // ...and does not stop the copy from following the live state afterwards.
+            set (*c, orbitamp::params::reverbMix, 64.0f);
+            ticks (*c, 12);
+            juce::MemoryBlock later;
+            onWorker ([&] { c->getStateInformation (later); });
+            const auto g = std::make_unique<orbitamp::AmpProcessor>();
+            g->setStateInformation (later.getData(), (int) later.getSize());
+            report ("...nor freezes it",                    std::abs (readMix (*g) - 64.0f) < 0.01f,
+                    "mix " + juce::String (readMix (*g), 2));
+        }
+
+        // The stress: a worker saving without pause while this thread moves a knob and the pump
+        // writes the session down. Every save it got must be a whole session.
+        {
+            std::atomic<int> torn { 0 };
+            juce::MemoryBlock last;
+            juce::CriticalSection lastLock;
+
+            Worker w ([&]
+            {
+                juce::MemoryBlock blob;
+                c->getStateInformation (blob);
+                if (orbitamp::AmpProcessor::getXmlFromBinary (blob.getData(), (int) blob.getSize()) == nullptr)
+                    ++torn;
+                const juce::ScopedLock sl (lastLock);
+                last = blob;
+            }, true);
+
+            w.startThread();
+            for (int i = 0; i < 300; ++i)
+            {
+                set (*c, orbitamp::params::reverbMix, (float) (i % 100));
+                ticks (*c, 1);
+            }
+            w.signalThreadShouldExit();
+            w.waitForThreadToExit (5000);
+
+            const auto f = std::make_unique<orbitamp::AmpProcessor>();
+            f->setStateInformation (last.getData(), (int) last.getSize());
+            const float mix = readMix (*f);
+            report ("...and saving flat out beside a changing state never tears",
+                    w.runs.load() > 0 && torn.load() == 0 && mix >= 0.0f && mix <= 99.0f
+                        && std::abs (mix - std::round (mix)) < 0.01f,
+                    juce::String (w.runs.load()) + " saves, " + juce::String (torn.load()) + " torn");
+        }
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench

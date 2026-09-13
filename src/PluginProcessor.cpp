@@ -34,10 +34,6 @@ AmpProcessor::AmpProcessor()
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })
 {
-    // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
-    // burst commits about 0.4 s after you stop moving.
-    startTimerHz (30);
-
     for (auto& order : blockSpectrumOrder)
         order.store (eqSpectrumOrder);
 
@@ -130,15 +126,98 @@ AmpProcessor::AmpProcessor()
     history.reset();
     history.markSaved();
 
+    // The saved session exists from the first moment: a host may ask for it from any thread
+    // before the pump has ever run.
+    apvts.state.addListener (this);
+    refreshSavedState (true);
+
     // The two links that HAVE a tail are told what their knobs say before anyone can ask how long
     // this rings. `prepareToPlay` does this too, but a VST3 host may ask before it activates the
     // plugin at all, and an answer built out of the stages' constructor defaults is not an answer.
     updateDelaySettings();
     updateReverbSettings();
+
+    // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
+    // burst commits about 0.4 s after you stop moving.
+    //
+    // LAST, and not by taste: the timer ticks on the message thread whoever constructs us, and a
+    // host that constructs on a worker would have had the first tick walking the history and the
+    // saved session while this constructor was still building them.
+    startTimerHz (30);
+}
+
+juce::MemoryBlock AmpProcessor::buildSavedState()
+{
+    juce::MemoryBlock out;
+
+    // The workspace envelope carries the live parameter tree and the other three registers, so
+    // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
+    // envelope holds the live capture and the register snapshots and nothing else, so undo starts
+    // fresh on reopen. (It said otherwise here for a long time — it never did.)
+    auto workspace = history.toTree();
+    embedCabIrs (workspace);   // the player's own IRs travel with the session, whole
+
+    if (auto xml = workspace.createXml())
+        copyXmlToBinary (*xml, out);
+
+    return out;
+}
+
+void AmpProcessor::refreshSavedState (bool force)
+{
+    // A RESTORE IS ON ITS WAY. The copy already IS the incoming session; the live state is still
+    // the one it replaces, and writing that down now would hand a worker's save the session the
+    // host just loaded over. The restore writes the copy itself once it has landed.
+    if (pendingRestores.load (std::memory_order_acquire) > 0)
+        return;
+
+    ticksSinceSaved = juce::jmin (ticksSinceSaved + 1, savedThrottleTicks);
+
+    bool registersMoved = history.active() != savedActive
+                       || (int) savedRegisters.size() != history.numRegisters();
+
+    for (int i = 0; ! registersMoved && i < history.numRegisters(); ++i)
+    {
+        const auto& r = history.registerTree (i);
+        registersMoved = (r.has_value() ? *r : juce::ValueTree()) != savedRegisters[(size_t) i];
+    }
+
+    if (! force && ((! stateDirty.load (std::memory_order_relaxed) && ! registersMoved)
+                    || ticksSinceSaved < savedThrottleTicks))
+        return;
+
+    auto bytes = buildSavedState();
+
+    // Taken AFTER the build: the build itself flushes the parameters into the tree, and whatever
+    // that stirred up is already in these bytes.
+    stateDirty.store (false, std::memory_order_relaxed);
+    ticksSinceSaved = 0;
+    savedActive     = history.active();
+    savedRegisters.clear();
+    for (int i = 0; i < history.numRegisters(); ++i)
+    {
+        const auto& r = history.registerTree (i);
+        savedRegisters.push_back (r.has_value() ? *r : juce::ValueTree());
+    }
+
+    const juce::ScopedLock sl (savedLock);
+    savedState = std::move (bytes);
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
+    // FROM ANYWHERE BUT THE MESSAGE THREAD, the copy the message thread keeps — see
+    // refreshSavedState. Nothing the session is made of is touched from here.
+    // ...and from the message thread too while a restore is still on its way to it: the live
+    // state is the one being replaced, and the copy is the session the host just handed over.
+    if (! juce::MessageManager::existsAndIsCurrentThread()
+        || pendingRestores.load (std::memory_order_acquire) > 0)
+    {
+        const juce::ScopedLock sl (savedLock);
+        destData = savedState;
+        return;
+    }
+
     // Switches and devices ride in the tree by NAME, and the names are written when they MOVE, so
     // a save normally has nothing to do here. The one gap is the tick: a control moved in the
     // 33 ms before the pump next runs would be saved as a new NUMBER beside its old NAME, and the
@@ -149,23 +228,14 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
     // when the number has moved and nothing has loaded it yet, writes the name of the device that
     // is leaving beside the number of the one arriving — which is worse than the gap it closes.
     //
-    // Guarded because a host may save from any thread and a ValueTree is the message thread's.
-    if (juce::MessageManager::getInstance()->isThisTheMessageThread())
-    {
-        pumpDeviceWork();
-        pumpSwitchNames();
-    }
+    pumpDeviceWork();
+    pumpSwitchNames();
 
+    // On the message thread the session is written fresh, and the kept copy becomes this one.
+    refreshSavedState (true);
 
-    // The workspace envelope carries the live parameter tree and the other three registers, so
-    // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
-    // envelope holds the live capture and the register snapshots and nothing else, so undo starts
-    // fresh on reopen. (It said otherwise here for a long time — it never did.)
-    auto workspace = history.toTree();
-    embedCabIrs (workspace);   // the player's own IRs travel with the session, whole
-
-    if (auto xml = workspace.createXml())
-        copyXmlToBinary (*xml, destData);
+    const juce::ScopedLock sl (savedLock);
+    destData = savedState;
 }
 
 void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -177,6 +247,26 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         return;
 
     const auto tree = juce::ValueTree::fromXml (*xml);
+
+    // What neither path below would load is not a session, and must not become the copy a worker's
+    // save hands out: before this copy existed, an ignored load left saves describing the state
+    // that actually plays. FIRST, before anything is counted or stored — a rejected blob that had
+    // been counted as pending would have frozen the copy for good. The state type is spelled out
+    // rather than read off the live tree, which is not this thread's to read.
+    const bool loadable = (tree.hasType ("Workspace") && tree.getChildWithName ("Live").getNumChildren() > 0)
+                       || tree.hasType ("state");   // the tree type the constructor gives apvts
+    if (! loadable)
+        return;
+
+    // The session just handed over IS the session now, whether or not the message thread has
+    // applied it yet: a host that restores and saves back to back from a worker thread must get
+    // back what it gave, not the state before. Counted as pending until it lands — see
+    // refreshSavedState — and written down in our own words once it has.
+    pendingRestores.fetch_add (1, std::memory_order_acq_rel);
+    {
+        const juce::ScopedLock sl (savedLock);
+        savedState.replaceAll (data, (size_t) sizeInBytes);
+    }
 
     const auto apply = [] (AmpProcessor& self, juce::ValueTree t)
     {
@@ -205,17 +295,24 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     // CompareHistory's contract is message-thread only, and a host may restore from anywhere —
     // marshalled rather than raced against the settle timer (found in review).
+    const auto land = [apply] (AmpProcessor& self, const juce::ValueTree& t)
+    {
+        apply (self, t);
+        self.pendingRestores.fetch_sub (1, std::memory_order_acq_rel);
+        self.refreshSavedState (true);
+    };
+
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
     {
-        apply (*this, tree);
+        land (*this, tree);
         return;
     }
 
     juce::MessageManager::callAsync (
-        [weak = juce::WeakReference<AmpProcessor> (this), tree, apply]
+        [weak = juce::WeakReference<AmpProcessor> (this), tree, land]
         {
             if (auto* self = weak.get())
-                apply (*self, tree);
+                land (*self, tree);
         });
 }
 
