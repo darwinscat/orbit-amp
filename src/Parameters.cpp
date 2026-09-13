@@ -119,6 +119,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Bool> (juce::ParameterID { outOn,   1 }, "Output", true),
                 std::make_unique<Bool> (juce::ParameterID { tunerOn, 1 }, "Tuner",  true));
 
+    // The tuner's mute ships OFF: a plugin that opens silent is a plugin reported as broken.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { tunerMute, 1 }, "Tuner Mute", false));
+
     // Block power. A boost is an addition to the sound, so it starts off; the rest are the sound.
     layout.add (std::make_unique<Bool> (juce::ParameterID { boostOn,  1 }, "Boost",  false),
                 std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, "Preamp", true),

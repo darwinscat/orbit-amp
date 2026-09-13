@@ -698,6 +698,7 @@ private:
             sr > 0.0 && ! juce::approximatelyEqual (sr, tunerEar.preparedRate()))
             tunerEar.prepare (sr);
 
+        tunerEar.setLevelFloorDb ((double) prefs::tunerFloor());
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 
@@ -975,6 +976,8 @@ private:
 
     std::atomic<float>* inTrimParam        = nullptr;
     std::atomic<float>* outTrimParam       = nullptr;
+    std::atomic<float>* tunerMuteParam     = nullptr;
+    float lastMuteGain = 1.0f;   // the tuner mute's ramp, per block
     std::atomic<float>* stereoModeParam    = nullptr;
     float histWorst   = 0.0f;
     int   histSamples = 0;

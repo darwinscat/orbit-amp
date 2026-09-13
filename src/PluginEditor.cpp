@@ -48,6 +48,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (inColumn);
     addAndMakeVisible (outColumn);
     addAndMakeVisible (tunerStrip);
+    tunerStrip.mute.attach (*p.apvts.getParameter (params::tunerMute));
     addAndMakeVisible (footer);
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
     // The demo needs its loops on disk — a machine without them has no player to show.
