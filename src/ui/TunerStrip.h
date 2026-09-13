@@ -5,6 +5,7 @@
 
 #include "../core/TunerEar.h"
 #include "Theme.h"
+#include "ZoneSwitch.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -26,6 +27,20 @@ public:
     {
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
         startTimerHz (30);
+
+        mute.setTooltip ("Mute the output while tuning");
+        mute.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        addAndMakeVisible (mute);
+    }
+
+    /** The MUTE pill, under the cents — the strip's one switch. The owner attaches it to the
+        tuner's mute parameter; the strip only gives it a place. It takes its own clicks, so a
+        click on it never opens the big tuner. */
+    ZoneSwitch mute;
+
+    void resized() override
+    {
+        mute.setBounds (muteArea().toNearestInt());
     }
 
     /** A click opens the big tuner — the strip is the glance, the zoom is the look. */
@@ -78,8 +93,9 @@ public:
             g.fillRoundedRectangle (noteArea.getX(), noteArea.getCentreY() - 2.0f, 30.0f, 4.0f, 2.0f);
         }
 
-        // ---- the cents, right ----
+        // ---- the cents, right — over the MUTE pill, which stands under them ----
         auto centsArea = inner.removeFromRight (52.0f);
+        centsArea.removeFromBottom (muteH + 1.0f);
         if (live)
         {
             const auto cents = juce::String (juce::roundToInt (note.cents));
@@ -150,6 +166,16 @@ public:
 
 private:
     void timerCallback() override { repaint(); }
+
+    static constexpr float muteW = 26.0f, muteH = 13.0f;
+
+    /** Where the pill stands: the bottom right of the cents column, right-aligned under the
+        number — the same insets `paint` lays the column out with. */
+    juce::Rectangle<float> muteArea() const
+    {
+        return getLocalBounds().toFloat().reduced (14.0f, 6.0f)
+                   .removeFromRight (52.0f).removeFromBottom (muteH).removeFromRight (muteW);
+    }
 
 public:
     /** WORKING or standing by — see VolumeColumn::setLive. A tuner standing by hears nothing (the

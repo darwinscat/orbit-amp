@@ -66,6 +66,7 @@ AmpProcessor::AmpProcessor()
 
     inTrimParam        = apvts.getRawParameterValue (params::inTrim);
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
+    tunerMuteParam     = apvts.getRawParameterValue (params::tunerMute);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
     boostInParam       = apvts.getRawParameterValue (params::blockIn (params::boostId));
     preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
@@ -1157,6 +1158,15 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // SPACE the copy was made at the seam, and there is nothing left to copy.)
         for (int ch = nchBack; ch < numChannels; ++ch)
             buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+
+        // The tuner's MUTE, last of all and before the meter reads — silence at the jack is
+        // silence on the rail. Ramped over the block like the trims, so muting mid-note is a fade
+        // rather than a click; a tuner standing by does not mute.
+        {
+            const float target = linkWorks (params::rowTuner) && tunerMuteParam->load() > 0.5f ? 0.0f : 1.0f;
+            buffer.applyGainRamp (0, numSamples, lastMuteGain, target);
+            lastMuteGain = target;
+        }
 
         if (limiter.lastMinGain() < 0.999f)
             limiterWorked.store (true);

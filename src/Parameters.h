@@ -406,6 +406,10 @@ inline constexpr const char* inPresent     = "in_present";
 inline constexpr const char* inOn          = "in_on";
 inline constexpr const char* tunerPresent  = "tuner_present";
 inline constexpr const char* tunerOn       = "tuner_on";
+/** The tuner's MUTE: silence at the jack while the tuner works, so a string can be tuned without
+    the room hearing it. The tuner keeps listening — it reads the input before anything — and a
+    tuner standing by does not mute, like any link's action in STANDBY. */
+inline constexpr const char* tunerMute     = "tuner_mute";
 inline constexpr const char* gatePresent   = "gate_present";
 inline constexpr const char* boostPresent  = "boost_present";
 inline constexpr const char* preampPresent = "preamp_present";

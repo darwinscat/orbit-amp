@@ -1038,6 +1038,50 @@ int main()
 
     }
 
+    // THE TUNER'S MUTE: silence at the jack while the tuner works, and not a sample of it while the
+    // tuner stands by — a link's action in STANDBY is ignored. A quiet tone through a chain with
+    // nothing that needs a pack; the last block of each run is what the jack puts out.
+    {
+        const auto m = std::make_unique<orbitamp::AmpProcessor>();
+        m->prepareToPlay (sampleRate, blockSize);
+        set (*m, orbitamp::params::stereoMode, 0.0f);
+        set (*m, orbitamp::params::boostPresent,  0.0f);
+        set (*m, orbitamp::params::preampPresent, 0.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        long long phase = 0;
+
+        const auto lastBlockPeak = [&]
+        {
+            for (int b = 0; b < 8; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                             * 220.0 * (double) phase / sampleRate);
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+                m->processBlock (buf, midi);
+            }
+            return juce::jmax (buf.getMagnitude (0, 0, blockSize), buf.getMagnitude (1, 0, blockSize));
+        };
+
+        const float open = lastBlockPeak();
+
+        set (*m, orbitamp::params::tunerMute, 1.0f);
+        const float muted = lastBlockPeak();
+
+        set (*m, orbitamp::params::tunerOn, 0.0f);
+        const float standby = lastBlockPeak();
+
+        report ("tuner mute: the jack goes silent",            open > 0.01f && muted == 0.0f,
+                juce::String (open, 3) + " -> " + juce::String (muted, 5));
+        report ("...and a tuner standing by does not mute",   std::abs (standby - open) < 0.01f,
+                juce::String (standby, 3));
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench
