@@ -29,6 +29,7 @@
   #include <malloc.h>
 #endif
 #include <cstdio>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -1036,6 +1037,59 @@ int main()
             report ("with the wire the block's length, the blend has no comb", flatEverywhere);
         }
 
+    }
+
+    // ONE BAD SAMPLE MUST NOT SILENCE THE ECHO FOR EVER. The line is recursive: a NaN or an
+    // infinity recorded into it used to go round for good, every sample after it not a number,
+    // until the delay left the rig. Stage alone, host-sized blocks: a quiet tone, one poisoned
+    // sample, the tone again — everything after the poisoned block a number, and repeats back.
+    {
+        for (const float poison : { std::numeric_limits<float>::quiet_NaN(),
+                                    std::numeric_limits<float>::infinity() })
+        {
+            orbitamp::core::DelayStage echo;
+            echo.prepare (sampleRate, blockSize);
+            echo.setTimeMs (120.0f);
+            echo.setRepeats (0.6f);
+            echo.setMix (0.5f);
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            long long phase = 0;
+            int bad = 0;
+            double lateWet = 0.0;
+
+            for (int b = 0; b < 200; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = b < 150 ? 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                                        * 220.0 * (double) phase / sampleRate)
+                                            : 0.0f;
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+
+                if (b == 20)
+                    buf.setSample (0, 100, poison), buf.setSample (1, 100, poison);
+
+                echo.process (buf.getArrayOfWritePointers(), 2, blockSize);
+
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < blockSize; ++i)
+                    {
+                        const float v = buf.getSample (ch, i);
+                        if (b > 20 && ! std::isfinite (v))
+                            ++bad;
+                        if (b >= 150 && b < 160)   // the input has stopped: what sounds is repeats
+                            lateWet = std::max (lateWet, (double) std::abs (v));
+                    }
+            }
+
+            const auto what = std::isnan (poison) ? "a NaN" : "an infinity";
+            report ((juce::String ("delay: ") + what + " in, every sample after it a number").toRawUTF8(),
+                    bad == 0, juce::String (bad) + " non-finite");
+            report ("...and the repeats come back", lateWet > 1.0e-3, juce::String (lateWet, 4));
+        }
     }
 
     if (amp.boost.packs.isEmpty())

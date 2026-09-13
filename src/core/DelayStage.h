@@ -209,8 +209,9 @@ public:
                                 + line[(size_t) ch][(size_t) i1] * f;
 
                 // The record head: input plus the recirculation, darkened and pressed — the
-                // first echo already wears one pass, the n-th wears n.
-                float v = (feed ? x : 0.0f) + tap * repeats;
+                // first echo already wears one pass, the n-th wears n. A sample that is not a
+                // number is not recorded — see POISON below; the dry keeps it, it is not ours.
+                float v = (feed && std::isfinite (x) ? x : 0.0f) + tap * repeats;
                 lpfState[ch] += lpfCoeff * (v - lpfState[ch]);
                 v = std::tanh (lpfState[ch] * satDrive) * satNorm;
                 line[(size_t) ch][(size_t) writePos] = v;
@@ -238,6 +239,15 @@ public:
             writePos = writePos + 1 == lineN ? 0 : writePos + 1;
             offPos   = offPos   + 1 == offN  ? 0 : offPos   + 1;
         }
+
+        // POISON. The line is recursive, and a NaN or an infinity recorded into it went round for
+        // ever: every sample after it was not a number, at any mix, standing by included, until
+        // the delay left the rig — the reverb's defect, one link earlier. The door above keeps one
+        // from being recorded; this is the proof nothing else got in. Every write into the line
+        // goes through the dark filter's state and leaves through the saturator, so a finite state
+        // at the end of the block means a clean line, and anything else restarts it from silence.
+        if (! std::isfinite (lpfState[0]) || ! std::isfinite (lpfState[1]))
+            reset();
 
         // Where the heads actually STAND, for the picture: the glided values, so the comb
         // slides with the motor instead of jumping to the target.
