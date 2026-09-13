@@ -24,7 +24,7 @@ namespace
     int failures = 0;
 
     constexpr double pi = 3.14159265358979323846;
-    constexpr int    windowLen = 16384;   // what the tap hands the panel
+    constexpr int    windowLen = orbitamp::core::TunerTap::size;   // what the tap hands the panel
 
     void check (const char* what, double got, double want, double tol)
     {
@@ -319,6 +319,30 @@ int main()
         std::snprintf (name, sizeof (name), "ear: plucks whose last needle leaves green (of %d)", notes);
         check (name, lastOutside, 0.0, 0.0);
         check ("ear: the worst last needle, cents", worstLast, 0.0, TunerEar::inTuneCents);
+    }
+
+    // ---- the ring's head is not analysed, at any rate --------------------------------------------
+    // The oldest part of the tap holds whatever came before: the anti-alias filter settling, the
+    // seam of a torn copy, the last note after a string is plucked again. Its oldest eighth — a
+    // semitone away from the note the rest of the window holds — must not move the reading.
+    {
+        using orbitamp::core::TunerTap;
+
+        for (const double sr : { 44100.0, 48000.0, 96000.0 })
+        {
+            const double f = 110.0, other = 110.0 * std::pow (2.0, 100.0 / 1200.0);
+            std::vector<float> w ((size_t) TunerTap::size);
+            for (int i = 0; i < TunerTap::size; ++i)
+                w[(size_t) i] = 0.5f * (float) std::sin (2.0 * pi * (i < TunerTap::size / 8 ? other : f) * i / sr);
+
+            PitchTracker t;
+            t.prepare (sr);
+            const auto r = t.analyse (w.data(), (int) w.size());
+
+            char name[96];
+            std::snprintf (name, sizeof (name), "old note in the ring's head @ %.0fk: cents error", sr / 1000.0);
+            check (name, r.hz > 0.0f ? centsBetween (r.hz, f) : 999.0, 0.0, 0.1);
+        }
     }
 
     // ---- the naming the panel prints -----------------------------------------------------------
