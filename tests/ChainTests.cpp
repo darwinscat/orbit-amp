@@ -29,6 +29,7 @@
   #include <malloc.h>
 #endif
 #include <cstdio>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -1036,6 +1037,846 @@ int main()
             report ("with the wire the block's length, the blend has no comb", flatEverywhere);
         }
 
+    }
+
+    // A CABINET IR OF THE PLAYER'S OWN travels with the state, whole. Picked from a file, saved with
+    // a session — from a register that is not even the active one — and the file thrown away: a
+    // fresh instance on the same machine has to play the very same bytes, and must never have held
+    // them in the tree the history copies every tick. Needs no pack, so it runs in front of the gate.
+    {
+        const auto work = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                              .getChildFile ("orbitamp-chain-ir").getNonexistentSibling();
+        work.createDirectory();
+
+        const auto wavFile = work.getChildFile ("My Cab.wav");
+        {
+            juce::AudioBuffer<float> shot (1, 2400);
+            for (int i = 0; i < shot.getNumSamples(); ++i)
+                shot.setSample (0, i, (float) (std::exp (-i / 300.0) * std::cos (i * 0.07)));
+
+            juce::WavAudioFormat wav;
+            std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (wavFile);
+
+            if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                               .withSampleRate (sampleRate)
+                                                               .withNumChannels (1)
+                                                               .withBitsPerSample (24)))
+                writer->writeFromAudioSampleBuffer (shot, 0, shot.getNumSamples());
+        }
+
+        juce::MemoryBlock original;
+        wavFile.loadFileAsData (original);
+
+        // A minute of audio fits the byte cap easily and is no cabinet: millions of taps.
+        const auto tooLong = work.getChildFile ("Song.wav");
+        {
+            juce::AudioBuffer<float> song (1, (int) (orbitamp::core::CabinetIr::maxSeconds * 8000.0) + 8000);
+            song.clear();
+            song.setSample (0, 0, 1.0f);
+
+            juce::WavAudioFormat wav;
+            std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (tooLong);
+
+            if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                               .withSampleRate (8000.0)
+                                                               .withNumChannels (1)
+                                                               .withBitsPerSample (16)))
+                writer->writeFromAudioSampleBuffer (song, 0, song.getNumSamples());
+        }
+
+        const auto notAudio = work.getChildFile ("readme.wav");
+        notAudio.replaceWithText ("not an impulse");
+
+        const auto a = std::make_unique<orbitamp::AmpProcessor>();
+        a->inlineLoads = true;
+        a->prepareToPlay (sampleRate, blockSize);
+
+        report ("a file that is not audio is not chosen",   ! a->chooseCabFile (notAudio) && ! a->cabChoice().isUser());
+        report ("an IR longer than a cabinet is not chosen",  ! a->chooseCabFile (tooLong) && ! a->cabChoice().isUser());
+        report ("a player's own IR is chosen",               a->chooseCabFile (wavFile) && a->cabChoice().isUser()
+                                                               && a->cabChoice().name == "My Cab");
+        a->pumpDeviceWork();
+
+        const auto preset = a->presetForSaving();
+        report ("a preset carries it whole",                 preset.getChildWithName ("EmbeddedIRs").getNumChildren() == 1);
+        report ("...and the live tree never does",           ! a->apvts.state.getChildWithName ("EmbeddedIRs").isValid());
+
+        // Into register B, then register A goes back to the shelf: the only state naming the file
+        // is one the history keeps out of sight.
+        a->history.copyRegister (a->history.active(), 1);
+        a->chooseCabFactory (3);
+        report ("the shelf takes over again",                ! a->cabChoice().isUser() && a->cabChoice().factory == 3);
+
+        juce::MemoryBlock session;
+        a->getStateInformation (session);
+        wavFile.deleteFile();
+
+        const auto b = std::make_unique<orbitamp::AmpProcessor>();
+        b->inlineLoads = true;
+        b->prepareToPlay (sampleRate, blockSize);
+        b->setStateInformation (session.getData(), (int) session.getSize());
+
+        report ("a session reopens on register A's shelf IR", ! b->cabChoice().isUser() && b->cabChoice().factory == 3);
+        report ("...holding no bytes in its tree",           ! b->apvts.state.getChildWithName ("EmbeddedIRs").isValid());
+
+        b->history.switchTo (1);
+        const auto choice = b->cabChoice();
+        report ("register B plays the file, which is gone",  choice.isUser() && choice.bytes != nullptr
+                                                               && *choice.bytes == original && choice.name == "My Cab");
+
+        report ("a factory reset forgets it",                b->stateForSaving().hasProperty (orbitamp::params::cabIrUserKey)
+                                                               && ! b->stateForSaving (true).hasProperty (orbitamp::params::cabIrUserKey));
+
+        // ...and what comes out is that IR, not the last factory one: through the cabinet alone —
+        // ALONE, and that is not a figure of speech. A captured block with no pack to play is
+        // silent, and a runner has no packs: with the preamp left in the rig both runs were
+        // silence, and silence compares as "0.0 % apart". The captured blocks stand out.
+        //
+        // The convolver also takes a new impulse on its own thread and swaps it in from the audio
+        // thread's side, crossfading, at the machine's pace — so each case gets most of a second
+        // of audio before it is measured.
+        const auto settleCabinet = [&] (orbitamp::AmpProcessor& p)
+        {
+            juce::AudioBuffer<float> silence (2, blockSize);
+            juce::MidiBuffer none;
+            for (int i = 0; i < 150; ++i)
+            {
+                silence.clear();
+                p.processBlock (silence, none);
+                p.pumpDeviceWork();
+                juce::Thread::sleep (5);
+            }
+        };
+
+        set (*b, orbitamp::params::stereoMode, 0.0f);
+        set (*b, orbitamp::params::cabOn, 1.0f);
+        set (*b, orbitamp::params::boostPresent,  0.0f);
+        set (*b, orbitamp::params::preampPresent, 0.0f);
+        settleCabinet (*b);
+        const auto own = run (*b);
+        b->chooseCabFactory (0);
+        settleCabinet (*b);
+        const auto shelf = run (*b);
+        report ("the player's IR is what sounds",            differencePercent (own, shelf) > 1.0,
+                juce::String (differencePercent (own, shelf), 1) + " % apart");
+
+        // THE AUTOMATION LANE WINS over a player's IR — and a recall is not a lane. A host moving
+        // `cab_ir` lets the player's IR go; a session restored with the player's IR and a different
+        // number underneath keeps playing the player's IR.
+        {
+            const auto h = std::make_unique<orbitamp::AmpProcessor>();
+            h->inlineLoads = true;
+            h->prepareToPlay (sampleRate, blockSize);
+            h->pumpDeviceWork();
+
+            juce::MemoryBlock ownIr;
+            {
+                juce::AudioBuffer<float> shot (1, 2400);
+                for (int i = 0; i < shot.getNumSamples(); ++i)
+                    shot.setSample (0, i, (float) (std::exp (-i / 200.0) * std::cos (i * 0.05)));
+                const auto f = work.getChildFile ("Lane.wav");
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (f);
+                if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                                   .withSampleRate (sampleRate)
+                                                                   .withNumChannels (1)
+                                                                   .withBitsPerSample (24)))
+                    writer->writeFromAudioSampleBuffer (shot, 0, shot.getNumSamples());
+                h->chooseCabFile (f);
+            }
+            h->pumpDeviceWork();
+
+            juce::MemoryBlock session;
+            h->getStateInformation (session);   // the player's IR, over factory index 7
+
+            set (*h, orbitamp::params::cabIr, 4.0f);   // the lane
+            h->pumpDeviceWork();
+            report ("a host moving cab_ir lets the player's IR go", ! h->cabChoice().isUser() && h->cabChoice().factory == 4);
+
+            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            r->inlineLoads = true;
+            r->prepareToPlay (sampleRate, blockSize);
+            set (*r, orbitamp::params::cabIr, 2.0f);
+            r->pumpDeviceWork();
+            r->setStateInformation (session.getData(), (int) session.getSize());
+            r->pumpDeviceWork();
+            r->pumpDeviceWork();
+            report ("...a restored session is not a lane",      r->cabChoice().isUser());
+        }
+
+        work.deleteRecursively();
+    }
+
+    // THE DELAY COUNTS IN THE SESSION'S TEMPO unless told to keep its own. A quarter note at the
+    // host's 100 BPM is 600 ms; the block's own 120 is 500; and a host that reports no tempo leaves
+    // the own BPM conducting whatever the switch says. Read off the stage's shown time once its glide
+    // has arrived — the motor slides to a new time rather than jumping. Needs no pack.
+    {
+        struct Head final : juce::AudioPlayHead
+        {
+            std::optional<double> bpm;
+
+            juce::Optional<PositionInfo> getPosition() const override
+            {
+                PositionInfo info;
+                if (bpm.has_value())
+                    info.setBpm (*bpm);
+                return info;
+            }
+        } head;
+
+        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        d->prepareToPlay (sampleRate, blockSize);
+        d->setPlayHead (&head);
+
+        set (*d, orbitamp::params::delaySync, 1.0f);
+        set (*d, orbitamp::params::delayDiv, 5.0f);   // 1/4
+        set (*d, orbitamp::params::delayBpm, 120.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        // Blocks until the glide stops moving: ten seconds of them at the most.
+        const auto block = [&]
+        {
+            float last = -1.0f;
+            for (int i = 0; i < (int) (10.0 * sampleRate / blockSize); ++i)
+            {
+                buf.clear();
+                d->processBlock (buf, midi);
+
+                const float now = d->delayTaps().shownTimeMs.load();
+                if (std::abs (now - last) < 0.001f)
+                    break;
+                last = now;
+            }
+        };
+        const auto timeMs = [&] { return d->delayTaps().shownTimeMs.load(); };
+
+        head.bpm = 100.0;
+        block();
+        report ("a quarter note follows the host's 100 BPM",  std::abs (timeMs() - 600.0f) < 0.5f
+                                                                && std::abs (d->hostTempoBpm() - 100.0f) < 0.01f,
+                juce::String (timeMs(), 1) + " ms");
+
+        set (*d, orbitamp::params::delayHostTempo, 0.0f);
+        block();
+        report ("...and its own 120 when told to keep it",   std::abs (timeMs() - 500.0f) < 0.5f,
+                juce::String (timeMs(), 1) + " ms");
+
+        set (*d, orbitamp::params::delayHostTempo, 1.0f);
+        head.bpm.reset();
+        block();
+        report ("a host with no tempo leaves its own conducting", std::abs (timeMs() - 500.0f) < 0.5f
+                                                                   && d->hostTempoBpm() == 0.0f,
+                juce::String (timeMs(), 1) + " ms");
+
+        d->setPlayHead (nullptr);
+    }
+
+    // ONE BAD SAMPLE MUST NOT SILENCE THE ECHO FOR EVER. The line is recursive: a NaN or an
+    // infinity recorded into it used to go round for good, every sample after it not a number,
+    // until the delay left the rig. Stage alone, host-sized blocks: a quiet tone, one poisoned
+    // sample, the tone again — everything after the poisoned block a number, and repeats back.
+    {
+        for (const float poison : { std::numeric_limits<float>::quiet_NaN(),
+                                    std::numeric_limits<float>::infinity() })
+        {
+            orbitamp::core::DelayStage echo;
+            echo.prepare (sampleRate, blockSize);
+            echo.setTimeMs (120.0f);
+            echo.setRepeats (0.6f);
+            echo.setMix (0.5f);
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            long long phase = 0;
+            int bad = 0;
+            double lateWet = 0.0;
+
+            for (int b = 0; b < 200; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = b < 150 ? 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                                        * 220.0 * (double) phase / sampleRate)
+                                            : 0.0f;
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+
+                if (b == 20)
+                    buf.setSample (0, 100, poison), buf.setSample (1, 100, poison);
+
+                echo.process (buf.getArrayOfWritePointers(), 2, blockSize);
+
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < blockSize; ++i)
+                    {
+                        const float v = buf.getSample (ch, i);
+                        if (b > 20 && ! std::isfinite (v))
+                            ++bad;
+                        if (b >= 150 && b < 160)   // the input has stopped: what sounds is repeats
+                            lateWet = std::max (lateWet, (double) std::abs (v));
+                    }
+            }
+
+            const auto what = std::isnan (poison) ? "a NaN" : "an infinity";
+            report ((juce::String ("delay: ") + what + " in, every sample after it a number").toRawUTF8(),
+                    bad == 0, juce::String (bad) + " non-finite");
+            report ("...and the repeats come back", lateWet > 1.0e-3, juce::String (lateWet, 4));
+        }
+    }
+
+    // THE CABINET, one bad sample in: every sample after it is a number AT ONCE — not after the
+    // impulse has carried it out, which is what macOS's convolver does, and not never, which is
+    // what Windows' did. The shipping IR, a quiet tone, one NaN, the tone again.
+    {
+        orbitamp::core::CabinetIr cabinet;
+        cabinet.prepare (sampleRate, blockSize, 2);
+        const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+        cabinet.load (shelf.data, (size_t) shelf.size);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        long long phase = 0;
+        int bad = 0;
+        double late = 0.0;
+
+        for (int b = 0; b < 400; ++b)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                         * 220.0 * (double) phase / sampleRate);
+                buf.setSample (0, i, s);
+                buf.setSample (1, i, s);
+            }
+
+            if (b == 100)
+                buf.setSample (0, 100, std::numeric_limits<float>::quiet_NaN()),
+                buf.setSample (1, 100, std::numeric_limits<float>::quiet_NaN());
+
+            cabinet.process (buf.getArrayOfWritePointers(), 2, blockSize, true);
+            juce::Thread::sleep (b < 100 ? 2 : 0);   // the impulse loads on the convolver's own thread
+
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < blockSize; ++i)
+                    if (b >= 100 && ! std::isfinite (buf.getSample (ch, i)))
+                        ++bad;
+
+            if (b >= 390)
+                late = std::max (late, (double) buf.getRMSLevel (0, 0, blockSize));
+        }
+
+        report ("cabinet: a NaN in, every sample after it a number", bad == 0, juce::String (bad) + " non-finite");
+        report ("...and the cabinet still sounds",                 late > 1.0e-3, juce::String (late, 4) + " rms");
+    }
+
+    // ...AND ONE INFINITY MUST NOT MUTE THE SAFETY FOR EVER. The limiter's envelope took the peak
+    // it heard, an infinity included, and no finite peak ever decays from that: the gain went to
+    // zero and the plugin put out exact silence until the limiter was switched off. A quiet tone,
+    // well under the ceiling, one infinite sample, the tone again: it must come back at unity.
+    {
+        orbitamp::core::SoftLimiter safety;
+        safety.prepare (sampleRate);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        long long phase = 0;
+        double lateRms = 0.0;
+
+        for (int b = 0; b < 100; ++b)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                         * 220.0 * (double) phase / sampleRate);
+                buf.setSample (0, i, s);
+                buf.setSample (1, i, s);
+            }
+
+            if (b == 20)
+                buf.setSample (0, 100, std::numeric_limits<float>::infinity());
+
+            safety.process (buf.getArrayOfWritePointers(), 2, blockSize, true, -1.0f);
+
+            if (b == 99)
+            {
+                double sum = 0.0;
+                for (int i = 0; i < blockSize; ++i)
+                    sum += (double) buf.getSample (1, i) * buf.getSample (1, i);
+                lateRms = std::sqrt (sum / blockSize);
+            }
+        }
+
+        report ("limiter: an infinity in, the tone comes back at unity",
+                std::abs (lateRms - 0.1 / std::sqrt (2.0)) < 0.002, juce::String (lateRms, 4) + " rms");
+    }
+
+    // ...and a huge FINITE spike — not a sound, a fault upstream — is met at its full height and
+    // then let go of within half a second, not four.
+    {
+        orbitamp::core::SoftLimiter safety;
+        safety.prepare (sampleRate);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        long long phase = 0;
+        float spikeOut = 0.0f;
+        double rmsAfterHalfSecond = 0.0;
+        const int spikeBlock = 20, checkBlock = spikeBlock + (int) (0.5 * sampleRate / blockSize) + 1;
+
+        for (int b = 0; b <= checkBlock; ++b)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                         * 220.0 * (double) phase / sampleRate);
+                buf.setSample (0, i, s);
+                buf.setSample (1, i, s);
+            }
+
+            if (b == spikeBlock)
+                buf.setSample (0, 100, 1.0e30f);
+
+            safety.process (buf.getArrayOfWritePointers(), 2, blockSize, true, -1.0f);
+
+            if (b == spikeBlock)
+                spikeOut = buf.getSample (0, 100);
+
+            if (b == checkBlock)
+            {
+                double sum = 0.0;
+                for (int i = 0; i < blockSize; ++i)
+                    sum += (double) buf.getSample (1, i) * buf.getSample (1, i);
+                rmsAfterHalfSecond = std::sqrt (sum / blockSize);
+            }
+        }
+
+        report ("limiter: a 1e30 spike is held to the lid",   std::abs (spikeOut) <= std::pow (10.0f, -1.0f / 20.0f) + 1.0e-4f,
+                juce::String (spikeOut, 4));
+        report ("...and let go within half a second",       std::abs (rmsAfterHalfSecond - 0.1 / std::sqrt (2.0)) < 0.002,
+                juce::String (rmsAfterHalfSecond, 4) + " rms");
+    }
+
+    // THE WHOLE CHAIN, one bad sample at the door. Everything that holds state and needs no pack —
+    // the gate, both EQ links, the delay, the reverb, the cabinet, the limiter — in the rig and on,
+    // a quiet tone, one NaN on both channels, the tone again; the captured blocks stand out, since
+    // without a pack they have nothing to play. Four seconds later every sample is a number and the
+    // level is the level of the same run with no NaN in it — the delay and the room are still
+    // building at that point, so the fair comparison is a twin, not the level before. The gate
+    // needs nothing of its own for this: its key heals itself and its audio is a multiply, which is
+    // what this is here to keep true.
+    //
+    // FOUR seconds, not one, because the cabinet DRAINS rather than heals: the convolution carries
+    // what went in for exactly the length of the impulse — about 1.3 s for the shipping IR — and
+    // then lets go by itself. That is a tail, not a latch, and measured as one: the late window
+    // starts well past it.
+    {
+        int badEver = 0;   // over the whole run, every block from the poisoned one on
+
+        const auto chainRun = [&] (bool poisoned, int& badLate)
+        {
+            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            c->prepareToPlay (sampleRate, blockSize);
+
+            set (*c, orbitamp::params::stereoMode, 0.0f);
+            for (const auto* id : { orbitamp::params::gateOn, orbitamp::params::delayOn, orbitamp::params::reverbOn,
+                                    orbitamp::params::cabOn, orbitamp::params::limiterOn,
+                                    orbitamp::params::gatePresent, orbitamp::params::delayPresent,
+                                    orbitamp::params::reverbPresent, orbitamp::params::cabPresent })
+                set (*c, id, 1.0f);
+            set (*c, orbitamp::params::boostPresent,  0.0f);
+            set (*c, orbitamp::params::preampPresent, 0.0f);
+            set (*c, orbitamp::params::gateThreshold, -70.0f);   // the tone stays open
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+            long long phase = 0;
+            double late = 0.0;
+            badLate = 0;
+
+            for (int b = 0; b < 700; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                             * 220.0 * (double) phase / sampleRate);
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+
+                if (poisoned && b == 200)
+                    buf.setSample (0, 100, std::numeric_limits<float>::quiet_NaN()),
+                    buf.setSample (1, 100, std::numeric_limits<float>::quiet_NaN());
+
+                c->processBlock (buf, midi);
+                c->pumpDeviceWork();
+
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < blockSize; ++i)
+                        if (! std::isfinite (buf.getSample (ch, i)))
+                            ++badEver;
+
+                if (b >= 600)
+                {
+                    double sum = 0.0;
+                    for (int ch = 0; ch < 2; ++ch)
+                        for (int i = 0; i < blockSize; ++i)
+                        {
+                            const float v = buf.getSample (ch, i);
+                            if (! std::isfinite (v))
+                                ++badLate;
+                            else if (ch == 0)
+                                sum += (double) v * v;
+                        }
+
+                    if (b >= 680)
+                        late = std::max (late, std::sqrt (sum / blockSize));
+                }
+            }
+
+            return late;
+        };
+
+        int cleanBad = 0, badLate = 0;
+        const double clean = chainRun (false, cleanBad);
+        const double after = chainRun (true,  badLate);
+        const double db    = 20.0 * std::log10 (juce::jmax (1.0e-9, after) / juce::jmax (1.0e-9, clean));
+
+        report ("the whole chain: a NaN at the door, later all numbers", badLate == 0,
+                juce::String (badLate) + " non-finite");
+        report ("...and not one sample that is not a number ever leaves the box", badEver == 0,
+                juce::String (badEver) + " non-finite, the cabinet's drain included");
+        report ("...and the level of the same run without it",  clean > 1.0e-3 && std::abs (db) < 1.0,
+                juce::String (db, 2) + " dB");
+    }
+
+    // A BLOCK OF NO SAMPLES in the middle of a fade: nothing moves, and the fade is still a fade —
+    // not finished, or the link fading out would be cleared with its tail still sounding.
+    {
+        orbitamp::core::BypassFade fade;
+        fade.prepare (sampleRate);
+        fade.snapTo (true);
+        const auto first = fade.advance (64, false);   // under way, not done
+        const auto empty = fade.advance (0, false);
+
+        report ("a fade meets an empty block: it holds, still moving",
+                first.moving && empty.moving && empty.ramp == 0
+                    && juce::approximatelyEqual (empty.from, first.to) && juce::approximatelyEqual (empty.to, first.to),
+                juce::String (empty.from, 3) + " -> " + juce::String (empty.to, 3));
+    }
+
+    // A HOST THAT SENDS MORE THAN IT PROMISED. Prepared for 512, handed 2048 at once, the chain
+    // must play exactly what four blocks of 512 would have played — the room, the echo, the
+    // cabinet and the fades all included. Two instances, the same tone, both ways.
+    {
+        const auto chained = [&] (bool oneBigBlock)
+        {
+            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            c->prepareToPlay (sampleRate, blockSize);
+            set (*c, orbitamp::params::stereoMode, 0.0f);
+            for (const auto* id : { orbitamp::params::delayOn, orbitamp::params::reverbOn, orbitamp::params::cabOn })
+                set (*c, id, 1.0f);
+            set (*c, orbitamp::params::boostPresent,  0.0f);
+            set (*c, orbitamp::params::preampPresent, 0.0f);
+
+            juce::MidiBuffer midi;
+            std::vector<float> out;
+            long long phase = 0;
+
+            // The cabinet's impulse arrives on the convolver's own thread, at the machine's pace: both
+            // instances hear most of a second of silence first, so neither compares a room that has
+            // its cabinet against one still waiting for it. (On a slow runner that wait is what made
+            // this check come and go.)
+            {
+                juce::AudioBuffer<float> silence (2, blockSize);
+                for (int i = 0; i < 150; ++i)
+                {
+                    silence.clear();
+                    c->processBlock (silence, midi);
+                    c->pumpDeviceWork();
+                    juce::Thread::sleep (5);
+                }
+            }
+
+            for (int round = 0; round < 40; ++round)
+            {
+                juce::AudioBuffer<float> big (2, blockSize * 4);
+                for (int i = 0; i < big.getNumSamples(); ++i, ++phase)
+                {
+                    const float v = 0.2f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                             * 220.0 * (double) phase / sampleRate);
+                    big.setSample (0, i, v);
+                    big.setSample (1, i, v);
+                }
+
+                if (oneBigBlock)
+                    c->processBlock (big, midi);
+                else
+                    for (int k = 0; k < 4; ++k)
+                    {
+                        juce::AudioBuffer<float> part (big.getArrayOfWritePointers(), 2, k * blockSize, blockSize);
+                        c->processBlock (part, midi);
+                    }
+
+                for (int i = 0; i < big.getNumSamples(); ++i)
+                    out.push_back (big.getSample (0, i));
+            }
+
+            return out;
+        };
+
+        const auto whole = chained (true);
+        const auto parts = chained (false);
+
+        double worst = 0.0;
+        for (size_t i = 0; i < whole.size() && i < parts.size(); ++i)
+            worst = std::max (worst, (double) std::abs (whole[i] - parts[i]));
+
+        report ("a host block 4x the promise plays as four promised ones",
+                whole.size() == parts.size() && worst < 1.0e-6, "worst difference " + juce::String (worst, 9));
+    }
+
+    // A PARAMETER THAT IS NOT A NUMBER must not silence a link for as long as it is held. The
+    // room's DECAY set to NaN — the way a broken automation lane would set it — then a burst of
+    // tone and silence after it: the room must still ring.
+    {
+        const auto tailWith = [&] (bool poisonDecay)
+        {
+            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            c->prepareToPlay (sampleRate, blockSize);
+            set (*c, orbitamp::params::stereoMode, 0.0f);
+            set (*c, orbitamp::params::reverbOn, 1.0f);
+            set (*c, orbitamp::params::reverbMix, 100.0f);
+            set (*c, orbitamp::params::boostPresent,  0.0f);
+            set (*c, orbitamp::params::preampPresent, 0.0f);
+            set (*c, orbitamp::params::cabPresent,    0.0f);
+            set (*c, orbitamp::params::delayPresent,  0.0f);
+
+            if (poisonDecay)
+                c->apvts.getParameter (orbitamp::params::reverbDecay)
+                    ->setValueNotifyingHost (std::numeric_limits<float>::quiet_NaN());
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+            double tail = 0.0;
+            long long phase = 0;
+
+            for (int b = 0; b < 60; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float v = b < 20 ? 0.3f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                                      * 220.0 * (double) phase / sampleRate) : 0.0f;
+                    buf.setSample (0, i, v);
+                    buf.setSample (1, i, v);
+                }
+
+                c->processBlock (buf, midi);
+
+                if (b >= 25 && b < 35)
+                    tail = std::max (tail, (double) buf.getMagnitude (0, 0, blockSize));
+            }
+
+            return tail;
+        };
+
+        const double healthy  = tailWith (false);
+        const double poisoned = tailWith (true);
+
+        report ("a NaN on the room's DECAY: the room still rings",
+                healthy > 1.0e-3 && poisoned > 0.5 * healthy,
+                juce::String (poisoned, 4) + " vs " + juce::String (healthy, 4));
+    }
+
+    // THE TUNER'S MUTE: silence at the jack while the tuner works, and not a sample of it while the
+    // tuner stands by — a link's action in STANDBY is ignored. A quiet tone through a chain with
+    // nothing that needs a pack; the last block of each run is what the jack puts out.
+    {
+        const auto m = std::make_unique<orbitamp::AmpProcessor>();
+        m->prepareToPlay (sampleRate, blockSize);
+        set (*m, orbitamp::params::stereoMode, 0.0f);
+        set (*m, orbitamp::params::boostPresent,  0.0f);
+        set (*m, orbitamp::params::preampPresent, 0.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        long long phase = 0;
+
+        const auto lastBlockPeak = [&]
+        {
+            for (int b = 0; b < 8; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                             * 220.0 * (double) phase / sampleRate);
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+                m->processBlock (buf, midi);
+            }
+            return juce::jmax (buf.getMagnitude (0, 0, blockSize), buf.getMagnitude (1, 0, blockSize));
+        };
+
+        const float open = lastBlockPeak();
+
+        set (*m, orbitamp::params::tunerMute, 1.0f);
+        const float muted = lastBlockPeak();
+
+        set (*m, orbitamp::params::tunerOn, 0.0f);
+        const float standby = lastBlockPeak();
+
+        report ("tuner mute: the jack goes silent",            open > 0.01f && muted == 0.0f,
+                juce::String (open, 3) + " -> " + juce::String (muted, 5));
+        report ("...and a tuner standing by does not mute",   std::abs (standby - open) < 0.01f,
+                juce::String (standby, 3));
+    }
+
+    // A SAVE FROM A HOST'S WORKER THREAD hands out the session the message thread wrote down, and
+    // never walks the live state. Driven the way the pump drives it — unforced refreshes, one per
+    // tick — so the change detection is what is under test, not a forced write.
+    {
+        struct Worker final : juce::Thread
+        {
+            std::function<void()> job;
+            bool loop = false;
+            std::atomic<int> runs { 0 };
+
+            Worker (std::function<void()> j, bool keepGoing) : juce::Thread ("host worker"), job (std::move (j)), loop (keepGoing) {}
+
+            void run() override
+            {
+                do { job(); ++runs; } while (loop && ! threadShouldExit());
+            }
+        };
+
+        const auto onWorker = [] (std::function<void()> job)
+        {
+            Worker w (std::move (job), false);
+            w.startThread();
+            w.waitForThreadToExit (5000);
+        };
+
+        const auto readMix = [] (orbitamp::AmpProcessor& p)
+        {
+            auto* prm = p.apvts.getParameter (orbitamp::params::reverbMix);
+            return prm->convertFrom0to1 (prm->getValue());
+        };
+
+        const auto ticks = [] (orbitamp::AmpProcessor& p, int n)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                p.history.tick();          // what the pump does first: it flushes the knobs into the tree
+                p.refreshSavedState();
+            }
+        };
+
+        const auto c = std::make_unique<orbitamp::AmpProcessor>();
+        set (*c, orbitamp::params::reverbMix, 37.0f);
+        ticks (*c, 12);
+
+        juce::MemoryBlock fromWorker;
+        onWorker ([&] { c->getStateInformation (fromWorker); });
+
+        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        d->setStateInformation (fromWorker.getData(), (int) fromWorker.getSize());
+        report ("a worker's save carries what the pump wrote down", std::abs (readMix (*d) - 37.0f) < 0.01f,
+                "mix " + juce::String (readMix (*d), 2));
+
+        // A register copy changes no parameter and no tree — the copy notices by the register.
+        {
+            juce::MemoryBlock before, after;
+            onWorker ([&] { c->getStateInformation (before); });
+            set (*c, orbitamp::params::reverbMix, 11.0f);
+            ticks (*c, 12);
+            c->history.copyRegister (c->history.active(), 2);
+            set (*c, orbitamp::params::reverbMix, 37.0f);
+            ticks (*c, 12);
+            onWorker ([&] { c->getStateInformation (after); });
+
+            const auto e = std::make_unique<orbitamp::AmpProcessor>();
+            e->setStateInformation (after.getData(), (int) after.getSize());
+            e->history.switchTo (2);
+            report ("...a copy into a register reaches it",  std::abs (readMix (*e) - 11.0f) < 0.01f,
+                    "register C mix " + juce::String (readMix (*e), 2));
+        }
+
+        // Restored from a worker — queued for a message thread that is busy — while the pump keeps
+        // ticking over a live state that has just changed: the save must still be what came in.
+        {
+            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            set (*r, orbitamp::params::reverbMix, 90.0f);   // the live state the restore replaces, dirty
+            onWorker ([&] { r->setStateInformation (fromWorker.getData(), (int) fromWorker.getSize()); });
+            ticks (*r, 30);
+
+            juce::MemoryBlock back;
+            onWorker ([&] { r->getStateInformation (back); });
+            report ("...a pending restore is not written over by the pump", back == fromWorker);
+
+            juce::MemoryBlock backHere;
+            r->getStateInformation (backHere);   // the message thread, the restore still queued
+            report ("...nor by a save on the message thread", backHere == fromWorker);
+        }
+
+        // What neither load path takes is not a session, and does not become the saved one.
+        {
+            juce::MemoryBlock junk;
+            juce::XmlElement workspaceWithoutLive ("Workspace");
+            c->copyXmlToBinary (workspaceWithoutLive, junk);
+
+            onWorker ([&] { c->setStateInformation (junk.getData(), (int) junk.getSize()); });
+            juce::MemoryBlock back;
+            onWorker ([&] { c->getStateInformation (back); });
+
+            const auto f = std::make_unique<orbitamp::AmpProcessor>();
+            f->setStateInformation (back.getData(), (int) back.getSize());
+            report ("...an unloadable blob never becomes the saved session", std::abs (readMix (*f) - 37.0f) < 0.01f,
+                    "mix " + juce::String (readMix (*f), 2));
+
+            // ...and does not stop the copy from following the live state afterwards.
+            set (*c, orbitamp::params::reverbMix, 64.0f);
+            ticks (*c, 12);
+            juce::MemoryBlock later;
+            onWorker ([&] { c->getStateInformation (later); });
+            const auto g = std::make_unique<orbitamp::AmpProcessor>();
+            g->setStateInformation (later.getData(), (int) later.getSize());
+            report ("...nor freezes it",                    std::abs (readMix (*g) - 64.0f) < 0.01f,
+                    "mix " + juce::String (readMix (*g), 2));
+        }
+
+        // The stress: a worker saving without pause while this thread moves a knob and the pump
+        // writes the session down. Every save it got must be a whole session.
+        {
+            std::atomic<int> torn { 0 };
+            juce::MemoryBlock last;
+            juce::CriticalSection lastLock;
+
+            Worker w ([&]
+            {
+                juce::MemoryBlock blob;
+                c->getStateInformation (blob);
+                if (orbitamp::AmpProcessor::getXmlFromBinary (blob.getData(), (int) blob.getSize()) == nullptr)
+                    ++torn;
+                const juce::ScopedLock sl (lastLock);
+                last = blob;
+            }, true);
+
+            w.startThread();
+            for (int i = 0; i < 300; ++i)
+            {
+                set (*c, orbitamp::params::reverbMix, (float) (i % 100));
+                ticks (*c, 1);
+            }
+            w.signalThreadShouldExit();
+            w.waitForThreadToExit (5000);
+
+            const auto f = std::make_unique<orbitamp::AmpProcessor>();
+            f->setStateInformation (last.getData(), (int) last.getSize());
+            const float mix = readMix (*f);
+            report ("...and saving flat out beside a changing state never tears",
+                    w.runs.load() > 0 && torn.load() == 0 && mix >= 0.0f && mix <= 99.0f
+                        && std::abs (mix - std::round (mix)) < 0.01f,
+                    juce::String (w.runs.load()) + " saves, " + juce::String (torn.load()) + " torn");
+        }
     }
 
     if (amp.boost.packs.isEmpty())

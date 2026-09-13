@@ -39,8 +39,20 @@ private:
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
 
-    /** The IR parameter moved: the picture decodes the shelf's bytes for that one. */
-    void loadWave (int index);
+    /** Shows what the cabinet plays — the name on the border, the picture — when that has changed
+        since the last look, or always when `force`. Asked by the IR parameter's echo and by the
+        timer: an IR of the player's own is a state property, and a preset, an undo or a register
+        switch moves it without any parameter to call anyone.
+
+        Writes nothing unless `keepTrimWord` — a pick's own request to keep a fixed trim window's
+        milliseconds across the swap. The timer never asks: what it finds is a recall. */
+    void refreshIr (bool force = false, bool keepTrimWord = false);
+
+    /** The IR list: flat when the library holds none of the player's own; otherwise the shelf
+        folds into a FACTORY submenu and the library follows as its folder tree. */
+    void showIrMenu();
+
+    juce::String shownIr;   // CabChoice::identity + "|" + name of what the face last showed
 
     /** The picture wears what the parameters say — the cuts, the trim — so it draws the sound. */
     void pushToWave();

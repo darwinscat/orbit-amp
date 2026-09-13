@@ -120,4 +120,36 @@ inline std::atomic<bool>& spectraCache()
 inline bool spectraShown()               { return spectraCache().load (std::memory_order_relaxed); }
 inline void setSpectraShown (bool shown) { spectraCache().store (shown, std::memory_order_relaxed); setBool (showSpectra, shown); }
 
+/** The TUNER's LEVEL FLOOR — about this room and this guitar, not about a sound, so it lives on the
+    machine like the switches above and a preset does not carry it. Read by the tuner thirty times a
+    second, so cached like the spectra: a tick must not open a file.
+
+    The quietest window that still counts as a note, in dBFS. -60 by default — low enough for a quiet
+    guitar's decay, high enough that a pickup's hum and hiss with nobody playing do not read as a
+    note. */
+inline const juce::Identifier tunerFloorDb { "tuner_floor_db" };
+
+inline constexpr int tunerFloors[]      = { -80, -70, -60, -50 };
+inline constexpr int tunerFloorDefault  = -60;
+
+/** A stored floor that is not one of the offered four — edited by hand, or from a build that
+    offered others — lands on the nearest that is. */
+inline int snapTunerFloor (int db)
+{
+    int best = tunerFloors[0];
+    for (const int f : tunerFloors)
+        if (std::abs (f - db) < std::abs (best - db))
+            best = f;
+    return best;
+}
+
+inline std::atomic<int>& tunerFloorCache()
+{
+    static std::atomic<int> cached { snapTunerFloor ((int) store().get (tunerFloorDb, tunerFloorDefault)) };
+    return cached;
+}
+
+inline int  tunerFloor()                { return tunerFloorCache().load (std::memory_order_relaxed); }
+inline void setTunerFloor (int db)      { db = snapTunerFloor (db); tunerFloorCache().store (db, std::memory_order_relaxed); store().set (tunerFloorDb, db); }
+
 } // namespace orbitamp::prefs

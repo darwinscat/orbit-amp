@@ -16,9 +16,10 @@ class AmpProcessor;
 
     The TIME stands on the border where the captured blocks stand their device combo: the sync
     division as a pill (1/4, 1/8T…), with FREE at the bottom of its menu for the millisecond
-    specialist. Under it, in the corner, the one typed control on the face — the BPM field the
-    standalone conducts by (a host's tempo outranks it), which turns into the MS field when the
-    time goes free. Mix is the hero; REPEATS and DARK stand small at its left hand, OFFSET —
+    specialist, and — in a host — whose tempo the division counts in: the HOST's, the default, or
+    the block's OWN. Under it, in the corner, the one typed control on the face — the BPM field
+    (which reads HOST and the host's tempo, and does not move, while the host conducts), turning
+    into the MS field when the time goes free. Mix is the hero; REPEATS and DARK stand small at its left hand, OFFSET —
     the block's stereo — small in the opposite corner.
 
     The picture is the COMB: one tooth per repeat, standing where the repeats will land — the
@@ -44,6 +45,16 @@ private:
 
     bool syncOn() const;
     float plain (const char* id) const;
+
+    /** The sync is on, the block follows the host, and the host is reporting a tempo — the one case
+        the corner field shows a number that is not the block's to move. */
+    bool hostConducts() const;
+
+    /** The time pill's menu: the division ladder, FREE, and in a host whose tempo the ladder
+        counts in — the host's or the block's own BPM. */
+    void showTimeMenu();
+
+    float shownHostTempo = -1.0f;   // what the field last showed of the host's tempo, 0 for none
 
     /** The comb's surface: dumb, the block paints through it — the reverb picture's pattern. */
     struct CombView final : public juce::Component
@@ -165,7 +176,7 @@ private:
                                                                           repeatsAttachment,
                                                                           darkAttachment,
                                                                           offsetAttachment;
-    std::unique_ptr<juce::ParameterAttachment> syncAtt, divAtt, bpmAtt, timeAtt;
+    std::unique_ptr<juce::ParameterAttachment> syncAtt, divAtt, bpmAtt, timeAtt, hostTempoAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DelayBlock)
 };

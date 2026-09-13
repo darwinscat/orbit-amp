@@ -50,7 +50,7 @@ SetupPanel::SetupPanel (AmpProcessor& processor) : amp (processor)
                                       p->setValueNotifyingHost (on ? 1.0f : 0.0f);
                                       p->endChangeGesture();
                                   },
-                                  {}, false } });
+                                  {}, false, {}, {}, {} } });
     }
 
     buildViewPage();
@@ -60,8 +60,12 @@ SetupPanel::SetupPanel (AmpProcessor& processor) : amp (processor)
     viewView.setViewedComponent (&viewPage, false);
     addAndMakeVisible (viewView);
 
+    buildTunerPage();
+    addAndMakeVisible (tunerPage);
+
     pages.push_back ({ "LIBRARY", &libraryPage, [this] { libraries[(size_t) currentLibrary].refresh(); }, {} });
     pages.push_back ({ "VIEW",    &viewView,    [this] { buildViewPage(); }, {} });
+    pages.push_back ({ "TUNER",   &tunerPage,   [this] { buildTunerPage(); }, {} });
 
     addAndMakeVisible (closeButton);
     selectLibrary (0);
@@ -95,13 +99,13 @@ void SetupPanel::buildViewPage()
                               if (onViewChanged)
                                   onViewChanged();
                           },
-                          {}, false });
+                          {}, false, {}, {}, {} });
     };
 
     rows.push_back ({ "SHOW SPECTRA", "the analyser behind every curve and picture",
                       [] { return prefs::spectraShown(); },
                       [this] (bool on) { prefs::setSpectraShown (on); if (onViewChanged) onViewChanged(); },
-                      {}, false });
+                      {}, false, {}, {}, {} });
 
     if (params::demoLoopsPresent())   // no loops on disk: no player, and no offer of one
         add ("SHOW DEMO PLAYER", "the audition strip under the footer", prefs::showDemo, false);
@@ -112,6 +116,32 @@ void SetupPanel::buildViewPage()
     add ("SHOW DEVICE GLYPHS", "the device-glyph review strip", prefs::showGlyphs, false);
 
     viewPage.setRows (std::move (rows));
+}
+
+void SetupPanel::buildTunerPage()
+{
+    std::vector<SettingsList::Row> rows;
+
+    {
+        SettingsList::Row floor;
+        floor.name = "LEVEL FLOOR";
+        floor.note = "the quietest the tuner still reads, dBFS - raise it if hum shows as a note";
+
+        for (const int db : prefs::tunerFloors)
+            floor.choices.add (juce::String (db));
+
+        floor.chosen = []
+        {
+            for (int k = 0; k < (int) std::size (prefs::tunerFloors); ++k)
+                if (prefs::tunerFloors[k] == prefs::tunerFloor())
+                    return k;
+            return -1;
+        };
+        floor.choose = [] (int k) { prefs::setTunerFloor (prefs::tunerFloors[k]); };
+        rows.push_back (std::move (floor));
+    }
+
+    tunerPage.setRows (std::move (rows));
 }
 
 void SetupPanel::open()

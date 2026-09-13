@@ -18,6 +18,7 @@
 #include "core/SoftLimiter.h"
 #include "core/DelayStage.h"
 #include "core/ReverbStage.h"
+#include "device/EmbeddedIrs.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/appkit/CompareHistory.h>
@@ -34,12 +35,14 @@ namespace orbitamp
     cabinet) lands in src/core/ behind small engines, and this class only pumps
     buffers into them and owns state. */
 class AmpProcessor final : public juce::AudioProcessor,
-                           private juce::Timer
+                           private juce::Timer,
+                           private juce::ValueTree::Listener
 {
 public:
     AmpProcessor();
-    /** Defaulted, and it is worth writing down WHY, because it looks like the place a weak
-        reference has to be cleared and it is not.
+    /** Takes the saved session's listener off the tree, and nothing else — worth writing down WHY
+        nothing else, because this looks like the place a weak reference has to be cleared and it
+        is not.
 
         `setStateInformation` can arrive on any thread, so it marshals the restore to the message
         thread behind a `juce::WeakReference<AmpProcessor>`, and the host may destroy the plugin
@@ -49,12 +52,28 @@ public:
         and declares it LAST, so it is the first member destroyed. Adding a clear here changes
         nothing at all. I wrote one anyway, on a reading of the wrong destructor, and the review
         caught it. */
-    ~AmpProcessor() override = default;
+    ~AmpProcessor() override { apvts.state.removeListener (this); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout&) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+private:
+    /** The chain, over at most the block size prepareToPlay promised — see processBlock. */
+    void processChunk (juce::AudioBuffer<float>&);
+
+    /** The largest block prepareToPlay was told to expect; 0 before the first prepare. */
+    std::atomic<int> preparedBlock { 0 };
+
+    /** A parameter's audio-thread mirror, and its default — see sanitiseParameters. */
+    struct ParameterGuard { std::atomic<float>* value; float fallback; };
+    std::vector<ParameterGuard> parameterGuards;
+
+    /** Puts a parameter that is not a number back on its default before the chain reads it. */
+    void sanitiseParameters() noexcept;
+
+public:
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override                          { return true; }
@@ -127,6 +146,21 @@ public:
     void getStateInformation (juce::MemoryBlock&) override;
     void setStateInformation (const void*, int) override;
 
+    /** THE SESSION AS A HOST WILL READ IT, kept ready for a save that does not come from the
+        message thread.
+
+        Everything a session is made of — the history's registers, the parameter tree, the names
+        beside the numbers — is the message thread's, and hosts that save from a worker thread (a
+        real habit: autosave, project save in the background) used to walk all of it while the
+        message thread was changing it. Now the message thread writes the session down whenever it
+        has changed — at most a few times a second, from the pump — and a save from anywhere else
+        hands out that copy under a lock. It is never torn. It is as fresh as the message thread's
+        last chance to write it: a third of a second while the host keeps its message loop running,
+        longer if the host holds that loop still — the one thing a copy cannot know about.
+
+        `force` writes it now whatever has changed. Message thread only. */
+    void refreshSavedState (bool force = false);
+
     juce::AudioProcessorValueTreeState apvts;
 
     /** Undo/redo + the A/B/C/D registers, from felitronics-appkit. It lives on the PROCESSOR, not
@@ -198,8 +232,32 @@ public:
                     tree.removeProperty (juce::Identifier (measuredIdOf (b, i) + switchAimSuffix), nullptr);
             }
 
+        // A cabinet IR of the player's own is identity the same way: the parameters going to their
+        // defaults would leave it playing over the default cabinet.
+        if (forgetIdentity)
+            for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                tree.removeProperty (id, nullptr);
+
         return tree;
     }
+
+    /** A PRESET AS IT GOES TO DISK: the state as `stateForSaving` writes it, with the cabinet IR it
+        plays embedded whole when that IR is the player's own — so the preset sounds the same
+        wherever it is opened. Message thread only. */
+    juce::ValueTree presetForSaving()
+    {
+        auto tree = stateForSaving();
+        embedCabIrs (tree);
+        return tree;
+    }
+
+    /** The other half: a tree read from disk gives its embedded IRs to the store and comes back a
+        plain state, before anything applies it. Message thread only. */
+    void takeEmbeddedIrs (juce::ValueTree& tree) { cabIrEmbeds.unpack (tree); }
+
+    /** The state tree's type — a constant, so code off the message thread can recognise a state
+        inside a saved envelope without touching the live tree. */
+    static constexpr const char* stateType = "state";
 
     /** The suffix a switch slot's saved position name wears in the state tree. */
     static constexpr const char* switchAimSuffix = "_pos";
@@ -249,6 +307,8 @@ private:
         pumpDeviceWork();
         pumpTuner();
         pumpSwitchNames();
+
+        refreshSavedState();   // last: the pumps above write names the session carries
     }
 
     /** A DEVICE AND ITS SWITCHES ARE SAVED BY NAME, and this is the half that puts them back.
@@ -611,6 +671,7 @@ private:
     void markSwitchAimsPending()
     {
         switchAimFrames = aimWindowFrames;
+        cabIrParamBaselineStale = true;   // a restored `cab_ir` is not a host moving it — see the pump
 
         // BOTH baselines are taken from what the tree has just become, and that is the whole of
         // how a hand wins. `aimWrote*` starting at "nothing written yet" meant theft could only be
@@ -656,6 +717,7 @@ private:
             sr > 0.0 && ! juce::approximatelyEqual (sr, tunerEar.preparedRate()))
             tunerEar.prepare (sr);
 
+        tunerEar.setLevelFloorDb ((double) prefs::tunerFloor());
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 
@@ -734,6 +796,14 @@ public:
         heads are actually standing on. */
     const core::DelayStage& delayTaps() const noexcept { return delay; }
 
+    /** The tempo the host reported at the last block, or 0 when it reports none — the standalone,
+        or a host that does not say. For the delay's face, which shows the number that conducts. */
+    float hostTempoBpm() const noexcept { return hostTempo.load (std::memory_order_relaxed); }
+
+    /** Whether a host could conduct at all — false in the standalone, where the choice between the
+        host's tempo and the block's own does not exist. */
+    bool runsInHost() const noexcept { return wrapperType != wrapperType_Standalone; }
+
 private:
 
     /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
@@ -761,6 +831,33 @@ public:
         same bytes the engine convolves. */
     struct IrBytes { const char* data; int size; };
     static const IrBytes& cabIrBytes (int index);
+
+    /** WHAT THE CABINET PLAYS, as the state says it: an IR of the player's own when the state names
+        one the store holds, and the factory shelf's entry under `cabIr` otherwise — which is also
+        the answer for a preset whose embedded IR did not survive. Message thread only; reads the
+        parameter OBJECT, so an attachment's callback asking this is not one change behind. */
+    struct CabChoice
+    {
+        int factory = params::cabIrDefault;
+        const juce::MemoryBlock* bytes = nullptr;   // the player's own IR, or null for the factory's
+        juce::String key, name, from;
+
+        bool isUser() const noexcept { return bytes != nullptr; }
+
+        /** One string per distinct sound, for a watcher to compare. */
+        juce::String identity() const { return isUser() ? "user:" + key : "factory:" + juce::String (factory); }
+    };
+
+    CabChoice cabChoice() const;
+
+    /** A factory IR from the shelf: the player's own is let go, and the parameter takes the pick
+        as one gesture. Message thread only. */
+    void chooseCabFactory (int index);
+
+    /** An IR out of the library: its bytes are read once, here, and from then on the state names
+        them by key — the file can go anywhere afterwards. False, changing nothing, for a file that
+        is too big to be an IR or that does not decode as audio. Message thread only. */
+    bool chooseCabFile (const juce::File& file);
 
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
@@ -898,6 +995,8 @@ private:
 
     std::atomic<float>* inTrimParam        = nullptr;
     std::atomic<float>* outTrimParam       = nullptr;
+    std::atomic<float>* tunerMuteParam     = nullptr;
+    float lastMuteGain = 1.0f;   // the tuner mute's ramp, per block
     std::atomic<float>* stereoModeParam    = nullptr;
     float histWorst   = 0.0f;
     int   histSamples = 0;
@@ -906,7 +1005,6 @@ private:
     core::SoftLimiter limiter;
 
     core::CabinetIr cab;
-    std::atomic<float>* cabIrParam = nullptr;
     std::atomic<float>* cabHpfOnParam = nullptr;
     std::atomic<float>* cabHpfHzParam = nullptr;
     std::atomic<float>* cabHpfSlopeParam = nullptr;
@@ -916,7 +1014,27 @@ private:
     std::atomic<float>* cabTrimOnParam = nullptr;
     std::atomic<float>* cabTrimParam = nullptr;
     std::atomic<float>* cabPhaseParam = nullptr;
-    int lastCabIr = -1;
+
+    /** The sound the engine was last handed (`CabChoice::identity`), and whether a fresh prepare
+        wants it handed again. The flag is set from `prepareToPlay`, which is not the pump's thread. */
+    juce::String lastCabIr;
+
+    /** Where the pump last saw `cab_ir`, and whether that sighting is out of date because the whole
+        state was just replaced — see the automation rule in pumpDeviceWork. */
+    int  lastCabIrParam = -1;
+    bool cabIrParamBaselineStale = true;
+    std::atomic<bool> cabIrStale { true };
+
+    /** The player's own IR the message thread last found the state naming, or null — for a prepare
+        that runs off that thread and cannot read the tree. */
+    std::atomic<const juce::MemoryBlock*> cabUserIr { nullptr };
+
+    /** The player's own IRs a state refers to — see `device::EmbeddedIrs`. */
+    device::EmbeddedIrs cabIrEmbeds;
+
+    /** Adds to a tree bound for disk every player's-own IR any state inside it names — the live
+        one, and each register's. */
+    void embedCabIrs (juce::ValueTree& tree) const;
 
     std::atomic<float>* boostInParam  = nullptr;
     std::atomic<float>* preampInParam = nullptr;
@@ -944,6 +1062,8 @@ private:
     std::atomic<float>* delayTimeMsParam  = nullptr;
     std::atomic<float>* delayDivParam     = nullptr;
     std::atomic<float>* delayBpmParam     = nullptr;
+    std::atomic<float>* delayHostTempoParam = nullptr;
+    std::atomic<float>  hostTempo { 0.0f };   // see hostTempoBpm()
     std::atomic<float>* delayRepeatsParam = nullptr;
     std::atomic<float>* delayDarkParam    = nullptr;
     std::atomic<float>* delayOffsetParam  = nullptr;
@@ -1017,6 +1137,33 @@ private:
         hand-move or one restored session ends it. */
     bool stateWasRestored = false;
     int  modeAutoValue    = (int) params::StereoMode::mono;   // the layout's own default
+
+    //==========================================================================
+    // The saved session — see refreshSavedState.
+
+    /** Builds the session's bytes from the live state. Message thread only. */
+    juce::MemoryBlock buildSavedState();
+
+    juce::CriticalSection savedLock;
+    juce::MemoryBlock     savedState;              // guarded by savedLock
+
+    // What says the saved copy is behind. The tree says so itself (a listener); the registers are
+    // not in the tree, so the copy remembers which register trees it was written from — a copy
+    // into a register replaces its tree, and a switch changes the active index.
+    std::atomic<bool> stateDirty { true };
+    int  savedActive = -1;
+
+    /** Restores handed over but not yet applied on the message thread — see setStateInformation. */
+    std::atomic<int> pendingRestores { 0 };
+    std::vector<juce::ValueTree> savedRegisters;
+    int  ticksSinceSaved = 0;
+    static constexpr int savedThrottleTicks = 10;   // ~a third of a second at the 30 Hz pump
+
+    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override { stateDirty = true; }
+    void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override            { stateDirty = true; }
+    void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override     { stateDirty = true; }
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override              { stateDirty = true; }
+    void valueTreeRedirected (juce::ValueTree&) override                              { stateDirty = true; }
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)

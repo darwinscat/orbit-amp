@@ -4,6 +4,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "Parameters.h"
+#include "device/IrLibrary.h"
 
 #include <BinaryData.h>
 
@@ -14,7 +15,7 @@ AmpProcessor::AmpProcessor()
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "state", params::createLayout()),
+      apvts (*this, nullptr, stateType, params::createLayout()),
       // The history's opaque seam: it snapshots and restores the parameter tree without knowing what
       // is in it. replaceState takes a COPY so the parameter objects stay valid and every editor
       // attachment survives an undo.
@@ -33,10 +34,6 @@ AmpProcessor::AmpProcessor()
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })
 {
-    // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
-    // burst commits about 0.4 s after you stop moving.
-    startTimerHz (30);
-
     for (auto& order : blockSpectrumOrder)
         order.store (eqSpectrumOrder);
 
@@ -66,12 +63,12 @@ AmpProcessor::AmpProcessor()
 
     inTrimParam        = apvts.getRawParameterValue (params::inTrim);
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
+    tunerMuteParam     = apvts.getRawParameterValue (params::tunerMute);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
     boostInParam       = apvts.getRawParameterValue (params::blockIn (params::boostId));
     preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
     boostSmoothParam   = apvts.getRawParameterValue (params::blockSmooth (params::boostId));
     preampSmoothParam  = apvts.getRawParameterValue (params::blockSmooth (params::preampId));
-    cabIrParam         = apvts.getRawParameterValue (params::cabIr);
     cabHpfOnParam      = apvts.getRawParameterValue (params::cabHpfOn);
     cabHpfHzParam      = apvts.getRawParameterValue (params::cabHpfHz);
     cabHpfSlopeParam   = apvts.getRawParameterValue (params::cabHpfSlope);
@@ -97,6 +94,7 @@ AmpProcessor::AmpProcessor()
     delayTimeMsParam  = apvts.getRawParameterValue (params::delayTimeMs);
     delayDivParam     = apvts.getRawParameterValue (params::delayDiv);
     delayBpmParam     = apvts.getRawParameterValue (params::delayBpm);
+    delayHostTempoParam = apvts.getRawParameterValue (params::delayHostTempo);
     delayRepeatsParam = apvts.getRawParameterValue (params::delayRepeats);
     delayDarkParam    = apvts.getRawParameterValue (params::delayDark);
     delayOffsetParam  = apvts.getRawParameterValue (params::delayOffset);
@@ -109,6 +107,12 @@ AmpProcessor::AmpProcessor()
     reverbHpfHzParam    = apvts.getRawParameterValue (params::reverbHpfHz);
 
     packCompParam    = apvts.getRawParameterValue (params::packLevelComp);
+
+    // Every parameter's audio-thread mirror and the value it falls back to — see sanitiseParameters.
+    for (auto* p : getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
+            if (auto* raw = apvts.getRawParameterValue (ranged->paramID))
+                parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (ranged->getDefaultValue()) });
     boostGainParam  = apvts.getRawParameterValue (params::boostGain);
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
@@ -122,15 +126,98 @@ AmpProcessor::AmpProcessor()
     history.reset();
     history.markSaved();
 
+    // The saved session exists from the first moment: a host may ask for it from any thread
+    // before the pump has ever run.
+    apvts.state.addListener (this);
+    refreshSavedState (true);
+
     // The two links that HAVE a tail are told what their knobs say before anyone can ask how long
     // this rings. `prepareToPlay` does this too, but a VST3 host may ask before it activates the
     // plugin at all, and an answer built out of the stages' constructor defaults is not an answer.
     updateDelaySettings();
     updateReverbSettings();
+
+    // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
+    // burst commits about 0.4 s after you stop moving.
+    //
+    // LAST, and not by taste: the timer ticks on the message thread whoever constructs us, and a
+    // host that constructs on a worker would have had the first tick walking the history and the
+    // saved session while this constructor was still building them.
+    startTimerHz (30);
+}
+
+juce::MemoryBlock AmpProcessor::buildSavedState()
+{
+    juce::MemoryBlock out;
+
+    // The workspace envelope carries the live parameter tree and the other three registers, so
+    // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
+    // envelope holds the live capture and the register snapshots and nothing else, so undo starts
+    // fresh on reopen. (It said otherwise here for a long time — it never did.)
+    auto workspace = history.toTree();
+    embedCabIrs (workspace);   // the player's own IRs travel with the session, whole
+
+    if (auto xml = workspace.createXml())
+        copyXmlToBinary (*xml, out);
+
+    return out;
+}
+
+void AmpProcessor::refreshSavedState (bool force)
+{
+    // A RESTORE IS ON ITS WAY. The copy already IS the incoming session; the live state is still
+    // the one it replaces, and writing that down now would hand a worker's save the session the
+    // host just loaded over. The restore writes the copy itself once it has landed.
+    if (pendingRestores.load (std::memory_order_acquire) > 0)
+        return;
+
+    ticksSinceSaved = juce::jmin (ticksSinceSaved + 1, savedThrottleTicks);
+
+    bool registersMoved = history.active() != savedActive
+                       || (int) savedRegisters.size() != history.numRegisters();
+
+    for (int i = 0; ! registersMoved && i < history.numRegisters(); ++i)
+    {
+        const auto& r = history.registerTree (i);
+        registersMoved = (r.has_value() ? *r : juce::ValueTree()) != savedRegisters[(size_t) i];
+    }
+
+    if (! force && ((! stateDirty.load (std::memory_order_relaxed) && ! registersMoved)
+                    || ticksSinceSaved < savedThrottleTicks))
+        return;
+
+    auto bytes = buildSavedState();
+
+    // Taken AFTER the build: the build itself flushes the parameters into the tree, and whatever
+    // that stirred up is already in these bytes.
+    stateDirty.store (false, std::memory_order_relaxed);
+    ticksSinceSaved = 0;
+    savedActive     = history.active();
+    savedRegisters.clear();
+    for (int i = 0; i < history.numRegisters(); ++i)
+    {
+        const auto& r = history.registerTree (i);
+        savedRegisters.push_back (r.has_value() ? *r : juce::ValueTree());
+    }
+
+    const juce::ScopedLock sl (savedLock);
+    savedState = std::move (bytes);
 }
 
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
+    // FROM ANYWHERE BUT THE MESSAGE THREAD, the copy the message thread keeps — see
+    // refreshSavedState. Nothing the session is made of is touched from here.
+    // ...and from the message thread too while a restore is still on its way to it: the live
+    // state is the one being replaced, and the copy is the session the host just handed over.
+    if (! juce::MessageManager::existsAndIsCurrentThread()
+        || pendingRestores.load (std::memory_order_acquire) > 0)
+    {
+        const juce::ScopedLock sl (savedLock);
+        destData = savedState;
+        return;
+    }
+
     // Switches and devices ride in the tree by NAME, and the names are written when they MOVE, so
     // a save normally has nothing to do here. The one gap is the tick: a control moved in the
     // 33 ms before the pump next runs would be saved as a new NUMBER beside its old NAME, and the
@@ -141,20 +228,14 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
     // when the number has moved and nothing has loaded it yet, writes the name of the device that
     // is leaving beside the number of the one arriving — which is worse than the gap it closes.
     //
-    // Guarded because a host may save from any thread and a ValueTree is the message thread's.
-    if (juce::MessageManager::getInstance()->isThisTheMessageThread())
-    {
-        pumpDeviceWork();
-        pumpSwitchNames();
-    }
+    pumpDeviceWork();
+    pumpSwitchNames();
 
+    // On the message thread the session is written fresh, and the kept copy becomes this one.
+    refreshSavedState (true);
 
-    // The workspace envelope carries the live parameter tree and the other three registers, so
-    // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
-    // envelope holds the live capture and the register snapshots and nothing else, so undo starts
-    // fresh on reopen. (It said otherwise here for a long time — it never did.)
-    if (auto xml = history.toTree().createXml())
-        copyXmlToBinary (*xml, destData);
+    const juce::ScopedLock sl (savedLock);
+    destData = savedState;
 }
 
 void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -167,8 +248,32 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     const auto tree = juce::ValueTree::fromXml (*xml);
 
-    const auto apply = [] (AmpProcessor& self, const juce::ValueTree& t)
+    // What neither path below would load is not a session, and must not become the copy a worker's
+    // save hands out: before this copy existed, an ignored load left saves describing the state
+    // that actually plays. FIRST, before anything is counted or stored — a rejected blob that had
+    // been counted as pending would have frozen the copy for good. The state type is spelled out
+    // rather than read off the live tree, which is not this thread's to read.
+    const bool loadable = (tree.hasType ("Workspace") && tree.getChildWithName ("Live").getNumChildren() > 0)
+                       || tree.hasType ("state");   // the tree type the constructor gives apvts
+    if (! loadable)
+        return;
+
+    // The session just handed over IS the session now, whether or not the message thread has
+    // applied it yet: a host that restores and saves back to back from a worker thread must get
+    // back what it gave, not the state before. Counted as pending until it lands — see
+    // refreshSavedState — and written down in our own words once it has.
+    pendingRestores.fetch_add (1, std::memory_order_acq_rel);
     {
+        const juce::ScopedLock sl (savedLock);
+        savedState.replaceAll (data, (size_t) sizeInBytes);
+    }
+
+    const auto apply = [] (AmpProcessor& self, juce::ValueTree t)
+    {
+        // The embedded IRs go to the store and leave the tree before anyone else sees it: the
+        // history would otherwise keep megabytes in its baseline and compare them every tick.
+        self.takeEmbeddedIrs (t);
+
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
         // the top of setStateInformation also means it is armed AFTER the tree has landed, which
         // is what lets it take the restored values as its baseline instead of the outgoing ones.
@@ -190,17 +295,24 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     // CompareHistory's contract is message-thread only, and a host may restore from anywhere —
     // marshalled rather than raced against the settle timer (found in review).
+    const auto land = [apply] (AmpProcessor& self, const juce::ValueTree& t)
+    {
+        apply (self, t);
+        self.pendingRestores.fetch_sub (1, std::memory_order_acq_rel);
+        self.refreshSavedState (true);
+    };
+
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
     {
-        apply (*this, tree);
+        land (*this, tree);
         return;
     }
 
     juce::MessageManager::callAsync (
-        [weak = juce::WeakReference<AmpProcessor> (this), tree, apply]
+        [weak = juce::WeakReference<AmpProcessor> (this), tree, land]
         {
             if (auto* self = weak.get())
-                apply (*self, tree);
+                land (*self, tree);
         });
 }
 
@@ -315,6 +427,108 @@ const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
 }
 
 
+AmpProcessor::CabChoice AmpProcessor::cabChoice() const
+{
+    CabChoice c;
+
+    const auto* p = apvts.getParameter (params::cabIr);
+    c.factory = juce::jlimit (0, params::cabIrNames.size() - 1, juce::roundToInt (p->convertFrom0to1 (p->getValue())));
+
+    const auto key = apvts.state.getProperty (params::cabIrUserKey).toString();
+
+    if (key.isNotEmpty())
+        if (const auto* bytes = cabIrEmbeds.find (key))
+        {
+            c.bytes = bytes;
+            c.key   = key;
+            c.name  = apvts.state.getProperty (params::cabIrUserName).toString();
+            c.from  = apvts.state.getProperty (params::cabIrUserFrom).toString();
+        }
+
+    return c;
+}
+
+void AmpProcessor::chooseCabFactory (int index)
+{
+    index = juce::jlimit (0, params::cabIrNames.size() - 1, index);
+
+    const auto choice = cabChoice();
+
+    // The IR already playing, picked again, is no edit — not for the host, not for the history.
+    if (! choice.isUser() && choice.factory == index)
+        return;
+
+    // The player's own goes FIRST: a pick of the factory IR already under it moves no parameter,
+    // and it is the properties leaving that makes it sound.
+    for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+        apvts.state.removeProperty (id, nullptr);
+
+    if (choice.factory != index)
+    {
+        auto* p = apvts.getParameter (params::cabIr);
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (p->convertTo0to1 ((float) index));
+        p->endChangeGesture();
+    }
+    else
+    {
+        // No parameter moved, only the state did — and a host hears of that only when told.
+        updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+    }
+}
+
+bool AmpProcessor::chooseCabFile (const juce::File& file)
+{
+    juce::MemoryBlock bytes;
+
+    if (! file.existsAsFile() || file.getSize() > device::EmbeddedIrs::maxBytes
+        || ! file.loadFileAsData (bytes) || ! core::CabinetIr::decodes (bytes.getData(), bytes.getSize()))
+        return false;
+
+    const auto key = cabIrEmbeds.add (std::move (bytes));
+    if (key.isEmpty())
+        return false;
+
+    // Where it came from, in the library's own terms and one spelling on every system — a tick in
+    // the menu, and nothing that the sound depends on.
+    const auto from = file.getRelativePathFrom (device::IrLibrary::directory()).replaceCharacter ('\\', '/');
+
+    // The key LAST: it is the one the pump and the face watch, and by then the name beside it is
+    // already the right one.
+    apvts.state.setProperty (params::cabIrUserName, file.getFileNameWithoutExtension(), nullptr);
+    apvts.state.setProperty (params::cabIrUserFrom, from, nullptr);
+    apvts.state.setProperty (params::cabIrUserKey,  key, nullptr);
+
+    // No parameter moved: without this, a host would not know the session has something to save.
+    updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+    return true;
+}
+
+void AmpProcessor::embedCabIrs (juce::ValueTree& tree) const
+{
+    // Every state inside the tree — a preset is one, a session's workspace holds the live one and
+    // each register's — is found by its type, wherever the envelope happens to nest it.
+    juce::StringArray keys;
+
+    std::function<void (const juce::ValueTree&)> collect = [&] (const juce::ValueTree& t)
+    {
+        if (t.hasType (stateType))   // the constant, not the live tree: a host may save from any thread
+        {
+            if (const auto key = t.getProperty (params::cabIrUserKey).toString(); key.isNotEmpty())
+                keys.addIfNotAlreadyThere (key);
+            return;
+        }
+
+        for (const auto& child : t)
+            collect (child);
+    };
+
+    collect (tree);
+
+    if (auto node = cabIrEmbeds.pack (keys); node.isValid())
+        tree.appendChild (node, nullptr);
+}
+
 void AmpProcessor::pumpDeviceWork()
 {
     auto pump = [this] (auto& block, auto& gainParam, auto& smoothParam, auto measuredId, const char* blk)
@@ -370,11 +584,59 @@ void AmpProcessor::pumpDeviceWork()
 
     // The cabinet IR: choosing one is picking a FILE, so it loads here — the convolution's own
     // background loader swaps it in without a click.
-    if (const int ir = juce::roundToInt (cabIrParam->load()); ir != lastCabIr)
+    // An IR of the player's own is the same kind of pick — its bytes are already in memory. It is
+    // named by the state TREE, which is the message thread's.
+    if (juce::MessageManager::existsAndIsCurrentThread())
     {
-        lastCabIr = ir;
-        const auto& bytes = cabIrBytes (ir);
-        cab.load (bytes.data, (size_t) bytes.size);
+        // THE AUTOMATION LANE WINS. `cab_ir` is the host's handle on the cabinet, and a lane that
+        // moves it while an IR of the player's own is playing used to move nothing at all: the
+        // player's IR outranks the parameter underneath it. A move the host makes now lets the
+        // player's IR go, and the shelf's pick plays. A recall is not a move — a register, an undo,
+        // a preset or a session replaces the whole state, player's IR and number together — so the
+        // sighting after one is only a new baseline. Picks from the menu need no exception: a
+        // factory pick lets the player's IR go itself, and a file pick moves no parameter.
+        {
+            const auto* p = apvts.getParameter (params::cabIr);
+            const int now = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
+
+            if (! cabIrParamBaselineStale && now != lastCabIrParam
+                && apvts.state.hasProperty (params::cabIrUserKey))
+                for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                    apvts.state.removeProperty (id, nullptr);
+
+            cabIrParamBaselineStale = false;
+            lastCabIrParam = now;
+        }
+
+        const auto choice = cabChoice();
+        cabUserIr = choice.bytes;   // what a prepare off this thread will load — see below
+
+        if (cabIrStale.exchange (false) || choice.identity() != lastCabIr)
+        {
+            lastCabIr = choice.identity();
+
+            if (choice.isUser())
+                cab.load (choice.bytes->getData(), choice.bytes->getSize());
+            else
+            {
+                const auto& bytes = cabIrBytes (choice.factory);
+                cab.load (bytes.data, (size_t) bytes.size);
+            }
+        }
+    }
+    else if (cabIrStale.exchange (false))
+    {
+        // `prepareToPlay` runs this pump on whatever thread the host prepares from, and the engine
+        // it just prepared must not wait for a timer — a render with no message loop would never get
+        // its cabinet. The tree is out of reach here; what the message thread last saw is not. The
+        // bytes never move (the store keeps them for its whole life), and the tick re-checks.
+        if (const auto* own = cabUserIr.load())
+            cab.load (own->getData(), own->getSize());
+        else
+        {
+            const auto& shelf = cabIrBytes (juce::roundToInt (apvts.getRawParameterValue (params::cabIr)->load()));
+            cab.load (shelf.data, (size_t) shelf.size);
+        }
     }
 
     // ...and what the player does to it: baked into the IR off this pump, so the convolution
@@ -474,6 +736,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // prepareToPlay directly got stages built for a block size nobody was going to send. The
     // convolver behind the measured controls then read past the end of its own buffers.
     const int block = juce::jmax (1, samplesPerBlock);
+    preparedBlock.store (block, std::memory_order_relaxed);
 
     for (auto& eq : eqLinks)
         eq.prepare (sampleRate, channels);
@@ -495,7 +758,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     limiter.prepare (sampleRate);
 
     cab.prepare (sampleRate, block, channels);
-    lastCabIr = -1;   // the pump reloads the chosen IR into the freshly prepared engine
+    cabIrStale = true;   // the pump reloads the chosen IR into the freshly prepared engine
 
     // Seeded from the parameter: a session saved gate-ON has to start already gated, not fade in
     // over a block of ungated hum.
@@ -570,18 +833,25 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 void AmpProcessor::updateDelaySettings() noexcept
 {
     // The time: the division against the conducting tempo when sync is on, the free knob when it
-    // is off. The host's tempo outranks the BPM field — the field exists for the standalone,
-    // where nobody else is counting.
+    // is off. The host's tempo conducts when there is one and the player has not asked for the
+    // block's own; the BPM field conducts otherwise — the standalone, where nobody else is counting.
+    // The host's tempo is published whatever the switches say, so the face can offer it.
+    double hostBpm = 0.0;
+
+    if (auto* ph = getPlayHead())
+        if (const auto pos = ph->getPosition())
+            if (const auto bpm = pos->getBpm(); bpm.hasValue() && *bpm > 0.0)
+                hostBpm = *bpm;
+
+    hostTempo.store ((float) hostBpm, std::memory_order_relaxed);
+
     float ms = delayTimeMsParam->load();
 
     if (delaySyncParam->load() > 0.5f)
     {
-        double bpm = (double) delayBpmParam->load();
-
-        if (auto* ph = getPlayHead())
-            if (const auto pos = ph->getPosition())
-                if (const auto hostBpm = pos->getBpm(); hostBpm.hasValue() && *hostBpm > 0.0)
-                    bpm = *hostBpm;
+        const double bpm = hostBpm > 0.0 && delayHostTempoParam->load() > 0.5f
+                               ? hostBpm
+                               : (double) delayBpmParam->load();
 
         const int div = juce::jlimit (0, params::delayDivisions.size() - 1,
                                       juce::roundToInt (delayDivParam->load()));
@@ -692,7 +962,47 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    // A HOST'S BLOCK IS NOT ALWAYS THE BLOCK IT PROMISED. prepareToPlay names the most it will
+    // send, and every stage with a scratch buffer — the room's wet copy, the fades' dry copy, the
+    // captured blocks — is sized to that; a host that sends more (an offline render, a bounce, a
+    // host that simply does) used to find the room adding its tail to the first part of the block
+    // only, and the fades skipping. So a block longer than the promise is played as consecutive
+    // blocks of the promised size, which is exactly what the chain would have heard had the host
+    // kept it. The views refer to the host's own memory: nothing is allocated.
+    const int total = buffer.getNumSamples();
+    const int most  = preparedBlock.load (std::memory_order_relaxed);
+
+    if (most <= 0 || total <= most)
+    {
+        processChunk (buffer);
+        return;
+    }
+
+    for (int start = 0; start < total; start += most)
+    {
+        juce::AudioBuffer<float> part (buffer.getArrayOfWritePointers(), buffer.getNumChannels(),
+                                       start, juce::jmin (most, total - start));
+        processChunk (part);
+    }
+}
+
+void AmpProcessor::sanitiseParameters() noexcept
+{
+    // A PARAMETER THAT IS NOT A NUMBER. A host's automation point, a broken session, a controller
+    // that sends garbage: JUCE clamps a value into its range, but a clamp of NaN is NaN, and every
+    // stage downstream would take it — a room whose decay is NaN is a room that is NaN, healed and
+    // re-poisoned every block, silent for as long as the lane holds it. One pass here, before any
+    // stage reads anything: a value that is not a number reads as the parameter's default until
+    // someone sends a real one. A couple of hundred compares a block.
+    for (const auto& guard : parameterGuards)
+        if (! std::isfinite (guard.value->load (std::memory_order_relaxed)))
+            guard.value->store (guard.fallback, std::memory_order_relaxed);
+}
+
+void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
+{
     juce::ScopedNoDenormals noDenormals;
+    sanitiseParameters();
     const auto blockStart = juce::Time::getHighResolutionTicks();
 
     // The per-stage load meter, orbitcab's recipe verbatim: a cheap monotonic read around each
@@ -1056,7 +1366,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
           { auto& tout = reverbSpectrumTap[1];
             const float* w = reverb.addedWet (0);
-            for (int i = 0; i < numSamples; ++i)
+            // As far as the room wrote, not as far as the host's block runs: a host that hands more
+            // than it promised at prepare would have this read past the end of the room's buffer.
+            for (int i = 0; i < reverb.addedLength(); ++i)
                 tout.push (w[i]);
             tout.publishIfDue (eqSpectrumOrder,
                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
@@ -1157,6 +1469,29 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // SPACE the copy was made at the seam, and there is nothing left to copy.)
         for (int ch = nchBack; ch < numChannels; ++ch)
             buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+
+        // The tuner's MUTE, last of all and before the meter reads — silence at the jack is
+        // silence on the rail. Ramped over the block like the trims, so muting mid-note is a fade
+        // rather than a click; a tuner standing by does not mute.
+        {
+            const float target = linkWorks (params::rowTuner) && tunerMuteParam->load() > 0.5f ? 0.0f : 1.0f;
+            buffer.applyGainRamp (0, numSamples, lastMuteGain, target);
+            lastMuteGain = target;
+        }
+
+        // THE DOOR. Nothing that is not a number leaves the box. Every link heals its own state, but
+        // healing is per block and the cabinet drains rather than heals — a NaN that got in rides
+        // its impulse out for a second and more — and one of those samples on a host's bus takes
+        // the whole mix with it: a sum with a NaN in it is a NaN, and a DAW's master goes silent for
+        // every track, not just this one. Here it becomes silence for this plugin, for as long as
+        // it lasts. No option: there is no one who wants the other thing.
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            auto* d = buffer.getWritePointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+                if (! std::isfinite (d[i]))
+                    d[i] = 0.0f;
+        }
 
         if (limiter.lastMinGain() < 0.999f)
             limiterWorked.store (true);

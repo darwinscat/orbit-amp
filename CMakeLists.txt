@@ -11,7 +11,7 @@ cmake_minimum_required(VERSION 3.22)
 # release is fetched, so a clean clone still configures.
 # ----------------------------------------------------------------------------
 
-project(OrbitAmp VERSION 0.6.0 LANGUAGES C CXX)
+project(OrbitAmp VERSION 0.7.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -82,7 +82,10 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # ../felitronics-core checkout, so a local build shows that checkout's HEAD however this line reads.
 # Proving anything about the pin means emptying the override — all five of them, not this one — and
 # letting FetchContent take the tag.
-set(ORBITAMP_FCORE_TAG "v0.30.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+#
+# v0.31.0 keeps that geometry and moves the pin to the freshest release — nothing here asks for
+# its new API, so the bump is the whole of the change.
+set(ORBITAMP_FCORE_TAG "v0.31.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")

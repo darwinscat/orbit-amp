@@ -66,21 +66,30 @@ public:
         conv.prepare ({ sampleRate, (juce::uint32) blockSize, (juce::uint32) channels });
     }
 
-    /** Message thread. The data is copied here — the caller's buffer may die. */
+    /** Message thread. The data is copied here — the caller's buffer may die. WAV or AIFF — the
+        shelf ships WAV, a player's own library may hold either. */
     void load (const void* data, size_t size)
     {
-        juce::WavAudioFormat wav;
-        std::unique_ptr<juce::AudioFormatReader> reader (
-            wav.createReaderFor (new juce::MemoryInputStream (data, size, false), true));
+        const auto reader = readerFor (data, size);
 
-        if (reader == nullptr || reader->lengthInSamples <= 0)
+        if (reader == nullptr)
             return;
 
-        raw.setSize ((int) reader->numChannels, (int) reader->lengthInSamples);
-        reader->read (&raw, 0, raw.getNumSamples(), 0, true, true);
+        // The FIRST channel, and only it: the convolution runs `Stereo::no`, which plays channel 0
+        // of whatever it is handed — so a stereo IR kept whole would be measured for its level
+        // across both channels and heard through one of them.
+        raw.setSize (1, (int) reader->lengthInSamples);
+        reader->read (&raw, 0, raw.getNumSamples(), 0, true, false);
         rawRate = reader->sampleRate;
         rebuild();
     }
+
+    /** The longest IR `load` takes — see `readerFor`. */
+    static constexpr double maxSeconds = 5.0;
+
+    /** Whether `load` would take these bytes — asked before a player's file is chosen, so a file
+        that is not audio is refused at the pick instead of silently playing the last cabinet. */
+    static bool decodes (const void* data, size_t size) { return readerFor (data, size) != nullptr; }
 
     /** Message thread. Rebuilds only when something actually moved. */
     void setPost (const Post& p)
@@ -100,13 +109,38 @@ public:
         if (! on)
             return;
 
-        juce::dsp::AudioBlock<float> block (const_cast<float**> (io),
-                                            (size_t) juce::jmin (channels, numChannels),
-                                            (size_t) numSamples);
+        const int nch = juce::jmin (channels, numChannels);
+
+        // POISON. A sample that is not a number does not enter the convolution. What the convolver
+        // does with one is the platform's business, and the platforms do not agree: on macOS it
+        // rides the impulse out and lets go after the IR's length; on Windows it stayed in for good,
+        // and the plugin went silent from that sample on — the output door turns what is not a
+        // number into silence. This link replaces the signal it is handed, so a bad sample becomes
+        // a silent one here exactly as it would at the door.
+        for (int ch = 0; ch < nch; ++ch)
+            for (int i = 0; i < numSamples; ++i)
+                if (! std::isfinite (io[ch][i]))
+                    io[ch][i] = 0.0f;
+
+        juce::dsp::AudioBlock<float> block (const_cast<float**> (io), (size_t) nch, (size_t) numSamples);
         cleared = false;   // there is history in the tail again
 
         juce::dsp::ProcessContextReplacing<float> ctx (block);
         conv.process (ctx);
+
+        // ...and one the convolver makes of its own is not kept either: the block goes silent and the
+        // convolution starts again. `x - x` is 0 for every finite x and NaN for anything else.
+        float poison = 0.0f;
+        for (int ch = 0; ch < nch; ++ch)
+            for (int i = 0; i < numSamples; ++i)
+                poison += io[ch][i] - io[ch][i];
+
+        if (! std::isfinite (poison))
+        {
+            conv.reset();
+            for (int ch = 0; ch < nch; ++ch)
+                std::fill_n (io[ch], numSamples, 0.0f);
+        }
     }
 
     /** Idempotent, like the room's and the echo's: the chain calls this while the cabinet is out
@@ -123,6 +157,30 @@ public:
 
 private:
     bool cleared = true;   // see reset()
+
+    static std::unique_ptr<juce::AudioFormatReader> readerFor (const void* data, size_t size)
+    {
+        juce::AudioFormatManager formats;
+        formats.registerFormat (new juce::WavAudioFormat(), true);
+        formats.registerFormat (new juce::AiffAudioFormat(), false);
+
+        std::unique_ptr<juce::AudioFormatReader> reader (
+            formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (data, size, false)));
+
+        // A header can say anything: a rate no converter ever ran at would let a tiny file claim
+        // billions of samples and still pass the duration test below.
+        if (reader == nullptr || reader->lengthInSamples <= 0 || reader->numChannels == 0
+            || reader->sampleRate < 8000.0 || reader->sampleRate > 768000.0)
+            return nullptr;
+
+        // A cabinet with its room is a second or two. The byte cap alone would let a minute of
+        // 16-bit mono through — millions of taps the convolution would try to run every block, and
+        // a rebuild over all of them on every move of a cut. Anything longer is not a cabinet.
+        if ((double) reader->lengthInSamples > maxSeconds * reader->sampleRate)
+            return nullptr;
+
+        return reader;
+    }
 
     void rebuild()
     {

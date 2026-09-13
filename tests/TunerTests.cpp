@@ -9,6 +9,7 @@
 // JUCE-free, like the code under test: links nothing at all.
 
 #include "core/PitchTracker.h"
+#include "core/TunerEar.h"
 
 #include <cmath>
 #include <cstdint>
@@ -23,7 +24,7 @@ namespace
     int failures = 0;
 
     constexpr double pi = 3.14159265358979323846;
-    constexpr int    windowLen = 16384;   // what the tap hands the panel
+    constexpr int    windowLen = orbitamp::core::TunerTap::size;   // what the tap hands the panel
 
     void check (const char* what, double got, double want, double tol)
     {
@@ -160,6 +161,17 @@ int main()
         check ("Karplus-Strong pluck: clarity", r.clarity, 1.0, 0.15);
     }
 
+    // ---- clarity is the height of the peak, not of the sample beside it -----------------------
+    // A period that falls exactly between two lags is where the interpolated peak stands furthest
+    // above both samples. A clean sine there must score as clean as one on a lag.
+    {
+        const double sr = 48000.0;                       // decimated to exactly 12 kHz
+        const auto onLag  = analyse (sine (12000.0 / 9.0, sr), sr);
+        const auto between = analyse (sine (12000.0 / 8.5, sr), sr);
+        check ("sine on a whole lag: clarity",         onLag.clarity,   1.0, 0.02);
+        check ("sine half a lag between: clarity",     between.clarity, 1.0, 0.02);
+    }
+
     // ---- what must NOT read as a note ----------------------------------------------------------
     {
         std::vector<float> silence ((size_t) windowLen, 0.0f);
@@ -182,6 +194,186 @@ int main()
         const auto r = analyse (sine (110.0, 48000.0, 0.5f, 0.4f), 48000.0);
         check ("A2 riding a DC offset: cents error",
                r.hz > 0.0f ? centsBetween (r.hz, 110.0) : 999.0, 0.0, 0.5);
+    }
+
+    // ---- the EAR: a new note starts from itself ------------------------------------------------
+    // The history of the note before must not lean on the note after. A string eight cents flat,
+    // then a gap, then the same string in tune: the first needle of the new note reads the new note.
+    // Both kinds of gap — the note dying out, and a short one inside the hold, a pick attack.
+    {
+        using orbitamp::core::TunerEar;
+        using orbitamp::core::TunerTap;
+
+        const double sr   = 48000.0;
+        const double flat = 110.0 * std::pow (2.0, -8.0 / 1200.0);
+
+        const auto windowOf = [sr] (double hz, float amp)
+        {
+            std::vector<float> w ((size_t) TunerTap::size);
+            for (int i = 0; i < TunerTap::size; ++i)
+                w[(size_t) i] = amp * (float) std::sin (2.0 * pi * hz * i / sr);
+            return w;
+        };
+
+        for (const int gapMs : { 900, 200 })
+        {
+            TunerEar ear;
+            TunerTap tap;
+            ear.prepare (sr);
+            unsigned now = 0;
+
+            const auto hold = [&] (const std::vector<float>& w, int ms)
+            {
+                tap.write (w.data(), (int) w.size());
+                for (int t = 0; t < ms; t += 33)
+                    ear.update (tap, now += 33);
+            };
+
+            hold (windowOf (flat, 0.3f), 500);
+            const double before = ear.needle();
+
+            hold (windowOf (110.0, 0.0f), gapMs);
+            tap.write (windowOf (110.0, 0.3f).data(), TunerTap::size);
+            ear.update (tap, now += 33);
+
+            char name[96];
+            std::snprintf (name, sizeof (name), "ear: 8 c flat, %d ms gap, in tune: first needle", gapMs);
+            check (name, ear.needle(), 0.0, 0.5);
+            checkTrue ("...and the flat note read flat before it", std::fabs (before + 8.0) < 0.5);
+        }
+    }
+
+    // ---- the ear through a whole pluck, to its last breath --------------------------------------
+    // Sixteen harmonics falling at 1/k, each decaying faster than the one below it (-20 dB/s at the
+    // fundamental), a pick burst, a stiff string's sharp partials (B = 1e-4), a -60 dBFS hiss under
+    // all of it — three seconds, fed in host blocks, the ear ticked at 30 Hz. What the needle shows
+    // last before the note goes is what a player reads when tuning: it must still be the string,
+    // not the noise the tail sank into. Six strings, three rates, three seeds. (On the tracker as it
+    // was, fourteen of the fifty-four ended outside green, six cents out: the long-lag search missed
+    // its peak under the hiss and fell back to the single period's error.)
+    {
+        using orbitamp::core::TunerEar;
+        using orbitamp::core::TunerTap;
+
+        const double open[] = { 82.407, 110.0, 146.832, 196.0, 247.0, 329.628 };
+        double worstLast = 0.0;
+        int    lastOutside = 0, notes = 0;
+
+        for (const double sr : { 44100.0, 48000.0, 96000.0 })
+            for (const double f0 : open)
+                for (std::uint32_t seed = 1; seed <= 3; ++seed)
+                {
+                    constexpr double B = 1.0e-4;
+                    const int total = (int) (3.0 * sr);
+                    std::vector<float> y ((size_t) total);
+                    std::uint32_t rng = seed * 7919u;
+                    double phase[16];
+                    for (auto& p : phase)
+                        p = pi * (1.0 + lcgNoise (rng));
+
+                    for (int n = 0; n < total; ++n)
+                    {
+                        const double t = n / sr;
+                        double v = 0.0;
+                        for (int k = 1; k <= 16; ++k)
+                        {
+                            phase[k - 1] += 2.0 * pi * k * f0 * std::sqrt (1.0 + B * k * k) / sr;
+                            v += std::pow (10.0, -20.0 * (1.0 + 0.3 * (k - 1)) * t / 20.0) / k * std::sin (phase[k - 1]);
+                        }
+                        if (t < 0.004)
+                            v += 0.6 * lcgNoise (rng) * std::exp (-t / 0.0012);
+                        y[(size_t) n] = (float) (0.4 * v + 1.0e-3 * lcgNoise (rng));
+                    }
+
+                    // The pitch a tuner means by this string: its fundamental.
+                    const auto want = PitchTracker::nearestNote ((float) (f0 * std::sqrt (1.0 + B)));
+
+                    TunerTap tap;
+                    TunerEar ear;
+                    ear.prepare (sr);
+
+                    double nextTick = 0.0, lastLive = 0.0;
+                    bool   everLive = false;
+
+                    for (int pos = 0; pos + 512 <= total; pos += 512)
+                    {
+                        tap.write (y.data() + pos, 512);
+                        for (; nextTick <= (pos + 512) / sr; nextTick += 1.0 / 30.0)
+                        {
+                            ear.update (tap, (unsigned) std::lround (nextTick * 1000.0));
+                            if (ear.live() && ear.nearestNote().midi == want.midi)
+                            {
+                                lastLive = ear.needle() - want.cents;
+                                everLive = true;
+                            }
+                        }
+                    }
+
+                    ++notes;
+                    if (! everLive || std::fabs (lastLive) > TunerEar::inTuneCents)
+                        ++lastOutside;
+                    worstLast = std::max (worstLast, std::fabs (lastLive));
+                }
+
+        char name[96];
+        std::snprintf (name, sizeof (name), "ear: plucks whose last needle leaves green (of %d)", notes);
+        check (name, lastOutside, 0.0, 0.0);
+        check ("ear: the worst last needle, cents", worstLast, 0.0, TunerEar::inTuneCents);
+    }
+
+    // ---- the ring's head is not analysed, at any rate --------------------------------------------
+    // The oldest part of the tap holds whatever came before: the anti-alias filter settling, the
+    // seam of a torn copy, the last note after a string is plucked again. Its oldest eighth — a
+    // semitone away from the note the rest of the window holds — must not move the reading.
+    {
+        using orbitamp::core::TunerTap;
+
+        for (const double sr : { 44100.0, 48000.0, 96000.0 })
+        {
+            const double f = 110.0, other = 110.0 * std::pow (2.0, 100.0 / 1200.0);
+            std::vector<float> w ((size_t) TunerTap::size);
+            for (int i = 0; i < TunerTap::size; ++i)
+                w[(size_t) i] = 0.5f * (float) std::sin (2.0 * pi * (i < TunerTap::size / 8 ? other : f) * i / sr);
+
+            PitchTracker t;
+            t.prepare (sr);
+            const auto r = t.analyse (w.data(), (int) w.size());
+
+            char name[96];
+            std::snprintf (name, sizeof (name), "old note in the ring's head @ %.0fk: cents error", sr / 1000.0);
+            check (name, r.hz > 0.0f ? centsBetween (r.hz, f) : 999.0, 0.0, 0.1);
+        }
+    }
+
+    // ---- the player's level floor ----------------------------------------------------------------
+    {
+        const auto at = [] (double hz, double sr, float amp, double floorDb)
+        {
+            std::vector<float> s ((size_t) windowLen);
+            for (int i = 0; i < windowLen; ++i)
+                s[(size_t) i] = amp * (float) std::sin (2.0 * pi * hz * i / sr);
+
+            PitchTracker t;
+            t.prepare (sr);
+            t.setLevelFloorDb (floorDb);
+            return t.analyse (s.data(), (int) s.size());
+        };
+
+        // An A2 whose window RMS is -63 dBFS: under the default -60 floor, over -70.
+        checkTrue ("floor -60 (default): a -63 dBFS string is not a note",
+                   at (110.0, 48000.0, 1.0e-3f, -60.0).hz == 0.0f);
+        checkTrue ("floor -70: the same string reads",
+                   at (110.0, 48000.0, 1.0e-3f, -70.0).hz > 0.0f);
+        checkTrue ("floor -50: a -57 dBFS string is not a note",
+                   at (110.0, 48000.0, 2.0e-3f, -50.0).hz == 0.0f);
+        {
+            PitchTracker plain;
+            plain.prepare (48000.0);
+            std::vector<float> s ((size_t) windowLen);
+            for (int i = 0; i < windowLen; ++i)
+                s[(size_t) i] = 1.0e-3f * (float) std::sin (2.0 * pi * 110.0 * i / 48000.0);
+            checkTrue ("a tracker nobody configured sits at -60", plain.analyse (s.data(), windowLen).hz == 0.0f);
+        }
     }
 
     // ---- the naming the panel prints -----------------------------------------------------------

@@ -14,11 +14,14 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "device/DeviceLibrary.h"
+#include "device/EmbeddedIrs.h"
 #include "device/IrLibrary.h"
 
 #include <cstdio>
+#include <cstring>
 
 using orbitamp::device::DeviceLibrary;
+using orbitamp::device::EmbeddedIrs;
 using orbitamp::device::IrLibrary;
 
 namespace
@@ -182,6 +185,113 @@ int main()
                                                                               "Hijack") == juce::File());
     }
 
+    // ---- IR move: rearranging what is already on the shelf -------------------------------------
+    {
+        const auto root = work.getChildFile ("irs-move");
+        makeWav (root.getChildFile ("loose.wav"));
+        makeWav (root.getChildFile ("Mine/loose.wav"));
+        makeWav (root.getChildFile ("Pack/Close/57.wav"));
+        root.getChildFile ("Mine").createDirectory();
+
+        const auto moved = IrLibrary::move (root, root.getChildFile ("Pack/Close/57.wav"), root.getChildFile ("Mine"));
+        report ("a file moves into a folder",        moved == root.getChildFile ("Mine/57.wav") && moved.existsAsFile()
+                                                       && ! root.getChildFile ("Pack/Close/57.wav").exists());
+        report ("a taken name there gets numbered",  IrLibrary::move (root, root.getChildFile ("loose.wav"), root.getChildFile ("Mine"))
+                                                       == root.getChildFile ("Mine/loose 2.wav"));
+        report ("a folder moves, contents and all",  IrLibrary::move (root, root.getChildFile ("Pack/Close"), root.getChildFile ("Mine"))
+                                                       .isDirectory());
+        report ("...and back up to the root",        IrLibrary::move (root, root.getChildFile ("Mine/Close"), root)
+                                                       == root.getChildFile ("Close"));
+        report ("where it already is, it stays",     IrLibrary::move (root, root.getChildFile ("Close"), root)
+                                                       == root.getChildFile ("Close"));
+        report ("a folder into itself is refused",   IrLibrary::move (root, root.getChildFile ("Mine"), root.getChildFile ("Mine"))
+                                                       == juce::File());
+
+        root.getChildFile ("Mine/Deep").createDirectory();
+        report ("...and into its own child",         IrLibrary::move (root, root.getChildFile ("Mine"), root.getChildFile ("Mine/Deep"))
+                                                       == juce::File() && root.getChildFile ("Mine/Deep").isDirectory());
+        report ("into a file is refused",            IrLibrary::move (root, root.getChildFile ("Mine/57.wav"), root.getChildFile ("Mine/loose.wav"))
+                                                       == juce::File());
+        report ("out of the library is refused",     IrLibrary::move (root, root.getChildFile ("Mine/57.wav"), work)
+                                                       == juce::File() && root.getChildFile ("Mine/57.wav").existsAsFile());
+        report ("a stranger's file is refused",      IrLibrary::move (root, work.getChildFile ("src/Cab 4x12.wav"), root)
+                                                       == juce::File());
+    }
+
+    // ---- Embedded IRs: the bytes travel with a preset, not the path ----------------------------
+    {
+        const auto bytesOf = [] (const char* text) { return juce::MemoryBlock (text, std::strlen (text)); };
+
+        EmbeddedIrs store;
+        const auto keyA = store.add (bytesOf ("impulse A"));
+        const auto keyB = store.add (bytesOf ("impulse B"));
+
+        report ("a key is the content's",            keyA.isNotEmpty() && keyA == EmbeddedIrs::keyOf (bytesOf ("impulse A")));
+        report ("other bytes, another key",          keyA != keyB);
+        report ("nothing is not an IR",              store.add ({}).isEmpty());
+        report ("too much is not an IR",             store.add (juce::MemoryBlock ((size_t) EmbeddedIrs::maxBytes + 1)).isEmpty());
+
+        // A preset on its way to disk, through real XML, and back into a store that never saw it.
+        juce::ValueTree preset ("PARAMETERS");
+        preset.setProperty ("cab_ir_user", keyA, nullptr);
+
+        if (auto node = store.pack ({ keyA, keyA, "missing-key" }); node.isValid())
+            preset.appendChild (node, nullptr);
+
+        report ("a repeat is embedded once",         preset.getChildWithName (EmbeddedIrs::treeType).getNumChildren() == 1);
+        report ("nothing to carry, nothing packed",  ! store.pack ({ "missing-key" }).isValid());
+
+        const auto xml = preset.createXml();
+        auto loaded = juce::ValueTree::fromXml (*juce::XmlDocument::parse (xml->toString()));
+
+        EmbeddedIrs elsewhere;
+        elsewhere.unpack (loaded);
+
+        const auto* back = elsewhere.find (keyA);
+        report ("the bytes come back whole",         back != nullptr && *back == bytesOf ("impulse A"));
+        report ("...and leave the tree plain",       ! loaded.getChildWithName (EmbeddedIrs::treeType).isValid()
+                                                       && loaded.getProperty ("cab_ir_user").toString() == keyA);
+
+        // A doctored file: the key it would have claimed is not the one its bytes are filed under.
+        juce::ValueTree doctored ("PARAMETERS");
+        juce::ValueTree node (EmbeddedIrs::treeType), ir (EmbeddedIrs::entryType);
+        ir.setProperty ("key", keyA, nullptr);
+        ir.setProperty ("data", juce::var (bytesOf ("impostor")), nullptr);
+        node.appendChild (ir, nullptr);
+        doctored.appendChild (node, nullptr);
+
+        EmbeddedIrs fresh;
+        fresh.unpack (doctored);
+        report ("bytes are filed by what they are",  fresh.find (keyA) == nullptr
+                                                       && fresh.find (EmbeddedIrs::keyOf (bytesOf ("impostor"))) != nullptr);
+    }
+
+    // ---- IR group move: a selection, planned before anything moves ------------------------------
+    {
+        const auto root = work.getChildFile ("irs-group");
+        makeWav (root.getChildFile ("Pack/a.wav"));
+        makeWav (root.getChildFile ("Pack/b.wav"));
+        makeWav (root.getChildFile ("Pack/Deep/c.wav"));
+        makeWav (root.getChildFile ("loose.wav"));
+        root.getChildFile ("Dest").createDirectory();
+
+        const auto pack = root.getChildFile ("Pack");
+        const auto plan = IrLibrary::planMove (root, { pack, pack.getChildFile ("a.wav"), pack.getChildFile ("Deep/c.wav"),
+                                                       root.getChildFile ("loose.wav") }, root.getChildFile ("Dest"));
+        report ("a folder and what is inside it move once", plan.size() == 2 && plan.contains (pack)
+                                                              && plan.contains (root.getChildFile ("loose.wav")),
+                juce::String (plan.size()) + " moves");
+
+        report ("what is already there stays",           IrLibrary::planMove (root, { root.getChildFile ("loose.wav") }, root).isEmpty());
+        report ("a folder is not taken into itself",     IrLibrary::planMove (root, { pack }, pack.getChildFile ("Deep")).isEmpty());
+        report ("...but its neighbour in the group goes", IrLibrary::planMove (root, { pack, root.getChildFile ("loose.wav") },
+                                                                              pack.getChildFile ("Deep"))
+                                                            == juce::Array<juce::File> { root.getChildFile ("loose.wav") });
+        report ("out to the top level",                  IrLibrary::planMove (root, { pack.getChildFile ("b.wav") }, root)
+                                                            == juce::Array<juce::File> { pack.getChildFile ("b.wav") });
+        report ("a stranger's file is not planned",      IrLibrary::planMove (root, { work.getChildFile ("src/Cab 4x12.wav") }, root).isEmpty());
+    }
+
     // ---- IR remove: only the guard is ours -----------------------------------------------------
     {
         const auto root = work.getChildFile ("irs-remove");
@@ -230,6 +340,94 @@ int main()
                                                        .getChildFile ("rig.json").existsAsFile());
         report ("a non-device is refused",           DeviceLibrary::importDevice (src.getChildFile ("random.zip"), into)
                                                        == juce::File());
+    }
+
+    // ---- Devices: one capture, one install — by its rig_id --------------------------------------
+    {
+        const auto src     = work.getChildFile ("dup-src");
+        const auto into    = work.getChildFile ("dup-devices");
+        const auto factory = work.getChildFile ("dup-factory");
+        into.createDirectory();
+        factory.createDirectory();
+
+        const auto pack = [&] (const juce::File& dir, const juce::String& name, const juce::String& rigId)
+        {
+            const auto folder = dir.getChildFile (name + ".orbitrig");
+            folder.createDirectory();
+            folder.getChildFile ("rig.json").replaceWithText (
+                "{ \"format\": \"orbitrig\", \"schema\": 4, \"rig_id\": \"" + rigId + "\", \"name\": \"" + name + "\" }");
+            return folder;
+        };
+
+        // The Trash is the player's machine's; here a retired copy is simply deleted.
+        const auto retire = [] (const juce::File& f) { return f.deleteRecursively(); };
+
+        const auto first = DeviceLibrary::importDevice (pack (src, "TS", "ts-mini-86a1"), into, factory, retire);
+        report ("a pack's rig_id is read",               DeviceLibrary::rigIdOf (first) == "ts-mini-86a1");
+
+        const auto again = DeviceLibrary::importDevice (pack (src.getChildFile ("v2"), "TS", "ts-mini-86a1"),
+                                                        into, factory, retire);
+        report ("the same capture again: one install",   again == into.getChildFile ("TS.orbitrig")
+                                                           && ! into.getChildFile ("TS 2.orbitrig").exists());
+
+        const auto renamed = DeviceLibrary::importDevice (pack (src, "Tube Screamer Mini", "ts-mini-86a1"),
+                                                          into, factory, retire);
+        report ("...under another name: still one",      renamed == into.getChildFile ("Tube Screamer Mini.orbitrig")
+                                                           && ! into.getChildFile ("TS.orbitrig").exists());
+
+        report ("re-importing the installed file is no-op",
+                DeviceLibrary::importDevice (renamed, into, factory, retire) == renamed && renamed.isDirectory());
+
+        const auto other = DeviceLibrary::importDevice (pack (src.getChildFile ("ch2"), "Tube Screamer Mini", "ts-mini-ch2-1111"),
+                                                        into, factory, retire);
+        report ("another capture with the same name: both", other == into.getChildFile ("Tube Screamer Mini 2.orbitrig")
+                                                           && renamed.isDirectory());
+
+        pack (factory, "RAT", "rat-2-3ab8");
+        juce::String refused;
+        report ("a capture the build ships is refused",  DeviceLibrary::importDevice (pack (src, "Rodent", "rat-2-3ab8"),
+                                                                                     into, factory, retire, &refused) == juce::File()
+                                                           && ! into.getChildFile ("Rodent.orbitrig").exists());
+        report ("...and says which pack it already is",  refused == "RAT", refused);
+
+        report ("a lone model has no rig_id to merge by", DeviceLibrary::rigIdOf (work.getChildFile ("dev-src/clean.nam")).isEmpty());
+
+        // The selectors' list: copies already on disk show once.
+        const auto entry = [] (const juce::String& name, const juce::String& rigId, bool bundled, int ageSeconds, bool loose = false)
+        {
+            DeviceLibrary::Pack p;
+            p.name     = name;
+            p.rigId    = rigId;
+            p.bundled  = bundled;
+            p.loose    = loose;
+            p.modified = juce::Time (2026, 8, 1, 12, 0) - juce::RelativeTime::seconds (ageSeconds);
+            return p;
+        };
+
+        juce::Array<DeviceLibrary::Pack> list;
+        list.add (entry ("TS",        "ts",  false, 100));
+        list.add (entry ("TS 2",      "ts",  false, 10));    // the newest copy
+        list.add (entry ("RAT",       "rat", false, 5));
+        list.add (entry ("RAT",       "rat", true,  500));   // the build's
+        list.add (entry ("Mystery",   "",    false, 1));
+        list.add (entry ("Mystery 2", "",    false, 2));
+        list.add (entry ("clean",     "ts",  false, 1, true));
+
+        DeviceLibrary::keepOnePerCapture (list);
+
+        const auto has = [&list] (const juce::String& name, bool bundled)
+        {
+            for (const auto& p : list)
+                if (p.name == name && p.bundled == bundled)
+                    return true;
+            return false;
+        };
+
+        report ("copies on disk: one entry per capture",  list.size() == 5, juce::String (list.size()) + " entries");
+        report ("...the newest of the player's copies",   has ("TS 2", false) && ! has ("TS", false));
+        report ("...the build's over the player's",       has ("RAT", true) && ! has ("RAT", false));
+        report ("...and nothing without an id is merged", has ("Mystery", false) && has ("Mystery 2", false)
+                                                            && has ("clean", false));
     }
 
     // ---- Devices: remove refuses what is not the user's ----------------------------------------

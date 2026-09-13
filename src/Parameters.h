@@ -242,6 +242,16 @@ inline const juce::StringArray cabIrNames {
 };
 inline constexpr int cabIrDefault = 7;   // BIG BUBBA
 
+/** A cabinet IR of the player's OWN — not a parameter, because it is not a number: three
+    properties on the state tree. The key names the bytes in `device::EmbeddedIrs`, which carries
+    the IR itself into presets and sessions; the name is what the border shows; `from` is where in
+    the IR library it was picked, so the menu can tick it — and nothing else depends on it. While
+    the key names an IR the store holds, it plays and `cabIr` waits underneath; picking a factory
+    IR clears all three. */
+inline constexpr const char* cabIrUserKey  = "cab_ir_user";
+inline constexpr const char* cabIrUserName = "cab_ir_name";
+inline constexpr const char* cabIrUserFrom = "cab_ir_from";
+
 /** What a player does to the one IR: cuts its bottom and top (a second-order high-pass and
     low-pass baked INTO the IR, so the convolution costs nothing more), trims its tail (a fraction
     of its length kept — the room's decay is often more than a guitar wants), and flips it. Each
@@ -321,6 +331,10 @@ inline constexpr const char* delaySync    = "delay_sync";
 inline constexpr const char* delayTimeMs  = "delay_time_ms";
 inline constexpr const char* delayDiv     = "delay_div";
 inline constexpr const char* delayBpm     = "delay_bpm";
+/** Whose tempo the sync counts in when a host is conducting: the HOST's (the default — a delay in a
+    session plays in the session's time) or the block's OWN BPM field, for a player who wants the
+    echo on a grid of its own. With no tempo from anyone — the standalone — the field conducts. */
+inline constexpr const char* delayHostTempo = "delay_host_tempo";
 inline constexpr const char* delayRepeats = "delay_repeats";
 inline constexpr const char* delayDark    = "delay_dark";
 inline constexpr const char* delayOffset  = "delay_offset";
@@ -336,8 +350,8 @@ inline constexpr float delayDivisionBeats[] = { 4.0f, 3.0f, 2.0f, 4.0f / 3.0f, 1
                                                 0.25f, 1.0f / 6.0f };
 inline constexpr int delayDivDefault = 5;   // 1/4
 
-/** The BPM the sync runs on when no host is conducting — the standalone's field. A host that
-    reports a tempo outranks it. */
+/** The BPM the sync runs on when no host is conducting — the standalone's field — or when the
+    player has told the delay to keep its own (`delayHostTempo` off). */
 inline constexpr float delayBpmMin = 40.0f, delayBpmMax = 240.0f, delayBpmDefault = 120.0f;
 
 inline constexpr float delayTimeMinMs = 20.0f, delayTimeMaxMs = 2000.0f;
@@ -406,6 +420,10 @@ inline constexpr const char* inPresent     = "in_present";
 inline constexpr const char* inOn          = "in_on";
 inline constexpr const char* tunerPresent  = "tuner_present";
 inline constexpr const char* tunerOn       = "tuner_on";
+/** The tuner's MUTE: silence at the jack while the tuner works, so a string can be tuned without
+    the room hearing it. The tuner keeps listening — it reads the input before anything — and a
+    tuner standing by does not mute, like any link's action in STANDBY. */
+inline constexpr const char* tunerMute     = "tuner_mute";
 inline constexpr const char* gatePresent   = "gate_present";
 inline constexpr const char* boostPresent  = "boost_present";
 inline constexpr const char* preampPresent = "preamp_present";

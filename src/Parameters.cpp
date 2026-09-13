@@ -119,6 +119,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Bool> (juce::ParameterID { outOn,   1 }, "Output", true),
                 std::make_unique<Bool> (juce::ParameterID { tunerOn, 1 }, "Tuner",  true));
 
+    // The tuner's mute ships OFF: a plugin that opens silent is a plugin reported as broken.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { tunerMute, 1 }, "Tuner Mute", false));
+
     // Block power. A boost is an addition to the sound, so it starts off; the rest are the sound.
     layout.add (std::make_unique<Bool> (juce::ParameterID { boostOn,  1 }, "Boost",  false),
                 std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, "Preamp", true),
@@ -311,9 +314,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     // The delay, off by default — an echo is a choice, not a starting point. Sync ships ON at a
     // quarter note: the free milliseconds are the specialist's mode, the division is the player's.
-    // The BPM field is the standalone's conductor; a host that reports a tempo outranks it.
+    // The BPM field is the standalone's conductor; in a host the session's tempo conducts, unless
+    // the player asks the delay to keep its own.
     layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", false),
                 std::make_unique<Bool>   (juce::ParameterID { delaySync, 1 }, "Delay Sync", true),
+                std::make_unique<Bool>   (juce::ParameterID { delayHostTempo, 1 }, "Delay Follows Host", true),
                 std::make_unique<Choice> (juce::ParameterID { delayDiv, 1 }, "Delay Division",
                                           delayDivisions, delayDivDefault),
                 std::make_unique<Float>  (juce::ParameterID { delayBpm, 1 }, "Delay BPM",

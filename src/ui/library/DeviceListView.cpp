@@ -39,7 +39,7 @@ struct DeviceListView::Row final : public juce::Component
 
         // Right-to-left: what it is on disk, and — for a file that named no slot — the fact that
         // it shows on every device tab, so meeting it again elsewhere is expected.
-        g.setFont (juce::FontOptions (9.0f, juce::Font::bold));
+        g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
         g.setColour (theme::txFaint);
         g.drawText (pack.loose ? "NAM" : "PACK", body.removeFromRight (56), juce::Justification::centredRight);
         if (pack.slot == device::DeviceLibrary::Slot::any)
@@ -50,7 +50,7 @@ struct DeviceListView::Row final : public juce::Component
         g.fillEllipse (dot.withSizeKeepingCentre (6.0f, 6.0f));
 
         g.setColour (theme::tx);
-        g.setFont (juce::FontOptions (12.5f));
+        g.setFont (juce::FontOptions (13.0f));
         g.drawText (pack.displayName(), body.withTrimmedLeft (4), juce::Justification::centredLeft, true);
     }
 
@@ -88,8 +88,9 @@ void DeviceListView::rebuild()
     content.removeAllChildren();
 
     // Only the user's layer — the factory devices are the build's, not this panel's to edit —
-    // and only this tab's slot, the same cut the block's own selector makes.
-    auto packs = device::DeviceLibrary::scan (slot);
+    // and only this tab's slot, the same cut the block's own selector makes. EVERY file, though:
+    // the selectors show one entry per capture, and a copy hidden here could never be removed.
+    auto packs = device::DeviceLibrary::scan (slot, false);
     packs.removeIf ([] (const device::DeviceLibrary::Pack& p) { return p.bundled; });
 
     for (int i = 0; i < packs.size(); ++i)
@@ -121,6 +122,9 @@ void DeviceListView::resized()
     toolbar.removeFromLeft (6);
     revealButton.setBounds (toolbar.removeFromLeft (92));
 
+    toolbar.removeFromLeft (12);
+    noticeArea = toolbar;
+
     r.removeFromBottom (6);
     viewport.setBounds (r);
 
@@ -136,10 +140,17 @@ void DeviceListView::paint (juce::Graphics& g)
     g.setColour (dragOver ? theme::orange : theme::hair2);
     g.drawRoundedRectangle (well.reduced (0.5f), theme::radiusSm, dragOver ? 1.5f : 1.0f);
 
+    if (notice.isNotEmpty())
+    {
+        g.setColour (theme::txDim);
+        g.setFont (juce::FontOptions (13.0f));
+        g.drawText (notice, noticeArea, juce::Justification::centredLeft, true);
+    }
+
     if (rows.empty())
     {
         g.setColour (theme::txFaint);
-        g.setFont (juce::FontOptions (11.5f));
+        g.setFont (juce::FontOptions (13.0f));
         g.drawText (juce::String::fromUTF8 ("No devices yet \xe2\x80\x94 Add\xe2\x80\xa6 "
                                             "or drop .nam / .namz / .orbitrig packs here."),
                     viewport.getBounds(), juce::Justification::centred);
@@ -191,10 +202,27 @@ void DeviceListView::addClicked()
 void DeviceListView::importPaths (const juce::StringArray& paths)
 {
     bool any = false;
+    juce::StringArray shipped;
 
     for (const auto& p : paths)
-        if (device::DeviceLibrary::importDevice (juce::File (p)) != juce::File())
+    {
+        juce::String refused;
+
+        if (device::DeviceLibrary::importDevice (juce::File (p), device::DeviceLibrary::directory(),
+                                                 device::DeviceLibrary::bundledDirectory(),
+                                                 [] (const juce::File& f) { return f.moveToTrash(); },
+                                                 &refused) != juce::File())
             any = true;
+        else if (refused.isNotEmpty())
+            shipped.addIfNotAlreadyThere (refused);
+    }
+
+    // A drop that brought nothing must say why, or it reads as a drop that did not work. The line
+    // stands until the next import says something else.
+    notice = shipped.isEmpty() ? juce::String()
+           : shipped.size() == 1 ? shipped[0] + " already ships with OrbitAmp - not added"
+                                 : shipped.joinIntoString (", ") + " already ship with OrbitAmp - not added";
+    repaint();
 
     if (any)
         changedLater();

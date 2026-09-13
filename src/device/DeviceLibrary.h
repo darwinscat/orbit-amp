@@ -54,6 +54,8 @@ public:
         bool          bundled = false;  // shipped with the plugin rather than added by the user
         int           character = 0;    // place on the ramp, from the stage's tone_type
         Slot          slot = Slot::any; // which block it belongs in front of
+        juce::String  rigId;            // the manifest's `rig_id` — the capture's identity; empty for a lone model
+        juce::Time    modified;         // when the file on disk last changed — the tie-break between copies
         namz::rig::Rig rig;
 
         /** What a player sees: the DEVICE, by the name the pack file carries. The manifest's own
@@ -122,7 +124,7 @@ public:
         Bundled devices first, then whatever the user added — packs and lone models alike, since a
         `.nam` someone dropped in is theirs exactly as much as an `.orbitrig` is. Within each of the
         two, the character ramp orders the list and the name settles ties. */
-    static juce::Array<Pack> scan (Slot wanted = Slot::any)
+    static juce::Array<Pack> scan (Slot wanted = Slot::any, bool onePerCapture = true)
     {
         juce::Array<Pack> packs;
 
@@ -132,6 +134,11 @@ public:
         // A pack that names a slot we do not have belongs in no list at all, whatever is being
         // asked for — including a scan that asks for `any`.
         packs.removeIf ([] (const Pack& p) { return p.slot == Slot::none; });
+
+        // One capture, one entry — see `keepOnePerCapture`. The library manager asks for every
+        // file instead: a copy it hid would be a copy nobody could remove.
+        if (onePerCapture)
+            keepOnePerCapture (packs);
 
         if (wanted != Slot::any)
             packs.removeIf ([wanted] (const Pack& p)
@@ -187,19 +194,120 @@ public:
             && (f.hasFileExtension ("nam;namz") || f.getFileName().endsWithIgnoreCase (".orbitrig.zip"));
     }
 
-    /** Copies a device into the user folder, name kept, collisions numbered — never overwritten:
-        two files with one name are two different sounds until somebody has listened. Returns the
-        installed location; invalid when `src` is not a device or the copy failed. */
-    static juce::File importDevice (const juce::File& src, const juce::File& into = directory())
+    /** A pack's capture identity: its manifest's `rig_id`. Empty for a lone model, a pack with no
+        manifest, or one whose manifest does not say. */
+    static juce::String rigIdOf (const juce::File& packFileOrFolder)
+    {
+        Pack p;
+        p.location = packFileOrFolder;
+        p.zipped   = packFileOrFolder.existsAsFile()
+                  && packFileOrFolder.getFileName().endsWithIgnoreCase (".orbitrig.zip");
+
+        if (! p.zipped && ! packFileOrFolder.getChildFile ("rig.json").existsAsFile())
+            return {};
+
+        const auto manifest = readEntry (p, "rig.json");
+        if (manifest.isEmpty())
+            return {};
+
+        bool ok = false;
+        return juce::String (namz::rig::loadRigManifest (manifest.toStdString(), &ok).rigId).trim();
+    }
+
+    /** ONE CAPTURE, ONE ENTRY. A pack's `rig_id` is the capture's identity — two channels of one
+        preamp are two ids, the same pack imported twice is one — so packs sharing an id are copies,
+        and a list that showed both would offer the same sound twice under two names. The copy that
+        stays: a bundled one over the player's (the build's layer is the floor everything else
+        stands on), then the newest file, then the name. Lone models and packs that state no id
+        are never merged: without an identity, two files are two sounds. */
+    static void keepOnePerCapture (juce::Array<Pack>& packs)
+    {
+        const auto better = [] (const Pack& a, const Pack& b)
+        {
+            if (a.bundled != b.bundled)   return a.bundled;
+            if (a.modified != b.modified) return a.modified > b.modified;
+            return a.name < b.name;
+        };
+
+        juce::Array<Pack> kept;
+
+        for (const auto& p : packs)
+        {
+            if (p.loose || p.rigId.isEmpty())
+            {
+                kept.add (p);
+                continue;
+            }
+
+            int same = -1;
+            for (int i = 0; i < kept.size(); ++i)
+                if (! kept.getReference (i).loose && kept.getReference (i).rigId == p.rigId)
+                    { same = i; break; }
+
+            if (same < 0)
+                kept.add (p);
+            else if (better (p, kept.getReference (same)))
+                kept.set (same, p);
+        }
+
+        packs = std::move (kept);
+    }
+
+    /** Copies a device into the user folder, name kept, collisions numbered — two files with one
+        name are two different sounds until somebody has listened. Returns the installed location;
+        invalid when `src` is not a device, the copy failed, or it was refused.
+
+        A PACK THAT IS ALREADY HERE is not installed beside itself. Its `rig_id` says whether it is:
+        a copy the player installed before is RETIRED — to the Trash by default, so a re-import is an
+        update and nothing is lost — and the new one takes its place; a pack the build ships is not
+        the player's to replace, and the import is refused — `refused`, when given, is then set to
+        the name of the pack the build ships, so the player can be told why nothing arrived.
+        Re-importing the very file that is installed changes nothing. */
+    static juce::File importDevice (const juce::File& src, const juce::File& into = directory(),
+                                    const juce::File& bundled = bundledDirectory(),
+                                    const std::function<bool (const juce::File&)>& retire
+                                        = [] (const juce::File& f) { return f.moveToTrash(); },
+                                    juce::String* refused = nullptr)
     {
         if (! looksLikeDevice (src))
             return {};
+
+        const auto rigId = rigIdOf (src);
+        juce::Array<juce::File> copies;
+
+        if (rigId.isNotEmpty())
+        {
+            if (const auto shipped = installedWithRigId (bundled, rigId); ! shipped.isEmpty())
+            {
+                if (refused != nullptr)
+                    *refused = shipped.getFirst().getFileName().upToFirstOccurrenceOf (".", false, false);
+                return {};
+            }
+
+            copies = installedWithRigId (into, rigId);
+
+            if (copies.contains (src))
+                return src;
+        }
 
         const auto dst = uniqueIn (into, src.getFileName());
 
         const bool ok = src.isDirectory() ? src.copyDirectoryTo (dst)
                                           : src.copyFileTo (dst);
-        return ok ? dst : juce::File();
+        if (! ok)
+            return {};
+
+        // Copied first, retired after: a failed copy must not cost the player the pack they had.
+        for (const auto& old : copies)
+            retire (old);
+
+        // The new copy was numbered only because the old one still stood on its name. It has gone:
+        // the name is free again, and the pack takes it back.
+        if (const auto wanted = into.getChildFile (src.getFileName()); dst != wanted && ! wanted.exists())
+            if (dst.moveFileTo (wanted))
+                return wanted;
+
+        return dst;
     }
 
     /** A user device out of the library, to the Trash — recoverable, unlike a delete. Bundled
@@ -231,6 +339,24 @@ public:
     }
 
 private:
+    /** The packs directly in `dir` whose manifest names this `rig_id`. */
+    static juce::Array<juce::File> installedWithRigId (const juce::File& dir, const juce::String& rigId)
+    {
+        juce::Array<juce::File> found;
+
+        if (dir.isDirectory())
+            for (const auto& f : dir.findChildFiles (juce::File::findFilesAndDirectories, false))
+            {
+                const bool pack = (f.existsAsFile() && f.getFileName().endsWithIgnoreCase (".orbitrig.zip"))
+                               || (f.isDirectory() && f.getChildFile ("rig.json").existsAsFile());
+
+                if (pack && rigIdOf (f) == rigId)
+                    found.add (f);
+            }
+
+        return found;
+    }
+
     static void scanFolder (const juce::File& dir, bool bundled, juce::Array<Pack>& out)
     {
         if (! dir.isDirectory())
@@ -247,6 +373,7 @@ private:
                 p.location = f;
                 p.zipped   = zipped;
                 p.bundled  = bundled;
+                p.modified = f.getLastModificationTime();
 
                 const auto manifest = readEntry (p, "rig.json");
                 if (manifest.isEmpty())
@@ -259,6 +386,7 @@ private:
                 // folder's own name for a folder — the same cut `uniqueIn` makes when it numbers one.
                 p.name  = f.getFileName().upToFirstOccurrenceOf (".", false, false).trim();
                 p.alias = juce::String (p.rig.name).trim();
+                p.rigId = juce::String (p.rig.rigId).trim();
                 if (p.name.isEmpty())
                     p.name = p.alias;
 

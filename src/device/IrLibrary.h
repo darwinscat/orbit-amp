@@ -145,6 +145,59 @@ public:
         return item.moveFileTo (target);
     }
 
+    /** Moves a file or folder into another folder of the library, or up to the root. It keeps its
+        name, numbered when the name is taken there — the same rule as an import, so a move never
+        overwrites. Returns where it landed: the item itself when it is already there, an invalid
+        File when refused — anything not the library's, a destination that is not a folder of it,
+        or a folder moved into itself or anywhere beneath itself. */
+    static juce::File move (const juce::File& root, const juce::File& item, const juce::File& into)
+    {
+        if (! isManaged (root, item))
+            return {};
+
+        if ((into != root && ! isManaged (root, into)) || ! into.isDirectory())
+            return {};
+
+        if (item.getParentDirectory() == into)
+            return item;
+
+        if (item.isDirectory() && (into == item || into.isAChildOf (item)))
+            return {};
+
+        const auto target = uniqueIn (into, item.getFileName());
+        return item.moveFileTo (target) ? target : juce::File();
+    }
+
+    /** A GROUP MOVE, planned: of `sources`, the ones that actually move into `into`, in order.
+
+        Something inside a folder that is itself in the group rides along with its folder and is not
+        moved twice; something already in `into` stays where it is; a folder is never taken into
+        itself or beneath itself; anything not the library's is not the library's to move. */
+    static juce::Array<juce::File> planMove (const juce::File& root, const juce::Array<juce::File>& sources,
+                                             const juce::File& into)
+    {
+        juce::Array<juce::File> plan;
+
+        for (const auto& s : sources)
+        {
+            if (! isManaged (root, s) || s.getParentDirectory() == into)
+                continue;
+
+            if (s.isDirectory() && (into == s || into.isAChildOf (s)))
+                continue;
+
+            bool ridesAlong = false;
+            for (const auto& other : sources)
+                if (other != s && other.isDirectory() && s.isAChildOf (other))
+                    { ridesAlong = true; break; }
+
+            if (! ridesAlong)
+                plan.addIfNotAlreadyThere (s);
+        }
+
+        return plan;
+    }
+
     /** To the Trash, not gone — a slip of the mouse should cost a trip to the bin, not a pack. */
     static bool remove (const juce::File& root, const juce::File& item)
     {

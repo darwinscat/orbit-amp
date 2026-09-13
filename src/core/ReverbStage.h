@@ -121,6 +121,10 @@ public:
         return wetOut[(size_t) juce::jlimit (0, 1, ch)].data();
     }
 
+    /** How many samples of `addedWet` the last block wrote — the block's length, or the prepared
+        maximum when a host handed more than it promised. A reader must not go past it. */
+    int addedLength() const noexcept { return addedCount; }
+
     /** How long the attack stays dry before the tail arrives, 0..100 ms. */
     void setPredelayMs (float ms) noexcept
     {
@@ -172,15 +176,18 @@ public:
         const int n   = juce::jmin (numSamples, (int) wet[0].size());
 
         cleared = false;   // there is state in here again; the next reset() has work to do
+        addedCount = n;
 
-        // The wet copy: the whole wet chain runs on it, and the dry never enters.
+        // The wet copy: the whole wet chain runs on it, and the dry never enters. A sample that is
+        // not a number does not enter it either — see POISON below; the dry keeps whatever it was
+        // handed, which is not this stage's to change.
         for (int ch = 0; ch < nch; ++ch)
         {
             float* w = wet[(size_t) ch].data();
             const float* d = channels[ch];
 
             for (int i = 0; i < n; ++i)
-                w[i] = feed ? d[i] : 0.0f;
+                w[i] = feed && std::isfinite (d[i]) ? d[i] : 0.0f;
         }
 
         // The room itself, 100% wet (the constants undo Freeverb's internal ×3 on wet).
@@ -193,7 +200,7 @@ public:
         if (character == Character::modulated)
             modulateTail (nch, n);
 
-        // Predelay, then the tail's own high-pass, then ADD at the mix — dry stays unity.
+        // Predelay, then the tail's own high-pass, then the mix — into `wetOut`, not yet added.
         const int preSamples = (int) ((double) predelayMs * 0.001 * sampleRate);
 
         for (int i = 0; i < n; ++i)
@@ -209,13 +216,42 @@ public:
 
                 s = hpf.processSample (ch, s);
 
-                const float added = s * mix;
-                wetOut[(size_t) ch][(size_t) i] = added;
-                channels[ch][i] += added;
+                wetOut[(size_t) ch][(size_t) i] = s * mix;
             }
 
             prePos = (prePos + 1) % (int) preLine[0].size();
         }
+
+        // POISON. Every element of the room is recursive — Freeverb's combs and allpasses, the
+        // high-pass's integrators, the predelay and chorus lines — and a single NaN or infinity in
+        // any of them reproduces itself for ever: every sample the plugin put out from then on was
+        // not a number, at any mix, standing by included, and the only cure was taking the reverb
+        // out of the rig, because leaving the rig is what calls `reset()`. In a DAW that reads as
+        // the plugin going silent some while into a session.
+        //
+        // The door above keeps a bad sample from walking in; this catches one the room makes of
+        // its own. The whole block's tail is checked BEFORE any of it reaches the dry: a tail that
+        // is not a number is dropped, the room restarts from silence — the reset the strip used to
+        // be needed for — and the dry passes untouched. `x - x` is 0 for every finite x and NaN
+        // for anything else, so one running sum answers for the block.
+        float poison = 0.0f;
+        for (int ch = 0; ch < nch; ++ch)
+            for (int i = 0; i < n; ++i)
+                poison += wetOut[(size_t) ch][(size_t) i] - wetOut[(size_t) ch][(size_t) i];
+
+        if (! std::isfinite (poison))
+        {
+            reset();
+
+            for (int ch = 0; ch < nch; ++ch)
+                std::fill_n (wetOut[(size_t) ch].begin(), n, 0.0f);
+
+            return;
+        }
+
+        for (int ch = 0; ch < nch; ++ch)
+            for (int i = 0; i < n; ++i)
+                channels[ch][i] += wetOut[(size_t) ch][(size_t) i];
     }
 
 private:
@@ -340,6 +376,7 @@ private:
     std::array<std::vector<float>, 2> wet, wetOut;
     std::array<std::vector<float>, 2> preLine, modLine;
     bool cleared = true;   // see reset(): the clear underneath is ~150 KB and must not be per-block
+    int  addedCount = 0;   // see addedLength()
     int   prePos = 0, modPos = 0;
     float lfoPhase = 0.0f;
 };

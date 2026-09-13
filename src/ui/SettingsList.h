@@ -12,7 +12,8 @@ namespace orbitamp
 {
 
 /** A page of switches, and nothing else. Each row says what it is, says in one line what it does,
-    and carries a toggle at its right edge.
+    and carries a toggle at its right edge — or, for a setting that is a pick of a few values rather
+    than on or off, a short row of them to choose from.
 
     The SMALLEST thing that does the job, on purpose. There was a plan to write this move-ready for
     appkit so a sibling could share it; a settings row is thirty lines of paint, and a shared
@@ -38,6 +39,12 @@ public:
         std::function<void (bool)> set;
         juce::Colour dot;                   // a link's own accent, when the row is about a link
         bool hasDot = false;
+
+        /** A CHOICE row instead of a switch: the values, which one stands, and a pick. When
+            `choices` is empty the row is a switch and these are not asked. */
+        juce::StringArray choices;
+        std::function<int()> chosen;
+        std::function<void (int)> choose;
     };
 
     void setRows (std::vector<Row> newRows)
@@ -46,7 +53,7 @@ public:
         shown.assign (rows.size(), (char) 0);
 
         for (size_t i = 0; i < rows.size(); ++i)
-            shown[i] = (char) (rows[i].get != nullptr && rows[i].get());
+            shown[i] = stateOf (rows[i]);
 
         setSize (getWidth(), (int) rows.size() * rowH);
         repaint();
@@ -63,13 +70,14 @@ public:
             const auto& row = rows[i];
             const bool on = row.get != nullptr && row.get();
             const bool over = (int) i == hovered;
+            const bool choice = ! row.choices.isEmpty();
 
             // What was PAINTED is what the cache must remember. A repaint asked for by something
             // else — a hover, a resize — draws the current answer without the timer's knowledge,
             // and a value that then goes back to what the cache still holds would never be found
             // changed, leaving a lit row that is off.
             if (i < shown.size())
-                shown[i] = (char) on;
+                shown[i] = stateOf (row);
 
             if (over)
             {
@@ -77,8 +85,13 @@ public:
                 g.fillRoundedRectangle (cell.toFloat().reduced (2.0f, 1.0f), theme::radiusSm);
             }
 
-            auto sw = cell.removeFromRight (switchW + 14).withSizeKeepingCentre (switchW, switchH);
-            paintSwitch (g, sw.toFloat(), on);
+            if (choice)
+                paintChoices (g, choiceArea (cell), row);
+            else
+                paintSwitch (g, cell.withTrimmedLeft (cell.getWidth() - (switchW + 14))
+                                    .withSizeKeepingCentre (switchW, switchH).toFloat(), on);
+
+            cell.removeFromRight (choice ? choiceArea (cell).getWidth() + 21 : switchW + 14);
 
             auto text = cell.reduced (12, 4);
 
@@ -109,6 +122,21 @@ public:
     void mouseDown (const juce::MouseEvent& e) override
     {
         const int i = rowAt (e.getPosition().y);
+
+        if (i >= 0 && ! rows[(size_t) i].choices.isEmpty())
+        {
+            const auto& row = rows[(size_t) i];
+            const auto cell = getLocalBounds().withY (i * rowH).withHeight (rowH);
+            const auto area = choiceArea (cell);
+
+            if (area.contains (e.getPosition()) && row.choose != nullptr)
+            {
+                row.choose (juce::jlimit (0, row.choices.size() - 1,
+                                          (e.x - area.getX()) * row.choices.size() / area.getWidth()));
+                repaint();
+            }
+            return;
+        }
 
         if (i >= 0 && rows[(size_t) i].set != nullptr)
         {
@@ -165,7 +193,7 @@ private:
         if (arriving)
         {
             for (size_t i = 0; i < rows.size() && i < shown.size(); ++i)
-                shown[i] = (char) (rows[i].get != nullptr && rows[i].get());
+                shown[i] = stateOf (rows[i]);
 
             repaint();
             return;
@@ -176,7 +204,7 @@ private:
         // it is still walking.
         for (size_t i = 0; i < rows.size(); ++i)
         {
-            const char now = (char) (rows[i].get != nullptr && rows[i].get());
+            const char now = stateOf (rows[i]);
 
             if (i >= shown.size())
                 break;
@@ -212,7 +240,59 @@ private:
         g.fillEllipse (x, r.getY() + 3.0f, d, d);
     }
 
+    /** What a row shows, as one small number for the repaint cache: a switch's on or off, a
+        choice's index. */
+    static char stateOf (const Row& row)
+    {
+        if (! row.choices.isEmpty())
+            return (char) (row.chosen != nullptr ? row.chosen() : -1);
+
+        return (char) (row.get != nullptr && row.get());
+    }
+
+    /** A choice row's values, at the right edge where a switch would stand. */
+    static juce::Rectangle<int> choiceArea (juce::Rectangle<int> cell)
+    {
+        // Its right edge where a switch's stands: a switch sits centred in the last switchW + 14.
+        return cell.withTrimmedLeft (cell.getWidth() - (choiceW * 4 + 7))
+                   .withTrimmedRight (7)
+                   .withSizeKeepingCentre (choiceW * 4, choiceH);
+    }
+
+    /** The values as one pill cut into cells — the switch's track and its fill, the chosen cell
+        lit. Every cell gets the width of four, so a row of three or four reads the same size. */
+    static void paintChoices (juce::Graphics& g, juce::Rectangle<int> area, const Row& row)
+    {
+        const int n   = row.choices.size();
+        const int sel = row.chosen != nullptr ? row.chosen() : -1;
+        const auto r  = area.toFloat();
+        const float rad = r.getHeight() * 0.5f;
+
+        g.setColour (juce::Colour (0xff17171d));
+        g.fillRoundedRectangle (r, rad);
+
+        for (int k = 0; k < n; ++k)
+        {
+            const auto c = r.withX (r.getX() + r.getWidth() * (float) k / (float) n)
+                            .withWidth (r.getWidth() / (float) n);
+
+            if (k == sel)
+            {
+                g.setColour (theme::violet.withAlpha (0.85f));
+                g.fillRoundedRectangle (c.reduced (2.0f), rad - 2.0f);
+            }
+
+            g.setColour (k == sel ? juce::Colours::white : theme::txDim);
+            g.setFont (juce::FontOptions (13.0f));
+            g.drawText (row.choices[k], c, juce::Justification::centred);
+        }
+
+        g.setColour (theme::hair2);
+        g.drawRoundedRectangle (r.reduced (0.5f), rad, 1.0f);
+    }
+
     static constexpr int switchW = 34, switchH = 18;
+    static constexpr int choiceW = 42, choiceH = 22;
 
     std::vector<Row> rows;
     std::vector<char> shown;   // char, not bool: vector<bool> has no honest references
