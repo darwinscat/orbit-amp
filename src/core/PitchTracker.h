@@ -48,6 +48,11 @@ public:
         local.reserve ((size_t) windowCap / 4);
     }
 
+    /** The quietest window that still counts as a note: the RMS of the analysed window, in dBFS.
+        Below it the window is the gap between notes — or the hum and hiss of a guitar nobody is
+        playing, which a lower floor lets through as a note of its own. */
+    void setLevelFloorDb (double db) noexcept { rmsFloor = std::pow (10.0, db / 20.0); }
+
     /** One window, oldest sample first. Every call is its own snapshot — no state carries over,
         so a torn or repeated window costs one reading, never a stuck tuner. */
     Reading analyse (const float* x, int n)
@@ -209,7 +214,7 @@ private:
     static constexpr double fMax         = 1600.0;
     static constexpr double keyMaxShare  = 0.90;
     static constexpr double clarityFloor = 0.85;    // below this the window is noise, not note
-    static constexpr double rmsFloor     = 1.0e-4;  // ~-80 dBFS
+    double rmsFloor = 1.0e-3;                       // -60 dBFS — see setLevelFloorDb
     static constexpr int    windowCap    = 3072;    // decimated samples analysed, ~280 ms
 
     /** Normalized square difference at one lag, from the prefix sums. */
@@ -260,6 +265,7 @@ private:
                 work.push_back ((float) v);
             }
         }
+
 
         if ((int) work.size() > windowCap)
             work.erase (work.begin(), work.end() - windowCap);

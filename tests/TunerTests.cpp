@@ -345,6 +345,37 @@ int main()
         }
     }
 
+    // ---- the player's level floor ----------------------------------------------------------------
+    {
+        const auto at = [] (double hz, double sr, float amp, double floorDb)
+        {
+            std::vector<float> s ((size_t) windowLen);
+            for (int i = 0; i < windowLen; ++i)
+                s[(size_t) i] = amp * (float) std::sin (2.0 * pi * hz * i / sr);
+
+            PitchTracker t;
+            t.prepare (sr);
+            t.setLevelFloorDb (floorDb);
+            return t.analyse (s.data(), (int) s.size());
+        };
+
+        // An A2 whose window RMS is -63 dBFS: under the default -60 floor, over -70.
+        checkTrue ("floor -60 (default): a -63 dBFS string is not a note",
+                   at (110.0, 48000.0, 1.0e-3f, -60.0).hz == 0.0f);
+        checkTrue ("floor -70: the same string reads",
+                   at (110.0, 48000.0, 1.0e-3f, -70.0).hz > 0.0f);
+        checkTrue ("floor -50: a -57 dBFS string is not a note",
+                   at (110.0, 48000.0, 2.0e-3f, -50.0).hz == 0.0f);
+        {
+            PitchTracker plain;
+            plain.prepare (48000.0);
+            std::vector<float> s ((size_t) windowLen);
+            for (int i = 0; i < windowLen; ++i)
+                s[(size_t) i] = 1.0e-3f * (float) std::sin (2.0 * pi * 110.0 * i / 48000.0);
+            checkTrue ("a tracker nobody configured sits at -60", plain.analyse (s.data(), windowLen).hz == 0.0f);
+        }
+    }
+
     // ---- the naming the panel prints -----------------------------------------------------------
     checkNote ("440 names as", 440.0, "A", 4);
     checkNote ("82.4 names as", 82.407, "E", 2);

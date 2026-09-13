@@ -656,6 +656,7 @@ private:
             sr > 0.0 && ! juce::approximatelyEqual (sr, tunerEar.preparedRate()))
             tunerEar.prepare (sr);
 
+        tunerEar.setLevelFloorDb ((double) prefs::tunerFloor());
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 

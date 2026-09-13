@@ -40,6 +40,10 @@ public:
 
     double preparedRate() const noexcept { return sr; }
 
+    /** The player's level floor, handed on to the tracker — see PitchTracker::setLevelFloorDb.
+        Cheap: call it every tick. */
+    void setLevelFloorDb (double db) { tracker.setLevelFloorDb (db); }
+
     /** One tick: snapshot the tap, analyse, fold into the display state. `nowMs` is any steady
         millisecond clock — the ear only ever compares differences. */
     void update (const TunerTap& tap, unsigned nowMs)

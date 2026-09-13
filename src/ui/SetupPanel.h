@@ -19,6 +19,7 @@ class AmpProcessor;
 
         LIBRARY   the packs and the IRs, one sub-tab per list
         VIEW      what this window shows — the eye's business, and only the eye's
+        TUNER     what the tuner listens for — how quiet this guitar and this room are
 
     The libraries used to BE this window, one tab each, and there was nowhere for a setting to
     live except a popup menu hanging off the gear. They are one page now with their own sub-tabs,
@@ -68,6 +69,7 @@ private:
     void selectPage (int index);
     void selectLibrary (int index);
     void buildViewPage();
+    void buildTunerPage();
     void layOutTabs (juce::Rectangle<int>& header, std::vector<Tab>& tabs, float height);
     void paintTabs (juce::Graphics&, const std::vector<Tab>&, int current, float height,
                     juce::Point<int> offset = {}) const;
@@ -91,6 +93,9 @@ private:
         cannot reach its own last row is a page with a hidden switch. */
     SettingsList   viewPage;
     juce::Viewport viewView;
+
+    /** TUNER: machine preferences like VIEW's — a room and a guitar, not a sound. */
+    SettingsList   tunerPage;
     MiniClose    closeButton;
 
     static constexpr int panelW = 720;
