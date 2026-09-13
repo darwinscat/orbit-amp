@@ -1132,6 +1132,51 @@ int main()
                 std::abs (lateRms - 0.1 / std::sqrt (2.0)) < 0.002, juce::String (lateRms, 4) + " rms");
     }
 
+    // ...and a huge FINITE spike — not a sound, a fault upstream — is met at its full height and
+    // then let go of within half a second, not four.
+    {
+        orbitamp::core::SoftLimiter safety;
+        safety.prepare (sampleRate);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        long long phase = 0;
+        float spikeOut = 0.0f;
+        double rmsAfterHalfSecond = 0.0;
+        const int spikeBlock = 20, checkBlock = spikeBlock + (int) (0.5 * sampleRate / blockSize) + 1;
+
+        for (int b = 0; b <= checkBlock; ++b)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                         * 220.0 * (double) phase / sampleRate);
+                buf.setSample (0, i, s);
+                buf.setSample (1, i, s);
+            }
+
+            if (b == spikeBlock)
+                buf.setSample (0, 100, 1.0e30f);
+
+            safety.process (buf.getArrayOfWritePointers(), 2, blockSize, true, -1.0f);
+
+            if (b == spikeBlock)
+                spikeOut = buf.getSample (0, 100);
+
+            if (b == checkBlock)
+            {
+                double sum = 0.0;
+                for (int i = 0; i < blockSize; ++i)
+                    sum += (double) buf.getSample (1, i) * buf.getSample (1, i);
+                rmsAfterHalfSecond = std::sqrt (sum / blockSize);
+            }
+        }
+
+        report ("limiter: a 1e30 spike is held to the lid",   std::abs (spikeOut) <= std::pow (10.0f, -1.0f / 20.0f) + 1.0e-4f,
+                juce::String (spikeOut, 4));
+        report ("...and let go within half a second",       std::abs (rmsAfterHalfSecond - 0.1 / std::sqrt (2.0)) < 0.002,
+                juce::String (rmsAfterHalfSecond, 4) + " rms");
+    }
+
     // THE WHOLE CHAIN, one bad sample at the door. Everything that holds state and needs no pack —
     // the gate, both EQ links, the delay, the reverb, the cabinet, the limiter — in the rig and on,
     // a quiet tone, one NaN on both channels, the tone again; the captured blocks stand out, since
