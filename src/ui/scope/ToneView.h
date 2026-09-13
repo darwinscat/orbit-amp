@@ -9,7 +9,7 @@
 
 #include <felitronics/analysis/PlotMap.h>
 #include <felitronics/analysis/SpectrumPane.h>
-#include <juce_dsp/juce_dsp.h>
+#include <felitronics/core/Fft.h>
 
 #include <array>
 #include <cmath>
@@ -209,7 +209,7 @@ private:
 
         // Hann first. It costs a little resolution and saves the picture from the skirts a
         // rectangular window grows around every partial.
-        std::array<float, fftSize * 2> work {};
+        std::array<float, fftSize> work {};
         const int from = f.size - fftSize;
 
         for (int i = 0; i < fftSize; ++i)
@@ -219,11 +219,19 @@ private:
             work[(size_t) i] = f.wet[from + i] * w;
         }
 
-        fft.performFrequencyOnlyForwardTransform (work.data());
+        // The family's FFT, prepared once: the same unnormalised transform the JUCE one was, so the
+        // picture's scale has not moved. Its spectrum is packed — DC, Nyquist, then each bin's real
+        // and imaginary parts side by side — and a bin's magnitude is read off its pair.
+        if (fft.size() != fftSize)
+            fft.prepare (fftSize);
+
+        fft.forward (work.data(), packed.data());
 
         for (int b = 0; b < bins; ++b)
         {
-            const float db = juce::Decibels::gainToDecibels (work[(size_t) b] * 2.0f / (float) fftSize,
+            const float re = b == 0 ? packed[0] : packed[(size_t) (2 * b)];
+            const float im = b == 0 ? 0.0f      : packed[(size_t) (2 * b + 1)];
+            const float db = juce::Decibels::gainToDecibels (std::sqrt (re * re + im * im) * 2.0f / (float) fftSize,
                                                              floorDb);
             auto& s = spectrum[(size_t) b];
             s = db > s ? db : s * 0.85f + db * 0.15f;
@@ -268,7 +276,8 @@ private:
     static constexpr int   bins     = fftSize / 2;
     static constexpr float floorDb  = -78.0f;
 
-    juce::dsp::FFT fft { fftOrder };
+    felitronics::core::fft::DefaultRealFft fft;
+    std::array<float, fftSize> packed { };
     std::array<float, bins> spectrum { };
     double sampleRate = 48000.0;
 };
