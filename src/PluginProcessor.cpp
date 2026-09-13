@@ -110,6 +110,12 @@ AmpProcessor::AmpProcessor()
     reverbHpfHzParam    = apvts.getRawParameterValue (params::reverbHpfHz);
 
     packCompParam    = apvts.getRawParameterValue (params::packLevelComp);
+
+    // Every parameter's audio-thread mirror and the value it falls back to — see sanitiseParameters.
+    for (auto* p : getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
+            if (auto* raw = apvts.getRawParameterValue (ranged->paramID))
+                parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (ranged->getDefaultValue()) });
     boostGainParam  = apvts.getRawParameterValue (params::boostGain);
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
@@ -632,6 +638,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // prepareToPlay directly got stages built for a block size nobody was going to send. The
     // convolver behind the measured controls then read past the end of its own buffers.
     const int block = juce::jmax (1, samplesPerBlock);
+    preparedBlock.store (block, std::memory_order_relaxed);
 
     for (auto& eq : eqLinks)
         eq.prepare (sampleRate, channels);
@@ -857,7 +864,47 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    // A HOST'S BLOCK IS NOT ALWAYS THE BLOCK IT PROMISED. prepareToPlay names the most it will
+    // send, and every stage with a scratch buffer — the room's wet copy, the fades' dry copy, the
+    // captured blocks — is sized to that; a host that sends more (an offline render, a bounce, a
+    // host that simply does) used to find the room adding its tail to the first part of the block
+    // only, and the fades skipping. So a block longer than the promise is played as consecutive
+    // blocks of the promised size, which is exactly what the chain would have heard had the host
+    // kept it. The views refer to the host's own memory: nothing is allocated.
+    const int total = buffer.getNumSamples();
+    const int most  = preparedBlock.load (std::memory_order_relaxed);
+
+    if (most <= 0 || total <= most)
+    {
+        processChunk (buffer);
+        return;
+    }
+
+    for (int start = 0; start < total; start += most)
+    {
+        juce::AudioBuffer<float> part (buffer.getArrayOfWritePointers(), buffer.getNumChannels(),
+                                       start, juce::jmin (most, total - start));
+        processChunk (part);
+    }
+}
+
+void AmpProcessor::sanitiseParameters() noexcept
+{
+    // A PARAMETER THAT IS NOT A NUMBER. A host's automation point, a broken session, a controller
+    // that sends garbage: JUCE clamps a value into its range, but a clamp of NaN is NaN, and every
+    // stage downstream would take it — a room whose decay is NaN is a room that is NaN, healed and
+    // re-poisoned every block, silent for as long as the lane holds it. One pass here, before any
+    // stage reads anything: a value that is not a number reads as the parameter's default until
+    // someone sends a real one. A couple of hundred compares a block.
+    for (const auto& guard : parameterGuards)
+        if (! std::isfinite (guard.value->load (std::memory_order_relaxed)))
+            guard.value->store (guard.fallback, std::memory_order_relaxed);
+}
+
+void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
+{
     juce::ScopedNoDenormals noDenormals;
+    sanitiseParameters();
     const auto blockStart = juce::Time::getHighResolutionTicks();
 
     // The per-stage load meter, orbitcab's recipe verbatim: a cheap monotonic read around each
@@ -1221,7 +1268,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
           { auto& tout = reverbSpectrumTap[1];
             const float* w = reverb.addedWet (0);
-            for (int i = 0; i < numSamples; ++i)
+            // As far as the room wrote, not as far as the host's block runs: a host that hands more
+            // than it promised at prepare would have this read past the end of the room's buffer.
+            for (int i = 0; i < reverb.addedLength(); ++i)
                 tout.push (w[i]);
             tout.publishIfDue (eqSpectrumOrder,
                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
@@ -1322,6 +1371,20 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         // SPACE the copy was made at the seam, and there is nothing left to copy.)
         for (int ch = nchBack; ch < numChannels; ++ch)
             buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
+
+        // THE DOOR. Nothing that is not a number leaves the box. Every link heals its own state, but
+        // healing is per block and the cabinet drains rather than heals — a NaN that got in rides
+        // its impulse out for a second and more — and one of those samples on a host's bus takes
+        // the whole mix with it: a sum with a NaN in it is a NaN, and a DAW's master goes silent for
+        // every track, not just this one. Here it becomes silence for this plugin, for as long as
+        // it lasts. No option: there is no one who wants the other thing.
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            auto* d = buffer.getWritePointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+                if (! std::isfinite (d[i]))
+                    d[i] = 0.0f;
+        }
 
         if (limiter.lastMinGain() < 0.999f)
             limiterWorked.store (true);

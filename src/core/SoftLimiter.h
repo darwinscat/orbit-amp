@@ -41,16 +41,29 @@ public:
 
         const float ceiling = std::pow (10.0f, ceilingDb / 20.0f);
 
+        // HOW FAR ABOVE THE LID THE MEMORY GOES. The release is exponential, so the time it takes to
+        // let go is the logarithm of how far over the lid the envelope stood: a spike of 1e30 — not
+        // a sound, a fault somewhere upstream — held the gain down for four seconds of silence. The
+        // spike itself is still met at its full height; what the envelope REMEMBERS stops sixty
+        // decibels over the lid, so nothing costs more than about four tenths of a second.
+        const float memoryCeiling = ceiling * 1000.0f;
+
         for (int i = 0; i < numSamples; ++i)
         {
+            // The DETECTOR hears numbers only. An infinity used to set the envelope to infinity,
+            // which no finite peak ever decays from: the gain went to zero and stayed there, and the
+            // plugin put out exact silence for the rest of the session unless the limiter was
+            // switched off. The audio itself is not this detector's to change.
             float peak = 0.0f;
             for (int ch = 0; ch < numChannels; ++ch)
-                peak = std::max (peak, std::abs (channels[ch][i]));
+                if (const float a = std::abs (channels[ch][i]); std::isfinite (a))
+                    peak = std::max (peak, a);
 
             // Instant up, exponential down — the classic peak follower.
-            envelope = peak > envelope ? peak : peak + (envelope - peak) * releaseCoef;
+            const float follow = peak > envelope ? peak : peak + (envelope - peak) * releaseCoef;
+            envelope = std::isfinite (follow) ? std::min (follow, memoryCeiling) : 0.0f;
 
-            const float gain = envelope > ceiling ? ceiling / envelope : 1.0f;
+            const float gain = follow > ceiling ? ceiling / follow : 1.0f;
             minGain = std::min (minGain, gain);
 
             for (int ch = 0; ch < numChannels; ++ch)

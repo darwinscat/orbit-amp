@@ -62,6 +62,13 @@ public:
         if (juce::approximatelyEqual (g, want))
             return { g, g, false };
 
+        // A block with no samples moves nothing — but a fade that is under way is still under way:
+        // reporting it stopped would tell the chain an outgoing link is gone, and the link would be
+        // cleared with its tail still sounding. (It used to reach the ramp below and ask for a
+        // number between 1 and 0.)
+        if (numSamples <= 0)
+            return { g, g, true, 0 };
+
         const float from   = g;
         const float needed = std::abs (want - g) / juce::jmax (1.0e-9f, perSample);
         const int   ramp   = juce::jlimit (1, numSamples, (int) std::ceil (needed));
