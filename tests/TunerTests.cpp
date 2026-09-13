@@ -9,6 +9,7 @@
 // JUCE-free, like the code under test: links nothing at all.
 
 #include "core/PitchTracker.h"
+#include "core/TunerEar.h"
 
 #include <cmath>
 #include <cstdint>
@@ -182,6 +183,53 @@ int main()
         const auto r = analyse (sine (110.0, 48000.0, 0.5f, 0.4f), 48000.0);
         check ("A2 riding a DC offset: cents error",
                r.hz > 0.0f ? centsBetween (r.hz, 110.0) : 999.0, 0.0, 0.5);
+    }
+
+    // ---- the EAR: a new note starts from itself ------------------------------------------------
+    // The history of the note before must not lean on the note after. A string eight cents flat,
+    // then a gap, then the same string in tune: the first needle of the new note reads the new note.
+    // Both kinds of gap — the note dying out, and a short one inside the hold, a pick attack.
+    {
+        using orbitamp::core::TunerEar;
+        using orbitamp::core::TunerTap;
+
+        const double sr   = 48000.0;
+        const double flat = 110.0 * std::pow (2.0, -8.0 / 1200.0);
+
+        const auto windowOf = [sr] (double hz, float amp)
+        {
+            std::vector<float> w ((size_t) TunerTap::size);
+            for (int i = 0; i < TunerTap::size; ++i)
+                w[(size_t) i] = amp * (float) std::sin (2.0 * pi * hz * i / sr);
+            return w;
+        };
+
+        for (const int gapMs : { 900, 200 })
+        {
+            TunerEar ear;
+            TunerTap tap;
+            ear.prepare (sr);
+            unsigned now = 0;
+
+            const auto hold = [&] (const std::vector<float>& w, int ms)
+            {
+                tap.write (w.data(), (int) w.size());
+                for (int t = 0; t < ms; t += 33)
+                    ear.update (tap, now += 33);
+            };
+
+            hold (windowOf (flat, 0.3f), 500);
+            const double before = ear.needle();
+
+            hold (windowOf (110.0, 0.0f), gapMs);
+            tap.write (windowOf (110.0, 0.3f).data(), TunerTap::size);
+            ear.update (tap, now += 33);
+
+            char name[96];
+            std::snprintf (name, sizeof (name), "ear: 8 c flat, %d ms gap, in tune: first needle", gapMs);
+            check (name, ear.needle(), 0.0, 0.5);
+            checkTrue ("...and the flat note read flat before it", std::fabs (before + 8.0) < 0.5);
+        }
     }
 
     // ---- the naming the panel prints -----------------------------------------------------------

@@ -48,8 +48,19 @@ public:
         if (sr > 0.0 && tap.read (snap))
             reading = tracker.analyse (snap.data(), (int) snap.size());
 
+        // A NEW NOTE starts from itself. A reading after a gap — idle, or no confident window for
+        // longer than a pick attack takes — is a string plucked again, and usually a string just
+        // turned: the median still held the last note's readings and the needle still stood where
+        // that note's tail left it, so a string tuned up from flat came back reading flat for the
+        // first ticks of the note that was already right. The history goes, the needle lands.
+        bool freshNote = false;
+
         if (reading.hz > 0.0f)
         {
+            freshNote = recent.empty() || nowMs - lastValidMs > (unsigned) newNoteGapMs;
+            if (freshNote)
+                recent.clear();
+
             if ((int) recent.size() >= medianDepth)
                 recent.erase (recent.begin());
             recent.push_back (reading.hz);
@@ -67,7 +78,8 @@ public:
             std::nth_element (sorted.begin(), sorted.begin() + (long) sorted.size() / 2, sorted.end());
             displayHz = sorted[sorted.size() / 2];
 
-            needleSmoothed += 0.45f * (nearestNote().cents - needleSmoothed);
+            const float target = nearestNote().cents;
+            needleSmoothed = freshNote ? target : needleSmoothed + needleEase * (target - needleSmoothed);
         }
     }
 
@@ -84,6 +96,15 @@ public:
 private:
     static constexpr int holdMs      = 700;   // how long a note outlives its last confident reading
     static constexpr int medianDepth = 5;
+
+    /** The needle's share of the way to its target per tick — the needle's weight. 0.3 at the 30 Hz
+        tick is a time constant of about 95 ms: steady enough to read between two phrases, quick
+        enough to follow a peg. (It was 0.45, ~55 ms, and read nervous.) */
+    static constexpr float needleEase = 0.30f;
+
+    /** No confident reading for this long, then one: a new note — see `update`. Three ticks: longer
+        than a string that is ringing ever goes without one, shorter than a pick attack. */
+    static constexpr int newNoteGapMs = 100;
 
     PitchTracker tracker;
     double sr = 0.0;
