@@ -45,6 +45,7 @@ public:
         work.reserve ((size_t) windowCap);
         nsdf.reserve ((size_t) windowCap / 2 + 1);
         cum.reserve ((size_t) windowCap + 1);
+        local.reserve ((size_t) windowCap / 4);
     }
 
     /** One window, oldest sample first. Every call is its own snapshot — no state carries over,
@@ -139,25 +140,37 @@ public:
         // a fixed fraction of a SAMPLE, so spreading it over m periods divides the cents error
         // by m — on the high strings, where one period is nine samples, this is the difference
         // between a tuner and a guess.
+        //
+        // WHERE THE LONG PEAK IS LOOKED FOR. The single period is a guess good to a fraction of a
+        // sample on a clean note, and m times that fraction is where the long peak actually stands.
+        // Looked for within two lags of m times the guess, the search found it on clean notes and
+        // MISSED it wherever the guess was noisy — the tail of a low string sinking into hiss, where
+        // half a sample per period is ~5 lags at m = 8 — and a miss quietly fell back to the single-
+        // period answer, whose error is the whole of that half sample: +8 cents on a low E, held
+        // there tick after tick because neighbouring windows share their noise. So the search reaches
+        // a quarter period either way — the long peak's own half-width, so it cannot land on the one
+        // beside it — and on a high string that is still the two lags it always was.
         const int m = std::min (8, (int) (W / (2.0 * period)));
         if (m >= 2)
         {
             const int center = (int) std::lround (period * m);
-            if (center + 2 <= W - 1 && center - 2 >= 1)
+            const int reach  = std::max (2, (int) (0.25 * period));
+            if (center + reach + 1 <= W - 1 && center - reach - 1 >= 1)
             {
-                double local[5];
-                for (int k = 0; k < 5; ++k)
-                    local[k] = nsdfAt (center - 2 + k);
+                local.assign ((size_t) (2 * reach + 3), 0.0);
+                for (int k = 0; k < (int) local.size(); ++k)
+                    local[(size_t) k] = nsdfAt (center - reach - 1 + k);
 
                 int b = 1;
-                for (int k = 2; k <= 3; ++k)
-                    if (local[k] > local[b])
+                for (int k = 2; k <= 2 * reach + 1; ++k)
+                    if (local[(size_t) k] > local[(size_t) b])
                         b = k;
 
                 // Only trust the long lag while it still looks like the same pitch — a decayed
                 // or inharmonic tail scores low there, and the single-period answer stands.
-                if (local[b] > local[b - 1] && local[b] >= local[b + 1] && local[b] > 0.75 * clarity)
-                    period = (center - 2 + b + parabola (local[b - 1], local[b], local[b + 1])) / m;
+                const auto at = [this] (int k) { return local[(size_t) k]; };
+                if (at (b) > at (b - 1) && at (b) >= at (b + 1) && at (b) > 0.75 * clarity)
+                    period = (center - reach - 1 + b + parabola (at (b - 1), at (b), at (b + 1))) / m;
             }
         }
 
@@ -279,6 +292,7 @@ private:
     std::vector<float>  work;
     std::vector<float>  nsdf;
     std::vector<double> cum;
+    std::vector<double> local;   // the long peak's neighbourhood — see the re-measure in analyse()
 };
 
 } // namespace orbitamp::core

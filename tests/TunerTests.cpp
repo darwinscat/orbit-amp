@@ -243,6 +243,84 @@ int main()
         }
     }
 
+    // ---- the ear through a whole pluck, to its last breath --------------------------------------
+    // Sixteen harmonics falling at 1/k, each decaying faster than the one below it (-20 dB/s at the
+    // fundamental), a pick burst, a stiff string's sharp partials (B = 1e-4), a -60 dBFS hiss under
+    // all of it — three seconds, fed in host blocks, the ear ticked at 30 Hz. What the needle shows
+    // last before the note goes is what a player reads when tuning: it must still be the string,
+    // not the noise the tail sank into. Six strings, three rates, three seeds. (On the tracker as it
+    // was, fourteen of the fifty-four ended outside green, six cents out: the long-lag search missed
+    // its peak under the hiss and fell back to the single period's error.)
+    {
+        using orbitamp::core::TunerEar;
+        using orbitamp::core::TunerTap;
+
+        const double open[] = { 82.407, 110.0, 146.832, 196.0, 247.0, 329.628 };
+        double worstLast = 0.0;
+        int    lastOutside = 0, notes = 0;
+
+        for (const double sr : { 44100.0, 48000.0, 96000.0 })
+            for (const double f0 : open)
+                for (std::uint32_t seed = 1; seed <= 3; ++seed)
+                {
+                    constexpr double B = 1.0e-4;
+                    const int total = (int) (3.0 * sr);
+                    std::vector<float> y ((size_t) total);
+                    std::uint32_t rng = seed * 7919u;
+                    double phase[16];
+                    for (auto& p : phase)
+                        p = pi * (1.0 + lcgNoise (rng));
+
+                    for (int n = 0; n < total; ++n)
+                    {
+                        const double t = n / sr;
+                        double v = 0.0;
+                        for (int k = 1; k <= 16; ++k)
+                        {
+                            phase[k - 1] += 2.0 * pi * k * f0 * std::sqrt (1.0 + B * k * k) / sr;
+                            v += std::pow (10.0, -20.0 * (1.0 + 0.3 * (k - 1)) * t / 20.0) / k * std::sin (phase[k - 1]);
+                        }
+                        if (t < 0.004)
+                            v += 0.6 * lcgNoise (rng) * std::exp (-t / 0.0012);
+                        y[(size_t) n] = (float) (0.4 * v + 1.0e-3 * lcgNoise (rng));
+                    }
+
+                    // The pitch a tuner means by this string: its fundamental.
+                    const auto want = PitchTracker::nearestNote ((float) (f0 * std::sqrt (1.0 + B)));
+
+                    TunerTap tap;
+                    TunerEar ear;
+                    ear.prepare (sr);
+
+                    double nextTick = 0.0, lastLive = 0.0;
+                    bool   everLive = false;
+
+                    for (int pos = 0; pos + 512 <= total; pos += 512)
+                    {
+                        tap.write (y.data() + pos, 512);
+                        for (; nextTick <= (pos + 512) / sr; nextTick += 1.0 / 30.0)
+                        {
+                            ear.update (tap, (unsigned) std::lround (nextTick * 1000.0));
+                            if (ear.live() && ear.nearestNote().midi == want.midi)
+                            {
+                                lastLive = ear.needle() - want.cents;
+                                everLive = true;
+                            }
+                        }
+                    }
+
+                    ++notes;
+                    if (! everLive || std::fabs (lastLive) > TunerEar::inTuneCents)
+                        ++lastOutside;
+                    worstLast = std::max (worstLast, std::fabs (lastLive));
+                }
+
+        char name[96];
+        std::snprintf (name, sizeof (name), "ear: plucks whose last needle leaves green (of %d)", notes);
+        check (name, lastOutside, 0.0, 0.0);
+        check ("ear: the worst last needle, cents", worstLast, 0.0, TunerEar::inTuneCents);
+    }
+
     // ---- the naming the panel prints -----------------------------------------------------------
     checkNote ("440 names as", 440.0, "A", 4);
     checkNote ("82.4 names as", 82.407, "E", 2);
