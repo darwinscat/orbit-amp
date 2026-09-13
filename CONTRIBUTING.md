@@ -8,7 +8,7 @@
 
 Open an issue. A bug you hit, a question about how something behaves, a feature you miss — all
 of these are genuinely useful and get acted on. If a fix or a feature lands because you raised
-it, you are credited in the release notes.
+it, you are credited in `CHANGELOG.md`.
 
 ## Code — not accepted
 
@@ -30,6 +30,12 @@ are not copyrightable — only their expression is — so a well-described probl
 implemented here freely. You get the fix you wanted, with credit, and the project keeps its
 options open.
 
+Describe it in prose, though — **please do not paste code into the issue**. A pasted patch brings
+the same copyright question in through the side door, and code that has been read cannot be
+unread: someone who has seen your implementation can no longer write that part independently. The
+problem, the approach and the behaviour you expect are what is useful here, and none of that needs
+a diff.
+
 ## What this policy does NOT do
 
 It takes away none of the freedoms the AGPL grants you. You may use OrbitAmp, study it, modify
@@ -39,8 +45,11 @@ This is only about what gets merged *here*.
 ## Third-party code
 
 Third-party dependencies keep their own licences and are unaffected by the policy above. New ones
-must be AGPL-compatible (BSD / MIT / Apache-2.0 / MPL-2.0) and are recorded with the project's
-notices.
+must be AGPL-compatible (BSD / MIT / Apache-2.0 / MPL-2.0).
+
+A separate matter, and a separate document: the hardware behind the captures. Manufacturer and
+product names, and the trademarks visible in our own photographs of the units, are covered by
+[`docs/THIRD-PARTY-NOTICE.md`](docs/THIRD-PARTY-NOTICE.md), which the plugin carries verbatim.
 
 The OrbitAmp and Darwin's Cat names and logos are trademarks and are *not* covered by the code
 licence.
