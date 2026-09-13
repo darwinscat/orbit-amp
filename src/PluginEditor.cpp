@@ -376,9 +376,12 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress::escapeKey)
         return faceplate.foldPicture();
 
-    // Space is the transport, like everywhere else sound is judged. Text editors keep their
-    // spaces — a focused editor consumes the key before it ever reaches us.
-    if (key == juce::KeyPress::spaceKey)
+    // Space is the demo player's transport, like everywhere else sound is judged — but ONLY while
+    // the player is on show. Hidden, it is not ours: in a DAW space is the host's play/stop, and a
+    // plugin window that has the focus must not eat it — nor start a loop nobody can see, which
+    // would replace the guitar at the input. Unclaimed, the key goes on to the host. Text editors
+    // keep their spaces — a focused editor consumes the key before it ever reaches us.
+    if (key == juce::KeyPress::spaceKey && showDemo)
     {
         amp.demo.setPlaying (! amp.demo.isPlaying());
         return true;
