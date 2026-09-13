@@ -125,8 +125,12 @@ public:
 
         const double d0      = parabola (nsdf[(size_t) tau0 - 1], nsdf[(size_t) tau0], nsdf[(size_t) tau0 + 1]);
         double       period  = tau0 + d0;
+        // The parabola's VERTEX height: y0 - (ym - yp) * d0 / 4. The sign was once a plus, which put
+        // the peak BELOW the sample it was interpolated from — the further between two lags the
+        // true period fell, the lower the clarity read, and a clean high note half a lag off
+        // (12000 / 8.5 Hz) scored 0.87 against a floor of 0.85, one breath from being thrown away.
         const double clarity = std::min (1.0, nsdf[(size_t) tau0]
-                                                  + 0.25 * (nsdf[(size_t) tau0 - 1] - nsdf[(size_t) tau0 + 1]) * d0);
+                                                  - 0.25 * (nsdf[(size_t) tau0 - 1] - nsdf[(size_t) tau0 + 1]) * d0);
 
         if (clarity < clarityFloor)
             return { 0.0f, (float) clarity };

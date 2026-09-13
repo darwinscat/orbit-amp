@@ -161,6 +161,17 @@ int main()
         check ("Karplus-Strong pluck: clarity", r.clarity, 1.0, 0.15);
     }
 
+    // ---- clarity is the height of the peak, not of the sample beside it -----------------------
+    // A period that falls exactly between two lags is where the interpolated peak stands furthest
+    // above both samples. A clean sine there must score as clean as one on a lag.
+    {
+        const double sr = 48000.0;                       // decimated to exactly 12 kHz
+        const auto onLag  = analyse (sine (12000.0 / 9.0, sr), sr);
+        const auto between = analyse (sine (12000.0 / 8.5, sr), sr);
+        check ("sine on a whole lag: clarity",         onLag.clarity,   1.0, 0.02);
+        check ("sine half a lag between: clarity",     between.clarity, 1.0, 0.02);
+    }
+
     // ---- what must NOT read as a note ----------------------------------------------------------
     {
         std::vector<float> silence ((size_t) windowLen, 0.0f);
