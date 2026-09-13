@@ -342,6 +342,94 @@ int main()
                                                        == juce::File());
     }
 
+    // ---- Devices: one capture, one install — by its rig_id --------------------------------------
+    {
+        const auto src     = work.getChildFile ("dup-src");
+        const auto into    = work.getChildFile ("dup-devices");
+        const auto factory = work.getChildFile ("dup-factory");
+        into.createDirectory();
+        factory.createDirectory();
+
+        const auto pack = [&] (const juce::File& dir, const juce::String& name, const juce::String& rigId)
+        {
+            const auto folder = dir.getChildFile (name + ".orbitrig");
+            folder.createDirectory();
+            folder.getChildFile ("rig.json").replaceWithText (
+                "{ \"format\": \"orbitrig\", \"schema\": 4, \"rig_id\": \"" + rigId + "\", \"name\": \"" + name + "\" }");
+            return folder;
+        };
+
+        // The Trash is the player's machine's; here a retired copy is simply deleted.
+        const auto retire = [] (const juce::File& f) { return f.deleteRecursively(); };
+
+        const auto first = DeviceLibrary::importDevice (pack (src, "TS", "ts-mini-86a1"), into, factory, retire);
+        report ("a pack's rig_id is read",               DeviceLibrary::rigIdOf (first) == "ts-mini-86a1");
+
+        const auto again = DeviceLibrary::importDevice (pack (src.getChildFile ("v2"), "TS", "ts-mini-86a1"),
+                                                        into, factory, retire);
+        report ("the same capture again: one install",   again == into.getChildFile ("TS.orbitrig")
+                                                           && ! into.getChildFile ("TS 2.orbitrig").exists());
+
+        const auto renamed = DeviceLibrary::importDevice (pack (src, "Tube Screamer Mini", "ts-mini-86a1"),
+                                                          into, factory, retire);
+        report ("...under another name: still one",      renamed == into.getChildFile ("Tube Screamer Mini.orbitrig")
+                                                           && ! into.getChildFile ("TS.orbitrig").exists());
+
+        report ("re-importing the installed file is no-op",
+                DeviceLibrary::importDevice (renamed, into, factory, retire) == renamed && renamed.isDirectory());
+
+        const auto other = DeviceLibrary::importDevice (pack (src.getChildFile ("ch2"), "Tube Screamer Mini", "ts-mini-ch2-1111"),
+                                                        into, factory, retire);
+        report ("another capture with the same name: both", other == into.getChildFile ("Tube Screamer Mini 2.orbitrig")
+                                                           && renamed.isDirectory());
+
+        pack (factory, "RAT", "rat-2-3ab8");
+        juce::String refused;
+        report ("a capture the build ships is refused",  DeviceLibrary::importDevice (pack (src, "Rodent", "rat-2-3ab8"),
+                                                                                     into, factory, retire, &refused) == juce::File()
+                                                           && ! into.getChildFile ("Rodent.orbitrig").exists());
+        report ("...and says which pack it already is",  refused == "RAT", refused);
+
+        report ("a lone model has no rig_id to merge by", DeviceLibrary::rigIdOf (work.getChildFile ("dev-src/clean.nam")).isEmpty());
+
+        // The selectors' list: copies already on disk show once.
+        const auto entry = [] (const juce::String& name, const juce::String& rigId, bool bundled, int ageSeconds, bool loose = false)
+        {
+            DeviceLibrary::Pack p;
+            p.name     = name;
+            p.rigId    = rigId;
+            p.bundled  = bundled;
+            p.loose    = loose;
+            p.modified = juce::Time (2026, 8, 1, 12, 0) - juce::RelativeTime::seconds (ageSeconds);
+            return p;
+        };
+
+        juce::Array<DeviceLibrary::Pack> list;
+        list.add (entry ("TS",        "ts",  false, 100));
+        list.add (entry ("TS 2",      "ts",  false, 10));    // the newest copy
+        list.add (entry ("RAT",       "rat", false, 5));
+        list.add (entry ("RAT",       "rat", true,  500));   // the build's
+        list.add (entry ("Mystery",   "",    false, 1));
+        list.add (entry ("Mystery 2", "",    false, 2));
+        list.add (entry ("clean",     "ts",  false, 1, true));
+
+        DeviceLibrary::keepOnePerCapture (list);
+
+        const auto has = [&list] (const juce::String& name, bool bundled)
+        {
+            for (const auto& p : list)
+                if (p.name == name && p.bundled == bundled)
+                    return true;
+            return false;
+        };
+
+        report ("copies on disk: one entry per capture",  list.size() == 5, juce::String (list.size()) + " entries");
+        report ("...the newest of the player's copies",   has ("TS 2", false) && ! has ("TS", false));
+        report ("...the build's over the player's",       has ("RAT", true) && ! has ("RAT", false));
+        report ("...and nothing without an id is merged", has ("Mystery", false) && has ("Mystery 2", false)
+                                                            && has ("clean", false));
+    }
+
     // ---- Devices: remove refuses what is not the user's ----------------------------------------
     {
         DeviceLibrary::Pack bundled;

@@ -72,6 +72,11 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
     bool dragOver = false;
 
+    /** What the last import has to say that the list cannot show — a pack refused because the
+        build already ships it. Beside the toolbar, until the next import. */
+    juce::String notice;
+    juce::Rectangle<int> noticeArea;
+
     static constexpr int rowH = 26;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DeviceListView)
