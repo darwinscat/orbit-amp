@@ -97,6 +97,7 @@ AmpProcessor::AmpProcessor()
     delayTimeMsParam  = apvts.getRawParameterValue (params::delayTimeMs);
     delayDivParam     = apvts.getRawParameterValue (params::delayDiv);
     delayBpmParam     = apvts.getRawParameterValue (params::delayBpm);
+    delayHostTempoParam = apvts.getRawParameterValue (params::delayHostTempo);
     delayRepeatsParam = apvts.getRawParameterValue (params::delayRepeats);
     delayDarkParam    = apvts.getRawParameterValue (params::delayDark);
     delayOffsetParam  = apvts.getRawParameterValue (params::delayOffset);
@@ -570,18 +571,25 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 void AmpProcessor::updateDelaySettings() noexcept
 {
     // The time: the division against the conducting tempo when sync is on, the free knob when it
-    // is off. The host's tempo outranks the BPM field — the field exists for the standalone,
-    // where nobody else is counting.
+    // is off. The host's tempo conducts when there is one and the player has not asked for the
+    // block's own; the BPM field conducts otherwise — the standalone, where nobody else is counting.
+    // The host's tempo is published whatever the switches say, so the face can offer it.
+    double hostBpm = 0.0;
+
+    if (auto* ph = getPlayHead())
+        if (const auto pos = ph->getPosition())
+            if (const auto bpm = pos->getBpm(); bpm.hasValue() && *bpm > 0.0)
+                hostBpm = *bpm;
+
+    hostTempo.store ((float) hostBpm, std::memory_order_relaxed);
+
     float ms = delayTimeMsParam->load();
 
     if (delaySyncParam->load() > 0.5f)
     {
-        double bpm = (double) delayBpmParam->load();
-
-        if (auto* ph = getPlayHead())
-            if (const auto pos = ph->getPosition())
-                if (const auto hostBpm = pos->getBpm(); hostBpm.hasValue() && *hostBpm > 0.0)
-                    bpm = *hostBpm;
+        const double bpm = hostBpm > 0.0 && delayHostTempoParam->load() > 0.5f
+                               ? hostBpm
+                               : (double) delayBpmParam->load();
 
         const int div = juce::jlimit (0, params::delayDivisions.size() - 1,
                                       juce::roundToInt (delayDivParam->load()));

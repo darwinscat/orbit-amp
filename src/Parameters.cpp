@@ -311,9 +311,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     // The delay, off by default — an echo is a choice, not a starting point. Sync ships ON at a
     // quarter note: the free milliseconds are the specialist's mode, the division is the player's.
-    // The BPM field is the standalone's conductor; a host that reports a tempo outranks it.
+    // The BPM field is the standalone's conductor; in a host the session's tempo conducts, unless
+    // the player asks the delay to keep its own.
     layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", false),
                 std::make_unique<Bool>   (juce::ParameterID { delaySync, 1 }, "Delay Sync", true),
+                std::make_unique<Bool>   (juce::ParameterID { delayHostTempo, 1 }, "Delay Follows Host", true),
                 std::make_unique<Choice> (juce::ParameterID { delayDiv, 1 }, "Delay Division",
                                           delayDivisions, delayDivDefault),
                 std::make_unique<Float>  (juce::ParameterID { delayBpm, 1 }, "Delay BPM",

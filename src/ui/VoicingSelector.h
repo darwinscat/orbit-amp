@@ -62,6 +62,11 @@ public:
     /** A pick out of the list. */
     std::function<void (int index)> onPick;
 
+    /** A list that is NOT flat opens its own menu: when set, a click calls this instead of listing
+        the entries, and the owner builds the menu and says what the combo shows through a single
+        entry. The cabinet's IRs are that list — a folder tree of the player's own beside the shelf. */
+    std::function<void()> onOpen;
+
     float fontHeight = 8.0f;
     float tracking   = 0.04f;   // letter-spacing, as a fraction of the height — a block's name uses 0.15
 
@@ -131,7 +136,16 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        if (! cellArea().contains (e.getPosition()) || entries.isEmpty())
+        if (! cellArea().contains (e.getPosition()))
+            return;
+
+        if (onOpen)
+        {
+            onOpen();
+            return;
+        }
+
+        if (entries.isEmpty())
             return;
 
         juce::PopupMenu menu;
