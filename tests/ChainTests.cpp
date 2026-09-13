@@ -1135,6 +1135,50 @@ int main()
         report ("the player's IR is what sounds",            differencePercent (own, shelf) > 1.0,
                 juce::String (differencePercent (own, shelf), 1) + " % apart");
 
+        // THE AUTOMATION LANE WINS over a player's IR — and a recall is not a lane. A host moving
+        // `cab_ir` lets the player's IR go; a session restored with the player's IR and a different
+        // number underneath keeps playing the player's IR.
+        {
+            const auto h = std::make_unique<orbitamp::AmpProcessor>();
+            h->inlineLoads = true;
+            h->prepareToPlay (sampleRate, blockSize);
+            h->pumpDeviceWork();
+
+            juce::MemoryBlock ownIr;
+            {
+                juce::AudioBuffer<float> shot (1, 2400);
+                for (int i = 0; i < shot.getNumSamples(); ++i)
+                    shot.setSample (0, i, (float) (std::exp (-i / 200.0) * std::cos (i * 0.05)));
+                const auto f = work.getChildFile ("Lane.wav");
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (f);
+                if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                                   .withSampleRate (sampleRate)
+                                                                   .withNumChannels (1)
+                                                                   .withBitsPerSample (24)))
+                    writer->writeFromAudioSampleBuffer (shot, 0, shot.getNumSamples());
+                h->chooseCabFile (f);
+            }
+            h->pumpDeviceWork();
+
+            juce::MemoryBlock session;
+            h->getStateInformation (session);   // the player's IR, over factory index 7
+
+            set (*h, orbitamp::params::cabIr, 4.0f);   // the lane
+            h->pumpDeviceWork();
+            report ("a host moving cab_ir lets the player's IR go", ! h->cabChoice().isUser() && h->cabChoice().factory == 4);
+
+            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            r->inlineLoads = true;
+            r->prepareToPlay (sampleRate, blockSize);
+            set (*r, orbitamp::params::cabIr, 2.0f);
+            r->pumpDeviceWork();
+            r->setStateInformation (session.getData(), (int) session.getSize());
+            r->pumpDeviceWork();
+            r->pumpDeviceWork();
+            report ("...a restored session is not a lane",      r->cabChoice().isUser());
+        }
+
         work.deleteRecursively();
     }
 

@@ -483,6 +483,26 @@ void AmpProcessor::pumpDeviceWork()
     // named by the state TREE, which is the message thread's.
     if (juce::MessageManager::existsAndIsCurrentThread())
     {
+        // THE AUTOMATION LANE WINS. `cab_ir` is the host's handle on the cabinet, and a lane that
+        // moves it while an IR of the player's own is playing used to move nothing at all: the
+        // player's IR outranks the parameter underneath it. A move the host makes now lets the
+        // player's IR go, and the shelf's pick plays. A recall is not a move — a register, an undo,
+        // a preset or a session replaces the whole state, player's IR and number together — so the
+        // sighting after one is only a new baseline. Picks from the menu need no exception: a
+        // factory pick lets the player's IR go itself, and a file pick moves no parameter.
+        {
+            const auto* p = apvts.getParameter (params::cabIr);
+            const int now = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
+
+            if (! cabIrParamBaselineStale && now != lastCabIrParam
+                && apvts.state.hasProperty (params::cabIrUserKey))
+                for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                    apvts.state.removeProperty (id, nullptr);
+
+            cabIrParamBaselineStale = false;
+            lastCabIrParam = now;
+        }
+
         const auto choice = cabChoice();
         cabUserIr = choice.bytes;   // what a prepare off this thread will load — see below
 

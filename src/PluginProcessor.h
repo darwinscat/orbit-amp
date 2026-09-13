@@ -636,6 +636,7 @@ private:
     void markSwitchAimsPending()
     {
         switchAimFrames = aimWindowFrames;
+        cabIrParamBaselineStale = true;   // a restored `cab_ir` is not a host moving it — see the pump
 
         // BOTH baselines are taken from what the tree has just become, and that is the whole of
         // how a hand wins. `aimWrote*` starting at "nothing written yet" meant theft could only be
@@ -971,6 +972,11 @@ private:
     /** The sound the engine was last handed (`CabChoice::identity`), and whether a fresh prepare
         wants it handed again. The flag is set from `prepareToPlay`, which is not the pump's thread. */
     juce::String lastCabIr;
+
+    /** Where the pump last saw `cab_ir`, and whether that sighting is out of date because the whole
+        state was just replaced — see the automation rule in pumpDeviceWork. */
+    int  lastCabIrParam = -1;
+    bool cabIrParamBaselineStale = true;
     std::atomic<bool> cabIrStale { true };
 
     /** The player's own IR the message thread last found the state naming, or null — for a prepare
