@@ -43,12 +43,20 @@ public:
 
         for (int i = 0; i < numSamples; ++i)
         {
+            // The DETECTOR hears numbers only. An infinity used to set the envelope to infinity,
+            // which no finite peak ever decays from: the gain went to zero and stayed there, and the
+            // plugin put out exact silence for the rest of the session unless the limiter was
+            // switched off. The audio itself is not this detector's to change.
             float peak = 0.0f;
             for (int ch = 0; ch < numChannels; ++ch)
-                peak = std::max (peak, std::abs (channels[ch][i]));
+                if (const float a = std::abs (channels[ch][i]); std::isfinite (a))
+                    peak = std::max (peak, a);
 
             // Instant up, exponential down — the classic peak follower.
             envelope = peak > envelope ? peak : peak + (envelope - peak) * releaseCoef;
+
+            if (! std::isfinite (envelope))   // no way in any more; kept as the proof
+                envelope = 0.0f;
 
             const float gain = envelope > ceiling ? ceiling / envelope : 1.0f;
             minGain = std::min (minGain, gain);

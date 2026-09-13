@@ -1092,6 +1092,46 @@ int main()
         }
     }
 
+    // ...AND ONE INFINITY MUST NOT MUTE THE SAFETY FOR EVER. The limiter's envelope took the peak
+    // it heard, an infinity included, and no finite peak ever decays from that: the gain went to
+    // zero and the plugin put out exact silence until the limiter was switched off. A quiet tone,
+    // well under the ceiling, one infinite sample, the tone again: it must come back at unity.
+    {
+        orbitamp::core::SoftLimiter safety;
+        safety.prepare (sampleRate);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        long long phase = 0;
+        double lateRms = 0.0;
+
+        for (int b = 0; b < 100; ++b)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                         * 220.0 * (double) phase / sampleRate);
+                buf.setSample (0, i, s);
+                buf.setSample (1, i, s);
+            }
+
+            if (b == 20)
+                buf.setSample (0, 100, std::numeric_limits<float>::infinity());
+
+            safety.process (buf.getArrayOfWritePointers(), 2, blockSize, true, -1.0f);
+
+            if (b == 99)
+            {
+                double sum = 0.0;
+                for (int i = 0; i < blockSize; ++i)
+                    sum += (double) buf.getSample (1, i) * buf.getSample (1, i);
+                lateRms = std::sqrt (sum / blockSize);
+            }
+        }
+
+        report ("limiter: an infinity in, the tone comes back at unity",
+                std::abs (lateRms - 0.1 / std::sqrt (2.0)) < 0.002, juce::String (lateRms, 4) + " rms");
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench
