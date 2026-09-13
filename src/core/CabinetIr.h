@@ -100,13 +100,38 @@ public:
         if (! on)
             return;
 
-        juce::dsp::AudioBlock<float> block (const_cast<float**> (io),
-                                            (size_t) juce::jmin (channels, numChannels),
-                                            (size_t) numSamples);
+        const int nch = juce::jmin (channels, numChannels);
+
+        // POISON. A sample that is not a number does not enter the convolution. What the convolver
+        // does with one is the platform's business, and the platforms do not agree: on macOS it
+        // rides the impulse out and lets go after the IR's length; on Windows it stayed in for good,
+        // and the plugin went silent from that sample on — the output door turns what is not a
+        // number into silence. This link replaces the signal it is handed, so a bad sample becomes
+        // a silent one here exactly as it would at the door.
+        for (int ch = 0; ch < nch; ++ch)
+            for (int i = 0; i < numSamples; ++i)
+                if (! std::isfinite (io[ch][i]))
+                    io[ch][i] = 0.0f;
+
+        juce::dsp::AudioBlock<float> block (const_cast<float**> (io), (size_t) nch, (size_t) numSamples);
         cleared = false;   // there is history in the tail again
 
         juce::dsp::ProcessContextReplacing<float> ctx (block);
         conv.process (ctx);
+
+        // ...and one the convolver makes of its own is not kept either: the block goes silent and the
+        // convolution starts again. `x - x` is 0 for every finite x and NaN for anything else.
+        float poison = 0.0f;
+        for (int ch = 0; ch < nch; ++ch)
+            for (int i = 0; i < numSamples; ++i)
+                poison += io[ch][i] - io[ch][i];
+
+        if (! std::isfinite (poison))
+        {
+            conv.reset();
+            for (int ch = 0; ch < nch; ++ch)
+                std::fill_n (io[ch], numSamples, 0.0f);
+        }
     }
 
     /** Idempotent, like the room's and the echo's: the chain calls this while the cabinet is out
