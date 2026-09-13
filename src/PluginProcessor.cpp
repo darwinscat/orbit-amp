@@ -582,6 +582,28 @@ void AmpProcessor::pumpDeviceWork()
         gate.setConfig (gateCfg);
     }
 
+    // What the player does to the cabinet: baked into the IR off this pump, so the convolution
+    // never learns of it. Rebuilt only when something moved — and set BEFORE an IR loads below, so
+    // an IR loading into a freshly prepared cabinet is built once, cuts and all. The convolver takes
+    // one handover at a time: the other order handed it the bare IR and then the cut one, and the
+    // second waits for a message-thread retry that a render with no message loop never makes.
+    {
+        core::CabinetIr::Post post;
+        post.trimOn       = cabTrimOnParam->load() > 0.5f;
+        post.trimFraction = cabTrimParam->load();
+        const auto slopeDb = [] (float v)
+        { return params::eqSlopeValues[juce::jlimit (0, (int) std::size (params::eqSlopeValues) - 1,
+                                                     juce::roundToInt (v))]; };
+        post.hpfOn        = cabHpfOnParam->load() > 0.5f;
+        post.hpfHz        = cabHpfHzParam->load();
+        post.hpfSlope     = slopeDb (cabHpfSlopeParam->load());
+        post.lpfOn        = cabLpfOnParam->load() > 0.5f;
+        post.lpfHz        = cabLpfHzParam->load();
+        post.lpfSlope     = slopeDb (cabLpfSlopeParam->load());
+        post.phase        = cabPhaseParam->load() > 0.5f;
+        cab.setPost (post);
+    }
+
     // The cabinet IR: choosing one is picking a FILE, so it loads here — the convolution's own
     // background loader swaps it in without a click.
     // An IR of the player's own is the same kind of pick — its bytes are already in memory. It is
@@ -639,24 +661,9 @@ void AmpProcessor::pumpDeviceWork()
         }
     }
 
-    // ...and what the player does to it: baked into the IR off this pump, so the convolution
-    // never learns of it. Rebuilt only when something moved.
-    {
-        core::CabinetIr::Post post;
-        post.trimOn       = cabTrimOnParam->load() > 0.5f;
-        post.trimFraction = cabTrimParam->load();
-        const auto slopeDb = [] (float v)
-        { return params::eqSlopeValues[juce::jlimit (0, (int) std::size (params::eqSlopeValues) - 1,
-                                                     juce::roundToInt (v))]; };
-        post.hpfOn        = cabHpfOnParam->load() > 0.5f;
-        post.hpfHz        = cabHpfHzParam->load();
-        post.hpfSlope     = slopeDb (cabHpfSlopeParam->load());
-        post.lpfOn        = cabLpfOnParam->load() > 0.5f;
-        post.lpfHz        = cabLpfHzParam->load();
-        post.lpfSlope     = slopeDb (cabLpfSlopeParam->load());
-        post.phase        = cabPhaseParam->load() > 0.5f;
-        cab.setPost (post);
-    }
+    // An IR the convolver turned away mid-crossfade gets its next chance here.
+    if (juce::MessageManager::existsAndIsCurrentThread())
+        cab.flushPending();
 }
 
 void AmpProcessor::fitWire (int index, int lat)
@@ -1415,7 +1422,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
       // Otherwise the first IR-length after it comes back convolves what was played BEFORE it
       // stood down — a ghost, faded in over fifteen milliseconds, of a phrase from minutes ago.
       if (! cabOn)
-          cab.reset();
+          cab.idle (numSamples);
 
       if (cabOn)
       {
