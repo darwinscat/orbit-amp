@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <limits>
 #include <memory>
+#include <thread>
 #include <vector>
 
 // EVERY ALLOCATION THIS THREAD MAKES, COUNTED. RT-safety claims are worth what their instrument
@@ -1467,6 +1468,180 @@ int main()
             report ("...and one response at 44.1, 48 and 96 kHz", std::abs (at44 - at48) < 0.1 && std::abs (at96 - at48) < 0.1,
                     juce::String (at44, 2) + " / " + juce::String (at48, 2) + " / " + juce::String (at96, 2) + " dB at 220 Hz");
         }
+
+        // A LONGER CABINET PICKED WHILE IT STANDS DOWN finds nothing of before either. The convolver
+        // keeps its whole schedule's past running, not the impulse's: a drain as long as a trimmed
+        // tenth of a second left the rest of the phrase in there, and the whole IR, handed over while
+        // it rested, played it back when it returned — at -40 dBFS, on silence.
+        {
+            orbitamp::core::CabinetIr cab;
+            cab.prepare (sampleRate, bs, 2);
+            orbitamp::core::CabinetIr::Post trimmed;
+            trimmed.trimOn       = true;
+            trimmed.trimFraction = 0.08f;
+            cab.setPost (trimmed);
+            cab.load (shelfIr.data, (size_t) shelfIr.size);
+            blocks (cab, 200, true, true);                                  // loud, for longer than the whole IR
+            blocks (cab, (int) ((orbitamp::core::CabinetIr::maxSeconds + 1.0) * sampleRate / bs), false, false);
+            cab.setPost ({});                                               // the whole IR, room and all...
+            blocks (cab, 20, false, false);                                 // ...handed over while it rests
+            std::vector<float> back;
+            blocks (cab, 100, true, false, &back);
+            double ghost = 0.0;
+            for (float v : back)
+                ghost = std::max (ghost, (double) std::abs (v));
+            report ("...nor when the cabinet it returns to is longer", ghost < 1.0e-6, juce::String (ghost, 8) + " peak");
+        }
+
+        // THE TOP OCTAVE AT ANOTHER RATE is the cabinet's, not the resampler's. It filled in what lies
+        // before an IR's first sample from the samples it had, and a cabinet starts on its loudest
+        // edge: a broadband floor 12 to 26 dB over the cabinet from 16 kHz up. Read as the band's level
+        // against the cabinet's own middle, next to the same reading at the IR's native 48 kHz.
+        {
+            const auto response = [&] (double sr)
+            {
+                orbitamp::core::CabinetIr cab;
+                cab.prepare (sr, bs, 2);
+                cab.load (shelfIr.data, (size_t) shelfIr.size);
+                juce::AudioBuffer<float> buf (2, bs);
+                for (int b = 0; b < (int) (0.2 * sr / bs) + 2; ++b)        // past the handover's crossfade
+                {
+                    buf.clear();
+                    cab.process (buf.getArrayOfWritePointers(), 2, bs, true);
+                    cab.flushPending();
+                }
+                std::vector<float> h;
+                for (int b = 0; b < (int) (1.5 * sr / bs); ++b)
+                {
+                    buf.clear();
+                    if (b == 0)
+                        buf.setSample (0, 0, 1.0f), buf.setSample (1, 0, 1.0f);
+                    cab.process (buf.getArrayOfWritePointers(), 2, bs, true);
+                    for (int i = 0; i < bs; ++i)
+                        h.push_back (buf.getSample (0, i));
+                }
+                return h;
+            };
+
+            const auto bandDb = [] (const std::vector<float>& h, double sr, double lo, double hi)
+            {
+                double power = 0.0;
+                int points = 0;
+                for (double f = lo; f <= hi; f += 25.0, ++points)
+                {
+                    const double w = 2.0 * juce::MathConstants<double>::pi * f / sr;
+                    double re = 0.0, im = 0.0;
+                    for (size_t i = 0; i < h.size(); ++i)
+                        re += h[i] * std::cos (w * (double) i), im -= h[i] * std::sin (w * (double) i);
+                    power += re * re + im * im;
+                }
+                return 10.0 * std::log10 (power / juce::jmax (1, points));
+            };
+
+            const auto topOver = [&] (double sr, double lo, double hi)
+            {
+                const auto h = response (sr);
+                return bandDb (h, sr, lo, hi) - bandDb (h, sr, 1000.0, 4000.0);
+            };
+
+            const double native44 = topOver (48000.0, 15000.0, 18500.0), at44 = topOver (44100.0, 15000.0, 18500.0);
+            const double native96 = topOver (48000.0, 16000.0, 20000.0), at96 = topOver (96000.0, 16000.0, 20000.0);
+            report ("...and its top octave is the cabinet's at 44.1 and 96 kHz",
+                    std::abs (at44 - native44) < 1.0 && std::abs (at96 - native96) < 1.0,
+                    juce::String (at44 - native44, 2) + " dB at 15-18.5 k / " + juce::String (at96 - native96, 2) + " dB at 16-20 k");
+        }
+
+        // A SILENT IR IS A CABINET THAT PLAYS SILENCE — not a pick that leaves the last one playing.
+        {
+            juce::MemoryBlock silentWav;
+            {
+                juce::AudioBuffer<float> nothing (1, 2400);
+                nothing.clear();
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::MemoryOutputStream> (silentWav, false);
+                if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                                   .withSampleRate (sampleRate)
+                                                                   .withNumChannels (1)
+                                                                   .withBitsPerSample (24)))
+                    writer->writeFromAudioSampleBuffer (nothing, 0, nothing.getNumSamples());
+            }
+
+            orbitamp::core::CabinetIr cab;
+            cab.prepare (sampleRate, bs, 2);
+            cab.load (shelfIr.data, (size_t) shelfIr.size);
+            blocks (cab, 100, true, true);
+            cab.load (silentWav.getData(), silentWav.getSize());
+            std::vector<float> after;
+            blocks (cab, 200, true, true, &after);
+            double left = 0.0;
+            for (size_t i = after.size() / 2; i < after.size(); ++i)
+                left = std::max (left, (double) std::abs (after[i]));
+            report ("...and a silent IR silences it", left < 1.0e-6, juce::String (left, 8) + " peak");
+
+            // ...AND ONE PICKED WHILE IT RESTS IS THE ONE THAT COMES BACK, from its first sample. Nothing
+            // runs a rested convolver, so the handover used to wait for the return and crossfade in over
+            // 50 ms from the cabinet before it — longer than the chain's own fade back in.
+            orbitamp::core::CabinetIr rested;
+            rested.prepare (sampleRate, bs, 2);
+            rested.load (shelfIr.data, (size_t) shelfIr.size);
+            blocks (rested, 100, true, true);
+            blocks (rested, (int) ((orbitamp::core::CabinetIr::maxSeconds + 1.0) * sampleRate / bs), false, false);
+            rested.load (silentWav.getData(), silentWav.getSize());
+            blocks (rested, 20, false, false);
+            std::vector<float> back;
+            blocks (rested, 20, true, true, &back);
+            double old = 0.0;
+            for (float v : back)
+                old = std::max (old, (double) std::abs (v));
+            report ("...even picked while it rests, from the first sample back", old < 1.0e-6, juce::String (old, 8) + " peak");
+        }
+    }
+
+    // A RENDER WITH NO MESSAGE LOOP PLAYS THE CUTS IT WAS SAVED WITH. Prepared off the message thread,
+    // nothing ever pumps again: the IR went to the convolver bare and the cut one straight after it,
+    // which the convolver turns away while the first is landing — and only the message thread's tick
+    // retries. A 5 kHz tone through a cabinet cut at 1.2 kHz, against the same cabinet open — the
+    // cabinet alone: the captured blocks and the delay stand out, so the level is the cabinet's.
+    {
+        const auto level = [&] (bool cut)
+        {
+            const auto p = std::make_unique<orbitamp::AmpProcessor>();
+            p->inlineLoads = true;
+            set (*p, orbitamp::params::stereoMode, 0.0f);
+            set (*p, orbitamp::params::cabOn, 1.0f);
+            set (*p, orbitamp::params::boostPresent,  0.0f);
+            set (*p, orbitamp::params::preampPresent, 0.0f);
+            set (*p, orbitamp::params::delayPresent,  0.0f);
+            set (*p, orbitamp::params::cabLpfOn, cut ? 1.0f : 0.0f);
+            set (*p, orbitamp::params::cabLpfHz, 1200.0f);
+
+            std::thread host ([&] { p->prepareToPlay (sampleRate, blockSize); });
+            host.join();
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+            long long phase = 0;
+            double sum = 0.0;
+            long long counted = 0;
+            for (int b = 0; b < 300; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 5000.0 * (double) phase / sampleRate);
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+                p->processBlock (buf, midi);
+                if (b >= 150)
+                    for (int i = 0; i < blockSize; ++i, ++counted)
+                        sum += (double) buf.getSample (0, i) * buf.getSample (0, i);
+            }
+            return 10.0 * std::log10 (juce::jmax (1.0e-20, sum / (double) juce::jmax (1LL, counted)));
+        };
+
+        const double open = level (false), cut = level (true);
+        report ("cabinet: a render with no message loop keeps its cuts", cut < open - 10.0,
+                juce::String (cut - open, 1) + " dB at 5 kHz, cut against open (" + juce::String (open, 1) + " / " + juce::String (cut, 1) + ")");
     }
 
     // ...AND ONE INFINITY MUST NOT MUTE THE SAFETY FOR EVER. The limiter's envelope took the peak
