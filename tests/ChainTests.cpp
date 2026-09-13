@@ -1126,11 +1126,35 @@ int main()
         report ("a factory reset forgets it",                b->stateForSaving().hasProperty (orbitamp::params::cabIrUserKey)
                                                                && ! b->stateForSaving (true).hasProperty (orbitamp::params::cabIrUserKey));
 
-        // ...and what comes out is that IR, not the last factory one: through the cabinet alone.
+        // ...and what comes out is that IR, not the last factory one: through the cabinet alone —
+        // ALONE, and that is not a figure of speech. A captured block with no pack to play is
+        // silent, and a runner has no packs: with the preamp left in the rig both runs were
+        // silence, and silence compares as "0.0 % apart". The captured blocks stand out.
+        //
+        // The convolver also takes a new impulse on its own thread and swaps it in from the audio
+        // thread's side, crossfading, at the machine's pace — so each case gets most of a second
+        // of audio before it is measured.
+        const auto settleCabinet = [&] (orbitamp::AmpProcessor& p)
+        {
+            juce::AudioBuffer<float> silence (2, blockSize);
+            juce::MidiBuffer none;
+            for (int i = 0; i < 150; ++i)
+            {
+                silence.clear();
+                p.processBlock (silence, none);
+                p.pumpDeviceWork();
+                juce::Thread::sleep (5);
+            }
+        };
+
         set (*b, orbitamp::params::stereoMode, 0.0f);
         set (*b, orbitamp::params::cabOn, 1.0f);
+        set (*b, orbitamp::params::boostPresent,  0.0f);
+        set (*b, orbitamp::params::preampPresent, 0.0f);
+        settleCabinet (*b);
         const auto own = run (*b);
         b->chooseCabFactory (0);
+        settleCabinet (*b);
         const auto shelf = run (*b);
         report ("the player's IR is what sounds",            differencePercent (own, shelf) > 1.0,
                 juce::String (differencePercent (own, shelf), 1) + " % apart");
