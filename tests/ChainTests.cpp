@@ -1225,6 +1225,21 @@ int main()
                 juce::String (db, 2) + " dB");
     }
 
+    // A BLOCK OF NO SAMPLES in the middle of a fade: nothing moves, and the fade is still a fade —
+    // not finished, or the link fading out would be cleared with its tail still sounding.
+    {
+        orbitamp::core::BypassFade fade;
+        fade.prepare (sampleRate);
+        fade.snapTo (true);
+        const auto first = fade.advance (64, false);   // under way, not done
+        const auto empty = fade.advance (0, false);
+
+        report ("a fade meets an empty block: it holds, still moving",
+                first.moving && empty.moving && empty.ramp == 0
+                    && juce::approximatelyEqual (empty.from, first.to) && juce::approximatelyEqual (empty.to, first.to),
+                juce::String (empty.from, 3) + " -> " + juce::String (empty.to, 3));
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench
