@@ -5,6 +5,60 @@ All notable changes to **OrbitAmp** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-09-13 — your own cabinets, and a plugin that does not go quiet
+
+Two things a player will notice first. The cabinet plays IRs of your own, and a preset carries
+them. And one bad sample can no longer silence the plugin for the rest of a session.
+
+### Added
+- **Your own cabinet IRs in the Cab IR menu.** With nothing in the IR library the list is the
+  factory shelf as before. Otherwise a **Factory** submenu sits at the top and your library
+  follows as its folder tree, with a tick on what plays. WAV and AIFF are read; anything longer
+  than 5 seconds is not a cabinet and is refused.
+- **A preset or a session carries your IR whole — the file's bytes, not its path.** It sounds the
+  same after the file is renamed, moved, deleted, or on another machine. An automation lane on
+  the cabinet still moves it: a host moving `Cabinet IR` lets your own IR go.
+- **SETUP → IR is a shelf you can shape.** Every folder row has a **+** to add IRs into it.
+  Right-click offers Rename, Add IRs here, New folder inside, and **Move to** the top level or
+  any folder. Rows select like a file list (click, ⌘, ⇧), and a selection drags onto a folder.
+- **The tuner has a MUTE pill** under its cents: silence at the output while you tune, and the
+  tuner keeps listening.
+- **SETUP → TUNER: level floor** −80 / −70 / −60 / −50 dBFS, −60 by default. The quietest the
+  tuner still reads; raise it if hum with nobody playing shows as a note.
+- **The delay follows the host's tempo, or keeps its own.** In a DAW the time menu has TEMPO:
+  HOST (the default) or OWN. While the host conducts, the field shows the host's tempo.
+
+### Fixed
+- **The plugin no longer goes silent some while into a session.** A single NaN or infinity that
+  reached the reverb, the delay or the limiter stayed in it for ever, until the link was taken
+  out of the rig. The reverb and the delay now heal from it, and the limiter's detector ignores
+  it. Nothing that is not a number leaves the plugin: a bad sample becomes silence instead of
+  taking the host's whole mix with it. A parameter set to NaN by a broken automation lane reads
+  as its default.
+- **Space starts and stops your DAW again** while the plugin window has focus. It toggles the
+  demo loop only while the demo player is on show. Before, it also started a loop nobody could
+  see, in place of the guitar.
+- **The tuner reads what you play:**
+  - a string tuned up from flat no longer reads flat for its first moments, because the needle
+    starts from the new note;
+  - the tail of a low string under hiss no longer wanders several cents off;
+  - clean high notes are no longer thrown away;
+  - 96 kHz reads as well as 44.1 and 48.
+  
+  The needle is also a little steadier.
+- **Importing a pack you already have updates it instead of adding a copy.** Packs are known by
+  their capture id. The old copy goes to the Trash; a pack that ships with OrbitAmp is not
+  replaced, and the library says so. Copies already on disk show once in the device lists.
+- **Hosts that save from a background thread** get a finished copy of the session, never one read
+  while it was changing.
+- **A host block longer than the host promised** plays correctly. The reverb added its tail to
+  only the first part of such a block.
+- **The limiter lets go within half a second** after a huge spike, not four.
+- **SETUP's lists read at 13 px.**
+
+### Dependencies
+- `felitronics-core` **v0.30.0 → v0.31.0.**
+
 ## [0.6.0] — 2026-09-11 — every capture that plays off its own rate sounds like itself again
 
 The headline is not a feature. It is that a captured device playing at a session rate other than
