@@ -122,6 +122,11 @@ AmpProcessor::AmpProcessor()
     history.reset();
     history.markSaved();
 
+    // The saved session exists from the first moment: a host may ask for it from any thread
+    // before the pump has ever run.
+    apvts.state.addListener (this);
+    refreshSavedState (true);
+
     // The two links that HAVE a tail are told what their knobs say before anyone can ask how long
     // this rings. `prepareToPlay` does this too, but a VST3 host may ask before it activates the
     // plugin at all, and an answer built out of the stages' constructor defaults is not an answer.
@@ -129,8 +134,65 @@ AmpProcessor::AmpProcessor()
     updateReverbSettings();
 }
 
+juce::MemoryBlock AmpProcessor::buildSavedState()
+{
+    juce::MemoryBlock out;
+
+    // The workspace envelope carries the live parameter tree and the other three registers, so
+    // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
+    // envelope holds the live capture and the register snapshots and nothing else, so undo starts
+    // fresh on reopen. (It said otherwise here for a long time — it never did.)
+    if (auto xml = history.toTree().createXml())
+        copyXmlToBinary (*xml, out);
+
+    return out;
+}
+
+void AmpProcessor::refreshSavedState (bool force)
+{
+    ++ticksSinceSaved;
+
+    bool registersMoved = history.active() != savedActive
+                       || (int) savedRegisters.size() != history.numRegisters();
+
+    for (int i = 0; ! registersMoved && i < history.numRegisters(); ++i)
+    {
+        const auto& r = history.registerTree (i);
+        registersMoved = (r.has_value() ? *r : juce::ValueTree()) != savedRegisters[(size_t) i];
+    }
+
+    if (! force && ((! stateDirty && ! registersMoved) || ticksSinceSaved < savedThrottleTicks))
+        return;
+
+    auto bytes = buildSavedState();
+
+    // Taken AFTER the build: the build itself flushes the parameters into the tree, and whatever
+    // that stirred up is already in these bytes.
+    stateDirty      = false;
+    ticksSinceSaved = 0;
+    savedActive     = history.active();
+    savedRegisters.clear();
+    for (int i = 0; i < history.numRegisters(); ++i)
+    {
+        const auto& r = history.registerTree (i);
+        savedRegisters.push_back (r.has_value() ? *r : juce::ValueTree());
+    }
+
+    const juce::ScopedLock sl (savedLock);
+    savedState = std::move (bytes);
+}
+
 void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
+    // FROM ANYWHERE BUT THE MESSAGE THREAD, the copy the message thread keeps — see
+    // refreshSavedState. Nothing the session is made of is touched from here.
+    if (! juce::MessageManager::existsAndIsCurrentThread())
+    {
+        const juce::ScopedLock sl (savedLock);
+        destData = savedState;
+        return;
+    }
+
     // Switches and devices ride in the tree by NAME, and the names are written when they MOVE, so
     // a save normally has nothing to do here. The one gap is the tick: a control moved in the
     // 33 ms before the pump next runs would be saved as a new NUMBER beside its old NAME, and the
@@ -141,20 +203,14 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
     // when the number has moved and nothing has loaded it yet, writes the name of the device that
     // is leaving beside the number of the one arriving — which is worse than the gap it closes.
     //
-    // Guarded because a host may save from any thread and a ValueTree is the message thread's.
-    if (juce::MessageManager::getInstance()->isThisTheMessageThread())
-    {
-        pumpDeviceWork();
-        pumpSwitchNames();
-    }
+    pumpDeviceWork();
+    pumpSwitchNames();
 
+    // On the message thread the session is written fresh, and the kept copy becomes this one.
+    refreshSavedState (true);
 
-    // The workspace envelope carries the live parameter tree and the other three registers, so
-    // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
-    // envelope holds the live capture and the register snapshots and nothing else, so undo starts
-    // fresh on reopen. (It said otherwise here for a long time — it never did.)
-    if (auto xml = history.toTree().createXml())
-        copyXmlToBinary (*xml, destData);
+    const juce::ScopedLock sl (savedLock);
+    destData = savedState;
 }
 
 void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -164,6 +220,14 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
     auto xml = getXmlFromBinary (data, sizeInBytes);
     if (xml == nullptr)
         return;
+
+    // The session just handed over IS the session now, whether or not the message thread has
+    // applied it yet: a host that restores and saves back to back from a worker thread must get
+    // back what it gave, not the state before. The next refresh rewrites it in our own words.
+    {
+        const juce::ScopedLock sl (savedLock);
+        savedState.replaceAll (data, (size_t) sizeInBytes);
+    }
 
     const auto tree = juce::ValueTree::fromXml (*xml);
 

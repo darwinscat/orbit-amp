@@ -34,12 +34,14 @@ namespace orbitamp
     cabinet) lands in src/core/ behind small engines, and this class only pumps
     buffers into them and owns state. */
 class AmpProcessor final : public juce::AudioProcessor,
-                           private juce::Timer
+                           private juce::Timer,
+                           private juce::ValueTree::Listener
 {
 public:
     AmpProcessor();
-    /** Defaulted, and it is worth writing down WHY, because it looks like the place a weak
-        reference has to be cleared and it is not.
+    /** Takes the saved session's listener off the tree, and nothing else — worth writing down WHY
+        nothing else, because this looks like the place a weak reference has to be cleared and it
+        is not.
 
         `setStateInformation` can arrive on any thread, so it marshals the restore to the message
         thread behind a `juce::WeakReference<AmpProcessor>`, and the host may destroy the plugin
@@ -49,7 +51,7 @@ public:
         and declares it LAST, so it is the first member destroyed. Adding a clear here changes
         nothing at all. I wrote one anyway, on a reading of the wrong destructor, and the review
         caught it. */
-    ~AmpProcessor() override = default;
+    ~AmpProcessor() override { apvts.state.removeListener (this); }
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -126,6 +128,19 @@ public:
 
     void getStateInformation (juce::MemoryBlock&) override;
     void setStateInformation (const void*, int) override;
+
+    /** THE SESSION AS A HOST WILL READ IT, kept ready for a save that does not come from the
+        message thread.
+
+        Everything a session is made of — the history's registers, the parameter tree, the names
+        beside the numbers — is the message thread's, and hosts that save from a worker thread (a
+        real habit: autosave, project save in the background) used to walk all of it while the
+        message thread was changing it. Now the message thread writes the session down whenever it
+        has changed — at most a few times a second, from the pump — and a save from anywhere else
+        hands out that copy under a lock. It can be one throttle old; it is never torn.
+
+        `force` writes it now whatever has changed. Message thread only. */
+    void refreshSavedState (bool force = false);
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -249,6 +264,8 @@ private:
         pumpDeviceWork();
         pumpTuner();
         pumpSwitchNames();
+
+        refreshSavedState();   // last: the pumps above write names the session carries
     }
 
     /** A DEVICE AND ITS SWITCHES ARE SAVED BY NAME, and this is the half that puts them back.
@@ -1017,6 +1034,30 @@ private:
         hand-move or one restored session ends it. */
     bool stateWasRestored = false;
     int  modeAutoValue    = (int) params::StereoMode::mono;   // the layout's own default
+
+    //==========================================================================
+    // The saved session — see refreshSavedState.
+
+    /** Builds the session's bytes from the live state. Message thread only. */
+    juce::MemoryBlock buildSavedState();
+
+    juce::CriticalSection savedLock;
+    juce::MemoryBlock     savedState;              // guarded by savedLock
+
+    // What says the saved copy is behind. The tree says so itself (a listener); the registers are
+    // not in the tree, so the copy remembers which register trees it was written from — a copy
+    // into a register replaces its tree, and a switch changes the active index.
+    bool stateDirty = true;
+    int  savedActive = -1;
+    std::vector<juce::ValueTree> savedRegisters;
+    int  ticksSinceSaved = 0;
+    static constexpr int savedThrottleTicks = 10;   // ~a third of a second at the 30 Hz pump
+
+    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override { stateDirty = true; }
+    void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override            { stateDirty = true; }
+    void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override     { stateDirty = true; }
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override              { stateDirty = true; }
+    void valueTreeRedirected (juce::ValueTree&) override                              { stateDirty = true; }
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)

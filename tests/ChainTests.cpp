@@ -1038,6 +1038,96 @@ int main()
 
     }
 
+    // A SAVE FROM A HOST'S WORKER THREAD hands out the session the message thread wrote down, and
+    // never walks the live state. What it hands out must restore; a restore followed at once by a
+    // save from a worker must give back what was restored, applied or not; and a worker saving
+    // over and over while the message thread keeps changing things must neither crash nor tear.
+    {
+        struct Saver final : juce::Thread
+        {
+            orbitamp::AmpProcessor& proc;
+            juce::MemoryBlock last;
+            std::atomic<int> saves { 0 };
+            bool loop = false;
+
+            Saver (orbitamp::AmpProcessor& p, bool keepGoing) : juce::Thread ("host save"), proc (p), loop (keepGoing) {}
+
+            void run() override
+            {
+                do
+                {
+                    proc.getStateInformation (last);
+                    ++saves;
+                }
+                while (loop && ! threadShouldExit());
+            }
+        };
+
+        const auto readMix = [] (orbitamp::AmpProcessor& p)
+        {
+            auto* prm = p.apvts.getParameter (orbitamp::params::reverbMix);
+            return prm->convertFrom0to1 (prm->getValue());
+        };
+
+        const auto c = std::make_unique<orbitamp::AmpProcessor>();
+        set (*c, orbitamp::params::reverbMix, 37.0f);
+        c->refreshSavedState (true);
+
+        juce::MemoryBlock fromWorker;
+        {
+            Saver s (*c, false);
+            s.startThread();
+            s.waitForThreadToExit (5000);
+            fromWorker = s.last;
+        }
+
+        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        d->setStateInformation (fromWorker.getData(), (int) fromWorker.getSize());
+        report ("a save from a worker thread restores",   fromWorker.getSize() > 0 && std::abs (readMix (*d) - 37.0f) < 0.01f,
+                juce::String (fromWorker.getSize()) + " bytes, mix " + juce::String (readMix (*d), 2));
+
+        // Restored from a worker — queued for the message thread, which is not running here — and
+        // saved again from a worker at once: the bytes that came in are the bytes that go out.
+        const auto e = std::make_unique<orbitamp::AmpProcessor>();
+        {
+            struct Restorer final : juce::Thread
+            {
+                orbitamp::AmpProcessor& proc; const juce::MemoryBlock& blob;
+                Restorer (orbitamp::AmpProcessor& p, const juce::MemoryBlock& b) : juce::Thread ("host load"), proc (p), blob (b) {}
+                void run() override { proc.setStateInformation (blob.getData(), (int) blob.getSize()); }
+            } r (*e, fromWorker);
+            r.startThread();
+            r.waitForThreadToExit (5000);
+        }
+        juce::MemoryBlock back;
+        {
+            Saver s (*e, false);
+            s.startThread();
+            s.waitForThreadToExit (5000);
+            back = s.last;
+        }
+        report ("...a worker's load then save gives it back", back == fromWorker);
+
+        // The stress: a worker saving without pause while this thread moves a knob and writes the
+        // session down, a few hundred times.
+        {
+            Saver s (*c, true);
+            s.startThread();
+            for (int i = 0; i < 300; ++i)
+            {
+                set (*c, orbitamp::params::reverbMix, (float) (i % 100));
+                c->refreshSavedState (true);
+            }
+            s.signalThreadShouldExit();
+            s.waitForThreadToExit (5000);
+
+            const auto f = std::make_unique<orbitamp::AmpProcessor>();
+            f->setStateInformation (s.last.getData(), (int) s.last.getSize());
+            report ("...and saving flat out beside a changing state holds", s.saves.load() > 0 && s.last.getSize() > 0,
+                    juce::String (s.saves.load()) + " saves");
+        }
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench
