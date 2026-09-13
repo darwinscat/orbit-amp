@@ -202,9 +202,15 @@ public:
                 if (pos < 0.0f)
                     pos += (float) lineN;
 
-                const int   i0 = (int) pos;
+                // A HAIR SHORT OF THE END IS THE END. A read a hair behind a write head that has
+                // just wrapped lands a hair short of the line's length, and a float that size cannot
+                // hold the hair: it rounds to the length itself, one past the last sample, and both
+                // taps were read off the heap beyond the line. That position is the line's first
+                // sample, and it is read as one.
+                const int   whole = (int) pos;
+                const float f  = pos - (float) whole;
+                const int   i0 = whole == lineN ? 0 : whole;
                 const int   i1 = i0 + 1 == lineN ? 0 : i0 + 1;
-                const float f  = pos - (float) i0;
                 const float tap = line[(size_t) ch][(size_t) i0] * (1.0f - f)
                                 + line[(size_t) ch][(size_t) i1] * f;
 
@@ -227,9 +233,14 @@ public:
                 if (opos < 0.0f)
                     opos += (float) offN;
 
-                const int   o0 = (int) opos;
+                // ...the same edge, and here it was hit in every session on an arm64 Mac: the knob's
+                // zero arrives from the parameter there as 0.000000447 ms, a hair of a sample, so
+                // every wrap of this line read two samples past its end — see A HAIR SHORT OF THE
+                // END above.
+                const int   owhole = (int) opos;
+                const float of = opos - (float) owhole;
+                const int   o0 = owhole == offN ? 0 : owhole;
                 const int   o1 = o0 + 1 == offN ? 0 : o0 + 1;
-                const float of = opos - (float) o0;
                 const float wet = offLine[(size_t) ch][(size_t) o0] * (1.0f - of)
                                 + offLine[(size_t) ch][(size_t) o1] * of;
 

@@ -1327,6 +1327,67 @@ int main()
         }
     }
 
+    // THE DELAY READS ONLY ITS OWN LINES. A read a hair behind a write head that has just wrapped is
+    // a hair short of the line's end, and a float that size rounds the hair away: the index became
+    // the line's length, one past its last sample, and the two samples read there were whatever the
+    // heap held — added to the wet, 31 times a second, in every session on an arm64 Mac, where the
+    // offset knob's own zero arrives as such a hair. Each case against a twin that lands exactly: the
+    // two agree to within the hair, and a read past the end does not.
+    {
+        const auto twins = [] (float offsetMs, float offsetExact, float timeMs, float timeExact)
+        {
+            orbitamp::core::DelayStage hair, exact;
+            for (auto* d : { &hair, &exact })
+            {
+                d->prepare (sampleRate, blockSize);
+                d->setRepeats (0.0f);
+                d->setMix (1.0f);
+            }
+            hair.setOffsetMs (offsetMs);   exact.setOffsetMs (offsetExact);
+            hair.setTimeMs (timeMs);       exact.setTimeMs (timeExact);
+
+            juce::AudioBuffer<float> a (2, blockSize), b (2, blockSize);
+            long long phase = 0;
+            double worst = 0.0;
+            for (int blk = 0; blk < 80; ++blk)   // past the first wrap of the long line's read
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    // Off zero: the first sample the line ever took has to be one worth reading back.
+                    const float s = 0.05f + 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                                      * 220.0 * (double) phase / sampleRate);
+                    for (auto* buf : { &a, &b })
+                        buf->setSample (0, i, s), buf->setSample (1, i, s);
+                }
+                hair.process (a.getArrayOfWritePointers(), 2, blockSize);
+                exact.process (b.getArrayOfWritePointers(), 2, blockSize);
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < blockSize; ++i)
+                        worst = std::max (worst, (double) std::abs (a.getSample (ch, i) - b.getSample (ch, i)));
+            }
+            return worst;
+        };
+
+        // The hair is handed over as a number. It is what the offset knob's own zero arrives as from
+        // an arm64 Mac build; MSVC and gcc on x86-64 hand over an exact zero there — but any setting
+        // that lands a hair past a whole sample finds the same edge on every platform. What this
+        // machine's parameter reads is shown beside it.
+        constexpr float hairMs = 4.47034836e-07f;
+        const float knobZero = []
+        {
+            const auto p = std::make_unique<orbitamp::AmpProcessor>();
+            return p->apvts.getRawParameterValue (orbitamp::params::delayOffset)->load();
+        }();
+
+        const double offsetWorst = twins (hairMs, 0.0f, 20.0f, 20.0f);
+        report ("delay: the offset line is read inside its own length", offsetWorst < 1.0e-3,
+                juce::String (offsetWorst, 6) + " apart; the knob's zero reads " + juce::String (knobZero, 9) + " ms here");
+
+        // 350 ms and a hair: 16800.004 samples, read at the wrap of a 6.1-second line.
+        const double timeWorst = twins (0.0f, 0.0f, 350.0000915f, 350.0f);
+        report ("...and so is the long line", timeWorst < 1.0e-3, juce::String (timeWorst, 6) + " apart");
+    }
+
     // THE CABINET, one bad sample in: every sample after it is a number AT ONCE — not after the
     // impulse has carried it out, which is what macOS's convolver does, and not never, which is
     // what Windows' did. The shipping IR, a quiet tone, one NaN, the tone again.
