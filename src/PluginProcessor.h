@@ -760,6 +760,14 @@ public:
         heads are actually standing on. */
     const core::DelayStage& delayTaps() const noexcept { return delay; }
 
+    /** The tempo the host reported at the last block, or 0 when it reports none — the standalone,
+        or a host that does not say. For the delay's face, which shows the number that conducts. */
+    float hostTempoBpm() const noexcept { return hostTempo.load (std::memory_order_relaxed); }
+
+    /** Whether a host could conduct at all — false in the standalone, where the choice between the
+        host's tempo and the block's own does not exist. */
+    bool runsInHost() const noexcept { return wrapperType != wrapperType_Standalone; }
+
 private:
 
     /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
@@ -1016,6 +1024,8 @@ private:
     std::atomic<float>* delayTimeMsParam  = nullptr;
     std::atomic<float>* delayDivParam     = nullptr;
     std::atomic<float>* delayBpmParam     = nullptr;
+    std::atomic<float>* delayHostTempoParam = nullptr;
+    std::atomic<float>  hostTempo { 0.0f };   // see hostTempoBpm()
     std::atomic<float>* delayRepeatsParam = nullptr;
     std::atomic<float>* delayDarkParam    = nullptr;
     std::atomic<float>* delayOffsetParam  = nullptr;

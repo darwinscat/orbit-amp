@@ -66,29 +66,29 @@ DelayBlock::DelayBlock (AmpProcessor& processor)
         *amp.apvts.getParameter (params::delayDiv), [this] (float) { applyTimeMode(); });
     bpmAtt = std::make_unique<juce::ParameterAttachment> (
         *amp.apvts.getParameter (params::delayBpm), [this] (float) { field.repaint(); });
+    hostTempoAtt = std::make_unique<juce::ParameterAttachment> (
+        *amp.apvts.getParameter (params::delayHostTempo), [this] (float) { applyTimeMode(); });
     timeAtt = std::make_unique<juce::ParameterAttachment> (
         *amp.apvts.getParameter (params::delayTimeMs), [this] (float) { field.repaint(); });
 
-    timeSel.onPick = [this] (int i)
-    {
-        if (i < params::delayDivisions.size())
-        {
-            divAtt->setValueAsCompleteGesture ((float) i);
-            if (! syncOn())
-                syncAtt->setValueAsCompleteGesture (1.0f);
-        }
-        else
-            syncAtt->setValueAsCompleteGesture (0.0f);
-    };
+    timeSel.onOpen = [this] { showTimeMenu(); };
 
     field.text = [this]
     {
+        // The number that CONDUCTS, whoever owns it: the host's tempo wears its name, since
+        // dragging it here would move nothing.
+        if (hostConducts())
+            return "HOST " + juce::String (juce::roundToInt (amp.hostTempoBpm()));
+
         return syncOn() ? juce::String (juce::roundToInt (plain (params::delayBpm))) + " BPM"
                         : juce::String (juce::roundToInt (plain (params::delayTimeMs))) + " MS";
     };
 
     field.onDrag = [this] (int phase, float dy)
     {
+        if (hostConducts())
+            return;   // not ours to move — the menu gives the block its own BPM back
+
         auto& att = syncOn() ? *bpmAtt : *timeAtt;
 
         if (phase == 0)
@@ -104,6 +104,9 @@ DelayBlock::DelayBlock (AmpProcessor& processor)
 
     field.onTyped = [this] (const juce::String& typed)
     {
+        if (hostConducts())
+            return;
+
         if (const auto v = typed.getDoubleValue(); v > 0.0)
             (syncOn() ? *bpmAtt : *timeAtt).setValueAsCompleteGesture ((float) v);
     };
@@ -124,6 +127,14 @@ void DelayBlock::timerCallback()
     // a note READ as a note when it arrives. A switched-off block feeds zeros: its line hears
     // nothing, so its comb goes still rather than replaying the last thing it saw.
     const float in = isBlockOn() ? amp.delayTaps().envIn.load (std::memory_order_relaxed) : 0.0f;
+
+    // The host's tempo can move under a running session — a tempo track — and nothing calls us.
+    if (const auto t = hostConducts() ? amp.hostTempoBpm() : 0.0f; ! juce::approximatelyEqual (t, shownHostTempo))
+    {
+        shownHostTempo = t;
+        field.setMouseCursor (t > 0.0f ? juce::MouseCursor::NormalCursor : juce::MouseCursor::UpDownResizeCursor);
+        field.repaint();
+    }
 
     // Fast attack, slow release — the eye wants the hit now and the fade at its own pace.
     envSmooth = in > envSmooth ? in : envSmooth * 0.72f;
@@ -207,6 +218,72 @@ void DelayBlock::paintComb (juce::Graphics& g, juce::Rectangle<float> r)
 bool DelayBlock::syncOn() const
 {
     return plain (params::delaySync) > 0.5f;
+}
+
+bool DelayBlock::hostConducts() const
+{
+    return syncOn() && plain (params::delayHostTempo) > 0.5f && amp.hostTempoBpm() > 0.0f;
+}
+
+void DelayBlock::showTimeMenu()
+{
+    // The ladder, FREE under a rule, and — in a host — whose tempo the ladder counts in, under a
+    // second rule and its own name: a division means nothing until someone says how long a beat is.
+    enum : int { firstDiv = 1, itemFree = 100, itemHost = 101, itemOwn = 102 };
+
+    const bool sync = syncOn();
+    const int  div  = juce::jlimit (0, params::delayDivisions.size() - 1, juce::roundToInt (plain (params::delayDiv)));
+
+    const auto itemFor = [] (const juce::String& name, int id, bool ticked, bool enabled = true)
+    {
+        juce::PopupMenu::Item item (name);
+        item.itemID    = id;
+        item.colour    = theme::lilac;
+        item.isTicked  = ticked;
+        item.isEnabled = enabled;
+        return item;
+    };
+
+    juce::PopupMenu menu;
+
+    for (int i = 0; i < params::delayDivisions.size(); ++i)
+        menu.addItem (itemFor (params::delayDivisions[i], firstDiv + i, sync && div == i));
+
+    menu.addSeparator();
+    menu.addItem (itemFor ("FREE", itemFree, ! sync));
+
+    if (amp.runsInHost())
+    {
+        const bool followsHost = plain (params::delayHostTempo) > 0.5f;
+        const auto hostBpm     = amp.hostTempoBpm();
+
+        // The host's line says what it is conducting at; a host that reports no tempo leaves the
+        // choice standing but the own BPM playing, and the line says that too.
+        menu.addSectionHeader ("TEMPO");
+        menu.addItem (itemFor (hostBpm > 0.0f ? "HOST  " + juce::String (hostBpm, 1) + " BPM"
+                                              : juce::String ("HOST  (no tempo)"),
+                               itemHost, followsHost));
+        menu.addItem (itemFor ("OWN  " + juce::String (juce::roundToInt (plain (params::delayBpm))) + " BPM",
+                               itemOwn, ! followsHost));
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&timeSel),
+                        [safe = juce::Component::SafePointer<DelayBlock> (this)] (int r)
+                        {
+                            if (safe == nullptr || r <= 0)
+                                return;
+
+                            if (r == itemFree)
+                                safe->syncAtt->setValueAsCompleteGesture (0.0f);
+                            else if (r == itemHost || r == itemOwn)
+                                safe->hostTempoAtt->setValueAsCompleteGesture (r == itemHost ? 1.0f : 0.0f);
+                            else
+                            {
+                                safe->divAtt->setValueAsCompleteGesture ((float) (r - firstDiv));
+                                if (! safe->syncOn())
+                                    safe->syncAtt->setValueAsCompleteGesture (1.0f);
+                            }
+                        });
 }
 
 float DelayBlock::plain (const char* id) const

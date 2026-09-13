@@ -331,6 +331,10 @@ inline constexpr const char* delaySync    = "delay_sync";
 inline constexpr const char* delayTimeMs  = "delay_time_ms";
 inline constexpr const char* delayDiv     = "delay_div";
 inline constexpr const char* delayBpm     = "delay_bpm";
+/** Whose tempo the sync counts in when a host is conducting: the HOST's (the default — a delay in a
+    session plays in the session's time) or the block's OWN BPM field, for a player who wants the
+    echo on a grid of its own. With no tempo from anyone — the standalone — the field conducts. */
+inline constexpr const char* delayHostTempo = "delay_host_tempo";
 inline constexpr const char* delayRepeats = "delay_repeats";
 inline constexpr const char* delayDark    = "delay_dark";
 inline constexpr const char* delayOffset  = "delay_offset";
@@ -346,8 +350,8 @@ inline constexpr float delayDivisionBeats[] = { 4.0f, 3.0f, 2.0f, 4.0f / 3.0f, 1
                                                 0.25f, 1.0f / 6.0f };
 inline constexpr int delayDivDefault = 5;   // 1/4
 
-/** The BPM the sync runs on when no host is conducting — the standalone's field. A host that
-    reports a tempo outranks it. */
+/** The BPM the sync runs on when no host is conducting — the standalone's field — or when the
+    player has told the delay to keep its own (`delayHostTempo` off). */
 inline constexpr float delayBpmMin = 40.0f, delayBpmMax = 240.0f, delayBpmDefault = 120.0f;
 
 inline constexpr float delayTimeMinMs = 20.0f, delayTimeMaxMs = 2000.0f;

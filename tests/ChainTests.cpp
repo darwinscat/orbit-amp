@@ -1206,6 +1206,72 @@ int main()
         work.deleteRecursively();
     }
 
+    // THE DELAY COUNTS IN THE SESSION'S TEMPO unless told to keep its own. A quarter note at the
+    // host's 100 BPM is 600 ms; the block's own 120 is 500; and a host that reports no tempo leaves
+    // the own BPM conducting whatever the switch says. Read off the stage's shown time once its glide
+    // has arrived — the motor slides to a new time rather than jumping. Needs no pack.
+    {
+        struct Head final : juce::AudioPlayHead
+        {
+            std::optional<double> bpm;
+
+            juce::Optional<PositionInfo> getPosition() const override
+            {
+                PositionInfo info;
+                if (bpm.has_value())
+                    info.setBpm (*bpm);
+                return info;
+            }
+        } head;
+
+        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        d->prepareToPlay (sampleRate, blockSize);
+        d->setPlayHead (&head);
+
+        set (*d, orbitamp::params::delaySync, 1.0f);
+        set (*d, orbitamp::params::delayDiv, 5.0f);   // 1/4
+        set (*d, orbitamp::params::delayBpm, 120.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        // Blocks until the glide stops moving: ten seconds of them at the most.
+        const auto block = [&]
+        {
+            float last = -1.0f;
+            for (int i = 0; i < (int) (10.0 * sampleRate / blockSize); ++i)
+            {
+                buf.clear();
+                d->processBlock (buf, midi);
+
+                const float now = d->delayTaps().shownTimeMs.load();
+                if (std::abs (now - last) < 0.001f)
+                    break;
+                last = now;
+            }
+        };
+        const auto timeMs = [&] { return d->delayTaps().shownTimeMs.load(); };
+
+        head.bpm = 100.0;
+        block();
+        report ("a quarter note follows the host's 100 BPM",  std::abs (timeMs() - 600.0f) < 0.5f
+                                                                && std::abs (d->hostTempoBpm() - 100.0f) < 0.01f,
+                juce::String (timeMs(), 1) + " ms");
+
+        set (*d, orbitamp::params::delayHostTempo, 0.0f);
+        block();
+        report ("...and its own 120 when told to keep it",   std::abs (timeMs() - 500.0f) < 0.5f,
+                juce::String (timeMs(), 1) + " ms");
+
+        set (*d, orbitamp::params::delayHostTempo, 1.0f);
+        head.bpm.reset();
+        block();
+        report ("a host with no tempo leaves its own conducting", std::abs (timeMs() - 500.0f) < 0.5f
+                                                                   && d->hostTempoBpm() == 0.0f,
+                juce::String (timeMs(), 1) + " ms");
+
+        d->setPlayHead (nullptr);
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench
