@@ -109,6 +109,12 @@ AmpProcessor::AmpProcessor()
     reverbHpfHzParam    = apvts.getRawParameterValue (params::reverbHpfHz);
 
     packCompParam    = apvts.getRawParameterValue (params::packLevelComp);
+
+    // Every parameter's audio-thread mirror and the value it falls back to — see sanitiseParameters.
+    for (auto* p : getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
+            if (auto* raw = apvts.getRawParameterValue (ranged->paramID))
+                parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (ranged->getDefaultValue()) });
     boostGainParam  = apvts.getRawParameterValue (params::boostGain);
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
@@ -717,9 +723,23 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     }
 }
 
+void AmpProcessor::sanitiseParameters() noexcept
+{
+    // A PARAMETER THAT IS NOT A NUMBER. A host's automation point, a broken session, a controller
+    // that sends garbage: JUCE clamps a value into its range, but a clamp of NaN is NaN, and every
+    // stage downstream would take it — a room whose decay is NaN is a room that is NaN, healed and
+    // re-poisoned every block, silent for as long as the lane holds it. One pass here, before any
+    // stage reads anything: a value that is not a number reads as the parameter's default until
+    // someone sends a real one. A couple of hundred compares a block.
+    for (const auto& guard : parameterGuards)
+        if (! std::isfinite (guard.value->load (std::memory_order_relaxed)))
+            guard.value->store (guard.fallback, std::memory_order_relaxed);
+}
+
 void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 {
     juce::ScopedNoDenormals noDenormals;
+    sanitiseParameters();
     const auto blockStart = juce::Time::getHighResolutionTicks();
 
     // The per-stage load meter, orbitcab's recipe verbatim: a cheap monotonic read around each

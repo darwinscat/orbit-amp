@@ -63,6 +63,13 @@ private:
     /** The largest block prepareToPlay was told to expect; 0 before the first prepare. */
     std::atomic<int> preparedBlock { 0 };
 
+    /** A parameter's audio-thread mirror, and its default — see sanitiseParameters. */
+    struct ParameterGuard { std::atomic<float>* value; float fallback; };
+    std::vector<ParameterGuard> parameterGuards;
+
+    /** Puts a parameter that is not a number back on its default before the chain reads it. */
+    void sanitiseParameters() noexcept;
+
 public:
 
     juce::AudioProcessorEditor* createEditor() override;

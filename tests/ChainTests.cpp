@@ -1299,6 +1299,58 @@ int main()
                 whole.size() == parts.size() && worst < 1.0e-6, "worst difference " + juce::String (worst, 9));
     }
 
+    // A PARAMETER THAT IS NOT A NUMBER must not silence a link for as long as it is held. The
+    // room's DECAY set to NaN — the way a broken automation lane would set it — then a burst of
+    // tone and silence after it: the room must still ring.
+    {
+        const auto tailWith = [&] (bool poisonDecay)
+        {
+            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            c->prepareToPlay (sampleRate, blockSize);
+            set (*c, orbitamp::params::stereoMode, 0.0f);
+            set (*c, orbitamp::params::reverbOn, 1.0f);
+            set (*c, orbitamp::params::reverbMix, 100.0f);
+            set (*c, orbitamp::params::boostPresent,  0.0f);
+            set (*c, orbitamp::params::preampPresent, 0.0f);
+            set (*c, orbitamp::params::cabPresent,    0.0f);
+            set (*c, orbitamp::params::delayPresent,  0.0f);
+
+            if (poisonDecay)
+                c->apvts.getParameter (orbitamp::params::reverbDecay)
+                    ->setValueNotifyingHost (std::numeric_limits<float>::quiet_NaN());
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+            double tail = 0.0;
+            long long phase = 0;
+
+            for (int b = 0; b < 60; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float v = b < 20 ? 0.3f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                                      * 220.0 * (double) phase / sampleRate) : 0.0f;
+                    buf.setSample (0, i, v);
+                    buf.setSample (1, i, v);
+                }
+
+                c->processBlock (buf, midi);
+
+                if (b >= 25 && b < 35)
+                    tail = std::max (tail, (double) buf.getMagnitude (0, 0, blockSize));
+            }
+
+            return tail;
+        };
+
+        const double healthy  = tailWith (false);
+        const double poisoned = tailWith (true);
+
+        report ("a NaN on the room's DECAY: the room still rings",
+                healthy > 1.0e-3 && poisoned > 0.5 * healthy,
+                juce::String (poisoned, 4) + " vs " + juce::String (healthy, 4));
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench
