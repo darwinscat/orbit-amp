@@ -1160,6 +1160,20 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         for (int ch = nchBack; ch < numChannels; ++ch)
             buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
 
+        // THE DOOR. Nothing that is not a number leaves the box. Every link heals its own state, but
+        // healing is per block and the cabinet drains rather than heals — a NaN that got in rides
+        // its impulse out for a second and more — and one of those samples on a host's bus takes
+        // the whole mix with it: a sum with a NaN in it is a NaN, and a DAW's master goes silent for
+        // every track, not just this one. Here it becomes silence for this plugin, for as long as
+        // it lasts. No option: there is no one who wants the other thing.
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            auto* d = buffer.getWritePointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+                if (! std::isfinite (d[i]))
+                    d[i] = 0.0f;
+        }
+
         if (limiter.lastMinGain() < 0.999f)
             limiterWorked.store (true);
 

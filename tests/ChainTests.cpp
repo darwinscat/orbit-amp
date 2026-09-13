@@ -1146,6 +1146,8 @@ int main()
     // then lets go by itself. That is a tail, not a latch, and measured as one: the late window
     // starts well past it.
     {
+        int badEver = 0;   // over the whole run, every block from the poisoned one on
+
         const auto chainRun = [&] (bool poisoned, int& badLate)
         {
             const auto c = std::make_unique<orbitamp::AmpProcessor>();
@@ -1184,6 +1186,11 @@ int main()
                 c->processBlock (buf, midi);
                 c->pumpDeviceWork();
 
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < blockSize; ++i)
+                        if (! std::isfinite (buf.getSample (ch, i)))
+                            ++badEver;
+
                 if (b >= 600)
                 {
                     double sum = 0.0;
@@ -1212,6 +1219,8 @@ int main()
 
         report ("the whole chain: a NaN at the door, later all numbers", badLate == 0,
                 juce::String (badLate) + " non-finite");
+        report ("...and not one sample that is not a number ever leaves the box", badEver == 0,
+                juce::String (badEver) + " non-finite, the cabinet's drain included");
         report ("...and the level of the same run without it",  clean > 1.0e-3 && std::abs (db) < 1.0,
                 juce::String (db, 2) + " dB");
     }
