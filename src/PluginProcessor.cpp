@@ -33,10 +33,6 @@ AmpProcessor::AmpProcessor()
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })
 {
-    // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
-    // burst commits about 0.4 s after you stop moving.
-    startTimerHz (30);
-
     for (auto& order : blockSpectrumOrder)
         order.store (eqSpectrumOrder);
 
@@ -132,6 +128,14 @@ AmpProcessor::AmpProcessor()
     // plugin at all, and an answer built out of the stages' constructor defaults is not an answer.
     updateDelaySettings();
     updateReverbSettings();
+
+    // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
+    // burst commits about 0.4 s after you stop moving.
+    //
+    // LAST, and not by taste: the timer ticks on the message thread whoever constructs us, and a
+    // host that constructs on a worker would have had the first tick walking the history and the
+    // saved session while this constructor was still building them.
+    startTimerHz (30);
 }
 
 juce::MemoryBlock AmpProcessor::buildSavedState()
@@ -150,7 +154,13 @@ juce::MemoryBlock AmpProcessor::buildSavedState()
 
 void AmpProcessor::refreshSavedState (bool force)
 {
-    ++ticksSinceSaved;
+    // A RESTORE IS ON ITS WAY. The copy already IS the incoming session; the live state is still
+    // the one it replaces, and writing that down now would hand a worker's save the session the
+    // host just loaded over. The restore writes the copy itself once it has landed.
+    if (pendingRestores.load (std::memory_order_acquire) > 0)
+        return;
+
+    ticksSinceSaved = juce::jmin (ticksSinceSaved + 1, savedThrottleTicks);
 
     bool registersMoved = history.active() != savedActive
                        || (int) savedRegisters.size() != history.numRegisters();
@@ -161,14 +171,15 @@ void AmpProcessor::refreshSavedState (bool force)
         registersMoved = (r.has_value() ? *r : juce::ValueTree()) != savedRegisters[(size_t) i];
     }
 
-    if (! force && ((! stateDirty && ! registersMoved) || ticksSinceSaved < savedThrottleTicks))
+    if (! force && ((! stateDirty.load (std::memory_order_relaxed) && ! registersMoved)
+                    || ticksSinceSaved < savedThrottleTicks))
         return;
 
     auto bytes = buildSavedState();
 
     // Taken AFTER the build: the build itself flushes the parameters into the tree, and whatever
     // that stirred up is already in these bytes.
-    stateDirty      = false;
+    stateDirty.store (false, std::memory_order_relaxed);
     ticksSinceSaved = 0;
     savedActive     = history.active();
     savedRegisters.clear();
@@ -186,7 +197,10 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     // FROM ANYWHERE BUT THE MESSAGE THREAD, the copy the message thread keeps — see
     // refreshSavedState. Nothing the session is made of is touched from here.
-    if (! juce::MessageManager::existsAndIsCurrentThread())
+    // ...and from the message thread too while a restore is still on its way to it: the live
+    // state is the one being replaced, and the copy is the session the host just handed over.
+    if (! juce::MessageManager::existsAndIsCurrentThread()
+        || pendingRestores.load (std::memory_order_acquire) > 0)
     {
         const juce::ScopedLock sl (savedLock);
         destData = savedState;
@@ -221,15 +235,27 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
     if (xml == nullptr)
         return;
 
+    const auto tree = juce::ValueTree::fromXml (*xml);
+
+    // What neither path below would load is not a session, and must not become the copy a worker's
+    // save hands out: before this copy existed, an ignored load left saves describing the state
+    // that actually plays. FIRST, before anything is counted or stored — a rejected blob that had
+    // been counted as pending would have frozen the copy for good. The state type is spelled out
+    // rather than read off the live tree, which is not this thread's to read.
+    const bool loadable = (tree.hasType ("Workspace") && tree.getChildWithName ("Live").getNumChildren() > 0)
+                       || tree.hasType ("state");   // the tree type the constructor gives apvts
+    if (! loadable)
+        return;
+
     // The session just handed over IS the session now, whether or not the message thread has
     // applied it yet: a host that restores and saves back to back from a worker thread must get
-    // back what it gave, not the state before. The next refresh rewrites it in our own words.
+    // back what it gave, not the state before. Counted as pending until it lands — see
+    // refreshSavedState — and written down in our own words once it has.
+    pendingRestores.fetch_add (1, std::memory_order_acq_rel);
     {
         const juce::ScopedLock sl (savedLock);
         savedState.replaceAll (data, (size_t) sizeInBytes);
     }
-
-    const auto tree = juce::ValueTree::fromXml (*xml);
 
     const auto apply = [] (AmpProcessor& self, const juce::ValueTree& t)
     {
@@ -254,17 +280,24 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     // CompareHistory's contract is message-thread only, and a host may restore from anywhere —
     // marshalled rather than raced against the settle timer (found in review).
+    const auto land = [apply] (AmpProcessor& self, const juce::ValueTree& t)
+    {
+        apply (self, t);
+        self.pendingRestores.fetch_sub (1, std::memory_order_acq_rel);
+        self.refreshSavedState (true);
+    };
+
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
     {
-        apply (*this, tree);
+        land (*this, tree);
         return;
     }
 
     juce::MessageManager::callAsync (
-        [weak = juce::WeakReference<AmpProcessor> (this), tree, apply]
+        [weak = juce::WeakReference<AmpProcessor> (this), tree, land]
         {
             if (auto* self = weak.get())
-                apply (*self, tree);
+                land (*self, tree);
         });
 }
 

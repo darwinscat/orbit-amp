@@ -137,7 +137,9 @@ public:
         real habit: autosave, project save in the background) used to walk all of it while the
         message thread was changing it. Now the message thread writes the session down whenever it
         has changed — at most a few times a second, from the pump — and a save from anywhere else
-        hands out that copy under a lock. It can be one throttle old; it is never torn.
+        hands out that copy under a lock. It is never torn. It is as fresh as the message thread's
+        last chance to write it: a third of a second while the host keeps its message loop running,
+        longer if the host holds that loop still — the one thing a copy cannot know about.
 
         `force` writes it now whatever has changed. Message thread only. */
     void refreshSavedState (bool force = false);
@@ -1047,8 +1049,11 @@ private:
     // What says the saved copy is behind. The tree says so itself (a listener); the registers are
     // not in the tree, so the copy remembers which register trees it was written from — a copy
     // into a register replaces its tree, and a switch changes the active index.
-    bool stateDirty = true;
+    std::atomic<bool> stateDirty { true };
     int  savedActive = -1;
+
+    /** Restores handed over but not yet applied on the message thread — see setStateInformation. */
+    std::atomic<int> pendingRestores { 0 };
     std::vector<juce::ValueTree> savedRegisters;
     int  ticksSinceSaved = 0;
     static constexpr int savedThrottleTicks = 10;   // ~a third of a second at the 30 Hz pump
