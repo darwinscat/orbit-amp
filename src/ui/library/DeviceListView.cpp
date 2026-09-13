@@ -88,8 +88,9 @@ void DeviceListView::rebuild()
     content.removeAllChildren();
 
     // Only the user's layer — the factory devices are the build's, not this panel's to edit —
-    // and only this tab's slot, the same cut the block's own selector makes.
-    auto packs = device::DeviceLibrary::scan (slot);
+    // and only this tab's slot, the same cut the block's own selector makes. EVERY file, though:
+    // the selectors show one entry per capture, and a copy hidden here could never be removed.
+    auto packs = device::DeviceLibrary::scan (slot, false);
     packs.removeIf ([] (const device::DeviceLibrary::Pack& p) { return p.bundled; });
 
     for (int i = 0; i < packs.size(); ++i)
