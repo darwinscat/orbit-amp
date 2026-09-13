@@ -66,14 +66,13 @@ public:
         conv.prepare ({ sampleRate, (juce::uint32) blockSize, (juce::uint32) channels });
     }
 
-    /** Message thread. The data is copied here — the caller's buffer may die. */
+    /** Message thread. The data is copied here — the caller's buffer may die. WAV or AIFF — the
+        shelf ships WAV, a player's own library may hold either. */
     void load (const void* data, size_t size)
     {
-        juce::WavAudioFormat wav;
-        std::unique_ptr<juce::AudioFormatReader> reader (
-            wav.createReaderFor (new juce::MemoryInputStream (data, size, false), true));
+        const auto reader = readerFor (data, size);
 
-        if (reader == nullptr || reader->lengthInSamples <= 0)
+        if (reader == nullptr)
             return;
 
         raw.setSize ((int) reader->numChannels, (int) reader->lengthInSamples);
@@ -81,6 +80,13 @@ public:
         rawRate = reader->sampleRate;
         rebuild();
     }
+
+    /** The longest IR `load` takes — see `readerFor`. */
+    static constexpr double maxSeconds = 5.0;
+
+    /** Whether `load` would take these bytes — asked before a player's file is chosen, so a file
+        that is not audio is refused at the pick instead of silently playing the last cabinet. */
+    static bool decodes (const void* data, size_t size) { return readerFor (data, size) != nullptr; }
 
     /** Message thread. Rebuilds only when something actually moved. */
     void setPost (const Post& p)
@@ -123,6 +129,28 @@ public:
 
 private:
     bool cleared = true;   // see reset()
+
+    static std::unique_ptr<juce::AudioFormatReader> readerFor (const void* data, size_t size)
+    {
+        juce::AudioFormatManager formats;
+        formats.registerFormat (new juce::WavAudioFormat(), true);
+        formats.registerFormat (new juce::AiffAudioFormat(), false);
+
+        std::unique_ptr<juce::AudioFormatReader> reader (
+            formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (data, size, false)));
+
+        if (reader == nullptr || reader->lengthInSamples <= 0 || reader->numChannels == 0
+            || reader->sampleRate <= 0.0)
+            return nullptr;
+
+        // A cabinet with its room is a second or two. The byte cap alone would let a minute of
+        // 16-bit mono through — millions of taps the convolution would try to run every block, and
+        // a rebuild over all of them on every move of a cut. Anything longer is not a cabinet.
+        if ((double) reader->lengthInSamples > maxSeconds * reader->sampleRate)
+            return nullptr;
+
+        return reader;
+    }
 
     void rebuild()
     {

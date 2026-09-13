@@ -14,11 +14,14 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "device/DeviceLibrary.h"
+#include "device/EmbeddedIrs.h"
 #include "device/IrLibrary.h"
 
 #include <cstdio>
+#include <cstring>
 
 using orbitamp::device::DeviceLibrary;
+using orbitamp::device::EmbeddedIrs;
 using orbitamp::device::IrLibrary;
 
 namespace
@@ -180,6 +183,54 @@ int main()
         report ("an illegal name is refused",        IrLibrary::createFolder (root, root, "   ") == juce::File());
         report ("a parent outside the root refused", IrLibrary::createFolder (root, work.getChildFile ("irs-zip"),
                                                                               "Hijack") == juce::File());
+    }
+
+    // ---- Embedded IRs: the bytes travel with a preset, not the path ----------------------------
+    {
+        const auto bytesOf = [] (const char* text) { return juce::MemoryBlock (text, std::strlen (text)); };
+
+        EmbeddedIrs store;
+        const auto keyA = store.add (bytesOf ("impulse A"));
+        const auto keyB = store.add (bytesOf ("impulse B"));
+
+        report ("a key is the content's",            keyA.isNotEmpty() && keyA == EmbeddedIrs::keyOf (bytesOf ("impulse A")));
+        report ("other bytes, another key",          keyA != keyB);
+        report ("nothing is not an IR",              store.add ({}).isEmpty());
+        report ("too much is not an IR",             store.add (juce::MemoryBlock ((size_t) EmbeddedIrs::maxBytes + 1)).isEmpty());
+
+        // A preset on its way to disk, through real XML, and back into a store that never saw it.
+        juce::ValueTree preset ("PARAMETERS");
+        preset.setProperty ("cab_ir_user", keyA, nullptr);
+
+        if (auto node = store.pack ({ keyA, keyA, "missing-key" }); node.isValid())
+            preset.appendChild (node, nullptr);
+
+        report ("a repeat is embedded once",         preset.getChildWithName (EmbeddedIrs::treeType).getNumChildren() == 1);
+        report ("nothing to carry, nothing packed",  ! store.pack ({ "missing-key" }).isValid());
+
+        const auto xml = preset.createXml();
+        auto loaded = juce::ValueTree::fromXml (*juce::XmlDocument::parse (xml->toString()));
+
+        EmbeddedIrs elsewhere;
+        elsewhere.unpack (loaded);
+
+        const auto* back = elsewhere.find (keyA);
+        report ("the bytes come back whole",         back != nullptr && *back == bytesOf ("impulse A"));
+        report ("...and leave the tree plain",       ! loaded.getChildWithName (EmbeddedIrs::treeType).isValid()
+                                                       && loaded.getProperty ("cab_ir_user").toString() == keyA);
+
+        // A doctored file: the key it would have claimed is not the one its bytes are filed under.
+        juce::ValueTree doctored ("PARAMETERS");
+        juce::ValueTree node (EmbeddedIrs::treeType), ir (EmbeddedIrs::entryType);
+        ir.setProperty ("key", keyA, nullptr);
+        ir.setProperty ("data", juce::var (bytesOf ("impostor")), nullptr);
+        node.appendChild (ir, nullptr);
+        doctored.appendChild (node, nullptr);
+
+        EmbeddedIrs fresh;
+        fresh.unpack (doctored);
+        report ("bytes are filed by what they are",  fresh.find (keyA) == nullptr
+                                                       && fresh.find (EmbeddedIrs::keyOf (bytesOf ("impostor"))) != nullptr);
     }
 
     // ---- IR remove: only the guard is ours -----------------------------------------------------

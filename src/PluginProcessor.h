@@ -18,6 +18,7 @@
 #include "core/SoftLimiter.h"
 #include "core/DelayStage.h"
 #include "core/ReverbStage.h"
+#include "device/EmbeddedIrs.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/appkit/CompareHistory.h>
@@ -198,8 +199,32 @@ public:
                     tree.removeProperty (juce::Identifier (measuredIdOf (b, i) + switchAimSuffix), nullptr);
             }
 
+        // A cabinet IR of the player's own is identity the same way: the parameters going to their
+        // defaults would leave it playing over the default cabinet.
+        if (forgetIdentity)
+            for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                tree.removeProperty (id, nullptr);
+
         return tree;
     }
+
+    /** A PRESET AS IT GOES TO DISK: the state as `stateForSaving` writes it, with the cabinet IR it
+        plays embedded whole when that IR is the player's own — so the preset sounds the same
+        wherever it is opened. Message thread only. */
+    juce::ValueTree presetForSaving()
+    {
+        auto tree = stateForSaving();
+        embedCabIrs (tree);
+        return tree;
+    }
+
+    /** The other half: a tree read from disk gives its embedded IRs to the store and comes back a
+        plain state, before anything applies it. Message thread only. */
+    void takeEmbeddedIrs (juce::ValueTree& tree) { cabIrEmbeds.unpack (tree); }
+
+    /** The state tree's type — a constant, so code off the message thread can recognise a state
+        inside a saved envelope without touching the live tree. */
+    static constexpr const char* stateType = "state";
 
     /** The suffix a switch slot's saved position name wears in the state tree. */
     static constexpr const char* switchAimSuffix = "_pos";
@@ -762,6 +787,33 @@ public:
     struct IrBytes { const char* data; int size; };
     static const IrBytes& cabIrBytes (int index);
 
+    /** WHAT THE CABINET PLAYS, as the state says it: an IR of the player's own when the state names
+        one the store holds, and the factory shelf's entry under `cabIr` otherwise — which is also
+        the answer for a preset whose embedded IR did not survive. Message thread only; reads the
+        parameter OBJECT, so an attachment's callback asking this is not one change behind. */
+    struct CabChoice
+    {
+        int factory = params::cabIrDefault;
+        const juce::MemoryBlock* bytes = nullptr;   // the player's own IR, or null for the factory's
+        juce::String key, name, from;
+
+        bool isUser() const noexcept { return bytes != nullptr; }
+
+        /** One string per distinct sound, for a watcher to compare. */
+        juce::String identity() const { return isUser() ? "user:" + key : "factory:" + juce::String (factory); }
+    };
+
+    CabChoice cabChoice() const;
+
+    /** A factory IR from the shelf: the player's own is let go, and the parameter takes the pick
+        as one gesture. Message thread only. */
+    void chooseCabFactory (int index);
+
+    /** An IR out of the library: its bytes are read once, here, and from then on the state names
+        them by key — the file can go anywhere afterwards. False, changing nothing, for a file that
+        is too big to be an IR or that does not decode as audio. Message thread only. */
+    bool chooseCabFile (const juce::File& file);
+
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
     void selectDemoLoop (int index);
@@ -906,7 +958,6 @@ private:
     core::SoftLimiter limiter;
 
     core::CabinetIr cab;
-    std::atomic<float>* cabIrParam = nullptr;
     std::atomic<float>* cabHpfOnParam = nullptr;
     std::atomic<float>* cabHpfHzParam = nullptr;
     std::atomic<float>* cabHpfSlopeParam = nullptr;
@@ -916,7 +967,18 @@ private:
     std::atomic<float>* cabTrimOnParam = nullptr;
     std::atomic<float>* cabTrimParam = nullptr;
     std::atomic<float>* cabPhaseParam = nullptr;
-    int lastCabIr = -1;
+
+    /** The sound the engine was last handed (`CabChoice::identity`), and whether a fresh prepare
+        wants it handed again. The flag is set from `prepareToPlay`, which is not the pump's thread. */
+    juce::String lastCabIr;
+    std::atomic<bool> cabIrStale { true };
+
+    /** The player's own IRs a state refers to — see `device::EmbeddedIrs`. */
+    device::EmbeddedIrs cabIrEmbeds;
+
+    /** Adds to a tree bound for disk every player's-own IR any state inside it names — the live
+        one, and each register's. */
+    void embedCabIrs (juce::ValueTree& tree) const;
 
     std::atomic<float>* boostInParam  = nullptr;
     std::atomic<float>* preampInParam = nullptr;

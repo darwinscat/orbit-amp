@@ -186,9 +186,11 @@ void Chrome::showPresetMenu()
     for (const auto& n : names)
         menu.addItem (n, true, n == presetName, [this, n]
         {
-            const auto tree = PresetManager::read (n);
+            auto tree = PresetManager::read (n);
             if (! tree.isValid())
                 return;
+
+            amp.takeEmbeddedIrs (tree);   // a cabinet IR it carries goes to the store, not the history
 
             // Through the history, so loading a preset is one undoable step rather than a silent
             // replacement of everything behind undo's back.
@@ -249,7 +251,7 @@ void Chrome::savePreset (bool forceNewName)
 {
     auto store = [this] (const juce::String& name)
     {
-        if (! PresetManager::write (name, amp.stateForSaving()))
+        if (! PresetManager::write (name, amp.presetForSaving()))
             return;
 
         presetName = name;

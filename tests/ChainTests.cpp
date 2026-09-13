@@ -1038,6 +1038,106 @@ int main()
 
     }
 
+    // A CABINET IR OF THE PLAYER'S OWN travels with the state, whole. Picked from a file, saved with
+    // a session — from a register that is not even the active one — and the file thrown away: a
+    // fresh instance on the same machine has to play the very same bytes, and must never have held
+    // them in the tree the history copies every tick. Needs no pack, so it runs in front of the gate.
+    {
+        const auto work = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                              .getChildFile ("orbitamp-chain-ir").getNonexistentSibling();
+        work.createDirectory();
+
+        const auto wavFile = work.getChildFile ("My Cab.wav");
+        {
+            juce::AudioBuffer<float> shot (1, 2400);
+            for (int i = 0; i < shot.getNumSamples(); ++i)
+                shot.setSample (0, i, (float) (std::exp (-i / 300.0) * std::cos (i * 0.07)));
+
+            juce::WavAudioFormat wav;
+            std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (wavFile);
+
+            if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                               .withSampleRate (sampleRate)
+                                                               .withNumChannels (1)
+                                                               .withBitsPerSample (24)))
+                writer->writeFromAudioSampleBuffer (shot, 0, shot.getNumSamples());
+        }
+
+        juce::MemoryBlock original;
+        wavFile.loadFileAsData (original);
+
+        // A minute of audio fits the byte cap easily and is no cabinet: millions of taps.
+        const auto tooLong = work.getChildFile ("Song.wav");
+        {
+            juce::AudioBuffer<float> song (1, (int) (orbitamp::core::CabinetIr::maxSeconds * 8000.0) + 8000);
+            song.clear();
+            song.setSample (0, 0, 1.0f);
+
+            juce::WavAudioFormat wav;
+            std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (tooLong);
+
+            if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                               .withSampleRate (8000.0)
+                                                               .withNumChannels (1)
+                                                               .withBitsPerSample (16)))
+                writer->writeFromAudioSampleBuffer (song, 0, song.getNumSamples());
+        }
+
+        const auto notAudio = work.getChildFile ("readme.wav");
+        notAudio.replaceWithText ("not an impulse");
+
+        const auto a = std::make_unique<orbitamp::AmpProcessor>();
+        a->inlineLoads = true;
+        a->prepareToPlay (sampleRate, blockSize);
+
+        report ("a file that is not audio is not chosen",   ! a->chooseCabFile (notAudio) && ! a->cabChoice().isUser());
+        report ("an IR longer than a cabinet is not chosen",  ! a->chooseCabFile (tooLong) && ! a->cabChoice().isUser());
+        report ("a player's own IR is chosen",               a->chooseCabFile (wavFile) && a->cabChoice().isUser()
+                                                               && a->cabChoice().name == "My Cab");
+        a->pumpDeviceWork();
+
+        const auto preset = a->presetForSaving();
+        report ("a preset carries it whole",                 preset.getChildWithName ("EmbeddedIRs").getNumChildren() == 1);
+        report ("...and the live tree never does",           ! a->apvts.state.getChildWithName ("EmbeddedIRs").isValid());
+
+        // Into register B, then register A goes back to the shelf: the only state naming the file
+        // is one the history keeps out of sight.
+        a->history.copyRegister (a->history.active(), 1);
+        a->chooseCabFactory (3);
+        report ("the shelf takes over again",                ! a->cabChoice().isUser() && a->cabChoice().factory == 3);
+
+        juce::MemoryBlock session;
+        a->getStateInformation (session);
+        wavFile.deleteFile();
+
+        const auto b = std::make_unique<orbitamp::AmpProcessor>();
+        b->inlineLoads = true;
+        b->prepareToPlay (sampleRate, blockSize);
+        b->setStateInformation (session.getData(), (int) session.getSize());
+
+        report ("a session reopens on register A's shelf IR", ! b->cabChoice().isUser() && b->cabChoice().factory == 3);
+        report ("...holding no bytes in its tree",           ! b->apvts.state.getChildWithName ("EmbeddedIRs").isValid());
+
+        b->history.switchTo (1);
+        const auto choice = b->cabChoice();
+        report ("register B plays the file, which is gone",  choice.isUser() && choice.bytes != nullptr
+                                                               && *choice.bytes == original && choice.name == "My Cab");
+
+        report ("a factory reset forgets it",                b->stateForSaving().hasProperty (orbitamp::params::cabIrUserKey)
+                                                               && ! b->stateForSaving (true).hasProperty (orbitamp::params::cabIrUserKey));
+
+        // ...and what comes out is that IR, not the last factory one: through the cabinet alone.
+        set (*b, orbitamp::params::stereoMode, 0.0f);
+        set (*b, orbitamp::params::cabOn, 1.0f);
+        const auto own = run (*b);
+        b->chooseCabFactory (0);
+        const auto shelf = run (*b);
+        report ("the player's IR is what sounds",            differencePercent (own, shelf) > 1.0,
+                juce::String (differencePercent (own, shelf), 1) + " % apart");
+
+        work.deleteRecursively();
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench

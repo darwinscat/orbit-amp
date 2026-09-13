@@ -4,6 +4,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "Parameters.h"
+#include "device/IrLibrary.h"
 
 #include <BinaryData.h>
 
@@ -14,7 +15,7 @@ AmpProcessor::AmpProcessor()
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "state", params::createLayout()),
+      apvts (*this, nullptr, stateType, params::createLayout()),
       // The history's opaque seam: it snapshots and restores the parameter tree without knowing what
       // is in it. replaceState takes a COPY so the parameter objects stay valid and every editor
       // attachment survives an undo.
@@ -71,7 +72,6 @@ AmpProcessor::AmpProcessor()
     preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
     boostSmoothParam   = apvts.getRawParameterValue (params::blockSmooth (params::boostId));
     preampSmoothParam  = apvts.getRawParameterValue (params::blockSmooth (params::preampId));
-    cabIrParam         = apvts.getRawParameterValue (params::cabIr);
     cabHpfOnParam      = apvts.getRawParameterValue (params::cabHpfOn);
     cabHpfHzParam      = apvts.getRawParameterValue (params::cabHpfHz);
     cabHpfSlopeParam   = apvts.getRawParameterValue (params::cabHpfSlope);
@@ -153,7 +153,10 @@ void AmpProcessor::getStateInformation (juce::MemoryBlock& destData)
     // a reopened session comes back with all four sounds. NOT the undo stacks: CompareHistory's
     // envelope holds the live capture and the register snapshots and nothing else, so undo starts
     // fresh on reopen. (It said otherwise here for a long time — it never did.)
-    if (auto xml = history.toTree().createXml())
+    auto workspace = history.toTree();
+    embedCabIrs (workspace);   // the player's own IRs travel with the session, whole
+
+    if (auto xml = workspace.createXml())
         copyXmlToBinary (*xml, destData);
 }
 
@@ -167,8 +170,12 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     const auto tree = juce::ValueTree::fromXml (*xml);
 
-    const auto apply = [] (AmpProcessor& self, const juce::ValueTree& t)
+    const auto apply = [] (AmpProcessor& self, juce::ValueTree t)
     {
+        // The embedded IRs go to the store and leave the tree before anyone else sees it: the
+        // history would otherwise keep megabytes in its baseline and compare them every tick.
+        self.takeEmbeddedIrs (t);
+
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
         // the top of setStateInformation also means it is armed AFTER the tree has landed, which
         // is what lets it take the restored values as its baseline instead of the outgoing ones.
@@ -315,6 +322,95 @@ const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
 }
 
 
+AmpProcessor::CabChoice AmpProcessor::cabChoice() const
+{
+    CabChoice c;
+
+    const auto* p = apvts.getParameter (params::cabIr);
+    c.factory = juce::jlimit (0, params::cabIrNames.size() - 1, juce::roundToInt (p->convertFrom0to1 (p->getValue())));
+
+    const auto key = apvts.state.getProperty (params::cabIrUserKey).toString();
+
+    if (key.isNotEmpty())
+        if (const auto* bytes = cabIrEmbeds.find (key))
+        {
+            c.bytes = bytes;
+            c.key   = key;
+            c.name  = apvts.state.getProperty (params::cabIrUserName).toString();
+            c.from  = apvts.state.getProperty (params::cabIrUserFrom).toString();
+        }
+
+    return c;
+}
+
+void AmpProcessor::chooseCabFactory (int index)
+{
+    // The player's own goes FIRST: a pick of the factory IR already under it moves no parameter,
+    // and it is the properties leaving that makes it sound.
+    for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+        apvts.state.removeProperty (id, nullptr);
+
+    auto* p = apvts.getParameter (params::cabIr);
+    p->beginChangeGesture();
+    p->setValueNotifyingHost (p->convertTo0to1 ((float) juce::jlimit (0, params::cabIrNames.size() - 1, index)));
+    p->endChangeGesture();
+
+    // When no parameter moved, only the state did — and a host hears of that only when told.
+    updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+}
+
+bool AmpProcessor::chooseCabFile (const juce::File& file)
+{
+    juce::MemoryBlock bytes;
+
+    if (! file.existsAsFile() || file.getSize() > device::EmbeddedIrs::maxBytes
+        || ! file.loadFileAsData (bytes) || ! core::CabinetIr::decodes (bytes.getData(), bytes.getSize()))
+        return false;
+
+    const auto key = cabIrEmbeds.add (std::move (bytes));
+    if (key.isEmpty())
+        return false;
+
+    // Where it came from, in the library's own terms and one spelling on every system — a tick in
+    // the menu, and nothing that the sound depends on.
+    const auto from = file.getRelativePathFrom (device::IrLibrary::directory()).replaceCharacter ('\\', '/');
+
+    // The key LAST: it is the one the pump and the face watch, and by then the name beside it is
+    // already the right one.
+    apvts.state.setProperty (params::cabIrUserName, file.getFileNameWithoutExtension(), nullptr);
+    apvts.state.setProperty (params::cabIrUserFrom, from, nullptr);
+    apvts.state.setProperty (params::cabIrUserKey,  key, nullptr);
+
+    // No parameter moved: without this, a host would not know the session has something to save.
+    updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+    return true;
+}
+
+void AmpProcessor::embedCabIrs (juce::ValueTree& tree) const
+{
+    // Every state inside the tree — a preset is one, a session's workspace holds the live one and
+    // each register's — is found by its type, wherever the envelope happens to nest it.
+    juce::StringArray keys;
+
+    std::function<void (const juce::ValueTree&)> collect = [&] (const juce::ValueTree& t)
+    {
+        if (t.hasType (stateType))   // the constant, not the live tree: a host may save from any thread
+        {
+            if (const auto key = t.getProperty (params::cabIrUserKey).toString(); key.isNotEmpty())
+                keys.addIfNotAlreadyThere (key);
+            return;
+        }
+
+        for (const auto& child : t)
+            collect (child);
+    };
+
+    collect (tree);
+
+    if (auto node = cabIrEmbeds.pack (keys); node.isValid())
+        tree.appendChild (node, nullptr);
+}
+
 void AmpProcessor::pumpDeviceWork()
 {
     auto pump = [this] (auto& block, auto& gainParam, auto& smoothParam, auto measuredId, const char* blk)
@@ -370,11 +466,24 @@ void AmpProcessor::pumpDeviceWork()
 
     // The cabinet IR: choosing one is picking a FILE, so it loads here — the convolution's own
     // background loader swaps it in without a click.
-    if (const int ir = juce::roundToInt (cabIrParam->load()); ir != lastCabIr)
+    // An IR of the player's own is the same kind of pick — its bytes are already in memory. It is
+    // named by the state TREE, which is the message thread's; `prepareToPlay` runs this pump on
+    // whatever thread the host prepares from, and there the reload waits for the timer's tick.
+    if (juce::MessageManager::existsAndIsCurrentThread())
     {
-        lastCabIr = ir;
-        const auto& bytes = cabIrBytes (ir);
-        cab.load (bytes.data, (size_t) bytes.size);
+        if (const auto choice = cabChoice();
+            cabIrStale.exchange (false) || choice.identity() != lastCabIr)
+        {
+            lastCabIr = choice.identity();
+
+            if (choice.isUser())
+                cab.load (choice.bytes->getData(), choice.bytes->getSize());
+            else
+            {
+                const auto& bytes = cabIrBytes (choice.factory);
+                cab.load (bytes.data, (size_t) bytes.size);
+            }
+        }
     }
 
     // ...and what the player does to it: baked into the IR off this pump, so the convolution
@@ -495,7 +604,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     limiter.prepare (sampleRate);
 
     cab.prepare (sampleRate, block, channels);
-    lastCabIr = -1;   // the pump reloads the chosen IR into the freshly prepared engine
+    cabIrStale = true;   // the pump reloads the chosen IR into the freshly prepared engine
 
     // Seeded from the parameter: a session saved gate-ON has to start already gated, not fade in
     // over a block of ungated hum.

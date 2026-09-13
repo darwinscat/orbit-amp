@@ -4,6 +4,7 @@
 #include "CabinetBlock.h"
 
 #include "../PluginProcessor.h"
+#include "../device/IrLibrary.h"
 #include "Prefs.h"
 
 namespace orbitamp
@@ -16,12 +17,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     attachPower (*amp.apvts.getParameter (params::cabOn));
 
     // The IR's name on the border beside the block's, set like a name and in the block's colour.
-    {
-        juce::Array<VoicingSelector::Entry> entries;
-        for (const auto& name : params::cabIrNames)
-            entries.add ({ name, 0, false });
-        ir.setEntries (std::move (entries));
-    }
+    // The combo shows one entry — whatever plays — and opens a menu this block builds.
     ir.fontHeight = 16.0f;
     ir.tracking   = 0.15f;
     ir.boxed      = false;
@@ -30,15 +26,9 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
 
     irAtt = std::make_unique<juce::ParameterAttachment> (
         *amp.apvts.getParameter (params::cabIr),
-        [this] (float v)
-        {
-            const int i = juce::jlimit (0, params::cabIrNames.size() - 1, juce::roundToInt (v));
-            ir.setSelection (i);
-            loadWave (i);
-            resized();   // the name on the border is as wide as the name
-        });
+        [this] (float) { refreshIr (false, true); });
 
-    ir.onPick = [this] (int i) { irAtt->setValueAsCompleteGesture ((float) i); };
+    ir.onOpen = [this] { showIrMenu(); };
 
     // The picture: the IR, the cuts' curve and the trim's handle drawn on it, in the block's colour.
     wave.setAccent (theme::orange);
@@ -182,26 +172,157 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
         s.att->sendInitialUpdate();
     }
 
-    irAtt->sendInitialUpdate();
+    refreshIr (true);
     pushToWave();
 }
 
 CabinetBlock::~CabinetBlock() = default;
 
-void CabinetBlock::loadWave (int index)
+void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
 {
-    const auto& bytes = AmpProcessor::cabIrBytes (index);
-    wave.setFromMemory (bytes.data, (size_t) bytes.size);
+    const auto choice = amp.cabChoice();
+
+    // The NAME is part of what is shown: two files with the same bytes are one sound and two names.
+    if (! force && choice.identity() + "|" + choice.name == shownIr)
+        return;
+
+    shownIr = choice.identity() + "|" + choice.name;
+
+    ir.setEntries ({ { choice.isUser() ? choice.name : params::cabIrNames[choice.factory], 0, false } });
+    ir.setSelection (0);
+
+    // The same bytes the engine convolves, whichever shelf they came off.
+    if (choice.isUser())
+        wave.setFromMemory (choice.bytes->getData(), choice.bytes->getSize());
+    else
+    {
+        const auto& bytes = AmpProcessor::cabIrBytes (choice.factory);
+        wave.setFromMemory (bytes.data, (size_t) bytes.size);
+    }
 
     // A fixed window keeps its WORD across an IR swap: the parameter is a fraction of the shot's
     // length, so 50 ms of the old cab is not 50 ms of the new — re-assert the milliseconds.
     // A shot too short to hold the window shows all of itself and keeps the word anyway — see the
     // STILL OURS test in `deriveTrimMode`, which is what makes that survive the swap.
-    if (trimMode == TrimMode::fixed && wave.lengthMs() > 0.0)
+    //
+    // ONLY WHEN A PICK ASKS. A recall — a register, an undo, a preset — brings its own trim with it,
+    // and an IR of the player's own arrives without a parameter to call anyone: the timer finds it
+    // after the recall has landed, and a write from there would carry the OLD shot's milliseconds
+    // over the recalled fraction, and leave an undo step nobody made.
+    if (keepTrimWord && trimMode == TrimMode::fixed && wave.lengthMs() > 0.0)
         trimAtt->setValueAsCompleteGesture (
             (float) juce::jlimit (0.001, 1.0, trimModeMs / wave.lengthMs()));
 
     pushToWave();
+    resized();   // the name on the border is as wide as the name
+}
+
+namespace
+{
+    int irsBeneath (const device::IrLibrary::Node& n)
+    {
+        if (! n.folder)
+            return 1;
+
+        int total = 0;
+        for (const auto& c : n.children)
+            total += irsBeneath (c);
+        return total;
+    }
+}
+
+void CabinetBlock::showIrMenu()
+{
+    const auto choice  = amp.cabChoice();
+    const auto library = device::IrLibrary::scan();
+    const auto root    = library.file;
+
+    const auto itemFor = [] (const juce::String& name, int id, bool ticked)
+    {
+        juce::PopupMenu::Item item (name);
+        item.itemID   = id;
+        item.colour   = theme::orange;
+        item.isTicked = ticked;
+        return item;
+    };
+
+    juce::PopupMenu factory;
+    for (int i = 0; i < params::cabIrNames.size(); ++i)
+        factory.addItem (itemFor (params::cabIrNames[i], 1 + i, ! choice.isUser() && choice.factory == i));
+
+    // The player's files are numbered from here, in the order the tree lists them.
+    static constexpr int firstFile = 1000;
+    auto files = std::make_shared<std::vector<juce::File>>();
+
+    juce::PopupMenu menu;
+
+    if (irsBeneath (library) == 0)
+    {
+        // Nothing of the player's own: the shelf is the whole list, as it always was.
+        menu = std::move (factory);
+    }
+    else
+    {
+        // The shelf keeps ONE place however the library grows — the top — and the library is laid
+        // out below it the way SETUP shows it: folders first, each a submenu, then the files. A
+        // folder with nothing playable anywhere under it is a shelf with nothing on it, and stays
+        // out. A folder holding what plays wears the tick too, so the way to it can be followed.
+        menu.addSubMenu ("Factory", factory, true, nullptr, ! choice.isUser());
+        menu.addSeparator();
+
+        std::function<bool (juce::PopupMenu&, const device::IrLibrary::Node&)> addTree =
+            [&] (juce::PopupMenu& into, const device::IrLibrary::Node& folder)
+        {
+            bool holdsChoice = false;
+
+            for (const auto& n : folder.children)
+            {
+                if (n.folder)
+                {
+                    if (irsBeneath (n) == 0)
+                        continue;
+
+                    juce::PopupMenu sub;
+                    const bool inside = addTree (sub, n);
+                    into.addSubMenu (n.name(), sub, true, nullptr, inside);
+                    holdsChoice = holdsChoice || inside;
+                }
+                else
+                {
+                    const auto from = n.file.getRelativePathFrom (root).replaceCharacter ('\\', '/');
+                    const bool ticked = choice.isUser() && from == choice.from;
+
+                    files->push_back (n.file);
+                    into.addItem (itemFor (n.file.getFileNameWithoutExtension(),
+                                           firstFile + (int) files->size() - 1, ticked));
+                    holdsChoice = holdsChoice || ticked;
+                }
+            }
+
+            return holdsChoice;
+        };
+
+        addTree (menu, library);
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&ir),
+                        [safe = juce::Component::SafePointer<CabinetBlock> (this), files] (int r)
+                        {
+                            if (safe == nullptr || r <= 0)
+                                return;
+
+                            if (r >= firstFile)
+                            {
+                                if ((size_t) (r - firstFile) < files->size())
+                                    safe->amp.chooseCabFile ((*files)[(size_t) (r - firstFile)]);
+                            }
+                            else
+                            {
+                                safe->amp.chooseCabFactory (r - 1);
+                            }
+
+                            safe->refreshIr (false, true);
+                        });
 }
 
 void CabinetBlock::pushToWave()
@@ -278,6 +399,12 @@ void CabinetBlock::deriveTrimMode()
     // `irAtt->sendInitialUpdate()` is the last of them — so a clean 100 MS used to come back as
     // TRIM MAN on every single open. Say nothing and wait for the shot.
     if (wave.lengthMs() <= 0.0)
+        return;
+
+    // ...and the same when the shot on show is not yet the one the state names: a recall moves the
+    // trim first and the IR of the player's own a tick later, and milliseconds read off the
+    // outgoing picture would latch a window nobody chose.
+    if (shownIr.upToFirstOccurrenceOf ("|", false, false) != amp.cabChoice().identity())
         return;
 
     // An explicitly chosen MANUAL stays MANUAL even when the magnet lands the handle exactly on
@@ -514,6 +641,8 @@ void CabinetBlock::paintContent (juce::Graphics&) {}
     stopped — then one repaint, and the hook above draws both. */
 void CabinetBlock::timerCallback()
 {
+    refreshIr();   // before the early return: what plays is shown whether or not the block is on
+
     if (! isBlockOn() || ! wave.isShowing())
         return;
 

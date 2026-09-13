@@ -242,6 +242,16 @@ inline const juce::StringArray cabIrNames {
 };
 inline constexpr int cabIrDefault = 7;   // BIG BUBBA
 
+/** A cabinet IR of the player's OWN — not a parameter, because it is not a number: three
+    properties on the state tree. The key names the bytes in `device::EmbeddedIrs`, which carries
+    the IR itself into presets and sessions; the name is what the border shows; `from` is where in
+    the IR library it was picked, so the menu can tick it — and nothing else depends on it. While
+    the key names an IR the store holds, it plays and `cabIr` waits underneath; picking a factory
+    IR clears all three. */
+inline constexpr const char* cabIrUserKey  = "cab_ir_user";
+inline constexpr const char* cabIrUserName = "cab_ir_name";
+inline constexpr const char* cabIrUserFrom = "cab_ir_from";
+
 /** What a player does to the one IR: cuts its bottom and top (a second-order high-pass and
     low-pass baked INTO the IR, so the convolution costs nothing more), trims its tail (a fraction
     of its length kept — the room's decay is often more than a guitar wants), and flips it. Each
