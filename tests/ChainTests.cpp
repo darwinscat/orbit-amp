@@ -1240,6 +1240,65 @@ int main()
                 juce::String (empty.from, 3) + " -> " + juce::String (empty.to, 3));
     }
 
+    // A HOST THAT SENDS MORE THAN IT PROMISED. Prepared for 512, handed 2048 at once, the chain
+    // must play exactly what four blocks of 512 would have played — the room, the echo, the
+    // cabinet and the fades all included. Two instances, the same tone, both ways.
+    {
+        const auto chained = [&] (bool oneBigBlock)
+        {
+            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            c->prepareToPlay (sampleRate, blockSize);
+            set (*c, orbitamp::params::stereoMode, 0.0f);
+            for (const auto* id : { orbitamp::params::delayOn, orbitamp::params::reverbOn, orbitamp::params::cabOn })
+                set (*c, id, 1.0f);
+            set (*c, orbitamp::params::boostPresent,  0.0f);
+            set (*c, orbitamp::params::preampPresent, 0.0f);
+
+            juce::MidiBuffer midi;
+            std::vector<float> out;
+            long long phase = 0;
+
+            for (int round = 0; round < 40; ++round)
+            {
+                juce::AudioBuffer<float> big (2, blockSize * 4);
+                for (int i = 0; i < big.getNumSamples(); ++i, ++phase)
+                {
+                    const float v = 0.2f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                             * 220.0 * (double) phase / sampleRate);
+                    big.setSample (0, i, v);
+                    big.setSample (1, i, v);
+                }
+
+                if (oneBigBlock)
+                    c->processBlock (big, midi);
+                else
+                    for (int k = 0; k < 4; ++k)
+                    {
+                        juce::AudioBuffer<float> part (big.getArrayOfWritePointers(), 2, k * blockSize, blockSize);
+                        c->processBlock (part, midi);
+                    }
+
+                if (round == 0)
+                    c->pumpDeviceWork();   // the cabinet's IR, once, the same moment for both
+
+                for (int i = 0; i < big.getNumSamples(); ++i)
+                    out.push_back (big.getSample (0, i));
+            }
+
+            return out;
+        };
+
+        const auto whole = chained (true);
+        const auto parts = chained (false);
+
+        double worst = 0.0;
+        for (size_t i = 0; i < whole.size() && i < parts.size(); ++i)
+            worst = std::max (worst, (double) std::abs (whole[i] - parts[i]));
+
+        report ("a host block 4x the promise plays as four promised ones",
+                whole.size() == parts.size() && worst < 1.0e-6, "worst difference " + juce::String (worst, 9));
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench

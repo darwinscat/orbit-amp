@@ -474,6 +474,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // prepareToPlay directly got stages built for a block size nobody was going to send. The
     // convolver behind the measured controls then read past the end of its own buffers.
     const int block = juce::jmax (1, samplesPerBlock);
+    preparedBlock.store (block, std::memory_order_relaxed);
 
     for (auto& eq : eqLinks)
         eq.prepare (sampleRate, channels);
@@ -691,6 +692,32 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 }
 
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+{
+    // A HOST'S BLOCK IS NOT ALWAYS THE BLOCK IT PROMISED. prepareToPlay names the most it will
+    // send, and every stage with a scratch buffer — the room's wet copy, the fades' dry copy, the
+    // captured blocks — is sized to that; a host that sends more (an offline render, a bounce, a
+    // host that simply does) used to find the room adding its tail to the first part of the block
+    // only, and the fades skipping. So a block longer than the promise is played as consecutive
+    // blocks of the promised size, which is exactly what the chain would have heard had the host
+    // kept it. The views refer to the host's own memory: nothing is allocated.
+    const int total = buffer.getNumSamples();
+    const int most  = preparedBlock.load (std::memory_order_relaxed);
+
+    if (most <= 0 || total <= most)
+    {
+        processChunk (buffer);
+        return;
+    }
+
+    for (int start = 0; start < total; start += most)
+    {
+        juce::AudioBuffer<float> part (buffer.getArrayOfWritePointers(), buffer.getNumChannels(),
+                                       start, juce::jmin (most, total - start));
+        processChunk (part);
+    }
+}
+
+void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 {
     juce::ScopedNoDenormals noDenormals;
     const auto blockStart = juce::Time::getHighResolutionTicks();

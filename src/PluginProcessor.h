@@ -56,6 +56,15 @@ public:
     bool isBusesLayoutSupported (const BusesLayout&) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
+private:
+    /** The chain, over at most the block size prepareToPlay promised — see processBlock. */
+    void processChunk (juce::AudioBuffer<float>&);
+
+    /** The largest block prepareToPlay was told to expect; 0 before the first prepare. */
+    std::atomic<int> preparedBlock { 0 };
+
+public:
+
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override                          { return true; }
 
