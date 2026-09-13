@@ -973,6 +973,10 @@ private:
     juce::String lastCabIr;
     std::atomic<bool> cabIrStale { true };
 
+    /** The player's own IR the message thread last found the state naming, or null — for a prepare
+        that runs off that thread and cannot read the tree. */
+    std::atomic<const juce::MemoryBlock*> cabUserIr { nullptr };
+
     /** The player's own IRs a state refers to — see `device::EmbeddedIrs`. */
     device::EmbeddedIrs cabIrEmbeds;
 

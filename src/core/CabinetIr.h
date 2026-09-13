@@ -75,8 +75,11 @@ public:
         if (reader == nullptr)
             return;
 
-        raw.setSize ((int) reader->numChannels, (int) reader->lengthInSamples);
-        reader->read (&raw, 0, raw.getNumSamples(), 0, true, true);
+        // The FIRST channel, and only it: the convolution runs `Stereo::no`, which plays channel 0
+        // of whatever it is handed — so a stereo IR kept whole would be measured for its level
+        // across both channels and heard through one of them.
+        raw.setSize (1, (int) reader->lengthInSamples);
+        reader->read (&raw, 0, raw.getNumSamples(), 0, true, false);
         rawRate = reader->sampleRate;
         rebuild();
     }
@@ -139,8 +142,10 @@ private:
         std::unique_ptr<juce::AudioFormatReader> reader (
             formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (data, size, false)));
 
+        // A header can say anything: a rate no converter ever ran at would let a tiny file claim
+        // billions of samples and still pass the duration test below.
         if (reader == nullptr || reader->lengthInSamples <= 0 || reader->numChannels == 0
-            || reader->sampleRate <= 0.0)
+            || reader->sampleRate < 8000.0 || reader->sampleRate > 768000.0)
             return nullptr;
 
         // A cabinet with its room is a second or two. The byte cap alone would let a minute of

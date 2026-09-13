@@ -246,10 +246,19 @@ private:
                 if (safe != nullptr)
                     safe->name.showEditor();
             });
-            menu.addItem (juce::String::fromUTF8 ("Add IRs here\xe2\x80\xa6"),
-                          [&owner = item.view, folder = item.node.file] { owner.addClicked (folder); });
-            menu.addItem (juce::String::fromUTF8 ("New folder inside\xe2\x80\xa6"),
-                          [&owner = item.view, parent = item.node.file] { owner.newFolderPrompt (parent); });
+            // ...and the view through one of its own: the whole window can go while a menu is up.
+            const juce::Component::SafePointer<IrTreeView> owner (&item.view);
+
+            menu.addItem (juce::String::fromUTF8 ("Add IRs here\xe2\x80\xa6"), [owner, folder = item.node.file]
+            {
+                if (owner != nullptr)
+                    owner->addClicked (folder);
+            });
+            menu.addItem (juce::String::fromUTF8 ("New folder inside\xe2\x80\xa6"), [owner, parent = item.node.file]
+            {
+                if (owner != nullptr)
+                    owner->newFolderPrompt (parent);
+            });
             menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this));
         }
 

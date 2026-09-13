@@ -345,18 +345,31 @@ AmpProcessor::CabChoice AmpProcessor::cabChoice() const
 
 void AmpProcessor::chooseCabFactory (int index)
 {
+    index = juce::jlimit (0, params::cabIrNames.size() - 1, index);
+
+    const auto choice = cabChoice();
+
+    // The IR already playing, picked again, is no edit — not for the host, not for the history.
+    if (! choice.isUser() && choice.factory == index)
+        return;
+
     // The player's own goes FIRST: a pick of the factory IR already under it moves no parameter,
     // and it is the properties leaving that makes it sound.
     for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
         apvts.state.removeProperty (id, nullptr);
 
-    auto* p = apvts.getParameter (params::cabIr);
-    p->beginChangeGesture();
-    p->setValueNotifyingHost (p->convertTo0to1 ((float) juce::jlimit (0, params::cabIrNames.size() - 1, index)));
-    p->endChangeGesture();
-
-    // When no parameter moved, only the state did — and a host hears of that only when told.
-    updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+    if (choice.factory != index)
+    {
+        auto* p = apvts.getParameter (params::cabIr);
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (p->convertTo0to1 ((float) index));
+        p->endChangeGesture();
+    }
+    else
+    {
+        // No parameter moved, only the state did — and a host hears of that only when told.
+        updateHostDisplay (ChangeDetails{}.withNonParameterStateChanged (true));
+    }
 }
 
 bool AmpProcessor::chooseCabFile (const juce::File& file)
@@ -467,12 +480,13 @@ void AmpProcessor::pumpDeviceWork()
     // The cabinet IR: choosing one is picking a FILE, so it loads here — the convolution's own
     // background loader swaps it in without a click.
     // An IR of the player's own is the same kind of pick — its bytes are already in memory. It is
-    // named by the state TREE, which is the message thread's; `prepareToPlay` runs this pump on
-    // whatever thread the host prepares from, and there the reload waits for the timer's tick.
+    // named by the state TREE, which is the message thread's.
     if (juce::MessageManager::existsAndIsCurrentThread())
     {
-        if (const auto choice = cabChoice();
-            cabIrStale.exchange (false) || choice.identity() != lastCabIr)
+        const auto choice = cabChoice();
+        cabUserIr = choice.bytes;   // what a prepare off this thread will load — see below
+
+        if (cabIrStale.exchange (false) || choice.identity() != lastCabIr)
         {
             lastCabIr = choice.identity();
 
@@ -483,6 +497,20 @@ void AmpProcessor::pumpDeviceWork()
                 const auto& bytes = cabIrBytes (choice.factory);
                 cab.load (bytes.data, (size_t) bytes.size);
             }
+        }
+    }
+    else if (cabIrStale.exchange (false))
+    {
+        // `prepareToPlay` runs this pump on whatever thread the host prepares from, and the engine
+        // it just prepared must not wait for a timer — a render with no message loop would never get
+        // its cabinet. The tree is out of reach here; what the message thread last saw is not. The
+        // bytes never move (the store keeps them for its whole life), and the tick re-checks.
+        if (const auto* own = cabUserIr.load())
+            cab.load (own->getData(), own->getSize());
+        else
+        {
+            const auto& shelf = cabIrBytes (juce::roundToInt (apvts.getRawParameterValue (params::cabIr)->load()));
+            cab.load (shelf.data, (size_t) shelf.size);
         }
     }
 
