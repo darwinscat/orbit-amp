@@ -1326,6 +1326,50 @@ int main()
         }
     }
 
+    // THE CABINET, one bad sample in: every sample after it is a number AT ONCE — not after the
+    // impulse has carried it out, which is what macOS's convolver does, and not never, which is
+    // what Windows' did. The shipping IR, a quiet tone, one NaN, the tone again.
+    {
+        orbitamp::core::CabinetIr cabinet;
+        cabinet.prepare (sampleRate, blockSize, 2);
+        const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+        cabinet.load (shelf.data, (size_t) shelf.size);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        long long phase = 0;
+        int bad = 0;
+        double late = 0.0;
+
+        for (int b = 0; b < 400; ++b)
+        {
+            for (int i = 0; i < blockSize; ++i, ++phase)
+            {
+                const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                         * 220.0 * (double) phase / sampleRate);
+                buf.setSample (0, i, s);
+                buf.setSample (1, i, s);
+            }
+
+            if (b == 100)
+                buf.setSample (0, 100, std::numeric_limits<float>::quiet_NaN()),
+                buf.setSample (1, 100, std::numeric_limits<float>::quiet_NaN());
+
+            cabinet.process (buf.getArrayOfWritePointers(), 2, blockSize, true);
+            juce::Thread::sleep (b < 100 ? 2 : 0);   // the impulse loads on the convolver's own thread
+
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < blockSize; ++i)
+                    if (b >= 100 && ! std::isfinite (buf.getSample (ch, i)))
+                        ++bad;
+
+            if (b >= 390)
+                late = std::max (late, (double) buf.getRMSLevel (0, 0, blockSize));
+        }
+
+        report ("cabinet: a NaN in, every sample after it a number", bad == 0, juce::String (bad) + " non-finite");
+        report ("...and the cabinet still sounds",                 late > 1.0e-3, juce::String (late, 4) + " rms");
+    }
+
     // ...AND ONE INFINITY MUST NOT MUTE THE SAFETY FOR EVER. The limiter's envelope took the peak
     // it heard, an infinity included, and no finite peak ever decays from that: the gain went to
     // zero and the plugin put out exact silence until the limiter was switched off. A quiet tone,
@@ -1537,6 +1581,21 @@ int main()
             std::vector<float> out;
             long long phase = 0;
 
+            // The cabinet's impulse arrives on the convolver's own thread, at the machine's pace: both
+            // instances hear most of a second of silence first, so neither compares a room that has
+            // its cabinet against one still waiting for it. (On a slow runner that wait is what made
+            // this check come and go.)
+            {
+                juce::AudioBuffer<float> silence (2, blockSize);
+                for (int i = 0; i < 150; ++i)
+                {
+                    silence.clear();
+                    c->processBlock (silence, midi);
+                    c->pumpDeviceWork();
+                    juce::Thread::sleep (5);
+                }
+            }
+
             for (int round = 0; round < 40; ++round)
             {
                 juce::AudioBuffer<float> big (2, blockSize * 4);
@@ -1556,9 +1615,6 @@ int main()
                         juce::AudioBuffer<float> part (big.getArrayOfWritePointers(), 2, k * blockSize, blockSize);
                         c->processBlock (part, midi);
                     }
-
-                if (round == 0)
-                    c->pumpDeviceWork();   // the cabinet's IR, once, the same moment for both
 
                 for (int i = 0; i < big.getNumSamples(); ++i)
                     out.push_back (big.getSample (0, i));
