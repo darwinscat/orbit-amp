@@ -1370,6 +1370,105 @@ int main()
         report ("...and the cabinet still sounds",                 late > 1.0e-3, juce::String (late, 4) + " rms");
     }
 
+    // THE CABINET'S CONVOLVER — felitronics-core's CabConvolver — kept as the cabinet it replaced.
+    {
+        const auto& shelfIr = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+        constexpr int bs = 512;
+
+        // Blocks of a signal through a cabinet; `on` false is the chain's out-of-the-path call.
+        const auto blocks = [] (orbitamp::core::CabinetIr& cab, int count, bool on, bool tone, std::vector<float>* keep = nullptr)
+        {
+            juce::AudioBuffer<float> buf (2, bs);
+            static long long phase = 0;
+            for (int b = 0; b < count; ++b)
+            {
+                for (int i = 0; i < bs; ++i, ++phase)
+                {
+                    const float v = tone ? 0.2f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * (double) phase / sampleRate) : 0.0f;
+                    buf.setSample (0, i, v);
+                    buf.setSample (1, i, v);
+                }
+                if (on)
+                    cab.process (buf.getArrayOfWritePointers(), 2, bs, true);
+                else
+                    cab.idle (bs);
+                cab.flushPending();
+                if (keep != nullptr && on)
+                    for (int i = 0; i < bs; ++i)
+                        keep->push_back (buf.getSample (0, i));
+            }
+        };
+
+        // A NEW CABINET HANDED OVER WHILE IT STANDS OUT OF THE PATH lands. The convolver's reset
+        // cancels a handover it has not picked up, so a cabinet reset every block while bypassed
+        // never took the IR it was given and played silence when it came back.
+        {
+            orbitamp::core::CabinetIr cab;
+            cab.prepare (sampleRate, bs, 2);
+            blocks (cab, 20, true, true);                                  // it has sounded: history to forget
+            cab.load (shelfIr.data, (size_t) shelfIr.size);                // a pick, while...
+            blocks (cab, 300, false, false);                               // ...it stands out of the path
+            std::vector<float> back;
+            blocks (cab, 60, true, true, &back);
+            double level = 0.0;
+            for (size_t i = back.size() / 2; i < back.size(); ++i)
+                level = std::max (level, (double) std::abs (back[i]));
+            report ("cabinet: a pick made while it stood down plays when it returns", level > 0.05,
+                    juce::String (level, 3) + " peak");
+        }
+
+        // NO GHOST: standing down long enough forgets what it heard, so returning on silence is silence.
+        {
+            orbitamp::core::CabinetIr cab;
+            cab.prepare (sampleRate, bs, 2);
+            cab.load (shelfIr.data, (size_t) shelfIr.size);
+            blocks (cab, 100, true, true);                                  // loud, with a long tail
+            blocks (cab, 300, false, false);                               // stood down past the impulse
+            std::vector<float> back;
+            blocks (cab, 4, true, false, &back);
+            double ghost = 0.0;
+            for (float v : back)
+                ghost = std::max (ghost, (double) std::abs (v));
+            report ("...and nothing of before comes back with it", ghost < 1.0e-6, juce::String (ghost, 8) + " peak");
+        }
+
+        // ONE RESPONSE AT EVERY SESSION RATE. The IR is recorded at 48 kHz; the convolver resamples it,
+        // and a resampled impulse's gain grows with the ratio unless it is taken out — +6 dB at 96.
+        {
+            const auto gainAt220 = [&] (double sr)
+            {
+                orbitamp::core::CabinetIr cab;
+                cab.prepare (sr, bs, 2);
+                cab.load (shelfIr.data, (size_t) shelfIr.size);
+                juce::AudioBuffer<float> buf (2, bs);
+                double in = 0.0, out = 0.0;
+                long long ph = 0;
+                // Two seconds in before measuring — past the whole impulse at any rate, since a block at
+                // 96 kHz is half the time it is at 48 — then one second measured.
+                const int warm = (int) (2.0 * sr / bs), total = warm + (int) (sr / bs);
+                for (int b = 0; b < total; ++b)
+                {
+                    for (int i = 0; i < bs; ++i, ++ph)
+                    {
+                        const float v = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * (double) ph / sr);
+                        buf.setSample (0, i, v); buf.setSample (1, i, v);
+                        if (b >= warm) in += (double) v * v;
+                    }
+                    cab.process (buf.getArrayOfWritePointers(), 2, bs, true);
+                    cab.flushPending();
+                    if (b >= warm)
+                        for (int i = 0; i < bs; ++i)
+                            out += (double) buf.getSample (0, i) * buf.getSample (0, i);
+                }
+                return 10.0 * std::log10 (out / in);
+            };
+
+            const double at48 = gainAt220 (48000.0), at44 = gainAt220 (44100.0), at96 = gainAt220 (96000.0);
+            report ("...and one response at 44.1, 48 and 96 kHz", std::abs (at44 - at48) < 0.1 && std::abs (at96 - at48) < 0.1,
+                    juce::String (at44, 2) + " / " + juce::String (at48, 2) + " / " + juce::String (at96, 2) + " dB at 220 Hz");
+        }
+    }
+
     // ...AND ONE INFINITY MUST NOT MUTE THE SAFETY FOR EVER. The limiter's envelope took the peak
     // it heard, an infinity included, and no finite peak ever decays from that: the gain went to
     // zero and the plugin put out exact silence until the limiter was switched off. A quiet tone,

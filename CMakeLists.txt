@@ -104,6 +104,11 @@ endif()
 # NeuralAmpModelerCore and the namz codec itself — the overrides below only spare a second clone of
 # trees this machine already has, and fall back to the pins when they are gone.
 set(FELITRONICS_WITH_NAM ON CACHE BOOL "orbit-amp plays .namz captures" FORCE)
+# The cabinet convolves through felitronics::convolution's CabConvolver, and its audio FFT is pffft
+# (SIMD, BSD) — the backend OrbitCab ships. Set before core is made available so the fftpffft module
+# is built; the convolution module then carries the definition to every target that links it, which
+# is what keeps the choice uniform across translation units.
+set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the pffft SIMD FFT" FORCE)
 
 set(ORBITAMP_NAM_CORE_SRC "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/build-hard/_deps/nam_core_src-src"
     CACHE PATH "Local NeuralAmpModelerCore checkout; empty fetches the pin")
@@ -451,6 +456,7 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
+    felitronics::convolution         # the cabinet's convolver (core::CabinetIr → CabConvolver, pffft)
     felitronics::measurement         # reference-unity IR normalization (core::CabinetIr)
     felitronics::nam                 # NAM inference — the captured devices actually play
     felitronics::rigplayer           # the pack player: captures, their crossfade, tone, alignment
@@ -622,6 +628,7 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
+    felitronics::convolution         # the cabinet convolves through CabConvolver
     felitronics::measurement
     felitronics::nam
     felitronics::rigplayer

@@ -639,6 +639,10 @@ void AmpProcessor::pumpDeviceWork()
         }
     }
 
+    // An IR the convolver turned away mid-crossfade gets its next chance here.
+    if (juce::MessageManager::existsAndIsCurrentThread())
+        cab.flushPending();
+
     // ...and what the player does to it: baked into the IR off this pump, so the convolution
     // never learns of it. Rebuilt only when something moved.
     {
@@ -1415,7 +1419,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
       // Otherwise the first IR-length after it comes back convolves what was played BEFORE it
       // stood down — a ghost, faded in over fifteen milliseconds, of a phrase from minutes ago.
       if (! cabOn)
-          cab.reset();
+          cab.idle (numSamples);
 
       if (cabOn)
       {

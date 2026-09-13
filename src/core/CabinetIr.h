@@ -6,21 +6,25 @@
 #include <felitronics/eq/MatchedBiquad.h>
 #include <felitronics/measurement/ReferenceUnity.h>
 
+#include <felitronics/convolution/CabConvolver.h>
+
 #include <juce_audio_formats/juce_audio_formats.h>
-#include <juce_dsp/juce_dsp.h>
 
 #include <algorithm>
 #include <atomic>
+#include <vector>
 
 namespace orbitamp::core
 {
 
 /** The cabinet as a convolution: one IR, chosen from the shelf, at the end of the chain.
 
-    juce::dsp::Convolution does the heavy lifting AND the thread safety: loadImpulseResponse is
-    documented safe to call while process runs — the background loader prepares the new IR and
-    swaps it in without a click. Zero latency (uniform partitioning), which is what a monitoring
-    chain wants.
+    The family's own convolver does the heavy lifting: felitronics-core's CabConvolver, the one
+    OrbitCab plays — true sample-zero latency, a result that does not depend on the host's block
+    size, and a new IR built on the message thread into the idle slot and crossfaded in over 50 ms
+    on the audio thread, without a click. It replaced `juce::dsp::Convolution`, which loaded on a
+    thread of its own at a pace nobody could see and did not agree across platforms about what a
+    bad sample does to it (see `process`).
 
     WHAT A PLAYER DOES TO THE IR is baked into the IR, not run on the audio: a second-order
     high-pass and low-pass over the impulse itself, a trim of its tail, a flip of its sign — the
@@ -62,8 +66,16 @@ public:
 
     void prepare (double sampleRate, int blockSize, int numChannels)
     {
-        channels = juce::jmax (1, numChannels);
-        conv.prepare ({ sampleRate, (juce::uint32) blockSize, (juce::uint32) channels });
+        channels = juce::jlimit (1, 2, numChannels);
+        // Its schedule is fixed at prepare for the longest IR it will ever be handed — `load` refuses
+        // longer — and the loudness is ours, set in `rebuild`, so the convolver applies none.
+        prepared = conv.prepare (sampleRate, blockSize, channels, maxSeconds, false);
+        spare.assign ((size_t) juce::jmax (1, blockSize), 0.0f);
+        silence.assign ((size_t) juce::jmax (1, blockSize), 0.0f);
+        hostRate    = sampleRate;
+        drainLeft   = 0;
+        silenceLeft = 0;
+        cleared     = true;
     }
 
     /** Message thread. The data is copied here — the caller's buffer may die. WAV or AIFF — the
@@ -110,23 +122,52 @@ public:
             return;
 
         const int nch = juce::jmin (channels, numChannels);
+        drainLeft = 0;   // it is sounding again: whatever was still being drained is its history now
 
-        // POISON. A sample that is not a number does not enter the convolution. What the convolver
-        // does with one is the platform's business, and the platforms do not agree: on macOS it
-        // rides the impulse out and lets go after the IR's length; on Windows it stayed in for good,
-        // and the plugin went silent from that sample on — the output door turns what is not a
-        // number into silence. This link replaces the signal it is handed, so a bad sample becomes
-        // a silent one here exactly as it would at the door.
+        // Still flushing a poisoned history (see below): silence goes in, silence comes out.
+        if (silenceLeft > 0)
+        {
+            flushWithSilence (numSamples);
+            silenceLeft -= numSamples;
+            for (int ch = 0; ch < nch; ++ch)
+                std::fill_n (io[ch], numSamples, 0.0f);
+            return;
+        }
+
+        // POISON. A sample that is not a number does not enter the convolution: a convolver's history
+        // is a recursion of blocks, and the one this used to be kept a NaN for good on Windows — the
+        // plugin went silent from that sample on. This link replaces the signal it is handed, so a
+        // bad sample becomes a silent one here exactly as it would at the output door.
         for (int ch = 0; ch < nch; ++ch)
             for (int i = 0; i < numSamples; ++i)
                 if (! std::isfinite (io[ch][i]))
                     io[ch][i] = 0.0f;
 
-        juce::dsp::AudioBlock<float> block (const_cast<float**> (io), (size_t) nch, (size_t) numSamples);
         cleared = false;   // there is history in the tail again
 
-        juce::dsp::ProcessContextReplacing<float> ctx (block);
-        conv.process (ctx);
+        // THE CONVOLVER'S WIDTH IS EXACT: prepared for the bus's two channels, it refuses a call with
+        // one — a 2×2 operator needs both planes. The chain runs mono until its stereo seam, so a
+        // one-channel call goes in with a silent second plane beside it: that channel's history
+        // simply stays quiet, and nothing is torn when the chain's width changes.
+        float* planes[2] { io[0], nch > 1 ? io[1] : spare.data() };
+
+        if (nch < channels)
+        {
+            if (numSamples > (int) spare.size())
+                planes[0] = nullptr;   // longer than prepared: refused below
+            else
+                std::fill_n (spare.data(), numSamples, 0.0f);
+        }
+
+        // A convolver that could not be prepared, or a block past what it was prepared for, plays
+        // nothing rather than something wrong: the host promised this block size, and the chain
+        // cuts longer blocks to it before they reach here.
+        if (! prepared || planes[0] == nullptr || ! conv.process (planes, channels, numSamples))
+        {
+            for (int ch = 0; ch < nch; ++ch)
+                std::fill_n (io[ch], numSamples, 0.0f);
+            return;
+        }
 
         // ...and one the convolver makes of its own is not kept either: the block goes silent and the
         // convolution starts again. `x - x` is 0 for every finite x and NaN for anything else.
@@ -137,26 +178,60 @@ public:
 
         if (! std::isfinite (poison))
         {
-            conv.reset();
+            silenceLeft = historySamples();
             for (int ch = 0; ch < nch; ++ch)
                 std::fill_n (io[ch], numSamples, 0.0f);
         }
     }
 
-    /** Idempotent, like the room's and the echo's: the chain calls this while the cabinet is out
-        of the path, and the clear underneath is a memset of the whole convolution state. Without
-        the guard it would run every block for a link nobody is listening to. */
-    void reset()
+    /** The chain calls this every block the cabinet is out of the path: what it remembers is DRAINED
+        — silence run through it for as long as an impulse lasts — and then it rests.
+
+        Not the convolver's reset. That runs on this thread against a load the message thread may be
+        handing over, which the convolver forbids, and it cancels a handover it has not picked up yet:
+        the new cabinet would stay in the idle slot for good and the one playing would be silence.
+        Draining forgets exactly what a reset forgets, and a handover in flight simply lands. Costs a
+        cabinet's worth of work for an impulse's length after it stands down, and nothing after that. */
+    void idle (int numSamples)
     {
-        if (cleared)
+        if (cleared || numSamples <= 0)
             return;
 
-        cleared = true;
-        conv.reset();
+        if (drainLeft <= 0)
+            drainLeft = historySamples();
+
+        flushWithSilence (numSamples);
+        drainLeft -= numSamples;
+
+        if (drainLeft <= 0)
+            cleared = true;
     }
 
 private:
-    bool cleared = true;   // see reset()
+    bool cleared = true;   // nothing left in the convolver's history — see idle()
+    int  drainLeft = 0, silenceLeft = 0;
+    double hostRate = 48000.0;
+    std::vector<float> silence;   // the second silent plane of a flush
+
+    /** How much silence clears the convolver's memory: the impulse, plus a block for the schedule's
+        own framing. */
+    int historySamples() const noexcept
+    {
+        return juce::roundToInt ((double) tailSec.load (std::memory_order_relaxed) * hostRate)
+             + (int) spare.size() + 1;
+    }
+
+    /** One block of silence through the convolver, and its answer thrown away. */
+    void flushWithSilence (int numSamples)
+    {
+        if (! prepared || numSamples > (int) spare.size())
+            return;
+
+        std::fill_n (spare.data(), numSamples, 0.0f);
+        std::fill_n (silence.data(), numSamples, 0.0f);
+        float* planes[2] { spare.data(), silence.data() };
+        juce::ignoreUnused (conv.process (planes, channels, numSamples));
+    }
 
     static std::unique_ptr<juce::AudioFormatReader> readerFor (const void* data, size_t size)
     {
@@ -259,27 +334,64 @@ private:
             ir.getArrayOfReadPointers(), ir.getNumChannels(), ir.getNumSamples(), rawRate));
 
         // What this speaker goes on saying after the guitar stops — the plugin has to be able to
-        // tell a host, and an impulse is exactly as long as it is. `Trim::yes` may shorten it
-        // further at the tail; taking the length before that errs long, which is the side to be
+        // tell a host, and an impulse is exactly as long as it is. The silence cut below may shorten
+        // it further at the tail; taking the length before that errs long, which is the side to be
         // wrong on. Stored where the load happens, read from wherever the host asks.
         tailSec.store ((float) ((double) ir.getNumSamples() / juce::jmax (1.0, rawRate)),
                        std::memory_order_relaxed);
 
-        conv.loadImpulseResponse (std::move (ir), rawRate,
-                                  juce::dsp::Convolution::Stereo::no,
-                                  juce::dsp::Convolution::Trim::yes,
-                                  juce::dsp::Convolution::Normalise::no);
+        // SILENCE AT EITHER END IS NOT PART OF THE CABINET. Anything under -80 dBFS before the first
+        // sound or after the last is cut before the convolver sees it — the rule the JUCE convolver
+        // applied under `Trim::yes`, kept so the cabinet's timing is what it was: a vendor IR with a
+        // few milliseconds of pre-roll would otherwise start that late.
+        {
+            constexpr float threshold = 1.0e-4f;   // -80 dBFS
+            const float* d = ir.getReadPointer (0);
+            int first = 0, last = keep;
+
+            while (first < keep && std::abs (d[first]) < threshold) ++first;
+            while (last > first && std::abs (d[last - 1]) < threshold) --last;
+
+            if (last > first)
+            {
+                // THE LEVEL SURVIVES A RATE CHANGE. The convolver resamples an IR recorded at another
+                // rate to the session's, and a resampled impulse has more (or fewer) taps carrying the
+                // same response — its sum, and so its gain, grows with the ratio: +6 dB for a 48 kHz
+                // cabinet in a 96 kHz session, -0.7 dB at 44.1. The convolver corrects that only when
+                // it normalises the level itself, and the level here is ours (`referenceUnityGain`
+                // above), so the ratio is taken out before it goes in. Measured against the cabinet
+                // this replaced, which kept one response at every rate.
+                const float rateGain = (float) (rawRate / juce::jmax (1.0, hostRate));
+                std::vector<float> taps (d + first, d + last);
+                for (auto& t : taps)
+                    t *= rateGain;
+
+                const float* planes[1] { taps.data() };
+                conv.loadIR (planes, 1, (int) taps.size(), rawRate);
+            }
+        }
     }
 
 public:
+    /** Message thread, every pump tick. An IR handed over while the previous one is still fading in
+        waits in the convolver; this gives it the next chance. Dragging a cut rebuilds the IR on every
+        tick, so without it the last position of a drag could be the one that never arrives. */
+    void flushPending()
+    {
+        if (conv.hasPending())
+            conv.flushPending();
+    }
+
     /** How long the loaded impulse is, in seconds — this block's whole tail. */
     float tailSeconds() const noexcept { return tailSec.load (std::memory_order_relaxed); }
 
 private:
     std::atomic<float> tailSec { 0.0f };
 
-    juce::dsp::Convolution conv;
+    felitronics::convolution::CabConvolver conv;
+    bool prepared = false;
     int channels = 2;
+    std::vector<float> spare;   // the silent second plane of a one-channel call — see process
 
     juce::AudioBuffer<float> raw;    // the shot, as it came — the post is baked into a copy
     double rawRate = 48000.0;
