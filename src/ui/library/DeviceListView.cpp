@@ -39,7 +39,7 @@ struct DeviceListView::Row final : public juce::Component
 
         // Right-to-left: what it is on disk, and — for a file that named no slot — the fact that
         // it shows on every device tab, so meeting it again elsewhere is expected.
-        g.setFont (juce::FontOptions (9.0f, juce::Font::bold));
+        g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
         g.setColour (theme::txFaint);
         g.drawText (pack.loose ? "NAM" : "PACK", body.removeFromRight (56), juce::Justification::centredRight);
         if (pack.slot == device::DeviceLibrary::Slot::any)
@@ -50,7 +50,7 @@ struct DeviceListView::Row final : public juce::Component
         g.fillEllipse (dot.withSizeKeepingCentre (6.0f, 6.0f));
 
         g.setColour (theme::tx);
-        g.setFont (juce::FontOptions (12.5f));
+        g.setFont (juce::FontOptions (13.0f));
         g.drawText (pack.displayName(), body.withTrimmedLeft (4), juce::Justification::centredLeft, true);
     }
 
@@ -150,7 +150,7 @@ void DeviceListView::paint (juce::Graphics& g)
     if (rows.empty())
     {
         g.setColour (theme::txFaint);
-        g.setFont (juce::FontOptions (11.5f));
+        g.setFont (juce::FontOptions (13.0f));
         g.drawText (juce::String::fromUTF8 ("No devices yet \xe2\x80\x94 Add\xe2\x80\xa6 "
                                             "or drop .nam / .namz / .orbitrig packs here."),
                     viewport.getBounds(), juce::Justification::centred);
