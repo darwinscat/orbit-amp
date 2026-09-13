@@ -1132,6 +1132,90 @@ int main()
                 std::abs (lateRms - 0.1 / std::sqrt (2.0)) < 0.002, juce::String (lateRms, 4) + " rms");
     }
 
+    // THE WHOLE CHAIN, one bad sample at the door. Everything that holds state and needs no pack —
+    // the gate, both EQ links, the delay, the reverb, the cabinet, the limiter — in the rig and on,
+    // a quiet tone, one NaN on both channels, the tone again; the captured blocks stand out, since
+    // without a pack they have nothing to play. Four seconds later every sample is a number and the
+    // level is the level of the same run with no NaN in it — the delay and the room are still
+    // building at that point, so the fair comparison is a twin, not the level before. The gate
+    // needs nothing of its own for this: its key heals itself and its audio is a multiply, which is
+    // what this is here to keep true.
+    //
+    // FOUR seconds, not one, because the cabinet DRAINS rather than heals: the convolution carries
+    // what went in for exactly the length of the impulse — about 1.3 s for the shipping IR — and
+    // then lets go by itself. That is a tail, not a latch, and measured as one: the late window
+    // starts well past it.
+    {
+        const auto chainRun = [&] (bool poisoned, int& badLate)
+        {
+            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            c->prepareToPlay (sampleRate, blockSize);
+
+            set (*c, orbitamp::params::stereoMode, 0.0f);
+            for (const auto* id : { orbitamp::params::gateOn, orbitamp::params::delayOn, orbitamp::params::reverbOn,
+                                    orbitamp::params::cabOn, orbitamp::params::limiterOn,
+                                    orbitamp::params::gatePresent, orbitamp::params::delayPresent,
+                                    orbitamp::params::reverbPresent, orbitamp::params::cabPresent })
+                set (*c, id, 1.0f);
+            set (*c, orbitamp::params::boostPresent,  0.0f);
+            set (*c, orbitamp::params::preampPresent, 0.0f);
+            set (*c, orbitamp::params::gateThreshold, -70.0f);   // the tone stays open
+
+            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::MidiBuffer midi;
+            long long phase = 0;
+            double late = 0.0;
+            badLate = 0;
+
+            for (int b = 0; b < 700; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++phase)
+                {
+                    const float s = 0.1f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                             * 220.0 * (double) phase / sampleRate);
+                    buf.setSample (0, i, s);
+                    buf.setSample (1, i, s);
+                }
+
+                if (poisoned && b == 200)
+                    buf.setSample (0, 100, std::numeric_limits<float>::quiet_NaN()),
+                    buf.setSample (1, 100, std::numeric_limits<float>::quiet_NaN());
+
+                c->processBlock (buf, midi);
+                c->pumpDeviceWork();
+
+                if (b >= 600)
+                {
+                    double sum = 0.0;
+                    for (int ch = 0; ch < 2; ++ch)
+                        for (int i = 0; i < blockSize; ++i)
+                        {
+                            const float v = buf.getSample (ch, i);
+                            if (! std::isfinite (v))
+                                ++badLate;
+                            else if (ch == 0)
+                                sum += (double) v * v;
+                        }
+
+                    if (b >= 680)
+                        late = std::max (late, std::sqrt (sum / blockSize));
+                }
+            }
+
+            return late;
+        };
+
+        int cleanBad = 0, badLate = 0;
+        const double clean = chainRun (false, cleanBad);
+        const double after = chainRun (true,  badLate);
+        const double db    = 20.0 * std::log10 (juce::jmax (1.0e-9, after) / juce::jmax (1.0e-9, clean));
+
+        report ("the whole chain: a NaN at the door, later all numbers", badLate == 0,
+                juce::String (badLate) + " non-finite");
+        report ("...and the level of the same run without it",  clean > 1.0e-3 && std::abs (db) < 1.0,
+                juce::String (db, 2) + " dB");
+    }
+
     if (amp.boost.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench
