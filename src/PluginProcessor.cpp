@@ -1056,7 +1056,9 @@ void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
           { auto& tout = reverbSpectrumTap[1];
             const float* w = reverb.addedWet (0);
-            for (int i = 0; i < numSamples; ++i)
+            // As far as the room wrote, not as far as the host's block runs: a host that hands more
+            // than it promised at prepare would have this read past the end of the room's buffer.
+            for (int i = 0; i < reverb.addedLength(); ++i)
                 tout.push (w[i]);
             tout.publishIfDue (eqSpectrumOrder,
                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }

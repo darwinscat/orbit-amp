@@ -10,6 +10,7 @@
 #include "core/ReverbStage.h"
 
 #include <cmath>
+#include <limits>
 #include <cstdio>
 #include <vector>
 
@@ -137,6 +138,95 @@ int main()
 
     report ("character: hall rings longer than spring", hall > spring,
             ("hall " + std::to_string (hall) + " > spring " + std::to_string (spring)).c_str());
+
+    // ONE BAD SAMPLE MUST NOT KILL THE ROOM FOR EVER. Every element in here is recursive, and a NaN
+    // or an infinity that got in used to make every sample after it not a number — at any mix, and
+    // standing by — until the reverb was taken out of the rig. Blocks of a host's size: a quiet
+    // 220 Hz, one poisoned sample on both channels, then the tone again. What comes out must be
+    // finite from the very block after, the dry must pass through the poisoned block's neighbours
+    // untouched — the poisoned sample itself is the dry's, and stays — and the room must be ringing
+    // again a moment later.
+    {
+        constexpr int block = 512;
+
+        const auto poisonRun = [&] (float poison, float mix)
+        {
+            ReverbStage room;
+            room.prepare (sampleRate, block);
+            room.setCharacter (ReverbStage::Character::hall);
+            room.setMix (mix);
+
+            std::vector<float> l ((size_t) block), rr ((size_t) block);
+            float* ch[2] = { l.data(), rr.data() };
+            long long phase = 0;
+            int badAfter = 0;
+            double tailLate = 0.0;
+
+            for (int b = 0; b < 200; ++b)
+            {
+                for (int i = 0; i < block; ++i, ++phase)
+                    l[(size_t) i] = rr[(size_t) i] = 0.1f * (float) std::sin (2.0 * 3.141592653589793 * 220.0 * (double) phase / sampleRate);
+
+                if (b == 20)
+                    l[100] = rr[100] = poison;
+
+                room.process (ch, 2, block);
+
+                if (b > 20)
+                    for (int i = 0; i < block; ++i)
+                        if (! std::isfinite (l[(size_t) i]) || ! std::isfinite (rr[(size_t) i]))
+                            ++badAfter;
+
+                if (b >= 190)
+                    for (int i = 0; i < block; ++i)
+                        tailLate = std::max (tailLate, (double) std::fabs (room.addedWet (0)[i]));
+            }
+
+            return std::make_pair (badAfter, tailLate);
+        };
+
+        const auto nanRun  = poisonRun (std::numeric_limits<float>::quiet_NaN(), 0.5f);
+        const auto infRun  = poisonRun (std::numeric_limits<float>::infinity(),  0.5f);
+        const auto zeroMix = poisonRun (std::numeric_limits<float>::quiet_NaN(), 0.0f);
+
+        report ("a NaN in: everything after it is a number", nanRun.first == 0,
+                ("non-finite after " + std::to_string (nanRun.first)).c_str());
+        report ("...and the room rings again",               nanRun.second > 1.0e-4,
+                ("late tail " + std::to_string (nanRun.second)).c_str());
+        report ("an infinity in: the same",                  infRun.first == 0 && infRun.second > 1.0e-4,
+                ("non-finite after " + std::to_string (infRun.first)).c_str());
+        report ("mix 0 is not a hiding place",               zeroMix.first == 0,
+                ("non-finite after " + std::to_string (zeroMix.first)).c_str());
+    }
+
+    // ...and poison the room makes of ITS OWN — its state, not its door — is dropped and the room
+    // restarts: a tail that is not a number never reaches the dry.
+    {
+        constexpr int block = 256;
+        ReverbStage room;
+        room.prepare (sampleRate, block);
+        room.setMix (1.0f);
+
+        std::vector<float> l ((size_t) block, 0.0f), rr ((size_t) block, 0.0f);
+        float* ch[2] = { l.data(), rr.data() };
+
+        // Enormous but finite: past what Freeverb's feedback sums can hold. Whether it overflows
+        // inside depends on the float path, so the check is on the OUTCOME either way.
+        for (int b = 0; b < 40; ++b)
+        {
+            for (int i = 0; i < block; ++i)
+                l[(size_t) i] = rr[(size_t) i] = (b < 4 && i % 2 == 0) ? 3.0e38f : (b < 4 ? -3.0e38f : 0.25f);
+
+            room.process (ch, 2, block);
+        }
+
+        bool finite = true;
+        for (int i = 0; i < block; ++i)
+            finite = finite && std::isfinite (l[(size_t) i]) && std::isfinite (rr[(size_t) i]);
+
+        report ("an overflow inside the room heals too",  finite, "");
+        report ("the room says how much it wrote",        room.addedLength() == block, "");
+    }
 
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
