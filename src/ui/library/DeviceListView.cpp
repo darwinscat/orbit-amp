@@ -122,6 +122,9 @@ void DeviceListView::resized()
     toolbar.removeFromLeft (6);
     revealButton.setBounds (toolbar.removeFromLeft (92));
 
+    toolbar.removeFromLeft (12);
+    noticeArea = toolbar;
+
     r.removeFromBottom (6);
     viewport.setBounds (r);
 
@@ -136,6 +139,13 @@ void DeviceListView::paint (juce::Graphics& g)
     g.fillRoundedRectangle (well, theme::radiusSm);
     g.setColour (dragOver ? theme::orange : theme::hair2);
     g.drawRoundedRectangle (well.reduced (0.5f), theme::radiusSm, dragOver ? 1.5f : 1.0f);
+
+    if (notice.isNotEmpty())
+    {
+        g.setColour (theme::txDim);
+        g.setFont (juce::FontOptions (13.0f));
+        g.drawText (notice, noticeArea, juce::Justification::centredLeft, true);
+    }
 
     if (rows.empty())
     {
@@ -192,10 +202,27 @@ void DeviceListView::addClicked()
 void DeviceListView::importPaths (const juce::StringArray& paths)
 {
     bool any = false;
+    juce::StringArray shipped;
 
     for (const auto& p : paths)
-        if (device::DeviceLibrary::importDevice (juce::File (p)) != juce::File())
+    {
+        juce::String refused;
+
+        if (device::DeviceLibrary::importDevice (juce::File (p), device::DeviceLibrary::directory(),
+                                                 device::DeviceLibrary::bundledDirectory(),
+                                                 [] (const juce::File& f) { return f.moveToTrash(); },
+                                                 &refused) != juce::File())
             any = true;
+        else if (refused.isNotEmpty())
+            shipped.addIfNotAlreadyThere (refused);
+    }
+
+    // A drop that brought nothing must say why, or it reads as a drop that did not work. The line
+    // stands until the next import says something else.
+    notice = shipped.isEmpty() ? juce::String()
+           : shipped.size() == 1 ? shipped[0] + " already ships with OrbitAmp - not added"
+                                 : shipped.joinIntoString (", ") + " already ship with OrbitAmp - not added";
+    repaint();
 
     if (any)
         changedLater();

@@ -260,12 +260,14 @@ public:
         A PACK THAT IS ALREADY HERE is not installed beside itself. Its `rig_id` says whether it is:
         a copy the player installed before is RETIRED — to the Trash by default, so a re-import is an
         update and nothing is lost — and the new one takes its place; a pack the build ships is not
-        the player's to replace, and the import is refused. Re-importing the very file that is
-        installed changes nothing. */
+        the player's to replace, and the import is refused — `refused`, when given, is then set to
+        the name of the pack the build ships, so the player can be told why nothing arrived.
+        Re-importing the very file that is installed changes nothing. */
     static juce::File importDevice (const juce::File& src, const juce::File& into = directory(),
                                     const juce::File& bundled = bundledDirectory(),
                                     const std::function<bool (const juce::File&)>& retire
-                                        = [] (const juce::File& f) { return f.moveToTrash(); })
+                                        = [] (const juce::File& f) { return f.moveToTrash(); },
+                                    juce::String* refused = nullptr)
     {
         if (! looksLikeDevice (src))
             return {};
@@ -275,8 +277,12 @@ public:
 
         if (rigId.isNotEmpty())
         {
-            if (! installedWithRigId (bundled, rigId).isEmpty())
+            if (const auto shipped = installedWithRigId (bundled, rigId); ! shipped.isEmpty())
+            {
+                if (refused != nullptr)
+                    *refused = shipped.getFirst().getFileName().upToFirstOccurrenceOf (".", false, false);
                 return {};
+            }
 
             copies = installedWithRigId (into, rigId);
 

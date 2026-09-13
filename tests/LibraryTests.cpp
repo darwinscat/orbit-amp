@@ -274,9 +274,11 @@ int main()
                                                            && renamed.isDirectory());
 
         pack (factory, "RAT", "rat-2-3ab8");
-        report ("a capture the build ships is refused",  DeviceLibrary::importDevice (pack (src, "RAT", "rat-2-3ab8"),
-                                                                                     into, factory, retire) == juce::File()
-                                                           && ! into.getChildFile ("RAT.orbitrig").exists());
+        juce::String refused;
+        report ("a capture the build ships is refused",  DeviceLibrary::importDevice (pack (src, "Rodent", "rat-2-3ab8"),
+                                                                                     into, factory, retire, &refused) == juce::File()
+                                                           && ! into.getChildFile ("Rodent.orbitrig").exists());
+        report ("...and says which pack it already is",  refused == "RAT", refused);
 
         report ("a lone model has no rig_id to merge by", DeviceLibrary::rigIdOf (work.getChildFile ("dev-src/clean.nam")).isEmpty());
 
