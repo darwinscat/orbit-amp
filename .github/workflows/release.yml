@@ -52,7 +52,7 @@ jobs:
       - name: Build
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Release \
-            -DORBITAMP_JUCE_DIR= -DORBITAMP_FCORE_DIR= -DORBITAMP_APPKIT_DIR= \
+            -DORBITAMP_JUCE_DIR= -DORBITAMP_FCORE_DIR= -DORBITAMP_GUITAR_DIR= -DORBITAMP_APPKIT_DIR= \
             -DORBITAMP_NAM_CORE_SRC= -DORBITAMP_NAMZ_SRC= \
             -DORBITAMP_COPY_PLUGIN=OFF
           cmake --build build --config Release --parallel
