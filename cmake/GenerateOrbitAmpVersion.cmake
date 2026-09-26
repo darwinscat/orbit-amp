@@ -20,10 +20,11 @@
 #   FCORE_LOCAL      ON when the sibling felitronics-core checkout is used, OFF when the pin is fetched
 #   FCORE_DIR        the sibling checkout path (only read when FCORE_LOCAL)
 #   FCORE_TAG        the pinned felitronics-core tag (used when fetched, or as a local fallback)
+#   GUITAR_LOCAL / GUITAR_DIR / GUITAR_TAG   the same three for felitronics-guitar-core
 #   APPKIT_LOCAL / APPKIT_DIR / APPKIT_TAG   the same three for felitronics-appkit
 #   NAMZ_LOCAL / NAMZ_DIR / NAMZ_TAG         the same three for namz, the pack codec
 #   NAMCORE_DIR      the NeuralAmpModelerCore sources the build used (a git checkout or not)
-#   NAMCORE_TAG      the commit felitronics-core pins it at
+#   NAMCORE_TAG      what felitronics-guitar-core's NAM module pins it at
 # ----------------------------------------------------------------------------
 
 # --- kBuildNumber: 14-digit UTC YYYYMMDDHHMMSS -----------------------------------------------
@@ -96,7 +97,7 @@ if(OS)
     set(_os "${OS}")
 endif()
 
-# --- the dependency rows: felitronics-core and felitronics-appkit --------------------------------
+# --- the dependency rows: felitronics-core, felitronics-guitar-core, felitronics-appkit, namz ------
 # The parent CMake knows which FetchContent path it took (sibling checkout vs pinned fetch) and says
 # so. A sibling is described LIVE (it may have advanced past the pin); a fetched one is the pin
 # itself. Three columns come out of it — version, where it came from, and the commit — because a
@@ -141,6 +142,7 @@ function(_orbitamp_resolve_dep is_local dir tag out_version out_commit out_state
 endfunction()
 
 _orbitamp_resolve_dep("${FCORE_LOCAL}"  "${FCORE_DIR}"  "${FCORE_TAG}"  _core   _core_commit   _core_state)
+_orbitamp_resolve_dep("${GUITAR_LOCAL}" "${GUITAR_DIR}" "${GUITAR_TAG}" _guitar _guitar_commit _guitar_state)
 _orbitamp_resolve_dep("${APPKIT_LOCAL}" "${APPKIT_DIR}" "${APPKIT_TAG}" _appkit _appkit_commit _appkit_state)
 _orbitamp_resolve_dep("${NAMZ_LOCAL}"   "${NAMZ_DIR}"   "${NAMZ_TAG}"   _namz   _namz_commit   _namz_state)
 
@@ -206,6 +208,9 @@ _orbitamp_cxx_escape(_builder)
 _orbitamp_cxx_escape(_core)
 _orbitamp_cxx_escape(_core_commit)
 _orbitamp_cxx_escape(_core_state)
+_orbitamp_cxx_escape(_guitar)
+_orbitamp_cxx_escape(_guitar_commit)
+_orbitamp_cxx_escape(_guitar_state)
 _orbitamp_cxx_escape(_appkit)
 _orbitamp_cxx_escape(_appkit_commit)
 _orbitamp_cxx_escape(_appkit_state)
@@ -243,6 +248,9 @@ namespace orbitamp::version
     inline constexpr const char* kCoreVersion   = \"${_core}\";
     inline constexpr const char* kCoreCommit    = \"${_core_commit}\";
     inline constexpr const char* kCoreState     = \"${_core_state}\";
+    inline constexpr const char* kGuitarVersion = \"${_guitar}\";
+    inline constexpr const char* kGuitarCommit  = \"${_guitar_commit}\";
+    inline constexpr const char* kGuitarState   = \"${_guitar_state}\";
     inline constexpr const char* kAppkitVersion = \"${_appkit}\";
     inline constexpr const char* kAppkitCommit  = \"${_appkit_commit}\";
     inline constexpr const char* kAppkitState   = \"${_appkit_state}\";

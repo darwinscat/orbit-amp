@@ -80,12 +80,18 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 #
 # ⚠️ AND IT IS THE TAG CI USES, NOT WHAT YOU SEE LOCALLY. The hybrid override below prefers a sibling
 # ../felitronics-core checkout, so a local build shows that checkout's HEAD however this line reads.
-# Proving anything about the pin means emptying the override — all five of them, not this one — and
+# Proving anything about the pin means emptying the override — all six of them, not this one — and
 # letting FetchContent take the tag.
 #
-# v0.31.0 keeps that geometry and moves the pin to the freshest release — nothing here asks for
-# its new API, so the bump is the whole of the change.
-set(ORBITAMP_FCORE_TAG "v0.31.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+# v0.51.0 is the first release felitronics-guitar-core accepts: nam, rigplayer and poweramp left core
+# for that repository in it (see below). v0.53.0 is the freshest, and the one the sibling checkout sits
+# on. Between v0.31.0 and it, nothing this plugin calls plays differently INSIDE a running stream — the
+# probe loops render bit-identically on both — and what moved is at a stream's edges: a re-prepared
+# capture no longer answers with the previous stream's tail, its warm-up is counted at the new rate, a
+# trim switched off stays off through the prepare. The cabinet hands CabConvolver taps already at the
+# host's rate, so the v0.34.0 rate factor and the v0.32.0 edge fix have nothing to act on here, and the
+# v0.53.0 glides are in stages this plugin does not link.
+set(ORBITAMP_FCORE_TAG "v0.53.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -99,39 +105,50 @@ else()
         GIT_TAG        ${ORBITAMP_FCORE_TAG}
         GIT_SHALLOW    TRUE)
 endif()
-# The neural runtime. felitronics::nam is OFF by default so a consumer that does not need it stays
-# header-only; orbit-amp plays captured devices, so it needs it. The module fetches
-# NeuralAmpModelerCore and the namz codec itself — the overrides below only spare a second clone of
-# trees this machine already has, and fall back to the pins when they are gone.
-set(FELITRONICS_WITH_NAM ON CACHE BOOL "orbit-amp plays .namz captures" FORCE)
 # The cabinet convolves through felitronics::convolution's CabConvolver, and its audio FFT is pffft
 # (SIMD, BSD) — the backend OrbitCab ships. Set before core is made available so the fftpffft module
 # is built; the convolution module then carries the definition to every target that links it, which
 # is what keeps the choice uniform across translation units.
 set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the pffft SIMD FFT" FORCE)
 
+# The neural runtime — felitronics::nam, and the pack player over it, felitronics::rigplayer. Since core
+# v0.51.0 both live in felitronics-guitar-core, made available right AFTER core below, by the same rule
+# as core: a sibling checkout when present, the pinned tag otherwise. It builds them by default, so
+# there is no switch to throw here any more (core refuses the old FELITRONICS_WITH_NAM outright). The
+# NAM module fetches NeuralAmpModelerCore and the namz codec itself — the overrides below only spare a
+# second clone of trees this machine already has, and fall back to the pins when they are gone.
+set(ORBITAMP_GUITAR_TAG "v0.1.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
+set(ORBITAMP_GUITAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-guitar-core"
+    CACHE PATH "Local felitronics-guitar-core checkout (used if present); else the pinned release is fetched")
+
+# ...and a build directory configured before the move still carries the FELITRONICS_WITH_NAM=ON this
+# file used to FORCE into its cache, which core now stops the configure on. We put it there; we take it
+# out, so an existing build directory configures again instead of asking its owner for a -U.
+unset(FELITRONICS_WITH_NAM CACHE)
+
 set(ORBITAMP_NAM_CORE_SRC "$ENV{HOME}/IdeaProjects/orbit-nam-capture/app/build-hard/_deps/nam_core_src-src"
     CACHE PATH "Local NeuralAmpModelerCore checkout; empty fetches the pin")
 set(ORBITAMP_NAMZ_SRC "$ENV{HOME}/IdeaProjects/namz"
     CACHE PATH "Local namz checkout; empty fetches the pin")
 
-# The local NAM copy is a SHORTCUT, not a source of truth: felitronics-core pins the engine, and a
+# The local NAM copy is a SHORTCUT, not a source of truth: the NAM module pins the engine, and a
 # copy sitting on a different commit would silently build a different DSP than the pin says. So the
-# shortcut is taken only when it agrees with the pin — read out of core's own CMakeLists, since the
-# pin is not known to us until core is configured, which is after this must be decided.
+# shortcut is taken only when it agrees with the pin — read out of the NAM module's own CMakeLists (in
+# felitronics-guitar-core since core v0.51.0), since the pin is not known to us until that is configured,
+# which is after this must be decided.
 if(EXISTS "${ORBITAMP_NAM_CORE_SRC}/.git")
     set(_oa_nam_pin "")
-    if(EXISTS "${ORBITAMP_FCORE_DIR}/modules/nam/CMakeLists.txt")
-        file(READ "${ORBITAMP_FCORE_DIR}/modules/nam/CMakeLists.txt" _oa_nam_cml)
+    if(EXISTS "${ORBITAMP_GUITAR_DIR}/modules/nam/CMakeLists.txt")
+        file(READ "${ORBITAMP_GUITAR_DIR}/modules/nam/CMakeLists.txt" _oa_nam_cml)
         string(REGEX MATCH "FELITRONICS_NAM_CORE_TAG \"([^\"]+)\"" _oa_nam_match "${_oa_nam_cml}")
         set(_oa_nam_pin "${CMAKE_MATCH_1}")
     endif()
 
     # ...and a build directory that was configured before the pin moved keeps the OLD value in its
-    # cache, because core declares the pin as a CACHE variable and a cache entry wins over a new
-    # default. Same failure, one layer down: the build would still compile the engine we replaced.
+    # cache, because the NAM module declares the pin as a CACHE variable and a cache entry wins over a
+    # new default. Same failure, one layer down: the build would still compile the engine we replaced.
     if(_oa_nam_pin AND DEFINED FELITRONICS_NAM_CORE_TAG AND NOT FELITRONICS_NAM_CORE_TAG STREQUAL _oa_nam_pin)
-        message(STATUS "NeuralAmpModelerCore: cached pin ${FELITRONICS_NAM_CORE_TAG} is stale — core pins ${_oa_nam_pin}")
+        message(STATUS "NeuralAmpModelerCore: cached pin ${FELITRONICS_NAM_CORE_TAG} is stale — the NAM module pins ${_oa_nam_pin}")
         set(FELITRONICS_NAM_CORE_TAG "${_oa_nam_pin}" CACHE STRING "" FORCE)
     endif()
 
@@ -151,7 +168,7 @@ if(EXISTS "${ORBITAMP_NAM_CORE_SRC}/.git")
         set(FELITRONICS_NAM_CORE_SRC "${ORBITAMP_NAM_CORE_SRC}" CACHE PATH "" FORCE)
         set(ORBITAMP_NAM_CORE_USED "${ORBITAMP_NAM_CORE_SRC}")
     else()
-        message(STATUS "NeuralAmpModelerCore: local copy is NOT on core's pin (${_oa_nam_pin}) — fetching the pin instead")
+        message(STATUS "NeuralAmpModelerCore: local copy is NOT on the NAM module's pin (${_oa_nam_pin}) — fetching the pin instead")
         set(FELITRONICS_NAM_CORE_SRC "" CACHE PATH "" FORCE)
         set(ORBITAMP_NAM_CORE_USED "${CMAKE_BINARY_DIR}/_deps/nam_core_src-src")
     endif()
@@ -160,15 +177,26 @@ if(EXISTS "${ORBITAMP_NAMZ_SRC}/include/namz.h")
     set(FELITRONICS_NAMZ_SRC "${ORBITAMP_NAMZ_SRC}" CACHE PATH "" FORCE)
 endif()
 
-# ...and when there is NO local checkout — CI — the tag core would otherwise pin. The device page
-# reads a pack's photograph and the box's own history (`Rig::picture`, `gear.year`, `serial_number`,
-# `designed_in`, `made_in`), all of which are newer than the commit felitronics-core carries. Pinned
-# HERE rather than waited for: a core release exists to move core's own code, and holding this
-# behind one would leave the plugin unbuildable on CI for no reason of its own.
+# ...and when there is NO local checkout — CI — the tag the NAM module would otherwise pin. The device
+# page reads a pack's photograph and the box's own history (`Rig::picture`, `gear.year`,
+# `serial_number`, `designed_in`, `made_in`), all of which were newer than the commit the NAM module
+# carried. Pinned HERE rather than waited for: a library release exists to move the library's own code,
+# and holding this behind one would leave the plugin unbuildable on CI for no reason of its own.
 set(ORBITAMP_NAMZ_TAG "v4.1.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
 set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_core)
+if(ORBITAMP_GUITAR_DIR AND EXISTS "${ORBITAMP_GUITAR_DIR}/CMakeLists.txt")
+    message(STATUS "felitronics-guitar-core: local checkout — ${ORBITAMP_GUITAR_DIR}")
+    FetchContent_Declare(felitronics_guitar_core SOURCE_DIR "${ORBITAMP_GUITAR_DIR}")
+else()
+    message(STATUS "felitronics-guitar-core: fetching ${ORBITAMP_GUITAR_TAG} from GitHub")
+    FetchContent_Declare(felitronics_guitar_core
+        GIT_REPOSITORY https://github.com/darwinscat/felitronics-guitar-core.git
+        GIT_TAG        ${ORBITAMP_GUITAR_TAG}
+        GIT_SHALLOW    TRUE)
+endif()
+FetchContent_MakeAvailable(felitronics_guitar_core)
 
 # ----------------------------------------------------------------------------
 # felitronics-appkit — the family's shared app-side JUCE infrastructure (brand kit, update
@@ -241,6 +269,13 @@ else()
     set(_oa_fcore_local OFF)
 endif()
 
+# ...and the same for felitronics-guitar-core, where the NAM stage and the pack player come from.
+if(ORBITAMP_GUITAR_DIR AND EXISTS "${ORBITAMP_GUITAR_DIR}/CMakeLists.txt")
+    set(_oa_guitar_local ON)
+else()
+    set(_oa_guitar_local OFF)
+endif()
+
 # ...and the same for felitronics-appkit: the badge's dependency rows name what was actually built
 # against, sibling or pin, never the other one.
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -250,8 +285,8 @@ else()
 endif()
 
 # The engine's sources as the build ACTUALLY resolved them — the local copy only when it agreed
-# with core's pin, the fetched pin otherwise (see the guard above). The stamp must name what was
-# compiled, not what was nearby.
+# with the NAM module's pin, the fetched pin otherwise (see the guard above). The stamp must name what
+# was compiled, not what was nearby.
 set(_oa_namcore_dir "${ORBITAMP_NAM_CORE_USED}")
 if(NOT _oa_namcore_dir)
     set(_oa_namcore_dir "${CMAKE_BINARY_DIR}/_deps/nam_core_src-src")
@@ -274,6 +309,9 @@ set(_oa_ver_args
     -DFCORE_LOCAL=${_oa_fcore_local}
     -DFCORE_DIR=${ORBITAMP_FCORE_DIR}
     -DFCORE_TAG=${ORBITAMP_FCORE_TAG}
+    -DGUITAR_LOCAL=${_oa_guitar_local}
+    -DGUITAR_DIR=${ORBITAMP_GUITAR_DIR}
+    -DGUITAR_TAG=${ORBITAMP_GUITAR_TAG}
     -DAPPKIT_LOCAL=${_oa_appkit_local}
     -DAPPKIT_DIR=${ORBITAMP_APPKIT_DIR}
     -DAPPKIT_TAG=${ORBITAMP_APPKIT_TAG}
