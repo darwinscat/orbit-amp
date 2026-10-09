@@ -28,19 +28,11 @@ public:
     Cockpit();
     void paint (juce::Graphics&) override;
 
-    /** A dark name tag centred on `anchor` — the full name and state of whatever is under the hand,
-        where the panel itself only has room for a short name or none. Empty text hides it. */
-    void showTag (juce::Point<float> anchor, juce::String text);
-
     /** What the signs by the overhead keys say: an arrow with nothing to step back or forward to stands
         dim, and the register that is playing has its letter and its lamp lit. */
     void setHistory (bool canUndo, bool canRedo, int activeRegister);
 
 private:
-    juce::Point<float> tagAnchor;
-    juce::String tagText;
-    juce::Rectangle<float> tagBounds() const;
-
     bool canUndo = false, canRedo = false;
     int  activeRegister = 0;
     void paintOverhead (juce::Graphics&) const;
@@ -52,6 +44,24 @@ private:
     float layerScale = 0.0f;
     void paintStatic (juce::Graphics&, float scale) const;
     void paintEmblem (juce::Graphics&, float scale) const;
+};
+
+//==============================================================================
+/** A dark name tag — the full name and state of whatever is under the hand, where the panel itself
+    only has room for a short name or none. It lies OVER everything on the stage: the keys stand right
+    under the tone knobs, and a tag drawn with the panel slid under the knob above it. Never takes a
+    click. */
+class NameTag final : public juce::Component
+{
+public:
+    NameTag();
+    void paint (juce::Graphics&) override;
+
+    /** Centred on `anchor`, in the stage's own space. Empty text hides it. */
+    void show (juce::Point<float> anchor, const juce::String& text);
+
+private:
+    juce::String text;
 };
 
 //==============================================================================
@@ -89,6 +99,7 @@ private:
     Space   space;
     Monitor monitor;             // a picture of the amp at work, when the windshield shows one instead of the sky
     Cockpit cockpit;
+    NameTag nameTag;             // over the controls: the last thing on the stage
 
     // The sky on the GPU when it can be; the CPU Space stays as the fallback (and with CATPIT_SKY=cpu).
     juce::OpenGLContext gl;

@@ -139,23 +139,6 @@ Cockpit::Cockpit()
     setInterceptsMouseClicks (false, false);
 }
 
-juce::Rectangle<float> Cockpit::tagBounds() const
-{
-    if (tagText.isEmpty())
-        return {};
-    const auto font = labelFont (layout::px13).withExtraKerningFactor (0.06f);
-    const float w = juce::GlyphArrangement::getStringWidth (font, tagText) + 30.0f;
-    return juce::Rectangle<float> (w, 32.0f).withCentre (tagAnchor);
-}
-
-void Cockpit::showTag (juce::Point<float> anchor, juce::String text)
-{
-    repaint (tagBounds().expanded (2.0f).getSmallestIntegerContainer());
-    tagAnchor = anchor;
-    tagText = std::move (text);
-    repaint (tagBounds().expanded (2.0f).getSmallestIntegerContainer());
-}
-
 void Cockpit::setHistory (bool undo, bool redo, int reg)
 {
     if (undo == canUndo && redo == canRedo && reg == activeRegister)
@@ -233,15 +216,6 @@ void Cockpit::paint (juce::Graphics& g)
     }
     g.drawImage (layer, juce::Rectangle<float> (0.0f, 0.0f, width, height));
     paintOverhead (g);
-
-    if (const auto tag = tagBounds(); ! tag.isEmpty())
-    {
-        g.setColour (juce::Colour (0xe8050509));
-        g.fillRoundedRectangle (tag, 6.0f);
-        g.setColour (violet.withAlpha (0.7f));
-        g.drawRoundedRectangle (tag, 6.0f, 1.2f);
-        drawLabel (g, tagText, tag, px13, juce::Colour (0xffece9f6), 0.06f);
-    }
 }
 
 void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
@@ -327,6 +301,36 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 }
 
 //==============================================================================
+NameTag::NameTag()
+{
+    setInterceptsMouseClicks (false, false);
+}
+
+void NameTag::show (juce::Point<float> anchor, const juce::String& words)
+{
+    text = words;
+    setVisible (text.isNotEmpty());
+    if (text.isEmpty())
+        return;
+
+    const auto font = labelFont (layout::px13).withExtraKerningFactor (0.06f);
+    const float w = juce::GlyphArrangement::getStringWidth (font, text) + 30.0f;
+    // A pixel of room all round for the outline, which is stroked on the edge of the plate.
+    setBounds (juce::Rectangle<float> (w, 32.0f).withCentre (anchor).expanded (2.0f).getSmallestIntegerContainer());
+    repaint();
+}
+
+void NameTag::paint (juce::Graphics& g)
+{
+    const auto tag = getLocalBounds().toFloat().reduced (2.0f);
+    g.setColour (juce::Colour (0xe8050509));
+    g.fillRoundedRectangle (tag, 6.0f);
+    g.setColour (violet.withAlpha (0.7f));
+    g.drawRoundedRectangle (tag, 6.0f, 1.2f);
+    drawLabel (g, text, tag, layout::px13, juce::Colour (0xffece9f6), 0.06f);
+}
+
+//==============================================================================
 CatpitEditor::CatpitEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), channels (p), presets (p, channels),
       monitor (p),
@@ -383,7 +387,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         b.setBounds (around (at, keySize, keySize));
         b.onHover = [this, at, &b] (bool over)
         {
-            cockpit.showTag (at.translated (0.0f, -40.0f), over ? b.name + "  " + b.stateText() : juce::String());
+            nameTag.show (at.translated (0.0f, -40.0f), over ? b.name + "  " + b.stateText() : juce::String());
         };
     }
 
@@ -594,6 +598,9 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         if (safe != nullptr && safe->isShowing())
             safe->grabKeyboardFocus();
     });
+
+    // The name tag goes on last, so that it lies over every control it may be shown beside.
+    stage.addChildComponent (nameTag);
 
     setResizable (true, true);
     getConstrainer()->setFixedAspectRatio ((double) width / (double) height);
@@ -928,8 +935,8 @@ void CatpitEditor::showComboTag (bool show)
     const auto& inset = layout::sliderInsets[2];
     const auto& cabinets = channels.cabinets();
     const int step = sliders[2]->getStep();
-    cockpit.showTag ({ inset.getCentreX(), inset.getY() - 52.0f },
-                     show && step < cabinets.size() ? Channels::cabinetName (cabinets.getReference (step)) : juce::String());
+    nameTag.show ({ inset.getCentreX(), inset.getY() - 52.0f },
+                  show && step < cabinets.size() ? Channels::cabinetName (cabinets.getReference (step)) : juce::String());
 }
 
 template <typename Control>
