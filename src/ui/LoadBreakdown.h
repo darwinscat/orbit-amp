@@ -20,6 +20,21 @@ namespace orbitamp
 struct LoadBreakdown final : public juce::Component,
                              private juce::Timer
 {
+    /** WHAT A FACE MAY MAKE ITS OWN. Its words for the stages — the cockpit's packs are whole amps,
+        so the row OrbitAmp calls PREAMP reads AMP there; an empty answer keeps the chain's own name —
+        and the three weights the text is set in. Left alone, it is OrbitAmp's. */
+    std::function<juce::String (int stage, bool brief)> nameOf;
+    juce::Colour text { theme::tx }, dim { theme::txDim }, faint { theme::txFaint };
+
+    juce::String stageName (int stage, bool brief) const
+    {
+        if (nameOf)
+            if (const auto own = nameOf (stage, brief); own.isNotEmpty())
+                return own;
+
+        return brief ? params::stageNames[stage].brief : params::stageNames[stage].full;
+    }
+
     explicit LoadBreakdown (AmpProcessor& p) : amp (p)
     {
         // Sized for EVERY stage, not for the ones standing when it opened: presence can be
@@ -92,7 +107,7 @@ struct LoadBreakdown final : public juce::Component,
             if (! stageInRig (i))
                 continue;
 
-            t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", params::stageNames[i].brief,
+            t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", stageName (i, true).toRawUTF8(),
                                           amp.stageLoad[i].load(), amp.stageWorst[i].load());
         }
 
@@ -106,10 +121,10 @@ struct LoadBreakdown final : public juce::Component,
 
         {
             auto head = r.removeFromTop (24);
-            g.setColour (theme::tx);
+            g.setColour (text);
             theme::drawTracked (g, "DSP LOAD", head.toFloat(),
                                 theme::displayFont (13.0f), 0.1f, juce::Justification::centredLeft);
-            g.setColour (theme::txDim);
+            g.setColour (dim);
             theme::drawTracked (g, "MEAN / WORST", head.toFloat(),
                                 theme::displayFont (13.0f), 0.08f, juce::Justification::centredRight);
         }
@@ -157,24 +172,24 @@ struct LoadBreakdown final : public juce::Component,
             const bool total   = i == AmpProcessor::stTotal;
             const bool working = stageWorking (i);
 
-            g.setColour (total ? theme::tx : working ? theme::txDim : theme::txFaint);
+            g.setColour (total ? text : working ? dim : faint);
             // Wide enough for the longest name there is — PREAMP EQ, which at 13 px with this
             // tracking is a shade under ninety. `drawTracked` does not clip, and the bar is
             // painted after the label, so a column measured for the SECOND longest name reads
             // as a bar that has eaten the end of a word.
-            theme::drawTracked (g, params::stageNames[i].full, row.removeFromLeft (96).toFloat(),
+            theme::drawTracked (g, stageName (i, false), row.removeFromLeft (96).toFloat(),
                                 theme::displayFont (13.0f), 0.08f, juce::Justification::centredLeft);
 
             const float w = amp.stageWorst[i].load();
 
             auto worst = row.removeFromRight (58);
-            g.setColour (w > 100.0f ? theme::orange : theme::txFaint);
+            g.setColour (w > 100.0f ? theme::orange : faint);
             theme::drawTracked (g, juce::String (juce::roundToInt (w)) + "%", worst.toFloat(),
                                 theme::displayFont (13.0f), 0.06f, juce::Justification::centredRight);
 
             auto num = row.removeFromRight (52);
             g.setColour (v > 50.0f ? theme::orange
-                       : total ? theme::tx : working ? theme::txDim : theme::txFaint);
+                       : total ? text : working ? dim : faint);
             theme::drawTracked (g, juce::String (v, 1) + "%", num.toFloat(),
                                 theme::displayFont (13.0f), 0.06f, juce::Justification::centredRight);
 
@@ -191,7 +206,7 @@ struct LoadBreakdown final : public juce::Component,
         {
             auto foot = r.removeFromTop (26);
             const auto n = amp.overruns.load();
-            g.setColour (n > 0 ? theme::orange : theme::txDim);
+            g.setColour (n > 0 ? theme::orange : dim);
             theme::drawTracked (g, "OVERRUNS  " + juce::String ((int) n)
                                     + juce::String (n > 0 ? "  = AUDIBLE DROPS" : ""),
                                 foot.toFloat(), theme::displayFont (13.0f), 0.08f,
@@ -199,14 +214,14 @@ struct LoadBreakdown final : public juce::Component,
         }
 
         // The buttons: RESET starts a fresh measurement, COPY hands me the numbers as text.
-        const auto pill = [&g] (juce::Rectangle<int> b, const juce::String& text, bool lit)
+        const auto pill = [&g, this] (juce::Rectangle<int> b, const juce::String& word, bool lit)
         {
             g.setColour (theme::panel);
             g.fillRoundedRectangle (b.toFloat(), b.getHeight() * 0.5f);
             g.setColour (lit ? theme::orange : theme::hair2);
             g.drawRoundedRectangle (b.toFloat().reduced (0.5f), b.getHeight() * 0.5f, 1.0f);
-            g.setColour (lit ? theme::orange : theme::txDim);
-            theme::drawTracked (g, text, b.toFloat(), theme::displayFont (13.0f), 0.1f,
+            g.setColour (lit ? theme::orange : dim);
+            theme::drawTracked (g, word, b.toFloat(), theme::displayFont (13.0f), 0.1f,
                                 juce::Justification::centred);
         };
 

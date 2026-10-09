@@ -333,6 +333,52 @@ void NameTag::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+Sheet::Sheet (std::unique_ptr<juce::Component> c) : content (std::move (c))
+{
+    addAndMakeVisible (*content);
+    setWantsKeyboardFocus (true);
+}
+
+juce::Rectangle<int> Sheet::plate() const
+{
+    constexpr int margin = 12;
+    return getLocalBounds().withSizeKeepingCentre (content->getWidth() + margin * 2, content->getHeight() + margin * 2);
+}
+
+void Sheet::resized()
+{
+    content->setBounds (getLocalBounds().withSizeKeepingCentre (content->getWidth(), content->getHeight()));
+}
+
+void Sheet::paint (juce::Graphics& g)
+{
+    // A light scrim, as the build window has: the cockpit steps back, it does not go dark.
+    g.fillAll (juce::Colours::black.withAlpha (0.22f));
+
+    // The plate is the name tag's, grown to a window: near-black, the family's violet round its edge.
+    const auto face = plate().toFloat();
+    g.setColour (juce::Colour (0xff0b0a12));
+    g.fillRoundedRectangle (face, 8.0f);
+    g.setColour (violet.withAlpha (0.7f));
+    g.drawRoundedRectangle (face.reduced (0.6f), 8.0f, 1.2f);
+}
+
+void Sheet::mouseDown (const juce::MouseEvent& e)
+{
+    if (! plate().contains (e.getPosition()) && onDismiss)
+        onDismiss();
+}
+
+bool Sheet::keyPressed (const juce::KeyPress& key)
+{
+    if (key != juce::KeyPress::escapeKey)
+        return false;
+    if (onDismiss)
+        onDismiss();
+    return true;
+}
+
+//==============================================================================
 CatpitEditor::CatpitEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), channels (p), presets (p, channels),
       monitor (p),
@@ -581,7 +627,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // OrbitAmp's footer opens from its DSP figure.
     load.nameColour = labelLilac.withAlpha (0.85f);
     load.fromLeft = true;
-    load.onClick = [this] { openLoadBreakdown (amp, load.getScreenBounds()); };
+    load.onClick = [this] { showLoad(); };
     stage.addAndMakeVisible (load);
     load.setBounds (loadPlate.toNearestInt());
 
@@ -691,6 +737,32 @@ void CatpitEditor::timerCallback()
         showDelayTime();
 }
 
+/** THE LOAD, ITEMISED — OrbitAmp's window, opened inside the cockpit and set in its colours. */
+void CatpitEditor::showLoad()
+{
+    auto panel = std::make_unique<LoadBreakdown> (amp);
+    panel->dim   = labelLilac.withAlpha (0.85f);
+    panel->faint = labelLilac.withAlpha (0.45f);
+
+    sheet = std::make_unique<Sheet> (std::move (panel));
+    // Closing is deferred: it is asked for from inside the very component it destroys.
+    sheet->onDismiss = [safe = juce::Component::SafePointer<CatpitEditor> (this)]
+    {
+        juce::MessageManager::callAsync ([safe]
+        {
+            if (safe == nullptr)
+                return;
+            safe->sheet.reset();
+            safe->grabKeyboardFocus();       // the keys — undo, the channels — go back to the face
+        });
+    };
+
+    addAndMakeVisible (*sheet);
+    sheet->setBounds (getLocalBounds());
+    sheet->toFront (true);
+    sheet->grabKeyboardFocus();
+}
+
 void CatpitEditor::refreshHistory()
 {
     const auto& history = amp.history;
@@ -796,6 +868,8 @@ void CatpitEditor::resized()
 {
     stage.setTransform (juce::AffineTransform::scale ((float) getWidth() / layout::width));
     placeSky();
+    if (sheet != nullptr)
+        sheet->setBounds (getLocalBounds());
 }
 
 void CatpitEditor::placeSky()

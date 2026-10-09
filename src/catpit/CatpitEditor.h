@@ -65,6 +65,28 @@ private:
 };
 
 //==============================================================================
+/** A WINDOW INSIDE THE COCKPIT: a plate in the cockpit's own colours, centred over the face on a light
+    scrim — where the build window opens, and for the same reason: it belongs to the amp, so it stays
+    on the amp rather than hanging off its edge over whatever lies behind. A click that misses the
+    plate closes it, and so does Escape. */
+class Sheet final : public juce::Component
+{
+public:
+    explicit Sheet (std::unique_ptr<juce::Component> content);
+
+    std::function<void()> onDismiss;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+    void mouseDown (const juce::MouseEvent&) override;
+    bool keyPressed (const juce::KeyPress&) override;
+
+private:
+    std::unique_ptr<juce::Component> content;
+    juce::Rectangle<int> plate() const;
+};
+
+//==============================================================================
 /** CatpitAmp's face over OrbitAmp's processor. Everything is laid out in the render's own 1672 x 941
     space on one stage, and the stage is scaled to the window as a whole. */
 class CatpitEditor final : public juce::AudioProcessorEditor,
@@ -155,8 +177,10 @@ private:
 
     // CPU on the plate under the grille: the share of each audio block's time the engine spends —
     // the number OrbitAmp's footer calls DSP. It warms as it climbs, and a click opens the same
-    // stage-by-stage window (ui/LoadBreakdown.h).
+    // stage-by-stage window (ui/LoadBreakdown.h) — here inside the cockpit, in the cockpit's colours.
     Legend load;
+    std::unique_ptr<Sheet> sheet;            // the window that click opens, while it is open
+    void showLoad();
 
     // MEM on the mirrored plate: what the process is holding, as the system's own monitor counts it
     // (core/ProcessMemory.h). Only while the cockpit stands alone — inside a host the process is the
