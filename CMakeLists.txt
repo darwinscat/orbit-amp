@@ -541,6 +541,7 @@ if(ORBITAMP_CATPIT_ART_DIR AND EXISTS "${ORBITAMP_CATPIT_ART_DIR}/bg.png")
         src/catpit/CatpitArt.cpp
         src/catpit/CatpitChannels.cpp
         src/catpit/CatpitControls.cpp
+        src/catpit/CatpitPresets.cpp
         src/catpit/CatpitSpace.cpp
         src/catpit/CatpitGlSky.cpp
         src/catpit/CatpitEditor.cpp)

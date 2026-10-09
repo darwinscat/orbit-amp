@@ -58,6 +58,19 @@ public:
     /** The pack a channel plays, as an index into the preamp's library; -1 when it is not installed. */
     int  packFor (int channel) const;
 
+    /** The type of the cockpit's node in the state tree. */
+    static constexpr const char* nodeType = "catpit";
+
+    /** A note kept on the node beside the channels — it travels wherever they do. */
+    juce::var tag (const juce::Identifier&) const;
+    void setTag (const juce::Identifier&, const juce::var&);
+
+    /** All four channels written out in full, as a tree of their own: the playing one from the live
+        controls, the others from their records, a channel never visited from its defaults. Two states
+        that would sound the same on every detent give the same tree — which the node itself does not,
+        since the playing channel's record there is stale and an unvisited one is missing. */
+    juce::ValueTree whole() const;
+
 private:
     AmpProcessor& amp;
     juce::StringArray kept;      // the parameters a channel remembers

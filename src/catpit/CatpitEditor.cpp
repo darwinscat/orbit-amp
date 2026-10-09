@@ -8,6 +8,7 @@
 #include "../ui/AboutConfig.h"
 
 #include <felitronics/appkit/BrandAssets.h>
+#include <felitronics/appkit/TextPrompt.h>
 
 namespace orbitamp
 {
@@ -305,7 +306,7 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 
 //==============================================================================
 CatpitEditor::CatpitEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p), channels (p),
+    : juce::AudioProcessorEditor (&p), amp (p), channels (p), presets (p, channels),
       drive (Art::get().knobDrive, drivePointer),
       reverbName (layout::px13),
       delayName (layout::px13),
@@ -314,7 +315,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
       tuner (p.tunerEar),
       version (layout::px13),
-      about (p.updateChecker(), aboutConfig ("CatpitAmp", "https://darwinscat.com", campaign), p.pluginFormat())
+      about (p.updateChecker(), aboutConfig ("CatpitAmp", "https://darwinscat.com", campaign), p.pluginFormat()),
+      presetDoor (layout::px13)
 {
     using namespace layout;
 
@@ -533,8 +535,16 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     version.onClick = [this] { about.showAbout (this); };
     stage.addAndMakeVisible (version);
     version.setBounds (around (versionPlate, 124.0f, 30.0f));
-    version.setDot (amp.updateChecker().updateAvailable());
-    startTimerHz (4);   // the dot only ever moves after a deliberate check: a lookup, a few times a second
+
+    // PRESET, on the mirrored plate.
+    presetDoor.valueColour = labelLilac.withAlpha (0.85f);
+    presetDoor.set ({}, "PRESET");
+    presetDoor.onClick = [this] { showPresetMenu(); };
+    stage.addAndMakeVisible (presetDoor);
+    presetDoor.setBounds (around (presetPlate, 140.0f, 30.0f));
+
+    timerCallback();
+    startTimerHz (4);   // both dots are a lookup, a few times a second: nobody needs either sooner
 
     if (juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu"))
         useCpuSky();
@@ -588,6 +598,7 @@ void CatpitEditor::adoptState()
 void CatpitEditor::timerCallback()
 {
     version.setDot (amp.updateChecker().updateAvailable());
+    presetDoor.setDot (presets.changed());
 
     // A host starts or stops saying its tempo whenever it likes.
     if (tempoIsOwn == (amp.runsInHost() && amp.hostTempoBpm() > 0.0f))
@@ -814,6 +825,74 @@ void CatpitEditor::showDelayMenu()
                         {
                             if (safe != nullptr && picked > 0)
                                 safe->delayDiv->setValueAsCompleteGesture ((float) (picked - 1));
+                        });
+}
+
+/** EVERYTHING ABOUT PRESETS IS IN HERE: the plate only says the word. Whose sound this is stands at the
+    top; then the list, the one that is loaded ticked; then what can be done with it. */
+void CatpitEditor::showPresetMenu()
+{
+    enum : int { itemSave = 1, itemSaveAs, itemRename, itemDelete, itemInit, firstPreset = 100 };
+
+    const auto names   = Presets::names();
+    const auto current = presets.current();
+    const bool onDisk  = Presets::exists (current);
+
+    const auto itemFor = [] (const juce::String& text, int id, bool ticked = false, bool enabled = true)
+    {
+        juce::PopupMenu::Item item (text);
+        item.itemID    = id;
+        item.colour    = lilac;
+        item.isTicked  = ticked;
+        item.isEnabled = enabled;
+        return item;
+    };
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader (current.isEmpty() ? juce::String ("No preset")
+                                             : current + (presets.changed() ? "  (changed)" : ""));
+    for (int i = 0; i < names.size(); ++i)
+        menu.addItem (itemFor (names[i], firstPreset + i, names[i] == current));
+
+    // Save writes back to the loaded preset; Save as always asks for a name. Rename and Delete are
+    // GREY, not absent, when the sound is not a saved preset — a row that vanishes says nothing about why.
+    menu.addSeparator();
+    menu.addItem (itemFor ("Save", itemSave));
+    menu.addItem (itemFor (juce::String::fromUTF8 ("Save as\xe2\x80\xa6"), itemSaveAs));
+    menu.addItem (itemFor (juce::String::fromUTF8 ("Rename\xe2\x80\xa6"), itemRename, false, onDisk));
+    menu.addItem (itemFor ("Delete", itemDelete, false, onDisk));
+    menu.addSeparator();
+    menu.addItem (itemFor ("Init", itemInit));
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&presetDoor),
+                        [safe = juce::Component::SafePointer<CatpitEditor> (this), names, current, onDisk] (int picked)
+                        {
+                            if (safe == nullptr || picked <= 0)
+                                return;
+
+                            // The prompt is a window of its own and answers later: the face may be gone by then.
+                            const auto ask = [safe] (const juce::String& title, const juce::String& initial,
+                                                     bool (Presets::* then) (const juce::String&))
+                            {
+                                felitronics::appkit::textPrompt (title, initial, [safe, then] (juce::String name)
+                                {
+                                    if (safe != nullptr)
+                                    {
+                                        (safe->presets.*then) (name.trim());
+                                        safe->timerCallback();
+                                    }
+                                });
+                            };
+
+                            if (picked >= firstPreset)                  safe->presets.load (names[picked - firstPreset]);
+                            else if (picked == itemSave && onDisk)      safe->presets.save (current);
+                            else if (picked == itemSave
+                                     || picked == itemSaveAs)           ask ("Save preset", current, &Presets::save);
+                            else if (picked == itemRename)              ask ("Rename preset", current, &Presets::rename);
+                            else if (picked == itemDelete)              safe->presets.removeCurrent();
+                            else if (picked == itemInit)                safe->presets.init();
+
+                            safe->timerCallback();
                         });
 }
 

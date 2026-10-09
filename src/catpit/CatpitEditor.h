@@ -7,6 +7,7 @@
 #include "CatpitChannels.h"
 #include "CatpitControls.h"
 #include "CatpitGlSky.h"
+#include "CatpitPresets.h"
 #include "CatpitSpace.h"
 
 #include <felitronics/appkit/VersionBadge.h>
@@ -70,6 +71,7 @@ public:
 private:
     AmpProcessor& amp;
     Channels channels;
+    Presets  presets;
 
     bool adoptionPending = false;
     void adoptState();
@@ -109,6 +111,12 @@ private:
     // for that window.
     Legend version;
     felitronics::appkit::VersionBadge about;
+
+    // PRESET on the mirrored plate: the one word, the family's orange dot beside it while the sound has
+    // moved away from the preset it came from, and everything else — which preset, the list, saving,
+    // renaming — behind a click.
+    Legend presetDoor;
+    void showPresetMenu();
     void timerCallback() override;
 
     std::vector<std::unique_ptr<juce::ParameterAttachment>> attachments;

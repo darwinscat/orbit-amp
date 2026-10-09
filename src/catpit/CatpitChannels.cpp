@@ -19,7 +19,7 @@ namespace
 
     constexpr std::array<const char*, Channels::numFlags> flagIds { "turbo", "fat", "bright", "depth", "presence" };
 
-    const juce::Identifier nodeId   { "catpit" };
+    const juce::Identifier nodeId   { Channels::nodeType };
     const juce::Identifier recordId { "channel" };
     const juce::Identifier activeId { "active" };
     const juce::Identifier indexId  { "i" };
@@ -142,6 +142,44 @@ void Channels::setFlag (Flag f, bool on)
 {
     if (flag (f) != on)
         ensureNode().setProperty (flagIds[(size_t) f], on, nullptr);
+}
+
+juce::var Channels::tag (const juce::Identifier& id) const
+{
+    return node().getProperty (id);
+}
+
+void Channels::setTag (const juce::Identifier& id, const juce::var& value)
+{
+    if (tag (id) != value)
+        ensureNode().setProperty (id, value, nullptr);
+}
+
+juce::ValueTree Channels::whole() const
+{
+    const auto n = node();
+    const int playing = active();
+
+    juce::ValueTree out (nodeId);
+    out.setProperty (activeId, playing, nullptr);
+
+    for (int c = 0; c < count; ++c)
+    {
+        const auto record = n.getChildWithProperty (indexId, c);
+
+        juce::ValueTree full (recordId);
+        full.setProperty (indexId, c, nullptr);
+        for (const auto& id : kept)
+            full.setProperty (id, c == playing ? plain (id)
+                                               : record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id),
+                              nullptr);
+        for (int f = 0; f < numFlags; ++f)
+            full.setProperty (flagIds[(size_t) f], c == playing ? flag ((Flag) f)
+                                                                : (bool) record.getProperty (flagIds[(size_t) f], false),
+                              nullptr);
+        out.appendChild (full, nullptr);
+    }
+    return out;
 }
 
 void Channels::store (juce::ValueTree record) const
