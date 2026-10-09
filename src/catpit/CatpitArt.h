@@ -8,9 +8,9 @@
 namespace orbitamp::catpit
 {
 
-/** The cockpit's renders, read from disk once at startup. A PROTOTYPE's art: the files live in a
-    private folder (CATPIT_ART_DIR), not in this repository, so swapping one and restarting is the
-    whole loop. A file that is missing leaves its image null, and its control draws a stand-in. */
+/** The cockpit's renders, decoded once at startup from the copies built into the binary
+    (resources/catpit), already at the size the window can need at its largest on a retina screen.
+    A render that fails to decode leaves its image null, and its control draws a stand-in. */
 struct Art
 {
     juce::Image bg;            // the cockpit, its windshield cut out to transparent

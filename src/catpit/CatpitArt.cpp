@@ -4,30 +4,41 @@
 #include "CatpitArt.h"
 #include "CatpitLayout.h"
 
+#include <CatpitData.h>
+
 #include <cmath>
 #include <map>
 #include <vector>
-
-#ifndef CATPIT_ART_DIR
- #define CATPIT_ART_DIR ""
-#endif
 
 namespace orbitamp::catpit
 {
 
 namespace
 {
+    /** A render by its file name: the copy built into the binary — or, when CATPIT_ART_DIR names a
+        folder that has one, the file from there, so a new render can be tried by restarting rather
+        than rebuilding. */
     juce::Image load (const char* name)
     {
-        const auto f = juce::File (CATPIT_ART_DIR).getChildFile (name);
-        auto img = juce::ImageFileFormat::loadFrom (f);
-        if (! img.isValid())
-            DBG ("catpit: no art at " << f.getFullPathName());
+        juce::Image img;
+
+        if (const auto dir = juce::SystemStats::getEnvironmentVariable ("CATPIT_ART_DIR", {}); dir.isNotEmpty())
+            img = juce::ImageFileFormat::loadFrom (juce::File (dir).getChildFile (name));
+
+        for (int i = 0; ! img.isValid() && i < CatpitData::namedResourceListSize; ++i)
+            if (juce::String (CatpitData::getNamedResourceOriginalFilename (CatpitData::namedResourceList[i])) == name)
+            {
+                int size = 0;
+                if (const auto* data = CatpitData::getNamedResource (CatpitData::namedResourceList[i], size))
+                    img = juce::ImageFileFormat::loadFrom (data, (size_t) size);
+            }
+
+        jassert (img.isValid());   // a name that is neither on disk nor in the binary is a typo
         return img.isValid() ? img.convertedToFormat (juce::Image::ARGB) : img;
     }
 
-    /** Scales a render down once so its longer side is `maxSide` — the size the window can need at its
-        largest on a retina screen — instead of resampling a 1254-pixel source on every paint. */
+    /** Scales an image down once so its longer side is `maxSide` — the size the window can need at its
+        largest on a retina screen — instead of resampling a bigger one on every paint. */
     juce::Image capped (juce::Image img, int maxSide)
     {
         if (! img.isValid() || juce::jmax (img.getWidth(), img.getHeight()) <= maxSide)
@@ -257,14 +268,14 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg          = cutWindshield (raiseTones (load ("bg.png")));
-        a.knobDrive   = capped (load ("knob-drive.png"),   640);
-        a.knobTone    = capped (load ("knob-tone.png"),    480);
-        a.leverGrip   = capped (offCentreGrip (load ("lever.png"), a.leverAxis), 480);
-        a.guardClosed = capped (load ("guard-closed.png"), 560);
-        a.guardOpen   = capped (load ("guard-open.png"),   560);
-        a.guardOn     = capped (load ("guard-on.png"),     560);
-        a.sliderCap   = capped (load ("slider-cap.png"),   360);
+        a.bg          = cutWindshield (raiseTones (load ("cockpit.png")));
+        a.knobDrive   = load ("knob-drive.png");
+        a.knobTone    = load ("knob-tone.png");
+        a.leverGrip   = capped (offCentreGrip (load ("throttle-grip.png"), a.leverAxis), 480);
+        a.guardClosed = load ("guard-closed.png");
+        a.guardOpen   = load ("guard-open.png");
+        a.guardOn     = load ("guard-on.png");
+        a.sliderCap   = load ("fader-cap.png");
         return a;
     }();
     return art;
