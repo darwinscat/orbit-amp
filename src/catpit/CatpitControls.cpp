@@ -629,9 +629,9 @@ void Emblem::paint (juce::Graphics& g)
         return;
 
     const auto box = layout::emblemMark.translated (-(float) getX(), -(float) getY());
-    g.setColour (orange.withAlpha (0.5f * l));
+    g.setColour (violet.withAlpha (0.8f * l));
     g.drawImage (mark.halo, box.expanded (MarkCut::haloPad), juce::RectanglePlacement::stretchToFit, true);
-    g.setColour (juce::Colour (0xffffb872).withAlpha (l));
+    g.setColour (violet.interpolatedWith (juce::Colour (0xffd9c8ff), 0.35f).withAlpha (l));   // violet, lifted a little so it reads as lit
     g.drawImage (mark.cut, box, juce::RectanglePlacement::stretchToFit, true);
 }
 
