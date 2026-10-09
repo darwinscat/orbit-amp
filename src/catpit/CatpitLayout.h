@@ -80,6 +80,10 @@ inline const juce::Point<float> versionPlate { 1434.0f, 812.0f };
 /** Its mirror under REVERB's left end: the presets' door. */
 inline const juce::Point<float> presetPlate { width - 1434.0f, 812.0f };
 
+/** The flat plate under the grille, right of the tuner and down-left of the version, on the cockpit's
+    bottom edge: what the engine is costing reads here. The words start at its left edge. */
+inline const juce::Rectangle<float> loadPlate { 1236.0f, 913.0f, 140.0f, 28.0f };
+
 /** The emblem plate's inner face, a flat hexagon under the windshield, and its six screws. The render's
     own cat is painted over by a new face here, and the family's mark goes on it. */
 inline const std::array<juce::Point<float>, 6> emblemFace {{

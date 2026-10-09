@@ -655,7 +655,8 @@ void Legend::paint (juce::Graphics& g)
         return flashing ? c.interpolatedWith (juce::Colours::white, 0.85f) : lit ? c.brighter (0.5f) : c;
     };
 
-    auto area = getLocalBounds().toFloat().withSizeKeepingCentre (r.width, (float) getHeight());
+    auto area = fromLeft ? getLocalBounds().toFloat().withWidth (r.width)
+                         : getLocalBounds().toFloat().withSizeKeepingCentre (r.width, (float) getHeight());
     if (r.nameWidth > 0.0f)
     {
         g.setColour (shown (nameColour));

@@ -243,6 +243,8 @@ public:
 
     juce::Colour nameColour { 0xffc9b8f5 }, valueColour { 0xffece9f6 };
     bool upper = true;                           // false keeps the text's own case
+    bool fromLeft = false;                       // true starts the words at the left edge instead of centring
+                                                 // them: a number that changes width then moves nothing else
 
     std::function<void()>       onClick;
     std::function<void()>       onDragStart, onDragEnd;

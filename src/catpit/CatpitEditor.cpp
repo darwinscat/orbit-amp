@@ -344,6 +344,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       tuner (p.tunerEar),
       version (layout::px13),
       about (p.updateChecker(), aboutTheCockpit(), p.pluginFormat()),
+      load (layout::px13),
       presetDoor (layout::px13)
 {
     using namespace layout;
@@ -573,6 +574,14 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     stage.addAndMakeVisible (version);
     version.setBounds (around (versionPlate, 124.0f, 30.0f));
 
+    // CPU, on the plate under the grille. It is a reading, not a control: a click there is a click on
+    // the panel.
+    load.nameColour = labelLilac.withAlpha (0.85f);
+    load.fromLeft = true;
+    load.setInterceptsMouseClicks (false, false);
+    stage.addAndMakeVisible (load);
+    load.setBounds (loadPlate.toNearestInt());
+
     // PRESET, on the mirrored plate.
     presetDoor.valueColour = labelLilac.withAlpha (0.85f);
     presetDoor.set ({}, "PRESET");
@@ -581,7 +590,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     presetDoor.setBounds (around (presetPlate, 140.0f, 30.0f));
 
     timerCallback();
-    startTimerHz (4);   // both dots are a lookup, a few times a second: nobody needs either sooner
+    startTimerHz (4);   // the dots are a lookup and the load is a smoothed figure: nobody needs either sooner
 
     // The sky flies on the GPU unless the player has said otherwise (or CATPIT_SKY=cpu says so for this
     // run): the choice is the machine's, not the sound's, so it lives with the settings, not the state.
@@ -643,6 +652,18 @@ void CatpitEditor::timerCallback()
 {
     version.setDot (amp.updateChecker().updateAvailable());
     presetDoor.setDot (presets.changed());
+
+    // The load turns warm as it climbs — OrbitAmp's thresholds: a number noticed when it starts to matter.
+    const float percent = amp.dspLoadPercent();
+    const auto warmth = percent > 80.0f ? orange
+                      : percent > 50.0f ? juce::Colour (0xffece9f6)
+                                        : labelLilac.withAlpha (0.85f);
+    if (warmth != load.valueColour)
+    {
+        load.valueColour = warmth;
+        load.repaint();
+    }
+    load.set ("CPU", juce::String (juce::roundToInt (percent)) + "%");
 
     // A host starts or stops saying its tempo whenever it likes.
     if (tempoIsOwn == (amp.runsInHost() && amp.hostTempoBpm() > 0.0f))
