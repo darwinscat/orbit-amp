@@ -21,17 +21,54 @@ namespace catpit
 
 namespace
 {
-    // The overhead buttons. The panel has room for a short name over each hole; the full one shows on
+    // The overhead buttons, in hole order: the two filters on the left of the divider, the pack's own
+    // layers on the right. The panel has room for a short name over each hole; the full one shows on
     // hover. FAT is a layer only the two hottest packs carry.
     struct Switch { const char* name; const char* shortName; };
+    enum { btHpf, btLpf, btFat, btBright, btDepth, btPresence };
     constexpr std::array<Switch, 6> switches {{
+        { "HIGHPASS", "HPF"    },
+        { "LOWPASS",  "LPF"    },
         { "FAT",      "FAT"    },
         { "BRIGHT",   "BRIGHT" },
         { "DEPTH",    "DEPTH"  },
         { "PRESENCE", "PRES"   },
-        { "HIGHPASS", "HPF"    },
-        { "LOWPASS",  "LPF"    },
     }};
+
+    /** Where each overhead name goes: over its hole if it can, but never touching a neighbour and never
+        past its group's edges — the right four holes sit closer than their names are wide. A few passes
+        of pushing overlapping pairs apart, then the group is slid back inside its edges. */
+    std::array<float, 6> overheadNameCentres()
+    {
+        const auto font = labelFont (layout::px13);
+        std::array<float, 6> x {}, w {};
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+            x[i] = layout::holes[i].x;
+            w[i] = juce::GlyphArrangement::getStringWidth (font, switches[i].shortName);
+        }
+
+        constexpr float gap = 10.0f;
+        const auto settle = [&] (size_t from, size_t to, float left, float right)
+        {
+            for (int pass = 0; pass < 24; ++pass)
+            {
+                for (size_t i = from + 1; i < to; ++i)
+                {
+                    const float overlap = (x[i - 1] + w[i - 1] * 0.5f + gap) - (x[i] - w[i] * 0.5f);
+                    if (overlap > 0.0f) { x[i - 1] -= overlap * 0.5f; x[i] += overlap * 0.5f; }
+                }
+                const float under = left - (x[from] - w[from] * 0.5f);
+                const float over  = (x[to - 1] + w[to - 1] * 0.5f) - right;
+                const float slide = under > 0.0f ? under : (over > 0.0f ? -over : 0.0f);
+                for (size_t i = from; i < to; ++i)
+                    x[i] += slide;
+            }
+        };
+        settle (0, 2, 572.0f, 772.0f);     // left of the divider
+        settle (2, 6, 790.0f, 1098.0f);    // right of it, to the panel's edge
+        return x;
+    }
 
     /** STAND-INS until the cockpit's own captures exist: four preamp packs from the library, in order
         of gain, matched by their file name without the extension (exactly — "V4 Copper" is not
@@ -179,11 +216,10 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 
     paintEmblem (g, scale);
 
-    // The overhead names, one row over their holes, set tight: the right four holes sit barely a name
-    // apart, so DEPTH and PRES lean away from each other into the room either side of them.
-    constexpr std::array<float, 6> lean { 0.0f, 0.0f, -8.0f, 8.0f, 0.0f, 0.0f };
+    // The overhead names, one row over their holes.
+    const auto nameX = overheadNameCentres();
     for (size_t i = 0; i < switches.size(); ++i)
-        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (110.0f, 22.0f).withCentre ({ holes[i].x + lean[i], 29.0f }),
+        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (140.0f, 22.0f).withCentre ({ nameX[i], 29.0f }),
                    px13, labelLilac, 0.0f);
 
     drawLabel (g, "DRIVE", juce::Rectangle<float> (220.0f, 30.0f).withCentre ({ drive.centre.x, 394.0f }), px15, labelLilac);
@@ -202,25 +238,8 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
     drawLabel (g, "INPUT",  juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 117.0f, 314.0f }),  px13, labelLilac);
     drawLabel (g, "OUTPUT", juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 1557.0f, 314.0f }), px13, labelLilac);
 
-    // The tuner: its name, and a dial that waits for a note (the ear is wired in a later step).
+    // The tuner's name; its screen is the live TunerFace.
     drawLabel (g, "TUNER", juce::Rectangle<float> (200.0f, 26.0f).withCentre ({ tunerScreen.getCentreX(), 781.0f }), px13, labelLilac);
-    {
-        const auto s = tunerScreen.reduced (24.0f, 18.0f);
-        for (int c = -50; c <= 50; c += 5)
-        {
-            const float x = s.getCentreX() + s.getWidth() * 0.5f * (float) c / 50.0f;
-            const bool major = c % 25 == 0;
-            g.setColour ((c == 0 ? orange : violet).withAlpha (major ? 0.95f : 0.45f));
-            g.fillRect (juce::Rectangle<float> (x - 1.0f, s.getY() + (major ? 4.0f : 14.0f), 2.0f, major ? 34.0f : 22.0f));
-        }
-        const char* marks[] { "-50", "-25", "0", "+25", "+50" };
-        for (int k = 0; k < 5; ++k)
-        {
-            const float x = s.getCentreX() + s.getWidth() * 0.5f * (float) (k * 25 - 50) / 50.0f;
-            drawLabel (g, marks[k], juce::Rectangle<float> (60.0f, 24.0f).withCentre ({ x, s.getBottom() - 12.0f }),
-                       px13, lilac.withAlpha (0.7f), 0.0f);
-        }
-    }
 }
 
 //==============================================================================
@@ -228,7 +247,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p),
       drive (Art::get().knobDrive, drivePointer),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
-      outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); })
+      outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
+      tuner (p.tunerEar)
 {
     using namespace layout;
 
@@ -279,7 +299,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     };
     lever.onDetent = [this] (int d)
     {
-        buttons[0]->setEnabled (d >= 2);
+        buttons[btFat]->setEnabled (d >= 2);
         choosePack (d);
     };
     int startDetent = -1;
@@ -295,7 +315,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     if (const auto d = juce::SystemStats::getEnvironmentVariable ("CATPIT_DETENT", {}); d.isNotEmpty())
         startDetent = d.getIntValue();
     lever.setDetent (startDetent, false);
-    buttons[0]->setEnabled (lever.getDetent() >= 2);
+    buttons[btFat]->setEnabled (lever.getDetent() >= 2);
 
     // TURBO moves but drives nothing: it will be a layer inside the pack.
     stage.addAndMakeVisible (turbo);
@@ -323,8 +343,9 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
             chooseCombo (0);
     }
 
-    for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter })
+    for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter, &tuner })
         stage.addAndMakeVisible (c);
+    tuner.setBounds (tunerScreen.toNearestInt());
     inFader.setBounds (layout::inFader.toNearestInt());
     outFader.setBounds (layout::outFader.toNearestInt());
     inMeter.setBounds (layout::inMeter.toNearestInt());
@@ -336,6 +357,18 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     bind (*sliders[1], params::delayMix);
     bind (inFader, params::inTrim);
     bind (outFader, params::outTrim);
+
+    // The tone stack is the preamp's own console in its universal mode — the same three bands on every
+    // pack, centre detent at 0 dB — until the cockpit's packs carry a captured tone of their own.
+    constexpr int preampConsole = 1;
+    bind (*tones[0], params::eqLoDb (preampConsole));
+    bind (*tones[1], params::eqBellDb (preampConsole, 0));
+    bind (*tones[2], params::eqHiDb (preampConsole));
+
+    // HPF and LPF switch the cabinet's own cut filters in and out; FAT, BRIGHT, DEPTH and PRESENCE wait
+    // for the layers the packs will carry.
+    bindButton (*buttons[btHpf], params::cabHpfOn);
+    bindButton (*buttons[btLpf], params::cabLpfOn);
 
     if (juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu"))
         useCpuSky();
@@ -408,6 +441,12 @@ float CatpitEditor::getParam (const char* paramId) const
     a hall, the cabinet. There is no strip to switch links in or out, so the face puts them there. */
 void CatpitEditor::setUpChain()
 {
+    setParam (params::tunerPresent,  1.0f);   // the tuner bay is always there, and always listening
+    setParam (params::tunerOn,       1.0f);
+    setParam (params::inPresent,     1.0f);   // the INPUT and OUTPUT faders are these links' trims
+    setParam (params::inOn,          1.0f);
+    setParam (params::outPresent,    1.0f);
+    setParam (params::outOn,         1.0f);
     setParam (params::boostPresent,  0.0f);
     setParam (params::preampPresent, 1.0f);
     setParam (params::preampOn,      1.0f);
@@ -418,6 +457,13 @@ void CatpitEditor::setUpChain()
     setParam (params::reverbType,    (float) params::reverbCharacters.indexOf ("Hall"));
     setParam (params::cabPresent,    1.0f);
     setParam (params::cabOn,         1.0f);
+
+    // BASS / MIDDLE / TREBLE ride the preamp's universal console, not the device's own tone.
+    setParam (params::blockEqMode (params::preampId).toRawUTF8(), (float) params::eqModes.indexOf ("Universal EQ"));
+
+    // HPF / LPF are on-off: the corners and slopes stay where OrbitCab puts them until set by ear.
+    setParam (params::cabHpfHz, params::cabHpfDefaultHz);
+    setParam (params::cabLpfHz, params::cabLpfDefaultHz);
 }
 
 int CatpitEditor::packIndexFor (int detent) const
@@ -449,9 +495,10 @@ void CatpitEditor::showComboTag (bool show)
 }
 
 template <typename Control>
-void CatpitEditor::bind (Control& control, const char* paramId)
+void CatpitEditor::bind (Control& control, const juce::String& paramId)
 {
     auto* p = amp.apvts.getParameter (paramId);
+    jassert (p != nullptr);   // a binding to an id the processor does not have is a typo, not an option
     if (p == nullptr)
         return;
 
@@ -466,6 +513,20 @@ void CatpitEditor::bind (Control& control, const char* paramId)
     control.onGestureEnd   = [a] { a->endGesture(); };
     control.defaultValue   = p->getDefaultValue();
 
+    a->sendInitialUpdate();
+    attachments.push_back (std::move (att));
+}
+
+void CatpitEditor::bindButton (PushButton& button, const char* paramId)
+{
+    auto* p = amp.apvts.getParameter (paramId);
+    jassert (p != nullptr);
+    if (p == nullptr)
+        return;
+
+    auto att = std::make_unique<juce::ParameterAttachment> (*p, [&button] (float v) { button.setOn (v > 0.5f, false); });
+    auto* a = att.get();
+    button.onChange = [a] (bool on) { a->setValueAsCompleteGesture (on ? 1.0f : 0.0f); };
     a->sendInitialUpdate();
     attachments.push_back (std::move (att));
 }

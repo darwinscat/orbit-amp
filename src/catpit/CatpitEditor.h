@@ -76,11 +76,13 @@ private:
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
     ColumnFader inFader, outFader;
     SegmentMeter inMeter, outMeter;
+    TunerFace tuner;
 
     std::vector<std::unique_ptr<juce::ParameterAttachment>> attachments;
 
     template <typename Control>
-    void bind (Control&, const char* paramId);
+    void bind (Control&, const juce::String& paramId);
+    void bindButton (PushButton&, const char* paramId);
     void  setParam (const char* paramId, float value);
     float getParam (const char* paramId) const;
 

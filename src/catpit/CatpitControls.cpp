@@ -135,12 +135,12 @@ void ArtKnob::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDet
 // the right, a lamp beside each.
 namespace
 {
-    constexpr float slotX      = 46.0f;
+    constexpr float slotX      = 42.0f;
     constexpr float firstY     = 40.0f;
     constexpr float detentStep = 46.0f;
-    constexpr float lampX      = 100.0f;
-    constexpr float namesX     = 110.0f;
-    constexpr float gripWidth  = 88.0f;
+    constexpr float lampX      = 92.0f;
+    constexpr float namesX     = 102.0f;
+    constexpr float gripWidth  = 80.0f;
 }
 
 Lever::Lever()
@@ -690,6 +690,76 @@ void SegmentMeter::paint (juce::Graphics& g)
         const juce::Colour hue = at > 0.94f ? juce::Colour (0xffff4646) : at > 0.8f ? orange : violet;
         g.setColour (at <= level ? hue : hue.withAlpha (0.10f));
         g.fillRoundedRectangle (seg, 1.5f);
+    }
+}
+
+//==============================================================================
+TunerFace::TunerFace (const core::TunerEar& e) : ear (e)
+{
+    setInterceptsMouseClicks (false, false);
+    startTimerHz (30);
+}
+
+void TunerFace::paint (juce::Graphics& g)
+{
+    const juce::Colour home { 0xff5fc97a };   // the family's in-tune green
+
+    auto area = getLocalBounds().toFloat().reduced (18.0f, 10.0f);
+    const bool live = ear.live();
+    const auto note = ear.nearestNote();
+
+    // The note: name big, octave small beside it; a dash while nothing is heard.
+    auto noteArea = area.removeFromLeft (96.0f);
+    if (live)
+    {
+        const auto name = juce::String (core::PitchTracker::noteName (note.midi));
+        g.setColour (ear.green() ? home : juce::Colour (0xffece9f6));
+        g.setFont (labelFont (52.0f));
+        g.drawText (name, noteArea.withTrimmedRight (26.0f), juce::Justification::centredRight, false);
+        g.setColour (lilac.withAlpha (0.8f));
+        g.setFont (labelFont (layout::px13));
+        g.drawText (juce::String (core::PitchTracker::noteOctave (note.midi)),
+                    noteArea.removeFromRight (24.0f).withTrimmedTop (noteArea.getHeight() * 0.42f),
+                    juce::Justification::centredLeft, false);
+    }
+    else
+    {
+        g.setColour (lilac.withAlpha (0.35f));
+        g.fillRoundedRectangle (juce::Rectangle<float> (30.0f, 5.0f).withCentre (noteArea.getCentre()), 2.5f);
+    }
+
+    // The ruler: a tick every five cents, the quarters long, the centre orange; numbers under it — the
+    // ruler stops short of the right edge so "+50" stays on the glass.
+    area.removeFromLeft (8.0f);
+    area.removeFromRight (18.0f);
+    auto numbers = area.removeFromBottom (24.0f);
+    const auto ruler = area;
+    const auto xOf = [&ruler] (float c) { return ruler.getX() + ruler.getWidth() * (juce::jlimit (-50.0f, 50.0f, c) + 50.0f) / 100.0f; };
+    for (int c = -50; c <= 50; c += 5)
+    {
+        const bool major = c % 25 == 0;
+        const float h = major ? ruler.getHeight() * 0.8f : ruler.getHeight() * 0.45f;
+        g.setColour ((c == 0 ? orange : violet).withAlpha (major ? 0.9f : 0.4f));
+        g.fillRect (juce::Rectangle<float> (xOf ((float) c) - 1.0f, ruler.getCentreY() - h * 0.5f, 2.0f, h));
+    }
+    for (int c = -50; c <= 50; c += 25)
+    {
+        g.setColour (lilac.withAlpha (0.6f));
+        g.setFont (labelFont (layout::px13));
+        g.drawText ((c > 0 ? "+" : "") + juce::String (c), juce::Rectangle<float> (60.0f, numbers.getHeight())
+                        .withCentre ({ xOf ((float) c), numbers.getCentreY() }), juce::Justification::centred, false);
+    }
+
+    if (live)
+    {
+        const float x = xOf (ear.needle());
+        const auto colour = ear.green() ? home
+                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+        juce::Path needle;
+        needle.addRoundedRectangle (juce::Rectangle<float> (4.0f, ruler.getHeight()).withCentre ({ x, ruler.getCentreY() }), 2.0f);
+        glow (g, needle, colour, 8.0f);
+        g.setColour (colour);
+        g.fillPath (needle);
     }
 }
 

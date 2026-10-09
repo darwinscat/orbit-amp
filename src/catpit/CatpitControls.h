@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CatpitArt.h"
+#include "../core/TunerEar.h"
 
 #include <felitronics/appkit/Brand.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -250,6 +251,21 @@ private:
     std::function<float()> readDb;
     float shown = -90.0f;
     void timerCallback() override;
+};
+
+//==============================================================================
+/** The tuner's screen: the note big on the left, a cents ruler on the right with the needle on it —
+    green when the string is home, warming to orange by 25 cents out. Reads the processor's ear on its
+    own 30 Hz clock; the ear only listens while a face is open and the tuner is in the chain. */
+class TunerFace final : public juce::Component, private juce::Timer
+{
+public:
+    explicit TunerFace (const core::TunerEar&);
+    void paint (juce::Graphics&) override;
+
+private:
+    const core::TunerEar& ear;
+    void timerCallback() override { repaint(); }
 };
 
 } // namespace orbitamp::catpit
