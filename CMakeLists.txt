@@ -557,6 +557,7 @@ target_sources(CatpitAmp PRIVATE
     src/PluginProcessor.cpp
     src/Parameters.cpp
     src/ui/Theme.cpp
+    src/core/ProcessMemory.cpp
     src/catpit/CatpitArt.cpp
     src/catpit/CatpitChannels.cpp
     src/catpit/CatpitControls.cpp

@@ -158,6 +158,12 @@ private:
     // stage-by-stage window (ui/LoadBreakdown.h).
     Legend load;
 
+    // MEM on the mirrored plate: what the process is holding, as the system's own monitor counts it
+    // (core/ProcessMemory.h). Only while the cockpit stands alone — inside a host the process is the
+    // host, and the figure would be the host's.
+    Legend memory;
+    int memoryTick = 0;          // the timer runs four times a second; this is asked once a second
+
     // PRESET on the mirrored plate: the one word, the family's orange dot beside it while the sound has
     // moved away from the preset it came from, and everything else — which preset, the list, saving,
     // renaming — behind a click.

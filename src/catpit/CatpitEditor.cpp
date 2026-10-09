@@ -5,6 +5,7 @@
 #include "CatpitLayout.h"
 
 #include "../Parameters.h"
+#include "../core/ProcessMemory.h"
 #include "../ui/AboutConfig.h"
 #include "../ui/LoadBreakdown.h"
 
@@ -346,6 +347,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       version (layout::px13),
       about (p.updateChecker(), aboutTheCockpit(), p.pluginFormat()),
       load (layout::px11),
+      memory (layout::px11),
       presetDoor (layout::px13)
 {
     using namespace layout;
@@ -583,6 +585,14 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     stage.addAndMakeVisible (load);
     load.setBounds (loadPlate.toNearestInt());
 
+    // MEM, on the mirror of CPU's plate. A reading and nothing else: a click there is a click on the
+    // panel.
+    memory.nameColour = memory.valueColour = labelLilac.withAlpha (0.85f);
+    memory.fromLeft = true;
+    memory.setInterceptsMouseClicks (false, false);
+    stage.addChildComponent (memory);
+    memory.setBounds (memoryPlate.toNearestInt());
+
     // PRESET, on the mirrored plate.
     presetDoor.valueColour = labelLilac.withAlpha (0.85f);
     presetDoor.set ({}, "PRESET");
@@ -665,6 +675,16 @@ void CatpitEditor::timerCallback()
         load.repaint();
     }
     load.set ("CPU", juce::String (juce::roundToInt (percent)) + "%");
+
+    // Memory moves slowly, and a figure that flickers in its last digit four times a second is a
+    // distraction: once a second is plenty.
+    if (memoryTick++ % 4 == 0)
+    {
+        const double mb = amp.runsInHost() ? 0.0 : (double) core::processMemoryBytes() / (1024.0 * 1024.0);
+        memory.setVisible (mb > 0.0);
+        memory.set ("MEM", mb < 1000.0 ? juce::String (juce::roundToInt (mb)) + " MB"
+                                       : juce::String (mb / 1024.0, 1) + " GB");
+    }
 
     // A host starts or stops saying its tempo whenever it likes.
     if (tempoIsOwn == (amp.runsInHost() && amp.hostTempoBpm() > 0.0f))
