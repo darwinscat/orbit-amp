@@ -14,29 +14,30 @@
 namespace orbitamp::catpit
 {
 
-/** The cockpit itself: the render with its windshield cut out, and every printed word on it. Drawn
-    over Space, under the controls, and never takes a click. */
+/** The cockpit itself: the render with its windshield cut out, the emblem, and every printed word on
+    it. Drawn over Space, under the controls, and never takes a click. */
 class Cockpit final : public juce::Component
 {
 public:
     Cockpit();
     void paint (juce::Graphics&) override;
 
-    /** The overhead toggle under the hand, if any — its full name and state are shown beneath the
-        panel, since the panel only has room for a short name. */
-    void showHover (int hole, juce::String text);
+    /** A dark name tag centred on `anchor` — the full name and state of whatever is under the hand,
+        where the panel itself only has room for a short name or none. Empty text hides it. */
+    void showTag (juce::Point<float> anchor, juce::String text);
 
 private:
-    int hoverHole = -1;
-    juce::String hoverText;
+    juce::Point<float> tagAnchor;
+    juce::String tagText;
+    juce::Rectangle<float> tagBounds() const;
 
     // The render and the printed words never change, but the windshield repaints sixty times a second
     // and every one of those repaints the cockpit over it. So the cockpit is painted ONCE, at the
     // screen's own pixel size, and each frame is a straight copy of the part that changed.
     juce::Image layer;
     float layerScale = 0.0f;
-    void paintStatic (juce::Graphics&) const;
-    void paintEmblem (juce::Graphics&) const;
+    void paintStatic (juce::Graphics&, float scale) const;
+    void paintEmblem (juce::Graphics&, float scale) const;
 };
 
 //==============================================================================
@@ -61,7 +62,7 @@ private:
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, 3> tones;
     Lever lever;
-    std::array<std::unique_ptr<BatToggle>, 6> toggles;
+    std::array<std::unique_ptr<PushButton>, 6> buttons;
     GuardButton turbo;
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
     ColumnFader inFader, outFader;
@@ -71,6 +72,14 @@ private:
 
     template <typename Control>
     void bind (Control&, const char* paramId);
+    void  setParam (const char* paramId, float value);
+    float getParam (const char* paramId) const;
+
+    void setUpChain();
+    int  packIndexFor (int detent) const;
+    void choosePack (int detent);
+    void chooseCombo (int step);
+    void showComboTag (bool show);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CatpitEditor)
 };

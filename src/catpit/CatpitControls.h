@@ -21,8 +21,8 @@ using felitronics::appkit::brand::violet;
 using felitronics::appkit::brand::lilac;
 using felitronics::appkit::brand::orange;
 
-/** A label face at an EM size — 13 means a 13-px em, the way the type rule counts it. */
-juce::Font labelFont (float em);
+/** The family's label face at a height in px — counted the way the rest of OrbitAmp counts it. */
+juce::Font labelFont (float px);
 
 /** Uppercase, tracked, centred in `area`. */
 void drawLabel (juce::Graphics&, const juce::String&, juce::Rectangle<float> area, float em,
@@ -122,35 +122,35 @@ private:
 };
 
 //==============================================================================
-/** A bat toggle seen from straight above, in one of the overhead holes: two positions (down OFF, up ON)
-    or three (down, centre, up). A click in the upper half throws it up a notch, the lower half down;
-    a two-position one just flips. It snaps with a little overshoot — the visible click. */
-class BatToggle final : public juce::Component, private juce::Timer
+/** A latching push button in one of the overhead holes: press it and it goes down and stays down, lit,
+    press again and it comes back up dark. It sinks under the finger while held — the travel is the
+    click — and settles at its latched depth on release. */
+class PushButton final : public juce::Component, private juce::Timer
 {
 public:
-    BatToggle (juce::String name, int positions);
+    explicit PushButton (juce::String name);
 
     const juce::String name;
-    const int positions;
 
-    std::function<void (int)> onChange;
+    std::function<void (bool)> onChange;
     std::function<void (bool)> onHover;          // the editor shows the name + state while hovered
 
-    int  getIndex() const noexcept { return index; }
-    void setIndex (int i, bool notify);
-    juce::String stateText() const;
+    bool isOn() const noexcept { return on; }
+    void setOn (bool, bool notify);
+    juce::String stateText() const { return on ? "ON" : "OFF"; }
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
     void mouseEnter (const juce::MouseEvent&) override { if (onHover) onHover (true); }
     void mouseExit (const juce::MouseEvent&) override  { if (onHover) onHover (false); }
     void enablementChanged() override { repaint(); }
 
 private:
-    int   index = 0;
-    Glide throw_;                                // -1 down .. 0 centre .. +1 up
-    float throwOf (int i) const noexcept;
-    void  timerCallback() override;
+    bool on = false, held = false;
+    Glide depth, light;                          // 0 up .. 1 bottomed; 0 dark .. 1 lit
+    void aim();
+    void timerCallback() override;
 };
 
 //==============================================================================
@@ -178,14 +178,20 @@ private:
 };
 
 //==============================================================================
-/** A horizontal fader in one of the three lower plates: a glowing line up to a metal cap. */
+/** A horizontal fader in one of the three lower plates: a glowing line up to a metal cap. With `steps`
+    set it is a selector instead — the cap clicks between that many marked positions. */
 class PlateSlider final : public juce::Component
 {
 public:
-    explicit PlateSlider (juce::Colour lineFrom, juce::Colour lineTo);
+    explicit PlateSlider (juce::Colour lineFrom, juce::Colour lineTo, int steps = 0);
 
     std::function<void()>       onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;
+    std::function<void (int)>   onStep;          // stepped only: the position it clicked into
+    std::function<void (bool)>  onHover;
+
+    int  getStep() const noexcept;
+    void setStep (int, bool notify);
 
     void  setValue (float v, bool notify);
     float getValue() const noexcept { return value; }
@@ -196,11 +202,15 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
+    void mouseEnter (const juce::MouseEvent&) override { if (onHover) onHover (true); }
+    void mouseExit (const juce::MouseEvent&) override  { if (onHover && ! isMouseButtonDown()) onHover (false); }
 
 private:
     juce::Colour from, to;
+    const int steps;
     float value = 0.0f, dragStartValue = 0.0f;
     juce::Range<float> travel() const;
+    void moveTo (float v);
 };
 
 //==============================================================================

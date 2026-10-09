@@ -19,7 +19,7 @@ inline constexpr float height = 941.0f;
 
 /** The smallest the window may get. Every label below is sized so that at THIS scale it is still 13 px —
     nothing a player reads goes smaller (CLAUDE.md). */
-inline constexpr int   minWindowWidth = 1280;
+inline constexpr int   minWindowWidth = 1024;
 inline constexpr float minScale       = (float) minWindowWidth / width;
 inline constexpr float px13           = 13.0f / minScale;   // a 13-px label, in this space
 inline constexpr float px15           = 15.0f / minScale;

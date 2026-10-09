@@ -21,16 +21,25 @@ namespace catpit
 
 namespace
 {
-    // The overhead panel has room for a short name over each hole; the full one shows on hover.
-    struct Switch { const char* name; const char* shortName; int positions; };
+    // The overhead buttons. The panel has room for a short name over each hole; the full one shows on
+    // hover. FAT is a layer only the two hottest packs carry.
+    struct Switch { const char* name; const char* shortName; };
     constexpr std::array<Switch, 6> switches {{
-        { "FAT",      "FAT",    2 },
-        { "BRIGHT",   "BRIGHT", 2 },
-        { "DEPTH",    "DEPTH",  3 },
-        { "PRESENCE", "PRES",   3 },
-        { "HIGHPASS", "HPF",    3 },
-        { "LOWPASS",  "LPF",    3 },
+        { "FAT",      "FAT"    },
+        { "BRIGHT",   "BRIGHT" },
+        { "DEPTH",    "DEPTH"  },
+        { "PRESENCE", "PRES"   },
+        { "HIGHPASS", "HPF"    },
+        { "LOWPASS",  "LPF"    },
     }};
+
+    /** STAND-INS until the cockpit's own captures exist: four preamp packs from the library, in order
+        of gain, matched by their file name without the extension (exactly — "V4 Copper" is not
+        "V4 Copper TB"). */
+    constexpr std::array<const char*, 4> leverPacks { "IR-X Ch1", "V4 Copper", "V4 Sheriff Ch1", "V4 Kraken Ch2" };
+
+    /** ...and six factory cabinets for COMBO to step through, the shipping default first. */
+    constexpr std::array<int, 6> comboIrs { params::cabIrDefault, 0, 2, 3, 10, 11 };
 
     // Measured off the original renders (the ones that still had their pointers): where the lit slot
     // starts and ends along the radius, and how wide it is, as fractions of the knob's opaque radius.
@@ -51,11 +60,21 @@ Cockpit::Cockpit()
     setInterceptsMouseClicks (false, false);
 }
 
-void Cockpit::showHover (int hole, juce::String text)
+juce::Rectangle<float> Cockpit::tagBounds() const
 {
-    hoverHole = hole;
-    hoverText = std::move (text);
-    repaint (juce::Rectangle<int> (0, 80, (int) layout::width, 70));
+    if (tagText.isEmpty())
+        return {};
+    const auto font = labelFont (layout::px13).withExtraKerningFactor (0.06f);
+    const float w = juce::GlyphArrangement::getStringWidth (font, tagText) + 30.0f;
+    return juce::Rectangle<float> (w, 32.0f).withCentre (tagAnchor);
+}
+
+void Cockpit::showTag (juce::Point<float> anchor, juce::String text)
+{
+    repaint (tagBounds().expanded (2.0f).getSmallestIntegerContainer());
+    tagAnchor = anchor;
+    tagText = std::move (text);
+    repaint (tagBounds().expanded (2.0f).getSmallestIntegerContainer());
 }
 
 void Cockpit::paint (juce::Graphics& g)
@@ -70,25 +89,21 @@ void Cockpit::paint (juce::Graphics& g)
         juce::Graphics lg (layer);
         lg.addTransform (juce::AffineTransform::scale (scale));
         lg.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-        paintStatic (lg);
+        paintStatic (lg, scale);
     }
     g.drawImage (layer, juce::Rectangle<float> (0.0f, 0.0f, width, height));
 
-    // The full name of the overhead toggle under the hand, on a dark tag below the panel.
-    if (hoverHole >= 0 && hoverText.isNotEmpty())
+    if (const auto tag = tagBounds(); ! tag.isEmpty())
     {
-        const auto font = labelFont (px13).withExtraKerningFactor (0.06f);
-        const float w = juce::GlyphArrangement::getStringWidth (font, hoverText) + 28.0f;
-        const auto tag = juce::Rectangle<float> (w, 30.0f).withCentre ({ holes[(size_t) hoverHole].x, 112.0f });
-        g.setColour (juce::Colour (0xe0050509));
+        g.setColour (juce::Colour (0xe8050509));
         g.fillRoundedRectangle (tag, 6.0f);
         g.setColour (violet.withAlpha (0.7f));
         g.drawRoundedRectangle (tag, 6.0f, 1.2f);
-        drawLabel (g, hoverText, tag, px13, juce::Colour (0xffece9f6), 0.06f);
+        drawLabel (g, tagText, tag, px13, juce::Colour (0xffece9f6), 0.06f);
     }
 }
 
-void Cockpit::paintEmblem (juce::Graphics& g) const
+void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
 {
     using namespace layout;
 
@@ -120,18 +135,41 @@ void Cockpit::paintEmblem (juce::Graphics& g) const
         g.drawLine (c.x - 2.2f, c.y - 2.2f, c.x + 2.2f, c.y + 2.2f, 1.0f);
     }
 
-    // The family's mark, raised a hair off the plate: its own outline cast as a soft shadow, then the mark.
-    if (auto* mark = felitronics::appkit::brand::catMark())
+    // THE MARK, ENGRAVED. Its light parts are cut into the plate: the cut's upper wall falls into
+    // shadow, its lower lip catches the light, and its floor is bare metal a shade brighter than the
+    // plate — so the mark reads as worked into the hull, not printed on it.
+    auto* mark = felitronics::appkit::brand::catMark();
+    if (mark == nullptr)
+        return;
+
+    const int mw = juce::roundToInt (emblemMark.getWidth() * scale), mh = juce::roundToInt (emblemMark.getHeight() * scale);
+    juce::Image lit (juce::Image::ARGB, mw, mh, true);
     {
-        auto outline = mark->getOutlineAsPath();
-        outline.applyTransform (juce::RectanglePlacement (juce::RectanglePlacement::centred)
-                                    .getTransformToFit (mark->getDrawableBounds(), emblemMark));
-        juce::DropShadow (juce::Colours::black.withAlpha (0.85f), 5, { 1, 3 }).drawForPath (g, outline);
-        mark->drawWithin (g, emblemMark, juce::RectanglePlacement::centred, 1.0f);
+        juce::Graphics mg (lit);
+        mg.fillAll (juce::Colours::black);
+        mg.addTransform (juce::AffineTransform::scale (scale));
+        mark->drawWithin (mg, emblemMark.withZeroOrigin(), juce::RectanglePlacement::centred, 1.0f);
     }
+    juce::Image cut (juce::Image::SingleChannel, mw, mh, true);
+    {
+        const juce::Image::BitmapData from (lit, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData to (cut, juce::Image::BitmapData::writeOnly);
+        for (int y = 0; y < mh; ++y)
+            for (int x = 0; x < mw; ++x)
+                to.setPixelColour (x, y, juce::Colours::white.withAlpha (from.getPixelColour (x, y).getBrightness()));
+    }
+
+    const float px = 1.0f / juce::jmax (1.0f, scale) * 1.6f;   // the wall's depth, about a pixel and a half
+    g.setColour (juce::Colours::black.withAlpha (0.8f));
+    g.drawImage (cut, emblemMark.translated (-0.5f * px, -px), juce::RectanglePlacement::stretchToFit, true);
+    g.setColour (juce::Colour (0xffd8d2ee).withAlpha (0.28f));
+    g.drawImage (cut, emblemMark.translated (0.4f * px, px), juce::RectanglePlacement::stretchToFit, true);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff8a8698), emblemMark.getCentreX(), emblemMark.getY(),
+                                             juce::Colour (0xff4b4858), emblemMark.getCentreX(), emblemMark.getBottom(), false));
+    g.drawImage (cut, emblemMark, juce::RectanglePlacement::stretchToFit, true);
 }
 
-void Cockpit::paintStatic (juce::Graphics& g) const
+void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 {
     using namespace layout;
 
@@ -139,16 +177,14 @@ void Cockpit::paintStatic (juce::Graphics& g) const
     if (bg.isValid())
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
 
-    paintEmblem (g);
+    paintEmblem (g, scale);
 
-    // The overhead names, over their holes. The right four holes sit closer than a 13-px name is wide,
-    // so their names alternate between two rows.
+    // The overhead names, one row over their holes, set tight: the right four holes sit barely a name
+    // apart, so DEPTH and PRES lean away from each other into the room either side of them.
+    constexpr std::array<float, 6> lean { 0.0f, 0.0f, -8.0f, 8.0f, 0.0f, 0.0f };
     for (size_t i = 0; i < switches.size(); ++i)
-    {
-        const float y = (i == 2 || i == 4) ? 17.0f : 35.0f;
-        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (110.0f, 20.0f).withCentre ({ holes[i].x, y }),
-                   px13, labelLilac, 0.02f);
-    }
+        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (110.0f, 22.0f).withCentre ({ holes[i].x + lean[i], 29.0f }),
+                   px13, labelLilac, 0.0f);
 
     drawLabel (g, "DRIVE", juce::Rectangle<float> (220.0f, 30.0f).withCentre ({ drive.centre.x, 394.0f }), px15, labelLilac);
     const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
@@ -196,6 +232,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 {
     using namespace layout;
 
+    setUpChain();
+
     addAndMakeVisible (stage);
     stage.setBounds (0, 0, (int) width, (int) height);
 
@@ -216,28 +254,44 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         tones[i]->setBounds (around (layout::tones[i].centre, d, d));
     }
 
+    for (size_t i = 0; i < buttons.size(); ++i)
+    {
+        buttons[i] = std::make_unique<PushButton> (switches[i].name);
+        auto& b = *buttons[i];
+        stage.addAndMakeVisible (b);
+        b.setBounds (around (holes[i], 40.0f, 40.0f));
+        b.onHover = [this, i, &b] (bool over)
+        {
+            cockpit.showTag ({ holes[i].x, 116.0f }, over ? b.name + "  " + b.stateText() : juce::String());
+        };
+    }
+
+    // The throttle picks the pack; where it starts is wherever the pack already playing sits, if it is one of
+    // the four.
     stage.addAndMakeVisible (lever);
     lever.setBounds (leverFrame.toNearestInt());
     lever.onTravel = [this] (float pos) { space.setThrottle (pos / (float) (Lever::numDetents - 1)); };
-    lever.onDetent = [this] (int d) { toggles[0]->setEnabled (d >= 2); };   // FAT lives only in CRUNCH and OVERDRIVE
-
-    for (size_t i = 0; i < toggles.size(); ++i)
+    lever.onDetent = [this] (int d)
     {
-        toggles[i] = std::make_unique<BatToggle> (switches[i].name, switches[i].positions);
-        auto& t = *toggles[i];
-        stage.addAndMakeVisible (t);
-        t.setBounds (around (holes[i], 46.0f, 66.0f));
-        t.onHover = [this, i, &t] (bool over)
-        {
-            cockpit.showHover (over ? (int) i : -1, over ? t.name + "  " + t.stateText() : juce::String());
-        };
+        buttons[0]->setEnabled (d >= 2);
+        choosePack (d);
+    };
+    int startDetent = -1;
+    for (int d = 0; d < Lever::numDetents; ++d)
+        if (packIndexFor (d) >= 0 && packIndexFor (d) == juce::roundToInt (getParam (params::preampDevice)))
+            startDetent = d;
+    if (startDetent < 0)
+    {
+        startDetent = 0;
+        choosePack (0);
     }
-    toggles[0]->setEnabled (false);
-
     // A prototype's hook for looking at the window at speed without a hand on the lever.
     if (const auto d = juce::SystemStats::getEnvironmentVariable ("CATPIT_DETENT", {}); d.isNotEmpty())
-        lever.setDetent (d.getIntValue(), false);
+        startDetent = d.getIntValue();
+    lever.setDetent (startDetent, false);
+    buttons[0]->setEnabled (lever.getDetent() >= 2);
 
+    // TURBO moves but drives nothing: it will be a layer inside the pack.
     stage.addAndMakeVisible (turbo);
     turbo.setBounds (turboFrame.toNearestInt());
 
@@ -245,9 +299,22 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     const juce::Colour lineTo[]   { orange,               orange, orange };
     for (size_t i = 0; i < sliders.size(); ++i)
     {
-        sliders[i] = std::make_unique<PlateSlider> (lineFrom[i], lineTo[i]);
+        sliders[i] = std::make_unique<PlateSlider> (lineFrom[i], lineTo[i], i == 2 ? (int) comboIrs.size() : 0);
         stage.addAndMakeVisible (*sliders[i]);
         sliders[i]->setBounds (sliderInsets[i].toNearestInt());
+    }
+
+    // COMBO steps through six cabinets; the one it sits on shows by name while the hand is on it.
+    auto& combo = *sliders[2];
+    combo.onStep  = [this] (int s) { chooseCombo (s); showComboTag (true); };
+    combo.onHover = [this] (bool over) { showComboTag (over); };
+    {
+        const int playing = juce::roundToInt (getParam (params::cabIr));
+        const auto it = std::find (comboIrs.begin(), comboIrs.end(), playing);
+        if (it != comboIrs.end())
+            combo.setStep ((int) std::distance (comboIrs.begin(), it), false);
+        else
+            chooseCombo (0);
     }
 
     for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter })
@@ -276,6 +343,63 @@ CatpitEditor::~CatpitEditor() = default;
 void CatpitEditor::resized()
 {
     stage.setTransform (juce::AffineTransform::scale ((float) getWidth() / layout::width));
+}
+
+void CatpitEditor::setParam (const char* paramId, float value)
+{
+    if (auto* p = amp.apvts.getParameter (paramId))
+        p->setValueNotifyingHost (p->convertTo0to1 (value));
+}
+
+float CatpitEditor::getParam (const char* paramId) const
+{
+    if (auto* p = amp.apvts.getParameter (paramId))
+        return p->convertFrom0to1 (p->getValue());
+    return 0.0f;
+}
+
+/** THE COCKPIT'S CHAIN IS FIXED: one captured amp (the boost now lives inside the packs), the delay,
+    a hall, the cabinet. There is no strip to switch links in or out, so the face puts them there. */
+void CatpitEditor::setUpChain()
+{
+    setParam (params::boostPresent,  0.0f);
+    setParam (params::preampPresent, 1.0f);
+    setParam (params::preampOn,      1.0f);
+    setParam (params::delayPresent,  1.0f);
+    setParam (params::delayOn,       1.0f);
+    setParam (params::reverbPresent, 1.0f);
+    setParam (params::reverbOn,      1.0f);
+    setParam (params::reverbType,    (float) params::reverbCharacters.indexOf ("Hall"));
+    setParam (params::cabPresent,    1.0f);
+    setParam (params::cabOn,         1.0f);
+}
+
+int CatpitEditor::packIndexFor (int detent) const
+{
+    const auto& packs = amp.preamp.packs;
+    for (int i = 0; i < packs.size(); ++i)
+        if (packs.getReference (i).location.getFileName().upToFirstOccurrenceOf (".", false, false)
+                .equalsIgnoreCase (leverPacks[(size_t) detent]))
+            return i;
+    return -1;
+}
+
+void CatpitEditor::choosePack (int detent)
+{
+    if (const int i = packIndexFor (detent); i >= 0)
+        setParam (params::preampDevice, (float) i);
+}
+
+void CatpitEditor::chooseCombo (int step)
+{
+    amp.chooseCabFactory (comboIrs[(size_t) juce::jlimit (0, (int) comboIrs.size() - 1, step)]);
+}
+
+void CatpitEditor::showComboTag (bool show)
+{
+    const auto& inset = layout::sliderInsets[2];
+    const auto name = params::cabIrNames[comboIrs[(size_t) sliders[2]->getStep()]];
+    cockpit.showTag ({ inset.getCentreX(), inset.getY() - 52.0f }, show ? name : juce::String());
 }
 
 template <typename Control>

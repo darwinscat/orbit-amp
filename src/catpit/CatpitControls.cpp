@@ -9,11 +9,11 @@
 namespace orbitamp::catpit
 {
 
-juce::Font labelFont (float em)
+juce::Font labelFont (float px)
 {
-    if (auto tf = felitronics::appkit::brand::wordmarkTypeface())
-        return juce::Font (juce::FontOptions().withTypeface (tf).withPointHeight (em));
-    return juce::Font (juce::FontOptions().withPointHeight (em).withStyle ("Bold"));
+    // The family counts a label's size the way the rest of OrbitAmp does — the font's HEIGHT, as
+    // brand::wordmarkFont sets it — so a 13 here is the same 13 the type rule means everywhere else.
+    return felitronics::appkit::brand::wordmarkFont (px);
 }
 
 void drawLabel (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> area, float em,
@@ -296,96 +296,100 @@ void Lever::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetai
 }
 
 //==============================================================================
-BatToggle::BatToggle (juce::String n, int p) : name (std::move (n)), positions (p)
+PushButton::PushButton (juce::String n) : name (std::move (n))
 {
-    throw_.stiffness = 2200.0f;   // fast and springy: the bat slams over and settles
-    throw_.damping   = 38.0f;
-    throw_.jump (throwOf (0));
+    depth.stiffness = 1800.0f;  depth.damping = 46.0f;
+    light.stiffness = 600.0f;   light.damping = 50.0f;
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
 }
 
-float BatToggle::throwOf (int i) const noexcept
+void PushButton::aim()
 {
-    if (positions == 2)
-        return i == 0 ? -1.0f : 1.0f;
-    return (float) i - 1.0f;
-}
-
-juce::String BatToggle::stateText() const
-{
-    if (positions == 2)
-        return index == 0 ? "OFF" : "ON";
-    return juce::StringArray { "I", "II", "III" }[index];
-}
-
-void BatToggle::setIndex (int i, bool notify)
-{
-    i = juce::jlimit (0, positions - 1, i);
-    if (i == index)
-        return;
-    index = i;
-    throw_.target = throwOf (i);
+    // Held: bottomed out. Latched on: resting a little down. Off: all the way up.
+    depth.target = held ? 1.0f : (on ? 0.45f : 0.0f);
+    light.target = on ? 1.0f : 0.0f;
     startTimerHz (60);
+}
+
+void PushButton::setOn (bool v, bool notify)
+{
+    if (v == on)
+        return;
+    on = v;
+    aim();
     if (notify && onChange)
-        onChange (index);
+        onChange (on);
     if (onHover && isMouseOver())
         onHover (true);
 }
 
-void BatToggle::timerCallback()
+void PushButton::timerCallback()
 {
-    if (! throw_.step (frameDt))
+    const bool a = depth.step (frameDt);
+    const bool b = light.step (frameDt);
+    if (! a && ! b)
         stopTimer();
     repaint();
 }
 
-void BatToggle::mouseDown (const juce::MouseEvent& e)
+void PushButton::mouseDown (const juce::MouseEvent&)
 {
-    if (positions == 2)
-        setIndex (1 - index, true);
-    else
-        setIndex (index + (e.position.y < (float) getHeight() * 0.5f ? 1 : -1), true);
+    held = true;
+    aim();
 }
 
-void BatToggle::paint (juce::Graphics& g)
+void PushButton::mouseUp (const juce::MouseEvent& e)
+{
+    held = false;
+    if (getLocalBounds().contains (e.getPosition()))
+        setOn (! on, true);
+    aim();
+}
+
+void PushButton::paint (juce::Graphics& g)
 {
     if (! isEnabled())
         g.beginTransparencyLayer (0.3f);
 
     const auto c = getLocalBounds().toFloat().getCentre();
+    const float d = juce::jlimit (0.0f, 1.2f, depth.value);
+    const float l = juce::jlimit (0.0f, 1.0f, light.value);
 
-    // The nut it is mounted through.
-    const auto nut = juce::Rectangle<float> (26.0f, 26.0f).withCentre (c);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff9b98a8), c.translated (-4.0f, -5.0f),
-                                             juce::Colour (0xff2a2833), c.translated (8.0f, 10.0f), true));
-    g.fillEllipse (nut);
-    g.setColour (juce::Colour (0xff0b0a10));
-    g.drawEllipse (nut, 1.2f);
-    g.setColour (juce::Colour (0xff15141b));
-    g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre (c));
+    // The bezel: a chrome ring set into the hole, the light ring inside it.
+    const auto bezel = juce::Rectangle<float> (34.0f, 34.0f).withCentre (c);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff8f8c9c), c.translated (-6.0f, -9.0f),
+                                             juce::Colour (0xff1e1d25), c.translated (8.0f, 12.0f), true));
+    g.fillEllipse (bezel);
+    g.setColour (juce::Colour (0xff07060a));
+    g.fillEllipse (bezel.reduced (3.0f));
 
-    // The bat, foreshortened: straight up at you in the centre, leaning out as it is thrown.
-    const float t   = throw_.value;
-    const auto  tip = c.translated (0.0f, -t * 25.0f);
-    juce::Path bat;
-    bat.startNewSubPath (c);
-    bat.lineTo (tip);
-    const juce::PathStrokeType stroke (8.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffe6e3ee), c.translated (-4.0f, 0.0f),
-                                             juce::Colour (0xff55525f), c.translated (4.0f, 0.0f), false));
-    g.strokePath (bat, stroke);
-
-    const auto ball = juce::Rectangle<float> (12.0f, 12.0f).withCentre (tip);
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white, tip.translated (-2.5f, -3.0f),
-                                             juce::Colour (0xff4a4754), tip.translated (4.0f, 5.0f), true));
-    g.fillEllipse (ball);
-
-    // Thrown up (on, or the top of three) the bat's tip catches a violet light.
-    if (t > 0.5f && isEnabled())
+    const auto ring = bezel.reduced (4.5f);
+    if (l > 0.01f)
     {
-        g.setColour (violet.withAlpha (0.55f * (t - 0.5f) * 2.0f));
-        g.drawEllipse (ball.expanded (1.5f), 1.6f);
+        juce::Path rp;
+        rp.addEllipse (ring);
+        glow (g, rp, violet.withAlpha (0.9f * l), 7.0f);
     }
+    g.setColour (violet.interpolatedWith (juce::Colour (0xff2a2140), 1.0f - l));
+    g.drawEllipse (ring, 1.8f);
+
+    // The cap: it shrinks a touch and darkens at its rim as it goes down — farther from the eye.
+    const float capD = 20.0f * (1.0f - 0.10f * d);
+    const auto cap = juce::Rectangle<float> (capD, capD).withCentre (c.translated (0.0f, 0.8f * d));
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffb9b5c6).interpolatedWith (juce::Colour (0xff6c6878), d * 0.5f),
+                                             cap.getCentre().translated (-3.0f, -4.0f),
+                                             juce::Colour (0xff24222c), cap.getCentre().translated (5.0f, 6.0f), true));
+    g.fillEllipse (cap);
+
+    // Latched on, the cap's face carries the light — a lilac pool in its middle.
+    if (l > 0.01f)
+    {
+        g.setGradientFill (juce::ColourGradient (lilac.withAlpha (0.75f * l), cap.getCentre(),
+                                                 violet.withAlpha (0.0f), cap.getCentre().translated (capD * 0.5f, 0.0f), true));
+        g.fillEllipse (cap);
+    }
+    g.setColour (juce::Colour (0xff0b0a10));
+    g.drawEllipse (cap, 1.0f);
 
     if (! isEnabled())
         g.endTransparencyLayer();
@@ -475,9 +479,33 @@ void GuardButton::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-PlateSlider::PlateSlider (juce::Colour a, juce::Colour b) : from (a), to (b)
+PlateSlider::PlateSlider (juce::Colour a, juce::Colour b, int n) : from (a), to (b), steps (n)
 {
     setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
+}
+
+int PlateSlider::getStep() const noexcept
+{
+    return steps > 1 ? juce::roundToInt (value * (float) (steps - 1)) : 0;
+}
+
+void PlateSlider::setStep (int i, bool notify)
+{
+    if (steps > 1)
+    {
+        const int before = getStep();
+        setValue ((float) juce::jlimit (0, steps - 1, i) / (float) (steps - 1), false);
+        if (notify && onStep && getStep() != before)
+            onStep (getStep());
+    }
+}
+
+void PlateSlider::moveTo (float v)
+{
+    if (steps > 1)
+        setStep (juce::roundToInt (juce::jlimit (0.0f, 1.0f, v) * (float) (steps - 1)), true);
+    else
+        setValue (v, true);
 }
 
 juce::Range<float> PlateSlider::travel() const
@@ -514,6 +542,15 @@ void PlateSlider::paint (juce::Graphics& g)
         g.fillPath (line);
     }
 
+    // A selector shows where it can stop: a notch under each position, the current one lit.
+    if (steps > 1)
+        for (int i = 0; i < steps; ++i)
+        {
+            const float nx = t.getStart() + t.getLength() * (float) i / (float) (steps - 1);
+            g.setColour (i == getStep() ? to : lilac.withAlpha (0.45f));
+            g.fillRoundedRectangle (juce::Rectangle<float> (3.0f, 9.0f).withCentre ({ nx, cy + 15.0f }), 1.5f);
+        }
+
     drawCap (g, { x, cy }, (float) getHeight() - 4.0f, juce::MathConstants<float>::halfPi);
 }
 
@@ -523,22 +560,26 @@ void PlateSlider::mouseDown (const juce::MouseEvent& e)
     const float x = t.getStart() + t.getLength() * value;
     if (onGestureStart) onGestureStart();
     if (std::abs (e.position.x - x) > 16.0f)
-        setValue ((e.position.x - t.getStart()) / t.getLength(), true);
+        moveTo ((e.position.x - t.getStart()) / t.getLength());
     dragStartValue = value;
 }
 
 void PlateSlider::mouseDrag (const juce::MouseEvent& e)
 {
-    setValue (dragStartValue + (float) e.getDistanceFromDragStartX() / travel().getLength(), true);
+    moveTo (dragStartValue + (float) e.getDistanceFromDragStartX() / travel().getLength());
 }
 
-void PlateSlider::mouseUp (const juce::MouseEvent&)
+void PlateSlider::mouseUp (const juce::MouseEvent& e)
 {
     if (onGestureEnd) onGestureEnd();
+    if (onHover && ! getLocalBounds().contains (e.getPosition()))
+        onHover (false);
 }
 
 void PlateSlider::mouseDoubleClick (const juce::MouseEvent&)
 {
+    if (steps > 1)
+        return;
     if (onGestureStart) onGestureStart();
     setValue (defaultValue, true);
     if (onGestureEnd) onGestureEnd();
