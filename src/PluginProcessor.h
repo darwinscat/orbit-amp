@@ -767,6 +767,35 @@ public:
         bug this became. */
     void pumpDeviceWork();
 
+    /** NAMES WHAT THE DEVICE PARAMETERS POINT AT, AT ONCE — for a caller on the message thread that has
+        just moved one and needs the state coherent before it returns, not a tick later.
+
+        A device is a number and a name, and the pump writes the name on the tick AFTER the number
+        moves. For a hand on a selector that gap is harmless: the move and its name settle into one
+        undo step. For a caller writing under a suppression scope it is not. The scope closes on a
+        baseline that holds the new number beside the OLD name; the name then lands outside it as an
+        edit of its own; and undoing that edit hands the aim the old name, which it honours by loading
+        the device the caller had just left. `rescanDevices` keeps its numbers and their names in one
+        scope for exactly this reason — this is the same, for anyone else who moves a device. */
+    void settleDeviceNames()
+    {
+        pumpDeviceWork();   // selects the pack each number names, which is what the names are read from
+
+        for (size_t b = 0; b < numCaptured; ++b)
+        {
+            const auto* id = deviceIdOf (b);
+
+            if (juce::approximatelyEqual (apvts.getRawParameterValue (id)->load(), lastDeviceValue[b]))
+                continue;
+
+            // What the aim does when a hand takes a device from it: the new pack's names, and the
+            // aim told that this is where the device now stands.
+            if (noteBlockNames (b, true))
+                if (const auto* param = apvts.getParameter (id))
+                    aimWroteDevice[b] = param->getValue();
+        }
+    }
+
     /** A model is BUILT off the message thread — bytes from the pack, a network parsed and warmed,
         some twenty milliseconds — and brought back to the player through the message queue. A driver
         without a message loop (a test) sets this and the jobs run inside pumpDeviceWork instead. */
