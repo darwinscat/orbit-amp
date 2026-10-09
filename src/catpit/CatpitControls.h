@@ -203,8 +203,8 @@ struct MarkCut
 };
 
 /** THE MARK ANSWERS THE HAND. Engraved and dark until the pointer is over the plate; then the cut
-    fills with violet light, the colour the knobs' pointers burn, and a click on it goes home — to the
-    maker's site. It paints only that light: the plate and the engraving belong to the cockpit's layer. */
+    takes a dark violet, quietly — a hint, not a lamp — and a click on it goes home, to the maker's
+    site. It paints only that light: the plate and the engraving belong to the cockpit's layer. */
 class Emblem final : public juce::Component, private juce::Timer
 {
 public:

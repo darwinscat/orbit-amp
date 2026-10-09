@@ -629,9 +629,11 @@ void Emblem::paint (juce::Graphics& g)
         return;
 
     const auto box = layout::emblemMark.translated (-(float) getX(), -(float) getY());
-    g.setColour (violet.withAlpha (0.5f * l));
+    // A dark violet and barely a halo: the cut takes colour under the pointer, it does not light the plate.
+    const juce::Colour deep { 0xff5a3fc0 };
+    g.setColour (deep.withAlpha (0.22f * l));
     g.drawImage (mark.halo, box.expanded (MarkCut::haloPad), juce::RectanglePlacement::stretchToFit, true);
-    g.setColour (violet.darker (0.18f).withAlpha (l));     // a deep violet: lit, but not washed out to lilac
+    g.setColour (deep.withAlpha (l));
     g.drawImage (mark.cut, box, juce::RectanglePlacement::stretchToFit, true);
 }
 
