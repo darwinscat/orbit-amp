@@ -953,7 +953,23 @@ void CatpitEditor::showPresetMenu()
                             else if (picked == itemSave
                                      || picked == itemSaveAs)           ask ("Save preset", current, &Presets::save);
                             else if (picked == itemRename)              ask ("Rename preset", current, &Presets::rename);
-                            else if (picked == itemDelete)              safe->presets.removeCurrent();
+                            else if (picked == itemDelete)
+                            {
+                                // A file gone is gone — undo does not bring it back — so this one asks.
+                                juce::AlertWindow::showAsync (
+                                    juce::MessageBoxOptions::makeOptionsOkCancel (juce::MessageBoxIconType::QuestionIcon,
+                                                                                  "Delete preset",
+                                                                                  "Delete \"" + current + "\"? Its file is removed for good.",
+                                                                                  "Delete", "Cancel", safe.getComponent()),
+                                    [safe] (int answer)
+                                    {
+                                        if (safe != nullptr && answer == 1)
+                                        {
+                                            safe->presets.removeCurrent();
+                                            safe->timerCallback();
+                                        }
+                                    });
+                            }
                             else if (picked == itemInit)                safe->presets.init();
 
                             safe->timerCallback();
