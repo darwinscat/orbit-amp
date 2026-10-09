@@ -18,7 +18,7 @@ namespace orbitamp::prefs
     by every instance, locked against two of them writing at once. */
 inline const felitronics::appkit::SettingsStore& store()
 {
-    static const felitronics::appkit::SettingsStore s ("Darwin's Cat", "OrbitAmp");
+    static const felitronics::appkit::SettingsStore s ("Darwin's Cat", product::name);
     return s;
 }
 

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "Product.h"
 #include "Parameters.h"
 #include "ui/Prefs.h"
 #include "core/CapturedBlock.h"
@@ -78,7 +79,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override                          { return true; }
 
-    const juce::String getName() const override              { return "OrbitAmp"; }
+    const juce::String getName() const override              { return product::name; }
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }
