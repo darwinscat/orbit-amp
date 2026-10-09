@@ -549,6 +549,8 @@ juce_add_plugin(CatpitAmp
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "CatpitAmp needs audio input to process your signal."
+    # Bundle / executable icon — the cockpit's mark on the family's disc. No ICON_SMALL, as OrbitAmp.
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/CatpitAmp-1024.png"
     COPY_PLUGIN_AFTER_BUILD     FALSE)
 
 target_sources(CatpitAmp PRIVATE
