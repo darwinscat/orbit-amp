@@ -522,13 +522,15 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     }
     emblem.onClick = [] { juce::URL (juce::String ("https://darwinscat.com?") + campaign).launchInDefaultBrowser(); };
 
-    // The version, and behind it the window with everything else about the build.
+    // The version, and behind it the window with everything else about the build. That window is
+    // hung on THIS editor rather than on the top-level window: the sky's GL surface lies over everything
+    // in the window that is not this editor's own child, and a dialog on the window would open under it.
     about.setBrandTypeface (theme::displayTypeface());
     addChildComponent (about);
     version.upper = false;
     version.valueColour = labelLilac.withAlpha (0.85f);
     version.set ({}, "v" + amp.updateChecker().currentVersion());
-    version.onClick = [this] { showAbout(); };
+    version.onClick = [this] { about.showAbout (this); };
     stage.addAndMakeVisible (version);
     version.setBounds (around (versionPlate, 124.0f, 30.0f));
     version.setDot (amp.updateChecker().updateAvailable());
@@ -590,40 +592,6 @@ void CatpitEditor::timerCallback()
     // A host starts or stops saying its tempo whenever it likes.
     if (tempoIsOwn == (amp.runsInHost() && amp.hostTempoBpm() > 0.0f))
         showDelayTime();
-
-    // The build window has closed: the sky goes back to the GPU.
-    if (skyParked && aboutWindow == nullptr)
-    {
-        skyParked = false;
-        if (glSky != nullptr)
-        {
-            space.setVisible (false);
-            gl.attachTo (*this);
-            placeSky();
-        }
-    }
-}
-
-/** THE BUILD WINDOW HANGS ON THE WINDOW, NOT ON THIS FACE — it is appkit's, the same one OrbitAmp opens —
-    and the GL view lies over everything in the window that is not its own, so it would open underneath
-    the cockpit. While it is up the sky flies on the CPU instead, and returns to the GPU when it closes. */
-void CatpitEditor::showAbout()
-{
-    auto* top = getTopLevelComponent();
-    const int before = top != nullptr ? top->getNumChildComponents() : 0;
-
-    if (glSky != nullptr && ! skyParked)
-    {
-        gl.detach();
-        space.setVisible (true);
-        skyParked = true;
-    }
-
-    about.showAbout();
-
-    // The window is the child it has just added; when that is gone, the timer brings the GPU sky back.
-    aboutWindow = top != nullptr && top->getNumChildComponents() > before
-                      ? top->getChildComponent (top->getNumChildComponents() - 1) : nullptr;
 }
 
 void CatpitEditor::refreshHistory()

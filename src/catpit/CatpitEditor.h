@@ -109,9 +109,6 @@ private:
     // for that window.
     Legend version;
     felitronics::appkit::VersionBadge about;
-    juce::Component::SafePointer<juce::Component> aboutWindow;
-    bool skyParked = false;      // the GPU sky is set aside while that window is open
-    void showAbout();
     void timerCallback() override;
 
     std::vector<std::unique_ptr<juce::ParameterAttachment>> attachments;
