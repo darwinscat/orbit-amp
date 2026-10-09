@@ -737,10 +737,18 @@ void CatpitEditor::timerCallback()
         showDelayTime();
 }
 
-/** THE LOAD, ITEMISED — OrbitAmp's window, opened inside the cockpit and set in its colours. */
+/** THE LOAD, ITEMISED — OrbitAmp's window, in the cockpit's words and colours. The cockpit's packs are
+    whole amps, with the boost and the power stage inside them, so the row OrbitAmp calls PREAMP is
+    the AMP here, and its console the amp's. */
 void CatpitEditor::showLoad()
 {
     auto panel = std::make_unique<LoadBreakdown> (amp);
+    panel->nameOf = [] (int which, bool brief) -> juce::String
+    {
+        if (which == params::stPreamp)  return "AMP";
+        if (which == params::stEq2)     return brief ? "A-EQ" : "AMP EQ";
+        return {};
+    };
     panel->dim   = labelLilac.withAlpha (0.85f);
     panel->faint = labelLilac.withAlpha (0.45f);
 
