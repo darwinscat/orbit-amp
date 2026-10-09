@@ -309,6 +309,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       drive (Art::get().knobDrive, drivePointer),
       reverbName (layout::px13),
       delayName (layout::px13),
+      delayTempo (layout::px13),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
       tuner (p.tunerEar),
@@ -431,18 +432,28 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     });
     reverbType->sendInitialUpdate();
 
-    // DELAY AMOUNT's name carries the delay's time. A click opens the list OrbitAmp's delay block has —
-    // the note values, and FREE under a rule; in FREE the time is milliseconds, and since the cockpit
-    // has no knob for it, the legend itself is the control: drag it up or down, or roll the wheel on it.
-    stage.addAndMakeVisible (delayName);
-    delayName.setBounds (plateName (1).toNearestInt());
+    // DELAY's name carries its note value, and a click on it opens the list of them. The delay always
+    // keeps time: with a host, the host's; standing alone, its own — and that tempo stands on the plate
+    // beside the name, where it is dragged up or down, or rolled under the wheel, like a knob.
+    for (auto* legend : { &delayName, &delayTempo })
+        stage.addAndMakeVisible (legend);
     delayName.nameColour = orange;
     delayName.onClick = [this] { showDelayMenu(); };
-    delayName.onDragStart = [this] { delayTime->beginGesture(); };
-    delayName.onDragEnd   = [this] { delayTime->endGesture(); };
-    delaySync = follow (params::delaySync,   [this] (float) { showDelayTime(); });
-    delayDiv  = follow (params::delayDiv,    [this] (float) { showDelayTime(); });
-    delayTime = follow (params::delayTimeMs, [this] (float) { showDelayTime(); });
+    delayTempo.setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+    delayTempo.onDragStart = [this] { delayBpm->beginGesture(); };
+    delayTempo.onDragEnd   = [this] { delayBpm->endGesture(); };
+    delayTempo.onDrag = [this] (float pixels)
+    {
+        tempoTravel += pixels / 3.0f;                       // three pixels to the beat-per-minute
+        const int whole = (int) tempoTravel;
+        if (whole == 0)
+            return;
+        tempoTravel -= (float) whole;
+        delayBpm->setValueAsPartOfGesture (juce::jlimit (params::delayBpmMin, params::delayBpmMax,
+                                                         std::round (getParam (params::delayBpm)) + (float) whole));
+    };
+    delayDiv = follow (params::delayDiv, [this] (float) { showDelayTime(); });
+    delayBpm = follow (params::delayBpm, [this] (float) { showDelayTime(); });
     showDelayTime();
 
     // COMBO steps through six cabinets; the one it sits on shows by name while the hand is on it.
@@ -575,6 +586,10 @@ void CatpitEditor::adoptState()
 void CatpitEditor::timerCallback()
 {
     version.setDot (amp.updateChecker().updateAvailable());
+
+    // A host starts or stops saying its tempo whenever it likes.
+    if (tempoIsOwn == (amp.runsInHost() && amp.hostTempoBpm() > 0.0f))
+        showDelayTime();
 
     // The build window has closed: the sky goes back to the GPU.
     if (skyParked && aboutWindow == nullptr)
@@ -722,6 +737,8 @@ void CatpitEditor::setUpChain (bool firstTime)
     setParam (params::preampOn,      1.0f);
     setParam (params::delayPresent,  1.0f);
     setParam (params::delayOn,       1.0f);
+    setParam (params::delaySync,      1.0f);  // the delay keeps time, always: the host's when there is one...
+    setParam (params::delayHostTempo, 1.0f);  // ...and its own BPM when there is not
     setParam (params::reverbPresent, 1.0f);
     setParam (params::reverbOn,      1.0f);
     if (firstTime)                            // after that the reverb is the player's to choose
@@ -780,66 +797,55 @@ juce::ParameterAttachment* CatpitEditor::follow (const char* paramId, std::funct
     return attachments.back().get();
 }
 
-/** What the delay's legend says, and whether it is a control: a note value while the delay keeps time
-    with the tempo, milliseconds — draggable — while it runs free. */
+/** What the delay's two legends say, and where they stand: the note value always; the tempo only while
+    it is the delay's own to set — a host that is conducting has the say, and there is nothing to drag. */
 void CatpitEditor::showDelayTime()
 {
-    const bool free = getParam (params::delaySync) < 0.5f;
-    if (free)
-        delayName.set ("DELAY AMOUNT", juce::String (juce::roundToInt (getParam (params::delayTimeMs))) + " MS");
-    else
-        delayName.set ("DELAY AMOUNT", params::delayDivisions[juce::jlimit (0, params::delayDivisions.size() - 1,
-                                                                             juce::roundToInt (getParam (params::delayDiv)))]);
+    delayName.set ("DELAY", params::delayDivisions[juce::jlimit (0, params::delayDivisions.size() - 1,
+                                                                 juce::roundToInt (getParam (params::delayDiv)))]);
 
-    if (free == (delayName.onDrag != nullptr))
-        return;
+    tempoIsOwn = ! (amp.runsInHost() && amp.hostTempoBpm() > 0.0f);
+    delayTempo.setVisible (tempoIsOwn);
+    delayTempo.set ({}, juce::String (juce::roundToInt (getParam (params::delayBpm))) + " BPM");
 
-    // A hand's travel is a ratio, not a number of milliseconds: the same pull doubles 40 ms and 400 ms.
-    delayName.onDrag = free ? [this] (float pixels)
-                              {
-                                  const float ms = getParam (params::delayTimeMs) * std::pow (1.008f, pixels);
-                                  delayTime->setValueAsPartOfGesture (std::round (juce::jlimit (params::delayTimeMinMs, params::delayTimeMaxMs, ms)));
-                              }
-                            : std::function<void (float)>();
-    delayName.setMouseCursor (free ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::PointingHandCursor);
+    // Side by side, the pair centred over the plate.
+    const auto row = plateName (1);
+    const float gap = 22.0f, pad = 8.0f;
+    const float nameWidth = delayName.idealWidth() + pad, tempoWidth = tempoIsOwn ? delayTempo.idealWidth() + pad : 0.0f;
+    float x = row.getCentreX() - (nameWidth + (tempoIsOwn ? gap + tempoWidth : 0.0f)) * 0.5f;
+    delayName.setBounds (juce::Rectangle<float> (x, row.getY(), nameWidth, row.getHeight()).toNearestInt());
+    x += nameWidth + gap;
+    delayTempo.setBounds (juce::Rectangle<float> (x, row.getY(), tempoWidth, row.getHeight()).toNearestInt());
 }
 
 void CatpitEditor::showDelayMenu()
 {
-    enum : int { firstDiv = 1, itemFree = 100 };
-
-    const bool sync = getParam (params::delaySync) > 0.5f;
-    const int  div  = juce::roundToInt (getParam (params::delayDiv));
-
-    const auto itemFor = [] (const juce::String& name, int id, bool ticked)
-    {
-        juce::PopupMenu::Item item (name);
-        item.itemID   = id;
-        item.colour   = lilac;
-        item.isTicked = ticked;
-        return item;
-    };
+    const int div = juce::roundToInt (getParam (params::delayDiv));
 
     juce::PopupMenu menu;
     for (int i = 0; i < params::delayDivisions.size(); ++i)
-        menu.addItem (itemFor (params::delayDivisions[i], firstDiv + i, sync && div == i));
-    menu.addSeparator();
-    menu.addItem (itemFor ("FREE", itemFree, ! sync));
+    {
+        juce::PopupMenu::Item item (params::delayDivisions[i]);
+        item.itemID   = i + 1;
+        item.colour   = lilac;
+        item.isTicked = i == div;
+        menu.addItem (std::move (item));
+    }
+
+    // In a host, whose beat those are counted in — said, not chosen: the host conducts.
+    if (amp.runsInHost())
+    {
+        const float hostBpm = amp.hostTempoBpm();
+        menu.addSeparator();
+        menu.addItem (-1, hostBpm > 0.0f ? "HOST  " + juce::String (hostBpm, 1) + " BPM"
+                                         : juce::String ("HOST  (no tempo)"), false, false);
+    }
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&delayName),
                         [safe = juce::Component::SafePointer<CatpitEditor> (this)] (int picked)
                         {
-                            if (safe == nullptr || picked <= 0)
-                                return;
-
-                            if (picked == itemFree)
-                                safe->delaySync->setValueAsCompleteGesture (0.0f);
-                            else
-                            {
-                                safe->delayDiv->setValueAsCompleteGesture ((float) (picked - firstDiv));
-                                if (safe->getParam (params::delaySync) < 0.5f)
-                                    safe->delaySync->setValueAsCompleteGesture (1.0f);
-                            }
+                            if (safe != nullptr && picked > 0)
+                                safe->delayDiv->setValueAsCompleteGesture ((float) (picked - 1));
                         });
 }
 

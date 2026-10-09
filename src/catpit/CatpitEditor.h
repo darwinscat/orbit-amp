@@ -93,10 +93,12 @@ private:
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
     Legend reverbName;                       // REVERB and its character; a click picks another
     juce::ParameterAttachment* reverbType = nullptr;
-    Legend delayName;                        // DELAY AMOUNT and its time: a note value, or free milliseconds
-    juce::ParameterAttachment* delaySync = nullptr;
-    juce::ParameterAttachment* delayDiv  = nullptr;
-    juce::ParameterAttachment* delayTime = nullptr;
+    Legend delayName;                        // DELAY and its note value; a click picks another
+    Legend delayTempo;                       // ...and the tempo it is counted in, dragged like a knob
+    juce::ParameterAttachment* delayDiv = nullptr;
+    juce::ParameterAttachment* delayBpm = nullptr;
+    float tempoTravel = 0.0f;                // the hand's travel not yet spent on a whole BPM
+    bool  tempoIsOwn  = true;                // false while a host is conducting
     ColumnFader inFader, outFader;
     SegmentMeter inMeter, outMeter;
     TunerFace tuner;

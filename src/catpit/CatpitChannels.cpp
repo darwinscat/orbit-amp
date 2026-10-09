@@ -51,9 +51,7 @@ Channels::Channels (AmpProcessor& p) : amp (p)
     kept.add (params::reverbMix);
     kept.add (params::reverbType);
     kept.add (params::delayMix);
-    kept.add (params::delaySync);
-    kept.add (params::delayDiv);
-    kept.add (params::delayTimeMs);
+    kept.add (params::delayDiv);        // the note value; the tempo it is counted in is the song's, not a channel's
     kept.add (params::cabIr);
 }
 

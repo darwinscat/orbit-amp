@@ -659,37 +659,47 @@ void Legend::setDot (bool d)
     }
 }
 
+namespace
+{
+    constexpr float legendGap = 14.0f, legendDot = 7.0f, legendDotGap = 9.0f;
+}
+
+Legend::Row Legend::row() const
+{
+    Row r { upper ? name.toUpperCase() : name, upper ? value.toUpperCase() : value,
+            labelFont (px).withExtraKerningFactor (0.08f), labelFont (px).withExtraKerningFactor (0.03f), 0.0f, 0.0f, 0.0f, 0.0f };
+    r.nameWidth  = r.name.isEmpty()  ? 0.0f : juce::GlyphArrangement::getStringWidth (r.nameFont, r.name);
+    r.valueWidth = r.value.isEmpty() ? 0.0f : juce::GlyphArrangement::getStringWidth (r.valueFont, r.value);
+    r.gap   = r.nameWidth > 0.0f && r.valueWidth > 0.0f ? legendGap : 0.0f;
+    r.width = r.nameWidth + r.gap + r.valueWidth + (dot ? legendDotGap + legendDot : 0.0f);
+    return r;
+}
+
+float Legend::idealWidth() const { return row().width; }
+
 void Legend::paint (juce::Graphics& g)
 {
     const bool lit = isMouseOverOrDragging();
-    const auto nameFont  = labelFont (px).withExtraKerningFactor (0.08f);
-    const auto valueFont = labelFont (px).withExtraKerningFactor (0.03f);
-    const auto n = upper ? name.toUpperCase() : name, v = upper ? value.toUpperCase() : value;
+    const auto r = row();
 
-    constexpr float gap = 14.0f, dotSize = 7.0f, dotGap = 9.0f;
-    const float nw = n.isEmpty() ? 0.0f : juce::GlyphArrangement::getStringWidth (nameFont, n);
-    const float vw = v.isEmpty() ? 0.0f : juce::GlyphArrangement::getStringWidth (valueFont, v);
-    const float between = nw > 0.0f && vw > 0.0f ? gap : 0.0f;
-    const float total = nw + between + vw + (dot ? dotGap + dotSize : 0.0f);
-
-    auto row = getLocalBounds().toFloat().withSizeKeepingCentre (total, (float) getHeight());
-    if (nw > 0.0f)
+    auto area = getLocalBounds().toFloat().withSizeKeepingCentre (r.width, (float) getHeight());
+    if (r.nameWidth > 0.0f)
     {
         g.setColour (lit ? nameColour.brighter (0.5f) : nameColour);
-        g.setFont (nameFont);
-        g.drawText (n, row.removeFromLeft (nw).expanded (2.0f, 0.0f), juce::Justification::centred, false);
-        row.removeFromLeft (between);
+        g.setFont (r.nameFont);
+        g.drawText (r.name, area.removeFromLeft (r.nameWidth).expanded (2.0f, 0.0f), juce::Justification::centred, false);
+        area.removeFromLeft (r.gap);
     }
-    if (vw > 0.0f)
+    if (r.valueWidth > 0.0f)
     {
         g.setColour (lit ? valueColour.brighter (0.5f) : valueColour);
-        g.setFont (valueFont);
-        g.drawText (v, row.removeFromLeft (vw).expanded (2.0f, 0.0f), juce::Justification::centred, false);
+        g.setFont (r.valueFont);
+        g.drawText (r.value, area.removeFromLeft (r.valueWidth).expanded (2.0f, 0.0f), juce::Justification::centred, false);
     }
     if (dot)
     {
         juce::Path p;
-        p.addEllipse (juce::Rectangle<float> (dotSize, dotSize).withCentre ({ row.getX() + dotGap + dotSize * 0.5f, row.getCentreY() }));
+        p.addEllipse (juce::Rectangle<float> (legendDot, legendDot).withCentre ({ area.getX() + legendDotGap + legendDot * 0.5f, area.getCentreY() }));
         glow (g, p, orange, 5.0f);
         g.setColour (orange);
         g.fillPath (p);
