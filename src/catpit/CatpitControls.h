@@ -145,6 +145,7 @@ public:
     bool latching = true;
     std::function<void (bool)> onChange;
     std::function<void()>      onPress;          // a plain key's press
+    std::function<void()>      onMenu;           // a right click, when set
     std::function<void (bool)> onHover;          // the editor shows the name + state while hovered
 
     bool isOn() const noexcept { return on; }

@@ -27,9 +27,9 @@ public:
         where the panel itself only has room for a short name or none. Empty text hides it. */
     void showTag (juce::Point<float> anchor, juce::String text);
 
-    /** What the signs over the overhead keys say: an arrow with nothing to step back or forward to
-        stands dim. */
-    void setHistory (bool canUndo, bool canRedo);
+    /** What the signs by the overhead keys say: an arrow with nothing to step back or forward to stands
+        dim, and the register that is playing has its letter and its lamp lit. */
+    void setHistory (bool canUndo, bool canRedo, int activeRegister);
 
 private:
     juce::Point<float> tagAnchor;
@@ -37,6 +37,7 @@ private:
     juce::Rectangle<float> tagBounds() const;
 
     bool canUndo = false, canRedo = false;
+    int  activeRegister = 0;
     void paintOverhead (juce::Graphics&) const;
 
     // The render and the printed words never change, but the windshield repaints sixty times a second
@@ -97,6 +98,7 @@ private:
 
     void setUpChain();
     void refreshHistory();
+    void showRegisterMenu (int index);
     int  packIndexFor (int detent) const;
     void choosePack (int detent);
     void chooseCombo (int step);

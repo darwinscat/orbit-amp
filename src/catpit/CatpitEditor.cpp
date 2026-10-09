@@ -36,8 +36,10 @@ namespace
     }};
     constexpr float keyTracking = 0.04f;
 
-    // The overhead keys, in hole order: the history on the left of the divider.
-    enum { ovUndo, ovRedo };
+    // The overhead keys, in hole order: the history on the left of the divider, the four registers —
+    // four whole amps to compare, each with a history of its own — on the right.
+    enum { ovUndo, ovRedo, ovFirstRegister };
+    constexpr int numRegisterKeys = 4;
 
     /** Where the keys stand along their row. ONE pitch for all six — the widest pair of neighbouring
         names plus a little air, so no name touches the next — the filters centred under BASS, the four
@@ -124,22 +126,43 @@ void Cockpit::showTag (juce::Point<float> anchor, juce::String text)
     repaint (tagBounds().expanded (2.0f).getSmallestIntegerContainer());
 }
 
-void Cockpit::setHistory (bool undo, bool redo)
+void Cockpit::setHistory (bool undo, bool redo, int reg)
 {
-    if (undo == canUndo && redo == canRedo)
+    if (undo == canUndo && redo == canRedo && reg == activeRegister)
         return;
     canUndo = undo;
     canRedo = redo;
-    repaint (juce::Rectangle<float> (layout::holes[ovUndo].x - 30.0f, 12.0f,
-                                     layout::holes[ovRedo].x - layout::holes[ovUndo].x + 60.0f, 34.0f).toNearestInt());
+    activeRegister = reg;
+    repaint (juce::Rectangle<float> (layout::holes.front().x - 40.0f, 12.0f,
+                                     layout::holes.back().x - layout::holes.front().x + 80.0f, 72.0f).toNearestInt());
 }
 
-/** The signs over the overhead keys. Not in the cached layer: they change with what there is to undo. */
+/** The signs by the overhead keys. Not in the cached layer: they change with what there is to undo and
+    with the register that is playing. */
 void Cockpit::paintOverhead (juce::Graphics& g) const
 {
     using namespace layout;
     drawTurnArrow (g, { holes[ovUndo].x, 29.0f }, 8.0f, true,  labelLilac.withAlpha (canUndo ? 1.0f : 0.3f));
     drawTurnArrow (g, { holes[ovRedo].x, 29.0f }, 8.0f, false, labelLilac.withAlpha (canRedo ? 1.0f : 0.3f));
+
+    // Each register's letter stands to the left of its key; the render's own little lamp over the hole
+    // is lit for the one that is playing.
+    for (int i = 0; i < numRegisterKeys; ++i)
+    {
+        const auto hole = holes[(size_t) (ovFirstRegister + i)];
+        const bool here = i == activeRegister;
+        drawLabel (g, juce::String::charToString ((juce::juce_wchar) ('A' + i)),
+                   juce::Rectangle<float> (24.0f, 26.0f).withCentre ({ hole.x - 29.0f, hole.y }),
+                   px13, here ? orange : labelLilac.withAlpha (0.8f), 0.0f);
+        if (here)
+        {
+            juce::Path lamp;
+            lamp.addRoundedRectangle (juce::Rectangle<float> (19.0f, 4.0f).withCentre ({ hole.x, 28.0f }), 2.0f);
+            juce::DropShadow (orange, 6, {}).drawForPath (g, lamp);
+            g.setColour (orange);
+            g.fillPath (lamp);
+        }
+    }
 }
 
 void Cockpit::paint (juce::Graphics& g)
@@ -333,6 +356,19 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     }
     overhead[ovUndo]->onPress = [this] { amp.history.undo(); };
     overhead[ovRedo]->onPress = [this] { amp.history.redo(); };
+
+    // A B C D, in the four holes right of it: a press plays that register, a right click copies it.
+    for (int r = 0; r < numRegisterKeys; ++r)
+    {
+        const auto i = (size_t) (ovFirstRegister + r);
+        overhead[i] = std::make_unique<PushButton> (juce::String::charToString ((juce::juce_wchar) ('A' + r)));
+        auto& key = *overhead[i];
+        key.latching = false;
+        key.onPress  = [this, r] { amp.history.switchTo (r); };
+        key.onMenu   = [this, r] { showRegisterMenu (r); };
+        stage.addAndMakeVisible (key);
+        key.setBounds (around (holes[i], 40.0f, 40.0f));
+    }
     amp.history.onHistoryChanged = [this] { refreshHistory(); };
     refreshHistory();
 
@@ -473,7 +509,28 @@ CatpitEditor::~CatpitEditor()
 
 void CatpitEditor::refreshHistory()
 {
-    cockpit.setHistory (amp.history.canUndo(), amp.history.canRedo());
+    const auto& history = amp.history;
+    cockpit.setHistory (history.canUndo(), history.canRedo(), history.active());
+    for (int r = 0; r < numRegisterKeys; ++r)
+        overhead[(size_t) (ovFirstRegister + r)]->setOn (r == history.active(), false);
+}
+
+void CatpitEditor::showRegisterMenu (int index)
+{
+    auto& history = amp.history;
+    const auto letter = [] (int i) { return juce::String::charToString ((juce::juce_wchar) ('A' + i)); };
+
+    juce::PopupMenu menu;
+    for (int i = 0; i < history.numRegisters(); ++i)
+        if (i != index)
+        {
+            juce::PopupMenu::Item item ("Copy " + letter (index) + " to " + letter (i));
+            item.itemID = i + 1;
+            item.colour = lilac;
+            item.action = [&history, index, i] { history.copyRegister (index, i); };
+            menu.addItem (std::move (item));
+        }
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (overhead[(size_t) (ovFirstRegister + index)].get()));
 }
 
 void CatpitEditor::resized()

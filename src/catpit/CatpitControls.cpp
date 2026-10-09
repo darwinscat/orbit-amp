@@ -335,14 +335,21 @@ void PushButton::timerCallback()
     repaint();
 }
 
-void PushButton::mouseDown (const juce::MouseEvent&)
+void PushButton::mouseDown (const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu() && onMenu)
+    {
+        onMenu();
+        return;
+    }
     held = true;
     aim();
 }
 
 void PushButton::mouseUp (const juce::MouseEvent& e)
 {
+    if (! held)
+        return;
     held = false;
     if (getLocalBounds().contains (e.getPosition()))
     {
