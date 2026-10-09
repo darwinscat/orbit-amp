@@ -145,30 +145,52 @@ void Cockpit::setHistory (bool undo, bool redo, int reg)
 }
 
 /** The signs by the overhead keys. Not in the cached layer: they change with what there is to undo and
-    with the register that is playing. */
+    with the register that is playing. Every key has its sign to its left and a small lamp over it —
+    the render painted lamps over the four register holes only, so the two over the history keys are
+    drawn here to match. */
 void Cockpit::paintOverhead (juce::Graphics& g) const
 {
     using namespace layout;
-    drawTurnArrow (g, { holes[ovUndo].x, 29.0f }, 8.0f, true,  labelLilac.withAlpha (canUndo ? 1.0f : 0.3f));
-    drawTurnArrow (g, { holes[ovRedo].x, 29.0f }, 8.0f, false, labelLilac.withAlpha (canRedo ? 1.0f : 0.3f));
 
-    // Each register's letter stands to the left of its key; the render's own little lamp over the hole
-    // is lit for the one that is playing.
+    const auto signAt = [] (juce::Point<float> hole) { return juce::Point<float> (hole.x - 29.0f, hole.y); };
+    const auto lamp = [&g] (juce::Point<float> hole, bool lit)
+    {
+        if (! lit)
+            return;
+        juce::Path glass;
+        glass.addRoundedRectangle (juce::Rectangle<float> (19.0f, 4.0f).withCentre ({ hole.x, 29.2f }), 2.0f);
+        juce::DropShadow (orange, 6, {}).drawForPath (g, glass);
+        g.setColour (orange);
+        g.fillPath (glass);
+    };
+    const auto socket = [&g] (juce::Point<float> hole)
+    {
+        const auto box = juce::Rectangle<float> (23.0f, 7.0f).withCentre ({ hole.x, 29.2f });
+        g.setColour (juce::Colour (0xff3a3843));
+        g.fillRoundedRectangle (box, 2.5f);
+        g.setColour (juce::Colour (0xff6b6878));
+        g.drawRoundedRectangle (box, 2.5f, 0.9f);
+    };
+
+    // The history: a turning arrow each, its lamp lit while there is a step to take.
+    const bool can[] { canUndo, canRedo };
+    for (int i = 0; i < 2; ++i)
+    {
+        const auto hole = holes[(size_t) (ovUndo + i)];
+        drawTurnArrow (g, signAt (hole), 8.0f, i == 0, labelLilac.withAlpha (can[i] ? 1.0f : 0.35f));
+        socket (hole);
+        lamp (hole, can[i]);
+    }
+
+    // The registers: a letter each, the lamp lit over the one that is playing.
     for (int i = 0; i < numRegisterKeys; ++i)
     {
         const auto hole = holes[(size_t) (ovFirstRegister + i)];
         const bool here = i == activeRegister;
         drawLabel (g, juce::String::charToString ((juce::juce_wchar) ('A' + i)),
-                   juce::Rectangle<float> (24.0f, 26.0f).withCentre ({ hole.x - 29.0f, hole.y }),
+                   juce::Rectangle<float> (24.0f, 26.0f).withCentre (signAt (hole)),
                    px13, here ? orange : labelLilac.withAlpha (0.8f), 0.0f);
-        if (here)
-        {
-            juce::Path lamp;
-            lamp.addRoundedRectangle (juce::Rectangle<float> (19.0f, 4.0f).withCentre ({ hole.x, 28.0f }), 2.0f);
-            juce::DropShadow (orange, 6, {}).drawForPath (g, lamp);
-            g.setColour (orange);
-            g.fillPath (lamp);
-        }
+        lamp (hole, here);
     }
 }
 
