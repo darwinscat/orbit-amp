@@ -6,8 +6,6 @@
 #include "CatpitControls.h"
 #include "CatpitLayout.h"
 
-#include "../ui/EqDisplay.h"
-
 #include <felitronics/analysis/PlotMap.h>
 
 namespace orbitamp::catpit
@@ -15,7 +13,7 @@ namespace orbitamp::catpit
 
 namespace
 {
-    constexpr int preampBlock   = 1;     // the processor's second captured block, and its console's link
+    constexpr int preampBlock   = 1;     // the processor's second captured block: the one the tone stack follows
     constexpr double displayRate = 48000.0;
 }
 
@@ -29,7 +27,6 @@ Monitor::Monitor (AmpProcessor& p) : amp (p)
 {
     setInterceptsMouseClicks (false, false);    // a right click on the glass is still a click on the panel
     setVisible (false);
-    console.prepare (displayRate, 1);
 }
 
 void Monitor::show (View v)
@@ -62,9 +59,7 @@ void Monitor::timerCallback()
         return;
     }
 
-    // The tone stack as the parameters have it now, and a frame from each side of it if one is waiting.
-    console.setSettings (eqSettingsFor (amp.apvts, preampBlock));
-
+    // A frame from each side of the tone stack, if one is waiting.
     const auto pull = [] (felitronics::analysis::RollingSpectrumTap& tap, felitronics::analysis::SpectrumPane& pane)
     {
         int order = 0;
@@ -145,20 +140,6 @@ void Monitor::paintSpectrum (juce::Graphics& g, juce::Rectangle<float> r)
     // over it.
     draw (before, juce::Colour (0xff9fb0cc).withAlpha (0.7f), 1.1f);
     draw (after,  orange, 1.4f);
-
-    // The curve the three tone knobs are holding: +/-18 dB about the middle of the band.
-    juce::Path curve;
-    constexpr double span = 18.0;
-    for (float x = 0.0f; x <= r.getWidth(); x += 2.0f)
-    {
-        const double hz = lo * std::pow (hi / lo, (double) x / (double) r.getWidth());
-        const float  y  = r.getCentreY() - (float) (juce::jlimit (-span, span, console.magnitudeDb (hz)) / span)
-                                               * r.getHeight() * 0.5f;
-        if (x <= 0.0f) curve.startNewSubPath (r.getX() + x, y);
-        else           curve.lineTo (r.getX() + x, y);
-    }
-    g.setColour (lilac);
-    g.strokePath (curve, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
 } // namespace orbitamp::catpit

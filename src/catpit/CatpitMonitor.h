@@ -4,7 +4,6 @@
 #pragma once
 
 #include "../PluginProcessor.h"
-#include "../core/EqLink.h"
 #include "../core/ScopeTap.h"
 #include "../ui/scope/EnvelopeView.h"
 #include "../ui/scope/ShapeView.h"
@@ -21,8 +20,8 @@ namespace orbitamp::catpit
 /** WHAT THE WINDSHIELD SHOWS OVER THE SKY. The window can carry an instrument as a second layer on
     the glass: one of the pictures OrbitAmp draws of an amp at work, with the stars flying on behind it.
 
-      SPECTRUM   what the tone stack eats, grey, and what it makes of it, orange — with the curve
-                 BASS, MIDDLE and TREBLE are holding drawn over both;
+      SPECTRUM   what the tone stack eats, grey, and what it makes of it, orange. No curve and no
+                 zero line: what BASS, MIDDLE and TREBLE do is the distance between the two;
       WAVE, SHAPE, ENVELOPE, TRANSFER
                  OrbitAmp's own scope pictures, drawn by OrbitAmp's own painters, looking at the amp
                  the throttle has chosen.
@@ -53,7 +52,6 @@ private:
     AmpProcessor& amp;
     View view = View::stars;
 
-    core::EqLink console;                                  // a display copy of the tone stack, for its curve
     felitronics::analysis::SpectrumPane before, after;
 
     std::array<float, core::ScopeTap::size> dry {}, wet {};   // the scope tap, copied out once a frame
