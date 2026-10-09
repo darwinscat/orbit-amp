@@ -344,7 +344,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       tuner (p.tunerEar),
       version (layout::px13),
       about (p.updateChecker(), aboutTheCockpit(), p.pluginFormat()),
-      load (layout::px13),
+      load (layout::px11),
       presetDoor (layout::px13)
 {
     using namespace layout;
