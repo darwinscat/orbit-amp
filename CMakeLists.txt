@@ -632,6 +632,55 @@ endforeach()
 # workflow and the pull-request build both do.
 set_target_properties(CatpitAmp CatpitAmp_Standalone CatpitAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
+# The cockpit's memory probe — not a gate, a measuring instrument: what the cockpit holds with its
+# window built, and with it SHUT, which is the figure that matters in a host and the one the
+# standalone cannot give. It is the cockpit itself, compiled again under a main() of its own, and
+# like the cockpit it is built only when asked for by name.
+juce_add_console_app(catpitamp_memory_probe PRODUCT_NAME "CatpitAmpMemoryProbe")
+target_sources(catpitamp_memory_probe PRIVATE
+    tests/MemoryProbe.cpp
+    src/PluginProcessor.cpp
+    src/Parameters.cpp
+    src/ui/Theme.cpp
+    src/core/ProcessMemory.cpp
+    src/catpit/CatpitArt.cpp
+    src/catpit/CatpitChannels.cpp
+    src/catpit/CatpitControls.cpp
+    src/catpit/CatpitMonitor.cpp
+    src/catpit/CatpitPresets.cpp
+    src/catpit/CatpitSpace.cpp
+    src/catpit/CatpitGlSky.cpp
+    src/catpit/CatpitEditor.cpp)
+target_include_directories(catpitamp_memory_probe PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(catpitamp_memory_probe OrbitAmpVersionGen)
+target_compile_definitions(catpitamp_memory_probe PRIVATE
+    ORBITAMP_VERSION="${CATPITAMP_VERSION}"
+    ORBITAMP_PRODUCT_NAME="CatpitAmp"
+    ORBITAMP_RELEASE_TAG_PREFIX="catpit-"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0)
+target_link_libraries(catpitamp_memory_probe PRIVATE
+    OrbitAmpData
+    CatpitAmpData
+    felitronics::analysis
+    felitronics::appkit
+    felitronics::appkit_webp
+    felitronics::core
+    felitronics::dynamics
+    felitronics::eq
+    felitronics::lineareq
+    felitronics::convolution
+    felitronics::measurement
+    felitronics::nam
+    felitronics::rigplayer
+    juce::juce_audio_utils
+    juce::juce_dsp
+    juce::juce_data_structures
+    juce::juce_opengl
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(catpitamp_memory_probe PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
 # ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
