@@ -516,7 +516,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         face.startNewSubPath (emblemFace[0]);
         for (size_t i = 1; i < emblemFace.size(); ++i)
             face.lineTo (emblemFace[i]);
-        emblem.setBounds (face.getBounds().expanded (MarkCut::haloPad).toNearestInt());
+        emblem.setBounds (face.getBounds().getSmallestIntegerContainer());
     }
     emblem.onClick = [] { juce::URL (juce::String ("https://darwinscat.com?") + campaign).launchInDefaultBrowser(); };
 

@@ -193,18 +193,16 @@ private:
 
 //==============================================================================
 /** The family's mark the way the emblem plate wears it: a mask of the mark's light parts, the plate's
-    size, at `scale` physical pixels to the unit — and the same mask blurred into a halo, `haloPad`
-    units wider on every side. Made once for the scale they were last asked for. */
+    size, at `scale` physical pixels to the unit. Made once for the scale it was last asked for. */
 struct MarkCut
 {
-    juce::Image cut, halo;
-    static constexpr float haloPad = 14.0f;
+    juce::Image cut;
     static const MarkCut& at (float scale);
 };
 
 /** THE MARK ANSWERS THE HAND. Engraved and dark until the pointer is over the plate; then the cut
-    takes a dark violet, quietly — a hint, not a lamp — and a click on it goes home, to the maker's
-    site. It paints only that light: the plate and the engraving belong to the cockpit's layer. */
+    turns a dark violet — its colour changes, nothing glows — and a click on it goes home, to the
+    maker's site. It paints only that light: the plate and the engraving belong to the cockpit's layer. */
 class Emblem final : public juce::Component, private juce::Timer
 {
 public:

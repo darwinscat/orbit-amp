@@ -505,48 +505,6 @@ void GuardButton::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-namespace
-{
-    /** A soft blur of a mask: three passes of a sliding box each way, which is a Gaussian near enough. */
-    juce::Image blurred (const juce::Image& mask, int pad, int radius)
-    {
-        const int w = mask.getWidth() + 2 * pad, h = mask.getHeight() + 2 * pad;
-        std::vector<float> a ((size_t) w * (size_t) h, 0.0f), b (a.size(), 0.0f);
-        {
-            const juce::Image::BitmapData src (mask, juce::Image::BitmapData::readOnly);
-            for (int y = 0; y < mask.getHeight(); ++y)
-                for (int x = 0; x < mask.getWidth(); ++x)
-                    a[(size_t) (y + pad) * (size_t) w + (size_t) (x + pad)] = src.getPixelColour (x, y).getFloatAlpha();
-        }
-
-        const auto pass = [radius] (const float* from, float* to, int count, int stride)
-        {
-            const float norm = 1.0f / (float) (2 * radius + 1);
-            float sum = 0.0f;
-            for (int i = -radius; i <= radius; ++i)
-                sum += i >= 0 && i < count ? from[i * stride] : 0.0f;
-            for (int i = 0; i < count; ++i)
-            {
-                to[i * stride] = sum * norm;
-                const int out = i - radius, in = i + radius + 1;
-                sum += (in < count ? from[in * stride] : 0.0f) - (out >= 0 ? from[out * stride] : 0.0f);
-            }
-        };
-        for (int n = 0; n < 3; ++n)
-        {
-            for (int y = 0; y < h; ++y) pass (a.data() + (size_t) y * (size_t) w, b.data() + (size_t) y * (size_t) w, w, 1);
-            for (int x = 0; x < w; ++x) pass (b.data() + x, a.data() + x, h, w);
-        }
-
-        juce::Image out (juce::Image::SingleChannel, w, h, true);
-        juce::Image::BitmapData dst (out, juce::Image::BitmapData::writeOnly);
-        for (int y = 0; y < h; ++y)
-            for (int x = 0; x < w; ++x)
-                dst.setPixelColour (x, y, juce::Colours::white.withAlpha (juce::jlimit (0.0f, 1.0f, a[(size_t) y * (size_t) w + (size_t) x] * 1.6f)));
-        return out;
-    }
-}
-
 const MarkCut& MarkCut::at (float scale)
 {
     static MarkCut made;
@@ -578,7 +536,6 @@ const MarkCut& MarkCut::at (float scale)
             for (int x = 0; x < w; ++x)
                 to.setPixelColour (x, y, juce::Colours::white.withAlpha (from.getPixelColour (x, y).getBrightness()));
     }
-    made.halo = blurred (made.cut, juce::roundToInt (haloPad * scale), juce::jmax (1, juce::roundToInt (2.6f * scale)));
     return made;
 }
 
@@ -629,11 +586,8 @@ void Emblem::paint (juce::Graphics& g)
         return;
 
     const auto box = layout::emblemMark.translated (-(float) getX(), -(float) getY());
-    // A dark violet and barely a halo: the cut takes colour under the pointer, it does not light the plate.
-    const juce::Colour deep { 0xff5a3fc0 };
-    g.setColour (deep.withAlpha (0.22f * l));
-    g.drawImage (mark.halo, box.expanded (MarkCut::haloPad), juce::RectanglePlacement::stretchToFit, true);
-    g.setColour (deep.withAlpha (l));
+    // Only the colour changes: the engraving goes from bare metal to a dark violet, and nothing glows.
+    g.setColour (juce::Colour (0xff4a36a2).withAlpha (l));
     g.drawImage (mark.cut, box, juce::RectanglePlacement::stretchToFit, true);
 }
 
