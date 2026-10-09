@@ -36,6 +36,7 @@ private:
     juce::Image layer;
     float layerScale = 0.0f;
     void paintStatic (juce::Graphics&) const;
+    void paintEmblem (juce::Graphics&) const;
 };
 
 //==============================================================================

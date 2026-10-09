@@ -6,6 +6,8 @@
 
 #include "../Parameters.h"
 
+#include <felitronics/appkit/BrandAssets.h>
+
 namespace orbitamp
 {
 
@@ -86,6 +88,49 @@ void Cockpit::paint (juce::Graphics& g)
     }
 }
 
+void Cockpit::paintEmblem (juce::Graphics& g) const
+{
+    using namespace layout;
+
+    // A fresh face over the render's: dark metal, lit from above, with a fine bevel — so the render's
+    // own cat is gone and the plate still reads as the same piece of hull.
+    juce::Path face;
+    face.startNewSubPath (emblemFace[0]);
+    for (size_t i = 1; i < emblemFace.size(); ++i)
+        face.lineTo (emblemFace[i]);
+    face.closeSubPath();
+
+    const auto box = face.getBounds();
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff24222b), box.getCentreX(), box.getY(),
+                                             juce::Colour (0xff111016), box.getCentreX(), box.getBottom(), false));
+    g.fillPath (face);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.05f), box.getX(), box.getY(),
+                                             juce::Colours::transparentWhite, box.getCentreX(), box.getCentreY(), false));
+    g.fillPath (face);
+    g.setColour (juce::Colour (0xff4a4757).withAlpha (0.8f));
+    g.strokePath (face, juce::PathStrokeType (1.2f));
+
+    for (const auto& c : emblemScrews)
+    {
+        const auto head = juce::Rectangle<float> (8.0f, 8.0f).withCentre (c);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff6d6a78), c.translated (-1.5f, -2.0f),
+                                                 juce::Colour (0xff141318), c.translated (2.5f, 3.0f), true));
+        g.fillEllipse (head);
+        g.setColour (juce::Colour (0xff09080c));
+        g.drawLine (c.x - 2.2f, c.y - 2.2f, c.x + 2.2f, c.y + 2.2f, 1.0f);
+    }
+
+    // The family's mark, raised a hair off the plate: its own outline cast as a soft shadow, then the mark.
+    if (auto* mark = felitronics::appkit::brand::catMark())
+    {
+        auto outline = mark->getOutlineAsPath();
+        outline.applyTransform (juce::RectanglePlacement (juce::RectanglePlacement::centred)
+                                    .getTransformToFit (mark->getDrawableBounds(), emblemMark));
+        juce::DropShadow (juce::Colours::black.withAlpha (0.85f), 5, { 1, 3 }).drawForPath (g, outline);
+        mark->drawWithin (g, emblemMark, juce::RectanglePlacement::centred, 1.0f);
+    }
+}
+
 void Cockpit::paintStatic (juce::Graphics& g) const
 {
     using namespace layout;
@@ -93,6 +138,8 @@ void Cockpit::paintStatic (juce::Graphics& g) const
     const auto& bg = Art::get().bg;
     if (bg.isValid())
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
+
+    paintEmblem (g);
 
     // The overhead names, over their holes. The right four holes sit closer than a 13-px name is wide,
     // so their names alternate between two rows.
