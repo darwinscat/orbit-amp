@@ -526,7 +526,15 @@ juce_add_binary_data(CatpitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-on.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/fader-cap.png")
 
+# RELEASED APART FROM ORBITAMP, from the same tree: a version of its own, and tags of its own —
+# `catpit-vX.Y.Z` beside OrbitAmp's `vX.Y.Z` — so neither waits for the other and a fix in the engine
+# reaches each at its own next release. This is the number the cockpit shows, stamps its bundle with
+# and compares against the releases that wear its prefix (src/Product.h); it moves when the COCKPIT
+# is released. .github/workflows/release-catpit.yml refuses a tag that disagrees with it.
+set(CATPITAMP_VERSION 0.1.0)
+
 juce_add_plugin(CatpitAmp
+    VERSION                     "${CATPITAMP_VERSION}"
     PRODUCT_NAME                "CatpitAmp"
     COMPANY_NAME                "Darwin's Cat"
     BUNDLE_ID                   "com.darwinscat.catpitamp"
@@ -555,7 +563,9 @@ target_sources(CatpitAmp PRIVATE
     src/catpit/CatpitEditor.cpp)
 
 target_compile_definitions(CatpitAmp PUBLIC
-    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    ORBITAMP_VERSION="${CATPITAMP_VERSION}"
+    ORBITAMP_PRODUCT_NAME="CatpitAmp"
+    ORBITAMP_RELEASE_TAG_PREFIX="catpit-"
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0

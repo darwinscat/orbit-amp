@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "PluginProcessor.h"
+#include "Product.h"
 #include "Parameters.h"
 #include "device/IrLibrary.h"
 
@@ -27,9 +28,12 @@ AmpProcessor::AmpProcessor()
                },
                felitronics::appkit::CompareHistory::Config {}),
       // GitHub's release list for THIS repo, the running version, and the badge's own settings file.
-      // The checker asks nothing on its own — see updateChecker().
+      // The checker asks nothing on its own — see updateChecker(). The repository releases both faces,
+      // so each asks for the releases that wear ITS tag prefix (see Product.h): OrbitAmp's is empty,
+      // which is the plain "latest release" it has always asked for.
       updater ({ .ownerRepo      = "darwinscat/orbit-amp",
-                 .productName    = "OrbitAmp",
+                 .tagPrefix      = product::tagPrefix,
+                 .productName    = product::name,
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })
 {

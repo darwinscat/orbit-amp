@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../Product.h"
+
 #include <felitronics/appkit/SettingsStore.h>
 
 #include <juce_data_structures/juce_data_structures.h>
@@ -42,8 +44,11 @@ public:
     UpdateStore()
     {
         juce::PropertiesFile::Options o;
+        // The PRODUCT's folder, not the family's shared one: two faces of one processor are released
+        // apart, and a newer OrbitAmp is no news for a cockpit. For OrbitAmp this is the folder it
+        // has always been.
         o.applicationName     = "update";
-        o.folderName          = "Darwin's Cat" + juce::String (juce::File::getSeparatorString()) + "OrbitAmp";
+        o.folderName          = "Darwin's Cat" + juce::String (juce::File::getSeparatorString()) + product::name;
         o.filenameSuffix      = "settings";
         o.osxLibrarySubFolder = "Application Support";
         o.processLock         = &ipLock;
@@ -53,7 +58,7 @@ public:
     juce::PropertiesFile* file() { return props.getUserSettings(); }
 
 private:
-    juce::InterProcessLock    ipLock { "OrbitAmp.update.settings" };
+    juce::InterProcessLock    ipLock { juce::String (product::name) + ".update.settings" };
     juce::ApplicationProperties props;
 };
 
