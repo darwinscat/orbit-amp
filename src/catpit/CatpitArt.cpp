@@ -4,6 +4,7 @@
 #include "CatpitArt.h"
 #include "CatpitLayout.h"
 
+#include <cmath>
 #include <map>
 #include <vector>
 
@@ -84,6 +85,67 @@ namespace
         return img;
     }
 
+    /** THE TONE SOCKETS MOVE UP. The render painted the three rings lower than the cockpit wants them
+        now — their tops level with DRIVE's, a row of keys under them — and until the console is rendered
+        again the picture is corrected here: the bare plate from just under each ring is laid over it,
+        the ring is put back `toneLift` higher as a soft-edged disc, and the divider between MIDDLE and
+        TREBLE, which would run down through the keys, is cut short. Numbers are in the render's own
+        1672-wide space, measured off it. */
+    juce::Image raiseTones (juce::Image img)
+    {
+        if (! img.isValid())
+            return img;
+
+        const float k = (float) img.getWidth() / layout::width;
+        const auto original = img.createCopy();
+        const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
+        const int w = img.getWidth(), h = img.getHeight();
+        const auto inside = [w, h] (int x, int y) { return x >= 0 && y >= 0 && x < w && y < h; };
+
+        const int lift = juce::roundToInt (layout::toneLift * k);
+        const int cleanRows = juce::jmax (2, juce::roundToInt (16.0f * k));
+        const float feather = 3.0f * k;
+
+        for (const auto& socket : layout::tones)
+        {
+            const float cx = socket.centre.x * k, cy = (socket.centre.y + layout::toneLift) * k;   // where it was painted
+            const float R = (socket.radius + 8.0f) * k;                                           // the ring and its glow
+            const int x0 = (int) std::floor (cx - R), x1 = (int) std::ceil (cx + R);
+            const int y0 = (int) std::floor (cy - R), y1 = (int) std::ceil (cy + R);
+            const int clean0 = y1 + 2;                                                            // bare plate from here down
+
+            for (int y = y0; y <= y1; ++y)
+                for (int x = x0; x <= x1; ++x)
+                    if (inside (x, y) && std::hypot ((float) x - cx, (float) y - cy) <= R)
+                    {
+                        // the strip under the ring, mirrored back and forth so no row meets a stranger
+                        const int m = (clean0 - 1 - y) % (2 * cleanRows);
+                        const int row = clean0 + (m < cleanRows ? m : 2 * cleanRows - 1 - m);
+                        if (inside (x, row))
+                            dst.setPixelColour (x, y, src.getPixelColour (x, row));
+                    }
+
+            for (int y = y0; y <= y1; ++y)
+                for (int x = x0; x <= x1; ++x)
+                {
+                    const float a = juce::jlimit (0.0f, 1.0f, (R - std::hypot ((float) x - cx, (float) y - cy)) / feather);
+                    if (a > 0.0f && inside (x, y) && inside (x, y - lift))
+                        dst.setPixelColour (x, y - lift, dst.getPixelColour (x, y - lift)
+                                                             .interpolatedWith (src.getPixelColour (x, y), a));
+                }
+        }
+
+        // The MIDDLE | TREBLE divider below the knobs: the plate beside it, copied over it.
+        const int dx0 = juce::roundToInt (1281.0f * k), dx1 = juce::roundToInt (1288.0f * k), from = juce::roundToInt (9.0f * k);
+        for (int y = juce::roundToInt (548.0f * k); y <= juce::roundToInt (584.0f * k); ++y)
+            for (int x = dx0; x <= dx1; ++x)
+                if (inside (x - from, y) && inside (x, y))
+                    dst.setPixelColour (x, y, dst.getPixelColour (x - from, y));
+
+        return img;
+    }
+
     /** The throttle render is a whole joystick; on a flat panel only its grip shows above the slot. */
     juce::Image gripOf (const juce::Image& lever)
     {
@@ -139,7 +201,7 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg          = cutWindshield (load ("bg.png"));
+        a.bg          = cutWindshield (raiseTones (load ("bg.png")));
         a.knobDrive   = capped (load ("knob-drive.png"),   640);
         a.knobTone    = capped (load ("knob-tone.png"),    480);
         a.leverGrip   = capped (gripOf (load ("lever.png")), 420);

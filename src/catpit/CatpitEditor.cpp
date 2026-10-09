@@ -225,7 +225,7 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
     drawLabel (g, "DRIVE", juce::Rectangle<float> (220.0f, 30.0f).withCentre ({ drive.centre.x, 394.0f }), px15, labelLilac);
     const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
     for (size_t i = 0; i < tones.size(); ++i)
-        drawLabel (g, toneNames[i], juce::Rectangle<float> (150.0f, 28.0f).withCentre ({ tones[i].centre.x, 420.0f }), px13, labelLilac);
+        drawLabel (g, toneNames[i], juce::Rectangle<float> (150.0f, 28.0f).withCentre ({ tones[i].centre.x, 394.0f }), px13, labelLilac);
 
     drawLabel (g, "TURBO", juce::Rectangle<float> (160.0f, 26.0f).withCentre ({ turboFrame.getCentreX(), 400.0f }), px13, orange);
 

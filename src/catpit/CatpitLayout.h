@@ -18,7 +18,7 @@ inline constexpr float width  = 1672.0f;
 inline constexpr float height = 941.0f;
 
 /** The smallest the window may get. Every label below is sized so that at THIS scale it is still 13 px —
-    nothing a player reads goes smaller (CLAUDE.md). */
+    nothing a player reads goes smaller. */
 inline constexpr int   minWindowWidth = 1024;
 inline constexpr float minScale       = (float) minWindowWidth / width;
 inline constexpr float px13           = 13.0f / minScale;   // a 13-px label, in this space
@@ -30,10 +30,15 @@ inline const juce::Rectangle<float> windshield { 152.0f, 60.0f, 1368.0f, 210.0f 
 struct Socket { juce::Point<float> centre; float radius; };
 
 inline const Socket drive  { { 653.6f, 503.6f }, 92.4f };
+
+/** The tone knobs stand with their top edges level with DRIVE's, which is `toneLift` higher than the
+    render painted their sockets — Art lifts the painted rings to match. The centres below are where
+    they stand NOW. */
+inline constexpr float toneLift = 24.5f;
 inline const std::array<Socket, 3> tones {{
-    { { 1060.3f, 501.4f }, 62.2f },    // BASS
-    { { 1209.6f, 501.5f }, 62.4f },    // MIDDLE
-    { { 1358.7f, 501.4f }, 61.9f },    // TREBLE
+    { { 1060.3f, 476.9f }, 62.2f },    // BASS
+    { { 1209.6f, 477.0f }, 62.4f },    // MIDDLE
+    { { 1358.7f, 476.9f }, 61.9f },    // TREBLE
 }};
 
 inline const juce::Rectangle<float> leverFrame { 254.0f, 376.0f, 261.0f, 217.0f };
