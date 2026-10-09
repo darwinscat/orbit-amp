@@ -534,6 +534,16 @@ juce_add_binary_data(CatpitAmpData
 # is released. .github/workflows/release-catpit.yml refuses a tag that disagrees with it.
 set(CATPITAMP_VERSION 0.1.0)
 
+# The cockpit's icon. macOS 26 sets any icon that is not its own rounded square on a grey plate —
+# the family's disc came out as a small disc on a light square — so the Mac wears the mark on the
+# rounded square the system expects (824 of the 1024 canvas, margins and all), and is shown as drawn.
+# Windows and Linux keep the disc.
+if(APPLE)
+    set(CATPITAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/CatpitAmp-macOS-1024.png")
+else()
+    set(CATPITAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/CatpitAmp-1024.png")
+endif()
+
 juce_add_plugin(CatpitAmp
     VERSION                     "${CATPITAMP_VERSION}"
     PRODUCT_NAME                "CatpitAmp"
@@ -549,8 +559,8 @@ juce_add_plugin(CatpitAmp
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "CatpitAmp needs audio input to process your signal."
-    # Bundle / executable icon — the cockpit's mark on the family's disc. No ICON_SMALL, as OrbitAmp.
-    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/CatpitAmp-1024.png"
+    # Bundle / executable icon — the cockpit's mark; see CATPITAMP_ICON. No ICON_SMALL, as OrbitAmp.
+    ICON_BIG                    "${CATPITAMP_ICON}"
     COPY_PLUGIN_AFTER_BUILD     FALSE)
 
 target_sources(CatpitAmp PRIVATE
