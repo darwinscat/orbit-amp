@@ -296,8 +296,6 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 
     drawLabel (g, "TURBO", juce::Rectangle<float> (160.0f, 26.0f).withCentre ({ turboFrame.getCentreX(), 400.0f }), px13, orange);
 
-    // COMBO's name. REVERB's and DELAY AMOUNT's are live legends — they also say what is chosen.
-    drawLabel (g, "COMBO", plateName (2), px13, labelLilac);
 
     drawLabel (g, "INPUT",  juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 117.0f, 314.0f }),  px13, labelLilac);
     drawLabel (g, "OUTPUT", juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 1557.0f, 314.0f }), px13, labelLilac);
@@ -388,6 +386,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       monitor (p),
       drive (Art::get().knobDrive, drivePointer),
       reverbName (layout::px13),
+      comboName (layout::px13),
       delayWord (layout::px13),
       delayNote (layout::px13),
       delayTempo (layout::px13),
@@ -557,14 +556,16 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     delayBpm = follow (params::delayBpm, [this] (float) { showDelayTime(); });
     showDelayTime();
 
-    // COMBO steps through the cockpit's own cabinets; the one it sits on shows by name while the hand
-    // is on it. With fewer than two there is nothing to choose between, and it stands dim.
+    // COMBO steps through the cockpit's own cabinets, and its plate reads the one it sits on, the way
+    // REVERB's reads its character. With fewer than two there is nothing to choose between, and it
+    // stands dim.
+    comboName.setInterceptsMouseClicks (false, false);      // a reading: the slider under it is the control
+    stage.addAndMakeVisible (comboName);
+    comboName.setBounds (plateName (2).toNearestInt());
+
     auto& combo = *sliders[2];
     if (channels.cabinets().size() >= 2)
-    {
-        combo.onStep  = [this] (int s) { chooseCombo (s); showComboTag (true); };
-        combo.onHover = [this] (bool over) { showComboTag (over); };
-    }
+        combo.onStep = [this] (int s) { chooseCombo (s); showCombo(); };
     else
     {
         combo.setEnabled (false);
@@ -817,6 +818,7 @@ void CatpitEditor::showChannel()
     // built, before the plates exist.)
     if (const int playing = channels.cabinet(); playing >= 0 && sliders[2] != nullptr)
         sliders[2]->setStep (playing, false);
+    showCombo();
 }
 
 void CatpitEditor::showRegisterMenu (int index)
@@ -1074,13 +1076,14 @@ void CatpitEditor::chooseCombo (int step)
     channels.chooseCabinet (step);
 }
 
-void CatpitEditor::showComboTag (bool show)
+/** COMBO's plate says which cabinet is playing: the name its file carries, without the number that
+    orders it. */
+void CatpitEditor::showCombo()
 {
-    const auto& inset = layout::sliderInsets[2];
     const auto& cabinets = channels.cabinets();
-    const int step = sliders[2]->getStep();
-    nameTag.show ({ inset.getCentreX(), inset.getY() - 52.0f },
-                  show && step < cabinets.size() ? Channels::cabinetName (cabinets.getReference (step)) : juce::String());
+    const int step = sliders[2] != nullptr ? sliders[2]->getStep() : -1;
+    comboName.set ("COMBO", step >= 0 && step < cabinets.size() ? Channels::cabinetName (cabinets.getReference (step))
+                                                               : juce::String());
 }
 
 template <typename Control>
