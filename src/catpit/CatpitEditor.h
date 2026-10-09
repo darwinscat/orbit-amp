@@ -91,6 +91,7 @@ private:
     ColumnFader inFader, outFader;
     SegmentMeter inMeter, outMeter;
     TunerFace tuner;
+    Emblem emblem;
 
     // The version on its plate, the family's orange dot beside it when a newer release has been seen.
     // A click opens the same window OrbitAmp's footer does — appkit's badge, kept invisible and only

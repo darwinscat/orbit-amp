@@ -6,6 +6,8 @@
 
 #include <felitronics/appkit/BrandAssets.h>
 
+#include <vector>
+
 namespace orbitamp::catpit
 {
 
@@ -498,6 +500,137 @@ void GuardButton::paint (juce::Graphics& g)
     fit (art.guardClosed, 1.0f - l);
     fit (art.guardOpen,   l * (1.0f - o));
     fit (art.guardOn,     l * o);
+}
+
+//==============================================================================
+namespace
+{
+    /** A soft blur of a mask: three passes of a sliding box each way, which is a Gaussian near enough. */
+    juce::Image blurred (const juce::Image& mask, int pad, int radius)
+    {
+        const int w = mask.getWidth() + 2 * pad, h = mask.getHeight() + 2 * pad;
+        std::vector<float> a ((size_t) w * (size_t) h, 0.0f), b (a.size(), 0.0f);
+        {
+            const juce::Image::BitmapData src (mask, juce::Image::BitmapData::readOnly);
+            for (int y = 0; y < mask.getHeight(); ++y)
+                for (int x = 0; x < mask.getWidth(); ++x)
+                    a[(size_t) (y + pad) * (size_t) w + (size_t) (x + pad)] = src.getPixelColour (x, y).getFloatAlpha();
+        }
+
+        const auto pass = [radius] (const float* from, float* to, int count, int stride)
+        {
+            const float norm = 1.0f / (float) (2 * radius + 1);
+            float sum = 0.0f;
+            for (int i = -radius; i <= radius; ++i)
+                sum += i >= 0 && i < count ? from[i * stride] : 0.0f;
+            for (int i = 0; i < count; ++i)
+            {
+                to[i * stride] = sum * norm;
+                const int out = i - radius, in = i + radius + 1;
+                sum += (in < count ? from[in * stride] : 0.0f) - (out >= 0 ? from[out * stride] : 0.0f);
+            }
+        };
+        for (int n = 0; n < 3; ++n)
+        {
+            for (int y = 0; y < h; ++y) pass (a.data() + (size_t) y * (size_t) w, b.data() + (size_t) y * (size_t) w, w, 1);
+            for (int x = 0; x < w; ++x) pass (b.data() + x, a.data() + x, h, w);
+        }
+
+        juce::Image out (juce::Image::SingleChannel, w, h, true);
+        juce::Image::BitmapData dst (out, juce::Image::BitmapData::writeOnly);
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x)
+                dst.setPixelColour (x, y, juce::Colours::white.withAlpha (juce::jlimit (0.0f, 1.0f, a[(size_t) y * (size_t) w + (size_t) x] * 1.6f)));
+        return out;
+    }
+}
+
+const MarkCut& MarkCut::at (float scale)
+{
+    static MarkCut made;
+    static float madeFor = 0.0f;
+    if (made.cut.isValid() && std::abs (scale - madeFor) < 1.0e-3f)
+        return made;
+
+    madeFor = scale;
+    made = {};
+    auto* mark = felitronics::appkit::brand::catMark();
+    const auto box = layout::emblemMark;
+    const int w = juce::roundToInt (box.getWidth() * scale), h = juce::roundToInt (box.getHeight() * scale);
+    if (mark == nullptr || w <= 0 || h <= 0)
+        return made;
+
+    // The mark drawn white on black: how bright a pixel comes out is how much of the cut it is.
+    juce::Image lit (juce::Image::ARGB, w, h, true);
+    {
+        juce::Graphics g (lit);
+        g.fillAll (juce::Colours::black);
+        g.addTransform (juce::AffineTransform::scale (scale));
+        mark->drawWithin (g, box.withZeroOrigin(), juce::RectanglePlacement::centred, 1.0f);
+    }
+    made.cut = juce::Image (juce::Image::SingleChannel, w, h, true);
+    {
+        const juce::Image::BitmapData from (lit, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData to (made.cut, juce::Image::BitmapData::writeOnly);
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x)
+                to.setPixelColour (x, y, juce::Colours::white.withAlpha (from.getPixelColour (x, y).getBrightness()));
+    }
+    made.halo = blurred (made.cut, juce::roundToInt (haloPad * scale), juce::jmax (1, juce::roundToInt (2.6f * scale)));
+    return made;
+}
+
+Emblem::Emblem()
+{
+    light.stiffness = 220.0f;
+    light.damping   = 30.0f;     // no overshoot: a lamp coming up, not a spring
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+bool Emblem::hitTest (int x, int y)
+{
+    juce::Path face;
+    face.startNewSubPath (layout::emblemFace[0]);
+    for (size_t i = 1; i < layout::emblemFace.size(); ++i)
+        face.lineTo (layout::emblemFace[i]);
+    face.closeSubPath();
+    return face.contains ((float) (x + getX()), (float) (y + getY()));
+}
+
+void Emblem::aim (float to)
+{
+    light.target = to;
+    startTimerHz (60);
+}
+
+void Emblem::timerCallback()
+{
+    if (! light.step (frameDt))
+        stopTimer();
+    repaint();
+}
+
+void Emblem::mouseUp (const juce::MouseEvent& e)
+{
+    if (onClick && hitTest (e.getPosition().x, e.getPosition().y))
+        onClick();
+}
+
+void Emblem::paint (juce::Graphics& g)
+{
+    const float l = juce::jlimit (0.0f, 1.0f, light.value);
+    if (l < 0.004f)
+        return;
+
+    const auto& mark = MarkCut::at (g.getInternalContext().getPhysicalPixelScaleFactor());
+    if (! mark.cut.isValid())
+        return;
+
+    const auto box = layout::emblemMark.translated (-(float) getX(), -(float) getY());
+    g.setColour (orange.withAlpha (0.5f * l));
+    g.drawImage (mark.halo, box.expanded (MarkCut::haloPad), juce::RectanglePlacement::stretchToFit, true);
+    g.setColour (juce::Colour (0xffffb872).withAlpha (l));
+    g.drawImage (mark.cut, box, juce::RectanglePlacement::stretchToFit, true);
 }
 
 //==============================================================================

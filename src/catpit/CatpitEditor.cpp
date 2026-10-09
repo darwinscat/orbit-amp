@@ -227,26 +227,9 @@ void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
     // THE MARK, ENGRAVED. Its light parts are cut into the plate: the cut's upper wall falls into
     // shadow, its lower lip catches the light, and its floor is bare metal a shade brighter than the
     // plate — so the mark reads as worked into the hull, not printed on it.
-    auto* mark = felitronics::appkit::brand::catMark();
-    if (mark == nullptr)
+    const auto& cut = MarkCut::at (scale).cut;
+    if (! cut.isValid())
         return;
-
-    const int mw = juce::roundToInt (emblemMark.getWidth() * scale), mh = juce::roundToInt (emblemMark.getHeight() * scale);
-    juce::Image lit (juce::Image::ARGB, mw, mh, true);
-    {
-        juce::Graphics mg (lit);
-        mg.fillAll (juce::Colours::black);
-        mg.addTransform (juce::AffineTransform::scale (scale));
-        mark->drawWithin (mg, emblemMark.withZeroOrigin(), juce::RectanglePlacement::centred, 1.0f);
-    }
-    juce::Image cut (juce::Image::SingleChannel, mw, mh, true);
-    {
-        const juce::Image::BitmapData from (lit, juce::Image::BitmapData::readOnly);
-        juce::Image::BitmapData to (cut, juce::Image::BitmapData::writeOnly);
-        for (int y = 0; y < mh; ++y)
-            for (int x = 0; x < mw; ++x)
-                to.setPixelColour (x, y, juce::Colours::white.withAlpha (from.getPixelColour (x, y).getBrightness()));
-    }
 
     const float px = 1.0f / juce::jmax (1.0f, scale) * 1.6f;   // the wall's depth, about a pixel and a half
     g.setColour (juce::Colours::black.withAlpha (0.8f));
@@ -463,6 +446,17 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     });
 
     showChannel();
+
+    // The mark lights under the pointer and leads to the maker's site.
+    stage.addAndMakeVisible (emblem);
+    {
+        juce::Path face;
+        face.startNewSubPath (emblemFace[0]);
+        for (size_t i = 1; i < emblemFace.size(); ++i)
+            face.lineTo (emblemFace[i]);
+        emblem.setBounds (face.getBounds().expanded (MarkCut::haloPad).toNearestInt());
+    }
+    emblem.onClick = [] { juce::URL (juce::String ("https://darwinscat.com?") + campaign).launchInDefaultBrowser(); };
 
     // The version, and behind it the window with everything else about the build.
     about.setBrandTypeface (theme::displayTypeface());

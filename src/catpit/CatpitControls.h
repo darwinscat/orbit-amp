@@ -191,6 +191,39 @@ private:
 };
 
 //==============================================================================
+/** The family's mark the way the emblem plate wears it: a mask of the mark's light parts, the plate's
+    size, at `scale` physical pixels to the unit — and the same mask blurred into a halo, `haloPad`
+    units wider on every side. Made once for the scale they were last asked for. */
+struct MarkCut
+{
+    juce::Image cut, halo;
+    static constexpr float haloPad = 14.0f;
+    static const MarkCut& at (float scale);
+};
+
+/** THE MARK ANSWERS THE HAND. Engraved and dark until the pointer is over the plate; then the cut
+    fills with light, the way the lamps either side of it burn, and a click on it goes home — to the
+    maker's site. It paints only that light: the plate and the engraving belong to the cockpit's layer. */
+class Emblem final : public juce::Component, private juce::Timer
+{
+public:
+    Emblem();
+
+    std::function<void()> onClick;
+
+    void paint (juce::Graphics&) override;
+    bool hitTest (int x, int y) override;
+    void mouseEnter (const juce::MouseEvent&) override { aim (1.0f); }
+    void mouseExit (const juce::MouseEvent&) override  { aim (0.0f); }
+    void mouseUp (const juce::MouseEvent&) override;
+
+private:
+    Glide light;
+    void aim (float);
+    void timerCallback() override;
+};
+
+//==============================================================================
 /** A WORD ON THE PANEL THAT ANSWERS THE HAND. A name and, after it and brighter, what it is set to. It
     lifts under the pointer and a click is `onClick`. With `onDrag` set, dragging the word up or down
     turns what it names — a control with no knob of its own — and a press that did not move still
