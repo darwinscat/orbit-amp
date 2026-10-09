@@ -51,6 +51,9 @@ Channels::Channels (AmpProcessor& p) : amp (p)
     kept.add (params::reverbMix);
     kept.add (params::reverbType);
     kept.add (params::delayMix);
+    kept.add (params::delaySync);
+    kept.add (params::delayDiv);
+    kept.add (params::delayTimeMs);
     kept.add (params::cabIr);
 }
 

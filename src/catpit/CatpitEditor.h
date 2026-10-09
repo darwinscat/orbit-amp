@@ -90,6 +90,10 @@ private:
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
     Legend reverbName;                       // REVERB and its character; a click picks another
     juce::ParameterAttachment* reverbType = nullptr;
+    Legend delayName;                        // DELAY AMOUNT and its time: a note value, or free milliseconds
+    juce::ParameterAttachment* delaySync = nullptr;
+    juce::ParameterAttachment* delayDiv  = nullptr;
+    juce::ParameterAttachment* delayTime = nullptr;
     ColumnFader inFader, outFader;
     SegmentMeter inMeter, outMeter;
     TunerFace tuner;
@@ -116,6 +120,8 @@ private:
 
     void setUpChain (bool firstTime);
     void showReverbMenu();
+    void showDelayMenu();
+    void showDelayTime();
     void refreshHistory();
     void showRegisterMenu (int index);
     void showChannel();

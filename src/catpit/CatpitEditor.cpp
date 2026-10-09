@@ -271,9 +271,8 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 
     drawLabel (g, "TURBO", juce::Rectangle<float> (160.0f, 26.0f).withCentre ({ turboFrame.getCentreX(), 400.0f }), px13, orange);
 
-    // The plates' names. REVERB's is a live legend — it also says which reverb.
-    drawLabel (g, "DELAY AMOUNT", plateName (1), px13, orange);
-    drawLabel (g, "COMBO",        plateName (2), px13, labelLilac);
+    // COMBO's name. REVERB's and DELAY AMOUNT's are live legends — they also say what is chosen.
+    drawLabel (g, "COMBO", plateName (2), px13, labelLilac);
 
     drawLabel (g, "INPUT",  juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 117.0f, 314.0f }),  px13, labelLilac);
     drawLabel (g, "OUTPUT", juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 1557.0f, 314.0f }), px13, labelLilac);
@@ -289,6 +288,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
       reverbName (layout::px13),
+      delayName (layout::px13),
       tuner (p.tunerEar),
       version (layout::px13),
       about (p.updateChecker(), aboutConfig ("CatpitAmp", "https://darwinscat.com", campaign), p.pluginFormat())
@@ -407,6 +407,20 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         reverbName.set ("REVERB", params::reverbCharacters[juce::jlimit (0, params::reverbCharacters.size() - 1, juce::roundToInt (v))]);
     });
     reverbType->sendInitialUpdate();
+
+    // DELAY AMOUNT's name carries the delay's time. A click opens the list OrbitAmp's delay block has —
+    // the note values, and FREE under a rule; in FREE the time is milliseconds, and since the cockpit
+    // has no knob for it, the legend itself is the control: drag it up or down, or roll the wheel on it.
+    stage.addAndMakeVisible (delayName);
+    delayName.setBounds (plateName (1).toNearestInt());
+    delayName.nameColour = orange;
+    delayName.onClick = [this] { showDelayMenu(); };
+    delayName.onDragStart = [this] { delayTime->beginGesture(); };
+    delayName.onDragEnd   = [this] { delayTime->endGesture(); };
+    delaySync = follow (params::delaySync,   [this] (float) { showDelayTime(); });
+    delayDiv  = follow (params::delayDiv,    [this] (float) { showDelayTime(); });
+    delayTime = follow (params::delayTimeMs, [this] (float) { showDelayTime(); });
+    showDelayTime();
 
     // COMBO steps through six cabinets; the one it sits on shows by name while the hand is on it.
     auto& combo = *sliders[2];
@@ -709,6 +723,69 @@ juce::ParameterAttachment* CatpitEditor::follow (const char* paramId, std::funct
     jassert (p != nullptr);
     attachments.push_back (std::make_unique<juce::ParameterAttachment> (*p, std::move (moved)));
     return attachments.back().get();
+}
+
+/** What the delay's legend says, and whether it is a control: a note value while the delay keeps time
+    with the tempo, milliseconds — draggable — while it runs free. */
+void CatpitEditor::showDelayTime()
+{
+    const bool free = getParam (params::delaySync) < 0.5f;
+    if (free)
+        delayName.set ("DELAY AMOUNT", juce::String (juce::roundToInt (getParam (params::delayTimeMs))) + " MS");
+    else
+        delayName.set ("DELAY AMOUNT", params::delayDivisions[juce::jlimit (0, params::delayDivisions.size() - 1,
+                                                                             juce::roundToInt (getParam (params::delayDiv)))]);
+
+    if (free == (delayName.onDrag != nullptr))
+        return;
+
+    // A hand's travel is a ratio, not a number of milliseconds: the same pull doubles 40 ms and 400 ms.
+    delayName.onDrag = free ? [this] (float pixels)
+                              {
+                                  const float ms = getParam (params::delayTimeMs) * std::pow (1.008f, pixels);
+                                  delayTime->setValueAsPartOfGesture (std::round (juce::jlimit (params::delayTimeMinMs, params::delayTimeMaxMs, ms)));
+                              }
+                            : std::function<void (float)>();
+    delayName.setMouseCursor (free ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::PointingHandCursor);
+}
+
+void CatpitEditor::showDelayMenu()
+{
+    enum : int { firstDiv = 1, itemFree = 100 };
+
+    const bool sync = getParam (params::delaySync) > 0.5f;
+    const int  div  = juce::roundToInt (getParam (params::delayDiv));
+
+    const auto itemFor = [] (const juce::String& name, int id, bool ticked)
+    {
+        juce::PopupMenu::Item item (name);
+        item.itemID   = id;
+        item.colour   = lilac;
+        item.isTicked = ticked;
+        return item;
+    };
+
+    juce::PopupMenu menu;
+    for (int i = 0; i < params::delayDivisions.size(); ++i)
+        menu.addItem (itemFor (params::delayDivisions[i], firstDiv + i, sync && div == i));
+    menu.addSeparator();
+    menu.addItem (itemFor ("FREE", itemFree, ! sync));
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&delayName),
+                        [safe = juce::Component::SafePointer<CatpitEditor> (this)] (int picked)
+                        {
+                            if (safe == nullptr || picked <= 0)
+                                return;
+
+                            if (picked == itemFree)
+                                safe->delaySync->setValueAsCompleteGesture (0.0f);
+                            else
+                            {
+                                safe->delayDiv->setValueAsCompleteGesture ((float) (picked - firstDiv));
+                                if (safe->getParam (params::delaySync) < 0.5f)
+                                    safe->delaySync->setValueAsCompleteGesture (1.0f);
+                            }
+                        });
 }
 
 void CatpitEditor::showReverbMenu()
