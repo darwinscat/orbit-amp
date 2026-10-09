@@ -683,6 +683,17 @@ if(APPLE)
                     "$<TARGET_BUNDLE_DIR:OrbitAmp_Standalone>"
             COMMENT "OrbitAmp: signing the standalone so macOS remembers the mic grant"
             VERBATIM)
+
+        # The cockpit is a standalone too, and asks for the same microphone.
+        if(TARGET CatpitAmp_Standalone)
+            add_custom_command(TARGET CatpitAmp_Standalone POST_BUILD
+                COMMAND codesign --force --options runtime --timestamp=none
+                        --entitlements "${CMAKE_CURRENT_SOURCE_DIR}/installer/standalone.entitlements"
+                        --sign "${ORBITAMP_SIGN_IDENTITY}"
+                        "$<TARGET_BUNDLE_DIR:CatpitAmp_Standalone>"
+                COMMENT "CatpitAmp: signing the standalone so macOS remembers the mic grant"
+                VERBATIM)
+        endif()
     else()
         message(STATUS "Standalone signing: no '${ORBITAMP_SIGN_IDENTITY}' identity — staying ad-hoc (mic prompt every launch)")
     endif()
