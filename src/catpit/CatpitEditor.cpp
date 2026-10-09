@@ -65,10 +65,6 @@ namespace
         return x;
     }
 
-    /** STAND-INS until the cockpit's own cabinets exist: six factory IRs for COMBO to step through, the
-        shipping default first. */
-    constexpr std::array<int, 6> comboIrs { params::cabIrDefault, 0, 2, 3, 10, 11 };
-
     // Measured off the original renders (the ones that still had their pointers): where the lit slot
     // starts and ends along the radius, and how wide it is, as fractions of the knob's opaque radius.
     constexpr ArtKnob::Pointer drivePointer { 0.32f, 0.76f, 0.068f };
@@ -326,6 +322,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
     setUpChain (channels.adopt());
+    channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
 
     addAndMakeVisible (stage);
     stage.setBounds (0, 0, (int) width, (int) height);
@@ -420,7 +417,9 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     const juce::Colour lineTo[]   { orange,               orange, orange };
     for (size_t i = 0; i < sliders.size(); ++i)
     {
-        sliders[i] = std::make_unique<PlateSlider> (lineFrom[i], lineTo[i], i == 2 ? (int) comboIrs.size() : 0);
+        // COMBO has a position for every cabinet the cockpit has; a selector needs two to be one.
+        sliders[i] = std::make_unique<PlateSlider> (lineFrom[i], lineTo[i],
+                                                    i == 2 ? juce::jmax (2, channels.cabinets().size()) : 0);
         stage.addAndMakeVisible (*sliders[i]);
         sliders[i]->setBounds (sliderInsets[i].toNearestInt());
     }
@@ -463,17 +462,18 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     delayBpm = follow (params::delayBpm, [this] (float) { showDelayTime(); });
     showDelayTime();
 
-    // COMBO steps through six cabinets; the one it sits on shows by name while the hand is on it.
+    // COMBO steps through the cockpit's own cabinets; the one it sits on shows by name while the hand
+    // is on it. With fewer than two there is nothing to choose between, and it stands dim.
     auto& combo = *sliders[2];
-    combo.onStep  = [this] (int s) { chooseCombo (s); showComboTag (true); };
-    combo.onHover = [this] (bool over) { showComboTag (over); };
+    if (channels.cabinets().size() >= 2)
     {
-        const int playing = juce::roundToInt (getParam (params::cabIr));
-        const auto it = std::find (comboIrs.begin(), comboIrs.end(), playing);
-        if (it != comboIrs.end())
-            combo.setStep ((int) std::distance (comboIrs.begin(), it), false);
-        else
-            chooseCombo (0);
+        combo.onStep  = [this] (int s) { chooseCombo (s); showComboTag (true); };
+        combo.onHover = [this] (bool over) { showComboTag (over); };
+    }
+    else
+    {
+        combo.setEnabled (false);
+        combo.setAlpha (0.35f);
     }
 
     for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter, &tuner })
@@ -506,15 +506,6 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
                                                     { btDepth, Channels::depth }, { btPresence, Channels::presence } };
     for (const auto& [key, flag] : layers)
         buttons[(size_t) key]->onChange = [this, f = flag] (bool on) { channels.setFlag (f, on); };
-
-    // COMBO is set by hand, but a channel, an undo or a register moves the cabinet from under it — so
-    // the cap follows the one that is playing.
-    follow (params::cabIr, [this] (float v)
-    {
-        const auto it = std::find (comboIrs.begin(), comboIrs.end(), juce::roundToInt (v));
-        if (it != comboIrs.end())
-            sliders[2]->setStep ((int) std::distance (comboIrs.begin(), it), false);
-    });
 
     showChannel();
 
@@ -606,8 +597,7 @@ void CatpitEditor::adoptState()
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     setUpChain (channels.adopt());
-    if (std::find (comboIrs.begin(), comboIrs.end(), juce::roundToInt (getParam (params::cabIr))) == comboIrs.end())
-        chooseCombo (0);
+    channels.align();
     showChannel();
 }
 
@@ -658,6 +648,11 @@ void CatpitEditor::showChannel()
     buttons[btDepth]->setOn    (channels.flag (Channels::depth),    false);
     buttons[btPresence]->setOn (channels.flag (Channels::presence), false);
     turbo.setOn (channels.flag (Channels::turbo), false);
+
+    // COMBO's cap, on the cabinet that is playing. (This is first called while the face is still being
+    // built, before the plates exist.)
+    if (const int playing = channels.cabinet(); playing >= 0 && sliders[2] != nullptr)
+        sliders[2]->setStep (playing, false);
 }
 
 void CatpitEditor::showRegisterMenu (int index)
@@ -786,14 +781,16 @@ void CatpitEditor::setUpChain (bool firstTime)
 
 void CatpitEditor::chooseCombo (int step)
 {
-    amp.chooseCabFactory (comboIrs[(size_t) juce::jlimit (0, (int) comboIrs.size() - 1, step)]);
+    channels.chooseCabinet (step);
 }
 
 void CatpitEditor::showComboTag (bool show)
 {
     const auto& inset = layout::sliderInsets[2];
-    const auto name = params::cabIrNames[comboIrs[(size_t) sliders[2]->getStep()]];
-    cockpit.showTag ({ inset.getCentreX(), inset.getY() - 52.0f }, show ? name : juce::String());
+    const auto& cabinets = channels.cabinets();
+    const int step = sliders[2]->getStep();
+    cockpit.showTag ({ inset.getCentreX(), inset.getY() - 52.0f },
+                     show && step < cabinets.size() ? Channels::cabinetName (cabinets.getReference (step)) : juce::String());
 }
 
 template <typename Control>

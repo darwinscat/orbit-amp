@@ -4,7 +4,9 @@
 #include "CatpitChannels.h"
 
 #include "../Parameters.h"
+#include "../device/IrLibrary.h"
 
+#include <algorithm>
 #include <array>
 
 namespace orbitamp::catpit
@@ -12,10 +14,8 @@ namespace orbitamp::catpit
 
 namespace
 {
-    /** STAND-INS until the cockpit's own captures exist: four preamp packs from the library, in order
-        of gain, matched by their file name without the extension (exactly — "V4 Copper" is not
-        "V4 Copper TB"). */
-    constexpr std::array<const char*, Channels::count> packs { "IR-X Ch1", "V4 Copper", "V4 Sheriff Ch1", "V4 Kraken Ch2" };
+    /** A channel's pack is the one whose file is named after it. */
+    constexpr std::array<const char*, Channels::count> packs { "Clean", "Edge", "Crunch", "Overdrive" };
 
     constexpr std::array<const char*, Channels::numFlags> flagIds { "turbo", "fat", "bright", "depth", "presence" };
 
@@ -23,6 +23,22 @@ namespace
     const juce::Identifier recordId { "channel" };
     const juce::Identifier activeId { "active" };
     const juce::Identifier indexId  { "i" };
+    const juce::Identifier cabinetId { "cabinet" };
+
+    /** Where a build ships the cockpit's cabinets: inside the bundle, beside its devices. */
+    juce::File bundledCabinets()
+    {
+        return juce::File::getSpecialLocation (juce::File::currentApplicationFile)
+                   .getChildFile ("Contents").getChildFile ("Resources").getChildFile ("IRs");
+    }
+
+    void addCabinets (const juce::File& folder, juce::Array<juce::File>& into)
+    {
+        if (folder.isDirectory())
+            for (const auto& f : folder.findChildFiles (juce::File::findFiles, true))
+                if (device::IrLibrary::isAudioFile (f))
+                    into.add (f);
+    }
 
     constexpr int preampConsole = 1;     // the EQ link BASS / MIDDLE / TREBLE ride
 
@@ -52,7 +68,73 @@ Channels::Channels (AmpProcessor& p) : amp (p)
     kept.add (params::reverbType);
     kept.add (params::delayMix);
     kept.add (params::delayDiv);        // the note value; the tempo it is counted in is the song's, not a channel's
-    kept.add (params::cabIr);
+
+    // The cabinets: a channel keeps its own too, but by NAME — a cabinet is a file, not a parameter.
+    addCabinets (bundledCabinets(), irs);
+    addCabinets (device::IrLibrary::directory(), irs);
+    std::sort (irs.begin(), irs.end(), [] (const juce::File& x, const juce::File& y)
+    {
+        return x.getFileName().compareNatural (y.getFileName()) < 0;
+    });
+}
+
+juce::String Channels::cabinetName (const juce::File& file)
+{
+    // "03-big-bubba.wav" reads BIG BUBBA: the number is for the order, the dashes for the file system.
+    auto name = file.getFileNameWithoutExtension();
+    int digits = 0;
+    while (digits < name.length() && juce::CharacterFunctions::isDigit (name[digits]))
+        ++digits;
+    if (digits > 0 && digits < name.length())
+        name = name.substring (digits).trimCharactersAtStart ("-_. ");
+    return name.replaceCharacters ("-_", "  ").trim();
+}
+
+juce::String Channels::cabinetPlaying() const
+{
+    // A cabinet of ours plays as "the player's own IR": the state carries its key and its name.
+    if (amp.apvts.state.getProperty (params::cabIrUserKey).toString().isEmpty())
+        return {};
+    return amp.apvts.state.getProperty (params::cabIrUserName).toString();
+}
+
+int Channels::cabinet() const
+{
+    const auto playing = cabinetPlaying();
+    if (playing.isNotEmpty())
+        for (int i = 0; i < irs.size(); ++i)
+            if (irs.getReference (i).getFileNameWithoutExtension() == playing)
+                return i;
+    return -1;
+}
+
+void Channels::chooseCabinet (int index)
+{
+    if (index >= 0 && index < irs.size() && index != cabinet())
+        amp.chooseCabFile (irs.getReference (index));
+}
+
+void Channels::chooseCabinetNamed (const juce::String& stem)
+{
+    for (int i = 0; i < irs.size(); ++i)
+        if (irs.getReference (i).getFileNameWithoutExtension() == stem)
+        {
+            chooseCabinet (i);
+            return;
+        }
+    chooseCabinet (0);      // not here any more, or never chosen: the first one (nothing, if there are none)
+}
+
+void Channels::align()
+{
+    if (const int pack = packFor (active()); pack >= 0 && pack != juce::roundToInt (plain (params::preampDevice)))
+    {
+        set (params::preampDevice, (float) pack);
+        amp.settleDeviceNames();
+    }
+
+    if (cabinet() < 0)
+        chooseCabinet (0);
 }
 
 juce::ValueTree Channels::node() const
@@ -96,11 +178,7 @@ bool Channels::adopt()
             channel = c;
 
     ensureNode().setProperty (activeId, juce::jmax (0, channel), nullptr);
-    if (channel < 0 && packFor (0) >= 0)
-    {
-        set (params::preampDevice, (float) packFor (0));
-        amp.settleDeviceNames();    // the caller is settling under a suppression: the name goes in with the number
-    }
+    align();    // the first channel's pack if none of ours was playing, and a cabinet of ours — names settled with them
     return true;
 }
 
@@ -177,6 +255,12 @@ juce::ValueTree Channels::whole() const
             full.setProperty (flagIds[(size_t) f], c == playing ? flag ((Flag) f)
                                                                 : (bool) record.getProperty (flagIds[(size_t) f], false),
                               nullptr);
+
+        // The cabinet, by name; a channel never visited would open on the first.
+        const auto first = irs.isEmpty() ? juce::String() : irs.getReference (0).getFileNameWithoutExtension();
+        full.setProperty (cabinetId, c == playing ? cabinetPlaying()
+                                                  : record.hasProperty (cabinetId) ? record[cabinetId].toString() : first,
+                          nullptr);
         out.appendChild (full, nullptr);
     }
     return out;
@@ -188,6 +272,7 @@ void Channels::store (juce::ValueTree record) const
         record.setProperty (id, plain (id), nullptr);
     for (int f = 0; f < numFlags; ++f)
         record.setProperty (flagIds[(size_t) f], flag ((Flag) f), nullptr);
+    record.setProperty (cabinetId, cabinetPlaying(), nullptr);
 }
 
 void Channels::recall (const juce::ValueTree& record)
@@ -197,6 +282,7 @@ void Channels::recall (const juce::ValueTree& record)
         set (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id));
     for (int f = 0; f < numFlags; ++f)
         setFlag ((Flag) f, record.isValid() && (bool) record.getProperty (flagIds[(size_t) f], false));
+    chooseCabinetNamed (record.getProperty (cabinetId).toString());
 }
 
 float Channels::plain (const juce::String& paramId) const
@@ -217,13 +303,6 @@ float Channels::defaultOf (const juce::String& paramId) const
 
 void Channels::set (const juce::String& paramId, float value)
 {
-    // The cabinet has its own door: picking a factory IR also lets go of a player's own file.
-    if (paramId == params::cabIr)
-    {
-        amp.chooseCabFactory (juce::roundToInt (value));
-        return;
-    }
-
     if (auto* p = amp.apvts.getParameter (paramId))
         if (const float to = p->convertTo0to1 (value); ! juce::approximatelyEqual (to, p->getValue()))
             p->setValueNotifyingHost (to);

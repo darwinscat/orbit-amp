@@ -594,6 +594,23 @@ target_link_libraries(CatpitAmp PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
+# THE COCKPIT'S OWN SET rides in its bundle the way OrbitAmp's factory devices ride in OrbitAmp's:
+# whatever sits in resources/catpit/Devices (packs named after the channels — Clean, Edge, Crunch,
+# Overdrive) and resources/catpit/IRs (the cabinets COMBO steps through, in the order of their names)
+# at CONFIGURE time. Absent or empty, the bundle ships without, and the cockpit plays what the player
+# puts in its own Devices and IRs folders. It reads nothing of OrbitAmp's.
+foreach(kind IN ITEMS Devices IRs)
+    file(GLOB CATPITAMP_SET "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}/*")
+    if(CATPITAMP_SET)
+        juce_add_bundle_resources_directory(CatpitAmp_Standalone
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}")
+        list(LENGTH CATPITAMP_SET CATPITAMP_SET_COUNT)
+        message(STATUS "CatpitAmp ${kind}: ${CATPITAMP_SET_COUNT} ride in the bundle")
+    else()
+        message(STATUS "CatpitAmp ${kind}: resources/catpit/${kind}/ is empty or absent — the bundle ships without")
+    endif()
+endforeach()
+
 # Not part of the default build. The two products are released apart, and OrbitAmp's own build — a
 # contributor's, a pull request's, a release's — must never fail on the cockpit. Whoever wants the
 # cockpit asks for it by name: `cmake --build build --target CatpitAmp_Standalone`, as its release

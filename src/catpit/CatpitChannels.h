@@ -55,8 +55,29 @@ public:
     bool flag (Flag) const;
     void setFlag (Flag, bool);
 
-    /** The pack a channel plays, as an index into the preamp's library; -1 when it is not installed. */
+    /** The pack a channel plays, as an index into the preamp's library; -1 when it is not installed.
+        A channel's pack is the one whose FILE is named after the channel — Clean, Edge, Crunch,
+        Overdrive — in the cockpit's own Devices folder or in its bundle. */
     int  packFor (int channel) const;
+
+    /** THE COCKPIT'S OWN CABINETS: every IR file in its two places — inside the bundle, where a build
+        ships them, and the player's IRs folder beside its Devices — in the order of their names, so a
+        leading number is how the order is chosen. Read once, when the face opens. COMBO has as many
+        positions as there are of them. */
+    const juce::Array<juce::File>& cabinets() const noexcept { return irs; }
+
+    /** The one that is playing, as an index into cabinets(); -1 when the sound's cabinet is none of them. */
+    int  cabinet() const;
+    void chooseCabinet (int index);
+
+    /** A cabinet's name as the panel says it: the file's, without its leading number. */
+    static juce::String cabinetName (const juce::File&);
+
+    /** Makes the sound agree with what the state says about itself: the playing channel's pack, and a
+        cabinet that is one of the cockpit's. The folders are the player's to change between sessions,
+        and a state remembers a pack by a name and a cabinet by its bytes — either may be one the
+        cockpit no longer has. Writes; the caller decides whether that is an edit. */
+    void align();
 
     /** The type of the cockpit's node in the state tree. */
     static constexpr const char* nodeType = "catpit";
@@ -74,6 +95,10 @@ public:
 private:
     AmpProcessor& amp;
     juce::StringArray kept;      // the parameters a channel remembers
+    juce::Array<juce::File> irs; // the cockpit's cabinets, in order
+
+    juce::String cabinetPlaying() const;                  // its file's name without the extension; empty when none of ours
+    void chooseCabinetNamed (const juce::String& stem);   // ...or the first, when that one is not here
 
     juce::ValueTree node() const;
     juce::ValueTree ensureNode();
