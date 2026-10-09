@@ -1169,4 +1169,8 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };
 
+/** The face a build opens. One processor, two faces: OrbitAmp's comes from PluginEditor.cpp, the
+    cockpit's from catpit/CatpitEditor.cpp, and each target compiles exactly one of them. */
+juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
+
 } // namespace orbitamp

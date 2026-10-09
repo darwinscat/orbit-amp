@@ -509,6 +509,73 @@ target_link_libraries(OrbitAmp PRIVATE
 )
 
 # ----------------------------------------------------------------------------
+# CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and two
+# faces, each target compiling exactly one `makeEditor`. A PROTOTYPE: Standalone only, and its art is
+# read at run time from a private folder — the renders are not in this public repository. Without that
+# folder the target is not made at all, so nobody else's build (CI included) ever meets it.
+# ----------------------------------------------------------------------------
+set(ORBITAMP_CATPIT_ART_DIR "$ENV{HOME}/IdeaProjects/orbit-amp/.private/catpit-art"
+    CACHE PATH "The cockpit's renders (private, never committed); missing skips CatpitAmp")
+if(ORBITAMP_CATPIT_ART_DIR AND EXISTS "${ORBITAMP_CATPIT_ART_DIR}/bg.png")
+    message(STATUS "CatpitAmp: art from ${ORBITAMP_CATPIT_ART_DIR}")
+    juce_add_plugin(CatpitAmp
+        PRODUCT_NAME                "CatpitAmp"
+        COMPANY_NAME                "Darwin's Cat"
+        BUNDLE_ID                   "com.darwinscat.catpitamp"
+        PLUGIN_MANUFACTURER_CODE    Dcat
+        PLUGIN_CODE                 Ctpt
+        FORMATS                     Standalone
+        IS_SYNTH                    FALSE
+        NEEDS_MIDI_INPUT            FALSE
+        NEEDS_MIDI_OUTPUT           FALSE
+        IS_MIDI_EFFECT              FALSE
+        EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+        MICROPHONE_PERMISSION_ENABLED TRUE
+        MICROPHONE_PERMISSION_TEXT  "CatpitAmp needs audio input to process your signal."
+        COPY_PLUGIN_AFTER_BUILD     FALSE)
+
+    target_sources(CatpitAmp PRIVATE
+        src/PluginProcessor.cpp
+        src/Parameters.cpp
+        src/ui/Theme.cpp
+        src/catpit/CatpitArt.cpp
+        src/catpit/CatpitControls.cpp
+        src/catpit/CatpitSpace.cpp
+        src/catpit/CatpitEditor.cpp)
+
+    target_compile_definitions(CatpitAmp PUBLIC
+        ORBITAMP_VERSION="${PROJECT_VERSION}"
+        CATPIT_ART_DIR="${ORBITAMP_CATPIT_ART_DIR}"
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0
+        JUCE_DISPLAY_SPLASH_SCREEN=0)
+    target_include_directories(CatpitAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")
+    add_dependencies(CatpitAmp OrbitAmpVersionGen)
+
+    target_link_libraries(CatpitAmp PRIVATE
+        OrbitAmpData
+        felitronics::analysis
+        felitronics::appkit
+        felitronics::appkit_webp
+        felitronics::core
+        felitronics::dynamics
+        felitronics::eq
+        felitronics::lineareq
+        felitronics::convolution
+        felitronics::measurement
+        felitronics::nam
+        felitronics::rigplayer
+        juce::juce_audio_utils
+        juce::juce_dsp
+        juce::juce_data_structures
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
+else()
+    message(STATUS "CatpitAmp: no art at ${ORBITAMP_CATPIT_ART_DIR} — the cockpit is not built")
+endif()
+
+# ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.

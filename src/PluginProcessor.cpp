@@ -2,7 +2,6 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "PluginProcessor.h"
-#include "PluginEditor.h"
 #include "Parameters.h"
 #include "device/IrLibrary.h"
 
@@ -1565,7 +1564,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
 juce::AudioProcessorEditor* AmpProcessor::createEditor()
 {
-    return new AmpEditor (*this);
+    return makeEditor (*this);
 }
 
 } // namespace orbitamp

@@ -646,4 +646,9 @@ void AmpEditor::resized()
 
 }
 
+juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
+{
+    return new AmpEditor (p);
+}
+
 } // namespace orbitamp

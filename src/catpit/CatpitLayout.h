@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
+#pragma once
+
+#include <juce_graphics/juce_graphics.h>
+
+#include <array>
+
+/** Where everything sits, in the background render's own coordinates (1672 x 941). Measured off the
+    render — the violet rings fitted as circles, the orange frames and the dark wells as boxes — not
+    guessed, so a control lands in the socket that was painted for it. The window scales this space as
+    a whole; a re-render at another resolution keeps these numbers as long as it keeps the composition. */
+namespace orbitamp::catpit::layout
+{
+
+inline constexpr float width  = 1672.0f;
+inline constexpr float height = 941.0f;
+
+/** The smallest the window may get. Every label below is sized so that at THIS scale it is still 13 px —
+    nothing a player reads goes smaller (CLAUDE.md). */
+inline constexpr int   minWindowWidth = 1280;
+inline constexpr float minScale       = (float) minWindowWidth / width;
+inline constexpr float px13           = 13.0f / minScale;   // a 13-px label, in this space
+inline constexpr float px15           = 15.0f / minScale;
+
+inline const juce::Point<float> windshieldSeed { 836.0f, 164.0f };
+inline const juce::Rectangle<float> windshield { 152.0f, 60.0f, 1368.0f, 210.0f };
+
+struct Socket { juce::Point<float> centre; float radius; };
+
+inline const Socket drive  { { 653.6f, 503.6f }, 92.4f };
+inline const std::array<Socket, 3> tones {{
+    { { 1060.3f, 501.4f }, 62.2f },    // BASS
+    { { 1209.6f, 501.5f }, 62.4f },    // MIDDLE
+    { { 1358.7f, 501.4f }, 61.9f },    // TREBLE
+}};
+
+inline const juce::Rectangle<float> leverFrame { 254.0f, 376.0f, 261.0f, 217.0f };
+inline const juce::Rectangle<float> turboFrame { 799.0f, 415.0f, 165.0f, 180.0f };
+
+inline const std::array<juce::Rectangle<float>, 3> sliderInsets {{
+    { 258.0f, 660.0f, 342.0f, 53.0f },     // REVERB
+    { 665.0f, 660.0f, 345.0f, 53.0f },     // DELAY AMOUNT
+    { 1073.0f, 660.0f, 341.0f, 53.0f },    // COMBO
+}};
+
+/** The six holes in the overhead panel, left to right. */
+inline const std::array<juce::Point<float>, 6> holes {{
+    { 626.0f, 60.0f }, { 726.0f, 60.0f }, { 834.0f, 60.0f }, { 901.0f, 60.0f }, { 967.0f, 60.0f }, { 1035.0f, 60.0f },
+}};
+inline constexpr float holeRadius = 12.0f;
+
+// Each side column holds two wells: the narrow one a meter, the wide one a fader's slot.
+inline const juce::Rectangle<float> inMeter  { 47.0f,   383.0f, 53.0f, 350.0f };
+inline const juce::Rectangle<float> inFader  { 116.0f,  383.0f, 65.0f, 350.0f };
+inline const juce::Rectangle<float> outMeter { 1493.0f, 383.0f, 53.0f, 350.0f };
+inline const juce::Rectangle<float> outFader { 1562.0f, 383.0f, 65.0f, 350.0f };
+
+inline const juce::Rectangle<float> tunerScreen { 635.0f, 799.0f, 402.0f, 104.0f };
+
+} // namespace orbitamp::catpit::layout
