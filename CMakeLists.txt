@@ -524,7 +524,8 @@ juce_add_binary_data(CatpitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-closed.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-open.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-on.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/fader-cap.png")
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/fader-cap.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/mark.svg")
 
 # RELEASED APART FROM ORBITAMP, from the same tree: a version of its own, and tags of its own —
 # `catpit-vX.Y.Z` beside OrbitAmp's `vX.Y.Z` — so neither waits for the other and a fix in the engine

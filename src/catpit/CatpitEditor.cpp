@@ -7,6 +7,7 @@
 #include "../Parameters.h"
 #include "../ui/AboutConfig.h"
 
+#include <CatpitData.h>
 #include <felitronics/appkit/BrandAssets.h>
 #include <felitronics/appkit/TextPrompt.h>
 
@@ -74,6 +75,26 @@ namespace
 
     /** The cockpit's own tag on a family link, for the site's analytics. */
     constexpr const char* campaign = "utm_source=catpitamp&utm_medium=plugin";
+
+    /** THE BUILD WINDOW, AS THE COCKPIT'S. What the build is and what it was built against is the same
+        for both faces of the processor (aboutConfig); what is the cockpit's own is its name, its mark —
+        a small starship head-on, its fins a cat's ears — and its name where the notice says whose
+        product this is. The window outlives the badge that opens it, so the mark is shared, not lent. */
+    felitronics::appkit::VersionBadge::Config aboutTheCockpit()
+    {
+        auto config = aboutConfig ("CatpitAmp", "https://darwinscat.com", campaign);
+
+        std::shared_ptr<juce::Drawable> mark { juce::Drawable::createFromImageData (
+            CatpitData::mark_svg, (size_t) CatpitData::mark_svgSize).release() };
+
+        config.drawMark = [mark] (juce::Graphics& g, float cx, float cy, float d)
+        {
+            if (mark != nullptr)
+                mark->drawWithin (g, { cx - d * 0.5f, cy - d * 0.5f, d, d }, juce::RectanglePlacement::centred, 1.0f);
+        };
+        config.notice = config.notice.replace ("OrbitAmp", "CatpitAmp");
+        return config;
+    }
 
     /** A turning arrow — three quarters of a circle with a head on its open end. Forward turns
         clockwise (redo); back is its mirror (undo). */
@@ -312,7 +333,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
       tuner (p.tunerEar),
       version (layout::px13),
-      about (p.updateChecker(), aboutConfig ("CatpitAmp", "https://darwinscat.com", campaign), p.pluginFormat()),
+      about (p.updateChecker(), aboutTheCockpit(), p.pluginFormat()),
       presetDoor (layout::px13)
 {
     using namespace layout;
