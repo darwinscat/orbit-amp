@@ -431,6 +431,11 @@ void GuardButton::setOn (bool v, bool notify)
         return;
     on = v;
     glow.target = on ? 1.0f : 0.0f;
+    if (on && ! open)       // switched on from elsewhere — a recalled channel: the guard is up too
+    {
+        open = true;
+        lid.target = 1.0f;
+    }
     startTimerHz (60);
     if (notify && onChange)
         onChange (on);

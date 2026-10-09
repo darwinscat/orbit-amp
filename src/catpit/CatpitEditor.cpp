@@ -63,12 +63,8 @@ namespace
         return x;
     }
 
-    /** STAND-INS until the cockpit's own captures exist: four preamp packs from the library, in order
-        of gain, matched by their file name without the extension (exactly — "V4 Copper" is not
-        "V4 Copper TB"). */
-    constexpr std::array<const char*, 4> leverPacks { "IR-X Ch1", "V4 Copper", "V4 Sheriff Ch1", "V4 Kraken Ch2" };
-
-    /** ...and six factory cabinets for COMBO to step through, the shipping default first. */
+    /** STAND-INS until the cockpit's own cabinets exist: six factory IRs for COMBO to step through, the
+        shipping default first. */
     constexpr std::array<int, 6> comboIrs { params::cabIrDefault, 0, 2, 3, 10, 11 };
 
     // Measured off the original renders (the ones that still had their pointers): where the lit slot
@@ -296,7 +292,7 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 
 //==============================================================================
 CatpitEditor::CatpitEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p),
+    : juce::AudioProcessorEditor (&p), amp (p), channels (p),
       drive (Art::get().knobDrive, drivePointer),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
@@ -309,6 +305,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
     setUpChain();
+    channels.adopt();
 
     addAndMakeVisible (stage);
     stage.setBounds (0, 0, (int) width, (int) height);
@@ -372,8 +369,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     amp.history.onHistoryChanged = [this] { refreshHistory(); };
     refreshHistory();
 
-    // The throttle picks the pack; where it starts is wherever the pack already playing sits, if it is one of
-    // the four.
+    // The throttle picks the channel — its pack, and everything that channel was left with.
     stage.addAndMakeVisible (lever);
     lever.setBounds (leverFrame.toNearestInt().withLeft (juce::roundToInt (leverFrame.getX()) - Lever::overhang));
     lever.onTravel = [this] (float pos)
@@ -385,27 +381,18 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     };
     lever.onDetent = [this] (int d)
     {
-        buttons[btFat]->setEnabled (d >= 2);
-        choosePack (d);
+        channels.select (d);
+        showChannel();
     };
-    int startDetent = -1;
-    for (int d = 0; d < Lever::numDetents; ++d)
-        if (packIndexFor (d) >= 0 && packIndexFor (d) == juce::roundToInt (getParam (params::preampDevice)))
-            startDetent = d;
-    if (startDetent < 0)
-    {
-        startDetent = 0;
-        choosePack (0);
-    }
     // A prototype's hook for looking at the window at speed without a hand on the lever.
     if (const auto d = juce::SystemStats::getEnvironmentVariable ("CATPIT_DETENT", {}); d.isNotEmpty())
-        startDetent = d.getIntValue();
-    lever.setDetent (startDetent, false);
-    buttons[btFat]->setEnabled (lever.getDetent() >= 2);
+        channels.select (d.getIntValue());
+    lever.setDetent (channels.active(), false, false);
 
-    // TURBO moves but drives nothing: it will be a layer inside the pack.
+    // TURBO moves and is remembered, but drives nothing yet: it will be a layer inside the pack.
     stage.addAndMakeVisible (turbo);
     turbo.setBounds (turboFrame.toNearestInt());
+    turbo.onChange = [this] (bool on) { channels.setFlag (Channels::turbo, on); };
 
     const juce::Colour lineFrom[] { orange.darker (0.3f), violet, orange.darker (0.3f) };
     const juce::Colour lineTo[]   { orange,               orange, orange };
@@ -451,28 +438,25 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     bind (*tones[1], params::eqBellDb (preampConsole, 0));
     bind (*tones[2], params::eqHiDb (preampConsole));
 
-    // HPF and LPF switch the cabinet's own cut filters in and out; FAT, BRIGHT, DEPTH and PRESENCE wait
-    // for the layers the packs will carry.
+    // HPF and LPF switch the cabinet's own cut filters in and out; FAT, BRIGHT, DEPTH and PRESENCE are
+    // kept with the channel and wait for the layers the packs will carry.
     bindButton (*buttons[btHpf], params::cabHpfOn);
     bindButton (*buttons[btLpf], params::cabLpfOn);
+    const std::pair<int, Channels::Flag> layers[] { { btFat, Channels::fat }, { btBright, Channels::bright },
+                                                    { btDepth, Channels::depth }, { btPresence, Channels::presence } };
+    for (const auto& [key, flag] : layers)
+        buttons[(size_t) key]->onChange = [this, f = flag] (bool on) { channels.setFlag (f, on); };
 
-    // The throttle and COMBO are set by hand, but an undo moves what they chose from under them — so
-    // they follow: the lever to the detent whose pack is playing, the cap to the cabinet that is.
-    follow (params::preampDevice, [this] (float v)
-    {
-        for (int d = 0; d < Lever::numDetents; ++d)
-            if (packIndexFor (d) == juce::roundToInt (v) && ! lever.isHeld())
-            {
-                lever.setDetent (d, true, false);
-                buttons[btFat]->setEnabled (d >= 2);
-            }
-    });
+    // COMBO is set by hand, but a channel, an undo or a register moves the cabinet from under it — so
+    // the cap follows the one that is playing.
     follow (params::cabIr, [this] (float v)
     {
         const auto it = std::find (comboIrs.begin(), comboIrs.end(), juce::roundToInt (v));
         if (it != comboIrs.end())
             sliders[2]->setStep ((int) std::distance (comboIrs.begin(), it), false);
     });
+
+    showChannel();
 
     if (juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu"))
         useCpuSky();
@@ -513,6 +497,25 @@ void CatpitEditor::refreshHistory()
     cockpit.setHistory (history.canUndo(), history.canRedo(), history.active());
     for (int r = 0; r < numRegisterKeys; ++r)
         overhead[(size_t) (ovFirstRegister + r)]->setOn (r == history.active(), false);
+
+    showChannel();   // an undo, a redo or another register may have brought a different channel with it
+}
+
+/** Puts the face where the state is: the lever in the playing channel's detent, and the controls that
+    live in the channels' node rather than in a parameter. Reads only — it is called from inside the
+    history's own callbacks. */
+void CatpitEditor::showChannel()
+{
+    const int channel = channels.active();
+    if (! lever.isHeld() && lever.getDetent() != channel)
+        lever.setDetent (channel, true, false);
+
+    buttons[btFat]->setEnabled (channel >= 2);
+    buttons[btFat]->setOn      (channels.flag (Channels::fat),      false);
+    buttons[btBright]->setOn   (channels.flag (Channels::bright),   false);
+    buttons[btDepth]->setOn    (channels.flag (Channels::depth),    false);
+    buttons[btPresence]->setOn (channels.flag (Channels::presence), false);
+    turbo.setOn (channels.flag (Channels::turbo), false);
 }
 
 void CatpitEditor::showRegisterMenu (int index)
@@ -595,22 +598,6 @@ void CatpitEditor::setUpChain()
     // HPF / LPF are on-off: the corners and slopes stay where OrbitCab puts them until set by ear.
     setParam (params::cabHpfHz, params::cabHpfDefaultHz);
     setParam (params::cabLpfHz, params::cabLpfDefaultHz);
-}
-
-int CatpitEditor::packIndexFor (int detent) const
-{
-    const auto& packs = amp.preamp.packs;
-    for (int i = 0; i < packs.size(); ++i)
-        if (packs.getReference (i).location.getFileName().upToFirstOccurrenceOf (".", false, false)
-                .equalsIgnoreCase (leverPacks[(size_t) detent]))
-            return i;
-    return -1;
-}
-
-void CatpitEditor::choosePack (int detent)
-{
-    if (const int i = packIndexFor (detent); i >= 0)
-        setParam (params::preampDevice, (float) i);
 }
 
 void CatpitEditor::chooseCombo (int step)

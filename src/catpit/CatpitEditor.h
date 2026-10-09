@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../PluginProcessor.h"
+#include "CatpitChannels.h"
 #include "CatpitControls.h"
 #include "CatpitGlSky.h"
 #include "CatpitSpace.h"
@@ -65,6 +66,7 @@ public:
 
 private:
     AmpProcessor& amp;
+    Channels channels;
 
     juce::Component stage;
     Space   space;
@@ -99,8 +101,7 @@ private:
     void setUpChain();
     void refreshHistory();
     void showRegisterMenu (int index);
-    int  packIndexFor (int detent) const;
-    void choosePack (int detent);
+    void showChannel();
     void chooseCombo (int step);
     void showComboTag (bool show);
 
