@@ -73,6 +73,9 @@ namespace
 
     const juce::Colour labelLilac { 0xffc9b8f5 };
 
+    /** Whether the sky flies on the GPU — a setting of the machine's, in the cockpit's settings file. */
+    const juce::Identifier gpuSkyKey { "gpuSky" };
+
     /** The cockpit's own tag on a family link, for the site's analytics. */
     constexpr const char* campaign = "utm_source=catpitamp&utm_medium=plugin";
 
@@ -563,25 +566,15 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     timerCallback();
     startTimerHz (4);   // both dots are a lookup, a few times a second: nobody needs either sooner
 
-    if (juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu"))
-        useCpuSky();
-    else
-    {
-        space.setVisible (false);
-        glSky = std::make_unique<GlSky> (gl);
-        glSky->setThrottle ((float) lever.getDetent() / (float) (Lever::numDetents - 1));
-        gl.setRenderer (glSky.get());
-        gl.setComponentPaintingEnabled (true);
-        gl.setContinuousRepainting (true);
-        gl.attachTo (*this);
+    // The sky flies on the GPU unless the player has said otherwise (or CATPIT_SKY=cpu says so for this
+    // run): the choice is the machine's, not the sound's, so it lives with the settings, not the state.
+    gpuSky = prefs::getBool (gpuSkyKey, true)
+             && ! juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu");
+    applySky();
 
-        // A shader that will not build on this machine leaves the window dark; look once, and fall back.
-        juce::Timer::callAfterDelay (800, [safe = juce::Component::SafePointer<CatpitEditor> (this)]
-        {
-            if (safe != nullptr && safe->glSky != nullptr && safe->glSky->failed())
-                safe->useCpuSky();
-        });
-    }
+    // A right click on the bare panel is the door to the settings; the panel is the stage itself,
+    // since the cockpit's picture over it lets every click through.
+    stage.addMouseListener (this, false);
 
     // The keys. A click anywhere on the face brings the focus here, since nothing on it wants the
     // keyboard for itself; and the face takes it once when it first comes up, so the keys answer
@@ -748,11 +741,115 @@ void CatpitEditor::placeSky()
     }
 }
 
-void CatpitEditor::useCpuSky()
+/** Puts up the sky the choice and the machine allow: the shader on the GPU, or the CPU's stars. */
+void CatpitEditor::applySky()
 {
-    gl.detach();
-    glSky.reset();
-    space.setVisible (true);
+    const bool wantGpu = gpuSky && ! gpuBroken;
+
+    if (wantGpu && glSky == nullptr)
+    {
+        glSky = std::make_unique<GlSky> (gl);
+        glSky->setThrottle ((float) lever.getDetent() / (float) (Lever::numDetents - 1));
+        gl.setRenderer (glSky.get());
+        gl.setComponentPaintingEnabled (true);
+        gl.setContinuousRepainting (true);
+        gl.attachTo (*this);
+
+        // A shader that will not build on this machine leaves the window dark; look once, and fall back.
+        juce::Timer::callAfterDelay (800, [safe = juce::Component::SafePointer<CatpitEditor> (this)]
+        {
+            if (safe != nullptr && safe->glSky != nullptr && safe->glSky->failed())
+            {
+                safe->gpuBroken = true;
+                safe->applySky();
+            }
+        });
+    }
+    else if (! wantGpu && glSky != nullptr)
+    {
+        gl.detach();
+        gl.setRenderer (nullptr);
+        glSky.reset();
+    }
+
+    space.setVisible (glSky == nullptr);
+    placeSky();
+}
+
+void CatpitEditor::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())
+        showSettingsMenu();
+}
+
+/** THE SETTINGS — what is set once for the machine and the room. The gate and the stereo mode are the
+    engine's own and are part of the sound; the GPU switch is this machine's and is not. */
+void CatpitEditor::showSettingsMenu()
+{
+    enum : int { itemGpu = 1, itemGateOn, firstStereo = 10, firstDecay = 20, firstPos = 30, firstThreshold = 100 };
+
+    const auto itemFor = [] (const juce::String& text, int id, bool ticked, bool enabled = true)
+    {
+        juce::PopupMenu::Item item (text);
+        item.itemID    = id;
+        item.colour    = lilac;
+        item.isTicked  = ticked;
+        item.isEnabled = enabled;
+        return item;
+    };
+    const auto choice = [this] (const char* id) { return juce::roundToInt (getParam (id)); };
+
+    juce::PopupMenu menu;
+
+    menu.addSectionHeader ("SKY");
+    menu.addItem (itemFor (gpuBroken ? "On the GPU (OpenGL) — not available here" : "On the GPU (OpenGL)",
+                           itemGpu, gpuSky && ! gpuBroken, ! gpuBroken));
+
+    menu.addSectionHeader ("OUTPUT");
+    for (int i = 0; i < params::stereoModes.size(); ++i)
+        menu.addItem (itemFor (params::stereoModes[i], firstStereo + i, choice (params::stereoMode) == i));
+
+    // The gate: whether it stands in the chain, where it closes, how fast, and where it mutes.
+    menu.addSectionHeader ("GATE");
+    const bool gateIsOn = getParam (params::gateOn) > 0.5f;
+    menu.addItem (itemFor ("On", itemGateOn, gateIsOn));
+
+    juce::PopupMenu threshold;
+    const int now = juce::roundToInt (getParam (params::gateThreshold));
+    for (int db = -80; db <= -10; db += 5)
+        threshold.addItem (itemFor (juce::String (db) + " dB", firstThreshold + (db + 80), std::abs (now - db) <= 2));
+    menu.addSubMenu ("Threshold  " + juce::String (now) + " dB", threshold, gateIsOn);
+
+    juce::PopupMenu decay;
+    for (int i = 0; i < params::gateDecayModes.size(); ++i)
+        decay.addItem (itemFor (params::gateDecayModes[i], firstDecay + i, choice (params::gateDecay) == i));
+    menu.addSubMenu ("Closes  " + params::gateDecayModes[choice (params::gateDecay)], decay, gateIsOn);
+
+    juce::PopupMenu position;
+    for (int i = 0; i < params::gatePositions.size(); ++i)
+        position.addItem (itemFor (params::gatePositions[i], firstPos + i, choice (params::gatePos) == i));
+    menu.addSubMenu ("Mutes at  " + params::gatePositions[choice (params::gatePos)], position, gateIsOn);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+                        [safe = juce::Component::SafePointer<CatpitEditor> (this), gateIsOn] (int picked)
+                        {
+                            if (safe == nullptr || picked <= 0)
+                                return;
+                            auto& e = *safe;
+                            e.endTapping();
+
+                            if (picked == itemGpu)
+                            {
+                                e.gpuSky = ! e.gpuSky;
+                                prefs::setBool (gpuSkyKey, e.gpuSky);
+                                e.applySky();
+                            }
+                            else if (picked == itemGateOn)             e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);
+                            else if (picked >= firstThreshold)         e.setParam (params::gateThreshold, (float) (picked - firstThreshold - 80));
+                            else if (picked >= firstPos)               e.setParam (params::gatePos, (float) (picked - firstPos));
+                            else if (picked >= firstDecay)             e.setParam (params::gateDecay, (float) (picked - firstDecay));
+                            else if (picked >= firstStereo)            e.setParam (params::stereoMode, (float) (picked - firstStereo));
+                        });
 }
 
 void CatpitEditor::setParam (const char* paramId, float value)
@@ -774,6 +871,7 @@ void CatpitEditor::setUpChain (bool firstTime)
 {
     setParam (params::tunerPresent,  1.0f);   // the tuner bay is always there, and always listening
     setParam (params::tunerOn,       1.0f);
+    setParam (params::gatePresent,   1.0f);   // the gate stands in the chain; whether it works is the settings' ON
     setParam (params::inPresent,     1.0f);   // the INPUT and OUTPUT faders are these links' trims
     setParam (params::inOn,          1.0f);
     setParam (params::outPresent,    1.0f);

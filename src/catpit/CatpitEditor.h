@@ -71,6 +71,11 @@ public:
     /** Cmd+Z and Cmd+Shift+Z step the history; 1 2 3 4 pull the throttle to a channel. */
     bool keyPressed (const juce::KeyPress&) override;
 
+    /** A right click on the panel itself — anywhere that is not a control — opens the cockpit's
+        settings: the things a player sets once for the machine and the room, which have no place of
+        their own on the console. */
+    void mouseDown (const juce::MouseEvent&) override;
+
 private:
     AmpProcessor& amp;
     Channels channels;
@@ -86,8 +91,11 @@ private:
     // The sky on the GPU when it can be; the CPU Space stays as the fallback (and with CATPIT_SKY=cpu).
     juce::OpenGLContext gl;
     std::unique_ptr<GlSky> glSky;
-    void useCpuSky();
+    bool gpuSky    = true;       // the player's choice, kept with the machine's settings
+    bool gpuBroken = false;      // the sky's shader would not build here: the choice is moot
+    void applySky();
     void placeSky();
+    void showSettingsMenu();
 
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, 3> tones;
