@@ -741,6 +741,18 @@ if(APPLE)
     else()
         message(STATUS "Standalone signing: no '${ORBITAMP_SIGN_IDENTITY}' identity — staying ad-hoc (mic prompt every launch)")
     endif()
+
+    # A REBUILD NEVER MOVES THE BUNDLE'S OWN DATE — only what is inside it changes — and that date is
+    # what macOS keys its icon cache on. A bundle first built before it had an icon kept the blank
+    # placeholder in the Dock and the app switcher for good, with the right icon sitting inside it.
+    # So the bundle is touched after every build, and the system looks again.
+    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone)
+        if(TARGET ${standalone})
+            add_custom_command(TARGET ${standalone} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E touch_nocreate "$<TARGET_BUNDLE_DIR:${standalone}>"
+                VERBATIM)
+        endif()
+    endforeach()
 endif()
 
 # ----------------------------------------------------------------------------
