@@ -25,8 +25,9 @@ namespace orbitamp::scope
 class WaveView
 {
 public:
+    /** `bare` — see EnvelopeView: no rules, and both waveforms as lines, their crests alone. */
     void paint (juce::Graphics& g, juce::Rectangle<float> r, core::WaveRibbon& ribbon,
-                bool halfWave = false)
+                bool halfWave = false, bool bare = false)
     {
         const int pixels = juce::jmax (2, (int) r.getWidth());
         ribbon.setResolution (pixels);
@@ -44,6 +45,9 @@ public:
         // The dB grid the scale earns: this view reads in decibels now, so it says so.
         for (float db : { -20.0f, -40.0f, -60.0f })
         {
+            if (bare)
+                break;
+
             const float t = (db - floorDb) / -floorDb;
 
             g.setColour (theme::hair);
@@ -96,6 +100,34 @@ public:
             // with no thickness disappears. The approach to a note is worth seeing.
             g.strokePath (p, juce::PathStrokeType (filled ? 1.0f : 1.4f));
         };
+
+        // BARE: the crests alone, as open lines — the top one, and in the mirrored picture the bottom
+        // one too. Nothing is filled and nothing runs along the baseline.
+        if (bare)
+        {
+            auto crest = [&] (auto pick, juce::Colour c)
+            {
+                juce::Path p;
+                p.startNewSubPath (r.getX() - phase, mid - shape (at (pick, 0)) * half);
+                for (int x = 1; x <= pixels; ++x)
+                    p.lineTo (r.getX() + (float) x - phase, mid - shape (at (pick, x)) * half);
+                g.setColour (c);
+                g.strokePath (p, juce::PathStrokeType (1.4f));
+            };
+
+            if (halfWave)
+            {
+                crest ([this] (int i) { const auto& c = columns[(size_t) i]; return juce::jmax (c.dryHi, -c.dryLo); }, theme::orange);
+                crest ([this] (int i) { const auto& c = columns[(size_t) i]; return juce::jmax (c.wetHi, -c.wetLo); }, theme::lilac);
+                return;
+            }
+
+            crest ([this] (int i) { return columns[(size_t) i].dryHi; }, theme::orange);
+            crest ([this] (int i) { return columns[(size_t) i].dryLo; }, theme::orange);
+            crest ([this] (int i) { return columns[(size_t) i].wetHi; }, theme::lilac);
+            crest ([this] (int i) { return columns[(size_t) i].wetLo; }, theme::lilac);
+            return;
+        }
 
         if (halfWave)
         {
