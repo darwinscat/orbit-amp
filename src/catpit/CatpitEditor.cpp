@@ -6,6 +6,7 @@
 
 #include "../Parameters.h"
 #include "../ui/AboutConfig.h"
+#include "../ui/LoadBreakdown.h"
 
 #include <CatpitData.h>
 #include <felitronics/appkit/BrandAssets.h>
@@ -574,11 +575,11 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     stage.addAndMakeVisible (version);
     version.setBounds (around (versionPlate, 124.0f, 30.0f));
 
-    // CPU, on the plate under the grille. It is a reading, not a control: a click there is a click on
-    // the panel.
+    // CPU, on the plate under the grille. A click opens what the number is made of — the window
+    // OrbitAmp's footer opens from its DSP figure.
     load.nameColour = labelLilac.withAlpha (0.85f);
     load.fromLeft = true;
-    load.setInterceptsMouseClicks (false, false);
+    load.onClick = [this] { openLoadBreakdown (amp, load.getScreenBounds()); };
     stage.addAndMakeVisible (load);
     load.setBounds (loadPlate.toNearestInt());
 

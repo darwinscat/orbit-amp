@@ -154,7 +154,8 @@ private:
     felitronics::appkit::VersionBadge about;
 
     // CPU on the plate under the grille: the share of each audio block's time the engine spends —
-    // the number OrbitAmp's footer calls DSP. Read only; it warms as it climbs.
+    // the number OrbitAmp's footer calls DSP. It warms as it climbs, and a click opens the same
+    // stage-by-stage window (ui/LoadBreakdown.h).
     Legend load;
 
     // PRESET on the mirrored plate: the one word, the family's orange dot beside it while the sound has
