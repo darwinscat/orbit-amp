@@ -12,7 +12,7 @@ namespace orbitamp::catpit
 {
 
 /** WHAT IS OUTSIDE THE WINDSHIELD. Stars coming at you and nebulae drifting past; the throttle sets the
-    speed, from a cruise at NORMAL to the edge of light at OVERDRIVE, and the ship spools up and down
+    speed, from a cruise at CLEAN to the edge of light at OVERDRIVE, and the ship spools up and down
     rather than jumping. Drawn on the CPU with the ordinary 2D renderer — a first look at the idea; the
     volumetric nebula belongs on the GPU once the idea is kept. Runs only while the window is on screen. */
 class Space final : public juce::Component
@@ -20,7 +20,7 @@ class Space final : public juce::Component
 public:
     Space();
 
-    /** 0 = NORMAL .. 1 = OVERDRIVE, continuous (the lever's travel, not just its detents). */
+    /** 0 = CLEAN .. 1 = OVERDRIVE, continuous (the lever's travel, not just its detents). */
     void setThrottle (float t) noexcept { throttle = juce::jlimit (0.0f, 1.0f, t); }
 
     void paint (juce::Graphics&) override;
