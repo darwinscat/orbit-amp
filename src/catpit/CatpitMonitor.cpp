@@ -17,38 +17,16 @@ namespace
 {
     constexpr int preampBlock   = 1;     // the processor's second captured block, and its console's link
     constexpr double displayRate = 48000.0;
-
-    DeviceScope::Mode scopeModeFor (Monitor::View v)
-    {
-        switch (v)
-        {
-            case Monitor::View::wave:      return DeviceScope::Mode::wave;
-            case Monitor::View::shape:     return DeviceScope::Mode::shape;
-            case Monitor::View::envelope:  return DeviceScope::Mode::envelope;
-            case Monitor::View::transfer:  return DeviceScope::Mode::transfer;
-            case Monitor::View::stars:
-            case Monitor::View::spectrum:
-            case Monitor::View::numViews:  break;
-        }
-        return DeviceScope::Mode::wave;
-    }
-
-    bool isScopeView (Monitor::View v)
-    {
-        return v == Monitor::View::wave || v == Monitor::View::shape
-            || v == Monitor::View::envelope || v == Monitor::View::transfer;
-    }
 }
 
 const juce::StringArray& Monitor::names()
 {
-    static const juce::StringArray all { "Stars", "Spectrum", "Wave", "Shape", "Envelope", "Transfer" };
+    static const juce::StringArray all { "Stars only", "Spectrum", "Wave", "Shape", "Envelope", "Transfer" };
     return all;
 }
 
 Monitor::Monitor (AmpProcessor& p) : amp (p)
 {
-    setOpaque (true);
     setInterceptsMouseClicks (false, false);    // a right click on the glass is still a click on the panel
     setVisible (false);
     console.prepare (displayRate, 1);
@@ -59,55 +37,31 @@ void Monitor::show (View v)
     view = v;
     setVisible (v != View::stars);
 
-    if (isScopeView (v))
-    {
-        if (scope == nullptr)
-        {
-            // OrbitAmp's scope asks for the tone curve only for its own TONE page, which the cockpit
-            // does not put up — its spectrum is drawn here, with the before beside the after.
-            scope = std::make_unique<DeviceScope> (amp.preamp.scope, amp.preamp.ribbon, [] (double) { return 0.0; });
-            scope->waveHalf = true;
-            addChildComponent (*scope);
-            resized();
-        }
-        scope->setSampleRate (amp.currentSampleRate());
-        scope->setMode (scopeModeFor (v));
-    }
-
-    if (scope != nullptr)
-        scope->setVisible (isScopeView (v));
-
-    if (v == View::spectrum)
-        startTimerHz (30);
-    else
-        stopTimer();
+    // The spectrum arrives in frames; the wave slides, and at less than this it reads as a slideshow.
+    if (v == View::stars)          stopTimer();
+    else if (v == View::spectrum)  startTimerHz (30);
+    else                           startTimerHz (60);
 
     repaint();
 }
 
-juce::Rectangle<float> Monitor::glass() const
-{
-    // In the render's space: clear of the overhead panel above, the emblem below, and the corners
-    // the windshield's frame cuts off.
-    return juce::Rectangle<float> (236.0f, 100.0f, 1200.0f, 134.0f)
-               .translated (-layout::windshield.getX(), -layout::windshield.getY());
-}
-
 juce::Rectangle<float> Monitor::band() const
 {
-    // The spectrum's ground: the glass's height, but the windshield's whole width — it runs out under
-    // the frame on both sides rather than stopping short of it.
-    return glass().withX (0.0f).withWidth ((float) getWidth());
-}
-
-void Monitor::resized()
-{
-    if (scope != nullptr)
-        scope->setBounds (glass().toNearestInt());
+    // In the render's space the glass is clear of the overhead panel above and the emblem below
+    // between these two heights; across, the picture takes the windshield's whole width and runs out
+    // under the frame on both sides rather than stopping short of it.
+    constexpr float top = 100.0f, bottom = 234.0f;
+    return { 0.0f, top - layout::windshield.getY(), (float) getWidth(), bottom - top };
 }
 
 void Monitor::timerCallback()
 {
+    if (view != View::spectrum)
+    {
+        repaint (band().getSmallestIntegerContainer());     // the scope pictures read their taps as they paint
+        return;
+    }
+
     // The tone stack as the parameters have it now, and a frame from each side of it if one is waiting.
     console.setSettings (eqSettingsFor (amp.apvts, preampBlock));
 
@@ -127,10 +81,31 @@ void Monitor::timerCallback()
 
 void Monitor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff030306));      // the glass, dark: the sky is not flying behind a picture
-
+    // Nothing under the picture but the sky: it is a second layer on the glass, and the stars fly on
+    // behind it.
+    const auto r = band();
     if (view == View::spectrum)
-        paintSpectrum (g, band());
+    {
+        paintSpectrum (g, r);
+        return;
+    }
+
+    const juce::Graphics::ScopedSaveState clipped (g);
+    g.reduceClipRegion (r.toNearestInt());
+
+    // OrbitAmp's painters, told to draw bare: lines alone, no rules and nothing filled — over the sky a
+    // translucent body is a stain on it.
+    if (view == View::wave)
+    {
+        waveView.paint (g, r, amp.preamp.ribbon, true, true);
+        return;
+    }
+
+    const scope::Frame frame = amp.preamp.scope.read (dry, wet) ? scope::Frame { dry.data(), wet.data(), core::ScopeTap::size }
+                                                                : scope::Frame {};
+    if (view == View::shape)          scope::ShapeView::paint (g, r, frame);
+    else if (view == View::envelope)  scope::EnvelopeView::paint (g, r, frame, true);
+    else if (view == View::transfer)  scope::TransferView::paint (g, r, frame);
 }
 
 void Monitor::paintSpectrum (juce::Graphics& g, juce::Rectangle<float> r)
@@ -152,32 +127,24 @@ void Monitor::paintSpectrum (juce::Graphics& g, juce::Rectangle<float> r)
     pm.specBottom = -90.0;
 
     const double rate = amp.currentSampleRate() > 0.0 ? amp.currentSampleRate() : displayRate;
-    const auto draw = [&] (felitronics::analysis::SpectrumPane& pane, juce::Colour tint,
-                           float fillTop, float fillBottom, float line)
+    // Lines alone: the peak trace of each spectrum, with nothing filled under it.
+    const auto draw = [&] (felitronics::analysis::SpectrumPane& pane, juce::Colour tint, float thickness)
     {
-        juce::Path fill, peak;
-        fill.startNewSubPath (r.getX(), r.getBottom());
+        juce::Path peak;
         bool first = true;
-        pane.buildColumns (pm, rate, 4.5, 1000.0, [&] (int, float x, float yFill, float yPeak)
+        pane.buildColumns (pm, rate, 4.5, 1000.0, [&] (int, float x, float, float yPeak)
         {
-            fill.lineTo (r.getX() + x, r.getY() + yFill);
             if (first) { peak.startNewSubPath (r.getX() + x, r.getY() + yPeak); first = false; }
             else       peak.lineTo (r.getX() + x, r.getY() + yPeak);
         });
-        fill.lineTo (r.getRight(), r.getBottom());
-        fill.closeSubPath();
-
-        g.setGradientFill (juce::ColourGradient (tint.withAlpha (fillTop), 0.0f, r.getY() + r.getHeight() * 0.30f,
-                                                 tint.withAlpha (fillBottom), 0.0f, r.getBottom(), false));
-        g.fillPath (fill);
-        g.setColour (tint.withAlpha (line));
-        g.strokePath (peak, juce::PathStrokeType (1.2f));
+        g.setColour (tint);
+        g.strokePath (peak, juce::PathStrokeType (thickness));
     };
 
-    // OrbitAmp's grammar for a pair: what goes in is the quiet grey ground, what comes out is drawn
-    // over it in the hot colour.
-    draw (before, juce::Colour (0xff7f93b5), 0.16f, 0.02f, 0.35f);
-    draw (after,  orange,                    0.20f, 0.02f, 0.60f);
+    // OrbitAmp's grammar for a pair: what goes in is the quiet grey, what comes out is the hot colour
+    // over it.
+    draw (before, juce::Colour (0xff9fb0cc).withAlpha (0.7f), 1.1f);
+    draw (after,  orange, 1.4f);
 
     // The curve the three tone knobs are holding: +/-18 dB about the middle of the band.
     juce::Path curve;

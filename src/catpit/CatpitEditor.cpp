@@ -576,7 +576,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     gpuSky = prefs::getBool (gpuSkyKey, true)
              && ! juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu");
 
-    // ...and so does what the windshield shows: the sky, or one of the pictures of the amp at work.
+    // ...and so does what the windshield shows over it: nothing, or a picture of the amp at work.
     monitor.show ((Monitor::View) juce::jlimit (0, (int) Monitor::View::numViews - 1,
                                                 (int) prefs::store().get (windowKey, 0)));
     applySky();
@@ -781,11 +781,7 @@ void CatpitEditor::applySky()
         glSky.reset();
     }
 
-    // The sky flies only while the windshield is showing it.
-    const bool stars = monitor.shown() == Monitor::View::stars;
-    space.setVisible (glSky == nullptr && stars);
-    if (glSky != nullptr)
-        glSky->setFlying (stars);
+    space.setVisible (glSky == nullptr);
     placeSky();
 }
 
@@ -793,7 +789,6 @@ void CatpitEditor::showInWindow (Monitor::View view)
 {
     prefs::store().set (windowKey, (int) view);
     monitor.show (view);
-    applySky();
 }
 
 void CatpitEditor::mouseDown (const juce::MouseEvent& e)
@@ -821,7 +816,7 @@ void CatpitEditor::showSettingsMenu()
 
     juce::PopupMenu menu;
 
-    // What the windshield shows: the sky, or one of the pictures of the amp at work.
+    // What the windshield shows over the sky: nothing, or one of the pictures of the amp at work.
     menu.addSectionHeader ("WINDOW");
     for (int i = 0; i < Monitor::names().size(); ++i)
         menu.addItem (itemFor (Monitor::names()[i], firstWindow + i, (int) monitor.shown() == i));
