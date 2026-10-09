@@ -57,7 +57,7 @@ inline const juce::Rectangle<float> turboFrame { 799.0f, 415.0f, 165.0f, 180.0f 
 inline const std::array<juce::Rectangle<float>, 3> sliderInsets {{
     { 258.0f, 660.0f, 342.0f, 53.0f },     // REVERB
     { 665.0f, 660.0f, 345.0f, 53.0f },     // DELAY AMOUNT
-    { 1073.0f, 660.0f, 341.0f, 53.0f },    // COMBO
+    { 1073.0f, 660.0f, 341.0f, 53.0f },    // CAB
 }};
 
 /** The six holes in the overhead panel, left to right: two, a divider, four. */
@@ -74,7 +74,7 @@ inline const juce::Rectangle<float> outFader { 1562.0f, 383.0f, 65.0f, 350.0f };
 
 inline const juce::Rectangle<float> tunerScreen { 635.0f, 799.0f, 402.0f, 104.0f };
 
-/** The flat plate under COMBO's right end, below the orange lamp: the version sits on it. */
+/** The flat plate under CAB's right end, below the orange lamp: the version sits on it. */
 inline const juce::Point<float> versionPlate { 1434.0f, 812.0f };
 
 /** Its mirror under REVERB's left end: the presets' door. */

@@ -386,7 +386,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       monitor (p),
       drive (Art::get().knobDrive, drivePointer),
       reverbName (layout::px13),
-      comboName (layout::px13),
+      cabName (layout::px13),
       delayWord (layout::px13),
       delayNote (layout::px13),
       delayTempo (layout::px13),
@@ -503,7 +503,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     const juce::Colour lineTo[]   { orange,               orange, orange };
     for (size_t i = 0; i < sliders.size(); ++i)
     {
-        // COMBO has a position for every cabinet the cockpit has; a selector needs two to be one.
+        // CAB has a position for every cabinet the cockpit has; a selector needs two to be one.
         sliders[i] = std::make_unique<PlateSlider> (lineFrom[i], lineTo[i],
                                                     i == 2 ? juce::jmax (2, channels.cabinets().size()) : 0);
         stage.addAndMakeVisible (*sliders[i]);
@@ -556,20 +556,20 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     delayBpm = follow (params::delayBpm, [this] (float) { showDelayTime(); });
     showDelayTime();
 
-    // COMBO steps through the cockpit's own cabinets, and its plate reads the one it sits on, the way
+    // CAB steps through the cockpit's own cabinets, and its plate reads the one it sits on, the way
     // REVERB's reads its character. With fewer than two there is nothing to choose between, and it
     // stands dim.
-    comboName.setInterceptsMouseClicks (false, false);      // a reading: the slider under it is the control
-    stage.addAndMakeVisible (comboName);
-    comboName.setBounds (plateName (2).toNearestInt());
+    cabName.setInterceptsMouseClicks (false, false);      // a reading: the slider under it is the control
+    stage.addAndMakeVisible (cabName);
+    cabName.setBounds (plateName (2).toNearestInt());
 
-    auto& combo = *sliders[2];
+    auto& cab = *sliders[2];
     if (channels.cabinets().size() >= 2)
-        combo.onStep = [this] (int s) { chooseCombo (s); showCombo(); };
+        cab.onStep = [this] (int s) { chooseCab (s); showCab(); };
     else
     {
-        combo.setEnabled (false);
-        combo.setAlpha (0.35f);
+        cab.setEnabled (false);
+        cab.setAlpha (0.35f);
     }
 
     for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter, &tuner })
@@ -697,7 +697,7 @@ CatpitEditor::~CatpitEditor()
 
 /** A STATE THE COCKPIT HAS NOT SEEN — a session saved before it existed, loaded while the window is
     open — is made its own the way the constructor makes the first one: the fixed chain, the channel
-    whose pack is playing, a cabinet COMBO can reach. */
+    whose pack is playing, a cabinet CAB can reach. */
 void CatpitEditor::adoptState()
 {
     adoptionPending = false;
@@ -814,11 +814,11 @@ void CatpitEditor::showChannel()
     buttons[btPresence]->setOn (channels.flag (Channels::presence), false);
     turbo.setOn (channels.flag (Channels::turbo), false);
 
-    // COMBO's cap, on the cabinet that is playing. (This is first called while the face is still being
+    // CAB's cap, on the cabinet that is playing. (This is first called while the face is still being
     // built, before the plates exist.)
     if (const int playing = channels.cabinet(); playing >= 0 && sliders[2] != nullptr)
         sliders[2]->setStep (playing, false);
-    showCombo();
+    showCab();
 }
 
 void CatpitEditor::showRegisterMenu (int index)
@@ -1071,18 +1071,18 @@ void CatpitEditor::setUpChain (bool firstTime)
     setParam (params::cabLpfHz, params::cabLpfDefaultHz);
 }
 
-void CatpitEditor::chooseCombo (int step)
+void CatpitEditor::chooseCab (int step)
 {
     channels.chooseCabinet (step);
 }
 
-/** COMBO's plate says which cabinet is playing: the name its file carries, without the number that
+/** CAB's plate says which cabinet is playing: the name its file carries, without the number that
     orders it. */
-void CatpitEditor::showCombo()
+void CatpitEditor::showCab()
 {
     const auto& cabinets = channels.cabinets();
     const int step = sliders[2] != nullptr ? sliders[2]->getStep() : -1;
-    comboName.set ("COMBO", step >= 0 && step < cabinets.size() ? Channels::cabinetName (cabinets.getReference (step))
+    cabName.set ("CAB", step >= 0 && step < cabinets.size() ? Channels::cabinetName (cabinets.getReference (step))
                                                                : juce::String());
 }
 

@@ -141,7 +141,7 @@ private:
     GuardButton turbo;
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
     Legend reverbName;                       // REVERB and its character; a click picks another
-    Legend comboName;                        // COMBO and the cabinet that is playing
+    Legend cabName;                        // CAB and the cabinet that is playing
     juce::ParameterAttachment* reverbType = nullptr;
     // The delay's plate reads three things, and each answers the hand its own way:
     Legend delayWord;                        // DELAY — tapped, it takes the tempo from the taps
@@ -212,8 +212,8 @@ private:
     void refreshHistory();
     void showRegisterMenu (int index);
     void showChannel();
-    void chooseCombo (int step);
-    void showCombo();
+    void chooseCab (int step);
+    void showCab();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CatpitEditor)
 };

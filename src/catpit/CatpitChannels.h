@@ -62,7 +62,7 @@ public:
 
     /** THE COCKPIT'S OWN CABINETS: every IR file in its two places — inside the bundle, where a build
         ships them, and the player's IRs folder beside its Devices — in the order of their names, so a
-        leading number is how the order is chosen. Read once, when the face opens. COMBO has as many
+        leading number is how the order is chosen. Read once, when the face opens. CAB has as many
         positions as there are of them. */
     const juce::Array<juce::File>& cabinets() const noexcept { return irs; }
 
