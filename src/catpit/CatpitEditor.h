@@ -5,6 +5,7 @@
 
 #include "../PluginProcessor.h"
 #include "CatpitControls.h"
+#include "CatpitGlSky.h"
 #include "CatpitSpace.h"
 
 #include <array>
@@ -49,7 +50,9 @@ public:
     explicit CatpitEditor (AmpProcessor&);
     ~CatpitEditor() override;
 
-    void paint (juce::Graphics& g) override { g.fillAll (juce::Colours::black); }
+    // Nothing to paint: the cockpit covers the whole stage, and where its windshield is cut out the sky
+    // shows through — from the GL context underneath, or from the CPU Space component.
+    void paint (juce::Graphics&) override {}
     void resized() override;
 
 private:
@@ -58,6 +61,12 @@ private:
     juce::Component stage;
     Space   space;
     Cockpit cockpit;
+
+    // The sky on the GPU when it can be; the CPU Space stays as the fallback (and with CATPIT_SKY=cpu).
+    juce::OpenGLContext gl;
+    std::unique_ptr<GlSky> glSky;
+    void useCpuSky();
+    void placeSky();
 
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, 3> tones;

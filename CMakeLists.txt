@@ -541,6 +541,7 @@ if(ORBITAMP_CATPIT_ART_DIR AND EXISTS "${ORBITAMP_CATPIT_ART_DIR}/bg.png")
         src/catpit/CatpitArt.cpp
         src/catpit/CatpitControls.cpp
         src/catpit/CatpitSpace.cpp
+        src/catpit/CatpitGlSky.cpp
         src/catpit/CatpitEditor.cpp)
 
     target_compile_definitions(CatpitAmp PUBLIC
@@ -569,6 +570,7 @@ if(ORBITAMP_CATPIT_ART_DIR AND EXISTS "${ORBITAMP_CATPIT_ART_DIR}/bg.png")
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_data_structures
+        juce::juce_opengl                # the sky, on the GPU
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
 else()

@@ -270,7 +270,13 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // the four.
     stage.addAndMakeVisible (lever);
     lever.setBounds (leverFrame.toNearestInt());
-    lever.onTravel = [this] (float pos) { space.setThrottle (pos / (float) (Lever::numDetents - 1)); };
+    lever.onTravel = [this] (float pos)
+    {
+        const float t = pos / (float) (Lever::numDetents - 1);
+        space.setThrottle (t);
+        if (glSky != nullptr)
+            glSky->setThrottle (t);
+    };
     lever.onDetent = [this] (int d)
     {
         buttons[0]->setEnabled (d >= 2);
@@ -331,6 +337,26 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     bind (inFader, params::inTrim);
     bind (outFader, params::outTrim);
 
+    if (juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu"))
+        useCpuSky();
+    else
+    {
+        space.setVisible (false);
+        glSky = std::make_unique<GlSky> (gl);
+        glSky->setThrottle ((float) lever.getDetent() / (float) (Lever::numDetents - 1));
+        gl.setRenderer (glSky.get());
+        gl.setComponentPaintingEnabled (true);
+        gl.setContinuousRepainting (true);
+        gl.attachTo (*this);
+
+        // A shader that will not build on this machine leaves the window dark; look once, and fall back.
+        juce::Timer::callAfterDelay (800, [safe = juce::Component::SafePointer<CatpitEditor> (this)]
+        {
+            if (safe != nullptr && safe->glSky != nullptr && safe->glSky->failed())
+                safe->useCpuSky();
+        });
+    }
+
     setResizable (true, true);
     getConstrainer()->setFixedAspectRatio ((double) width / (double) height);
     setResizeLimits (minWindowWidth, juce::roundToInt ((float) minWindowWidth * height / width),
@@ -338,11 +364,31 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     setSize (minWindowWidth, juce::roundToInt ((float) minWindowWidth * height / width));
 }
 
-CatpitEditor::~CatpitEditor() = default;
+CatpitEditor::~CatpitEditor()
+{
+    gl.detach();
+}
 
 void CatpitEditor::resized()
 {
     stage.setTransform (juce::AffineTransform::scale ((float) getWidth() / layout::width));
+    placeSky();
+}
+
+void CatpitEditor::placeSky()
+{
+    if (glSky != nullptr)
+    {
+        const float s = (float) getWidth() / layout::width;
+        glSky->setArea (layout::windshield * s, { (float) getWidth(), (float) getHeight() });
+    }
+}
+
+void CatpitEditor::useCpuSky()
+{
+    gl.detach();
+    glSky.reset();
+    space.setVisible (true);
 }
 
 void CatpitEditor::setParam (const char* paramId, float value)

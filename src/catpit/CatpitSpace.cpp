@@ -117,6 +117,9 @@ void Space::respawn (Star& s, bool anywhere)
 
 void Space::tick()
 {
+    if (! isVisible())           // the GPU sky is flying instead
+        return;
+
     const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
     if (now - lastFrame < 1.0 / 62.0)       // a 120 Hz display would ask twice as often as the eye needs
         return;
