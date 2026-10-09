@@ -80,6 +80,10 @@ namespace
     const juce::Identifier gpuSkyKey { "gpuSky" };
     const juce::Identifier windowKey { "window" };
 
+    // How many pixels of images the GL context may hold as textures before it starts throwing the
+    // oldest out — room for the layer at the largest window on a 3x screen, and the art beside it.
+    constexpr size_t glTexturePixels = 32u * 1024u * 1024u;
+
     /** The cockpit's own tag on a family link, for the site's analytics. */
     constexpr const char* campaign = "utm_source=catpitamp&utm_medium=plugin";
 
@@ -901,6 +905,14 @@ void CatpitEditor::applySky()
         gl.setRenderer (glSky.get());
         gl.setComponentPaintingEnabled (true);
         gl.setContinuousRepainting (true);
+
+        // JUCE keeps the textures it makes of images in a cache whose limit — 8 * 1024 * 1024, and
+        // called bytes — it compares with PIXEL counts. The cockpit's own layer is the whole window at
+        // the screen's pixel size: 2.4 million pixels at the smallest window and 9.5 million at the
+        // largest on a 2x screen, so from about 1740 wide the layer and the art no longer fitted, and
+        // every paint threw textures out and loaded them again. The limit is a ceiling, not an
+        // allocation: only what is drawn is held, and a replaced layer leaves the cache with its image.
+        gl.setImageCacheSize (glTexturePixels);
         gl.attachTo (*this);
 
         // A shader that will not build on this machine leaves the window dark; look once, and fall back.
