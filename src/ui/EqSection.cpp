@@ -3,6 +3,8 @@
 
 #include "EqSection.h"
 
+#include "EqDisplay.h"
+
 #include "Prefs.h"
 
 #include "Theme.h"
@@ -382,32 +384,7 @@ void EqSection::setWidgetsVisible (bool v)
 
 void EqSection::refreshCurve()
 {
-    const auto slope = [] (float v)
-    {
-        return params::eqSlopeValues[juce::jlimit (0, params::eqSlopes.size() - 1, juce::roundToInt (v))];
-    };
-
-    core::EqLink::Settings s;
-    s.hpfOn    = raw (params::eqHpfOn (link)) > 0.5f;
-    s.hpfHz    = (double) raw (params::eqHpfHz (link));
-    s.hpfSlope = slope (raw (params::eqHpfSlope (link)));
-    s.loDb     = (double) raw (params::eqLoDb (link));
-    s.loHz     = (double) raw (params::eqLoHz (link));
-    s.b1Db     = (double) raw (params::eqBellDb (link, 0));
-    s.b1Hz     = (double) raw (params::eqBellHz (link, 0));
-    s.b1Q      = (double) raw (params::eqBellQ (link, 0));
-    s.b2Db     = (double) raw (params::eqBellDb (link, 1));
-    s.b2Hz     = (double) raw (params::eqBellHz (link, 1));
-    s.b2Q      = (double) raw (params::eqBellQ (link, 1));
-    s.b3On     = raw (params::eqB3On (link)) > 0.5f;
-    s.b3Db     = (double) raw (params::eqBellDb (link, 2));
-    s.b3Hz     = (double) raw (params::eqBellHz (link, 2));
-    s.b3Q      = (double) raw (params::eqBellQ (link, 2));
-    s.hiDb     = (double) raw (params::eqHiDb (link));
-    s.hiHz     = (double) raw (params::eqHiHz (link));
-    s.lpfOn    = raw (params::eqLpfOn (link)) > 0.5f;
-    s.lpfHz    = (double) raw (params::eqLpfHz (link));
-    s.lpfSlope = slope (raw (params::eqLpfSlope (link)));
+    const auto s = eqSettingsFor (state, link);   // the one reading every face shares
 
     display.setSettings (s);
     refreshHandles();
