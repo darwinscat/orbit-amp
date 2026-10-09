@@ -594,6 +594,12 @@ target_link_libraries(CatpitAmp PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
+# Not part of the default build. The two products are released apart, and OrbitAmp's own build — a
+# contributor's, a pull request's, a release's — must never fail on the cockpit. Whoever wants the
+# cockpit asks for it by name: `cmake --build build --target CatpitAmp_Standalone`, as its release
+# workflow and the pull-request build both do.
+set_target_properties(CatpitAmp CatpitAmp_Standalone CatpitAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
 # ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or

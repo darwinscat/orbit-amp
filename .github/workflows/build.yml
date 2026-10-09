@@ -59,6 +59,12 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      # The cockpit is released apart and is not part of the default build, so that OrbitAmp's build
+      # can never fail on it. It is built here by name: this is the only place a pull request meets
+      # MSVC with it.
+      - name: Build CatpitAmp
+        run: cmake --build build --target CatpitAmp_Standalone
+
       - name: sccache stats
         if: always()
         run: sccache --show-stats
