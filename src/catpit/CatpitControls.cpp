@@ -586,8 +586,9 @@ void Emblem::paint (juce::Graphics& g)
         return;
 
     const auto box = layout::emblemMark.translated (-(float) getX(), -(float) getY());
-    // Only the colour changes: the engraving goes from bare metal to a dark violet, and nothing glows.
-    g.setColour (juce::Colour (0xff4a36a2).withAlpha (l));
+    // Only the colour changes, and not by much: the bare metal takes a violet cast — half the dark
+    // violet over the engraving, so the metal still shows through it — and nothing glows.
+    g.setColour (juce::Colour (0xff4a36a2).withAlpha (0.5f * l));
     g.drawImage (mark.cut, box, juce::RectanglePlacement::stretchToFit, true);
 }
 
