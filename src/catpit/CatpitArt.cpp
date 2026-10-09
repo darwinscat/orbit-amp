@@ -146,13 +146,69 @@ namespace
         return img;
     }
 
-    /** The throttle render is a whole joystick; on a flat panel only its grip shows above the slot. */
-    juce::Image gripOf (const juce::Image& lever)
+    /** THE THROTTLE'S GRIP, OFF ITS CENTRE. The render is a whole joystick with a symmetrical T on top;
+        on the flat panel only the T shows, and the cockpit wants it bigger without lying over the channel
+        names — so it is rebuilt with its stem where it was and the bar reaching further to the LEFT of it
+        than to the right: the left cap, a longer run of the knurled sleeve (the clean stretch beside the
+        yoke, mirrored out), the middle with the yoke, a shorter run on the right, the right cap. Columns
+        and rows are the render's own, 1086 px wide; `axis` is where the stem ends up across the result. */
+    juce::Image offCentreGrip (const juce::Image& lever, float& axis)
     {
         if (! lever.isValid())
             return lever;
-        const auto b = opaqueBounds (lever).toNearestInt();
-        return lever.getClippedImage (b.withHeight (juce::roundToInt ((float) b.getHeight() * 0.40f))).createCopy();
+
+        const float s = (float) lever.getWidth() / 1086.0f;
+        const auto at = [s] (int v) { return juce::roundToInt ((float) v * s); };
+
+        const int top = at (73), barBottom = at (392), sleeveBottom = at (361), bottom = at (589);
+        const int capL0 = at (49), sleeve0 = at (295), midEnd = at (648), capR0 = at (790), capR1 = at (1038);
+        const int clean0 = at (300), cleanW = at (75), extra = at (101);
+        const int yoke0 = at (385), yoke1 = at (710), stem = at (545);
+
+        const int capLW = sleeve0 - capL0, midW = midEnd - sleeve0, capRW = capR1 - capR0;
+        const int w = capLW + extra + midW + capRW, h = bottom - top;
+        const int stemX = capLW + extra + (stem - sleeve0);
+        if (w <= 0 || h <= 0 || capR1 > lever.getWidth() || bottom > lever.getHeight())
+            return lever;
+
+        juce::Image out (juce::Image::ARGB, w, h, true);
+        {
+            const juce::Image::BitmapData src (lever, juce::Image::BitmapData::readOnly);
+            juce::Image::BitmapData dst (out, juce::Image::BitmapData::readWrite);
+
+            const auto column = [&] (int srcX, int dstX, int y0, int y1, bool over)
+            {
+                if (dstX < 0 || dstX >= w)
+                    return;
+                for (int y = y0; y < y1; ++y)
+                {
+                    const auto c = src.getPixelColour (srcX, y);
+                    if (! over)
+                        dst.setPixelColour (dstX, y - top, c);
+                    else if (c.getAlpha() > 0)
+                        dst.setPixelColour (dstX, y - top, dst.getPixelColour (dstX, y - top).overlaidWith (c));
+                }
+            };
+
+            for (int i = 0; i < capLW; ++i)
+                column (capL0 + i, i, top, barBottom, false);
+            for (int i = 0; i < extra; ++i)
+            {
+                const int m = (extra - 1 - i) % (2 * cleanW);      // mirrored, ending on the sleeve's first column
+                column (clean0 + (m < cleanW ? m : 2 * cleanW - 1 - m), capLW + i, top, barBottom, false);
+            }
+            for (int i = 0; i < midW; ++i)
+                column (sleeve0 + i, capLW + extra + i, top, barBottom, false);
+            for (int i = 0; i < capRW; ++i)
+                column (capR0 + i, capLW + extra + midW + i, top, barBottom, false);
+
+            // The yoke under the bar, where the stem is — its right shoulder now passes under the cap.
+            for (int x = yoke0; x < yoke1; ++x)
+                column (x, stemX + (x - stem), x < midEnd ? barBottom : sleeveBottom, bottom, true);
+        }
+
+        axis = (float) stemX / (float) w;
+        return out;
     }
 }
 
@@ -204,7 +260,7 @@ const Art& Art::get()
         a.bg          = cutWindshield (raiseTones (load ("bg.png")));
         a.knobDrive   = capped (load ("knob-drive.png"),   640);
         a.knobTone    = capped (load ("knob-tone.png"),    480);
-        a.leverGrip   = capped (gripOf (load ("lever.png")), 420);
+        a.leverGrip   = capped (offCentreGrip (load ("lever.png"), a.leverAxis), 480);
         a.guardClosed = capped (load ("guard-closed.png"), 560);
         a.guardOpen   = capped (load ("guard-open.png"),   560);
         a.guardOn     = capped (load ("guard-on.png"),     560);

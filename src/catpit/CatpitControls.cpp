@@ -131,16 +131,16 @@ void ArtKnob::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDet
 }
 
 //==============================================================================
-// The lever's own space, inside the 261 x 217 AMP MODE frame: the slot on the left, the four names on
-// the right, a lamp beside each.
+// The lever's own space: the 261 x 217 AMP MODE frame plus `overhang` to its left, where the grip
+// reaches past the frame. The slot on the left, the four names on the right, a lamp beside each.
 namespace
 {
-    constexpr float slotX      = 42.0f;
+    constexpr float slotX      = (float) Lever::overhang + 42.0f;
     constexpr float firstY     = 40.0f;
     constexpr float detentStep = 46.0f;
-    constexpr float lampX      = 92.0f;
-    constexpr float namesX     = 102.0f;
-    constexpr float gripWidth  = 80.0f;
+    constexpr float lampX      = (float) Lever::overhang + 92.0f;
+    constexpr float namesX     = (float) Lever::overhang + 102.0f;
+    constexpr float gripLength = 92.0f;      // end to end; the stem is not in its middle (Art::leverAxis)
 }
 
 Lever::Lever()
@@ -231,18 +231,21 @@ void Lever::paint (juce::Graphics& g)
         g.drawText (names[i], row, juce::Justification::centredLeft, false);
     }
 
-    // The grip: pulled toward you it comes a little closer, so it grows as it travels down.
+    // The grip: pulled toward you it comes a little closer, so it grows as it travels down. Its stem
+    // stays in the slot; the bar hangs further to the left of it than to the right, clear of the names.
     const float y = firstY + detentStep * pos.value;
-    const float grow = 1.0f + 0.05f * pos.value;
-    const float gripW = gripWidth * grow;
-    const auto& img = Art::get().leverGrip;
-    const auto area = juce::Rectangle<float> (gripW, gripW * 0.6f).withCentre ({ slotX, y });
-    if (img.isValid())
-        drawFitted (g, img, area);
+    const float length = gripLength * (1.0f + 0.05f * pos.value);
+    const auto& art = Art::get();
+    if (art.leverGrip.isValid())
+    {
+        const float height = length * (float) art.leverGrip.getHeight() / (float) art.leverGrip.getWidth();
+        g.setOpacity (1.0f);     // an image is drawn at the brush's opacity, and the last name left it dimmed
+        g.drawImage (art.leverGrip, { slotX - art.leverAxis * length, y - height * 0.5f, length, height });
+    }
     else
     {
         g.setColour (juce::Colours::darkgrey);
-        g.fillRoundedRectangle (area.withSizeKeepingCentre (gripW, 26.0f), 10.0f);
+        g.fillRoundedRectangle ({ slotX - length * 0.63f, y - 13.0f, length, 26.0f }, 10.0f);
     }
 }
 

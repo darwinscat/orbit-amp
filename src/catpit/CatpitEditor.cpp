@@ -279,7 +279,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // The throttle picks the pack; where it starts is wherever the pack already playing sits, if it is one of
     // the four.
     stage.addAndMakeVisible (lever);
-    lever.setBounds (leverFrame.toNearestInt());
+    lever.setBounds (leverFrame.toNearestInt().withLeft (juce::roundToInt (leverFrame.getX()) - Lever::overhang));
     lever.onTravel = [this] (float pos)
     {
         const float t = pos / (float) (Lever::numDetents - 1);

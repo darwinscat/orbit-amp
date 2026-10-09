@@ -16,7 +16,8 @@ struct Art
     juce::Image bg;            // the cockpit, its windshield cut out to transparent
     juce::Image knobDrive;     // the big knurled knob, no pointer — the pointer is drawn
     juce::Image knobTone;      // the ringed knob, no pointer
-    juce::Image leverGrip;     // the T-grip cropped off the throttle render
+    juce::Image leverGrip;     // the throttle's T-grip, rebuilt with the bar reaching further left of its stem
+    float leverAxis = 0.5f;    // where that stem stands across the grip, 0 = its left end
     juce::Image guardClosed, guardOpen, guardOn;
     juce::Image sliderCap;
 

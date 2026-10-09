@@ -95,6 +95,9 @@ public:
     static constexpr int numDetents = 4;
     inline static const juce::StringArray names { "NORMAL", "ALTERED", "CRUNCH", "OVERDRIVE" };
 
+    /** The grip is wider than the frame's left margin: the lever's box starts this far left of the frame. */
+    static constexpr int overhang = 34;
+
     Lever();
 
     std::function<void (int)>   onDetent;     // the detent it settled in (or snapped into while held)
