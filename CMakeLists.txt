@@ -84,14 +84,16 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # letting FetchContent take the tag.
 #
 # v0.51.0 is the first release felitronics-guitar-core accepts: nam, rigplayer and poweramp left core
-# for that repository in it (see below). v0.53.0 is the freshest, and the one the sibling checkout sits
-# on. Between v0.31.0 and it, nothing this plugin calls plays differently INSIDE a running stream — the
-# probe loops render bit-identically on both — and what moved is at a stream's edges: a re-prepared
+# for that repository in it (see below). v0.59.0 is the freshest, and the one the sibling checkout sits
+# on. Between v0.31.0 and v0.53.0, nothing this plugin calls plays differently INSIDE a running stream —
+# the probe loops render bit-identically on both — and what moved is at a stream's edges: a re-prepared
 # capture no longer answers with the previous stream's tail, its warm-up is counted at the new rate, a
 # trim switched off stays off through the prepare. The cabinet hands CabConvolver taps already at the
 # host's rate, so the v0.34.0 rate factor and the v0.32.0 edge fix have nothing to act on here, and the
-# v0.53.0 glides are in stages this plugin does not link.
-set(ORBITAMP_FCORE_TAG "v0.53.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+# v0.53.0 glides are in stages this plugin does not link. Past v0.53.0 two things reach this graph, and
+# neither plays here: WaveShaper gains four shapes while Asym — the only one the power amp's TubeStage
+# sets — keeps its expressions, and eq's Tilt at slope 6 turns first-order, a band no block here builds.
+set(ORBITAMP_FCORE_TAG "v0.59.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -204,7 +206,7 @@ FetchContent_MakeAvailable(felitronics_guitar_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.21.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.21.1" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
