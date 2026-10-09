@@ -99,7 +99,10 @@ bool Channels::adopt()
 
     ensureNode().setProperty (activeId, juce::jmax (0, channel), nullptr);
     if (channel < 0 && packFor (0) >= 0)
+    {
         set (params::preampDevice, (float) packFor (0));
+        amp.settleDeviceNames();    // the caller is settling under a suppression: the name goes in with the number
+    }
     return true;
 }
 
@@ -108,22 +111,28 @@ int Channels::active() const
     return juce::jlimit (0, count - 1, (int) node().getProperty (activeId, 0));
 }
 
-void Channels::select (int to)
+bool Channels::select (int to)
 {
     to = juce::jlimit (0, count - 1, to);
     const int from = active();
     if (to == from)
-        return;
+        return true;
+
+    const int pack = packFor (to);
+    if (pack < 0)
+        return false;
 
     auto n = ensureNode();
     store (recordOf (n, from, true));
     n.setProperty (activeId, to, nullptr);
 
-    // The pack first, then what is dialled on it. All of it lands in one tick, so the history commits
-    // it as ONE step: undo goes back to the channel that was playing, exactly as it stood.
-    if (const int pack = packFor (to); pack >= 0)
-        set (params::preampDevice, (float) pack);
+    // The pack, then what is dialled on it, then the pack's name beside its number — all before this
+    // returns, so the state is never caught half-way, and all in one tick, so the history commits it
+    // as ONE step: undo goes back to the channel that was playing, exactly as it stood.
+    set (params::preampDevice, (float) pack);
     recall (recordOf (n, to, false));
+    amp.settleDeviceNames();
+    return true;
 }
 
 bool Channels::flag (Flag f) const

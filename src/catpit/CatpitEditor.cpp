@@ -285,10 +285,10 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 CatpitEditor::CatpitEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), channels (p),
       drive (Art::get().knobDrive, drivePointer),
-      inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
-      outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
       reverbName (layout::px13),
       delayName (layout::px13),
+      inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
+      outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
       tuner (p.tunerEar),
       version (layout::px13),
       about (p.updateChecker(), aboutConfig ("CatpitAmp", "https://darwinscat.com", campaign), p.pluginFormat())
@@ -375,9 +375,10 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     };
     lever.onDetent = [this] (int d)
     {
-        channels.select (d);
-        showChannel();
+        channels.select (d);    // refused when that channel's pack is not installed...
+        showChannel();          // ...and then this puts the lever back where the sound is
     };
+    lever.onRelease = [this] { showChannel(); };   // held, it follows the hand; let go, it follows the state
     // A prototype's hook for looking at the window at speed without a hand on the lever.
     if (const auto d = juce::SystemStats::getEnvironmentVariable ("CATPIT_DETENT", {}); d.isNotEmpty())
         channels.select (d.getIntValue());
@@ -497,7 +498,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     version.onClick = [this] { showAbout(); };
     stage.addAndMakeVisible (version);
     version.setBounds (around (versionPlate, 124.0f, 30.0f));
-    timerCallback();
+    version.setDot (amp.updateChecker().updateAvailable());
     startTimerHz (4);   // the dot only ever moves after a deliberate check: a lookup, a few times a second
 
     if (juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu"))
@@ -531,6 +532,22 @@ CatpitEditor::~CatpitEditor()
 {
     amp.history.onHistoryChanged = nullptr;   // the history outlives this window
     gl.detach();
+}
+
+/** A STATE THE COCKPIT HAS NOT SEEN — a session saved before it existed, loaded while the window is
+    open — is made its own the way the constructor makes the first one: the fixed chain, the channel
+    whose pack is playing, a cabinet COMBO can reach. */
+void CatpitEditor::adoptState()
+{
+    adoptionPending = false;
+    if (channels.adopted())
+        return;
+
+    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
+    setUpChain (channels.adopt());
+    if (std::find (comboIrs.begin(), comboIrs.end(), juce::roundToInt (getParam (params::cabIr))) == comboIrs.end())
+        chooseCombo (0);
+    showChannel();
 }
 
 void CatpitEditor::timerCallback()
@@ -580,6 +597,18 @@ void CatpitEditor::refreshHistory()
         overhead[(size_t) (ovFirstRegister + r)]->setOn (r == history.active(), false);
 
     showChannel();   // an undo, a redo or another register may have brought a different channel with it
+
+    // ...or a state with no channels in it at all. Adopting it writes, and this is the history's own
+    // callback, so it is done on the way out.
+    if (! channels.adopted() && ! adoptionPending)
+    {
+        adoptionPending = true;
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<CatpitEditor> (this)]
+        {
+            if (safe != nullptr)
+                safe->adoptState();
+        });
+    }
 }
 
 /** Puts the face where the state is: the lever in the playing channel's detent, and the controls that
@@ -611,7 +640,11 @@ void CatpitEditor::showRegisterMenu (int index)
             juce::PopupMenu::Item item ("Copy " + letter (index) + " to " + letter (i));
             item.itemID = i + 1;
             item.colour = lilac;
-            item.action = [&history, index, i] { history.copyRegister (index, i); };
+            item.action = [safe = juce::Component::SafePointer<CatpitEditor> (this), index, i]
+            {
+                if (safe != nullptr)     // the action is posted: the window may be gone by the time it runs
+                    safe->amp.history.copyRegister (index, i);
+            };
             menu.addItem (std::move (item));
         }
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (overhead[(size_t) (ovFirstRegister + index)].get()));

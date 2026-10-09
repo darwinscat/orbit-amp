@@ -101,6 +101,7 @@ public:
     Lever();
 
     std::function<void (int)>   onDetent;     // the detent it settled in (or snapped into while held)
+    std::function<void()>       onRelease;    // the hand has let go
     std::function<void (float)> onTravel;     // continuous position, 0..numDetents-1, every movement
 
     int  getDetent() const noexcept { return detent; }

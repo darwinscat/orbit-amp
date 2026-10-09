@@ -71,6 +71,9 @@ private:
     AmpProcessor& amp;
     Channels channels;
 
+    bool adoptionPending = false;
+    void adoptState();
+
     juce::Component stage;
     Space   space;
     Cockpit cockpit;

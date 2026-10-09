@@ -36,6 +36,10 @@ public:
 
     explicit Channels (AmpProcessor&);
 
+    /** Whether the state carries the cockpit's node at all. One that does not is a state the cockpit has
+        never seen — a session saved before it existed, or a fresh instance. */
+    bool adopted() const { return node().isValid(); }
+
     /** Makes the state the cockpit's, if it is not yet: the channel is the one whose pack is already
         playing, the first otherwise. True when there was nothing of ours in it before. */
     bool adopt();
@@ -44,8 +48,9 @@ public:
     int  active() const;
 
     /** Leaves the playing channel as it stands, switches to `channel`'s pack and puts back what that
-        channel was left with — its defaults, the first time it is visited. */
-    void select (int channel);
+        channel was left with — its defaults, the first time it is visited. False, and nothing touched,
+        when that channel's pack is not installed: a channel that cannot be played is not claimed. */
+    bool select (int channel);
 
     bool flag (Flag) const;
     void setFlag (Flag, bool);

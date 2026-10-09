@@ -291,6 +291,8 @@ void Lever::mouseUp (const juce::MouseEvent&)
         return;
     held = false;
     setDetent (juce::roundToInt (pos.value), true);
+    if (onRelease)
+        onRelease();
 }
 
 void Lever::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
@@ -433,10 +435,10 @@ void GuardButton::setOn (bool v, bool notify)
         return;
     on = v;
     glow.target = on ? 1.0f : 0.0f;
-    if (on && ! open)       // switched on from elsewhere — a recalled channel: the guard is up too
+    if (! notify || (on && ! open))     // set from elsewhere — a recalled channel: the guard goes with the switch
     {
-        open = true;
-        lid.target = 1.0f;
+        open = on;
+        lid.target = on ? 1.0f : 0.0f;
     }
     startTimerHz (60);
     if (notify && onChange)
