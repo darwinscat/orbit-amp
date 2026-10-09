@@ -101,6 +101,13 @@ namespace
     {
         return juce::Rectangle<float> (w, h).withCentre (c).toNearestInt();
     }
+
+    /** Where a lower plate's name stands: over its inset. */
+    juce::Rectangle<float> plateName (size_t plate)
+    {
+        const auto& inset = layout::sliderInsets[plate];
+        return juce::Rectangle<float> (inset.getWidth(), 30.0f).withCentre ({ inset.getCentreX(), 640.0f });
+    }
 }
 
 //==============================================================================
@@ -264,11 +271,9 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 
     drawLabel (g, "TURBO", juce::Rectangle<float> (160.0f, 26.0f).withCentre ({ turboFrame.getCentreX(), 400.0f }), px13, orange);
 
-    const char* plateNames[] { "REVERB", "DELAY AMOUNT", "COMBO" };
-    const juce::Colour plateColours[] { labelLilac, orange, labelLilac };
-    for (size_t i = 0; i < sliderInsets.size(); ++i)
-        drawLabel (g, plateNames[i], juce::Rectangle<float> (sliderInsets[i].getWidth(), 30.0f)
-                                         .withCentre ({ sliderInsets[i].getCentreX(), 640.0f }), px13, plateColours[i]);
+    // The plates' names. REVERB's is a live legend — it also says which reverb.
+    drawLabel (g, "DELAY AMOUNT", plateName (1), px13, orange);
+    drawLabel (g, "COMBO",        plateName (2), px13, labelLilac);
 
     drawLabel (g, "INPUT",  juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 117.0f, 314.0f }),  px13, labelLilac);
     drawLabel (g, "OUTPUT", juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 1557.0f, 314.0f }), px13, labelLilac);
@@ -283,6 +288,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       drive (Art::get().knobDrive, drivePointer),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
+      reverbName (layout::px13),
       tuner (p.tunerEar),
       version (layout::px13),
       about (p.updateChecker(), aboutConfig ("CatpitAmp", "https://darwinscat.com", campaign), p.pluginFormat())
@@ -293,8 +299,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // undo on the panel it must not leave a step to press back through.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
-    setUpChain();
-    channels.adopt();
+    setUpChain (channels.adopt());
 
     addAndMakeVisible (stage);
     stage.setBounds (0, 0, (int) width, (int) height);
@@ -391,6 +396,17 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         stage.addAndMakeVisible (*sliders[i]);
         sliders[i]->setBounds (sliderInsets[i].toNearestInt());
     }
+
+    // REVERB's name carries the reverb's character, and a click on it opens the list — the same six
+    // OrbitAmp's reverb block offers.
+    stage.addAndMakeVisible (reverbName);
+    reverbName.setBounds (plateName (0).toNearestInt());
+    reverbName.onClick = [this] { showReverbMenu(); };
+    reverbType = follow (params::reverbType, [this] (float v)
+    {
+        reverbName.set ("REVERB", params::reverbCharacters[juce::jlimit (0, params::reverbCharacters.size() - 1, juce::roundToInt (v))]);
+    });
+    reverbType->sendInitialUpdate();
 
     // COMBO steps through six cabinets; the one it sits on shows by name while the hand is on it.
     auto& combo = *sliders[2];
@@ -624,7 +640,7 @@ float CatpitEditor::getParam (const char* paramId) const
 
 /** THE COCKPIT'S CHAIN IS FIXED: one captured amp (the boost now lives inside the packs), the delay,
     a hall, the cabinet. There is no strip to switch links in or out, so the face puts them there. */
-void CatpitEditor::setUpChain()
+void CatpitEditor::setUpChain (bool firstTime)
 {
     setParam (params::tunerPresent,  1.0f);   // the tuner bay is always there, and always listening
     setParam (params::tunerOn,       1.0f);
@@ -639,7 +655,8 @@ void CatpitEditor::setUpChain()
     setParam (params::delayOn,       1.0f);
     setParam (params::reverbPresent, 1.0f);
     setParam (params::reverbOn,      1.0f);
-    setParam (params::reverbType,    (float) params::reverbCharacters.indexOf ("Hall"));
+    if (firstTime)                            // after that the reverb is the player's to choose
+        setParam (params::reverbType, (float) params::reverbCharacters.indexOf (Channels::defaultReverb));
     setParam (params::cabPresent,    1.0f);
     setParam (params::cabOn,         1.0f);
 
@@ -686,10 +703,34 @@ void CatpitEditor::bind (Control& control, const juce::String& paramId)
     attachments.push_back (std::move (att));
 }
 
-void CatpitEditor::follow (const char* paramId, std::function<void (float)> moved)
+juce::ParameterAttachment* CatpitEditor::follow (const char* paramId, std::function<void (float)> moved)
 {
-    if (auto* p = amp.apvts.getParameter (paramId))
-        attachments.push_back (std::make_unique<juce::ParameterAttachment> (*p, std::move (moved)));
+    auto* p = amp.apvts.getParameter (paramId);
+    jassert (p != nullptr);
+    attachments.push_back (std::make_unique<juce::ParameterAttachment> (*p, std::move (moved)));
+    return attachments.back().get();
+}
+
+void CatpitEditor::showReverbMenu()
+{
+    const int now = juce::roundToInt (getParam (params::reverbType));
+
+    juce::PopupMenu menu;
+    for (int i = 0; i < params::reverbCharacters.size(); ++i)
+    {
+        juce::PopupMenu::Item item (params::reverbCharacters[i]);
+        item.itemID   = i + 1;
+        item.colour   = lilac;
+        item.isTicked = i == now;
+        menu.addItem (std::move (item));
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&reverbName),
+                        [safe = juce::Component::SafePointer<CatpitEditor> (this)] (int picked)
+                        {
+                            if (safe != nullptr && picked > 0)
+                                safe->reverbType->setValueAsCompleteGesture ((float) (picked - 1));
+                        });
 }
 
 void CatpitEditor::bindButton (PushButton& button, const char* paramId)

@@ -28,6 +28,9 @@ class Channels
 public:
     static constexpr int count = 4;
 
+    /** The reverb a channel opens on until the player picks another. */
+    static constexpr const char* defaultReverb = "Hall";
+
     /** The controls kept in the node rather than in a parameter. */
     enum Flag { turbo, fat, bright, depth, presence, numFlags };
 

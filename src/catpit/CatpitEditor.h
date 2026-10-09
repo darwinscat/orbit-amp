@@ -88,6 +88,8 @@ private:
     std::array<std::unique_ptr<PushButton>, 6> overhead;     // the keys in the overhead holes
     GuardButton turbo;
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
+    Legend reverbName;                       // REVERB and its character; a click picks another
+    juce::ParameterAttachment* reverbType = nullptr;
     ColumnFader inFader, outFader;
     SegmentMeter inMeter, outMeter;
     TunerFace tuner;
@@ -108,11 +110,12 @@ private:
     template <typename Control>
     void bind (Control&, const juce::String& paramId);
     void bindButton (PushButton&, const char* paramId);
-    void follow (const char* paramId, std::function<void (float)> moved);
+    juce::ParameterAttachment* follow (const char* paramId, std::function<void (float)> moved);
     void  setParam (const char* paramId, float value);
     float getParam (const char* paramId) const;
 
-    void setUpChain();
+    void setUpChain (bool firstTime);
+    void showReverbMenu();
     void refreshHistory();
     void showRegisterMenu (int index);
     void showChannel();

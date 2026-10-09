@@ -49,6 +49,7 @@ Channels::Channels (AmpProcessor& p) : amp (p)
     kept.add (params::cabHpfOn);
     kept.add (params::cabLpfOn);
     kept.add (params::reverbMix);
+    kept.add (params::reverbType);
     kept.add (params::delayMix);
     kept.add (params::cabIr);
 }
@@ -159,6 +160,9 @@ float Channels::plain (const juce::String& paramId) const
 
 float Channels::defaultOf (const juce::String& paramId) const
 {
+    if (paramId == params::reverbType)      // the cockpit's room is a hall, whatever the engine opens on
+        return (float) juce::jmax (0, params::reverbCharacters.indexOf (defaultReverb));
+
     auto* p = amp.apvts.getParameter (paramId);
     return p != nullptr ? p->convertFrom0to1 (p->getDefaultValue()) : 0.0f;
 }
