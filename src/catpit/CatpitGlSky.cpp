@@ -148,7 +148,7 @@ void GlSky::renderOpenGL()
     const int fw = juce::roundToInt (fullW.load() * k), fh = juce::roundToInt (fullH.load() * k);
 
     juce::OpenGLHelpers::clear (juce::Colours::black);
-    if (shader == nullptr || fw <= 0 || fh <= 0)
+    if (shader == nullptr || fw <= 0 || fh <= 0 || ! flying.load())
         return;
 
     // The ship: the speed the lever asks for, reached the way a ship reaches it — slower up than down.

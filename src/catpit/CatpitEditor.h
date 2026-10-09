@@ -7,6 +7,7 @@
 #include "CatpitChannels.h"
 #include "CatpitControls.h"
 #include "CatpitGlSky.h"
+#include "CatpitMonitor.h"
 #include "CatpitPresets.h"
 #include "CatpitSpace.h"
 
@@ -86,6 +87,7 @@ private:
 
     juce::Component stage;
     Space   space;
+    Monitor monitor;             // a picture of the amp at work, when the windshield shows one instead of the sky
     Cockpit cockpit;
 
     // The sky on the GPU when it can be; the CPU Space stays as the fallback (and with CATPIT_SKY=cpu).
@@ -96,6 +98,7 @@ private:
     void applySky();
     void placeSky();
     void showSettingsMenu();
+    void showInWindow (Monitor::View);
 
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, 3> tones;

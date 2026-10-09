@@ -73,8 +73,10 @@ namespace
 
     const juce::Colour labelLilac { 0xffc9b8f5 };
 
-    /** Whether the sky flies on the GPU — a setting of the machine's, in the cockpit's settings file. */
+    /** Whether the sky flies on the GPU, and what the windshield shows — settings of the machine's, in
+        the cockpit's settings file. */
     const juce::Identifier gpuSkyKey { "gpuSky" };
+    const juce::Identifier windowKey { "window" };
 
     /** The cockpit's own tag on a family link, for the site's analytics. */
     constexpr const char* campaign = "utm_source=catpitamp&utm_medium=plugin";
@@ -327,6 +329,7 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 //==============================================================================
 CatpitEditor::CatpitEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), channels (p), presets (p, channels),
+      monitor (p),
       drive (Art::get().knobDrive, drivePointer),
       reverbName (layout::px13),
       delayWord (layout::px13),
@@ -353,6 +356,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     stage.addAndMakeVisible (space);
     space.setBounds (windshield.toNearestInt());
+    stage.addChildComponent (monitor);
+    monitor.setBounds (windshield.toNearestInt());
     stage.addAndMakeVisible (cockpit);
     cockpit.setBounds (stage.getLocalBounds());
 
@@ -570,6 +575,10 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // run): the choice is the machine's, not the sound's, so it lives with the settings, not the state.
     gpuSky = prefs::getBool (gpuSkyKey, true)
              && ! juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu");
+
+    // ...and so does what the windshield shows: the sky, or one of the pictures of the amp at work.
+    monitor.show ((Monitor::View) juce::jlimit (0, (int) Monitor::View::numViews - 1,
+                                                (int) prefs::store().get (windowKey, 0)));
     applySky();
 
     // A right click on the bare panel is the door to the settings; the panel is the stage itself,
@@ -772,8 +781,19 @@ void CatpitEditor::applySky()
         glSky.reset();
     }
 
-    space.setVisible (glSky == nullptr);
+    // The sky flies only while the windshield is showing it.
+    const bool stars = monitor.shown() == Monitor::View::stars;
+    space.setVisible (glSky == nullptr && stars);
+    if (glSky != nullptr)
+        glSky->setFlying (stars);
     placeSky();
+}
+
+void CatpitEditor::showInWindow (Monitor::View view)
+{
+    prefs::store().set (windowKey, (int) view);
+    monitor.show (view);
+    applySky();
 }
 
 void CatpitEditor::mouseDown (const juce::MouseEvent& e)
@@ -786,7 +806,7 @@ void CatpitEditor::mouseDown (const juce::MouseEvent& e)
     engine's own and are part of the sound; the GPU switch is this machine's and is not. */
 void CatpitEditor::showSettingsMenu()
 {
-    enum : int { itemGpu = 1, itemGateOn, firstStereo = 10, firstDecay = 20, firstPos = 30, firstThreshold = 100 };
+    enum : int { itemGpu = 1, itemGateOn, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100 };
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked, bool enabled = true)
     {
@@ -801,8 +821,12 @@ void CatpitEditor::showSettingsMenu()
 
     juce::PopupMenu menu;
 
-    menu.addSectionHeader ("SKY");
-    menu.addItem (itemFor (gpuBroken ? "On the GPU (OpenGL) — not available here" : "On the GPU (OpenGL)",
+    // What the windshield shows: the sky, or one of the pictures of the amp at work.
+    menu.addSectionHeader ("WINDOW");
+    for (int i = 0; i < Monitor::names().size(); ++i)
+        menu.addItem (itemFor (Monitor::names()[i], firstWindow + i, (int) monitor.shown() == i));
+    menu.addItem (itemFor (gpuBroken ? juce::String::fromUTF8 ("Stars on the GPU (OpenGL) \xe2\x80\x94 not available here")
+                                     : juce::String ("Stars on the GPU (OpenGL)"),
                            itemGpu, gpuSky && ! gpuBroken, ! gpuBroken));
 
     menu.addSectionHeader ("OUTPUT");
@@ -846,6 +870,7 @@ void CatpitEditor::showSettingsMenu()
                             }
                             else if (picked == itemGateOn)             e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);
                             else if (picked >= firstThreshold)         e.setParam (params::gateThreshold, (float) (picked - firstThreshold - 80));
+                            else if (picked >= firstWindow)            e.showInWindow ((Monitor::View) (picked - firstWindow));
                             else if (picked >= firstPos)               e.setParam (params::gatePos, (float) (picked - firstPos));
                             else if (picked >= firstDecay)             e.setParam (params::gateDecay, (float) (picked - firstDecay));
                             else if (picked >= firstStereo)            e.setParam (params::stereoMode, (float) (picked - firstStereo));

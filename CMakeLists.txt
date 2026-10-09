@@ -560,6 +560,7 @@ target_sources(CatpitAmp PRIVATE
     src/catpit/CatpitArt.cpp
     src/catpit/CatpitChannels.cpp
     src/catpit/CatpitControls.cpp
+    src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitPresets.cpp
     src/catpit/CatpitSpace.cpp
     src/catpit/CatpitGlSky.cpp

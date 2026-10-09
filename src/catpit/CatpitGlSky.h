@@ -29,6 +29,9 @@ public:
     /** Where the windshield is, and how big the whole surface is, in the editor's logical pixels. */
     void setArea (juce::Rectangle<float> windshield, juce::Point<float> editorSize) noexcept;
 
+    /** Off while the windshield shows a picture instead: the surface is cleared and nothing is shaded. */
+    void setFlying (bool f) noexcept { flying.store (f); }
+
     /** False once the shader has failed to build — the editor falls back to the CPU sky then. */
     bool failed() const noexcept { return broken.load(); }
 
@@ -44,6 +47,7 @@ private:
     std::atomic<float> throttle { 0.0f };
     std::atomic<float> areaX { 0 }, areaY { 0 }, areaW { 0 }, areaH { 0 }, fullW { 0 }, fullH { 0 };
     std::atomic<bool>  broken { false };
+    std::atomic<bool>  flying { true };
 
     // GL thread only.
     float speed = 0.05f;
