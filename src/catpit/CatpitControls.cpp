@@ -164,7 +164,7 @@ int Lever::labelAt (juce::Point<float> p) const noexcept
     return juce::jlimit (0, numDetents - 1, juce::roundToInt (posFromY (p.y)));
 }
 
-void Lever::setDetent (int d, bool animate)
+void Lever::setDetent (int d, bool animate, bool notify)
 {
     d = juce::jlimit (0, numDetents - 1, d);
     const bool changed = d != detent;
@@ -179,7 +179,7 @@ void Lever::setDetent (int d, bool animate)
         pos.jump ((float) d);
         travelled();
     }
-    if (changed && onDetent)
+    if (changed && notify && onDetent)
         onDetent (detent);
 }
 
@@ -345,7 +345,12 @@ void PushButton::mouseUp (const juce::MouseEvent& e)
 {
     held = false;
     if (getLocalBounds().contains (e.getPosition()))
-        setOn (! on, true);
+    {
+        if (latching)
+            setOn (! on, true);
+        else if (onPress)
+            onPress();
+    }
     aim();
 }
 

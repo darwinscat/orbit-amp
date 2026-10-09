@@ -104,7 +104,10 @@ public:
     std::function<void (float)> onTravel;     // continuous position, 0..numDetents-1, every movement
 
     int  getDetent() const noexcept { return detent; }
-    void setDetent (int d, bool animate);
+    bool isHeld() const noexcept    { return held; }
+
+    /** `notify` off moves the lever without reporting it — for following a state that moved by itself. */
+    void setDetent (int d, bool animate, bool notify = true);
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -128,7 +131,10 @@ private:
 //==============================================================================
 /** A latching push button: press it and it goes down and stays down, lit, press again and it comes
     back up dark. It sinks under the finger while held — the travel is the click — and settles at its
-    latched depth on release. Drawn to fill whatever square it is given. */
+    latched depth on release. Drawn to fill whatever square it is given.
+
+    With `latching` off it is a plain key: the press is `onPress` and it comes straight back up; whether
+    it is lit is then its owner's to say, through setOn. */
 class PushButton final : public juce::Component, private juce::Timer
 {
 public:
@@ -136,7 +142,9 @@ public:
 
     const juce::String name;
 
+    bool latching = true;
     std::function<void (bool)> onChange;
+    std::function<void()>      onPress;          // a plain key's press
     std::function<void (bool)> onHover;          // the editor shows the name + state while hovered
 
     bool isOn() const noexcept { return on; }

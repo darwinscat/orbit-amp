@@ -27,10 +27,17 @@ public:
         where the panel itself only has room for a short name or none. Empty text hides it. */
     void showTag (juce::Point<float> anchor, juce::String text);
 
+    /** What the signs over the overhead keys say: an arrow with nothing to step back or forward to
+        stands dim. */
+    void setHistory (bool canUndo, bool canRedo);
+
 private:
     juce::Point<float> tagAnchor;
     juce::String tagText;
     juce::Rectangle<float> tagBounds() const;
+
+    bool canUndo = false, canRedo = false;
+    void paintOverhead (juce::Graphics&) const;
 
     // The render and the printed words never change, but the windshield repaints sixty times a second
     // and every one of those repaints the cockpit over it. So the cockpit is painted ONCE, at the
@@ -72,6 +79,7 @@ private:
     std::array<std::unique_ptr<ArtKnob>, 3> tones;
     Lever lever;
     std::array<std::unique_ptr<PushButton>, 6> buttons;      // the keys under the tone knobs
+    std::array<std::unique_ptr<PushButton>, 6> overhead;     // the keys in the overhead holes
     GuardButton turbo;
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
     ColumnFader inFader, outFader;
@@ -83,10 +91,12 @@ private:
     template <typename Control>
     void bind (Control&, const juce::String& paramId);
     void bindButton (PushButton&, const char* paramId);
+    void follow (const char* paramId, std::function<void (float)> moved);
     void  setParam (const char* paramId, float value);
     float getParam (const char* paramId) const;
 
     void setUpChain();
+    void refreshHistory();
     int  packIndexFor (int detent) const;
     void choosePack (int detent);
     void chooseCombo (int step);

@@ -36,6 +36,9 @@ namespace
     }};
     constexpr float keyTracking = 0.04f;
 
+    // The overhead keys, in hole order: the history on the left of the divider.
+    enum { ovUndo, ovRedo };
+
     /** Where the keys stand along their row. ONE pitch for all six — the widest pair of neighbouring
         names plus a little air, so no name touches the next — the filters centred under BASS, the four
         layers set against the right end of the row, clear of the divider that parts the two groups. */
@@ -73,6 +76,25 @@ namespace
 
     const juce::Colour labelLilac { 0xffc9b8f5 };
 
+    /** A turning arrow — three quarters of a circle with a head on its open end. Forward turns
+        clockwise (redo); back is its mirror (undo). */
+    void drawTurnArrow (juce::Graphics& g, juce::Point<float> centre, float radius, bool back, juce::Colour colour)
+    {
+        const float from = juce::degreesToRadians (-140.0f), to = juce::degreesToRadians (70.0f);
+        juce::Path arc, head;
+        arc.addCentredArc (0.0f, 0.0f, radius, radius, 0.0f, from, to, true);
+
+        const juce::Point<float> end { radius * std::sin (to), -radius * std::cos (to) };
+        const juce::Point<float> along { std::cos (to), std::sin (to) }, across { std::sin (to), -std::cos (to) };
+        const float h = radius * 0.85f;
+        head.addTriangle (end + along * h, end + across * (h * 0.62f), end - across * (h * 0.62f));
+
+        const auto place = juce::AffineTransform::scale (back ? -1.0f : 1.0f, 1.0f).translated (centre);
+        g.setColour (colour);
+        g.strokePath (arc, juce::PathStrokeType (radius * 0.26f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded), place);
+        g.fillPath (head, place);
+    }
+
     juce::Rectangle<int> around (juce::Point<float> c, float w, float h)
     {
         return juce::Rectangle<float> (w, h).withCentre (c).toNearestInt();
@@ -102,6 +124,24 @@ void Cockpit::showTag (juce::Point<float> anchor, juce::String text)
     repaint (tagBounds().expanded (2.0f).getSmallestIntegerContainer());
 }
 
+void Cockpit::setHistory (bool undo, bool redo)
+{
+    if (undo == canUndo && redo == canRedo)
+        return;
+    canUndo = undo;
+    canRedo = redo;
+    repaint (juce::Rectangle<float> (layout::holes[ovUndo].x - 30.0f, 12.0f,
+                                     layout::holes[ovRedo].x - layout::holes[ovUndo].x + 60.0f, 34.0f).toNearestInt());
+}
+
+/** The signs over the overhead keys. Not in the cached layer: they change with what there is to undo. */
+void Cockpit::paintOverhead (juce::Graphics& g) const
+{
+    using namespace layout;
+    drawTurnArrow (g, { holes[ovUndo].x, 29.0f }, 8.0f, true,  labelLilac.withAlpha (canUndo ? 1.0f : 0.3f));
+    drawTurnArrow (g, { holes[ovRedo].x, 29.0f }, 8.0f, false, labelLilac.withAlpha (canRedo ? 1.0f : 0.3f));
+}
+
 void Cockpit::paint (juce::Graphics& g)
 {
     using namespace layout;
@@ -117,6 +157,7 @@ void Cockpit::paint (juce::Graphics& g)
         paintStatic (lg, scale);
     }
     g.drawImage (layer, juce::Rectangle<float> (0.0f, 0.0f, width, height));
+    paintOverhead (g);
 
     if (const auto tag = tagBounds(); ! tag.isEmpty())
     {
@@ -240,6 +281,10 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 {
     using namespace layout;
 
+    // Everything this constructor sets is the face settling onto the state, not a player's edit: with
+    // undo on the panel it must not leave a step to press back through.
+    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
+
     setUpChain();
 
     addAndMakeVisible (stage);
@@ -275,6 +320,21 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
             cockpit.showTag (at.translated (0.0f, -40.0f), over ? b.name + "  " + b.stateText() : juce::String());
         };
     }
+
+    // UNDO and REDO, in the two holes left of the overhead divider: plain keys over the processor's own
+    // history — the same one OrbitAmp's header drives.
+    for (const size_t i : { (size_t) ovUndo, (size_t) ovRedo })
+    {
+        overhead[i] = std::make_unique<PushButton> (i == ovUndo ? "UNDO" : "REDO");
+        auto& key = *overhead[i];
+        key.latching = false;
+        stage.addAndMakeVisible (key);
+        key.setBounds (around (holes[i], 40.0f, 40.0f));
+    }
+    overhead[ovUndo]->onPress = [this] { amp.history.undo(); };
+    overhead[ovRedo]->onPress = [this] { amp.history.redo(); };
+    amp.history.onHistoryChanged = [this] { refreshHistory(); };
+    refreshHistory();
 
     // The throttle picks the pack; where it starts is wherever the pack already playing sits, if it is one of
     // the four.
@@ -360,6 +420,24 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     bindButton (*buttons[btHpf], params::cabHpfOn);
     bindButton (*buttons[btLpf], params::cabLpfOn);
 
+    // The throttle and COMBO are set by hand, but an undo moves what they chose from under them — so
+    // they follow: the lever to the detent whose pack is playing, the cap to the cabinet that is.
+    follow (params::preampDevice, [this] (float v)
+    {
+        for (int d = 0; d < Lever::numDetents; ++d)
+            if (packIndexFor (d) == juce::roundToInt (v) && ! lever.isHeld())
+            {
+                lever.setDetent (d, true, false);
+                buttons[btFat]->setEnabled (d >= 2);
+            }
+    });
+    follow (params::cabIr, [this] (float v)
+    {
+        const auto it = std::find (comboIrs.begin(), comboIrs.end(), juce::roundToInt (v));
+        if (it != comboIrs.end())
+            sliders[2]->setStep ((int) std::distance (comboIrs.begin(), it), false);
+    });
+
     if (juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu"))
         useCpuSky();
     else
@@ -389,7 +467,13 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
 CatpitEditor::~CatpitEditor()
 {
+    amp.history.onHistoryChanged = nullptr;   // the history outlives this window
     gl.detach();
+}
+
+void CatpitEditor::refreshHistory()
+{
+    cockpit.setHistory (amp.history.canUndo(), amp.history.canRedo());
 }
 
 void CatpitEditor::resized()
@@ -505,6 +589,12 @@ void CatpitEditor::bind (Control& control, const juce::String& paramId)
 
     a->sendInitialUpdate();
     attachments.push_back (std::move (att));
+}
+
+void CatpitEditor::follow (const char* paramId, std::function<void (float)> moved)
+{
+    if (auto* p = amp.apvts.getParameter (paramId))
+        attachments.push_back (std::make_unique<juce::ParameterAttachment> (*p, std::move (moved)));
 }
 
 void CatpitEditor::bindButton (PushButton& button, const char* paramId)
