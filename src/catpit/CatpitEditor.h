@@ -68,6 +68,9 @@ public:
     void paint (juce::Graphics&) override {}
     void resized() override;
 
+    /** Cmd+Z and Cmd+Shift+Z step the history; 1 2 3 4 pull the throttle to a channel. */
+    bool keyPressed (const juce::KeyPress&) override;
+
 private:
     AmpProcessor& amp;
     Channels channels;

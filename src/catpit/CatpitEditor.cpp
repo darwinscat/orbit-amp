@@ -571,6 +571,16 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         });
     }
 
+    // The keys. A click anywhere on the face brings the focus here, since nothing on it wants the
+    // keyboard for itself; and the face takes it once when it first comes up, so the keys answer
+    // before the first click too.
+    setWantsKeyboardFocus (true);
+    juce::Timer::callAfterDelay (300, [safe = juce::Component::SafePointer<CatpitEditor> (this)]
+    {
+        if (safe != nullptr && safe->isShowing())
+            safe->grabKeyboardFocus();
+    });
+
     setResizable (true, true);
     getConstrainer()->setFixedAspectRatio ((double) width / (double) height);
     setResizeLimits (minWindowWidth, juce::roundToInt ((float) minWindowWidth * height / width),
@@ -670,6 +680,41 @@ void CatpitEditor::showRegisterMenu (int index)
             menu.addItem (std::move (item));
         }
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (overhead[(size_t) (ovFirstRegister + index)].get()));
+}
+
+bool CatpitEditor::keyPressed (const juce::KeyPress& key)
+{
+    using Mods = juce::ModifierKeys;
+
+    // The history — the same two steps the overhead keys take. (Ctrl on Windows and Linux; and there
+    // Ctrl+Y is redo as well, as hands expect.)
+    if (key == juce::KeyPress ('z', Mods::commandModifier | Mods::shiftModifier, 0)
+        || key == juce::KeyPress ('y', Mods::commandModifier, 0))
+    {
+        endTapping();
+        amp.history.redo();
+        return true;
+    }
+    if (key == juce::KeyPress ('z', Mods::commandModifier, 0))
+    {
+        endTapping();
+        amp.history.undo();
+        return true;
+    }
+
+    // 1 2 3 4: the throttle goes to that channel, as if a hand had put it there.
+    if (! key.getModifiers().isAnyModifierKeyDown())
+    {
+        const int channel = key.getKeyCode() - '1';
+        if (channel >= 0 && channel < Lever::numDetents)
+        {
+            if (! lever.isHeld())
+                lever.setDetent (channel, true);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void CatpitEditor::resized()
