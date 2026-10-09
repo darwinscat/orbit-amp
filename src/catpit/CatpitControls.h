@@ -240,6 +240,9 @@ public:
     /** How wide its words are as it would draw them now — for laying several out in a row. */
     float idealWidth() const;
 
+    /** Lights it for an instant, brighter than the pointer does — the answer to a tap. */
+    void flash();
+
     juce::Colour nameColour { 0xffc9b8f5 }, valueColour { 0xffece9f6 };
     bool upper = true;                           // false keeps the text's own case
 
@@ -260,6 +263,7 @@ private:
     juce::String name, value;
     bool dot = false, dragging = false;
     int  lastY = 0;
+    double flashUntil = 0.0;                     // on the millisecond counter
 
     struct Row { juce::String name, value; juce::Font nameFont, valueFont; float nameWidth, valueWidth, gap, width; };
     Row row() const;

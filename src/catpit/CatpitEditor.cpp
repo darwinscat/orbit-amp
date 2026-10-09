@@ -309,7 +309,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), channels (p), presets (p, channels),
       drive (Art::get().knobDrive, drivePointer),
       reverbName (layout::px13),
-      delayName (layout::px13),
+      delayWord (layout::px13),
+      delayNote (layout::px13),
       delayTempo (layout::px13),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
@@ -370,8 +371,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         stage.addAndMakeVisible (key);
         key.setBounds (around (holes[i], 40.0f, 40.0f));
     }
-    overhead[ovUndo]->onPress = [this] { amp.history.undo(); };
-    overhead[ovRedo]->onPress = [this] { amp.history.redo(); };
+    overhead[ovUndo]->onPress = [this] { endTapping(); amp.history.undo(); };
+    overhead[ovRedo]->onPress = [this] { endTapping(); amp.history.redo(); };
 
     // A B C D, in the four holes right of it: a press plays that register, a right click copies it.
     for (int r = 0; r < numRegisterKeys; ++r)
@@ -380,7 +381,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         overhead[i] = std::make_unique<PushButton> (juce::String::charToString ((juce::juce_wchar) ('A' + r)));
         auto& key = *overhead[i];
         key.latching = false;
-        key.onPress  = [this, r] { amp.history.switchTo (r); };
+        key.onPress  = [this, r] { endTapping(); amp.history.switchTo (r); };
         key.onMenu   = [this, r] { showRegisterMenu (r); };
         stage.addAndMakeVisible (key);
         key.setBounds (around (holes[i], 40.0f, 40.0f));
@@ -400,6 +401,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     };
     lever.onDetent = [this] (int d)
     {
+        endTapping();
         channels.select (d);    // refused when that channel's pack is not installed...
         showChannel();          // ...and then this puts the lever back where the sound is
     };
@@ -434,13 +436,16 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     });
     reverbType->sendInitialUpdate();
 
-    // DELAY's name carries its note value, and a click on it opens the list of them. The delay always
-    // keeps time: with a host, the host's; standing alone, its own — and that tempo stands on the plate
-    // beside the name, where it is dragged up or down, or rolled under the wheel, like a knob.
-    for (auto* legend : { &delayName, &delayTempo })
+    // The delay always keeps time, so its plate reads a beat: DELAY, a note value, a tempo. The word is
+    // tapped to give the tempo by hand; the note value opens the list of them; and the tempo — the
+    // delay's own when it stands alone, since with a host the host conducts — is dragged up or down,
+    // or rolled under the wheel, like a knob.
+    for (auto* legend : { &delayWord, &delayNote, &delayTempo })
         stage.addAndMakeVisible (legend);
-    delayName.nameColour = orange;
-    delayName.onClick = [this] { showDelayMenu(); };
+    delayWord.nameColour = orange;
+    delayWord.onClick = [this] { tapTempo(); };
+    delayNote.onClick = [this] { showDelayMenu(); };
+    tapPause.then = [this] { endTapping(); };
     delayTempo.setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
     delayTempo.onDragStart = [this] { delayBpm->beginGesture(); };
     delayTempo.onDragEnd   = [this] { delayBpm->endGesture(); };
@@ -576,6 +581,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 CatpitEditor::~CatpitEditor()
 {
     amp.history.onHistoryChanged = nullptr;   // the history outlives this window
+    endTapping();
     gl.detach();
 }
 
@@ -776,25 +782,81 @@ juce::ParameterAttachment* CatpitEditor::follow (const char* paramId, std::funct
     return attachments.back().get();
 }
 
-/** What the delay's two legends say, and where they stand: the note value always; the tempo only while
-    it is the delay's own to set — a host that is conducting has the say, and there is nothing to drag. */
+/** What the delay's plate says, and where the three stand: the word and the note value always; the
+    tempo only while it is the delay's own to set — a host that is conducting has the say, and there is
+    nothing to drag or tap. */
 void CatpitEditor::showDelayTime()
 {
-    delayName.set ("DELAY", params::delayDivisions[juce::jlimit (0, params::delayDivisions.size() - 1,
-                                                                 juce::roundToInt (getParam (params::delayDiv)))]);
+    delayWord.set ("DELAY");
+    delayNote.set ({}, params::delayDivisions[juce::jlimit (0, params::delayDivisions.size() - 1,
+                                                            juce::roundToInt (getParam (params::delayDiv)))]);
 
     tempoIsOwn = ! (amp.runsInHost() && amp.hostTempoBpm() > 0.0f);
     delayTempo.setVisible (tempoIsOwn);
     delayTempo.set ({}, juce::String (juce::roundToInt (getParam (params::delayBpm))) + " BPM");
 
-    // Side by side, the pair centred over the plate.
+    // Side by side, the row centred over the plate.
     const auto row = plateName (1);
-    const float gap = 22.0f, pad = 8.0f;
-    const float nameWidth = delayName.idealWidth() + pad, tempoWidth = tempoIsOwn ? delayTempo.idealWidth() + pad : 0.0f;
-    float x = row.getCentreX() - (nameWidth + (tempoIsOwn ? gap + tempoWidth : 0.0f)) * 0.5f;
-    delayName.setBounds (juce::Rectangle<float> (x, row.getY(), nameWidth, row.getHeight()).toNearestInt());
-    x += nameWidth + gap;
-    delayTempo.setBounds (juce::Rectangle<float> (x, row.getY(), tempoWidth, row.getHeight()).toNearestInt());
+    const float pad = 8.0f, gapNote = 6.0f, gapTempo = 22.0f;
+    const float wordWidth = delayWord.idealWidth() + pad, noteWidth = delayNote.idealWidth() + pad;
+    const float tempoWidth = tempoIsOwn ? delayTempo.idealWidth() + pad : 0.0f;
+
+    float x = row.getCentreX() - (wordWidth + gapNote + noteWidth + (tempoIsOwn ? gapTempo + tempoWidth : 0.0f)) * 0.5f;
+    const auto place = [&] (Legend& legend, float width, float gapAfter)
+    {
+        legend.setBounds (juce::Rectangle<float> (x, row.getY(), width, row.getHeight()).toNearestInt());
+        x += width + gapAfter;
+    };
+    place (delayWord, wordWidth, gapNote);
+    place (delayNote, noteWidth, gapTempo);
+    place (delayTempo, tempoWidth, 0.0f);
+}
+
+/** A TAP ON THE WORD. The tempo is the mean of the last few gaps between taps — the first tap only
+    starts the count, and a pause longer than the slowest beat worth counting starts it again. */
+void CatpitEditor::tapTempo()
+{
+    if (! tempoIsOwn)
+        return;     // a host is conducting: the beat is not ours to give
+
+    constexpr double longestGapMs = 2000.0;
+    constexpr size_t gapsKept = 4;
+
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    if (! tapping)
+    {
+        amp.history.beginGesture ("Tap tempo");
+        tapping = true;
+        tapGaps.clear();
+    }
+    else if (now - lastTap <= longestGapMs)
+    {
+        tapGaps.push_back (now - lastTap);
+        if (tapGaps.size() > gapsKept)
+            tapGaps.erase (tapGaps.begin());
+
+        double mean = 0.0;
+        for (const double gap : tapGaps)
+            mean += gap / (double) tapGaps.size();
+        delayBpm->setValueAsCompleteGesture (juce::jlimit (params::delayBpmMin, params::delayBpmMax,
+                                                           (float) std::round (60000.0 / mean)));
+    }
+
+    lastTap = now;
+    delayWord.flash();
+    tapPause.startTimer ((int) longestGapMs);
+}
+
+/** The taps have stopped — or something else is about to move the state, and the count must not be
+    left open across it. Closes the gesture: everything the taps did is one undo step. */
+void CatpitEditor::endTapping()
+{
+    if (! tapping)
+        return;
+    tapping = false;
+    tapPause.stopTimer();
+    tapGaps.clear();
+    amp.history.endGesture();
 }
 
 void CatpitEditor::showDelayMenu()
@@ -820,7 +882,7 @@ void CatpitEditor::showDelayMenu()
                                          : juce::String ("HOST  (no tempo)"), false, false);
     }
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&delayName),
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&delayNote),
                         [safe = juce::Component::SafePointer<CatpitEditor> (this)] (int picked)
                         {
                             if (safe != nullptr && picked > 0)
@@ -869,6 +931,8 @@ void CatpitEditor::showPresetMenu()
                         {
                             if (safe == nullptr || picked <= 0)
                                 return;
+
+                            safe->endTapping();
 
                             // The prompt is a window of its own and answers later: the face may be gone by then.
                             const auto ask = [safe] (const juce::String& title, const juce::String& initial,

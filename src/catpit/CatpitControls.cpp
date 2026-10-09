@@ -677,22 +677,38 @@ Legend::Row Legend::row() const
 
 float Legend::idealWidth() const { return row().width; }
 
+void Legend::flash()
+{
+    flashUntil = juce::Time::getMillisecondCounterHiRes() + 110.0;
+    repaint();
+    juce::Timer::callAfterDelay (120, [safe = juce::Component::SafePointer<Legend> (this)]
+    {
+        if (safe != nullptr)
+            safe->repaint();
+    });
+}
+
 void Legend::paint (juce::Graphics& g)
 {
     const bool lit = isMouseOverOrDragging();
+    const bool flashing = juce::Time::getMillisecondCounterHiRes() < flashUntil;
     const auto r = row();
+    const auto shown = [lit, flashing] (juce::Colour c)
+    {
+        return flashing ? c.interpolatedWith (juce::Colours::white, 0.85f) : lit ? c.brighter (0.5f) : c;
+    };
 
     auto area = getLocalBounds().toFloat().withSizeKeepingCentre (r.width, (float) getHeight());
     if (r.nameWidth > 0.0f)
     {
-        g.setColour (lit ? nameColour.brighter (0.5f) : nameColour);
+        g.setColour (shown (nameColour));
         g.setFont (r.nameFont);
         g.drawText (r.name, area.removeFromLeft (r.nameWidth).expanded (2.0f, 0.0f), juce::Justification::centred, false);
         area.removeFromLeft (r.gap);
     }
     if (r.valueWidth > 0.0f)
     {
-        g.setColour (lit ? valueColour.brighter (0.5f) : valueColour);
+        g.setColour (shown (valueColour));
         g.setFont (r.valueFont);
         g.drawText (r.value, area.removeFromLeft (r.valueWidth).expanded (2.0f, 0.0f), juce::Justification::centred, false);
     }

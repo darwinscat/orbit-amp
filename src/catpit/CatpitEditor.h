@@ -95,12 +95,28 @@ private:
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
     Legend reverbName;                       // REVERB and its character; a click picks another
     juce::ParameterAttachment* reverbType = nullptr;
-    Legend delayName;                        // DELAY and its note value; a click picks another
-    Legend delayTempo;                       // ...and the tempo it is counted in, dragged like a knob
+    // The delay's plate reads three things, and each answers the hand its own way:
+    Legend delayWord;                        // DELAY — tapped, it takes the tempo from the taps
+    Legend delayNote;                        // the note value — a click opens the list of them
+    Legend delayTempo;                       // the tempo — dragged up or down like a knob
     juce::ParameterAttachment* delayDiv = nullptr;
     juce::ParameterAttachment* delayBpm = nullptr;
     float tempoTravel = 0.0f;                // the hand's travel not yet spent on a whole BPM
     bool  tempoIsOwn  = true;                // false while a host is conducting
+
+    // Tapping. However many taps it takes to find the beat, the history sees one step: the count is
+    // held open as a gesture from the first tap until the taps have stopped for a moment.
+    struct After final : juce::Timer
+    {
+        std::function<void()> then;
+        void timerCallback() override { stopTimer(); if (then) then(); }
+    };
+    After tapPause;
+    std::vector<double> tapGaps;             // the last few gaps between taps, ms
+    double lastTap = 0.0;
+    bool   tapping = false;
+    void tapTempo();
+    void endTapping();
     ColumnFader inFader, outFader;
     SegmentMeter inMeter, outMeter;
     TunerFace tuner;
