@@ -476,6 +476,14 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         stage.addAndMakeVisible (legend);
     delayWord.nameColour = orange;
     delayWord.onClick = [this] { tapTempo(); };
+    // Nothing on the plate says the word is a key, so the pointer is told: what a tap on it does —
+    // or, with a host conducting, why it does nothing.
+    delayWord.onHover = [this] (bool over)
+    {
+        const auto word = delayWord.getBounds().toFloat();
+        nameTag.show ({ word.getCentreX(), word.getY() - 22.0f },
+                      ! over ? juce::String() : tempoIsOwn ? "TAP TEMPO" : "HOST TEMPO");
+    };
     delayNote.onClick = [this] { showDelayMenu(); };
     tapPause.then = [this] { endTapping(); };
     delayTempo.setMouseCursor (juce::MouseCursor::UpDownResizeCursor);

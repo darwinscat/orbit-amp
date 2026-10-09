@@ -247,10 +247,11 @@ public:
     std::function<void()>       onClick;
     std::function<void()>       onDragStart, onDragEnd;
     std::function<void (float)> onDrag;          // pixels since the last call, up is positive
+    std::function<void (bool)>  onHover;         // the editor says what a click on it does
 
     void paint (juce::Graphics&) override;
-    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
-    void mouseExit (const juce::MouseEvent&) override  { repaint(); }
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); if (onHover) onHover (true); }
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); if (onHover) onHover (false); }
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
