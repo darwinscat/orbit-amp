@@ -5,6 +5,7 @@
 #include "CatpitLayout.h"
 
 #include "../Parameters.h"
+#include "../ui/AboutConfig.h"
 
 #include <felitronics/appkit/BrandAssets.h>
 
@@ -73,6 +74,9 @@ namespace
     constexpr ArtKnob::Pointer tonePointer  { 0.335f, 0.70f, 0.076f };
 
     const juce::Colour labelLilac { 0xffc9b8f5 };
+
+    /** The cockpit's own tag on a family link, for the site's analytics. */
+    constexpr const char* campaign = "utm_source=catpitamp&utm_medium=plugin";
 
     /** A turning arrow — three quarters of a circle with a head on its open end. Forward turns
         clockwise (redo); back is its mirror (undo). */
@@ -296,7 +300,9 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       drive (Art::get().knobDrive, drivePointer),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
-      tuner (p.tunerEar)
+      tuner (p.tunerEar),
+      version (layout::px13),
+      about (p.updateChecker(), aboutConfig ("CatpitAmp", "https://darwinscat.com", campaign), p.pluginFormat())
 {
     using namespace layout;
 
@@ -458,6 +464,18 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     showChannel();
 
+    // The version, and behind it the window with everything else about the build.
+    about.setBrandTypeface (theme::displayTypeface());
+    addChildComponent (about);
+    version.upper = false;
+    version.valueColour = labelLilac.withAlpha (0.85f);
+    version.set ({}, "v" + amp.updateChecker().currentVersion());
+    version.onClick = [this] { showAbout(); };
+    stage.addAndMakeVisible (version);
+    version.setBounds (around (versionPlate, 124.0f, 30.0f));
+    timerCallback();
+    startTimerHz (4);   // the dot only ever moves after a deliberate check: a lookup, a few times a second
+
     if (juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu"))
         useCpuSky();
     else
@@ -489,6 +507,45 @@ CatpitEditor::~CatpitEditor()
 {
     amp.history.onHistoryChanged = nullptr;   // the history outlives this window
     gl.detach();
+}
+
+void CatpitEditor::timerCallback()
+{
+    version.setDot (amp.updateChecker().updateAvailable());
+
+    // The build window has closed: the sky goes back to the GPU.
+    if (skyParked && aboutWindow == nullptr)
+    {
+        skyParked = false;
+        if (glSky != nullptr)
+        {
+            space.setVisible (false);
+            gl.attachTo (*this);
+            placeSky();
+        }
+    }
+}
+
+/** THE BUILD WINDOW HANGS ON THE WINDOW, NOT ON THIS FACE — it is appkit's, the same one OrbitAmp opens —
+    and the GL view lies over everything in the window that is not its own, so it would open underneath
+    the cockpit. While it is up the sky flies on the CPU instead, and returns to the GPU when it closes. */
+void CatpitEditor::showAbout()
+{
+    auto* top = getTopLevelComponent();
+    const int before = top != nullptr ? top->getNumChildComponents() : 0;
+
+    if (glSky != nullptr && ! skyParked)
+    {
+        gl.detach();
+        space.setVisible (true);
+        skyParked = true;
+    }
+
+    about.showAbout();
+
+    // The window is the child it has just added; when that is gone, the timer brings the GPU sky back.
+    aboutWindow = top != nullptr && top->getNumChildComponents() > before
+                      ? top->getChildComponent (top->getNumChildComponents() - 1) : nullptr;
 }
 
 void CatpitEditor::refreshHistory()

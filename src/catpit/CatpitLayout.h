@@ -74,6 +74,9 @@ inline const juce::Rectangle<float> outFader { 1562.0f, 383.0f, 65.0f, 350.0f };
 
 inline const juce::Rectangle<float> tunerScreen { 635.0f, 799.0f, 402.0f, 104.0f };
 
+/** The flat plate under COMBO's right end, below the orange lamp: the version sits on it. */
+inline const juce::Point<float> versionPlate { 1434.0f, 812.0f };
+
 /** The emblem plate's inner face, a flat hexagon under the windshield, and its six screws. The render's
     own cat is painted over by a new face here, and the family's mark goes on it. */
 inline const std::array<juce::Point<float>, 6> emblemFace {{

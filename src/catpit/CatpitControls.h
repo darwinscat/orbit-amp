@@ -191,6 +191,41 @@ private:
 };
 
 //==============================================================================
+/** A WORD ON THE PANEL THAT ANSWERS THE HAND. A name and, after it and brighter, what it is set to. It
+    lifts under the pointer and a click is `onClick`. With `onDrag` set, dragging the word up or down
+    turns what it names — a control with no knob of its own — and a press that did not move still
+    clicks. `dot` hangs the family's orange dot after it: something here wants a look. */
+class Legend final : public juce::Component
+{
+public:
+    explicit Legend (float px);
+
+    void set (juce::String name, juce::String value = {});
+    void setDot (bool);
+
+    juce::Colour nameColour { 0xffc9b8f5 }, valueColour { 0xffece9f6 };
+    bool upper = true;                           // false keeps the text's own case
+
+    std::function<void()>       onClick;
+    std::function<void()>       onDragStart, onDragEnd;
+    std::function<void (float)> onDrag;          // pixels since the last call, up is positive
+
+    void paint (juce::Graphics&) override;
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); }
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+
+private:
+    const float px;
+    juce::String name, value;
+    bool dot = false, dragging = false;
+    int  lastY = 0;
+};
+
+//==============================================================================
 /** A horizontal fader in one of the three lower plates: a glowing line up to a metal cap. With `steps`
     set it is a selector instead — the cap clicks between that many marked positions. */
 class PlateSlider final : public juce::Component

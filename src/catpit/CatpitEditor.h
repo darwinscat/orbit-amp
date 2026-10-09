@@ -9,6 +9,8 @@
 #include "CatpitGlSky.h"
 #include "CatpitSpace.h"
 
+#include <felitronics/appkit/VersionBadge.h>
+
 #include <array>
 #include <memory>
 #include <vector>
@@ -53,7 +55,8 @@ private:
 //==============================================================================
 /** CatpitAmp's face over OrbitAmp's processor. Everything is laid out in the render's own 1672 x 941
     space on one stage, and the stage is scaled to the window as a whole. */
-class CatpitEditor final : public juce::AudioProcessorEditor
+class CatpitEditor final : public juce::AudioProcessorEditor,
+                           private juce::Timer
 {
 public:
     explicit CatpitEditor (AmpProcessor&);
@@ -88,6 +91,16 @@ private:
     ColumnFader inFader, outFader;
     SegmentMeter inMeter, outMeter;
     TunerFace tuner;
+
+    // The version on its plate, the family's orange dot beside it when a newer release has been seen.
+    // A click opens the same window OrbitAmp's footer does — appkit's badge, kept invisible and only
+    // for that window.
+    Legend version;
+    felitronics::appkit::VersionBadge about;
+    juce::Component::SafePointer<juce::Component> aboutWindow;
+    bool skyParked = false;      // the GPU sky is set aside while that window is open
+    void showAbout();
+    void timerCallback() override;
 
     std::vector<std::unique_ptr<juce::ParameterAttachment>> attachments;
 

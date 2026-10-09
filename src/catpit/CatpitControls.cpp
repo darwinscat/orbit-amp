@@ -501,6 +501,115 @@ void GuardButton::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+Legend::Legend (float size) : px (size)
+{
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+void Legend::set (juce::String n, juce::String v)
+{
+    if (n == name && v == value)
+        return;
+    name  = std::move (n);
+    value = std::move (v);
+    repaint();
+}
+
+void Legend::setDot (bool d)
+{
+    if (d != dot)
+    {
+        dot = d;
+        repaint();
+    }
+}
+
+void Legend::paint (juce::Graphics& g)
+{
+    const bool lit = isMouseOverOrDragging();
+    const auto nameFont  = labelFont (px).withExtraKerningFactor (0.08f);
+    const auto valueFont = labelFont (px).withExtraKerningFactor (0.03f);
+    const auto n = upper ? name.toUpperCase() : name, v = upper ? value.toUpperCase() : value;
+
+    constexpr float gap = 14.0f, dotSize = 7.0f, dotGap = 9.0f;
+    const float nw = n.isEmpty() ? 0.0f : juce::GlyphArrangement::getStringWidth (nameFont, n);
+    const float vw = v.isEmpty() ? 0.0f : juce::GlyphArrangement::getStringWidth (valueFont, v);
+    const float between = nw > 0.0f && vw > 0.0f ? gap : 0.0f;
+    const float total = nw + between + vw + (dot ? dotGap + dotSize : 0.0f);
+
+    auto row = getLocalBounds().toFloat().withSizeKeepingCentre (total, (float) getHeight());
+    if (nw > 0.0f)
+    {
+        g.setColour (lit ? nameColour.brighter (0.5f) : nameColour);
+        g.setFont (nameFont);
+        g.drawText (n, row.removeFromLeft (nw).expanded (2.0f, 0.0f), juce::Justification::centred, false);
+        row.removeFromLeft (between);
+    }
+    if (vw > 0.0f)
+    {
+        g.setColour (lit ? valueColour.brighter (0.5f) : valueColour);
+        g.setFont (valueFont);
+        g.drawText (v, row.removeFromLeft (vw).expanded (2.0f, 0.0f), juce::Justification::centred, false);
+    }
+    if (dot)
+    {
+        juce::Path p;
+        p.addEllipse (juce::Rectangle<float> (dotSize, dotSize).withCentre ({ row.getX() + dotGap + dotSize * 0.5f, row.getCentreY() }));
+        glow (g, p, orange, 5.0f);
+        g.setColour (orange);
+        g.fillPath (p);
+    }
+}
+
+void Legend::mouseDown (const juce::MouseEvent& e)
+{
+    dragging = false;
+    lastY = e.getScreenY();
+}
+
+void Legend::mouseDrag (const juce::MouseEvent& e)
+{
+    if (! onDrag)
+        return;
+    if (! dragging && std::abs (e.getDistanceFromDragStartY()) < 4)
+        return;                                   // not a drag yet — it may still be a click
+    if (! dragging)
+    {
+        dragging = true;
+        lastY = e.getScreenY();
+        if (onDragStart) onDragStart();
+    }
+    const int y = e.getScreenY();
+    if (y != lastY)
+        onDrag ((float) (lastY - y));
+    lastY = y;
+}
+
+void Legend::mouseUp (const juce::MouseEvent& e)
+{
+    if (dragging)
+    {
+        dragging = false;
+        if (onDragEnd) onDragEnd();
+    }
+    else if (onClick && getLocalBounds().contains (e.getPosition()))
+        onClick();
+    repaint();
+}
+
+void Legend::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
+{
+    if (! onDrag || juce::approximatelyEqual (w.deltaY, 0.0f))
+    {
+        juce::Component::mouseWheelMove (e, w);
+        return;
+    }
+    if (onDragStart) onDragStart();
+    onDrag ((w.isReversed ? -w.deltaY : w.deltaY) * 40.0f);
+    if (onDragEnd) onDragEnd();
+}
+
+//==============================================================================
 PlateSlider::PlateSlider (juce::Colour a, juce::Colour b, int n) : from (a), to (b), steps (n)
 {
     setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
