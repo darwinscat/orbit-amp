@@ -93,6 +93,13 @@ juce::Rectangle<float> Monitor::glass() const
                .translated (-layout::windshield.getX(), -layout::windshield.getY());
 }
 
+juce::Rectangle<float> Monitor::band() const
+{
+    // The spectrum's ground: the glass's height, but the windshield's whole width — it runs out under
+    // the frame on both sides rather than stopping short of it.
+    return glass().withX (0.0f).withWidth ((float) getWidth());
+}
+
 void Monitor::resized()
 {
     if (scope != nullptr)
@@ -115,7 +122,7 @@ void Monitor::timerCallback()
     pull (amp.blockInSpectrumTap[(size_t) preampBlock], before);
     pull (amp.blockSpectrumTap[(size_t) preampBlock],   after);
 
-    repaint (glass().getSmallestIntegerContainer());
+    repaint (band().getSmallestIntegerContainer());
 }
 
 void Monitor::paint (juce::Graphics& g)
@@ -123,85 +130,68 @@ void Monitor::paint (juce::Graphics& g)
     g.fillAll (juce::Colour (0xff030306));      // the glass, dark: the sky is not flying behind a picture
 
     if (view == View::spectrum)
-        paintSpectrum (g, glass());
+        paintSpectrum (g, band());
 }
 
 void Monitor::paintSpectrum (juce::Graphics& g, juce::Rectangle<float> r)
 {
+    // No well, no grid, no frame: the spectrum is light on the glass, from one edge of the windshield to
+    // the other, and the cockpit's frame is what cuts it off.
     const double lo = 20.0, hi = 20000.0;
-    const auto xOf = [&] (double hz) { return r.getX() + (float) (std::log10 (hz / lo) / std::log10 (hi / lo)) * r.getWidth(); };
 
-    // The well, and a grid: a line at every decade, fainter ones at 2 and 5 between.
-    g.setColour (juce::Colour (0xff050509));
-    g.fillRoundedRectangle (r, 6.0f);
-    for (const double decade : { 10.0, 100.0, 1000.0, 10000.0 })
-        for (const double step : { 2.0, 5.0, 10.0 })
-            if (const double hz = decade * step; hz > lo && hz < hi)
-            {
-                g.setColour (violet.withAlpha (juce::exactlyEqual (step, 10.0) ? 0.22f : 0.09f));
-                g.fillRect (juce::Rectangle<float> (xOf (hz) - 0.5f, r.getY() + 3.0f, 1.0f, r.getHeight() - 6.0f));
-            }
-    g.setColour (violet.withAlpha (0.16f));
-    g.fillRect (juce::Rectangle<float> (r.getX() + 3.0f, r.getCentreY() - 0.5f, r.getWidth() - 6.0f, 1.0f));   // 0 dB for the curve
+    const juce::Graphics::ScopedSaveState clipped (g);
+    g.reduceClipRegion (r.withTrimmedBottom (2.0f).toNearestInt());   // a trace lying on the floor is not drawn: silence is dark glass
 
+    felitronics::analysis::PlotMap pm;
+    pm.width      = r.getWidth();
+    pm.height     = r.getHeight();
+    pm.plotBottom = r.getHeight();
+    pm.freqMin    = lo;
+    pm.freqMax    = hi;
+    pm.specTop    = 0.0;
+    pm.specBottom = -90.0;
+
+    const double rate = amp.currentSampleRate() > 0.0 ? amp.currentSampleRate() : displayRate;
+    const auto draw = [&] (felitronics::analysis::SpectrumPane& pane, juce::Colour tint,
+                           float fillTop, float fillBottom, float line)
     {
-        const juce::Graphics::ScopedSaveState clipped (g);
-        g.reduceClipRegion (r.toNearestInt());
-
-        felitronics::analysis::PlotMap pm;
-        pm.width      = r.getWidth();
-        pm.height     = r.getHeight();
-        pm.plotBottom = r.getHeight();
-        pm.freqMin    = lo;
-        pm.freqMax    = hi;
-        pm.specTop    = 0.0;
-        pm.specBottom = -90.0;
-
-        const double rate = amp.currentSampleRate() > 0.0 ? amp.currentSampleRate() : displayRate;
-        const auto draw = [&] (felitronics::analysis::SpectrumPane& pane, juce::Colour tint,
-                               float fillTop, float fillBottom, float line)
+        juce::Path fill, peak;
+        fill.startNewSubPath (r.getX(), r.getBottom());
+        bool first = true;
+        pane.buildColumns (pm, rate, 4.5, 1000.0, [&] (int, float x, float yFill, float yPeak)
         {
-            juce::Path fill, peak;
-            fill.startNewSubPath (r.getX(), r.getBottom());
-            bool first = true;
-            pane.buildColumns (pm, rate, 4.5, 1000.0, [&] (int, float x, float yFill, float yPeak)
-            {
-                fill.lineTo (r.getX() + x, r.getY() + yFill);
-                if (first) { peak.startNewSubPath (r.getX() + x, r.getY() + yPeak); first = false; }
-                else       peak.lineTo (r.getX() + x, r.getY() + yPeak);
-            });
-            fill.lineTo (r.getRight(), r.getBottom());
-            fill.closeSubPath();
+            fill.lineTo (r.getX() + x, r.getY() + yFill);
+            if (first) { peak.startNewSubPath (r.getX() + x, r.getY() + yPeak); first = false; }
+            else       peak.lineTo (r.getX() + x, r.getY() + yPeak);
+        });
+        fill.lineTo (r.getRight(), r.getBottom());
+        fill.closeSubPath();
 
-            g.setGradientFill (juce::ColourGradient (tint.withAlpha (fillTop), 0.0f, r.getY() + r.getHeight() * 0.30f,
-                                                     tint.withAlpha (fillBottom), 0.0f, r.getBottom(), false));
-            g.fillPath (fill);
-            g.setColour (tint.withAlpha (line));
-            g.strokePath (peak, juce::PathStrokeType (1.2f));
-        };
+        g.setGradientFill (juce::ColourGradient (tint.withAlpha (fillTop), 0.0f, r.getY() + r.getHeight() * 0.30f,
+                                                 tint.withAlpha (fillBottom), 0.0f, r.getBottom(), false));
+        g.fillPath (fill);
+        g.setColour (tint.withAlpha (line));
+        g.strokePath (peak, juce::PathStrokeType (1.2f));
+    };
 
-        // OrbitAmp's grammar for a pair: what goes in is the quiet grey ground, what comes out is drawn
-        // over it in the hot colour.
-        draw (before, juce::Colour (0xff7f93b5), 0.16f, 0.02f, 0.35f);
-        draw (after,  orange,                    0.20f, 0.02f, 0.60f);
+    // OrbitAmp's grammar for a pair: what goes in is the quiet grey ground, what comes out is drawn
+    // over it in the hot colour.
+    draw (before, juce::Colour (0xff7f93b5), 0.16f, 0.02f, 0.35f);
+    draw (after,  orange,                    0.20f, 0.02f, 0.60f);
 
-        // The curve the three tone knobs are holding: +/-18 dB about the middle line.
-        juce::Path curve;
-        constexpr double span = 18.0;
-        for (float x = 0.0f; x <= r.getWidth(); x += 2.0f)
-        {
-            const double hz = lo * std::pow (hi / lo, (double) x / (double) r.getWidth());
-            const float  y  = r.getCentreY() - (float) (juce::jlimit (-span, span, console.magnitudeDb (hz)) / span)
-                                                   * r.getHeight() * 0.5f;
-            if (x <= 0.0f) curve.startNewSubPath (r.getX() + x, y);
-            else           curve.lineTo (r.getX() + x, y);
-        }
-        g.setColour (lilac);
-        g.strokePath (curve, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    // The curve the three tone knobs are holding: +/-18 dB about the middle of the band.
+    juce::Path curve;
+    constexpr double span = 18.0;
+    for (float x = 0.0f; x <= r.getWidth(); x += 2.0f)
+    {
+        const double hz = lo * std::pow (hi / lo, (double) x / (double) r.getWidth());
+        const float  y  = r.getCentreY() - (float) (juce::jlimit (-span, span, console.magnitudeDb (hz)) / span)
+                                               * r.getHeight() * 0.5f;
+        if (x <= 0.0f) curve.startNewSubPath (r.getX() + x, y);
+        else           curve.lineTo (r.getX() + x, y);
     }
-
-    g.setColour (violet.withAlpha (0.35f));
-    g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
+    g.setColour (lilac);
+    g.strokePath (curve, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
 } // namespace orbitamp::catpit

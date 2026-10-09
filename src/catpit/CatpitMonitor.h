@@ -18,7 +18,8 @@ namespace orbitamp::catpit
     pictures OrbitAmp draws of an amp at work, thrown across the glass in place of the stars.
 
       SPECTRUM   what the tone stack eats, grey, and what it makes of it, orange — with the curve
-                 BASS, MIDDLE and TREBLE are holding drawn over both;
+                 BASS, MIDDLE and TREBLE are holding drawn over both. Bare light on the glass: no
+                 grid, no frame, running out under the windshield's frame on both sides;
       WAVE, SHAPE, ENVELOPE, TRANSFER
                  OrbitAmp's own scope, as it stands, looking at the amp the throttle has chosen.
 
@@ -52,7 +53,8 @@ private:
     core::EqLink console;                                  // a display copy of the tone stack, for its curve
     felitronics::analysis::SpectrumPane before, after;
 
-    juce::Rectangle<float> glass() const;
+    juce::Rectangle<float> glass() const;     // where a framed picture stands, clear of what hangs into the window
+    juce::Rectangle<float> band() const;      // the spectrum's: the same height, from edge to edge
     void paintSpectrum (juce::Graphics&, juce::Rectangle<float>);
     void timerCallback() override;
 };
