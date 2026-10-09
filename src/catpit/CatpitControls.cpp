@@ -351,34 +351,36 @@ void PushButton::paint (juce::Graphics& g)
     if (! isEnabled())
         g.beginTransparencyLayer (0.3f);
 
+    // Drawn for a 40-px box — an overhead hole — and scaled to whatever box it is given.
+    const float u = (float) juce::jmin (getWidth(), getHeight()) / 40.0f;
     const auto c = getLocalBounds().toFloat().getCentre();
     const float d = juce::jlimit (0.0f, 1.2f, depth.value);
     const float l = juce::jlimit (0.0f, 1.0f, light.value);
 
     // The bezel: a chrome ring set into the hole, the light ring inside it.
-    const auto bezel = juce::Rectangle<float> (34.0f, 34.0f).withCentre (c);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff8f8c9c), c.translated (-6.0f, -9.0f),
-                                             juce::Colour (0xff1e1d25), c.translated (8.0f, 12.0f), true));
+    const auto bezel = juce::Rectangle<float> (34.0f * u, 34.0f * u).withCentre (c);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff8f8c9c), c.translated (-6.0f * u, -9.0f * u),
+                                             juce::Colour (0xff1e1d25), c.translated (8.0f * u, 12.0f * u), true));
     g.fillEllipse (bezel);
     g.setColour (juce::Colour (0xff07060a));
-    g.fillEllipse (bezel.reduced (3.0f));
+    g.fillEllipse (bezel.reduced (3.0f * u));
 
-    const auto ring = bezel.reduced (4.5f);
+    const auto ring = bezel.reduced (4.5f * u);
     if (l > 0.01f)
     {
         juce::Path rp;
         rp.addEllipse (ring);
-        glow (g, rp, violet.withAlpha (0.9f * l), 7.0f);
+        glow (g, rp, violet.withAlpha (0.9f * l), 7.0f * u);
     }
     g.setColour (violet.interpolatedWith (juce::Colour (0xff2a2140), 1.0f - l));
-    g.drawEllipse (ring, 1.8f);
+    g.drawEllipse (ring, 1.8f * u);
 
     // The cap: it shrinks a touch and darkens at its rim as it goes down — farther from the eye.
-    const float capD = 20.0f * (1.0f - 0.10f * d);
-    const auto cap = juce::Rectangle<float> (capD, capD).withCentre (c.translated (0.0f, 0.8f * d));
+    const float capD = 20.0f * u * (1.0f - 0.10f * d);
+    const auto cap = juce::Rectangle<float> (capD, capD).withCentre (c.translated (0.0f, 0.8f * u * d));
     g.setGradientFill (juce::ColourGradient (juce::Colour (0xffb9b5c6).interpolatedWith (juce::Colour (0xff6c6878), d * 0.5f),
-                                             cap.getCentre().translated (-3.0f, -4.0f),
-                                             juce::Colour (0xff24222c), cap.getCentre().translated (5.0f, 6.0f), true));
+                                             cap.getCentre().translated (-3.0f * u, -4.0f * u),
+                                             juce::Colour (0xff24222c), cap.getCentre().translated (5.0f * u, 6.0f * u), true));
     g.fillEllipse (cap);
 
     // Latched on, the cap's face carries the light — a lilac pool in its middle.

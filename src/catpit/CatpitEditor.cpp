@@ -21,9 +21,9 @@ namespace catpit
 
 namespace
 {
-    // The overhead buttons, in hole order: the two filters on the left of the divider, the pack's own
-    // layers on the right. The panel has room for a short name over each hole; the full one shows on
-    // hover. FAT is a layer only the two hottest packs carry.
+    // The six keys under the tone knobs: the two filters, then the pack's own layers. The row has room
+    // for a short name under each; the full one shows on hover. FAT is a layer only the two hottest
+    // packs carry.
     struct Switch { const char* name; const char* shortName; };
     enum { btHpf, btLpf, btFat, btBright, btDepth, btPresence };
     constexpr std::array<Switch, 6> switches {{
@@ -34,39 +34,27 @@ namespace
         { "DEPTH",    "DEPTH"  },
         { "PRESENCE", "PRES"   },
     }};
+    constexpr float keyTracking = 0.04f;
 
-    /** Where each overhead name goes: over its hole if it can, but never touching a neighbour and never
-        past its group's edges — the right four holes sit closer than their names are wide. A few passes
-        of pushing overlapping pairs apart, then the group is slid back inside its edges. */
-    std::array<float, 6> overheadNameCentres()
+    /** Where the keys stand along their row. ONE pitch for all six — the widest pair of neighbouring
+        names plus a little air, so no name touches the next — the filters centred under BASS, the four
+        layers set against the right end of the row, clear of the divider that parts the two groups. */
+    std::array<float, 6> keyCentres()
     {
-        const auto font = labelFont (layout::px13);
-        std::array<float, 6> x {}, w {};
-        for (size_t i = 0; i < x.size(); ++i)
-        {
-            x[i] = layout::holes[i].x;
+        const auto font = labelFont (layout::px11).withExtraKerningFactor (keyTracking);
+        std::array<float, 6> w {}, x {};
+        for (size_t i = 0; i < w.size(); ++i)
             w[i] = juce::GlyphArrangement::getStringWidth (font, switches[i].shortName);
-        }
 
-        constexpr float gap = 10.0f;
-        const auto settle = [&] (size_t from, size_t to, float left, float right)
-        {
-            for (int pass = 0; pass < 24; ++pass)
-            {
-                for (size_t i = from + 1; i < to; ++i)
-                {
-                    const float overlap = (x[i - 1] + w[i - 1] * 0.5f + gap) - (x[i] - w[i] * 0.5f);
-                    if (overlap > 0.0f) { x[i - 1] -= overlap * 0.5f; x[i] += overlap * 0.5f; }
-                }
-                const float under = left - (x[from] - w[from] * 0.5f);
-                const float over  = (x[to - 1] + w[to - 1] * 0.5f) - right;
-                const float slide = under > 0.0f ? under : (over > 0.0f ? -over : 0.0f);
-                for (size_t i = from; i < to; ++i)
-                    x[i] += slide;
-            }
-        };
-        settle (0, 2, 572.0f, 772.0f);     // left of the divider
-        settle (2, 6, 790.0f, 1098.0f);    // right of it, to the panel's edge
+        float pitch = 0.0f;
+        for (size_t i = 0; i + 1 < w.size(); ++i)
+            if (i != btLpf)     // the divider stands between LPF and FAT, not air
+                pitch = juce::jmax (pitch, (w[i] + w[i + 1]) * 0.5f + 7.5f);
+
+        x[btHpf] = layout::keyGroupX - pitch * 0.5f;
+        x[btLpf] = layout::keyGroupX + pitch * 0.5f;
+        for (size_t i = btFat; i <= btPresence; ++i)
+            x[i] = layout::keyRowRight - w[btPresence] * 0.5f - pitch * (float) (btPresence - i);
         return x;
     }
 
@@ -216,11 +204,11 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 
     paintEmblem (g, scale);
 
-    // The overhead names, one row over their holes.
-    const auto nameX = overheadNameCentres();
+    // The keys' names, under them.
+    const auto keyX = keyCentres();
     for (size_t i = 0; i < switches.size(); ++i)
-        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (140.0f, 22.0f).withCentre ({ nameX[i], 29.0f }),
-                   px13, labelLilac, 0.0f);
+        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
+                   px11, labelLilac, keyTracking);
 
     drawLabel (g, "DRIVE", juce::Rectangle<float> (220.0f, 30.0f).withCentre ({ drive.centre.x, 394.0f }), px15, labelLilac);
     const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
@@ -274,15 +262,17 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         tones[i]->setBounds (around (layout::tones[i].centre, d, d));
     }
 
+    const auto keyX = keyCentres();
     for (size_t i = 0; i < buttons.size(); ++i)
     {
         buttons[i] = std::make_unique<PushButton> (switches[i].name);
         auto& b = *buttons[i];
         stage.addAndMakeVisible (b);
-        b.setBounds (around (holes[i], 40.0f, 40.0f));
-        b.onHover = [this, i, &b] (bool over)
+        const juce::Point<float> at { keyX[i], keyRowY };
+        b.setBounds (around (at, keySize, keySize));
+        b.onHover = [this, at, &b] (bool over)
         {
-            cockpit.showTag ({ holes[i].x, 116.0f }, over ? b.name + "  " + b.stateText() : juce::String());
+            cockpit.showTag (at.translated (0.0f, -40.0f), over ? b.name + "  " + b.stateText() : juce::String());
         };
     }
 

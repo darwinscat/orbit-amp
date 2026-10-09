@@ -71,7 +71,7 @@ private:
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, 3> tones;
     Lever lever;
-    std::array<std::unique_ptr<PushButton>, 6> buttons;
+    std::array<std::unique_ptr<PushButton>, 6> buttons;      // the keys under the tone knobs
     GuardButton turbo;
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
     ColumnFader inFader, outFader;

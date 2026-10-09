@@ -123,9 +123,9 @@ private:
 };
 
 //==============================================================================
-/** A latching push button in one of the overhead holes: press it and it goes down and stays down, lit,
-    press again and it comes back up dark. It sinks under the finger while held — the travel is the
-    click — and settles at its latched depth on release. */
+/** A latching push button: press it and it goes down and stays down, lit, press again and it comes
+    back up dark. It sinks under the finger while held — the travel is the click — and settles at its
+    latched depth on release. Drawn to fill whatever square it is given. */
 class PushButton final : public juce::Component, private juce::Timer
 {
 public:

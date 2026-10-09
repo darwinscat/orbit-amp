@@ -23,6 +23,8 @@ inline constexpr int   minWindowWidth = 1024;
 inline constexpr float minScale       = (float) minWindowWidth / width;
 inline constexpr float px13           = 13.0f / minScale;   // a 13-px label, in this space
 inline constexpr float px15           = 15.0f / minScale;
+/** The one exception, asked for: the six keys under the tone knobs wear short names a size down. */
+inline constexpr float px11           = 11.0f / minScale;
 
 inline const juce::Point<float> windshieldSeed { 836.0f, 164.0f };
 inline const juce::Rectangle<float> windshield { 152.0f, 60.0f, 1368.0f, 210.0f };
@@ -41,6 +43,14 @@ inline const std::array<Socket, 3> tones {{
     { { 1358.7f, 476.9f }, 61.9f },    // TREBLE
 }};
 
+/** The row that lift frees under them: six keys, their names below. Two groups — the two filters under
+    BASS, the pack's four layers under MIDDLE and TREBLE — with the painted divider between them. */
+inline constexpr float keyRowY     = 563.0f;
+inline constexpr float keyNameY    = 588.5f;
+inline constexpr float keySize     = 34.0f;
+inline constexpr float keyGroupX   = 1060.3f;    // the filters' middle: BASS
+inline constexpr float keyRowRight = 1418.0f;    // the last name ends here, short of the plate's corner screw
+
 inline const juce::Rectangle<float> leverFrame { 254.0f, 376.0f, 261.0f, 217.0f };
 inline const juce::Rectangle<float> turboFrame { 799.0f, 415.0f, 165.0f, 180.0f };
 
@@ -50,7 +60,7 @@ inline const std::array<juce::Rectangle<float>, 3> sliderInsets {{
     { 1073.0f, 660.0f, 341.0f, 53.0f },    // COMBO
 }};
 
-/** The six holes in the overhead panel, left to right. */
+/** The six holes in the overhead panel, left to right: two, a divider, four. */
 inline const std::array<juce::Point<float>, 6> holes {{
     { 626.0f, 60.0f }, { 726.0f, 60.0f }, { 834.0f, 60.0f }, { 901.0f, 60.0f }, { 967.0f, 60.0f }, { 1035.0f, 60.0f },
 }};
