@@ -412,7 +412,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     stage.setBounds (0, 0, (int) width, (int) height);
 
     stage.addAndMakeVisible (space);
-    space.setBounds (windshield.toNearestInt());
+    space.setBounds (glass.toNearestInt());
+    space.setWindow (windshield - glass.getPosition());
     stage.addChildComponent (monitor);
     monitor.setBounds (windshield.toNearestInt());
     stage.addAndMakeVisible (cockpit);
@@ -891,7 +892,7 @@ void CatpitEditor::placeSky()
     if (glSky != nullptr)
     {
         const float s = (float) getWidth() / layout::width;
-        glSky->setArea (layout::windshield * s, { (float) getWidth(), (float) getHeight() });
+        glSky->setArea (layout::glass * s, layout::windshield * s, { (float) getWidth(), (float) getHeight() });
     }
 }
 

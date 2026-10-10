@@ -159,11 +159,12 @@ void Space::tick()
 void Space::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat();
-    const auto c = b.getCentre();
-    const float f = b.getWidth() * 0.5f;
+    const auto w = window.isEmpty() ? b : window;      // what the picture is composed for; `b` is what is painted
+    const auto c = w.getCentre();
+    const float f = w.getWidth() * 0.5f;
     const float warp = juce::jlimit (0.0f, 1.0f, (speed - 0.5f) / 1.1f);
 
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff070616), c, juce::Colour (0xff010104), b.getTopLeft(), true));
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff070616), c, juce::Colour (0xff010104), w.getTopLeft(), true));
     g.fillAll();
 
     // The clouds: each swells from far to past the windshield while it brightens and then fades, two
@@ -174,8 +175,8 @@ void Space::paint (juce::Graphics& g)
         const auto& img = nebulae[(size_t) cl.image];
         const float scale = 0.7f + cl.phase * cl.phase * 3.2f;
         const float alpha = std::sin (cl.phase * juce::MathConstants<float>::pi) * 0.8f;
-        const float k = b.getWidth() / (float) img.getWidth() * scale;
-        const auto at = c + cl.drift * b.getWidth() * 0.35f * cl.phase;
+        const float k = w.getWidth() / (float) img.getWidth() * scale;
+        const auto at = c + cl.drift * w.getWidth() * 0.35f * cl.phase;
         g.setOpacity (alpha);
         g.drawImageTransformed (img, juce::AffineTransform::translation (-(float) img.getWidth() * 0.5f, -(float) img.getHeight() * 0.5f)
                                          .rotated (cl.angle * 0.15f)
@@ -188,7 +189,7 @@ void Space::paint (juce::Graphics& g)
     if (warp > 0.0f)
     {
         g.setGradientFill (juce::ColourGradient (juce::Colour (0xffcfc4ff).withAlpha (0.35f * warp), c,
-                                                 juce::Colours::transparentBlack, c.translated (b.getHeight() * 1.4f, 0.0f), true));
+                                                 juce::Colours::transparentBlack, c.translated (w.getHeight() * 1.4f, 0.0f), true));
         g.fillAll();
     }
 
