@@ -101,7 +101,8 @@ public:
     void paint (juce::Graphics&) override {}
     void resized() override;
 
-    /** Cmd+Z and Cmd+Shift+Z step the history; 1 2 3 4 pull the throttle to a channel. */
+    /** Cmd+Z and Cmd+Shift+Z step the history; 1 2 3 4 pull the throttle to a channel; A B C D play a
+        register. */
     bool keyPressed (const juce::KeyPress&) override;
 
     /** A right click on the panel itself — anywhere that is not a control — opens the cockpit's

@@ -874,6 +874,19 @@ bool CatpitEditor::keyPressed (const juce::KeyPress& key)
                 lever.setDetent (channel, true);
             return true;
         }
+
+        // A B C D: that register plays, as its key under the lamp does. The four keys are the same four
+        // whatever the layout prints on them — under a Russian one they arrive as Ф И С В.
+        static constexpr juce::juce_wchar latin[numRegisterKeys]   { 'A', 'B', 'C', 'D' };
+        static constexpr juce::juce_wchar russian[numRegisterKeys] { 0x0424, 0x0418, 0x0421, 0x0412 };
+        const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
+        for (int r = 0; r < numRegisterKeys; ++r)
+            if (letter == latin[r] || letter == russian[r])
+            {
+                endTapping();
+                amp.history.switchTo (r);
+                return true;
+            }
     }
 
     return false;
