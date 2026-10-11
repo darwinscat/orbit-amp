@@ -229,7 +229,7 @@ void Lever::paint (juce::Graphics& g)
 
         const auto row = juce::Rectangle<float> (namesX, detentY (i) - 14.0f, (float) getWidth() - namesX - 6.0f, 28.0f);
         g.setColour (here ? orange : lilac.withAlpha (0.75f));
-        g.setFont (labelFont (layout::px15));
+        g.setFont (labelFont (layout::px16));
         g.drawText (names[i], row, juce::Justification::centredLeft, false);
     }
 

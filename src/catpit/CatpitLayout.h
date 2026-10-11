@@ -23,6 +23,7 @@ inline constexpr int   minWindowWidth = 1024;
 inline constexpr float minScale       = (float) minWindowWidth / width;
 inline constexpr float px13           = 13.0f / minScale;   // a 13-px label, in this space
 inline constexpr float px15           = 15.0f / minScale;
+inline constexpr float px16           = 16.0f / minScale;
 /** The one exception, asked for: the six keys under the tone knobs wear short names a size down. */
 inline constexpr float px11           = 11.0f / minScale;
 
