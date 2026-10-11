@@ -658,6 +658,9 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     timerCallback();
     startTimerHz (4);   // the dots are a lookup and the load is a smoothed figure: nobody needs either sooner
 
+    midiPulse.beat = [this] { playMidi(); };
+    midiPulse.startTimerHz (100);
+
     // The sky flies on the GPU unless the player has said otherwise (or CATPIT_SKY=cpu says so for this
     // run): the choice is the machine's, not the sound's, so it lives with the settings, not the state.
     gpuSky = prefs::getBool (gpuSkyKey, true)
@@ -744,6 +747,15 @@ void CatpitEditor::timerCallback()
     // A host starts or stops saying its tempo whenever it likes.
     if (tempoIsOwn == (amp.runsInHost() && amp.hostTempoBpm() > 0.0f))
         showDelayTime();
+}
+
+/** A Program Change from a MIDI input: the throttle goes to that channel, as it does for 1 2 3 4 on the
+    keyboard. Programs past the fourth are not the cockpit's. */
+void CatpitEditor::playMidi()
+{
+    const int program = amp.takeProgramChange();
+    if (program >= 0 && program < Lever::numDetents && ! lever.isHeld())
+        lever.setDetent (program, true);
 }
 
 /** THE LOAD, ITEMISED — OrbitAmp's window, in the cockpit's words and colours. The cockpit's packs are

@@ -161,6 +161,17 @@ private:
         void timerCallback() override { stopTimer(); if (then) then(); }
     };
     After tapPause;
+
+    // MIDI. A Program Change the engine heard (AmpProcessor::takeProgramChange) is a pull of the
+    // throttle: programs 1 2 3 4 are the four channels. It is asked for a hundred times a second — a
+    // foot must not feel the wait, and the face's own timer ticks four times.
+    struct Pulse final : juce::Timer
+    {
+        std::function<void()> beat;
+        void timerCallback() override { if (beat) beat(); }
+    };
+    Pulse midiPulse;
+    void playMidi();
     std::vector<double> tapGaps;             // the last few gaps between taps, ms
     double lastTap = 0.0;
     bool   tapping = false;

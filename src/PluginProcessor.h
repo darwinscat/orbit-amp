@@ -834,7 +834,14 @@ public:
         host's tempo and the block's own does not exist. */
     bool runsInHost() const noexcept { return wrapperType != wrapperType_Standalone; }
 
+    /** A PROGRAM CHANGE THAT CAME IN, for a face that plays them. The engine has no programs of its
+        own: it keeps the last one a MIDI input sent (0..127, on any channel) until a face that gives
+        programs a meaning takes it — the cockpit, whose first four are its channels. -1 when none has
+        come since the last call. */
+    int takeProgramChange() noexcept { return midiProgram.exchange (-1, std::memory_order_relaxed); }
+
 private:
+    std::atomic<int> midiProgram { -1 };
 
     /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
         raw input at the front of the chain; where it MUTES is the player's parameter. */
