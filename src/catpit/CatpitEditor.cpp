@@ -294,7 +294,9 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
     for (size_t i = 0; i < tones.size(); ++i)
         drawLabel (g, toneNames[i], juce::Rectangle<float> (150.0f, 28.0f).withCentre ({ tones[i].centre.x, 394.0f }), px13, labelLilac);
 
-    drawLabel (g, "TURBO", juce::Rectangle<float> (160.0f, 26.0f).withCentre ({ turboFrame.getCentreX(), 400.0f }), px13, orange);
+    // TURBO stands IN its frame's top line, in the gap the two brackets leave (96 wide; the word is 80).
+    // The capitals sit a hair under the middle of the row they are drawn in — hence the 1.
+    drawLabel (g, "TURBO", juce::Rectangle<float> (160.0f, 26.0f).withCentre ({ turboFrame.getCentreX(), turboFrame.getY() - 1.0f }), px13, orange);
 
 
     drawLabel (g, "INPUT",  juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 117.0f, 314.0f }),  px13, labelLilac);
