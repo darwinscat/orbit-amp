@@ -297,7 +297,8 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
     // TURBO stands IN its frame's top line, in the gap the two brackets leave (96 wide; the word is 80).
     // The capitals sit a hair under the middle of the row they are drawn in — hence the 1.
     drawLabel (g, "TURBO", juce::Rectangle<float> (160.0f, 26.0f).withCentre ({ turboFrame.getCentreX(), turboFrame.getY() - 1.0f }), px13, orange);
-
+    // ...and the throttle's frame is named the same way (its gap is 148 wide).
+    drawLabel (g, "CHANNEL", juce::Rectangle<float> (160.0f, 26.0f).withCentre ({ leverFrame.getCentreX(), leverFrame.getY() - 1.0f }), px13, orange);
 
     drawLabel (g, "INPUT",  juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 117.0f, 314.0f }),  px13, labelLilac);
     drawLabel (g, "OUTPUT", juce::Rectangle<float> (170.0f, 26.0f).withCentre ({ 1557.0f, 314.0f }), px13, labelLilac);
