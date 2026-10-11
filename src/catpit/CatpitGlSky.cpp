@@ -113,10 +113,12 @@ void main()
 )GLSL";
 }
 
-void GlSky::setArea (juce::Rectangle<float> w, juce::Point<float> editorSize) noexcept
+void GlSky::setArea (juce::Rectangle<float> g, juce::Rectangle<float> w, juce::Point<float> editorSize) noexcept
 {
-    areaX.store (w.getX());  areaY.store (w.getY());
-    areaW.store (w.getWidth()); areaH.store (w.getHeight());
+    areaX.store (g.getX());  areaY.store (g.getY());
+    areaW.store (g.getWidth()); areaH.store (g.getHeight());
+    viewX.store (w.getX());  viewY.store (w.getY());
+    viewW.store (w.getWidth()); viewH.store (w.getHeight());
     fullW.store (editorSize.x); fullH.store (editorSize.y);
 }
 
@@ -161,15 +163,21 @@ void GlSky::renderOpenGL()
     speed += (want - speed) * (1.0f - std::exp (-dt / (want > speed ? 0.9f : 0.5f)));
     travel += (double) (speed * dt);
 
-    // Only the windshield's rectangle is shaded. GL counts rows from the bottom.
+    // Only the glass's rectangle is shaded. GL counts rows from the bottom.
     const int x = juce::roundToInt (areaX.load() * k), w = juce::roundToInt (areaW.load() * k);
     const int h = juce::roundToInt (areaH.load() * k);
     const int y = fh - juce::roundToInt ((areaY.load() + areaH.load()) * k);
 
+    // ...and the picture in it is the windshield's: the shader measures from that rectangle's corner and
+    // by its size, so the glass above it is more of the same sky, not the same sky stretched.
+    const int vx = juce::roundToInt (viewX.load() * k), vw = juce::roundToInt (viewW.load() * k);
+    const int vh = juce::roundToInt (viewH.load() * k);
+    const int vy = fh - juce::roundToInt ((viewY.load() + viewH.load()) * k);
+
     glViewport (x, y, w, h);
     shader->use();
-    shader->setUniform ("uOrigin", (GLfloat) x, (GLfloat) y);
-    shader->setUniform ("uSize", (GLfloat) w, (GLfloat) h);
+    shader->setUniform ("uOrigin", (GLfloat) vx, (GLfloat) vy);
+    shader->setUniform ("uSize", (GLfloat) vw, (GLfloat) vh);
     shader->setUniform ("uTravel", (GLfloat) std::fmod (travel, 1000.0));
     shader->setUniform ("uSpeed", (GLfloat) speed);
     shader->setUniform ("uWarp", (GLfloat) juce::jlimit (0.0f, 1.0f, (speed - 0.5f) / 1.1f));

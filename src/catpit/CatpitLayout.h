@@ -29,6 +29,12 @@ inline constexpr float px11           = 11.0f / minScale;
 
 inline const juce::Point<float> windshieldSeed { 836.0f, 164.0f };
 inline const juce::Rectangle<float> windshield { 152.0f, 60.0f, 1368.0f, 210.0f };
+/** ALL THE GLASS: the box round the whole cut-out. The overhead panel hangs into the windshield from the
+    top, and on either side of it the glass runs on upward — two wedges, 31 rows tall at their outer ends
+    (the cut-out's first row is 29) and closing to nothing where they meet the panel. The sky is flown
+    over this; `windshield` stays what the picture is composed for — where the stars come from, how big
+    they are — and what the monitor draws in. */
+inline const juce::Rectangle<float> glass { 152.0f, 29.0f, 1368.0f, 241.0f };
 
 struct Socket { juce::Point<float> centre; float radius; };
 
