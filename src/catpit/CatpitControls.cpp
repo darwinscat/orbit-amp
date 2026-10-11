@@ -138,8 +138,8 @@ void ArtKnob::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDet
 namespace
 {
     constexpr float slotX      = (float) Lever::overhang + 42.0f;
-    constexpr float firstY     = 40.0f;
-    constexpr float detentStep = 46.0f;
+    constexpr float firstY     = 46.0f;
+    constexpr float detentStep = 44.0f;
     constexpr float lampX      = (float) Lever::overhang + 92.0f;
     constexpr float namesX     = (float) Lever::overhang + 102.0f;
     constexpr float gripLength = 92.0f;      // end to end; the stem is not in its middle (Art::leverAxis)
