@@ -59,7 +59,11 @@ inline constexpr float keyGroupX   = 1060.3f;    // the filters' middle: BASS
 inline constexpr float keyRowRight = 1418.0f;    // the last name ends here, short of the plate's corner screw
 
 inline const juce::Rectangle<float> leverFrame { 254.0f, 376.0f, 261.0f, 217.0f };
-inline const juce::Rectangle<float> turboFrame { 799.0f, 415.0f, 165.0f, 180.0f };
+/** The TURBO frame stands `turboLift` higher than the render painted it, so that its name, which is
+    printed in its top line, is read in the row it always was — beside DRIVE's and the tones'. The
+    picture is corrected to match in CatpitArt. */
+inline constexpr float turboLift = 14.0f;
+inline const juce::Rectangle<float> turboFrame { 799.0f, 415.0f - turboLift, 165.0f, 180.0f };
 
 inline const std::array<juce::Rectangle<float>, 3> sliderInsets {{
     { 258.0f, 660.0f, 342.0f, 53.0f },     // REVERB

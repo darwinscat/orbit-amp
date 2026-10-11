@@ -157,6 +157,72 @@ namespace
         return img;
     }
 
+    /** THE TURBO FRAME MOVES UP, its name with it. The name stands in the frame's own top line, and
+        that line was painted lower than the row the name is read in, beside DRIVE's and the tones'.
+        Until the console is rendered again the picture is corrected here, the way the tone sockets are:
+        the frame's box — the tab of its backplate, the brackets and their glow — is put back
+        `turboLift` higher as a soft-edged rectangle, the bolt that stood in its way goes under bare
+        plate, and so does the band the frame leaves at the bottom. The lift is as far as it can go:
+        the tab's top comes to 3 under the plate's own edge. Numbers are in the render's 1672-wide
+        space, measured off it. */
+    juce::Image raiseTurbo (juce::Image img)
+    {
+        if (! img.isValid())
+            return img;
+
+        const float k = (float) img.getWidth() / layout::width;
+        const auto original = img.createCopy();
+        const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
+        const int w = img.getWidth(), h = img.getHeight();
+        const auto inside = [w, h] (int x, int y) { return x >= 0 && y >= 0 && x < w && y < h; };
+
+        const int lift = juce::roundToInt (layout::turboLift * k);
+        const int x0 = juce::roundToInt (793.0f * k), x1 = juce::roundToInt (971.0f * k);     // the box as painted
+        const int y0 = juce::roundToInt (399.0f * k), y1 = juce::roundToInt (599.0f * k);
+        const int clean0 = y1 + 1, cleanRows = juce::jmax (2, juce::roundToInt (5.0f * k));   // bare plate under it
+        const float feather = 2.5f * k;
+
+        const auto edge = [feather] (int x, int y, int left, int top, int right, int bottom)
+        {
+            return juce::jlimit (0.0f, 1.0f, (float) juce::jmin (x - left, right - x, y - top, bottom - y) / feather);
+        };
+
+        // The bolt above the frame's right shoulder: the plate beside it, laid over it.
+        const float bx = 956.7f * k, by = 389.3f * k, br = 6.5f * k;
+        const int from = juce::roundToInt (16.0f * k);
+        for (int y = (int) std::floor (by - br); y <= (int) std::ceil (by + br); ++y)
+            for (int x = (int) std::floor (bx - br); x <= (int) std::ceil (bx + br); ++x)
+            {
+                const float a = juce::jlimit (0.0f, 1.0f, (br - std::hypot ((float) x - bx, (float) y - by)) / feather);
+                if (a > 0.0f && inside (x, y) && inside (x - from, y))
+                    dst.setPixelColour (x, y, dst.getPixelColour (x, y).interpolatedWith (src.getPixelColour (x - from, y), a));
+            }
+
+        // Bare plate where the frame was: the strip under it, mirrored back and forth.
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x)
+            {
+                const int m = (clean0 - 1 - y) % (2 * cleanRows);
+                const int row = clean0 + (m < cleanRows ? m : 2 * cleanRows - 1 - m);
+                const float a = edge (x, y, x0, y0 - lift, x1, y1);
+                if (a > 0.0f && inside (x, y) && inside (x, row))
+                    dst.setPixelColour (x, y, dst.getPixelColour (x, y).interpolatedWith (src.getPixelColour (x, row), a));
+            }
+
+        // The frame, `lift` higher.
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x)
+            {
+                const float a = edge (x, y, x0, y0, x1, y1);
+                if (a > 0.0f && inside (x, y) && inside (x, y - lift))
+                    dst.setPixelColour (x, y - lift, dst.getPixelColour (x, y - lift)
+                                                         .interpolatedWith (src.getPixelColour (x, y), a));
+            }
+
+        return img;
+    }
+
     /** THE THROTTLE'S GRIP, OFF ITS CENTRE. The render is a whole joystick with a symmetrical T on top;
         on the flat panel only the T shows, and the cockpit wants it bigger without lying over the channel
         names — so it is rebuilt with its stem where it was and the bar reaching further to the LEFT of it
@@ -268,7 +334,7 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg          = cutWindshield (raiseTones (load ("cockpit.png")));
+        a.bg          = cutWindshield (raiseTurbo (raiseTones (load ("cockpit.png"))));
         a.knobDrive   = load ("knob-drive.png");
         a.knobTone    = load ("knob-tone.png");
         a.leverGrip   = capped (offCentreGrip (load ("throttle-grip.png"), a.leverAxis), 480);
