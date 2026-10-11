@@ -81,6 +81,9 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
+    /** The content may change its own size — a list that grew a row — and the plate goes with it. */
+    void childBoundsChanged (juce::Component*) override;
+
 private:
     std::unique_ptr<juce::Component> content;
     juce::Rectangle<int> plate() const;
@@ -194,6 +197,8 @@ private:
     Legend load;
     std::unique_ptr<Sheet> sheet;            // the window that click opens, while it is open
     void showLoad();
+    void showMidi();                         // the MIDI inputs, from the settings menu
+    void showSheet (std::unique_ptr<juce::Component> content);
 
     // MEM on the mirrored plate: what the process is holding, as the system's own monitor counts it
     // (core/ProcessMemory.h). Only while the cockpit stands alone — inside a host the process is the

@@ -1,0 +1,11 @@
+CatpitAmp MIDI commands
+
+The cockpit listens to every MIDI input that is switched on, on all 16 channels.
+
+Program Change
+1	CLEAN
+2	EDGE
+3	CRUNCH
+4	HI-GAIN
+
+A controller that numbers its programs from 0 sends 0, 1, 2 and 3 for these.

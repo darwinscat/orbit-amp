@@ -518,6 +518,7 @@ juce_add_binary_data(CatpitAmpData
     HEADER_NAME CatpitData.h
     SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/cockpit.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/midi.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/knob-drive.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/knob-tone.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/throttle-grip.png"
@@ -571,6 +572,7 @@ target_sources(CatpitAmp PRIVATE
     src/catpit/CatpitArt.cpp
     src/catpit/CatpitChannels.cpp
     src/catpit/CatpitControls.cpp
+    src/catpit/CatpitMidi.cpp
     src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitPresets.cpp
     src/catpit/CatpitSpace.cpp
@@ -646,6 +648,7 @@ target_sources(catpitamp_memory_probe PRIVATE
     src/catpit/CatpitArt.cpp
     src/catpit/CatpitChannels.cpp
     src/catpit/CatpitControls.cpp
+    src/catpit/CatpitMidi.cpp
     src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitPresets.cpp
     src/catpit/CatpitSpace.cpp

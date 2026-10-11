@@ -3,6 +3,7 @@
 
 #include "CatpitEditor.h"
 #include "CatpitLayout.h"
+#include "CatpitMidi.h"
 
 #include "../Parameters.h"
 #include "../core/ProcessMemory.h"
@@ -372,6 +373,12 @@ void Sheet::mouseDown (const juce::MouseEvent& e)
 {
     if (! plate().contains (e.getPosition()) && onDismiss)
         onDismiss();
+}
+
+void Sheet::childBoundsChanged (juce::Component*)
+{
+    resized();
+    repaint();
 }
 
 bool Sheet::keyPressed (const juce::KeyPress& key)
@@ -772,8 +779,18 @@ void CatpitEditor::showLoad()
     };
     panel->dim   = labelLilac.withAlpha (0.85f);
     panel->faint = labelLilac.withAlpha (0.45f);
+    showSheet (std::move (panel));
+}
 
-    sheet = std::make_unique<Sheet> (std::move (panel));
+/** THE MIDI WINDOW — which inputs the cockpit listens to, and the list of what it does with what it hears. */
+void CatpitEditor::showMidi()
+{
+    showSheet (std::make_unique<MidiPanel>());
+}
+
+void CatpitEditor::showSheet (std::unique_ptr<juce::Component> content)
+{
+    sheet = std::make_unique<Sheet> (std::move (content));
     // Closing is deferred: it is asked for from inside the very component it destroys.
     sheet->onDismiss = [safe = juce::Component::SafePointer<CatpitEditor> (this)]
     {
@@ -983,7 +1000,7 @@ void CatpitEditor::mouseDown (const juce::MouseEvent& e)
     engine's own and are part of the sound; the GPU switch is this machine's and is not. */
 void CatpitEditor::showSettingsMenu()
 {
-    enum : int { itemGpu = 1, itemGateOn, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100 };
+    enum : int { itemGpu = 1, itemGateOn, itemMidi, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100 };
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked, bool enabled = true)
     {
@@ -1031,6 +1048,13 @@ void CatpitEditor::showSettingsMenu()
         position.addItem (itemFor (params::gatePositions[i], firstPos + i, choice (params::gatePos) == i));
     menu.addSubMenu ("Mutes at  " + params::gatePositions[choice (params::gatePos)], position, gateIsOn);
 
+    // The MIDI inputs are the standalone's; a host routes MIDI itself.
+    if (MidiPanel::available())
+    {
+        menu.addSeparator();
+        menu.addItem (itemFor ("MIDI...", itemMidi, false));
+    }
+
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
                         [safe = juce::Component::SafePointer<CatpitEditor> (this), gateIsOn] (int picked)
                         {
@@ -1046,6 +1070,7 @@ void CatpitEditor::showSettingsMenu()
                                 e.applySky();
                             }
                             else if (picked == itemGateOn)             e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);
+                            else if (picked == itemMidi)               e.showMidi();
                             else if (picked >= firstThreshold)         e.setParam (params::gateThreshold, (float) (picked - firstThreshold - 80));
                             else if (picked >= firstWindow)            e.showInWindow ((Monitor::View) (picked - firstWindow));
                             else if (picked >= firstPos)               e.setParam (params::gatePos, (float) (picked - firstPos));
