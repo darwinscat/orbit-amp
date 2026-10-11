@@ -17,15 +17,18 @@ namespace orbitamp::catpit::layout
 inline constexpr float width  = 1672.0f;
 inline constexpr float height = 941.0f;
 
-/** The smallest the window may get. Every label below is sized so that at THIS scale it is still 13 px —
-    nothing a player reads goes smaller. */
-inline constexpr int   minWindowWidth = 1024;
-inline constexpr float minScale       = (float) minWindowWidth / width;
-inline constexpr float px13           = 13.0f / minScale;   // a 13-px label, in this space
-inline constexpr float px15           = 15.0f / minScale;
-inline constexpr float px16           = 16.0f / minScale;
+/** THE READING WIDTH: the window opens this wide, and every label below is sized so that at THIS scale
+    it is 13 px. */
+inline constexpr int   readingWidth   = 1024;
+inline constexpr float readingScale   = (float) readingWidth / width;
+/** The smallest the window may get: a little under the reading width, asked for. Pulled all the way in,
+    a 13-px label is 12.2 px. */
+inline constexpr int   minWindowWidth = 960;
+inline constexpr float px13           = 13.0f / readingScale;   // a 13-px label, in this space
+inline constexpr float px15           = 15.0f / readingScale;
+inline constexpr float px16           = 16.0f / readingScale;
 /** The one exception, asked for: the six keys under the tone knobs wear short names a size down. */
-inline constexpr float px11           = 11.0f / minScale;
+inline constexpr float px11           = 11.0f / readingScale;
 
 inline const juce::Point<float> windshieldSeed { 836.0f, 164.0f };
 inline const juce::Rectangle<float> windshield { 152.0f, 60.0f, 1368.0f, 210.0f };

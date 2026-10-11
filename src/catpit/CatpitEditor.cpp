@@ -698,8 +698,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     setResizable (true, true);
     getConstrainer()->setFixedAspectRatio ((double) width / (double) height);
     setResizeLimits (minWindowWidth, juce::roundToInt ((float) minWindowWidth * height / width),
-                     minWindowWidth * 2, juce::roundToInt ((float) minWindowWidth * 2.0f * height / width));
-    setSize (minWindowWidth, juce::roundToInt ((float) minWindowWidth * height / width));
+                     readingWidth * 2, juce::roundToInt ((float) readingWidth * 2.0f * height / width));
+    setSize (readingWidth, juce::roundToInt ((float) readingWidth * height / width));
 }
 
 CatpitEditor::~CatpitEditor()
