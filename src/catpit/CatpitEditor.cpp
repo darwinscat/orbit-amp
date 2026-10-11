@@ -4,6 +4,7 @@
 #include "CatpitEditor.h"
 #include "CatpitLayout.h"
 #include "CatpitMidi.h"
+#include "CatpitStandalone.h"
 
 #include "../Parameters.h"
 #include "../core/ProcessMemory.h"
@@ -706,6 +707,7 @@ CatpitEditor::~CatpitEditor()
 {
     amp.history.onHistoryChanged = nullptr;   // the history outlives this window
     endTapping();
+    setFullScreen (false);                    // a window closed in full screen is remembered where it stood before
     gl.detach();
 }
 
@@ -896,6 +898,19 @@ bool CatpitEditor::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // Full screen, where the cockpit stands alone: Cmd+Ctrl+F as a Mac has it, F11 as the others do.
+    // Esc leaves it.
+    if (key == juce::KeyPress ('f', Mods::commandModifier | Mods::ctrlModifier, 0) || key == juce::KeyPress (juce::KeyPress::F11Key))
+    {
+        setFullScreen (! fullScreen);
+        return true;
+    }
+    if (fullScreen && key == juce::KeyPress::escapeKey)
+    {
+        setFullScreen (false);
+        return true;
+    }
+
     // 1 2 3 4: the throttle goes to that channel, as if a hand had put it there.
     if (! key.getModifiers().isAnyModifierKeyDown())
     {
@@ -924,9 +939,36 @@ bool CatpitEditor::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
+float CatpitEditor::stageScale() const
+{
+    // In a window of the cockpit's shape the width decides, as it always has: the height is that shape
+    // rounded to a pixel, and fitting by it would leave a hair of window at the sides.
+    const float byWidth = (float) getWidth() / layout::width;
+    return layout::height * byWidth <= (float) getHeight() + 1.0f ? byWidth
+                                                                  : (float) getHeight() / layout::height;
+}
+
+juce::Point<float> CatpitEditor::stageOrigin() const
+{
+    // On whole pixels: the cockpit's cached picture is copied to the screen, not resampled.
+    const float s = stageScale();
+    return { std::round (juce::jmax (0.0f, ((float) getWidth()  - layout::width  * s) * 0.5f)),
+             std::round (juce::jmax (0.0f, ((float) getHeight() - layout::height * s) * 0.5f)) };
+}
+
+void CatpitEditor::paint (juce::Graphics& g)
+{
+    const auto cockpitArea = juce::Rectangle<float> (layout::width, layout::height) * stageScale() + stageOrigin();
+    if (cockpitArea.getWidth() + 1.0f >= (float) getWidth() && cockpitArea.getHeight() + 1.0f >= (float) getHeight())
+        return;
+
+    g.excludeClipRegion (cockpitArea.reduced (1.0f).toNearestInt());      // the sky is under there
+    g.fillAll (juce::Colours::black);
+}
+
 void CatpitEditor::resized()
 {
-    stage.setTransform (juce::AffineTransform::scale ((float) getWidth() / layout::width));
+    stage.setTransform (juce::AffineTransform::scale (stageScale()).translated (stageOrigin()));
     placeSky();
     if (sheet != nullptr)
         sheet->setBounds (getLocalBounds());
@@ -936,8 +978,42 @@ void CatpitEditor::placeSky()
 {
     if (glSky != nullptr)
     {
-        const float s = (float) getWidth() / layout::width;
-        glSky->setArea (layout::glass * s, layout::windshield * s, { (float) getWidth(), (float) getHeight() });
+        const float s = stageScale();
+        const auto at = stageOrigin();
+        glSky->setArea (layout::glass * s + at, layout::windshield * s + at, { (float) getWidth(), (float) getHeight() });
+    }
+}
+
+/** FULL SCREEN, and back. The standalone's window follows the cockpit's size and the cockpit keeps its
+    shape; in full screen it is the other way round — the window is the screen's, whatever its shape —
+    so for as long as it lasts the cockpit lets go of its shape and its limits and takes what the
+    window gives it, centring its stage (stageScale). JUCE's kiosk mode does the rest: it hides the
+    title bar, the menu bar and the Dock, and puts the window back where it was on the way out. */
+void CatpitEditor::setFullScreen (bool on)
+{
+    auto* window = dynamic_cast<juce::DocumentWindow*> (getTopLevelComponent());
+    if (on == fullScreen || window == nullptr || amp.runsInHost())
+        return;
+
+    fullScreen = on;
+
+    auto& desktop = juce::Desktop::getInstance();
+    if (on)
+    {
+        windowedAt = window->getPosition();
+        getConstrainer()->setFixedAspectRatio (0.0);
+        getConstrainer()->setSizeLimits (layout::minWindowWidth, juce::roundToInt ((float) layout::minWindowWidth * layout::height / layout::width),
+                                         0x3fffffff, 0x3fffffff);
+        desktop.setKioskModeComponent (window, false);
+    }
+    else
+    {
+        getConstrainer()->setFixedAspectRatio ((double) layout::width / (double) layout::height);
+        getConstrainer()->setSizeLimits (layout::minWindowWidth, juce::roundToInt ((float) layout::minWindowWidth * layout::height / layout::width),
+                                         layout::readingWidth * 2, juce::roundToInt ((float) layout::readingWidth * 2.0f * layout::height / layout::width));
+        desktop.setKioskModeComponent (nullptr);
+        setBoundsConstrained (getBounds());
+        standalone::rememberWindowPosition (windowedAt);
     }
 }
 
@@ -1000,7 +1076,7 @@ void CatpitEditor::mouseDown (const juce::MouseEvent& e)
     engine's own and are part of the sound; the GPU switch is this machine's and is not. */
 void CatpitEditor::showSettingsMenu()
 {
-    enum : int { itemGpu = 1, itemGateOn, itemMidi, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100 };
+    enum : int { itemGpu = 1, itemGateOn, itemMidi, itemFullScreen, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100 };
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked, bool enabled = true)
     {
@@ -1022,6 +1098,8 @@ void CatpitEditor::showSettingsMenu()
     menu.addItem (itemFor (gpuBroken ? juce::String::fromUTF8 ("Stars on the GPU (OpenGL) \xe2\x80\x94 not available here")
                                      : juce::String ("Stars on the GPU (OpenGL)"),
                            itemGpu, gpuSky && ! gpuBroken, ! gpuBroken));
+    if (! amp.runsInHost())
+        menu.addItem (itemFor ("Full screen", itemFullScreen, fullScreen));
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)
@@ -1071,6 +1149,7 @@ void CatpitEditor::showSettingsMenu()
                             }
                             else if (picked == itemGateOn)             e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);
                             else if (picked == itemMidi)               e.showMidi();
+                            else if (picked == itemFullScreen)         e.setFullScreen (! e.fullScreen);
                             else if (picked >= firstThreshold)         e.setParam (params::gateThreshold, (float) (picked - firstThreshold - 80));
                             else if (picked >= firstWindow)            e.showInWindow ((Monitor::View) (picked - firstWindow));
                             else if (picked >= firstPos)               e.setParam (params::gatePos, (float) (picked - firstPos));

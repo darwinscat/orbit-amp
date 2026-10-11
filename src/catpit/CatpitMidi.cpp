@@ -3,16 +3,10 @@
 
 #include "CatpitMidi.h"
 
+#include "CatpitStandalone.h"
 #include "../Product.h"
 
 #include <CatpitData.h>
-
-#if defined (JucePlugin_Build_Standalone) && JucePlugin_Build_Standalone
- #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
- #define CATPIT_STANDS_ALONE 1
-#else
- #define CATPIT_STANDS_ALONE 0
-#endif
 
 namespace orbitamp::catpit
 {
@@ -28,25 +22,7 @@ namespace
     const juce::Colour dim   = juce::Colour (0xffc9b8f5).withAlpha (0.85f);
     const juce::Colour faint = juce::Colour (0xffc9b8f5).withAlpha (0.45f);
 
-    /** The standalone's device manager: the one thing that opens MIDI inputs and hands what they send
-        to the engine. Null inside a host. */
-    juce::AudioDeviceManager* devices()
-    {
-       #if CATPIT_STANDS_ALONE
-        if (auto* holder = juce::StandalonePluginHolder::getInstance())
-            return &holder->deviceManager;
-       #endif
-        return nullptr;
-    }
-
-    /** The standalone writes its devices down when it quits; a choice made here is written at once. */
-    void remember()
-    {
-       #if CATPIT_STANDS_ALONE
-        if (auto* holder = juce::StandalonePluginHolder::getInstance())
-            holder->saveAudioDeviceState();
-       #endif
-    }
+    using standalone::devices;
 
     juce::Font textFont (float px) { return labelFont (px).withExtraKerningFactor (tracking); }
 
@@ -285,7 +261,7 @@ void MidiPanel::mouseDown (const juce::MouseEvent& e)
 
     const auto id = inputs[i].identifier;
     manager->setMidiInputDeviceEnabled (id, ! manager->isMidiInputDeviceEnabled (id));
-    remember();
+    standalone::rememberDevices();
     refresh();
     hovered = i;
     repaint();

@@ -576,6 +576,7 @@ target_sources(CatpitAmp PRIVATE
     src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitPresets.cpp
     src/catpit/CatpitSpace.cpp
+    src/catpit/CatpitStandalone.cpp
     src/catpit/CatpitGlSky.cpp
     src/catpit/CatpitEditor.cpp)
 
@@ -652,6 +653,7 @@ target_sources(catpitamp_memory_probe PRIVATE
     src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitPresets.cpp
     src/catpit/CatpitSpace.cpp
+    src/catpit/CatpitStandalone.cpp
     src/catpit/CatpitGlSky.cpp
     src/catpit/CatpitEditor.cpp)
 target_include_directories(catpitamp_memory_probe PRIVATE src "${ORBITAMP_GENERATED_DIR}")

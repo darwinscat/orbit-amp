@@ -99,9 +99,10 @@ public:
     explicit CatpitEditor (AmpProcessor&);
     ~CatpitEditor() override;
 
-    // Nothing to paint: the cockpit covers the whole stage, and where its windshield is cut out the sky
-    // shows through — from the GL context underneath, or from the CPU Space component.
-    void paint (juce::Graphics&) override {}
+    // Nothing to paint where the cockpit is: it covers its whole stage, and where its windshield is cut
+    // out the sky shows through — from the GL context underneath, or from the CPU Space component.
+    // Only in full screen is there window left round the stage, and that is painted black.
+    void paint (juce::Graphics&) override;
     void resized() override;
 
     /** Cmd+Z and Cmd+Shift+Z step the history; 1 2 3 4 pull the throttle to a channel; A B C D play a
@@ -134,6 +135,19 @@ private:
     bool gpuBroken = false;      // the sky's shader would not build here: the choice is moot
     void applySky();
     void placeSky();
+
+    // THE STAGE IN THE WINDOW. The window has the cockpit's shape and the stage fills it — except in
+    // full screen, where the screen rarely has that shape: there the stage is the largest that fits,
+    // centred.
+    float stageScale() const;
+    juce::Point<float> stageOrigin() const;
+
+    // FULL SCREEN, where the cockpit stands alone: the window takes the whole screen — no title bar, no
+    // menu bar, no Dock — and the cockpit keeps its shape in the middle of it. From the settings menu,
+    // Cmd+Ctrl+F or F11; Esc leaves.
+    bool fullScreen = false;
+    juce::Point<int> windowedAt;             // where the window stood before it took the screen
+    void setFullScreen (bool);
     void showSettingsMenu();
     void showInWindow (Monitor::View);
 
