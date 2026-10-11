@@ -611,7 +611,7 @@ target_link_libraries(CatpitAmp PRIVATE
 
 # THE COCKPIT'S OWN SET rides in its bundle the way OrbitAmp's factory devices ride in OrbitAmp's:
 # whatever sits in resources/catpit/Devices (packs named after the channels — Clean, Edge, Crunch,
-# Overdrive) and resources/catpit/IRs (the cabinets CAB steps through, in the order of their names)
+# Hi-Gain) and resources/catpit/IRs (the cabinets CAB steps through, in the order of their names)
 # at CONFIGURE time. Absent or empty, the bundle ships without, and the cockpit plays what the player
 # puts in its own Devices and IRs folders. It reads nothing of OrbitAmp's.
 foreach(kind IN ITEMS Devices IRs)

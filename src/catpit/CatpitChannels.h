@@ -57,7 +57,7 @@ public:
 
     /** The pack a channel plays, as an index into the preamp's library; -1 when it is not installed.
         A channel's pack is the one whose FILE is named after the channel — Clean, Edge, Crunch,
-        Overdrive — in the cockpit's own Devices folder or in its bundle. */
+        Hi-Gain — in the cockpit's own Devices folder or in its bundle. */
     int  packFor (int channel) const;
 
     /** THE COCKPIT'S OWN CABINETS: every IR file in its two places — inside the bundle, where a build

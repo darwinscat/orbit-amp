@@ -86,14 +86,14 @@ private:
 };
 
 //==============================================================================
-/** THE THROTTLE. Four detents — CLEAN, EDGE, CRUNCH, OVERDRIVE — down the slot, and pulling it toward
+/** THE THROTTLE. Four detents — CLEAN, EDGE, CRUNCH, HI-GAIN — down the slot, and pulling it toward
     you (down) is going faster. It follows the hand while held, sticks to a detent within reach of one
     (that is the click under the palm), and springs into the nearest one on release. */
 class Lever final : public juce::Component, private juce::Timer
 {
 public:
     static constexpr int numDetents = 4;
-    inline static const juce::StringArray names { "CLEAN", "EDGE", "CRUNCH", "OVERDRIVE" };
+    inline static const juce::StringArray names { "CLEAN", "EDGE", "CRUNCH", "HI-GAIN" };
 
     /** The grip is wider than the frame's left margin: the lever's box starts this far left of the frame. */
     static constexpr int overhang = 34;

@@ -15,7 +15,7 @@ namespace orbitamp::catpit
 namespace
 {
     /** A channel's pack is the one whose file is named after it. */
-    constexpr std::array<const char*, Channels::count> packs { "Clean", "Edge", "Crunch", "Overdrive" };
+    constexpr std::array<const char*, Channels::count> packs { "Clean", "Edge", "Crunch", "Hi-Gain" };
 
     constexpr std::array<const char*, Channels::numFlags> flagIds { "turbo", "fat", "bright", "depth", "presence" };
 

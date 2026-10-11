@@ -23,7 +23,7 @@ class GlSky final : public juce::OpenGLRenderer
 public:
     explicit GlSky (juce::OpenGLContext& c) : context (c) {}
 
-    /** 0 = CLEAN .. 1 = OVERDRIVE, continuous. */
+    /** 0 = CLEAN .. 1 = HI-GAIN, continuous. */
     void setThrottle (float t) noexcept { throttle.store (juce::jlimit (0.0f, 1.0f, t)); }
 
     /** Where the windshield is, and how big the whole surface is, in the editor's logical pixels. */
