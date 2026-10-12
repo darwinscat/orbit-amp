@@ -908,6 +908,7 @@ public:
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
     void selectDemoLoop (int index);
+    int  demoLoop() const noexcept { return demoLoopIndex; }     // the one last selected; -1 before any was
 
     /** The raw input, kept for the tuner. The audio thread only ever writes it; listening happens
         on the processor's own message-thread pump, and every needle — the strip's miniature, the
@@ -1015,6 +1016,7 @@ public:
     std::atomic<float> gateKeyDb { -90.0f };
 
 private:
+    int demoLoopIndex = -1;     // which of params::demoLoops the audition player holds
 
     // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
     // thread should not be doing per block.

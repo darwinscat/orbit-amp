@@ -324,8 +324,8 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 void AmpProcessor::selectDemoLoop (int index)
 {
     const int n = (int) std::size (params::demoLoopFiles);
-    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[juce::jlimit (0, n - 1, index)]),
-                  getSampleRate());
+    demoLoopIndex = juce::jlimit (0, n - 1, index);
+    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[demoLoopIndex]), getSampleRate());
 }
 
 void AmpProcessor::rescanDevices()

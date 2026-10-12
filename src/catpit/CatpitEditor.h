@@ -164,6 +164,11 @@ private:
     void showSettingsMenu();
     void showInWindow (Monitor::View);
 
+    // A LOOP IN PLACE OF THE GUITAR — OrbitAmp's audition player (core/DemoPlayer.h), here in the
+    // settings menu. Only on a machine that has the loops (params::demoLoopsPresent); anywhere else the
+    // menu does not offer it. A loop picked plays from its top; -1 starts the one last picked, or stops it.
+    void playDemo (int loop);
+
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, 3> tones;
     Lever lever;

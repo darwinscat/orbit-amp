@@ -1155,11 +1155,19 @@ void CatpitEditor::mouseDown (const juce::MouseEvent& e)
         showSettingsMenu();
 }
 
+void CatpitEditor::playDemo (int loop)
+{
+    const bool start = loop >= 0 || ! amp.demo.isPlaying();
+    if (loop >= 0 || (start && amp.demoLoop() < 0))
+        amp.selectDemoLoop (juce::jmax (0, loop));      // none picked yet: the first
+    amp.demo.setPlaying (start);
+}
+
 /** THE SETTINGS — what is set once for the machine and the room. The gate and the stereo mode are the
     engine's own and are part of the sound; how the stars fly is this machine's and is not. */
 void CatpitEditor::showSettingsMenu()
 {
-    enum : int { itemGateOn = 1, itemMidi, itemFullScreen, firstStars = 5, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100 };
+    enum : int { itemGateOn = 1, itemMidi, itemFullScreen, itemDemo, firstStars = 5, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100, firstDemo = 200 };
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked, bool enabled = true)
     {
@@ -1222,6 +1230,15 @@ void CatpitEditor::showSettingsMenu()
         menu.addItem (itemFor ("MIDI...", itemMidi, false));
     }
 
+    // A loop through the amp in place of the guitar, where the loops are — see playDemo.
+    if (params::demoLoopsPresent())
+    {
+        menu.addSectionHeader ("DEMO");
+        menu.addItem (itemFor ("Play", itemDemo, amp.demo.isPlaying()));
+        for (int i = 0; i < params::demoLoops.size(); ++i)
+            menu.addItem (itemFor (params::demoLoops[i], firstDemo + i, i == juce::jmax (0, amp.demoLoop())));
+    }
+
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
                         [safe = juce::Component::SafePointer<CatpitEditor> (this), gateIsOn] (int picked)
                         {
@@ -1230,7 +1247,9 @@ void CatpitEditor::showSettingsMenu()
                             auto& e = *safe;
                             e.endTapping();
 
-                            if (picked == itemGateOn)                  e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);
+                            if (picked >= firstDemo)                   e.playDemo (picked - firstDemo);
+                            else if (picked == itemDemo)               e.playDemo (-1);
+                            else if (picked == itemGateOn)             e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);
                             else if (picked == itemMidi)               e.showMidi();
                             else if (picked == itemFullScreen)         e.setFullScreen (! e.fullScreen);
                             else if (picked < firstStereo)             e.chooseStars ((Stars) (picked - firstStars));
