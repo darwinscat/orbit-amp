@@ -1301,6 +1301,11 @@ void CatpitEditor::setUpChain (bool firstTime)
     setParam (params::cabPresent,    1.0f);
     setParam (params::cabOn,         1.0f);
 
+    // DRIVE turns smoothly and the sound goes with it: between two captures the player mixes them by
+    // the knob's angle, rather than landing on the nearer one and holding it until the next. The
+    // cockpit has no switch for the other way.
+    setParam (params::blockSmooth (params::preampId).toRawUTF8(), 1.0f);
+
     // TURBO is the preamp's input trim, at its push or at nothing: a state the cockpit has never seen
     // starts with it off, wherever that trim was left.
     if (firstTime)
