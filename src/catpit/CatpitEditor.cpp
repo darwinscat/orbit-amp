@@ -464,9 +464,9 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         stage.addAndMakeVisible (b);
         const juce::Point<float> at { keyX[i], keyRowY };
         b.setBounds (around (at, keySize, keySize));
-        b.onHover = [this, at, &b] (bool over)
+        b.onHover = [this, at, &b] (bool over)     // a key that does not answer the hand says nothing either
         {
-            nameTag.show (at.translated (0.0f, -40.0f), over ? b.name + "  " + b.stateText() : juce::String());
+            nameTag.show (at.translated (0.0f, -40.0f), over && b.isEnabled() ? b.name + "  " + b.stateText() : juce::String());
         };
     }
 

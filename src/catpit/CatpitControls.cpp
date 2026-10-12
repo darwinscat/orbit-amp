@@ -343,6 +343,8 @@ void PushButton::enablementChanged()
 {
     // A key that will not go down does not offer itself to the hand either.
     setMouseCursor (isEnabled() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    if (onHover && isMouseOver())       // what is said over it changes with it
+        onHover (true);
     repaint();
 }
 
