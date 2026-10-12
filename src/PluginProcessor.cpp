@@ -1103,8 +1103,11 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // pop-free, so it runs unconditionally and the switch is an argument.
     const auto tGate = PerfClock::now();
     {
+        // Of the channels the chain WORKS, not of everything that was handed in: in MONO and in STEREO
+        // SPACE the amp eats channel 0 alone, and a second input that never reaches it must not move
+        // the meter the IN trim is set by, nor light its clip.
         float peak = 0.0f;
-        for (int ch = 0; ch < numChannels; ++ch)
+        for (int ch = 0; ch < nch; ++ch)
             peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, numSamples));
         gateKeyDb.store (juce::Decibels::gainToDecibels (peak, -90.0f));
 

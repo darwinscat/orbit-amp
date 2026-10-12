@@ -1011,8 +1011,8 @@ public:
     /** What resolution each block's pair is publishing at, written by that block's face. */
     std::array<std::atomic<int>, 2> blockSpectrumOrder;
 
-    /** The raw input's peak this block, in dB — the level the gate KEYS off, for the meter the
-        thresholds are drawn on. Same writer, same readers. */
+    /** The raw input's peak this block, in dB, over the channels the chain works — the level the
+        gate KEYS off, for the meter the thresholds are drawn on. Same writer, same readers. */
     std::atomic<float> gateKeyDb { -90.0f };
 
 private:
