@@ -18,7 +18,8 @@ namespace
     /** A render by its file name: the copy built into the binary — or, when CATPIT_ART_DIR names a
         folder that has one, the file from there, so a new render can be tried by restarting rather
         than rebuilding. */
-    juce::Image load (const char* name)
+    /** A picture as it was made — whatever format it decodes to. */
+    juce::Image decode (const char* name)
     {
         juce::Image img;
 
@@ -34,6 +35,12 @@ namespace
             }
 
         jassert (img.isValid());   // a name that is neither on disk nor in the binary is a typo
+        return img;
+    }
+
+    juce::Image load (const char* name)
+    {
+        const auto img = decode (name);
         return img.isValid() ? img.convertedToFormat (juce::Image::ARGB) : img;
     }
 
@@ -327,6 +334,12 @@ void drawFitted (juce::Graphics& g, const juce::Image& img, juce::Rectangle<floa
                                      .scaled (k)
                                      .translated (dst.getX(), dst.getY()));
     g.setOpacity (1.0f);
+}
+
+juce::Image stillSky (int channel)
+{
+    static constexpr const char* names[] { "sky-clean.jpg", "sky-edge.jpg", "sky-crunch.jpg", "sky-hi-gain.jpg" };
+    return decode (names[juce::jlimit (0, 3, channel)]);
 }
 
 const Art& Art::get()

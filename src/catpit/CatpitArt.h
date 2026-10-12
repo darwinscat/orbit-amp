@@ -24,6 +24,11 @@ struct Art
     static const Art& get();
 };
 
+/** THE SKY, STANDING STILL: the GPU sky's own picture at a channel's speed, the glass's whole rectangle
+    (layout::glass) at twice the render's size. Decoded when asked for rather than at startup — only one
+    of the four is ever on the glass, and only when the stars are switched off. */
+juce::Image stillSky (int channel);
+
 /** Where a render's opaque part sits — its alpha bounding box, in image pixels. The renders carry
     uneven transparent margins, so anything that is centred or scaled goes by this, not the canvas. */
 juce::Rectangle<float> opaqueBounds (const juce::Image&);

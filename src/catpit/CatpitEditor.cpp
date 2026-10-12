@@ -77,10 +77,11 @@ namespace
 
     const juce::Colour labelLilac { 0xffc9b8f5 };
 
-    /** Whether the sky flies on the GPU, and what the windshield shows — settings of the machine's, in
-        the cockpit's settings file. */
-    const juce::Identifier gpuSkyKey { "gpuSky" };
+    /** How the stars fly, and what the windshield shows — settings of the machine's, in the cockpit's
+        settings file. The stars are kept as a word, in the order of CatpitEditor::Stars. */
+    const juce::Identifier starsKey  { "stars" };
     const juce::Identifier windowKey { "window" };
+    const juce::StringArray starsWords { "opengl", "cpu", "off" };
 
     // How many pixels of images the GL context may hold as textures before it starts throwing the
     // oldest out — room for the layer at the largest window on a 3x screen, and the art beside it.
@@ -439,6 +440,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     stage.addAndMakeVisible (space);
     space.setBounds (glass.toNearestInt());
     space.setWindow (windshield - glass.getPosition());
+    stage.addChildComponent (still);
+    still.setBounds (glass.toNearestInt());
     stage.addChildComponent (monitor);
     monitor.setBounds (windshield.toNearestInt());
     stage.addAndMakeVisible (cockpit);
@@ -693,10 +696,15 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     midiPulse.beat = [this] { playMidi(); };
     midiPulse.startTimerHz (100);
 
-    // The sky flies on the GPU unless the player has said otherwise (or CATPIT_SKY=cpu says so for this
-    // run): the choice is the machine's, not the sound's, so it lives with the settings, not the state.
-    gpuSky = prefs::getBool (gpuSkyKey, true)
-             && ! juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).equalsIgnoreCase ("cpu");
+    // The stars fly on the GPU unless the player has said otherwise (or CATPIT_SKY=cpu or =off says so
+    // for this run): the choice is the machine's, not the sound's, so it lives with the settings, not
+    // the state.
+    {
+        auto word = juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).toLowerCase();
+        if (! starsWords.contains (word))
+            word = prefs::store().get (starsKey, starsWords[0]).toString();
+        stars = (Stars) juce::jmax (0, starsWords.indexOf (word));
+    }
 
     // ...and so does what the windshield shows over it: nothing, or a picture of the amp at work.
     monitor.show ((Monitor::View) juce::jlimit (0, (int) Monitor::View::numViews - 1,
@@ -875,6 +883,8 @@ void CatpitEditor::showChannel()
     buttons[btDepth]->setOn    (thrown (Channels::depth),    false);
     buttons[btPresence]->setOn (thrown (Channels::presence), false);
 
+    still.setChannel (channel);
+
     std::array<bool, 6> live {};
     for (size_t i = 0; i < live.size(); ++i)
         live[i] = buttons[i]->isEnabled();
@@ -1048,10 +1058,18 @@ void CatpitEditor::setFullScreen (bool on)
     }
 }
 
-/** Puts up the sky the choice and the machine allow: the shader on the GPU, or the CPU's stars. */
+void CatpitEditor::chooseStars (Stars chosen)
+{
+    stars = chosen;
+    prefs::store().set (starsKey, starsWords[(int) chosen]);
+    applySky();
+}
+
+/** Puts up the sky the choice and the machine allow: the shader on the GPU, the CPU's stars, or the
+    still picture. */
 void CatpitEditor::applySky()
 {
-    const bool wantGpu = gpuSky && ! gpuBroken;
+    const bool wantGpu = stars == Stars::gpu && ! gpuBroken;
 
     if (wantGpu && glSky == nullptr)
     {
@@ -1087,7 +1105,8 @@ void CatpitEditor::applySky()
         glSky.reset();
     }
 
-    space.setVisible (glSky == nullptr);
+    space.setVisible (glSky == nullptr && stars != Stars::off);
+    still.setVisible (glSky == nullptr && stars == Stars::off);
     placeSky();
 }
 
@@ -1104,10 +1123,10 @@ void CatpitEditor::mouseDown (const juce::MouseEvent& e)
 }
 
 /** THE SETTINGS — what is set once for the machine and the room. The gate and the stereo mode are the
-    engine's own and are part of the sound; the GPU switch is this machine's and is not. */
+    engine's own and are part of the sound; how the stars fly is this machine's and is not. */
 void CatpitEditor::showSettingsMenu()
 {
-    enum : int { itemGpu = 1, itemGateOn, itemMidi, itemFullScreen, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100 };
+    enum : int { itemGateOn = 1, itemMidi, itemFullScreen, firstStars = 5, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100 };
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked, bool enabled = true)
     {
@@ -1126,11 +1145,17 @@ void CatpitEditor::showSettingsMenu()
     menu.addSectionHeader ("WINDOW");
     for (int i = 0; i < Monitor::names().size(); ++i)
         menu.addItem (itemFor (Monitor::names()[i], firstWindow + i, (int) monitor.shown() == i));
-    menu.addItem (itemFor (gpuBroken ? juce::String::fromUTF8 ("Stars on the GPU (OpenGL) \xe2\x80\x94 not available here")
-                                     : juce::String ("Stars on the GPU (OpenGL)"),
-                           itemGpu, gpuSky && ! gpuBroken, ! gpuBroken));
     if (! amp.runsInHost())
         menu.addItem (itemFor ("Full screen", itemFullScreen, fullScreen));
+
+    // The stars outside it: flying on the GPU, flying on the CPU, or a still picture and nothing running.
+    // Where the GPU's sky cannot be had the CPU's flies instead, and the tick says so.
+    menu.addSectionHeader ("STARS");
+    const auto flying = stars == Stars::gpu && gpuBroken ? Stars::cpu : stars;
+    menu.addItem (itemFor (gpuBroken ? juce::String::fromUTF8 ("OpenGL \xe2\x80\x94 not available here") : juce::String ("OpenGL"),
+                           firstStars + (int) Stars::gpu, flying == Stars::gpu, ! gpuBroken));
+    menu.addItem (itemFor ("CPU", firstStars + (int) Stars::cpu, flying == Stars::cpu));
+    menu.addItem (itemFor ("Off", firstStars + (int) Stars::off, flying == Stars::off));
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)
@@ -1172,15 +1197,10 @@ void CatpitEditor::showSettingsMenu()
                             auto& e = *safe;
                             e.endTapping();
 
-                            if (picked == itemGpu)
-                            {
-                                e.gpuSky = ! e.gpuSky;
-                                prefs::setBool (gpuSkyKey, e.gpuSky);
-                                e.applySky();
-                            }
-                            else if (picked == itemGateOn)             e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);
+                            if (picked == itemGateOn)                  e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);
                             else if (picked == itemMidi)               e.showMidi();
                             else if (picked == itemFullScreen)         e.setFullScreen (! e.fullScreen);
+                            else if (picked < firstStereo)             e.chooseStars ((Stars) (picked - firstStars));
                             else if (picked >= firstThreshold)         e.setParam (params::gateThreshold, (float) (picked - firstThreshold - 80));
                             else if (picked >= firstWindow)            e.showInWindow ((Monitor::View) (picked - firstWindow));
                             else if (picked >= firstPos)               e.setParam (params::gatePos, (float) (picked - firstPos));

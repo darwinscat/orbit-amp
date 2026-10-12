@@ -107,7 +107,8 @@ public:
     ~CatpitEditor() override;
 
     // Nothing to paint where the cockpit is: it covers its whole stage, and where its windshield is cut
-    // out the sky shows through — from the GL context underneath, or from the CPU Space component.
+    // out the sky shows through — from the GL context underneath, or from the CPU's Space, or standing
+    // still (StillSky).
     // Only in full screen is there window left round the stage, and that is painted black.
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -131,15 +132,20 @@ private:
 
     juce::Component stage;
     Space   space;
+    StillSky still;              // the sky when the stars are switched off: a picture for each channel
     Monitor monitor;             // a picture of the amp at work, when the windshield shows one instead of the sky
     Cockpit cockpit;
     NameTag nameTag;             // over the controls: the last thing on the stage
 
-    // The sky on the GPU when it can be; the CPU Space stays as the fallback (and with CATPIT_SKY=cpu).
+    // THE STARS, three ways: flying on the GPU (the shader, in a GL context of the cockpit's own), flying
+    // on the CPU (Space), or switched off — a still picture for each channel and nothing running at all.
+    // Where the GPU's sky cannot be had, the CPU's flies in its place.
+    enum class Stars { gpu, cpu, off };
+    Stars stars = Stars::gpu;    // the player's choice, kept with the machine's settings
     juce::OpenGLContext gl;
     std::unique_ptr<GlSky> glSky;
-    bool gpuSky    = true;       // the player's choice, kept with the machine's settings
-    bool gpuBroken = false;      // the sky's shader would not build here: the choice is moot
+    bool gpuBroken = false;      // the sky's shader would not build here
+    void chooseStars (Stars);
     void applySky();
     void placeSky();
 

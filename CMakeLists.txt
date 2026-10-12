@@ -526,6 +526,10 @@ juce_add_binary_data(CatpitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-open.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-on.png"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/fader-cap.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-clean.jpg"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-edge.jpg"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-crunch.jpg"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-hi-gain.jpg"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/mark.svg")
 
 # RELEASED APART FROM ORBITAMP, from the same tree: a version of its own, and tags of its own —

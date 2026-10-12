@@ -3,6 +3,8 @@
 
 #include "CatpitSpace.h"
 
+#include "CatpitArt.h"
+
 #include <felitronics/appkit/Brand.h>
 
 #include <cmath>
@@ -219,6 +221,68 @@ void Space::paint (juce::Graphics& g)
         g.setColour (col.withAlpha (bright));
         g.fillEllipse (juce::Rectangle<float> (size, size).withCentre (head));
     }
+}
+
+//==============================================================================
+StillSky::StillSky()
+{
+    setInterceptsMouseClicks (false, false);
+    setOpaque (true);
+}
+
+void StillSky::setChannel (int c)
+{
+    if (c == channel)
+        return;
+    channel = c;
+    repaint();
+}
+
+void StillSky::visibilityChanged()
+{
+    if (! isVisible())
+    {
+        picture = {};
+        fitted = {};
+        pictureOf = -1;
+    }
+}
+
+void StillSky::paint (juce::Graphics& g)
+{
+    // The sky's own darkest, under the picture: the picture is set on whole pixels, which can leave a
+    // hair of the glass's edge to it.
+    g.fillAll (juce::Colour (0xff010104));
+
+    if (pictureOf != channel)
+    {
+        picture = stillSky (channel);
+        pictureOf = channel;
+        fitted = {};
+    }
+    if (! picture.isValid())
+        return;
+
+    // Fitted once to the pixels the glass has on this screen, then copied: a picture resampled on every
+    // paint would cost what a still sky is there to save. And copied ONTO the pixel grid — the glass
+    // stands wherever the stage's scale puts it, and half a pixel off the grid the copy would be a
+    // blur of two rows.
+    const float scale = g.getInternalContext().getPhysicalPixelScaleFactor();      // pixels to a unit of ours
+    const int w = juce::roundToInt ((float) getWidth() * scale), h = juce::roundToInt ((float) getHeight() * scale);
+    if (w <= 0 || h <= 0)
+        return;
+    if (fitted.getWidth() != w || fitted.getHeight() != h)
+        fitted = picture.rescaled (w, h, juce::Graphics::highResamplingQuality);
+
+    const auto* top = getTopLevelComponent();
+    const auto at = top->getLocalPoint (this, juce::Point<float>());
+    const float unit = top->getLocalPoint (this, juce::Point<float> (1.0f, 0.0f)).x - at.x;   // the window's points to a unit of ours
+    const float perPoint = unit > 0.0f ? scale / unit : 1.0f;                                 // ...and pixels to a point
+    const juce::Point<float> onGrid { std::round (at.x * perPoint) - at.x * perPoint,
+                                      std::round (at.y * perPoint) - at.y * perPoint };
+
+    g.setImageResamplingQuality (juce::Graphics::lowResamplingQuality);
+    g.drawImage (fitted, juce::Rectangle<float> (onGrid.x, onGrid.y, (float) w, (float) h) / scale);
 }
 
 } // namespace orbitamp::catpit
