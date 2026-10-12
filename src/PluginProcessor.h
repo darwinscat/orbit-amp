@@ -840,8 +840,17 @@ public:
         come since the last call. */
     int takeProgramChange() noexcept { return midiProgram.exchange (-1, std::memory_order_relaxed); }
 
+    /** ...AND A CONTROLLER'S VALUE, the same way: the last one each of the 128 controllers sent
+        (0..127, on any channel), kept until a face that rides something on that controller takes it.
+        -1 when that controller has sent nothing since the last call. */
+    int takeControlChange (int controller) noexcept
+    {
+        return midiControl[(size_t) (controller & 0x7f)].exchange (-1, std::memory_order_relaxed);
+    }
+
 private:
     std::atomic<int> midiProgram { -1 };
+    std::array<std::atomic<int>, 128> midiControl;      // each -1 until its controller speaks
 
     /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
         raw input at the front of the chain; where it MUTES is the player's parameter. */

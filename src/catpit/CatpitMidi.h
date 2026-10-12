@@ -13,6 +13,14 @@
 namespace orbitamp::catpit
 {
 
+/** THE CONTROLLERS THE COCKPIT RIDES. Three switches — 64 and up is on, anything under it off — and
+    four knobs, each over its whole travel. These are the numbers resources/catpit/midi.txt gives the
+    player: change one, change the other. */
+namespace midi
+{
+    enum Controller { turbo = 20, hpf, lpf, drive, bass, middle, treble };
+}
+
 /** THE MIDI WINDOW'S CONTENT (the cockpit's Sheet shows it): which inputs the cockpit listens to, and
     what it does with what it hears.
 

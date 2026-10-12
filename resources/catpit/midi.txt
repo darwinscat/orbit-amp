@@ -9,3 +9,17 @@ Program Change
 4	HI-GAIN
 
 A controller that numbers its programs from 0 sends 0, 1, 2 and 3 for these.
+
+Control Change
+20	TURBO
+21	HPF
+22	LPF
+
+64 and up is on, below 64 is off.
+
+23	DRIVE
+24	BASS
+25	MIDDLE
+26	TREBLE
+
+0 to 127 is the knob's whole travel. On a tone knob 64 is the middle.

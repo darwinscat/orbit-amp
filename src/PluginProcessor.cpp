@@ -39,6 +39,8 @@ AmpProcessor::AmpProcessor()
 {
     for (auto& order : blockSpectrumOrder)
         order.store (eqSpectrumOrder);
+    for (auto& value : midiControl)
+        value.store (-1);
 
     for (int l = 0; l < params::numEqLinks; ++l)
     {
@@ -972,13 +974,17 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
-    // The one thing the engine listens for in MIDI (takeProgramChange). The standalone hands over
-    // whatever the inputs switched on in its settings sent; a host sends nothing to a plug-in that
-    // asks for no MIDI input. Read off the raw bytes — a MidiMessage made of a long SysEx passing by
-    // would allocate.
+    // The two things the engine listens for in MIDI: a Program Change and a controller's value
+    // (takeProgramChange, takeControlChange). The standalone hands over whatever the inputs switched
+    // on in its settings sent; a host sends nothing to a plug-in that asks for no MIDI input. Read off
+    // the raw bytes — a MidiMessage made of a long SysEx passing by would allocate.
     for (const auto event : midi)
+    {
         if (event.numBytes == 2 && (event.data[0] & 0xf0) == 0xc0)
             midiProgram.store (event.data[1] & 0x7f, std::memory_order_relaxed);
+        else if (event.numBytes == 3 && (event.data[0] & 0xf0) == 0xb0)
+            midiControl[(size_t) (event.data[1] & 0x7f)].store (event.data[2] & 0x7f, std::memory_order_relaxed);
+    }
 
     // A HOST'S BLOCK IS NOT ALWAYS THE BLOCK IT PROMISED. prepareToPlay names the most it will
     // send, and every stage with a scratch buffer — the room's wet copy, the fades' dry copy, the

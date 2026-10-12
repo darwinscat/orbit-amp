@@ -193,8 +193,10 @@ private:
     After tapPause;
 
     // MIDI. A Program Change the engine heard (AmpProcessor::takeProgramChange) is a pull of the
-    // throttle: programs 1 2 3 4 are the four channels. It is asked for a hundred times a second — a
-    // foot must not feel the wait, and the face's own timer ticks four times.
+    // throttle: programs 1 2 3 4 are the four channels. A controller's value (takeControlChange) is a
+    // foot on TURBO, HPF or LPF, or a pedal under DRIVE or a tone knob (midi::Controller). They are
+    // asked for a hundred times a second — a foot must not feel the wait, and the face's own timer
+    // ticks four times.
     struct Pulse final : juce::Timer
     {
         std::function<void()> beat;

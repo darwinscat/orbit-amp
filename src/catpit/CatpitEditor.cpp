@@ -43,6 +43,8 @@ namespace
     }};
     constexpr float keyTracking = 0.04f;
 
+    constexpr int preampConsole = 1;        // the EQ link BASS / MIDDLE / TREBLE ride
+
     // The overhead keys, in hole order: the history on the left of the divider, the four registers —
     // four whole amps to compare, each with a history of its own — on the right.
     enum { ovUndo, ovRedo, ovFirstRegister };
@@ -624,7 +626,6 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     // The tone stack is the preamp's own console in its universal mode — the same three bands on every
     // pack, centre detent at 0 dB — until the cockpit's packs carry a captured tone of their own.
-    constexpr int preampConsole = 1;
     bind (*tones[0], params::eqLoDb (preampConsole));
     bind (*tones[1], params::eqBellDb (preampConsole, 0));
     bind (*tones[2], params::eqHiDb (preampConsole));
@@ -797,6 +798,38 @@ void CatpitEditor::playMidi()
     const int program = amp.takeProgramChange();
     if (program >= 0 && program < Lever::numDetents && ! lever.isHeld())
         lever.setDetent (program, true);
+
+    // The controllers, after the program: a controller's preset sends its program first, and what
+    // follows it is meant for the channel that program chose.
+    const int turboTo = amp.takeControlChange (midi::turbo);
+    const int hpfTo   = amp.takeControlChange (midi::hpf);
+    const int lpfTo   = amp.takeControlChange (midi::lpf);
+    const int driveTo = amp.takeControlChange (midi::drive);
+    const int toneTo[] { amp.takeControlChange (midi::bass), amp.takeControlChange (midi::middle), amp.takeControlChange (midi::treble) };
+    if (turboTo < 0 && hpfTo < 0 && lpfTo < 0 && driveTo < 0 && toneTo[0] < 0 && toneTo[1] < 0 && toneTo[2] < 0)
+        return;
+
+    // A foot on a pedal is playing, not editing: none of it is a step to undo.
+    const felitronics::appkit::CompareHistory::ScopedSuppress playing (amp.history);
+
+    const auto along = [this] (const juce::String& paramId, float travel)       // 0..1 of the control's own travel
+    {
+        if (auto* p = amp.apvts.getParameter (paramId))
+            p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, travel));
+    };
+    const auto thrown = [] (int value) { return value >= 64; };
+
+    if (turboTo >= 0)   setParam (params::blockIn (params::preampId).toRawUTF8(), thrown (turboTo) ? Channels::turboDb : 0.0f);
+    if (hpfTo >= 0)     along (params::cabHpfOn, thrown (hpfTo) ? 1.0f : 0.0f);
+    if (lpfTo >= 0)     along (params::cabLpfOn, thrown (lpfTo) ? 1.0f : 0.0f);
+    if (driveTo >= 0)   along (params::preampGain, (float) driveTo / 127.0f);
+
+    // A tone knob's middle is 0 dB, and 0..127 has no middle: 64 is given it, and each half of the
+    // controller's travel is spread over its own half of the knob's.
+    const juce::String tone[] { params::eqLoDb (preampConsole), params::eqBellDb (preampConsole, 0), params::eqHiDb (preampConsole) };
+    for (size_t i = 0; i < 3; ++i)
+        if (const int v = toneTo[i]; v >= 0)
+            along (tone[i], v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
 }
 
 /** THE LOAD, ITEMISED — OrbitAmp's window, in the cockpit's words and colours. The cockpit's packs are
