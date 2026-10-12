@@ -54,10 +54,17 @@ public:
         false,      // PRESENCE
     }};
 
-    /** TURBO IS A PUSH INTO THE CAPTURE: the preamp's own input trim (params::blockIn), at this many dB
-        or at none — a clean boost in front of the amp, the way a pedal is one. It is a parameter, so a
-        channel keeps it with everything else it remembers. */
-    static constexpr float turboDb = 6.0f;
+    /** TURBO IS A PUSH INTO THE CAPTURE: the preamp's own input trim (params::blockIn), at its push or
+        at none — a clean boost in front of the amp, the way a pedal is one. It is a parameter, so a
+        channel keeps it with everything else it remembers. How HARD the push is, though, is the
+        machine's to say (the settings): a channel remembers that TURBO is on, and comes back at the
+        push in force. */
+    void  setTurboDb (float db) noexcept { turboPush = db; }
+    float turboDb() const noexcept { return turboPush; }
+
+    /** The trim is a parameter and a host may leave it anywhere: past this it reads as TURBO on. It is
+        under every push on offer. */
+    static constexpr float turboOnAbove = 1.5f;
 
     /** A note on the state itself, beside INPUT's trim: the lever's zero that trim was dialled against
         (CatpitEditor — the INPUT lever). It is INPUT's, and goes where INPUT goes: no preset holds
@@ -132,6 +139,8 @@ private:
     AmpProcessor& amp;
     juce::StringArray kept;      // the parameters a channel remembers
     juce::Array<juce::File> irs; // the cockpit's cabinets, in order
+    float turboPush = 9.0f;      // TURBO's push, dB
+    float settled (const juce::String& paramId, float value) const;    // a remembered TURBO, at the push in force
     mutable std::vector<std::optional<juce::String>> irKeys;    // each file's content key, read when first asked for; empty if it would not read
     juce::String keyOfFile (int index) const;
 

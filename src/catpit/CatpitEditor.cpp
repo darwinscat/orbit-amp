@@ -111,6 +111,20 @@ namespace
     }
 
     juce::String decibels (int db) { return (db > 0 ? "+" : "") + juce::String (db) + " dB"; }
+
+    // TURBO's push — see CatpitEditor.h. Kept with the machine's settings.
+    const juce::Identifier turboKey { "turbo_db" };
+    constexpr int turboDefault = 9;
+    constexpr std::array<int, 4> turboPushes { 3, 6, 9, 12 };
+
+    int snapTurbo (int db)
+    {
+        int best = turboPushes.front();
+        for (const int push : turboPushes)
+            if (std::abs (push - db) < std::abs (best - db))
+                best = push;
+        return best;
+    }
     const juce::Identifier windowKey { "window" };
     const juce::StringArray starsWords { "opengl", "cpu", "off" };
 
@@ -463,6 +477,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
     leverZero = snapLeverZero ((int) prefs::store().get (leverZeroKey, leverZeroDefault));
+    channels.setTurboDb ((float) snapTurbo ((int) prefs::store().get (turboKey, turboDefault)));
 
     setUpChain (channels.adopt());
     channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
@@ -557,14 +572,14 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         channels.select (d.getIntValue());
     lever.setDetent (channels.active(), false, false);
 
-    // TURBO pushes the capture: the preamp's input trim, at Channels::turboDb or at nothing. The trim
-    // is a parameter and a host may leave it anywhere, so anything past half the push reads as on.
+    // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
+    // The trim is a parameter and a host may leave it anywhere, so anything well above nothing reads as on.
     stage.addAndMakeVisible (turbo);
     turbo.setBounds (turboFrame.toNearestInt());
     {
         auto* push = follow (params::blockIn (params::preampId).toRawUTF8(),
-                             [this] (float db) { turbo.setOn (db > Channels::turboDb * 0.5f, false); });
-        turbo.onChange = [push] (bool on) { push->setValueAsCompleteGesture (on ? Channels::turboDb : 0.0f); };
+                             [this] (float db) { turbo.setOn (db > Channels::turboOnAbove, false); });
+        turbo.onChange = [this, push] (bool on) { push->setValueAsCompleteGesture (on ? channels.turboDb() : 0.0f); };
         push->sendInitialUpdate();
     }
 
@@ -805,7 +820,10 @@ void CatpitEditor::adoptState()
 bool CatpitEditor::inputNeedsSettling() const
 {
     const auto dialled = amp.apvts.state.getProperty (Channels::leverZeroId);
-    return dialled.isVoid() || (int) dialled != leverZero;
+    const float push = getParam (params::blockIn (params::preampId).toRawUTF8());
+
+    return dialled.isVoid() || (int) dialled != leverZero
+        || (push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f);
 }
 
 void CatpitEditor::settleInput()
@@ -820,6 +838,12 @@ void CatpitEditor::settleInput()
         amp.apvts.state.setProperty (Channels::leverZeroId, leverZero, nullptr);
 
     inFader.setValue (dbToLever (getParam (params::inTrim), leverZero), false);
+
+    // TURBO the same way: that it is on is the state's, how hard is the settings'.
+    const auto turboTrim = params::blockIn (params::preampId);
+    if (const float push = getParam (turboTrim.toRawUTF8());
+        push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
+        setParam (turboTrim.toRawUTF8(), channels.turboDb());
 }
 
 /** The machine's setting, not an edit of the sound: the lever stays, the trim follows, and there is
@@ -828,6 +852,16 @@ void CatpitEditor::chooseLeverZero (int db)
 {
     leverZero = snapLeverZero (db);
     prefs::store().set (leverZeroKey, leverZero);
+
+    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
+    settleInput();
+}
+
+void CatpitEditor::chooseTurbo (int db)
+{
+    db = snapTurbo (db);
+    prefs::store().set (turboKey, db);
+    channels.setTurboDb ((float) db);
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     settleInput();
@@ -893,7 +927,7 @@ void CatpitEditor::playMidi()
     };
     const auto thrown = [] (int value) { return value >= 64; };
 
-    if (turboTo >= 0)   setParam (params::blockIn (params::preampId).toRawUTF8(), thrown (turboTo) ? Channels::turboDb : 0.0f);
+    if (turboTo >= 0)   setParam (params::blockIn (params::preampId).toRawUTF8(), thrown (turboTo) ? channels.turboDb() : 0.0f);
     if (hpfTo >= 0)     along (params::cabHpfOn, thrown (hpfTo) ? 1.0f : 0.0f);
     if (lpfTo >= 0)     along (params::cabLpfOn, thrown (lpfTo) ? 1.0f : 0.0f);
     if (driveTo >= 0)   along (params::preampGain, (float) driveTo / 127.0f);
@@ -1241,7 +1275,7 @@ void CatpitEditor::playDemo (int loop)
     engine's own and are part of the sound; how the stars fly is this machine's and is not. */
 void CatpitEditor::showSettingsMenu()
 {
-    enum : int { itemGateOn = 1, itemMidi, itemFullScreen, itemDemo, firstStars = 5, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100, firstDemo = 200, firstLeverZero = 300 };
+    enum : int { itemGateOn = 1, itemMidi, itemFullScreen, itemDemo, firstStars = 5, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100, firstDemo = 200, firstLeverZero = 300, firstTurbo = 320 };
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked, bool enabled = true)
     {
@@ -1272,12 +1306,18 @@ void CatpitEditor::showSettingsMenu()
     menu.addItem (itemFor ("CPU", firstStars + (int) Stars::cpu, flying == Stars::cpu));
     menu.addItem (itemFor ("Off", firstStars + (int) Stars::off, flying == Stars::off));
 
-    // What the INPUT lever gives in the middle of its travel.
+    // What the INPUT lever gives in the middle of its travel, and how hard TURBO pushes.
     menu.addSectionHeader ("INPUT");
     juce::PopupMenu zero;
     for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
         zero.addItem (itemFor (decibels (db), firstLeverZero + (db - leverZeroLowest) / leverZeroStep, db == leverZero));
     menu.addSubMenu ("Lever's zero  " + decibels (leverZero), zero);
+
+    juce::PopupMenu push;
+    const int turboNow = juce::roundToInt (channels.turboDb());
+    for (size_t i = 0; i < turboPushes.size(); ++i)
+        push.addItem (itemFor (decibels (turboPushes[i]), firstTurbo + (int) i, turboPushes[i] == turboNow));
+    menu.addSubMenu ("TURBO adds  " + decibels (turboNow), push);
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)
@@ -1328,7 +1368,8 @@ void CatpitEditor::showSettingsMenu()
                             auto& e = *safe;
                             e.endTapping();
 
-                            if (picked >= firstLeverZero)              e.chooseLeverZero (leverZeroLowest + (picked - firstLeverZero) * leverZeroStep);
+                            if (picked >= firstTurbo)                  e.chooseTurbo (turboPushes[(size_t) juce::jlimit (0, (int) turboPushes.size() - 1, picked - firstTurbo)]);
+                            else if (picked >= firstLeverZero)         e.chooseLeverZero (leverZeroLowest + (picked - firstLeverZero) * leverZeroStep);
                             else if (picked >= firstDemo)              e.playDemo (picked - firstDemo);
                             else if (picked == itemDemo)               e.playDemo (-1);
                             else if (picked == itemGateOn)             e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);

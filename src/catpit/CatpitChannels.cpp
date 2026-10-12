@@ -281,7 +281,7 @@ juce::ValueTree Channels::whole() const
         full.setProperty (indexId, c, nullptr);
         for (const auto& id : kept)
             full.setProperty (id, c == playing ? plain (id)
-                                               : record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id),
+                                               : settled (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id)),
                               nullptr);
         for (int f = 0; f < numFlags; ++f)
             full.setProperty (flagIds[(size_t) f], c == playing ? flag ((Flag) f)
@@ -311,10 +311,15 @@ void Channels::recall (const juce::ValueTree& record)
 {
     // No record is a channel never visited: every control at its default, every layer off.
     for (const auto& id : kept)
-        set (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id));
+        set (id, settled (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id)));
     for (int f = 0; f < numFlags; ++f)
         setFlag ((Flag) f, record.isValid() && (bool) record.getProperty (flagIds[(size_t) f], false));
     chooseCabinetNamed (record.getProperty (cabinetId).toString());
+}
+
+float Channels::settled (const juce::String& paramId, float value) const
+{
+    return paramId == params::blockIn (params::preampId) && value > turboOnAbove ? turboPush : value;
 }
 
 float Channels::plain (const juce::String& paramId) const

@@ -224,11 +224,16 @@ private:
     // (Channels::leverZeroId). Where that is not the zero in force — a session from before there was
     // one, a register, another setting — the LEVER stays where it stood and the trim goes to what that
     // place gives now.
+    //
+    // TURBO'S PUSH is the machine's the same way (Channels::turboDb): the state says that TURBO is on, by
+    // the preamp's input trim standing above nothing, and the settings say how hard that is — +9 dB
+    // unless told otherwise, which with the lever's zero at -9 feeds the captures as they were taken.
     int leverZero = 0;
     juce::ParameterAttachment* inputTrim = nullptr;
     bool inputNeedsSettling() const;
     void settleInput();
     void chooseLeverZero (int db);
+    void chooseTurbo (int db);
     SegmentMeter inMeter, outMeter;
     TunerFace tuner;
     Emblem emblem;
