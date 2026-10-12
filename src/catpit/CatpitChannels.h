@@ -59,6 +59,11 @@ public:
         channel keeps it with everything else it remembers. */
     static constexpr float turboDb = 6.0f;
 
+    /** A note on the state itself, beside INPUT's trim: the lever's zero that trim was dialled against
+        (CatpitEditor — the INPUT lever). It is INPUT's, and goes where INPUT goes: no preset holds
+        either of them. */
+    static inline const juce::Identifier leverZeroId { "catpit_input_zero" };
+
     explicit Channels (AmpProcessor&);
 
     /** Whether the state carries the cockpit's node at all. One that does not is a state the cockpit has

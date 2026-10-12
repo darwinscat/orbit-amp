@@ -215,6 +215,20 @@ private:
     void tapTempo();
     void endTapping();
     ColumnFader inFader, outFader;
+
+    // THE INPUT LEVER'S ZERO is the machine's to say (the settings): what the engine's input trim stands
+    // at with the lever in the middle of its travel — -9 dB unless the player says otherwise, a guitar
+    // straight into an interface being hotter than what the captures were fed. The lever's ends are the
+    // trim's own, so each half of the travel has the decibels between them and the zero.
+    // The state carries the trim in decibels and, beside it, the zero it was dialled against
+    // (Channels::leverZeroId). Where that is not the zero in force — a session from before there was
+    // one, a register, another setting — the LEVER stays where it stood and the trim goes to what that
+    // place gives now.
+    int leverZero = 0;
+    juce::ParameterAttachment* inputTrim = nullptr;
+    bool inputNeedsSettling() const;
+    void settleInput();
+    void chooseLeverZero (int db);
     SegmentMeter inMeter, outMeter;
     TunerFace tuner;
     Emblem emblem;

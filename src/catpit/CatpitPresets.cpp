@@ -79,6 +79,7 @@ juce::String Presets::sound() const
     auto tree = amp.apvts.copyState();
 
     setInTree (tree, params::inTrim, 0.0f);
+    tree.removeProperty (Channels::leverZeroId, nullptr);      // ...nor the zero INPUT was dialled against
     setInTree (tree, params::preampDevice, 0.0f);
     setInTree (tree, params::boostDevice, 0.0f);
 
@@ -110,9 +111,13 @@ bool Presets::load (const juce::String& name)
 
     amp.takeEmbeddedIrs (tree);     // a cabinet IR it carries goes to the store, not into the history
 
-    // INPUT stays where the player has it.
+    // INPUT stays where the player has it — the trim, and the lever's zero it was dialled against.
     if (auto* in = amp.apvts.getParameter (params::inTrim))
         setInTree (tree, params::inTrim, in->convertFrom0to1 (in->getValue()));
+    if (const auto zero = amp.apvts.state.getProperty (Channels::leverZeroId); ! zero.isVoid())
+        tree.setProperty (Channels::leverZeroId, zero, nullptr);
+    else
+        tree.removeProperty (Channels::leverZeroId, nullptr);
 
     amp.history.applyEdit (amp.history.active(), tree, "Load " + name);
     mark (name);

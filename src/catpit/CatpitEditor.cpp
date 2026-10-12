@@ -82,6 +82,35 @@ namespace
     /** How the stars fly, and what the windshield shows — settings of the machine's, in the cockpit's
         settings file. The stars are kept as a word, in the order of CatpitEditor::Stars. */
     const juce::Identifier starsKey  { "stars" };
+
+    // The INPUT lever's zero — see CatpitEditor.h. Kept with the machine's settings.
+    const juce::Identifier leverZeroKey { "input_zero_db" };
+    constexpr int leverZeroDefault = -9, leverZeroLowest = -24, leverZeroHighest = 12, leverZeroStep = 3;
+
+    int snapLeverZero (int db)
+    {
+        db = juce::jlimit (leverZeroLowest, leverZeroHighest, db);
+        return leverZeroLowest + leverZeroStep * juce::roundToInt ((float) (db - leverZeroLowest) / (float) leverZeroStep);
+    }
+
+    /** The lever's travel against the engine's trim: the bottom of the travel is the trim's bottom, the
+        top its top, and the middle whatever `zero` says the lever's zero gives. */
+    float leverToDb (float travel, int zero)
+    {
+        const float z = (float) zero, range = params::inTrimRangeDb;
+        return travel <= 0.5f ? juce::jmap (travel * 2.0f, -range, z)
+                              : juce::jmap ((travel - 0.5f) * 2.0f, z, range);
+    }
+
+    float dbToLever (float db, int zero)
+    {
+        const float z = (float) zero, range = params::inTrimRangeDb;
+        if (db <= z)
+            return z > -range ? 0.5f * (db + range) / (z + range) : 0.5f;   // a zero at the very bottom has nothing under it
+        return 0.5f + 0.5f * (db - z) / (range - z);
+    }
+
+    juce::String decibels (int db) { return (db > 0 ? "+" : "") + juce::String (db) + " dB"; }
     const juce::Identifier windowKey { "window" };
     const juce::StringArray starsWords { "opengl", "cpu", "off" };
 
@@ -433,8 +462,11 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // undo on the panel it must not leave a step to press back through.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
+    leverZero = snapLeverZero ((int) prefs::store().get (leverZeroKey, leverZeroDefault));
+
     setUpChain (channels.adopt());
     channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
+    settleInput();      // ...and INPUT's lever may have another zero than the one the state was dialled against
 
     addAndMakeVisible (stage);
     stage.setBounds (0, 0, (int) width, (int) height);
@@ -621,8 +653,15 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     bind (drive, params::preampGain);
     bind (*sliders[0], params::reverbMix);
     bind (*sliders[1], params::delayMix);
-    bind (inFader, params::inTrim);
     bind (outFader, params::outTrim);
+
+    // INPUT's lever does not read the trim's own scale: its middle is the lever's zero (CatpitEditor.h).
+    inputTrim = follow (params::inTrim, [this] (float db) { inFader.setValue (dbToLever (db, leverZero), false); });
+    inFader.onGestureStart = [this] { inputTrim->beginGesture(); };
+    inFader.onChange       = [this] (float travel) { inputTrim->setValueAsPartOfGesture (leverToDb (travel, leverZero)); };
+    inFader.onGestureEnd   = [this] { inputTrim->endGesture(); };
+    inFader.defaultValue   = 0.5f;
+    inputTrim->sendInitialUpdate();
 
     // The tone stack is the playing pack's own — its Bass, Middle and Treble as they were measured on
     // the amp, centre detent where every capture was taken.
@@ -746,19 +785,52 @@ CatpitEditor::~CatpitEditor()
 /** A STATE THE COCKPIT HAS NOT SEEN — a session saved before it existed, loaded while the window is
     open — is made its own the way the constructor makes the first one: the fixed chain, the channel
     whose pack is playing, a cabinet CAB can reach. And one it HAS seen, whose cabinet is no longer
-    the file of that name — a register kept from before the file was replaced — has it read again. */
+    the file of that name — a register kept from before the file was replaced — has it read again;
+    as one whose INPUT was dialled against another zero of the lever has it settled on this one. */
 void CatpitEditor::adoptState()
 {
     adoptionPending = false;
     const bool unseen = ! channels.adopted();
-    if (! unseen && ! channels.cabinetIsStale())
+    if (! unseen && ! channels.cabinetIsStale() && ! inputNeedsSettling())
         return;
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     if (unseen)
         setUpChain (channels.adopt());
     channels.align();
+    settleInput();
     showChannel();
+}
+
+bool CatpitEditor::inputNeedsSettling() const
+{
+    const auto dialled = amp.apvts.state.getProperty (Channels::leverZeroId);
+    return dialled.isVoid() || (int) dialled != leverZero;
+}
+
+void CatpitEditor::settleInput()
+{
+    // No note: the trim was dialled on the engine's own scale, whose middle is 0 dB.
+    const auto dialled = amp.apvts.state.getProperty (Channels::leverZeroId);
+    const int was = dialled.isVoid() ? 0 : (int) dialled;
+
+    if (was != leverZero)
+        setParam (params::inTrim, leverToDb (dbToLever (getParam (params::inTrim), was), leverZero));
+    if (dialled.isVoid() || was != leverZero)
+        amp.apvts.state.setProperty (Channels::leverZeroId, leverZero, nullptr);
+
+    inFader.setValue (dbToLever (getParam (params::inTrim), leverZero), false);
+}
+
+/** The machine's setting, not an edit of the sound: the lever stays, the trim follows, and there is
+    no step to undo. */
+void CatpitEditor::chooseLeverZero (int db)
+{
+    leverZero = snapLeverZero (db);
+    prefs::store().set (leverZeroKey, leverZero);
+
+    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
+    settleInput();
 }
 
 void CatpitEditor::timerCallback()
@@ -887,9 +959,9 @@ void CatpitEditor::refreshHistory()
     showChannel();   // an undo, a redo or another register may have brought a different channel with it
 
     // ...or a state with no channels in it at all, or one whose cabinet is not the file of that name
-    // any more. Settling either writes, and this is the history's own callback, so it is done on the
-    // way out.
-    if ((! channels.adopted() || channels.cabinetIsStale()) && ! adoptionPending)
+    // any more, or whose INPUT was dialled against another zero. Settling any of them writes, and this
+    // is the history's own callback, so it is done on the way out.
+    if ((! channels.adopted() || channels.cabinetIsStale() || inputNeedsSettling()) && ! adoptionPending)
     {
         adoptionPending = true;
         juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<CatpitEditor> (this)]
@@ -1169,7 +1241,7 @@ void CatpitEditor::playDemo (int loop)
     engine's own and are part of the sound; how the stars fly is this machine's and is not. */
 void CatpitEditor::showSettingsMenu()
 {
-    enum : int { itemGateOn = 1, itemMidi, itemFullScreen, itemDemo, firstStars = 5, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100, firstDemo = 200 };
+    enum : int { itemGateOn = 1, itemMidi, itemFullScreen, itemDemo, firstStars = 5, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100, firstDemo = 200, firstLeverZero = 300 };
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked, bool enabled = true)
     {
@@ -1199,6 +1271,13 @@ void CatpitEditor::showSettingsMenu()
                            firstStars + (int) Stars::gpu, flying == Stars::gpu, ! gpuBroken));
     menu.addItem (itemFor ("CPU", firstStars + (int) Stars::cpu, flying == Stars::cpu));
     menu.addItem (itemFor ("Off", firstStars + (int) Stars::off, flying == Stars::off));
+
+    // What the INPUT lever gives in the middle of its travel.
+    menu.addSectionHeader ("INPUT");
+    juce::PopupMenu zero;
+    for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
+        zero.addItem (itemFor (decibels (db), firstLeverZero + (db - leverZeroLowest) / leverZeroStep, db == leverZero));
+    menu.addSubMenu ("Lever's zero  " + decibels (leverZero), zero);
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)
@@ -1249,7 +1328,8 @@ void CatpitEditor::showSettingsMenu()
                             auto& e = *safe;
                             e.endTapping();
 
-                            if (picked >= firstDemo)                   e.playDemo (picked - firstDemo);
+                            if (picked >= firstLeverZero)              e.chooseLeverZero (leverZeroLowest + (picked - firstLeverZero) * leverZeroStep);
+                            else if (picked >= firstDemo)              e.playDemo (picked - firstDemo);
                             else if (picked == itemDemo)               e.playDemo (-1);
                             else if (picked == itemGateOn)             e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f);
                             else if (picked == itemMidi)               e.showMidi();
