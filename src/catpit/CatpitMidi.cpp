@@ -13,8 +13,10 @@ namespace orbitamp::catpit
 
 namespace
 {
-    // In the editor's own pixels: a Sheet's content is not on the scaled stage.
-    constexpr int width = 400, pad = 16, titleH = 34, rowH = 30, gap = 14, lineH = 20;
+    // In the editor's own pixels: a Sheet's content is not on the scaled stage. The inputs' column, then
+    // the commands'.
+    constexpr int inputsW = 320, commandsW = 400, pad = 16, titleH = 34, rowH = 30, gap = 14, lineH = 20;
+    constexpr int commandsTop = 6;      // so the commands' first line reads level with the inputs' title
     constexpr int keyW = 86, keyH = 28, tabStop = 44;
     constexpr float textPx = 13.0f, tracking = 0.08f;
 
@@ -104,21 +106,46 @@ void MidiPanel::layOutCommands()
     lines.clear();
     commandsHeight = 0;
 
+    // A TABLE'S ROWS STAND TWO ABREAST: the first half down the left, the rest down the right. The rows
+    // that follow one another are one table; it is set when the line after its last has been read.
+    size_t tableFrom = 0;
+    const auto setTable = [this, &tableFrom]
+    {
+        const int count = (int) (lines.size() - tableFrom);
+        const int deep = (count + 1) / 2;
+        for (int i = 0; i < count; ++i)
+        {
+            auto& cell = lines[tableFrom + (size_t) i];
+            cell.x = (i / deep) * (commandsW - pad * 2) / 2;
+            cell.y = commandsHeight + (i % deep) * lineH;
+        }
+        commandsHeight += deep * lineH;
+    };
+    const auto inTable = [this] { return ! lines.empty() && lines.back().kind == Line::Kind::row; };
+
     for (const auto& raw : juce::StringArray::fromLines (commands.trimEnd()))
     {
         Line line;
         const auto text = raw.trimEnd();
 
-        if (text.isEmpty())
+        if (text.containsChar ('\t'))
         {
-            line.height = lineH / 2;
-        }
-        else if (text.containsChar ('\t'))
-        {
+            if (! inTable())
+                tableFrom = lines.size();
             line.kind   = Line::Kind::row;
             line.text   = text.upToFirstOccurrenceOf ("\t", false, false).trim();
             line.second = text.fromFirstOccurrenceOf ("\t", false, false).trim();
             line.height = lineH;
+            lines.push_back (std::move (line));
+            continue;
+        }
+
+        if (inTable())
+            setTable();
+
+        if (text.isEmpty())
+        {
+            line.height = lineH / 2;
         }
         else if (text.endsWithChar ('.'))
         {
@@ -127,7 +154,7 @@ void MidiPanel::layOutCommands()
             words.append (text.toUpperCase(), textFont (textPx), dim);
             words.setWordWrap (juce::AttributedString::byWord);
             words.setLineSpacing (4.0f);
-            line.wrapped.createLayout (words, (float) (width - pad * 2));
+            line.wrapped.createLayout (words, (float) (commandsW - pad * 2));
             line.height = juce::roundToInt (std::ceil (line.wrapped.getHeight())) + 2;
         }
         else
@@ -137,19 +164,28 @@ void MidiPanel::layOutCommands()
             line.height = lineH + 2;
         }
 
+        line.y = commandsHeight;
         commandsHeight += line.height;
         lines.push_back (std::move (line));
     }
+
+    if (inTable())
+        setTable();
+}
+
+int MidiPanel::commandsLeft() const
+{
+    return available() ? inputsW : 0;
 }
 
 int MidiPanel::inputsHeight() const
 {
-    return available() ? titleH + rowH * juce::jmax (1, inputs.size()) + gap : pad - 6;
+    return available() ? titleH + rowH * juce::jmax (1, inputs.size()) + pad - 6 : 0;
 }
 
 juce::Rectangle<int> MidiPanel::row (int index) const
 {
-    return { pad - 8, titleH + rowH * index, width - (pad - 8) * 2, rowH };
+    return { pad - 8, titleH + rowH * index, inputsW - (pad - 8) * 2, rowH };
 }
 
 int MidiPanel::rowAt (juce::Point<int> p) const
@@ -178,10 +214,13 @@ void MidiPanel::refresh()
     listening = std::move (on);
     hovered   = -1;
 
-    const int keysY = inputsHeight() + commandsHeight + gap;
-    save.setBounds (width - pad - keyW, keysY, keyW, keyH);
+    // The keys stand under the commands they copy and save, at the foot of the window whichever column
+    // is the taller.
+    const int height = juce::jmax (inputsHeight(), commandsTop + commandsHeight + gap + keyH + pad - 6);
+    const int keysY = height - (pad - 6) - keyH;
+    save.setBounds (commandsLeft() + commandsW - pad - keyW, keysY, keyW, keyH);
     copy.setBounds (save.getX() - 10 - keyW, keysY, keyW, keyH);
-    setSize (width, keysY + keyH + pad - 6);
+    setSize (commandsLeft() + commandsW, height);
     repaint();
 }
 
@@ -189,7 +228,7 @@ void MidiPanel::paint (juce::Graphics& g)
 {
     if (available())
     {
-        write (g, "MIDI inputs", { pad, 4, width - pad * 2, titleH - 8 }, textPx, faint);
+        write (g, "MIDI inputs", { pad, 4, inputsW - pad * 2, titleH - 8 }, textPx, faint);
 
         if (inputs.isEmpty())
             write (g, "None found", row (0).withTrimmedLeft (8), 15.0f, dim);
@@ -213,13 +252,14 @@ void MidiPanel::paint (juce::Graphics& g)
         }
 
         g.setColour (violet.withAlpha (0.28f));
-        g.fillRect (pad, inputsHeight() - gap / 2, width - pad * 2, 1);
+        g.fillRect (inputsW, pad - 6, 1, getHeight() - (pad - 6) * 2);
     }
 
-    int y = inputsHeight();
+    const int half = (commandsW - pad * 2) / 2;
     for (const auto& line : lines)
     {
-        const juce::Rectangle<int> area { pad, y, width - pad * 2, line.height };
+        const juce::Rectangle<int> area { commandsLeft() + pad + line.x, commandsTop + line.y,
+                                          line.kind == Line::Kind::row ? half : commandsW - pad * 2, line.height };
         switch (line.kind)
         {
             case Line::Kind::gap:      break;
@@ -230,7 +270,6 @@ void MidiPanel::paint (juce::Graphics& g)
                 write (g, line.second, area.withTrimmedLeft (tabStop), textPx, ink);
                 break;
         }
-        y += line.height;
     }
 }
 

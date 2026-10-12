@@ -24,7 +24,10 @@ namespace orbitamp::catpit
     THE COMMANDS — a text file in the resources (resources/catpit/midi.txt), shown as it is written:
     a line with a tab in it is a row of a table, a line that is not a sentence is a heading, the rest
     is prose. COPY puts the file on the clipboard and SAVE writes it out, so the list can go where the
-    player keeps the controller's notes. To change what the window says, change the file. */
+    player keeps the controller's notes. To change what the window says, change the file.
+
+    The two stand side by side, the inputs on the left: the cockpit's window is wide and not tall, and
+    a table's rows are set two abreast for the same reason. */
 class MidiPanel final : public juce::Component,
                         private juce::Timer
 {
@@ -80,11 +83,12 @@ private:
         Kind kind = Kind::gap;
         juce::String text, second;      // a row's two cells
         juce::TextLayout wrapped;       // prose
-        int height = 0;
+        int x = 0, y = 0, height = 0;   // where it stands in the commands' column
     };
     std::vector<Line> lines;
     int commandsHeight = 0;
     void layOutCommands();
+    int commandsLeft() const;           // where the commands' column begins
 
     WordKey copy { "Copy" }, save { "Save" };
     std::unique_ptr<juce::FileChooser> chooser;
