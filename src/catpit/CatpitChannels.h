@@ -5,6 +5,8 @@
 
 #include "../PluginProcessor.h"
 
+#include <array>
+
 namespace orbitamp::catpit
 {
 
@@ -20,7 +22,7 @@ namespace orbitamp::catpit
     parameters are its truth until it is left.
 
     The same node carries the controls that have no parameter yet: the pack's four layers are
-    remembered here, and will reach the sound when the packs carry them (layersPlayable).
+    remembered here, and will reach the sound when the packs carry them (layerPlayable).
 
     No widgets in here, and nothing the audio thread reads. Message thread only. */
 class Channels
@@ -34,11 +36,16 @@ public:
     /** The controls kept in the node rather than in a parameter. */
     enum Flag { fat, bright, depth, presence, numFlags };
 
-    /** THE PACKS DO NOT CARRY THE LAYERS YET, so a hand on a layer's key would change nothing it could
-        hear. Until a version of the packs brings them, the face keeps those four where they stand and
-        does not let them be thrown; what a state already says about them is left alone, only not shown.
-        This one word turns them back on. */
-    static constexpr bool layersPlayable = false;
+    /** WHICH LAYERS THE PACKS CARRY — none of them yet, so a hand on a layer's key would change nothing
+        it could hear. Until a version of the packs brings a layer, the face keeps its key where it
+        stands and does not let it be thrown; what a state already says about it is left alone, only not
+        shown. One word each, in Flag's order, turns a key back on. */
+    static constexpr std::array<bool, numFlags> layerPlayable {{
+        false,      // FAT
+        false,      // BRIGHT
+        false,      // DEPTH
+        false,      // PRESENCE
+    }};
 
     /** TURBO IS A PUSH INTO THE CAPTURE: the preamp's own input trim (params::blockIn), at this many dB
         or at none — a clean boost in front of the amp, the way a pedal is one. It is a parameter, so a

@@ -613,8 +613,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     bind (*tones[2], params::eqHiDb (preampConsole));
 
     // HPF and LPF switch the cabinet's own cut filters in and out; FAT, BRIGHT, DEPTH and PRESENCE are
-    // kept with the channel and wait for the layers the packs will carry — dimmed and deaf to the hand
-    // until they do (Channels::layersPlayable).
+    // kept with the channel and wait for the layers the packs will carry — each dimmed and deaf to the
+    // hand until its own arrives (Channels::layerPlayable).
     bindButton (*buttons[btHpf], params::cabHpfOn);
     bindButton (*buttons[btLpf], params::cabLpfOn);
     const std::pair<int, Channels::Flag> layers[] { { btFat, Channels::fat }, { btBright, Channels::bright },
@@ -622,7 +622,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     for (const auto& [key, flag] : layers)
     {
         buttons[(size_t) key]->onChange = [this, f = flag] (bool on) { channels.setFlag (f, on); };
-        buttons[(size_t) key]->setEnabled (Channels::layersPlayable);
+        buttons[(size_t) key]->setEnabled (Channels::layerPlayable[(size_t) flag]);
     }
 
     showChannel();
@@ -852,9 +852,10 @@ void CatpitEditor::showChannel()
     if (! lever.isHeld() && lever.getDetent() != channel)
         lever.setDetent (channel, true, false);
 
-    // While the packs carry no layers, none of the four shows as thrown — whatever the state says.
-    const auto thrown = [this] (Channels::Flag f) { return Channels::layersPlayable && channels.flag (f); };
-    buttons[btFat]->setEnabled (Channels::layersPlayable && channel >= 2);
+    // A layer the packs do not carry yet never shows as thrown — whatever the state says.
+    const auto playable = [] (Channels::Flag f) { return Channels::layerPlayable[(size_t) f]; };
+    const auto thrown = [this, playable] (Channels::Flag f) { return playable (f) && channels.flag (f); };
+    buttons[btFat]->setEnabled (playable (Channels::fat) && channel >= 2);
     buttons[btFat]->setOn      (thrown (Channels::fat),      false);
     buttons[btBright]->setOn   (thrown (Channels::bright),   false);
     buttons[btDepth]->setOn    (thrown (Channels::depth),    false);
