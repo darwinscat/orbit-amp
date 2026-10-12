@@ -20,7 +20,7 @@ namespace orbitamp::catpit
     parameters are its truth until it is left.
 
     The same node carries the controls that have no parameter yet: TURBO and the pack's four layers
-    move and are remembered here, and will reach the sound when the packs carry them.
+    are remembered here, and will reach the sound when the packs carry them (layersPlayable).
 
     No widgets in here, and nothing the audio thread reads. Message thread only. */
 class Channels
@@ -33,6 +33,12 @@ public:
 
     /** The controls kept in the node rather than in a parameter. */
     enum Flag { turbo, fat, bright, depth, presence, numFlags };
+
+    /** THE PACKS DO NOT CARRY THE LAYERS YET, so a hand on TURBO or on a layer's key would change
+        nothing it could hear. Until a version of the packs brings them, the face keeps those five where
+        they stand and does not let them be thrown; what a state already says about them is left alone,
+        only not shown. This one word turns them back on. */
+    static constexpr bool layersPlayable = false;
 
     explicit Channels (AmpProcessor&);
 

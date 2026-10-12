@@ -506,9 +506,11 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         channels.select (d.getIntValue());
     lever.setDetent (channels.active(), false, false);
 
-    // TURBO moves and is remembered, but drives nothing yet: it will be a layer inside the pack.
+    // TURBO will be a layer inside the pack. Until the packs carry it (Channels::layersPlayable) its
+    // guard stays down.
     stage.addAndMakeVisible (turbo);
     turbo.setBounds (turboFrame.toNearestInt());
+    turbo.setEnabled (Channels::layersPlayable);
     turbo.onChange = [this] (bool on) { channels.setFlag (Channels::turbo, on); };
 
     const juce::Colour lineFrom[] { orange.darker (0.3f), violet, orange.darker (0.3f) };
@@ -607,13 +609,17 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     bind (*tones[2], params::eqHiDb (preampConsole));
 
     // HPF and LPF switch the cabinet's own cut filters in and out; FAT, BRIGHT, DEPTH and PRESENCE are
-    // kept with the channel and wait for the layers the packs will carry.
+    // kept with the channel and wait for the layers the packs will carry — dimmed and deaf to the hand
+    // until they do (Channels::layersPlayable).
     bindButton (*buttons[btHpf], params::cabHpfOn);
     bindButton (*buttons[btLpf], params::cabLpfOn);
     const std::pair<int, Channels::Flag> layers[] { { btFat, Channels::fat }, { btBright, Channels::bright },
                                                     { btDepth, Channels::depth }, { btPresence, Channels::presence } };
     for (const auto& [key, flag] : layers)
+    {
         buttons[(size_t) key]->onChange = [this, f = flag] (bool on) { channels.setFlag (f, on); };
+        buttons[(size_t) key]->setEnabled (Channels::layersPlayable);
+    }
 
     showChannel();
 
@@ -842,12 +848,14 @@ void CatpitEditor::showChannel()
     if (! lever.isHeld() && lever.getDetent() != channel)
         lever.setDetent (channel, true, false);
 
-    buttons[btFat]->setEnabled (channel >= 2);
-    buttons[btFat]->setOn      (channels.flag (Channels::fat),      false);
-    buttons[btBright]->setOn   (channels.flag (Channels::bright),   false);
-    buttons[btDepth]->setOn    (channels.flag (Channels::depth),    false);
-    buttons[btPresence]->setOn (channels.flag (Channels::presence), false);
-    turbo.setOn (channels.flag (Channels::turbo), false);
+    // While the packs carry no layers, none of the five shows as thrown — whatever the state says.
+    const auto thrown = [this] (Channels::Flag f) { return Channels::layersPlayable && channels.flag (f); };
+    buttons[btFat]->setEnabled (Channels::layersPlayable && channel >= 2);
+    buttons[btFat]->setOn      (thrown (Channels::fat),      false);
+    buttons[btBright]->setOn   (thrown (Channels::bright),   false);
+    buttons[btDepth]->setOn    (thrown (Channels::depth),    false);
+    buttons[btPresence]->setOn (thrown (Channels::presence), false);
+    turbo.setOn (thrown (Channels::turbo), false);
 
     // CAB's cap, on the cabinet that is playing. (This is first called while the face is still being
     // built, before the plates exist.)

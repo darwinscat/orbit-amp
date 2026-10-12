@@ -339,8 +339,17 @@ void PushButton::timerCallback()
     repaint();
 }
 
+void PushButton::enablementChanged()
+{
+    // A key that will not go down does not offer itself to the hand either.
+    setMouseCursor (isEnabled() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    repaint();
+}
+
 void PushButton::mouseDown (const juce::MouseEvent& e)
 {
+    if (! isEnabled())
+        return;
     if (e.mods.isPopupMenu() && onMenu)
     {
         onMenu();
@@ -454,8 +463,15 @@ void GuardButton::timerCallback()
     repaint();
 }
 
+void GuardButton::enablementChanged()
+{
+    setMouseCursor (isEnabled() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+}
+
 void GuardButton::mouseDown (const juce::MouseEvent& e)
 {
+    if (! isEnabled())      // the guard stays down
+        return;
     if (! open)
     {
         open = true;

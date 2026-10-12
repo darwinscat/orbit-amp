@@ -158,7 +158,7 @@ public:
     void mouseUp (const juce::MouseEvent&) override;
     void mouseEnter (const juce::MouseEvent&) override { if (onHover) onHover (true); }
     void mouseExit (const juce::MouseEvent&) override  { if (onHover) onHover (false); }
-    void enablementChanged() override { repaint(); }
+    void enablementChanged() override;
 
 private:
     bool on = false, held = false;
@@ -183,6 +183,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
+    void enablementChanged() override;
 
 private:
     bool open = false, on = false;
