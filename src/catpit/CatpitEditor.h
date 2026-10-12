@@ -64,7 +64,7 @@ public:
     NameTag();
     void paint (juce::Graphics&) override;
 
-    /** Centred on `anchor`, in the stage's own space. Empty text hides it. */
+    /** Centred on `anchor`, in the stage's own space, and kept inside it. Empty text hides it. */
     void show (juce::Point<float> anchor, const juce::String& text);
 
 private:
@@ -234,6 +234,10 @@ private:
     void settleInput();
     void chooseLeverZero (int db);
     void chooseTurbo (int db);
+
+    // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
+    // for INPUT count from the lever's zero, so the middle of the travel reads 0.
+    void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);
     SegmentMeter inMeter, outMeter;
     TunerFace tuner;
     Emblem emblem;

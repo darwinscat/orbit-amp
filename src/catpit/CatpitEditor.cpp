@@ -385,7 +385,10 @@ void NameTag::show (juce::Point<float> anchor, const juce::String& words)
     const auto font = labelFont (layout::px13).withExtraKerningFactor (0.06f);
     const float w = juce::GlyphArrangement::getStringWidth (font, text) + 30.0f;
     // A pixel of room all round for the outline, which is stroked on the edge of the plate.
-    setBounds (juce::Rectangle<float> (w, 32.0f).withCentre (anchor).expanded (2.0f).getSmallestIntegerContainer());
+    auto box = juce::Rectangle<float> (w, 32.0f).withCentre (anchor).expanded (2.0f).getSmallestIntegerContainer();
+    if (const auto* parent = getParentComponent())
+        box = box.constrainedWithin (parent->getLocalBounds());      // a tag by the stage's edge stays on the stage
+    setBounds (box);
     repaint();
 }
 
@@ -678,6 +681,9 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     inFader.defaultValue   = 0.5f;
     inputTrim->sendInitialUpdate();
 
+    sayLever (inFader,  "INPUT",  [this] { return getParam (params::inTrim) - (float) leverZero; });
+    sayLever (outFader, "OUTPUT", [this] { return getParam (params::outTrim); });
+
     // The tone stack is the playing pack's own — its Bass, Middle and Treble as they were measured on
     // the amp, centre detent where every capture was taken.
     for (int t = 0; t < Channels::numTones; ++t)
@@ -855,6 +861,25 @@ void CatpitEditor::chooseLeverZero (int db)
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     settleInput();
+}
+
+void CatpitEditor::sayLever (ColumnFader& lever, const juce::String& name, std::function<float()> reading)
+{
+    const auto say = [this, &lever, name, reading]
+    {
+        float db = reading();
+        if (std::abs (db) < 0.05f)
+            db = 0.0f;      // never "-0.0"
+
+        const auto at = lever.getBounds().toFloat();
+        nameTag.show ({ at.getCentreX(), at.getY() - 24.0f },
+                      name + "  " + (db > 0.0f ? "+" : "") + juce::String (db, 1) + " dB");
+    };
+
+    // Round what the lever already does: the value is the parameter's, and it has moved by the time this reads it.
+    lever.onGestureStart = [say, before = lever.onGestureStart] { if (before) before(); say(); };
+    lever.onChange       = [say, before = lever.onChange] (float travel) { if (before) before (travel); say(); };
+    lever.onGestureEnd   = [this, before = lever.onGestureEnd] { if (before) before(); nameTag.show ({}, {}); };
 }
 
 void CatpitEditor::chooseTurbo (int db)
