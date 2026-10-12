@@ -50,8 +50,8 @@ private:
 };
 
 //==============================================================================
-/** THE SKY, STANDING STILL: what the glass shows when the stars are switched off — a picture of the
-    GPU's sky at the playing channel's speed, one for each channel (Art's stillSky). Nothing flies and
+/** THE SKY, STANDING STILL: what the glass shows when the stars are switched off — a long exposure of
+    the GPU's sky at the playing channel's speed, one for each channel (Art's stillSky). Nothing flies and
     nothing is computed: the picture is fitted to the screen's pixels once and copied from then on.
     Hidden, it holds no picture at all. */
 class StillSky final : public juce::Component
