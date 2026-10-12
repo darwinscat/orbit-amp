@@ -109,6 +109,31 @@ int Channels::cabinet() const
     return -1;
 }
 
+juce::String Channels::keyOfFile (int index) const
+{
+    // Once a file: this is asked on every step of the history, and the list itself is read once.
+    irKeys.resize ((size_t) irs.size());
+    auto& key = irKeys[(size_t) index];
+    if (! key.has_value())
+    {
+        const auto& file = irs.getReference (index);
+        juce::MemoryBlock bytes;
+        key = file.getSize() <= device::EmbeddedIrs::maxBytes && file.loadFileAsData (bytes)
+                  ? device::EmbeddedIrs::keyOf (bytes) : juce::String();
+    }
+    return *key;
+}
+
+bool Channels::cabinetIsStale() const
+{
+    const int playing = cabinet();
+    if (playing < 0)
+        return false;
+
+    const auto ofFile = keyOfFile (playing);
+    return ofFile.isNotEmpty() && ofFile != amp.apvts.state.getProperty (params::cabIrUserKey).toString();
+}
+
 void Channels::chooseCabinet (int index)
 {
     if (index >= 0 && index < irs.size() && index != cabinet())
@@ -134,8 +159,17 @@ void Channels::align()
         amp.settleDeviceNames();
     }
 
-    if (cabinet() < 0)
+    if (const int playing = cabinet(); playing < 0)
+    {
         chooseCabinet (0);
+    }
+    else if (cabinetIsStale())
+    {
+        // The file is the cabinet: read again, and its key is whatever was just read — or nothing, if
+        // it would not read, so that it is not asked for again.
+        const bool read = amp.chooseCabFile (irs.getReference (playing));
+        irKeys[(size_t) playing] = read ? amp.apvts.state.getProperty (params::cabIrUserKey).toString() : juce::String();
+    }
 }
 
 juce::ValueTree Channels::node() const

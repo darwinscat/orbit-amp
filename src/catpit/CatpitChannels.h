@@ -6,6 +6,8 @@
 #include "../PluginProcessor.h"
 
 #include <array>
+#include <optional>
+#include <vector>
 
 namespace orbitamp::catpit
 {
@@ -91,10 +93,16 @@ public:
     /** A cabinet's name as the panel says it: the file's, without its leading number. */
     static juce::String cabinetName (const juce::File&);
 
+    /** True when the cabinet that is playing wears the name of one of the cockpit's and is not that
+        file: a state carries its cabinet's bytes, and one saved before the file was replaced under its
+        name would go on sounding the old one, under a plate that names the new. align() cures it. */
+    bool cabinetIsStale() const;
+
     /** Makes the sound agree with what the state says about itself: the playing channel's pack, and a
-        cabinet that is one of the cockpit's. The folders are the player's to change between sessions,
-        and a state remembers a pack by a name and a cabinet by its bytes — either may be one the
-        cockpit no longer has. Writes; the caller decides whether that is an edit. */
+        cabinet that is one of the cockpit's — the file of that name as it is now. The folders are the
+        player's to change between sessions, and a state remembers a pack by a name and a cabinet by
+        its bytes — either may be one the cockpit no longer has. Writes; the caller decides whether
+        that is an edit. */
     void align();
 
     /** The type of the cockpit's node in the state tree. */
@@ -114,6 +122,8 @@ private:
     AmpProcessor& amp;
     juce::StringArray kept;      // the parameters a channel remembers
     juce::Array<juce::File> irs; // the cockpit's cabinets, in order
+    mutable std::vector<std::optional<juce::String>> irKeys;    // each file's content key, read when first asked for; empty if it would not read
+    juce::String keyOfFile (int index) const;
 
     juce::String cabinetPlaying() const;                  // its file's name without the extension; empty when none of ours
     void chooseCabinetNamed (const juce::String& stem);   // ...or the first, when that one is not here

@@ -746,15 +746,18 @@ CatpitEditor::~CatpitEditor()
 
 /** A STATE THE COCKPIT HAS NOT SEEN — a session saved before it existed, loaded while the window is
     open — is made its own the way the constructor makes the first one: the fixed chain, the channel
-    whose pack is playing, a cabinet CAB can reach. */
+    whose pack is playing, a cabinet CAB can reach. And one it HAS seen, whose cabinet is no longer
+    the file of that name — a register kept from before the file was replaced — has it read again. */
 void CatpitEditor::adoptState()
 {
     adoptionPending = false;
-    if (channels.adopted())
+    const bool unseen = ! channels.adopted();
+    if (! unseen && ! channels.cabinetIsStale())
         return;
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
-    setUpChain (channels.adopt());
+    if (unseen)
+        setUpChain (channels.adopt());
     channels.align();
     showChannel();
 }
@@ -885,9 +888,10 @@ void CatpitEditor::refreshHistory()
 
     showChannel();   // an undo, a redo or another register may have brought a different channel with it
 
-    // ...or a state with no channels in it at all. Adopting it writes, and this is the history's own
-    // callback, so it is done on the way out.
-    if (! channels.adopted() && ! adoptionPending)
+    // ...or a state with no channels in it at all, or one whose cabinet is not the file of that name
+    // any more. Settling either writes, and this is the history's own callback, so it is done on the
+    // way out.
+    if ((! channels.adopted() || channels.cabinetIsStale()) && ! adoptionPending)
     {
         adoptionPending = true;
         juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<CatpitEditor> (this)]
