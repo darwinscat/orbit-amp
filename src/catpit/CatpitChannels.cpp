@@ -17,7 +17,7 @@ namespace
     /** A channel's pack is the one whose file is named after it. */
     constexpr std::array<const char*, Channels::count> packs { "Clean", "Edge", "Crunch", "Hi-Gain" };
 
-    constexpr std::array<const char*, Channels::numFlags> flagIds { "turbo", "fat", "bright", "depth", "presence" };
+    constexpr std::array<const char*, Channels::numFlags> flagIds { "fat", "bright", "depth", "presence" };
 
     const juce::Identifier nodeId   { Channels::nodeType };
     const juce::Identifier recordId { "channel" };
@@ -59,6 +59,7 @@ namespace
 Channels::Channels (AmpProcessor& p) : amp (p)
 {
     kept.add (params::preampGain);
+    kept.add (params::blockIn (params::preampId));      // TURBO: how hard the capture is fed
     kept.add (params::eqLoDb (preampConsole));
     kept.add (params::eqBellDb (preampConsole, 0));
     kept.add (params::eqHiDb (preampConsole));

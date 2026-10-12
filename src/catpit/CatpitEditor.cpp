@@ -506,12 +506,16 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         channels.select (d.getIntValue());
     lever.setDetent (channels.active(), false, false);
 
-    // TURBO will be a layer inside the pack. Until the packs carry it (Channels::layersPlayable) its
-    // guard stays down.
+    // TURBO pushes the capture: the preamp's input trim, at Channels::turboDb or at nothing. The trim
+    // is a parameter and a host may leave it anywhere, so anything past half the push reads as on.
     stage.addAndMakeVisible (turbo);
     turbo.setBounds (turboFrame.toNearestInt());
-    turbo.setEnabled (Channels::layersPlayable);
-    turbo.onChange = [this] (bool on) { channels.setFlag (Channels::turbo, on); };
+    {
+        auto* push = follow (params::blockIn (params::preampId).toRawUTF8(),
+                             [this] (float db) { turbo.setOn (db > Channels::turboDb * 0.5f, false); });
+        turbo.onChange = [push] (bool on) { push->setValueAsCompleteGesture (on ? Channels::turboDb : 0.0f); };
+        push->sendInitialUpdate();
+    }
 
     const juce::Colour lineFrom[] { orange.darker (0.3f), violet, orange.darker (0.3f) };
     const juce::Colour lineTo[]   { orange,               orange, orange };
@@ -848,14 +852,13 @@ void CatpitEditor::showChannel()
     if (! lever.isHeld() && lever.getDetent() != channel)
         lever.setDetent (channel, true, false);
 
-    // While the packs carry no layers, none of the five shows as thrown — whatever the state says.
+    // While the packs carry no layers, none of the four shows as thrown — whatever the state says.
     const auto thrown = [this] (Channels::Flag f) { return Channels::layersPlayable && channels.flag (f); };
     buttons[btFat]->setEnabled (Channels::layersPlayable && channel >= 2);
     buttons[btFat]->setOn      (thrown (Channels::fat),      false);
     buttons[btBright]->setOn   (thrown (Channels::bright),   false);
     buttons[btDepth]->setOn    (thrown (Channels::depth),    false);
     buttons[btPresence]->setOn (thrown (Channels::presence), false);
-    turbo.setOn (thrown (Channels::turbo), false);
 
     // CAB's cap, on the cabinet that is playing. (This is first called while the face is still being
     // built, before the plates exist.)
@@ -1203,6 +1206,11 @@ void CatpitEditor::setUpChain (bool firstTime)
         setParam (params::reverbType, (float) params::reverbCharacters.indexOf (Channels::defaultReverb));
     setParam (params::cabPresent,    1.0f);
     setParam (params::cabOn,         1.0f);
+
+    // TURBO is the preamp's input trim, at its push or at nothing: a state the cockpit has never seen
+    // starts with it off, wherever that trim was left.
+    if (firstTime)
+        setParam (params::blockIn (params::preampId).toRawUTF8(), 0.0f);
 
     // BASS / MIDDLE / TREBLE ride the preamp's universal console, not the device's own tone.
     setParam (params::blockEqMode (params::preampId).toRawUTF8(), (float) params::eqModes.indexOf ("Universal EQ"));
