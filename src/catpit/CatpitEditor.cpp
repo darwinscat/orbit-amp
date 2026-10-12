@@ -162,6 +162,25 @@ void Cockpit::setHistory (bool undo, bool redo, int reg)
     with the register that is playing. Every key has its sign to its left and a small lamp over it —
     the render painted lamps over the four register holes only, so the two over the history keys are
     drawn here to match. */
+void Cockpit::setKeysLive (const std::array<bool, 6>& live)
+{
+    if (live == keysLive)
+        return;
+    keysLive = live;
+    repaint();
+}
+
+/** The keys' names, under them — a dimmed key's as dim as the key. */
+void Cockpit::paintKeyNames (juce::Graphics& g) const
+{
+    using namespace layout;
+
+    const auto keyX = keyCentres();
+    for (size_t i = 0; i < switches.size(); ++i)
+        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
+                   px11, labelLilac.withAlpha (keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
+}
+
 void Cockpit::paintOverhead (juce::Graphics& g) const
 {
     using namespace layout;
@@ -224,6 +243,7 @@ void Cockpit::paint (juce::Graphics& g)
     }
     g.drawImage (layer, juce::Rectangle<float> (0.0f, 0.0f, width, height));
     paintOverhead (g);
+    paintKeyNames (g);
 }
 
 void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
@@ -284,12 +304,6 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
 
     paintEmblem (g, scale);
-
-    // The keys' names, under them.
-    const auto keyX = keyCentres();
-    for (size_t i = 0; i < switches.size(); ++i)
-        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
-                   px11, labelLilac, keyTracking);
 
     drawLabel (g, "DRIVE", juce::Rectangle<float> (220.0f, 30.0f).withCentre ({ drive.centre.x, 394.0f }), px15, labelLilac);
     const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
@@ -860,6 +874,11 @@ void CatpitEditor::showChannel()
     buttons[btBright]->setOn   (thrown (Channels::bright),   false);
     buttons[btDepth]->setOn    (thrown (Channels::depth),    false);
     buttons[btPresence]->setOn (thrown (Channels::presence), false);
+
+    std::array<bool, 6> live {};
+    for (size_t i = 0; i < live.size(); ++i)
+        live[i] = buttons[i]->isEnabled();
+    cockpit.setKeysLive (live);
 
     // CAB's cap, on the cabinet that is playing. (This is first called while the face is still being
     // built, before the plates exist.)

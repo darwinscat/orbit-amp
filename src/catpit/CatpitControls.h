@@ -143,6 +143,9 @@ public:
 
     const juce::String name;
 
+    /** How much of a key that does not answer the hand is left to see. */
+    static constexpr float dimmed = 0.3f;
+
     bool latching = true;
     std::function<void (bool)> onChange;
     std::function<void()>      onPress;          // a plain key's press

@@ -377,7 +377,7 @@ void PushButton::mouseUp (const juce::MouseEvent& e)
 void PushButton::paint (juce::Graphics& g)
 {
     if (! isEnabled())
-        g.beginTransparencyLayer (0.3f);
+        g.beginTransparencyLayer (dimmed);
 
     // Drawn for a 40-px box — an overhead hole — and scaled to whatever box it is given.
     const float u = (float) juce::jmin (getWidth(), getHeight()) / 40.0f;

@@ -32,10 +32,17 @@ public:
         dim, and the register that is playing has its letter and its lamp lit. */
     void setHistory (bool canUndo, bool canRedo, int activeRegister);
 
+    /** Which of the six keys under the tone knobs answer the hand. The name under one that does not
+        is dimmed with it. */
+    void setKeysLive (const std::array<bool, 6>&);
+
 private:
     bool canUndo = false, canRedo = false;
     int  activeRegister = 0;
     void paintOverhead (juce::Graphics&) const;
+
+    std::array<bool, 6> keysLive { true, true, true, true, true, true };
+    void paintKeyNames (juce::Graphics&) const;
 
     // The render and the printed words never change, but the windshield repaints sixty times a second
     // and every one of those repaints the cockpit over it. So the cockpit is painted ONCE, at the
