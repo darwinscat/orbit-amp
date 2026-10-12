@@ -13,8 +13,10 @@ using namespace juce::gl;
 
 namespace
 {
-    // Ship speed at each detent — the same table as the CPU sky, so the two fly alike.
-    constexpr std::array<float, 4> detentSpeed { 0.05f, 0.16f, 0.42f, 1.6f };
+    // Ship speed at each detent. CLEAN and EDGE fly as the CPU sky does; from CRUNCH on this one goes
+    // faster — CRUNCH a little past where HI-GAIN used to fly, HI-GAIN nearly twice that — and since a
+    // star's streak is as long as the ship is fast, the two top detents smear the stars further too.
+    constexpr std::array<float, 4> detentSpeed { 0.05f, 0.16f, 1.8f, 3.0f };
 
     const char* const vertexShader = R"GLSL(
 attribute vec2 position;
@@ -94,18 +96,30 @@ void main()
         float fade = smoothstep (0.0, 0.3, z) * smoothstep (1.0, 0.86, z);
         float scale = mix (16.0, 1.2, z);
         vec2 p = uv * scale + vec2 (float (l) * 17.1, float (l) * 31.7);
-        vec2 cell = floor (p);
-        float h = hash (cell);
-        if (h < 0.62) continue;
-        vec2 at = fract (p) - 0.5 - (vec2 (hash (cell + 3.1), hash (cell + 7.7)) - 0.5) * 0.7;
-        float along = dot (at, dir), across = dot (at, side);
+        vec2 home = floor (p);
         float len = 0.004 + uSpeed * 0.18 * z * z;
-        float d = length (vec2 (max (abs (along + len) - len, 0.0), across));
         float size = 0.010 + 0.035 * z * z;
-        float star = smoothstep (size, 0.0, d) * fade * (0.55 + 0.45 * fract (h * 13.0));
-        vec3 tint = fract (h * 7.0) < 0.12 ? vec3 (0.72, 0.61, 1.0)
-                  : fract (h * 7.0) < 0.18 ? vec3 (1.0, 0.78, 0.6) : vec3 (0.91, 0.93, 1.0);
-        col += tint * star * 1.4;
+
+        // A star sits well inside its cell, but its streak runs back along the ray for twice `len` —
+        // at speed, out of the cell it started in. So the cells round this one are asked as well, or
+        // the streak would end at the cell's edge as if cut. A slow ship's streaks never leave home,
+        // and then only home is asked.
+        bool roams = 2.0 * len + size > 0.15;
+        for (int j = -1; j <= 1; ++j)
+        for (int i = -1; i <= 1; ++i)
+        {
+            if (! roams && (i != 0 || j != 0)) continue;
+            vec2 cell = home + vec2 (float (i), float (j));
+            float h = hash (cell);
+            if (h < 0.62) continue;
+            vec2 at = p - cell - 0.5 - (vec2 (hash (cell + 3.1), hash (cell + 7.7)) - 0.5) * 0.7;
+            float along = dot (at, dir), across = dot (at, side);
+            float d = length (vec2 (max (abs (along + len) - len, 0.0), across));
+            float star = smoothstep (size, 0.0, d) * fade * (0.55 + 0.45 * fract (h * 13.0));
+            vec3 tint = fract (h * 7.0) < 0.12 ? vec3 (0.72, 0.61, 1.0)
+                      : fract (h * 7.0) < 0.18 ? vec3 (1.0, 0.78, 0.6) : vec3 (0.91, 0.93, 1.0);
+            col += tint * star * 1.4;
+        }
     }
 
     gl_FragColor = vec4 (col, 1.0);
