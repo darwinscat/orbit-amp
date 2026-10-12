@@ -43,7 +43,7 @@ namespace
     }};
     constexpr float keyTracking = 0.04f;
 
-    constexpr int preampConsole = 1;        // the EQ link BASS / MIDDLE / TREBLE ride
+    constexpr int preampConsole = 1;        // the preamp's universal console: kept flat, the tones are the pack's
 
     // The overhead keys, in hole order: the history on the left of the divider, the four registers —
     // four whole amps to compare, each with a history of its own — on the right.
@@ -624,11 +624,10 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     bind (inFader, params::inTrim);
     bind (outFader, params::outTrim);
 
-    // The tone stack is the preamp's own console in its universal mode — the same three bands on every
-    // pack, centre detent at 0 dB — until the cockpit's packs carry a captured tone of their own.
-    bind (*tones[0], params::eqLoDb (preampConsole));
-    bind (*tones[1], params::eqBellDb (preampConsole, 0));
-    bind (*tones[2], params::eqHiDb (preampConsole));
+    // The tone stack is the playing pack's own — its Bass, Middle and Treble as they were measured on
+    // the amp, centre detent where every capture was taken.
+    for (int t = 0; t < Channels::numTones; ++t)
+        bind (*tones[(size_t) t], Channels::toneId (t));
 
     // HPF and LPF switch the cabinet's own cut filters in and out; FAT, BRIGHT, DEPTH and PRESENCE are
     // kept with the channel and wait for the layers the packs will carry — each dimmed and deaf to the
@@ -827,12 +826,11 @@ void CatpitEditor::playMidi()
     if (lpfTo >= 0)     along (params::cabLpfOn, thrown (lpfTo) ? 1.0f : 0.0f);
     if (driveTo >= 0)   along (params::preampGain, (float) driveTo / 127.0f);
 
-    // A tone knob's middle is 0 dB, and 0..127 has no middle: 64 is given it, and each half of the
-    // controller's travel is spread over its own half of the knob's.
-    const juce::String tone[] { params::eqLoDb (preampConsole), params::eqBellDb (preampConsole, 0), params::eqHiDb (preampConsole) };
-    for (size_t i = 0; i < 3; ++i)
-        if (const int v = toneTo[i]; v >= 0)
-            along (tone[i], v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
+    // A tone knob's middle is where the pack was captured, and 0..127 has no middle: 64 is given it, and
+    // each half of the controller's travel is spread over its own half of the knob's.
+    for (int t = 0; t < Channels::numTones; ++t)
+        if (const int v = toneTo[(size_t) t]; v >= 0)
+            along (Channels::toneId (t), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
 }
 
 /** THE LOAD, ITEMISED — OrbitAmp's window, in the cockpit's words and colours. The cockpit's packs are
@@ -1308,8 +1306,13 @@ void CatpitEditor::setUpChain (bool firstTime)
     if (firstTime)
         setParam (params::blockIn (params::preampId).toRawUTF8(), 0.0f);
 
-    // BASS / MIDDLE / TREBLE ride the preamp's universal console, not the device's own tone.
-    setParam (params::blockEqMode (params::preampId).toRawUTF8(), (float) params::eqModes.indexOf ("Universal EQ"));
+    // BASS / MIDDLE / TREBLE are the pack's own tone stack. The universal console's three bands they
+    // used to ride stand flat behind it: a pack with no tone of its own falls to that console, and
+    // must not find a setting there that no knob on the face shows.
+    setParam (params::blockEqMode (params::preampId).toRawUTF8(), (float) params::eqModes.indexOf ("Device Tone"));
+    setParam (params::eqLoDb (preampConsole).toRawUTF8(), 0.0f);
+    setParam (params::eqBellDb (preampConsole, 0).toRawUTF8(), 0.0f);
+    setParam (params::eqHiDb (preampConsole).toRawUTF8(), 0.0f);
 
     // HPF / LPF are on-off: the corners and slopes stay where OrbitCab puts them until set by ear.
     setParam (params::cabHpfHz, params::cabHpfDefaultHz);

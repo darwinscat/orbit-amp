@@ -40,8 +40,6 @@ namespace
                     into.add (f);
     }
 
-    constexpr int preampConsole = 1;     // the EQ link BASS / MIDDLE / TREBLE ride
-
     /** A channel's record in the node; made if `create` and it is not there. */
     juce::ValueTree recordOf (juce::ValueTree node, int channel, bool create)
     {
@@ -60,9 +58,8 @@ Channels::Channels (AmpProcessor& p) : amp (p)
 {
     kept.add (params::preampGain);
     kept.add (params::blockIn (params::preampId));      // TURBO: how hard the capture is fed
-    kept.add (params::eqLoDb (preampConsole));
-    kept.add (params::eqBellDb (preampConsole, 0));
-    kept.add (params::eqHiDb (preampConsole));
+    for (int t = 0; t < numTones; ++t)
+        kept.add (toneId (t));
     kept.add (params::cabHpfOn);
     kept.add (params::cabLpfOn);
     kept.add (params::reverbMix);

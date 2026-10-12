@@ -35,6 +35,11 @@ public:
     /** The reverb a channel opens on until the player picks another. */
     static constexpr const char* defaultReverb = "Hall";
 
+    /** BASS, MIDDLE, TREBLE are the playing pack's own tone controls, by their place in it: the
+        cockpit's packs are made with those three first, in that order. */
+    static constexpr int numTones = 3;
+    static juce::String toneId (int knob) { return params::preampMeasured (knob); }
+
     /** The controls kept in the node rather than in a parameter. */
     enum Flag { fat, bright, depth, presence, numFlags };
 
