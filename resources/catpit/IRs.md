@@ -88,3 +88,18 @@ The twelve cabinets the cockpit had before these, under the names the new ones n
 `19-brown-dwarf-old.wav`, `20-accretion-gap-old.wav`, `21-dust-cloud-old.wav`, `22-blue-shift-old.wav`, `23-red-giant-old.wav`, `24-pulsar-beam-old.wav`.
 48 kHz, 5000 samples, 24-bit mono. Kept behind the new twelve while the two sets are compared; the
 plate reads the mark — `BARYON CORE OLD`.
+
+## `25` … `28` — four more takes of the Orange PPC212V
+
+The same cabinet and the same three microphones, shot again on 2026-10-13; the SM57 at four of the
+places it stood in the first twelve. Each file is its take's MIX of the three, 48 kHz, 4096 samples,
+24-bit mono, like `01` … `12` — and none of them is the same file as the take at that place there.
+They stand behind the OLD twelve, in the order they were handed over, and the plate reads what the
+folder each came from was called.
+
+| file | on the plate | SM57 | from |
+|---|---|---|---|
+| `25-333.wav` | 333 | Cap Edge r25 | `IR-OUT/333/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r25+e906+Ai).wav` |
+| `26-444.wav` | 444 | Cap Edge r55 | `IR-OUT/444/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r55+e906+Ai).wav` |
+| `27-22.wav` | 22 | Cap Edge r20 | `IR-OUT/22/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r20+e906+Ai).wav` |
+| `28-11.wav` | 11 | Cap Edge r40 | `IR-OUT/11/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r40+e906+Ai).wav` |
