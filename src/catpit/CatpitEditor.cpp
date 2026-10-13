@@ -879,23 +879,23 @@ void CatpitEditor::chooseLeverZero (int db)
     settleOnSettings();
 }
 
-void CatpitEditor::sayLever (ColumnFader& lever, const juce::String& name, std::function<float()> reading)
+void CatpitEditor::sayLever (ColumnFader& fader, const juce::String& name, std::function<float()> reading)
 {
-    const auto say = [this, &lever, name, reading]
+    const auto say = [this, &fader, name, reading]
     {
         float db = reading();
         if (std::abs (db) < 0.05f)
             db = 0.0f;      // never "-0.0"
 
-        const auto at = lever.getBounds().toFloat();
+        const auto at = fader.getBounds().toFloat();
         nameTag.show ({ at.getCentreX(), at.getY() - 24.0f },
                       name + "  " + (db > 0.0f ? "+" : "") + juce::String (db, 1) + " dB");
     };
 
     // Round what the lever already does: the value is the parameter's, and it has moved by the time this reads it.
-    lever.onGestureStart = [say, before = lever.onGestureStart] { if (before) before(); say(); };
-    lever.onChange       = [say, before = lever.onChange] (float travel) { if (before) before (travel); say(); };
-    lever.onGestureEnd   = [this, before = lever.onGestureEnd] { if (before) before(); nameTag.show ({}, {}); };
+    fader.onGestureStart = [say, before = fader.onGestureStart] { if (before) before(); say(); };
+    fader.onChange       = [say, before = fader.onChange] (float travel) { if (before) before (travel); say(); };
+    fader.onGestureEnd   = [this, before = fader.onGestureEnd] { if (before) before(); nameTag.show ({}, {}); };
 }
 
 void CatpitEditor::chooseTurbo (int db)
