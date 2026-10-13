@@ -674,6 +674,12 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         delayBpm->setValueAsPartOfGesture (juce::jlimit (params::delayBpmMin, params::delayBpmMax,
                                                          std::round (getParam (params::delayBpm)) + (float) whole));
     };
+    // ...and a double click on it is the tempo it starts at, as a double click on a knob is its middle.
+    delayTempo.onDoubleClick = [this]
+    {
+        endTapping();
+        delayBpm->setValueAsCompleteGesture (params::delayBpmDefault);
+    };
     delayDiv = follow (params::delayDiv, [this] (float) { showDelayTime(); });
     delayBpm = follow (params::delayBpm, [this] (float) { showDelayTime(); });
     showDelayTime();

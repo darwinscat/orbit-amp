@@ -246,7 +246,9 @@ private:
 /** A WORD ON THE PANEL THAT ANSWERS THE HAND. A name and, after it and brighter, what it is set to. It
     lifts under the pointer and a click is `onClick`. With `onDrag` set, dragging the word up or down
     turns what it names — a control with no knob of its own — and a press that did not move still
-    clicks. `dot` hangs the family's orange dot after it: something here wants a look. */
+    clicks; a double click is `onDoubleClick`, which such a control answers the way a knob does, by
+    going back to where it starts. `dot` hangs the family's orange dot after it: something here wants
+    a look. */
 class Legend final : public juce::Component
 {
 public:
@@ -266,7 +268,7 @@ public:
     bool fromLeft = false;                       // true starts the words at the left edge instead of centring
                                                  // them: a number that changes width then moves nothing else
 
-    std::function<void()>       onClick;
+    std::function<void()>       onClick, onDoubleClick;
     std::function<void()>       onDragStart, onDragEnd;
     std::function<void (float)> onDrag;          // pixels since the last call, up is positive
     std::function<void (bool)>  onHover;         // the editor says what a click on it does
@@ -274,6 +276,7 @@ public:
     void paint (juce::Graphics&) override;
     void mouseEnter (const juce::MouseEvent&) override { repaint(); if (onHover) onHover (true); }
     void mouseExit (const juce::MouseEvent&) override  { repaint(); if (onHover) onHover (false); }
+    void mouseDoubleClick (const juce::MouseEvent&) override { if (onDoubleClick) onDoubleClick(); }
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
