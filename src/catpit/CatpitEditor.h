@@ -249,6 +249,11 @@ private:
     void showDriveMenu();
     void saveCapture();
 
+    // A right click on CAB offers the cabinet that is playing as the IR file it is.
+    std::unique_ptr<juce::FileChooser> cabChooser;
+    void showCabMenu();
+    void saveCab();
+
     // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
     // for INPUT count from the lever's zero, so the middle of the travel reads 0.
     void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);

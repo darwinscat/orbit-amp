@@ -859,6 +859,12 @@ void PlateSlider::paint (juce::Graphics& g)
 
 void PlateSlider::mouseDown (const juce::MouseEvent& e)
 {
+    sliding = ! (e.mods.isPopupMenu() && onMenu);
+    if (! sliding)
+    {
+        onMenu();
+        return;
+    }
     const auto t = travel();
     const float x = t.getStart() + t.getLength() * value;
     if (onGestureStart) onGestureStart();
@@ -869,12 +875,14 @@ void PlateSlider::mouseDown (const juce::MouseEvent& e)
 
 void PlateSlider::mouseDrag (const juce::MouseEvent& e)
 {
+    if (! sliding)
+        return;
     moveTo (dragStartValue + (float) e.getDistanceFromDragStartX() / travel().getLength());
 }
 
 void PlateSlider::mouseUp (const juce::MouseEvent& e)
 {
-    if (onGestureEnd) onGestureEnd();
+    if (sliding && onGestureEnd) onGestureEnd();
     if (onHover && ! getLocalBounds().contains (e.getPosition()))
         onHover (false);
 }

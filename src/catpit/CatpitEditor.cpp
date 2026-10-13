@@ -133,6 +133,19 @@ namespace
     // Where a capture was last saved to (saveCapture): the next one is offered the same folder.
     const juce::Identifier captureFolderKey { "capture_folder" };
 
+    // ...and a cabinet (saveCab), which goes where cabinets are kept, not where captures are.
+    const juce::Identifier cabFolderKey { "cab_folder" };
+
+    void sayNotSaved (const juce::File& file)
+    {
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                          .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                          .withTitle ("Not saved")
+                                          .withMessage (file.getFullPathName())
+                                          .withButton ("OK"),
+                                      nullptr);
+    }
+
     const juce::Identifier windowKey { "window" };
     const juce::StringArray starsWords { "opengl", "cpu", "off" };
 
@@ -660,6 +673,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     cabName.setBounds (plateName (2).toNearestInt());
 
     auto& cab = *sliders[2];
+    cab.onMenu = [this] { showCabMenu(); };
     if (channels.cabinets().size() >= 2)
         cab.onStep = [this] (int s) { chooseCab (s); showCab(); };
     else
@@ -979,13 +993,60 @@ void CatpitEditor::saveCapture()
 
                                      prefs::store().set (captureFolderKey, file.getParentDirectory().getFullPathName());
                                      if (! file.replaceWithData (nam.getData(), nam.getSize()))
-                                         juce::AlertWindow::showAsync (juce::MessageBoxOptions()
-                                                                           .withIconType (juce::MessageBoxIconType::WarningIcon)
-                                                                           .withTitle ("Not saved")
-                                                                           .withMessage (file.getFullPathName())
-                                                                           .withButton ("OK"),
-                                                                       nullptr);
+                                         sayNotSaved (file);
                                  });
+}
+
+/** A RIGHT CLICK ON CAB — the slider, or the name over it — offers the cabinet that is playing as a
+    file: the IR as it is, under the name it has here, for whatever else loads one. A sound whose
+    cabinet is none of the cockpit's has no file to give, and no menu. */
+void CatpitEditor::showCabMenu()
+{
+    const int playing = channels.cabinet();
+    if (playing < 0)
+        return;
+
+    endTapping();
+
+    juce::PopupMenu::Item item ("Save the current cabinet as " + channels.cabinets().getReference (playing).getFileExtension().toLowerCase() + "...");
+    item.itemID = 1;
+    item.colour = lilac;
+    item.action = [safe = juce::Component::SafePointer<CatpitEditor> (this)]
+    {
+        if (safe != nullptr)     // the action is posted: the window may be gone by the time it runs
+            safe->saveCab();
+    };
+
+    juce::PopupMenu menu;
+    menu.addItem (std::move (item));
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+void CatpitEditor::saveCab()
+{
+    const int playing = channels.cabinet();
+    if (playing < 0)
+        return;
+    const auto cabinet = channels.cabinets()[playing];
+
+    auto folder = juce::File (prefs::store().get (cabFolderKey, juce::String()).toString());
+    if (! folder.isDirectory())
+        folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+
+    cabChooser = std::make_unique<juce::FileChooser> ("Save the cabinet", folder.getChildFile (cabinet.getFileName()),
+                                                      "*" + cabinet.getFileExtension());
+    cabChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                                 | juce::FileBrowserComponent::warnAboutOverwriting,
+                             [cabinet] (const juce::FileChooser& picked)
+                             {
+                                 const auto file = picked.getResult();
+                                 if (file == juce::File())
+                                     return;
+
+                                 prefs::store().set (cabFolderKey, file.getParentDirectory().getFullPathName());
+                                 if (! cabinet.copyFileTo (file))
+                                     sayNotSaved (file);
+                             });
 }
 
 void CatpitEditor::timerCallback()
@@ -1381,7 +1442,13 @@ void CatpitEditor::showInWindow (Monitor::View view)
 
 void CatpitEditor::mouseDown (const juce::MouseEvent& e)
 {
-    if (e.mods.isPopupMenu())
+    if (! e.mods.isPopupMenu())
+        return;
+
+    // CAB's name is a reading and takes no clicks of its own: a right click on it is one on CAB.
+    if (cabName.getBounds().contains (e.getEventRelativeTo (&stage).getPosition()))
+        showCabMenu();
+    else
         showSettingsMenu();
 }
 

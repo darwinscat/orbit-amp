@@ -302,6 +302,7 @@ public:
     std::function<void (float)> onChange;
     std::function<void (int)>   onStep;          // stepped only: the position it clicked into
     std::function<void (bool)>  onHover;
+    std::function<void()>       onMenu;          // a right click, when set — and then it does not move the cap
 
     int  getStep() const noexcept;
     void setStep (int, bool notify);
@@ -322,6 +323,7 @@ private:
     juce::Colour from, to;
     const int steps;
     float value = 0.0f, dragStartValue = 0.0f;
+    bool  sliding = false;                       // false through a right click that opened the menu
     juce::Range<float> travel() const;
     void moveTo (float v);
 };
