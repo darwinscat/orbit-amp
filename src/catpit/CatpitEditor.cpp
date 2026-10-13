@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "CatpitEditor.h"
+#include "CatpitCabs.h"
 #include "CatpitLayout.h"
 #include "CatpitMidi.h"
 #include "CatpitStandalone.h"
@@ -672,7 +673,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     stage.addAndMakeVisible (cabName);
     cabName.setBounds (plateName (2).toNearestInt());
 
-    sliders[2]->onMenu = [this] { showCabMenu(); };
+    sliders[2]->onMenu = [this] { showCabs(); };
     cabinetsChanged();
 
     for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter, &tuner })
@@ -1001,31 +1002,24 @@ void CatpitEditor::saveCapture()
                                  });
 }
 
-/** A RIGHT CLICK ON CAB — the slider, or the name over it — offers the cabinet that is playing as a
-    file: the IR as it is, under the name it has here without the number that orders it, for whatever
-    else loads one. A sound whose cabinet is none of the cockpit's has no file to give, and no menu. */
-void CatpitEditor::showCabMenu()
+/** A RIGHT CLICK ON CAB — the slider, or the name over it — opens the cabinets' window: all of them by
+    name, the build's own and the player's apart, and the keys that add one, hand one out, and rename
+    or remove one of the player's. */
+void CatpitEditor::showCabs()
 {
-    const int playing = channels.cabinet();
-    if (playing < 0)
-        return;
-
     endTapping();
 
-    juce::PopupMenu::Item item ("Save the current cabinet as " + channels.cabinets().getReference (playing).getFileExtension().toLowerCase() + "...");
-    item.itemID = 1;
-    item.colour = lilac;
-    item.action = [safe = juce::Component::SafePointer<CatpitEditor> (this)]
-    {
-        if (safe != nullptr)     // the action is posted: the window may be gone by the time it runs
-            safe->saveCab();
-    };
-
-    juce::PopupMenu menu;
-    menu.addItem (std::move (item));
-    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+    auto cabs = std::make_unique<CabPanel> (channels, juce::Point<int> (getWidth() - 72, getHeight() - 72));
+    cabs->onChoose = [this] (int cabinet) { chooseCab (cabinet); showChannel(); };
+    cabs->onAdd    = [this] { chooseCabsToAdd(); };
+    cabs->onSave   = [this] { saveCab(); };
+    cabs->onRename = [this] { renameCab(); };
+    cabs->onRemove = [this] { removeCab(); };
+    showSheet (std::move (cabs));
 }
 
+/** The cabinet that is playing, as a file: the IR as it is, under the name it has here without the
+    number that orders it, for whatever else loads one. */
 void CatpitEditor::saveCab()
 {
     const int playing = channels.cabinet();
@@ -1452,7 +1446,7 @@ void CatpitEditor::mouseDown (const juce::MouseEvent& e)
 
     // CAB's name is a reading and takes no clicks of its own: a right click on it is one on CAB.
     if (cabName.getBounds().contains (e.getEventRelativeTo (&stage).getPosition()))
-        showCabMenu();
+        showCabs();
     else
         showSettingsMenu();
 }
@@ -1618,6 +1612,96 @@ void CatpitEditor::cabinetsChanged()
     cab.setEnabled (choice);
     cab.setAlpha (choice ? 1.0f : 0.35f);
     showChannel();
+}
+
+/** ADD: the files a player points at, taken in the way dropped ones are. */
+void CatpitEditor::chooseCabsToAdd()
+{
+    auto folder = juce::File (prefs::store().get (cabFolderKey, juce::String()).toString());
+    if (! folder.isDirectory())
+        folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+
+    cabChooser = std::make_unique<juce::FileChooser> ("Add cabinets", folder, "*.wav;*.aif;*.aiff;*.zip");
+    cabChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles
+                                 | juce::FileBrowserComponent::canSelectDirectories
+                                 | juce::FileBrowserComponent::canSelectMultipleItems,
+                             [safe = juce::Component::SafePointer<CatpitEditor> (this)] (const juce::FileChooser& picked)
+                             {
+                                 juce::StringArray paths;
+                                 for (const auto& file : picked.getResults())
+                                     paths.add (file.getFullPathName());
+                                 if (safe != nullptr && ! paths.isEmpty())
+                                     safe->addCabinets (paths);
+                             });
+}
+
+/** RENAME: the file of a cabinet of the player's own, under another name. The sound does not move, and
+    every channel that was left on that cabinet goes with it (Channels::renameCabinet). */
+void CatpitEditor::renameCab()
+{
+    const int playing = channels.cabinet();
+    if (playing < channels.factoryCabinets())
+        return;
+
+    const auto file = channels.cabinets()[playing];
+    felitronics::appkit::textPrompt ("Rename the cabinet", file.getFileNameWithoutExtension(),
+                                     [safe = juce::Component::SafePointer<CatpitEditor> (this), file] (juce::String name)
+    {
+        // The prompt is a window of its own and answers later: the face may be gone by then, and the
+        // list may have been read again — the cabinet is found by its file, not by where it stood.
+        if (safe == nullptr)
+            return;
+        auto& e = *safe;
+        const int index = e.channels.cabinets().indexOf (file);
+
+        bool renamed = false;
+        {
+            const felitronics::appkit::CompareHistory::ScopedSuppress quiet (e.amp.history);
+            renamed = e.channels.renameCabinet (index, name);
+        }
+
+        if (renamed)
+            e.cabinetsChanged();
+        else
+            juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                              .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                              .withTitle ("Not renamed")
+                                              .withMessage (name + "\n\nThere is a cabinet of that name already, or the file would not move.")
+                                              .withButton ("OK"),
+                                          nullptr);
+    });
+}
+
+/** REMOVE: the file of a cabinet of the player's own, to the Trash — asked first. The sound goes on to
+    the cabinet that takes its place in the list: a state keeps its cabinet's bytes, and without that
+    the plate would go on naming a file that is no longer there. */
+void CatpitEditor::removeCab()
+{
+    const int playing = channels.cabinet();
+    if (playing < channels.factoryCabinets())
+        return;
+
+    const auto file = channels.cabinets()[playing];
+    juce::AlertWindow::showAsync (juce::MessageBoxOptions::makeOptionsOkCancel (juce::MessageBoxIconType::QuestionIcon,
+                                                                                "Remove the cabinet?",
+                                                                                Channels::cabinetName (file) + "\n\nIts file goes to the Trash.",
+                                                                                "Remove", "Cancel"),
+                                  [safe = juce::Component::SafePointer<CatpitEditor> (this), file] (int answer)
+    {
+        if (safe == nullptr || answer != 1)
+            return;
+        auto& e = *safe;
+        const int index = e.channels.cabinets().indexOf (file);
+        if (! e.channels.removeCabinet (index))
+            return;
+
+        e.cabinetsChanged();
+        if (const int left = e.channels.cabinets().size(); left > 0)
+        {
+            e.chooseCab (juce::jmin (index, left - 1));
+            e.showChannel();
+        }
+    });
 }
 
 void CatpitEditor::addCabinets (const juce::StringArray& paths)

@@ -155,10 +155,20 @@ juce::String Channels::cabinetPlaying() const
 int Channels::cabinet() const
 {
     const auto playing = cabinetPlaying();
-    if (playing.isNotEmpty())
-        for (int i = 0; i < irs.size(); ++i)
-            if (irs.getReference (i).getFileNameWithoutExtension() == playing)
-                return i;
+    if (playing.isEmpty())
+        return -1;
+
+    for (int i = 0; i < irs.size(); ++i)
+        if (irs.getReference (i).getFileNameWithoutExtension() == playing)
+            return i;
+
+    // No file of that name. A state carries its cabinet's bytes, though, and the key of them: a file
+    // the player has since renamed is still that cabinet, and is found by what it is.
+    const auto key = amp.apvts.state.getProperty (params::cabIrUserKey).toString();
+    for (int i = 0; i < irs.size(); ++i)
+        if (keyOfFile (i) == key)
+            return i;
+
     return -1;
 }
 
@@ -183,8 +193,56 @@ bool Channels::cabinetIsStale() const
     if (playing < 0)
         return false;
 
+    // Found by what it is, under a name the file no longer has: the state's word for it is the stale part.
+    if (irs.getReference (playing).getFileNameWithoutExtension() != cabinetPlaying())
+        return true;
+
     const auto ofFile = keyOfFile (playing);
     return ofFile.isNotEmpty() && ofFile != amp.apvts.state.getProperty (params::cabIrUserKey).toString();
+}
+
+void Channels::nameCabinet (const juce::File& file)
+{
+    amp.apvts.state.setProperty (params::cabIrUserName, file.getFileNameWithoutExtension(), nullptr);
+    amp.apvts.state.setProperty (params::cabIrUserFrom,
+                                 file.getRelativePathFrom (device::IrLibrary::directory()).replaceCharacter ('\\', '/'), nullptr);
+}
+
+bool Channels::renameCabinet (int index, const juce::String& name)
+{
+    if (index < factory || index >= irs.size())
+        return false;       // the build's own are not the player's to rename
+
+    const auto file = irs[index];
+    const auto was  = file.getFileNameWithoutExtension();
+
+    // The name it will have, cut the way the library cuts it: legal, and with the file's own extension.
+    const auto legal = juce::File::createLegalFileName (name.trim()).upToLastOccurrenceOf (".", false, false);
+    const auto renamed = file.getSiblingFile (legal + file.getFileExtension());
+    if (legal.isEmpty() || ! device::IrLibrary::rename (device::IrLibrary::directory(), file, name))
+        return false;
+
+    // A CHANNEL REMEMBERS ITS CABINET BY THE FILE'S NAME, and so does the sound that is playing: both
+    // go with the file, or every channel left on this cabinet would come back on the first one.
+    const auto now = renamed.getFileNameWithoutExtension();
+    for (auto record : node())
+        if (record.hasType (recordId) && record.getProperty (cabinetId).toString() == was)
+            record.setProperty (cabinetId, now, nullptr);
+    if (cabinetPlaying() == was)
+        nameCabinet (renamed);
+
+    readCabinets();
+    return true;
+}
+
+bool Channels::removeCabinet (int index)
+{
+    if (index < factory || index >= irs.size()
+        || ! device::IrLibrary::remove (device::IrLibrary::directory(), irs[index]))
+        return false;
+
+    readCabinets();
+    return true;
 }
 
 void Channels::chooseCabinet (int index)
@@ -215,6 +273,11 @@ void Channels::align()
     if (const int playing = cabinet(); playing < 0)
     {
         chooseCabinet (0);
+    }
+    else if (irs.getReference (playing).getFileNameWithoutExtension() != cabinetPlaying())
+    {
+        // The cabinet it is, under the name the file had when the state was kept: the name is put right.
+        nameCabinet (irs.getReference (playing));
     }
     else if (cabinetIsStale())
     {

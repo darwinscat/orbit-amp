@@ -259,10 +259,15 @@ private:
     void showDriveMenu();
     void saveCapture();
 
-    // A right click on CAB offers the cabinet that is playing as the IR file it is.
+    // A right click on CAB opens the cabinets' window (CatpitCabs.h): the lists, and what its keys do —
+    // the cabinet that is playing handed out as the IR file it is, files taken in, and one of the
+    // player's own renamed or removed.
     std::unique_ptr<juce::FileChooser> cabChooser;
-    void showCabMenu();
+    void showCabs();
     void saveCab();
+    void chooseCabsToAdd();
+    void renameCab();
+    void removeCab();
 
     // The player's own cabinets: files taken into the IRs folder, CAB given a position for each, and
     // the first of the new ones played.

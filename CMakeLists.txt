@@ -591,6 +591,7 @@ set(CATPITAMP_SOURCES
     src/ui/Theme.cpp
     src/core/ProcessMemory.cpp
     src/catpit/CatpitArt.cpp
+    src/catpit/CatpitCabs.cpp
     src/catpit/CatpitChannels.cpp
     src/catpit/CatpitControls.cpp
     src/catpit/CatpitEngine.cpp

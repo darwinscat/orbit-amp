@@ -163,12 +163,20 @@ int main()
         scratch.createDirectory();
 
         // Two IRs under names that would stand FIRST and last in one list, and one too big to keep.
-        const auto donor = channels.cabinets().getFirst();
+        // Each is one of the build's with its last sample nudged: an IR of its own, like no other here.
         const auto early = scratch.getChildFile ("00-first-" + run + ".wav");
         const auto late  = scratch.getChildFile ("zz-last-" + run + ".wav");
         const auto big   = scratch.getChildFile ("too-big-" + run + ".wav");
-        donor.copyFileTo (early);
-        donor.copyFileTo (late);
+        const auto nudged = [&channels] (const juce::File& to, char by)
+        {
+            juce::MemoryBlock bytes;
+            channels.cabinets().getFirst().loadFileAsData (bytes);
+            if (bytes.getSize() > 0)
+                bytes[bytes.getSize() - 1] = (char) (bytes[bytes.getSize() - 1] ^ by);
+            to.replaceWithData (bytes.getData(), bytes.getSize());
+        };
+        nudged (early, 1);
+        nudged (late, 2);
         {
             juce::FileOutputStream out (big);
             out.setPosition (device::EmbeddedIrs::maxBytes);
@@ -184,6 +192,34 @@ int main()
 
         channels.chooseCabinet (added.first);
         check (channels.cabinet() == added.first, "a cabinet taken in plays");
+
+        // RENAMED, it is still that cabinet — to the channel that was left on it, and to a state kept
+        // from before, which names it as it was called then and carries what it is.
+        ticks();
+        const int home  = channels.active();
+        const int other = home == 0 ? 1 : 0;
+        const auto kept = amp->apvts.copyState();           // this channel, on this cabinet, under its first name
+        engine.go (other);
+        const auto elsewhere = channels.cabinet();
+
+        check (! channels.renameCabinet (0, "nobody"), "one of the build's own cannot be renamed");
+        check (channels.renameCabinet (added.first, "mm-renamed-" + run), "one of the player's own can");
+
+        int now = -1;
+        for (int i = 0; i < channels.cabinets().size(); ++i)
+            if (channels.cabinets().getReference (i).getFileNameWithoutExtension() == "mm-renamed-" + run)
+                now = i;
+        check (now >= factory, "...and is in the list under its new name, among the player's");
+        check (channels.cabinet() == elsewhere, "...while the cabinet that is playing stays the one it was");
+
+        engine.go (home);
+        check (channels.cabinet() == now, "the channel left on it comes back on it");
+
+        history.applyEdit (history.active(), kept, "a state from before the rename");
+        check (channels.cabinet() == now, "a state that names it as it was called is on it too, found by what it is");
+        check (channels.cabinetIsStale(), "...and that name is the stale part");
+        channels.align();
+        check (channels.cabinet() == now && ! channels.cabinetIsStale(), "...which settling puts right");
     }
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");

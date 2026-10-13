@@ -122,6 +122,13 @@ public:
     };
     Added importCabinets (const juce::StringArray& paths);
 
+    /** A cabinet of the player's own under another name — the file's, where it lies — or gone, to the
+        Trash. Every channel that was left on a renamed cabinet goes with it. False, and nothing
+        touched, for one of the build's own, a name already taken, or a file that would not move.
+        Neither is an edit of the sound: the caller says so to the history. */
+    bool renameCabinet (int index, const juce::String& name);
+    bool removeCabinet (int index);
+
     /** The one that is playing, as an index into cabinets(); -1 when the sound's cabinet is none of them. */
     int  cabinet() const;
     void chooseCabinet (int index);
@@ -134,7 +141,8 @@ public:
 
     /** True when the cabinet that is playing wears the name of one of the cockpit's and is not that
         file: a state carries its cabinet's bytes, and one saved before the file was replaced under its
-        name would go on sounding the old one, under a plate that names the new. align() cures it. */
+        name would go on sounding the old one, under a plate that names the new. And true the other
+        way round — the file it is, under a name the file has since lost. align() cures both. */
     bool cabinetIsStale() const;
 
     /** Makes the sound agree with what the state says about itself: the playing channel's pack, and a
@@ -169,6 +177,7 @@ private:
     juce::String keyOfFile (int index) const;
 
     juce::String cabinetPlaying() const;                  // its file's name without the extension; empty when none of ours
+    void nameCabinet (const juce::File&);                 // writes the playing cabinet's name down as that file's
     void chooseCabinetNamed (const juce::String& stem);   // ...or the first, when that one is not here
 
     juce::ValueTree node() const;
