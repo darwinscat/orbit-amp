@@ -63,6 +63,18 @@ ArtKnob::ArtKnob (const juce::Image& a, Pointer p) : art (a), ptr (p)
 
 void ArtKnob::setValue (float v, bool notify)
 {
+    hand = juce::jlimit (0.0f, 1.0f, v);
+    land (hand, notify);
+}
+
+void ArtKnob::turn (float place)
+{
+    hand = juce::jlimit (0.0f, 1.0f, place);
+    land (detent ? detent (hand) : hand, true);
+}
+
+void ArtKnob::land (float v, bool notify)
+{
     v = juce::jlimit (0.0f, 1.0f, v);
     if (std::abs (v - value) < 1.0e-6f)
         return;
@@ -70,6 +82,17 @@ void ArtKnob::setValue (float v, bool notify)
     repaint();
     if (notify && onChange)
         onChange (value);
+}
+
+float ArtKnob::shown() const
+{
+    return detent ? juce::jlimit (0.0f, 1.0f, detent (value)) : value;
+}
+
+void ArtKnob::settle()
+{
+    if (std::abs (shown() - painted) > 1.0e-6f)
+        repaint();
 }
 
 void ArtKnob::paint (juce::Graphics& g)
@@ -88,7 +111,8 @@ void ArtKnob::paint (juce::Graphics& g)
     }
 
     // The pointer: a lit slot from `inner` to `outer` of the radius, turned 270 degrees end to end.
-    const float angle = juce::degreesToRadians (-135.0f + 270.0f * value);
+    painted = shown();
+    const float angle = juce::degreesToRadians (-135.0f + 270.0f * painted);
     const float w = R * ptr.width;
     juce::Path p;
     p.addRoundedRectangle (-w * 0.5f, -R * ptr.outer, w, R * (ptr.outer - ptr.inner), w * 0.5f);
@@ -108,7 +132,7 @@ void ArtKnob::mouseDown (const juce::MouseEvent& e)
         return;
     }
     turning = true;
-    dragStartValue = value;
+    dragStartValue = shown();
     dragStartY = e.getScreenY();
     if (onGestureStart) onGestureStart();
 }
@@ -118,7 +142,7 @@ void ArtKnob::mouseDrag (const juce::MouseEvent& e)
     if (! turning)
         return;
     const float pixelsForFullTurn = e.mods.isShiftDown() ? 1400.0f : 280.0f;
-    setValue (dragStartValue + (float) (dragStartY - e.getScreenY()) / pixelsForFullTurn, true);
+    turn (dragStartValue + (float) (dragStartY - e.getScreenY()) / pixelsForFullTurn);
 }
 
 void ArtKnob::mouseUp (const juce::MouseEvent&)
@@ -132,14 +156,14 @@ void ArtKnob::mouseUp (const juce::MouseEvent&)
 void ArtKnob::mouseDoubleClick (const juce::MouseEvent&)
 {
     if (onGestureStart) onGestureStart();
-    setValue (defaultValue, true);
+    turn (defaultValue);
     if (onGestureEnd) onGestureEnd();
 }
 
 void ArtKnob::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
 {
     if (onGestureStart) onGestureStart();
-    setValue (value + w.deltaY * (w.isReversed ? -0.12f : 0.12f), true);
+    turn (hand + w.deltaY * (w.isReversed ? -0.12f : 0.12f));      // the hand's place: small turns add up to a click
     if (onGestureEnd) onGestureEnd();
 }
 

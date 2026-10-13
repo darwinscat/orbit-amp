@@ -261,6 +261,20 @@ public:
         player.setDial (dial, deg);
     }
 
+    /** WHERE THE GAIN DIAL LANDS IN STEP, as a fraction of its travel: the captured position nearest to
+        `travel` — what `setGain` plays there with SMOOTH off, so a face can stand its knob on it. The
+        travel itself when no pack is loaded or the device has no captured axis. Message thread. */
+    double stepAt (double travel) const
+    {
+        travel = juce::jlimit (0.0, 1.0, travel);
+
+        if (! player.loaded() || player.dialName().empty())
+            return travel;
+
+        const double sweep = (double) player.dialSweep();
+        return sweep > 0.0 ? nearestKnot (travel * sweep) / sweep : travel;
+    }
+
     /** The pack's per-file input trims (`input_db`), see RigPlayer::setInputTrims: off, every
         capture eats exactly what the chain feeds it — for a library shot at one honest level
         the stated attenuations are somebody else's story. Atomic underneath; any thread. */

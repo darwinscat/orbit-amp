@@ -66,9 +66,17 @@ public:
     std::function<void (float)> onChange;          // 0..1
     std::function<void()>      onMenu;             // a right click, when set — and then it does not turn the knob
 
+    /** A KNOB THAT CLICKS: when set, the place the knob lands for a place of the hand, both 0..1. The
+        hand turns it from one such place to the next, and the pointer stands on one whatever value it
+        was given — the value itself is left as it came. */
+    std::function<float (float)> detent;
+
     void  setValue (float v, bool notify);
     float getValue() const noexcept { return value; }
     float defaultValue = 0.5f;
+
+    /** The detents may have moved under a knob that stands still: draws it again if they did. */
+    void settle();
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -83,8 +91,14 @@ private:
     const juce::Image& art;
     Pointer ptr;
     float value = 0.5f, dragStartValue = 0.0f;
+    float hand = 0.5f;          // where the hand has it: between two detents the knob has not moved yet
+    float painted = -1.0f;      // where the pointer was last drawn
     int   dragStartY = 0;
     bool  turning = false;
+
+    float shown() const;        // where the pointer stands
+    void  turn (float place);   // the hand's doing
+    void  land (float v, bool notify);
 };
 
 //==============================================================================

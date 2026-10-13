@@ -232,7 +232,8 @@ private:
     // HOW DRIVE GOES BETWEEN THE PACK'S CAPTURES is the machine's too. Smoothly, unless told otherwise:
     // between two captures the player mixes them by the knob's angle, and the sound goes with the hand.
     // In steps, it lands on the nearer capture and holds it until the knob is nearer the next — one
-    // capture playing at a time, each exactly as it was shot.
+    // capture playing at a time, each exactly as it was shot. The knob goes the same way: it clicks from
+    // one capture's place to the next under the hand, and stands on one whatever DRIVE was left at.
     int  leverZero = 0;
     bool driveSteps = false;
     juce::ParameterAttachment* inputTrim = nullptr;

@@ -678,6 +678,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // What has an obvious home in the engine is wired to it; the rest only moves for now.
     bind (drive, params::preampGain);
     drive.onMenu = [this] { showDriveMenu(); };
+    drive.detent = [this] (float travel) { return driveSteps ? (float) amp.preamp.stepAt ((double) travel) : travel; };
     bind (*sliders[0], params::reverbMix);
     bind (*sliders[1], params::delayMix);
     bind (outFader, params::outTrim);
@@ -915,6 +916,7 @@ void CatpitEditor::chooseDriveSteps (bool steps)
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     settleOnSettings();
+    drive.settle();
 }
 
 /** IN STEPS, DRIVE STANDS ON ONE CAPTURE OF THE PACK, and a right click on it offers that capture as a
@@ -975,6 +977,7 @@ void CatpitEditor::timerCallback()
 {
     version.setDot (amp.updateChecker().updateAvailable());
     presetDoor.setDot (presets.changed());
+    drive.settle();     // in steps it stands on a capture, and the pack under it may be another now
 
     // The load turns warm as it climbs — OrbitAmp's thresholds: a number noticed when it starts to matter.
     const float percent = amp.dspLoadPercent();
