@@ -7,12 +7,12 @@ name: release-catpit
 # A manual run (workflow_dispatch) builds the SAME artifacts but does NOT create a release unless
 # dry_run=false, so they can be downloaded and tried from the run page without publishing.
 #
-#   • macOS  → signed + notarized .zip (Standalone, universal)          [self-hosted runner]
-#   • Windows → .zip (Standalone; x64 and arm64)
-#   • Linux  → .tar.gz (Standalone; x86_64 and arm64)
+#   • macOS  → signed + notarized .zip (VST3 + AU + CLAP + Standalone, universal)  [self-hosted runner]
+#   • Windows → .zip (VST3 + CLAP + Standalone; x64 and arm64)
+#   • Linux  → .tar.gz (VST3 + CLAP + Standalone; x86_64 and arm64)
 #
-# Standalone only: that is all the cockpit is built as, for now. When it becomes a plug-in too,
-# its bundles join here the way OrbitAmp's sit in release.yml.
+# Archives only, no installer yet: a player puts the bundles where the host looks for them. The
+# cockpit's packs and cabinets are inside every binary, so a bundle is all there is to carry.
 #
 # THE RELEASE IS PUBLISHED AS "NOT LATEST", AND THAT IS LOAD-BEARING. Every OrbitAmp build already
 # out there asks GitHub for this repository's LATEST release and expects a tag that reads vX.Y.Z.
@@ -84,7 +84,7 @@ jobs:
             -DORBITAMP_COPY_PLUGIN=OFF
           # By name: the cockpit is not part of the default build. The gates are the engine's, and
           # the engine is what this release ships.
-          cmake --build build --config Release --parallel --target CatpitAmp_Standalone \
+          cmake --build build --config Release --parallel --target CatpitAmp_All \
             orbitamp_captured_test orbitamp_chain_test orbitamp_library_test \
             orbitamp_reverb_test orbitamp_ribbon_test orbitamp_eqlink_test orbitamp_tuner_test
       - name: Gates
@@ -110,7 +110,9 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCH_PWD" "$KEYCHAIN" >/dev/null
 
           VER="${{ needs.version.outputs.version }}"
-          APP="build/CatpitAmp_artefacts/Release/Standalone/CatpitAmp.app"
+          REL="build/CatpitAmp_artefacts/Release"
+          VST3="$REL/VST3/CatpitAmp.vst3"; AU="$REL/AU/CatpitAmp.component"; CLAP="$REL/CLAP/CatpitAmp.clap"
+          APP="$REL/Standalone/CatpitAmp.app"
           mkdir -p dist
           rm -rf stage && mkdir -p stage
 
@@ -125,22 +127,33 @@ jobs:
             return 1
           }
 
-          # Its own process → the audio-input entitlement, under the hardened runtime.
+          # Plug-ins: hardened-runtime sign (they run inside the host → no own entitlements).
+          BUNDLES=("$VST3" "$AU" "$CLAP")
+          for b in "${BUNDLES[@]}"; do
+            codesign --force --options runtime --timestamp --sign "$APP_ID" "$b"
+            codesign --verify --strict --verbose=1 "$b"
+          done
+
+          # The standalone: its own process → the audio-input entitlement, under the hardened runtime.
           codesign --force --options runtime --timestamp \
                    --entitlements installer/standalone.entitlements --sign "$APP_ID" "$APP"
           codesign --verify --strict --verbose=1 "$APP"
+          BUNDLES+=("$APP")
 
-          cp -R "$APP" stage/
-          ditto -c -k stage dist/_app.zip
-          xcrun notarytool submit dist/_app.zip --keychain-profile "$NOTARY" --wait
-          rm -f dist/_app.zip
+          # One submission for all four, and a ticket on each — see release.yml.
+          for b in "${BUNDLES[@]}"; do cp -R "$b" stage/; done
+          ditto -c -k stage dist/_bundles.zip
+          xcrun notarytool submit dist/_bundles.zip --keychain-profile "$NOTARY" --wait
+          rm -f dist/_bundles.zip
 
           # The ticket goes on the ORIGINAL, and the archive is made from what already carries it.
-          staple_retry "$APP"
-          xcrun stapler validate "$APP"
-          codesign --verify --deep --strict "$APP"
           rm -rf stage && mkdir -p stage
-          cp -R "$APP" stage/
+          for b in "${BUNDLES[@]}"; do
+            staple_retry "$b"
+            xcrun stapler validate "$b"
+            codesign --verify --deep --strict "$b"
+            cp -R "$b" stage/
+          done
           ditto -c -k stage "dist/CatpitAmp-$VER-macOS.zip"
       - uses: actions/upload-artifact@v7
         with:
@@ -162,14 +175,15 @@ jobs:
       - name: Build
         run: |
           cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release --parallel --target CatpitAmp_Standalone
+          cmake --build build --config Release --parallel --target CatpitAmp_All
       - name: Zip
         shell: pwsh
         run: |
           $ver = "${{ needs.version.outputs.version }}"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Force -DestinationPath "dist\CatpitAmp-$ver-Windows-${{ matrix.arch }}.zip" `
-              -Path "build\CatpitAmp_artefacts\Release\Standalone\CatpitAmp.exe"
+          $rel = "build\CatpitAmp_artefacts\Release"
+          $items = @("$rel\VST3\CatpitAmp.vst3", "$rel\CLAP\CatpitAmp.clap", "$rel\Standalone\CatpitAmp.exe")
+          Compress-Archive -Force -DestinationPath "dist\CatpitAmp-$ver-Windows-${{ matrix.arch }}.zip" -Path $items
       - uses: actions/upload-artifact@v7
         with:
           name: windows-${{ matrix.arch }}
@@ -198,7 +212,7 @@ jobs:
       - name: Build
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --target CatpitAmp_Standalone \
+          cmake --build build --target CatpitAmp_All \
             orbitamp_captured_test orbitamp_chain_test orbitamp_library_test \
             orbitamp_reverb_test orbitamp_ribbon_test orbitamp_eqlink_test orbitamp_tuner_test
       - name: Gates
@@ -213,8 +227,11 @@ jobs:
       - name: Package (.tar.gz)
         run: |
           VER="${{ needs.version.outputs.version }}"
+          REL="build/CatpitAmp_artefacts/Release"
           mkdir -p stage dist
-          cp "build/CatpitAmp_artefacts/Release/Standalone/CatpitAmp" stage/
+          cp -R "$REL/VST3/CatpitAmp.vst3" stage/
+          cp -R "$REL/CLAP/CatpitAmp.clap" stage/      # a single file here, not a bundle — see release.yml
+          cp "$REL/Standalone/CatpitAmp" stage/
           tar -C stage -czf "dist/CatpitAmp-$VER-Linux-${{ matrix.arch }}.tar.gz" .
       - uses: actions/upload-artifact@v7
         with:
