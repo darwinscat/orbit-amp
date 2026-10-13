@@ -113,6 +113,10 @@ namespace
 
     juce::String decibels (int db) { return (db > 0 ? "+" : "") + juce::String (db) + " dB"; }
 
+    // The ceilings the OUTPUT column's menu offers the limiter, within what the engine takes
+    // (params::limiterCeilingMin .. Max).
+    constexpr float limiterCeilings[] { -0.1f, -0.3f, -0.5f, -1.0f, -2.0f, -3.0f };
+
     // TURBO's push — see CatpitEditor.h. Kept with the machine's settings, where the engine reads it too
     // (CatpitEngine.h).
     using settings::turboKey, settings::turboPushes, settings::snapTurbo;
@@ -720,6 +724,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     inFader.onMenu = [this] { showInputMenu(); };
 
+    outFader.onMenu = [this] { showOutputMenu(); };
+
     sayLever (inFader,  "INPUT",  [this] { return getParam (params::inTrim) - (float) leverZero; });
     sayLever (outFader, "OUTPUT", [this] { return getParam (params::outTrim); });
 
@@ -987,6 +993,28 @@ void CatpitEditor::showInputMenu()
     menu.addSectionHeader ("LEVER'S ZERO");
     for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
         addChoice (menu, decibels (db), db == leverZero, [db] (CatpitEditor& e) { e.chooseLeverZero (db); });
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+/** A RIGHT CLICK ON THE OUTPUT COLUMN — the lever, or the meter beside it: the limiter that stands last
+    in the chain, whether it works and what it lets through at the most. It is the sound's, not the
+    machine's: a session and a preset keep it, and undo steps over it. */
+void CatpitEditor::showOutputMenu()
+{
+    endTapping();
+
+    const bool on  = getParam (params::limiterOn) > 0.5f;
+    const float at = getParam (params::limiterCeiling);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("LIMITER");
+    addChoice (menu, "On", on, [on] (CatpitEditor& e) { e.setParam (params::limiterOn, on ? 0.0f : 1.0f); });
+
+    menu.addSectionHeader ("CEILING");
+    for (const float db : limiterCeilings)
+        addChoice (menu, juce::String (db, 1) + " dB", std::abs (at - db) < 0.05f,
+                   [db] (CatpitEditor& e) { e.setParam (params::limiterCeiling, db); }, on);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
@@ -1502,6 +1530,8 @@ void CatpitEditor::mouseDown (const juce::MouseEvent& e)
         showCabs();
     else if (inMeter.getBounds().contains (at))
         showInputMenu();
+    else if (outMeter.getBounds().contains (at))
+        showOutputMenu();
     else
         showSettingsMenu();
 }
