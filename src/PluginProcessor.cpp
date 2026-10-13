@@ -11,6 +11,11 @@
 namespace orbitamp
 {
 
+AmpProcessor::FactorySet::FactorySet()
+{
+    layOutFactorySet();
+}
+
 AmpProcessor::AmpProcessor()
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)

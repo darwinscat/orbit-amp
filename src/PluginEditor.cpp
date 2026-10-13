@@ -651,4 +651,6 @@ juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
     return new AmpEditor (p);
 }
 
+void layOutFactorySet() {}      // OrbitAmp's factory devices ride in its bundles
+
 } // namespace orbitamp

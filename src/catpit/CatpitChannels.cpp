@@ -3,6 +3,7 @@
 
 #include "CatpitChannels.h"
 
+#include "CatpitSet.h"
 #include "../Parameters.h"
 #include "../device/IrLibrary.h"
 
@@ -25,11 +26,17 @@ namespace
     const juce::Identifier indexId  { "i" };
     const juce::Identifier cabinetId { "cabinet" };
 
-    /** Where a build ships the cockpit's cabinets: inside the bundle, beside its devices. */
+    /** The amp's own folder beside the player's: where the set a build carries is laid out
+        (CatpitSet.h), and where the device library looks for the packs a bundle does not hold. */
+    juce::File factory()
+    {
+        return device::DeviceLibrary::appDataRoot().getChildFile ("Factory");
+    }
+
+    /** Where a build's own cabinets are: laid out with its packs. */
     juce::File bundledCabinets()
     {
-        return juce::File::getSpecialLocation (juce::File::currentApplicationFile)
-                   .getChildFile ("Contents").getChildFile ("Resources").getChildFile ("IRs");
+        return set::cabinetsIn (factory());
     }
 
     void addCabinets (const juce::File& folder, juce::Array<juce::File>& into)
@@ -350,3 +357,16 @@ void Channels::set (const juce::String& paramId, float value)
 }
 
 } // namespace orbitamp::catpit
+
+namespace orbitamp
+{
+
+/** The cockpit's set is in its binary (CatpitSet.h). Once in a process, however many of the amp it
+    holds: the first one built lays it out, and the folder is the same for all of them. */
+void layOutFactorySet()
+{
+    static const int laid = catpit::set::layOut (catpit::factory());
+    juce::ignoreUnused (laid);
+}
+
+} // namespace orbitamp

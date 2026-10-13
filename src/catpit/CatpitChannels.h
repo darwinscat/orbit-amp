@@ -94,13 +94,13 @@ public:
 
     /** The pack a channel plays, as an index into the preamp's library; -1 when it is not installed.
         A channel's pack is the one whose FILE is named after the channel — Clean, Edge, Crunch,
-        Hi-Gain — in the cockpit's own Devices folder or in its bundle. */
+        Hi-Gain — in the cockpit's own Devices folder or among the packs the build carries. */
     int  packFor (int channel) const;
 
-    /** THE COCKPIT'S OWN CABINETS: every IR file in its two places — inside the bundle, where a build
-        ships them, and the player's IRs folder beside its Devices — in the order of their names, so a
-        leading number is how the order is chosen. Read once, when the face opens. CAB has as many
-        positions as there are of them. */
+    /** THE COCKPIT'S OWN CABINETS: every IR file in its two places — the ones the build carries, laid
+        out in the amp's factory folder (CatpitSet.h), and the player's IRs folder beside its Devices —
+        in the order of their names, so a leading number is how the order is chosen. Read once, when
+        the face opens. CAB has as many positions as there are of them. */
     const juce::Array<juce::File>& cabinets() const noexcept { return irs; }
 
     /** The one that is playing, as an index into cabinets(); -1 when the sound's cabinet is none of them. */

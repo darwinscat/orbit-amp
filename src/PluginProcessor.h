@@ -162,6 +162,11 @@ public:
         `force` writes it now whatever has changed. Message thread only. */
     void refreshSavedState (bool force = false);
 
+    // BEFORE THE PARAMETERS, and so before everything: the list of devices a parameter offers is read
+    // off the disk when the parameters are made, and a product that carries its set in the binary has
+    // to have laid it out by then. A member, because the constructor's body would be too late.
+    struct FactorySet { FactorySet(); } factorySet;
+
     juce::AudioProcessorValueTreeState apvts;
 
     /** Undo/redo + the A/B/C/D registers, from felitronics-appkit. It lives on the PROCESSOR, not
@@ -1220,5 +1225,11 @@ private:
 /** The face a build opens. One processor, two faces: OrbitAmp's comes from PluginEditor.cpp, the
     cockpit's from catpit/CatpitEditor.cpp, and each target compiles exactly one of them. */
 juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
+
+/** What a product keeps INSIDE ITS BINARY and plays from disk, put where it is played from. Defined
+    once per target, like the face: OrbitAmp's set rides in its bundles and this does nothing; the
+    cockpit's is in the binary (catpit/CatpitSet.h). The processor calls it before it builds anything
+    of its own — see AmpProcessor::factorySet. */
+void layOutFactorySet();
 
 } // namespace orbitamp

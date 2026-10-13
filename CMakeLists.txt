@@ -594,6 +594,7 @@ target_sources(CatpitAmp PRIVATE
     src/catpit/CatpitMidi.cpp
     src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitPresets.cpp
+    src/catpit/CatpitSet.cpp
     src/catpit/CatpitSpace.cpp
     src/catpit/CatpitStandalone.cpp
     src/catpit/CatpitGlSky.cpp
@@ -639,24 +640,37 @@ foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
     endif()
 endforeach()
 
-# THE COCKPIT'S OWN SET rides in its bundles the way OrbitAmp's factory devices ride in OrbitAmp's:
-# whatever sits in resources/catpit/Devices (packs named after the channels — Clean, Edge, Crunch,
-# Hi-Gain) and resources/catpit/IRs (the cabinets CAB steps through, in the order of their names)
-# at CONFIGURE time. Absent or empty, the bundles ship without, and the cockpit plays what the player
-# puts in its own Devices and IRs folders. It reads nothing of OrbitAmp's.
+# THE COCKPIT'S OWN SET IS INSIDE ITS BINARY — every format's, on every system — and the amp lays it
+# out as files when it first starts (src/catpit/CatpitSet.h says why). Whatever sits in
+# resources/catpit/Devices (packs named after the channels — Clean, Edge, Crunch, Hi-Gain — each one
+# `.orbitrig.zip` file) and resources/catpit/IRs (the cabinets CAB steps through, in the order of their
+# names). CONFIGURE_DEPENDS: a file added or renamed there is seen at the next build, not at the next
+# time somebody remembers to run cmake. Absent or empty, the build carries none, and the cockpit plays
+# what the player puts in its own Devices and IRs folders. It reads nothing of OrbitAmp's.
+set(CATPITAMP_SET "")
 foreach(kind IN ITEMS Devices IRs)
-    file(GLOB CATPITAMP_SET "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}/*")
-    if(CATPITAMP_SET)
-        foreach(format IN LISTS CATPITAMP_FORMATS)
-            juce_add_bundle_resources_directory(${format}
-                "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}")
-        endforeach()
-        list(LENGTH CATPITAMP_SET CATPITAMP_SET_COUNT)
-        message(STATUS "CatpitAmp ${kind}: ${CATPITAMP_SET_COUNT} ride in the bundles")
-    else()
-        message(STATUS "CatpitAmp ${kind}: resources/catpit/${kind}/ is empty or absent — the bundles ship without")
-    endif()
+    file(GLOB CATPITAMP_SET_FILES LIST_DIRECTORIES false CONFIGURE_DEPENDS
+         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}/*")
+    list(FILTER CATPITAMP_SET_FILES EXCLUDE REGEX "/\\.[^/]*$")      # .DS_Store and its kind
+    list(LENGTH CATPITAMP_SET_FILES CATPITAMP_SET_COUNT)
+    message(STATUS "CatpitAmp ${kind}: ${CATPITAMP_SET_COUNT} in the binary")
+    list(APPEND CATPITAMP_SET ${CATPITAMP_SET_FILES})
 endforeach()
+
+# What reads the set says whether there is one: with none, there is no data to link and nothing to ask.
+add_library(CatpitAmpSet INTERFACE)
+if(CATPITAMP_SET)
+    juce_add_binary_data(CatpitAmpSetData
+        NAMESPACE   CatpitSetData
+        HEADER_NAME CatpitSetData.h
+        SOURCES     ${CATPITAMP_SET})
+    set_target_properties(CatpitAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    target_link_libraries(CatpitAmpSet INTERFACE CatpitAmpSetData)
+    target_compile_definitions(CatpitAmpSet INTERFACE CATPIT_SET_EMBEDDED=1)
+else()
+    target_compile_definitions(CatpitAmpSet INTERFACE CATPIT_SET_EMBEDDED=0)
+endif()
+target_link_libraries(CatpitAmp PRIVATE CatpitAmpSet)
 
 # Not part of the default build. The two products are released apart, and OrbitAmp's own build — a
 # contributor's, a pull request's, a release's — must never fail on the cockpit. Whoever wants the
@@ -683,6 +697,7 @@ target_sources(catpitamp_memory_probe PRIVATE
     src/catpit/CatpitMidi.cpp
     src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitPresets.cpp
+    src/catpit/CatpitSet.cpp
     src/catpit/CatpitSpace.cpp
     src/catpit/CatpitStandalone.cpp
     src/catpit/CatpitGlSky.cpp
@@ -698,6 +713,7 @@ target_compile_definitions(catpitamp_memory_probe PRIVATE
 target_link_libraries(catpitamp_memory_probe PRIVATE
     OrbitAmpData
     CatpitAmpData
+    CatpitAmpSet
     felitronics::analysis
     felitronics::appkit
     felitronics::appkit_webp
@@ -716,6 +732,21 @@ target_link_libraries(catpitamp_memory_probe PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 set_target_properties(catpitamp_memory_probe PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# Gate for the cockpit's set as it leaves the binary — laid out whole, once, and nothing else in the
+# folder touched. Runs entirely in a folder of its own. The cockpit's, so built only by name.
+juce_add_console_app(catpitamp_set_test PRODUCT_NAME "CatpitAmpSetTest")
+target_sources(catpitamp_set_test PRIVATE
+    tests/CatpitSetTests.cpp
+    src/catpit/CatpitSet.cpp)
+target_include_directories(catpitamp_set_test PRIVATE src)
+target_compile_definitions(catpitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(catpitamp_set_test PRIVATE
+    CatpitAmpSet
+    juce::juce_core
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(catpitamp_set_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is

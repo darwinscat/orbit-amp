@@ -1,6 +1,6 @@
 # The cockpit's cabinets
 
-What is in `IRs/`, and where it came from. The folder rides in CatpitAmp's bundle whole; this note
+What is in `IRs/`, and where it came from. The folder is built into CatpitAmp's binary whole; this note
 stays in the tree.
 
 ## `01` … `12` — the Orange PPC212V
