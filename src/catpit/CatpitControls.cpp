@@ -1055,6 +1055,14 @@ void TunerFace::paint (juce::Graphics& g)
     // The note: name big, octave small beside it; a dash while nothing is heard.
     auto noteArea = area.removeFromLeft (96.0f);
 
+    // What it measures from, over the note — said only when it is not the 440 everyone assumes.
+    if (const int a4 = juce::roundToInt (ear.referenceHz()); a4 != juce::roundToInt (core::PitchTracker::concertA))
+    {
+        g.setColour (lilac.withAlpha (0.8f));
+        g.setFont (labelFont (layout::px13));
+        g.drawText ("A " + juce::String (a4), noteArea.withHeight (20.0f), juce::Justification::centredLeft, false);
+    }
+
     // Its state, in the corner under the note and on the numbers' line: off, or muting the amp.
     if (! listening || muting)
     {

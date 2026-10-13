@@ -383,6 +383,12 @@ int main()
     checkNote ("466.2 names as", 466.164, "A#", 4);
     check ("445 Hz vs A4 in cents", (double) PitchTracker::nearestNote (445.0f).cents, 19.56, 0.05);
 
+    // ---- the reference: an A that is not 440 ----------------------------------------------------
+    check ("442 Hz against an A of 442, in cents", (double) PitchTracker::nearestNote (442.0f, 442.0f).cents, 0.0, 0.01);
+    check ("440 Hz against an A of 442, in cents", (double) PitchTracker::nearestNote (440.0f, 442.0f).cents, -7.85, 0.05);
+    checkTrue ("432 Hz against an A of 432 is A4", PitchTracker::nearestNote (432.0f, 432.0f).midi == 69);
+    checkTrue ("an ear nobody told measures from 440", orbitamp::core::TunerEar().referenceHz() == 440.0f);
+
     std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "PASS" : "FAIL", failures, failures == 1 ? "" : "s");
     return failures == 0 ? 0 : 1;
 }

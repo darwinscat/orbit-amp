@@ -44,6 +44,11 @@ public:
         Cheap: call it every tick. */
     void setLevelFloorDb (double db) { tracker.setLevelFloorDb (db); }
 
+    /** The pitch A4 is tuned to, in Hz: what every note is named and measured from. Cheap: call it
+        every tick — the needle eases to the new reading like to any other. */
+    void  setReferenceHz (float hz) noexcept { a4 = hz > 0.0f ? hz : PitchTracker::concertA; }
+    float referenceHz() const noexcept       { return a4; }
+
     /** One tick: snapshot the tap, analyse, fold into the display state. `nowMs` is any steady
         millisecond clock — the ear only ever compares differences. */
     void update (const TunerTap& tap, unsigned nowMs)
@@ -94,7 +99,7 @@ public:
 
     PitchTracker::Note nearestNote() const
     {
-        return live() ? PitchTracker::nearestNote (displayHz) : PitchTracker::Note {};
+        return live() ? PitchTracker::nearestNote (displayHz, a4) : PitchTracker::Note {};
     }
 
 private:
@@ -117,6 +122,7 @@ private:
 
     std::vector<float> recent;
     unsigned lastValidMs = 0;
+    float a4             = PitchTracker::concertA;
     float displayHz      = 0.0f;   // 0 = idle
     float needleSmoothed = 0.0f;
 };

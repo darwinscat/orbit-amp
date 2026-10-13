@@ -157,4 +157,31 @@ inline std::atomic<int>& tunerFloorCache()
 inline int  tunerFloor()                { return tunerFloorCache().load (std::memory_order_relaxed); }
 inline void setTunerFloor (int db)      { db = snapTunerFloor (db); tunerFloorCache().store (db, std::memory_order_relaxed); store().set (tunerFloorDb, db); }
 
+/** The TUNER's REFERENCE — the pitch A4 is tuned to, in Hz. 440 wherever a guitar plays alone; a piano
+    or an orchestra that will not retune, and a record that has drifted, are why a tuner lets it move.
+    About the band and the room, like the floor above, so it lives on the machine with it and is read
+    the same way. */
+inline const juce::Identifier tunerReferenceHz { "tuner_reference_hz" };
+
+inline constexpr int tunerReferences[]     = { 432, 436, 437, 438, 439, 440, 441, 442, 443, 444, 445 };
+inline constexpr int tunerReferenceDefault = 440;
+
+inline int snapTunerReference (int hz)
+{
+    int best = tunerReferenceDefault;
+    for (const int r : tunerReferences)
+        if (std::abs (r - hz) < std::abs (best - hz))
+            best = r;
+    return best;
+}
+
+inline std::atomic<int>& tunerReferenceCache()
+{
+    static std::atomic<int> cached { snapTunerReference ((int) store().get (tunerReferenceHz, tunerReferenceDefault)) };
+    return cached;
+}
+
+inline int  tunerReference()            { return tunerReferenceCache().load (std::memory_order_relaxed); }
+inline void setTunerReference (int hz)  { hz = snapTunerReference (hz); tunerReferenceCache().store (hz, std::memory_order_relaxed); store().set (tunerReferenceHz, hz); }
+
 } // namespace orbitamp::prefs

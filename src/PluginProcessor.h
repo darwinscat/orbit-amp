@@ -746,6 +746,7 @@ private:
             tunerEar.prepare (sr);
 
         tunerEar.setLevelFloorDb ((double) prefs::tunerFloor());
+        tunerEar.setReferenceHz ((float) prefs::tunerReference());
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 

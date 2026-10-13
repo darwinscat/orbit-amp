@@ -1043,7 +1043,8 @@ void CatpitEditor::showTurboMenu()
 
 /** A RIGHT CLICK ON THE TUNER: whether it listens at all, and whether the amp is silent while it does —
     the way a tuner pedal mutes the rig. Off, it does neither. Both are the sound's own switches, the
-    same two the engine has always had; the glass says which is thrown. */
+    same two the engine has always had; the glass says which is thrown. And the pitch it measures
+    from, which is the machine's. */
 void CatpitEditor::showTunerMenu()
 {
     endTapping();
@@ -1055,6 +1056,13 @@ void CatpitEditor::showTunerMenu()
     menu.addSectionHeader ("TUNER");
     addChoice (menu, "On", on, [on] (CatpitEditor& e) { e.setParam (params::tunerOn, on ? 0.0f : 1.0f); });
     addChoice (menu, "Mute the amp", muted, [muted] (CatpitEditor& e) { e.setParam (params::tunerMute, muted ? 0.0f : 1.0f); }, on);
+
+    // The pitch its A is tuned to: the machine's, not the sound's — it is about who the guitar plays with.
+    juce::PopupMenu reference;
+    const int a4 = prefs::tunerReference();
+    for (const int hz : prefs::tunerReferences)
+        addChoice (reference, juce::String (hz) + " Hz", hz == a4, [hz] (CatpitEditor&) { prefs::setTunerReference (hz); });
+    menu.addSubMenu ("Reference  A = " + juce::String (a4) + " Hz", reference);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
