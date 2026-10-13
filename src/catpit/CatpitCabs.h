@@ -21,8 +21,9 @@ namespace orbitamp::catpit
 
     THE KEYS under them: ADD takes files in; SAVE hands the cabinet that is playing out as a file; and
     RENAME and REMOVE are for a cabinet of the player's own — the build's are not the player's to
-    change, and with one of those playing the two stand faint. OK, apart from them, shuts the window:
-    a click beside it does too, but nothing on the window says so.
+    change, and with one of those playing the two stand faint. BYPASS takes the cabinet out of the
+    sound altogether, for all four channels, and stands lit while it is out — the lists pale behind it.
+    OK, apart from them, shuts the window: a click beside it does too, but nothing on the window says so.
 
     A dumb view. It reads the channels' list and says what the hand asked for; what a key does is the
     face's to carry out. */
@@ -36,6 +37,7 @@ public:
     std::function<void (int)> onChoose;                         // a row: an index into the channels' cabinets
     std::function<void()> onAdd, onSave, onRename, onRemove;    // the last three act on the one playing
     std::function<void()> onClose;                              // OK
+    std::function<void()> onBypass;                             // the cabinet out of the sound, or back in
 
     /** Reads the list again now, rather than at the next look of its own. */
     void refresh();
@@ -74,7 +76,8 @@ private:
 
     Lists lists { *this };
     juce::Viewport view;
-    panel::WordKey add { "Add" }, save { "Save" }, rename { "Rename" }, remove { "Remove" }, ok { "OK" };
+    panel::WordKey add { "Add" }, bypass { "Bypass" }, save { "Save" }, rename { "Rename" }, remove { "Remove" }, ok { "OK" };
+    bool out = false;               // the cabinet is bypassed
 
     void timerCallback() override { refresh(); }
 };

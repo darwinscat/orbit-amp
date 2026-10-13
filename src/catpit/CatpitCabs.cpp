@@ -143,8 +143,9 @@ CabPanel::CabPanel (const Channels& c, juce::Point<int> space) : channels (c), r
     view.getHorizontalScrollBar().setColour (juce::ScrollBar::thumbColourId, violet.withAlpha (0.6f));
     addAndMakeVisible (view);
 
-    for (auto* key : { &add, &save, &rename, &remove, &ok })
+    for (auto* key : { &add, &bypass, &save, &rename, &remove, &ok })
         addAndMakeVisible (key);
+    bypass.onClick = [this] { if (onBypass) onBypass(); refresh(); };
     add.onClick    = [this] { if (onAdd)    onAdd(); };
     save.onClick   = [this] { if (onSave)   onSave(); };
     rename.onClick = [this] { if (onRename) onRename(); };
@@ -166,6 +167,14 @@ void CabPanel::refresh()
     const int   nowPlaying = channels.cabinet();
     const bool  relaid = now != files || channels.factoryCabinets() != factory || getHeight() == 0;
 
+    // Bypassed, the key stands lit and the lists pale: they are what is not playing.
+    if (const bool nowOut = ! channels.cabinetOn(); nowOut != out || relaid)
+    {
+        out = nowOut;
+        bypass.setLit (out);
+        lists.setAlpha (out ? 0.4f : 1.0f);
+    }
+
     if (! relaid && nowPlaying == playing)
         return;
 
@@ -180,7 +189,7 @@ void CabPanel::refresh()
 
     if (relaid)
     {
-        const int keysW = keyW * 5 + keyGap * 3 + okGap;
+        const int keysW = keyW * 6 + keyGap * 4 + okGap;
         const int deep  = juce::jmax (fewestRows, (room.y - pad * 2 - gap - keyH - titleH) / rowH);
         lists.layOut (deep);
 
@@ -194,6 +203,7 @@ void CabPanel::refresh()
 
         const int keysY = view.getBottom() + gap;
         add.setBounds (pad, keysY, keyW, keyH);
+        bypass.setBounds (add.getRight() + keyGap, keysY, keyW, keyH);
         ok.setBounds (pad + viewW - keyW, keysY, keyW, keyH);
         remove.setBounds (ok.getX() - okGap - keyW, keysY, keyW, keyH);
         rename.setBounds (remove.getX() - keyGap - keyW, keysY, keyW, keyH);

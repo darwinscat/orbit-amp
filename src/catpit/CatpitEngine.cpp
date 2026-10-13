@@ -158,7 +158,8 @@ void Engine::setUpChain (bool firstTime)
     if (firstTime)                            // after that the reverb is the player's to choose
         setParam (params::reverbType, channels.defaultOf (channels.active(), params::reverbType));
     setParam (params::cabPresent,    1.0f);
-    setParam (params::cabOn,         1.0f);
+    if (firstTime)                            // after that, whether the cabinet plays is the player's to say
+        setParam (params::cabOn,     1.0f);
 
     // TURBO is the preamp's input trim, at its push or at nothing: a state the cockpit has never seen
     // starts with it off, wherever that trim was left.

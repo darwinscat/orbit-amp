@@ -727,6 +727,9 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     outFader.onMenu = [this] { showOutputMenu(); };
 
+    // Whether the cabinet is in the sound at all is on CAB's plate.
+    follow (params::cabOn, [this] (float) { showCab(); });
+
     // The tuner's two switches are read here and thrown from its menu (showTunerMenu).
     follow (params::tunerOn,   [this] (float) { showTunerState(); });
     follow (params::tunerMute, [this] (float) { showTunerState(); });
@@ -1148,6 +1151,7 @@ void CatpitEditor::showCabs()
     cabs->onRename = [this] { renameCab(); };
     cabs->onRemove = [this] { removeCab(); };
     cabs->onClose  = [this] { if (sheet != nullptr && sheet->onDismiss) sheet->onDismiss(); };
+    cabs->onBypass = [this] { channels.setCabinetOn (! channels.cabinetOn()); };
     showSheet (std::move (cabs));
 }
 
@@ -1738,6 +1742,7 @@ float CatpitEditor::getParam (const char* paramId) const
 void CatpitEditor::chooseCab (int step)
 {
     channels.chooseCabinet (step);
+    channels.setCabinetOn (true);       // a cabinet picked is a cabinet wanted: it comes out of bypass
 }
 
 /** CAB has a position for every cabinet the cockpit has, and the list has just been read again — a
@@ -1839,7 +1844,7 @@ void CatpitEditor::removeCab()
         e.cabinetsChanged();
         if (const int left = e.channels.cabinets().size(); left > 0)
         {
-            e.chooseCab (juce::jmin (index, left - 1));
+            e.channels.chooseCabinet (juce::jmin (index, left - 1));    // not chooseCab: a file removed is no reason to leave bypass
             e.showChannel();
         }
     });
@@ -1898,8 +1903,9 @@ void CatpitEditor::showCab()
 {
     const auto& cabinets = channels.cabinets();
     const int step = sliders[2] != nullptr ? sliders[2]->getStep() : -1;
-    cabName.set ("CAB", step >= 0 && step < cabinets.size() ? Channels::cabinetName (cabinets.getReference (step))
-                                                               : juce::String());
+    cabName.set ("CAB", ! channels.cabinetOn() ? juce::String ("OFF")      // bypassed: see the cabinets' window
+                        : step >= 0 && step < cabinets.size() ? Channels::cabinetName (cabinets.getReference (step))
+                                                              : juce::String());
 }
 
 template <typename Control>

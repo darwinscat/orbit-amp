@@ -1154,6 +1154,15 @@ void panel::WordKey::timerCallback()
     repaint();
 }
 
+void panel::WordKey::setLit (bool on)
+{
+    if (lit != on)
+    {
+        lit = on;
+        repaint();
+    }
+}
+
 void panel::WordKey::enablementChanged()
 {
     setMouseCursor (isEnabled() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
@@ -1170,10 +1179,10 @@ void panel::WordKey::paint (juce::Graphics& g)
         g.setColour (violet.withAlpha (0.18f));
         g.fillRoundedRectangle (face, 5.0f);
     }
-    g.setColour (violet.withAlpha (over ? 0.9f : live ? 0.55f : 0.22f));
+    g.setColour (lit ? orange.withAlpha (over ? 1.0f : 0.85f) : violet.withAlpha (over ? 0.9f : live ? 0.55f : 0.22f));
     g.drawRoundedRectangle (face, 5.0f, 1.2f);
     write (g, said.isNotEmpty() ? said : word, getLocalBounds(), textPx,
-           said.isNotEmpty() ? orange : over ? ink : live ? dim : faint.withMultipliedAlpha (0.7f),
+           said.isNotEmpty() || lit ? orange : over ? ink : live ? dim : faint.withMultipliedAlpha (0.7f),
            juce::Justification::centred);
 }
 

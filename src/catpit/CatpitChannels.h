@@ -115,6 +115,13 @@ public:
         a player adds never lands among the factory ones, whatever it is called. */
     int factoryCabinets() const noexcept { return factory; }
 
+    /** THE CABINET, OUT OF THE SOUND ALTOGETHER — for an amp played into a real one, or into an IR
+        loaded somewhere else. One switch for all four channels, and the sound's own: a session and a
+        preset keep it, undo steps over it, INIT throws it back on. Off, each channel still remembers
+        its cabinet. */
+    bool cabinetOn() const;
+    void setCabinetOn (bool);
+
     /** THE CABINET A CHANNEL OPENS ON, until the player picks another — a channel never pulled, every
         one of them after INIT, and one whose own cabinet is not here any more: the second of the
         build's, as an index into cabinets(). The first, where there is no second; -1 with none at all. */

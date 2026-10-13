@@ -415,7 +415,7 @@ void write (juce::Graphics&, const juce::String& text, juce::Rectangle<int> area
             juce::Justification = juce::Justification::centredLeft);
 
 /** A word in a frame that does one thing when clicked, and says for a moment that it has. Disabled, it
-    stands faint and deaf. */
+    stands faint and deaf. Lit, it is a switch that is thrown: frame and word in the family's orange. */
 class WordKey final : public juce::Component,
                       private juce::Timer
 {
@@ -423,6 +423,7 @@ public:
     explicit WordKey (juce::String word);
     std::function<void()> onClick;
     void flash (const juce::String& said);
+    void setLit (bool);
 
     void paint (juce::Graphics&) override;
     void mouseEnter (const juce::MouseEvent&) override { repaint(); }
@@ -433,6 +434,7 @@ public:
 private:
     const juce::String word;
     juce::String said;
+    bool lit = false;
     void timerCallback() override;
 };
 } // namespace panel

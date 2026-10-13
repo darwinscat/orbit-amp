@@ -251,6 +251,17 @@ void Channels::chooseCabinet (int index)
         amp.chooseCabFile (irs.getReference (index));
 }
 
+bool Channels::cabinetOn() const
+{
+    return plain (params::cabOn) > 0.5f;
+}
+
+void Channels::setCabinetOn (bool on)
+{
+    if (cabinetOn() != on)
+        set (params::cabOn, on ? 1.0f : 0.0f);
+}
+
 void Channels::chooseCabinetNamed (const juce::String& stem)
 {
     for (int i = 0; i < irs.size(); ++i)

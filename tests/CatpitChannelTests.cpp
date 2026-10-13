@@ -273,6 +273,16 @@ int main()
         engine.go (0);
         engine.go (3);
         check (opensOn ("Ambience", 40.0f), "what a hand has set on a channel is kept over what it opens on");
+
+        // The cabinet out of the sound: it stays out when a window opens, and INIT brings it back.
+        channels.setCabinetOn (false);
+        engine.setUpChain (false);
+        check (! channels.cabinetOn(), "a cabinet bypassed stays bypassed when the face comes up");
+        engine.go (0);
+        check (! channels.cabinetOn(), "...and on every channel");
+        presets.init();
+        ticks();
+        check (channels.cabinetOn(), "...until INIT, which plays it again");
         ticks();
     }
 
