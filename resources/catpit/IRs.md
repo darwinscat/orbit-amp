@@ -5,7 +5,8 @@ stays in the tree.
 
 ## `01` … `12` — the Orange PPC212V
 
-One cabinet, shot twelve times in one OrbitCapture session, the SM57 moved between the takes.
+One cabinet, shot twelve times in one OrbitCapture session, the SM57 moved between the takes — and
+four of the twelve since taken again from a second shoot (below).
 
 - session: `212_20261012-2009` (OrbitCapture 0.1), recorded at 96 kHz
 - cabinet: Orange PPC212V (2x12, open, G12M-65 Creamback, no tweeter)
@@ -22,25 +23,42 @@ Three microphones stood in front of it, all on the grille and on-axis:
 - Sennheiser e906 — Cap Edge, 0 cm. The same place in every take.
 - Neumann U87 Ai — Center Cone, 2 cm. The same place in every take.
 
-Each file here is one take's MIX of the three, from the session's deliverables at 48 kHz, 4096
-samples, 24-bit mono (`Darwin's Cat - Orange PPC212V - MIX (SM57 rNN+e906+Ai).wav`).
+Each file here is one take's MIX of the three, from the deliverables at 48 kHz, 4096 samples, 24-bit
+mono (`Darwin's Cat - Orange PPC212V - MIX (SM57 rNN+e906+Ai).wav`).
 
 | file | on the plate | take | SM57 |
 |---|---|---|---|
-| `01-baryon-core.wav` | BARYON CORE | take01 | Cap Edge r10 |
+| `01-baryon-core.wav` | BARYON CORE | second shoot, `11` | Cap Edge r40 |
 | `02-dark-matter.wav` | DARK MATTER | take02 | Cap Edge r15 |
 | `03-ion-cavity.wav` | ION CAVITY | take03 | Cap Edge r20 |
 | `04-event-horizon.wav` | EVENT HORIZON | take04 | Cap Edge r25 |
 | `05-gravity-well.wav` | GRAVITY WELL | take05 | Cap Edge r30 |
 | `06-coronal-flare.wav` | CORONAL FLARE | take06 | Cap Edge r35 |
 | `07-brown-dwarf.wav` | BROWN DWARF | take07 | Cap Edge r40 |
-| `08-accretion-gap.wav` | ACCRETION GAP | take08 | Cap Edge r45 |
-| `09-dust-cloud.wav` | DUST CLOUD | take09 | Cap Edge r50 |
+| `08-accretion-gap.wav` | ACCRETION GAP | second shoot, `333` | Cap Edge r25 |
+| `09-dust-cloud.wav` | DUST CLOUD | second shoot, `444` | Cap Edge r55 |
 | `10-blue-shift.wav` | BLUE SHIFT | take10 | Cap Edge r55 |
-| `11-red-giant.wav` | RED GIANT | take11 | Cap Edge r60 |
+| `11-red-giant.wav` | RED GIANT | second shoot, `22` | Cap Edge r20 |
 | `12-pulsar-beam.wav` | PULSAR BEAM | take12 | Cap Edge r65 |
 
-### The session's report
+### The second shoot
+
+The same cabinet and the same three microphones, shot again on 2026-10-13, the SM57 at four of the
+places it stood in the first session. Four of those takes stand in the set where the first
+session's take01, take08, take09 and take11 stood — under those cabinets' names, so the name no
+longer says where the SM57 was: the table above does. None of the four is the same file as the first
+session's take at that place.
+
+| file | from |
+|---|---|
+| `01-baryon-core.wav` | `IR-OUT/11/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r40+e906+Ai).wav` |
+| `08-accretion-gap.wav` | `IR-OUT/333/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r25+e906+Ai).wav` |
+| `09-dust-cloud.wav` | `IR-OUT/444/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r55+e906+Ai).wav` |
+| `11-red-giant.wav` | `IR-OUT/22/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r20+e906+Ai).wav` |
+
+### The first session's report
+
+All twelve takes as they were shot; take01, take08, take09 and take11 are no longer in the set.
 
 | take | time | mic | location | position | dist | axis | in | peak dBFS | SNR | delay |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -88,18 +106,3 @@ The twelve cabinets the cockpit had before these, under the names the new ones n
 `19-brown-dwarf-old.wav`, `20-accretion-gap-old.wav`, `21-dust-cloud-old.wav`, `22-blue-shift-old.wav`, `23-red-giant-old.wav`, `24-pulsar-beam-old.wav`.
 48 kHz, 5000 samples, 24-bit mono. Kept behind the new twelve while the two sets are compared; the
 plate reads the mark — `BARYON CORE OLD`.
-
-## `25` … `28` — four more takes of the Orange PPC212V
-
-The same cabinet and the same three microphones, shot again on 2026-10-13; the SM57 at four of the
-places it stood in the first twelve. Each file is its take's MIX of the three, 48 kHz, 4096 samples,
-24-bit mono, like `01` … `12` — and none of them is the same file as the take at that place there.
-They stand behind the OLD twelve, in the order they were handed over, and the plate reads what the
-folder each came from was called.
-
-| file | on the plate | SM57 | from |
-|---|---|---|---|
-| `25-333.wav` | 333 | Cap Edge r25 | `IR-OUT/333/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r25+e906+Ai).wav` |
-| `26-444.wav` | 444 | Cap Edge r55 | `IR-OUT/444/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r55+e906+Ai).wav` |
-| `27-22.wav` | 22 | Cap Edge r20 | `IR-OUT/22/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r20+e906+Ai).wav` |
-| `28-11.wav` | 11 | Cap Edge r40 | `IR-OUT/11/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r40+e906+Ai).wav` |
