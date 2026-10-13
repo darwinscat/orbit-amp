@@ -115,6 +115,15 @@ public:
         a player adds never lands among the factory ones, whatever it is called. */
     int factoryCabinets() const noexcept { return factory; }
 
+    /** THE CABINET A CHANNEL OPENS ON, until the player picks another — a channel never pulled, every
+        one of them after INIT, and one whose own cabinet is not here any more: the second of the
+        build's, as an index into cabinets(). The first, where there is no second; -1 with none at all. */
+    static constexpr int defaultCabinetAt = 1;
+    int defaultCabinet() const noexcept
+    {
+        return factory > 0 ? juce::jmin (defaultCabinetAt, factory - 1) : (irs.isEmpty() ? -1 : 0);
+    }
+
     /** TAKING FILES IN — IRs themselves, folders of them, zips — into the player's own IRs folder, the
         way OrbitAmp's library takes them, and reading the cabinets again. How many cabinets that made,
         the first of them as an index into cabinets(), and the files refused, by name: an IR too big to
@@ -183,7 +192,7 @@ private:
 
     juce::String cabinetPlaying() const;                  // its file's name without the extension; empty when none of ours
     void nameCabinet (const juce::File&);                 // writes the playing cabinet's name down as that file's
-    void chooseCabinetNamed (const juce::String& stem);   // ...or the first, when that one is not here
+    void chooseCabinetNamed (const juce::String& stem);   // ...or the one a channel opens on, when that one is not here
 
     juce::ValueTree node() const;
     juce::ValueTree ensureNode();

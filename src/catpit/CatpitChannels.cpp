@@ -259,7 +259,7 @@ void Channels::chooseCabinetNamed (const juce::String& stem)
             chooseCabinet (i);
             return;
         }
-    chooseCabinet (0);      // not here any more, or never chosen: the first one (nothing, if there are none)
+    chooseCabinet (defaultCabinet());   // not here any more, or never chosen: the one a channel opens on
 }
 
 void Channels::align()
@@ -272,7 +272,7 @@ void Channels::align()
 
     if (const int playing = cabinet(); playing < 0)
     {
-        chooseCabinet (0);
+        chooseCabinet (defaultCabinet());
     }
     else if (irs.getReference (playing).getFileNameWithoutExtension() != cabinetPlaying())
     {
@@ -411,10 +411,10 @@ juce::ValueTree Channels::whole() const
                                                                 : (bool) record.getProperty (flagIds[(size_t) f], false),
                               nullptr);
 
-        // The cabinet, by name; a channel never visited would open on the first.
-        const auto first = irs.isEmpty() ? juce::String() : irs.getReference (0).getFileNameWithoutExtension();
+        // The cabinet, by name; a channel never visited would open on the one every channel opens on.
+        const auto opening = defaultCabinet() < 0 ? juce::String() : irs.getReference (defaultCabinet()).getFileNameWithoutExtension();
         full.setProperty (cabinetId, c == playing ? cabinetPlaying()
-                                                  : record.hasProperty (cabinetId) ? record[cabinetId].toString() : first,
+                                                  : record.hasProperty (cabinetId) ? record[cabinetId].toString() : opening,
                           nullptr);
         out.appendChild (full, nullptr);
     }

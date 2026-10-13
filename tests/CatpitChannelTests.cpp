@@ -256,12 +256,18 @@ int main()
         presets.init();
         ticks();
         check (channels.active() == 0 && opensOn ("Hall", 15.0f), "after INIT the first channel stands in a hall, with a little delay");
+        const int second = channels.defaultCabinet();
+        bool onIt = channels.cabinet() == second;
         engine.go (1);
         check (opensOn ("Hall", 15.0f), "...and so does the second");
+        onIt = onIt && channels.cabinet() == second;
         engine.go (2);
         check (opensOn ("Spring", 0.0f), "the third opens on a spring, and no delay");
+        onIt = onIt && channels.cabinet() == second;
         engine.go (3);
         check (opensOn ("Ambience", 0.0f), "...the fourth on an ambience, and none either");
+        onIt = onIt && channels.cabinet() == second;
+        check (second == 1 && onIt, "...and all four on the second cabinet of the build's");
 
         delay->setValueNotifyingHost (delay->convertTo0to1 (40.0f));
         engine.go (0);
