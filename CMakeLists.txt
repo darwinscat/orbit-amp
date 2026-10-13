@@ -556,7 +556,9 @@ juce_add_plugin(CatpitAmp
     BUNDLE_ID                   "com.darwinscat.catpitamp"
     PLUGIN_MANUFACTURER_CODE    Dcat
     PLUGIN_CODE                 Ctpt
-    FORMATS                     Standalone
+    FORMATS                     VST3 AU Standalone
+    VST3_CATEGORIES             "Fx" "Distortion"
+    AU_MAIN_TYPE                "kAudioUnitType_Effect"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE
     NEEDS_MIDI_OUTPUT           FALSE
@@ -566,7 +568,20 @@ juce_add_plugin(CatpitAmp
     MICROPHONE_PERMISSION_TEXT  "CatpitAmp needs audio input to process your signal."
     # Bundle / executable icon — the cockpit's mark; see CATPITAMP_ICON. No ICON_SMALL, as OrbitAmp.
     ICON_BIG                    "${CATPITAMP_ICON}"
-    COPY_PLUGIN_AFTER_BUILD     FALSE)
+    COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
+
+# ...and as a CLAP, wrapped the way OrbitAmp's is, wearing the cockpit's icon in place of the
+# wrapper's own.
+clap_juce_extensions_plugin(TARGET CatpitAmp
+    CLAP_ID       "com.darwinscat.catpitamp"
+    CLAP_FEATURES audio-effect "guitar" "amplifier")
+if(APPLE)
+    add_custom_command(TARGET CatpitAmp_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:CatpitAmp,JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:CatpitAmp_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
 
 target_sources(CatpitAmp PRIVATE
     src/PluginProcessor.cpp
@@ -616,28 +631,40 @@ target_link_libraries(CatpitAmp PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
-# THE COCKPIT'S OWN SET rides in its bundle the way OrbitAmp's factory devices ride in OrbitAmp's:
+# Every format the cockpit is built as on this platform — AU on the Mac alone.
+set(CATPITAMP_FORMATS "")
+foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
+    if(TARGET CatpitAmp_${fmt})
+        list(APPEND CATPITAMP_FORMATS CatpitAmp_${fmt})
+    endif()
+endforeach()
+
+# THE COCKPIT'S OWN SET rides in its bundles the way OrbitAmp's factory devices ride in OrbitAmp's:
 # whatever sits in resources/catpit/Devices (packs named after the channels — Clean, Edge, Crunch,
 # Hi-Gain) and resources/catpit/IRs (the cabinets CAB steps through, in the order of their names)
-# at CONFIGURE time. Absent or empty, the bundle ships without, and the cockpit plays what the player
+# at CONFIGURE time. Absent or empty, the bundles ship without, and the cockpit plays what the player
 # puts in its own Devices and IRs folders. It reads nothing of OrbitAmp's.
 foreach(kind IN ITEMS Devices IRs)
     file(GLOB CATPITAMP_SET "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}/*")
     if(CATPITAMP_SET)
-        juce_add_bundle_resources_directory(CatpitAmp_Standalone
-            "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}")
+        foreach(format IN LISTS CATPITAMP_FORMATS)
+            juce_add_bundle_resources_directory(${format}
+                "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}")
+        endforeach()
         list(LENGTH CATPITAMP_SET CATPITAMP_SET_COUNT)
-        message(STATUS "CatpitAmp ${kind}: ${CATPITAMP_SET_COUNT} ride in the bundle")
+        message(STATUS "CatpitAmp ${kind}: ${CATPITAMP_SET_COUNT} ride in the bundles")
     else()
-        message(STATUS "CatpitAmp ${kind}: resources/catpit/${kind}/ is empty or absent — the bundle ships without")
+        message(STATUS "CatpitAmp ${kind}: resources/catpit/${kind}/ is empty or absent — the bundles ship without")
     endif()
 endforeach()
 
 # Not part of the default build. The two products are released apart, and OrbitAmp's own build — a
 # contributor's, a pull request's, a release's — must never fail on the cockpit. Whoever wants the
-# cockpit asks for it by name: `cmake --build build --target CatpitAmp_Standalone`, as its release
-# workflow and the pull-request build both do.
-set_target_properties(CatpitAmp CatpitAmp_Standalone CatpitAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+# cockpit asks for it by name: one format (`cmake --build build --target CatpitAmp_Standalone`), or
+# all of them — `--target CatpitAmp_All`, which the CLAP joins here, since its wrapper does not add
+# itself.
+set_target_properties(CatpitAmp ${CATPITAMP_FORMATS} CatpitAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(CatpitAmp_All CatpitAmp_CLAP)
 
 # The cockpit's memory probe — not a gate, a measuring instrument: what the cockpit holds with its
 # window built, and with it SHUT, which is the figure that matters in a host and the one the
