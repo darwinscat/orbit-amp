@@ -132,7 +132,8 @@ public:
     /** All four channels written out in full, as a tree of their own: the playing one from the live
         controls, the others from their records, a channel never visited from its defaults. Two states
         that would sound the same on every detent give the same tree — which the node itself does not,
-        since the playing channel's record there is stale and an unvisited one is missing. */
+        since the playing channel's record there is stale and an unvisited one is missing. TURBO is in
+        as on or off: a channel kept under one push is the same channel under another. */
     juce::ValueTree whole() const;
 
 private:

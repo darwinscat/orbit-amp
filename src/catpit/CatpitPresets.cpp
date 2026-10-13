@@ -70,6 +70,7 @@ bool Presets::changed() const
     give the same one, so what is left out matters as much as what is in:
       - INPUT, which no preset holds;
       - how DRIVE goes between the captures, which the settings say;
+      - how hard TURBO pushes, which they say too: that it is on is in, with its channel;
       - the device NUMBERS, which are places in a list that belongs to this machine today — the names
         beside them are the identity, and they are in;
       - the cockpit's node as it lies in the tree, replaced by the four channels written out in full:
@@ -82,6 +83,7 @@ juce::String Presets::sound() const
     setInTree (tree, params::inTrim, 0.0f);
     tree.removeProperty (Channels::leverZeroId, nullptr);      // ...nor the zero INPUT was dialled against
     setInTree (tree, params::blockSmooth (params::preampId), 1.0f);    // ...nor DRIVE's way: as every state had it before there was a choice
+    setInTree (tree, params::blockIn (params::preampId), 0.0f);        // ...nor TURBO's push: Channels::whole says on or off
     setInTree (tree, params::preampDevice, 0.0f);
     setInTree (tree, params::boostDevice, 0.0f);
 

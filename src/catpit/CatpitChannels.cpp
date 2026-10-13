@@ -280,9 +280,13 @@ juce::ValueTree Channels::whole() const
         juce::ValueTree full (recordId);
         full.setProperty (indexId, c, nullptr);
         for (const auto& id : kept)
-            full.setProperty (id, c == playing ? plain (id)
-                                               : settled (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id)),
-                              nullptr);
+        {
+            const float value = c == playing ? plain (id)
+                                             : record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id);
+
+            // TURBO as on or off: how hard it pushes is the settings' to say, not the channel's.
+            full.setProperty (id, id == params::blockIn (params::preampId) ? (value > turboOnAbove ? 1.0f : 0.0f) : value, nullptr);
+        }
         for (int f = 0; f < numFlags; ++f)
             full.setProperty (flagIds[(size_t) f], c == playing ? flag ((Flag) f)
                                                                 : (bool) record.getProperty (flagIds[(size_t) f], false),
