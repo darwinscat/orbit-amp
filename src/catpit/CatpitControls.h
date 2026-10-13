@@ -64,6 +64,7 @@ public:
 
     std::function<void()>      onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;          // 0..1
+    std::function<void()>      onMenu;             // a right click, when set — and then it does not turn the knob
 
     void  setValue (float v, bool notify);
     float getValue() const noexcept { return value; }
@@ -83,6 +84,7 @@ private:
     Pointer ptr;
     float value = 0.5f, dragStartValue = 0.0f;
     int   dragStartY = 0;
+    bool  turning = false;
 };
 
 //==============================================================================

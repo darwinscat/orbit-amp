@@ -242,6 +242,11 @@ private:
     void chooseTurbo (int db);
     void chooseDriveSteps (bool steps);
 
+    // In steps, a right click on DRIVE offers the capture it stands on as a `.nam`.
+    std::unique_ptr<juce::FileChooser> captureChooser;
+    void showDriveMenu();
+    void saveCapture();
+
     // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
     // for INPUT count from the lever's zero, so the middle of the travel reads 0.
     void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);

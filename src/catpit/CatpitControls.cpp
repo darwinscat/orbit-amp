@@ -102,6 +102,12 @@ void ArtKnob::paint (juce::Graphics& g)
 
 void ArtKnob::mouseDown (const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu() && onMenu)
+    {
+        onMenu();
+        return;
+    }
+    turning = true;
     dragStartValue = value;
     dragStartY = e.getScreenY();
     if (onGestureStart) onGestureStart();
@@ -109,12 +115,17 @@ void ArtKnob::mouseDown (const juce::MouseEvent& e)
 
 void ArtKnob::mouseDrag (const juce::MouseEvent& e)
 {
+    if (! turning)
+        return;
     const float pixelsForFullTurn = e.mods.isShiftDown() ? 1400.0f : 280.0f;
     setValue (dragStartValue + (float) (dragStartY - e.getScreenY()) / pixelsForFullTurn, true);
 }
 
 void ArtKnob::mouseUp (const juce::MouseEvent&)
 {
+    if (! turning)
+        return;
+    turning = false;
     if (onGestureEnd) onGestureEnd();
 }
 

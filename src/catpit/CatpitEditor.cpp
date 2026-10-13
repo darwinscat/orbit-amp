@@ -129,6 +129,9 @@ namespace
     // How DRIVE goes between the pack's captures — see CatpitEditor.h. Kept with the machine's settings.
     const juce::Identifier driveStepsKey { "drive_steps" };
 
+    // Where a capture was last saved to (saveCapture): the next one is offered the same folder.
+    const juce::Identifier captureFolderKey { "capture_folder" };
+
     const juce::Identifier windowKey { "window" };
     const juce::StringArray starsWords { "opengl", "cpu", "off" };
 
@@ -674,6 +677,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     // What has an obvious home in the engine is wired to it; the rest only moves for now.
     bind (drive, params::preampGain);
+    drive.onMenu = [this] { showDriveMenu(); };
     bind (*sliders[0], params::reverbMix);
     bind (*sliders[1], params::delayMix);
     bind (outFader, params::outTrim);
@@ -911,6 +915,60 @@ void CatpitEditor::chooseDriveSteps (bool steps)
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     settleOnSettings();
+}
+
+/** IN STEPS, DRIVE STANDS ON ONE CAPTURE OF THE PACK, and a right click on it offers that capture as a
+    `.nam` — the model alone, as it was shot, for whatever else plays one. Turning smoothly it stands
+    between two, and there is no one file to give: no menu either. */
+void CatpitEditor::showDriveMenu()
+{
+    if (! driveSteps)
+        return;
+
+    endTapping();
+
+    juce::PopupMenu::Item item ("Save the current sound as .nam...");
+    item.itemID = 1;
+    item.colour = lilac;
+    item.action = [safe = juce::Component::SafePointer<CatpitEditor> (this)]
+    {
+        if (safe != nullptr)     // the action is posted: the window may be gone by the time it runs
+            safe->saveCapture();
+    };
+
+    juce::PopupMenu menu;
+    menu.addItem (std::move (item));
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+void CatpitEditor::saveCapture()
+{
+    auto capture = amp.preamp.captureOnDial();
+    if (capture.nam.isEmpty())
+        return;
+
+    auto folder = juce::File (prefs::store().get (captureFolderKey, juce::String()).toString());
+    if (! folder.isDirectory())
+        folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+
+    captureChooser = std::make_unique<juce::FileChooser> ("Save the capture", folder.getChildFile (capture.name + ".nam"), "*.nam");
+    captureChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                                     | juce::FileBrowserComponent::warnAboutOverwriting,
+                                 [nam = std::move (capture.nam)] (const juce::FileChooser& picked)
+                                 {
+                                     const auto file = picked.getResult();
+                                     if (file == juce::File())
+                                         return;
+
+                                     prefs::store().set (captureFolderKey, file.getParentDirectory().getFullPathName());
+                                     if (! file.replaceWithData (nam.getData(), nam.getSize()))
+                                         juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                                                           .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                                                           .withTitle ("Not saved")
+                                                                           .withMessage (file.getFullPathName())
+                                                                           .withButton ("OK"),
+                                                                       nullptr);
+                                 });
 }
 
 void CatpitEditor::timerCallback()

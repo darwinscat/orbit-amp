@@ -98,9 +98,7 @@ public:
     {
         lastSelected = index;
 
-        const auto* pack = juce::isPositiveAndBelow (index, packs.size())
-                             ? &packs.getReference (index)
-                             : (packs.isEmpty() ? nullptr : &packs.getReference (0));
+        const auto* pack = packAt (index);
 
         if (pack == nullptr)
         {
@@ -571,6 +569,43 @@ public:
 
     juce::String dialName() const { return juce::String (player.dialName()); }
 
+    /** THE CAPTURE THE DIAL STANDS ON, AS A FILE: its name in the pack and its bytes as a plain `.nam`,
+        whatever the pack keeps it as. In STEP that is the one capture playing; in SMOOTH, the nearer
+        of the two the player is mixing. Nothing when no pack is loaded, the dial picks no file, or
+        the file will not be read. Message thread — it opens the pack. */
+    struct CaptureFile
+    {
+        juce::String      name;     // the file's name in the pack, without its extension
+        juce::MemoryBlock nam;      // the model, as NAM JSON
+    };
+
+    CaptureFile captureOnDial() const
+    {
+        const auto* pack = packAt (lastSelected);
+        if (pack == nullptr || ! player.loaded())
+            return {};
+
+        const auto& plan  = player.plan();
+        const auto& files = player.stage().device.files;
+        const int   file  = plan.file[plan.targetB > 0.5 ? 1 : 0];
+        if (! juce::isPositiveAndBelow (file, (int) files.size()))
+            return {};
+
+        const juce::String id (files[(size_t) file].id);
+        auto bytes = device::DeviceLibrary::readBinaryEntry (*pack, id);
+
+        if (namz::isNamz (bytes.getData(), bytes.getSize()))
+        {
+            const auto json = namz::unpack (bytes.getData(), bytes.getSize(), maxNamBytes);
+            bytes.replaceAll (json.data(), json.size());    // nothing, when it would not unpack
+        }
+
+        if (bytes.isEmpty())
+            return {};
+
+        return { juce::File::createLegalFileName (id).upToLastOccurrenceOf (".", false, false), bytes };
+    }
+
     juce::String circuit() const
     {
         const auto* s = nam();
@@ -701,7 +736,17 @@ private:
     // breaking up to thoroughly into it without leaving the range a model behaves in.
     static constexpr float driveDbPerStep = 4.0f;
 
+    // What a capture may unpack to — the player's own guard (NamStage) against a file that lies about its size.
+    static constexpr size_t maxNamBytes = 64u * 1024u * 1024u;
+
     const namz::rig::Stage* nam() const { return player.loaded() ? &player.stage() : nullptr; }
+
+    /** The pack an index stands for: when it points nowhere the first one, as `select` plays it. */
+    const device::DeviceLibrary::Pack* packAt (int index) const
+    {
+        return juce::isPositiveAndBelow (index, packs.size()) ? &packs.getReference (index)
+                                                              : (packs.isEmpty() ? nullptr : &packs.getReference (0));
+    }
 
     /** SMOOTH is the player's own law — the midpoint handover, the full span. STEP is that law with
         no width at all: a hard switch halfway between two captures, which the dial never visits
