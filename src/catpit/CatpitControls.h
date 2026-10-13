@@ -377,15 +377,20 @@ private:
 //==============================================================================
 /** The tuner's screen: the note big on the left, a cents ruler on the right with the needle on it —
     green when the string is home, warming to orange by 25 cents out. Reads the processor's ear on its
-    own 30 Hz clock; the ear only listens while a face is open and the tuner is in the chain. */
+    own 30 Hz clock; the ear only listens while a face is open and the tuner is in the chain.
+
+    Two things it is told and writes in its corner, since each is a silence that wants a reason: OFF —
+    it is not listening, and shows no note — and MUTE: it listens, and the amp is silent while it does. */
 class TunerFace final : public juce::Component, private juce::Timer
 {
 public:
     explicit TunerFace (const core::TunerEar&);
+    void setState (bool listening, bool muting);
     void paint (juce::Graphics&) override;
 
 private:
     const core::TunerEar& ear;
+    bool listening = true, muting = false;
     void timerCallback() override { repaint(); }
 };
 

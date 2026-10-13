@@ -138,8 +138,9 @@ void Engine::setParam (const juce::String& paramId, float value)
 
 void Engine::setUpChain (bool firstTime)
 {
-    setParam (params::tunerPresent,  1.0f);   // the tuner bay is always there, and always listening
-    setParam (params::tunerOn,       1.0f);
+    setParam (params::tunerPresent,  1.0f);   // the tuner bay is always there...
+    if (firstTime)                            // ...and listening, until the player switches it off
+        setParam (params::tunerOn,   1.0f);
     setParam (params::gatePresent,   1.0f);   // the gate stands in the chain; whether it works is the settings' ON
     setParam (params::inPresent,     1.0f);   // the INPUT and OUTPUT faders are these links' trims
     setParam (params::inOn,          1.0f);

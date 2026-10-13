@@ -1035,16 +1035,34 @@ TunerFace::TunerFace (const core::TunerEar& e) : ear (e)
     startTimerHz (30);
 }
 
+void TunerFace::setState (bool isListening, bool isMuting)
+{
+    if (listening == isListening && muting == isMuting)
+        return;
+    listening = isListening;
+    muting    = isMuting;
+    repaint();
+}
+
 void TunerFace::paint (juce::Graphics& g)
 {
     const juce::Colour home { 0xff5fc97a };   // the family's in-tune green
 
     auto area = getLocalBounds().toFloat().reduced (18.0f, 10.0f);
-    const bool live = ear.live();
+    const bool live = listening && ear.live();      // switched off, the ear keeps the last note it heard
     const auto note = ear.nearestNote();
 
     // The note: name big, octave small beside it; a dash while nothing is heard.
     auto noteArea = area.removeFromLeft (96.0f);
+
+    // Its state, in the corner under the note and on the numbers' line: off, or muting the amp.
+    if (! listening || muting)
+    {
+        g.setColour (listening ? orange : lilac.withAlpha (0.8f));
+        g.setFont (labelFont (layout::px13));
+        g.drawText (listening ? "MUTE" : "OFF", noteArea.withTop (noteArea.getBottom() - 24.0f),
+                    juce::Justification::centredLeft, false);
+    }
     if (live)
     {
         const auto name = juce::String (core::PitchTracker::noteName (note.midi));

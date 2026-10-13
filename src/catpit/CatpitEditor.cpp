@@ -727,6 +727,11 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     outFader.onMenu = [this] { showOutputMenu(); };
 
+    // The tuner's two switches are read here and thrown from its menu (showTunerMenu).
+    follow (params::tunerOn,   [this] (float) { showTunerState(); });
+    follow (params::tunerMute, [this] (float) { showTunerState(); });
+    showTunerState();
+
     sayLever (inFader,  "INPUT",  [this] { return getParam (params::inTrim) - (float) leverZero; });
     sayLever (outFader, "OUTPUT", [this] { return getParam (params::outTrim); });
 
@@ -1034,6 +1039,30 @@ void CatpitEditor::showTurboMenu()
         addChoice (menu, decibels (db), db == now, [db] (CatpitEditor& e) { e.chooseTurbo (db); });
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+/** A RIGHT CLICK ON THE TUNER: whether it listens at all, and whether the amp is silent while it does —
+    the way a tuner pedal mutes the rig. Off, it does neither. Both are the sound's own switches, the
+    same two the engine has always had; the glass says which is thrown. */
+void CatpitEditor::showTunerMenu()
+{
+    endTapping();
+
+    const bool on    = getParam (params::tunerOn) > 0.5f;
+    const bool muted = getParam (params::tunerMute) > 0.5f;
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("TUNER");
+    addChoice (menu, "On", on, [on] (CatpitEditor& e) { e.setParam (params::tunerOn, on ? 0.0f : 1.0f); });
+    addChoice (menu, "Mute the amp", muted, [muted] (CatpitEditor& e) { e.setParam (params::tunerMute, muted ? 0.0f : 1.0f); }, on);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+void CatpitEditor::showTunerState()
+{
+    const bool on = getParam (params::tunerOn) > 0.5f;
+    tuner.setState (on, on && getParam (params::tunerMute) > 0.5f);
 }
 
 /** A RIGHT CLICK ON DRIVE: how it goes between the pack's captures — the setting the settings menu
@@ -1549,6 +1578,8 @@ void CatpitEditor::mouseDown (const juce::MouseEvent& e)
         showInputMenu();
     else if (outMeter.getBounds().contains (at))
         showOutputMenu();
+    else if (tuner.getBounds().contains (at))
+        showTunerMenu();
     else
         showSettingsMenu();
 }

@@ -260,6 +260,8 @@ private:
     void showInputMenu();           // the INPUT column: the lever's zero
     void showOutputMenu();          // the OUTPUT column: the limiter, and where its ceiling is
     void showTurboMenu();           // TURBO: how hard it pushes
+    void showTunerMenu();           // the tuner: whether it listens, and whether the amp is silent meanwhile
+    void showTunerState();          // ...both written on its glass
 
     // A right click on DRIVE picks between the two ways, and offers a capture as a `.nam`: in steps the
     // one it stands on, turning smoothly the nearer of the two it stands between.
