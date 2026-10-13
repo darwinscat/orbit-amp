@@ -729,7 +729,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     showChannel();
 
-    // The mark lights under the pointer and leads to the maker's site.
+    // The mark lights under the pointer and leads to the cockpit's own page on the maker's site.
     stage.addAndMakeVisible (emblem);
     {
         juce::Path face;
@@ -738,7 +738,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
             face.lineTo (emblemFace[i]);
         emblem.setBounds (face.getBounds().getSmallestIntegerContainer());
     }
-    emblem.onClick = [] { juce::URL (juce::String ("https://darwinscat.com?") + campaign).launchInDefaultBrowser(); };
+    emblem.onClick = [] { juce::URL (juce::String ("https://darwinscat.com/felitronics/catpitamp?") + campaign).launchInDefaultBrowser(); };
 
     // The version, and behind it the window with everything else about the build. That window is
     // hung on THIS editor rather than on the top-level window: the sky's GL surface lies over everything
