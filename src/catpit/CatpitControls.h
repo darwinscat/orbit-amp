@@ -383,4 +383,45 @@ private:
     void timerCallback() override { repaint(); }
 };
 
+//==============================================================================
+/** WHAT THE WINDOWS INSIDE THE COCKPIT ARE WRITTEN WITH — the MIDI window, the cabinets' — so that they
+    read as one hand's: the type, its three weights of ink, and a word in a frame that does one thing
+    when clicked. All in the editor's own pixels: a Sheet's content is not on the scaled stage. */
+namespace panel
+{
+inline constexpr float textPx = 13.0f, tracking = 0.08f;
+
+inline const juce::Colour ink   { 0xffece9f6 };
+inline const juce::Colour dim   = juce::Colour (0xffc9b8f5).withAlpha (0.85f);
+inline const juce::Colour faint = juce::Colour (0xffc9b8f5).withAlpha (0.45f);
+
+juce::Font textFont (float px);
+
+/** A line of the panel's type, in capitals. */
+void write (juce::Graphics&, const juce::String& text, juce::Rectangle<int> area, float px, juce::Colour,
+            juce::Justification = juce::Justification::centredLeft);
+
+/** A word in a frame that does one thing when clicked, and says for a moment that it has. Disabled, it
+    stands faint and deaf. */
+class WordKey final : public juce::Component,
+                      private juce::Timer
+{
+public:
+    explicit WordKey (juce::String word);
+    std::function<void()> onClick;
+    void flash (const juce::String& said);
+
+    void paint (juce::Graphics&) override;
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); }
+    void mouseUp (const juce::MouseEvent&) override;
+    void enablementChanged() override;
+
+private:
+    const juce::String word;
+    juce::String said;
+    void timerCallback() override;
+};
+} // namespace panel
+
 } // namespace orbitamp::catpit

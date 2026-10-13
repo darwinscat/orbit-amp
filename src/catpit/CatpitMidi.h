@@ -51,26 +51,6 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
-    /** A word in a frame that does one thing when clicked, and says for a moment that it has. */
-    class WordKey final : public juce::Component,
-                          private juce::Timer
-    {
-    public:
-        explicit WordKey (juce::String word);
-        std::function<void()> onClick;
-        void flash (const juce::String& said);
-
-        void paint (juce::Graphics&) override;
-        void mouseEnter (const juce::MouseEvent&) override { repaint(); }
-        void mouseExit (const juce::MouseEvent&) override  { repaint(); }
-        void mouseUp (const juce::MouseEvent&) override;
-
-    private:
-        const juce::String word;
-        juce::String said;
-        void timerCallback() override;
-    };
-
     // The inputs.
     juce::Array<juce::MidiDeviceInfo> inputs;
     juce::Array<bool> listening;
@@ -98,7 +78,7 @@ private:
     void layOutCommands();
     int commandsLeft() const;           // where the commands' column begins
 
-    WordKey copy { "Copy" }, save { "Save" };
+    panel::WordKey copy { "Copy" }, save { "Save" };
     std::unique_ptr<juce::FileChooser> chooser;
     void saveCommands();
 };

@@ -18,64 +18,9 @@ namespace
     constexpr int inputsW = 320, commandsW = 400, pad = 16, titleH = 34, rowH = 30, gap = 14, lineH = 20;
     constexpr int commandsTop = 6;      // so the commands' first line reads level with the inputs' title
     constexpr int keyW = 86, keyH = 28, tabStop = 44;
-    constexpr float textPx = 13.0f, tracking = 0.08f;
-
-    const juce::Colour ink   { 0xffece9f6 };
-    const juce::Colour dim   = juce::Colour (0xffc9b8f5).withAlpha (0.85f);
-    const juce::Colour faint = juce::Colour (0xffc9b8f5).withAlpha (0.45f);
 
     using standalone::devices;
-
-    juce::Font textFont (float px) { return labelFont (px).withExtraKerningFactor (tracking); }
-
-    void write (juce::Graphics& g, const juce::String& text, juce::Rectangle<int> area, float px, juce::Colour colour,
-                juce::Justification where = juce::Justification::centredLeft)
-    {
-        g.setColour (colour);
-        g.setFont (textFont (px));
-        g.drawText (text.toUpperCase(), area, where, true);
-    }
-}
-
-//==============================================================================
-MidiPanel::WordKey::WordKey (juce::String w) : word (std::move (w))
-{
-    setMouseCursor (juce::MouseCursor::PointingHandCursor);
-}
-
-void MidiPanel::WordKey::flash (const juce::String& text)
-{
-    said = text;
-    startTimer (1400);
-    repaint();
-}
-
-void MidiPanel::WordKey::timerCallback()
-{
-    stopTimer();
-    said.clear();
-    repaint();
-}
-
-void MidiPanel::WordKey::paint (juce::Graphics& g)
-{
-    const auto face = getLocalBounds().toFloat().reduced (0.6f);
-    const bool over = isMouseOver();
-    if (over)
-    {
-        g.setColour (violet.withAlpha (0.18f));
-        g.fillRoundedRectangle (face, 5.0f);
-    }
-    g.setColour (violet.withAlpha (over ? 0.9f : 0.55f));
-    g.drawRoundedRectangle (face, 5.0f, 1.2f);
-    write (g, said.isNotEmpty() ? said : word, getLocalBounds(), textPx, said.isNotEmpty() ? orange : (over ? ink : dim),
-           juce::Justification::centred);
-}
-
-void MidiPanel::WordKey::mouseUp (const juce::MouseEvent& e)
-{
-    if (getLocalBounds().contains (e.getPosition()) && onClick)
-        onClick();
+    using panel::textPx, panel::ink, panel::dim, panel::faint, panel::textFont, panel::write;
 }
 
 //==============================================================================

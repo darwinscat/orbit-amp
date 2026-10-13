@@ -1085,4 +1085,63 @@ void TunerFace::paint (juce::Graphics& g)
     }
 }
 
+//==============================================================================
+juce::Font panel::textFont (float px) { return labelFont (px).withExtraKerningFactor (tracking); }
+
+void panel::write (juce::Graphics& g, const juce::String& text, juce::Rectangle<int> area, float px, juce::Colour colour,
+                   juce::Justification where)
+{
+    g.setColour (colour);
+    g.setFont (textFont (px));
+    g.drawText (text.toUpperCase(), area, where, true);
+}
+
+panel::WordKey::WordKey (juce::String w) : word (std::move (w))
+{
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+void panel::WordKey::flash (const juce::String& text)
+{
+    said = text;
+    startTimer (1400);
+    repaint();
+}
+
+void panel::WordKey::timerCallback()
+{
+    stopTimer();
+    said.clear();
+    repaint();
+}
+
+void panel::WordKey::enablementChanged()
+{
+    setMouseCursor (isEnabled() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    repaint();
+}
+
+void panel::WordKey::paint (juce::Graphics& g)
+{
+    const auto face = getLocalBounds().toFloat().reduced (0.6f);
+    const bool live = isEnabled();
+    const bool over = live && isMouseOver();
+    if (over)
+    {
+        g.setColour (violet.withAlpha (0.18f));
+        g.fillRoundedRectangle (face, 5.0f);
+    }
+    g.setColour (violet.withAlpha (over ? 0.9f : live ? 0.55f : 0.22f));
+    g.drawRoundedRectangle (face, 5.0f, 1.2f);
+    write (g, said.isNotEmpty() ? said : word, getLocalBounds(), textPx,
+           said.isNotEmpty() ? orange : over ? ink : live ? dim : faint.withMultipliedAlpha (0.7f),
+           juce::Justification::centred);
+}
+
+void panel::WordKey::mouseUp (const juce::MouseEvent& e)
+{
+    if (isEnabled() && getLocalBounds().contains (e.getPosition()) && onClick)
+        onClick();
+}
+
 } // namespace orbitamp::catpit
