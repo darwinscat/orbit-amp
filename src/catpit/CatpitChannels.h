@@ -113,6 +113,9 @@ public:
     /** A cabinet's name as the panel says it: the file's, without its leading number. */
     static juce::String cabinetName (const juce::File&);
 
+    /** ...and as a file would carry it: the same, with the file's own dashes and no extension. */
+    static juce::String cabinetStem (const juce::File&);
+
     /** True when the cabinet that is playing wears the name of one of the cockpit's and is not that
         file: a state carries its cabinet's bytes, and one saved before the file was replaced under its
         name would go on sounding the old one, under a plate that names the new. align() cures it. */

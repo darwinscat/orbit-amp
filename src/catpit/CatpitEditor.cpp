@@ -119,6 +119,11 @@ namespace
     const juce::Identifier driveStepsKey { "drive_steps" };
     const juce::StringArray driveWays { "Smoothly", "In steps" };
 
+    // WHAT THE COCKPIT HANDS OUT SAYS WHERE IT CAME FROM: a capture and a cabinet saved from it are
+    // offered a name that starts with the cockpit's own and with what kind of file it is.
+    constexpr const char* captureNamePrefix = "CatpitAmp-NamA2-";
+    constexpr const char* cabNamePrefix     = "CatpitAmp-IR-";
+
     // Where a capture was last saved to (saveCapture): the next one is offered the same folder.
     const juce::Identifier captureFolderKey { "capture_folder" };
 
@@ -987,7 +992,7 @@ void CatpitEditor::saveCapture()
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
-    captureChooser = std::make_unique<juce::FileChooser> ("Save the capture", folder.getChildFile (capture.name + ".nam"), "*.nam");
+    captureChooser = std::make_unique<juce::FileChooser> ("Save the capture", folder.getChildFile (captureNamePrefix + capture.name + ".nam"), "*.nam");
     captureChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                                      | juce::FileBrowserComponent::warnAboutOverwriting,
                                  [nam = std::move (capture.nam)] (const juce::FileChooser& picked)
@@ -1003,8 +1008,8 @@ void CatpitEditor::saveCapture()
 }
 
 /** A RIGHT CLICK ON CAB — the slider, or the name over it — offers the cabinet that is playing as a
-    file: the IR as it is, under the name it has here, for whatever else loads one. A sound whose
-    cabinet is none of the cockpit's has no file to give, and no menu. */
+    file: the IR as it is, under the name it has here without the number that orders it, for whatever
+    else loads one. A sound whose cabinet is none of the cockpit's has no file to give, and no menu. */
 void CatpitEditor::showCabMenu()
 {
     const int playing = channels.cabinet();
@@ -1038,7 +1043,8 @@ void CatpitEditor::saveCab()
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
-    cabChooser = std::make_unique<juce::FileChooser> ("Save the cabinet", folder.getChildFile (cabinet.getFileName()),
+    cabChooser = std::make_unique<juce::FileChooser> ("Save the cabinet",
+                                                      folder.getChildFile (cabNamePrefix + Channels::cabinetStem (cabinet) + cabinet.getFileExtension()),
                                                       "*" + cabinet.getFileExtension());
     cabChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                                  | juce::FileBrowserComponent::warnAboutOverwriting,

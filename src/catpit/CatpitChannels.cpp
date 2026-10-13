@@ -90,16 +90,22 @@ void Channels::readCabinets()
     });
 }
 
-juce::String Channels::cabinetName (const juce::File& file)
+juce::String Channels::cabinetStem (const juce::File& file)
 {
-    // "03-big-bubba.wav" reads BIG BUBBA: the number is for the order, the dashes for the file system.
+    // "03-big-bubba.wav" is big-bubba: the number is for the order.
     auto name = file.getFileNameWithoutExtension();
     int digits = 0;
     while (digits < name.length() && juce::CharacterFunctions::isDigit (name[digits]))
         ++digits;
     if (digits > 0 && digits < name.length())
         name = name.substring (digits).trimCharactersAtStart ("-_. ");
-    return name.replaceCharacters ("-_", "  ").trim();
+    return name;
+}
+
+juce::String Channels::cabinetName (const juce::File& file)
+{
+    // ...and reads BIG BUBBA: the dashes are for the file system.
+    return cabinetStem (file).replaceCharacters ("-_", "  ").trim();
 }
 
 juce::String Channels::cabinetPlaying() const
