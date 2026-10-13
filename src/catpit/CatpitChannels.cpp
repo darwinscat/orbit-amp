@@ -74,7 +74,14 @@ Channels::Channels (AmpProcessor& p) : amp (p)
     kept.add (params::delayMix);
     kept.add (params::delayDiv);        // the note value; the tempo it is counted in is the song's, not a channel's
 
+    readCabinets();
+}
+
+void Channels::readCabinets()
+{
     // The cabinets: a channel keeps its own too, but by NAME — a cabinet is a file, not a parameter.
+    irs.clearQuick();
+    irKeys.clear();
     addCabinets (bundledCabinets(), irs);
     addCabinets (device::IrLibrary::directory(), irs);
     std::sort (irs.begin(), irs.end(), [] (const juce::File& x, const juce::File& y)

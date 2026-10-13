@@ -583,7 +583,9 @@ if(APPLE)
         VERBATIM)
 endif()
 
-target_sources(CatpitAmp PRIVATE
+# What the cockpit is made of — said once, for the plug-in and for the two programs further down that
+# are the cockpit compiled again under a main() of their own.
+set(CATPITAMP_SOURCES
     src/PluginProcessor.cpp
     src/Parameters.cpp
     src/ui/Theme.cpp
@@ -591,6 +593,7 @@ target_sources(CatpitAmp PRIVATE
     src/catpit/CatpitArt.cpp
     src/catpit/CatpitChannels.cpp
     src/catpit/CatpitControls.cpp
+    src/catpit/CatpitEngine.cpp
     src/catpit/CatpitMidi.cpp
     src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitPresets.cpp
@@ -599,19 +602,7 @@ target_sources(CatpitAmp PRIVATE
     src/catpit/CatpitStandalone.cpp
     src/catpit/CatpitGlSky.cpp
     src/catpit/CatpitEditor.cpp)
-
-target_compile_definitions(CatpitAmp PUBLIC
-    ORBITAMP_VERSION="${CATPITAMP_VERSION}"
-    ORBITAMP_PRODUCT_NAME="CatpitAmp"
-    ORBITAMP_RELEASE_TAG_PREFIX="catpit-"
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_DISPLAY_SPLASH_SCREEN=0)
-target_include_directories(CatpitAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")
-add_dependencies(CatpitAmp OrbitAmpVersionGen)
-
-target_link_libraries(CatpitAmp PRIVATE
+set(CATPITAMP_LIBRARIES
     OrbitAmpData
     CatpitAmpData
     felitronics::analysis
@@ -631,6 +622,21 @@ target_link_libraries(CatpitAmp PRIVATE
     juce::juce_opengl                # the sky, on the GPU
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
+
+target_sources(CatpitAmp PRIVATE ${CATPITAMP_SOURCES})
+
+target_compile_definitions(CatpitAmp PUBLIC
+    ORBITAMP_VERSION="${CATPITAMP_VERSION}"
+    ORBITAMP_PRODUCT_NAME="CatpitAmp"
+    ORBITAMP_RELEASE_TAG_PREFIX="catpit-"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0)
+target_include_directories(CatpitAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(CatpitAmp OrbitAmpVersionGen)
+
+target_link_libraries(CatpitAmp PRIVATE ${CATPITAMP_LIBRARIES})
 
 # Every format the cockpit is built as on this platform — AU on the Mac alone.
 set(CATPITAMP_FORMATS "")
@@ -684,54 +690,26 @@ add_dependencies(CatpitAmp_All CatpitAmp_CLAP)
 # window built, and with it SHUT, which is the figure that matters in a host and the one the
 # standalone cannot give. It is the cockpit itself, compiled again under a main() of its own, and
 # like the cockpit it is built only when asked for by name.
-juce_add_console_app(catpitamp_memory_probe PRODUCT_NAME "CatpitAmpMemoryProbe")
-target_sources(catpitamp_memory_probe PRIVATE
-    tests/MemoryProbe.cpp
-    src/PluginProcessor.cpp
-    src/Parameters.cpp
-    src/ui/Theme.cpp
-    src/core/ProcessMemory.cpp
-    src/catpit/CatpitArt.cpp
-    src/catpit/CatpitChannels.cpp
-    src/catpit/CatpitControls.cpp
-    src/catpit/CatpitMidi.cpp
-    src/catpit/CatpitMonitor.cpp
-    src/catpit/CatpitPresets.cpp
-    src/catpit/CatpitSet.cpp
-    src/catpit/CatpitSpace.cpp
-    src/catpit/CatpitStandalone.cpp
-    src/catpit/CatpitGlSky.cpp
-    src/catpit/CatpitEditor.cpp)
-target_include_directories(catpitamp_memory_probe PRIVATE src "${ORBITAMP_GENERATED_DIR}")
-add_dependencies(catpitamp_memory_probe OrbitAmpVersionGen)
-target_compile_definitions(catpitamp_memory_probe PRIVATE
-    ORBITAMP_VERSION="${CATPITAMP_VERSION}"
-    ORBITAMP_PRODUCT_NAME="CatpitAmp"
-    ORBITAMP_RELEASE_TAG_PREFIX="catpit-"
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0)
-target_link_libraries(catpitamp_memory_probe PRIVATE
-    OrbitAmpData
-    CatpitAmpData
-    CatpitAmpSet
-    felitronics::analysis
-    felitronics::appkit
-    felitronics::appkit_webp
-    felitronics::core
-    felitronics::dynamics
-    felitronics::eq
-    felitronics::lineareq
-    felitronics::convolution
-    felitronics::measurement
-    felitronics::nam
-    felitronics::rigplayer
-    juce::juce_audio_utils
-    juce::juce_dsp
-    juce::juce_data_structures
-    juce::juce_opengl
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-set_target_properties(catpitamp_memory_probe PROPERTIES EXCLUDE_FROM_ALL TRUE)
+function(catpitamp_console target main product)
+    juce_add_console_app(${target} PRODUCT_NAME "${product}")
+    target_sources(${target} PRIVATE ${main} ${CATPITAMP_SOURCES})
+    target_include_directories(${target} PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+    add_dependencies(${target} OrbitAmpVersionGen)
+    target_compile_definitions(${target} PRIVATE
+        ORBITAMP_VERSION="${CATPITAMP_VERSION}"
+        ORBITAMP_PRODUCT_NAME="CatpitAmp"
+        ORBITAMP_RELEASE_TAG_PREFIX="catpit-"
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0)
+    target_link_libraries(${target} PRIVATE CatpitAmpSet ${CATPITAMP_LIBRARIES})
+    set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endfunction()
+catpitamp_console(catpitamp_memory_probe tests/MemoryProbe.cpp "CatpitAmpMemoryProbe")
+
+# Gate for the cockpit's channels with no window at all: that the processor is a four-channel amp by
+# itself, and CHANNEL — the parameter a host reaches it by — moves it. The cockpit under a main() of
+# its own again, and the cockpit's, so built only by name.
+catpitamp_console(catpitamp_channel_test tests/CatpitChannelTests.cpp "CatpitAmpChannelTest")
 
 # Gate for the cockpit's set as it leaves the binary — laid out whole, once, and nothing else in the
 # folder touched. Runs entirely in a folder of its own. The cockpit's, so built only by name.

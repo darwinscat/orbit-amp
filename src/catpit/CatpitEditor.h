@@ -4,8 +4,8 @@
 #pragma once
 
 #include "../PluginProcessor.h"
-#include "CatpitChannels.h"
 #include "CatpitControls.h"
+#include "CatpitEngine.h"
 #include "CatpitGlSky.h"
 #include "CatpitMonitor.h"
 #include "CatpitPresets.h"
@@ -124,11 +124,13 @@ public:
 
 private:
     AmpProcessor& amp;
-    Channels channels;
-    Presets  presets;
+    Engine&   engine;       // the cockpit's half of the processor: the channels live there, window or no window
+    Channels& channels;     // ...and these are its
+    Presets   presets;
 
     bool adoptionPending = false;
     void adoptState();
+    void followEngine();
 
     juce::Component stage;
     Space   space;
@@ -298,7 +300,6 @@ private:
     void  setParam (const char* paramId, float value);
     float getParam (const char* paramId) const;
 
-    void setUpChain (bool firstTime);
     void showReverbMenu();
     void showDelayMenu();
     void showDelayTime();

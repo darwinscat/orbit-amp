@@ -26,7 +26,8 @@ namespace orbitamp::catpit
     The same node carries the controls that have no parameter yet: the pack's four layers are
     remembered here, and will reach the sound when the packs carry them (layerPlayable).
 
-    No widgets in here, and nothing the audio thread reads. Message thread only. */
+    No widgets in here, and nothing the audio thread reads. Message thread only. It belongs to the
+    cockpit's half of the engine (CatpitEngine.h), so it is there with the window shut. */
 class Channels
 {
 public:
@@ -99,9 +100,11 @@ public:
 
     /** THE COCKPIT'S OWN CABINETS: every IR file in its two places — the ones the build carries, laid
         out in the amp's factory folder (CatpitSet.h), and the player's IRs folder beside its Devices —
-        in the order of their names, so a leading number is how the order is chosen. Read once, when
-        the face opens. CAB has as many positions as there are of them. */
+        in the order of their names, so a leading number is how the order is chosen. Read when the
+        engine is built and again each time the face opens: the folder is the player's to add to
+        between two looks. CAB has as many positions as there are of them. */
     const juce::Array<juce::File>& cabinets() const noexcept { return irs; }
+    void readCabinets();
 
     /** The one that is playing, as an index into cabinets(); -1 when the sound's cabinet is none of them. */
     int  cabinet() const;

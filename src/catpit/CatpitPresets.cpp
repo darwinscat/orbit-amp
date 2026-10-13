@@ -3,6 +3,7 @@
 
 #include "CatpitPresets.h"
 
+#include "CatpitEngine.h"
 #include "../Parameters.h"
 
 namespace orbitamp::catpit
@@ -86,6 +87,11 @@ juce::String Presets::sound() const
     setInTree (tree, params::blockIn (params::preampId), 0.0f);        // ...nor TURBO's push: Channels::whole says on or off
     setInTree (tree, params::preampDevice, 0.0f);
     setInTree (tree, params::boostDevice, 0.0f);
+
+    // CHANNEL the parameter says nothing the node does not, and is left out whole: a preset marked
+    // before the parameter existed carries a fingerprint with no such line in it.
+    if (auto asked = tree.getChildWithProperty ("id", Engine::channelId); asked.isValid())
+        tree.removeChild (asked, nullptr);
 
     if (auto node = tree.getChildWithName (Channels::nodeType); node.isValid())
         tree.removeChild (node, nullptr);

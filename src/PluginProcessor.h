@@ -32,6 +32,21 @@
 namespace orbitamp
 {
 
+/** WHAT A PRODUCT ADDS TO THE ENGINE THAT IS NOT ITS FACE. A face is there while its window is open;
+    this is there for as long as the processor is — what a host can reach with the window shut. The
+    cockpit keeps its four channels in one (catpit/CatpitEngine.h); OrbitAmp has none. */
+struct ProductEngine
+{
+    virtual ~ProductEngine() = default;
+
+    /** On the processor's own timer, on the message thread, before anything else that tick. */
+    virtual void pump() = 0;
+
+    /** The state changed under the processor — a session opened, a register recalled, a step of the
+        history taken. Said from inside the landing itself: it may look, and must not write. */
+    virtual void stateLanded() = 0;
+};
+
 /** The plugin shell. Deliberately thin: the chain (boost -> EQ -> preamp -> EQ -> delay -> reverb ->
     cabinet) lands in src/core/ behind small engines, and this class only pumps
     buffers into them and owns state. */
@@ -301,6 +316,10 @@ private:
         as ONE undo step, so dragging a knob is not fifty of them. */
     void timerCallback() override
     {
+        // The product's own half first — what it does it does as a hand would, between two ticks.
+        if (product != nullptr)
+            product->pump();
+
         history.tick();
 
         // THE AIM GOES FIRST, and the order is load-bearing. It writes the device NUMBER; the pump
@@ -678,6 +697,9 @@ private:
     {
         switchAimFrames = aimWindowFrames;
         cabIrParamBaselineStale = true;   // a restored `cab_ir` is not a host moving it — see the pump
+
+        if (product != nullptr)
+            product->stateLanded();       // ...and the product's own half has parameters to read the same way
 
         // BOTH baselines are taken from what the tree has just become, and that is the whole of
         // how a hand wins. `aimWrote*` starting at "nothing written yet" meant theft could only be
@@ -1218,6 +1240,12 @@ private:
     void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override              { stateDirty = true; }
     void valueTreeRedirected (juce::ValueTree&) override                              { stateDirty = true; }
 
+public:
+    /** The product's own half of the engine, where it has one (ProductEngine) — null for OrbitAmp.
+        Declared after everything it reaches into, so that it goes before any of it does. */
+    std::unique_ptr<ProductEngine> product;
+
+private:
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };
@@ -1231,5 +1259,10 @@ juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
     cockpit's is in the binary (catpit/CatpitSet.h). The processor calls it before it builds anything
     of its own — see AmpProcessor::factorySet. */
 void layOutFactorySet();
+
+/** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —
+    once per target again. OrbitAmp adds no parameter and has no such half: it answers null. */
+void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
+std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor&);
 
 } // namespace orbitamp

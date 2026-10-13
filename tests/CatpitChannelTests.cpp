@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
+// Gate for THE COCKPIT'S CHANNELS WITH NO WINDOW (catpit/CatpitEngine.h). A plug-in's window is shut
+// for most of its life, and what a host can reach then is the processor's parameters: so a channel
+// has to be something the processor does by itself. No window is built here at all.
+//
+// What it holds the engine to:
+//   - a processor just built IS the cockpit — chain, channel, pack — and that is not an edit;
+//   - CHANNEL moved the way a host moves it switches the channel, pack and all;
+//   - each channel comes back as it was left;
+//   - a hand's switch is one step of the history, and undoing it brings parameter and sound back together;
+//   - a state from before there was a parameter keeps its channel, and the parameter following it is
+//     not a step of its own;
+//   - a channel whose pack is not installed is refused, and the parameter says where the sound stayed.
+//
+// It reads the cockpit's packs from where the cockpit reads them, and lays the build's set out there
+// first, as the cockpit does.
+
+#include "PluginProcessor.h"
+#include "Parameters.h"
+#include "catpit/CatpitEngine.h"
+
+#include <cmath>
+#include <cstdio>
+
+int main()
+{
+    using namespace orbitamp;
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+
+    int failed = 0;
+    const auto check = [&failed] (bool ok, const char* what)
+    {
+        std::printf ("%s  %s\n", ok ? "ok  " : "FAIL", what);
+        if (! ok)
+            ++failed;
+    };
+
+    auto amp = std::make_unique<AmpProcessor>();
+    amp->inlineLoads = true;            // no message loop here: a model lands inside the pump
+
+    auto& engine   = catpit::Engine::of (*amp);
+    auto& channels = engine.channels;
+    auto& history  = amp->history;
+    auto* channel  = amp->apvts.getParameter (catpit::Engine::channelId);
+    auto* drive    = amp->apvts.getParameter (params::preampGain);
+    auto* device   = amp->apvts.getParameter (params::preampDevice);
+    if (channel == nullptr || drive == nullptr || device == nullptr)
+    {
+        std::printf ("FAIL  the cockpit's processor has CHANNEL, DRIVE and a device to play\nFAILED\n");
+        return 1;
+    }
+
+    const auto asked   = [channel] { return juce::roundToInt (channel->convertFrom0to1 (channel->getValue())); };
+    const auto playing = [device]  { return juce::roundToInt (device->convertFrom0to1 (device->getValue())); };
+    const auto asHost  = [channel] (int c) { channel->setValueNotifyingHost (channel->convertTo0to1 ((float) c)); };
+
+    // What the processor's own timer does, as far as the channels go: the engine's half, then the
+    // history's settle count. Forty of them is well past the moment a burst commits.
+    const auto ticks = [&engine, &history] (int n = 40)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            engine.pump();
+            history.tick();
+        }
+    };
+
+    bool installed = true;
+    for (int c = 0; c < catpit::Channels::count; ++c)
+        installed = installed && channels.packFor (c) >= 0;
+    check (installed, "all four channels' packs are installed");
+
+    // A processor just built.
+    check (channels.adopted(), "a processor just built is the cockpit's already");
+    check (channels.active() == 0 && asked() == 0, "...on the first channel, and CHANNEL says so");
+    check (playing() == channels.packFor (0), "...playing that channel's pack");
+    ticks();
+    check (! history.canUndo(), "...and none of that is an edit");
+
+    // A host moves the parameter.
+    asHost (2);
+    check (channels.active() == 0, "CHANNEL moved by a host changes nothing until the engine's own tick");
+    engine.pump();
+    check (channels.active() == 2 && asked() == 2, "...and then the channel is the one asked for");
+    check (playing() == channels.packFor (2), "...with its pack");
+
+    // Each channel as it was left.
+    const float first = drive->getValue();
+    drive->setValueNotifyingHost (0.8f);
+    asHost (0);
+    engine.pump();
+    check (std::abs (drive->getValue() - 0.8f) > 0.01f, "another channel has a DRIVE of its own");
+    drive->setValueNotifyingHost (0.3f);
+    asHost (2);
+    engine.pump();
+    check (std::abs (drive->getValue() - 0.8f) < 1.0e-4f, "a channel comes back with the DRIVE it was left with");
+    asHost (0);
+    engine.pump();
+    check (std::abs (drive->getValue() - 0.3f) < 1.0e-4f, "...and so does the other");
+    juce::ignoreUnused (first);
+
+    // A hand's switch: one step, and undone whole.
+    asHost (2);
+    ticks();
+    const int depth = history.undoDepth();
+    check (engine.go (1), "a hand takes the lever to another channel");
+    check (channels.active() == 1 && asked() == 1, "...and CHANNEL goes with it at once");
+    ticks();
+    check (history.undoDepth() == depth + 1, "...as one step of the history");
+    history.undo();
+    ticks();
+    check (channels.active() == 2 && asked() == 2, "undo brings the channel back, parameter and sound together");
+    check (playing() == channels.packFor (2), "...and its pack");
+    check (history.undoDepth() == depth, "...leaving no step of its own behind");
+
+    // A state from before there was a parameter: it says its channel on the node, and nowhere else.
+    {
+        auto old = amp->apvts.copyState();
+        if (auto word = old.getChildWithProperty ("id", catpit::Engine::channelId); word.isValid())
+            old.removeChild (word, nullptr);
+        if (auto node = old.getChildWithName (catpit::Channels::nodeType); node.isValid())
+            node.setProperty ("active", 3, nullptr);
+
+        const int before = history.undoDepth();
+        history.applyEdit (history.active(), old, "an older state");
+        check (channels.active() == 3 && asked() != 3, "an older state lands on a channel the parameter does not say");
+        ticks();
+        check (channels.active() == 3 && asked() == 3, "...the parameter follows the state, not the other way round");
+        check (history.undoDepth() == before + 1, "...and following it is not a step of its own");
+    }
+
+    // A channel whose pack is not installed.
+    {
+        const auto all = amp->preamp.packs;
+        const int from = channels.active();
+        const int gone = from == 1 ? 0 : 1;
+        amp->preamp.packs.remove (channels.packFor (gone));
+        const bool missing = channels.packFor (gone) < 0;
+
+        asHost (gone);
+        engine.pump();
+        check (missing && channels.active() == from, "a channel whose pack is not installed is refused");
+        check (asked() == from, "...and CHANNEL goes back to where the sound stayed");
+
+        amp->preamp.packs = all;
+    }
+
+    std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
+    return failed == 0 ? 0 : 1;
+}

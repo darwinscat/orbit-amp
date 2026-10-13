@@ -16,11 +16,22 @@ AmpProcessor::FactorySet::FactorySet()
     layOutFactorySet();
 }
 
+namespace
+{
+    /** The engine's parameters, and after them whatever the product adds of its own. */
+    juce::AudioProcessorValueTreeState::ParameterLayout layout()
+    {
+        auto all = params::createLayout();
+        addProductParameters (all);
+        return all;
+    }
+}
+
 AmpProcessor::AmpProcessor()
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, stateType, params::createLayout()),
+      apvts (*this, nullptr, stateType, layout()),
       // The history's opaque seam: it snapshots and restores the parameter tree without knowing what
       // is in it. replaceState takes a COPY so the parameter objects stay valid and every editor
       // attachment survives an undo.
@@ -127,6 +138,11 @@ AmpProcessor::AmpProcessor()
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
     rescanDevices();
+
+    // The product's own half, where it has one. HERE, before the history takes its baseline: what it
+    // settles as it is built — the cockpit's chain, its channel, its pack — is how the amp starts,
+    // and must not be an edit of it.
+    product = makeProductEngine (*this);
 
     // The names go in BEFORE the history looks, so a plugin that has just opened already knows
     // which device it is playing — and knows it without that knowledge being an edit. Resetting

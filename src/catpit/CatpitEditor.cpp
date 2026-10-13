@@ -43,7 +43,6 @@ namespace
     }};
     constexpr float keyTracking = 0.04f;
 
-    constexpr int preampConsole = 1;        // the preamp's universal console: kept flat, the tones are the pack's
 
     // The overhead keys, in hole order: the history on the left of the divider, the four registers —
     // four whole amps to compare, each with a history of its own — on the right.
@@ -112,19 +111,9 @@ namespace
 
     juce::String decibels (int db) { return (db > 0 ? "+" : "") + juce::String (db) + " dB"; }
 
-    // TURBO's push — see CatpitEditor.h. Kept with the machine's settings.
-    const juce::Identifier turboKey { "turbo_db" };
-    constexpr int turboDefault = 9;
-    constexpr std::array<int, 4> turboPushes { 3, 6, 9, 12 };
-
-    int snapTurbo (int db)
-    {
-        int best = turboPushes.front();
-        for (const int push : turboPushes)
-            if (std::abs (push - db) < std::abs (best - db))
-                best = push;
-        return best;
-    }
+    // TURBO's push — see CatpitEditor.h. Kept with the machine's settings, where the engine reads it too
+    // (CatpitEngine.h).
+    using settings::turboKey, settings::turboPushes, settings::snapTurbo;
 
     // How DRIVE goes between the pack's captures — see CatpitEditor.h. Kept with the machine's settings.
     const juce::Identifier driveStepsKey { "drive_steps" };
@@ -477,7 +466,7 @@ bool Sheet::keyPressed (const juce::KeyPress& key)
 
 //==============================================================================
 CatpitEditor::CatpitEditor (AmpProcessor& p)
-    : juce::AudioProcessorEditor (&p), amp (p), channels (p), presets (p, channels),
+    : juce::AudioProcessorEditor (&p), amp (p), engine (Engine::of (p)), channels (engine.channels), presets (p, channels),
       monitor (p),
       drive (Art::get().knobDrive, drivePointer),
       reverbName (layout::px13),
@@ -501,10 +490,11 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
     leverZero = snapLeverZero ((int) prefs::store().get (leverZeroKey, leverZeroDefault));
-    channels.setTurboDb ((float) snapTurbo ((int) prefs::store().get (turboKey, turboDefault)));
+    channels.setTurboDb ((float) settings::turbo());
     driveSteps = (bool) prefs::store().get (driveStepsKey, false);
 
-    setUpChain (channels.adopt());
+    channels.readCabinets();    // the player's folder may have gained or lost a file since the engine was built
+    engine.setUpChain (channels.adopt());
     channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
     settleOnSettings(); // ...and INPUT's lever may have another zero than the one the state was dialled against
 
@@ -588,14 +578,18 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     lever.onDetent = [this] (int d)
     {
         endTapping();
-        channels.select (d);    // refused when that channel's pack is not installed...
+        engine.go (d);          // refused when that channel's pack is not installed...
         showChannel();          // ...and then this puts the lever back where the sound is
     };
     lever.onRelease = [this] { showChannel(); };   // held, it follows the hand; let go, it follows the state
     // A prototype's hook for looking at the window at speed without a hand on the lever.
     if (const auto d = juce::SystemStats::getEnvironmentVariable ("CATPIT_DETENT", {}); d.isNotEmpty())
-        channels.select (d.getIntValue());
+        engine.go (d.getIntValue());
     lever.setDetent (channels.active(), false, false);
+
+    // ...and so does a host, through CHANNEL, with no hand on anything: the engine makes the switch
+    // (CatpitEngine.h) and the face goes after it.
+    engine.onChange = [this] { followEngine(); };
 
     // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
     // The trim is a parameter and a host may leave it anywhere, so anything well above nothing reads as on.
@@ -823,6 +817,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 CatpitEditor::~CatpitEditor()
 {
     amp.history.onHistoryChanged = nullptr;   // the history outlives this window
+    engine.onChange = nullptr;                // ...and so does the engine
     endTapping();
     setFullScreen (false);                    // a window closed in full screen is remembered where it stood before
     gl.detach();
@@ -842,10 +837,22 @@ void CatpitEditor::adoptState()
         return;
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
-    if (unseen)
-        setUpChain (channels.adopt());
+    engine.makeOwn();
     channels.align();
     settleOnSettings();
+    showChannel();
+}
+
+/** The engine moved a channel, or took in a state the cockpit had not seen, with no hand of this
+    window's on it. The face shows where the sound is now — and a state just taken in is settled on
+    the machine's settings, which are this window's to keep. */
+void CatpitEditor::followEngine()
+{
+    if (settingsDiffer())
+    {
+        const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
+        settleOnSettings();
+    }
     showChannel();
 }
 
@@ -1595,47 +1602,6 @@ float CatpitEditor::getParam (const char* paramId) const
 
 /** THE COCKPIT'S CHAIN IS FIXED: one captured amp (the boost now lives inside the packs), the delay,
     a hall, the cabinet. There is no strip to switch links in or out, so the face puts them there. */
-void CatpitEditor::setUpChain (bool firstTime)
-{
-    setParam (params::tunerPresent,  1.0f);   // the tuner bay is always there, and always listening
-    setParam (params::tunerOn,       1.0f);
-    setParam (params::gatePresent,   1.0f);   // the gate stands in the chain; whether it works is the settings' ON
-    setParam (params::inPresent,     1.0f);   // the INPUT and OUTPUT faders are these links' trims
-    setParam (params::inOn,          1.0f);
-    setParam (params::outPresent,    1.0f);
-    setParam (params::outOn,         1.0f);
-    setParam (params::boostPresent,  0.0f);
-    setParam (params::preampPresent, 1.0f);
-    setParam (params::preampOn,      1.0f);
-    setParam (params::delayPresent,  1.0f);
-    setParam (params::delayOn,       1.0f);
-    setParam (params::delaySync,      1.0f);  // the delay keeps time, always: the host's when there is one...
-    setParam (params::delayHostTempo, 1.0f);  // ...and its own BPM when there is not
-    setParam (params::reverbPresent, 1.0f);
-    setParam (params::reverbOn,      1.0f);
-    if (firstTime)                            // after that the reverb is the player's to choose
-        setParam (params::reverbType, (float) params::reverbCharacters.indexOf (Channels::defaultReverb));
-    setParam (params::cabPresent,    1.0f);
-    setParam (params::cabOn,         1.0f);
-
-    // TURBO is the preamp's input trim, at its push or at nothing: a state the cockpit has never seen
-    // starts with it off, wherever that trim was left.
-    if (firstTime)
-        setParam (params::blockIn (params::preampId).toRawUTF8(), 0.0f);
-
-    // BASS / MIDDLE / TREBLE are the pack's own tone stack. The universal console's three bands they
-    // used to ride stand flat behind it: a pack with no tone of its own falls to that console, and
-    // must not find a setting there that no knob on the face shows.
-    setParam (params::blockEqMode (params::preampId).toRawUTF8(), (float) params::eqModes.indexOf ("Device Tone"));
-    setParam (params::eqLoDb (preampConsole).toRawUTF8(), 0.0f);
-    setParam (params::eqBellDb (preampConsole, 0).toRawUTF8(), 0.0f);
-    setParam (params::eqHiDb (preampConsole).toRawUTF8(), 0.0f);
-
-    // HPF / LPF are on-off: the corners and slopes stay where OrbitCab puts them until set by ear.
-    setParam (params::cabHpfHz, params::cabHpfDefaultHz);
-    setParam (params::cabLpfHz, params::cabLpfDefaultHz);
-}
-
 void CatpitEditor::chooseCab (int step)
 {
     channels.chooseCabinet (step);
