@@ -245,8 +245,8 @@ private:
     void chooseTurbo (int db);
     void chooseDriveSteps (bool steps);
 
-    // A right click on DRIVE picks between the two ways, and in steps offers the capture it stands on
-    // as a `.nam`.
+    // A right click on DRIVE picks between the two ways, and offers a capture as a `.nam`: in steps the
+    // one it stands on, turning smoothly the nearer of the two it stands between.
     std::unique_ptr<juce::FileChooser> captureChooser;
     void showDriveMenu();
     void saveCapture();

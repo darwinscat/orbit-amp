@@ -942,9 +942,10 @@ void CatpitEditor::chooseDriveSteps (bool steps)
 }
 
 /** A RIGHT CLICK ON DRIVE: how it goes between the pack's captures — the setting the settings menu
-    keeps under INPUT, here on the knob it is about. IN STEPS, DRIVE STANDS ON ONE CAPTURE OF THE PACK,
-    and the menu offers that capture as a `.nam` too — the model alone, as it was shot, for whatever
-    else plays one. Turning smoothly it stands between two, and there is no one file to give. */
+    keeps under INPUT, here on the knob it is about — and a capture of the pack as a `.nam`, the model
+    alone, as it was shot, for whatever else plays one. IN STEPS, DRIVE STANDS ON ONE CAPTURE, and that
+    is the one: the sound that is playing. Turning smoothly it stands between two and plays a mix of
+    them, which is no file — so the menu offers the nearer of the two, and says so. */
 void CatpitEditor::showDriveMenu()
 {
     endTapping();
@@ -969,12 +970,9 @@ void CatpitEditor::showDriveMenu()
         menu.addItem (itemFor (driveWays[i], 1 + i, (i == 1) == driveSteps,
                                [steps = i == 1] (CatpitEditor& e) { e.chooseDriveSteps (steps); }));
 
-    if (driveSteps)
-    {
-        menu.addSeparator();
-        menu.addItem (itemFor ("Save the current sound as .nam...", 1 + driveWays.size(), false,
-                               [] (CatpitEditor& e) { e.saveCapture(); }));
-    }
+    menu.addSeparator();
+    menu.addItem (itemFor (driveSteps ? "Save the current sound as .nam..." : "Save the nearest capture as .nam...",
+                           1 + driveWays.size(), false, [] (CatpitEditor& e) { e.saveCapture(); }));
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
