@@ -125,6 +125,10 @@ namespace
                 best = push;
         return best;
     }
+
+    // How DRIVE goes between the pack's captures — see CatpitEditor.h. Kept with the machine's settings.
+    const juce::Identifier driveStepsKey { "drive_steps" };
+
     const juce::Identifier windowKey { "window" };
     const juce::StringArray starsWords { "opengl", "cpu", "off" };
 
@@ -481,10 +485,11 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     leverZero = snapLeverZero ((int) prefs::store().get (leverZeroKey, leverZeroDefault));
     channels.setTurboDb ((float) snapTurbo ((int) prefs::store().get (turboKey, turboDefault)));
+    driveSteps = (bool) prefs::store().get (driveStepsKey, false);
 
     setUpChain (channels.adopt());
     channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
-    settleInput();      // ...and INPUT's lever may have another zero than the one the state was dialled against
+    settleOnSettings(); // ...and INPUT's lever may have another zero than the one the state was dialled against
 
     addAndMakeVisible (stage);
     stage.setBounds (0, 0, (int) width, (int) height);
@@ -807,32 +812,34 @@ CatpitEditor::~CatpitEditor()
     open — is made its own the way the constructor makes the first one: the fixed chain, the channel
     whose pack is playing, a cabinet CAB can reach. And one it HAS seen, whose cabinet is no longer
     the file of that name — a register kept from before the file was replaced — has it read again;
-    as one whose INPUT was dialled against another zero of the lever has it settled on this one. */
+    as one whose INPUT was dialled against another zero of the lever has it settled on this one, and
+    one kept under another TURBO or another way of DRIVE's is given the settings' own. */
 void CatpitEditor::adoptState()
 {
     adoptionPending = false;
     const bool unseen = ! channels.adopted();
-    if (! unseen && ! channels.cabinetIsStale() && ! inputNeedsSettling())
+    if (! unseen && ! channels.cabinetIsStale() && ! settingsDiffer())
         return;
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     if (unseen)
         setUpChain (channels.adopt());
     channels.align();
-    settleInput();
+    settleOnSettings();
     showChannel();
 }
 
-bool CatpitEditor::inputNeedsSettling() const
+bool CatpitEditor::settingsDiffer() const
 {
     const auto dialled = amp.apvts.state.getProperty (Channels::leverZeroId);
     const float push = getParam (params::blockIn (params::preampId).toRawUTF8());
 
     return dialled.isVoid() || (int) dialled != leverZero
-        || (push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f);
+        || (push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
+        || (getParam (params::blockSmooth (params::preampId).toRawUTF8()) > 0.5f) == driveSteps;
 }
 
-void CatpitEditor::settleInput()
+void CatpitEditor::settleOnSettings()
 {
     // No note: the trim was dialled on the engine's own scale, whose middle is 0 dB.
     const auto dialled = amp.apvts.state.getProperty (Channels::leverZeroId);
@@ -850,6 +857,11 @@ void CatpitEditor::settleInput()
     if (const float push = getParam (turboTrim.toRawUTF8());
         push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
         setParam (turboTrim.toRawUTF8(), channels.turboDb());
+
+    // ...and so is how DRIVE goes between the captures: mixing the two it stands between, or in steps.
+    const auto smooth = params::blockSmooth (params::preampId);
+    if ((getParam (smooth.toRawUTF8()) > 0.5f) == driveSteps)
+        setParam (smooth.toRawUTF8(), driveSteps ? 0.0f : 1.0f);
 }
 
 /** The machine's setting, not an edit of the sound: the lever stays, the trim follows, and there is
@@ -860,7 +872,7 @@ void CatpitEditor::chooseLeverZero (int db)
     prefs::store().set (leverZeroKey, leverZero);
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
-    settleInput();
+    settleOnSettings();
 }
 
 void CatpitEditor::sayLever (ColumnFader& lever, const juce::String& name, std::function<float()> reading)
@@ -889,7 +901,16 @@ void CatpitEditor::chooseTurbo (int db)
     channels.setTurboDb ((float) db);
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
-    settleInput();
+    settleOnSettings();
+}
+
+void CatpitEditor::chooseDriveSteps (bool steps)
+{
+    driveSteps = steps;
+    prefs::store().set (driveStepsKey, steps);
+
+    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
+    settleOnSettings();
 }
 
 void CatpitEditor::timerCallback()
@@ -1020,7 +1041,7 @@ void CatpitEditor::refreshHistory()
     // ...or a state with no channels in it at all, or one whose cabinet is not the file of that name
     // any more, or whose INPUT was dialled against another zero. Settling any of them writes, and this
     // is the history's own callback, so it is done on the way out.
-    if ((! channels.adopted() || channels.cabinetIsStale() || inputNeedsSettling()) && ! adoptionPending)
+    if ((! channels.adopted() || channels.cabinetIsStale() || settingsDiffer()) && ! adoptionPending)
     {
         adoptionPending = true;
         juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<CatpitEditor> (this)]
@@ -1300,7 +1321,7 @@ void CatpitEditor::playDemo (int loop)
     engine's own and are part of the sound; how the stars fly is this machine's and is not. */
 void CatpitEditor::showSettingsMenu()
 {
-    enum : int { itemGateOn = 1, itemMidi, itemFullScreen, itemDemo, firstStars = 5, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100, firstDemo = 200, firstLeverZero = 300, firstTurbo = 320 };
+    enum : int { itemGateOn = 1, itemMidi, itemFullScreen, itemDemo, firstStars = 5, firstStereo = 10, firstDecay = 20, firstPos = 30, firstWindow = 40, firstThreshold = 100, firstDemo = 200, firstLeverZero = 300, firstTurbo = 320, firstDrive = 340 };
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked, bool enabled = true)
     {
@@ -1331,7 +1352,8 @@ void CatpitEditor::showSettingsMenu()
     menu.addItem (itemFor ("CPU", firstStars + (int) Stars::cpu, flying == Stars::cpu));
     menu.addItem (itemFor ("Off", firstStars + (int) Stars::off, flying == Stars::off));
 
-    // What the INPUT lever gives in the middle of its travel, and how hard TURBO pushes.
+    // What the INPUT lever gives in the middle of its travel, how hard TURBO pushes, and how DRIVE
+    // goes between the pack's captures.
     menu.addSectionHeader ("INPUT");
     juce::PopupMenu zero;
     for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
@@ -1343,6 +1365,12 @@ void CatpitEditor::showSettingsMenu()
     for (size_t i = 0; i < turboPushes.size(); ++i)
         push.addItem (itemFor (decibels (turboPushes[i]), firstTurbo + (int) i, turboPushes[i] == turboNow));
     menu.addSubMenu ("TURBO adds  " + decibels (turboNow), push);
+
+    const juce::StringArray ways { "Smoothly", "In steps" };
+    juce::PopupMenu way;
+    for (int i = 0; i < ways.size(); ++i)
+        way.addItem (itemFor (ways[i], firstDrive + i, (i == 1) == driveSteps));
+    menu.addSubMenu ("DRIVE turns  " + ways[driveSteps ? 1 : 0], way);
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)
@@ -1393,7 +1421,8 @@ void CatpitEditor::showSettingsMenu()
                             auto& e = *safe;
                             e.endTapping();
 
-                            if (picked >= firstTurbo)                  e.chooseTurbo (turboPushes[(size_t) juce::jlimit (0, (int) turboPushes.size() - 1, picked - firstTurbo)]);
+                            if (picked >= firstDrive)                  e.chooseDriveSteps (picked > firstDrive);
+                            else if (picked >= firstTurbo)             e.chooseTurbo (turboPushes[(size_t) juce::jlimit (0, (int) turboPushes.size() - 1, picked - firstTurbo)]);
                             else if (picked >= firstLeverZero)         e.chooseLeverZero (leverZeroLowest + (picked - firstLeverZero) * leverZeroStep);
                             else if (picked >= firstDemo)              e.playDemo (picked - firstDemo);
                             else if (picked == itemDemo)               e.playDemo (-1);
@@ -1446,11 +1475,6 @@ void CatpitEditor::setUpChain (bool firstTime)
         setParam (params::reverbType, (float) params::reverbCharacters.indexOf (Channels::defaultReverb));
     setParam (params::cabPresent,    1.0f);
     setParam (params::cabOn,         1.0f);
-
-    // DRIVE turns smoothly and the sound goes with it: between two captures the player mixes them by
-    // the knob's angle, rather than landing on the nearer one and holding it until the next. The
-    // cockpit has no switch for the other way.
-    setParam (params::blockSmooth (params::preampId).toRawUTF8(), 1.0f);
 
     // TURBO is the preamp's input trim, at its push or at nothing: a state the cockpit has never seen
     // starts with it off, wherever that trim was left.

@@ -228,12 +228,19 @@ private:
     // TURBO'S PUSH is the machine's the same way (Channels::turboDb): the state says that TURBO is on, by
     // the preamp's input trim standing above nothing, and the settings say how hard that is — +9 dB
     // unless told otherwise, which with the lever's zero at -9 feeds the captures as they were taken.
-    int leverZero = 0;
+    //
+    // HOW DRIVE GOES BETWEEN THE PACK'S CAPTURES is the machine's too. Smoothly, unless told otherwise:
+    // between two captures the player mixes them by the knob's angle, and the sound goes with the hand.
+    // In steps, it lands on the nearer capture and holds it until the knob is nearer the next — one
+    // capture playing at a time, each exactly as it was shot.
+    int  leverZero = 0;
+    bool driveSteps = false;
     juce::ParameterAttachment* inputTrim = nullptr;
-    bool inputNeedsSettling() const;
-    void settleInput();
+    bool settingsDiffer() const;
+    void settleOnSettings();
     void chooseLeverZero (int db);
     void chooseTurbo (int db);
+    void chooseDriveSteps (bool steps);
 
     // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
     // for INPUT count from the lever's zero, so the middle of the travel reads 0.
