@@ -952,6 +952,12 @@ void ColumnFader::paint (juce::Graphics& g)
 
 void ColumnFader::mouseDown (const juce::MouseEvent& e)
 {
+    sliding = ! (e.mods.isPopupMenu() && onMenu);
+    if (! sliding)
+    {
+        onMenu();
+        return;
+    }
     const auto t = travel();
     const float y = t.getEnd() - t.getLength() * value;
     if (onGestureStart) onGestureStart();
@@ -962,12 +968,14 @@ void ColumnFader::mouseDown (const juce::MouseEvent& e)
 
 void ColumnFader::mouseDrag (const juce::MouseEvent& e)
 {
+    if (! sliding)
+        return;
     setValue (dragStartValue - (float) e.getDistanceFromDragStartY() / travel().getLength(), true);
 }
 
 void ColumnFader::mouseUp (const juce::MouseEvent&)
 {
-    if (onGestureEnd) onGestureEnd();
+    if (sliding && onGestureEnd) onGestureEnd();
 }
 
 void ColumnFader::mouseDoubleClick (const juce::MouseEvent&)

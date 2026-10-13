@@ -253,6 +253,12 @@ private:
     void chooseTurbo (int db);
     void chooseDriveSteps (bool steps);
 
+    // WHAT IS SET ON A CONTROL IS FOUND ON THAT CONTROL: a right click on it opens the few choices that
+    // are about it, and nothing else. The settings menu keeps the machine's among them as well.
+    void addChoice (juce::PopupMenu&, const juce::String& text, bool ticked,
+                    std::function<void (CatpitEditor&)> picked, bool enabled = true);
+    void showInputMenu();           // the INPUT column: the lever's zero
+
     // A right click on DRIVE picks between the two ways, and offers a capture as a `.nam`: in steps the
     // one it stands on, turning smoothly the nearer of the two it stands between.
     std::unique_ptr<juce::FileChooser> captureChooser;

@@ -341,6 +341,7 @@ public:
 
     std::function<void()>       onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;
+    std::function<void()>       onMenu;          // a right click, when set — and then it does not move the cap
 
     void  setValue (float v, bool notify);
     float getValue() const noexcept { return value; }
@@ -354,6 +355,7 @@ public:
 
 private:
     float value = 0.5f, dragStartValue = 0.0f;
+    bool  sliding = false;                       // false through a right click that opened the menu
     juce::Range<float> travel() const;
 };
 

@@ -718,6 +718,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     inFader.defaultValue   = 0.5f;
     inputTrim->sendInitialUpdate();
 
+    inFader.onMenu = [this] { showInputMenu(); };
+
     sayLever (inFader,  "INPUT",  [this] { return getParam (params::inTrim) - (float) leverZero; });
     sayLever (outFader, "OUTPUT", [this] { return getParam (params::outTrim); });
 
@@ -957,6 +959,36 @@ void CatpitEditor::chooseDriveSteps (bool steps)
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     settleOnSettings();
     drive.settle();
+}
+
+void CatpitEditor::addChoice (juce::PopupMenu& menu, const juce::String& text, bool ticked,
+                              std::function<void (CatpitEditor&)> picked, bool enabled)
+{
+    juce::PopupMenu::Item item (text);
+    item.itemID    = menu.getNumItems() + 1;
+    item.colour    = lilac;
+    item.isTicked  = ticked;
+    item.isEnabled = enabled;
+    item.action    = [safe = juce::Component::SafePointer<CatpitEditor> (this), run = std::move (picked)]
+    {
+        if (safe != nullptr)     // the action is posted: the window may be gone by the time it runs
+            run (*safe);
+    };
+    menu.addItem (item);
+}
+
+/** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: what the lever gives in the
+    middle of its travel. */
+void CatpitEditor::showInputMenu()
+{
+    endTapping();
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("LEVER'S ZERO");
+    for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
+        addChoice (menu, decibels (db), db == leverZero, [db] (CatpitEditor& e) { e.chooseLeverZero (db); });
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
 
 /** A RIGHT CLICK ON DRIVE: how it goes between the pack's captures — the setting the settings menu
@@ -1463,9 +1495,13 @@ void CatpitEditor::mouseDown (const juce::MouseEvent& e)
     if (! e.mods.isPopupMenu())
         return;
 
-    // CAB's name is a reading and takes no clicks of its own: a right click on it is one on CAB.
-    if (cabName.getBounds().contains (e.getEventRelativeTo (&stage).getPosition()))
+    // CAB's name is a reading and takes no clicks of its own: a right click on it is one on CAB. So
+    // with a column's meter: it is the same column as the lever beside it.
+    const auto at = e.getEventRelativeTo (&stage).getPosition();
+    if (cabName.getBounds().contains (at))
         showCabs();
+    else if (inMeter.getBounds().contains (at))
+        showInputMenu();
     else
         showSettingsMenu();
 }
