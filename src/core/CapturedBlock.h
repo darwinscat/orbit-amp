@@ -589,8 +589,10 @@ public:
         the file will not be read. Message thread — it opens the pack. */
     struct CaptureFile
     {
-        juce::String      name;     // the file's name in the pack, without its extension
-        juce::MemoryBlock nam;      // the model, as NAM JSON
+        juce::String      name;         // the file's name in the pack, without its extension
+        juce::MemoryBlock nam;          // the model, as NAM JSON
+        double            hour = 0.0;   // where the gear's gain knob stood for it, as on a clock face:
+                                        // 1 to 12, 9.5 = half past nine; 0 = the pack does not say
     };
 
     CaptureFile captureOnDial() const
@@ -617,7 +619,39 @@ public:
         if (bytes.isEmpty())
             return {};
 
-        return { juce::File::createLegalFileName (id).upToLastOccurrenceOf (".", false, false), bytes };
+        return { juce::File::createLegalFileName (id).upToLastOccurrenceOf (".", false, false), bytes,
+                 hourShotAt (files[(size_t) file].id) };
+    }
+
+    /** WHERE THE GEAR'S GAIN KNOB STOOD FOR A CAPTURE, as an hour on a clock face. The pack states a
+        position in degrees up from the knob's lower stop, and how far the knob turns in all; that
+        travel is centred on twelve, so 150 of 300 degrees is 12 and 180 is 1. A capture the pack also
+        plays lower on the dial, fed softer, answers with the position it was SHOT at — the entry
+        that feeds it untouched. 0 when the pack names no dial, or says this position some other way. */
+    double hourShotAt (const std::string& id) const
+    {
+        const double sweep = (double) player.dialSweep();
+        if (sweep <= 0.0 || ! player.loaded())
+            return 0.0;
+
+        for (const auto& f : player.stage().device.files)
+        {
+            if (f.id != id || std::abs (f.inputDb) > 0.0005)
+                continue;
+
+            const auto at = f.settings.find (player.dialName());
+            if (at == f.settings.end())
+                continue;
+
+            const juce::String degrees (at->second);
+            if (degrees.isEmpty() || ! degrees.containsOnly ("0123456789."))
+                continue;
+
+            const double hour = std::fmod (12.0 + (degrees.getDoubleValue() - sweep * 0.5) / 30.0, 12.0);
+            return hour > 0.0 ? hour : hour + 12.0;
+        }
+
+        return 0.0;
     }
 
     juce::String circuit() const

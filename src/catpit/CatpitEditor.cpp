@@ -126,6 +126,18 @@ namespace
     constexpr const char* captureNamePrefix = "CatpitAmp-NamA2-";
     constexpr const char* cabNamePrefix     = "CatpitAmp-IR-";
 
+    /** ...and a capture's name ends with where the gear's gain knob stood for it, as the hour it
+        pointed at: "-1h", "-9h30". Nothing when the pack does not say. */
+    juce::String hourTag (double hour)
+    {
+        if (hour <= 0.0)
+            return {};
+
+        const int minutes = juce::roundToInt (hour * 60.0);
+        const int h = (minutes / 60 + 11) % 12 + 1, m = minutes % 60;
+        return "-" + juce::String (h) + "h" + (m > 0 ? juce::String (m).paddedLeft ('0', 2) : juce::String());
+    }
+
     // Where a capture was last saved to (saveCapture): the next one is offered the same folder.
     const juce::Identifier captureFolderKey { "capture_folder" };
 
@@ -987,7 +999,7 @@ void CatpitEditor::saveCapture()
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
-    captureChooser = std::make_unique<juce::FileChooser> ("Save the capture", folder.getChildFile (captureNamePrefix + capture.name + ".nam"), "*.nam");
+    captureChooser = std::make_unique<juce::FileChooser> ("Save the capture", folder.getChildFile (captureNamePrefix + capture.name + hourTag (capture.hour) + ".nam"), "*.nam");
     captureChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                                      | juce::FileBrowserComponent::warnAboutOverwriting,
                                  [nam = std::move (capture.nam)] (const juce::FileChooser& picked)

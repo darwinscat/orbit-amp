@@ -149,6 +149,24 @@ int main()
         amp->preamp.packs = all;
     }
 
+    // The capture DRIVE stands on says where the gear's own knob stood for it, as an hour.
+    {
+        asHost (0);
+        ticks();
+
+        const auto hourAt = [&amp, drive] (float travel)
+        {
+            drive->setValueNotifyingHost (travel);
+            amp->pumpDeviceWork();
+            return amp->preamp.captureOnDial().hour;
+        };
+
+        check (std::abs (hourAt (1.0f) - 5.0) < 1.0e-9, "the capture at the top of DRIVE was shot at five o'clock");
+        check (std::abs (hourAt (0.5f) - 12.0) < 1.0e-9, "...the one in the middle at twelve");
+        check (std::abs (hourAt (0.0f) - 9.0) < 1.0e-9, "...and the bottom plays the one shot at nine, fed softer");
+        ticks();
+    }
+
     // THE PLAYER'S OWN CABINETS — only where the gate has been told the home is its own to write in
     // (CATPIT_GATE_OWNS_HOME): this takes files into the player's IRs folder, and on a player's machine
     // that folder is the player's.
