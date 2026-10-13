@@ -259,6 +259,7 @@ private:
                     std::function<void (CatpitEditor&)> picked, bool enabled = true);
     void showInputMenu();           // the INPUT column: the lever's zero
     void showOutputMenu();          // the OUTPUT column: the limiter, and where its ceiling is
+    void showTurboMenu();           // TURBO: how hard it pushes
 
     // A right click on DRIVE picks between the two ways, and offers a capture as a `.nam`: in steps the
     // one it stands on, turning smoothly the nearer of the two it stands between.

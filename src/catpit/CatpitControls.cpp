@@ -507,6 +507,11 @@ void GuardButton::enablementChanged()
 
 void GuardButton::mouseDown (const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu() && onMenu)
+    {
+        onMenu();
+        return;
+    }
     if (! isEnabled())      // the guard stays down
         return;
     if (! open)

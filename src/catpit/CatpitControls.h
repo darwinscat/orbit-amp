@@ -196,6 +196,7 @@ public:
     GuardButton();
 
     std::function<void (bool)> onChange;
+    std::function<void()>      onMenu;           // a right click, when set — and then the guard stays as it is
 
     bool isOn() const noexcept { return on; }
     void setOn (bool, bool notify);

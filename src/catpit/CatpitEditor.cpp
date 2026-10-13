@@ -618,6 +618,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // The trim is a parameter and a host may leave it anywhere, so anything well above nothing reads as on.
     stage.addAndMakeVisible (turbo);
     turbo.setBounds (turboFrame.toNearestInt());
+    turbo.onMenu = [this] { showTurboMenu(); };
     {
         auto* push = follow (params::blockIn (params::preampId).toRawUTF8(),
                              [this] (float db) { turbo.setOn (db > Channels::turboOnAbove, false); });
@@ -1015,6 +1016,22 @@ void CatpitEditor::showOutputMenu()
     for (const float db : limiterCeilings)
         addChoice (menu, juce::String (db, 1) + " dB", std::abs (at - db) < 0.05f,
                    [db] (CatpitEditor& e) { e.setParam (params::limiterCeiling, db); }, on);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+/** A RIGHT CLICK ON TURBO: how hard it pushes into the capture. The machine's to say, as in the settings
+    menu — every channel that has TURBO on comes back at the push in force. */
+void CatpitEditor::showTurboMenu()
+{
+    endTapping();
+
+    const int now = juce::roundToInt (channels.turboDb());
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("TURBO ADDS");
+    for (const int db : turboPushes)
+        addChoice (menu, decibels (db), db == now, [db] (CatpitEditor& e) { e.chooseTurbo (db); });
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
