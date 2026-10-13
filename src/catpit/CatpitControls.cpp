@@ -803,6 +803,17 @@ void PlateSlider::setStep (int i, bool notify)
     }
 }
 
+void PlateSlider::setSteps (int count)
+{
+    if (count == steps)
+        return;
+
+    const int at = getStep();
+    steps = count;
+    value = steps > 1 ? (float) juce::jlimit (0, steps - 1, at) / (float) (steps - 1) : 0.0f;
+    repaint();
+}
+
 void PlateSlider::moveTo (float v)
 {
     if (steps > 1)

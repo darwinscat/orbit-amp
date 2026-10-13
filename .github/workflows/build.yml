@@ -134,7 +134,7 @@ jobs:
           # The cockpit's own: its set as it leaves the binary, laid out in a folder of the gate's —
           # and its channels with no window, moved the way a host moves them.
           run_gate catpit-set "$(find build/catpitamp_set_test_artefacts -type f -name '*.exe' | head -1)"
-          run_gate catpit-channel "$(find build/catpitamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
+          CATPIT_GATE_OWNS_HOME=1 run_gate catpit-channel "$(find build/catpitamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
 
       - name: Validate (pluginval, VST3)
         shell: bash

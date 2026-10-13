@@ -8,6 +8,7 @@
 
 #include "../Parameters.h"
 #include "../core/ProcessMemory.h"
+#include "../device/IrLibrary.h"
 #include "../ui/AboutConfig.h"
 #include "../ui/LoadBreakdown.h"
 
@@ -671,15 +672,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     stage.addAndMakeVisible (cabName);
     cabName.setBounds (plateName (2).toNearestInt());
 
-    auto& cab = *sliders[2];
-    cab.onMenu = [this] { showCabMenu(); };
-    if (channels.cabinets().size() >= 2)
-        cab.onStep = [this] (int s) { chooseCab (s); showCab(); };
-    else
-    {
-        cab.setEnabled (false);
-        cab.setAlpha (0.35f);
-    }
+    sliders[2]->onMenu = [this] { showCabMenu(); };
+    cabinetsChanged();
 
     for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter, &tuner })
         stage.addAndMakeVisible (c);
@@ -1609,6 +1603,68 @@ float CatpitEditor::getParam (const char* paramId) const
 void CatpitEditor::chooseCab (int step)
 {
     channels.chooseCabinet (step);
+}
+
+/** CAB has a position for every cabinet the cockpit has, and the list has just been read again — a
+    file added, renamed or taken away. A selector needs two to be one: with fewer it stands dim. */
+void CatpitEditor::cabinetsChanged()
+{
+    auto& cab = *sliders[2];
+    const int count = channels.cabinets().size();
+    const bool choice = count >= 2;
+
+    cab.setSteps (juce::jmax (2, count));
+    cab.onStep = choice ? std::function<void (int)> ([this] (int s) { chooseCab (s); showCab(); }) : nullptr;
+    cab.setEnabled (choice);
+    cab.setAlpha (choice ? 1.0f : 0.35f);
+    showChannel();
+}
+
+void CatpitEditor::addCabinets (const juce::StringArray& paths)
+{
+    const auto added = channels.importCabinets (paths);
+    cabinetsChanged();
+
+    if (added.first >= 0)       // the first of the new ones plays: that is what the hand was asking to hear
+    {
+        chooseCab (added.first);
+        showChannel();
+    }
+
+    if (! added.refused.isEmpty())
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                          .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                          .withTitle ("Not added")
+                                          .withMessage (added.refused.joinIntoString ("\n")
+                                                        + "\n\nA cabinet is kept inside the session it plays in, and an IR over "
+                                                        + juce::String (device::EmbeddedIrs::maxBytes / (1024 * 1024)) + " MB does not fit.")
+                                          .withButton ("OK"),
+                                      nullptr);
+}
+
+bool CatpitEditor::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (const auto& path : files)
+        if (device::IrLibrary::looksLikeImport (juce::File (path)))
+            return true;
+    return false;
+}
+
+void CatpitEditor::fileDragEnter (const juce::StringArray&, int, int)
+{
+    const auto plate = cabName.getBounds().toFloat();
+    nameTag.show ({ plate.getCentreX(), plate.getY() - 22.0f }, "DROP TO ADD A CABINET");
+}
+
+void CatpitEditor::fileDragExit (const juce::StringArray&)
+{
+    nameTag.show ({}, {});
+}
+
+void CatpitEditor::filesDropped (const juce::StringArray& files, int, int)
+{
+    nameTag.show ({}, {});
+    addCabinets (files);
 }
 
 /** CAB's plate says which cabinet is playing: the name its file carries, without the number that

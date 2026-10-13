@@ -100,6 +100,7 @@ private:
 /** CatpitAmp's face over OrbitAmp's processor. Everything is laid out in the render's own 1672 x 941
     space on one stage, and the stage is scaled to the window as a whole. */
 class CatpitEditor final : public juce::AudioProcessorEditor,
+                           public juce::FileDragAndDropTarget,
                            private juce::Timer
 {
 public:
@@ -121,6 +122,13 @@ public:
         settings: the things a player sets once for the machine and the room, which have no place of
         their own on the console. */
     void mouseDown (const juce::MouseEvent&) override;
+
+    /** IRs DROPPED ANYWHERE ON THE COCKPIT become cabinets of the player's own — files, folders of
+        them, zips. While they hang over the window a tag over CAB says what letting go will do. */
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void fileDragEnter (const juce::StringArray& files, int x, int y) override;
+    void fileDragExit (const juce::StringArray& files) override;
+    void filesDropped (const juce::StringArray& files, int x, int y) override;
 
 private:
     AmpProcessor& amp;
@@ -255,6 +263,11 @@ private:
     std::unique_ptr<juce::FileChooser> cabChooser;
     void showCabMenu();
     void saveCab();
+
+    // The player's own cabinets: files taken into the IRs folder, CAB given a position for each, and
+    // the first of the new ones played.
+    void addCabinets (const juce::StringArray& paths);
+    void cabinetsChanged();
 
     // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
     // for INPUT count from the lever's zero, so the middle of the travel reads 0.

@@ -106,6 +106,22 @@ public:
     const juce::Array<juce::File>& cabinets() const noexcept { return irs; }
     void readCabinets();
 
+    /** How many of cabinets() are the build's own. They stand first and the player's after them: what
+        a player adds never lands among the factory ones, whatever it is called. */
+    int factoryCabinets() const noexcept { return factory; }
+
+    /** TAKING FILES IN — IRs themselves, folders of them, zips — into the player's own IRs folder, the
+        way OrbitAmp's library takes them, and reading the cabinets again. How many cabinets that made,
+        the first of them as an index into cabinets(), and the files refused, by name: an IR too big to
+        be kept inside a session cannot be a cabinet here. */
+    struct Added
+    {
+        int cabinets = 0;
+        int first = -1;
+        juce::StringArray refused;
+    };
+    Added importCabinets (const juce::StringArray& paths);
+
     /** The one that is playing, as an index into cabinets(); -1 when the sound's cabinet is none of them. */
     int  cabinet() const;
     void chooseCabinet (int index);
@@ -146,6 +162,7 @@ private:
     AmpProcessor& amp;
     juce::StringArray kept;      // the parameters a channel remembers
     juce::Array<juce::File> irs; // the cockpit's cabinets, in order
+    int factory = 0;             // how many of them, from the front, are the build's own
     float turboPush = 9.0f;      // TURBO's push, dB
     float settled (const juce::String& paramId, float value) const;    // a remembered TURBO, at the push in force
     mutable std::vector<std::optional<juce::String>> irKeys;    // each file's content key, read when first asked for; empty if it would not read

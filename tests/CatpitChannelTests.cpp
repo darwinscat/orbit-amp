@@ -14,6 +14,8 @@
 //     not a step of its own;
 //   - a channel whose pack is not installed is refused, and the parameter says where the sound stayed.
 //
+//   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called.
+//
 // It reads the cockpit's packs from where the cockpit reads them, and lays the build's set out there
 // first, as the cockpit does.
 
@@ -145,6 +147,43 @@ int main()
         check (asked() == from, "...and CHANNEL goes back to where the sound stayed");
 
         amp->preamp.packs = all;
+    }
+
+    // THE PLAYER'S OWN CABINETS — only where the gate has been told the home is its own to write in
+    // (CATPIT_GATE_OWNS_HOME): this takes files into the player's IRs folder, and on a player's machine
+    // that folder is the player's.
+    if (juce::SystemStats::getEnvironmentVariable ("CATPIT_GATE_OWNS_HOME", {}).isNotEmpty())
+    {
+        const int factory = channels.factoryCabinets();
+        const int before  = channels.cabinets().size();
+        check (factory > 0, "the build's own cabinets are there");
+
+        const auto run = juce::String::toHexString (juce::Random::getSystemRandom().nextInt());
+        const auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("catpit-channel-test-" + run);
+        scratch.createDirectory();
+
+        // Two IRs under names that would stand FIRST and last in one list, and one too big to keep.
+        const auto donor = channels.cabinets().getFirst();
+        const auto early = scratch.getChildFile ("00-first-" + run + ".wav");
+        const auto late  = scratch.getChildFile ("zz-last-" + run + ".wav");
+        const auto big   = scratch.getChildFile ("too-big-" + run + ".wav");
+        donor.copyFileTo (early);
+        donor.copyFileTo (late);
+        {
+            juce::FileOutputStream out (big);
+            out.setPosition (device::EmbeddedIrs::maxBytes);
+            out.writeByte (0);
+        }
+
+        const auto added = channels.importCabinets ({ early.getFullPathName(), late.getFullPathName(), big.getFullPathName() });
+        check (added.cabinets == 2 && channels.cabinets().size() == before + 2, "two IRs taken in are two more cabinets");
+        check (channels.factoryCabinets() == factory, "...and the build's own are as many as they were");
+        check (added.first >= factory && channels.cabinets()[added.first].getFileName() == early.getFileName(),
+               "...a name that would sort first still stands after the build's own");
+        check (added.refused.size() == 1 && added.refused[0] == big.getFileName(), "an IR too big for a session is refused, by name");
+
+        channels.chooseCabinet (added.first);
+        check (channels.cabinet() == added.first, "a cabinet taken in plays");
     }
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");

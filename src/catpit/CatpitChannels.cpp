@@ -39,12 +39,21 @@ namespace
         return set::cabinetsIn (factory());
     }
 
-    void addCabinets (const juce::File& folder, juce::Array<juce::File>& into)
+    /** A folder's cabinets, in the order of their names. One too big to be kept inside a session
+        (EmbeddedIrs) cannot be played, and a cabinet that cannot be played is not one. */
+    juce::Array<juce::File> cabinetsIn (const juce::File& folder)
     {
+        juce::Array<juce::File> found;
         if (folder.isDirectory())
             for (const auto& f : folder.findChildFiles (juce::File::findFiles, true))
-                if (device::IrLibrary::isAudioFile (f))
-                    into.add (f);
+                if (device::IrLibrary::isAudioFile (f) && f.getSize() <= device::EmbeddedIrs::maxBytes)
+                    found.add (f);
+
+        std::sort (found.begin(), found.end(), [] (const juce::File& x, const juce::File& y)
+        {
+            return x.getFileName().compareNatural (y.getFileName()) < 0;
+        });
+        return found;
     }
 
     /** A channel's record in the node; made if `create` and it is not there. */
@@ -80,14 +89,41 @@ Channels::Channels (AmpProcessor& p) : amp (p)
 void Channels::readCabinets()
 {
     // The cabinets: a channel keeps its own too, but by NAME — a cabinet is a file, not a parameter.
-    irs.clearQuick();
+    // The build's own stand first and the player's after them, each group in the order of its names:
+    // what a player adds never lands among the factory ones.
+    irs = cabinetsIn (bundledCabinets());
+    factory = irs.size();
+    irs.addArray (cabinetsIn (device::IrLibrary::directory()));
     irKeys.clear();
-    addCabinets (bundledCabinets(), irs);
-    addCabinets (device::IrLibrary::directory(), irs);
-    std::sort (irs.begin(), irs.end(), [] (const juce::File& x, const juce::File& y)
+}
+
+Channels::Added Channels::importCabinets (const juce::StringArray& paths)
+{
+    Added out;
+    const auto before = irs;
+    const auto library = device::IrLibrary::directory();
+
+    for (const auto& path : paths)
     {
-        return x.getFileName().compareNatural (y.getFileName()) < 0;
-    });
+        const juce::File from (path);
+        if (from.isAChildOf (library))
+            continue;       // it is one of the player's already
+
+        if (device::IrLibrary::isAudioFile (from) && from.getSize() > device::EmbeddedIrs::maxBytes)
+            out.refused.add (from.getFileName());
+        else
+            device::IrLibrary::importPath (from, library);
+    }
+
+    readCabinets();
+    for (int i = factory; i < irs.size(); ++i)
+        if (! before.contains (irs.getReference (i)))
+        {
+            ++out.cabinets;
+            if (out.first < 0)
+                out.first = i;
+        }
+    return out;
 }
 
 juce::String Channels::cabinetStem (const juce::File& file)

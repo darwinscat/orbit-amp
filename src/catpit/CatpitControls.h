@@ -306,6 +306,7 @@ public:
 
     int  getStep() const noexcept;
     void setStep (int, bool notify);
+    void setSteps (int count);      // a selector whose list has grown or shrunk; the cap keeps its place in it
 
     void  setValue (float v, bool notify);
     float getValue() const noexcept { return value; }
@@ -321,7 +322,7 @@ public:
 
 private:
     juce::Colour from, to;
-    const int steps;
+    int steps;
     float value = 0.0f, dragStartValue = 0.0f;
     bool  sliding = false;                       // false through a right click that opened the menu
     juce::Range<float> travel() const;
