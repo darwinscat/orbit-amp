@@ -357,7 +357,7 @@ bool Channels::select (int to)
     // returns, so the state is never caught half-way, and all in one tick, so the history commits it
     // as ONE step: undo goes back to the channel that was playing, exactly as it stood.
     set (params::preampDevice, (float) pack);
-    recall (recordOf (n, to, false));
+    recall (to, recordOf (n, to, false));
     amp.settleDeviceNames();
     return true;
 }
@@ -401,7 +401,7 @@ juce::ValueTree Channels::whole() const
         for (const auto& id : kept)
         {
             const float value = c == playing ? plain (id)
-                                             : record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id);
+                                             : record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (c, id);
 
             // TURBO as on or off: how hard it pushes is the settings' to say, not the channel's.
             full.setProperty (id, id == params::blockIn (params::preampId) ? (value > turboOnAbove ? 1.0f : 0.0f) : value, nullptr);
@@ -430,11 +430,11 @@ void Channels::store (juce::ValueTree record) const
     record.setProperty (cabinetId, cabinetPlaying(), nullptr);
 }
 
-void Channels::recall (const juce::ValueTree& record)
+void Channels::recall (int channel, const juce::ValueTree& record)
 {
-    // No record is a channel never visited: every control at its default, every layer off.
+    // No record is a channel never visited: every control at what that channel opens on, every layer off.
     for (const auto& id : kept)
-        set (id, settled (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (id)));
+        set (id, settled (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (channel, id)));
     for (int f = 0; f < numFlags; ++f)
         setFlag ((Flag) f, record.isValid() && (bool) record.getProperty (flagIds[(size_t) f], false));
     chooseCabinetNamed (record.getProperty (cabinetId).toString());
@@ -452,10 +452,14 @@ float Channels::plain (const juce::String& paramId) const
     return p != nullptr ? p->convertFrom0to1 (p->getValue()) : 0.0f;
 }
 
-float Channels::defaultOf (const juce::String& paramId) const
+float Channels::defaultOf (int channel, const juce::String& paramId) const
 {
-    if (paramId == params::reverbType)      // the cockpit's room is a hall, whatever the engine opens on
-        return (float) juce::jmax (0, params::reverbCharacters.indexOf (defaultReverb));
+    const auto c = (size_t) juce::jlimit (0, count - 1, channel);
+
+    if (paramId == params::reverbType)      // the channel's own room, whatever the engine opens on
+        return (float) juce::jmax (0, params::reverbCharacters.indexOf (defaultReverbs[c]));
+    if (paramId == params::delayMix)
+        return defaultDelayMix[c];
 
     auto* p = amp.apvts.getParameter (paramId);
     return p != nullptr ? p->convertFrom0to1 (p->getDefaultValue()) : 0.0f;

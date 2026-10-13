@@ -14,7 +14,8 @@
 //     not a step of its own;
 //   - a channel whose pack is not installed is refused, and the parameter says where the sound stayed.
 //
-//   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called.
+//   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called;
+//   - a channel never pulled opens on its own reverb and its own share of delay.
 //
 // It reads the cockpit's packs from where the cockpit reads them, and lays the build's set out there
 // first, as the cockpit does.
@@ -22,6 +23,7 @@
 #include "PluginProcessor.h"
 #include "Parameters.h"
 #include "catpit/CatpitEngine.h"
+#include "catpit/CatpitPresets.h"
 
 #include <cmath>
 #include <cstdio>
@@ -238,6 +240,34 @@ int main()
         check (channels.cabinetIsStale(), "...and that name is the stale part");
         channels.align();
         check (channels.cabinet() == now && ! channels.cabinetIsStale(), "...which settling puts right");
+    }
+
+    // WHAT EACH CHANNEL OPENS ON. INIT forgets every channel, so each of them is new again.
+    {
+        auto* room  = amp->apvts.getParameter (params::reverbType);
+        auto* delay = amp->apvts.getParameter (params::delayMix);
+        const auto opensOn = [room, delay] (const char* reverb, float mix)
+        {
+            return room != nullptr && delay != nullptr && room->getCurrentValueAsText() == reverb
+                && std::abs (delay->convertFrom0to1 (delay->getValue()) - mix) < 1.0e-3f;
+        };
+
+        catpit::Presets presets (*amp, channels);
+        presets.init();
+        ticks();
+        check (channels.active() == 0 && opensOn ("Hall", 15.0f), "after INIT the first channel stands in a hall, with a little delay");
+        engine.go (1);
+        check (opensOn ("Hall", 15.0f), "...and so does the second");
+        engine.go (2);
+        check (opensOn ("Spring", 0.0f), "the third opens on a spring, and no delay");
+        engine.go (3);
+        check (opensOn ("Ambience", 0.0f), "...the fourth on an ambience, and none either");
+
+        delay->setValueNotifyingHost (delay->convertTo0to1 (40.0f));
+        engine.go (0);
+        engine.go (3);
+        check (opensOn ("Ambience", 40.0f), "what a hand has set on a channel is kept over what it opens on");
+        ticks();
     }
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");

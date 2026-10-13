@@ -155,7 +155,7 @@ void Engine::setUpChain (bool firstTime)
     setParam (params::reverbPresent, 1.0f);
     setParam (params::reverbOn,      1.0f);
     if (firstTime)                            // after that the reverb is the player's to choose
-        setParam (params::reverbType, (float) params::reverbCharacters.indexOf (Channels::defaultReverb));
+        setParam (params::reverbType, channels.defaultOf (channels.active(), params::reverbType));
     setParam (params::cabPresent,    1.0f);
     setParam (params::cabOn,         1.0f);
 
@@ -163,6 +163,10 @@ void Engine::setUpChain (bool firstTime)
     // starts with it off, wherever that trim was left.
     if (firstTime)
         setParam (params::blockIn (params::preampId), 0.0f);
+
+    // ...and with as much delay as its channel opens on, not as much as the engine does.
+    if (firstTime)
+        setParam (params::delayMix, channels.defaultOf (channels.active(), params::delayMix));
 
     // BASS / MIDDLE / TREBLE are the pack's own tone stack. The universal console's three bands they
     // used to ride stand flat behind it: a pack with no tone of its own falls to that console, and

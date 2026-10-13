@@ -33,8 +33,13 @@ class Channels
 public:
     static constexpr int count = 4;
 
-    /** The reverb a channel opens on until the player picks another. */
-    static constexpr const char* defaultReverb = "Hall";
+    /** WHAT A CHANNEL OPENS ON, until the player sets it otherwise — a channel never pulled, and every
+        one of them after INIT. In the channels' order: the two clean ones stand in a hall with a
+        little delay behind them; the two driven ones have each a room of their own, and no delay.
+        Everything else a channel keeps opens on its parameter's own default. */
+    static constexpr std::array<const char*, count> defaultReverbs {{ "Hall", "Hall", "Spring", "Ambience" }};
+    static constexpr std::array<float, count> defaultDelayMix {{ 15.0f, 15.0f, 0.0f, 0.0f }};
+    float defaultOf (int channel, const juce::String& paramId) const;
 
     /** BASS, MIDDLE, TREBLE are the playing pack's own tone controls, by their place in it: the
         cockpit's packs are made with those three first, in that order. */
@@ -183,9 +188,8 @@ private:
     juce::ValueTree node() const;
     juce::ValueTree ensureNode();
     void  store (juce::ValueTree record) const;
-    void  recall (const juce::ValueTree& record);
+    void  recall (int channel, const juce::ValueTree& record);
     float plain (const juce::String& paramId) const;
-    float defaultOf (const juce::String& paramId) const;
     void  set (const juce::String& paramId, float plainValue);
 };
 
