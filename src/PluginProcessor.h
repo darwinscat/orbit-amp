@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "Product.h"
 #include "Parameters.h"
 #include "ui/Prefs.h"
 #include "core/CapturedBlock.h"
@@ -30,6 +31,21 @@
 
 namespace orbitamp
 {
+
+/** WHAT A PRODUCT ADDS TO THE ENGINE THAT IS NOT ITS FACE. A face is there while its window is open;
+    this is there for as long as the processor is — what a host can reach with the window shut. The
+    cockpit keeps its four channels in one (catpit/CatpitEngine.h); OrbitAmp has none. */
+struct ProductEngine
+{
+    virtual ~ProductEngine() = default;
+
+    /** On the processor's own timer, on the message thread, before anything else that tick. */
+    virtual void pump() = 0;
+
+    /** The state changed under the processor — a session opened, a register recalled, a step of the
+        history taken. Said from inside the landing itself: it may look, and must not write. */
+    virtual void stateLanded() = 0;
+};
 
 /** The plugin shell. Deliberately thin: the chain (boost -> EQ -> preamp -> EQ -> delay -> reverb ->
     cabinet) lands in src/core/ behind small engines, and this class only pumps
@@ -78,7 +94,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override                          { return true; }
 
-    const juce::String getName() const override              { return "OrbitAmp"; }
+    const juce::String getName() const override              { return product::name; }
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }
@@ -160,6 +176,11 @@ public:
 
         `force` writes it now whatever has changed. Message thread only. */
     void refreshSavedState (bool force = false);
+
+    // BEFORE THE PARAMETERS, and so before everything: the list of devices a parameter offers is read
+    // off the disk when the parameters are made, and a product that carries its set in the binary has
+    // to have laid it out by then. A member, because the constructor's body would be too late.
+    struct FactorySet { FactorySet(); } factorySet;
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -295,6 +316,10 @@ private:
         as ONE undo step, so dragging a knob is not fifty of them. */
     void timerCallback() override
     {
+        // The product's own half first — what it does it does as a hand would, between two ticks.
+        if (product != nullptr)
+            product->pump();
+
         history.tick();
 
         // THE AIM GOES FIRST, and the order is load-bearing. It writes the device NUMBER; the pump
@@ -673,6 +698,9 @@ private:
         switchAimFrames = aimWindowFrames;
         cabIrParamBaselineStale = true;   // a restored `cab_ir` is not a host moving it — see the pump
 
+        if (product != nullptr)
+            product->stateLanded();       // ...and the product's own half has parameters to read the same way
+
         // BOTH baselines are taken from what the tree has just become, and that is the whole of
         // how a hand wins. `aimWrote*` starting at "nothing written yet" meant theft could only be
         // seen on a parameter the aim had already moved — so a player who reached for a control
@@ -718,6 +746,7 @@ private:
             tunerEar.prepare (sr);
 
         tunerEar.setLevelFloorDb ((double) prefs::tunerFloor());
+        tunerEar.setReferenceHz ((float) prefs::tunerReference());
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 
@@ -767,6 +796,35 @@ public:
         bug this became. */
     void pumpDeviceWork();
 
+    /** NAMES WHAT THE DEVICE PARAMETERS POINT AT, AT ONCE — for a caller on the message thread that has
+        just moved one and needs the state coherent before it returns, not a tick later.
+
+        A device is a number and a name, and the pump writes the name on the tick AFTER the number
+        moves. For a hand on a selector that gap is harmless: the move and its name settle into one
+        undo step. For a caller writing under a suppression scope it is not. The scope closes on a
+        baseline that holds the new number beside the OLD name; the name then lands outside it as an
+        edit of its own; and undoing that edit hands the aim the old name, which it honours by loading
+        the device the caller had just left. `rescanDevices` keeps its numbers and their names in one
+        scope for exactly this reason — this is the same, for anyone else who moves a device. */
+    void settleDeviceNames()
+    {
+        pumpDeviceWork();   // selects the pack each number names, which is what the names are read from
+
+        for (size_t b = 0; b < numCaptured; ++b)
+        {
+            const auto* id = deviceIdOf (b);
+
+            if (juce::approximatelyEqual (apvts.getRawParameterValue (id)->load(), lastDeviceValue[b]))
+                continue;
+
+            // What the aim does when a hand takes a device from it: the new pack's names, and the
+            // aim told that this is where the device now stands.
+            if (noteBlockNames (b, true))
+                if (const auto* param = apvts.getParameter (id))
+                    aimWroteDevice[b] = param->getValue();
+        }
+    }
+
     /** A model is BUILT off the message thread — bytes from the pack, a network parsed and warmed,
         some twenty milliseconds — and brought back to the player through the message queue. A driver
         without a message loop (a test) sets this and the jobs run inside pumpDeviceWork instead. */
@@ -804,7 +862,23 @@ public:
         host's tempo and the block's own does not exist. */
     bool runsInHost() const noexcept { return wrapperType != wrapperType_Standalone; }
 
+    /** A PROGRAM CHANGE THAT CAME IN, for a face that plays them. The engine has no programs of its
+        own: it keeps the last one a MIDI input sent (0..127, on any channel) until a face that gives
+        programs a meaning takes it — the cockpit, whose first four are its channels. -1 when none has
+        come since the last call. */
+    int takeProgramChange() noexcept { return midiProgram.exchange (-1, std::memory_order_relaxed); }
+
+    /** ...AND A CONTROLLER'S VALUE, the same way: the last one each of the 128 controllers sent
+        (0..127, on any channel), kept until a face that rides something on that controller takes it.
+        -1 when that controller has sent nothing since the last call. */
+    int takeControlChange (int controller) noexcept
+    {
+        return midiControl[(size_t) (controller & 0x7f)].exchange (-1, std::memory_order_relaxed);
+    }
+
 private:
+    std::atomic<int> midiProgram { -1 };
+    std::array<std::atomic<int>, 128> midiControl;      // each -1 until its controller speaks
 
     /** The noise gate, from felitronics-core — the same engine OrbitCab ships. It keys off the
         raw input at the front of the chain; where it MUTES is the player's parameter. */
@@ -862,6 +936,7 @@ public:
     /** TEMPORARY — the audition loop player. Goes with the demo strip it belongs to. */
     core::DemoPlayer demo;
     void selectDemoLoop (int index);
+    int  demoLoop() const noexcept { return demoLoopIndex; }     // the one last selected; -1 before any was
 
     /** The raw input, kept for the tuner. The audio thread only ever writes it; listening happens
         on the processor's own message-thread pump, and every needle — the strip's miniature, the
@@ -964,11 +1039,12 @@ public:
     /** What resolution each block's pair is publishing at, written by that block's face. */
     std::array<std::atomic<int>, 2> blockSpectrumOrder;
 
-    /** The raw input's peak this block, in dB — the level the gate KEYS off, for the meter the
-        thresholds are drawn on. Same writer, same readers. */
+    /** The raw input's peak this block, in dB, over the channels the chain works — the level the
+        gate KEYS off, for the meter the thresholds are drawn on. Same writer, same readers. */
     std::atomic<float> gateKeyDb { -90.0f };
 
 private:
+    int demoLoopIndex = -1;     // which of params::demoLoops the audition player holds
 
     // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
     // thread should not be doing per block.
@@ -1165,8 +1241,29 @@ private:
     void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override              { stateDirty = true; }
     void valueTreeRedirected (juce::ValueTree&) override                              { stateDirty = true; }
 
+public:
+    /** The product's own half of the engine, where it has one (ProductEngine) — null for OrbitAmp.
+        Declared after everything it reaches into, so that it goes before any of it does. */
+    std::unique_ptr<ProductEngine> product;
+
+private:
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };
+
+/** The face a build opens. One processor, two faces: OrbitAmp's comes from PluginEditor.cpp, the
+    cockpit's from catpit/CatpitEditor.cpp, and each target compiles exactly one of them. */
+juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
+
+/** What a product keeps INSIDE ITS BINARY and plays from disk, put where it is played from. Defined
+    once per target, like the face: OrbitAmp's set rides in its bundles and this does nothing; the
+    cockpit's is in the binary (catpit/CatpitSet.h). The processor calls it before it builds anything
+    of its own — see AmpProcessor::factorySet. */
+void layOutFactorySet();
+
+/** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —
+    once per target again. OrbitAmp adds no parameter and has no such half: it answers null. */
+void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
+std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor&);
 
 } // namespace orbitamp

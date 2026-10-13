@@ -646,4 +646,15 @@ void AmpEditor::resized()
 
 }
 
+juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
+{
+    return new AmpEditor (p);
+}
+
+void layOutFactorySet() {}      // OrbitAmp's factory devices ride in its bundles
+
+// ...and it is the engine as it stands: no parameter of its own, no half of its own.
+void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&) {}
+std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor&) { return nullptr; }
+
 } // namespace orbitamp

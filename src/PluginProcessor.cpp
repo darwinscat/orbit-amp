@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "PluginProcessor.h"
-#include "PluginEditor.h"
+#include "Product.h"
 #include "Parameters.h"
 #include "device/IrLibrary.h"
 
@@ -11,11 +11,27 @@
 namespace orbitamp
 {
 
+AmpProcessor::FactorySet::FactorySet()
+{
+    layOutFactorySet();
+}
+
+namespace
+{
+    /** The engine's parameters, and after them whatever the product adds of its own. */
+    juce::AudioProcessorValueTreeState::ParameterLayout layout()
+    {
+        auto all = params::createLayout();
+        addProductParameters (all);
+        return all;
+    }
+}
+
 AmpProcessor::AmpProcessor()
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, stateType, params::createLayout()),
+      apvts (*this, nullptr, stateType, layout()),
       // The history's opaque seam: it snapshots and restores the parameter tree without knowing what
       // is in it. replaceState takes a COPY so the parameter objects stay valid and every editor
       // attachment survives an undo.
@@ -28,14 +44,19 @@ AmpProcessor::AmpProcessor()
                },
                felitronics::appkit::CompareHistory::Config {}),
       // GitHub's release list for THIS repo, the running version, and the badge's own settings file.
-      // The checker asks nothing on its own — see updateChecker().
+      // The checker asks nothing on its own — see updateChecker(). The repository releases both faces,
+      // so each asks for the releases that wear ITS tag prefix (see Product.h): OrbitAmp's is empty,
+      // which is the plain "latest release" it has always asked for.
       updater ({ .ownerRepo      = "darwinscat/orbit-amp",
-                 .productName    = "OrbitAmp",
+                 .tagPrefix      = product::tagPrefix,
+                 .productName    = product::name,
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })
 {
     for (auto& order : blockSpectrumOrder)
         order.store (eqSpectrumOrder);
+    for (auto& value : midiControl)
+        value.store (-1);
 
     for (int l = 0; l < params::numEqLinks; ++l)
     {
@@ -117,6 +138,11 @@ AmpProcessor::AmpProcessor()
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
     rescanDevices();
+
+    // The product's own half, where it has one. HERE, before the history takes its baseline: what it
+    // settles as it is built — the cockpit's chain, its channel, its pack — is how the amp starts,
+    // and must not be an edit of it.
+    product = makeProductEngine (*this);
 
     // The names go in BEFORE the history looks, so a plugin that has just opened already knows
     // which device it is playing — and knows it without that knowledge being an edit. Resetting
@@ -319,8 +345,8 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
 void AmpProcessor::selectDemoLoop (int index)
 {
     const int n = (int) std::size (params::demoLoopFiles);
-    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[juce::jlimit (0, n - 1, index)]),
-                  getSampleRate());
+    demoLoopIndex = juce::jlimit (0, n - 1, index);
+    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[demoLoopIndex]), getSampleRate());
 }
 
 void AmpProcessor::rescanDevices()
@@ -967,8 +993,20 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
     return layouts.getMainInputChannelSet() == out;
 }
 
-void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    // The two things the engine listens for in MIDI: a Program Change and a controller's value
+    // (takeProgramChange, takeControlChange). The standalone hands over whatever the inputs switched
+    // on in its settings sent; a host sends nothing to a plug-in that asks for no MIDI input. Read off
+    // the raw bytes — a MidiMessage made of a long SysEx passing by would allocate.
+    for (const auto event : midi)
+    {
+        if (event.numBytes == 2 && (event.data[0] & 0xf0) == 0xc0)
+            midiProgram.store (event.data[1] & 0x7f, std::memory_order_relaxed);
+        else if (event.numBytes == 3 && (event.data[0] & 0xf0) == 0xb0)
+            midiControl[(size_t) (event.data[1] & 0x7f)].store (event.data[2] & 0x7f, std::memory_order_relaxed);
+    }
+
     // A HOST'S BLOCK IS NOT ALWAYS THE BLOCK IT PROMISED. prepareToPlay names the most it will
     // send, and every stage with a scratch buffer — the room's wet copy, the fades' dry copy, the
     // captured blocks — is sized to that; a host that sends more (an offline render, a bounce, a
@@ -1086,8 +1124,11 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // pop-free, so it runs unconditionally and the switch is an argument.
     const auto tGate = PerfClock::now();
     {
+        // Of the channels the chain WORKS, not of everything that was handed in: in MONO and in STEREO
+        // SPACE the amp eats channel 0 alone, and a second input that never reaches it must not move
+        // the meter the IN trim is set by, nor light its clip.
         float peak = 0.0f;
-        for (int ch = 0; ch < numChannels; ++ch)
+        for (int ch = 0; ch < nch; ++ch)
             peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, numSamples));
         gateKeyDb.store (juce::Decibels::gainToDecibels (peak, -90.0f));
 
@@ -1565,7 +1606,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
 juce::AudioProcessorEditor* AmpProcessor::createEditor()
 {
-    return new AmpEditor (*this);
+    return makeEditor (*this);
 }
 
 } // namespace orbitamp

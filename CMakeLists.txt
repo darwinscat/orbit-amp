@@ -206,7 +206,7 @@ FetchContent_MakeAvailable(felitronics_guitar_core)
 # the modules transitively. This is also where the faceplate render kit MOVES once it settles
 # here (see CLAUDE.md — build it here first, move it later).
 # ----------------------------------------------------------------------------
-set(ORBITAMP_APPKIT_TAG "v0.21.1" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+set(ORBITAMP_APPKIT_TAG "v0.22.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
 set(ORBITAMP_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit"
     CACHE PATH "Local felitronics-appkit checkout (used if present); else the pinned release is fetched")
 if(ORBITAMP_APPKIT_DIR AND EXISTS "${ORBITAMP_APPKIT_DIR}/CMakeLists.txt")
@@ -509,6 +509,225 @@ target_link_libraries(OrbitAmp PRIVATE
 )
 
 # ----------------------------------------------------------------------------
+# CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and two
+# faces, each target compiling exactly one `makeEditor`. Standalone only, for now. Its renders are in
+# resources/catpit and are built into the binary under a namespace of their own, beside OrbitAmp's data.
+# ----------------------------------------------------------------------------
+juce_add_binary_data(CatpitAmpData
+    NAMESPACE   CatpitData
+    HEADER_NAME CatpitData.h
+    SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/cockpit.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/midi.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/knob-drive.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/knob-tone.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/throttle-grip.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-closed.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-open.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-on.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/fader-cap.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-clean.jpg"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-edge.jpg"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-crunch.jpg"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-hi-gain.jpg"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/mark.svg")
+
+# RELEASED APART FROM ORBITAMP, from the same tree: a version of its own, and tags of its own —
+# `catpit-vX.Y.Z` beside OrbitAmp's `vX.Y.Z` — so neither waits for the other and a fix in the engine
+# reaches each at its own next release. This is the number the cockpit shows, stamps its bundle with
+# and compares against the releases that wear its prefix (src/Product.h); it moves when the COCKPIT
+# is released. .github/workflows/release-catpit.yml refuses a tag that disagrees with it.
+set(CATPITAMP_VERSION 0.1.0)
+
+# The cockpit's icon. macOS 26 sets any icon that is not its own rounded square on a grey plate —
+# the family's disc came out as a small disc on a light square — so the Mac wears the mark on the
+# rounded square the system expects (824 of the 1024 canvas, margins and all), and is shown as drawn.
+# Windows and Linux keep the disc.
+if(APPLE)
+    set(CATPITAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/CatpitAmp-macOS-1024.png")
+else()
+    set(CATPITAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/CatpitAmp-1024.png")
+endif()
+
+juce_add_plugin(CatpitAmp
+    VERSION                     "${CATPITAMP_VERSION}"
+    PRODUCT_NAME                "CatpitAmp"
+    COMPANY_NAME                "Darwin's Cat"
+    BUNDLE_ID                   "com.darwinscat.catpitamp"
+    PLUGIN_MANUFACTURER_CODE    Dcat
+    PLUGIN_CODE                 Ctpt
+    FORMATS                     VST3 AU Standalone
+    VST3_CATEGORIES             "Fx" "Distortion"
+    AU_MAIN_TYPE                "kAudioUnitType_Effect"
+    IS_SYNTH                    FALSE
+    NEEDS_MIDI_INPUT            FALSE
+    NEEDS_MIDI_OUTPUT           FALSE
+    IS_MIDI_EFFECT              FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT  "CatpitAmp needs audio input to process your signal."
+    # Bundle / executable icon — the cockpit's mark; see CATPITAMP_ICON. No ICON_SMALL, as OrbitAmp.
+    ICON_BIG                    "${CATPITAMP_ICON}"
+    COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
+
+# ...and as a CLAP, wrapped the way OrbitAmp's is, wearing the cockpit's icon in place of the
+# wrapper's own.
+clap_juce_extensions_plugin(TARGET CatpitAmp
+    CLAP_ID       "com.darwinscat.catpitamp"
+    CLAP_FEATURES audio-effect "guitar" "amplifier")
+if(APPLE)
+    add_custom_command(TARGET CatpitAmp_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:CatpitAmp,JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:CatpitAmp_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
+
+# What the cockpit is made of — said once, for the plug-in and for the two programs further down that
+# are the cockpit compiled again under a main() of their own.
+set(CATPITAMP_SOURCES
+    src/PluginProcessor.cpp
+    src/Parameters.cpp
+    src/ui/Theme.cpp
+    src/core/ProcessMemory.cpp
+    src/catpit/CatpitArt.cpp
+    src/catpit/CatpitCabs.cpp
+    src/catpit/CatpitChannels.cpp
+    src/catpit/CatpitControls.cpp
+    src/catpit/CatpitEngine.cpp
+    src/catpit/CatpitMidi.cpp
+    src/catpit/CatpitMonitor.cpp
+    src/catpit/CatpitPresets.cpp
+    src/catpit/CatpitSet.cpp
+    src/catpit/CatpitSpace.cpp
+    src/catpit/CatpitStandalone.cpp
+    src/catpit/CatpitGlSky.cpp
+    src/catpit/CatpitEditor.cpp)
+set(CATPITAMP_LIBRARIES
+    OrbitAmpData
+    CatpitAmpData
+    felitronics::analysis
+    felitronics::appkit
+    felitronics::appkit_webp
+    felitronics::core
+    felitronics::dynamics
+    felitronics::eq
+    felitronics::lineareq
+    felitronics::convolution
+    felitronics::measurement
+    felitronics::nam
+    felitronics::rigplayer
+    juce::juce_audio_utils
+    juce::juce_dsp
+    juce::juce_data_structures
+    juce::juce_opengl                # the sky, on the GPU
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+target_sources(CatpitAmp PRIVATE ${CATPITAMP_SOURCES})
+
+target_compile_definitions(CatpitAmp PUBLIC
+    ORBITAMP_VERSION="${CATPITAMP_VERSION}"
+    ORBITAMP_PRODUCT_NAME="CatpitAmp"
+    ORBITAMP_RELEASE_TAG_PREFIX="catpit-"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0)
+target_include_directories(CatpitAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(CatpitAmp OrbitAmpVersionGen)
+
+target_link_libraries(CatpitAmp PRIVATE ${CATPITAMP_LIBRARIES})
+
+# Every format the cockpit is built as on this platform — AU on the Mac alone.
+set(CATPITAMP_FORMATS "")
+foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
+    if(TARGET CatpitAmp_${fmt})
+        list(APPEND CATPITAMP_FORMATS CatpitAmp_${fmt})
+    endif()
+endforeach()
+
+# THE COCKPIT'S OWN SET IS INSIDE ITS BINARY — every format's, on every system — and the amp lays it
+# out as files when it first starts (src/catpit/CatpitSet.h says why). Whatever sits in
+# resources/catpit/Devices (packs named after the channels — Clean, Edge, Crunch, Hi-Gain — each one
+# `.orbitrig.zip` file) and resources/catpit/IRs (the cabinets CAB steps through, in the order of their
+# names). CONFIGURE_DEPENDS: a file added or renamed there is seen at the next build, not at the next
+# time somebody remembers to run cmake. Absent or empty, the build carries none, and the cockpit plays
+# what the player puts in its own Devices and IRs folders. It reads nothing of OrbitAmp's.
+set(CATPITAMP_SET "")
+foreach(kind IN ITEMS Devices IRs)
+    file(GLOB CATPITAMP_SET_FILES LIST_DIRECTORIES false CONFIGURE_DEPENDS
+         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}/*")
+    list(FILTER CATPITAMP_SET_FILES EXCLUDE REGEX "/\\.[^/]*$")      # .DS_Store and its kind
+    list(LENGTH CATPITAMP_SET_FILES CATPITAMP_SET_COUNT)
+    message(STATUS "CatpitAmp ${kind}: ${CATPITAMP_SET_COUNT} in the binary")
+    list(APPEND CATPITAMP_SET ${CATPITAMP_SET_FILES})
+endforeach()
+
+# What reads the set says whether there is one: with none, there is no data to link and nothing to ask.
+add_library(CatpitAmpSet INTERFACE)
+if(CATPITAMP_SET)
+    juce_add_binary_data(CatpitAmpSetData
+        NAMESPACE   CatpitSetData
+        HEADER_NAME CatpitSetData.h
+        SOURCES     ${CATPITAMP_SET})
+    set_target_properties(CatpitAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    target_link_libraries(CatpitAmpSet INTERFACE CatpitAmpSetData)
+    target_compile_definitions(CatpitAmpSet INTERFACE CATPIT_SET_EMBEDDED=1)
+else()
+    target_compile_definitions(CatpitAmpSet INTERFACE CATPIT_SET_EMBEDDED=0)
+endif()
+target_link_libraries(CatpitAmp PRIVATE CatpitAmpSet)
+
+# Not part of the default build. The two products are released apart, and OrbitAmp's own build — a
+# contributor's, a pull request's, a release's — must never fail on the cockpit. Whoever wants the
+# cockpit asks for it by name: one format (`cmake --build build --target CatpitAmp_Standalone`), or
+# all of them — `--target CatpitAmp_All`, which the CLAP joins here, since its wrapper does not add
+# itself.
+set_target_properties(CatpitAmp ${CATPITAMP_FORMATS} CatpitAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(CatpitAmp_All CatpitAmp_CLAP)
+
+# The cockpit's memory probe — not a gate, a measuring instrument: what the cockpit holds with its
+# window built, and with it SHUT, which is the figure that matters in a host and the one the
+# standalone cannot give. It is the cockpit itself, compiled again under a main() of its own, and
+# like the cockpit it is built only when asked for by name.
+function(catpitamp_console target main product)
+    juce_add_console_app(${target} PRODUCT_NAME "${product}")
+    target_sources(${target} PRIVATE ${main} ${CATPITAMP_SOURCES})
+    target_include_directories(${target} PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+    add_dependencies(${target} OrbitAmpVersionGen)
+    target_compile_definitions(${target} PRIVATE
+        ORBITAMP_VERSION="${CATPITAMP_VERSION}"
+        ORBITAMP_PRODUCT_NAME="CatpitAmp"
+        ORBITAMP_RELEASE_TAG_PREFIX="catpit-"
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0)
+    target_link_libraries(${target} PRIVATE CatpitAmpSet ${CATPITAMP_LIBRARIES})
+    set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endfunction()
+catpitamp_console(catpitamp_memory_probe tests/MemoryProbe.cpp "CatpitAmpMemoryProbe")
+
+# Gate for the cockpit's channels with no window at all: that the processor is a four-channel amp by
+# itself, and CHANNEL — the parameter a host reaches it by — moves it. The cockpit under a main() of
+# its own again, and the cockpit's, so built only by name.
+catpitamp_console(catpitamp_channel_test tests/CatpitChannelTests.cpp "CatpitAmpChannelTest")
+
+# Gate for the cockpit's set as it leaves the binary — laid out whole, once, and nothing else in the
+# folder touched. Runs entirely in a folder of its own. The cockpit's, so built only by name.
+juce_add_console_app(catpitamp_set_test PRODUCT_NAME "CatpitAmpSetTest")
+target_sources(catpitamp_set_test PRIVATE
+    tests/CatpitSetTests.cpp
+    src/catpit/CatpitSet.cpp)
+target_include_directories(catpitamp_set_test PRIVATE src)
+target_compile_definitions(catpitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(catpitamp_set_test PRIVATE
+    CatpitAmpSet
+    juce::juce_core
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(catpitamp_set_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.
@@ -614,9 +833,32 @@ if(APPLE)
                     "$<TARGET_BUNDLE_DIR:OrbitAmp_Standalone>"
             COMMENT "OrbitAmp: signing the standalone so macOS remembers the mic grant"
             VERBATIM)
+
+        # The cockpit is a standalone too, and asks for the same microphone.
+        if(TARGET CatpitAmp_Standalone)
+            add_custom_command(TARGET CatpitAmp_Standalone POST_BUILD
+                COMMAND codesign --force --options runtime --timestamp=none
+                        --entitlements "${CMAKE_CURRENT_SOURCE_DIR}/installer/standalone.entitlements"
+                        --sign "${ORBITAMP_SIGN_IDENTITY}"
+                        "$<TARGET_BUNDLE_DIR:CatpitAmp_Standalone>"
+                COMMENT "CatpitAmp: signing the standalone so macOS remembers the mic grant"
+                VERBATIM)
+        endif()
     else()
         message(STATUS "Standalone signing: no '${ORBITAMP_SIGN_IDENTITY}' identity — staying ad-hoc (mic prompt every launch)")
     endif()
+
+    # A REBUILD NEVER MOVES THE BUNDLE'S OWN DATE — only what is inside it changes — and that date is
+    # what macOS keys its icon cache on. A bundle first built before it had an icon kept the blank
+    # placeholder in the Dock and the app switcher for good, with the right icon sitting inside it.
+    # So the bundle is touched after every build, and the system looks again.
+    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone)
+        if(TARGET ${standalone})
+            add_custom_command(TARGET ${standalone} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E touch_nocreate "$<TARGET_BUNDLE_DIR:${standalone}>"
+                VERBATIM)
+        endif()
+    endforeach()
 endif()
 
 # ----------------------------------------------------------------------------

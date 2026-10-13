@@ -183,16 +183,19 @@ public:
     }
 
     //==========================================================================
-    /** Nearest equal-tempered note, A4 = 440. What the needle shows is the DISTANCE, in cents. */
+    /** Nearest equal-tempered note, counted from an A4 of `a4` Hz — 440, unless the player tunes to
+        something that will not retune. What the needle shows is the DISTANCE, in cents. */
     struct Note
     {
         int   midi  = 0;      // MIDI number of the nearest note
         float cents = 0.0f;   // signed distance to it, -50..+50
     };
 
-    static Note nearestNote (float hz)
+    static constexpr float concertA = 440.0f;
+
+    static Note nearestNote (float hz, float a4 = concertA)
     {
-        const float semis = 69.0f + 12.0f * std::log2 (hz / 440.0f);
+        const float semis = 69.0f + 12.0f * std::log2 (hz / a4);
         const int   midi  = (int) std::lround (semis);
         return { midi, (semis - (float) midi) * 100.0f };
     }

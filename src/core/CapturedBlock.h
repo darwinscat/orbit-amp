@@ -98,9 +98,7 @@ public:
     {
         lastSelected = index;
 
-        const auto* pack = juce::isPositiveAndBelow (index, packs.size())
-                             ? &packs.getReference (index)
-                             : (packs.isEmpty() ? nullptr : &packs.getReference (0));
+        const auto* pack = packAt (index);
 
         if (pack == nullptr)
         {
@@ -261,6 +259,20 @@ public:
             deg = nearestKnot (deg);
 
         player.setDial (dial, deg);
+    }
+
+    /** WHERE THE GAIN DIAL LANDS IN STEP, as a fraction of its travel: the captured position nearest to
+        `travel` — what `setGain` plays there with SMOOTH off, so a face can stand its knob on it. The
+        travel itself when no pack is loaded or the device has no captured axis. Message thread. */
+    double stepAt (double travel) const
+    {
+        travel = juce::jlimit (0.0, 1.0, travel);
+
+        if (! player.loaded() || player.dialName().empty())
+            return travel;
+
+        const double sweep = (double) player.dialSweep();
+        return sweep > 0.0 ? nearestKnot (travel * sweep) / sweep : travel;
     }
 
     /** The pack's per-file input trims (`input_db`), see RigPlayer::setInputTrims: off, every
@@ -571,6 +583,77 @@ public:
 
     juce::String dialName() const { return juce::String (player.dialName()); }
 
+    /** THE CAPTURE THE DIAL STANDS ON, AS A FILE: its name in the pack and its bytes as a plain `.nam`,
+        whatever the pack keeps it as. In STEP that is the one capture playing; in SMOOTH, the nearer
+        of the two the player is mixing. Nothing when no pack is loaded, the dial picks no file, or
+        the file will not be read. Message thread — it opens the pack. */
+    struct CaptureFile
+    {
+        juce::String      name;         // the file's name in the pack, without its extension
+        juce::MemoryBlock nam;          // the model, as NAM JSON
+        double            hour = 0.0;   // where the gear's gain knob stood for it, as on a clock face:
+                                        // 1 to 12, 9.5 = half past nine; 0 = the pack does not say
+    };
+
+    CaptureFile captureOnDial() const
+    {
+        const auto* pack = packAt (lastSelected);
+        if (pack == nullptr || ! player.loaded())
+            return {};
+
+        const auto& plan  = player.plan();
+        const auto& files = player.stage().device.files;
+        const int   file  = plan.file[plan.targetB > 0.5 ? 1 : 0];
+        if (! juce::isPositiveAndBelow (file, (int) files.size()))
+            return {};
+
+        const juce::String id (files[(size_t) file].id);
+        auto bytes = device::DeviceLibrary::readBinaryEntry (*pack, id);
+
+        if (namz::isNamz (bytes.getData(), bytes.getSize()))
+        {
+            const auto json = namz::unpack (bytes.getData(), bytes.getSize(), maxNamBytes);
+            bytes.replaceAll (json.data(), json.size());    // nothing, when it would not unpack
+        }
+
+        if (bytes.isEmpty())
+            return {};
+
+        return { juce::File::createLegalFileName (id).upToLastOccurrenceOf (".", false, false), bytes,
+                 hourShotAt (files[(size_t) file].id) };
+    }
+
+    /** WHERE THE GEAR'S GAIN KNOB STOOD FOR A CAPTURE, as an hour on a clock face. The pack states a
+        position in degrees up from the knob's lower stop, and how far the knob turns in all; that
+        travel is centred on twelve, so 150 of 300 degrees is 12 and 180 is 1. A capture the pack also
+        plays lower on the dial, fed softer, answers with the position it was SHOT at — the entry
+        that feeds it untouched. 0 when the pack names no dial, or says this position some other way. */
+    double hourShotAt (const std::string& id) const
+    {
+        const double sweep = (double) player.dialSweep();
+        if (sweep <= 0.0 || ! player.loaded())
+            return 0.0;
+
+        for (const auto& f : player.stage().device.files)
+        {
+            if (f.id != id || std::abs (f.inputDb) > 0.0005)
+                continue;
+
+            const auto at = f.settings.find (player.dialName());
+            if (at == f.settings.end())
+                continue;
+
+            const juce::String degrees (at->second);
+            if (degrees.isEmpty() || ! degrees.containsOnly ("0123456789."))
+                continue;
+
+            const double hour = std::fmod (12.0 + (degrees.getDoubleValue() - sweep * 0.5) / 30.0, 12.0);
+            return hour > 0.0 ? hour : hour + 12.0;
+        }
+
+        return 0.0;
+    }
+
     juce::String circuit() const
     {
         const auto* s = nam();
@@ -701,7 +784,17 @@ private:
     // breaking up to thoroughly into it without leaving the range a model behaves in.
     static constexpr float driveDbPerStep = 4.0f;
 
+    // What a capture may unpack to — the player's own guard (NamStage) against a file that lies about its size.
+    static constexpr size_t maxNamBytes = 64u * 1024u * 1024u;
+
     const namz::rig::Stage* nam() const { return player.loaded() ? &player.stage() : nullptr; }
+
+    /** The pack an index stands for: when it points nowhere the first one, as `select` plays it. */
+    const device::DeviceLibrary::Pack* packAt (int index) const
+    {
+        return juce::isPositiveAndBelow (index, packs.size()) ? &packs.getReference (index)
+                                                              : (packs.isEmpty() ? nullptr : &packs.getReference (0));
+    }
 
     /** SMOOTH is the player's own law — the midpoint handover, the full span. STEP is that law with
         no width at all: a hard switch halfway between two captures, which the dial never visits

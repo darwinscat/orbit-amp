@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../Product.h"
+
 #include <namz.h>
 #include <namz_rig.h>
 #include <namz_rig_load.h>
@@ -93,7 +95,9 @@ public:
         dir = dir.getChildFile ("Application Support");
        #endif
 
-        return dir.getChildFile ("Darwin's Cat").getChildFile ("OrbitAmp");
+        // The PRODUCT's folder: two faces of one engine each keep a set of their own — devices,
+        // IRs — and neither reads the other's. For OrbitAmp this is the folder it has always been.
+        return dir.getChildFile ("Darwin's Cat").getChildFile (product::name);
     }
 
     static juce::File directory()
