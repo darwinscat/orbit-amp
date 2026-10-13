@@ -128,6 +128,7 @@ namespace
 
     // How DRIVE goes between the pack's captures — see CatpitEditor.h. Kept with the machine's settings.
     const juce::Identifier driveStepsKey { "drive_steps" };
+    const juce::StringArray driveWays { "Smoothly", "In steps" };
 
     // Where a capture was last saved to (saveCapture): the next one is offered the same folder.
     const juce::Identifier captureFolderKey { "capture_folder" };
@@ -919,27 +920,41 @@ void CatpitEditor::chooseDriveSteps (bool steps)
     drive.settle();
 }
 
-/** IN STEPS, DRIVE STANDS ON ONE CAPTURE OF THE PACK, and a right click on it offers that capture as a
-    `.nam` — the model alone, as it was shot, for whatever else plays one. Turning smoothly it stands
-    between two, and there is no one file to give: no menu either. */
+/** A RIGHT CLICK ON DRIVE: how it goes between the pack's captures — the setting the settings menu
+    keeps under INPUT, here on the knob it is about. IN STEPS, DRIVE STANDS ON ONE CAPTURE OF THE PACK,
+    and the menu offers that capture as a `.nam` too — the model alone, as it was shot, for whatever
+    else plays one. Turning smoothly it stands between two, and there is no one file to give. */
 void CatpitEditor::showDriveMenu()
 {
-    if (! driveSteps)
-        return;
-
     endTapping();
 
-    juce::PopupMenu::Item item ("Save the current sound as .nam...");
-    item.itemID = 1;
-    item.colour = lilac;
-    item.action = [safe = juce::Component::SafePointer<CatpitEditor> (this)]
+    const auto itemFor = [this] (const juce::String& text, int id, bool ticked, std::function<void (CatpitEditor&)> then)
     {
-        if (safe != nullptr)     // the action is posted: the window may be gone by the time it runs
-            safe->saveCapture();
+        juce::PopupMenu::Item item (text);
+        item.itemID   = id;
+        item.colour   = lilac;
+        item.isTicked = ticked;
+        item.action   = [safe = juce::Component::SafePointer<CatpitEditor> (this), run = std::move (then)]
+        {
+            if (safe != nullptr)     // the action is posted: the window may be gone by the time it runs
+                run (*safe);
+        };
+        return item;
     };
 
     juce::PopupMenu menu;
-    menu.addItem (std::move (item));
+    menu.addSectionHeader ("DRIVE TURNS");
+    for (int i = 0; i < driveWays.size(); ++i)
+        menu.addItem (itemFor (driveWays[i], 1 + i, (i == 1) == driveSteps,
+                               [steps = i == 1] (CatpitEditor& e) { e.chooseDriveSteps (steps); }));
+
+    if (driveSteps)
+    {
+        menu.addSeparator();
+        menu.addItem (itemFor ("Save the current sound as .nam...", 1 + driveWays.size(), false,
+                               [] (CatpitEditor& e) { e.saveCapture(); }));
+    }
+
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
 
@@ -1427,11 +1442,10 @@ void CatpitEditor::showSettingsMenu()
         push.addItem (itemFor (decibels (turboPushes[i]), firstTurbo + (int) i, turboPushes[i] == turboNow));
     menu.addSubMenu ("TURBO adds  " + decibels (turboNow), push);
 
-    const juce::StringArray ways { "Smoothly", "In steps" };
     juce::PopupMenu way;
-    for (int i = 0; i < ways.size(); ++i)
-        way.addItem (itemFor (ways[i], firstDrive + i, (i == 1) == driveSteps));
-    menu.addSubMenu ("DRIVE turns  " + ways[driveSteps ? 1 : 0], way);
+    for (int i = 0; i < driveWays.size(); ++i)
+        way.addItem (itemFor (driveWays[i], firstDrive + i, (i == 1) == driveSteps));
+    menu.addSubMenu ("DRIVE turns  " + driveWays[driveSteps ? 1 : 0], way);
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)
