@@ -1027,6 +1027,7 @@ void CatpitEditor::showCabs()
     cabs->onSave   = [this] { saveCab(); };
     cabs->onRename = [this] { renameCab(); };
     cabs->onRemove = [this] { removeCab(); };
+    cabs->onClose  = [this] { if (sheet != nullptr && sheet->onDismiss) sheet->onDismiss(); };
     showSheet (std::move (cabs));
 }
 

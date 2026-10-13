@@ -12,6 +12,7 @@ namespace
     constexpr int narrowest = 176, widest = 320, rowH = 28, titleH = 34, pad = 16, gap = 14, groupGap = 24;
     constexpr int nameLeft = 32, nameRight = 6, rowGap = 8;     // a row: the lamp's strip, the name, and the gap to the next column
     constexpr int keyW = 92, keyH = 28, keyGap = 10, fewestRows = 6;
+    constexpr int okGap = 28;       // OK stands apart from the keys that do something to a cabinet
     constexpr float namePx = 15.0f;
 
     using panel::textPx, panel::ink, panel::dim, panel::faint, panel::write;
@@ -142,12 +143,13 @@ CabPanel::CabPanel (const Channels& c, juce::Point<int> space) : channels (c), r
     view.getHorizontalScrollBar().setColour (juce::ScrollBar::thumbColourId, violet.withAlpha (0.6f));
     addAndMakeVisible (view);
 
-    for (auto* key : { &add, &save, &rename, &remove })
+    for (auto* key : { &add, &save, &rename, &remove, &ok })
         addAndMakeVisible (key);
     add.onClick    = [this] { if (onAdd)    onAdd(); };
     save.onClick   = [this] { if (onSave)   onSave(); };
     rename.onClick = [this] { if (onRename) onRename(); };
     remove.onClick = [this] { if (onRemove) onRemove(); };
+    ok.onClick     = [this] { if (onClose)  onClose(); };
 
     refresh();
 
@@ -178,7 +180,7 @@ void CabPanel::refresh()
 
     if (relaid)
     {
-        const int keysW = keyW * 4 + keyGap * 3;
+        const int keysW = keyW * 5 + keyGap * 3 + okGap;
         const int deep  = juce::jmax (fewestRows, (room.y - pad * 2 - gap - keyH - titleH) / rowH);
         lists.layOut (deep);
 
@@ -192,7 +194,8 @@ void CabPanel::refresh()
 
         const int keysY = view.getBottom() + gap;
         add.setBounds (pad, keysY, keyW, keyH);
-        remove.setBounds (pad + viewW - keyW, keysY, keyW, keyH);
+        ok.setBounds (pad + viewW - keyW, keysY, keyW, keyH);
+        remove.setBounds (ok.getX() - okGap - keyW, keysY, keyW, keyH);
         rename.setBounds (remove.getX() - keyGap - keyW, keysY, keyW, keyH);
         save.setBounds (rename.getX() - keyGap - keyW, keysY, keyW, keyH);
 
