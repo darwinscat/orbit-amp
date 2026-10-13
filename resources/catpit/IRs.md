@@ -98,11 +98,3 @@ All twelve takes as they were shot; take01, take08, take09 and take11 are no lon
 | take12 | 20:27:35 | Shure SM57 | grille | Cap Edge r65 | 0 cm | On-axis | 2 | -10.0 | 76.8 dB | +0 |
 | take12 | 20:27:35 | Sennheiser e906 | grille | Cap Edge | 0 cm | On-axis | 3 | -5.9 | 83.1 dB | +7 |
 | take12 | 20:27:35 | Neumann U87 Ai | grille | Center Cone | 2 cm | On-axis | 4 | -8.7 | 80.6 dB | +31 |
-
-## `13` … `24` — the set before, marked OLD
-
-The twelve cabinets the cockpit had before these, under the names the new ones now wear:
-`13-baryon-core-old.wav`, `14-dark-matter-old.wav`, `15-ion-cavity-old.wav`, `16-event-horizon-old.wav`, `17-gravity-well-old.wav`, `18-coronal-flare-old.wav`,
-`19-brown-dwarf-old.wav`, `20-accretion-gap-old.wav`, `21-dust-cloud-old.wav`, `22-blue-shift-old.wav`, `23-red-giant-old.wav`, `24-pulsar-beam-old.wav`.
-48 kHz, 5000 samples, 24-bit mono. Kept behind the new twelve while the two sets are compared; the
-plate reads the mark — `BARYON CORE OLD`.
