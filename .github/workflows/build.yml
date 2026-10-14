@@ -65,11 +65,15 @@ jobs:
       - name: Build CatpitAmp
         run: cmake --build build --target CatpitAmp_All catpitamp_set_test catpitamp_channel_test
 
+      # The rover likewise: released apart, not in the default build, built here by name with its gates.
+      - name: Build RedPawAmp
+        run: cmake --build build --target RedPawAmp_All redpawamp_set_test redpawamp_channel_test
+
       - name: sccache stats
         if: always()
         run: sccache --show-stats
 
-      # The nine acceptance gates — the same ones the local release runs. Console apps land in
+      # The acceptance gates — OrbitAmp's nine, the same ones the local release runs, and each product's own. Console apps land in
       # <name>_artefacts/Release; the two plain executables sit wherever the generator put them.
       - name: Gates
         shell: bash
@@ -135,6 +139,9 @@ jobs:
           # and its channels with no window, moved the way a host moves them.
           run_gate catpit-set "$(find build/catpitamp_set_test_artefacts -type f -name '*.exe' | head -1)"
           CATPIT_GATE_OWNS_HOME=1 run_gate catpit-channel "$(find build/catpitamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
+          # ...and the rover's, the same two over its six channels.
+          run_gate redpaw-set "$(find build/redpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
+          REDPAW_GATE_OWNS_HOME=1 run_gate redpaw-channel "$(find build/redpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
 
       - name: Validate (pluginval, VST3)
         shell: bash

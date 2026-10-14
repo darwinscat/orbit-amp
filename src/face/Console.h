@@ -80,6 +80,9 @@ public:
         float holeKeySize = 40.0f;
         std::array<juce::Rectangle<float>, 3> sliders;      // REVERB, DELAY, CAB
         std::array<juce::Rectangle<float>, 3> sliderNames;  // the row each plate's words stand in
+        float sliderCapAngle = juce::MathConstants<float>::halfPi;  // how the sliders' caps lie (PlateSlider)
+        float sliderCapLength = 0.0f;
+        float faderCapLength = 0.0f;                        // ...and the columns' (ColumnFader)
         juce::Rectangle<float> inMeter, inFader, outMeter, outFader;
         juce::Rectangle<float> tuner;
         std::array<juce::Rectangle<float>, numLamps> lamps;
@@ -96,7 +99,8 @@ public:
         ArtKnob::Pointer drivePointer;
         const juce::Image& toneKnob;
         ArtKnob::Pointer tonePointer;
-        const juce::Image& cap;                             // the plate sliders' and the columns' faders'
+        const juce::Image& cap;                             // the plate sliders' cap
+        const juce::Image& faderCap;                        // ...and the columns' faders'
         std::array<const juce::Image*, numLamps> lampsLit;  // each lamp as its render painted it lit
         juce::String mark;                                  // the product's mark, as SVG: the build window wears it
         juce::String midiCommands;                          // what the MIDI window lists (Midi.h)

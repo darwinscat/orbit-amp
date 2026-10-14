@@ -118,7 +118,7 @@ namespace
     face::Console::Look cockpitLook()
     {
         const auto& art = Art::get();
-        return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap,
+        return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.sliderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
                  juce::String::fromUTF8 (CatpitData::mark_svg, CatpitData::mark_svgSize),
                  juce::String::fromUTF8 (CatpitData::midi_txt, CatpitData::midi_txtSize) };

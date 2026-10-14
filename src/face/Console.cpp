@@ -161,8 +161,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
       delayWord (stage::px13),
       delayNote (stage::px13),
       delayTempo (stage::px13),
-      inFader (look.cap),
-      outFader (look.cap),
+      inFader (look.faderCap),
+      outFader (look.faderCap),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
       inClip (*look.lampsLit[inClipLamp],   [this] { return amp.inClip.exchange (false) ? 1.0f : 0.0f; }, clipHoldMs, clipFadeMs),
@@ -271,6 +271,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         // CAB has a position for every cabinet the product has; a selector needs two to be one.
         sliders[i] = std::make_unique<PlateSlider> (look.cap, lineFrom[i], lineTo[i],
                                                     i == 2 ? juce::jmax (2, channels.cabinets().size()) : 0);
+        sliders[i]->capAngle  = places.sliderCapAngle;
+        sliders[i]->capLength = places.sliderCapLength;
         stage.addAndMakeVisible (*sliders[i]);
         sliders[i]->setBounds (box (places.sliders[i]));
     }
@@ -340,6 +342,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter, &tuner })
         stage.addAndMakeVisible (c);
     tuner.setBounds (box (places.tuner));
+    inFader.capLength = outFader.capLength = places.faderCapLength;
     inFader.setBounds (box (places.inFader));
     outFader.setBounds (box (places.outFader));
     inMeter.setBounds (box (places.inMeter));

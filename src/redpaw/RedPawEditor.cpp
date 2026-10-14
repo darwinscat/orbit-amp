@@ -1,0 +1,424 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
+
+#include "RedPawEditor.h"
+
+#include "RedPawLayout.h"
+#include "RedPawLineup.h"
+
+#include "../ui/Prefs.h"
+
+#include <BinaryData.h>
+#include <RedPawData.h>
+
+namespace orbitamp
+{
+
+juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
+{
+    return new redpaw::RedPawEditor (p);
+}
+
+namespace redpaw
+{
+
+using namespace face;
+
+namespace
+{
+    // Where the pointer is drawn on the knobs' renders: a lit slot from `inner` to `outer` of the cap's
+    // radius, `width` wide — on the machined cap, clear of the knurled ring.
+    constexpr ArtKnob::Pointer drivePointer { 0.30f, 0.66f, 0.06f };
+    constexpr ArtKnob::Pointer tonePointer  { 0.30f, 0.64f, 0.07f };
+
+    /** What the windscreen shows, and how often — the machine's, kept with its settings. The landscape
+        as a word, in the order of Windscreen::Mode. */
+    const juce::Identifier landscapeKey { "landscape" };
+    const juce::Identifier frameRateKey { "landscape_fps" };
+    const juce::StringArray landscapeWords { "plains", "1993", "still" };
+    const juce::StringArray landscapeNames { "Plains (GPU)", "1993 (CPU)", "Still" };
+
+    juce::Rectangle<float> around (juce::Point<float> c, float w, float h)
+    {
+        return juce::Rectangle<float> (w, h).withCentre (c);
+    }
+
+    /** A row of words over or under a well, as wide as the well. */
+    juce::Rectangle<float> wellRow (size_t well)
+    {
+        const auto& w = layout::wells[well];
+        return { w.getX(), layout::wellNameY[well] - 15.0f, w.getWidth(), 30.0f };
+    }
+
+    /** WHERE THE CONSOLE'S CONTROLS STAND on the dashboard (RedPawLayout.h). Each knob is drawn smaller
+        than its cyan ring, which stays in sight round it. */
+    Console::Places dashboardPlaces()
+    {
+        using namespace layout;
+
+        Console::Places p;
+        p.drive = around (drive.centre, drive.knob, drive.knob);
+        for (size_t i = 0; i < tones.size(); ++i)
+            p.tones[i] = around (tones[i].centre, tones[i].knob, tones[i].knob);
+
+        p.keys = keys;
+        p.keySize = keySize;
+        p.holes = holes;
+        p.holeKeySize = 44.0f;      // the hole's pitch: a toggle up or down stands out of it
+
+        for (size_t i = 0; i < p.sliders.size(); ++i)
+        {
+            const auto& w = wells[i];
+            p.sliders[i] = juce::Rectangle<float> (w.getWidth(), sliderHeight).withCentre (w.getCentre());
+            p.sliderNames[i] = wellRow (i);
+        }
+        p.sliderCapAngle  = 0.0f;   // the caps' renders lie along their wells...
+        p.sliderCapLength = sliderCapLength;
+        p.faderCapLength  = faderCapLength;     // ...and across their slots
+
+        p.inMeter  = inMeter;
+        p.outMeter = outMeter;
+        p.inFader  = inFader.withSizeKeepingCentre (faderWidth, inFader.getHeight());
+        p.outFader = outFader.withSizeKeepingCentre (faderWidth, outFader.getHeight());
+        p.tuner = tunerScreen;
+        for (size_t i = 0; i < p.lamps.size(); ++i)
+            p.lamps[i] = lamps[i];
+
+        p.emblemFace = { emblemFace.begin(), emblemFace.end() };
+        p.emblemMark = emblemMark;
+
+        // The two long plates: PRESET over MEM on the left, the version over CPU on the right. The
+        // readings start where a reading of their usual width would be centred, so that a number that
+        // changes width moves nothing else.
+        const auto rowA = [] (juce::Rectangle<float> plate) { return plate.withHeight (28.0f).translated (0.0f, 1.0f); };
+        const auto rowB = [] (juce::Rectangle<float> plate, float usual)
+        {
+            return juce::Rectangle<float> (plate.getCentreX() - usual * 0.5f, plate.getY() + 29.0f, usual + 40.0f, 28.0f);
+        };
+        p.preset  = rowA (leftPlate);
+        p.memory  = rowB (leftPlate, 170.0f);
+        p.version = rowA (rightPlate);
+        p.load    = rowB (rightPlate, 110.0f);
+
+        p.gateDoor    = around (gatePlate, 110.0f, 28.0f);
+        p.limiterDoor = around (limiterPlate, 112.0f, 28.0f);
+        p.readingPx   = px13;
+        return p;
+    }
+
+    Console::Look dashboardLook()
+    {
+        const auto& art = Art::get();
+        return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.faderCap,
+                 { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
+                 juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),     // the family's mark, until the rover has its own
+                 juce::String::fromUTF8 (RedPawData::midi_txt, RedPawData::midi_txtSize) };
+    }
+
+    /** A render drawn fitted into `box` by its opaque part — the square keys and TURBO, up or down. */
+    void drawRender (juce::Graphics& g, const juce::Image& img, juce::Rectangle<float> box)
+    {
+        drawFitted (g, img, box);
+    }
+
+    /** THE ROOF'S TOGGLE. The two renders are not drawn alike — up, the bat stands over its nut; down,
+        it hangs under a nut drawn larger — so each is fitted by its own opaque part: both nuts as wide
+        as `nut`, centred on the hole, the bat up or down from there. */
+    void drawToggle (juce::Graphics& g, juce::Rectangle<float> keyBox, bool up)
+    {
+        const auto& art = Art::get();
+        const auto& img = up ? art.toggleUp : art.toggleDown;
+        if (! img.isValid())
+            return;
+
+        const auto src = opaqueBounds (img);
+        constexpr float nut = 20.0f;
+        const float k = nut / src.getWidth();
+        const auto c = keyBox.getCentre();
+        const float h = src.getHeight() * k;
+        const auto dst = up ? juce::Rectangle<float> (nut, h).withPosition (c.x - nut * 0.5f, c.y + nut * 0.5f - h)
+                            : juce::Rectangle<float> (nut, h).withPosition (c.x - nut * 0.5f, c.y - nut * 0.5f);
+        g.drawImageTransformed (img, juce::AffineTransform::translation (-src.getX(), -src.getY()).scaled (k).translated (dst.getX(), dst.getY()));
+    }
+}
+
+//==============================================================================
+juce::Rectangle<int> Dashboard::historyArea() const
+{
+    return juce::Rectangle<float> (layout::holes.front().x - 40.0f, 0.0f,
+                                   layout::holes.back().x - layout::holes.front().x + 60.0f, 47.0f).toNearestInt();
+}
+
+void Dashboard::paintLive (juce::Graphics& g) const
+{
+    paintRoof (g);
+    paintKeyNames (g);
+}
+
+/** The signs by the roof's keys, each in the gap left of its hole: the history's turning arrows, lit
+    while there is a step to take, and the registers' letters, the one that is playing lit orange. */
+void Dashboard::paintRoof (juce::Graphics& g) const
+{
+    using namespace layout;
+
+    const auto signAt = [] (juce::Point<float> hole) { return juce::Point<float> (hole.x - signOffset, hole.y); };
+
+    const bool can[] { canUndo, canRedo };
+    for (int i = 0; i < 2; ++i)
+        drawTurnArrow (g, signAt (holes[(size_t) (ovUndo + i)]), 6.0f, i == 0, labelLilac.withAlpha (can[i] ? 1.0f : 0.35f));
+
+    // The gaps between the holes' bezels are narrower than a 13-px capital is wide: the letters are set
+    // condensed — as tall as ever, three quarters as wide.
+    for (int i = 0; i < numRegisterKeys; ++i)
+    {
+        const auto at = signAt (holes[(size_t) (ovFirstRegister + i)]);
+        const juce::Graphics::ScopedSaveState keep (g);
+        g.addTransform (juce::AffineTransform::scale (0.75f, 1.0f, at.x, at.y));
+        drawLabel (g, juce::String::charToString ((juce::juce_wchar) ('A' + i)), juce::Rectangle<float> (30.0f, 26.0f).withCentre (at),
+                   px13, i == activeRegister ? orange : labelLilac.withAlpha (0.8f), 0.0f);
+    }
+}
+
+/** The keys' names, over or under them by turns — a dimmed key's as dim as the key. */
+void Dashboard::paintKeyNames (juce::Graphics& g) const
+{
+    using namespace layout;
+
+    for (size_t i = 0; i < switches.size(); ++i)
+        drawLabel (g, switches[i].shortName,
+                   juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keys[i].x, keyNameOver[i] ? keyNameOverY : keyNameUnderY }),
+                   px11, labelLilac.withAlpha (keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
+}
+
+void Dashboard::paintStatic (juce::Graphics& g, float scale) const
+{
+    using namespace layout;
+
+    if (const auto& bg = Art::get().bg; bg.isValid())
+        g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
+
+    engraveMark (g, emblemMark, scale);
+
+    // A word on the dust: a shadow under it, so it reads off the rust as well as off the bare metal.
+    const auto print = [&g] (const juce::String& text, juce::Point<float> at, float w, juce::Colour colour)
+    {
+        const auto area = juce::Rectangle<float> (w, 28.0f).withCentre (at);
+        drawLabel (g, text, area.translated (0.0f, 1.5f), px13, juce::Colours::black.withAlpha (0.7f));
+        drawLabel (g, text, area, px13, colour);
+    };
+
+    print ("DRIVE", { drive.centre.x, knobNameY }, 200.0f, labelLilac);
+    const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
+    for (size_t i = 0; i < tones.size(); ++i)
+        print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, labelLilac);
+
+    print ("TURBO", turboName, 140.0f, orange);
+    print ("INPUT", inputName, 170.0f, labelLilac);
+    print ("OUTPUT", outputName, 170.0f, labelLilac);
+}
+
+//==============================================================================
+RedPawEditor::RedPawEditor (AmpProcessor& p)
+    : face::Console (p, std::make_unique<Dashboard>(), dashboardPlaces(), dashboardLook()),
+      channelName (layout::px16)
+{
+    using namespace layout;
+
+    // Everything this constructor sets is the face settling onto the state, not a player's edit.
+    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
+
+    // THE ROOF'S KEYS ARE TOGGLES: thrown up while a history key is pressed, and up on the register
+    // that is playing.
+    for (int i = 0; i < 6; ++i)
+        roofKey (i).drawKey = [] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        {
+            drawToggle (g, box, down);
+        };
+
+    // ...the six square keys, and TURBO, are the dashboard's own buttons, up or pressed.
+    for (int i = 0; i < 6; ++i)
+        key (i).drawKey = [] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        {
+            drawRender (g, down ? Art::get().keyDown : Art::get().keyUp, box);
+        };
+
+    // THE WINDSCREEN, under the dashboard: the picture's alpha is its frame.
+    stage.addAndMakeVisible (view, 0);
+    view.setBounds (windscreen.toNearestInt());
+    view.addMouseListener (&glassClicks, false);
+    glassClicks.menu = [this] { showWindowMenu(); };
+
+    // THE GEAR LEVER: the pedal, and everything its channel was left with.
+    addToStage (lever);
+    lever.setBounds (juce::Rectangle<float> (GearLever::left, GearLever::top, gearPlate.getRight() - GearLever::left, 240.0f).toNearestInt());
+    lever.onGear    = [this] (int g) { pullGear (g); };
+    lever.onRelease = [this] { showChannel(); };   // held, it follows the hand; let go, it follows the state
+
+    // TURBO: the pedal's second channel, on or off — one switch for all three gears.
+    turbo.latching = false;
+    turbo.drawKey = [] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+    {
+        drawRender (g, down ? Art::get().turboDown : Art::get().turboUp, box);
+    };
+    turbo.onPress = [this] { throwTurbo (! turboOf (channels.active())); };
+    addToStage (turbo);
+    turbo.setBounds (juce::Rectangle<float> (turboSize, turboSize).withCentre (layout::turbo).toNearestInt());
+
+    // The channel that is playing, along the top of the nav screen: the gear in orange, the pack after it.
+    channelName.nameColour = orange;
+    channelName.setInterceptsMouseClicks (false, false);
+    addToStage (channelName);
+    channelName.setBounds (channelLine.toNearestInt());
+
+    showChannel();
+
+    // What the windscreen shows: the machine's choice, the Plains unless it has said otherwise — drawn
+    // by this window's context, which paints the face over it.
+    view.setHost (&gl);
+    gl.setOpenGLVersionRequired (juce::OpenGLContext::openGL3_2);
+    gl.setRenderer (this);
+    gl.setComponentPaintingEnabled (true);
+    gl.setContinuousRepainting (false);     // the view asks for each frame, at its own pace
+    gl.attachTo (*this);
+    view.setFrameRateCap ((int) prefs::store().get (frameRateKey, 60));
+    view.setMode ((Windscreen::Mode) juce::jmax (0, landscapeWords.indexOf (prefs::store().get (landscapeKey, landscapeWords[0]).toString())));
+    placeView();
+}
+
+RedPawEditor::~RedPawEditor()
+{
+    view.removeMouseListener (&glassClicks);
+    gl.detach();
+}
+
+void RedPawEditor::pullGear (int gear)
+{
+    go (channelOf (gear, turboOf (channels.active())));
+}
+
+void RedPawEditor::throwTurbo (bool on)
+{
+    go (channelOf (gearOf (channels.active()), on));
+}
+
+void RedPawEditor::showSelector (int channel)
+{
+    const int gear = gearOf (channel);
+    const bool turboOn = turboOf (channel);
+
+    if (! lever.isHeld() && lever.getGear() != gear)
+        lever.setGear (gear, true, false);
+    turbo.setOn (turboOn, false);
+
+    channelName.set (GearLever::names[gear], juce::String (lineup().channels[(size_t) channel].name).toUpperCase());
+
+    view.setGear (gear + 1);
+    view.setTurbo (turboOn);
+}
+
+/** 1 2 3: the lever goes to that gear, as if a hand had put it there; T throws TURBO. The keys are the
+    same whatever the layout prints on them — under a Russian one T arrives as Е. */
+bool RedPawEditor::channelKey (const juce::KeyPress& key)
+{
+    if (const int gear = key.getKeyCode() - '1'; gear >= 0 && gear < GearLever::numGears)
+    {
+        if (! lever.isHeld())
+            lever.setGear (gear, true);
+        return true;
+    }
+
+    const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
+    if (letter == 'T' || letter == 0x0415)
+    {
+        throwTurbo (! turboOf (channels.active()));
+        return true;
+    }
+    return false;
+}
+
+/** TURBO's controller: the pedal's second channel, or its first. */
+void RedPawEditor::turboChange (bool thrown)
+{
+    if (thrown != turboOf (channels.active()))
+        throwTurbo (thrown);
+}
+
+//==============================================================================
+/** What the windscreen shows — the Plains on the GPU, the 1993 landscape on the CPU, or a still — and
+    how often; and full screen. The machine's, kept with its settings. */
+void RedPawEditor::addWindowSections (juce::PopupMenu& menu)
+{
+    const auto self = [] (Console& e) -> RedPawEditor& { return static_cast<RedPawEditor&> (e); };
+
+    if (! amp.runsInHost())
+    {
+        menu.addSectionHeader ("WINDOW");
+        addChoice (menu, "Full screen", fullScreen, [self] (Console& e) { self (e).setFullScreen (! self (e).fullScreen); });
+    }
+
+    // Where the GPU's landscape cannot be had the CPU's drives instead, and the tick says what runs.
+    menu.addSectionHeader ("LANDSCAPE");
+    const auto running = view.mode();
+    for (int i = 0; i < landscapeNames.size(); ++i)
+        addChoice (menu, landscapeNames[i], (int) running == i,
+                   [self, i] (Console& e) { self (e).chooseLandscape ((Windscreen::Mode) i); },
+                   i != (int) Windscreen::Mode::gpu || ! view.status().gpuBroken);
+    for (const int fps : { 60, 30 })
+        addChoice (menu, juce::String (fps) + " frames a second", view.frameRateCap() == fps,
+                   [self, fps] (Console& e) { self (e).chooseFrameRate (fps); }, running != Windscreen::Mode::still);
+}
+
+void RedPawEditor::showWindowMenu()
+{
+    endTapping();
+
+    juce::PopupMenu menu;
+    addWindowSections (menu);
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+void RedPawEditor::chooseLandscape (Windscreen::Mode mode)
+{
+    prefs::store().set (landscapeKey, landscapeWords[(int) mode]);
+    view.setMode (mode);
+}
+
+void RedPawEditor::chooseFrameRate (int fps)
+{
+    prefs::store().set (frameRateKey, fps);
+    view.setFrameRateCap (fps);
+}
+
+/** Where the windscreen is in the editor's own pixels, for the GL thread: the stage's scale and place. */
+void RedPawEditor::placeView()
+{
+    const auto at = (layout::windscreen * stageScale() + stageOrigin()).toNearestInt();
+    glassX.store (at.getX());
+    glassY.store (at.getY());
+    glassW.store (at.getWidth());
+    glassH.store (at.getHeight());
+    gl.triggerRepaint();
+}
+
+void RedPawEditor::newOpenGLContextCreated()
+{
+    view.hostContextCreated();
+}
+
+void RedPawEditor::renderOpenGL()
+{
+    const float k = (float) gl.getRenderingScale();
+    const int fw = juce::roundToInt ((float) getWidth() * k), fh = juce::roundToInt ((float) getHeight() * k);
+    juce::OpenGLHelpers::clear (juce::Colours::black);
+
+    const auto glass = juce::Rectangle<float> ((float) glassX.load(), (float) glassY.load(), (float) glassW.load(), (float) glassH.load()) * k;
+    view.hostRender (glass.toNearestInt(), fw, fh);
+}
+
+void RedPawEditor::openGLContextClosing()
+{
+    view.hostContextClosing();
+}
+
+} // namespace redpaw
+} // namespace orbitamp

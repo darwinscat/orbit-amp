@@ -796,6 +796,206 @@ target_link_libraries(redpaw_view_demo PRIVATE
 set_target_properties(redpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ----------------------------------------------------------------------------
+# RedPawAmp — the rover: a third face over the same processor (src/redpaw), the dashboard of a Mars rover
+# with the drive across Mars in its windscreen. Six channels — the Victory V4's six packs — picked as
+# three gears and TURBO. Built like the cockpit: the family's console (src/face) over the family's
+# channels (src/channels), its own renders in resources/redpaw, its own set, released apart under
+# tags of its own (`redpaw-vX.Y.Z`) — no release workflow yet. Built only when asked for by name.
+# ----------------------------------------------------------------------------
+juce_add_binary_data(RedPawAmpData
+    NAMESPACE   RedPawData
+    HEADER_NAME RedPawData.h
+    SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/dashboard.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/midi.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/knob-drive.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/knob-tone.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/lever.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/slider-cap.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/fader-cap.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/toggle-up.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/toggle-down.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/key-up.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/key-down.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/turbo-up.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/turbo-down.png")
+
+# The rover's own version, moved when the ROVER is released (src/Product.h).
+set(REDPAWAMP_VERSION 0.1.0)
+
+juce_add_plugin(RedPawAmp
+    VERSION                     "${REDPAWAMP_VERSION}"
+    PRODUCT_NAME                "RedPawAmp"
+    COMPANY_NAME                "Darwin's Cat"
+    BUNDLE_ID                   "com.darwinscat.redpawamp"
+    PLUGIN_MANUFACTURER_CODE    Dcat
+    PLUGIN_CODE                 Rdpw
+    FORMATS                     VST3 AU Standalone
+    VST3_CATEGORIES             "Fx" "Distortion"
+    AU_MAIN_TYPE                "kAudioUnitType_Effect"
+    IS_SYNTH                    FALSE
+    NEEDS_MIDI_INPUT            FALSE
+    NEEDS_MIDI_OUTPUT           FALSE
+    IS_MIDI_EFFECT              FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT  "RedPawAmp needs audio input to process your signal."
+    # A stand-in until the rover has an icon of its own: its DRIVE socket, knob and all, off the dashboard.
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/RedPawAmp-1024.png"
+    COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
+
+clap_juce_extensions_plugin(TARGET RedPawAmp
+    CLAP_ID       "com.darwinscat.redpawamp"
+    CLAP_FEATURES audio-effect "guitar" "amplifier")
+if(APPLE)
+    add_custom_command(TARGET RedPawAmp_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:RedPawAmp,JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:RedPawAmp_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
+
+# What the rover is made of — for the plug-in and for its gates, which are the rover compiled again
+# under a main() of their own.
+set(REDPAWAMP_SOURCES
+    src/PluginProcessor.cpp
+    src/Parameters.cpp
+    src/ui/Theme.cpp
+    src/core/ProcessMemory.cpp
+    src/device/FactorySet.cpp
+    src/channels/Channels.cpp
+    src/channels/Engine.cpp
+    src/channels/Presets.cpp
+    src/channels/Set.cpp
+    src/face/Cabs.cpp
+    src/face/Console.cpp
+    src/face/Controls.cpp
+    src/face/Midi.cpp
+    src/face/Picture.cpp
+    src/face/Renders.cpp
+    src/face/Sheet.cpp
+    src/face/Standalone.cpp
+    src/redpaw/RedPawArt.cpp
+    src/redpaw/RedPawControls.cpp
+    src/redpaw/RedPawLineup.cpp
+    src/redpaw/RedPawEditor.cpp
+    ${REDPAW_VIEW_SOURCES})
+set(REDPAWAMP_LIBRARIES
+    OrbitAmpData
+    RedPawAmpData
+    felitronics::analysis
+    felitronics::appkit
+    felitronics::appkit_webp
+    felitronics::core
+    felitronics::dynamics
+    felitronics::eq
+    felitronics::lineareq
+    felitronics::convolution
+    felitronics::measurement
+    felitronics::nam
+    felitronics::rigplayer
+    juce::juce_audio_utils
+    juce::juce_dsp
+    juce::juce_data_structures
+    juce::juce_opengl                # the windscreen, on the GPU
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+target_sources(RedPawAmp PRIVATE ${REDPAWAMP_SOURCES})
+target_compile_definitions(RedPawAmp PUBLIC
+    ORBITAMP_VERSION="${REDPAWAMP_VERSION}"
+    ORBITAMP_PRODUCT_NAME="RedPawAmp"
+    ORBITAMP_RELEASE_TAG_PREFIX="redpaw-"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>)
+target_include_directories(RedPawAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(RedPawAmp OrbitAmpVersionGen)
+target_link_libraries(RedPawAmp PRIVATE ${REDPAWAMP_LIBRARIES})
+
+set(REDPAWAMP_FORMATS "")
+foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
+    if(TARGET RedPawAmp_${fmt})
+        list(APPEND REDPAWAMP_FORMATS RedPawAmp_${fmt})
+    endif()
+endforeach()
+
+# THE ROVER'S OWN SET IS INSIDE ITS BINARY, laid out as files when it first starts (src/channels/Set.h):
+# out of the tree's set, the Victory V4's six packs its channels play — each found by the capture it
+# holds — and, until the rover has cabinets of its own, the ten the cockpit carries.
+set(REDPAWAMP_SET
+    "${ORBITAMP_SET_DIR}/Devices/V4 Copper.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/Devices/V4 Copper TB.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/Devices/V4 Sheriff Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/Devices/V4 Sheriff Ch2.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/Devices/V4 Kraken Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/Devices/V4 Kraken Ch2.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
+    "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
+    "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
+    "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
+    "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
+    "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
+    "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
+    "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
+    "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
+    "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav")
+
+add_library(RedPawAmpSet INTERFACE)
+juce_add_binary_data(RedPawAmpSetData
+    NAMESPACE   ProductSetData
+    HEADER_NAME ProductSetData.h
+    SOURCES     ${REDPAWAMP_SET})
+set_target_properties(RedPawAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+target_link_libraries(RedPawAmpSet INTERFACE RedPawAmpSetData)
+target_compile_definitions(RedPawAmpSet INTERFACE PRODUCT_SET_EMBEDDED=1)
+target_link_libraries(RedPawAmp PRIVATE RedPawAmpSet)
+
+# Not part of the default build, like the cockpit: `--target RedPawAmp_All` builds every format.
+set_target_properties(RedPawAmp ${REDPAWAMP_FORMATS} RedPawAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(RedPawAmp_All RedPawAmp_CLAP)
+
+function(redpawamp_console target main product)
+    juce_add_console_app(${target} PRODUCT_NAME "${product}")
+    target_sources(${target} PRIVATE ${main} ${REDPAWAMP_SOURCES})
+    target_include_directories(${target} PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+    add_dependencies(${target} OrbitAmpVersionGen)
+    target_compile_definitions(${target} PRIVATE
+        ORBITAMP_VERSION="${REDPAWAMP_VERSION}"
+        ORBITAMP_PRODUCT_NAME="RedPawAmp"
+        ORBITAMP_RELEASE_TAG_PREFIX="redpaw-"
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0)
+    target_link_libraries(${target} PRIVATE RedPawAmpSet ${REDPAWAMP_LIBRARIES})
+    set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endfunction()
+
+# Gate for the rover's channels with no window at all: six channels on the V4's six packs, moved by
+# CHANNEL the way a host moves it, each with its own memory and what it opens on.
+redpawamp_console(redpawamp_channel_test tests/RedPawChannelTests.cpp "RedPawAmpChannelTest")
+
+# Gate for the rover's set as it leaves the binary — laid out whole, once, under the rover's own list,
+# the six packs the six channels' own. Runs entirely in a folder of its own.
+juce_add_console_app(redpawamp_set_test PRODUCT_NAME "RedPawAmpSetTest")
+target_sources(redpawamp_set_test PRIVATE
+    tests/RedPawSetTests.cpp
+    src/channels/Set.cpp
+    src/device/FactorySet.cpp)
+target_include_directories(redpawamp_set_test PRIVATE src)
+target_compile_definitions(redpawamp_set_test PRIVATE ORBITAMP_PRODUCT_NAME="RedPawAmp" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(redpawamp_set_test PRIVATE
+    RedPawAmpSet
+    felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
+    juce::juce_core
+    juce::juce_events
+    juce::juce_gui_basics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(redpawamp_set_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.
@@ -912,6 +1112,17 @@ if(APPLE)
                 COMMENT "CatpitAmp: signing the standalone so macOS remembers the mic grant"
                 VERBATIM)
         endif()
+
+        # ...and so is the rover.
+        if(TARGET RedPawAmp_Standalone)
+            add_custom_command(TARGET RedPawAmp_Standalone POST_BUILD
+                COMMAND codesign --force --options runtime --timestamp=none
+                        --entitlements "${CMAKE_CURRENT_SOURCE_DIR}/installer/standalone.entitlements"
+                        --sign "${ORBITAMP_SIGN_IDENTITY}"
+                        "$<TARGET_BUNDLE_DIR:RedPawAmp_Standalone>"
+                COMMENT "RedPawAmp: signing the standalone so macOS remembers the mic grant"
+                VERBATIM)
+        endif()
     else()
         message(STATUS "Standalone signing: no '${ORBITAMP_SIGN_IDENTITY}' identity — staying ad-hoc (mic prompt every launch)")
     endif()
@@ -920,7 +1131,7 @@ if(APPLE)
     # what macOS keys its icon cache on. A bundle first built before it had an icon kept the blank
     # placeholder in the Dock and the app switcher for good, with the right icon sitting inside it.
     # So the bundle is touched after every build, and the system looks again.
-    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone)
+    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone RedPawAmp_Standalone)
         if(TARGET ${standalone})
             add_custom_command(TARGET ${standalone} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E touch_nocreate "$<TARGET_BUNDLE_DIR:${standalone}>"
