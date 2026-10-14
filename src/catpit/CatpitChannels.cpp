@@ -27,10 +27,10 @@ namespace
     const juce::Identifier cabinetId { "cabinet" };
 
     /** The amp's own folder beside the player's: where the set a build carries is laid out
-        (CatpitSet.h), and where the device library looks for the packs a bundle does not hold. */
+        (CatpitSet.h), and where the device library looks for the packs the build carries. */
     juce::File factory()
     {
-        return device::DeviceLibrary::appDataRoot().getChildFile ("Factory");
+        return device::DeviceLibrary::factoryDirectory();
     }
 
     /** Where a build's own cabinets are: laid out with its packs. */

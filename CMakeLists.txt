@@ -386,6 +386,8 @@ juce_add_plugin(OrbitAmp
 target_sources(OrbitAmp PRIVATE
     src/PluginProcessor.cpp
     src/PluginEditor.cpp
+    src/OrbitAmpSet.cpp
+    src/device/FactorySet.cpp
     src/Parameters.cpp
     src/ui/Theme.cpp
     src/ui/FaceplateView.cpp
@@ -420,27 +422,21 @@ if(APPLE)
 endif()
 
 # ----------------------------------------------------------------------------
-# Factory devices. DeviceLibrary::bundledDirectory() looks inside the bundle first
-# (Contents/Resources/Devices) and falls back to the machine's Factory folder only when the build
-# ships nothing. The packs are curated by hand and arrive late, so the rule is a folder, not a
-# list: whatever sits in resources/Devices/ at CONFIGURE time rides into every bundle — drop the
-# packs in and re-run cmake. Absent or empty, the build ships an empty factory. The resources land
-# during bundle assembly, so they are inside every seal that is applied afterwards (dev signing,
-# the copy-plugin step, the release signature).
+# Factory devices: OrbitAmp's own set, INSIDE THE BINARY like the cockpit's — every format, every
+# system — and laid out in OrbitAmp's Factory folder when it starts (src/device/FactorySet.h says
+# why a bundle will not do). The X88-IR's four channels, the very files the cockpit carries:
+# referenced in resources/catpit/Devices, not copied, so there is one copy of each in the tree.
+# src/OrbitAmpSet.h names each by the channel it captured. A file listed here and not named there
+# is not laid out.
 # ----------------------------------------------------------------------------
-file(GLOB ORBITAMP_FACTORY_PACKS "${CMAKE_CURRENT_SOURCE_DIR}/resources/Devices/*")
-if(ORBITAMP_FACTORY_PACKS)
-    foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
-        if(TARGET OrbitAmp_${fmt})
-            juce_add_bundle_resources_directory(OrbitAmp_${fmt}
-                "${CMAKE_CURRENT_SOURCE_DIR}/resources/Devices")
-        endif()
-    endforeach()
-    list(LENGTH ORBITAMP_FACTORY_PACKS ORBITAMP_FACTORY_COUNT)
-    message(STATUS "Factory devices: ${ORBITAMP_FACTORY_COUNT} pack(s) ride in the bundles")
-else()
-    message(STATUS "Factory devices: resources/Devices/ is empty or absent — the factory ships empty")
-endif()
+juce_add_binary_data(OrbitAmpSetData
+    NAMESPACE   OrbitAmpSetData
+    HEADER_NAME OrbitAmpSetData.h
+    SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/Devices/Clean.orbitrig.zip"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/Devices/Edge.orbitrig.zip"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/Devices/Crunch.orbitrig.zip"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/Devices/Hi-Gain.orbitrig.zip")
 
 # ----------------------------------------------------------------------------
 # Embedded assets. The display FACE is not among them: appkit carries Michroma itself, whole, as
@@ -516,6 +512,7 @@ add_dependencies(OrbitAmp OrbitAmpVersionGen)                            # ...re
 
 target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # the mark, the notice, the demo loops — BinaryData::*
+    OrbitAmpSetData                  # the factory packs, laid out at start — OrbitAmpSetData::*
     felitronics::analysis            # spectrum taps + panes behind the EQ curves
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::appkit_webp         # juce::Image <- WebP, for the picture a pack ships
@@ -617,6 +614,7 @@ set(CATPITAMP_SOURCES
     src/Parameters.cpp
     src/ui/Theme.cpp
     src/core/ProcessMemory.cpp
+    src/device/FactorySet.cpp
     src/catpit/CatpitArt.cpp
     src/catpit/CatpitCabs.cpp
     src/catpit/CatpitChannels.cpp
@@ -745,7 +743,8 @@ catpitamp_console(catpitamp_channel_test tests/CatpitChannelTests.cpp "CatpitAmp
 juce_add_console_app(catpitamp_set_test PRODUCT_NAME "CatpitAmpSetTest")
 target_sources(catpitamp_set_test PRIVATE
     tests/CatpitSetTests.cpp
-    src/catpit/CatpitSet.cpp)
+    src/catpit/CatpitSet.cpp
+    src/device/FactorySet.cpp)
 target_include_directories(catpitamp_set_test PRIVATE src)
 target_compile_definitions(catpitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(catpitamp_set_test PRIVATE
@@ -979,6 +978,25 @@ target_sources(orbitamp_library_test PRIVATE tests/LibraryTests.cpp)
 target_include_directories(orbitamp_library_test PRIVATE src)
 target_compile_definitions(orbitamp_library_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_library_test PRIVATE
+    felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
+    juce::juce_events
+    juce::juce_gui_basics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+# ----------------------------------------------------------------------------
+# Gate for OrbitAmp's set as it leaves the binary — the X88-IR's four packs laid out under the names
+# the device list tells apart, once, byte for byte. Runs entirely in a temp folder: the machine's
+# real Factory folder is never written.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
+target_sources(orbitamp_set_test PRIVATE
+    tests/OrbitAmpSetTests.cpp
+    src/device/FactorySet.cpp)
+target_include_directories(orbitamp_set_test PRIVATE src)
+target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_set_test PRIVATE
+    OrbitAmpSetData
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events
     juce::juce_gui_basics

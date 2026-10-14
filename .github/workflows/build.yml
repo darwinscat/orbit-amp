@@ -69,7 +69,7 @@ jobs:
         if: always()
         run: sccache --show-stats
 
-      # The seven acceptance gates — the same ones the local release runs. Console apps land in
+      # The eight acceptance gates — the same ones the local release runs. Console apps land in
       # <name>_artefacts/Release; the two plain executables sit wherever the generator put them.
       - name: Gates
         shell: bash
@@ -125,7 +125,7 @@ jobs:
             set -e
             return 1
           }
-          for t in captured chain library reverb ribbon; do
+          for t in captured chain library reverb ribbon set; do
             run_gate "$t" "$(find "build/orbitamp_${t}_test_artefacts" -type f -name '*.exe' | head -1)"
           done
           for t in eqlink tuner; do

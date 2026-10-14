@@ -1256,9 +1256,9 @@ private:
 juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
 
 /** What a product keeps INSIDE ITS BINARY and plays from disk, put where it is played from. Defined
-    once per target, like the face: OrbitAmp's set rides in its bundles and this does nothing; the
-    cockpit's is in the binary (catpit/CatpitSet.h). The processor calls it before it builds anything
-    of its own — see AmpProcessor::factorySet. */
+    once per target, like the face: OrbitAmp's set in OrbitAmpSet.cpp, the cockpit's beside its
+    channels (catpit/CatpitSet.h); both are laid out the one way device/FactorySet.h says. The
+    processor calls it before it builds anything of its own — see AmpProcessor::factorySet. */
 void layOutFactorySet();
 
 /** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —

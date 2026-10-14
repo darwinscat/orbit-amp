@@ -20,6 +20,10 @@
 
 #include <BinaryData.h>
 
+// OrbitAmp's set (OrbitAmpSet.cpp) is NOT laid out from here: the processor would write it into the
+// machine's real Factory folder. Its own gate, OrbitAmpSetTests, lays it out in a folder of its own.
+void orbitamp::layOutFactorySet() {}
+
 #include <felitronics/core/StreamResampler.h>
 
 #include <algorithm>
