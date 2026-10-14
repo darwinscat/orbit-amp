@@ -95,12 +95,20 @@ inline const juce::Point<float> versionPlate { 1434.0f, 812.0f };
 inline const juce::Point<float> presetPlate { width - 1434.0f, 812.0f };
 
 /** THE LAMPS THE COCKPIT LIGHTS ITSELF, each with room round it for its glow: the bars under the columns'
-    names, the input's overload and the output's. The render paints them lit; Art puts them out. */
-enum LampId { inClipLamp, outClipLamp, numLamps };
+    names, the input's overload and the output's; the slanted ones in the bottom corners under the
+    columns, the gate's and the limiter's. The render paints them lit; Art puts them out. */
+enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
 inline const std::array<juce::Rectangle<float>, numLamps> lamps {{
     { 81.0f,   325.0f, 66.0f, 38.0f },    // the bar 93..134 x 334..340, and its glow on the seam below
     { 1525.0f, 325.0f, 67.0f, 38.0f },    // the bar 1537..1579 x 334..340, and its glow on the seam below
+    { 62.0f,   824.0f, 54.0f, 49.0f },    // the slant 74..103 x 836..860
+    { 1556.0f, 824.0f, 55.0f, 48.0f },    // the slant 1568..1598 x 836..859
 }};
+
+/** The plates over those two, their names between the screws: left of PRESET, the gate's (screws at 25
+    and 125); right of the version, the limiter's (1546 and 1645). */
+inline const juce::Point<float> gatePlate    { 75.0f, 805.5f };
+inline const juce::Point<float> limiterPlate { 1595.5f, 805.5f };
 
 /** The flat plate under the grille, right of the tuner and down-left of the version, on the cockpit's
     bottom edge: what the engine is costing reads here. The words start at its left edge. */

@@ -501,6 +501,12 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
       inClip (Art::get().lampLit[layout::inClipLamp],   [this] { return amp.inClip.exchange (false) ? 1.0f : 0.0f; }, clipHoldMs, clipFadeMs),
       outClip (Art::get().lampLit[layout::outClipLamp], [this] { return amp.outClip.exchange (false) ? 1.0f : 0.0f; }, clipHoldMs, clipFadeMs),
+      gateLight (Art::get().lampLit[layout::gateLamp],
+                 [this] { return -amp.gateMeterDb.load (std::memory_order_relaxed) / 20.0f; }, 150.0, 350.0),       // full at 20 dB pressed
+      limiterLight (Art::get().lampLit[layout::limiterLamp],
+                    [this] { return -amp.limiterGrDb.load (std::memory_order_relaxed) / 3.0f; }, 300.0, 400.0),   // full at 3 dB squeezed
+      gateDoor (layout::px13),
+      limiterDoor (layout::px13),
       tuner (p.tunerEar),
       version (layout::px13),
       about (p.updateChecker(), aboutTheCockpit(), p.pluginFormat()),
@@ -716,10 +722,12 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     inMeter.setBounds (layout::inMeter.toNearestInt());
     outMeter.setBounds (layout::outMeter.toNearestInt());
 
-    for (auto* lamp : { &inClip, &outClip })
+    for (auto* lamp : { &inClip, &outClip, &gateLight, &limiterLight })
         stage.addAndMakeVisible (lamp);
     inClip.setBounds (layout::lamps[layout::inClipLamp].toNearestInt());
     outClip.setBounds (layout::lamps[layout::outClipLamp].toNearestInt());
+    gateLight.setBounds (layout::lamps[layout::gateLamp].toNearestInt());
+    limiterLight.setBounds (layout::lamps[layout::limiterLamp].toNearestInt());
 
     // What has an obvious home in the engine is wired to it; the rest only moves for now.
     bind (drive, params::preampGain);
@@ -818,6 +826,19 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     presetDoor.onClick = [this] { showPresetMenu(); };
     stage.addAndMakeVisible (presetDoor);
     presetDoor.setBounds (around (presetPlate, 140.0f, 30.0f));
+
+    // GATE and LIMITER, on the plates over their lamps, outside PRESET and the version.
+    for (auto* door : { &gateDoor, &limiterDoor })
+    {
+        door->valueColour = labelLilac.withAlpha (0.85f);
+        stage.addAndMakeVisible (door);
+    }
+    gateDoor.set ({}, "GATE");
+    gateDoor.onClick = [this] { showGateMenu(); };
+    gateDoor.setBounds (around (gatePlate, 100.0f, 28.0f));
+    limiterDoor.set ({}, "LIMITER");
+    limiterDoor.onClick = [this] { showOutputMenu(); };
+    limiterDoor.setBounds (around (limiterPlate, 100.0f, 28.0f));
 
     timerCallback();
     startTimerHz (4);   // the dots are a lookup and the load is a smoothed figure: nobody needs either sooner
@@ -1039,6 +1060,41 @@ void CatpitEditor::showOutputMenu()
     for (const float db : limiterCeilings)
         addChoice (menu, juce::String (db, 1) + " dB", std::abs (at - db) < 0.05f,
                    [db] (CatpitEditor& e) { e.setParam (params::limiterCeiling, db); }, on);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+/** A CLICK ON GATE, on its plate left of PRESET: the gate, as the settings menu holds it too — whether it
+    works, where it closes, how fast, and where in the chain it mutes. The sound's, like the limiter. */
+void CatpitEditor::showGateMenu()
+{
+    endTapping();
+
+    const bool on = getParam (params::gateOn) > 0.5f;
+    const auto choice = [this] (const char* id) { return juce::roundToInt (getParam (id)); };
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("GATE");
+    addChoice (menu, "On", on, [on] (CatpitEditor& e) { e.setParam (params::gateOn, on ? 0.0f : 1.0f); });
+
+    juce::PopupMenu threshold;
+    const int now = juce::roundToInt (getParam (params::gateThreshold));
+    for (int db = -80; db <= -10; db += 5)
+        addChoice (threshold, juce::String (db) + " dB", std::abs (now - db) <= 2,
+                   [db] (CatpitEditor& e) { e.setParam (params::gateThreshold, (float) db); });
+    menu.addSubMenu ("Threshold  " + juce::String (now) + " dB", threshold, on);
+
+    juce::PopupMenu decay;
+    for (int i = 0; i < params::gateDecayModes.size(); ++i)
+        addChoice (decay, params::gateDecayModes[i], choice (params::gateDecay) == i,
+                   [i] (CatpitEditor& e) { e.setParam (params::gateDecay, (float) i); });
+    menu.addSubMenu ("Closes  " + params::gateDecayModes[choice (params::gateDecay)], decay, on);
+
+    juce::PopupMenu position;
+    for (int i = 0; i < params::gatePositions.size(); ++i)
+        addChoice (position, params::gatePositions[i], choice (params::gatePos) == i,
+                   [i] (CatpitEditor& e) { e.setParam (params::gatePos, (float) i); });
+    menu.addSubMenu ("Mutes at  " + params::gatePositions[choice (params::gatePos)], position, on);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }

@@ -230,6 +230,42 @@ namespace
         return img;
     }
 
+    /** THE NAME PLATES LOSE THEIR SCREWS. The plates over the slanted lamps carry GATE and LIMITER now
+        (layout::gatePlate, limiterPlate), and LIMITER, at its 13 px, is as wide as the room between its
+        plate's two screws. All four go under bare plate — the plate beside each, toward the middle,
+        laid over it as a soft-edged disc — so both words sit free and the two sides stay a pair.
+        Numbers are in the render's 1672-wide space, measured off it. */
+    juce::Image clearNamePlates (juce::Image img)
+    {
+        if (! img.isValid())
+            return img;
+
+        const float k = (float) img.getWidth() / layout::width;
+        const auto original = img.createCopy();
+        const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
+        const int w = img.getWidth(), h = img.getHeight();
+        const auto inside = [w, h] (int x, int y) { return x >= 0 && y >= 0 && x < w && y < h; };
+
+        struct Screw { float x, y; int from; };     // `from`: where the plate is taken, beside it
+        const Screw screws[] { { 25.0f, 805.0f, 22 }, { 125.0f, 805.0f, -22 }, { 1545.8f, 805.0f, 22 }, { 1645.0f, 804.5f, -22 } };
+        const float r = 10.0f * k, feather = 2.5f * k;
+
+        for (const auto& s : screws)
+        {
+            const float sx = s.x * k, sy = s.y * k;
+            const int from = juce::roundToInt ((float) s.from * k);
+            for (int y = (int) std::floor (sy - r); y <= (int) std::ceil (sy + r); ++y)
+                for (int x = (int) std::floor (sx - r); x <= (int) std::ceil (sx + r); ++x)
+                {
+                    const float a = juce::jlimit (0.0f, 1.0f, (r - std::hypot ((float) x - sx, (float) y - sy)) / feather);
+                    if (a > 0.0f && inside (x, y) && inside (x + from, y))
+                        dst.setPixelColour (x, y, dst.getPixelColour (x, y).interpolatedWith (src.getPixelColour (x + from, y), a));
+                }
+        }
+        return img;
+    }
+
     /** THE LAMPS GO OUT. The render paints lit the lamps the cockpit now lights itself (layout::lamps).
         Each is taken out as it was painted, glow and all, to be laid back over at the strength it burns;
         in the picture it is put out — how much of a pixel is the lamp's orange is how far it is taken
@@ -385,7 +421,7 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg          = putOutLamps (cutWindshield (raiseTurbo (raiseTones (load ("cockpit.png")))), a.lampLit);
+        a.bg          = putOutLamps (clearNamePlates (cutWindshield (raiseTurbo (raiseTones (load ("cockpit.png"))))), a.lampLit);
         a.knobDrive   = load ("knob-drive.png");
         a.knobTone    = load ("knob-tone.png");
         a.leverGrip   = capped (offCentreGrip (load ("throttle-grip.png"), a.leverAxis), 480);
