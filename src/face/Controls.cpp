@@ -379,6 +379,22 @@ const MarkCut& MarkCut::at (float scale, juce::Rectangle<float> box)
     return made;
 }
 
+void engraveMark (juce::Graphics& g, juce::Rectangle<float> box, float scale)
+{
+    const auto& cut = MarkCut::at (scale, box).cut;
+    if (! cut.isValid())
+        return;
+
+    const float px = 1.0f / juce::jmax (1.0f, scale) * 1.6f;   // the wall's depth, about a pixel and a half
+    g.setColour (juce::Colours::black.withAlpha (0.8f));
+    g.drawImage (cut, box.translated (-0.5f * px, -px), juce::RectanglePlacement::stretchToFit, true);
+    g.setColour (juce::Colour (0xffd8d2ee).withAlpha (0.28f));
+    g.drawImage (cut, box.translated (0.4f * px, px), juce::RectanglePlacement::stretchToFit, true);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff8a8698), box.getCentreX(), box.getY(),
+                                             juce::Colour (0xff4b4858), box.getCentreX(), box.getBottom(), false));
+    g.drawImage (cut, box, juce::RectanglePlacement::stretchToFit, true);
+}
+
 namespace
 {
     juce::Path polygon (const std::vector<juce::Point<float>>& corners)

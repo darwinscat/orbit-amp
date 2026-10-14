@@ -241,21 +241,7 @@ void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
         g.drawLine (c.x - 2.2f, c.y - 2.2f, c.x + 2.2f, c.y + 2.2f, 1.0f);
     }
 
-    // THE MARK, ENGRAVED. Its light parts are cut into the plate: the cut's upper wall falls into
-    // shadow, its lower lip catches the light, and its floor is bare metal a shade brighter than the
-    // plate — so the mark reads as worked into the hull, not printed on it.
-    const auto& cut = MarkCut::at (scale, emblemMark).cut;
-    if (! cut.isValid())
-        return;
-
-    const float px = 1.0f / juce::jmax (1.0f, scale) * 1.6f;   // the wall's depth, about a pixel and a half
-    g.setColour (juce::Colours::black.withAlpha (0.8f));
-    g.drawImage (cut, emblemMark.translated (-0.5f * px, -px), juce::RectanglePlacement::stretchToFit, true);
-    g.setColour (juce::Colour (0xffd8d2ee).withAlpha (0.28f));
-    g.drawImage (cut, emblemMark.translated (0.4f * px, px), juce::RectanglePlacement::stretchToFit, true);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff8a8698), emblemMark.getCentreX(), emblemMark.getY(),
-                                             juce::Colour (0xff4b4858), emblemMark.getCentreX(), emblemMark.getBottom(), false));
-    g.drawImage (cut, emblemMark, juce::RectanglePlacement::stretchToFit, true);
+    engraveMark (g, emblemMark, scale);
 }
 
 void Cockpit::paintStatic (juce::Graphics& g, float scale) const

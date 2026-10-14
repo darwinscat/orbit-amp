@@ -173,6 +173,12 @@ struct MarkCut
     static const MarkCut& at (float scale, juce::Rectangle<float> box);
 };
 
+/** THE MARK, ENGRAVED in `box`, at `scale` physical pixels to the unit. Its light parts are cut into the
+    plate: the cut's upper wall falls into shadow, its lower lip catches the light, and its floor is
+    bare metal a shade brighter than the plate — so the mark reads as worked into the hull, not printed
+    on it. */
+void engraveMark (juce::Graphics&, juce::Rectangle<float> box, float scale);
+
 /** THE MARK ANSWERS THE HAND. Engraved and dark until the pointer is over the plate; then the cut
     turns a dark violet — its colour changes, nothing glows — and a click on it goes home, to the
     maker's site. It paints only that light: the plate and the engraving belong to the face's picture.
