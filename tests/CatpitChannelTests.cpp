@@ -267,7 +267,9 @@ int main()
         engine.go (3);
         check (opensOn ("Ambience", 0.0f), "...the fourth on an ambience, and none either");
         onIt = onIt && channels.cabinet() == opening;
-        check (opening == 0 && onIt, "...and all four on the first cabinet of the build's");
+        check (opening >= 0 && opening < channels.factoryCabinets()
+                   && channels.cabinetStem (channels.cabinets()[opening]) == "dark-matter" && onIt,
+               "...and all four on the build's DARK MATTER");
 
         delay->setValueNotifyingHost (delay->convertTo0to1 (40.0f));
         engine.go (0);

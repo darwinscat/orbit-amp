@@ -123,13 +123,11 @@ public:
     void setCabinetOn (bool);
 
     /** THE CABINET A CHANNEL OPENS ON, until the player picks another — a channel never pulled, every
-        one of them after INIT, and one whose own cabinet is not here any more: the first in the
-        list, as an index into cabinets() — the build's first, or the player's where the build carries
-        none; -1 with none at all. */
-    int defaultCabinet() const noexcept
-    {
-        return irs.isEmpty() ? -1 : 0;
-    }
+        one of them after INIT, and one whose own cabinet is not here any more: the build's DARK MATTER,
+        found by its name wherever it stands in the list, as an index into cabinets(). The first in the
+        list where the build carries none of that name; -1 with none at all. */
+    static constexpr const char* defaultCabinetStem = "dark-matter";
+    int defaultCabinet() const;
 
     /** TAKING FILES IN — IRs themselves, folders of them, zips — into the player's own IRs folder, the
         way OrbitAmp's library takes them, and reading the cabinets again. How many cabinets that made,
