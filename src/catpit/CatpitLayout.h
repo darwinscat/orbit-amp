@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../face/Stage.h"
+
 #include <juce_graphics/juce_graphics.h>
 
 #include <array>
@@ -14,21 +16,16 @@
 namespace orbitamp::catpit::layout
 {
 
-inline constexpr float width  = 1672.0f;
-inline constexpr float height = 941.0f;
-
-/** THE READING WIDTH: the window opens this wide, and every label below is sized so that at THIS scale
-    it is 13 px. */
-inline constexpr int   readingWidth   = 1024;
-inline constexpr float readingScale   = (float) readingWidth / width;
-/** The smallest the window may get: a little under the reading width, asked for. Pulled all the way in,
-    a 13-px label is 12.2 px. */
-inline constexpr int   minWindowWidth = 960;
-inline constexpr float px13           = 13.0f / readingScale;   // a 13-px label, in this space
-inline constexpr float px15           = 15.0f / readingScale;
-inline constexpr float px16           = 16.0f / readingScale;
-/** The one exception, asked for: the six keys under the tone knobs wear short names a size down. */
-inline constexpr float px11           = 11.0f / readingScale;
+// The stage's own space and type sizes: the render was composed in the space every face is drawn on.
+using face::stage::width;
+using face::stage::height;
+using face::stage::readingWidth;
+using face::stage::readingScale;
+using face::stage::minWindowWidth;
+using face::stage::px11;
+using face::stage::px13;
+using face::stage::px15;
+using face::stage::px16;
 
 inline const juce::Point<float> windshieldSeed { 836.0f, 164.0f };
 inline const juce::Rectangle<float> windshield { 152.0f, 60.0f, 1368.0f, 210.0f };

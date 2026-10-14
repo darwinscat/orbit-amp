@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-#include "CatpitCabs.h"
+#include "Cabs.h"
 
-namespace orbitamp::catpit
+namespace orbitamp::face
 {
 
 namespace
@@ -158,7 +158,7 @@ CabPanel::CabPanel (const Channels& c, juce::Point<int> space) : channels (c), r
     if (playing >= 0)
         view.setViewPosition (juce::jmax (0, lists.row (playing).getRight() + 8 - view.getWidth()), 0);
 
-    startTimerHz (4);       // a file dropped on the cockpit, an undo: the lists follow without being told
+    startTimerHz (4);       // a file dropped on the face, an undo: the lists follow without being told
 }
 
 void CabPanel::refresh()
@@ -182,7 +182,7 @@ void CabPanel::refresh()
     factory = channels.factoryCabinets();
     playing = nowPlaying;
 
-    // RENAME and REMOVE are for a cabinet of the player's own; SAVE for any that is one of the cockpit's.
+    // RENAME and REMOVE are for a cabinet of the player's own; SAVE for any that is one of the product's.
     save.setEnabled (playing >= 0);
     rename.setEnabled (playing >= factory);
     remove.setEnabled (playing >= factory);
@@ -215,4 +215,4 @@ void CabPanel::refresh()
     lists.repaint();
 }
 
-} // namespace orbitamp::catpit
+} // namespace orbitamp::face

@@ -3,28 +3,28 @@
 
 #pragma once
 
+#include "Controls.h"
 #include "../channels/Channels.h"
-#include "CatpitControls.h"
 
 #include <functional>
 
-namespace orbitamp::catpit
+namespace orbitamp::face
 {
 
 using channels::Channels;
 
-/** THE CABINETS' WINDOW (the cockpit's Sheet shows it): every cabinet CAB steps through, by name, where
+/** THE CABINETS' WINDOW (a face's Sheet shows it): every cabinet CAB steps through, by name, where
     the slider gives each a few pixels of its travel.
 
     TWO LISTS THAT NEVER MIX. FACTORY is what the build carries; YOURS is what the player has added —
-    dropped on the cockpit, or taken in with ADD. A click on a row plays that cabinet. The rows stand in
-    columns, since the cockpit's window is wide and not tall, and when there are more columns than the
+    dropped on the face, or taken in with ADD. A click on a row plays that cabinet. The rows stand in
+    columns, since a face's window is wide and not tall, and when there are more columns than the
     window has room for, the lists scroll sideways.
 
     THE KEYS under them: ADD takes files in; SAVE hands the cabinet that is playing out as a file; and
     RENAME and REMOVE are for a cabinet of the player's own — the build's are not the player's to
     change, and with one of those playing the two stand faint. BYPASS takes the cabinet out of the
-    sound altogether, for all four channels, and stands lit while it is out — the lists pale behind it.
+    sound altogether, for every channel, and stands lit while it is out — the lists pale behind it.
     OK, apart from them, shuts the window: a click beside it does too, but nothing on the window says so.
 
     A dumb view. It reads the channels' list and says what the hand asked for; what a key does is the
@@ -84,4 +84,4 @@ private:
     void timerCallback() override { refresh(); }
 };
 
-} // namespace orbitamp::catpit
+} // namespace orbitamp::face

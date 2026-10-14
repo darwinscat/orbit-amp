@@ -7,7 +7,6 @@
 #include <CatpitData.h>
 
 #include <cmath>
-#include <map>
 #include <vector>
 
 namespace orbitamp::catpit
@@ -368,46 +367,6 @@ namespace
         axis = (float) stemX / (float) w;
         return out;
     }
-}
-
-juce::Rectangle<float> opaqueBounds (const juce::Image& img)
-{
-    if (! img.isValid())
-        return {};
-
-    const juce::Image::BitmapData bd (img, juce::Image::BitmapData::readOnly);
-    int x0 = img.getWidth(), y0 = img.getHeight(), x1 = -1, y1 = -1;
-    for (int y = 0; y < img.getHeight(); ++y)
-        for (int x = 0; x < img.getWidth(); ++x)
-            if (bd.getPixelColour (x, y).getAlpha() > 128)
-            {
-                x0 = juce::jmin (x0, x); y0 = juce::jmin (y0, y);
-                x1 = juce::jmax (x1, x); y1 = juce::jmax (y1, y);
-            }
-    return x1 < 0 ? juce::Rectangle<float>()
-                  : juce::Rectangle<float> ((float) x0, (float) y0, (float) (x1 - x0 + 1), (float) (y1 - y0 + 1));
-}
-
-void drawFitted (juce::Graphics& g, const juce::Image& img, juce::Rectangle<float> area, float alpha)
-{
-    if (! img.isValid() || alpha <= 0.0f)
-        return;
-
-    // The opaque box is measured once per image and remembered by the image's pixel data pointer.
-    static std::map<const void*, juce::Rectangle<float>> boxes;
-    auto it = boxes.find (img.getPixelData().get());
-    if (it == boxes.end())
-        it = boxes.emplace (img.getPixelData().get(), opaqueBounds (img)).first;
-
-    const auto src = it->second;
-    const float k  = juce::jmin (area.getWidth() / src.getWidth(), area.getHeight() / src.getHeight());
-    const auto  dst = juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k).withCentre (area.getCentre());
-
-    g.setOpacity (alpha);
-    g.drawImageTransformed (img, juce::AffineTransform::translation (-src.getX(), -src.getY())
-                                     .scaled (k)
-                                     .translated (dst.getX(), dst.getY()));
-    g.setOpacity (1.0f);
 }
 
 juce::Image stillSky (int channel)

@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-#include "CatpitMidi.h"
+#include "Midi.h"
 
-#include "CatpitStandalone.h"
+#include "Standalone.h"
 #include "../Product.h"
 
-#include <CatpitData.h>
-
-namespace orbitamp::catpit
+namespace orbitamp::face
 {
 
 namespace
@@ -26,8 +24,8 @@ namespace
 //==============================================================================
 bool MidiPanel::available() { return devices() != nullptr; }
 
-MidiPanel::MidiPanel()
-    : commands (juce::String::fromUTF8 (CatpitData::midi_txt, CatpitData::midi_txtSize))
+MidiPanel::MidiPanel (juce::String text)
+    : commands (std::move (text))
 {
     layOutCommands();
 
@@ -268,4 +266,4 @@ void MidiPanel::saveCommands()
                           });
 }
 
-} // namespace orbitamp::catpit
+} // namespace orbitamp::face

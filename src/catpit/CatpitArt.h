@@ -38,11 +38,4 @@ struct Art
     only when the stars are switched off. */
 juce::Image stillSky (int channel);
 
-/** Where a render's opaque part sits — its alpha bounding box, in image pixels. The renders carry
-    uneven transparent margins, so anything that is centred or scaled goes by this, not the canvas. */
-juce::Rectangle<float> opaqueBounds (const juce::Image&);
-
-/** Draws `img`'s opaque part fitted into `area` (aspect kept, centred), at `alpha`. */
-void drawFitted (juce::Graphics&, const juce::Image& img, juce::Rectangle<float> area, float alpha = 1.0f);
-
 } // namespace orbitamp::catpit

@@ -2,10 +2,11 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "CatpitEditor.h"
-#include "CatpitCabs.h"
 #include "CatpitLayout.h"
-#include "CatpitMidi.h"
-#include "CatpitStandalone.h"
+
+#include "../face/Cabs.h"
+#include "../face/Midi.h"
+#include "../face/Standalone.h"
 
 #include "../Parameters.h"
 #include "../core/ProcessMemory.h"
@@ -362,7 +363,7 @@ void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
     // THE MARK, ENGRAVED. Its light parts are cut into the plate: the cut's upper wall falls into
     // shadow, its lower lip catches the light, and its floor is bare metal a shade brighter than the
     // plate — so the mark reads as worked into the hull, not printed on it.
-    const auto& cut = MarkCut::at (scale).cut;
+    const auto& cut = MarkCut::at (scale, emblemMark).cut;
     if (! cut.isValid())
         return;
 
@@ -405,91 +406,6 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 }
 
 //==============================================================================
-NameTag::NameTag()
-{
-    setInterceptsMouseClicks (false, false);
-}
-
-void NameTag::show (juce::Point<float> anchor, const juce::String& words)
-{
-    text = words;
-    setVisible (text.isNotEmpty());
-    if (text.isEmpty())
-        return;
-
-    const auto font = labelFont (layout::px13).withExtraKerningFactor (0.06f);
-    const float w = juce::GlyphArrangement::getStringWidth (font, text) + 30.0f;
-    // A pixel of room all round for the outline, which is stroked on the edge of the plate.
-    auto box = juce::Rectangle<float> (w, 32.0f).withCentre (anchor).expanded (2.0f).getSmallestIntegerContainer();
-    if (const auto* parent = getParentComponent())
-        box = box.constrainedWithin (parent->getLocalBounds());      // a tag by the stage's edge stays on the stage
-    setBounds (box);
-    repaint();
-}
-
-void NameTag::paint (juce::Graphics& g)
-{
-    const auto tag = getLocalBounds().toFloat().reduced (2.0f);
-    g.setColour (juce::Colour (0xe8050509));
-    g.fillRoundedRectangle (tag, 6.0f);
-    g.setColour (violet.withAlpha (0.7f));
-    g.drawRoundedRectangle (tag, 6.0f, 1.2f);
-    drawLabel (g, text, tag, layout::px13, juce::Colour (0xffece9f6), 0.06f);
-}
-
-//==============================================================================
-Sheet::Sheet (std::unique_ptr<juce::Component> c) : content (std::move (c))
-{
-    addAndMakeVisible (*content);
-    setWantsKeyboardFocus (true);
-}
-
-juce::Rectangle<int> Sheet::plate() const
-{
-    constexpr int margin = 12;
-    return getLocalBounds().withSizeKeepingCentre (content->getWidth() + margin * 2, content->getHeight() + margin * 2);
-}
-
-void Sheet::resized()
-{
-    content->setBounds (getLocalBounds().withSizeKeepingCentre (content->getWidth(), content->getHeight()));
-}
-
-void Sheet::paint (juce::Graphics& g)
-{
-    // A light scrim, as the build window has: the cockpit steps back, it does not go dark.
-    g.fillAll (juce::Colours::black.withAlpha (0.22f));
-
-    // The plate is the name tag's, grown to a window: near-black, the family's violet round its edge.
-    const auto face = plate().toFloat();
-    g.setColour (juce::Colour (0xff0b0a12));
-    g.fillRoundedRectangle (face, 8.0f);
-    g.setColour (violet.withAlpha (0.7f));
-    g.drawRoundedRectangle (face.reduced (0.6f), 8.0f, 1.2f);
-}
-
-void Sheet::mouseDown (const juce::MouseEvent& e)
-{
-    if (! plate().contains (e.getPosition()) && onDismiss)
-        onDismiss();
-}
-
-void Sheet::childBoundsChanged (juce::Component*)
-{
-    resized();
-    repaint();
-}
-
-bool Sheet::keyPressed (const juce::KeyPress& key)
-{
-    if (key != juce::KeyPress::escapeKey)
-        return false;
-    if (onDismiss)
-        onDismiss();
-    return true;
-}
-
-//==============================================================================
 CatpitEditor::CatpitEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), engine (Engine::of (p)), channels (engine.channels), presets (p, channels),
       monitor (p),
@@ -499,6 +415,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       delayWord (layout::px13),
       delayNote (layout::px13),
       delayTempo (layout::px13),
+      inFader (Art::get().sliderCap),
+      outFader (Art::get().sliderCap),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
       inClip (Art::get().lampLit[layout::inClipLamp],   [this] { return amp.inClip.exchange (false) ? 1.0f : 0.0f; }, clipHoldMs, clipFadeMs),
@@ -510,6 +428,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       gateDoor (layout::px13),
       limiterDoor (layout::px13),
       tuner (p.tunerEar),
+      emblem ({ layout::emblemFace.begin(), layout::emblemFace.end() }, layout::emblemMark),
       version (layout::px13),
       about (p.updateChecker(), aboutTheCockpit(), p.pluginFormat()),
       load (layout::px11),
@@ -648,7 +567,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     for (size_t i = 0; i < sliders.size(); ++i)
     {
         // CAB has a position for every cabinet the cockpit has; a selector needs two to be one.
-        sliders[i] = std::make_unique<PlateSlider> (lineFrom[i], lineTo[i],
+        sliders[i] = std::make_unique<PlateSlider> (Art::get().sliderCap, lineFrom[i], lineTo[i],
                                                     i == 2 ? juce::jmax (2, channels.cabinets().size()) : 0);
         stage.addAndMakeVisible (*sliders[i]);
         sliders[i]->setBounds (sliderInsets[i].toNearestInt());
@@ -1351,7 +1270,7 @@ void CatpitEditor::showLoad()
 /** THE MIDI WINDOW — which inputs the cockpit listens to, and the list of what it does with what it hears. */
 void CatpitEditor::showMidi()
 {
-    showSheet (std::make_unique<MidiPanel>());
+    showSheet (std::make_unique<MidiPanel> (juce::String::fromUTF8 (CatpitData::midi_txt, CatpitData::midi_txtSize)));
 }
 
 void CatpitEditor::showSheet (std::unique_ptr<juce::Component> content)
@@ -1410,7 +1329,8 @@ void CatpitEditor::showChannel()
     // A layer the packs do not carry yet never shows as thrown — whatever the state says.
     const auto playable = [] (Channels::Flag f) { return Channels::layerPlayable[(size_t) f]; };
     const auto thrown = [this, playable] (Channels::Flag f) { return playable (f) && channels.flag (f); };
-    buttons[btFat]->setEnabled (playable (Channels::fat) && channels.lineup().channels[(size_t) channel].hot);
+    const bool hot = channels.lineup().channels[(size_t) channel].hot;     // FAT is a layer only the hottest packs carry
+    buttons[btFat]->setEnabled (hot && playable (Channels::fat));
     buttons[btFat]->setOn      (thrown (Channels::fat),      false);
     buttons[btBright]->setOn   (thrown (Channels::bright),   false);
     buttons[btDepth]->setOn    (thrown (Channels::depth),    false);

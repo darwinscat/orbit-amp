@@ -5,10 +5,10 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
-/** WHAT THE COCKPIT ASKS OF THE STANDALONE IT RUNS IN — JUCE's own window and device manager, reached
-    in one place. Inside a host, and in any program that is not the standalone, none of it exists:
+/** WHAT A FACE ASKS OF THE STANDALONE IT RUNS IN — JUCE's own window and device manager, reached in
+    one place. Inside a host, and in any program that is not the standalone, none of it exists:
     devices() is null and the rest does nothing. */
-namespace orbitamp::catpit::standalone
+namespace orbitamp::face::standalone
 {
 
 /** The device manager: the one thing that opens MIDI inputs and hands what they send to the engine. */
@@ -25,4 +25,4 @@ void rememberWindowPosition (juce::Point<int> topLeft);
     says so: every later call says false, and so does every call inside a host. */
 bool firstTimeHere (const char* key);
 
-} // namespace orbitamp::catpit::standalone
+} // namespace orbitamp::face::standalone

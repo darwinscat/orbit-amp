@@ -623,14 +623,16 @@ set(CATPITAMP_SOURCES
     src/channels/Engine.cpp
     src/channels/Presets.cpp
     src/channels/Set.cpp
+    src/face/Cabs.cpp
+    src/face/Controls.cpp
+    src/face/Midi.cpp
+    src/face/Sheet.cpp
+    src/face/Standalone.cpp
     src/catpit/CatpitArt.cpp
-    src/catpit/CatpitCabs.cpp
     src/catpit/CatpitControls.cpp
     src/catpit/CatpitLineup.cpp
-    src/catpit/CatpitMidi.cpp
     src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitSpace.cpp
-    src/catpit/CatpitStandalone.cpp
     src/catpit/CatpitGlSky.cpp
     src/catpit/CatpitEditor.cpp)
 set(CATPITAMP_LIBRARIES

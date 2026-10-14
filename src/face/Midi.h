@@ -3,46 +3,47 @@
 
 #pragma once
 
-#include "CatpitControls.h"
+#include "Controls.h"
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
 #include <memory>
 #include <vector>
 
-namespace orbitamp::catpit
+namespace orbitamp::face
 {
 
-/** THE CONTROLLERS THE COCKPIT RIDES. Three switches — 64 and up is on, anything under it off — and
-    four knobs, each over its whole travel. These are the numbers resources/catpit/midi.txt gives the
-    player: change one, change the other. */
+/** THE CONTROLLERS A FACE RIDES. Three switches — 64 and up is on, anything under it off — and four
+    knobs, each over its whole travel. These are the numbers each product's midi.txt gives the player
+    (resources/catpit/midi.txt for the cockpit): change one, change the others. */
 namespace midi
 {
     enum Controller { turbo = 20, hpf, lpf, drive, bass, middle, treble };
 }
 
-/** THE MIDI WINDOW'S CONTENT (the cockpit's Sheet shows it): which inputs the cockpit listens to, and
-    what it does with what it hears.
+/** THE MIDI WINDOW'S CONTENT (a face's Sheet shows it): which inputs the product listens to, and what
+    it does with what it hears.
 
     THE INPUTS — every one the machine has, a lamp by each; a click switches one on or off. They are
     the standalone's own: the same inputs, the same choice and the same saved settings as its
     Audio/MIDI window. Inside a host there are none to show — the host routes MIDI itself — so
-    available() is false there and the cockpit does not offer the window.
+    available() is false there and the face does not offer the window.
 
-    THE COMMANDS — a text file in the resources (resources/catpit/midi.txt), shown as it is written:
+    THE COMMANDS — a text file in the product's resources (resources/catpit/midi.txt), handed in and
+    shown as it is written:
     a line with a tab in it is a row of a table, a line that is not a sentence is a heading, the rest
     is prose. COPY puts the file on the clipboard and SAVE writes it out, so the list can go where the
     player keeps the controller's notes. To change what the window says, change the file.
 
-    The two stand side by side, the inputs on the left: the cockpit's window is wide and not tall, and
+    The two stand side by side, the inputs on the left: a face's window is wide and not tall, and
     a table's rows are set two abreast for the same reason. */
 class MidiPanel final : public juce::Component,
                         private juce::Timer
 {
 public:
-    MidiPanel();
+    explicit MidiPanel (juce::String commands);
 
-    /** Whether there are inputs to choose at all: only where the cockpit stands alone. */
+    /** Whether there are inputs to choose at all: only where the product stands alone. */
     static bool available();
 
     void paint (juce::Graphics&) override;
@@ -83,4 +84,4 @@ private:
     void saveCommands();
 };
 
-} // namespace orbitamp::catpit
+} // namespace orbitamp::face
