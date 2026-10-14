@@ -143,8 +143,8 @@ public:
         //
         // So while either link that can be set to ring long is in the rig, the answer is never
         // below the flat eight this used to be. Both of the wins survive it — a rig with neither
-        // of them asks for a second and a bit instead of eight, and a hall breathing at double is
-        // no longer cut at eight — and the one case that stays wrong in a caching host is one
+        // of them asks for its cabinet and a tenth instead of eight, and a hall breathing at double
+        // is no longer cut at eight — and the one case that stays wrong in a caching host is one
         // where the old constant was exactly as wrong. Lifting the floor is a thing to do after
         // watching a real session in Cubase and Logic, not before.
         if (linkInRig (params::rowDelay) || linkInRig (params::rowReverb))

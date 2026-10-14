@@ -1085,6 +1085,13 @@ int main()
                 wrong.add (orbitamp::params::cabIrNames[i]);
 
         report ("...and every one plays the file it is named after", wrong.isEmpty(), wrong.joinIntoString (", "));
+
+        // The default is a NUMBER, and a number names a cabinet only while the list stands still.
+        const auto fresh = std::make_unique<orbitamp::AmpProcessor>();
+        const auto opens = fresh->cabChoice();
+        report ("...and a fresh instance opens on DARK MATTER",
+                ! opens.isUser() && orbitamp::params::cabIrNames[opens.factory] == "DARK MATTER",
+                orbitamp::params::cabIrNames[opens.factory]);
     }
 
     // A CABINET IR OF THE PLAYER'S OWN travels with the state, whole. Picked from a file, saved with
@@ -2071,12 +2078,19 @@ int main()
     // THE TUNER'S MUTE: silence at the jack while the tuner works, and not a sample of it while the
     // tuner stands by — a link's action in STANDBY is ignored. A quiet tone through a chain with
     // nothing that needs a pack; the last block of each run is what the jack puts out.
+    //
+    // Nothing that rings, either: the echo and the room grow louder with every run the tone goes
+    // on, so a third run came out a few per cent over the first with no mute anywhere near it —
+    // under the tolerance through BIG BUBBA, and over it through a cabinet 3.7 dB louder at 220 Hz.
+    // Without them the two runs are the same number.
     {
         const auto m = std::make_unique<orbitamp::AmpProcessor>();
         m->prepareToPlay (sampleRate, blockSize);
         set (*m, orbitamp::params::stereoMode, 0.0f);
         set (*m, orbitamp::params::boostPresent,  0.0f);
         set (*m, orbitamp::params::preampPresent, 0.0f);
+        set (*m, orbitamp::params::delayPresent,  0.0f);
+        set (*m, orbitamp::params::reverbPresent, 0.0f);
 
         juce::AudioBuffer<float> buf (2, blockSize);
         juce::MidiBuffer midi;
@@ -3386,8 +3400,21 @@ int main()
 
         report ("nothing that rings asks the host for nothing", bare < 0.5,
                 juce::String (bare, 2) + " s");
-        report ("the speaker alone asks for its own impulse", spkr > bare + 0.5 && spkr < 3.0,
-                juce::String (spkr, 2) + " s");
+        // ...exactly as long as the shipping cabinet's file is. Over half a second, this used to say:
+        // true of BIG BUBBA's second and a quarter, and not of DARK MATTER's 4096 samples, which is
+        // as much as that cabinet goes on saying.
+        const double impulse = []
+        {
+            const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+            juce::AudioFormatManager formats;
+            formats.registerFormat (new juce::WavAudioFormat(), true);
+            const std::unique_ptr<juce::AudioFormatReader> reader (
+                formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (shelf.data, (size_t) shelf.size, false)));
+            return reader != nullptr ? (double) reader->lengthInSamples / reader->sampleRate : 0.0;
+        }();
+
+        report ("the speaker alone asks for its own impulse", impulse > 0.0 && std::abs (spkr - (bare + impulse)) < 1.0e-3,
+                juce::String (spkr, 3) + " s, the impulse " + juce::String (impulse, 3) + " s of it");
         report ("a hall at double decay outlives the old eight", room > 9.0 && room < 12.0,
                 juce::String (room, 2) + " s");
         // Nothing can tell a host this number moved, so while a link that CAN be set to ring long

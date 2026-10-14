@@ -9,3 +9,5 @@
   submenu that opens on a line saying what its IRs are — the cabinet, its speakers, and where they come
   from. They are always there, at the top; your own IR library follows below them when it holds any.
   A preset or a session saved on one of the factory IRs opens on the same one.
+- **A new OrbitAmp opens on DARK MATTER**, the first of the Orange's, instead of BIG BUBBA. A preset or a
+  session keeps the cabinet it was saved with.

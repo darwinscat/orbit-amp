@@ -234,8 +234,8 @@ inline constexpr const char* cabIr = "cab_ir";
 // The cabinet IRs on the factory shelf — display names derived from the files. What a session keeps
 // of `cabIr` is an INDEX into this list, so a new cabinet joins at the end and nothing already here
 // ever moves: a session saved on WUMBO opens on WUMBO. The menu does not show them in this order;
-// it shows them by cabinet (cabShelves, below). big-bubba is the shipping default: the one he asked
-// for by (approximately) name.
+// it shows them by cabinet (cabShelves, below). DARK MATTER is the shipping default, the cabinet a
+// CatpitAmp channel opens on too.
 inline const juce::StringArray cabIrNames {
     // orbitcab's set: the Jesters Brutal Pack's fifteen, then the Jesters Emerald Pack's six.
     "COOKIE MONSTER", "DARTH GENOCIDER", "KITTEN SLAYER", "KAIJU TAMER", "ICEBURN SUICIDE",
@@ -248,7 +248,7 @@ inline const juce::StringArray cabIrNames {
     "DARK MATTER", "ION CAVITY", "EVENT HORIZON", "CORONAL FLARE", "BROWN DWARF",
     "ACCRETION GAP", "DUST CLOUD", "BLUE SHIFT", "RED GIANT", "PULSAR BEAM",
 };
-inline constexpr int cabIrDefault = 7;   // BIG BUBBA
+inline constexpr int cabIrDefault = 21;   // DARK MATTER
 
 /** THE SHELF BY CABINET, as the IR menu lays it out: a submenu for each, in this order, named
     `cabinet` and opening on `about` — a line that says what its IRs are: the cabinet, its speakers,
