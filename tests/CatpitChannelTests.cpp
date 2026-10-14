@@ -12,7 +12,8 @@
 //   - a hand's switch is one step of the history, and undoing it brings parameter and sound back together;
 //   - a state from before there was a parameter keeps its channel, and the parameter following it is
 //     not a step of its own;
-//   - a channel whose pack is not installed is refused, and the parameter says where the sound stayed.
+//   - a channel whose pack is not installed is refused, and the parameter says where the sound stayed;
+//   - a channel's pack is the capture it holds: renamed, the file is that channel's pack still.
 //
 //   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called;
 //   - a channel never pulled opens on its own reverb and its own share of delay.
@@ -147,6 +148,30 @@ int main()
         engine.pump();
         check (missing && channels.active() == from, "a channel whose pack is not installed is refused");
         check (asked() == from, "...and CHANNEL goes back to where the sound stayed");
+
+        amp->preamp.packs = all;
+    }
+
+    // A channel's pack is the capture it holds, not its file's name: the same four under names that
+    // say nothing, in a folder of the gate's own, are the four channels' packs still.
+    {
+        const auto all = amp->preamp.packs;
+        const auto renamed = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                 .getChildFile ("catpit-renamed-test-" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt()));
+        const auto nameOf = [] (int c) { return "Renamed " + juce::String (c) + ".orbitrig.zip"; };
+
+        bool copied = renamed.createDirectory().wasOk();
+        for (int c = 0; c < catpit::Channels::count; ++c)
+            copied = copied && channels.packFor (c) >= 0
+                            && all.getReference (channels.packFor (c)).location.copyFileTo (renamed.getChildFile (nameOf (c)));
+
+        amp->preamp.packs = device::DeviceLibrary::scan (device::DeviceLibrary::Slot::preamp, true,
+                                                         renamed, renamed.getChildFile ("none"));
+        bool found = copied;
+        for (int c = 0; c < catpit::Channels::count; ++c)
+            found = found && channels.packFor (c) >= 0
+                          && amp->preamp.packs.getReference (channels.packFor (c)).location.getFileName() == nameOf (c);
+        check (found, "a channel's pack is found by the capture it holds, whatever its file is called");
 
         amp->preamp.packs = all;
     }

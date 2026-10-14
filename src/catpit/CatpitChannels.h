@@ -99,8 +99,9 @@ public:
     void setFlag (Flag, bool);
 
     /** The pack a channel plays, as an index into the preamp's library; -1 when it is not installed.
-        A channel's pack is the one whose FILE is named after the channel — Clean, Edge, Crunch,
-        Hi-Gain — in the cockpit's own Devices folder or among the packs the build carries. */
+        A channel's pack is the CAPTURE it plays, known by the `rig_id` in its manifest and not by what
+        its file is called, wherever the device library finds it — among the packs the build carries
+        first, as the library itself orders them. A file renamed is the same channel's pack still. */
     int  packFor (int channel) const;
 
     /** THE COCKPIT'S OWN CABINETS: every IR file in its two places — the ones the build carries, laid

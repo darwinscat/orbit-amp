@@ -15,8 +15,11 @@ namespace orbitamp::catpit
 
 namespace
 {
-    /** A channel's pack is the one whose file is named after it. */
-    constexpr std::array<const char*, Channels::count> packs { "Clean", "Edge", "Crunch", "Hi-Gain" };
+    /** A channel's pack is the capture it plays, known by the `rig_id` its manifest carries — what the
+        pack IS, whatever its file is called. The X88-IR's own four channels: Normal for Clean, Altered
+        for Edge, Crunch for Crunch, Overdrive for Hi-Gain. */
+    constexpr std::array<const char*, Channels::count> captures { "x88-ir-normal-bae8", "x88-ir-altered-c14c",
+                                                                  "x88-ir-crunch-2abb", "x88-ir-overdrive-0344" };
 
     constexpr std::array<const char*, Channels::numFlags> flagIds { "fat", "bright", "depth", "presence" };
 
@@ -331,8 +334,7 @@ int Channels::packFor (int channel) const
 {
     const auto& library = amp.preamp.packs;
     for (int i = 0; i < library.size(); ++i)
-        if (library.getReference (i).location.getFileName().upToFirstOccurrenceOf (".", false, false)
-                .equalsIgnoreCase (packs[(size_t) juce::jlimit (0, count - 1, channel)]))
+        if (library.getReference (i).rigId == captures[(size_t) juce::jlimit (0, count - 1, channel)])
             return i;
     return -1;
 }
