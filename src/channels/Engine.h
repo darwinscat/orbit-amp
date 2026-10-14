@@ -82,6 +82,10 @@ public:
 
     void pump() override;
     void stateLanded() override;
+    const std::atomic<float>* parkSwitch() const override { return park; }
+
+    /** PARK's parameter, where the lineup has one: the whole amp out of the sound. */
+    const char* parkId() const noexcept { return channels.lineup().parkId; }
 
     /** The face, when it is open: the engine has moved a channel or taken a state as its own, and
         what the window shows may be behind. */
@@ -90,6 +94,7 @@ public:
 private:
     AmpProcessor& amp;
     juce::RangedAudioParameter* const channel;
+    const std::atomic<float>* const park;
     int lastAsked = 0;      // where the parameter stood when it was last looked at
 
     int  asked() const;

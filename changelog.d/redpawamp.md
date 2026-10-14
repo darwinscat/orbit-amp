@@ -8,6 +8,9 @@ OrbitAmp's build or installers.
   channel (Copper TB, Sheriff Ch2, Kraken Ch2). Each of the six keeps its own DRIVE, tone, keys, reverb,
   delay and cabinet, and opens on a room of its own. Keys 1 2 3 pick the gear and T throws TURBO; MIDI
   Program Change 1–6 picks the six channels, controller 20 is TURBO.
+- **PARK**, the lever's top end: the whole amp out of the sound, the guitar coming through dry and in time,
+  the rooms and the delay ringing out — and the drive outside comes to a stand. A gear pulled plays again
+  on the channel that was waiting. 0 or P on the keyboard, Program Change 7, or the PARK parameter in a host.
 - Through the windscreen, an endless drive across Mars — on the GPU, as a 1993-style landscape on the CPU,
   or a still picture — chosen from a right click on the glass; a drag across the glass steers.
 - Everything else the cockpit has, on the dashboard: DRIVE and the three tone knobs, the six keys, undo,

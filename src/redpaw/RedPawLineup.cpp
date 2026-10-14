@@ -27,7 +27,8 @@ const channels::Lineup& lineup()
             { "Sheriff Ch2", "v4-sheriff-ch2-2f2f", "Plate",    30.0f, 30.0f, false },
             { "Kraken Ch1",  "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true  },
             { "Kraken Ch2",  "v4-kraken-ch2-5f71",  "Ambience", 30.0f, 0.0f,  true  },
-        }
+        },
+        "redpaw_park"       // PARK: the lever's fourth position, the whole amp out of the sound
     };
     return rover;
 }

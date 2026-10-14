@@ -72,12 +72,12 @@ inline const juce::Rectangle<float> channelLine { 563.5f, 428.0f, 436.5f, 40.0f 
 inline const juce::Rectangle<float> tunerScreen { 563.5f, 478.0f, 436.5f, 136.0f };
 
 /** THE GEAR LEVER'S SLOT: straight, with three notches on its right — CLEAN, CRUNCH, HI-GAIN, top to
-    bottom — and its top end free. The lever's stem runs up and down the slot's middle and stands in a
-    notch. Their names stand left of the slot, set against it. */
+    bottom — and PARK at its top end. The lever's stem runs up and down the slot's middle and stands in
+    a notch, or at the top. Their names stand left of the slot, set against it. */
 inline const juce::Rectangle<float> gateSlot { 785.5f, 682.0f, 37.5f, 173.5f };
 inline constexpr float slotX  = 799.0f;         // the stem in the slot
 inline constexpr float notchX = 810.0f;         // ...and in a notch
-inline constexpr float slotTopY = 690.0f;       // the slot's top end: free for now
+inline constexpr float slotTopY = 690.0f;       // the slot's top end: PARK
 inline const std::array<float, 3> notches {{ 727.0f, 767.0f, 810.0f }};
 inline constexpr float gearNamesRight = 778.0f;
 inline constexpr float leverSize = 88.0f;       // the lever's render: grip on a stem to its bottom edge

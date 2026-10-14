@@ -15,7 +15,8 @@ namespace orbitamp::channels
     extension: its name in lower case, `.catpitamp` for the cockpit.
 
     INPUT is not in a preset. It is set to the guitar and the interface, not to a sound, and a preset
-    that moved it would be undoing a setting made once for the room.
+    that moved it would be undoing a setting made once for the room. Nor is PARK, where the product has
+    it: whether the amp is in the sound at all is the moment's, not the preset's.
 
     Loading goes through the processor's history, so it is one undoable step and lands in the register
     that is playing. Which preset the sound came from, and a number that stands for that sound, are

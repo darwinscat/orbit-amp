@@ -12,7 +12,8 @@ namespace orbitamp::redpaw
     (channels/Lineup.h) — and to the hand, three gears of two. The gear is the pedal — CLEAN the
     Copper, CRUNCH the Sheriff, HI-GAIN the Kraken — and TURBO is that pedal's second channel: the
     Copper TB, the Sheriff's Ch2, the Kraken's Ch2. So the channels go in pairs, gear by gear, TURBO off
-    then on, and a Program Change counts them in that order. The engine they are kept by is the
+    then on, and a Program Change counts them in that order. PARK, the lever's fourth position, is no
+    channel: it takes the whole amp out of the sound, and the channel waits for the lever to come back. The engine they are kept by is the
     family's (channels/Engine.h); this file is what makes it the rover's. */
 const channels::Lineup& lineup();
 

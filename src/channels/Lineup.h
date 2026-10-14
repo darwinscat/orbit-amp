@@ -32,6 +32,10 @@ struct Lineup
 
     std::vector<Channel> channels;
 
+    /** PARK, where the product has it: a switch of its own that takes the whole amp out of the sound
+        (ProductEngine::parkSwitch) — its parameter's id, or none. */
+    const char* parkId = nullptr;
+
     int count() const noexcept { return (int) channels.size(); }
 };
 

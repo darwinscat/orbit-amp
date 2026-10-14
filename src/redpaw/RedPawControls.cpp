@@ -28,56 +28,60 @@ GearLever::GearLever()
 {
     pos.stiffness = 260.0f;     // a heavy lever: it overshoots the notch a hair and comes back
     pos.damping   = 22.0f;
-    pos.jump (0.0f);
+    pos.jump (1.0f);
     setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
 }
 
-float GearLever::yOf (float position) const noexcept
+namespace
 {
-    const auto& n = layout::notches;
-    const float p = juce::jlimit (0.0f, (float) (numGears - 1), position);
-    const int i = juce::jmin (numGears - 2, (int) p);
-    return juce::jmap (p - (float) i, n[(size_t) i], n[(size_t) i + 1]) - top;
+    /** Each position's height in the dashboard's space: PARK at the slot's top end, the gears in the notches. */
+    const std::array<float, GearLever::numPositions> heights { layout::slotTopY, layout::notches[0], layout::notches[1], layout::notches[2] };
+}
+
+float GearLever::yOf (float at) const noexcept
+{
+    const float p = juce::jlimit (0.0f, (float) (numPositions - 1), at);
+    const int i = juce::jmin (numPositions - 2, (int) p);
+    return juce::jmap (p - (float) i, heights[(size_t) i], heights[(size_t) i + 1]) - top;
 }
 
 float GearLever::positionAt (float y) const noexcept
 {
-    const auto& n = layout::notches;
     y += top;
-    if (y <= n.front()) return 0.0f;
-    for (int i = 0; i + 1 < numGears; ++i)
-        if (y <= n[(size_t) i + 1])
-            return (float) i + (y - n[(size_t) i]) / (n[(size_t) i + 1] - n[(size_t) i]);
-    return (float) (numGears - 1);
+    if (y <= heights.front()) return 0.0f;
+    for (int i = 0; i + 1 < numPositions; ++i)
+        if (y <= heights[(size_t) i + 1])
+            return (float) i + (y - heights[(size_t) i]) / (heights[(size_t) i + 1] - heights[(size_t) i]);
+    return (float) (numPositions - 1);
 }
 
 int GearLever::nameAt (juce::Point<float> p) const noexcept
 {
     if (p.x > namesRight + 4.0f)
         return -1;
-    for (int i = 0; i < numGears; ++i)
+    for (int i = 0; i < numPositions; ++i)
         if (std::abs (p.y - yOf ((float) i)) < nameH * 0.5f)
             return i;
     return -1;
 }
 
-void GearLever::setGear (int g, bool animate, bool notify)
+void GearLever::setPosition (int to, bool animate, bool notify)
 {
-    g = juce::jlimit (0, numGears - 1, g);
-    const bool changed = g != gear;
-    gear = g;
+    to = juce::jlimit (0, numPositions - 1, to);
+    const bool changed = to != position;
+    position = to;
     if (animate)
     {
-        pos.target = (float) g;
+        pos.target = (float) to;
         startTimerHz (60);
     }
     else
     {
-        pos.jump ((float) g);
+        pos.jump ((float) to);
         repaint();
     }
-    if (changed && notify && onGear)
-        onGear (gear);
+    if (changed && notify && onPosition)
+        onPosition (position);
 }
 
 void GearLever::timerCallback()
@@ -91,18 +95,20 @@ void GearLever::paint (juce::Graphics& g)
 {
     // The names, left of the slot and set against it; the gear the lever stands in lit orange.
     const auto font = face::labelFont (layout::px13).withExtraKerningFactor (0.06f);
-    for (int i = 0; i < numGears; ++i)
+    for (int i = 0; i < numPositions; ++i)
     {
-        g.setColour (i == gear ? orange : labelLilac.withAlpha (0.8f));
+        g.setColour (i == position ? orange : labelLilac.withAlpha (0.8f));
         g.setFont (font);
         g.drawText (names[i], juce::Rectangle<float> (0.0f, yOf ((float) i) - nameH * 0.5f, namesRight, nameH),
                     juce::Justification::centredRight, false);
     }
 
-    // The lever: its knob where it stands, its stem down the slot. In a notch the stem leans into it.
+    // The lever: its knob where it stands, its stem down the slot. In a notch the stem leans into it;
+    // at PARK, the slot's top end, there is no notch.
     const auto& art = Art::get().lever;
     const float p = pos.value;
-    const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f);
+    const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f)
+                        * juce::jlimit (0.0f, 1.0f, p / 0.5f);
     const float x = slotX + (notchX - slotX) * inNotch;
     const float y = yOf (p);
     const float s = layout::leverSize;
@@ -129,7 +135,7 @@ void GearLever::mouseDown (const juce::MouseEvent& e)
 {
     if (const int n = nameAt (e.position); n >= 0)
     {
-        setGear (n, true);
+        setPosition (n, true);
         return;
     }
     held = true;
@@ -150,10 +156,10 @@ void GearLever::mouseDrag (const juce::MouseEvent& e)
     const float p = std::abs (raw - (float) nearest) < 0.22f ? (float) nearest : raw;
 
     pos.jump (p);
-    if (juce::exactlyEqual (p, (float) nearest) && nearest != gear)
+    if (juce::exactlyEqual (p, (float) nearest) && nearest != position)
     {
-        gear = nearest;
-        if (onGear) onGear (gear);
+        position = nearest;
+        if (onPosition) onPosition (position);
     }
     repaint();
 }
@@ -163,7 +169,7 @@ void GearLever::mouseUp (const juce::MouseEvent&)
     if (! held)
         return;
     held = false;
-    setGear (juce::roundToInt (pos.value), true);
+    setPosition (juce::roundToInt (pos.value), true);
     if (onRelease)
         onRelease();
 }
@@ -172,7 +178,7 @@ void GearLever::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelD
 {
     const float d = w.isReversed ? -w.deltaY : w.deltaY;
     if (std::abs (d) > 0.0f)
-        setGear (gear + (d < 0.0f ? 1 : -1), true);
+        setPosition (position + (d < 0.0f ? 1 : -1), true);
 }
 
 } // namespace orbitamp::redpaw

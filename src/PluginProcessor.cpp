@@ -143,6 +143,7 @@ AmpProcessor::AmpProcessor()
     // settles as it is built — the cockpit's chain, its channel, its pack — is how the amp starts,
     // and must not be an edit of it.
     product = makeProductEngine (*this);
+    parked = product != nullptr ? product->parkSwitch() : nullptr;
 
     // The names go in BEFORE the history looks, so a plugin that has just opened already knows
     // which device it is playing — and knows it without that knowledge being an edit. Resetting

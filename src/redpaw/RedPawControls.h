@@ -13,30 +13,32 @@
 namespace orbitamp::redpaw
 {
 
-/** THE GEAR LEVER in the dashboard's straight slot: CLEAN, CRUNCH, HI-GAIN down the slot's three
-    notches, their names left of it, the one it stands in lit. It follows the hand up and down the
-    slot while held, sits in a notch within reach of one, and springs into the nearest on release; a
-    click on a name puts it there, and so does the wheel, a notch at a time. In a notch its stem leans
-    into it.
+/** THE GEAR LEVER in the dashboard's straight slot: PARK at its top end, then CLEAN, CRUNCH, HI-GAIN
+    down the slot's three notches, their names left of it, the one it stands in lit. It follows the hand
+    up and down the slot while held, sits in a position within reach of one, and springs into the
+    nearest on release; a click on a name puts it there, and so does the wheel, a position at a time.
+    In a notch its stem leans into it.
 
     Its box takes in the names and the gate's plate: in the dashboard's space from `left` across. */
 class GearLever final : public juce::Component, private juce::Timer
 {
 public:
-    static constexpr int numGears = 3;
-    inline static const juce::StringArray names { "CLEAN", "CRUNCH", "HI-GAIN" };
+    /** Its positions, top to bottom: PARK, then the three gears. */
+    static constexpr int park = 0, numPositions = 4, numGears = 3;
+    inline static const juce::StringArray names { "PARK", "CLEAN", "CRUNCH", "HI-GAIN" };
+    static int positionOf (int gear) noexcept { return gear + 1; }
     static constexpr float left = 660.0f, top = 640.0f;
 
     GearLever();
 
-    std::function<void (int)>   onGear;       // the gear it settled in (or snapped into while held), 0..2
+    std::function<void (int)>   onPosition;   // the position it settled in (or snapped into while held)
     std::function<void()>       onRelease;    // the hand has let go
 
-    int  getGear() const noexcept { return gear; }
+    int  getPosition() const noexcept { return position; }
     bool isHeld() const noexcept  { return held; }
 
     /** `notify` off moves the lever without reporting it — for following a state that moved by itself. */
-    void setGear (int, bool animate, bool notify = true);
+    void setPosition (int, bool animate, bool notify = true);
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -45,8 +47,8 @@ public:
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
 
 private:
-    face::Glide pos;            // where the stem stands: 0..2, a notch to the gear
-    int  gear = 0;
+    face::Glide pos;            // where the stem stands: 0..3, one to a position
+    int  position = 1;
     bool held = false;
     float grabOffset = 0.0f;
 

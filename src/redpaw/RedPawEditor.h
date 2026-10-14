@@ -67,15 +67,20 @@ private:
     void openGLContextClosing() override;
 
     // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel. TURBO is one
-    // switch for all three gears — a gear pulled keeps it as it stands.
+    // switch for all three gears — a gear pulled keeps it as it stands. PARK, the lever's top end, takes
+    // the whole amp out of the sound (ProductEngine::parkSwitch); the channel waits, and TURBO does
+    // nothing until a gear is pulled again.
     GearLever lever;
     face::PushButton turbo { "TURBO" };
     face::Legend channelName;       // on the nav screen: the gear, and the pack that is playing
     void pullGear (int gear);
     void throwTurbo (bool on);
+    void parkIt();
+    bool isParked() const;
 
     void showSelector (int channel) override;
     bool channelKey (const juce::KeyPress&) override;
+    void programChange (int program) override;
     void turboChange (bool thrown) override;
     void addWindowSections (juce::PopupMenu&) override;
     void stagePlaced() override { placeView(); }

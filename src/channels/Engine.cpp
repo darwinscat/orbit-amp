@@ -38,6 +38,10 @@ void Engine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout&
     for (const auto& c : lineup.channels)
         names.add (c.name);
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { lineup.parameterId, 1 }, "Channel", names, 0));
+
+    // ...and PARK, where the product has it: off, the amp plays.
+    if (lineup.parkId != nullptr)
+        layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { lineup.parkId, 1 }, "Park", false));
 }
 
 Engine& Engine::of (AmpProcessor& p)
@@ -49,7 +53,8 @@ Engine& Engine::of (AmpProcessor& p)
 /** Built while the processor is still building itself, before its history has taken a baseline: what
     is settled here is how the amp starts, not an edit of it. */
 Engine::Engine (AmpProcessor& p, const Lineup& lineup)
-    : channels (p, lineup), amp (p), channel (p.apvts.getParameter (lineup.parameterId))
+    : channels (p, lineup), amp (p), channel (p.apvts.getParameter (lineup.parameterId)),
+      park (lineup.parkId != nullptr ? p.apvts.getRawParameterValue (lineup.parkId) : nullptr)
 {
     jassert (channel != nullptr);
 

@@ -18,6 +18,7 @@
 //   - a channel's tone knobs are its pack's Bass, Middle and Treble, found by name — the Copper's
 //     pack lists them in an order of its own;
 //   - the six channels are three gears of two: a gear's pair is its pedal's two channels;
+//   - PARK takes the whole amp out of the sound: the guitar comes through dry, the channel waits;
 //
 //   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called;
 //   - a cabinet another product lays out in the family's folder is not one of the rover's;
@@ -121,6 +122,75 @@ int main()
     check (playing() == channels.packFor (0), "...playing that channel's pack");
     ticks();
     check (! history.canUndo(), "...and none of that is an edit");
+
+    // PARK: the lever's fourth position, the whole amp out of the sound —
+    // a switch of the rover's own. Parked, the guitar comes out as it went in, only as late as the
+    // chain always is; the channel waits.
+    {
+        auto* park = amp->apvts.getParameter (engine.parkId());
+        check (park != nullptr && ! amp->isParked(), "the rover has PARK, and a processor just built plays");
+
+        if (park != nullptr)
+        {
+            constexpr double rate = 44100.0;       // not the packs' own: the captures are resampled, and the chain is late
+            constexpr int block = 512, blocks = 24;
+            amp->prepareToPlay (rate, block);
+            for (int i = 0; i < 10; ++i)        // the captures land, resampled to the session's rate
+            {
+                amp->pumpDeviceWork();
+                juce::Thread::sleep (5);
+            }
+            int late = amp->getLatencySamples();
+
+            // No room and no echo, so that nothing rings on into the parked blocks.
+            for (const auto* id : { params::reverbMix, params::delayMix })
+                if (auto* p = amp->apvts.getParameter (id))
+                    p->setValueNotifyingHost (0.0f);
+
+            std::vector<float> in ((size_t) (block * blocks)), out (in.size());
+            for (size_t n = 0; n < in.size(); ++n)
+                in[n] = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * (double) n / rate);
+
+            juce::MidiBuffer none;
+            const auto play = [&]
+            {
+                for (int b = 0; b < blocks; ++b)
+                {
+                    juce::AudioBuffer<float> buf (2, block);
+                    for (int ch = 0; ch < 2; ++ch)
+                        buf.copyFrom (ch, 0, in.data() + b * block, block);
+                    amp->processBlock (buf, none);
+                    std::copy (buf.getReadPointer (0), buf.getReadPointer (0) + block, out.begin() + b * block);
+                }
+
+                // Past the first blocks, which the fades and the wires settle in.
+                float worst = 0.0f;
+                for (size_t n = (size_t) (block * 8); n < out.size(); ++n)
+                    worst = juce::jmax (worst, std::abs (out[n] - in[n - (size_t) late]));
+                return worst;
+            };
+
+            const float playing = play();
+            check (playing > 0.01f, "playing, the amp is in the sound: what comes out is not what went in");
+            amp->pumpDeviceWork();
+            late = amp->getLatencySamples();       // the captures have landed by now, at the session's rate
+
+            const int was = channels.active();
+            park->setValueNotifyingHost (1.0f);
+            check (amp->isParked() && channels.active() == was, "PARK thrown, the processor is parked and the channel waits");
+            amp->pumpDeviceWork();
+            check (amp->getLatencySamples() == late, "...as late as it was playing");
+
+            const float worst = play();
+            std::printf ("      parked: %d samples late, the worst sample %.2g off the input\n", late, (double) worst);
+            check (worst < 1.0e-3f, "parked, the input comes out as it went in, as late as the chain reports");
+
+            park->setValueNotifyingHost (0.0f);
+            check (! amp->isParked(), "...and the amp plays again when PARK is let go");
+            amp->releaseResources();
+        }
+    }
+    ticks();
 
     // A host moves the parameter.
     asHost (5);

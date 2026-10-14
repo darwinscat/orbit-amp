@@ -87,6 +87,8 @@ juce::String Presets::sound() const
     auto tree = amp.apvts.copyState();
 
     setInTree (tree, params::inTrim, 0.0f);
+    if (const auto* park = channels.lineup().parkId)
+        setInTree (tree, park, 0.0f);                           // ...nor PARK
     tree.removeProperty (channels.leverZeroId(), nullptr);      // ...nor the zero INPUT was dialled against
     setInTree (tree, params::blockSmooth (params::preampId), 1.0f);    // ...nor DRIVE's way: as every state had it before there was a choice
     setInTree (tree, params::blockIn (params::preampId), 0.0f);        // ...nor TURBO's push: Channels::whole says on or off
@@ -133,6 +135,11 @@ bool Presets::load (const juce::String& name)
         tree.setProperty (channels.leverZeroId(), zero, nullptr);
     else
         tree.removeProperty (channels.leverZeroId(), nullptr);
+
+    // ...and the amp stays parked or playing as it is.
+    if (const auto* park = channels.lineup().parkId)
+        if (auto* p = amp.apvts.getParameter (park))
+            setInTree (tree, park, p->convertFrom0to1 (p->getValue()));
 
     // ...and DRIVE goes on turning the way the settings have it.
     const auto smooth = params::blockSmooth (params::preampId);

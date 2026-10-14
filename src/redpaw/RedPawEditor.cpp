@@ -251,8 +251,11 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // THE GEAR LEVER: the pedal, and everything its channel was left with.
     addToStage (lever);
     lever.setBounds (juce::Rectangle<float> (GearLever::left, GearLever::top, gearPlate.getRight() - GearLever::left, 240.0f).toNearestInt());
-    lever.onGear    = [this] (int g) { pullGear (g); };
-    lever.onRelease = [this] { showChannel(); };   // held, it follows the hand; let go, it follows the state
+    lever.onPosition = [this] (int at) { if (at == GearLever::park) parkIt(); else pullGear (at - GearLever::positionOf (0)); };
+    lever.onRelease  = [this] { showChannel(); };  // held, it follows the hand; let go, it follows the state
+
+    // PARK may move with no hand on the lever: a host's automation, an undo.
+    follow (engine.parkId(), [this] (float) { showChannel(); });
 
     // TURBO: the pedal's second channel, on or off — one switch for all three gears.
     turbo.latching = false;
@@ -269,6 +272,13 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     channelName.setInterceptsMouseClicks (false, false);
     addToStage (channelName);
     channelName.setBounds (channelLine.toNearestInt());
+
+    // A prototype's hook for looking at the windscreen in a gear, with TURBO, or parked, without a hand
+    // on anything: REDPAW_CHANNEL names a channel, 0..5, or "park".
+    if (const auto c = juce::SystemStats::getEnvironmentVariable ("REDPAW_CHANNEL", {}); c.equalsIgnoreCase ("park"))
+        setParam (engine.parkId(), 1.0f);
+    else if (c.isNotEmpty())
+        engine.go (c.getIntValue());
 
     showChannel();
 
@@ -291,43 +301,68 @@ RedPawEditor::~RedPawEditor()
     gl.detach();
 }
 
+bool RedPawEditor::isParked() const
+{
+    return getParam (engine.parkId()) > 0.5f;
+}
+
+/** A gear pulled: that pedal, TURBO as it stands — and out of PARK, in the same step of the history. */
 void RedPawEditor::pullGear (int gear)
 {
+    if (isParked())
+        setParam (engine.parkId(), 0.0f);
     go (channelOf (gear, turboOf (channels.active())));
 }
 
 void RedPawEditor::throwTurbo (bool on)
 {
-    go (channelOf (gearOf (channels.active()), on));
+    if (! isParked())
+        go (channelOf (gearOf (channels.active()), on));
+}
+
+void RedPawEditor::parkIt()
+{
+    endTapping();
+    if (! isParked())
+        setParam (engine.parkId(), 1.0f);
+    showChannel();
 }
 
 void RedPawEditor::showSelector (int channel)
 {
     const int gear = gearOf (channel);
     const bool turboOn = turboOf (channel);
+    const bool parked = isParked();
+    const int at = parked ? GearLever::park : GearLever::positionOf (gear);
 
-    if (! lever.isHeld() && lever.getGear() != gear)
-        lever.setGear (gear, true, false);
+    if (! lever.isHeld() && lever.getPosition() != at)
+        lever.setPosition (at, true, false);
     turbo.setOn (turboOn, false);
+    turbo.setEnabled (! parked);
 
-    channelName.set (GearLever::names[gear], juce::String (lineup().channels[(size_t) channel].name).toUpperCase());
+    channelName.set (GearLever::names[at], juce::String (lineup().channels[(size_t) channel].name).toUpperCase());
 
     view.setGear (gear + 1);
     view.setTurbo (turboOn);
+    view.setParked (parked);
 }
 
-/** 1 2 3: the lever goes to that gear, as if a hand had put it there; T throws TURBO. The keys are the
-    same whatever the layout prints on them — under a Russian one T arrives as Е. */
+/** 1 2 3: the lever goes to that gear, as if a hand had put it there; 0 or P to PARK; T throws TURBO.
+    The keys are the same whatever the layout prints on them — under a Russian one T arrives as Е, and
+    P as З. */
 bool RedPawEditor::channelKey (const juce::KeyPress& key)
 {
-    if (const int gear = key.getKeyCode() - '1'; gear >= 0 && gear < GearLever::numGears)
+    const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
+    const int at = letter == '0' || letter == 'P' || letter == 0x0417 ? GearLever::park
+                 : letter >= '1' && letter < '1' + GearLever::numGears ? GearLever::positionOf ((int) (letter - '1'))
+                 : -1;
+    if (at >= 0)
     {
         if (! lever.isHeld())
-            lever.setGear (gear, true);
+            lever.setPosition (at, true);
         return true;
     }
 
-    const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
     if (letter == 'T' || letter == 0x0415)
     {
         throwTurbo (! turboOf (channels.active()));
@@ -336,7 +371,22 @@ bool RedPawEditor::channelKey (const juce::KeyPress& key)
     return false;
 }
 
-/** TURBO's controller: the pedal's second channel, or its first. */
+/** Programs 1-6 are the six channels, out of PARK; the seventh is PARK. */
+void RedPawEditor::programChange (int program)
+{
+    if (program == channels.count())
+    {
+        parkIt();
+    }
+    else if (program >= 0 && program < channels.count())
+    {
+        if (isParked())
+            setParam (engine.parkId(), 0.0f);
+        go (program);
+    }
+}
+
+/** TURBO's controller: the pedal's second channel, or its first — nothing, parked. */
 void RedPawEditor::turboChange (bool thrown)
 {
     if (thrown != turboOf (channels.active()))
