@@ -5,7 +5,7 @@ stays in the tree.
 
 ## `02` … `12` — the Orange PPC212V
 
-One cabinet, shot twelve times in one OrbitCapture session, the SM57 moved between the takes. Eleven
+One cabinet, shot twelve times in one OrbitCapture session, the SM57 moved between the takes. Ten
 of the twelve places are in the set, three of them since taken again from a second shoot (below).
 
 - session: `212_20261012-2009` (OrbitCapture 0.1), recorded at 96 kHz
@@ -31,7 +31,6 @@ mono (`Darwin's Cat - Orange PPC212V - MIX (SM57 rNN+e906+Ai).wav`).
 | `02-dark-matter.wav` | DARK MATTER | take02 | Cap Edge r15 |
 | `03-ion-cavity.wav` | ION CAVITY | take03 | Cap Edge r20 |
 | `04-event-horizon.wav` | EVENT HORIZON | take04 | Cap Edge r25 |
-| `05-gravity-well.wav` | GRAVITY WELL | take05 | Cap Edge r30 |
 | `06-coronal-flare.wav` | CORONAL FLARE | take06 | Cap Edge r35 |
 | `07-brown-dwarf.wav` | BROWN DWARF | take07 | Cap Edge r40 |
 | `08-accretion-gap.wav` | ACCRETION GAP | second shoot, `333` | Cap Edge r25 |
@@ -57,7 +56,7 @@ left the set.
 
 ### The first session's report
 
-All twelve takes as they were shot; take01, take08, take09 and take11 are no longer in the set.
+All twelve takes as they were shot; take01, take05, take08, take09 and take11 are no longer in the set.
 
 | take | time | mic | location | position | dist | axis | in | peak dBFS | SNR | delay |
 |---|---|---|---|---|---|---|---|---|---|---|
