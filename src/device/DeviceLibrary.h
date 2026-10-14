@@ -84,10 +84,10 @@ public:
         return 0;
     }
 
-    /** Where a user drops packs. Created on first look, so the folder exists to be dropped into. */
-    /** JUCE's userApplicationDataDirectory is ~/Library on macOS, not ~/Library/Application Support —
+    /** The FAMILY's folder, `Darwin's Cat`: every product's own folder is in it, and the set they share.
+        JUCE's userApplicationDataDirectory is ~/Library on macOS, not ~/Library/Application Support —
         without this the folder lands one level too high and nothing a user drops in is ever found. */
-    static juce::File appDataRoot()
+    static juce::File familyRoot()
     {
         auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
 
@@ -95,9 +95,14 @@ public:
         dir = dir.getChildFile ("Application Support");
        #endif
 
-        // The PRODUCT's folder: two faces of one engine each keep a set of their own — devices,
-        // IRs — and neither reads the other's. For OrbitAmp this is the folder it has always been.
-        return dir.getChildFile ("Darwin's Cat").getChildFile (product::name);
+        return dir.getChildFile ("Darwin's Cat");
+    }
+
+    /** The PRODUCT's folder: two faces of one engine each keep what the PLAYER adds — devices, IRs —
+        and neither reads the other's. For OrbitAmp this is the folder it has always been. */
+    static juce::File appDataRoot()
+    {
+        return familyRoot().getChildFile (product::name);
     }
 
     static juce::File directory()
@@ -110,18 +115,27 @@ public:
         return dir;
     }
 
-    /** The amp's own folder beside the player's `Devices` and `IRs`: where the set a build carries in
-        its binary is laid out when it starts (FactorySet.h). Not the player's to edit, and not made
-        here — a build that carries nothing leaves it absent. */
+    /** THE FAMILY'S `Factory`, beside every product's folder: where each product lays out the set it
+        carries in its binary when it starts (FactorySet.h) — packs at its top, cabinets in `IRs` — so a
+        pack two products carry is one file, and every product's list shows every pack the family has
+        laid out. Not the player's to edit, and not made here — with no build that carries a set, it is
+        absent. */
     static juce::File factoryDirectory()
+    {
+        return familyRoot().getChildFile ("Factory");
+    }
+
+    /** Where a build from before the family shared one laid its set out: the product's own `Factory`.
+        Not read any more — only emptied, once (FactorySet::retire). */
+    static juce::File formerFactoryDirectory()
     {
         return appDataRoot().getChildFile ("Factory");
     }
 
-    /** Where the plugin's own devices live: the factory folder its set is laid out in. The factory
-        LAYER is a fact of the product — the manager edits only what sits on top of it, so something
-        has to say which is which. It used to be looked for inside the Mac's bundle first; the set is
-        in the binary now, on every system, and is laid out in one place. */
+    /** Where the devices the builds carry live: the factory folder their sets are laid out in, one for
+        the family. The factory LAYER is a fact of the product — the manager edits only what sits on top
+        of it, so something has to say which is which. It used to be looked for inside the Mac's bundle
+        first; the set is in the binary now, on every system, and is laid out in one place. */
     static juce::File bundledDirectory()
     {
         return factoryDirectory();

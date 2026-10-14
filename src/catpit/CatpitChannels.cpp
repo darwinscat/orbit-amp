@@ -5,6 +5,7 @@
 
 #include "CatpitSet.h"
 #include "../Parameters.h"
+#include "../device/FactorySet.h"
 #include "../device/IrLibrary.h"
 
 #include <algorithm>
@@ -29,34 +30,40 @@ namespace
     const juce::Identifier indexId  { "i" };
     const juce::Identifier cabinetId { "cabinet" };
 
-    /** The amp's own folder beside the player's: where the set a build carries is laid out
-        (CatpitSet.h), and where the device library looks for the packs the build carries. */
+    /** The family's folder beside the products': where the set a build carries is laid out
+        (CatpitSet.h), and where the device library looks for the packs the builds carry. */
     juce::File factory()
     {
         return device::DeviceLibrary::factoryDirectory();
     }
 
-    /** Where a build's own cabinets are: laid out with its packs. */
-    juce::File bundledCabinets()
+    /** Where a build's own cabinets are: laid out with its packs, and named in the cockpit's own list. */
+    juce::Array<juce::File> bundledCabinets()
     {
-        return set::cabinetsIn (factory());
+        return set::ownCabinets (factory());
     }
 
-    /** A folder's cabinets, in the order of their names. One too big to be kept inside a session
+    /** The cabinets among `files`, in the order of their names. One too big to be kept inside a session
         (EmbeddedIrs) cannot be played, and a cabinet that cannot be played is not one. */
-    juce::Array<juce::File> cabinetsIn (const juce::File& folder)
+    juce::Array<juce::File> cabinetsAmong (const juce::Array<juce::File>& files)
     {
         juce::Array<juce::File> found;
-        if (folder.isDirectory())
-            for (const auto& f : folder.findChildFiles (juce::File::findFiles, true))
-                if (device::IrLibrary::isAudioFile (f) && f.getSize() <= device::EmbeddedIrs::maxBytes)
-                    found.add (f);
+        for (const auto& f : files)
+            if (device::IrLibrary::isAudioFile (f) && f.getSize() <= device::EmbeddedIrs::maxBytes)
+                found.add (f);
 
         std::sort (found.begin(), found.end(), [] (const juce::File& x, const juce::File& y)
         {
             return x.getFileName().compareNatural (y.getFileName()) < 0;
         });
         return found;
+    }
+
+    /** A folder's cabinets, in the order of their names. */
+    juce::Array<juce::File> cabinetsIn (const juce::File& folder)
+    {
+        return cabinetsAmong (folder.isDirectory() ? folder.findChildFiles (juce::File::findFiles, true)
+                                                   : juce::Array<juce::File>());
     }
 
     /** A channel's record in the node; made if `create` and it is not there. */
@@ -93,8 +100,9 @@ void Channels::readCabinets()
 {
     // The cabinets: a channel keeps its own too, but by NAME — a cabinet is a file, not a parameter.
     // The build's own stand first and the player's after them, each group in the order of its names:
-    // what a player adds never lands among the factory ones.
-    irs = cabinetsIn (bundledCabinets());
+    // what a player adds never lands among the factory ones. The build's own are the ones the cockpit's
+    // list names, not whatever another product laid out beside them.
+    irs = cabinetsAmong (bundledCabinets());
     factory = irs.size();
     irs.addArray (cabinetsIn (device::IrLibrary::directory()));
     irKeys.clear();
@@ -503,10 +511,12 @@ namespace orbitamp
 {
 
 /** The cockpit's set is in its binary (CatpitSet.h). Once in a process, however many of the amp it
-    holds: the first one built lays it out, and the folder is the same for all of them. */
+    holds: the first one built lays it out, and the folder is the same for all of them. The cockpit's
+    own `Factory` of before is emptied with it, of what a build of before laid there. */
 void layOutFactorySet()
 {
-    static const int laid = catpit::set::layOut (catpit::factory());
+    static const int laid = device::FactorySet::retire (device::DeviceLibrary::formerFactoryDirectory())
+                          + catpit::set::layOut (catpit::factory());
     juce::ignoreUnused (laid);
 }
 

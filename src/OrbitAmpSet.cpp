@@ -10,12 +10,14 @@ namespace orbitamp
 {
 
 /** OrbitAmp's set is in its binary (OrbitAmpSet.h). Once in a process, however many of the amp it
-    holds: the first one built lays it out, and the folder is the same for all of them. Apart from
-    the face, in a file of its own, so that a gate built on the face does not lay the set out in the
-    machine's real folder. */
+    holds: the first one built lays it out, and the folder is the same for all of them. OrbitAmp's own
+    `Factory` of before is emptied with it, of what a build of before laid there. Apart from the face,
+    in a file of its own, so that a gate built on the face does not lay the set out in the machine's
+    real folder. */
 void layOutFactorySet()
 {
-    static const int laid = device::FactorySet::layOut (device::DeviceLibrary::factoryDirectory(), set::carried());
+    static const int laid = device::FactorySet::retire (device::DeviceLibrary::formerFactoryDirectory())
+                          + device::FactorySet::layOut (device::DeviceLibrary::factoryDirectory(), product::name, set::carried());
     juce::ignoreUnused (laid);
 }
 

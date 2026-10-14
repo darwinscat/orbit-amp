@@ -47,7 +47,7 @@ cmake -S . -B "$BUILD" -DCMAKE_BUILD_TYPE=Release \
 
 # 2. Build everything, then run the gates — a release with a red gate is not a release.
 cmake --build "$BUILD" --parallel
-for t in captured chain library reverb ribbon set; do
+for t in captured chain library reverb ribbon set factory; do
   bin="$(find "$BUILD/orbitamp_${t}_test_artefacts" -type f -perm +111 | head -1)"
   echo "-- gate: $t"; "$bin" > /dev/null
 done

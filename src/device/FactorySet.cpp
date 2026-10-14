@@ -9,9 +9,13 @@ namespace orbitamp::device
 {
 namespace
 {
-    // What the folder holds of a build's, one path to the line — the list the next build reads to know
-    // what it may take away.
-    constexpr const char* listName = "set.txt";
+    // Where every product's list lies in the folder, one file each: what the folder holds of that
+    // product's, one path to the line — the list its next build reads to know what it may take away,
+    // and every other product reads to know what is not its to take.
+    constexpr const char* listsName = "sets";
+
+    // The one list a folder held when it was a single product's own.
+    constexpr const char* formerListName = "set.txt";
 
     bool holds (const juce::File& file, const void* data, size_t size)
     {
@@ -21,9 +25,34 @@ namespace
         juce::MemoryBlock there;
         return file.loadFileAsData (there) && there.getSize() == size && std::memcmp (there.getData(), data, size) == 0;
     }
+
+    juce::File listOfProduct (const juce::File& factory, const juce::String& product)
+    {
+        return factory.getChildFile (listsName).getChildFile (juce::File::createLegalFileName (product) + ".txt");
+    }
+
+    juce::StringArray read (const juce::File& list)
+    {
+        juce::StringArray lines;
+        lines.addLines (list.loadFileAsString());
+        lines.removeEmptyStrings();
+        return lines;
+    }
+
+    // The list is a file anyone can write. A line takes a file away only when it names one INSIDE the folder.
+    bool takeAway (const juce::File& folder, const juce::String& path)
+    {
+        const auto gone = folder.getChildFile (path);
+        return gone.isAChildOf (folder) && gone.existsAsFile() && gone.deleteFile();
+    }
 }
 
-int FactorySet::layOut (const juce::File& factory, const std::vector<Entry>& set)
+juce::StringArray FactorySet::listOf (const juce::File& factory, const juce::String& product)
+{
+    return read (listOfProduct (factory, product));
+}
+
+int FactorySet::layOut (const juce::File& factory, const juce::String& product, const std::vector<Entry>& set)
 {
     int changed = 0;
     juce::StringArray laid;
@@ -42,26 +71,57 @@ int FactorySet::layOut (const juce::File& factory, const std::vector<Entry>& set
             ++changed;
     }
 
-    const auto list = factory.getChildFile (listName);
-    juce::StringArray before;
-    before.addLines (list.loadFileAsString());
-    before.removeEmptyStrings();
+    const auto list = listOfProduct (factory, product);
+    const auto before = read (list);
 
-    // The list is a file anyone can write. A line is taken away only when it names a file INSIDE this folder.
+    // What the other products' lists name: theirs still, whatever this one carries now.
+    juce::StringArray theirs;
+    for (const auto& other : factory.getChildFile (listsName).findChildFiles (juce::File::findFiles, false, "*.txt"))
+        if (other != list)
+            theirs.addArray (read (other));
+
     for (const auto& was : before)
-        if (! laid.contains (was))
-            if (const auto gone = factory.getChildFile (was); gone.isAChildOf (factory) && gone.existsAsFile() && gone.deleteFile())
-                ++changed;
+        if (! laid.contains (was) && ! theirs.contains (was) && takeAway (factory, was))
+            ++changed;
 
     if (before != laid)
     {
         if (laid.isEmpty())
             list.deleteFile();
-        else if (factory.createDirectory())
+        else if (list.getParentDirectory().createDirectory())
             list.replaceWithText (laid.joinIntoString ("\n") + "\n");
     }
 
     return changed;
+}
+
+int FactorySet::retire (const juce::File& former)
+{
+    const auto list = former.getChildFile (formerListName);
+    if (! list.existsAsFile())
+        return 0;
+
+    int removed = 0;
+
+    for (const auto& was : read (list))
+    {
+        if (! takeAway (former, was))
+            continue;
+
+        ++removed;
+
+        // The folders it lay in, where it was the last thing in them — `IRs`, and the like.
+        for (auto dir = former.getChildFile (was).getParentDirectory(); dir.isAChildOf (former); dir = dir.getParentDirectory())
+            if (dir.isSymbolicLink() || dir.getNumberOfChildFiles (juce::File::findFilesAndDirectories) > 0 || ! dir.deleteFile())
+                break;
+    }
+
+    list.deleteFile();
+
+    if (! former.isSymbolicLink() && former.getNumberOfChildFiles (juce::File::findFilesAndDirectories) == 0)
+        former.deleteFile();
+
+    return removed;
 }
 
 } // namespace orbitamp::device

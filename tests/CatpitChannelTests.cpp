@@ -16,6 +16,7 @@
 //   - a channel's pack is the capture it holds: renamed, the file is that channel's pack still.
 //
 //   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called;
+//   - a cabinet another product lays out in the family's folder is not one of the cockpit's;
 //   - a channel never pulled opens on its own reverb and its own share of delay.
 //
 // It reads the cockpit's packs from where the cockpit reads them, and lays the build's set out there
@@ -23,6 +24,7 @@
 
 #include "PluginProcessor.h"
 #include "Parameters.h"
+#include "device/FactorySet.h"
 #include "catpit/CatpitEngine.h"
 #include "catpit/CatpitPresets.h"
 
@@ -202,6 +204,25 @@ int main()
         const int factory = channels.factoryCabinets();
         const int before  = channels.cabinets().size();
         check (factory > 0, "the build's own cabinets are there");
+
+        // ANOTHER PRODUCT'S CABINET in the family's folder, beside the build's own, under a name that
+        // would stand first among them: it is not one of the cockpit's. It goes again with that
+        // product's own list.
+        {
+            const juce::String bytes ("another product's cabinet");
+            const auto family = device::DeviceLibrary::factoryDirectory();
+            device::FactorySet::layOut (family, "AnotherAmp", { { "IRs/00-another.wav", bytes.toRawUTF8(), (size_t) bytes.length() } });
+            channels.readCabinets();
+
+            bool notOurs = family.getChildFile ("IRs/00-another.wav").existsAsFile() && channels.factoryCabinets() == factory
+                        && channels.cabinets().size() == before;
+            for (const auto& c : channels.cabinets())
+                notOurs = notOurs && c.getFileName() != "00-another.wav";
+            check (notOurs, "a cabinet another product lays out beside the build's own is not one of the cockpit's");
+
+            device::FactorySet::layOut (family, "AnotherAmp", {});
+            channels.readCabinets();
+        }
 
         const auto run = juce::String::toHexString (juce::Random::getSystemRandom().nextInt());
         const auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("catpit-channel-test-" + run);

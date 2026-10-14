@@ -430,7 +430,7 @@ endif()
 set(ORBITAMP_SET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/set")
 
 # Factory devices: OrbitAmp's own set, INSIDE THE BINARY like the cockpit's — every format, every
-# system — and laid out in OrbitAmp's Factory folder when it starts (src/device/FactorySet.h says
+# system — and laid out in the family's Factory folder when it starts (src/device/FactorySet.h says
 # why a bundle will not do). OrbitAmp is the player of the whole library: it carries EVERY pack in
 # resources/set/Devices, each under its own name. CONFIGURE_DEPENDS: a pack added there is carried
 # from the next build on, with nobody to remember to list it.
@@ -748,14 +748,15 @@ catpitamp_console(catpitamp_memory_probe tests/MemoryProbe.cpp "CatpitAmpMemoryP
 catpitamp_console(catpitamp_channel_test tests/CatpitChannelTests.cpp "CatpitAmpChannelTest")
 
 # Gate for the cockpit's set as it leaves the binary — laid out whole, once, and nothing else in the
-# folder touched. Runs entirely in a folder of its own. The cockpit's, so built only by name.
+# folder touched. Runs entirely in a folder of its own. The cockpit's, so built only by name — and under
+# the cockpit's name, which is the name of its list in the folder.
 juce_add_console_app(catpitamp_set_test PRODUCT_NAME "CatpitAmpSetTest")
 target_sources(catpitamp_set_test PRIVATE
     tests/CatpitSetTests.cpp
     src/catpit/CatpitSet.cpp
     src/device/FactorySet.cpp)
 target_include_directories(catpitamp_set_test PRIVATE src)
-target_compile_definitions(catpitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(catpitamp_set_test PRIVATE ORBITAMP_PRODUCT_NAME="CatpitAmp" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(catpitamp_set_test PRIVATE
     CatpitAmpSet
     juce::juce_core
@@ -1009,5 +1010,23 @@ target_link_libraries(orbitamp_set_test PRIVATE
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events
     juce::juce_gui_basics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+# ----------------------------------------------------------------------------
+# Gate for the family's Factory folder with more than one product laying out in it — two products of
+# make-believe in one folder: what each keeps, what one leaves to the other when it drops a file, and
+# the folder a product kept before the family shared one, emptied of exactly what its list named.
+# Neither product's: built and run with OrbitAmp's gates, and the cockpit's release runs it too. Runs
+# entirely in a temp folder.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_factory_test PRODUCT_NAME "OrbitAmpFactoryTest")
+target_sources(orbitamp_factory_test PRIVATE
+    tests/FactorySetTests.cpp
+    src/device/FactorySet.cpp)
+target_include_directories(orbitamp_factory_test PRIVATE src)
+target_compile_definitions(orbitamp_factory_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_factory_test PRIVATE
+    juce::juce_core
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)

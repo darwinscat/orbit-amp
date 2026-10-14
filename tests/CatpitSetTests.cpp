@@ -3,14 +3,17 @@
 
 // Gate for THE COCKPIT'S SET AS IT LEAVES THE BINARY (catpit/CatpitSet.h): that what is laid out is
 // what was built in, byte for byte; that a start after the first writes nothing; that a file damaged
-// or lost comes back; that what an earlier build left behind goes — and that nothing else does.
+// or lost comes back; that what an earlier build left behind goes — and that nothing else does; and
+// that the cockpit's cabinets are its own, whatever another product lays out beside them.
 //
 //   CatpitSetTests [folder]     the folder to work in, under the current directory; one of its own
 //                               under the system's temporary folder when none is named
 //
 // It works in that folder alone, and leaves it behind to be looked at.
 
+#include "Product.h"
 #include "catpit/CatpitSet.h"
+#include "device/FactorySet.h"
 
 #if CATPIT_SET_EMBEDDED
  #include <CatpitSetData.h>
@@ -35,8 +38,9 @@ int main (int argc, char** argv)
                                : juce::File::getSpecialLocation (juce::File::tempDirectory)
                                      .getChildFile ("catpit-set-test-" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt()));
 
-    // The real folder's own shape: an apostrophe and a space on the way down.
-    const auto factory = root.getChildFile ("Darwin's Cat").getChildFile ("CatpitAmp").getChildFile ("Factory");
+    // The real folder's own shape: an apostrophe and a space on the way down. The family's, not the cockpit's.
+    const auto factory = root.getChildFile ("Darwin's Cat").getChildFile ("Factory");
+    const auto list    = factory.getChildFile ("sets").getChildFile (juce::String (orbitamp::product::name) + ".txt");
     std::printf ("in %s\n", factory.getFullPathName().toRawUTF8());
     check (! factory.exists(), "the folder is not there before the first start");
 
@@ -74,7 +78,7 @@ int main (int argc, char** argv)
     // The first start.
     check (set::layOut (factory) == (int) carried.size(), "the first start writes every file of the set");
     check (allThere(), "...each of them byte for byte what was built in");
-    check (carried.empty() || factory.getChildFile ("set.txt").existsAsFile(), "...and the list of them");
+    check (carried.empty() || list.existsAsFile(), "...and the cockpit's own list of them");
 
     // Every start after it.
     std::vector<juce::Time> stamps;
@@ -102,7 +106,6 @@ int main (int argc, char** argv)
         const auto leftCab  = set::cabinetsIn (factory).getChildFile ("99-gone.wav");
         leftPack.replaceWithText ("an earlier build's pack");
         leftCab.replaceWithText ("an earlier build's cabinet");
-        const auto list = factory.getChildFile ("set.txt");
         list.appendText ("Gone.orbitrig.zip\nIRs/99-gone.wav\n");
 
         // ...beside a file the list does not name, and a line that points out of the folder.
@@ -110,7 +113,7 @@ int main (int argc, char** argv)
         const auto outside = root.getChildFile ("outside.txt");
         players.replaceWithText ("the player's own");
         outside.replaceWithText ("not the amp's");
-        list.appendText ("../../../outside.txt\n" + outside.getFullPathName() + "\n");
+        list.appendText ("../../outside.txt\n" + outside.getFullPathName() + "\n");
 
         check (set::layOut (factory) == 2, "two files an earlier build left are taken away");
         check (! leftPack.exists() && ! leftCab.exists(), "...those two");
@@ -118,6 +121,19 @@ int main (int argc, char** argv)
         check (outside.existsAsFile(), "a line that points out of the folder takes nothing away");
         check (allThere(), "the set is whole after it");
         check (set::layOut (factory) == 0, "and the next start writes nothing again");
+
+        // ANOTHER PRODUCT IN THE SAME FOLDER, with a cabinet of its own beside the cockpit's.
+        const juce::String another ("another product's cabinet");
+        orbitamp::device::FactorySet::layOut (factory, "AnotherAmp", { { "IRs/50-another.wav", another.toRawUTF8(), (size_t) another.length() } });
+        check (set::cabinetsIn (factory).getChildFile ("50-another.wav").existsAsFile(), "another product lays a cabinet out beside the cockpit's");
+
+        const auto own = set::ownCabinets (factory);
+        bool mine = own.size() == cabinets;
+        for (const auto& c : carried)
+            mine = mine && (c.file.getParentDirectory() != set::cabinetsIn (factory) || own.contains (c.file));
+        check (mine, "the cockpit's cabinets are the ones it carries, all " + juce::String (own.size()) + " of them");
+        check (! own.contains (set::cabinetsIn (factory).getChildFile ("50-another.wav")), "...and not the other product's");
+        check (! own.contains (players), "...nor a file of the player's");
     }
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");

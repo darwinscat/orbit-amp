@@ -31,12 +31,13 @@ int main()
             ++failed;
     };
 
-    // The real folders' own shape: an apostrophe and a space on the way down.
+    // The real folders' own shape: an apostrophe and a space on the way down, the family's Factory
+    // beside OrbitAmp's own folder.
     const auto root = juce::File::getSpecialLocation (juce::File::tempDirectory)
                           .getChildFile ("orbitamp-set-test-" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt()))
-                          .getChildFile ("Darwin's Cat").getChildFile ("OrbitAmp");
+                          .getChildFile ("Darwin's Cat");
     const auto factory = root.getChildFile ("Factory");
-    const auto own     = root.getChildFile ("Devices");
+    const auto own     = root.getChildFile (product::name).getChildFile ("Devices");
     own.createDirectory();
     std::printf ("in %s\n", root.getFullPathName().toRawUTF8());
 
@@ -58,7 +59,7 @@ int main()
                          + names.joinIntoString (", "));
 
     // The first start.
-    check (FactorySet::layOut (factory, carried) == (int) carried.size(), "the first start writes every one of them");
+    check (FactorySet::layOut (factory, product::name, carried) == (int) carried.size(), "the first start writes every one of them");
 
     bool whole = true;
     for (const auto& e : carried)
@@ -93,7 +94,7 @@ int main()
     check (allListed, "the preamp list shows each by a name of its own: " + listed.joinIntoString (", "));
 
     // Every start after it.
-    check (FactorySet::layOut (factory, carried) == 0, "the second start writes nothing");
+    check (FactorySet::layOut (factory, product::name, carried) == 0, "the second start writes nothing");
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
     return failed == 0 ? 0 : 1;

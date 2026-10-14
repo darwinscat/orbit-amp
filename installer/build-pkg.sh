@@ -15,7 +15,7 @@ OUT="${3:?missing output dir}"
 # Stage the FULL absolute install tree and use --install-location "/" so plug-ins and the app can
 # land in DIFFERENT roots from one pkgbuild: plug-ins under /Library/Audio/Plug-Ins, the Standalone
 # under /Applications. Factory device packs need no payload of their own — they ride INSIDE the
-# binary, and the amp lays them out in its Factory folder when it first starts.
+# binary, and the amp lays them out in the family's Factory folder when it first starts.
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 PLUG="$stage/Library/Audio/Plug-Ins"

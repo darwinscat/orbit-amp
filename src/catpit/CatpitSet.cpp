@@ -3,6 +3,7 @@
 
 #include "CatpitSet.h"
 
+#include "../Product.h"
 #include "../device/FactorySet.h"
 
 #if CATPIT_SET_EMBEDDED
@@ -19,6 +20,18 @@ namespace
 juce::File cabinetsIn (const juce::File& factory)
 {
     return factory.getChildFile (cabinetsName);
+}
+
+juce::Array<juce::File> ownCabinets (const juce::File& factory)
+{
+    juce::Array<juce::File> own;
+
+    for (const auto& path : device::FactorySet::listOf (factory, product::name))
+        if (path.startsWith (juce::String (cabinetsName) + "/"))
+            if (const auto file = factory.getChildFile (path); file.isAChildOf (cabinetsIn (factory)) && file.existsAsFile())
+                own.add (file);
+
+    return own;
 }
 
 int layOut (const juce::File& factory)
@@ -43,6 +56,6 @@ int layOut (const juce::File& factory)
     }
    #endif
 
-    return device::FactorySet::layOut (factory, carried);
+    return device::FactorySet::layOut (factory, product::name, carried);
 }
 } // namespace orbitamp::catpit::set

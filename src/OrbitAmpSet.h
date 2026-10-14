@@ -8,9 +8,9 @@
 #include <OrbitAmpSetData.h>
 
 /** ORBITAMP'S OWN SET: every pack in the tree's set (resources/set/Devices) — the X88-IR's four
-    channels, the Victory V4's six — inside the binary and laid out in OrbitAmp's `Factory` folder when
-    it starts (device/FactorySet.h says why, and how). OrbitAmp is the player of the whole library, so
-    what the set holds, it carries.
+    channels, the Victory V4's six — inside the binary and laid out in the family's `Factory` folder
+    when it starts (device/FactorySet.h says why, and how). OrbitAmp is the player of the whole library,
+    so what the set holds, it carries.
 
     Each pack lies under its own file's name, which is the name the device list shows it by: the
     manifest's own name is the voice's alias, and "X88-IR" for all four of one amp. The cabinets are

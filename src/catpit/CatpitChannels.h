@@ -106,7 +106,8 @@ public:
     int  packFor (int channel) const;
 
     /** THE COCKPIT'S OWN CABINETS: every IR file in its two places — the ones the build carries, laid
-        out in the amp's factory folder (CatpitSet.h), and the player's IRs folder beside its Devices —
+        out in the family's factory folder under the cockpit's own list (CatpitSet.h; another product's
+        cabinets beside them are not among them), and the player's IRs folder beside its Devices —
         in the order of their names, so a leading number is how the order is chosen. Read when the
         engine is built and again each time the face opens: the folder is the player's to add to
         between two looks. CAB has as many positions as there are of them. */

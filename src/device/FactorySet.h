@@ -19,10 +19,16 @@ namespace orbitamp::device
     Laid out rather than played from memory because the whole library reads files: a pack is a path to
     a zip, a cabinet is a file, and what the face offers to save is that file.
 
-    THE FOLDER IS THE AMP'S, NOT THE PLAYER'S: `Factory` beside the player's own `Devices` and `IRs`
-    (DeviceLibrary::factoryDirectory), where the device library looks for the packs the build carries.
-    What a product carries, and under which names, is the product's to say — OrbitAmpSet.h for
-    OrbitAmp, catpit/CatpitSet.h for the cockpit; how it lands in the folder is said once, here. */
+    THE FOLDER IS THE FAMILY'S, NOT ONE PRODUCT'S: `Darwin's Cat/Factory`, beside every product's own
+    folder (DeviceLibrary::factoryDirectory), packs at its top and cabinets in `IRs`. Every product lays
+    out what IT carries there, so a pack two of them carry is one file, and every product's list shows
+    every pack the family has laid out. What a product carries, and under which names, is the product's
+    to say — OrbitAmpSet.h for OrbitAmp, catpit/CatpitSet.h for the cockpit; how it lands in the folder
+    is said once, here.
+
+    EACH PRODUCT KEEPS ITS OWN LIST there, `sets/<product>.txt`: what it laid out, one path to the line.
+    The lists are what makes the folder safe to share — a file one product no longer carries may be one
+    another still plays. */
 struct FactorySet
 {
     /** One file of a set: where it lies, as a path inside the factory folder, and the bytes it holds. */
@@ -33,12 +39,22 @@ struct FactorySet
         size_t       size = 0;
     };
 
-    /** Makes `factory` hold `set`, whatever it held before: a file that is missing or differs is
-        written, and one an EARLIER build laid here that this one no longer carries is removed — a pack
-        or a cabinet left behind would go on being offered. What is removed is only what the folder's
-        own list says a build put there: nothing else in it is the build's to touch. Returns how many
-        files it wrote or removed, which on every start after the first is none. */
-    static int layOut (const juce::File& factory, const std::vector<Entry>& set);
+    /** Makes `factory` hold `product`'s set, whatever it held before: a file that is missing or differs
+        is written, and one an EARLIER build of the product laid here that this one no longer carries is
+        removed — a pack or a cabinet left behind would go on being offered — unless another product's
+        list names it too: then it is that product's still. What is removed is only what the product's
+        own list says it put there: nothing else in the folder is its to touch. Returns how many files it
+        wrote or removed, which on every start after the first is none. */
+    static int layOut (const juce::File& factory, const juce::String& product, const std::vector<Entry>& set);
+
+    /** What `product`'s own list in `factory` names: the paths, inside the folder, of what it laid there. */
+    static juce::StringArray listOf (const juce::File& factory, const juce::String& product);
+
+    /** EMPTIES THE FOLDER A BUILD OF BEFORE laid its set out in — the product's own `Factory`, from before
+        the family shared one — once: exactly the files its `set.txt` names, then any folder that leaves
+        empty, then the list, then the folder itself if nothing else is in it. A file the list does not
+        name stays, and the folder with it. Returns how many files it removed: with no list there, none. */
+    static int retire (const juce::File& former);
 };
 
 } // namespace orbitamp::device
