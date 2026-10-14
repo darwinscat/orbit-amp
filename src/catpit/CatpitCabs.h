@@ -3,13 +3,15 @@
 
 #pragma once
 
-#include "CatpitChannels.h"
+#include "../channels/Channels.h"
 #include "CatpitControls.h"
 
 #include <functional>
 
 namespace orbitamp::catpit
 {
+
+using channels::Channels;
 
 /** THE CABINETS' WINDOW (the cockpit's Sheet shows it): every cabinet CAB steps through, by name, where
     the slider gives each a few pixels of its travel.

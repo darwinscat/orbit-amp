@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-#include "CatpitEngine.h"
+#include "Engine.h"
 
 #include "../Parameters.h"
 #include "../ui/Prefs.h"
 
-namespace orbitamp::catpit
+namespace orbitamp::channels
 {
 
 namespace
@@ -31,11 +31,13 @@ int settings::turbo()
 }
 
 //==============================================================================
-void Engine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+void Engine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, const Lineup& lineup)
 {
-    // The names the lever wears, as a host would write them.
-    layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { channelId, 1 }, "Channel",
-                                                              juce::StringArray { "Clean", "Edge", "Crunch", "Hi-Gain" }, 0));
+    // The names the channels wear, as a host would write them.
+    juce::StringArray names;
+    for (const auto& c : lineup.channels)
+        names.add (c.name);
+    layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { lineup.parameterId, 1 }, "Channel", names, 0));
 }
 
 Engine& Engine::of (AmpProcessor& p)
@@ -46,8 +48,8 @@ Engine& Engine::of (AmpProcessor& p)
 
 /** Built while the processor is still building itself, before its history has taken a baseline: what
     is settled here is how the amp starts, not an edit of it. */
-Engine::Engine (AmpProcessor& p)
-    : channels (p), amp (p), channel (p.apvts.getParameter (channelId))
+Engine::Engine (AmpProcessor& p, const Lineup& lineup)
+    : channels (p, lineup), amp (p), channel (p.apvts.getParameter (lineup.parameterId))
 {
     jassert (channel != nullptr);
 
@@ -60,7 +62,7 @@ Engine::Engine (AmpProcessor& p)
 
 int Engine::asked() const
 {
-    return channel != nullptr ? juce::jlimit (0, Channels::count - 1, juce::roundToInt (channel->convertFrom0to1 (channel->getValue())))
+    return channel != nullptr ? juce::jlimit (0, channels.count() - 1, juce::roundToInt (channel->convertFrom0to1 (channel->getValue())))
                               : channels.active();
 }
 
@@ -97,7 +99,7 @@ void Engine::pump()
 
     if (! channels.adopted())
     {
-        // A state the cockpit has not seen — a session from before it existed, a preset's INIT — with
+        // A state the product has not seen — a session from before it existed, a preset's INIT — with
         // no window open to take it in.
         const Suppress settling (amp.history);
         makeOwn();
@@ -156,12 +158,16 @@ void Engine::setUpChain (bool firstTime)
     setParam (params::reverbPresent, 1.0f);
     setParam (params::reverbOn,      1.0f);
     if (firstTime)                            // after that the reverb is the player's to choose
+    {
         setParam (params::reverbType, channels.defaultOf (channels.active(), params::reverbType));
+        if (channels.lineup().channels[(size_t) channels.active()].reverbMix.has_value())
+            setParam (params::reverbMix, channels.defaultOf (channels.active(), params::reverbMix));
+    }
     setParam (params::cabPresent,    1.0f);
     if (firstTime)                            // after that, whether the cabinet plays is the player's to say
         setParam (params::cabOn,     1.0f);
 
-    // TURBO is the preamp's input trim, at its push or at nothing: a state the cockpit has never seen
+    // TURBO is the preamp's input trim, at its push or at nothing: a state the product has never seen
     // starts with it off, wherever that trim was left.
     if (firstTime)
         setParam (params::blockIn (params::preampId), 0.0f);
@@ -183,20 +189,4 @@ void Engine::setUpChain (bool firstTime)
     setParam (params::cabLpfHz, params::cabLpfDefaultHz);
 }
 
-} // namespace orbitamp::catpit
-
-namespace orbitamp
-{
-
-// The cockpit's half of the two things a product gives the processor beside its face (PluginProcessor.h).
-void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
-{
-    catpit::Engine::addParameters (layout);
-}
-
-std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor& p)
-{
-    return std::make_unique<catpit::Engine> (p);
-}
-
-} // namespace orbitamp
+} // namespace orbitamp::channels

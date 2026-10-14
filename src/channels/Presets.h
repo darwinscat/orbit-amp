@@ -3,14 +3,16 @@
 
 #pragma once
 
-#include "CatpitChannels.h"
+#include "Channels.h"
 
-namespace orbitamp::catpit
+namespace orbitamp::channels
 {
 
-/** THE COCKPIT'S PRESETS. A preset is the whole amp — all four channels as each was left, the one that
-    was playing, the reverb, the delay, the cabinet, OUTPUT — in a file of the cockpit's own, in a folder
-    of its own: its chain is fixed, and a preset from OrbitAmp's looser one does not lie in it.
+/** A PRODUCT'S PRESETS. A preset is the whole amp — every channel as it was left, the one that was
+    playing, the reverb, the delay, the cabinet, OUTPUT — in a file of the product's own, in a folder of
+    its own: its chain is fixed, and a preset from OrbitAmp's looser one, or another product's, does
+    not lie in it. The folder is the product's (`Darwin's Cat/<product>/Presets`), and so is the file's
+    extension: its name in lower case, `.catpitamp` for the cockpit.
 
     INPUT is not in a preset. It is set to the guitar and the interface, not to a sound, and a preset
     that moved it would be undoing a setting made once for the room.
@@ -25,7 +27,7 @@ namespace orbitamp::catpit
 class Presets
 {
 public:
-    static constexpr const char* extension = ".catpitamp";
+    static juce::String extension();
 
     Presets (AmpProcessor&, Channels&);
 
@@ -44,7 +46,7 @@ public:
     bool rename (const juce::String& to);
     bool removeCurrent();
 
-    /** Back to what a fresh cockpit is: every control at its default, every channel's memory gone. */
+    /** Back to what a fresh product is: every control at its default, every channel's memory gone. */
     void init();
 
 private:
@@ -56,4 +58,4 @@ private:
     void mark (const juce::String& name);
 };
 
-} // namespace orbitamp::catpit
+} // namespace orbitamp::channels

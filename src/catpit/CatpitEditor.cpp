@@ -28,6 +28,8 @@ juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
 namespace catpit
 {
 
+namespace settings = channels::settings;
+
 namespace
 {
     // The six keys under the tone knobs: the two filters, then the pack's own layers. The row has room
@@ -118,7 +120,7 @@ namespace
     constexpr float limiterCeilings[] { -0.1f, -0.3f, -0.5f, -1.0f, -2.0f, -3.0f };
 
     // TURBO's push — see CatpitEditor.h. Kept with the machine's settings, where the engine reads it too
-    // (CatpitEngine.h).
+    // (channels/Engine.h).
     using settings::turboKey, settings::turboPushes, settings::snapTurbo;
 
     // How DRIVE goes between the pack's captures — see CatpitEditor.h. Kept with the machine's settings.
@@ -626,7 +628,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     lever.setDetent (channels.active(), false, false);
 
     // ...and so does a host, through CHANNEL, with no hand on anything: the engine makes the switch
-    // (CatpitEngine.h) and the face goes after it.
+    // (channels/Engine.h) and the face goes after it.
     engine.onChange = [this] { followEngine(); };
 
     // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
@@ -929,7 +931,7 @@ void CatpitEditor::followEngine()
 
 bool CatpitEditor::settingsDiffer() const
 {
-    const auto dialled = amp.apvts.state.getProperty (Channels::leverZeroId);
+    const auto dialled = amp.apvts.state.getProperty (channels.leverZeroId());
     const float push = getParam (params::blockIn (params::preampId).toRawUTF8());
 
     return dialled.isVoid() || (int) dialled != leverZero
@@ -940,13 +942,13 @@ bool CatpitEditor::settingsDiffer() const
 void CatpitEditor::settleOnSettings()
 {
     // No note: the trim was dialled on the engine's own scale, whose middle is 0 dB.
-    const auto dialled = amp.apvts.state.getProperty (Channels::leverZeroId);
+    const auto dialled = amp.apvts.state.getProperty (channels.leverZeroId());
     const int was = dialled.isVoid() ? 0 : (int) dialled;
 
     if (was != leverZero)
         setParam (params::inTrim, leverToDb (dbToLever (getParam (params::inTrim), was), leverZero));
     if (dialled.isVoid() || was != leverZero)
-        amp.apvts.state.setProperty (Channels::leverZeroId, leverZero, nullptr);
+        amp.apvts.state.setProperty (channels.leverZeroId(), leverZero, nullptr);
 
     inFader.setValue (dbToLever (getParam (params::inTrim), leverZero), false);
 
@@ -1408,7 +1410,7 @@ void CatpitEditor::showChannel()
     // A layer the packs do not carry yet never shows as thrown — whatever the state says.
     const auto playable = [] (Channels::Flag f) { return Channels::layerPlayable[(size_t) f]; };
     const auto thrown = [this, playable] (Channels::Flag f) { return playable (f) && channels.flag (f); };
-    buttons[btFat]->setEnabled (playable (Channels::fat) && channel >= 2);
+    buttons[btFat]->setEnabled (playable (Channels::fat) && channels.lineup().channels[(size_t) channel].hot);
     buttons[btFat]->setOn      (thrown (Channels::fat),      false);
     buttons[btBright]->setOn   (thrown (Channels::bright),   false);
     buttons[btDepth]->setOn    (thrown (Channels::depth),    false);

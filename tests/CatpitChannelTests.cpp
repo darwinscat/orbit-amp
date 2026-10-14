@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for THE COCKPIT'S CHANNELS WITH NO WINDOW (catpit/CatpitEngine.h). A plug-in's window is shut
+// Gate for THE COCKPIT'S CHANNELS WITH NO WINDOW (channels/Engine.h, over catpit/CatpitLineup.h). A plug-in's window is shut
 // for most of its life, and what a host can reach then is the processor's parameters: so a channel
 // has to be something the processor does by itself. No window is built here at all.
 //
@@ -25,8 +25,8 @@
 #include "PluginProcessor.h"
 #include "Parameters.h"
 #include "device/FactorySet.h"
-#include "catpit/CatpitEngine.h"
-#include "catpit/CatpitPresets.h"
+#include "channels/Engine.h"
+#include "channels/Presets.h"
 
 #include <cmath>
 #include <cstdio>
@@ -47,10 +47,10 @@ int main()
     auto amp = std::make_unique<AmpProcessor>();
     amp->inlineLoads = true;            // no message loop here: a model lands inside the pump
 
-    auto& engine   = catpit::Engine::of (*amp);
+    auto& engine   = channels::Engine::of (*amp);
     auto& channels = engine.channels;
     auto& history  = amp->history;
-    auto* channel  = amp->apvts.getParameter (catpit::Engine::channelId);
+    auto* channel  = amp->apvts.getParameter (engine.channelId());
     auto* drive    = amp->apvts.getParameter (params::preampGain);
     auto* device   = amp->apvts.getParameter (params::preampDevice);
     if (channel == nullptr || drive == nullptr || device == nullptr)
@@ -75,7 +75,7 @@ int main()
     };
 
     bool installed = true;
-    for (int c = 0; c < catpit::Channels::count; ++c)
+    for (int c = 0; c < channels.count(); ++c)
         installed = installed && channels.packFor (c) >= 0;
     check (installed, "all four channels' packs are installed");
 
@@ -125,9 +125,9 @@ int main()
     // A state from before there was a parameter: it says its channel on the node, and nowhere else.
     {
         auto old = amp->apvts.copyState();
-        if (auto word = old.getChildWithProperty ("id", catpit::Engine::channelId); word.isValid())
+        if (auto word = old.getChildWithProperty ("id", juce::String (engine.channelId())); word.isValid())
             old.removeChild (word, nullptr);
-        if (auto node = old.getChildWithName (catpit::Channels::nodeType); node.isValid())
+        if (auto node = old.getChildWithName (channels.nodeType()); node.isValid())
             node.setProperty ("active", 3, nullptr);
 
         const int before = history.undoDepth();
@@ -163,14 +163,14 @@ int main()
         const auto nameOf = [] (int c) { return "Renamed " + juce::String (c) + ".orbitrig.zip"; };
 
         bool copied = renamed.createDirectory().wasOk();
-        for (int c = 0; c < catpit::Channels::count; ++c)
+        for (int c = 0; c < channels.count(); ++c)
             copied = copied && channels.packFor (c) >= 0
                             && all.getReference (channels.packFor (c)).location.copyFileTo (renamed.getChildFile (nameOf (c)));
 
         amp->preamp.packs = device::DeviceLibrary::scan (device::DeviceLibrary::Slot::preamp, true,
                                                          renamed, renamed.getChildFile ("none"));
         bool found = copied;
-        for (int c = 0; c < catpit::Channels::count; ++c)
+        for (int c = 0; c < channels.count(); ++c)
             found = found && channels.packFor (c) >= 0
                           && amp->preamp.packs.getReference (channels.packFor (c)).location.getFileName() == nameOf (c);
         check (found, "a channel's pack is found by the capture it holds, whatever its file is called");
@@ -298,7 +298,7 @@ int main()
                 && std::abs (delay->convertFrom0to1 (delay->getValue()) - mix) < 1.0e-3f;
         };
 
-        catpit::Presets presets (*amp, channels);
+        orbitamp::channels::Presets presets (*amp, channels);
         presets.init();
         ticks();
         check (channels.active() == 0 && opensOn ("Hall", 15.0f), "after INIT the first channel stands in a hall, with a little delay");

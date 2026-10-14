@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-#include "CatpitSet.h"
+#include "Set.h"
 
 #include "../Product.h"
 #include "../device/FactorySet.h"
 
-#if CATPIT_SET_EMBEDDED
- #include <CatpitSetData.h>
+#if PRODUCT_SET_EMBEDDED
+ #include <ProductSetData.h>
 #endif
 
-namespace orbitamp::catpit::set
+namespace orbitamp::channels::set
 {
 namespace
 {
@@ -38,17 +38,17 @@ int layOut (const juce::File& factory, juce::int64 build)
 {
     std::vector<device::FactorySet::Entry> carried;
 
-   #if CATPIT_SET_EMBEDDED
-    for (int i = 0; i < CatpitSetData::namedResourceListSize; ++i)
+   #if PRODUCT_SET_EMBEDDED
+    for (int i = 0; i < ProductSetData::namedResourceListSize; ++i)
     {
-        const auto name = juce::String::fromUTF8 (CatpitSetData::originalFilenames[i]);
+        const auto name = juce::String::fromUTF8 (ProductSetData::originalFilenames[i]);
         const bool pack    = name.endsWithIgnoreCase (".orbitrig.zip");
         const bool cabinet = name.endsWithIgnoreCase (".wav") || name.endsWithIgnoreCase (".aif") || name.endsWithIgnoreCase (".aiff");
         if (! pack && ! cabinet)
             continue;
 
         int size = 0;
-        const char* data = CatpitSetData::getNamedResource (CatpitSetData::namedResourceList[i], size);
+        const char* data = ProductSetData::getNamedResource (ProductSetData::namedResourceList[i], size);
         if (data == nullptr)
             continue;
 
@@ -58,4 +58,4 @@ int layOut (const juce::File& factory, juce::int64 build)
 
     return device::FactorySet::layOut (factory, product::name, build, carried);
 }
-} // namespace orbitamp::catpit::set
+} // namespace orbitamp::channels::set

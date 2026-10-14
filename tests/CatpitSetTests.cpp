@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for THE COCKPIT'S SET AS IT LEAVES THE BINARY (catpit/CatpitSet.h): that what is laid out is
+// Gate for THE COCKPIT'S SET AS IT LEAVES THE BINARY (channels/Set.h, over the cockpit's set data): that what is laid out is
 // what was built in, byte for byte; that a start after the first writes nothing; that a file damaged
 // or lost comes back; that what an earlier build left behind goes — and that nothing else does; and
 // that the cockpit's cabinets are its own, whatever another product lays out beside them.
@@ -12,11 +12,11 @@
 // It works in that folder alone, and leaves it behind to be looked at.
 
 #include "Product.h"
-#include "catpit/CatpitSet.h"
+#include "channels/Set.h"
 #include "device/FactorySet.h"
 
-#if CATPIT_SET_EMBEDDED
- #include <CatpitSetData.h>
+#if PRODUCT_SET_EMBEDDED
+ #include <ProductSetData.h>
 #endif
 
 #include <cstdio>
@@ -24,7 +24,7 @@
 
 int main (int argc, char** argv)
 {
-    using namespace orbitamp::catpit;
+    using namespace orbitamp::channels;
 
     int failed = 0;
     const auto check = [&failed] (bool ok, const juce::String& what)
@@ -50,13 +50,13 @@ int main (int argc, char** argv)
     std::vector<Carried> carried;
     int packs = 0, cabinets = 0;
     juce::int64 bytes = 0;
-   #if CATPIT_SET_EMBEDDED
-    for (int i = 0; i < CatpitSetData::namedResourceListSize; ++i)
+   #if PRODUCT_SET_EMBEDDED
+    for (int i = 0; i < ProductSetData::namedResourceListSize; ++i)
     {
-        const auto name = juce::String::fromUTF8 (CatpitSetData::originalFilenames[i]);
+        const auto name = juce::String::fromUTF8 (ProductSetData::originalFilenames[i]);
         const bool pack = name.endsWithIgnoreCase (".orbitrig.zip");
         int size = 0;
-        const char* data = CatpitSetData::getNamedResource (CatpitSetData::namedResourceList[i], size);
+        const char* data = ProductSetData::getNamedResource (ProductSetData::namedResourceList[i], size);
         carried.push_back ({ (pack ? factory : set::cabinetsIn (factory)).getChildFile (name), data, size });
         (pack ? packs : cabinets) += 1;
         bytes += size;

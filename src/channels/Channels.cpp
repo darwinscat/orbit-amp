@@ -1,45 +1,35 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-#include "CatpitChannels.h"
+#include "Channels.h"
 
-#include "CatpitSet.h"
+#include "Set.h"
 #include "../Parameters.h"
-#include "../device/FactorySet.h"
 #include "../device/IrLibrary.h"
-
-#include <OrbitAmpVersion.h>
 
 #include <algorithm>
 #include <array>
 
-namespace orbitamp::catpit
+namespace orbitamp::channels
 {
 
 namespace
 {
-    /** A channel's pack is the capture it plays, known by the `rig_id` its manifest carries — what the
-        pack IS, whatever its file is called. The X88-IR's own four channels: Normal for Clean, Altered
-        for Edge, Crunch for Crunch, Overdrive for Hi-Gain. */
-    constexpr std::array<const char*, Channels::count> captures { "x88-ir-normal-bae8", "x88-ir-altered-c14c",
-                                                                  "x88-ir-crunch-2abb", "x88-ir-overdrive-0344" };
-
     constexpr std::array<const char*, Channels::numFlags> flagIds { "fat", "bright", "depth", "presence" };
 
-    const juce::Identifier nodeId   { Channels::nodeType };
     const juce::Identifier recordId { "channel" };
     const juce::Identifier activeId { "active" };
     const juce::Identifier indexId  { "i" };
     const juce::Identifier cabinetId { "cabinet" };
 
     /** The family's folder beside the products': where the set a build carries is laid out
-        (CatpitSet.h), and where the device library looks for the packs the builds carry. */
+        (Set.h), and where the device library looks for the packs the builds carry. */
     juce::File factory()
     {
         return device::DeviceLibrary::factoryDirectory();
     }
 
-    /** Where a build's own cabinets are: laid out with its packs, and named in the cockpit's own list. */
+    /** Where a build's own cabinets are: laid out with its packs, and named in the product's own list. */
     juce::Array<juce::File> bundledCabinets()
     {
         return set::ownCabinets (factory());
@@ -82,7 +72,7 @@ namespace
     }
 }
 
-Channels::Channels (AmpProcessor& p) : amp (p)
+Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
 {
     kept.add (params::preampGain);
     kept.add (params::blockIn (params::preampId));      // TURBO: how hard the capture is fed
@@ -102,7 +92,7 @@ void Channels::readCabinets()
 {
     // The cabinets: a channel keeps its own too, but by NAME — a cabinet is a file, not a parameter.
     // The build's own stand first and the player's after them, each group in the order of its names:
-    // what a player adds never lands among the factory ones. The build's own are the ones the cockpit's
+    // what a player adds never lands among the factory ones. The build's own are the ones the product's
     // list names, not whatever another product laid out beside them.
     irs = cabinetsAmong (bundledCabinets());
     factory = irs.size();
@@ -161,7 +151,7 @@ int Channels::defaultCabinet() const
 {
     // Only among the build's own: a player's file of the same name is the player's, not the default.
     for (int i = 0; i < juce::jmin (factory, irs.size()); ++i)
-        if (cabinetStem (irs.getReference (i)).equalsIgnoreCase (defaultCabinetStem))
+        if (cabinetStem (irs.getReference (i)).equalsIgnoreCase (line.openingCabinet))
             return i;
     return irs.isEmpty() ? -1 : 0;
 }
@@ -325,7 +315,7 @@ juce::ValueTree Channels::node() const
 {
     // Asked for afresh every time: an undo, a register or a session REPLACES the state tree, and a
     // handle kept across that would be a handle to the tree that was thrown away.
-    return amp.apvts.state.getChildWithName (nodeId);
+    return amp.apvts.state.getChildWithName (nodeType());
 }
 
 juce::ValueTree Channels::ensureNode()
@@ -333,7 +323,7 @@ juce::ValueTree Channels::ensureNode()
     auto n = node();
     if (! n.isValid())
     {
-        n = juce::ValueTree (nodeId);
+        n = juce::ValueTree (nodeType());
         n.setProperty (activeId, 0, nullptr);
         amp.apvts.state.appendChild (n, nullptr);
     }
@@ -344,7 +334,7 @@ int Channels::packFor (int channel) const
 {
     const auto& library = amp.preamp.packs;
     for (int i = 0; i < library.size(); ++i)
-        if (library.getReference (i).rigId == captures[(size_t) juce::jlimit (0, count - 1, channel)])
+        if (library.getReference (i).rigId == line.channels[(size_t) juce::jlimit (0, count() - 1, channel)].capture)
             return i;
     return -1;
 }
@@ -355,11 +345,11 @@ bool Channels::adopt()
         return false;
 
     // A device still where its parameter starts is nobody's choice — a fresh instance, an INIT — and the
-    // cockpit opens on its first channel then, whichever pack the engine starts on.
+    // product opens on its first channel then, whichever pack the engine starts on.
     const int playing = juce::roundToInt (plain (params::preampDevice));
     const bool chosen = playing != juce::roundToInt (defaultOf (0, params::preampDevice));
     int channel = -1;
-    for (int c = 0; c < count; ++c)
+    for (int c = 0; c < count(); ++c)
         if (chosen && packFor (c) >= 0 && packFor (c) == playing)
             channel = c;
 
@@ -370,12 +360,12 @@ bool Channels::adopt()
 
 int Channels::active() const
 {
-    return juce::jlimit (0, count - 1, (int) node().getProperty (activeId, 0));
+    return juce::jlimit (0, count() - 1, (int) node().getProperty (activeId, 0));
 }
 
 bool Channels::select (int to)
 {
-    to = juce::jlimit (0, count - 1, to);
+    to = juce::jlimit (0, count() - 1, to);
     const int from = active();
     if (to == from)
         return true;
@@ -424,10 +414,10 @@ juce::ValueTree Channels::whole() const
     const auto n = node();
     const int playing = active();
 
-    juce::ValueTree out (nodeId);
+    juce::ValueTree out (nodeType());
     out.setProperty (activeId, playing, nullptr);
 
-    for (int c = 0; c < count; ++c)
+    for (int c = 0; c < count(); ++c)
     {
         const auto record = n.getChildWithProperty (indexId, c);
 
@@ -489,12 +479,14 @@ float Channels::plain (const juce::String& paramId) const
 
 float Channels::defaultOf (int channel, const juce::String& paramId) const
 {
-    const auto c = (size_t) juce::jlimit (0, count - 1, channel);
+    const auto& own = line.channels[(size_t) juce::jlimit (0, count() - 1, channel)];
 
     if (paramId == params::reverbType)      // the channel's own room, whatever the engine opens on
-        return (float) juce::jmax (0, params::reverbCharacters.indexOf (defaultReverbs[c]));
+        return (float) juce::jmax (0, params::reverbCharacters.indexOf (own.reverb));
+    if (paramId == params::reverbMix && own.reverbMix.has_value())
+        return *own.reverbMix;
     if (paramId == params::delayMix)
-        return defaultDelayMix[c];
+        return own.delayMix;
 
     auto* p = amp.apvts.getParameter (paramId);
     return p != nullptr ? p->convertFrom0to1 (p->getDefaultValue()) : 0.0f;
@@ -507,20 +499,4 @@ void Channels::set (const juce::String& paramId, float value)
             p->setValueNotifyingHost (to);
 }
 
-} // namespace orbitamp::catpit
-
-namespace orbitamp
-{
-
-/** The cockpit's set is in its binary (CatpitSet.h). Once in a process, however many of the amp it
-    holds: the first one built lays it out, and the folder is the same for all of them — as the build
-    this is, so that of two products carrying one file the newer build's stands. The cockpit's own
-    `Factory` of before is emptied with it, of what a build of before laid there. */
-void layOutFactorySet()
-{
-    static const int laid = device::FactorySet::retire (device::DeviceLibrary::formerFactoryDirectory())
-                          + catpit::set::layOut (catpit::factory(), version::kBuildNumber);
-    juce::ignoreUnused (laid);
-}
-
-} // namespace orbitamp
+} // namespace orbitamp::channels

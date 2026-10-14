@@ -34,7 +34,7 @@ namespace orbitamp
 
 /** WHAT A PRODUCT ADDS TO THE ENGINE THAT IS NOT ITS FACE. A face is there while its window is open;
     this is there for as long as the processor is — what a host can reach with the window shut. The
-    cockpit keeps its four channels in one (catpit/CatpitEngine.h); OrbitAmp has none. */
+    cockpit keeps its four channels in one (channels/Engine.h); OrbitAmp has none. */
 struct ProductEngine
 {
     virtual ~ProductEngine() = default;
@@ -1256,9 +1256,9 @@ private:
 juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
 
 /** What a product keeps INSIDE ITS BINARY and plays from disk, put where it is played from. Defined
-    once per target, like the face: OrbitAmp's set in OrbitAmpSet.cpp, the cockpit's beside its
-    channels (catpit/CatpitSet.h); both are laid out the one way device/FactorySet.h says. The
-    processor calls it before it builds anything of its own — see AmpProcessor::factorySet. */
+    once per target, like the face: OrbitAmp's set in OrbitAmpSet.cpp, the cockpit's beside its lineup
+    (catpit/CatpitLineup.cpp, through channels/Set.h); both are laid out the one way device/FactorySet.h
+    says. The processor calls it before it builds anything of its own — see AmpProcessor::factorySet. */
 void layOutFactorySet();
 
 /** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —

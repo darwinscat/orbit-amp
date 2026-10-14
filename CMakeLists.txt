@@ -619,15 +619,16 @@ set(CATPITAMP_SOURCES
     src/ui/Theme.cpp
     src/core/ProcessMemory.cpp
     src/device/FactorySet.cpp
+    src/channels/Channels.cpp
+    src/channels/Engine.cpp
+    src/channels/Presets.cpp
+    src/channels/Set.cpp
     src/catpit/CatpitArt.cpp
     src/catpit/CatpitCabs.cpp
-    src/catpit/CatpitChannels.cpp
     src/catpit/CatpitControls.cpp
-    src/catpit/CatpitEngine.cpp
+    src/catpit/CatpitLineup.cpp
     src/catpit/CatpitMidi.cpp
     src/catpit/CatpitMonitor.cpp
-    src/catpit/CatpitPresets.cpp
-    src/catpit/CatpitSet.cpp
     src/catpit/CatpitSpace.cpp
     src/catpit/CatpitStandalone.cpp
     src/catpit/CatpitGlSky.cpp
@@ -678,7 +679,7 @@ foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
 endforeach()
 
 # THE COCKPIT'S OWN SET IS INSIDE ITS BINARY — every format's, on every system — and the amp lays it
-# out as files when it first starts (src/catpit/CatpitSet.h says why). Out of the tree's set
+# out as files when it first starts (src/channels/Set.h says why). Out of the tree's set
 # (resources/set), the cockpit carries what its four channels play and nothing else: the X88-IR's four
 # packs — a channel finds its own by the capture it holds, not by the file's name — and the ten
 # cabinets CAB steps through, in the order of their names. Without a set, the cockpit would play only
@@ -700,17 +701,19 @@ set(CATPITAMP_SET
     "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav")
 
 # What reads the set says whether there is one: with none, there is no data to link and nothing to ask.
+# Every product's set data goes by the one name, ProductSetData, which channels/Set.cpp reads: a target
+# links exactly one product's.
 add_library(CatpitAmpSet INTERFACE)
 if(CATPITAMP_SET)
     juce_add_binary_data(CatpitAmpSetData
-        NAMESPACE   CatpitSetData
-        HEADER_NAME CatpitSetData.h
+        NAMESPACE   ProductSetData
+        HEADER_NAME ProductSetData.h
         SOURCES     ${CATPITAMP_SET})
     set_target_properties(CatpitAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
     target_link_libraries(CatpitAmpSet INTERFACE CatpitAmpSetData)
-    target_compile_definitions(CatpitAmpSet INTERFACE CATPIT_SET_EMBEDDED=1)
+    target_compile_definitions(CatpitAmpSet INTERFACE PRODUCT_SET_EMBEDDED=1)
 else()
-    target_compile_definitions(CatpitAmpSet INTERFACE CATPIT_SET_EMBEDDED=0)
+    target_compile_definitions(CatpitAmpSet INTERFACE PRODUCT_SET_EMBEDDED=0)
 endif()
 target_link_libraries(CatpitAmp PRIVATE CatpitAmpSet)
 
@@ -753,7 +756,7 @@ catpitamp_console(catpitamp_channel_test tests/CatpitChannelTests.cpp "CatpitAmp
 juce_add_console_app(catpitamp_set_test PRODUCT_NAME "CatpitAmpSetTest")
 target_sources(catpitamp_set_test PRIVATE
     tests/CatpitSetTests.cpp
-    src/catpit/CatpitSet.cpp
+    src/channels/Set.cpp
     src/device/FactorySet.cpp)
 target_include_directories(catpitamp_set_test PRIVATE src)
 target_compile_definitions(catpitamp_set_test PRIVATE ORBITAMP_PRODUCT_NAME="CatpitAmp" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)

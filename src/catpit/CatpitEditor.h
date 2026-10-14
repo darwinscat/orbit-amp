@@ -4,11 +4,11 @@
 #pragma once
 
 #include "../PluginProcessor.h"
+#include "../channels/Engine.h"
+#include "../channels/Presets.h"
 #include "CatpitControls.h"
-#include "CatpitEngine.h"
 #include "CatpitGlSky.h"
 #include "CatpitMonitor.h"
-#include "CatpitPresets.h"
 #include "CatpitSpace.h"
 
 #include <felitronics/appkit/VersionBadge.h>
@@ -19,6 +19,10 @@
 
 namespace orbitamp::catpit
 {
+
+using channels::Engine;
+using channels::Channels;
+using channels::Presets;
 
 /** The cockpit itself: the render with its windshield cut out, the emblem, and every printed word on
     it. Drawn over Space, under the controls, and never takes a click. */
@@ -132,7 +136,7 @@ public:
 
 private:
     AmpProcessor& amp;
-    Engine&   engine;       // the cockpit's half of the processor: the channels live there, window or no window
+    Engine&   engine;       // the product's half of the processor: the channels live there, window or no window
     Channels& channels;     // ...and these are its
     Presets   presets;
 

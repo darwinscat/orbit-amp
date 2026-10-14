@@ -88,7 +88,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // INIT alike: the X88-IR Crunch through DARK MATTER, no boost in the chain, the input and output
     // columns in it, the delay on with nothing in its mix, and everything else where the cockpit leaves
     // it, at its parameter's own default. The cockpit sets its chain over these defaults
-    // (catpit/CatpitEngine.cpp, setUpChain) and finds them already so.
+    // (channels/Engine.cpp, setUpChain) and finds them already so.
     //
     // The devices a fresh instance opens on, and everything the packs say about starting them. The
     // boost's is TS, for when the player puts a boost in.

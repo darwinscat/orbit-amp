@@ -23,7 +23,7 @@ namespace orbitamp::device
     folder (DeviceLibrary::factoryDirectory), packs at its top and cabinets in `IRs`. Every product lays
     out what IT carries there, so a pack two of them carry is one file, and every product's list shows
     every pack the family has laid out. What a product carries, and under which names, is the product's
-    to say — OrbitAmpSet.h for OrbitAmp, catpit/CatpitSet.h for the cockpit; how it lands in the folder
+    to say — OrbitAmpSet.h for OrbitAmp, channels/Set.h for the cockpit; how it lands in the folder
     is said once, here.
 
     EACH PRODUCT KEEPS ITS OWN LIST there, `sets/<product>.txt`: what it laid out, one path to the line,

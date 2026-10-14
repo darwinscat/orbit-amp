@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-#include "CatpitPresets.h"
+#include "Presets.h"
 
-#include "CatpitEngine.h"
 #include "../Parameters.h"
+#include "../Product.h"
 
-namespace orbitamp::catpit
+namespace orbitamp::channels
 {
 
 namespace
@@ -24,6 +24,11 @@ namespace
 
 Presets::Presets (AmpProcessor& p, Channels& c) : amp (p), channels (c) {}
 
+juce::String Presets::extension()
+{
+    return "." + juce::String (product::name).toLowerCase();
+}
+
 juce::File Presets::directory()
 {
     auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
@@ -32,7 +37,7 @@ juce::File Presets::directory()
     dir = dir.getChildFile ("Application Support");     // JUCE answers ~/Library here, one level too high
    #endif
 
-    dir = dir.getChildFile ("Darwin's Cat").getChildFile ("CatpitAmp").getChildFile ("Presets");
+    dir = dir.getChildFile ("Darwin's Cat").getChildFile (product::name).getChildFile ("Presets");
     if (! dir.isDirectory())
         dir.createDirectory();
     return dir;
@@ -41,7 +46,7 @@ juce::File Presets::directory()
 juce::StringArray Presets::names()
 {
     juce::StringArray out;
-    for (const auto& f : directory().findChildFiles (juce::File::findFiles, false, juce::String ("*") + extension))
+    for (const auto& f : directory().findChildFiles (juce::File::findFiles, false, "*" + extension()))
         out.add (f.getFileNameWithoutExtension());
     out.sortNatural();
     return out;
@@ -49,7 +54,7 @@ juce::StringArray Presets::names()
 
 juce::File Presets::fileFor (const juce::String& name)
 {
-    return directory().getChildFile (juce::File::createLegalFileName (name) + extension);
+    return directory().getChildFile (juce::File::createLegalFileName (name) + extension());
 }
 
 bool Presets::exists (const juce::String& name)
@@ -74,7 +79,7 @@ bool Presets::changed() const
       - how hard TURBO pushes, which they say too: that it is on is in, with its channel;
       - the device NUMBERS, which are places in a list that belongs to this machine today — the names
         beside them are the identity, and they are in;
-      - the cockpit's node as it lies in the tree, replaced by the four channels written out in full:
+      - the product's node as it lies in the tree, replaced by every channel written out in full:
         the node's record of the playing channel is stale by design, and a channel never visited has
         none, so the raw node differs between two states that are the same amp. */
 juce::String Presets::sound() const
@@ -82,7 +87,7 @@ juce::String Presets::sound() const
     auto tree = amp.apvts.copyState();
 
     setInTree (tree, params::inTrim, 0.0f);
-    tree.removeProperty (Channels::leverZeroId, nullptr);      // ...nor the zero INPUT was dialled against
+    tree.removeProperty (channels.leverZeroId(), nullptr);      // ...nor the zero INPUT was dialled against
     setInTree (tree, params::blockSmooth (params::preampId), 1.0f);    // ...nor DRIVE's way: as every state had it before there was a choice
     setInTree (tree, params::blockIn (params::preampId), 0.0f);        // ...nor TURBO's push: Channels::whole says on or off
     setInTree (tree, params::preampDevice, 0.0f);
@@ -90,10 +95,10 @@ juce::String Presets::sound() const
 
     // CHANNEL the parameter says nothing the node does not, and is left out whole: a preset marked
     // before the parameter existed carries a fingerprint with no such line in it.
-    if (auto asked = tree.getChildWithProperty ("id", Engine::channelId); asked.isValid())
+    if (auto asked = tree.getChildWithProperty ("id", juce::String (channels.lineup().parameterId)); asked.isValid())
         tree.removeChild (asked, nullptr);
 
-    if (auto node = tree.getChildWithName (Channels::nodeType); node.isValid())
+    if (auto node = tree.getChildWithName (channels.nodeType()); node.isValid())
         tree.removeChild (node, nullptr);
     tree.appendChild (channels.whole(), nullptr);
 
@@ -103,7 +108,7 @@ juce::String Presets::sound() const
 /** Writes down whose sound this is. Not an edit — the sound did not move — so it leaves no undo step. */
 void Presets::mark (const juce::String& name)
 {
-    if (! channels.adopted())   // a state the cockpit has not made its own yet has nowhere to keep a name
+    if (! channels.adopted())   // a state the product has not made its own yet has nowhere to keep a name
         return;
 
     const felitronics::appkit::CompareHistory::ScopedSuppress quiet (amp.history);
@@ -124,10 +129,10 @@ bool Presets::load (const juce::String& name)
     // INPUT stays where the player has it — the trim, and the lever's zero it was dialled against.
     if (auto* in = amp.apvts.getParameter (params::inTrim))
         setInTree (tree, params::inTrim, in->convertFrom0to1 (in->getValue()));
-    if (const auto zero = amp.apvts.state.getProperty (Channels::leverZeroId); ! zero.isVoid())
-        tree.setProperty (Channels::leverZeroId, zero, nullptr);
+    if (const auto zero = amp.apvts.state.getProperty (channels.leverZeroId()); ! zero.isVoid())
+        tree.setProperty (channels.leverZeroId(), zero, nullptr);
     else
-        tree.removeProperty (Channels::leverZeroId, nullptr);
+        tree.removeProperty (channels.leverZeroId(), nullptr);
 
     // ...and DRIVE goes on turning the way the settings have it.
     const auto smooth = params::blockSmooth (params::preampId);
@@ -189,12 +194,12 @@ void Presets::init()
                 setInTree (tree, rp->paramID, rp->convertFrom0to1 (rp->getDefaultValue()));
 
     // ...and every channel's memory, and whose preset this was. A state without the node is one the
-    // cockpit has not seen, and its face adopts it the way it adopts the first: chain, channel, pack.
-    if (auto node = tree.getChildWithName (Channels::nodeType); node.isValid())
+    // product has not seen, and its engine adopts it the way it adopts the first: chain, channel, pack.
+    if (auto node = tree.getChildWithName (channels.nodeType()); node.isValid())
         tree.removeChild (node, nullptr);
 
     amp.history.applyEdit (amp.history.active(), tree, "Init");
     amp.history.markSaved();
 }
 
-} // namespace orbitamp::catpit
+} // namespace orbitamp::channels
