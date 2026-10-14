@@ -1538,7 +1538,11 @@ void CatpitEditor::applySky()
         glSky->setThrottle ((float) lever.getDetent() / (float) (Lever::numDetents - 1));
         gl.setRenderer (glSky.get());
         gl.setComponentPaintingEnabled (true);
+       #if JUCE_LINUX || JUCE_BSD
+        gl.setContinuousRepainting (false);     // glPulse asks for each frame
+       #else
         gl.setContinuousRepainting (true);
+       #endif
 
         // JUCE keeps the textures it makes of images in a cache whose limit — 8 * 1024 * 1024, and
         // called bytes — it compares with PIXEL counts. The cockpit's own layer is the whole window at
