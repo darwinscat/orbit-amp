@@ -242,6 +242,14 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
             drawRender (g, down ? Art::get().keyDown : Art::get().keyUp, box);
         };
 
+    // THE RINGS ROUND THE KNOBS say where each stands.
+    const auto ringFor = [] (const ArtKnob& knob, const layout::Socket& s) { return std::make_unique<KnobRing> (knob, s.centre, s.ring, s.ringWidth); };
+    rings.push_back (ringFor (driveKnob(), layout::drive));
+    for (int t = 0; t < 3; ++t)
+        rings.push_back (ringFor (toneKnob (t), layout::tones[(size_t) t]));
+    for (auto& ring : rings)
+        addToStage (*ring);
+
     // THE WINDSCREEN, under the dashboard: the picture's alpha is its frame.
     stage.addAndMakeVisible (view, 0);
     view.setBounds (windscreen.toNearestInt());

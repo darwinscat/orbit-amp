@@ -58,4 +58,29 @@ private:
     void  timerCallback() override;
 };
 
+//==============================================================================
+/** THE RING ROUND A KNOB: the cyan ring the dashboard paints round each knob's socket, made to say where
+    the knob stands — lit from the start of its travel to where its pointer is, the rest dimmed. It
+    breathes only when it matters: under the hand, or while the knob turns, it brightens softly, and
+    about a second after the hand has gone it eases back. Nothing moves on it otherwise.
+
+    It watches its knob (a dumb view watching another) and lies over the picture round it, `radius`
+    from the socket's middle and `width` wide, as the ring was painted; it never takes a click. */
+class KnobRing final : public juce::Component, private juce::Timer
+{
+public:
+    KnobRing (const face::ArtKnob&, juce::Point<float> centre, float radius, float width);
+
+    void paint (juce::Graphics&) override;
+
+private:
+    const face::ArtKnob& knob;
+    const float radius, width;
+    float shown = -1.0f;            // the value last drawn
+    face::Glide breath;             // 0 resting .. 1 under the hand
+    double leftAt = 0.0;            // when the hand last left, on the millisecond counter
+    bool touched = false;
+    void timerCallback() override;
+};
+
 } // namespace orbitamp::redpaw

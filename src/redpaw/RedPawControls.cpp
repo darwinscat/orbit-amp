@@ -181,4 +181,60 @@ void GearLever::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelD
         setPosition (position + (d < 0.0f ? 1 : -1), true);
 }
 
+//==============================================================================
+namespace
+{
+    const juce::Colour ringCyan { 0xff3fe6f2 };     // the painted ring's light, a shade brighter
+    constexpr float ringFrom = -135.0f, ringSweep = 270.0f;     // a knob's travel, as ArtKnob turns it
+    constexpr double breathHoldMs = 1000.0;
+}
+
+KnobRing::KnobRing (const face::ArtKnob& k, juce::Point<float> centre, float r, float w)
+    : knob (k), radius (r), width (w)
+{
+    setInterceptsMouseClicks (false, false);
+    breath.stiffness = 40.0f;       // soft: a lamp warming, not a spring
+    breath.damping   = 13.0f;
+    setBounds (juce::Rectangle<float> ((radius + width + 8.0f) * 2.0f, (radius + width + 8.0f) * 2.0f)
+                   .withCentre (centre).getSmallestIntegerContainer());
+    startTimerHz (30);
+}
+
+void KnobRing::timerCallback()
+{
+    // The hand on the knob, or a moment ago: the ring warms; a second after it has gone, it cools.
+    const bool now = knob.isMouseOverOrDragging();
+    const double ms = juce::Time::getMillisecondCounterHiRes();
+    if (touched && ! now)
+        leftAt = ms;
+    touched = now;
+    breath.target = now || ms - leftAt < breathHoldMs ? 1.0f : 0.0f;
+
+    const bool easing = breath.step (1.0f / 30.0f);
+    const bool moved = std::abs (knob.getValue() - shown) > 1.0e-4f;
+    if (easing || moved)
+        repaint();
+}
+
+void KnobRing::paint (juce::Graphics& g)
+{
+    shown = knob.getValue();
+    const auto c = getLocalBounds().toFloat().getCentre();
+    const float b = juce::jlimit (0.0f, 1.0f, breath.value);
+
+    // The rest of the ring dimmed: the painted cyan under a dark veil.
+    juce::Path whole;
+    whole.addCentredArc (c.x, c.y, radius, radius, 0.0f, 0.0f, juce::MathConstants<float>::twoPi, true);
+    g.setColour (juce::Colour (0xff05090b).withAlpha (0.62f));
+    g.strokePath (whole, juce::PathStrokeType (width + 1.5f));
+
+    // From the start of the travel to the pointer, lit.
+    const float to = juce::degreesToRadians (ringFrom + ringSweep * juce::jlimit (0.0f, 1.0f, shown));
+    juce::Path lit;
+    lit.addCentredArc (c.x, c.y, radius, radius, 0.0f, juce::degreesToRadians (ringFrom), to, true);
+    juce::DropShadow (ringCyan.withAlpha (0.35f + 0.4f * b), juce::roundToInt (3.0f + 4.0f * b), {}).drawForPath (g, lit);
+    g.setColour (ringCyan.withAlpha (0.7f + 0.3f * b));
+    g.strokePath (lit, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
 } // namespace orbitamp::redpaw

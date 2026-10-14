@@ -45,13 +45,13 @@ inline constexpr float signOffset = 22.0f;      // a sign's centre, left of its 
 
 /** A knob's socket: the cyan ring painted round it, and how big the knob is drawn in it — so that the
     ring stays in sight all round. */
-struct Socket { juce::Point<float> centre; float ring; float knob; };
+struct Socket { juce::Point<float> centre; float ring; float ringWidth; float knob; };
 
-inline const Socket drive { { 374.3f, 538.3f }, 71.7f, 132.0f };
+inline const Socket drive { { 374.3f, 538.3f }, 71.7f, 3.0f, 132.0f };
 inline const std::array<Socket, 3> tones {{
-    { { 1118.3f, 495.0f }, 40.6f, 104.0f },     // BASS
-    { { 1240.5f, 495.0f }, 40.6f, 104.0f },     // MIDDLE
-    { { 1363.3f, 494.9f }, 40.6f, 104.0f },     // TREBLE
+    { { 1118.3f, 495.0f }, 40.6f, 2.2f, 104.0f },   // BASS
+    { { 1240.5f, 495.0f }, 40.6f, 2.2f, 104.0f },   // MIDDLE
+    { { 1363.3f, 494.9f }, 40.6f, 2.2f, 104.0f },   // TREBLE
 }};
 inline constexpr float knobNameY = 423.0f;      // DRIVE, BASS, MIDDLE, TREBLE: on the panel over the sockets
 

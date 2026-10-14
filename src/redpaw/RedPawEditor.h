@@ -72,6 +72,7 @@ private:
     // nothing until a gear is pulled again.
     GearLever lever;
     face::PushButton turbo { "TURBO" };
+    std::vector<std::unique_ptr<KnobRing>> rings;   // DRIVE's and the tones': where each knob stands
     face::Legend channelName;       // on the nav screen: the gear, and the pack that is playing
     void pullGear (int gear);
     void throwTurbo (bool on);
