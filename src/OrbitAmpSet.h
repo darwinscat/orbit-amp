@@ -7,32 +7,17 @@
 
 #include <OrbitAmpSetData.h>
 
-/** ORBITAMP'S OWN SET: the X88-IR's four channels as four preamp packs, inside the binary and laid out
-    in OrbitAmp's `Factory` folder when it starts (device/FactorySet.h says why, and how).
+/** ORBITAMP'S OWN SET: every pack in the tree's set (resources/set/Devices) — the X88-IR's four
+    channels, the Victory V4's six — inside the binary and laid out in OrbitAmp's `Factory` folder when
+    it starts (device/FactorySet.h says why, and how). OrbitAmp is the player of the whole library, so
+    what the set holds, it carries.
 
-    They are the very files the cockpit carries — resources/catpit/Devices, one copy of each in the
-    tree — under other names. The cockpit names a pack after the channel that plays it; OrbitAmp's
-    device list shows a pack by its FILE's name, and the manifest's own name is "X88-IR" for all four,
-    so "Clean" and "Crunch" would stand in the list with nothing to say they are one amp. Here each
-    goes by the X88-IR's own name for the channel it captured, which is also what its `rig_id` says. */
+    Each pack lies under its own file's name, which is the name the device list shows it by: the
+    manifest's own name is the voice's alias, and "X88-IR" for all four of one amp. The cabinets are
+    not laid out — the shelf plays them from the binary itself. */
 namespace orbitamp::set
 {
-/** A file the cockpit carries, and the name OrbitAmp lays it out under. */
-struct Named
-{
-    const char* carried;
-    const char* laidAs;
-};
-
-inline constexpr Named names[] {
-    { "Clean.orbitrig.zip",   "X88-IR Normal.orbitrig.zip" },
-    { "Edge.orbitrig.zip",    "X88-IR Altered.orbitrig.zip" },
-    { "Crunch.orbitrig.zip",  "X88-IR Crunch.orbitrig.zip" },
-    { "Hi-Gain.orbitrig.zip", "X88-IR Overdrive.orbitrig.zip" },
-};
-
-/** What OrbitAmp carries, under the names it lays them out by. A file the build carries that is not
-    named above is not laid out: a pack under the cockpit's name is a pack nobody here can place. */
+/** What OrbitAmp carries: every pack the build took in, at the top of the folder, under its own name. */
 inline std::vector<device::FactorySet::Entry> carried()
 {
     std::vector<device::FactorySet::Entry> out;
@@ -44,9 +29,8 @@ inline std::vector<device::FactorySet::Entry> carried()
         int size = 0;
         const char* data = OrbitAmpSetData::getNamedResource (OrbitAmpSetData::namedResourceList[i], size);
 
-        for (const auto& n : names)
-            if (data != nullptr && file == n.carried)
-                out.push_back ({ n.laidAs, data, (size_t) size });
+        if (data != nullptr && file.endsWithIgnoreCase (".orbitrig.zip"))
+            out.push_back ({ file, data, (size_t) size });
     }
 
     return out;

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for ORBITAMP'S SET AS IT LEAVES THE BINARY (OrbitAmpSet.h): that the X88-IR's four packs are
-// laid out byte for byte what was built in; that each lies under the name of the capture it holds;
-// that the preamp list shows four devices by four names, not one name four times; and that a start
-// after the first writes nothing. How a set is laid out — what is rewritten, what an earlier build
-// left that goes — is the cockpit's gate's to hold (CatpitSetTests): it is the same code.
+// Gate for ORBITAMP'S SET AS IT LEAVES THE BINARY (OrbitAmpSet.h): that it carries every pack of the
+// set — the X88-IR's four, the Victory V4's six — laid out byte for byte what was built in; that each
+// lies under the name of the capture it holds; that the preamp list shows each by a name of its own,
+// not one name four times; and that a start after the first writes nothing. How a set is laid out —
+// what is rewritten, what an earlier build left that goes — is the cockpit's gate's to hold
+// (CatpitSetTests): it is the same code.
 //
 // It works in a folder of its own under the system's temporary folder — the machine's real Factory
 // and Devices folders are never read or written — and leaves it behind to be looked at.
@@ -39,9 +40,22 @@ int main()
     own.createDirectory();
     std::printf ("in %s\n", root.getFullPathName().toRawUTF8());
 
+    // What OrbitAmp ships, by the names its list shows them by: a pack that went missing from the tree
+    // would otherwise go missing from the product without a word.
+    const juce::StringArray wanted { "X88-IR Normal", "X88-IR Altered", "X88-IR Crunch", "X88-IR Overdrive",
+                                     "V4 Copper", "V4 Copper TB", "V4 Sheriff Ch1", "V4 Sheriff Ch2",
+                                     "V4 Kraken Ch1", "V4 Kraken Ch2" };
+
     const auto carried = set::carried();
-    check (carried.size() == std::size (set::names), "the binary carries the X88-IR's four packs, "
-                                                     + juce::String ((int) carried.size()) + " of them");
+    juce::StringArray names;
+    for (const auto& e : carried)
+        names.add (e.path.upToFirstOccurrenceOf (".", false, false));
+
+    bool everyOne = carried.size() == (size_t) wanted.size();
+    for (const auto& w : wanted)
+        everyOne = everyOne && names.contains (w);
+    check (everyOne, "the binary carries every pack of the set — the X88-IR's four, the V4's six: "
+                         + names.joinIntoString (", "));
 
     // The first start.
     check (FactorySet::layOut (factory, carried) == (int) carried.size(), "the first start writes every one of them");
@@ -57,9 +71,9 @@ int main()
 
     // A name is a promise about the capture: "X88-IR Crunch" is the pack whose rig_id is x88-ir-crunch-….
     juce::StringArray astray;
-    for (const auto& n : set::names)
+    for (const auto& e : carried)
     {
-        const auto file = factory.getChildFile (n.laidAs);
+        const auto file = factory.getChildFile (e.path);
         const auto stem = file.getFileName().upToFirstOccurrenceOf (".", false, false);
         const auto rig  = DeviceLibrary::rigIdOf (file);
         if (! rig.startsWith (stem.toLowerCase().replaceCharacter (' ', '-') + "-"))
@@ -73,14 +87,10 @@ int main()
         if (p.bundled)
             listed.add (p.displayName());
 
-    juce::StringArray wanted;
-    for (const auto& n : set::names)
-        wanted.add (juce::String (n.laidAs).upToFirstOccurrenceOf (".", false, false));
-
     bool allListed = listed.size() == wanted.size();
     for (const auto& w : wanted)
         allListed = allListed && listed.contains (w);
-    check (allListed, "the preamp list shows four devices by four names: " + listed.joinIntoString (", "));
+    check (allListed, "the preamp list shows each by a name of its own: " + listed.joinIntoString (", "));
 
     // Every start after it.
     check (FactorySet::layOut (factory, carried) == 0, "the second start writes nothing");

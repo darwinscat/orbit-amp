@@ -422,21 +422,25 @@ if(APPLE)
 endif()
 
 # ----------------------------------------------------------------------------
+# THE SET: every pack and every cabinet a Darwin's Cat amp carries in its binary, ONE copy of each in
+# the tree — resources/set/Devices for the packs, under their own names, and resources/set/IRs for the
+# cabinets (resources/set/IRs.md says what they are). Each product says which of them it carries, and
+# no product keeps a folder of its own.
+# ----------------------------------------------------------------------------
+set(ORBITAMP_SET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/set")
+
 # Factory devices: OrbitAmp's own set, INSIDE THE BINARY like the cockpit's — every format, every
 # system — and laid out in OrbitAmp's Factory folder when it starts (src/device/FactorySet.h says
-# why a bundle will not do). The X88-IR's four channels, the very files the cockpit carries:
-# referenced in resources/catpit/Devices, not copied, so there is one copy of each in the tree.
-# src/OrbitAmpSet.h names each by the channel it captured. A file listed here and not named there
-# is not laid out.
-# ----------------------------------------------------------------------------
+# why a bundle will not do). OrbitAmp is the player of the whole library: it carries EVERY pack in
+# resources/set/Devices, each under its own name. CONFIGURE_DEPENDS: a pack added there is carried
+# from the next build on, with nobody to remember to list it.
+file(GLOB ORBITAMP_SET_PACKS LIST_DIRECTORIES false CONFIGURE_DEPENDS "${ORBITAMP_SET_DIR}/Devices/*.orbitrig.zip")
+list(LENGTH ORBITAMP_SET_PACKS ORBITAMP_SET_COUNT)
+message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the binary")
 juce_add_binary_data(OrbitAmpSetData
     NAMESPACE   OrbitAmpSetData
     HEADER_NAME OrbitAmpSetData.h
-    SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/Devices/Clean.orbitrig.zip"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/Devices/Edge.orbitrig.zip"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/Devices/Crunch.orbitrig.zip"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/Devices/Hi-Gain.orbitrig.zip")
+    SOURCES     ${ORBITAMP_SET_PACKS})
 
 # ----------------------------------------------------------------------------
 # Embedded assets. The display FACE is not among them: appkit carries Michroma itself, whole, as
@@ -479,19 +483,19 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/20-don-spinacio.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav"
 
-        # ...and the Orange PPC212V's ten, the cabinets CatpitAmp plays, referenced in the cockpit's
-        # own folder rather than copied: one copy in the tree. resources/catpit/IRs.md says what they
-        # are and how they were shot.
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/02-dark-matter.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/03-ion-cavity.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/04-event-horizon.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/06-coronal-flare.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/07-brown-dwarf.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/08-accretion-gap.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/09-dust-cloud.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/10-blue-shift.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/11-red-giant.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/12-pulsar-beam.wav"
+        # ...and the Orange PPC212V's ten, the cabinets CatpitAmp plays, referenced in the set's
+        # folder rather than copied: one copy in the tree. resources/set/IRs.md says what they are and
+        # how they were shot.
+        "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
+        "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
+        "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
+        "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
+        "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
+        "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
+        "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
+        "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
+        "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
+        "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav"
 )
 
 # THE PRODUCT'S version, not the plugin wrapper's. `JucePlugin_VersionString` exists only inside a
@@ -674,21 +678,26 @@ foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
 endforeach()
 
 # THE COCKPIT'S OWN SET IS INSIDE ITS BINARY — every format's, on every system — and the amp lays it
-# out as files when it first starts (src/catpit/CatpitSet.h says why). Whatever sits in
-# resources/catpit/Devices (packs named after the channels — Clean, Edge, Crunch, Hi-Gain — each one
-# `.orbitrig.zip` file) and resources/catpit/IRs (the cabinets CAB steps through, in the order of their
-# names). CONFIGURE_DEPENDS: a file added or renamed there is seen at the next build, not at the next
-# time somebody remembers to run cmake. Absent or empty, the build carries none, and the cockpit plays
-# what the player puts in its own Devices and IRs folders. It reads nothing of OrbitAmp's.
-set(CATPITAMP_SET "")
-foreach(kind IN ITEMS Devices IRs)
-    file(GLOB CATPITAMP_SET_FILES LIST_DIRECTORIES false CONFIGURE_DEPENDS
-         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/${kind}/*")
-    list(FILTER CATPITAMP_SET_FILES EXCLUDE REGEX "/\\.[^/]*$")      # .DS_Store and its kind
-    list(LENGTH CATPITAMP_SET_FILES CATPITAMP_SET_COUNT)
-    message(STATUS "CatpitAmp ${kind}: ${CATPITAMP_SET_COUNT} in the binary")
-    list(APPEND CATPITAMP_SET ${CATPITAMP_SET_FILES})
-endforeach()
+# out as files when it first starts (src/catpit/CatpitSet.h says why). Out of the tree's set
+# (resources/set), the cockpit carries what its four channels play and nothing else: the X88-IR's four
+# packs — a channel finds its own by the capture it holds, not by the file's name — and the ten
+# cabinets CAB steps through, in the order of their names. Without a set, the cockpit would play only
+# what the player puts in its own Devices and IRs folders.
+set(CATPITAMP_SET
+    "${ORBITAMP_SET_DIR}/Devices/X88-IR Normal.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/Devices/X88-IR Altered.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/Devices/X88-IR Crunch.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/Devices/X88-IR Overdrive.orbitrig.zip"
+    "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
+    "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
+    "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
+    "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
+    "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
+    "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
+    "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
+    "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
+    "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
+    "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav")
 
 # What reads the set says whether there is one: with none, there is no data to link and nothing to ask.
 add_library(CatpitAmpSet INTERFACE)
@@ -985,9 +994,9 @@ target_link_libraries(orbitamp_library_test PRIVATE
     juce::juce_recommended_warning_flags)
 
 # ----------------------------------------------------------------------------
-# Gate for OrbitAmp's set as it leaves the binary — the X88-IR's four packs laid out under the names
-# the device list tells apart, once, byte for byte. Runs entirely in a temp folder: the machine's
-# real Factory folder is never written.
+# Gate for OrbitAmp's set as it leaves the binary — every pack of the set laid out under a name the
+# device list tells apart, once, byte for byte. Runs entirely in a temp folder: the machine's real
+# Factory folder is never written.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
 target_sources(orbitamp_set_test PRIVATE

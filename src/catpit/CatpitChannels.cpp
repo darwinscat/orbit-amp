@@ -344,10 +344,13 @@ bool Channels::adopt()
     if (node().isValid())
         return false;
 
+    // A device still where its parameter starts is nobody's choice — a fresh instance, an INIT — and the
+    // cockpit opens on its first channel then, whichever pack the engine starts on.
     const int playing = juce::roundToInt (plain (params::preampDevice));
+    const bool chosen = playing != juce::roundToInt (defaultOf (0, params::preampDevice));
     int channel = -1;
     for (int c = 0; c < count; ++c)
-        if (packFor (c) >= 0 && packFor (c) == playing)
+        if (chosen && packFor (c) >= 0 && packFor (c) == playing)
             channel = c;
 
     ensureNode().setProperty (activeId, juce::jmax (0, channel), nullptr);

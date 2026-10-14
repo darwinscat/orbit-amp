@@ -83,8 +83,9 @@ public:
         never seen — a session saved before it existed, or a fresh instance. */
     bool adopted() const { return node().isValid(); }
 
-    /** Makes the state the cockpit's, if it is not yet: the channel is the one whose pack is already
-        playing, the first otherwise. True when there was nothing of ours in it before. */
+    /** Makes the state the cockpit's, if it is not yet: the channel is the one whose pack a hand has set
+        playing, the first otherwise — and the first for a fresh instance or an INIT, whose device is
+        the engine's starting one. True when there was nothing of ours in it before. */
     bool adopt();
 
     /** The channel the state says is playing. */

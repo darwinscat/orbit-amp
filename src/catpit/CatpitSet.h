@@ -8,7 +8,8 @@
 /** THE COCKPIT'S OWN SET — its four packs and its cabinets — IS INSIDE THE BINARY and is laid out as
     files the first time the amp starts; device/FactorySet.h says why, and how. What is the cockpit's
     alone is what it carries and where each file lies: the packs at the top of its `Factory` folder,
-    under the names of the channels that play them, and the cabinets in `IRs` inside it. */
+    under their own names — a channel finds its pack by the capture it holds (CatpitChannels.h) — and
+    the cabinets in `IRs` inside it. */
 namespace orbitamp::catpit::set
 {
 /** Where the cabinets lie in a factory folder. */
