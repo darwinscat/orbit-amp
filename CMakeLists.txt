@@ -482,6 +482,7 @@ target_compile_definitions(OrbitAmp PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0   # JUCE 8 has no splash requirement on any tier, incl. AGPLv3
+    $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>   # the standalone offers ASIO beside WASAPI; JUCE carries the SDK
 )
 
 target_include_directories(OrbitAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")   # OrbitAmpVersion.h
