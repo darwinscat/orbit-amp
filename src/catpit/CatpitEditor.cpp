@@ -521,6 +521,13 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
     settleOnSettings(); // ...and INPUT's lever may have another zero than the one the state was dialled against
 
+    // THE STANDALONE PLAYS IN STEREO SPACE — one guitar in, a wide room out. The processor's own default
+    // waits for a device to open, so a first run with none saved MONO for good; and the first players'
+    // states were saved before this. So once on each machine, over whatever the state says; after that
+    // the choice is the player's.
+    if (standalone::firstTimeHere ("stereoSpaceSet"))
+        setParam (params::stereoMode, (float) params::StereoMode::stereoSpace);
+
     addAndMakeVisible (stage);
     stage.setBounds (0, 0, (int) width, (int) height);
 

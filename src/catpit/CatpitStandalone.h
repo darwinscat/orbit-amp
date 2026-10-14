@@ -21,4 +21,8 @@ void rememberDevices();
     in full screen stands at the corner of the screen; this puts down where it really belongs. */
 void rememberWindowPosition (juce::Point<int> topLeft);
 
+/** True ONCE on this machine for each `key`, and written down in the standalone's own settings as it
+    says so: every later call says false, and so does every call inside a host. */
+bool firstTimeHere (const char* key);
+
 } // namespace orbitamp::catpit::standalone
