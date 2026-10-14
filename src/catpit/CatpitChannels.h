@@ -123,12 +123,12 @@ public:
     void setCabinetOn (bool);
 
     /** THE CABINET A CHANNEL OPENS ON, until the player picks another — a channel never pulled, every
-        one of them after INIT, and one whose own cabinet is not here any more: the second of the
-        build's, as an index into cabinets(). The first, where there is no second; -1 with none at all. */
-    static constexpr int defaultCabinetAt = 1;
+        one of them after INIT, and one whose own cabinet is not here any more: the first in the
+        list, as an index into cabinets() — the build's first, or the player's where the build carries
+        none; -1 with none at all. */
     int defaultCabinet() const noexcept
     {
-        return factory > 0 ? juce::jmin (defaultCabinetAt, factory - 1) : (irs.isEmpty() ? -1 : 0);
+        return irs.isEmpty() ? -1 : 0;
     }
 
     /** TAKING FILES IN — IRs themselves, folders of them, zips — into the player's own IRs folder, the
