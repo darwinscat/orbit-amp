@@ -628,6 +628,7 @@ set(CATPITAMP_SOURCES
     src/face/Controls.cpp
     src/face/Midi.cpp
     src/face/Picture.cpp
+    src/face/Renders.cpp
     src/face/Sheet.cpp
     src/face/Standalone.cpp
     src/catpit/CatpitArt.cpp

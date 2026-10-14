@@ -3,6 +3,7 @@
 
 #include "CatpitArt.h"
 #include "CatpitLayout.h"
+#include "../face/Renders.h"
 
 #include <CatpitData.h>
 
@@ -14,34 +15,13 @@ namespace orbitamp::catpit
 
 namespace
 {
+    const face::renders::Binary binary { CatpitData::namedResourceList, CatpitData::namedResourceListSize,
+                                         CatpitData::getNamedResourceOriginalFilename, CatpitData::getNamedResource };
+
     /** A render by its file name: the copy built into the binary — or, when CATPIT_ART_DIR names a
-        folder that has one, the file from there, so a new render can be tried by restarting rather
-        than rebuilding. */
-    /** A picture as it was made — whatever format it decodes to. */
-    juce::Image decode (const char* name)
-    {
-        juce::Image img;
-
-        if (const auto dir = juce::SystemStats::getEnvironmentVariable ("CATPIT_ART_DIR", {}); dir.isNotEmpty())
-            img = juce::ImageFileFormat::loadFrom (juce::File (dir).getChildFile (name));
-
-        for (int i = 0; ! img.isValid() && i < CatpitData::namedResourceListSize; ++i)
-            if (juce::String (CatpitData::getNamedResourceOriginalFilename (CatpitData::namedResourceList[i])) == name)
-            {
-                int size = 0;
-                if (const auto* data = CatpitData::getNamedResource (CatpitData::namedResourceList[i], size))
-                    img = juce::ImageFileFormat::loadFrom (data, (size_t) size);
-            }
-
-        jassert (img.isValid());   // a name that is neither on disk nor in the binary is a typo
-        return img;
-    }
-
-    juce::Image load (const char* name)
-    {
-        const auto img = decode (name);
-        return img.isValid() ? img.convertedToFormat (juce::Image::ARGB) : img;
-    }
+        folder that has one, the file from there (face/Renders.h). */
+    juce::Image decode (const char* name) { return face::renders::decode (name, binary, "CATPIT_ART_DIR"); }
+    juce::Image load (const char* name)   { return face::renders::load (name, binary, "CATPIT_ART_DIR"); }
 
     /** Scales an image down once so its longer side is `maxSide` — the size the window can need at its
         largest on a retina screen — instead of resampling a bigger one on every paint. */
@@ -265,42 +245,14 @@ namespace
         return img;
     }
 
-    /** THE LAMPS GO OUT. The render paints lit the lamps the cockpit now lights itself (layout::lamps).
-        Each is taken out as it was painted, glow and all, to be laid back over at the strength it burns;
-        in the picture it is put out — how much of a pixel is the lamp's orange is how far it is taken
-        down to the dark warm grey of a lamp that is off, so the glow on the plate round it goes too.
-        What the lamp did not touch stays as it was, in the picture and out of the copy. */
+    /** THE LAMPS GO OUT (face/Renders.h). On the cockpit's violet panel a lamp is whatever is warmer
+        than it is blue: how far its red stands over its blue says how much of a pixel is the lamp's. */
     juce::Image putOutLamps (juce::Image img, std::array<juce::Image, layout::numLamps>& lit)
     {
-        if (! img.isValid())
-            return img;
-
-        const float k = (float) img.getWidth() / layout::width;
-        for (size_t i = 0; i < layout::lamps.size(); ++i)
+        return face::renders::putOutLamps (std::move (img), layout::lamps, layout::width, [] (juce::Colour c)
         {
-            const auto box = (layout::lamps[i] * k).getSmallestIntegerContainer().getIntersection (img.getBounds());
-            lit[i] = juce::Image (juce::Image::ARGB, juce::jmax (1, box.getWidth()), juce::jmax (1, box.getHeight()), true);
-            if (box.isEmpty())
-                continue;
-
-            juce::Image::BitmapData bd (img, box.getX(), box.getY(), box.getWidth(), box.getHeight(), juce::Image::BitmapData::readWrite);
-            juce::Image::BitmapData out (lit[i], juce::Image::BitmapData::writeOnly);
-            for (int y = 0; y < box.getHeight(); ++y)
-                for (int x = 0; x < box.getWidth(); ++x)
-                {
-                    const auto c = bd.getPixelColour (x, y);
-                    const float r = c.getFloatRed(), g = c.getFloatGreen(), b = c.getFloatBlue();
-                    const float s = juce::jlimit (0.0f, 1.0f, (r - b - 0.025f) / 0.22f);
-                    if (s <= 0.0f)
-                        continue;
-
-                    const float lum = 0.3f * r + 0.59f * g + 0.11f * b;
-                    const auto off = juce::Colour::fromFloatRGBA (lum * 0.30f + 0.03f, lum * 0.25f + 0.028f, lum * 0.24f + 0.03f, c.getFloatAlpha());
-                    out.setPixelColour (x, y, c);
-                    bd.setPixelColour (x, y, c.interpolatedWith (off, s));
-                }
-        }
-        return img;
+            return (c.getFloatRed() - c.getFloatBlue() - 0.025f) / 0.22f;
+        }, lit);
     }
 
     /** THE THROTTLE'S GRIP, OFF ITS CENTRE. The render is a whole joystick with a symmetrical T on top;
