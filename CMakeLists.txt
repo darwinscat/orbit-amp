@@ -30,13 +30,25 @@ include(FetchContent)
 
 # ----------------------------------------------------------------------------
 # JUCE — pinned tag, with a local-source-dir escape hatch. ORBITAMP_JUCE_DIR defaults to the
-# JUCE 8.0.14 tree another Felitronics project already fetched, so a first build here costs no
-# second full clone; if that path is gone, the pin is fetched instead. Bump the tag deliberately.
+# JUCE tree another Felitronics project already fetched, so a first build here costs no second
+# full clone — but only while that tree is the pinned version; any other tree is passed over and
+# the pin is fetched, so a local build never quietly runs on a JUCE the CI does not. Bump the tag
+# deliberately.
 # ----------------------------------------------------------------------------
-set(ORBITAMP_JUCE_TAG "8.0.14" CACHE STRING "JUCE git tag to build against")
+set(ORBITAMP_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
 set(ORBITAMP_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
-    CACHE PATH "Local JUCE source tree (used if present); else the pinned tag is fetched")
+    CACHE PATH "Local JUCE source tree (used if it is the pinned version); else the pin is fetched")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _orbitamp_juce_want "${ORBITAMP_JUCE_TAG}")
+set(_orbitamp_juce_have "")
 if(ORBITAMP_JUCE_DIR AND EXISTS "${ORBITAMP_JUCE_DIR}/CMakeLists.txt")
+    file(STRINGS "${ORBITAMP_JUCE_DIR}/CMakeLists.txt" _orbitamp_juce_have
+        REGEX "^project\\(JUCE VERSION [0-9.]+" LIMIT_COUNT 1)
+    string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" _orbitamp_juce_have "${_orbitamp_juce_have}")
+    if(NOT _orbitamp_juce_have STREQUAL _orbitamp_juce_want)
+        message(STATUS "JUCE: local tree is ${_orbitamp_juce_have}, the pin is ${_orbitamp_juce_want} — passed over")
+    endif()
+endif()
+if(_orbitamp_juce_have AND _orbitamp_juce_have STREQUAL _orbitamp_juce_want)
     message(STATUS "JUCE: local source — ${ORBITAMP_JUCE_DIR}")
     FetchContent_Declare(juce SOURCE_DIR "${ORBITAMP_JUCE_DIR}")
 else()
