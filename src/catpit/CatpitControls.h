@@ -379,8 +379,8 @@ private:
     green when the string is home, warming to orange by 25 cents out. Reads the processor's ear on its
     own 30 Hz clock; the ear only listens while a face is open and the tuner is in the chain.
 
-    Two things it is told and writes in its corner, since each is a silence that wants a reason: OFF —
-    it is not listening, and shows no note — and MUTE: it listens, and the amp is silent while it does.
+    Its state it writes in its corner, always — ON; OFF: it is not listening, and shows no note; MUTE: it
+    listens, and the amp is silent while it does — since the screen is the switch: a click throws it.
     Over the note it writes the pitch its A is tuned to, when that is not 440: a needle that reads a
     tuned guitar flat wants a reason as well. */
 class TunerFace final : public juce::Component, private juce::Timer
