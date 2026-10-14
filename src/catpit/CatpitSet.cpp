@@ -34,7 +34,7 @@ juce::Array<juce::File> ownCabinets (const juce::File& factory)
     return own;
 }
 
-int layOut (const juce::File& factory)
+int layOut (const juce::File& factory, juce::int64 build)
 {
     std::vector<device::FactorySet::Entry> carried;
 
@@ -56,6 +56,6 @@ int layOut (const juce::File& factory)
     }
    #endif
 
-    return device::FactorySet::layOut (factory, product::name, carried);
+    return device::FactorySet::layOut (factory, product::name, build, carried);
 }
 } // namespace orbitamp::catpit::set

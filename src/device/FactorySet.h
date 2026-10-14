@@ -26,9 +26,15 @@ namespace orbitamp::device
     to say — OrbitAmpSet.h for OrbitAmp, catpit/CatpitSet.h for the cockpit; how it lands in the folder
     is said once, here.
 
-    EACH PRODUCT KEEPS ITS OWN LIST there, `sets/<product>.txt`: what it laid out, one path to the line.
-    The lists are what makes the folder safe to share — a file one product no longer carries may be one
-    another still plays. */
+    EACH PRODUCT KEEPS ITS OWN LIST there, `sets/<product>.txt`: what it laid out, one path to the line,
+    under the BUILD it was laid out by. The lists are what makes the folder safe to share — a file one
+    product no longer carries may be one another still plays.
+
+    THE NEWEST BUILD WINS a file two products carry. A pack says nothing of its own version, and one
+    retrained keeps its `rig_id`; what can be compared is when each product was built. A product whose
+    copy of a file differs from the one in the folder writes it over only when it is newer than every
+    other product that names the file — an older one leaves it, and plays the newer file. Without that,
+    two products holding two versions of one file would each write theirs back on every start. */
 struct FactorySet
 {
     /** One file of a set: where it lies, as a path inside the factory folder, and the bytes it holds. */
@@ -39,13 +45,16 @@ struct FactorySet
         size_t       size = 0;
     };
 
-    /** Makes `factory` hold `product`'s set, whatever it held before: a file that is missing or differs
-        is written, and one an EARLIER build of the product laid here that this one no longer carries is
-        removed — a pack or a cabinet left behind would go on being offered — unless another product's
-        list names it too: then it is that product's still. What is removed is only what the product's
-        own list says it put there: nothing else in the folder is its to touch. Returns how many files it
-        wrote or removed, which on every start after the first is none. */
-    static int layOut (const juce::File& factory, const juce::String& product, const std::vector<Entry>& set);
+    /** Makes `factory` hold `product`'s set, as built at `build` (a later build is a bigger number —
+        version::kBuildNumber): a file that is missing is written, and one that differs is written over
+        when no other product's list names it under a build as new as this one or newer. One an EARLIER
+        build of the product laid here that this one no longer carries is removed — a pack or a cabinet
+        left behind would go on being offered — unless another product's list names it too: then it is
+        that product's still. What is removed is only what the product's own list says it put there:
+        nothing else in the folder is its to touch. Returns how many files it wrote or removed, which on
+        every start after the first is none. */
+    static int layOut (const juce::File& factory, const juce::String& product, juce::int64 build,
+                       const std::vector<Entry>& set);
 
     /** What `product`'s own list in `factory` names: the paths, inside the folder, of what it laid there. */
     static juce::StringArray listOf (const juce::File& factory, const juce::String& product);

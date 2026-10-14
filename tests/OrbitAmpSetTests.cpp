@@ -48,6 +48,7 @@ int main()
                                      "V4 Kraken Ch1", "V4 Kraken Ch2" };
 
     const auto carried = set::carried();
+    const juce::int64 build = 20261014120000;     // the build the gate plays: a stamp of make-believe
     juce::StringArray names;
     for (const auto& e : carried)
         names.add (e.path.upToFirstOccurrenceOf (".", false, false));
@@ -59,7 +60,7 @@ int main()
                          + names.joinIntoString (", "));
 
     // The first start.
-    check (FactorySet::layOut (factory, product::name, carried) == (int) carried.size(), "the first start writes every one of them");
+    check (FactorySet::layOut (factory, product::name, build, carried) == (int) carried.size(), "the first start writes every one of them");
 
     bool whole = true;
     for (const auto& e : carried)
@@ -94,7 +95,7 @@ int main()
     check (allListed, "the preamp list shows each by a name of its own: " + listed.joinIntoString (", "));
 
     // Every start after it.
-    check (FactorySet::layOut (factory, product::name, carried) == 0, "the second start writes nothing");
+    check (FactorySet::layOut (factory, product::name, build, carried) == 0, "the second start writes nothing");
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
     return failed == 0 ? 0 : 1;

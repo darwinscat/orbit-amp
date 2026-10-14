@@ -8,6 +8,8 @@
 #include "../device/FactorySet.h"
 #include "../device/IrLibrary.h"
 
+#include <OrbitAmpVersion.h>
+
 #include <algorithm>
 #include <array>
 
@@ -511,12 +513,13 @@ namespace orbitamp
 {
 
 /** The cockpit's set is in its binary (CatpitSet.h). Once in a process, however many of the amp it
-    holds: the first one built lays it out, and the folder is the same for all of them. The cockpit's
-    own `Factory` of before is emptied with it, of what a build of before laid there. */
+    holds: the first one built lays it out, and the folder is the same for all of them — as the build
+    this is, so that of two products carrying one file the newer build's stands. The cockpit's own
+    `Factory` of before is emptied with it, of what a build of before laid there. */
 void layOutFactorySet()
 {
     static const int laid = device::FactorySet::retire (device::DeviceLibrary::formerFactoryDirectory())
-                          + catpit::set::layOut (catpit::factory());
+                          + catpit::set::layOut (catpit::factory(), version::kBuildNumber);
     juce::ignoreUnused (laid);
 }
 

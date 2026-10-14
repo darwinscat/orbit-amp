@@ -21,7 +21,7 @@ juce::File cabinetsIn (const juce::File& factory);
 juce::Array<juce::File> ownCabinets (const juce::File& factory);
 
 /** Makes `factory` hold this build's set, whatever it held before — FactorySet::layOut over what the
-    cockpit carries, under the cockpit's own list. Returns how many files it wrote or removed, which on
-    every start after the first is none. */
-int layOut (const juce::File& factory);
+    cockpit carries, under the cockpit's own list and `build`, the build it is. Returns how many files it
+    wrote or removed, which on every start after the first is none. */
+int layOut (const juce::File& factory, juce::int64 build);
 } // namespace orbitamp::catpit::set

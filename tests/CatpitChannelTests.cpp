@@ -211,7 +211,7 @@ int main()
         {
             const juce::String bytes ("another product's cabinet");
             const auto family = device::DeviceLibrary::factoryDirectory();
-            device::FactorySet::layOut (family, "AnotherAmp", { { "IRs/00-another.wav", bytes.toRawUTF8(), (size_t) bytes.length() } });
+            device::FactorySet::layOut (family, "AnotherAmp", 1, { { "IRs/00-another.wav", bytes.toRawUTF8(), (size_t) bytes.length() } });
             channels.readCabinets();
 
             bool notOurs = family.getChildFile ("IRs/00-another.wav").existsAsFile() && channels.factoryCabinets() == factory
@@ -220,7 +220,7 @@ int main()
                 notOurs = notOurs && c.getFileName() != "00-another.wav";
             check (notOurs, "a cabinet another product lays out beside the build's own is not one of the cockpit's");
 
-            device::FactorySet::layOut (family, "AnotherAmp", {});
+            device::FactorySet::layOut (family, "AnotherAmp", 1, {});
             channels.readCabinets();
         }
 

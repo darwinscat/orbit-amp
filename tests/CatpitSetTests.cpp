@@ -41,6 +41,7 @@ int main (int argc, char** argv)
     // The real folder's own shape: an apostrophe and a space on the way down. The family's, not the cockpit's.
     const auto factory = root.getChildFile ("Darwin's Cat").getChildFile ("Factory");
     const auto list    = factory.getChildFile ("sets").getChildFile (juce::String (orbitamp::product::name) + ".txt");
+    const juce::int64 build = 20261014120000;     // the build the gate plays: a stamp of make-believe
     std::printf ("in %s\n", factory.getFullPathName().toRawUTF8());
     check (! factory.exists(), "the folder is not there before the first start");
 
@@ -76,7 +77,7 @@ int main (int argc, char** argv)
     };
 
     // The first start.
-    check (set::layOut (factory) == (int) carried.size(), "the first start writes every file of the set");
+    check (set::layOut (factory, build) == (int) carried.size(), "the first start writes every file of the set");
     check (allThere(), "...each of them byte for byte what was built in");
     check (carried.empty() || list.existsAsFile(), "...and the cockpit's own list of them");
 
@@ -85,7 +86,7 @@ int main (int argc, char** argv)
     for (const auto& c : carried)
         stamps.push_back (c.file.getLastModificationTime());
     juce::Thread::sleep (1100);       // a file system that keeps whole seconds would hide a rewrite
-    check (set::layOut (factory) == 0, "the second start writes nothing");
+    check (set::layOut (factory, build) == 0, "the second start writes nothing");
     bool untouched = true;
     for (size_t i = 0; i < carried.size(); ++i)
         untouched = untouched && carried[i].file.getLastModificationTime() == stamps[i];
@@ -97,9 +98,9 @@ int main (int argc, char** argv)
         const auto& first = carried.front();
         const auto& last  = carried.back();
         first.file.replaceWithData (first.data, (size_t) first.size / 2);
-        check (set::layOut (factory) == 1 && allThere(), "a file cut short is written again");
+        check (set::layOut (factory, build) == 1 && allThere(), "a file cut short is written again");
         last.file.deleteFile();
-        check (set::layOut (factory) == 1 && allThere(), "a file that went missing comes back");
+        check (set::layOut (factory, build) == 1 && allThere(), "a file that went missing comes back");
 
         // What an earlier build laid here and this one does not carry.
         const auto leftPack = factory.getChildFile ("Gone.orbitrig.zip");
@@ -115,16 +116,16 @@ int main (int argc, char** argv)
         outside.replaceWithText ("not the amp's");
         list.appendText ("../../outside.txt\n" + outside.getFullPathName() + "\n");
 
-        check (set::layOut (factory) == 2, "two files an earlier build left are taken away");
+        check (set::layOut (factory, build) == 2, "two files an earlier build left are taken away");
         check (! leftPack.exists() && ! leftCab.exists(), "...those two");
         check (players.existsAsFile(), "a file the list does not name stays");
         check (outside.existsAsFile(), "a line that points out of the folder takes nothing away");
         check (allThere(), "the set is whole after it");
-        check (set::layOut (factory) == 0, "and the next start writes nothing again");
+        check (set::layOut (factory, build) == 0, "and the next start writes nothing again");
 
         // ANOTHER PRODUCT IN THE SAME FOLDER, with a cabinet of its own beside the cockpit's.
         const juce::String another ("another product's cabinet");
-        orbitamp::device::FactorySet::layOut (factory, "AnotherAmp", { { "IRs/50-another.wav", another.toRawUTF8(), (size_t) another.length() } });
+        orbitamp::device::FactorySet::layOut (factory, "AnotherAmp", build, { { "IRs/50-another.wav", another.toRawUTF8(), (size_t) another.length() } });
         check (set::cabinetsIn (factory).getChildFile ("50-another.wav").existsAsFile(), "another product lays a cabinet out beside the cockpit's");
 
         const auto own = set::ownCabinets (factory);
