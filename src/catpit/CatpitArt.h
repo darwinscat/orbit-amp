@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "CatpitLayout.h"
+
 namespace orbitamp::catpit
 {
 
@@ -20,6 +22,10 @@ struct Art
     float leverAxis = 0.5f;    // where that stem stands across the grip, 0 = its left end
     juce::Image guardClosed, guardOpen, guardOn;
     juce::Image sliderCap;
+
+    /** The lamps (layout::lamps), each as the render painted it lit, over the box it is laid back into;
+        what is not the lamp or its glow is transparent. In `bg` they are out. */
+    std::array<juce::Image, layout::numLamps> lampLit;
 
     static const Art& get();
 };

@@ -94,6 +94,14 @@ inline const juce::Point<float> versionPlate { 1434.0f, 812.0f };
 /** Its mirror under REVERB's left end: the presets' door. */
 inline const juce::Point<float> presetPlate { width - 1434.0f, 812.0f };
 
+/** THE LAMPS THE COCKPIT LIGHTS ITSELF, each with room round it for its glow: the bars under the columns'
+    names, the input's overload and the output's. The render paints them lit; Art puts them out. */
+enum LampId { inClipLamp, outClipLamp, numLamps };
+inline const std::array<juce::Rectangle<float>, numLamps> lamps {{
+    { 81.0f,   325.0f, 66.0f, 38.0f },    // the bar 93..134 x 334..340, and its glow on the seam below
+    { 1525.0f, 325.0f, 67.0f, 38.0f },    // the bar 1537..1579 x 334..340, and its glow on the seam below
+}};
+
 /** The flat plate under the grille, right of the tuner and down-left of the version, on the cockpit's
     bottom edge: what the engine is costing reads here. The words start at its left edge. */
 inline const juce::Rectangle<float> loadPlate { 1246.0f, 908.0f, 126.0f, 26.0f };

@@ -499,6 +499,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       delayTempo (layout::px13),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
+      inClip (Art::get().lampLit[layout::inClipLamp],   [this] { return amp.inClip.exchange (false) ? 1.0f : 0.0f; }, clipHoldMs, clipFadeMs),
+      outClip (Art::get().lampLit[layout::outClipLamp], [this] { return amp.outClip.exchange (false) ? 1.0f : 0.0f; }, clipHoldMs, clipFadeMs),
       tuner (p.tunerEar),
       version (layout::px13),
       about (p.updateChecker(), aboutTheCockpit(), p.pluginFormat()),
@@ -713,6 +715,11 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     outFader.setBounds (layout::outFader.toNearestInt());
     inMeter.setBounds (layout::inMeter.toNearestInt());
     outMeter.setBounds (layout::outMeter.toNearestInt());
+
+    for (auto* lamp : { &inClip, &outClip })
+        stage.addAndMakeVisible (lamp);
+    inClip.setBounds (layout::lamps[layout::inClipLamp].toNearestInt());
+    outClip.setBounds (layout::lamps[layout::outClipLamp].toNearestInt());
 
     // What has an obvious home in the engine is wired to it; the rest only moves for now.
     bind (drive, params::preampGain);

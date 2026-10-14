@@ -230,6 +230,44 @@ namespace
         return img;
     }
 
+    /** THE LAMPS GO OUT. The render paints lit the lamps the cockpit now lights itself (layout::lamps).
+        Each is taken out as it was painted, glow and all, to be laid back over at the strength it burns;
+        in the picture it is put out — how much of a pixel is the lamp's orange is how far it is taken
+        down to the dark warm grey of a lamp that is off, so the glow on the plate round it goes too.
+        What the lamp did not touch stays as it was, in the picture and out of the copy. */
+    juce::Image putOutLamps (juce::Image img, std::array<juce::Image, layout::numLamps>& lit)
+    {
+        if (! img.isValid())
+            return img;
+
+        const float k = (float) img.getWidth() / layout::width;
+        for (size_t i = 0; i < layout::lamps.size(); ++i)
+        {
+            const auto box = (layout::lamps[i] * k).getSmallestIntegerContainer().getIntersection (img.getBounds());
+            lit[i] = juce::Image (juce::Image::ARGB, juce::jmax (1, box.getWidth()), juce::jmax (1, box.getHeight()), true);
+            if (box.isEmpty())
+                continue;
+
+            juce::Image::BitmapData bd (img, box.getX(), box.getY(), box.getWidth(), box.getHeight(), juce::Image::BitmapData::readWrite);
+            juce::Image::BitmapData out (lit[i], juce::Image::BitmapData::writeOnly);
+            for (int y = 0; y < box.getHeight(); ++y)
+                for (int x = 0; x < box.getWidth(); ++x)
+                {
+                    const auto c = bd.getPixelColour (x, y);
+                    const float r = c.getFloatRed(), g = c.getFloatGreen(), b = c.getFloatBlue();
+                    const float s = juce::jlimit (0.0f, 1.0f, (r - b - 0.025f) / 0.22f);
+                    if (s <= 0.0f)
+                        continue;
+
+                    const float lum = 0.3f * r + 0.59f * g + 0.11f * b;
+                    const auto off = juce::Colour::fromFloatRGBA (lum * 0.30f + 0.03f, lum * 0.25f + 0.028f, lum * 0.24f + 0.03f, c.getFloatAlpha());
+                    out.setPixelColour (x, y, c);
+                    bd.setPixelColour (x, y, c.interpolatedWith (off, s));
+                }
+        }
+        return img;
+    }
+
     /** THE THROTTLE'S GRIP, OFF ITS CENTRE. The render is a whole joystick with a symmetrical T on top;
         on the flat panel only the T shows, and the cockpit wants it bigger without lying over the channel
         names — so it is rebuilt with its stem where it was and the bar reaching further to the LEFT of it
@@ -347,7 +385,7 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg          = cutWindshield (raiseTurbo (raiseTones (load ("cockpit.png"))));
+        a.bg          = putOutLamps (cutWindshield (raiseTurbo (raiseTones (load ("cockpit.png")))), a.lampLit);
         a.knobDrive   = load ("knob-drive.png");
         a.knobTone    = load ("knob-tone.png");
         a.leverGrip   = capped (offCentreGrip (load ("throttle-grip.png"), a.leverAxis), 480);

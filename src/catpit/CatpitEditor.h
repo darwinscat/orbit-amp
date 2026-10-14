@@ -294,6 +294,12 @@ private:
     // for INPUT count from the lever's zero, so the middle of the travel reads 0.
     void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);
     SegmentMeter inMeter, outMeter;
+
+    // The bars under the columns' names: each lights when its side has gone over full scale — the input
+    // as it arrives, the output as it leaves — and stays lit long enough for the peak to be seen.
+    static constexpr double clipHoldMs = 1000.0, clipFadeMs = 500.0;
+    Lamp inClip, outClip;
+
     TunerFace tuner;
     Emblem emblem;
 
