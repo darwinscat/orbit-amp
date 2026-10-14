@@ -178,6 +178,7 @@ private:
     juce::Point<int> windowedAt;             // where the window stood before it took the screen
     void setFullScreen (bool);
     void showSettingsMenu();
+    void showWindowMenu();          // a click on the glass: WINDOW and STARS, as the settings menu has them
     void showInWindow (Monitor::View);
 
     // A LOOP IN PLACE OF THE GUITAR — OrbitAmp's audition player (core/DemoPlayer.h), here in the

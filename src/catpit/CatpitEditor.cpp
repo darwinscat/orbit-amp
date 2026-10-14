@@ -1651,17 +1651,65 @@ void CatpitEditor::showInWindow (Monitor::View view)
     monitor.show (view);
 }
 
+namespace
+{
+    /** Whether a point on the stage is glass: where the render is cut through to the sky (Art), which
+        the windshield's box also holds the overhead panel and the frame's corners round. */
+    bool onGlass (juce::Point<int> at)
+    {
+        const auto& bg = Art::get().bg;
+        if (! bg.isValid() || ! layout::glass.contains (at.toFloat()))
+            return false;
+
+        const float k = (float) bg.getWidth() / layout::width;
+        const int x = (int) ((float) at.x * k), y = (int) ((float) at.y * k);
+        return juce::isPositiveAndBelow (x, bg.getWidth()) && juce::isPositiveAndBelow (y, bg.getHeight())
+            && bg.getPixelAt (x, y).getAlpha() < 16;
+    }
+}
+
+/** A CLICK ON THE GLASS: what the windshield shows and the stars outside it — the two sections the
+    settings menu opens with, which keeps them as well. */
+void CatpitEditor::showWindowMenu()
+{
+    endTapping();
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("WINDOW");
+    for (int i = 0; i < Monitor::names().size(); ++i)
+        addChoice (menu, Monitor::names()[i], (int) monitor.shown() == i,
+                   [i] (CatpitEditor& e) { e.showInWindow ((Monitor::View) i); });
+    if (! amp.runsInHost())
+        addChoice (menu, "Full screen", fullScreen, [] (CatpitEditor& e) { e.setFullScreen (! e.fullScreen); });
+
+    // Where the GPU's sky cannot be had the CPU's flies instead, and the tick says so.
+    menu.addSectionHeader ("STARS");
+    const auto flying = stars == Stars::gpu && gpuBroken ? Stars::cpu : stars;
+    addChoice (menu, gpuBroken ? juce::String::fromUTF8 ("OpenGL \xe2\x80\x94 not available here") : juce::String ("OpenGL"),
+               flying == Stars::gpu, [] (CatpitEditor& e) { e.chooseStars (Stars::gpu); }, ! gpuBroken);
+    addChoice (menu, "CPU", flying == Stars::cpu, [] (CatpitEditor& e) { e.chooseStars (Stars::cpu); });
+    addChoice (menu, "Off", flying == Stars::off, [] (CatpitEditor& e) { e.chooseStars (Stars::off); });
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
 void CatpitEditor::mouseDown (const juce::MouseEvent& e)
 {
     const auto at = e.getEventRelativeTo (&stage).getPosition();
 
     // The tuner's screen is its switch: a click turns it on or off; the right click has the rest.
+    // A click on the glass — where the picture is cut through to the sky, so not the overhead panel
+    // that hangs into it — asks what the windshield shows.
     if (! e.mods.isPopupMenu())
     {
         if (e.originalComponent == &stage && tuner.getBounds().contains (at))
         {
             endTapping();
             setParam (params::tunerOn, getParam (params::tunerOn) > 0.5f ? 0.0f : 1.0f);
+        }
+        else if (e.originalComponent == &stage && onGlass (at))
+        {
+            showWindowMenu();
         }
         return;
     }
