@@ -765,6 +765,29 @@ target_link_libraries(catpitamp_set_test PRIVATE
 set_target_properties(catpitamp_set_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ----------------------------------------------------------------------------
+# RedPawAmp — the windscreen: the drive across Mars (src/redpaw/view), a view that takes values and
+# no processor, so it stands on its own. The sources are listed here for the third face to take up;
+# the demo is a bare window with the view in it, for looking at it and measuring it. Built only when
+# asked for by name. No audio.
+# ----------------------------------------------------------------------------
+set(REDPAW_VIEW_SOURCES
+    src/redpaw/view/Mars1993.cpp
+    src/redpaw/view/PlainsWorld.cpp
+    src/redpaw/view/PlainsGl.cpp
+    src/redpaw/view/Windscreen.cpp)
+
+juce_add_gui_app(redpaw_view_demo PRODUCT_NAME "RedPawViewDemo")
+target_sources(redpaw_view_demo PRIVATE src/redpaw/view/WindscreenDemo.cpp ${REDPAW_VIEW_SOURCES})
+target_include_directories(redpaw_view_demo PRIVATE src)
+target_compile_definitions(redpaw_view_demo PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(redpaw_view_demo PRIVATE
+    juce::juce_gui_extra
+    juce::juce_opengl
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(redpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.
