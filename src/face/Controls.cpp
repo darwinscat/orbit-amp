@@ -289,6 +289,14 @@ void PushButton::paint (juce::Graphics& g)
     if (! isEnabled())
         g.beginTransparencyLayer (dimmed);
 
+    if (drawKey)
+    {
+        drawKey (g, getLocalBounds().toFloat(), held || on, juce::jlimit (0.0f, 1.0f, light.value));
+        if (! isEnabled())
+            g.endTransparencyLayer();
+        return;
+    }
+
     // Drawn for a 40-px box — an overhead hole — and scaled to whatever box it is given.
     const float u = (float) juce::jmin (getWidth(), getHeight()) / 40.0f;
     const auto c = getLocalBounds().toFloat().getCentre();
@@ -655,7 +663,7 @@ void PlateSlider::paint (juce::Graphics& g)
             g.fillRoundedRectangle (juce::Rectangle<float> (3.0f, 9.0f).withCentre ({ nx, cy + 15.0f }), 1.5f);
         }
 
-    drawCap (g, cap, { x, cy }, (float) getHeight() - 4.0f, juce::MathConstants<float>::halfPi);
+    drawCap (g, cap, { x, cy }, capLength > 0.0f ? capLength : (float) getHeight() - 4.0f, capAngle);
 }
 
 void PlateSlider::mouseDown (const juce::MouseEvent& e)
@@ -737,7 +745,7 @@ void ColumnFader::paint (juce::Graphics& g)
     }
 
     const float y = t.getEnd() - t.getLength() * value;
-    drawCap (g, cap, { cx, y }, (float) getWidth() - 8.0f, 0.0f);
+    drawCap (g, cap, { cx, y }, capLength > 0.0f ? capLength : (float) getWidth() - 8.0f, 0.0f);
 }
 
 void ColumnFader::mouseDown (const juce::MouseEvent& e)

@@ -135,6 +135,12 @@ public:
     static constexpr float dimmed = 0.3f;
 
     bool latching = true;
+
+    /** A FACE'S OWN KEY: when set, the key is drawn by this instead of the kit's chrome bezel — given
+        its whole box, whether it is down (held, or latched on), and how lit it is, 0..1. A face whose
+        keys are renders draws them here. */
+    std::function<void (juce::Graphics&, juce::Rectangle<float>, bool down, float lit)> drawKey;
+
     std::function<void (bool)> onChange;
     std::function<void()>      onPress;          // a plain key's press
     std::function<void()>      onMenu;           // a right click, when set
@@ -253,6 +259,11 @@ class PlateSlider final : public juce::Component
 public:
     PlateSlider (const juce::Image& cap, juce::Colour lineFrom, juce::Colour lineTo, int steps = 0);
 
+    /** How the cap's render lies: turned by `capAngle` and its opaque width drawn `capLength` long. By
+        default it stands across the line, as long as the slider is tall less a little. */
+    float capAngle = juce::MathConstants<float>::halfPi;
+    float capLength = 0.0f;
+
     std::function<void()>       onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;
     std::function<void (int)>   onStep;          // stepped only: the position it clicked into
@@ -291,6 +302,9 @@ class ColumnFader final : public juce::Component
 {
 public:
     explicit ColumnFader (const juce::Image& cap);
+
+    /** The cap's render, its opaque width drawn this long; by default as wide as the fader less a little. */
+    float capLength = 0.0f;
 
     std::function<void()>       onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;
