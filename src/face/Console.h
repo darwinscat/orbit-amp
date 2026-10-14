@@ -377,6 +377,12 @@ private:
 
     template <typename Control>
     void bind (Control&, const juce::String& paramId);
+    template <typename Control>
+    std::unique_ptr<juce::ParameterAttachment> attach (Control&, const juce::String& paramId);
+
+    std::array<std::unique_ptr<juce::ParameterAttachment>, 3> toneBindings;
+    std::array<juce::String, 3> toneBound;
+    void bindTones();
     void bindButton (PushButton&, const char* paramId);
 
     void showReverbMenu();

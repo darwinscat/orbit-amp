@@ -386,8 +386,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
 
     // The tone stack is the playing pack's own — its Bass, Middle and Treble as they were measured on
     // the amp, centre detent where every capture was taken.
-    for (int t = 0; t < Channels::numTones; ++t)
-        bind (*tones[(size_t) t], Channels::toneId (t));
+    bindTones();
 
     // HPF and LPF switch the cabinet's own cut filters in and out; FAT, BRIGHT, DEPTH and PRESENCE are
     // kept with the channel and wait for the layers the packs will carry — each dimmed and deaf to the
@@ -947,7 +946,7 @@ void Console::playMidi()
     // each half of the controller's travel is spread over its own half of the knob's.
     for (int t = 0; t < Channels::numTones; ++t)
         if (const int v = toneTo[(size_t) t]; v >= 0)
-            along (Channels::toneId (t), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
+            along (channels.toneId (t), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
 }
 
 /** THE LOAD, ITEMISED — OrbitAmp's window, in the face's words and colours. A product's packs are
@@ -1024,6 +1023,7 @@ void Console::showChannel()
 {
     const int channel = channels.active();
     showSelector (channel);
+    bindTones();        // another channel's pack may keep its Bass, Middle and Treble in other places
 
     // A layer the packs do not carry yet never shows as thrown — whatever the state says.
     const auto playable = [] (Channels::Flag f) { return Channels::layerPlayable[(size_t) f]; };
@@ -1516,10 +1516,17 @@ void Console::showCab()
 template <typename Control>
 void Console::bind (Control& control, const juce::String& paramId)
 {
+    if (auto att = attach (control, paramId))
+        attachments.push_back (std::move (att));
+}
+
+template <typename Control>
+std::unique_ptr<juce::ParameterAttachment> Console::attach (Control& control, const juce::String& paramId)
+{
     auto* p = amp.apvts.getParameter (paramId);
     jassert (p != nullptr);   // a binding to an id the processor does not have is a typo, not an option
     if (p == nullptr)
-        return;
+        return {};
 
     auto att = std::make_unique<juce::ParameterAttachment> (*p, [&control, p] (float v)
     {
@@ -1533,7 +1540,20 @@ void Console::bind (Control& control, const juce::String& paramId)
     control.defaultValue   = p->getDefaultValue();
 
     a->sendInitialUpdate();
-    attachments.push_back (std::move (att));
+    return att;
+}
+
+/** The tone knobs on the playing pack's own Bass, Middle and Treble — wherever its list has them, so
+    the knobs of a channel whose pack lists them otherwise turn other parameters (Channels::toneId). Only
+    a knob whose parameter is another now is bound again. */
+void Console::bindTones()
+{
+    for (size_t t = 0; t < tones.size(); ++t)
+        if (const auto id = channels.toneId ((int) t); tones[t] != nullptr && id != toneBound[t])
+        {
+            toneBindings[t] = attach (*tones[t], id);
+            toneBound[t] = id;
+        }
 }
 
 juce::ParameterAttachment* Console::follow (const char* paramId, std::function<void (float)> moved)

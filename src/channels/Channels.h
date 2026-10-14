@@ -43,10 +43,15 @@ public:
         Everything else a channel keeps opens on its parameter's own default. */
     float defaultOf (int channel, const juce::String& paramId) const;
 
-    /** BASS, MIDDLE, TREBLE are the playing pack's own tone controls, by their place in it: the
-        products' packs are made with those three first, in that order. */
+    /** BASS, MIDDLE, TREBLE are the playing pack's own tone controls, found in it by their NAMES: a
+        pack lists its tones in an order of its own — the X88-IR's Bass, Middle, Treble; the V4
+        Copper's Tone, Treble, Middle, Bass and Bass cut — and the engine plays each list's controls
+        by their places in it (params::preampMeasured). A pack with no tone of that name has the knob
+        on that place instead. toneId is the parameter a knob turns on the channel that is playing. */
     static constexpr int numTones = 3;
-    static juce::String toneId (int knob) { return params::preampMeasured (knob); }
+    static constexpr std::array<const char*, numTones> toneNames {{ "Bass", "Middle", "Treble" }};
+    juce::String toneId (int knob) const { return toneOf (active(), knob); }
+    juce::String toneOf (int channel, int knob) const;
 
     /** The controls kept in the node rather than in a parameter. */
     enum Flag { fat, bright, depth, presence, numFlags };

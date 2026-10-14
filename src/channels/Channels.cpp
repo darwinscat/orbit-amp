@@ -76,8 +76,9 @@ Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
 {
     kept.add (params::preampGain);
     kept.add (params::blockIn (params::preampId));      // TURBO: how hard the capture is fed
-    for (int t = 0; t < numTones; ++t)
-        kept.add (toneId (t));
+    for (int t = 0; t < numTones; ++t)                  // the tones each channel's knobs turn, its own place in its own pack
+        for (int c = 0; c < count(); ++c)
+            kept.addIfNotAlreadyThere (toneOf (c, t));
     kept.add (params::cabHpfOn);
     kept.add (params::cabLpfOn);
     kept.add (params::reverbMix);
@@ -337,6 +338,23 @@ int Channels::packFor (int channel) const
         if (library.getReference (i).rigId == line.channels[(size_t) juce::jlimit (0, count() - 1, channel)].capture)
             return i;
     return -1;
+}
+
+juce::String Channels::toneOf (int channel, int knob) const
+{
+    knob = juce::jlimit (0, numTones - 1, knob);
+
+    if (const int pack = packFor (channel); pack >= 0)
+        for (const auto& stage : amp.preamp.packs.getReference (pack).rig.chain)
+        {
+            if (stage.kind != namz::rig::StageKind::Nam)
+                continue;
+            for (int t = 0; t < (int) stage.tone.size() && t < params::preampNumMeasured; ++t)
+                if (juce::String (stage.tone[(size_t) t].name).trim().equalsIgnoreCase (toneNames[(size_t) knob]))
+                    return params::preampMeasured (t);
+        }
+
+    return params::preampMeasured (knob);
 }
 
 bool Channels::adopt()

@@ -13,7 +13,8 @@
 //   - a state from before there was a parameter keeps its channel, and the parameter following it is
 //     not a step of its own;
 //   - a channel whose pack is not installed is refused, and the parameter says where the sound stayed;
-//   - a channel's pack is the capture it holds: renamed, the file is that channel's pack still.
+//   - a channel's pack is the capture it holds: renamed, the file is that channel's pack still;
+//   - a channel's tone knobs are its pack's Bass, Middle and Treble, found by name.
 //
 //   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called;
 //   - a cabinet another product lays out in the family's folder is not one of the cockpit's;
@@ -78,6 +79,16 @@ int main()
     for (int c = 0; c < channels.count(); ++c)
         installed = installed && channels.packFor (c) >= 0;
     check (installed, "all four channels' packs are installed");
+
+    // BASS, MIDDLE and TREBLE are found in each pack by their names — the X88-IR lists them first, in
+    // that order, so every channel's knobs are on the first three places.
+    {
+        bool inPlace = true;
+        for (int c = 0; c < channels.count(); ++c)
+            for (int t = 0; t < 3; ++t)
+                inPlace = inPlace && channels.toneOf (c, t) == params::preampMeasured (t);
+        check (inPlace, "every channel's BASS, MIDDLE and TREBLE are its pack's first three tones, found by name");
+    }
 
     // A processor just built.
     check (channels.adopted(), "a processor just built is the cockpit's already");
