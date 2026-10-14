@@ -37,7 +37,7 @@ public:
         one of them after INIT. In the channels' order: the two clean ones stand in a hall with a
         little delay behind them; the two driven ones have each a room of their own, and no delay.
         Everything else a channel keeps opens on its parameter's own default. */
-    static constexpr std::array<const char*, count> defaultReverbs {{ "Hall", "Hall", "Spring", "Ambience" }};
+    static constexpr std::array<const char*, count> defaultReverbs {{ "Hall", "Hall", "Plate", "Ambience" }};
     static constexpr std::array<float, count> defaultDelayMix {{ 15.0f, 15.0f, 0.0f, 0.0f }};
     float defaultOf (int channel, const juce::String& paramId) const;
 

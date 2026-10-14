@@ -262,7 +262,7 @@ int main()
         check (opensOn ("Hall", 15.0f), "...and so does the second");
         onIt = onIt && channels.cabinet() == opening;
         engine.go (2);
-        check (opensOn ("Spring", 0.0f), "the third opens on a spring, and no delay");
+        check (opensOn ("Plate", 0.0f), "the third opens on a plate, and no delay");
         onIt = onIt && channels.cabinet() == opening;
         engine.go (3);
         check (opensOn ("Ambience", 0.0f), "...the fourth on an ambience, and none either");

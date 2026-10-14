@@ -375,6 +375,26 @@ private:
 };
 
 //==============================================================================
+/** A LAMP THE RENDER PAINTED, LIT FROM HERE: the picture holds it out (Art), and this lays it back over
+    as it was painted, at the strength it burns. `level` says how hard that is now, 0..1, read at 30 Hz;
+    the lamp takes it at once and lets go slowly — it holds what it showed for `holdMs`, then fades over
+    `fadeMs` — so that something one block long is still seen. */
+class Lamp final : public juce::Component, private juce::Timer
+{
+public:
+    Lamp (const juce::Image& lit, std::function<float()> level, double holdMs, double fadeMs);
+    void paint (juce::Graphics&) override;
+
+private:
+    const juce::Image& lit;
+    std::function<float()> level;
+    const double holdMs, fadeMs;
+    float held = 0.0f, shown = 0.0f;
+    double heldAt = 0.0;
+    void timerCallback() override;
+};
+
+//==============================================================================
 /** The tuner's screen: the note big on the left, a cents ruler on the right with the needle on it —
     green when the string is home, warming to orange by 25 cents out. Reads the processor's ear on its
     own 30 Hz clock; the ear only listens while a face is open and the tuner is in the chain.

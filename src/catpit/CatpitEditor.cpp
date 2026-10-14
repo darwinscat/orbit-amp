@@ -499,6 +499,14 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
       delayTempo (layout::px13),
       inMeter ([this] { return amp.gateKeyDb.load (std::memory_order_relaxed); }),
       outMeter ([this] { return amp.outDb.load (std::memory_order_relaxed); }),
+      inClip (Art::get().lampLit[layout::inClipLamp],   [this] { return amp.inClip.exchange (false) ? 1.0f : 0.0f; }, clipHoldMs, clipFadeMs),
+      outClip (Art::get().lampLit[layout::outClipLamp], [this] { return amp.outClip.exchange (false) ? 1.0f : 0.0f; }, clipHoldMs, clipFadeMs),
+      gateLight (Art::get().lampLit[layout::gateLamp],
+                 [this] { return -amp.gateMeterDb.load (std::memory_order_relaxed) / 20.0f; }, 150.0, 350.0),       // full at 20 dB pressed
+      limiterLight (Art::get().lampLit[layout::limiterLamp],
+                    [this] { return -amp.limiterGrDb.load (std::memory_order_relaxed) / 3.0f; }, 300.0, 400.0),   // full at 3 dB squeezed
+      gateDoor (layout::px13),
+      limiterDoor (layout::px13),
       tuner (p.tunerEar),
       version (layout::px13),
       about (p.updateChecker(), aboutTheCockpit(), p.pluginFormat()),
@@ -520,6 +528,13 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     engine.setUpChain (channels.adopt());
     channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
     settleOnSettings(); // ...and INPUT's lever may have another zero than the one the state was dialled against
+
+    // THE STANDALONE PLAYS IN STEREO SPACE — one guitar in, a wide room out. The processor's own default
+    // waits for a device to open, so a first run with none saved MONO for good; and the first players'
+    // states were saved before this. So once on each machine, over whatever the state says; after that
+    // the choice is the player's.
+    if (standalone::firstTimeHere ("stereoSpaceSet"))
+        setParam (params::stereoMode, (float) params::StereoMode::stereoSpace);
 
     addAndMakeVisible (stage);
     stage.setBounds (0, 0, (int) width, (int) height);
@@ -707,6 +722,13 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     inMeter.setBounds (layout::inMeter.toNearestInt());
     outMeter.setBounds (layout::outMeter.toNearestInt());
 
+    for (auto* lamp : { &inClip, &outClip, &gateLight, &limiterLight })
+        stage.addAndMakeVisible (lamp);
+    inClip.setBounds (layout::lamps[layout::inClipLamp].toNearestInt());
+    outClip.setBounds (layout::lamps[layout::outClipLamp].toNearestInt());
+    gateLight.setBounds (layout::lamps[layout::gateLamp].toNearestInt());
+    limiterLight.setBounds (layout::lamps[layout::limiterLamp].toNearestInt());
+
     // What has an obvious home in the engine is wired to it; the rest only moves for now.
     bind (drive, params::preampGain);
     drive.onMenu = [this] { showDriveMenu(); };
@@ -804,6 +826,19 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     presetDoor.onClick = [this] { showPresetMenu(); };
     stage.addAndMakeVisible (presetDoor);
     presetDoor.setBounds (around (presetPlate, 140.0f, 30.0f));
+
+    // GATE and LIMITER, on the plates over their lamps, outside PRESET and the version.
+    for (auto* door : { &gateDoor, &limiterDoor })
+    {
+        door->valueColour = labelLilac.withAlpha (0.85f);
+        stage.addAndMakeVisible (door);
+    }
+    gateDoor.set ({}, "GATE");
+    gateDoor.onClick = [this] { showGateMenu(); };
+    gateDoor.setBounds (around (gatePlate, 100.0f, 28.0f));
+    limiterDoor.set ({}, "LIMITER");
+    limiterDoor.onClick = [this] { showOutputMenu(); };
+    limiterDoor.setBounds (around (limiterPlate, 100.0f, 28.0f));
 
     timerCallback();
     startTimerHz (4);   // the dots are a lookup and the load is a smoothed figure: nobody needs either sooner
@@ -1025,6 +1060,41 @@ void CatpitEditor::showOutputMenu()
     for (const float db : limiterCeilings)
         addChoice (menu, juce::String (db, 1) + " dB", std::abs (at - db) < 0.05f,
                    [db] (CatpitEditor& e) { e.setParam (params::limiterCeiling, db); }, on);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+/** A CLICK ON GATE, on its plate left of PRESET: the gate, as the settings menu holds it too — whether it
+    works, where it closes, how fast, and where in the chain it mutes. The sound's, like the limiter. */
+void CatpitEditor::showGateMenu()
+{
+    endTapping();
+
+    const bool on = getParam (params::gateOn) > 0.5f;
+    const auto choice = [this] (const char* id) { return juce::roundToInt (getParam (id)); };
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("GATE");
+    addChoice (menu, "On", on, [on] (CatpitEditor& e) { e.setParam (params::gateOn, on ? 0.0f : 1.0f); });
+
+    juce::PopupMenu threshold;
+    const int now = juce::roundToInt (getParam (params::gateThreshold));
+    for (int db = -80; db <= -10; db += 5)
+        addChoice (threshold, juce::String (db) + " dB", std::abs (now - db) <= 2,
+                   [db] (CatpitEditor& e) { e.setParam (params::gateThreshold, (float) db); });
+    menu.addSubMenu ("Threshold  " + juce::String (now) + " dB", threshold, on);
+
+    juce::PopupMenu decay;
+    for (int i = 0; i < params::gateDecayModes.size(); ++i)
+        addChoice (decay, params::gateDecayModes[i], choice (params::gateDecay) == i,
+                   [i] (CatpitEditor& e) { e.setParam (params::gateDecay, (float) i); });
+    menu.addSubMenu ("Closes  " + params::gateDecayModes[choice (params::gateDecay)], decay, on);
+
+    juce::PopupMenu position;
+    for (int i = 0; i < params::gatePositions.size(); ++i)
+        addChoice (position, params::gatePositions[i], choice (params::gatePos) == i,
+                   [i] (CatpitEditor& e) { e.setParam (params::gatePos, (float) i); });
+    menu.addSubMenu ("Mutes at  " + params::gatePositions[choice (params::gatePos)], position, on);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
@@ -1581,17 +1651,65 @@ void CatpitEditor::showInWindow (Monitor::View view)
     monitor.show (view);
 }
 
+namespace
+{
+    /** Whether a point on the stage is glass: where the render is cut through to the sky (Art), which
+        the windshield's box also holds the overhead panel and the frame's corners round. */
+    bool onGlass (juce::Point<int> at)
+    {
+        const auto& bg = Art::get().bg;
+        if (! bg.isValid() || ! layout::glass.contains (at.toFloat()))
+            return false;
+
+        const float k = (float) bg.getWidth() / layout::width;
+        const int x = (int) ((float) at.x * k), y = (int) ((float) at.y * k);
+        return juce::isPositiveAndBelow (x, bg.getWidth()) && juce::isPositiveAndBelow (y, bg.getHeight())
+            && bg.getPixelAt (x, y).getAlpha() < 16;
+    }
+}
+
+/** A CLICK ON THE GLASS: what the windshield shows and the stars outside it — the two sections the
+    settings menu opens with, which keeps them as well. */
+void CatpitEditor::showWindowMenu()
+{
+    endTapping();
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("WINDOW");
+    for (int i = 0; i < Monitor::names().size(); ++i)
+        addChoice (menu, Monitor::names()[i], (int) monitor.shown() == i,
+                   [i] (CatpitEditor& e) { e.showInWindow ((Monitor::View) i); });
+    if (! amp.runsInHost())
+        addChoice (menu, "Full screen", fullScreen, [] (CatpitEditor& e) { e.setFullScreen (! e.fullScreen); });
+
+    // Where the GPU's sky cannot be had the CPU's flies instead, and the tick says so.
+    menu.addSectionHeader ("STARS");
+    const auto flying = stars == Stars::gpu && gpuBroken ? Stars::cpu : stars;
+    addChoice (menu, gpuBroken ? juce::String::fromUTF8 ("OpenGL \xe2\x80\x94 not available here") : juce::String ("OpenGL"),
+               flying == Stars::gpu, [] (CatpitEditor& e) { e.chooseStars (Stars::gpu); }, ! gpuBroken);
+    addChoice (menu, "CPU", flying == Stars::cpu, [] (CatpitEditor& e) { e.chooseStars (Stars::cpu); });
+    addChoice (menu, "Off", flying == Stars::off, [] (CatpitEditor& e) { e.chooseStars (Stars::off); });
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
 void CatpitEditor::mouseDown (const juce::MouseEvent& e)
 {
     const auto at = e.getEventRelativeTo (&stage).getPosition();
 
     // The tuner's screen is its switch: a click turns it on or off; the right click has the rest.
+    // A click on the glass — where the picture is cut through to the sky, so not the overhead panel
+    // that hangs into it — asks what the windshield shows.
     if (! e.mods.isPopupMenu())
     {
         if (e.originalComponent == &stage && tuner.getBounds().contains (at))
         {
             endTapping();
             setParam (params::tunerOn, getParam (params::tunerOn) > 0.5f ? 0.0f : 1.0f);
+        }
+        else if (e.originalComponent == &stage && onGlass (at))
+        {
+            showWindowMenu();
         }
         return;
     }

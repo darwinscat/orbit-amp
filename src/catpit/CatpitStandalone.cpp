@@ -42,4 +42,18 @@ void rememberWindowPosition ([[maybe_unused]] juce::Point<int> topLeft)
    #endif
 }
 
+bool firstTimeHere ([[maybe_unused]] const char* key)
+{
+   #if CATPIT_STANDS_ALONE
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+        if (auto* settings = holder->settings.get())
+            if (! settings->containsKey (key))
+            {
+                settings->setValue (key, true);
+                return true;
+            }
+   #endif
+    return false;
+}
+
 } // namespace orbitamp::catpit::standalone

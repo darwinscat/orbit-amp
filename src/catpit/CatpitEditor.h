@@ -178,6 +178,7 @@ private:
     juce::Point<int> windowedAt;             // where the window stood before it took the screen
     void setFullScreen (bool);
     void showSettingsMenu();
+    void showWindowMenu();          // a click on the glass: WINDOW and STARS, as the settings menu has them
     void showInWindow (Monitor::View);
 
     // A LOOP IN PLACE OF THE GUITAR — OrbitAmp's audition player (core/DemoPlayer.h), here in the
@@ -264,7 +265,8 @@ private:
     void addChoice (juce::PopupMenu&, const juce::String& text, bool ticked,
                     std::function<void (CatpitEditor&)> picked, bool enabled = true);
     void showInputMenu();           // the INPUT column: the lever's zero
-    void showOutputMenu();          // the OUTPUT column: the limiter, and where its ceiling is
+    void showOutputMenu();          // the OUTPUT column: the limiter, and where its ceiling is — and LIMITER's plate
+    void showGateMenu();            // GATE's plate: the gate the settings menu holds too
     void showTurboMenu();           // TURBO: how hard it pushes
     void showTunerMenu();           // the tuner: whether it listens, and whether the amp is silent meanwhile
     void showTunerState();          // ...both written on its glass
@@ -294,6 +296,18 @@ private:
     // for INPUT count from the lever's zero, so the middle of the travel reads 0.
     void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);
     SegmentMeter inMeter, outMeter;
+
+    // The bars under the columns' names: each lights when its side has gone over full scale — the input
+    // as it arrives, the output as it leaves — and stays lit long enough for the peak to be seen.
+    static constexpr double clipHoldMs = 1000.0, clipFadeMs = 500.0;
+    Lamp inClip, outClip;
+
+    // The slanted lamps under the columns, named on the plates over them: GATE burns as hard as the gate
+    // is pressing the signal, LIMITER as hard as the limiter is squeezing it. A click on either name
+    // opens what it is set by.
+    Lamp gateLight, limiterLight;
+    Legend gateDoor, limiterDoor;
+
     TunerFace tuner;
     Emblem emblem;
 

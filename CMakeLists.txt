@@ -30,13 +30,25 @@ include(FetchContent)
 
 # ----------------------------------------------------------------------------
 # JUCE — pinned tag, with a local-source-dir escape hatch. ORBITAMP_JUCE_DIR defaults to the
-# JUCE 8.0.14 tree another Felitronics project already fetched, so a first build here costs no
-# second full clone; if that path is gone, the pin is fetched instead. Bump the tag deliberately.
+# JUCE tree another Felitronics project already fetched, so a first build here costs no second
+# full clone — but only while that tree is the pinned version; any other tree is passed over and
+# the pin is fetched, so a local build never quietly runs on a JUCE the CI does not. Bump the tag
+# deliberately.
 # ----------------------------------------------------------------------------
-set(ORBITAMP_JUCE_TAG "8.0.14" CACHE STRING "JUCE git tag to build against")
+set(ORBITAMP_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
 set(ORBITAMP_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
-    CACHE PATH "Local JUCE source tree (used if present); else the pinned tag is fetched")
+    CACHE PATH "Local JUCE source tree (used if it is the pinned version); else the pin is fetched")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _orbitamp_juce_want "${ORBITAMP_JUCE_TAG}")
+set(_orbitamp_juce_have "")
 if(ORBITAMP_JUCE_DIR AND EXISTS "${ORBITAMP_JUCE_DIR}/CMakeLists.txt")
+    file(STRINGS "${ORBITAMP_JUCE_DIR}/CMakeLists.txt" _orbitamp_juce_have
+        REGEX "^project\\(JUCE VERSION [0-9.]+" LIMIT_COUNT 1)
+    string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" _orbitamp_juce_have "${_orbitamp_juce_have}")
+    if(NOT _orbitamp_juce_have STREQUAL _orbitamp_juce_want)
+        message(STATUS "JUCE: local tree is ${_orbitamp_juce_have}, the pin is ${_orbitamp_juce_want} — passed over")
+    endif()
+endif()
+if(_orbitamp_juce_have AND _orbitamp_juce_have STREQUAL _orbitamp_juce_want)
     message(STATUS "JUCE: local source — ${ORBITAMP_JUCE_DIR}")
     FetchContent_Declare(juce SOURCE_DIR "${ORBITAMP_JUCE_DIR}")
 else()
@@ -482,6 +494,7 @@ target_compile_definitions(OrbitAmp PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0   # JUCE 8 has no splash requirement on any tier, incl. AGPLv3
+    $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>   # the standalone offers ASIO beside WASAPI; JUCE carries the SDK
 )
 
 target_include_directories(OrbitAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")   # OrbitAmpVersion.h
@@ -537,7 +550,7 @@ juce_add_binary_data(CatpitAmpData
 # reaches each at its own next release. This is the number the cockpit shows, stamps its bundle with
 # and compares against the releases that wear its prefix (src/Product.h); it moves when the COCKPIT
 # is released. .github/workflows/release-catpit.yml refuses a tag that disagrees with it.
-set(CATPITAMP_VERSION 0.1.0)
+set(CATPITAMP_VERSION 0.1.1)
 
 # The cockpit's icon. macOS 26 sets any icon that is not its own rounded square on a grey plate —
 # the family's disc came out as a small disc on a light square — so the Mac wears the mark on the
@@ -633,7 +646,8 @@ target_compile_definitions(CatpitAmp PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_DISPLAY_SPLASH_SCREEN=0)
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>)   # the standalone offers ASIO beside WASAPI; JUCE carries the SDK
 target_include_directories(CatpitAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")
 add_dependencies(CatpitAmp OrbitAmpVersionGen)
 

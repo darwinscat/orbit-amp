@@ -1008,6 +1008,41 @@ void SegmentMeter::timerCallback()
     }
 }
 
+Lamp::Lamp (const juce::Image& l, std::function<float()> lv, double hold, double fade)
+    : lit (l), level (std::move (lv)), holdMs (hold), fadeMs (juce::jmax (1.0, fade))
+{
+    setInterceptsMouseClicks (false, false);
+    startTimerHz (30);
+}
+
+void Lamp::timerCallback()
+{
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    const float in = juce::jlimit (0.0f, 1.0f, level ? level() : 0.0f);
+    if (in >= held || now - heldAt > holdMs + fadeMs)
+    {
+        held = in;
+        heldAt = now;
+    }
+
+    const double age = now - heldAt;
+    const float fading = age <= holdMs ? held : held * (float) juce::jmax (0.0, 1.0 - (age - holdMs) / fadeMs);
+    const float next = juce::jmax (in, fading);
+    if (std::abs (next - shown) > 0.01f || (next == 0.0f) != (shown == 0.0f))
+    {
+        shown = next;
+        repaint();
+    }
+}
+
+void Lamp::paint (juce::Graphics& g)
+{
+    if (shown <= 0.0f || ! lit.isValid())
+        return;
+    g.setOpacity (shown);
+    g.drawImage (lit, getLocalBounds().toFloat());
+}
+
 void SegmentMeter::paint (juce::Graphics& g)
 {
     constexpr int segments = 26;
