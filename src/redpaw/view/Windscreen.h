@@ -75,6 +75,24 @@ public:
     /** Whether the ladder may lower the quality on its own. On by default. */
     void setAdaptive (bool shouldAdapt) noexcept { adaptive = shouldAdapt; }
 
+    /** HOSTED: the GPU's frame drawn by a context the view does not own. A GL surface of the glass's own
+        is a native view, and on the Mac a native view lies over everything painted beside it — over the
+        picture whose cut-out the glass is meant to show through. So a window whose picture lies over the
+        glass attaches ONE context to itself, painting its components over what that context renders (as
+        the cockpit's sky is drawn), and hands the view its frame through the three calls below: the view
+        attaches nothing of its own then, asks the host for its frames, and paints nothing of its own
+        where the GPU draws. Set before the first setMode; null (the default) is a context of the view's
+        own. */
+    void setHost (juce::OpenGLContext* host);
+
+    /** The host's context was made, is closing; and a frame of it, the glass at `glass` in its frame
+        buffer's pixels counted from the top-left, of a frame `frameWidth` x `frameHeight`. GL thread. The frame
+        buffer is left bound, with the whole of it the viewport and nothing enabled that would stand in
+        the way of what is painted over it. */
+    void hostContextCreated();
+    void hostContextClosing();
+    void hostRender (juce::Rectangle<int> glass, int frameWidth, int frameHeight);
+
     struct Status
     {
         Mode mode = Mode::gpu;
@@ -103,7 +121,8 @@ private:
     PlainsWorld world;
     PlainsGl plains { world };
     juce::OpenGLContext gl;
-    bool glAttached = false;
+    juce::OpenGLContext* host = nullptr;    // the window's, when the view is hosted (setHost)
+    bool glAttached = false;                // the GPU's frames are being drawn: in the view's own context, or the host's
     std::atomic<bool> gpuFailed { false };
     std::atomic<float> gpuMsShared { -1.0f };
     std::atomic<int> gpuFrames { 0 };
@@ -145,6 +164,8 @@ private:
 
     void tick();
     void apply();
+    void triggerFrame();
+    void renderFrame (int x, int y, int w, int h, juce::uint32 target);
     void attachGl();
     void detachGl();
     void stepDown (const juce::String& why);

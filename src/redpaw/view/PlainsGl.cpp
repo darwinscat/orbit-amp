@@ -572,7 +572,7 @@ void PlainsGl::noteCost (float ms)
     gpuMs = gpuMs < 0 ? ms : gpuMs + (ms - gpuMs) * 0.1f;
 }
 
-void PlainsGl::render (int w, int h, float scale, juce::uint32 target)
+void PlainsGl::render (int w, int h, float scale, juce::uint32 target, int x, int y)
 {
     if (terrain.id == 0 || w <= 0 || h <= 0)
         return;
@@ -622,7 +622,7 @@ void PlainsGl::render (int w, int h, float scale, juce::uint32 target)
 
     glBindFramebuffer (GL_READ_FRAMEBUFFER, fbo);
     glBindFramebuffer (GL_DRAW_FRAMEBUFFER, target);
-    glBlitFramebuffer (0, 0, rw, rh, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBlitFramebuffer (0, 0, rw, rh, x, y, x + w, y + h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer (GL_FRAMEBUFFER, target);
 }
 

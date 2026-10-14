@@ -166,7 +166,8 @@ void Windscreen::attachGl()
 {
     if (glAttached)
         return;
-    gl.attachTo (*this);
+    if (host == nullptr)
+        gl.attachTo (*this);
     glAttached = true;
 }
 
@@ -174,8 +175,55 @@ void Windscreen::detachGl()
 {
     if (! glAttached)
         return;
-    gl.detach();
+    if (host == nullptr)
+        gl.detach();
     glAttached = false;
+}
+
+void Windscreen::triggerFrame()
+{
+    if (host != nullptr)
+        host->triggerRepaint();
+    else
+        gl.triggerRepaint();
+}
+
+void Windscreen::setHost (juce::OpenGLContext* context)
+{
+    detachGl();
+    host = context;
+    setOpaque (host == nullptr);    // hosted, the GPU's frame shows through where the view paints nothing
+}
+
+void Windscreen::hostContextCreated()
+{
+    newOpenGLContextCreated();
+}
+
+void Windscreen::hostContextClosing()
+{
+    openGLContextClosing();
+}
+
+void Windscreen::hostRender (juce::Rectangle<int> glass, int frameWidth, int frameHeight)
+{
+    if (host == nullptr || ! glAttached)
+        return;
+
+    const auto target = host->getFrameBufferID();
+    renderFrame (glass.getX(), frameHeight - glass.getBottom(), glass.getWidth(), glass.getHeight(), target);
+
+    // What is painted over the frame next is the host's components: the whole surface its viewport,
+    // nothing of the scene's state left on.
+    using namespace juce::gl;
+    glBindFramebuffer (GL_FRAMEBUFFER, target);
+    glDisable (GL_DEPTH_TEST);
+    glDisable (GL_CULL_FACE);
+    glDisable (GL_SCISSOR_TEST);
+    glDisable (GL_BLEND);
+    glBindVertexArray (0);
+    glUseProgram (0);
+    glViewport (0, 0, frameWidth, frameHeight);
 }
 
 /** One frame, kept. From the GPU where it works — the GL thread reads it back and the pulse collects
@@ -186,7 +234,7 @@ void Windscreen::takeStill()
     {
         attachGl();
         stillWanted.store (true);
-        gl.triggerRepaint();
+        triggerFrame();
         return;
     }
     detachGl();
@@ -274,7 +322,7 @@ void Windscreen::tick()
     if (running == Mode::gpu)
     {
         if (glAttached)
-            gl.triggerRepaint();
+            triggerFrame();
     }
     else
     {
@@ -335,6 +383,8 @@ void Windscreen::drawCpuFrame (bool advance)
 
 void Windscreen::paint (juce::Graphics& g)
 {
+    if (host != nullptr && running == Mode::gpu)
+        return;     // the host's context draws the glass here, under what is painted over it
     g.fillAll (juce::Colours::black);
     const auto* image = running == Mode::still ? &still : (running == Mode::cpu ? &cpuImage : nullptr);
     if (image == nullptr || ! image->isValid())
@@ -397,8 +447,13 @@ void Windscreen::newOpenGLContextCreated()
 void Windscreen::renderOpenGL()
 {
     const float k = (float) gl.getRenderingScale();
-    const int w = juce::roundToInt ((float) getWidth() * k), h = juce::roundToInt ((float) getHeight() * k);
     juce::OpenGLHelpers::clear (juce::Colours::black);
+    renderFrame (0, 0, juce::roundToInt ((float) getWidth() * k), juce::roundToInt ((float) getHeight() * k), gl.getFrameBufferID());
+}
+
+/** One frame of the drive, into `target` over (x, y, w, h) — GL's pixels, from the bottom-left. */
+void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
+{
     if (gpuFailed.load() || w <= 0 || h <= 0)
         return;
 
@@ -415,7 +470,7 @@ void Windscreen::renderOpenGL()
     else
         world.step (dt);
 
-    plains.render (w, h, scaleInUse.load(), gl.getFrameBufferID());
+    plains.render (w, h, scaleInUse.load(), target, x, y);
     gpuMsShared.store (plains.gpuMillis());
     gpuFrameW.store (plains.frameWidth()); gpuFrameH.store (plains.frameHeight());
     ++gpuFrames;

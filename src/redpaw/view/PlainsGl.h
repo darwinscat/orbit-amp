@@ -41,8 +41,8 @@ public:
     void destroy();
 
     /** Draws the world's state: the scene at (w * scale) x (h * scale), blitted to `targetFrameBuffer`
-        over (0, 0, w, h). */
-    void render (int w, int h, float scale, juce::uint32 targetFrameBuffer);
+        over (x, y, w, h) — GL's own pixels, from its bottom-left corner. */
+    void render (int w, int h, float scale, juce::uint32 targetFrameBuffer, int x = 0, int y = 0);
 
     /** What the last frames cost on the GPU, milliseconds, a running mean; -1 until known. Timer
         queries where the driver has them, else a finished frame timed once a second. */
