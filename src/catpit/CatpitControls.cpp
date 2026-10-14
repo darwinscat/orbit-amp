@@ -1064,7 +1064,7 @@ void TunerFace::paint (juce::Graphics& g)
     }
 
     // Its state, always, in the corner under the note and on the numbers' line: on, off, or muting the amp.
-    g.setColour (! listening ? lilac.withAlpha (0.8f) : muting ? orange : home);
+    g.setColour (! listening ? violet : orange);
     g.setFont (labelFont (layout::px13));
     g.drawText (! listening ? "OFF" : muting ? "MUTE" : "ON", noteArea.withTop (noteArea.getBottom() - 24.0f),
                 juce::Justification::centredLeft, false);
