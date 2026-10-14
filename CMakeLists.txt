@@ -624,8 +624,10 @@ set(CATPITAMP_SOURCES
     src/channels/Presets.cpp
     src/channels/Set.cpp
     src/face/Cabs.cpp
+    src/face/Console.cpp
     src/face/Controls.cpp
     src/face/Midi.cpp
+    src/face/Picture.cpp
     src/face/Sheet.cpp
     src/face/Standalone.cpp
     src/catpit/CatpitArt.cpp
