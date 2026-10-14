@@ -84,9 +84,16 @@ namespace
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
-    // The devices a fresh instance opens on, and everything the packs say about starting them.
+    // A FRESH INSTANCE IS CATPITAMP'S CRUNCH CHANNEL — the first launch, a new instance in a host, and
+    // INIT alike: the X88-IR Crunch through DARK MATTER, no boost in the chain, the input and output
+    // columns in it, the delay on with nothing in its mix, and everything else where the cockpit leaves
+    // it, at its parameter's own default. The cockpit sets its chain over these defaults
+    // (catpit/CatpitEngine.cpp, setUpChain) and finds them already so.
+    //
+    // The devices a fresh instance opens on, and everything the packs say about starting them. The
+    // boost's is TS, for when the player puts a boost in.
     const auto boostDef  = blockDefaults (device::DeviceLibrary::Slot::pedal,  "TS");
-    const auto preampDef = blockDefaults (device::DeviceLibrary::Slot::preamp, "IR-X Ch2");
+    const auto preampDef = blockDefaults (device::DeviceLibrary::Slot::preamp, "X88-IR Crunch");
     using Bool   = juce::AudioParameterBool;
     using Choice = juce::AudioParameterChoice;
     using Float  = juce::AudioParameterFloat;
@@ -94,24 +101,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    // IN THE RIG, one per link — see the pair's note in Parameters.h. All true out of the box:
-    // a fresh instance is the whole chain, and taking a link out of the rig is a thing the player
-    // does deliberately in Setup, never a thing they find already done.
-    // IN and OUT are OUT of the rig out of the box. The volumes that matter are the captured
-    // blocks' own IN trims — how hard each model is fed — and those live on the blocks. A global
-    // input and output fader is a thing a player reaches for when a rig needs fixing, not a thing
-    // a rig needs to start with; the two columns are one click away in Setup for whoever wants
-    // them, and their absence gives their width back to the panel.
-    layout.add (std::make_unique<Bool> (juce::ParameterID { inPresent,     1 }, "Input In Rig",    false),
+    // IN THE RIG, one per link — see the pair's note in Parameters.h. All true out of the box but the
+    // boost: a fresh instance is the cockpit's Crunch, which has none, and putting one in is a thing
+    // the player does in Setup. IN and OUT are in, at unity — the cockpit's INPUT and OUTPUT faders.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { inPresent,     1 }, "Input In Rig",    true),
                 std::make_unique<Bool> (juce::ParameterID { tunerPresent,  1 }, "Tuner In Rig",    true),
                 std::make_unique<Bool> (juce::ParameterID { gatePresent,   1 }, "Gate In Rig",     true),
-                std::make_unique<Bool> (juce::ParameterID { boostPresent,  1 }, "Boost In Rig",    true),
+                std::make_unique<Bool> (juce::ParameterID { boostPresent,  1 }, "Boost In Rig",    false),
                 std::make_unique<Bool> (juce::ParameterID { preampPresent, 1 }, "Preamp In Rig",   true),
                 std::make_unique<Bool> (juce::ParameterID { delayPresent,  1 }, "Delay In Rig",    true),
                 std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Rig",   true),
                 std::make_unique<Bool> (juce::ParameterID { cabPresent,    1 }, "Cabinet In Rig",  true),
                 std::make_unique<Bool> (juce::ParameterID { limitPresent,  1 }, "Limiter In Rig",  true),
-                std::make_unique<Bool> (juce::ParameterID { outPresent,    1 }, "Output In Rig",   false));
+                std::make_unique<Bool> (juce::ParameterID { outPresent,    1 }, "Output In Rig",   true));
 
     // STANDBY/ON for the three links that never had one: the two volume columns and the tuner.
     // ON out of the box — a column that does not apply its volume is a column nobody asked for.
@@ -312,11 +314,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Choice> (juce::ParameterID { cabIr, 1 }, "Cabinet IR",
                                           cabIrNames, cabIrDefault));
 
-    // The delay, off by default — an echo is a choice, not a starting point. Sync ships ON at a
-    // quarter note: the free milliseconds are the specialist's mode, the division is the player's.
-    // The BPM field is the standalone's conductor; in a host the session's tempo conducts, unless
-    // the player asks the delay to keep its own.
-    layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", false),
+    // The delay, ON with nothing in its mix, as the cockpit's Crunch opens: the echo is there to be
+    // turned up, and still not a starting point. Sync ships ON at a quarter note: the free
+    // milliseconds are the specialist's mode, the division is the player's. The BPM field is the
+    // standalone's conductor; in a host the session's tempo conducts, unless the player asks the
+    // delay to keep its own.
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", true),
                 std::make_unique<Bool>   (juce::ParameterID { delaySync, 1 }, "Delay Sync", true),
                 std::make_unique<Bool>   (juce::ParameterID { delayHostTempo, 1 }, "Delay Follows Host", true),
                 std::make_unique<Choice> (juce::ParameterID { delayDiv, 1 }, "Delay Division",
@@ -338,7 +341,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                           delayOffsetMaxMs, 0.1f),
                                           0.0f),
                 std::make_unique<Float>  (juce::ParameterID { delayMix, 1 }, "Delay Mix",
-                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 25.0f));
+                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
 
     // PLATE at thirty: the shipping room. DECAY breathes around unity, PREDELAY ships at zero,
     // and the tail's HPF waits switched off at a bass-cleaning corner.

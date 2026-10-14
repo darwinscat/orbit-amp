@@ -2309,6 +2309,31 @@ int main()
     // the most likely answer to "it does not react", and if it ever changes this says so.
     report ("the boost ships switched OFF",
             amp.apvts.getRawParameterValue (orbitamp::params::boostOn)->load() < 0.5f);
+    report ("...and out of the rig, as the cockpit's Crunch has it",
+            amp.apvts.getRawParameterValue (orbitamp::params::boostPresent)->load() < 0.5f);
+
+    // Out of the rig, a boost switched on is still no boost at all: everything below measures it,
+    // so it is put in first.
+    set (amp, orbitamp::params::boostPresent, 1.0f);
+
+    // ...and the preamp it opens on is the cockpit's Crunch, found by its name wherever the list puts
+    // it. The parameter's default is a place in that list, so it is the place that is checked.
+    {
+        const auto& packs = amp.preamp.packs;
+        int crunch = -1;
+        for (int i = 0; i < packs.size(); ++i)
+            if (packs.getReference (i).displayName() == "X88-IR Crunch")
+                crunch = i;
+
+        const auto* device = amp.apvts.getParameter (orbitamp::params::preampDevice);
+        const int opens = juce::roundToInt (device->convertFrom0to1 (device->getDefaultValue()));
+
+        if (crunch >= 0)
+            report ("the preamp ships on the X88-IR Crunch", opens == crunch,
+                    juce::isPositiveAndBelow (opens, packs.size()) ? packs.getReference (opens).displayName() : juce::String (opens));
+        else
+            std::printf ("no X88-IR Crunch installed — the preamp's starting device is not checked\n");
+    }
 
     {
         set (amp, orbitamp::params::boostOn, 0.0f);
@@ -2494,6 +2519,7 @@ int main()
             set (solo, orbitamp::params::boostDevice, 0.0f);
             set (solo, orbitamp::params::reverbOn, 0.0f);
             set (solo, orbitamp::params::preampOn, 0.0f);
+            set (solo, orbitamp::params::boostPresent, 1.0f);   // a fresh instance has none in the rig
             set (solo, orbitamp::params::boostOn, 1.0f);
 
             solo.boost.packs.set (0, bare);
@@ -2924,6 +2950,7 @@ int main()
             auto& hi = *hiOwned;
             hi.inlineLoads = true;
             hi.prepareToPlay (96000.0, blockSize);
+            set (hi, orbitamp::params::boostPresent, 1.0f);   // two blocks to measure; a fresh instance has one in the rig
 
             juce::AudioBuffer<float> buf (2, blockSize);
             juce::MidiBuffer midi;
