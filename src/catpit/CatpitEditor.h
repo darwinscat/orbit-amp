@@ -155,6 +155,12 @@ private:
     juce::OpenGLContext gl;
     std::unique_ptr<GlSky> glSky;
     bool gpuBroken = false;      // the sky's shader would not build here
+   #if JUCE_LINUX || JUCE_BSD
+    // On Linux JUCE's GL thread, told to repaint continuously, renders flat out: nothing paces it but the
+    // buffer swap, and through XWayland that does not always hold — a core went on frames nobody saw.
+    // The frames are asked for here instead, one per refresh of the screen.
+    juce::VBlankAttachment glPulse { this, [this] { if (glSky != nullptr) gl.triggerRepaint(); } };
+   #endif
     void chooseStars (Stars);
     void applySky();
     void placeSky();

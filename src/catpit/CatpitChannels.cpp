@@ -144,6 +144,15 @@ juce::String Channels::cabinetName (const juce::File& file)
     return cabinetStem (file).replaceCharacters ("-_", "  ").trim();
 }
 
+int Channels::defaultCabinet() const
+{
+    // Only among the build's own: a player's file of the same name is the player's, not the default.
+    for (int i = 0; i < juce::jmin (factory, irs.size()); ++i)
+        if (cabinetStem (irs.getReference (i)).equalsIgnoreCase (defaultCabinetStem))
+            return i;
+    return irs.isEmpty() ? -1 : 0;
+}
+
 juce::String Channels::cabinetPlaying() const
 {
     // A cabinet of ours plays as "the player's own IR": the state carries its key and its name.

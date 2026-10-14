@@ -730,7 +730,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // Whether the cabinet is in the sound at all is on CAB's plate.
     follow (params::cabOn, [this] (float) { showCab(); });
 
-    // The tuner's two switches are read here and thrown from its menu (showTunerMenu).
+    // The tuner's two switches are read here and thrown from its menu (showTunerMenu); on and off, also
+    // by a click on its screen (mouseDown).
     follow (params::tunerOn,   [this] (float) { showTunerState(); });
     follow (params::tunerMute, [this] (float) { showTunerState(); });
     showTunerState();
@@ -1537,7 +1538,11 @@ void CatpitEditor::applySky()
         glSky->setThrottle ((float) lever.getDetent() / (float) (Lever::numDetents - 1));
         gl.setRenderer (glSky.get());
         gl.setComponentPaintingEnabled (true);
+       #if JUCE_LINUX || JUCE_BSD
+        gl.setContinuousRepainting (false);     // glPulse asks for each frame
+       #else
         gl.setContinuousRepainting (true);
+       #endif
 
         // JUCE keeps the textures it makes of images in a cache whose limit — 8 * 1024 * 1024, and
         // called bytes — it compares with PIXEL counts. The cockpit's own layer is the whole window at
@@ -1578,12 +1583,21 @@ void CatpitEditor::showInWindow (Monitor::View view)
 
 void CatpitEditor::mouseDown (const juce::MouseEvent& e)
 {
+    const auto at = e.getEventRelativeTo (&stage).getPosition();
+
+    // The tuner's screen is its switch: a click turns it on or off; the right click has the rest.
     if (! e.mods.isPopupMenu())
+    {
+        if (e.originalComponent == &stage && tuner.getBounds().contains (at))
+        {
+            endTapping();
+            setParam (params::tunerOn, getParam (params::tunerOn) > 0.5f ? 0.0f : 1.0f);
+        }
         return;
+    }
 
     // CAB's name is a reading and takes no clicks of its own: a right click on it is one on CAB. So
     // with a column's meter: it is the same column as the lever beside it.
-    const auto at = e.getEventRelativeTo (&stage).getPosition();
     if (cabName.getBounds().contains (at))
         showCabs();
     else if (inMeter.getBounds().contains (at))

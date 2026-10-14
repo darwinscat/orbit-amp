@@ -1063,14 +1063,11 @@ void TunerFace::paint (juce::Graphics& g)
         g.drawText ("A " + juce::String (a4), noteArea.withHeight (20.0f), juce::Justification::centredLeft, false);
     }
 
-    // Its state, in the corner under the note and on the numbers' line: off, or muting the amp.
-    if (! listening || muting)
-    {
-        g.setColour (listening ? orange : lilac.withAlpha (0.8f));
-        g.setFont (labelFont (layout::px13));
-        g.drawText (listening ? "MUTE" : "OFF", noteArea.withTop (noteArea.getBottom() - 24.0f),
-                    juce::Justification::centredLeft, false);
-    }
+    // Its state, always, in the corner under the note and on the numbers' line: on, off, or muting the amp.
+    g.setColour (! listening ? violet : orange);
+    g.setFont (labelFont (layout::px13));
+    g.drawText (! listening ? "OFF" : muting ? "MUTE" : "ON", noteArea.withTop (noteArea.getBottom() - 24.0f),
+                juce::Justification::centredLeft, false);
     if (live)
     {
         const auto name = juce::String (core::PitchTracker::noteName (note.midi));

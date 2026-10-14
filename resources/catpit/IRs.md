@@ -3,10 +3,10 @@
 What is in `IRs/`, and where it came from. The folder is built into CatpitAmp's binary whole; this note
 stays in the tree.
 
-## `01` … `12` — the Orange PPC212V
+## `02` … `12` — the Orange PPC212V
 
-One cabinet, shot twelve times in one OrbitCapture session, the SM57 moved between the takes — and
-four of the twelve since taken again from a second shoot (below).
+One cabinet, shot twelve times in one OrbitCapture session, the SM57 moved between the takes. Ten
+of the twelve places are in the set, three of them since taken again from a second shoot (below).
 
 - session: `212_20261012-2009` (OrbitCapture 0.1), recorded at 96 kHz
 - cabinet: Orange PPC212V (2x12, open, G12M-65 Creamback, no tweeter)
@@ -28,11 +28,9 @@ mono (`Darwin's Cat - Orange PPC212V - MIX (SM57 rNN+e906+Ai).wav`).
 
 | file | on the plate | take | SM57 |
 |---|---|---|---|
-| `01-baryon-core.wav` | BARYON CORE | second shoot, `11` | Cap Edge r40 |
 | `02-dark-matter.wav` | DARK MATTER | take02 | Cap Edge r15 |
 | `03-ion-cavity.wav` | ION CAVITY | take03 | Cap Edge r20 |
 | `04-event-horizon.wav` | EVENT HORIZON | take04 | Cap Edge r25 |
-| `05-gravity-well.wav` | GRAVITY WELL | take05 | Cap Edge r30 |
 | `06-coronal-flare.wav` | CORONAL FLARE | take06 | Cap Edge r35 |
 | `07-brown-dwarf.wav` | BROWN DWARF | take07 | Cap Edge r40 |
 | `08-accretion-gap.wav` | ACCRETION GAP | second shoot, `333` | Cap Edge r25 |
@@ -44,21 +42,21 @@ mono (`Darwin's Cat - Orange PPC212V - MIX (SM57 rNN+e906+Ai).wav`).
 ### The second shoot
 
 The same cabinet and the same three microphones, shot again on 2026-10-13, the SM57 at four of the
-places it stood in the first session. Four of those takes stand in the set where the first
-session's take01, take08, take09 and take11 stood — under those cabinets' names, so the name no
-longer says where the SM57 was: the table above does. None of the four is the same file as the first
-session's take at that place.
+places it stood in the first session. Three of those takes stand in the set where the first
+session's take08, take09 and take11 stood — under those cabinets' names, so the name no longer says
+where the SM57 was: the table above does. None of the three is the same file as the first session's
+take at that place. The fourth, `11` (SM57 r40), played as BARYON CORE in take01's place, and has
+left the set.
 
 | file | from |
 |---|---|
-| `01-baryon-core.wav` | `IR-OUT/11/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r40+e906+Ai).wav` |
 | `08-accretion-gap.wav` | `IR-OUT/333/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r25+e906+Ai).wav` |
 | `09-dust-cloud.wav` | `IR-OUT/444/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r55+e906+Ai).wav` |
 | `11-red-giant.wav` | `IR-OUT/22/48kHz/4096/Darwin's Cat - Orange PPC212V - MIX (SM57 r20+e906+Ai).wav` |
 
 ### The first session's report
 
-All twelve takes as they were shot; take01, take08, take09 and take11 are no longer in the set.
+All twelve takes as they were shot; take01, take05, take08, take09 and take11 are no longer in the set.
 
 | take | time | mic | location | position | dist | axis | in | peak dBFS | SNR | delay |
 |---|---|---|---|---|---|---|---|---|---|---|
