@@ -446,6 +446,17 @@ const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
             { BinaryData::_19pestopaladin_wav,        BinaryData::_19pestopaladin_wavSize },
             { BinaryData::_20donspinacio_wav,         BinaryData::_20donspinacio_wavSize },
             { BinaryData::_21killdill_wav,            BinaryData::_21killdill_wavSize },
+
+            { BinaryData::_02darkmatter_wav,          BinaryData::_02darkmatter_wavSize },
+            { BinaryData::_03ioncavity_wav,           BinaryData::_03ioncavity_wavSize },
+            { BinaryData::_04eventhorizon_wav,        BinaryData::_04eventhorizon_wavSize },
+            { BinaryData::_06coronalflare_wav,        BinaryData::_06coronalflare_wavSize },
+            { BinaryData::_07browndwarf_wav,          BinaryData::_07browndwarf_wavSize },
+            { BinaryData::_08accretiongap_wav,        BinaryData::_08accretiongap_wavSize },
+            { BinaryData::_09dustcloud_wav,           BinaryData::_09dustcloud_wavSize },
+            { BinaryData::_10blueshift_wav,           BinaryData::_10blueshift_wavSize },
+            { BinaryData::_11redgiant_wav,            BinaryData::_11redgiant_wavSize },
+            { BinaryData::_12pulsarbeam_wav,          BinaryData::_12pulsarbeam_wavSize },
         };
 
         return shelf[(size_t) juce::jlimit (0, (int) std::size (shelf) - 1, index)];

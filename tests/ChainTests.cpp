@@ -18,6 +18,8 @@
 #include "PluginProcessor.h"
 #include "core/BypassWire.h"
 
+#include <BinaryData.h>
+
 #include <felitronics/core/StreamResampler.h>
 
 #include <algorithm>
@@ -1038,6 +1040,51 @@ int main()
             report ("with the wire the block's length, the blend has no comb", flatEverywhere);
         }
 
+    }
+
+    // THE FACTORY SHELF IS THREE LISTS that agree only while somebody keeps them in step: the names
+    // the parameter counts, the bytes behind each number, and the cabinets the menu shows them by.
+    // Every name stands in exactly one cabinet, and every number plays the file its name was read
+    // off — cabIrBytes holds a number past its end to the last entry, so a name added without its
+    // file would play another cabinet's IR without a word.
+    {
+        const int names = orbitamp::params::cabIrNames.size();
+
+        std::vector<int> shown ((size_t) names, 0);
+        int astray = 0;
+        for (const auto& shelf : orbitamp::params::cabShelves)
+            for (int i = shelf.first; i < shelf.first + shelf.count; ++i)
+                if (i >= 0 && i < names)
+                    ++shown[(size_t) i];
+                else
+                    ++astray;
+
+        const auto once = std::count (shown.begin(), shown.end(), 1);
+        report ("cabinet: every shelf IR stands in one cabinet, once", astray == 0 && once == names,
+                juce::String (once) + " of " + juce::String (names) + ", " + juce::String (astray) + " past the list");
+
+        // The name a file gives, the way the shelf was named: "08-big-bubba.wav" is BIG BUBBA.
+        const auto nameOfBytes = [] (const char* data)
+        {
+            for (int r = 0; r < BinaryData::namedResourceListSize; ++r)
+            {
+                int size = 0;
+                if (BinaryData::getNamedResource (BinaryData::namedResourceList[r], size) == data)
+                    return juce::String (BinaryData::originalFilenames[r])
+                               .upToLastOccurrenceOf (".", false, false)
+                               .trimCharactersAtStart ("0123456789-")
+                               .replaceCharacter ('-', ' ')
+                               .toUpperCase();
+            }
+            return juce::String();
+        };
+
+        juce::StringArray wrong;
+        for (int i = 0; i < names; ++i)
+            if (nameOfBytes (orbitamp::AmpProcessor::cabIrBytes (i).data) != orbitamp::params::cabIrNames[i])
+                wrong.add (orbitamp::params::cabIrNames[i]);
+
+        report ("...and every one plays the file it is named after", wrong.isEmpty(), wrong.joinIntoString (", "));
     }
 
     // A CABINET IR OF THE PLAYER'S OWN travels with the state, whole. Picked from a file, saved with

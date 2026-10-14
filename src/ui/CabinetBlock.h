@@ -48,8 +48,9 @@ private:
         milliseconds across the swap. The timer never asks: what it finds is a recall. */
     void refreshIr (bool force = false, bool keepTrimWord = false);
 
-    /** The IR list: flat when the library holds none of the player's own; otherwise the shelf
-        folds into a FACTORY submenu and the library follows as its folder tree. */
+    /** The IR list: the shelf as one submenu per cabinet, each opening on a line that says what
+        its IRs are; below them, when the library holds any of the player's own, the library as its
+        folder tree. */
     void showIrMenu();
 
     juce::String shownIr;   // CabChoice::identity + "|" + name of what the face last showed

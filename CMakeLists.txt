@@ -482,6 +482,20 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/19-pesto-paladin.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/20-don-spinacio.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav"
+
+        # ...and the Orange PPC212V's ten, the cabinets CatpitAmp plays, referenced in the cockpit's
+        # own folder rather than copied: one copy in the tree. resources/catpit/IRs.md says what they
+        # are and how they were shot.
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/02-dark-matter.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/03-ion-cavity.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/04-event-horizon.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/06-coronal-flare.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/07-brown-dwarf.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/08-accretion-gap.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/09-dust-cloud.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/10-blue-shift.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/11-red-giant.wav"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/IRs/12-pulsar-beam.wav"
 )
 
 # THE PRODUCT'S version, not the plugin wrapper's. `JucePlugin_VersionString` exists only inside a
