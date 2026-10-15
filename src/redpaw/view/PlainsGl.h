@@ -55,6 +55,9 @@ public:
     int frameWidth() const noexcept  { return fbW; }
     int frameHeight() const noexcept { return fbH; }
 
+    /** The scene drawn this many times a frame, for measuring: the timer then reads that many scenes. */
+    void setRepeats (int times) noexcept { repeats = juce::jlimit (1, 16, times); }
+
 private:
     PlainsWorld& world;
 
@@ -81,6 +84,7 @@ private:
 
     juce::uint32 fbo = 0, fboColour = 0, fboDepth = 0;
     int fbW = 0, fbH = 0;
+    int repeats = 1;
 
     // The frame timer.
     bool queriesWork = false;

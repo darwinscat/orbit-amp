@@ -610,7 +610,8 @@ void PlainsGl::render (int w, int h, float scale, juce::uint32 target, int x, in
         probeStart = juce::Time::getMillisecondCounterHiRes();
     }
 
-    drawScene (rw, rh);
+    for (int i = 0; i < repeats; ++i)
+        drawScene (rw, rh);
 
     if (queriesWork)
         glEndQuery (GL_TIME_ELAPSED);

@@ -48,6 +48,7 @@ public:
     bool readFrame (std::vector<uint8_t>& rgba, int& w, int& h) override { return gl.readFrame (rgba, w, h); }
     int frameWidth() const noexcept override                     { return gl.frameWidth(); }
     int frameHeight() const noexcept override                    { return gl.frameHeight(); }
+    void setRepeats (int times) override                         { gl.setRepeats (times); }
 
 private:
     PlainsWorld world;
