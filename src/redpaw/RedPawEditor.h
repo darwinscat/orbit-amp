@@ -84,6 +84,7 @@ private:
     // THE NAV SCREEN'S PICTURE of the amp at work (face/Monitor.h), the machine's choice; a right click
     // on the screen offers the five.
     face::Monitor screen;
+    ParkSign parkSign;              // parked: the warning, large, in the screen's middle
     GlassFilm glassFilm;            // the screen's glass, over all of it
     void showScreenMenu();
     void chooseScreen (face::Monitor::View);

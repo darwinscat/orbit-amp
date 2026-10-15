@@ -182,6 +182,41 @@ void GearLever::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelD
 }
 
 //==============================================================================
+namespace
+{
+    /** The warning's triangle, its corners rounded, filling `box` — as wide as it is tall and a little more. */
+    juce::Path warningShape (juce::Rectangle<float> box)
+    {
+        juce::Path sign;
+        sign.addTriangle (box.getCentreX(), box.getY(), box.getRight(), box.getBottom(), box.getX(), box.getBottom());
+        return sign.createPathWithRoundedCorners (2.5f * box.getHeight() / 20.0f);
+    }
+
+    /** The warning: the red triangle, an exclamation mark cut dark into it. */
+    void drawWarning (juce::Graphics& g, juce::Rectangle<float> box)
+    {
+        const float h = box.getHeight(), k = h / 20.0f;
+        g.setColour (juce::Colour (0xffe8463a));
+        g.fillPath (warningShape (box));
+        g.setColour (juce::Colour (0xff160606));
+        g.fillRoundedRectangle (juce::Rectangle<float> (2.6f * k, 8.0f * k).withCentre ({ box.getCentreX(), box.getY() + h * 0.52f }), 1.3f * k);
+        g.fillEllipse (juce::Rectangle<float> (2.8f * k, 2.8f * k).withCentre ({ box.getCentreX(), box.getBottom() - 3.6f * k }));
+    }
+}
+
+void ParkSign::paint (juce::Graphics& g)
+{
+    const auto area = getLocalBounds().toFloat();
+    g.setColour (juce::Colour (0xff050304).withAlpha (0.72f));
+    g.fillRect (area);
+
+    const float h = juce::jmin (area.getHeight() - 24.0f, 96.0f);
+    const auto box = juce::Rectangle<float> (h * 1.15f, h).withCentre (area.getCentre());
+    juce::DropShadow (juce::Colour (0xffe8463a).withAlpha (0.55f), 16, {}).drawForPath (g, warningShape (box));
+    drawWarning (g, box);
+}
+
+//==============================================================================
 NavHeader::NavHeader()
 {
     setInterceptsMouseClicks (false, false);
@@ -230,15 +265,7 @@ void NavHeader::paint (juce::Graphics& g)
     if (parked)
     {
         const float h = 20.0f, w = 23.0f;
-        const auto box = area.removeFromLeft (w).withSizeKeepingCentre (w, h);
-        juce::Path sign;
-        sign.addTriangle (box.getCentreX(), box.getY(), box.getRight(), box.getBottom(), box.getX(), box.getBottom());
-        sign = sign.createPathWithRoundedCorners (2.5f);
-        g.setColour (juce::Colour (0xffe8463a));
-        g.fillPath (sign);
-        g.setColour (juce::Colour (0xff160606));
-        g.fillRoundedRectangle (juce::Rectangle<float> (2.6f, 8.0f).withCentre ({ box.getCentreX(), box.getY() + h * 0.52f }), 1.3f);
-        g.fillEllipse (juce::Rectangle<float> (2.8f, 2.8f).withCentre ({ box.getCentreX(), box.getBottom() - 3.6f }));
+        drawWarning (g, area.removeFromLeft (w).withSizeKeepingCentre (w, h));
         area.removeFromLeft (8.0f);
     }
 

@@ -328,6 +328,11 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
                                                (int) prefs::store().get (screenKey, (int) Monitor::View::spectrum)));
 
+    // Parked, the warning stands large in the middle of the screen, over the picture dimmed.
+    addToStage (parkSign);
+    parkSign.setVisible (false);      // showSelector says when
+    parkSign.setBounds (navPicture.toNearestInt());
+
     // ...and its glass, over the lot: a little murky, dusty, lightly scratched.
     addToStage (glassFilm);
     glassFilm.setBounds (navHeader.getUnion (tunerScreen).toNearestInt());
@@ -404,6 +409,7 @@ void RedPawEditor::showSelector (int channel)
     view.setGear (gear + 1);
     view.setTurbo (turboOn);
     view.setParked (parked);
+    parkSign.setVisible (parked);
 }
 
 /** 1 2 3: the lever goes to that gear, as if a hand had put it there; 0 or P to PARK; T throws TURBO.

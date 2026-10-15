@@ -85,6 +85,16 @@ private:
 };
 
 //==============================================================================
+/** PARKED, IN THE MIDDLE OF THE NAV SCREEN: the warning triangle the top line carries, large, over the
+    picture dimmed — the amp is out of the sound. Shown only while parked; it never takes a click. */
+class ParkSign final : public juce::Component
+{
+public:
+    ParkSign() { setInterceptsMouseClicks (false, false); }
+    void paint (juce::Graphics&) override;
+};
+
+//==============================================================================
 /** THE NAV SCREEN'S GLASS: a little murky, fine dust on it, a few light scratches — laid over everything
     the screen shows, and faint enough that every number and line under it reads. It never changes: it is
     made once, from a fixed seed, at the screen's own pixel size, and every paint is a copy of it. It
