@@ -429,18 +429,78 @@ endif()
 # ----------------------------------------------------------------------------
 set(ORBITAMP_SET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/set")
 
+# A PACK IS KEPT AS A FOLDER and carried as a zip. In the tree each pack is a folder,
+# resources/set/Devices/<name>.orbitrig — its manifest, its models and its picture side by side, so a
+# change to a pack is a change to its rig.json that git can show, not a new blob. Every build zips each
+# folder into <name>.orbitrig.zip in the build tree — the file the products carry and lay out, under
+# the name it always had — and that is what the set data below takes in. .gitattributes keeps git's
+# hands off the folders' line endings: what is zipped is the files byte for byte, on every system.
+#
+# The zip is made by a tool of our own (tools/PackZip.cpp, JUCE's zip writer), not by `cmake -E tar`:
+# CMake's zip writer puts into every entry the access and change times the file has on disk, its
+# owner, its permissions and a date in the machine's own time zone, whatever --mtime says — so the
+# same folder made other bytes on another checkout, another day or another machine, and a product
+# built later would lay its copy of an unchanged pack over the one another product had laid out. Ours
+# puts in the files' names and bytes and nothing else, in the order of their names, so the same folder
+# makes the same zip on every build and every system.
+#
+# Each folder's files are listed by a glob, CONFIGURE_DEPENDS, so a file added to a pack, or a pack
+# added to Devices, is zipped from the next build on; the list is also written out, and rewritten only
+# when it changes, so a file taken out of a pack makes the zip again too (as JUCE's binary data does).
+# A name with a leading dot is the Finder's (.DS_Store), not the pack's. Every zip is made by one
+# target, OrbitAmpSetPacks, which each product's set data waits for: a rule that several targets ran
+# would race itself in a parallel build.
+juce_add_console_app(orbitamp_pack_zip PRODUCT_NAME "OrbitAmpPackZip")
+target_sources(orbitamp_pack_zip PRIVATE tools/PackZip.cpp)
+target_compile_definitions(orbitamp_pack_zip PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_pack_zip PRIVATE
+    juce::juce_core
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+set(ORBITAMP_SET_ZIPPED "${CMAKE_CURRENT_BINARY_DIR}/set/Devices")
+file(GLOB ORBITAMP_SET_FOLDERS LIST_DIRECTORIES true CONFIGURE_DEPENDS "${ORBITAMP_SET_DIR}/Devices/*.orbitrig")
+set(ORBITAMP_SET_PACKS "")
+foreach(folder IN LISTS ORBITAMP_SET_FOLDERS)
+    if(NOT IS_DIRECTORY "${folder}")
+        continue()
+    endif()
+    get_filename_component(pack "${folder}" NAME)
+    file(GLOB files LIST_DIRECTORIES false CONFIGURE_DEPENDS "${folder}/*")
+    list(FILTER files EXCLUDE REGEX "/\\.[^/]*$")
+    list(SORT files)
+
+    set(listed "${ORBITAMP_SET_ZIPPED}/${pack}.files")
+    list(JOIN files "\n" lines)
+    set(before "")
+    if(EXISTS "${listed}")
+        file(READ "${listed}" before)
+    endif()
+    if(NOT before STREQUAL lines)
+        file(WRITE "${listed}" "${lines}")
+    endif()
+
+    add_custom_command(OUTPUT "${ORBITAMP_SET_ZIPPED}/${pack}.zip"
+        COMMAND orbitamp_pack_zip "${listed}" "${ORBITAMP_SET_ZIPPED}/${pack}.zip"
+        DEPENDS orbitamp_pack_zip "${listed}" ${files}
+        COMMENT "Zipping ${pack}"
+        VERBATIM)
+    list(APPEND ORBITAMP_SET_PACKS "${ORBITAMP_SET_ZIPPED}/${pack}.zip")
+endforeach()
+add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
+
 # Factory devices: OrbitAmp's own set, INSIDE THE BINARY like the cockpit's — every format, every
 # system — and laid out in the family's Factory folder when it starts (src/device/FactorySet.h says
 # why a bundle will not do). OrbitAmp is the player of the whole library: it carries EVERY pack in
-# resources/set/Devices, each under its own name. CONFIGURE_DEPENDS: a pack added there is carried
-# from the next build on, with nobody to remember to list it.
-file(GLOB ORBITAMP_SET_PACKS LIST_DIRECTORIES false CONFIGURE_DEPENDS "${ORBITAMP_SET_DIR}/Devices/*.orbitrig.zip")
+# resources/set/Devices, each under its own name — every folder there, zipped. A pack added there is
+# carried from the next build on, with nobody to remember to list it.
 list(LENGTH ORBITAMP_SET_PACKS ORBITAMP_SET_COUNT)
 message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the binary")
 juce_add_binary_data(OrbitAmpSetData
     NAMESPACE   OrbitAmpSetData
     HEADER_NAME OrbitAmpSetData.h
     SOURCES     ${ORBITAMP_SET_PACKS})
+add_dependencies(OrbitAmpSetData OrbitAmpSetPacks)
 
 # ----------------------------------------------------------------------------
 # Embedded assets. The display FACE is not among them: appkit carries Michroma itself, whole, as
@@ -692,10 +752,10 @@ endforeach()
 # cabinets CAB steps through, in the order of their names. Without a set, the cockpit would play only
 # what the player puts in its own Devices and IRs folders.
 set(CATPITAMP_SET
-    "${ORBITAMP_SET_DIR}/Devices/X88-IR Normal.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/Devices/X88-IR Altered.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/Devices/X88-IR Crunch.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/Devices/X88-IR Overdrive.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/X88-IR Normal.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/X88-IR Altered.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/X88-IR Crunch.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/X88-IR Overdrive.orbitrig.zip"
     "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
     "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
     "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
@@ -716,6 +776,7 @@ if(CATPITAMP_SET)
         NAMESPACE   ProductSetData
         HEADER_NAME ProductSetData.h
         SOURCES     ${CATPITAMP_SET})
+    add_dependencies(CatpitAmpSetData OrbitAmpSetPacks)   # the packs are zipped by the build (THE SET)
     set_target_properties(CatpitAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
     target_link_libraries(CatpitAmpSet INTERFACE CatpitAmpSetData)
     target_compile_definitions(CatpitAmpSet INTERFACE PRODUCT_SET_EMBEDDED=1)
@@ -930,12 +991,12 @@ endforeach()
 # out of the tree's set, the Victory V4's six packs its channels play — each found by the capture it
 # holds — and, until the rover has cabinets of its own, the ten the cockpit carries.
 set(REDPAWAMP_SET
-    "${ORBITAMP_SET_DIR}/Devices/V4 Copper.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/Devices/V4 Copper TB.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/Devices/V4 Sheriff Ch1.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/Devices/V4 Sheriff Ch2.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/Devices/V4 Kraken Ch1.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/Devices/V4 Kraken Ch2.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip"
     "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
     "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
     "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
@@ -952,6 +1013,7 @@ juce_add_binary_data(RedPawAmpSetData
     NAMESPACE   ProductSetData
     HEADER_NAME ProductSetData.h
     SOURCES     ${REDPAWAMP_SET})
+add_dependencies(RedPawAmpSetData OrbitAmpSetPacks)   # the packs are zipped by the build (THE SET)
 set_target_properties(RedPawAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
 target_link_libraries(RedPawAmpSet INTERFACE RedPawAmpSetData)
 target_compile_definitions(RedPawAmpSet INTERFACE PRODUCT_SET_EMBEDDED=1)
