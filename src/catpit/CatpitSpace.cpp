@@ -19,6 +19,16 @@ namespace
     constexpr std::array<float, 4> detentSpeed { 0.05f, 0.16f, 0.42f, 1.6f };
     constexpr int numStars = 700;
 
+    // A turn's sweep at full lock, in the stars' own measure a second — the windshield's half-width
+    // at a depth of 1: a slide at the cruise, nearly four times that at the edge of light. A star is
+    // swept across the glass as much faster as it is nearer. The clouds are swept by this share of it,
+    // a near one, larger, faster than a far one.
+    constexpr float slideCruise = 0.06f, slidePerSpeed = 0.1f;
+    constexpr float cloudSlide = 0.8f;
+    // The stars are spread this far either side; one swept past it comes back in on the other side,
+    // well out of sight at any depth.
+    constexpr float starsReach = 1.6f;
+
     //--------------------------------------------------------------------------
     // A value-noise field, smooth and cheap — enough to paint a cloud once, at startup.
     struct Noise
@@ -111,7 +121,7 @@ Space::Space()
 void Space::respawn (Star& s, bool anywhere)
 {
     // Spread wide and low: the windshield is a letterbox, and stars outside it are wasted.
-    s.x = (rng.nextFloat() * 2.0f - 1.0f) * 1.6f;
+    s.x = (rng.nextFloat() * 2.0f - 1.0f) * starsReach;
     s.y = (rng.nextFloat() * 2.0f - 1.0f) * 0.45f;
     s.z = anywhere ? 0.05f + rng.nextFloat() * 0.95f : 1.0f;
     s.tint = rng.nextFloat();
@@ -136,9 +146,16 @@ void Space::tick()
     const float tau = want > speed ? 0.9f : 0.5f;
     speed += (want - speed) * (1.0f - std::exp (-dt / tau));
 
+    // ...and the helm's: the turn sweeps the stars and the clouds the other way.
+    helm.step (steer, dt);
+    slide = helm.turn * (slideCruise + slidePerSpeed * speed);
+
     for (auto& s : stars)
     {
         s.z -= speed * dt;
+        s.x -= slide * dt;
+        if (s.x < -starsReach)     s.x += 2.0f * starsReach;
+        else if (s.x > starsReach) s.x -= 2.0f * starsReach;
         if (s.z <= 0.03f)
             respawn (s, false);
     }
@@ -146,9 +163,11 @@ void Space::tick()
     for (auto& c : clouds)
     {
         c.phase += dt * (0.025f + speed * 0.30f);
+        c.sweep -= slide * cloudSlide * (0.7f + c.phase * c.phase * 3.2f) * dt;    // as near as it is large: see paint
         if (c.phase >= 1.0f)
         {
             c.phase -= 1.0f;
+            c.sweep = 0.0f;
             c.image = (c.image + 2) % (int) nebulae.size();
             c.angle = rng.nextFloat() * juce::MathConstants<float>::twoPi;
             c.drift = { rng.nextFloat() - 0.5f, (rng.nextFloat() - 0.5f) * 0.4f };
@@ -162,12 +181,16 @@ void Space::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat();
     const auto w = window.isEmpty() ? b : window;      // what the picture is composed for; `b` is what is painted
-    const auto c = w.getCentre();
+    const auto c = w.getCentre().translated (helm.focus() * w.getHeight(), 0.0f);   // where the stars stream out of
     const float f = w.getWidth() * 0.5f;
     const float warp = juce::jlimit (0.0f, 1.0f, (speed - 0.5f) / 1.1f);
 
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff070616), c, juce::Colour (0xff010104), w.getTopLeft(), true));
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff070616), c, juce::Colour (0xff010104), c + (w.getTopLeft() - w.getCentre()), true));
     g.fillAll();
+
+    // The bank: everything from here on is the sky turned against it, about where the ship is headed.
+    const auto banked = juce::AffineTransform::rotation (-helm.roll(), c.x, c.y);
+    g.addTransform (banked);
 
     // The clouds: each swells from far to past the windshield while it brightens and then fades, two
     // half a cycle apart, so one is always arriving as the other leaves.
@@ -178,7 +201,7 @@ void Space::paint (juce::Graphics& g)
         const float scale = 0.7f + cl.phase * cl.phase * 3.2f;
         const float alpha = std::sin (cl.phase * juce::MathConstants<float>::pi) * 0.8f;
         const float k = w.getWidth() / (float) img.getWidth() * scale;
-        const auto at = c + cl.drift * w.getWidth() * 0.35f * cl.phase;
+        const auto at = c + cl.drift * w.getWidth() * 0.35f * cl.phase + juce::Point<float> (cl.sweep * f, 0.0f);
         g.setOpacity (alpha);
         g.drawImageTransformed (img, juce::AffineTransform::translation (-(float) img.getWidth() * 0.5f, -(float) img.getHeight() * 0.5f)
                                          .rotated (cl.angle * 0.15f)
@@ -196,16 +219,16 @@ void Space::paint (juce::Graphics& g)
     }
 
     // The stars: each a streak from where it was a moment ago to where it is, so a slow ship shows
-    // points and a fast one shows lines raking out from the centre.
+    // points and a fast one shows lines raking out from the centre — and, in a turn, swept sideways.
     const float streak = 0.03f + 0.10f * juce::jlimit (0.0f, 1.0f, speed / 1.6f);
     for (const auto& s : stars)
     {
         const juce::Point<float> head { c.x + s.x / s.z * f, c.y + s.y / s.z * f };
-        if (! b.expanded (4.0f).contains (head))
+        if (! b.expanded (4.0f).contains (head.transformedBy (banked)))
             continue;
 
         const float zt = s.z + speed * streak;
-        const juce::Point<float> tail { c.x + s.x / zt * f, c.y + s.y / zt * f };
+        const juce::Point<float> tail { c.x + (s.x + slide * streak) / zt * f, c.y + s.y / zt * f };
 
         const float near = 1.0f - s.z;
         const float bright = juce::jlimit (0.0f, 1.0f, near * 1.35f) * smooth (1.0f, 0.88f, s.z);

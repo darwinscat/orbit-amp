@@ -6,6 +6,7 @@
 #include "Mars1993.h"
 #include "PlainsGl.h"
 #include "PlainsWorld.h"
+#include "../../face/Steering.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_opengl/juce_opengl.h>
@@ -154,10 +155,9 @@ private:
     // The inputs, shared with the GL thread.
     std::atomic<int> gearWanted { 1 };
     std::atomic<bool> turboWanted { false }, parkedWanted { false };
-    std::atomic<float> steerOutside { 0.0f }, steerDrag { 0.0f }, steerKeys { 0.0f };
+    face::Steering steering;        // the drag, the keys, and steer() from outside, as one value
     std::atomic<float> scaleInUse { 1.0f };
     float scaleWanted = 1.0f;
-    int dragStartX = 0;
 
     // The pacing and the ladder.
     Mode wanted = Mode::gpu, running = Mode::gpu;
@@ -178,7 +178,6 @@ private:
     void stepDown (const juce::String& why);
     void drawCpuFrame (bool advance);
     void takeStill();
-    float steerTotal() const noexcept;
 
     void newOpenGLContextCreated() override;
     void renderOpenGL() override;

@@ -9,6 +9,8 @@
 
 #include <CatpitData.h>
 
+#include <utility>
+
 namespace orbitamp
 {
 
@@ -312,6 +314,14 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         engine.go (d.getIntValue());
     lever.setDetent (channels.active(), false, false);
 
+    // The helm turns whichever sky is flying.
+    steering.onChange = [this] (float s)
+    {
+        space.setSteer (s);
+        if (glSky != nullptr)
+            glSky->setSteer (s);
+    };
+
     // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
     // The trim is a parameter and a host may leave it anywhere, so anything well above nothing reads as on.
     addToStage (turbo);
@@ -402,14 +412,65 @@ void CatpitEditor::addWindowSections (juce::PopupMenu& menu)
     addChoice (menu, "Off", flying == Stars::off, [self] (face::Console& e) { self (e).chooseStars (Stars::off); });
 }
 
-/** A CLICK ON THE GLASS — where the picture is cut through to the sky, so not the overhead panel that
-    hangs into it — asks what the windshield shows: the sections the settings menu opens with. */
-bool CatpitEditor::pictureClicked (juce::Point<int> at)
+//==============================================================================
+/** THE HAND ON THE GLASS — where the picture is cut through to the sky, so not the overhead panel that
+    hangs into it. Dragged left or right it steers, a quarter of the windshield's width either way full
+    lock, and the ship straightens when the button comes up. Pressed and let go without moving, it was a
+    click, and asks what the windshield shows: the sections the settings menu opens with. Which of the
+    two it was is known only when the button comes up — the platform's few pixels of travel tell them
+    apart — so the menu waits for that. Anywhere else, the hand is the console's. */
+void CatpitEditor::mouseDown (const juce::MouseEvent& e)
 {
-    if (! onGlass (at))
-        return false;
-    showWindowMenu();
-    return true;
+    const auto onStage = e.getEventRelativeTo (&stage);
+    if (e.originalComponent == &stage && ! e.mods.isPopupMenu() && onGlass (onStage.getPosition()))
+    {
+        handOnGlass = true;
+        grabKeyboardFocus();        // ...and from here on the arrows steer as well
+        steering.press (onStage.position.x);
+        return;
+    }
+    Console::mouseDown (e);
+}
+
+void CatpitEditor::mouseDrag (const juce::MouseEvent& e)
+{
+    if (handOnGlass)
+        steering.drag (e.getEventRelativeTo (&stage).position.x, layout::windshield.getWidth());
+}
+
+void CatpitEditor::mouseUp (const juce::MouseEvent& e)
+{
+    if (! std::exchange (handOnGlass, false))
+        return;
+    steering.release();
+    if (! e.mouseWasDraggedSinceMouseDown())
+        showWindowMenu();
+}
+
+/** ← AND → steer while they are held, as the drag does — while the face itself has the keyboard, which a
+    click anywhere on it gives it back. A window open over the face (Sheet) keeps its arrows. */
+bool CatpitEditor::keyPressed (const juce::KeyPress& key)
+{
+    return (hasKeyboardFocus (false) && face::Steering::steersBy (key)) || Console::keyPressed (key);
+}
+
+bool CatpitEditor::keyStateChanged (bool)
+{
+    return hasKeyboardFocus (false) && steering.keysChanged();
+}
+
+void CatpitEditor::focusLost (FocusChangeType)
+{
+    steering.keysLost();
+}
+
+void CatpitEditor::visibilityChanged()
+{
+    if (! isVisible())
+    {
+        handOnGlass = false;
+        steering.clear();
+    }
 }
 
 void CatpitEditor::showWindowMenu()
@@ -448,6 +509,7 @@ void CatpitEditor::applySky()
     {
         glSky = std::make_unique<GlSky> (gl);
         glSky->setThrottle ((float) lever.getDetent() / (float) (Lever::numDetents - 1));
+        glSky->setSteer (steering.value());
         gl.setRenderer (glSky.get());
         gl.setComponentPaintingEnabled (true);
        #if JUCE_LINUX || JUCE_BSD

@@ -6,6 +6,7 @@
 #include "../face/Console.h"
 #include "CatpitControls.h"
 #include "../face/Monitor.h"
+#include "../face/Steering.h"
 #include "CatpitGlSky.h"
 #include "CatpitSpace.h"
 
@@ -31,12 +32,23 @@ private:
 //==============================================================================
 /** CatpitAmp's face over OrbitAmp's processor: the family's console (face/Console.h), laid out on the
     cockpit's render, with what is the cockpit's own over it — the throttle that pulls the four channels,
-    TURBO under its guard, and the sky through the windshield. */
+    TURBO under its guard, the sky through the windshield, and the helm. */
 class CatpitEditor final : public face::Console
 {
 public:
     explicit CatpitEditor (AmpProcessor&);
     ~CatpitEditor() override;
+
+    // THE HELM: a drag left or right across the glass, or ← and → held, steers the ship — the sky banks
+    // and sweeps (CatpitHelm.h) — and it straightens as soon as the hand lets go. A click on the glass
+    // that does not move asks what the windshield shows, once the button is up.
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    bool keyPressed (const juce::KeyPress&) override;
+    bool keyStateChanged (bool isKeyDown) override;
+    void focusLost (FocusChangeType) override;
+    void visibilityChanged() override;
 
 private:
     Space   space;
@@ -63,6 +75,9 @@ private:
     void showWindowMenu();          // a click on the glass: WINDOW and STARS, as the settings menu has them
     void showInWindow (Monitor::View);
 
+    face::Steering steering;        // the hand on the helm, handed to the sky that is flying
+    bool handOnGlass = false;       // the button went down on the glass: a drag steers, a click is the menu
+
     // The throttle picks the channel — its pack, and everything that channel was left with — and TURBO
     // pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
     Lever lever;
@@ -74,7 +89,6 @@ private:
     void turboChange (bool thrown) override;
     bool turboPushesCapture() const override { return true; }
     void addWindowSections (juce::PopupMenu&) override;
-    bool pictureClicked (juce::Point<int>) override;
     void stagePlaced() override { placeSky(); }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CatpitEditor)
