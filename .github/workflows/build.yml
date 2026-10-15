@@ -145,9 +145,9 @@ jobs:
           CATPIT_GATE_OWNS_HOME=1 run_gate catpit-channel "$(find build/catpitamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
           # ...and the rover's, the same two over its six channels.
           run_gate redpaw-set "$(find build/redpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
-          REDPAW_GATE_OWNS_HOME=1 run_gate redpaw-channel "$(find build/redpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
+          ROVER_GATE_OWNS_HOME=1 run_gate redpaw-channel "$(find build/redpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
           run_gate frostpaw-set "$(find build/frostpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
-          REDPAW_GATE_OWNS_HOME=1 run_gate frostpaw-channel "$(find build/frostpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
+          ROVER_GATE_OWNS_HOME=1 run_gate frostpaw-channel "$(find build/frostpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
 
       - name: Validate (pluginval, VST3)
         shell: bash

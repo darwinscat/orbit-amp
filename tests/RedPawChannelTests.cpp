@@ -288,9 +288,9 @@ int main()
     }
 
     // THE PLAYER'S OWN CABINETS — only where the gate has been told the home is its own to write in
-    // (REDPAW_GATE_OWNS_HOME): this takes files into the player's IRs folder, and on a player's machine
+    // (ROVER_GATE_OWNS_HOME): this takes files into the player's IRs folder, and on a player's machine
     // that folder is the player's.
-    if (juce::SystemStats::getEnvironmentVariable ("REDPAW_GATE_OWNS_HOME", {}).isNotEmpty())
+    if (juce::SystemStats::getEnvironmentVariable ("ROVER_GATE_OWNS_HOME", {}).isNotEmpty())
     {
         const int factory = channels.factoryCabinets();
         const int before  = channels.cabinets().size();

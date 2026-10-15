@@ -377,8 +377,8 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     glassFilm.setBounds (navHeader.getUnion (tunerScreen).toNearestInt());
 
     // A prototype's hook for looking at the windscreen in a gear, with TURBO, or parked, without a hand
-    // on anything: REDPAW_CHANNEL names a channel, 0..5, or "park".
-    if (const auto c = juce::SystemStats::getEnvironmentVariable ("REDPAW_CHANNEL", {}); c.equalsIgnoreCase ("park"))
+    // on anything: ROVER_CHANNEL names a channel, 0..5, or "park".
+    if (const auto c = juce::SystemStats::getEnvironmentVariable ("ROVER_CHANNEL", {}); c.equalsIgnoreCase ("park"))
         setParam (engine.parkId(), 1.0f);
     else if (c.isNotEmpty())
         engine.go (c.getIntValue());
