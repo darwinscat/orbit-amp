@@ -383,9 +383,14 @@ public:
     void setState (bool listening, bool muting);
     void paint (juce::Graphics&) override;
 
+    /** A STRIP: the tuner in one low line — its state, the note, and the ruler with its needle, no
+        numbers under it — for a face whose glass has other work to do. */
+    void setStrip (bool);
+
 private:
     const core::TunerEar& ear;
-    bool listening = true, muting = false;
+    bool listening = true, muting = false, strip = false;
+    void paintStrip (juce::Graphics&);
     void timerCallback() override { repaint(); }
 };
 

@@ -342,6 +342,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     for (auto* c : std::initializer_list<juce::Component*> { &inFader, &outFader, &inMeter, &outMeter, &tuner })
         stage.addAndMakeVisible (c);
     tuner.setBounds (box (places.tuner));
+    tuner.setStrip (places.tunerStrip);
     inFader.capLength = outFader.capLength = places.faderCapLength;
     inFader.setBounds (box (places.inFader));
     outFader.setBounds (box (places.outFader));
@@ -1211,7 +1212,10 @@ void Console::mouseDown (const juce::MouseEvent& e)
         if (e.originalComponent == &stage && tuner.getBounds().contains (at))
         {
             endTapping();
-            setParam (params::tunerOn, getParam (params::tunerOn) > 0.5f ? 0.0f : 1.0f);
+            if (places.tunerMenuOnClick)
+                showTunerMenu();
+            else
+                setParam (params::tunerOn, getParam (params::tunerOn) > 0.5f ? 0.0f : 1.0f);
         }
         else if (e.originalComponent == &stage)
         {
@@ -1220,8 +1224,10 @@ void Console::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // CAB's name is a reading and takes no clicks of its own: a right click on it is one on CAB. So
-    // with a column's meter: it is the same column as the lever beside it.
+    // The product's own first; then CAB's name, a reading that takes no clicks of its own — a right
+    // click on it is one on CAB. So with a column's meter: it is the same column as the lever beside it.
+    if (e.originalComponent == &stage && pictureRightClicked (at))
+        return;
     if (cabName.getBounds().contains (at))
         showCabs();
     else if (inMeter.getBounds().contains (at))

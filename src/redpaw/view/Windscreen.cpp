@@ -98,6 +98,19 @@ void Windscreen::setFrameRateCap (int fpsCap)
     cap = fpsCap >= 60 ? 60 : 30;
 }
 
+float Windscreen::speedKmh() const noexcept
+{
+    constexpr float kmh = 3.6f;
+    const int g = juce::jlimit (1, PlainsWorld::numGears, gearWanted.load());
+    switch (running)
+    {
+        case Mode::gpu:   return speedShared.load() * kmh;
+        case Mode::cpu:   return (float) marsSpeed / marsTexelsPerSecond[(size_t) g - 1] * PlainsWorld::gearSpeed[(size_t) g - 1] * kmh;
+        case Mode::still: break;
+    }
+    return parkedWanted.load() ? 0.0f : PlainsWorld::speedFor (g, turboWanted.load()) * kmh;
+}
+
 float Windscreen::steerTotal() const noexcept
 {
     return juce::jlimit (-1.0f, 1.0f, steerOutside.load() + steerDrag.load() + steerKeys.load());
@@ -484,6 +497,7 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
         world.place (world.state().x, world.state().z, world.state().heading, gearWanted.load(), turboWanted.load());   // a still is clear air, as the drive would be once settled
     else
         world.step (dt);
+    speedShared.store (world.state().speed);
 
     plains.render (w, h, scaleInUse.load(), target, x, y);
     gpuMsShared.store (plains.gpuMillis());

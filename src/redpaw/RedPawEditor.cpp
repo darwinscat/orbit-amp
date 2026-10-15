@@ -38,6 +38,9 @@ namespace
     const juce::StringArray landscapeWords { "plains", "1993", "still" };
     const juce::StringArray landscapeNames { "Plains (GPU)", "1993 (CPU)", "Still" };
 
+    /** The nav screen's picture — the machine's too, as a view's number (face::Monitor::View). */
+    const juce::Identifier screenKey { "screen" };
+
     juce::Rectangle<float> around (juce::Point<float> c, float w, float h)
     {
         return juce::Rectangle<float> (w, h).withCentre (c);
@@ -81,6 +84,8 @@ namespace
         p.inFader  = inFader.withSizeKeepingCentre (faderWidth, inFader.getHeight());
         p.outFader = outFader.withSizeKeepingCentre (faderWidth, outFader.getHeight());
         p.tuner = tunerScreen;
+        p.tunerStrip = true;            // one low line along the screen's bottom...
+        p.tunerMenuOnClick = true;      // ...whose settings a click on it opens
         for (size_t i = 0; i < p.lamps.size(); ++i)
             p.lamps[i] = lamps[i];
 
@@ -222,7 +227,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 //==============================================================================
 RedPawEditor::RedPawEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Dashboard>(), dashboardPlaces(), dashboardLook()),
-      channelName (layout::px16)
+      screen (p)
 {
     using namespace layout;
 
@@ -277,11 +282,15 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     addToStage (turbo);
     turbo.setBounds (juce::Rectangle<float> (turboSize, turboSize).withCentre (layout::turbo).toNearestInt());
 
-    // The channel that is playing, along the top of the nav screen: the gear in orange, the pack after it.
-    channelName.nameColour = orange;
-    channelName.setInterceptsMouseClicks (false, false);
-    addToStage (channelName);
-    channelName.setBounds (channelLine.toNearestInt());
+    // THE NAV SCREEN: along its top the gear, the channel and the speed the windscreen is driving at;
+    // under them the picture of the amp at work the machine has chosen.
+    header.speed = [this] { return view.speedKmh(); };
+    addToStage (header);
+    header.setBounds (navHeader.toNearestInt());
+    addToStage (screen);
+    screen.setBounds (navPicture.toNearestInt());
+    screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
+                                               (int) prefs::store().get (screenKey, (int) Monitor::View::spectrum)));
 
     // A prototype's hook for looking at the windscreen in a gear, with TURBO, or parked, without a hand
     // on anything: REDPAW_CHANNEL names a channel, 0..5, or "park".
@@ -350,7 +359,7 @@ void RedPawEditor::showSelector (int channel)
     turbo.setOn (turboOn, false);
     turbo.setEnabled (! parked);
 
-    channelName.set (GearLever::names[at], juce::String (lineup().channels[(size_t) channel].name).toUpperCase());
+    header.set (GearLever::names[at], juce::String (lineup().channels[(size_t) channel].name).toUpperCase(), parked);
 
     view.setGear (gear + 1);
     view.setTurbo (turboOn);
@@ -426,6 +435,35 @@ void RedPawEditor::addWindowSections (juce::PopupMenu& menu)
     for (const int fps : { 60, 30 })
         addChoice (menu, juce::String (fps) + " frames a second", view.frameRateCap() == fps,
                    [self, fps] (Console& e) { self (e).chooseFrameRate (fps); }, running != Windscreen::Mode::still);
+}
+
+/** A RIGHT CLICK ON THE NAV SCREEN — anywhere over its picture or its top line — offers its five
+    pictures; the tuner's strip under them has a menu of its own. */
+bool RedPawEditor::pictureRightClicked (juce::Point<int> at)
+{
+    if (! layout::navHeader.getUnion (layout::navPicture).contains (at.toFloat()))
+        return false;
+    showScreenMenu();
+    return true;
+}
+
+void RedPawEditor::showScreenMenu()
+{
+    endTapping();
+
+    const auto self = [] (Console& e) -> RedPawEditor& { return static_cast<RedPawEditor&> (e); };
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("SCREEN");
+    for (int i = (int) Monitor::View::spectrum; i < (int) Monitor::View::numViews; ++i)
+        addChoice (menu, Monitor::names()[i], (int) screen.shown() == i,
+                   [self, i] (Console& e) { self (e).chooseScreen ((Monitor::View) i); });
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+void RedPawEditor::chooseScreen (Monitor::View v)
+{
+    prefs::store().set (screenKey, (int) v);
+    screen.show (v);
 }
 
 void RedPawEditor::showWindowMenu()

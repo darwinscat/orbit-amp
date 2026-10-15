@@ -888,8 +888,68 @@ void TunerFace::setState (bool isListening, bool isMuting)
     repaint();
 }
 
+void TunerFace::setStrip (bool s)
+{
+    strip = s;
+    repaint();
+}
+
+void TunerFace::paintStrip (juce::Graphics& g)
+{
+    const juce::Colour home { 0xff5fc97a };   // the family's in-tune green
+
+    auto area = getLocalBounds().toFloat().reduced (10.0f, 1.0f);
+    const bool live = listening && ear.live();
+    const auto note = ear.nearestNote();
+    g.setFont (labelFont (stage::px13));
+
+    // Its state first — ON, OFF, or MUTE — then the note, a dash while nothing is heard.
+    g.setColour (! listening ? violet : orange);
+    g.drawText (! listening ? "OFF" : muting ? "MUTE" : "ON", area.removeFromLeft (64.0f), juce::Justification::centredLeft, false);
+    auto noteArea = area.removeFromLeft (54.0f);
+    if (live)
+    {
+        g.setColour (ear.green() ? home : juce::Colour (0xffece9f6));
+        g.drawText (juce::String (core::PitchTracker::noteName (note.midi)) + juce::String (core::PitchTracker::noteOctave (note.midi)),
+                    noteArea, juce::Justification::centredLeft, false);
+    }
+    else
+    {
+        g.setColour (lilac.withAlpha (0.35f));
+        g.fillRoundedRectangle (juce::Rectangle<float> (18.0f, 3.0f).withCentre ({ noteArea.getX() + 12.0f, noteArea.getCentreY() }), 1.5f);
+    }
+
+    // The ruler: a tick every five cents, the quarters taller, the centre orange; the needle over it.
+    area.removeFromLeft (6.0f);
+    const auto ruler = area;
+    const auto xOf = [&ruler] (float c) { return ruler.getX() + ruler.getWidth() * (juce::jlimit (-50.0f, 50.0f, c) + 50.0f) / 100.0f; };
+    for (int c = -50; c <= 50; c += 5)
+    {
+        const bool major = c % 25 == 0;
+        const float h = ruler.getHeight() * (major ? 0.8f : 0.4f);
+        g.setColour ((c == 0 ? orange : violet).withAlpha (major ? 0.9f : 0.4f));
+        g.fillRect (juce::Rectangle<float> (xOf ((float) c) - 0.75f, ruler.getCentreY() - h * 0.5f, 1.5f, h));
+    }
+    if (live)
+    {
+        const auto colour = ear.green() ? home
+                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+        juce::Path needle;
+        needle.addRoundedRectangle (juce::Rectangle<float> (3.0f, ruler.getHeight()).withCentre ({ xOf (ear.needle()), ruler.getCentreY() }), 1.5f);
+        glow (g, needle, colour, 5.0f);
+        g.setColour (colour);
+        g.fillPath (needle);
+    }
+}
+
 void TunerFace::paint (juce::Graphics& g)
 {
+    if (strip)
+    {
+        paintStrip (g);
+        return;
+    }
+
     const juce::Colour home { 0xff5fc97a };   // the family's in-tune green
 
     auto area = getLocalBounds().toFloat().reduced (18.0f, 10.0f);

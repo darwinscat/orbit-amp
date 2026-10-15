@@ -91,6 +91,8 @@ public:
         juce::Rectangle<float> version, load, memory, preset, gateDoor, limiterDoor;
         float gateDoorAngle = 0.0f, limiterDoorAngle = 0.0f;    // GATE and LIMITER turned about their middles, radians
         float readingPx = stage::px11;                      // what CPU and MEM are written at
+        bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...
+        bool tunerMenuOnClick = false;                      // ...and a click on it opens its menu, rather than switching it
     };
 
     /** WHAT IT IS DRAWN WITH: the product's renders, and its words. */
@@ -171,6 +173,9 @@ protected:
 
     /** A left click on the bare picture that the console does not use: true when the product took it. */
     virtual bool pictureClicked (juce::Point<int> /*onStage*/) { return false; }
+
+    /** A right click on the bare picture, before the console's own: true when the product took it. */
+    virtual bool pictureRightClicked (juce::Point<int> /*onStage*/) { return false; }
 
     /** The stage has been placed in the window again. */
     virtual void stagePlaced() {}

@@ -66,10 +66,12 @@ inline constexpr float keyNameOverY = 563.0f;
 inline constexpr float keyNameUnderY = 642.0f;
 inline constexpr std::array<bool, 6> keyNameOver {{ false, false, false, true, false, true }};
 
-/** THE NAV SCREEN: the channel that is playing along its top, the tuner's glass under it. */
-inline const juce::Rectangle<float> navScreen { 563.5f, 423.5f, 436.5f, 195.0f };
-inline const juce::Rectangle<float> channelLine { 563.5f, 428.0f, 436.5f, 40.0f };
-inline const juce::Rectangle<float> tunerScreen { 563.5f, 478.0f, 436.5f, 136.0f };
+/** THE NAV SCREEN: along its top the gear, the channel and the rover's speed; under them a picture of
+    the amp at work; along its bottom the tuner, one low line. */
+inline const juce::Rectangle<float> navScreen   { 563.5f, 423.5f, 436.5f, 195.0f };
+inline const juce::Rectangle<float> navHeader   { 567.0f, 426.0f, 430.0f, 32.0f };
+inline const juce::Rectangle<float> navPicture  { 567.0f, 460.0f, 430.0f, 126.0f };
+inline const juce::Rectangle<float> tunerScreen { 567.0f, 588.0f, 430.0f, 27.0f };
 
 /** THE GEAR LEVER'S SLOT: straight, with three notches on its right — CLEAN, CRUNCH, HI-GAIN, top to
     bottom — and PARK at its top end. The lever's stem runs up and down the slot's middle and stands in

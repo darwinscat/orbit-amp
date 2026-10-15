@@ -182,6 +182,61 @@ void GearLever::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelD
 }
 
 //==============================================================================
+NavHeader::NavHeader()
+{
+    setInterceptsMouseClicks (false, false);
+    startTimerHz (10);
+}
+
+void NavHeader::set (const juce::String& g, const juce::String& c, bool p)
+{
+    if (g == gear && c == channel && p == parked)
+        return;
+    gear = g;
+    channel = c;
+    parked = p;
+    repaint();
+}
+
+void NavHeader::timerCallback()
+{
+    if (const int kmh = speed ? juce::roundToInt (speed()) : 0; kmh != shownKmh)
+    {
+        shownKmh = kmh;
+        repaint();
+    }
+}
+
+void NavHeader::paint (juce::Graphics& g)
+{
+    auto area = getLocalBounds().toFloat().reduced (8.0f, 0.0f);
+    const auto words = face::labelFont (layout::px15).withExtraKerningFactor (0.04f);
+    const auto small = face::labelFont (layout::px13).withExtraKerningFactor (0.04f);
+
+    // The speed on the right: the number, then its unit a size down.
+    const auto unit = juce::String ("KM/H"), number = juce::String (juce::jmax (0, shownKmh));
+    g.setColour (labelLilac.withAlpha (0.8f));
+    g.setFont (small);
+    g.drawText (unit, area.removeFromRight (juce::GlyphArrangement::getStringWidth (small, unit) + 2.0f),
+                juce::Justification::centredRight, false);
+    area.removeFromRight (6.0f);
+    g.setColour (juce::Colour (0xffece9f6));
+    g.setFont (words);
+    g.drawText (number, area.removeFromRight (juce::GlyphArrangement::getStringWidth (words, number) + 2.0f),
+                juce::Justification::centredRight, false);
+    area.removeFromRight (8.0f);
+
+    // The gear, then the channel.
+    g.setColour (orange);
+    g.drawText (gear, area.removeFromLeft (juce::GlyphArrangement::getStringWidth (words, gear) + 2.0f),
+                juce::Justification::centredLeft, false);
+    area.removeFromLeft (10.0f);
+    g.setColour (juce::Colour (0xffece9f6));
+    g.setFont (small);      // the channel a size down: at the gear's size the longest would not fit beside the speed
+    g.drawText (channel, area, juce::Justification::centredLeft, true);
+}
+
+//==============================================================================
 namespace
 {
     const juce::Colour ringCyan { 0xff3fe6f2 };     // the painted ring's light, a shade brighter

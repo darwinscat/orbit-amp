@@ -59,6 +59,27 @@ private:
 };
 
 //==============================================================================
+/** THE NAV SCREEN'S TOP LINE: the gear in orange and the channel that is playing beside it, and on the
+    right the rover's speed in km/h — read from the windscreen's own drive, so it climbs and falls as
+    the gears change, and stands at nothing when parked. */
+class NavHeader final : public juce::Component, private juce::Timer
+{
+public:
+    NavHeader();
+
+    std::function<float()> speed;       // km/h
+
+    void set (const juce::String& gear, const juce::String& channel, bool parked);
+    void paint (juce::Graphics&) override;
+
+private:
+    juce::String gear, channel;
+    bool parked = false;
+    int  shownKmh = -1;
+    void timerCallback() override;
+};
+
+//==============================================================================
 /** THE RING ROUND A KNOB: the cyan ring the dashboard paints round each knob's socket, made to say where
     the knob stands — lit from the start of its travel to where its pointer is, the rest dimmed. It
     breathes only when it matters: under the hand, or while the knob turns, it brightens softly, and

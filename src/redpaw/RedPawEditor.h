@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../face/Console.h"
+#include "../face/Monitor.h"
 #include "RedPawControls.h"
 #include "view/Windscreen.h"
 
@@ -73,7 +74,13 @@ private:
     GearLever lever;
     face::PushButton turbo { "TURBO" };
     std::vector<std::unique_ptr<KnobRing>> rings;   // DRIVE's and the tones': where each knob stands
-    face::Legend channelName;       // on the nav screen: the gear, and the pack that is playing
+    NavHeader header;               // on the nav screen: the gear, the pack that is playing, the speed
+
+    // THE NAV SCREEN'S PICTURE of the amp at work (face/Monitor.h), the machine's choice; a right click
+    // on the screen offers the five.
+    face::Monitor screen;
+    void showScreenMenu();
+    void chooseScreen (face::Monitor::View);
     void pullGear (int gear);
     void throwTurbo (bool on);
     void parkIt();
@@ -84,6 +91,7 @@ private:
     void programChange (int program) override;
     void turboChange (bool thrown) override;
     void addWindowSections (juce::PopupMenu&) override;
+    bool pictureRightClicked (juce::Point<int>) override;
     void stagePlaced() override { placeView(); }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RedPawEditor)

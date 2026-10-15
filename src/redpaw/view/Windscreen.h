@@ -60,6 +60,11 @@ public:
     void setParked (bool on);
     bool isParked() const noexcept { return parkedWanted.load(); }
 
+    /** THE ROVER'S SPEED, km/h, as the view is driving it: eased toward what the gear and TURBO ask for,
+        to a stand when parked. In the 1993 landscape its own drive, counted in the Plains' measure; in
+        the still, what the gear asks for — nothing moves there to ease. Message thread. */
+    float speedKmh() const noexcept;
+
     /** Held steering input from outside, -1..1; 0 lets go. Adds to the view's own drag and keys. */
     void steer (float amount) noexcept;
 
@@ -125,6 +130,7 @@ private:
     bool glAttached = false;                // the GPU's frames are being drawn: in the view's own context, or the host's
     std::atomic<bool> gpuFailed { false };
     std::atomic<float> gpuMsShared { -1.0f };
+    std::atomic<float> speedShared { PlainsWorld::gearSpeed[0] };     // m/s, the GPU's drive, as last stepped
     std::atomic<int> gpuFrames { 0 };
     std::atomic<int> gpuFrameW { 0 }, gpuFrameH { 0 };
     double glLast = 0.0;
