@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-#include "CatpitMonitor.h"
+#include "Monitor.h"
 
-#include "CatpitControls.h"
-#include "CatpitLayout.h"
+#include "Controls.h"
 
 #include <felitronics/analysis/PlotMap.h>
 
-namespace orbitamp::catpit
+namespace orbitamp::face
 {
 
 namespace
@@ -19,7 +18,7 @@ namespace
 
 const juce::StringArray& Monitor::names()
 {
-    static const juce::StringArray all { "Stars only", "Spectrum", "Wave", "Shape", "Envelope", "Transfer" };
+    static const juce::StringArray all { "None", "Spectrum", "Wave", "Shape", "Envelope", "Transfer" };
     return all;
 }
 
@@ -32,10 +31,10 @@ Monitor::Monitor (AmpProcessor& p) : amp (p)
 void Monitor::show (View v)
 {
     view = v;
-    setVisible (v != View::stars);
+    setVisible (v != View::none);
 
     // The spectrum arrives in frames; the wave slides, and at less than this it reads as a slideshow.
-    if (v == View::stars)          stopTimer();
+    if (v == View::none)           stopTimer();
     else if (v == View::spectrum)  startTimerHz (30);
     else                           startTimerHz (60);
 
@@ -44,11 +43,7 @@ void Monitor::show (View v)
 
 juce::Rectangle<float> Monitor::band() const
 {
-    // In the render's space the glass is clear of the overhead panel above and the emblem below
-    // between these two heights; across, the picture takes the windshield's whole width and runs out
-    // under the frame on both sides rather than stopping short of it.
-    constexpr float top = 100.0f, bottom = 234.0f;
-    return { 0.0f, top - layout::windshield.getY(), (float) getWidth(), bottom - top };
+    return area.isEmpty() ? getLocalBounds().toFloat() : area;
 }
 
 void Monitor::timerCallback()
@@ -76,8 +71,7 @@ void Monitor::timerCallback()
 
 void Monitor::paint (juce::Graphics& g)
 {
-    // Nothing under the picture but the sky: it is a second layer on the glass, and the stars fly on
-    // behind it.
+    // Nothing under the picture but what the glass shows behind it: it is a second layer on the glass.
     const auto r = band();
     if (view == View::spectrum)
     {
@@ -105,8 +99,8 @@ void Monitor::paint (juce::Graphics& g)
 
 void Monitor::paintSpectrum (juce::Graphics& g, juce::Rectangle<float> r)
 {
-    // No well, no grid, no frame: the spectrum is light on the glass, from one edge of the windshield to
-    // the other, and the cockpit's frame is what cuts it off.
+    // No well, no grid, no frame: the spectrum is light on the glass, from one edge of the band to the
+    // other, and the face's frame is what cuts it off.
     const double lo = 20.0, hi = 20000.0;
 
     const juce::Graphics::ScopedSaveState clipped (g);
@@ -142,4 +136,4 @@ void Monitor::paintSpectrum (juce::Graphics& g, juce::Rectangle<float> r)
     draw (after,  orange, 1.4f);
 }
 
-} // namespace orbitamp::catpit
+} // namespace orbitamp::face

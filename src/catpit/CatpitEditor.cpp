@@ -290,6 +290,10 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     still.setBounds (glass.toNearestInt());
     stage.addChildComponent (monitor, 2);
     monitor.setBounds (windshield.toNearestInt());
+    // In the render's space the glass is clear of the overhead panel above and the emblem below between
+    // these two heights; across, the picture takes the windshield's whole width and runs out under the
+    // frame on both sides rather than stopping short of it.
+    monitor.setBand ({ 0.0f, 100.0f - windshield.getY(), windshield.getWidth(), 134.0f });
 
     // The throttle picks the channel — its pack, and everything that channel was left with.
     addToStage (lever);
@@ -385,7 +389,7 @@ void CatpitEditor::addWindowSections (juce::PopupMenu& menu)
 
     menu.addSectionHeader ("WINDOW");
     for (int i = 0; i < Monitor::names().size(); ++i)
-        addChoice (menu, Monitor::names()[i], (int) monitor.shown() == i,
+        addChoice (menu, i == 0 ? juce::String ("Stars only") : Monitor::names()[i], (int) monitor.shown() == i,
                    [i, self] (face::Console& e) { self (e).showInWindow ((Monitor::View) i); });
     if (! amp.runsInHost())
         addChoice (menu, "Full screen", fullScreen, [self] (face::Console& e) { self (e).setFullScreen (! self (e).fullScreen); });

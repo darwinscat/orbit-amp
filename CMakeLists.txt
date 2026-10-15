@@ -627,6 +627,7 @@ set(CATPITAMP_SOURCES
     src/face/Console.cpp
     src/face/Controls.cpp
     src/face/Midi.cpp
+    src/face/Monitor.cpp
     src/face/Picture.cpp
     src/face/Renders.cpp
     src/face/Sheet.cpp
@@ -634,7 +635,6 @@ set(CATPITAMP_SOURCES
     src/catpit/CatpitArt.cpp
     src/catpit/CatpitControls.cpp
     src/catpit/CatpitLineup.cpp
-    src/catpit/CatpitMonitor.cpp
     src/catpit/CatpitSpace.cpp
     src/catpit/CatpitGlSky.cpp
     src/catpit/CatpitEditor.cpp)
@@ -871,6 +871,7 @@ set(REDPAWAMP_SOURCES
     src/face/Console.cpp
     src/face/Controls.cpp
     src/face/Midi.cpp
+    src/face/Monitor.cpp
     src/face/Picture.cpp
     src/face/Renders.cpp
     src/face/Sheet.cpp

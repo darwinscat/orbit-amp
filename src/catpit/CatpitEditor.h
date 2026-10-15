@@ -5,8 +5,8 @@
 
 #include "../face/Console.h"
 #include "CatpitControls.h"
+#include "../face/Monitor.h"
 #include "CatpitGlSky.h"
-#include "CatpitMonitor.h"
 #include "CatpitSpace.h"
 
 #include <memory>
