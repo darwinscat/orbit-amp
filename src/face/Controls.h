@@ -45,6 +45,13 @@ juce::Rectangle<float> opaqueBounds (const juce::Image&);
 /** Draws `img`'s opaque part fitted into `area` (aspect kept, centred), at `alpha`. */
 void drawFitted (juce::Graphics&, const juce::Image& img, juce::Rectangle<float> area, float alpha = 1.0f);
 
+/** Where drawFitted puts a render's opaque part in `area`. */
+juce::Rectangle<float> fittedArea (const juce::Image& img, juce::Rectangle<float> area);
+
+/** THE HAND'S RIM: a thin line along `outline`, glowing a little either side of it — laid OVER a
+    control, so that no render can cover it. */
+void drawHandRim (juce::Graphics&, const juce::Path& outline, juce::Colour);
+
 /** A tiny animator: eases a value toward a target on the message thread, with an optional overshoot.
     Owners call `step()` from their own timer and repaint while it reports movement. */
 struct Glide
@@ -153,8 +160,8 @@ public:
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
-    void mouseEnter (const juce::MouseEvent&) override { if (onHover) onHover (true); }
-    void mouseExit (const juce::MouseEvent&) override  { if (onHover) onHover (false); }
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); if (onHover) onHover (true); }
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); if (onHover) onHover (false); }
     void enablementChanged() override;
 
 private:
@@ -270,7 +277,7 @@ public:
     float capAngle = juce::MathConstants<float>::halfPi;
     float capLength = 0.0f;
 
-    /** A soft light round the cap while the hand is over the slider or on it — none unless set. */
+    /** The hand's rim round the cap while the hand is over the slider or on it — none unless set. */
     juce::Colour handLight;
 
     std::function<void()>       onGestureStart, onGestureEnd;
@@ -318,7 +325,7 @@ public:
     /** A short fader in a smaller slot: its ends, its line and its scale drawn this much of a column's. */
     float scale = 1.0f;
 
-    /** A soft light round the cap while the hand is over the fader or on it — none unless set. */
+    /** The hand's rim round the cap while the hand is over the fader or on it — none unless set. */
     juce::Colour handLight;
 
     /** The scale down its right edge: this many steps, and the one that is drawn longer — unity, by

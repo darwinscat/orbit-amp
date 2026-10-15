@@ -62,14 +62,32 @@ namespace
     }
 }
 
+juce::Rectangle<float> fittedArea (const juce::Image& img, juce::Rectangle<float> area)
+{
+    if (! img.isValid())
+        return area;
+    const auto src = opaqueBoundsOnce (img);
+    const float k  = juce::jmin (area.getWidth() / src.getWidth(), area.getHeight() / src.getHeight());
+    return juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k).withCentre (area.getCentre());
+}
+
+void drawHandRim (juce::Graphics& g, const juce::Path& outline, juce::Colour colour)
+{
+    juce::Path line;
+    juce::PathStrokeType (1.6f).createStrokedPath (line, outline);
+    juce::DropShadow (colour, 6, {}).drawForPath (g, line);
+    g.setColour (colour.withMultipliedAlpha (0.75f));
+    g.fillPath (line);
+}
+
 void drawFitted (juce::Graphics& g, const juce::Image& img, juce::Rectangle<float> area, float alpha)
 {
     if (! img.isValid() || alpha <= 0.0f)
         return;
 
     const auto src = opaqueBoundsOnce (img);
-    const float k  = juce::jmin (area.getWidth() / src.getWidth(), area.getHeight() / src.getHeight());
-    const auto  dst = juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k).withCentre (area.getCentre());
+    const auto dst = fittedArea (img, area);
+    const float k  = dst.getWidth() / src.getWidth();
 
     g.setOpacity (alpha);
     g.drawImageTransformed (img, juce::AffineTransform::translation (-src.getX(), -src.getY())
@@ -80,18 +98,19 @@ void drawFitted (juce::Graphics& g, const juce::Image& img, juce::Rectangle<floa
 
 namespace
 {
-    /** A soft light round a cap drawn as drawCap draws it — `colour`, or nothing while it is transparent. */
-    void lightCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle, juce::Colour colour)
+    /** The hand's rim round a cap drawn as drawCap draws it — in `colour`, or nothing while that is
+        transparent. */
+    void rimCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle, juce::Colour colour)
     {
         if (colour.isTransparent() || ! img.isValid())
             return;
         const auto src = opaqueBoundsOnce (img);
         const float k = length / src.getWidth();
-        const auto box = juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k).withCentre ({})
-                             .transformedBy (juce::AffineTransform::rotation (angle)).translated (centre.x, centre.y);
+        const auto box = juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k).withCentre ({});
         juce::Path shape;
-        shape.addRoundedRectangle (box, juce::jmin (box.getWidth(), box.getHeight()) * 0.2f);
-        juce::DropShadow (colour, 10, {}).drawForPath (g, shape);
+        shape.addRoundedRectangle (box.reduced (0.8f), juce::jmin (box.getWidth(), box.getHeight()) * 0.12f);
+        shape.applyTransform (juce::AffineTransform::rotation (angle).translated (centre));
+        drawHandRim (g, shape, colour);
     }
 
     /** Draws a cap render centred on `centre`, its long axis `length` long, turned by `angle`. */
@@ -695,9 +714,9 @@ void PlateSlider::paint (juce::Graphics& g)
         }
 
     const float length = capLength > 0.0f ? capLength : (float) getHeight() - 4.0f;
-    if (isMouseOverOrDragging (true))
-        lightCap (g, cap, { x, cy }, length, capAngle, handLight);
     drawCap (g, cap, { x, cy }, length, capAngle);
+    if (isMouseOverOrDragging (true))
+        rimCap (g, cap, { x, cy }, length, capAngle, handLight);
 }
 
 void PlateSlider::mouseDown (const juce::MouseEvent& e)
@@ -783,9 +802,9 @@ void ColumnFader::paint (juce::Graphics& g)
 
     const float y = t.getEnd() - t.getLength() * value;
     const float length = capLength > 0.0f ? capLength : (float) getWidth() - 8.0f;
-    if (isMouseOverOrDragging (true))
-        lightCap (g, cap, { cx, y }, length, 0.0f, handLight);
     drawCap (g, cap, { cx, y }, length, 0.0f);
+    if (isMouseOverOrDragging (true))
+        rimCap (g, cap, { cx, y }, length, 0.0f, handLight);
 }
 
 void ColumnFader::mouseDown (const juce::MouseEvent& e)

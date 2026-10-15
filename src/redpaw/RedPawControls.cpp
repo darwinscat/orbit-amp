@@ -110,11 +110,13 @@ void GearLever::paint (juce::Graphics& g)
         g.fillRoundedRectangle (bar.translated (3.0f, 5.0f).expanded (grow), bar.getHeight() * 0.5f + grow);
     }
 
-    // A soft cyan light round it, the knobs' rings' own: in sight on the dark plate, warmer under the hand.
+    // A soft cyan light round it, the knobs' rings' own, keeps it in sight on the dark plate; under the
+    // hand it turns the orange everything that moves wears there.
     if (const auto& glow = Art::get().leverGlow; glow.isValid() && art.isValid())
     {
         const float k = box.getWidth() / (float) art.getWidth();
-        g.setColour (ringCyan.withAlpha (0.6f + 0.4f * juce::jlimit (0.0f, 1.0f, lit.value)));
+        const float hand = juce::jlimit (0.0f, 1.0f, lit.value);
+        g.setColour (ringCyan.interpolatedWith (orange, hand).withAlpha (0.6f + 0.4f * hand));
         g.drawImage (glow, box.expanded ((float) Art::leverGlowPad * k), juce::RectanglePlacement::stretchToFit, true);
     }
 
@@ -396,6 +398,16 @@ void KnobRing::paint (juce::Graphics& g)
     shown = knob.getValue();
     const auto c = getLocalBounds().toFloat().getCentre();
     const float b = juce::jlimit (0.0f, 1.0f, breath.value);
+
+    // Under the hand, an orange light round the knob's cap, inside its ring — the hand's colour, as on
+    // everything else that moves — warming and cooling with the ring.
+    if (b > 0.01f)
+    {
+        juce::Path rim;
+        const float r = (float) knob.getWidth() * 0.46f;
+        rim.addEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c));
+        face::drawHandRim (g, rim, orange.withAlpha (0.8f * b));
+    }
 
     // The rest of the ring dimmed: the painted cyan under a dark veil.
     juce::Path whole;

@@ -31,6 +31,10 @@ namespace
     constexpr ArtKnob::Pointer drivePointer { 0.30f, 0.66f, 0.06f };
     constexpr ArtKnob::Pointer tonePointer  { 0.30f, 0.64f, 0.07f };
 
+    /** THE HAND'S LIGHT: a soft orange round whatever the hand is over or on — the family's colour for
+        the hand, the dashboard's desert accent. */
+    const juce::Colour handLight = orange.withAlpha (0.8f);
+
     /** What the windscreen shows, and how often — the machine's, kept with its settings. The landscape
         as a word, in the order of Windscreen::Mode. */
     const juce::Identifier landscapeKey { "landscape" };
@@ -120,7 +124,7 @@ namespace
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
                  juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),     // the family's mark, until the rover has its own
                  juce::String::fromUTF8 (RedPawData::midi_txt, RedPawData::midi_txtSize),
-                 juce::Colour (0xff3fe6f2).withAlpha (0.75f) };     // the knobs' rings' cyan, under the hand
+                 handLight };       // under the hand, the dashboard's orange
     }
 
     /** A render drawn fitted into `box` by its opaque part — the square keys and TURBO, up or down. */
@@ -238,16 +242,30 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // THE ROOF'S KEYS ARE TOGGLES: thrown up while a history key is pressed, and up on the register
     // that is playing.
     for (int i = 0; i < 6; ++i)
-        roofKey (i).drawKey = [] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        roofKey (i).drawKey = [&k = roofKey (i)] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
         {
+            if (k.isMouseOverOrDragging())
+            {
+                juce::Path hole;
+                hole.addEllipse (juce::Rectangle<float> (layout::holeRadius * 2.0f, layout::holeRadius * 2.0f).withCentre (box.getCentre()));
+                drawHandRim (g, hole, handLight);
+            }
             drawToggle (g, box, down);
         };
 
-    // ...the six square keys, and TURBO, are the dashboard's own buttons, up or pressed.
+    // ...the six square keys, and TURBO, are the dashboard's own buttons, up or pressed — each with the
+    // hand's orange rim round its face while the hand is over it, like everything else that moves.
     for (int i = 0; i < 6; ++i)
-        key (i).drawKey = [] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        key (i).drawKey = [&k = key (i)] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
         {
-            drawRender (g, down ? Art::get().keyDown : Art::get().keyUp, box);
+            const auto& img = down ? Art::get().keyDown : Art::get().keyUp;
+            drawRender (g, img, box);
+            if (k.isMouseOverOrDragging() && k.isEnabled())
+            {
+                juce::Path face;
+                face.addRoundedRectangle (fittedArea (img, box).reduced (2.0f), 4.0f);
+                drawHandRim (g, face, handLight);
+            }
         };
 
     // THE RINGS ROUND THE KNOBS say where each stands.
@@ -278,9 +296,16 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
 
     // TURBO: the pedal's second channel, on or off — one switch for all three gears.
     turbo.latching = false;
-    turbo.drawKey = [] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+    turbo.drawKey = [this] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
     {
-        drawRender (g, down ? Art::get().turboDown : Art::get().turboUp, box);
+        const auto& img = down ? Art::get().turboDown : Art::get().turboUp;
+        drawRender (g, img, box);
+        if (turbo.isMouseOverOrDragging() && turbo.isEnabled())
+        {
+            juce::Path face;
+            face.addEllipse (fittedArea (img, box).reduced (2.0f));
+            drawHandRim (g, face, handLight);
+        }
     };
     turbo.onPress = [this] { throwTurbo (! turboOf (channels.active())); };
     addToStage (turbo);
@@ -296,7 +321,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         const auto travelOf = [low, high] (float v) { return (v - low) / (high - low); };
         fader.scale = slotScale;
         fader.capLength = faderCapLength * slotScale;
-        fader.handLight = juce::Colour (0xff3fe6f2).withAlpha (0.75f);
+        fader.handLight = handLight;
         fader.defaultValue = travelOf (amp.apvts.getParameter (paramId)->convertFrom0to1 (amp.apvts.getParameter (paramId)->getDefaultValue()));
         auto* attachment = follow (paramId, [&fader, travelOf] (float v) { fader.setValue (travelOf (v), false); });
         fader.onGestureStart = [attachment] { attachment->beginGesture(); };
