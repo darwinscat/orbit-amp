@@ -19,7 +19,7 @@ namespace
 
     /** Where the grip's bar ends and its collar begins on the lever's render, down from its top — a
         fraction of the render's height. */
-    constexpr float barBottom = 0.72f;
+    constexpr float barBottom = 0.85f;
 }
 
 juce::Rectangle<float> GearLever::leverBox (float y, float x) const
