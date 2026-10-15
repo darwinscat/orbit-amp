@@ -1302,6 +1302,17 @@ if(APPLE)
                 COMMENT "RedPawAmp: signing the standalone so macOS remembers the mic grant"
                 VERBATIM)
         endif()
+
+        # ...and the ice moon's.
+        if(TARGET FrostPawAmp_Standalone)
+            add_custom_command(TARGET FrostPawAmp_Standalone POST_BUILD
+                COMMAND codesign --force --options runtime --timestamp=none
+                        --entitlements "${CMAKE_CURRENT_SOURCE_DIR}/installer/standalone.entitlements"
+                        --sign "${ORBITAMP_SIGN_IDENTITY}"
+                        "$<TARGET_BUNDLE_DIR:FrostPawAmp_Standalone>"
+                COMMENT "FrostPawAmp: signing the standalone so macOS remembers the mic grant"
+                VERBATIM)
+        endif()
     else()
         message(STATUS "Standalone signing: no '${ORBITAMP_SIGN_IDENTITY}' identity — staying ad-hoc (mic prompt every launch)")
     endif()
@@ -1310,7 +1321,7 @@ if(APPLE)
     # what macOS keys its icon cache on. A bundle first built before it had an icon kept the blank
     # placeholder in the Dock and the app switcher for good, with the right icon sitting inside it.
     # So the bundle is touched after every build, and the system looks again.
-    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone RedPawAmp_Standalone)
+    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone RedPawAmp_Standalone FrostPawAmp_Standalone)
         if(TARGET ${standalone})
             add_custom_command(TARGET ${standalone} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E touch_nocreate "$<TARGET_BUNDLE_DIR:${standalone}>"
