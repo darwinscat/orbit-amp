@@ -164,6 +164,7 @@ private:
 
     void tick();
     void apply();
+    void restartLadder();
     void triggerFrame();
     void renderFrame (int x, int y, int w, int h, juce::uint32 target);
     void attachGl();

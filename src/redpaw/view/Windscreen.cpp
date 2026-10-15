@@ -44,11 +44,24 @@ Windscreen::~Windscreen()
 }
 
 //==============================================================================
+/** THE PLAYER'S CHOICE ALWAYS WINS: whatever the ladder came down to, a mode chosen starts afresh — the
+    Plains at the render scale asked for, the cost forgotten. Only the ladder's own steps are one-way. */
 void Windscreen::setMode (Mode m)
 {
     wanted = running = m;
     note.clear();
+    restartLadder();
     apply();
+}
+
+void Windscreen::restartLadder()
+{
+    scaleInUse.store (scaleWanted);
+    gpuMsShared.store (-1.0f);
+    gpuFrames.store (0);
+    cpuMs = -1.0f;
+    cpuFrames = 0;
+    windowStart = juce::Time::getMillisecondCounterHiRes() * 0.001;
 }
 
 void Windscreen::setGear (int g)
@@ -74,9 +87,9 @@ void Windscreen::steer (float amount) noexcept
 void Windscreen::setRenderScale (float scale)
 {
     scaleWanted = juce::jlimit (0.25f, 1.0f, scale);
-    scaleInUse.store (scaleWanted);
     running = wanted;
     note.clear();
+    restartLadder();
     apply();
 }
 
@@ -150,6 +163,8 @@ void Windscreen::apply()
         case Mode::gpu:
             if (gpuFailed.load()) { running = Mode::cpu; apply(); return; }
             attachGl();
+            repaint();          // hosted, what the CPU or the still painted here must go, or it lies over the GPU's frame
+            triggerFrame();
             break;
         case Mode::cpu:
             detachGl();
