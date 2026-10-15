@@ -1060,6 +1060,108 @@ target_link_libraries(redpawamp_set_test PRIVATE
 set_target_properties(redpawamp_set_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ----------------------------------------------------------------------------
+# FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
+# over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
+# ice-blue rings. The same controls, the same six channels on the same packs and cabinets, the same
+# MIDI, TURBO and PARK: the rover's, shared, not copied. Released apart under tags of its own
+# (`frostpaw-vX.Y.Z`) — no release workflow yet. Built only when asked for by name.
+# ----------------------------------------------------------------------------
+
+# Its renders are in resources/frostpaw, under the rover's names; one that is not there yet is
+# RedPawAmp's. So a render of its own is a file dropped in there and nothing more: the folder is looked
+# at again on every build.
+file(GLOB FROSTPAW_OWN_RENDERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/*")
+set(FROSTPAWAMP_RENDERS "")
+foreach(render IN LISTS ROVER_RENDERS)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}" IN_LIST FROSTPAW_OWN_RENDERS)
+        list(APPEND FROSTPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}")
+    else()
+        list(APPEND FROSTPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/${render}")
+    endif()
+endforeach()
+juce_add_binary_data(FrostPawAmpData
+    NAMESPACE   FrostPawData
+    HEADER_NAME FrostPawData.h
+    SOURCES     ${FROSTPAWAMP_RENDERS})
+
+# Its own version, moved when FROSTPAWAMP is released (src/Product.h).
+set(FROSTPAWAMP_VERSION 0.1.0)
+
+juce_add_plugin(FrostPawAmp
+    VERSION                     "${FROSTPAWAMP_VERSION}"
+    PRODUCT_NAME                "FrostPawAmp"
+    COMPANY_NAME                "Darwin's Cat"
+    BUNDLE_ID                   "com.darwinscat.frostpawamp"
+    PLUGIN_MANUFACTURER_CODE    Dcat
+    PLUGIN_CODE                 Frpw
+    FORMATS                     VST3 AU Standalone
+    VST3_CATEGORIES             "Fx" "Distortion"
+    AU_MAIN_TYPE                "kAudioUnitType_Effect"
+    IS_SYNTH                    FALSE
+    NEEDS_MIDI_INPUT            FALSE
+    NEEDS_MIDI_OUTPUT           FALSE
+    IS_MIDI_EFFECT              FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT  "FrostPawAmp needs audio input to process your signal."
+    # A stand-in until it has an icon of its own: its DRIVE socket, knob and all, off the dashboard.
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/FrostPawAmp-1024.png"
+    COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
+
+clap_juce_extensions_plugin(TARGET FrostPawAmp
+    CLAP_ID       "com.darwinscat.frostpawamp"
+    CLAP_FEATURES audio-effect "guitar" "amplifier")
+if(APPLE)
+    add_custom_command(TARGET FrostPawAmp_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:FrostPawAmp,JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:FrostPawAmp_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
+
+# A rover, and its skin.
+set(FROSTPAWAMP_SOURCES ${ROVER_SOURCES} src/frostpaw/FrostPawSkin.cpp)
+set(FROSTPAWAMP_LIBRARIES FrostPawAmpData ${ROVER_LIBRARIES})
+
+target_sources(FrostPawAmp PRIVATE ${FROSTPAWAMP_SOURCES})
+target_compile_definitions(FrostPawAmp PUBLIC
+    ORBITAMP_VERSION="${FROSTPAWAMP_VERSION}"
+    ORBITAMP_PRODUCT_NAME="FrostPawAmp"
+    ORBITAMP_RELEASE_TAG_PREFIX="frostpaw-"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>)
+target_include_directories(FrostPawAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(FrostPawAmp OrbitAmpVersionGen)
+target_link_libraries(FrostPawAmp PRIVATE ${FROSTPAWAMP_LIBRARIES})
+
+set(FROSTPAWAMP_FORMATS "")
+foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
+    if(TARGET FrostPawAmp_${fmt})
+        list(APPEND FROSTPAWAMP_FORMATS FrostPawAmp_${fmt})
+    endif()
+endforeach()
+
+# ITS SET IS INSIDE ITS BINARY TOO, and it is RedPawAmp's — the V4's six packs and the ten cabinets — laid
+# out under its own list in the family's folder (src/channels/Set.h), where a file both carry is one file.
+add_library(FrostPawAmpSet INTERFACE)
+juce_add_binary_data(FrostPawAmpSetData
+    NAMESPACE   ProductSetData
+    HEADER_NAME ProductSetData.h
+    SOURCES     ${REDPAWAMP_SET})
+add_dependencies(FrostPawAmpSetData OrbitAmpSetPacks)   # the packs are zipped by the build (THE SET)
+set_target_properties(FrostPawAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+target_link_libraries(FrostPawAmpSet INTERFACE FrostPawAmpSetData)
+target_compile_definitions(FrostPawAmpSet INTERFACE PRODUCT_SET_EMBEDDED=1)
+target_link_libraries(FrostPawAmp PRIVATE FrostPawAmpSet)
+
+# Not part of the default build, like the other faces: `--target FrostPawAmp_All` builds every format.
+set_target_properties(FrostPawAmp ${FROSTPAWAMP_FORMATS} FrostPawAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(FrostPawAmp_All FrostPawAmp_CLAP)
+
+# ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.
