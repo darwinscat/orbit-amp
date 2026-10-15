@@ -1766,10 +1766,12 @@ int main()
     // ...AND ONE INFINITY MUST NOT MUTE THE SAFETY FOR EVER. The limiter's envelope took the peak
     // it heard, an infinity included, and no finite peak ever decays from that: the gain went to
     // zero and the plugin put out exact silence until the limiter was switched off. A quiet tone,
-    // well under the ceiling, one infinite sample, the tone again: it must come back at unity.
+    // well under the ceiling, one infinite sample, the tone again: it must come back at unity. (Of
+    // the limiter the chain plays, set up as it sets it up — core/DoorLimiter.h.)
     {
-        orbitamp::core::SoftLimiter safety;
-        safety.prepare (sampleRate);
+        felitronics::limiter::TruePeakLimiter safety;
+        (void) safety.prepare (sampleRate, blockSize, 2, orbitamp::core::door::config());
+        safety.setParams (orbitamp::core::door::params (-1.0));
 
         juce::AudioBuffer<float> buf (2, blockSize);
         long long phase = 0;
@@ -1788,7 +1790,7 @@ int main()
             if (b == 20)
                 buf.setSample (0, 100, std::numeric_limits<float>::infinity());
 
-            safety.process (buf.getArrayOfWritePointers(), 2, blockSize, true, -1.0f);
+            (void) safety.process (buf.getArrayOfWritePointers(), 2, blockSize);
 
             if (b == 99)
             {
@@ -1806,8 +1808,9 @@ int main()
     // ...and a huge FINITE spike — not a sound, a fault upstream — is met at its full height and
     // then let go of within half a second, not four.
     {
-        orbitamp::core::SoftLimiter safety;
-        safety.prepare (sampleRate);
+        felitronics::limiter::TruePeakLimiter safety;
+        (void) safety.prepare (sampleRate, blockSize, 2, orbitamp::core::door::config());
+        safety.setParams (orbitamp::core::door::params (-1.0));
 
         juce::AudioBuffer<float> buf (2, blockSize);
         long long phase = 0;
@@ -1828,10 +1831,10 @@ int main()
             if (b == spikeBlock)
                 buf.setSample (0, 100, 1.0e30f);
 
-            safety.process (buf.getArrayOfWritePointers(), 2, blockSize, true, -1.0f);
+            (void) safety.process (buf.getArrayOfWritePointers(), 2, blockSize);
 
-            if (b == spikeBlock)
-                spikeOut = buf.getSample (0, 100);
+            if (b == spikeBlock || b == spikeBlock + 1)     // it leaves a lookahead late
+                spikeOut = juce::jmax (spikeOut, buf.getMagnitude (0, 0, blockSize));
 
             if (b == checkBlock)
             {

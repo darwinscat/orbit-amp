@@ -730,7 +730,7 @@ void AmpProcessor::reportLatency()
     // which is why nothing downstream of here may write it down.
     const int bo = boost.latencySamples();
     const int pr = preamp.latencySamples();
-    const int total = bo + pr;
+    const int total = bo + pr + limiterLatency.load();      // ...and the limiter's lookahead and grid, always
 
     // 🔴 THE WIRE IS SIZED FROM THE NUMBER THE BLOCK ACTUALLY REPORTS, here and nowhere else.
     // `latencySamples()` came out of `NamStage::rateMatch` and therefore out of the rates that are
@@ -800,7 +800,12 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     lastOutGain  = linkWorks (params::rowOut) ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
     lastBoostInGain  = juce::Decibels::decibelsToGain (boostInParam->load());
     lastPreampInGain = juce::Decibels::decibelsToGain (preampInParam->load());
-    limiter.prepare (sampleRate);
+    {
+        limiterReady = limiter.prepare (sampleRate, block, juce::jmax (2, channels), core::door::config());
+        limiterLatency.store (limiterReady ? limiter.latencySamples() : 0);
+        limiterLate.prepare (limiterLatency.load(), juce::jmax (2, channels));
+        limiterCeilingSet = 1.0e9f;
+    }
 
     cab.prepare (sampleRate, block, channels);
     cabIrStale = true;   // the pump reloads the chosen IR into the freshly prepared engine
@@ -1505,25 +1510,50 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         { const auto a = PerfClock::now();
           // Switching a limiter off returns whatever it was holding down in ONE sample: three
           // decibels of grip released instantly is a step upward, which is a click. Its grip is
-          // crossfaded off like any other replacing link.
+          // crossfaded off like any other replacing link — against the input as late as the
+          // limiter makes it, so the two line up.
           const bool limWorks = linkWorks (params::rowLimit);
           const auto limSpan  = blockFade[(size_t) params::rowLimit].advance (numSamples, limWorks);
           const bool limFade  = limSpan.moving && canFade (numSamples, nchBack);
 
-          if (limFade)
-              for (int ch = 0; ch < nchBack; ++ch)
-                  juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
-                                                     buffer.getReadPointer (ch), numSamples);
+          if (limiterReady)
+          {
+              if (const float ceiling = limiterCeilParam->load(); ceiling != limiterCeilingSet)
+              {
+                  limiter.setParams (core::door::params (ceiling));
+                  limiterCeilingSet = ceiling;
+              }
 
-          limiter.process (channels, nchBack, numSamples,
-                           core::BypassFade::runs (limSpan, limWorks), limiterCeilParam->load());
-
-          if (limFade)
-              core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
-                                       nchBack, numSamples, limSpan);
+              if (limFade)
+              {
+                  // A switch under way: the limited signal and the input as late, crossfaded.
+                  limiterLate.pass (channels, fadeDry.getArrayOfWritePointers(), nchBack, numSamples);
+                  (void) limiter.process (channels, nchBack, numSamples);
+                  core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
+                                           nchBack, numSamples, limSpan);
+              }
+              else if (limWorks)
+              {
+                  // In: the wire keeps up with the input, and the limiter takes it.
+                  limiterLate.feed (channels, nchBack, numSamples);
+                  (void) limiter.process (channels, nchBack, numSamples);
+              }
+              else
+              {
+                  // Out: the limiter stays warm on a copy, and the input goes on, late and untouched.
+                  if (canFade (numSamples, nchBack))
+                  {
+                      for (int ch = 0; ch < nchBack; ++ch)
+                          juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                             buffer.getReadPointer (ch), numSamples);
+                      (void) limiter.process (fadeDry.getArrayOfWritePointers(), nchBack, numSamples);
+                  }
+                  limiterLate.pass (channels, channels, nchBack, numSamples);
+              }
+          }
 
           nsStage[stLimit] = elapsedNs (a); }
-        limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
+        limiterGrDb.store (limiterReady && linkWorks (params::rowLimit) ? (float) limiter.gainReductionDb() : 0.0f);
 
         // The mono chain becomes the stereo output HERE — one copy, after everything. (In STEREO
         // SPACE the copy was made at the seam, and there is nothing left to copy.)
@@ -1553,7 +1583,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                     d[i] = 0.0f;
         }
 
-        if (limiter.lastMinGain() < 0.999f)
+        if (limiterGrDb.load() < -0.01f)
             limiterWorked.store (true);
 
         float peak = 0.0f;

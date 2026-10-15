@@ -16,7 +16,8 @@
 #include "core/BypassFade.h"
 #include "core/BypassWire.h"
 #include "core/CabinetIr.h"
-#include "core/SoftLimiter.h"
+#include "core/DoorLimiter.h"
+#include "core/LateWire.h"
 #include "core/DelayStage.h"
 #include "core/ReverbStage.h"
 #include "device/EmbeddedIrs.h"
@@ -1092,7 +1093,15 @@ private:
     int   histSamples = 0;
     std::atomic<float>* limiterCeilParam   = nullptr;
     float lastOutGain = 1.0f;
-    core::SoftLimiter limiter;
+    // THE SAFETY AT THE DOOR (core/DoorLimiter.h): a true-peak limiter that sees each peak a
+    // millisecond before it arrives. It always runs, so its state is warm when it is switched in; while
+    // it is out, `limiterLate` hands on the input exactly as late as the limiter would have, so the
+    // chain is equally late either way and a switch is a crossfade between two signals that line up.
+    felitronics::limiter::TruePeakLimiter limiter;
+    core::LateWire limiterLate;
+    bool limiterReady = false;
+    std::atomic<int> limiterLatency { 0 };
+    float limiterCeilingSet = 1.0e9f;      // the ceiling last handed to it, dB
 
     core::CabinetIr cab;
     std::atomic<float>* cabHpfOnParam = nullptr;

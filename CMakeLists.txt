@@ -528,6 +528,7 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::measurement         # reference-unity IR normalization (core::CabinetIr)
     felitronics::nam                 # NAM inference — the captured devices actually play
     felitronics::rigplayer           # the pack player: captures, their crossfade, tone, alignment
+    felitronics::limiter             # the safety at the door: a true-peak limiter with lookahead
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures       # ValueTree behind the workspace / presets
@@ -652,6 +653,7 @@ set(CATPITAMP_LIBRARIES
     felitronics::measurement
     felitronics::nam
     felitronics::rigplayer
+    felitronics::limiter
     juce::juce_audio_utils
     juce::juce_dsp
     juce::juce_data_structures
@@ -895,6 +897,7 @@ set(REDPAWAMP_LIBRARIES
     felitronics::measurement
     felitronics::nam
     felitronics::rigplayer
+    felitronics::limiter
     juce::juce_audio_utils
     juce::juce_dsp
     juce::juce_data_structures
@@ -1008,7 +1011,7 @@ target_sources(orbitamp_pack_probe PRIVATE tests/PackProbe.cpp)
 target_include_directories(orbitamp_pack_probe PRIVATE src)
 target_compile_definitions(orbitamp_pack_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_pack_probe PRIVATE
-    felitronics::lineareq felitronics::nam felitronics::rigplayer
+    felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
     juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
@@ -1017,7 +1020,7 @@ target_sources(orbitamp_render_probe PRIVATE tests/RenderProbe.cpp)
 target_include_directories(orbitamp_render_probe PRIVATE src)
 target_compile_definitions(orbitamp_render_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_render_probe PRIVATE
-    felitronics::lineareq felitronics::nam felitronics::rigplayer
+    felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
     juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
@@ -1026,7 +1029,7 @@ target_sources(orbitamp_level_probe PRIVATE tests/LevelProbe.cpp)
 target_include_directories(orbitamp_level_probe PRIVATE src)
 target_compile_definitions(orbitamp_level_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_level_probe PRIVATE
-    felitronics::lineareq felitronics::nam felitronics::rigplayer
+    felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
     juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
@@ -1194,6 +1197,7 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::measurement
     felitronics::nam
     felitronics::rigplayer
+    felitronics::limiter
     juce::juce_audio_utils
     juce::juce_dsp
     juce::juce_data_structures
@@ -1214,6 +1218,7 @@ target_link_libraries(orbitamp_captured_test PRIVATE
     felitronics::lineareq
     felitronics::nam
     felitronics::rigplayer
+    felitronics::limiter
     juce::juce_audio_basics
     juce::juce_audio_processors
     juce::juce_dsp
