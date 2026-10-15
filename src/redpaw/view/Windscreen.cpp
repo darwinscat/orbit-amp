@@ -81,7 +81,7 @@ void Windscreen::setParked (bool on)
 
 void Windscreen::steer (float amount) noexcept
 {
-    steerOutside.store (juce::jlimit (-1.0f, 1.0f, amount));
+    steering.setOutside (amount);
 }
 
 void Windscreen::setRenderScale (float scale)
@@ -109,11 +109,6 @@ float Windscreen::speedKmh() const noexcept
         case Mode::still: break;
     }
     return parkedWanted.load() ? 0.0f : PlainsWorld::speedFor (g, turboWanted.load()) * kmh;
-}
-
-float Windscreen::steerTotal() const noexcept
-{
-    return juce::jlimit (-1.0f, 1.0f, steerOutside.load() + steerDrag.load() + steerKeys.load());
 }
 
 //==============================================================================
@@ -383,7 +378,7 @@ void Windscreen::drawCpuFrame (bool advance)
     marsSpeed += (want - marsSpeed) * (1 - std::exp (-dt / (parked ? PlainsWorld::parkSeconds : 0.28)));
     marsPos += marsSpeed * 16 * dt;
     if (! parked)
-        marsX += steerTotal() * marsStrafePerSecond * 16 * dt;
+        marsX += steering.value() * marsStrafePerSecond * 16 * dt;
     marsPos = std::fmod (marsPos + 65536.0, 65536.0);
     marsX = std::fmod (marsX + 65536.0, 65536.0);
 
@@ -431,37 +426,32 @@ void Windscreen::resized()
 void Windscreen::mouseDown (const juce::MouseEvent& e)
 {
     grabKeyboardFocus();
-    dragStartX = e.x;
+    steering.press ((float) e.x);
 }
 
 void Windscreen::mouseDrag (const juce::MouseEvent& e)
 {
-    // A quarter of the glass's width is full lock.
-    const float span = juce::jmax (40.0f, (float) getWidth() * 0.25f);
-    steerDrag.store (juce::jlimit (-1.0f, 1.0f, (float) (e.x - dragStartX) / span));
+    steering.drag ((float) e.x, (float) getWidth());     // a quarter of the glass's width is full lock
 }
 
 void Windscreen::mouseUp (const juce::MouseEvent&)
 {
-    steerDrag.store (0.0f);
+    steering.release();
 }
 
 bool Windscreen::keyPressed (const juce::KeyPress& k)
 {
-    return k.getKeyCode() == juce::KeyPress::leftKey || k.getKeyCode() == juce::KeyPress::rightKey;   // held: keyStateChanged
+    return face::Steering::steersBy (k);     // held: keyStateChanged
 }
 
 bool Windscreen::keyStateChanged (bool)
 {
-    const bool left = juce::KeyPress::isKeyCurrentlyDown (juce::KeyPress::leftKey);
-    const bool right = juce::KeyPress::isKeyCurrentlyDown (juce::KeyPress::rightKey);
-    steerKeys.store ((right ? 1.0f : 0.0f) - (left ? 1.0f : 0.0f));
-    return left || right;
+    return steering.keysChanged();
 }
 
 void Windscreen::focusLost (FocusChangeType)
 {
-    steerKeys.store (0.0f);
+    steering.keysLost();
 }
 
 //==============================================================================
@@ -491,7 +481,7 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     world.setGear (gearWanted.load());
     world.setTurbo (turboWanted.load());
     world.setParked (parkedWanted.load());
-    world.setSteer (steerTotal());
+    world.setSteer (steering.value());
     const bool wantStill = stillWanted.load();
     if (wantStill)
         world.place (world.state().x, world.state().z, world.state().heading, gearWanted.load(), turboWanted.load());   // a still is clear air, as the drive would be once settled
