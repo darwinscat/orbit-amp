@@ -91,6 +91,7 @@ namespace
         }
         const auto src = opaqueBoundsOnce (img);
         const float k = length / src.getWidth();
+        g.setOpacity (1.0f);    // an image is drawn at the colour's opacity: a dim mark's, set before, let the well show through
         g.drawImageTransformed (img, juce::AffineTransform::translation (-src.getCentreX(), -src.getCentreY())
                                          .scaled (k)
                                          .rotated (angle)
