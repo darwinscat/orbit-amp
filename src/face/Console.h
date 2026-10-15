@@ -148,6 +148,12 @@ protected:
     /** A control of the product's own onto the stage, under the name tag. */
     void addToStage (juce::Component&);
 
+    void showGateMenu();            // GATE's plate: the gate the settings menu holds too
+
+    // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
+    // for INPUT count from the lever's zero, so the middle of the travel reads 0.
+    void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);
+
     // THE PRODUCT'S OWN. Each is asked from the console's own code once the face is built.
 
     /** Where the state's channel is now: the product's selector goes there (without saying so). */
@@ -309,7 +315,6 @@ private:
 
     void showInputMenu();           // the INPUT column: the lever's zero
     void showOutputMenu();          // the OUTPUT column: the limiter, and where its ceiling is — and LIMITER's plate
-    void showGateMenu();            // GATE's plate: the gate the settings menu holds too
     void showTunerMenu();           // the tuner: whether it listens, and whether the amp is silent meanwhile
     void showTunerState();          // ...both written on its glass
 
@@ -334,9 +339,6 @@ private:
     void addCabinets (const juce::StringArray& paths);
     void cabinetsChanged();
 
-    // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
-    // for INPUT count from the lever's zero, so the middle of the travel reads 0.
-    void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);
     SegmentMeter inMeter, outMeter;
 
     // The lamps over the columns: each lights when its side has gone over full scale — the input as it

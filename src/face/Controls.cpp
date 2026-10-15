@@ -729,7 +729,8 @@ ColumnFader::ColumnFader (const juce::Image& c) : cap (c)
 
 juce::Range<float> ColumnFader::travel() const
 {
-    return { 26.0f, (float) getHeight() - 26.0f };
+    const float end = 26.0f * scale;
+    return { end, (float) getHeight() - end };
 }
 
 void ColumnFader::setValue (float v, bool notify)
@@ -748,16 +749,17 @@ void ColumnFader::paint (juce::Graphics& g)
     const float cx = (float) getWidth() * 0.5f;
     const auto t = travel();
 
+    const float k = scale;
     g.setColour (juce::Colour (0xff020205));
-    g.fillRoundedRectangle (juce::Rectangle<float> (cx - 3.0f, t.getStart() - 8.0f, 6.0f, t.getLength() + 16.0f), 3.0f);
+    g.fillRoundedRectangle (juce::Rectangle<float> (cx - 3.0f * k, t.getStart() - 8.0f * k, 6.0f * k, t.getLength() + 16.0f * k), 3.0f * k);
 
-    // A scale down the right edge, every tenth; the middle one (unity) longer.
-    for (int i = 0; i <= 10; ++i)
+    // A scale down the right edge, every tenth unless told otherwise; one of them (unity) longer.
+    for (int i = 0; i <= marks; ++i)
     {
-        const float y = t.getEnd() - t.getLength() * (float) i / 10.0f;
-        const float len = i == 5 ? 12.0f : 7.0f;
-        g.setColour (orange.withAlpha (i == 5 ? 0.95f : 0.6f));
-        g.fillRect (juce::Rectangle<float> ((float) getWidth() - 6.0f - len, y - 0.8f, len, 1.6f));
+        const float y = t.getEnd() - t.getLength() * (float) i / (float) marks;
+        const float len = (i == longMark ? 12.0f : 7.0f) * k;
+        g.setColour (orange.withAlpha (i == longMark ? 0.95f : 0.6f));
+        g.fillRect (juce::Rectangle<float> ((float) getWidth() - 6.0f * k - len, y - 0.8f, len, 1.6f));
     }
 
     const float y = t.getEnd() - t.getLength() * value;

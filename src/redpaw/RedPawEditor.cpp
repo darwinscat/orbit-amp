@@ -283,6 +283,25 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     addToStage (turbo);
     turbo.setBounds (juce::Rectangle<float> (turboSize, turboSize).withCentre (layout::turbo).toNearestInt());
 
+    // GATE'S THRESHOLD: marks every 5 dB, the longer one at -50, where a double click puts it; a right
+    // click is GATE's menu, and while it is held the tag over it says where it stands.
+    const auto travelOf = [] (float db) { return (db - thresholdLowDb) / (thresholdHighDb - thresholdLowDb); };
+    threshold.scale = thresholdScale;
+    threshold.capLength = faderCapLength * thresholdScale;
+    threshold.marks = 6;
+    threshold.longMark = 4;
+    threshold.defaultValue = travelOf (-50.0f);
+    auto* gateThreshold = follow (params::gateThreshold, [this, travelOf] (float db) { threshold.setValue (travelOf (db), false); });
+    threshold.onGestureStart = [gateThreshold] { gateThreshold->beginGesture(); };
+    threshold.onChange       = [gateThreshold] (float travel) { gateThreshold->setValueAsPartOfGesture (juce::jmap (travel, thresholdLowDb, thresholdHighDb)); };
+    threshold.onGestureEnd   = [gateThreshold] { gateThreshold->endGesture(); };
+    threshold.onMenu         = [this] { showGateMenu(); };
+    gateThreshold->sendInitialUpdate();
+    sayLever (threshold, "GATE", [this] { return getParam (params::gateThreshold); });
+    follow (params::gateOn, [this] (float on) { threshold.setAlpha (on > 0.5f ? 1.0f : 0.45f); })->sendInitialUpdate();
+    addToStage (threshold);
+    threshold.setBounds (thresholdSlot.withSizeKeepingCentre (faderWidth * thresholdScale, thresholdSlot.getHeight()).toNearestInt());
+
     // THE NAV SCREEN: along its top the gear, the channel and the speed the windscreen is driving at;
     // under them the picture of the amp at work the machine has chosen.
     header.speed = [this] { return view.speedKmh(); };

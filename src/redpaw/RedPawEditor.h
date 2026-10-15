@@ -73,6 +73,10 @@ private:
     // nothing until a gear is pulled again.
     GearLever lever;
     face::PushButton turbo { "TURBO" };
+
+    // GATE'S THRESHOLD, on a short fader right of the gate's lamp: -70 dB at its foot, -40 at its head.
+    // While the gate is off it stands dim, and still moves — the gate keeps what it was set to.
+    face::ColumnFader threshold { Art::get().faderCap };
     std::vector<std::unique_ptr<KnobRing>> rings;   // DRIVE's and the tones': where each knob stands
     NavHeader header;               // on the nav screen: the gear, the pack that is playing, the speed
 

@@ -52,6 +52,37 @@ namespace
         return img;
     }
 
+    /** GATE'S THRESHOLD GETS A WELL, right of the gate's lamp (layout::thresholdWell): INPUT's recess as
+        painted, all of it drawn at one smaller size — its top end and its bottom end whole, and of the
+        straight run between them only as much as the well is long. */
+    juce::Image addThresholdWell (juce::Image img)
+    {
+        if (! img.isValid())
+            return img;
+
+        using namespace layout;
+        const float k = (float) img.getWidth() / width;
+        const auto px = [k] (float v) { return juce::roundToInt (v * k); };
+        const auto original = img.createCopy();
+        juce::Graphics g (img);
+        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+
+        const float s = thresholdScale;
+        const float run = thresholdWell.getHeight() / s - inWellTop - inWellBottom;     // of INPUT's straight run, kept
+        const float srcTop[] { inWell.getY(), inWell.getY() + inWellTop, inWell.getBottom() - inWellBottom };
+        const float srcLen[] { inWellTop, run, inWellBottom };
+
+        float y = thresholdWell.getY();
+        for (int i = 0; i < 3; ++i)
+        {
+            const float len = srcLen[i] * s;
+            g.drawImage (original, px (thresholdWell.getX()), px (y), px (thresholdWell.getRight()) - px (thresholdWell.getX()), px (y + len) - px (y),
+                         px (inWell.getX()), px (srcTop[i]), px (inWell.getRight()) - px (inWell.getX()), px (srcTop[i] + srcLen[i]) - px (srcTop[i]));
+            y += len;
+        }
+        return img;
+    }
+
     /** THE LAMPS GO OUT (face/Renders.h). On a rusted dashboard warm is everywhere: a lamp is what is
         both warm AND bright — its red well over its blue, and the whole of it lit — so the rust and the
         dust round it stay as they were painted. */
@@ -69,7 +100,7 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg         = face::renders::putOutLamps (widenRims (load ("dashboard.png")), layout::lamps, layout::width, lampness, a.lampLit);
+        a.bg         = face::renders::putOutLamps (addThresholdWell (widenRims (load ("dashboard.png"))), layout::lamps, layout::width, lampness, a.lampLit);
         a.knobDrive  = load ("knob-drive.png");
         a.knobTone   = load ("knob-tone.png");
         a.lever      = load ("lever.png");

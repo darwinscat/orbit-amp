@@ -121,6 +121,21 @@ inline const juce::Rectangle<float> outFader { 1588.0f, 447.5f, 24.5f, 235.0f };
 inline constexpr float faderWidth     = 44.0f;      // the fader's box round its slot
 inline constexpr float faderCapLength = 18.0f;      // the cap's render, across its slot
 
+/** GATE'S THRESHOLD: a short fader right of the gate's lamp, on the corner housing's plain face, in a
+    well of INPUT's own kind (Art: `addThresholdWell`) — INPUT's recess as painted, drawn smaller, its two
+    ends whole and only its straight run cut short. -70 dB at the bottom, -40 at the top. */
+inline const juce::Rectangle<float> inWell { 106.0f, 428.75f, 61.5f, 274.0f };      // INPUT's recess, as painted
+inline constexpr float inWellTop = 33.25f, inWellBottom = 32.5f;                    // its ends: the screws, the slot's round ends
+inline const juce::Rectangle<float> inSlot { 125.0f, 447.0f, 25.0f, 237.0f };       // the slot in it
+inline const juce::Rectangle<float> thresholdWell { 136.0f, 804.0f, 40.0f, 115.0f };
+inline constexpr float thresholdScale = 40.0f / 61.5f;                              // the well's size to INPUT's
+inline const juce::Rectangle<float> thresholdSlot {
+    thresholdWell.getX() + (inSlot.getX() - inWell.getX()) * thresholdScale,
+    thresholdWell.getY() + (inSlot.getY() - inWell.getY()) * thresholdScale,
+    inSlot.getWidth() * thresholdScale,
+    thresholdWell.getHeight() - (inWell.getHeight() - inSlot.getHeight()) * thresholdScale };
+inline constexpr float thresholdLowDb = -70.0f, thresholdHighDb = -40.0f;
+
 
 /** THE LAMPS THE DASHBOARD LIGHTS ITSELF, each with room round it for its glow: the bars of three over
     the columns, the input's overload and the output's; the slanted ones in the bottom corners, the

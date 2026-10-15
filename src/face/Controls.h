@@ -312,6 +312,13 @@ public:
     /** The cap's render, its opaque width drawn this long; by default as wide as the fader less a little. */
     float capLength = 0.0f;
 
+    /** A short fader in a smaller slot: its ends, its line and its scale drawn this much of a column's. */
+    float scale = 1.0f;
+
+    /** The scale down its right edge: this many steps, and the one that is drawn longer — unity, by
+        default; none, below zero. */
+    int marks = 10, longMark = 5;
+
     std::function<void()>       onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;
     std::function<void()>       onMenu;          // a right click, when set — and then it does not move the cap
