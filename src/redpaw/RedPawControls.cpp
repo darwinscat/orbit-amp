@@ -16,12 +16,10 @@ namespace
     // The slot and its notches in the lever's own space.
     constexpr float slotX  = layout::slotX - GearLever::left;
     constexpr float notchX = layout::notchX - GearLever::left;
-    constexpr float namesRight = layout::gearNamesRight - GearLever::left;
-    constexpr float nameH = 26.0f;
 
-    /** Where the knob's middle stands on the lever's render, down from its top, and how far down the
-        knob goes before the stem — fractions of the render's side. */
-    constexpr float gripMiddle = 0.33f, gripBottom = 0.72f;
+    /** Where the grip's collar ends and the stem begins on the lever's render, down from its top — a
+        fraction of the render's side. */
+    constexpr float stemTop = 0.69f;
 }
 
 GearLever::GearLever()
@@ -55,16 +53,6 @@ float GearLever::positionAt (float y) const noexcept
     return (float) (numPositions - 1);
 }
 
-int GearLever::nameAt (juce::Point<float> p) const noexcept
-{
-    if (p.x > namesRight + 4.0f)
-        return -1;
-    for (int i = 0; i < numPositions; ++i)
-        if (std::abs (p.y - yOf ((float) i)) < nameH * 0.5f)
-            return i;
-    return -1;
-}
-
 void GearLever::setPosition (int to, bool animate, bool notify)
 {
     to = juce::jlimit (0, numPositions - 1, to);
@@ -93,18 +81,8 @@ void GearLever::timerCallback()
 
 void GearLever::paint (juce::Graphics& g)
 {
-    // The names, left of the slot and set against it; the gear the lever stands in lit orange.
-    const auto font = face::labelFont (layout::px13).withExtraKerningFactor (0.06f);
-    for (int i = 0; i < numPositions; ++i)
-    {
-        g.setColour (i == position ? orange : labelLilac.withAlpha (0.8f));
-        g.setFont (font);
-        g.drawText (names[i], juce::Rectangle<float> (0.0f, yOf ((float) i) - nameH * 0.5f, namesRight, nameH),
-                    juce::Justification::centredRight, false);
-    }
-
-    // The lever: its knob where it stands, its stem down the slot. In a notch the stem leans into it;
-    // at PARK, the slot's top end, there is no notch.
+    // The lever: its grip over the position, its stem entering the slot under the grip's collar. In a
+    // notch the stem stands in the notch; at PARK, the slot's top end, there is none.
     const auto& art = Art::get().lever;
     const float p = pos.value;
     const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f)
@@ -112,7 +90,8 @@ void GearLever::paint (juce::Graphics& g)
     const float x = slotX + (notchX - slotX) * inNotch;
     const float y = yOf (p);
     const float s = layout::leverSize;
-    const auto box = juce::Rectangle<float> (x - s * 0.5f, y - s * gripMiddle, s, s);
+    const float enters = y - layout::stemIn;
+    const auto box = juce::Rectangle<float> (x - s * 0.5f, enters - s * stemTop, s, s);
 
     if (! art.isValid())
     {
@@ -121,11 +100,10 @@ void GearLever::paint (juce::Graphics& g)
         return;
     }
 
-    // The stem shows only down the slot: below it, it is under the plate.
-    const auto slot = layout::gateSlot.translated (-left, -top).reduced (2.0f, 1.0f);
+    // Of the stem, only what enters the slot is seen: a little way under the collar, then it is in the
+    // slot's dark.
     juce::Path shown;
-    shown.addRectangle (box.withHeight (s * gripBottom));
-    shown.addRectangle (slot.withLeft (box.getX()).withRight (box.getRight()).getIntersection (box));
+    shown.addRectangle (box.withBottom (enters + layout::stemIn + layout::stemStub));
     const juce::Graphics::ScopedSaveState keep (g);
     g.reduceClipRegion (shown);
     g.drawImage (art, box);
@@ -133,15 +111,13 @@ void GearLever::paint (juce::Graphics& g)
 
 void GearLever::mouseDown (const juce::MouseEvent& e)
 {
-    if (const int n = nameAt (e.position); n >= 0)
-    {
-        setPosition (n, true);
-        return;
-    }
     held = true;
     stopTimer();
-    const float gripY = yOf (pos.value);
-    grabOffset = std::abs (e.position.y - gripY) < 30.0f ? gripY - e.position.y : 0.0f;
+    // Taken by the grip, it goes with the hand from where it was taken; anywhere else on the gate it
+    // goes where the hand is.
+    const float at = yOf (pos.value);
+    const float grip = at - layout::stemIn - layout::leverSize * (stemTop - 0.35f);
+    grabOffset = std::abs (e.position.y - grip) < 32.0f ? at - e.position.y : 0.0f;
     mouseDrag (e);
 }
 
@@ -225,6 +201,22 @@ void NavHeader::paint (juce::Graphics& g)
     g.drawText (number, area.removeFromRight (juce::GlyphArrangement::getStringWidth (words, number) + 2.0f),
                 juce::Justification::centredRight, false);
     area.removeFromRight (8.0f);
+
+    // PARKED, a warning first: a red triangle with its mark — the amp is out of the sound.
+    if (parked)
+    {
+        const float h = 20.0f, w = 23.0f;
+        const auto box = area.removeFromLeft (w).withSizeKeepingCentre (w, h);
+        juce::Path sign;
+        sign.addTriangle (box.getCentreX(), box.getY(), box.getRight(), box.getBottom(), box.getX(), box.getBottom());
+        sign = sign.createPathWithRoundedCorners (2.5f);
+        g.setColour (juce::Colour (0xffe8463a));
+        g.fillPath (sign);
+        g.setColour (juce::Colour (0xff160606));
+        g.fillRoundedRectangle (juce::Rectangle<float> (2.6f, 8.0f).withCentre ({ box.getCentreX(), box.getY() + h * 0.52f }), 1.3f);
+        g.fillEllipse (juce::Rectangle<float> (2.8f, 2.8f).withCentre ({ box.getCentreX(), box.getBottom() - 3.6f }));
+        area.removeFromLeft (8.0f);
+    }
 
     // The gear, then the channel.
     g.setColour (orange);

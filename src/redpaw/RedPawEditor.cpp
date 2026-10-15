@@ -265,7 +265,8 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
 
     // THE GEAR LEVER: the pedal, and everything its channel was left with.
     addToStage (lever);
-    lever.setBounds (juce::Rectangle<float> (GearLever::left, GearLever::top, gearPlate.getRight() - GearLever::left, 240.0f).toNearestInt());
+    lever.setBounds (juce::Rectangle<float> (GearLever::left, GearLever::top, gearPlate.getRight() - GearLever::left,
+                                             gearPlate.getBottom() - GearLever::top).toNearestInt());
     lever.onPosition = [this] (int at) { if (at == GearLever::park) parkIt(); else pullGear (at - GearLever::positionOf (0)); };
     lever.onRelease  = [this] { showChannel(); };  // held, it follows the hand; let go, it follows the state
 

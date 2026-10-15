@@ -73,15 +73,17 @@ inline const juce::Rectangle<float> navHeader   { 567.0f, 426.0f, 430.0f, 32.0f 
 inline const juce::Rectangle<float> navPicture  { 567.0f, 460.0f, 430.0f, 126.0f };
 inline const juce::Rectangle<float> tunerScreen { 567.0f, 588.0f, 430.0f, 27.0f };
 
-/** THE GEAR LEVER'S SLOT: straight, with three notches on its right — CLEAN, CRUNCH, HI-GAIN, top to
-    bottom — and PARK at its top end. The lever's stem runs up and down the slot's middle and stands in
-    a notch, or at the top. Their names stand left of the slot, set against it. */
-inline const juce::Rectangle<float> gateSlot { 785.5f, 682.0f, 37.5f, 173.5f };
-inline constexpr float slotX  = 799.0f;         // the stem in the slot
-inline constexpr float notchX = 810.0f;         // ...and in a notch
-inline constexpr float slotTopY = 690.0f;       // the slot's top end: PARK
-inline const std::array<float, 3> notches {{ 727.0f, 767.0f, 810.0f }};
-inline constexpr float gearNamesRight = 778.0f;
+/** THE GEAR LEVER'S SLOT: straight, 785.5..811 across, its top end at 681 — PARK — and three notches on
+    its right, out to 823 — CLEAN, CRUNCH, HI-GAIN, top to bottom. A position is where the lever's stem
+    enters the slot: its grip stands over it, the stem goes in under the grip's collar, and in a notch
+    the stem stands in the notch. */
+inline const juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
+inline constexpr float slotX  = 798.3f;         // the stem in the slot
+inline constexpr float notchX = 814.0f;         // ...and in a notch
+inline constexpr float slotTopY = 694.0f;       // PARK: the stem at the slot's top end
+inline const std::array<float, 3> notches {{ 733.8f, 776.0f, 817.5f }};     // the notches' middles
+inline constexpr float stemIn = 11.0f;          // how far over a position the stem enters the slot...
+inline constexpr float stemStub = 10.0f;        // ...and how far under it the stem is seen
 inline constexpr float leverSize = 88.0f;       // the lever's render: grip on a stem to its bottom edge
 inline const juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };
 

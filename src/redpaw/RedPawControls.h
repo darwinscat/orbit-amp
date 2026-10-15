@@ -14,12 +14,13 @@ namespace orbitamp::redpaw
 {
 
 /** THE GEAR LEVER in the dashboard's straight slot: PARK at its top end, then CLEAN, CRUNCH, HI-GAIN
-    down the slot's three notches, their names left of it, the one it stands in lit. It follows the hand
-    up and down the slot while held, sits in a position within reach of one, and springs into the
-    nearest on release; a click on a name puts it there, and so does the wheel, a position at a time.
-    In a notch its stem leans into it.
+    down the slot's three notches — the gear's name is on the nav screen. It follows the hand up and down
+    the slot while held, sits in a position within reach of one, and springs into the nearest on
+    release; a click anywhere on the gate puts it at the position nearest the click, and so does the
+    wheel, a position at a time. In a notch its stem stands in it.
 
-    Its box takes in the names and the gate's plate: in the dashboard's space from `left` across. */
+    Its box is the gate's plate and the room over it the grip stands up into: in the dashboard's space
+    from `left`, `top`. */
 class GearLever final : public juce::Component, private juce::Timer
 {
 public:
@@ -27,7 +28,7 @@ public:
     static constexpr int park = 0, numPositions = 4, numGears = 3;
     inline static const juce::StringArray names { "PARK", "CLEAN", "CRUNCH", "HI-GAIN" };
     static int positionOf (int gear) noexcept { return gear + 1; }
-    static constexpr float left = 660.0f, top = 640.0f;
+    static constexpr float left = 742.0f, top = 600.0f;
 
     GearLever();
 
@@ -54,14 +55,14 @@ private:
 
     float yOf (float position) const noexcept;      // in the lever's own space
     float positionAt (float y) const noexcept;
-    int   nameAt (juce::Point<float>) const noexcept;
     void  timerCallback() override;
 };
 
 //==============================================================================
 /** THE NAV SCREEN'S TOP LINE: the gear in orange and the channel that is playing beside it, and on the
     right the rover's speed in km/h — read from the windscreen's own drive, so it climbs and falls as
-    the gears change, and stands at nothing when parked. */
+    the gears change, and stands at nothing when parked. Parked, a red warning triangle stands before
+    PARK: the amp is out of the sound. */
 class NavHeader final : public juce::Component, private juce::Timer
 {
 public:
