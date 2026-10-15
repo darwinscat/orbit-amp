@@ -92,18 +92,18 @@ namespace
         p.emblemFace = { emblemFace.begin(), emblemFace.end() };
         p.emblemMark = emblemMark;
 
-        // The two long plates: PRESET over MEM on the left, the version over CPU on the right. The
-        // readings start where a reading of their usual width would be centred, so that a number that
-        // changes width moves nothing else.
-        const auto rowA = [] (juce::Rectangle<float> plate) { return plate.withHeight (28.0f).translated (0.0f, 1.0f); };
-        const auto rowB = [] (juce::Rectangle<float> plate, float usual)
+        // The bottom plates: PRESET alone on the left, the version in the middle, MEM over CPU on the
+        // right — the two readings starting at one edge, where MEM of its usual width would be centred,
+        // so that a number that changes width moves nothing else.
+        const auto reading = [] (juce::Rectangle<float> plate, float row)
         {
-            return juce::Rectangle<float> (plate.getCentreX() - usual * 0.5f, plate.getY() + 29.0f, usual + 40.0f, 28.0f);
+            constexpr float usual = 170.0f;
+            return juce::Rectangle<float> (plate.getCentreX() - usual * 0.5f, plate.getY() + row, usual + 40.0f, 28.0f);
         };
-        p.preset  = rowA (leftPlate);
-        p.memory  = rowB (leftPlate, 170.0f);
-        p.version = rowA (rightPlate);
-        p.load    = rowB (rightPlate, 110.0f);
+        p.preset  = leftPlate;
+        p.version = centrePlate;
+        p.memory  = reading (rightPlate, 1.0f);
+        p.load    = reading (rightPlate, 29.0f);
 
         p.gateDoor    = around (gateWord, 110.0f, 28.0f);
         p.limiterDoor = around (limiterWord, 124.0f, 28.0f);

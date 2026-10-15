@@ -144,10 +144,12 @@ inline const juce::Point<float> gateWord    { 110.0f, 824.0f };
 inline const juce::Point<float> limiterWord { 1562.0f, 825.0f };
 inline constexpr float lampSlant = 0.7854f;     // 45 degrees
 
-/** THE TWO LONG PLATES on the bottom edge, between their screws: PRESET over MEM on the left, the
-    version over CPU on the right. */
-inline const juce::Rectangle<float> leftPlate  { 340.0f, 852.0f, 262.0f, 57.0f };
-inline const juce::Rectangle<float> rightPlate { 1103.0f, 852.0f, 229.0f, 57.0f };
+/** THE PLATES ON THE BOTTOM EDGE, between their screws: PRESET alone on the long one on the left, MEM
+    over CPU on the long one on the right, and the version on the short one in the middle, under the
+    gate's block. */
+inline const juce::Rectangle<float> leftPlate   { 340.0f, 852.0f, 262.0f, 57.0f };
+inline const juce::Rectangle<float> rightPlate  { 1103.0f, 852.0f, 229.0f, 57.0f };
+inline const juce::Rectangle<float> centrePlate { 755.0f, 895.0f, 195.0f, 33.0f };
 
 /** The emblem plate under the windscreen: a flat hexagon the family's mark is cut into, clear of its six
     screws. */
