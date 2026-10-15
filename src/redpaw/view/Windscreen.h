@@ -31,11 +31,13 @@ namespace orbitamp::redpaw
     another (the ice moon's drive, say); the 1993 landscape then wears that world's colours. The glass,
     the modes, the ladder and the hand are the same over any of them.
 
-    Quality looks after itself: the GPU's frame is timed, and when a second's frames average more than
-    4 ms the render scale comes down (1.0, 0.75, 0.5), then the CPU takes over, then the still. It never
-    climbs back by itself within a session — a jump up and down again is worse than a steady lesser
-    picture; `setMode` or `setRenderScale` from the player starts the ladder again. `status()` says
-    where it stands, for a status line.
+    Quality looks after itself: every frame is timed, and when the middle of a second's frames costs
+    more than 4 ms five seconds running, the render scale comes down a rung (1.0, 0.75, 0.5); after half a
+    minute in which the rung above would have cost under 3 ms, it climbs back one, never past the scale
+    asked for. The ladder
+    never changes the landscape: the 1993 one and the still are the player's to choose — only a GPU
+    whose shaders will not build is left for the CPU by itself. `setMode` or `setRenderScale` from the
+    player starts the ladder again. `status()` says where it stands, for a status line.
 
     A dumb view: it takes values, never a processor. The drive runs on the GL thread in GPU mode and on
     the message thread otherwise, paced by the screen's refresh and capped at 30 or 60 frames a second. */
@@ -143,6 +145,8 @@ private:
     std::atomic<float> gpuMsShared { -1.0f };
     std::atomic<float> speedShared { PlainsWorld::gearSpeed[0] };     // m/s, the GPU's drive, as last stepped
     std::atomic<int> gpuFrames { 0 };
+    std::array<std::atomic<float>, 256> gpuMsRing {};    // every frame's cost, the GL thread writing, the ladder reading
+    std::atomic<unsigned> gpuMsAt { 0 };
     std::atomic<int> gpuFrameW { 0 }, gpuFrameH { 0 };
     double glLast = 0.0;
 
@@ -176,6 +180,9 @@ private:
     double lastFrame = 0.0, windowStart = 0.0;
     float fps = 0.0f;
     juce::String note;
+    unsigned gpuMsRead = 0;                  // the ring read up to here
+    std::vector<float> secondsMs;            // a second's frame costs, for the median
+    int slowSeconds = 0, calmSeconds = 0;    // in a row
     juce::VBlankAttachment pulse { this, [this] { tick(); } };
 
     void tick();
@@ -186,6 +193,9 @@ private:
     void attachGl();
     void detachGl();
     void stepDown (const juce::String& why);
+    void stepUp();
+    void forgetCosts();
+    float rungAbove (float scale) const noexcept;
     void drawCpuFrame (bool advance);
     void takeStill();
 
