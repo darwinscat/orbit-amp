@@ -21,15 +21,16 @@ namespace orbitamp::redpaw
 /** THE WINDSCREEN. An endless drive across Mars, three ways: the Plains on the GPU (a context of the
     view's own, the landscape rasterized by the shaders), the 1993 landscape on the CPU (MARS.EXE, drawn
     into an image and painted), or STILL — one frame, rendered once and kept, for a player who wants
-    nothing moving. Three gears set the speed — CLEAN, CRUNCH, HI-GAIN — and TURBO doubles it, eased over
-    about a second; TURBO also raises dust, graded by the gear, up to the head-on storm. PARK brings the
+    nothing moving. The gears set the speed — as many as the product has, CLEAN first — and TURBO doubles
+    it, eased over about a second; TURBO also raises dust, graded by the gear, the top one's the head-on
+    storm. PARK brings the
     rover to a stand and clears the air. Steering is held input: a drag left or right across the glass while the button is down, the
     arrow keys while the view has the focus (a host often keeps the keys, so the drag is the main way),
     or `steer()` from outside.
 
-    The world it looks out on is a Drive handed in at construction — the Plains unless a product passes
-    another (the ice moon's drive, say); the 1993 landscape then wears that world's colours. The glass,
-    the modes, the ladder and the hand are the same over any of them.
+    The world it looks out on is a Drive handed in at construction, made for the product's gears — the
+    Plains of Mars, the ice moon's drive; the 1993 landscape wears that world's colours. The glass, the
+    modes, the ladder and the hand are the same over any of them.
 
     Quality looks after itself: every frame is timed, and when the middle of a second's frames costs
     more than 4 ms five seconds running, the render scale comes down a rung (1.0, 0.75, 0.5); after half a
@@ -47,8 +48,8 @@ class Windscreen final : public juce::Component,
 public:
     enum class Mode { gpu, cpu, still };
 
-    /** With the world to drive across; none is the Plains. */
-    explicit Windscreen (std::unique_ptr<Drive> drive = nullptr);
+    /** With the world to drive across, in the product's gears. */
+    explicit Windscreen (std::unique_ptr<Drive> drive);
     ~Windscreen() override;
 
     /** The world, to be placed or clocked before the first frame. The GL thread's while the GPU draws. */
@@ -59,15 +60,16 @@ public:
     /** The mode running now — the choice, or what the ladder has come down to. */
     Mode mode() const noexcept { return running; }
 
-    /** 1..3: CLEAN, CRUNCH, HI-GAIN. */
+    /** 1..numGears(): CLEAN, CRUNCH, HI-GAIN, as far as the product has them. */
     void setGear (int gear);
     int gear() const noexcept { return gearWanted.load(); }
+    int numGears() const noexcept { return world->numGears(); }
 
     /** TURBO: the second channel of the pedal, twice the speed. */
     void setTurbo (bool on);
     bool isTurbo() const noexcept { return turboWanted.load(); }
 
-    /** PARK: the lever's fourth position. The rover stands in about 1.5 s, the dust settles, and the
+    /** PARK: the lever's top end. The rover stands in about 1.5 s, the dust settles, and the
         hand only turns the view slowly in place. */
     void setParked (bool on);
     bool isParked() const noexcept { return parkedWanted.load(); }

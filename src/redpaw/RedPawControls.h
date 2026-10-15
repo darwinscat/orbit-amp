@@ -13,24 +13,28 @@
 namespace orbitamp::redpaw
 {
 
-/** THE GEAR LEVER in the dashboard's straight slot: PARK at its top end, then CLEAN, CRUNCH, HI-GAIN
-    down the slot's three notches — the gear's name is on the nav screen. It follows the hand up and down
-    the slot while held, sits in a position within reach of one, and springs into the nearest on
-    release; a click anywhere on the gate puts it at the position nearest the click, and so does the
-    wheel, a position at a time. In a notch its stem stands in it.
+/** THE GEAR LEVER in the dashboard's straight slot: PARK at its top end, then the product's gears down
+    the slot's notches — CLEAN, CRUNCH, HI-GAIN, as many of them as it has — the gear's name is on the
+    nav screen. It follows the hand up and down the slot while held, sits in a position within reach of
+    one, and springs into the nearest on release; a click anywhere on the gate puts it at the position
+    nearest the click, and so does the wheel, a position at a time. In a notch its stem stands in it.
 
     Its box is the gate's plate and the room over it the grip stands up into: in the dashboard's space
     from `left`, `top`. */
 class GearLever final : public juce::Component, private juce::Timer
 {
 public:
-    /** Its positions, top to bottom: PARK, then the three gears. */
-    static constexpr int park = 0, numPositions = 4, numGears = 3;
+    /** Its positions, top to bottom: PARK, then the gears — a lever of fewer than three has the first. */
+    static constexpr int park = 0;
     inline static const juce::StringArray names { "PARK", "CLEAN", "CRUNCH", "HI-GAIN" };
     static int positionOf (int gear) noexcept { return gear + 1; }
     static constexpr float left = 724.0f, top = 600.0f;
 
-    GearLever();
+    /** In the product's gears, as many as the slot's top notches. */
+    explicit GearLever (int gears);
+
+    int numGears() const noexcept     { return gears; }
+    int numPositions() const noexcept { return gears + 1; }
 
     std::function<void (int)>   onPosition;   // the position it settled in (or snapped into while held)
     std::function<void()>       onRelease;    // the hand has let go
@@ -50,7 +54,9 @@ public:
     void mouseExit (const juce::MouseEvent&) override  { if (! held) { lit.target = 0.0f; startTimerHz (60); } }
 
 private:
-    face::Glide pos;            // where the stem stands: 0..3, one to a position
+    const int gears;
+    std::array<float, 4> heights {};    // each position's height in the dashboard's space: PARK, then the notches
+    face::Glide pos;            // where the stem stands: 0..gears, one to a position
     face::Glide lit;            // the light round the grip: 0 resting .. 1 under the hand
     int  position = 1;
     bool held = false;

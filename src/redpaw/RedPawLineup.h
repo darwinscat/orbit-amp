@@ -8,18 +8,29 @@
 namespace orbitamp::redpaw
 {
 
-/** THE ROVER'S SIX CHANNELS: the Victory V4's six packs, each its own channel with its own memory
-    (channels/Lineup.h) — and to the hand, three gears of two. The gear is the pedal — CLEAN the
-    Copper, CRUNCH the Sheriff, HI-GAIN the Kraken — and TURBO is that pedal's second channel: the
-    Copper TB, the Sheriff's Ch2, the Kraken's Ch2. So the channels go in pairs, gear by gear, TURBO off
-    then on, and a Program Change counts them in that order. PARK, the lever's fourth position, is no
-    channel: it takes the whole amp out of the sound, and the channel waits for the lever to come back. The engine they are kept by is the
-    family's (channels/Engine.h); this file is what makes it the rover's. */
+/** THE ROVER'S CHANNELS: each its own pack with its own memory (channels/Lineup.h) — and to the hand,
+    gears of two. The gear is the pedal and TURBO is that pedal's second channel, so the channels go in
+    pairs, gear by gear, TURBO off then on, and a Program Change counts them in that order. PARK, the
+    lever's top end, is no channel: it takes the whole amp out of the sound, and the channel waits for
+    the lever to come back. The engine they are kept by is the family's (channels/Engine.h); this file
+    is what makes it the rover's.
+
+    WHICH CHANNELS, AND SO HOW MANY GEARS, IS THE PRODUCT'S: each rover lists its own in a file of its
+    own — RedPawAmp's in redpaw/RedPawSkin.cpp, FrostPawAmp's in frostpaw/FrostPawSkin.cpp — and
+    whatever counts gears counts its pairs: the lever's notches, the keys, the programs, the nav screen's
+    names, the window. */
 const channels::Lineup& lineup();
 
-inline constexpr int numGears = 3;
+/** A rover's lineup over the channels it plays: the names its memory is kept under, its CHANNEL, INPUT's
+    zero, the cabinet a channel opens on and PARK, are every rover's. */
+channels::Lineup roverLineup (std::vector<channels::Lineup::Channel>);
 
-/** A channel's gear, 0..2, and whether it is TURBO's. */
+/** As many gears as the product has pairs of channels — at most as many as the lever's slot has
+    notches. */
+inline constexpr int maxGears = 3;
+int numGears() noexcept;
+
+/** A channel's gear, 0..numGears() - 1, and whether it is TURBO's. */
 inline constexpr int  gearOf (int channel) noexcept  { return channel / 2; }
 inline constexpr bool turboOf (int channel) noexcept { return channel % 2 == 1; }
 

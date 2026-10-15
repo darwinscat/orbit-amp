@@ -31,8 +31,17 @@ juce::Rectangle<float> GearLever::leverBox (float y, float x) const
     return { x - w * 0.5f, y + layout::collarSink - h, w, h };
 }
 
-GearLever::GearLever()
+GearLever::GearLever (int g)
+    : gears (juce::jlimit (1, (int) layout::notches.size(), g))
 {
+    // Each position's height in the dashboard's space: PARK at the slot's top end, the gears in the
+    // notches from the top. A notch past the last gear is no position.
+    static_assert (std::tuple_size_v<decltype (heights)> == 1 + std::tuple_size_v<std::remove_const_t<decltype (layout::notches)>>);
+    jassert (gears == g);
+    heights[0] = layout::slotTopY;
+    for (int i = 0; i < gears; ++i)
+        heights[(size_t) i + 1] = layout::notches[(size_t) i];
+
     pos.stiffness = 260.0f;     // a heavy lever: it overshoots the notch a hair and comes back
     pos.damping   = 22.0f;
     pos.jump (1.0f);
@@ -41,32 +50,28 @@ GearLever::GearLever()
     setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
 }
 
-namespace
-{
-    /** Each position's height in the dashboard's space: PARK at the slot's top end, the gears in the notches. */
-    const std::array<float, GearLever::numPositions> heights { layout::slotTopY, layout::notches[0], layout::notches[1], layout::notches[2] };
-}
-
 float GearLever::yOf (float at) const noexcept
 {
-    const float p = juce::jlimit (0.0f, (float) (numPositions - 1), at);
-    const int i = juce::jmin (numPositions - 2, (int) p);
+    const int last = numPositions() - 1;
+    const float p = juce::jlimit (0.0f, (float) last, at);
+    const int i = juce::jmin (last - 1, (int) p);
     return juce::jmap (p - (float) i, heights[(size_t) i], heights[(size_t) i + 1]) - top;
 }
 
 float GearLever::positionAt (float y) const noexcept
 {
+    const int last = numPositions() - 1;
     y += top;
     if (y <= heights.front()) return 0.0f;
-    for (int i = 0; i + 1 < numPositions; ++i)
+    for (int i = 0; i < last; ++i)
         if (y <= heights[(size_t) i + 1])
             return (float) i + (y - heights[(size_t) i]) / (heights[(size_t) i + 1] - heights[(size_t) i]);
-    return (float) (numPositions - 1);
+    return (float) last;
 }
 
 void GearLever::setPosition (int to, bool animate, bool notify)
 {
-    to = juce::jlimit (0, numPositions - 1, to);
+    to = juce::jlimit (0, numPositions() - 1, to);
     const bool changed = to != position;
     position = to;
     if (animate)

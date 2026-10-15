@@ -2,8 +2,9 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 // Gate for THE ROVER'S SET AS IT LEAVES THE BINARY (channels/Set.h, over the rover's set data): that
-// what is laid out is what was built in, byte for byte — the Victory V4's six packs, one for each of
-// the six channels, and the cabinets; that a start after the first writes nothing; that a file damaged
+// what is laid out is what was built in, byte for byte — the Victory V4's packs, one for each of the
+// product's channels (ROVER_CHANNELS, as the build says), and the cabinets; that a start after the first
+// writes nothing; that a file damaged
 // or lost comes back; that what an earlier build left behind goes — and that nothing else does; and
 // that the rover's cabinets are its own, whatever another product lays out beside them. Every rover that
 // wears the dashboard runs it as itself — RedPawAmp, FrostPawAmp (CMakeLists.txt: rover_set_test).
@@ -24,6 +25,10 @@
 
 #include <cstdio>
 #include <cstring>
+
+#ifndef ROVER_CHANNELS
+ #error "the build says how many channels the rover plays"
+#endif
 
 int main (int argc, char** argv)
 {
@@ -84,11 +89,14 @@ int main (int argc, char** argv)
     check (allThere(), "...each of them byte for byte what was built in");
     check (carried.empty() || list.existsAsFile(), "...and the rover's own list of them");
 
-    // THE SIX CHANNELS' PACKS, each by the capture it holds: Copper, Copper TB, the Sheriff's two and
-    // the Kraken's two — and nothing else among the packs.
+    // THE CHANNELS' PACKS, each by the capture it holds: the V4's in order, as far as the product goes —
+    // Copper, Copper TB, the Sheriff's two, the Kraken's two — and nothing else among the packs.
     {
-        const juce::StringArray wanted { "v4-copper-4ae0", "v4-copper-tb-5841", "v4-sheriff-ch1-82ab",
-                                         "v4-sheriff-ch2-2f2f", "v4-kraken-ch1-f7fc", "v4-kraken-ch2-5f71" };
+        const juce::StringArray v4 { "v4-copper-4ae0", "v4-copper-tb-5841", "v4-sheriff-ch1-82ab",
+                                     "v4-sheriff-ch2-2f2f", "v4-kraken-ch1-f7fc", "v4-kraken-ch2-5f71" };
+        juce::StringArray wanted;
+        for (int i = 0; i < juce::jmin (ROVER_CHANNELS, v4.size()); ++i)
+            wanted.add (v4[i]);
         juce::StringArray found;
         for (const auto& c : carried)
             if (c.file.getFileName().endsWithIgnoreCase (".orbitrig.zip"))
@@ -96,7 +104,8 @@ int main (int argc, char** argv)
         found.sort (false);
         auto sorted = wanted;
         sorted.sort (false);
-        check (packs == 6 && found == sorted, "the six packs are the six channels' captures: " + found.joinIntoString (" "));
+        check (packs == ROVER_CHANNELS && found == sorted,
+               "the " + juce::String (packs) + " packs are the " + juce::String (ROVER_CHANNELS) + " channels' captures: " + found.joinIntoString (" "));
         check (cabinets == 10, "...and the ten cabinets with them");
     }
 

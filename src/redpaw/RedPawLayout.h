@@ -68,15 +68,16 @@ extern const juce::Rectangle<float> navHeader;
 extern const juce::Rectangle<float> navPicture;
 extern const juce::Rectangle<float> tunerScreen;
 
-/** THE GEAR LEVER'S SLOT: straight, its top end PARK, and three notches on its right — CLEAN, CRUNCH,
-    HI-GAIN, top to bottom. A position is where the lever's stem stands: seen from above, as the whole
+/** THE GEAR LEVER'S SLOT: straight, its top end PARK, and three notches painted on its right — the
+    product's gears, CLEAN, CRUNCH, HI-GAIN, stand in them from the top, as many as it has (RedPawLineup.h).
+    A position is where the lever's stem stands: seen from above, as the whole
     dashboard is, the lever is its T grip lying across the slot, the stem's collar under the grip's
     middle standing on the position — in a notch, in the notch. */
 extern const juce::Rectangle<float> gateSlot;
 extern const float slotX;           // the stem in the slot
 extern const float notchX;          // ...and in a notch
 extern const float slotTopY;        // PARK: the stem at the slot's top end
-extern const std::array<float, 3> notches;      // the notches' middles
+extern const std::array<float, 3> notches;      // the notches' middles, as painted, top to bottom
 extern const float leverWidth;      // the lever's render, grip and collar, this wide: over the plate's edges
 extern const float collarSink;      // how far the collar's foot goes past the position, into the slot
 extern const juce::Rectangle<float> gearPlate;

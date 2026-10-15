@@ -32,7 +32,7 @@ private:
 //==============================================================================
 /** RedPawAmp's face over OrbitAmp's processor: the family's console (face/Console.h), laid out on the
     rover's dashboard, with what is the rover's own over it — the gear lever and TURBO, which between
-    them pick one of the six channels, the channel's name along the top of the nav screen, and the
+    them pick one of the product's channels, the channel's name along the top of the nav screen, and the
     drive across Mars through the windscreen. Every rover wears it, each in a skin of its own
     (RedPawSkin.h). */
 class RedPawEditor final : public face::Console,
@@ -69,7 +69,7 @@ private:
     void openGLContextClosing() override;
 
     // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel. TURBO is one
-    // switch for all three gears — a gear pulled keeps it as it stands. PARK, the lever's top end, takes
+    // switch for every gear — a gear pulled keeps it as it stands. PARK, the lever's top end, takes
     // the whole amp out of the sound (ProductEngine::parkSwitch); the channel waits, and TURBO does
     // nothing until a gear is pulled again.
     GearLever lever;

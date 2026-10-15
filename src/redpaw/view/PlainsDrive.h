@@ -14,13 +14,17 @@ namespace orbitamp::redpaw
 {
 
 /** THE PLAINS AS A DRIVE: PlainsWorld and PlainsGl behind the windscreen's face. What the windscreen
-    was built around, and what it hosts when given nothing else. */
+    was built around: `Windscreen (std::make_unique<PlainsDrive> (gears))`. */
 class PlainsDrive final : public Drive
 {
 public:
+    /** In the product's gears, 1..PlainsWorld::maxGears. */
+    explicit PlainsDrive (int gears) : world (gears) {}
+
     PlainsWorld& plains() noexcept { return world; }
 
     const char* name() const noexcept override { return "Plains"; }
+    int numGears() const noexcept override     { return world.numGears(); }
 
     void setGear (int g) override            { world.setGear (g); }
     void setTurbo (bool on) override         { world.setTurbo (on); }
@@ -41,7 +45,7 @@ public:
     }
 
     float speed() const noexcept override                        { return world.state().speed; }
-    float speedFor (int g, bool t) const noexcept override       { return PlainsWorld::speedFor (g, t); }
+    float speedFor (int g, bool t) const noexcept override       { return world.speedFor (g, t); }
     Mars1993::Look look1993() const noexcept override            { return Mars1993::Look::mars; }
 
     std::string landmarks (double metres) const override

@@ -15,8 +15,8 @@ namespace orbitamp::redpaw
 /** A DRIVE THE WINDSCREEN HOSTS: a world and its GPU renderer behind one face, so the same glass can
     look out on the Plains of Mars or across the ice of a moon. The windscreen hands the drive its gear,
     TURBO, PARK and the steering, steps it once a frame and has it draw; what the world is — its height
-    function, its sky, what flies at the glass — is the drive's own. A product passes the drive it wants
-    to the windscreen's constructor; none means the Plains.
+    function, its sky, what flies at the glass — is the drive's own. A product passes the drive it wants,
+    made for its own number of gears, to the windscreen's constructor.
 
     The world's half is called from the thread that drives (the GL thread while the GPU draws); the
     GPU's half is the GL thread's only, between create() and destroy(), as PlainsGl is. */
@@ -28,8 +28,11 @@ public:
     /** What it is, for a status line: "Plains", "Ice". */
     virtual const char* name() const noexcept = 0;
 
+    /** How many gears it drives in: the product's, handed to the drive as it is made. */
+    virtual int numGears() const noexcept = 0;
+
     /** The drive's inputs. */
-    virtual void setGear (int gear) = 0;            // 1..3
+    virtual void setGear (int gear) = 0;            // 1..numGears()
     virtual void setTurbo (bool on) = 0;
     virtual void setParked (bool on) = 0;
     virtual void setSteer (float amount) = 0;       // -1..1, held

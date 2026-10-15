@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for THE ROVER'S CHANNELS WITH NO WINDOW (channels/Engine.h, over redpaw/RedPawLineup.h): six
-// channels on the Victory V4's six packs. A plug-in's window is shut for most of its life, and what a
+// Gate for THE ROVER'S CHANNELS WITH NO WINDOW (channels/Engine.h, over redpaw/RedPawLineup.h): the
+// product's channels on the Victory V4's packs, as many as it plays — ROVER_CHANNELS, which the build says
+// for each rover (CMakeLists.txt: rover_console). A plug-in's window is shut for most of its life, and what a
 // host can reach then is the processor's parameters: so a channel has to be something the processor
 // does by itself. No window is built here at all.
 //
@@ -17,7 +18,7 @@
 //   - a channel's pack is the capture it holds: renamed, the file is that channel's pack still;
 //   - a channel's tone knobs are its pack's Bass, Middle and Treble, found by name — the Copper's
 //     pack lists them in an order of its own;
-//   - the six channels are three gears of two: a gear's pair is its pedal's two channels;
+//   - the channels are gears of two, the V4's pedals in order: a gear's pair is its pedal's two channels;
 //   - PARK takes the whole amp out of the sound: the guitar comes through dry, the channel waits;
 //
 //   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called;
@@ -37,6 +38,10 @@
 
 #include <cmath>
 #include <cstdio>
+
+#ifndef ROVER_CHANNELS
+ #error "the build says how many channels the rover plays"
+#endif
 
 int main()
 {
@@ -84,7 +89,9 @@ int main()
     bool installed = true;
     for (int c = 0; c < channels.count(); ++c)
         installed = installed && channels.packFor (c) >= 0;
-    check (channels.count() == 6 && installed, "all six channels' packs are installed");
+    const int last = channels.count() - 1;
+    std::printf ("      %d channels, %d gears\n", channels.count(), redpaw::numGears());
+    check (channels.count() == ROVER_CHANNELS && installed, "all the product's channels' packs are installed");
 
     // BASS, MIDDLE and TREBLE are found in each pack by their names. The Sheriff's and the Kraken's list
     // them first, in that order; the Copper's two list Tone, Treble, Middle, Bass — so there BASS is the
@@ -101,13 +108,13 @@ int main()
         check (found, "every channel's BASS, MIDDLE and TREBLE are its pack's own, found by name wherever its list has them");
     }
 
-    // THREE GEARS OF TWO: CLEAN the Copper and the Copper TB, CRUNCH the Sheriff's two, HI-GAIN the
-    // Kraken's two — TURBO the second of each.
+    // GEARS OF TWO, the V4's pedals in order, as far as the product goes: CLEAN the Copper and the
+    // Copper TB, CRUNCH the Sheriff's two, HI-GAIN the Kraken's two — TURBO the second of each.
     {
         const char* pairs[][2] { { "v4-copper-4ae0", "v4-copper-tb-5841" }, { "v4-sheriff-ch1-82ab", "v4-sheriff-ch2-2f2f" },
                                  { "v4-kraken-ch1-f7fc", "v4-kraken-ch2-5f71" } };
-        bool paired = true;
-        for (int g = 0; g < redpaw::numGears; ++g)
+        bool paired = redpaw::numGears() * 2 == ROVER_CHANNELS && redpaw::numGears() <= (int) std::size (pairs);
+        for (int g = 0; paired && g < redpaw::numGears(); ++g)
             for (int t = 0; t < 2; ++t)
             {
                 const int c = redpaw::channelOf (g, t == 1);
@@ -124,7 +131,7 @@ int main()
     ticks();
     check (! history.canUndo(), "...and none of that is an edit");
 
-    // PARK: the lever's fourth position, the whole amp out of the sound —
+    // PARK: the lever's top end, the whole amp out of the sound —
     // a switch of the rover's own. Parked, the guitar comes out as it went in, only as late as the
     // chain always is; the channel waits.
     {
@@ -194,11 +201,11 @@ int main()
     ticks();
 
     // A host moves the parameter.
-    asHost (5);
+    asHost (last);
     check (channels.active() == 0, "CHANNEL moved by a host changes nothing until the engine's own tick");
     engine.pump();
-    check (channels.active() == 5 && asked() == 5, "...and then the channel is the one asked for");
-    check (playing() == channels.packFor (5), "...with its pack");
+    check (channels.active() == last && asked() == last, "...and then the channel is the one asked for");
+    check (playing() == channels.packFor (last), "...with its pack");
     asHost (2);
     engine.pump();
 
@@ -237,13 +244,13 @@ int main()
         if (auto word = old.getChildWithProperty ("id", juce::String (engine.channelId())); word.isValid())
             old.removeChild (word, nullptr);
         if (auto node = old.getChildWithName (channels.nodeType()); node.isValid())
-            node.setProperty ("active", 4, nullptr);
+            node.setProperty ("active", last, nullptr);
 
         const int before = history.undoDepth();
         history.applyEdit (history.active(), old, "an older state");
-        check (channels.active() == 4 && asked() != 4, "an older state lands on a channel the parameter does not say");
+        check (channels.active() == last && asked() != last, "an older state lands on a channel the parameter does not say");
         ticks();
-        check (channels.active() == 4 && asked() == 4, "...the parameter follows the state, not the other way round");
+        check (channels.active() == last && asked() == last, "...the parameter follows the state, not the other way round");
         check (history.undoDepth() == before + 1, "...and following it is not a step of its own");
     }
 
@@ -263,8 +270,8 @@ int main()
         amp->preamp.packs = all;
     }
 
-    // A channel's pack is the capture it holds, not its file's name: the same six under names that
-    // say nothing, in a folder of the gate's own, are the six channels' packs still.
+    // A channel's pack is the capture it holds, not its file's name: the same packs under names that
+    // say nothing, in a folder of the gate's own, are the channels' packs still.
     {
         const auto all = amp->preamp.packs;
         const auto renamed = juce::File::getSpecialLocation (juce::File::tempDirectory)
@@ -401,22 +408,23 @@ int main()
         const Opening openings[] { { "Hall", 15.0f, 15.0f }, { "Hall", 30.0f, 30.0f }, { "Plate", 15.0f, 15.0f },
                                    { "Plate", 30.0f, 30.0f }, { "Ambience", 15.0f, 0.0f }, { "Ambience", 30.0f, 0.0f } };
         const int opening = channels.defaultCabinet();
-        bool each = channels.active() == 0, onIt = true;
-        for (int c = 0; c < channels.count(); ++c)
+        bool each = channels.active() == 0 && channels.count() <= (int) std::size (openings), onIt = true;
+        for (int c = 0; each && c < channels.count(); ++c)
         {
             engine.go (c);
             each = each && opensOn (openings[c].reverb, openings[c].wet, openings[c].echo);
             onIt = onIt && channels.cabinet() == opening;
         }
-        check (each, "after INIT each of the six opens on its own room, its own share of it and of delay");
+        check (each, "after INIT each channel opens on its own room, its own share of it and of delay");
         check (opening >= 0 && opening < channels.factoryCabinets()
                    && channels.cabinetStem (channels.cabinets()[opening]) == "dark-matter" && onIt,
-               "...and all six on the build's DARK MATTER");
+               "...and every one on the build's DARK MATTER");
 
         delay->setValueNotifyingHost (delay->convertTo0to1 (40.0f));
         engine.go (0);
-        engine.go (5);
-        check (opensOn ("Ambience", 30.0f, 40.0f), "what a hand has set on a channel is kept over what it opens on");
+        engine.go (last);
+        const auto& lastOpens = openings[std::min ((size_t) last, std::size (openings) - 1)];
+        check (opensOn (lastOpens.reverb, lastOpens.wet, 40.0f), "what a hand has set on a channel is kept over what it opens on");
         ticks();
     }
 

@@ -3,15 +3,34 @@
 
 #include "../redpaw/RedPawSkin.h"
 #include "../redpaw/RedPawLayout.h"
+#include "../redpaw/RedPawLineup.h"
 #include "view/IceDrive.h"
 
 #include <FrostPawData.h>
 
 /** FROSTPAWAMP'S OWN (redpaw/RedPawSkin.h): the rover on an ice moon — RedPawAmp's dashboard in frosted
-    stainless steel, its lamps amber, its rings and light strips ice-blue. The face, the controls and the
-    channels are RedPawAmp's; what is here is the picture's measure, its light, and its renders. */
+    stainless steel, its lamps amber, its rings and light strips ice-blue. The face and the controls are
+    RedPawAmp's; what is here is its channels, the picture's measure, its light, and its renders. */
 namespace orbitamp::redpaw
 {
+
+/** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's six packs, three gears of two — CLEAN the
+    Copper, CRUNCH the Sheriff, HI-GAIN the Kraken — and TURBO each pedal's second channel, each found by
+    the capture it plays. What each opens on: a pedal's first channel a little of its room and as much
+    delay, its TURBO twice as much of both — the Copper in a hall, the Sheriff on a plate, the Kraken in
+    an ambience with no delay at all. The Kraken's two are the hot packs, the ones that would carry FAT. */
+const channels::Lineup& lineup()
+{
+    static const channels::Lineup rover = roverLineup ({
+        { "Copper",      "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false },
+        { "Copper TB",   "v4-copper-tb-5841",   "Hall",     30.0f, 30.0f, false },
+        { "Sheriff Ch1", "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false },
+        { "Sheriff Ch2", "v4-sheriff-ch2-2f2f", "Plate",    30.0f, 30.0f, false },
+        { "Kraken Ch1",  "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true  },
+        { "Kraken Ch2",  "v4-kraken-ch2-5f71",  "Ambience", 30.0f, 0.0f,  true  },
+    });
+    return rover;
+}
 
 namespace
 {
@@ -44,7 +63,7 @@ const Skin& skin()
         // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
         juce::String::fromUTF8 (FrostPawData::midi_txt, FrostPawData::midi_txtSize),
         // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
-        [] { return std::make_unique<Windscreen> (std::make_unique<frostpaw::IceDrive>()); },
+        [] { return std::make_unique<Windscreen> (std::make_unique<frostpaw::IceDrive> (numGears())); },
         { "Ice (GPU)", "1993 (CPU)", "Still" },
     };
     return ice;

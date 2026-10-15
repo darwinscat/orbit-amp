@@ -256,6 +256,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 RedPawEditor::RedPawEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Dashboard>(), dashboardPlaces(), dashboardLook()),
       view (skin().makeView()),
+      lever (numGears()),
       screen (p)
 {
     using namespace layout;
@@ -318,7 +319,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // PARK may move with no hand on the lever: a host's automation, an undo.
     follow (engine.parkId(), [this] (float) { showChannel(); });
 
-    // TURBO: the pedal's second channel, on or off — one switch for all three gears.
+    // TURBO: the pedal's second channel, on or off — one switch for every gear.
     turbo.latching = false;
     turbo.drawKey = [this] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
     {
@@ -387,7 +388,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     glassFilm.setBounds (navHeader.getUnion (tunerScreen).toNearestInt());
 
     // A prototype's hook for looking at the windscreen in a gear, with TURBO, or parked, without a hand
-    // on anything: ROVER_CHANNEL names a channel, 0..5, or "park".
+    // on anything: ROVER_CHANNEL names a channel, from 0 to the product's last, or "park".
     if (const auto c = juce::SystemStats::getEnvironmentVariable ("ROVER_CHANNEL", {}); c.equalsIgnoreCase ("park"))
         setParam (engine.parkId(), 1.0f);
     else if (c.isNotEmpty())
@@ -461,14 +462,15 @@ void RedPawEditor::showSelector (int channel)
     parkSign.setVisible (parked);
 }
 
-/** 1 2 3: the lever goes to that gear, as if a hand had put it there; 0 or P to PARK; T throws TURBO.
+/** 1, 2, ... as many as the gears: the lever goes to that gear, as if a hand had put it there; 0 or P to
+    PARK; T throws TURBO.
     The keys are the same whatever the layout prints on them — under a Russian one T arrives as Е, and
     P as З. */
 bool RedPawEditor::channelKey (const juce::KeyPress& key)
 {
     const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
     const int at = letter == '0' || letter == 'P' || letter == 0x0417 ? GearLever::park
-                 : letter >= '1' && letter < '1' + GearLever::numGears ? GearLever::positionOf ((int) (letter - '1'))
+                 : letter >= '1' && letter < '1' + lever.numGears() ? GearLever::positionOf ((int) (letter - '1'))
                  : -1;
     if (at >= 0)
     {
@@ -485,7 +487,7 @@ bool RedPawEditor::channelKey (const juce::KeyPress& key)
     return false;
 }
 
-/** Programs 1-6 are the six channels, out of PARK; the seventh is PARK. */
+/** Programs 1 to the number of channels are the channels, out of PARK; the one after them is PARK. */
 void RedPawEditor::programChange (int program)
 {
     if (program == channels.count())

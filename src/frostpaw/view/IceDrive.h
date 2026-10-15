@@ -14,14 +14,18 @@ namespace orbitamp::frostpaw
 {
 
 /** THE ICE AS A DRIVE: IceWorld and IceGl behind the windscreen's face. A product passes one to the
-    windscreen — `Windscreen (std::make_unique<frostpaw::IceDrive>())` — and the glass looks out on
-    the ice moon; the 1993 landscape wears the ice's colours. */
+    windscreen — `Windscreen (std::make_unique<frostpaw::IceDrive> (gears))` — and the glass looks out
+    on the ice moon; the 1993 landscape wears the ice's colours. */
 class IceDrive final : public redpaw::Drive
 {
 public:
+    /** In the product's gears, 1..IceWorld::maxGears. */
+    explicit IceDrive (int gears) : world (gears) {}
+
     IceWorld& ice() noexcept { return world; }
 
     const char* name() const noexcept override { return "Ice"; }
+    int numGears() const noexcept override     { return world.numGears(); }
 
     void setGear (int g) override            { world.setGear (g); }
     void setTurbo (bool on) override         { world.setTurbo (on); }
@@ -44,7 +48,7 @@ public:
     void setClock (double seconds, double metresDriven) override { world.setClock (seconds, metresDriven); }
 
     float speed() const noexcept override                        { return world.state().speed; }
-    float speedFor (int g, bool t) const noexcept override       { return IceWorld::speedFor (g, t); }
+    float speedFor (int g, bool t) const noexcept override       { return world.speedFor (g, t); }
     redpaw::Mars1993::Look look1993() const noexcept override    { return redpaw::Mars1993::Look::ice; }
 
     std::string landmarks (double metres) const override

@@ -36,13 +36,16 @@ public:
     static constexpr int texSize = 1024;         // the height texture, wrapping
     static constexpr int detailSize = 256;
     static constexpr double worldPeriod = 665000.0;   // metres: lcm of the layer periods and the cells
-    static constexpr int numGears = 3;
-    static constexpr std::array<float, numGears> gearSpeed { 2.4f, 6.2f, 13.5f };   // m/s
+    /** THE GEARS ARE THE PRODUCT'S: as many as its lever has, at most three. The speeds go up from the
+        first gear, whatever the count; the weather comes down from the top one. */
+    static constexpr int maxGears = 3;
+    static constexpr std::array<float, maxGears> gearSpeed { 2.4f, 6.2f, 13.5f };   // m/s, the first gear first
     static constexpr float turboFactor = 2.0f;        // TURBO doubles the gear's speed
-    /** The snow each gear drives through, 0..1: clear air, a light fall, more; and with TURBO, up to
-        the blizzard. Parked, a light drift of flakes. */
-    static constexpr std::array<float, numGears> gearSnow { 0.0f, 0.25f, 0.45f };
-    static constexpr std::array<float, numGears> turboSnow { 0.45f, 0.72f, 1.0f };
+    /** The snow each gear drives through, 0..1 — on three gears clear air, a light fall, more; and with
+        TURBO, up to the blizzard. Graded down from the top: a product of fewer gears has the top ones,
+        so its top gear with TURBO is always the blizzard. Parked, a light drift of flakes. */
+    static constexpr std::array<float, maxGears> gearSnow { 0.0f, 0.25f, 0.45f };
+    static constexpr std::array<float, maxGears> turboSnow { 0.45f, 0.72f, 1.0f };
     static constexpr float parkedSnow = 0.12f;
     static constexpr double snowEaseSeconds = 0.7;    // tau: about 2 s to thicken or clear, never a jump
     static constexpr double parkSeconds = 0.5;        // tau: parked, the rover is standing in about 1.5 s
@@ -66,6 +69,9 @@ public:
         int ci = 0, cj = 0;        // the unwrapped cell
     };
 
+    /** With the product's gears, 1..maxGears. */
+    explicit IceWorld (int gears) noexcept;
+
     /** Makes the textures. Once, tens of milliseconds. */
     void build();
     bool isBuilt() const noexcept { return built; }
@@ -83,7 +89,7 @@ public:
 
     //==========================================================================
     /** The drive, the inputs. */
-    void setGear (int g) noexcept;                       // 1..3
+    void setGear (int g) noexcept;                       // 1..numGears()
     void setTurbo (bool on) noexcept { turbo = on; }
     /** PARK: the rover comes to a stand, the snow thins to a drift, the hand only turns the view in place. */
     void setParked (bool on) noexcept { parked = on; }
@@ -91,11 +97,12 @@ public:
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
     bool isParked() const noexcept { return parked; }
+    int numGears() const noexcept { return gears; }
 
     /** The speed the gear and TURBO ask for, before easing. */
-    static float speedFor (int gear, bool turbo) noexcept;
+    float speedFor (int gear, bool turbo) const noexcept;
     /** The snow the gear, TURBO and PARK ask for, before easing. */
-    static float snowFor (int gear, bool turbo, bool parked) noexcept;
+    float snowFor (int gear, bool turbo, bool parked) const noexcept;
 
     /** One step of the drive. */
     void step (double dt);
@@ -144,6 +151,7 @@ private:
     std::array<float, 4> gmax { 1, 1, 1, 1 };
 
     State s;
+    const int gears;
     int gearWanted = 1;
     bool turbo = false, parked = false;
     float steer = 0.0f;

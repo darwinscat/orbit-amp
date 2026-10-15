@@ -116,6 +116,8 @@ namespace
     constexpr double off1[] { 0.37, 0.61 }, off2[] { 0.71, 0.13 };   // the layers' fixed texture offsets
 }
 
+PlainsWorld::PlainsWorld (int g) noexcept : gears (std::clamp (g, 1, maxGears)) {}
+
 //==============================================================================
 void PlainsWorld::build()
 {
@@ -322,22 +324,22 @@ double PlainsWorld::avoidRelics (double fx, double fz)
 }
 
 //==============================================================================
-void PlainsWorld::setGear (int g) noexcept   { gearWanted = std::clamp (g, 1, numGears); }
+void PlainsWorld::setGear (int g) noexcept   { gearWanted = std::clamp (g, 1, gears); }
 void PlainsWorld::setSteer (float v) noexcept { steer = std::clamp (v, -1.0f, 1.0f); }
 
-float PlainsWorld::speedFor (int g, bool t) noexcept
+float PlainsWorld::speedFor (int g, bool t) const noexcept
 {
-    return gearSpeed[(size_t) std::clamp (g, 1, numGears) - 1] * (t ? turboFactor : 1.0f);
+    return gearSpeed[(size_t) std::clamp (g, 1, gears) - 1] * (t ? turboFactor : 1.0f);
 }
 
-float PlainsWorld::dustFor (int g, bool t) noexcept
+float PlainsWorld::dustFor (int g, bool t) const noexcept
 {
-    return t ? turboDust[(size_t) std::clamp (g, 1, numGears) - 1] : 0.0f;
+    return t ? turboDust[(size_t) (maxGears - gears + std::clamp (g, 1, gears) - 1)] : 0.0f;    // the top gear the storm
 }
 
 void PlainsWorld::place (double x, double z, double heading, int g, bool t)
 {
-    gearWanted = std::clamp (g, 1, numGears);
+    gearWanted = std::clamp (g, 1, gears);
     turbo = t;
     s.x = x; s.z = z; s.heading = heading;
     s.speed = speedFor (gearWanted, turbo);

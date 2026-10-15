@@ -17,12 +17,12 @@ namespace orbitamp::redpaw
 
 /** WHAT MAKES ONE ROVER NOT ANOTHER. The rover's dashboard is worn by more than one product — RedPawAmp
     on Mars, FrostPawAmp on an ice moon: the same controls in the same places, the same editor
-    (RedPawEditor.h), the same six channels (RedPawLineup.h) — each over a picture of its own, with its
-    own renders, its own light, and its own world out of the window.
+    (RedPawEditor.h) — each over a picture of its own, with its own renders, its own light, its own world
+    out of the window, and its own channels and so its own number of gears (RedPawLineup.h).
 
     What is a product's own is said in a file of its own — redpaw/RedPawSkin.cpp, frostpaw/FrostPawSkin.cpp
-    — with the numbers its picture was measured to (RedPawLayout.h), and a target compiles exactly one,
-    as it compiles exactly one makeEditor. */
+    — with its channels and the numbers its picture was measured to (RedPawLayout.h), and a target
+    compiles exactly one, as it compiles exactly one makeEditor. */
 struct Skin
 {
     /** Where its renders are built into its binary (RedPawArt.h) — every one under the rover's file

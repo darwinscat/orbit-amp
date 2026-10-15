@@ -2,7 +2,6 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "Windscreen.h"
-#include "PlainsDrive.h"
 
 #include <algorithm>
 #include <chrono>
@@ -29,7 +28,7 @@ namespace
         std::nth_element (ms.begin(), mid, ms.end());
         return *mid;
     }
-    constexpr std::array<float, 3> marsTexelsPerSecond { 2.0f, 5.0f, 10.0f };   // the 1993 drive's gears
+    constexpr std::array<float, PlainsWorld::maxGears> marsTexelsPerSecond { 2.0f, 5.0f, 10.0f };   // the 1993 drive's gears, the first first
     constexpr float marsStrafePerSecond = 6.0f;   // the 1993 view has no heading: steering slides it along u
 
     /** The 1993 program took its seed from the clock, 18.2 ticks a second since midnight, 15 bits kept. */
@@ -44,8 +43,9 @@ namespace
 }
 
 Windscreen::Windscreen (std::unique_ptr<Drive> drive)
-    : world (drive != nullptr ? std::move (drive) : std::make_unique<PlainsDrive>())
+    : world (std::move (drive))
 {
+    jassert (world != nullptr);
     setOpaque (true);
     setWantsKeyboardFocus (true);
     setMouseCursor (juce::MouseCursor::DraggingHandCursor);
@@ -86,7 +86,7 @@ void Windscreen::restartLadder()
 
 void Windscreen::setGear (int g)
 {
-    gearWanted.store (juce::jlimit (1, PlainsWorld::numGears, g));
+    gearWanted.store (juce::jlimit (1, world->numGears(), g));
 }
 
 void Windscreen::setTurbo (bool on)
@@ -121,7 +121,7 @@ void Windscreen::setFrameRateCap (int fpsCap)
 float Windscreen::speedKmh() const noexcept
 {
     constexpr float kmh = 3.6f;
-    const int g = juce::jlimit (1, PlainsWorld::numGears, gearWanted.load());
+    const int g = juce::jlimit (1, world->numGears(), gearWanted.load());
     switch (running)
     {
         case Mode::gpu:   return speedShared.load() * kmh;

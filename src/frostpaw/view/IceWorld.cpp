@@ -141,6 +141,8 @@ namespace
     }
 }
 
+IceWorld::IceWorld (int g) noexcept : gears (std::clamp (g, 1, maxGears)) {}
+
 //==============================================================================
 void IceWorld::build()
 {
@@ -366,23 +368,23 @@ double IceWorld::avoidStructures (double fx, double fz)
 }
 
 //==============================================================================
-void IceWorld::setGear (int g) noexcept   { gearWanted = std::clamp (g, 1, numGears); }
+void IceWorld::setGear (int g) noexcept   { gearWanted = std::clamp (g, 1, gears); }
 void IceWorld::setSteer (float v) noexcept { steer = std::clamp (v, -1.0f, 1.0f); }
 
-float IceWorld::speedFor (int g, bool t) noexcept
+float IceWorld::speedFor (int g, bool t) const noexcept
 {
-    return gearSpeed[(size_t) std::clamp (g, 1, numGears) - 1] * (t ? turboFactor : 1.0f);
+    return gearSpeed[(size_t) std::clamp (g, 1, gears) - 1] * (t ? turboFactor : 1.0f);
 }
 
-float IceWorld::snowFor (int g, bool t, bool p) noexcept
+float IceWorld::snowFor (int g, bool t, bool p) const noexcept
 {
-    const auto i = (size_t) std::clamp (g, 1, numGears) - 1;
+    const auto i = (size_t) (maxGears - gears + std::clamp (g, 1, gears) - 1);    // the top gear the blizzard
     return p ? parkedSnow : (t ? turboSnow[i] : gearSnow[i]);
 }
 
 void IceWorld::place (double x, double z, double heading, int g, bool t, bool p)
 {
-    gearWanted = std::clamp (g, 1, numGears);
+    gearWanted = std::clamp (g, 1, gears);
     turbo = t; parked = p;
     s.x = x; s.z = z; s.heading = heading;
     s.speed = parked ? 0.0f : speedFor (gearWanted, turbo);

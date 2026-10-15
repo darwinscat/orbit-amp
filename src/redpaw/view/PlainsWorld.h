@@ -34,12 +34,15 @@ public:
     static constexpr int texSize = 1024;         // the height texture, wrapping
     static constexpr int detailSize = 256;
     static constexpr double worldPeriod = 665000.0;   // metres: lcm of the layer periods and the cells
-    static constexpr int numGears = 3;                // CLEAN, CRUNCH, HI-GAIN
-    static constexpr std::array<float, numGears> gearSpeed { 2.4f, 6.2f, 13.5f };   // m/s, pending the owner's word
+    /** THE GEARS ARE THE PRODUCT'S: as many as its lever has, at most three. The speeds go up from the
+        first gear, whatever the count; the weather comes down from the top one. */
+    static constexpr int maxGears = 3;
+    static constexpr std::array<float, maxGears> gearSpeed { 2.4f, 6.2f, 13.5f };   // m/s, the first gear first
     static constexpr float turboFactor = 2.0f;        // TURBO doubles the gear's speed
-    /** The dust TURBO raises on each gear, 0..1: a light haze with sparse specks, clearly more, the full
-        head-on storm. Without TURBO the air is clear on every gear. */
-    static constexpr std::array<float, numGears> turboDust { 0.25f, 0.6f, 1.0f };
+    /** The dust TURBO raises on each gear, 0..1 — on three gears a light haze with sparse specks, clearly
+        more, the full head-on storm. Graded down from the top: a product of fewer gears has the top ones,
+        so its top gear is always the storm. Without TURBO the air is clear on every gear. */
+    static constexpr std::array<float, maxGears> turboDust { 0.25f, 0.6f, 1.0f };
     static constexpr double dustEaseSeconds = 0.7;    // tau: about 2 s to arrive or clear, never a jump
     static constexpr double parkSeconds = 0.5;        // tau: parked, the rover is standing in about 1.5 s
     static constexpr float parkedYawDegrees = 8.0f;   // parked, the hand turns the view in place, slowly
@@ -58,6 +61,9 @@ public:
         int ci = 0, cj = 0;        // the unwrapped cell
     };
 
+    /** With the product's gears, 1..maxGears. */
+    explicit PlainsWorld (int gears) noexcept;
+
     /** Makes the textures. Once, tens of milliseconds. */
     void build();
     bool isBuilt() const noexcept { return built; }
@@ -74,7 +80,7 @@ public:
 
     //==========================================================================
     /** The drive, the inputs. */
-    void setGear (int g) noexcept;                       // 1..3
+    void setGear (int g) noexcept;                       // 1..numGears()
     void setTurbo (bool on) noexcept { turbo = on; }
     /** PARK: the rover comes to a stand, the dust settles, the hand only turns the view in place. */
     void setParked (bool on) noexcept { parked = on; }
@@ -82,11 +88,12 @@ public:
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
     bool isParked() const noexcept { return parked; }
+    int numGears() const noexcept { return gears; }
 
     /** The speed the gear and TURBO ask for, before easing. */
-    static float speedFor (int gear, bool turbo) noexcept;
+    float speedFor (int gear, bool turbo) const noexcept;
     /** The dust the gear and TURBO ask for, before easing. */
-    static float dustFor (int gear, bool turbo) noexcept;
+    float dustFor (int gear, bool turbo) const noexcept;
 
     /** One step of the drive. */
     void step (double dt);
@@ -129,6 +136,7 @@ private:
     std::array<float, 4> gmax { 1, 1, 1, 1 };
 
     State s;
+    const int gears;
     int gearWanted = 1;
     bool turbo = false, parked = false;
     float steer = 0.0f;
