@@ -5,8 +5,6 @@
 #include "../redpaw/RedPawLayout.h"
 #include "view/IceDrive.h"
 
-#include "../Product.h"
-
 #include <FrostPawData.h>
 
 /** FROSTPAWAMP'S OWN (redpaw/RedPawSkin.h): the rover on an ice moon — RedPawAmp's dashboard in frosted
@@ -43,8 +41,8 @@ const Skin& skin()
         face::Ink { juce::Colour (0xff0b1018), juce::Colour (0xff030507), juce::Colour (0xff8f3507),
                     juce::Colour (0x9ef0f6fc), 0.55f },
         juce::Colour(),
-        // The rover's MIDI sheet, which names the product it is read in.
-        juce::String::fromUTF8 (FrostPawData::midi_txt, FrostPawData::midi_txtSize).replace ("RedPawAmp", product::name),
+        // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
+        juce::String::fromUTF8 (FrostPawData::midi_txt, FrostPawData::midi_txtSize),
         // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
         [] { return std::make_unique<Windscreen> (std::make_unique<frostpaw::IceDrive>()); },
         { "Ice (GPU)", "1993 (CPU)", "Still" },

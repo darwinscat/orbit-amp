@@ -1007,14 +1007,9 @@ endforeach()
 
 # THE ROVER'S OWN SET IS INSIDE ITS BINARY, laid out as files when it first starts (src/channels/Set.h):
 # out of the tree's set, the Victory V4's six packs its channels play — each found by the capture it
-# holds — and, until the rover has cabinets of its own, the ten the cockpit carries.
-set(REDPAWAMP_SET
-    "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip"
+# holds — and, until the rovers have cabinets of their own, the ten the cockpit carries. Every rover
+# lists its own packs; the cabinets are every rover's.
+set(ROVER_CABINETS
     "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
     "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
     "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
@@ -1025,6 +1020,14 @@ set(REDPAWAMP_SET
     "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
     "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
     "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav")
+set(REDPAWAMP_SET
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip"
+    ${ROVER_CABINETS})
 
 add_library(RedPawAmpSet INTERFACE)
 juce_add_binary_data(RedPawAmpSetData
@@ -1179,13 +1182,23 @@ foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
     endif()
 endforeach()
 
-# ITS SET IS INSIDE ITS BINARY TOO, and it is RedPawAmp's — the V4's six packs and the ten cabinets — laid
-# out under its own list in the family's folder (src/channels/Set.h), where a file both carry is one file.
+# ITS SET IS INSIDE ITS BINARY TOO, a list of its own — the V4's six packs its channels play, and the
+# rovers' ten cabinets — laid out under its own list in the family's folder (src/channels/Set.h), where a
+# file another product carries too is one file.
+set(FROSTPAWAMP_SET
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip"
+    ${ROVER_CABINETS})
+
 add_library(FrostPawAmpSet INTERFACE)
 juce_add_binary_data(FrostPawAmpSetData
     NAMESPACE   ProductSetData
     HEADER_NAME ProductSetData.h
-    SOURCES     ${REDPAWAMP_SET})
+    SOURCES     ${FROSTPAWAMP_SET})
 add_dependencies(FrostPawAmpSetData OrbitAmpSetPacks)   # the packs are zipped by the build (THE SET)
 set_target_properties(FrostPawAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
 target_link_libraries(FrostPawAmpSet INTERFACE FrostPawAmpSetData)
