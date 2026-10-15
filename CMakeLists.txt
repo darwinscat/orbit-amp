@@ -1148,7 +1148,7 @@ if(APPLE)
 endif()
 
 # A rover, and its skin.
-set(FROSTPAWAMP_SOURCES ${ROVER_SOURCES} src/frostpaw/FrostPawSkin.cpp)
+set(FROSTPAWAMP_SOURCES ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp)
 set(FROSTPAWAMP_LIBRARIES FrostPawAmpData ${ROVER_LIBRARIES})
 
 target_sources(FrostPawAmp PRIVATE ${FROSTPAWAMP_SOURCES})

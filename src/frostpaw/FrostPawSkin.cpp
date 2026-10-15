@@ -3,6 +3,7 @@
 
 #include "../redpaw/RedPawSkin.h"
 #include "../redpaw/RedPawLayout.h"
+#include "view/IceDrive.h"
 
 #include "../Product.h"
 
@@ -38,9 +39,9 @@ const Skin& skin()
         juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
         // The rover's MIDI sheet, which names the product it is read in.
         juce::String::fromUTF8 (FrostPawData::midi_txt, FrostPawData::midi_txtSize).replace ("RedPawAmp", product::name),
-        // A stand-in until the ice moon's own world is in the window: the drive across Mars.
-        [] { return std::make_unique<Windscreen>(); },
-        { "Plains (GPU)", "1993 (CPU)", "Still" },
+        // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
+        [] { return std::make_unique<Windscreen> (std::make_unique<frostpaw::IceDrive>()); },
+        { "Ice (GPU)", "1993 (CPU)", "Still" },
     };
     return ice;
 }
