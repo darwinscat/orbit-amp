@@ -107,9 +107,6 @@ inline const juce::Rectangle<float> outFader { 1588.0f, 447.5f, 24.5f, 235.0f };
 inline constexpr float faderWidth     = 44.0f;      // the fader's box round its slot
 inline constexpr float faderCapLength = 18.0f;      // the cap's render, across its slot
 
-/** INPUT and OUTPUT, on the rusted bevel over each column's lamps. */
-inline const juce::Point<float> inputName  { 95.0f,   337.0f };
-inline const juce::Point<float> outputName { 1576.0f, 337.0f };
 
 /** THE LAMPS THE DASHBOARD LIGHTS ITSELF, each with room round it for its glow: the bars of three over
     the columns, the input's overload and the output's; the slanted ones in the bottom corners, the
@@ -122,9 +119,9 @@ inline const std::array<juce::Rectangle<float>, numLamps> lamps {{
     { 1565.0f, 824.0f, 62.0f,  63.0f },     // the slant 1575..1617 x 834..877
 }};
 
-/** The plate under each column's wells, between its screws. */
-inline const juce::Point<float> gatePlate    { 101.8f, 721.7f };
-inline const juce::Point<float> limiterPlate { 1570.0f, 721.7f };
+/** INPUT and OUTPUT, on the plate under each column's wells, between its screws. */
+inline const juce::Point<float> inputName  { 101.8f, 721.7f };
+inline const juce::Point<float> outputName { 1570.0f, 721.7f };
 
 /** GATE and LIMITER along their own lamps in the bottom corners: each word parallel to its lamp's
     slant, on the plate beside the lamp's housing — GATE down to the right, LIMITER up to the right. */
