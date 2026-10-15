@@ -18,6 +18,13 @@ namespace
     // star's streak is as long as the ship is fast, the two top detents smear the stars further too.
     constexpr std::array<float, 4> detentSpeed { 0.05f, 0.16f, 1.8f, 3.0f };
 
+    // A turn's sweep, in the stars' own cells a second at full lock: a slide at the cruise, four times
+    // that at the top. A layer's cells look smaller the farther off it is, so the same sweep carries
+    // the near stars across the glass much faster than the far ones. The clouds are swept the same
+    // way, in their own measure, by this share of it.
+    constexpr float slideCruise = 3.0f, slidePerSpeed = 3.0f;
+    constexpr float cloudSlide = 0.08f;
+
     const char* const vertexShader = R"GLSL(
 attribute vec2 position;
 void main()
@@ -29,12 +36,23 @@ void main()
     // Written for this sky, from scratch: value noise, a domain-warped cloud swelling toward the eye in
     // two staggered layers, and four depth layers of stars on a grid that zooms out from the centre —
     // which is what flying forward looks like — each star stretched along its own ray by the speed.
+    //
+    // THE HELM (CatpitHelm.h) moves that centre — the point the stars stream out of — toward the turn
+    // (uFocus), turns the whole sky about it against the bank (uRoll), and slides each layer and each
+    // cloud sideways by as far as the turns have swept it since it came up out of the distance (uDrift,
+    // uCloudDrift); a star's streak then runs back toward where the sweep brought it from as well
+    // (uSlide). Flying straight, all of it is nothing and the sky is the one it always was.
     const char* const fragmentShader = R"GLSL(
 uniform vec2  uOrigin;
 uniform vec2  uSize;
 uniform float uTravel;
 uniform float uSpeed;
 uniform float uWarp;
+uniform float uFocus;
+uniform float uRoll;
+uniform float uSlide;
+uniform vec4  uDrift;
+uniform vec2  uCloudDrift;
 
 float hash (vec2 p)
 {
@@ -65,7 +83,10 @@ float fbm (vec2 p)
 
 void main()
 {
-    vec2 uv = (gl_FragCoord.xy - uOrigin - 0.5 * uSize) / uSize.y;
+    // Measured from the point the stars stream out of, in the windshield's heights; and the sky's own
+    // frame turned against the bank about that point.
+    vec2 uv = (gl_FragCoord.xy - uOrigin - 0.5 * uSize) / uSize.y - vec2 (uFocus, 0.0);
+    mat2 bank = mat2 (cos (uRoll), -sin (uRoll), sin (uRoll), cos (uRoll));
     float r = length (uv);
     vec3 col = mix (vec3 (0.028, 0.024, 0.086), vec3 (0.004, 0.004, 0.016), clamp (r * 0.8, 0.0, 1.0));
 
@@ -75,7 +96,7 @@ void main()
     {
         float ph = fract (uTravel * 0.12 + float (i) * 0.5);
         float zoom = mix (2.6, 0.35, ph * ph);
-        vec2 p = uv * zoom + vec2 (float (i) * 7.3 + 3.0, float (i) * 3.1 + 1.0);
+        vec2 p = bank * (uv * zoom + vec2 (uCloudDrift[i], 0.0)) + vec2 (float (i) * 7.3 + 3.0, float (i) * 3.1 + 1.0);
         vec2 q = vec2 (fbm (p * 1.1), fbm (p * 1.1 + vec2 (5.2, 1.3)));
         float d = fbm (p * 1.4 + 3.2 * q);
         vec3 c = mix (vec3 (0.16, 0.07, 0.38), vec3 (0.42, 0.17, 0.72), smoothstep (0.45, 0.72, d));
@@ -87,24 +108,28 @@ void main()
     // At speed the light ahead gathers into a glow.
     col += vec3 (0.81, 0.77, 1.0) * uWarp * 0.32 * exp (-r * r * 5.0);
 
-    // The stars.
+    // The stars. A streak runs back along the ray, toward the point they stream out of, and — while a
+    // turn sweeps them — sideways, back where the sweep brought it from: both in the layers' own frame.
     vec2 dir = uv / max (r, 1e-4);
-    vec2 side = vec2 (-dir.y, dir.x);
+    vec2 back = bank * -dir;
+    vec2 aside = bank * vec2 (1.0, 0.0);
     for (int l = 0; l < 4; ++l)
     {
         float z = fract (float (l) * 0.25 + uTravel * 0.45);
         float fade = smoothstep (0.0, 0.3, z) * smoothstep (1.0, 0.86, z);
         float scale = mix (16.0, 1.2, z);
-        vec2 p = uv * scale + vec2 (float (l) * 17.1, float (l) * 31.7);
+        vec2 p = bank * (uv * scale + vec2 (uDrift[l], 0.0)) + vec2 (float (l) * 17.1, float (l) * 31.7);
         vec2 home = floor (p);
         float len = 0.004 + uSpeed * 0.18 * z * z;
         float size = 0.010 + 0.035 * z * z;
+        vec2 trail = back * 2.0 * len + aside * uSlide * 0.035;
+        float reach = dot (trail, trail);
 
-        // A star sits well inside its cell, but its streak runs back along the ray for twice `len` —
-        // at speed, out of the cell it started in. So the cells round this one are asked as well, or
-        // the streak would end at the cell's edge as if cut. A slow ship's streaks never leave home,
-        // and then only home is asked.
-        bool roams = 2.0 * len + size > 0.15;
+        // A star sits well inside its cell, but its streak runs back for the trail's length — at speed,
+        // out of the cell it started in. So the cells round this one are asked as well, or the streak
+        // would end at the cell's edge as if cut. A slow ship's streaks never leave home, and then only
+        // home is asked.
+        bool roams = sqrt (reach) + size > 0.15;
         for (int j = -1; j <= 1; ++j)
         for (int i = -1; i <= 1; ++i)
         {
@@ -113,8 +138,7 @@ void main()
             float h = hash (cell);
             if (h < 0.62) continue;
             vec2 at = p - cell - 0.5 - (vec2 (hash (cell + 3.1), hash (cell + 7.7)) - 0.5) * 0.7;
-            float along = dot (at, dir), across = dot (at, side);
-            float d = length (vec2 (max (abs (along + len) - len, 0.0), across));
+            float d = length (at - trail * clamp (dot (at, trail) / max (reach, 1e-8), 0.0, 1.0));
             float star = smoothstep (size, 0.0, d) * fade * (0.55 + 0.45 * fract (h * 13.0));
             vec3 tint = fract (h * 7.0) < 0.12 ? vec3 (0.72, 0.61, 1.0)
                       : fract (h * 7.0) < 0.18 ? vec3 (1.0, 0.78, 0.6) : vec3 (0.91, 0.93, 1.0);
@@ -177,6 +201,30 @@ void GlSky::renderOpenGL()
     speed += (want - speed) * (1.0f - std::exp (-dt / (want > speed ? 0.9f : 0.5f)));
     travel += (double) (speed * dt);
 
+    // ...and the helm: the turn sweeps each layer and each cloud sideways, and what a layer or a cloud
+    // was swept is forgotten when it comes up again out of the distance, where nothing of it shows —
+    // so no sweep ever piles up. The depths are the shader's own.
+    helm.step (steer.load(), dt);
+    const float slide = helm.turn * (slideCruise + slidePerSpeed * speed);
+    const double flown = std::fmod (travel, 1000.0);
+    const auto fraction = [] (double v) { return (float) (v - std::floor (v)); };
+    for (size_t l = 0; l < drift.size(); ++l)
+    {
+        const float z = fraction ((double) l * 0.25 + flown * 0.45);
+        if (z < depth[l])
+            drift[l] = 0.0f;
+        depth[l] = z;
+        drift[l] += slide * dt;
+    }
+    for (size_t c = 0; c < cloudDrift.size(); ++c)
+    {
+        const float phase = fraction (flown * 0.12 + (double) c * 0.5);
+        if (phase < cloudPhase[c])
+            cloudDrift[c] = 0.0f;
+        cloudPhase[c] = phase;
+        cloudDrift[c] += slide * cloudSlide * dt;
+    }
+
     // Only the glass's rectangle is shaded. GL counts rows from the bottom.
     const int x = juce::roundToInt (areaX.load() * k), w = juce::roundToInt (areaW.load() * k);
     const int h = juce::roundToInt (areaH.load() * k);
@@ -192,9 +240,14 @@ void GlSky::renderOpenGL()
     shader->use();
     shader->setUniform ("uOrigin", (GLfloat) vx, (GLfloat) vy);
     shader->setUniform ("uSize", (GLfloat) vw, (GLfloat) vh);
-    shader->setUniform ("uTravel", (GLfloat) std::fmod (travel, 1000.0));
+    shader->setUniform ("uTravel", (GLfloat) flown);
     shader->setUniform ("uSpeed", (GLfloat) speed);
     shader->setUniform ("uWarp", (GLfloat) juce::jlimit (0.0f, 1.0f, (speed - 0.5f) / 1.1f));
+    shader->setUniform ("uFocus", (GLfloat) helm.focus());
+    shader->setUniform ("uRoll", (GLfloat) helm.roll());
+    shader->setUniform ("uSlide", (GLfloat) slide);
+    shader->setUniform ("uDrift", drift[0], drift[1], drift[2], drift[3]);
+    shader->setUniform ("uCloudDrift", cloudDrift[0], cloudDrift[1]);
 
     glBindBuffer (GL_ARRAY_BUFFER, quad);
     const auto pos = (GLuint) glGetAttribLocation (shader->getProgramID(), "position");
