@@ -55,6 +55,7 @@ private:
 
     float yOf (float position) const noexcept;      // in the lever's own space
     float positionAt (float y) const noexcept;
+    juce::Rectangle<float> leverBox (float y, float x) const;     // the render's box, its collar standing on (x, y)
     void  timerCallback() override;
 };
 

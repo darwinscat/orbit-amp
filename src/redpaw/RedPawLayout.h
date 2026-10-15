@@ -75,16 +75,15 @@ inline const juce::Rectangle<float> tunerScreen { 567.0f, 588.0f, 430.0f, 27.0f 
 
 /** THE GEAR LEVER'S SLOT: straight, 785.5..811 across, its top end at 681 — PARK — and three notches on
     its right, out to 823 — CLEAN, CRUNCH, HI-GAIN, top to bottom. A position is where the lever's stem
-    enters the slot: its grip stands over it, the stem goes in under the grip's collar, and in a notch
-    the stem stands in the notch. */
+    stands: seen from above, as the whole dashboard is, the lever is its T grip lying across the slot,
+    the stem's collar under the grip's middle standing on the position — in a notch, in the notch. */
 inline const juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
 inline constexpr float slotX  = 798.3f;         // the stem in the slot
 inline constexpr float notchX = 814.0f;         // ...and in a notch
 inline constexpr float slotTopY = 694.0f;       // PARK: the stem at the slot's top end
 inline const std::array<float, 3> notches {{ 733.8f, 776.0f, 817.5f }};     // the notches' middles
-inline constexpr float stemIn = 11.0f;          // how far over a position the stem enters the slot...
-inline constexpr float stemStub = 10.0f;        // ...and how far under it the stem is seen
-inline constexpr float leverSize = 88.0f;       // the lever's render: grip on a stem to its bottom edge
+inline constexpr float leverWidth = 92.0f;      // the lever's render, grip and collar, this wide: nearly the plate's
+inline constexpr float collarSink = 3.0f;       // how far the collar's foot goes past the position, into the slot
 inline const juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };
 
 /** TURBO: the round hole under the hatch the picture shows open, and its name over the hatch. */

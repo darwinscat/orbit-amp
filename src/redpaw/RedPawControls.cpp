@@ -17,9 +17,17 @@ namespace
     constexpr float slotX  = layout::slotX - GearLever::left;
     constexpr float notchX = layout::notchX - GearLever::left;
 
-    /** Where the grip's collar ends and the stem begins on the lever's render, down from its top — a
-        fraction of the render's side. */
-    constexpr float stemTop = 0.69f;
+    /** Where the grip's bar ends and its collar begins on the lever's render, down from its top — a
+        fraction of the render's height. */
+    constexpr float barBottom = 0.72f;
+}
+
+juce::Rectangle<float> GearLever::leverBox (float y, float x) const
+{
+    const auto& art = Art::get().lever;
+    const float w = layout::leverWidth;
+    const float h = art.isValid() ? w * (float) art.getHeight() / (float) art.getWidth() : w / 3.0f;
+    return { x - w * 0.5f, y + layout::collarSink - h, w, h };
 }
 
 GearLever::GearLever()
@@ -81,32 +89,30 @@ void GearLever::timerCallback()
 
 void GearLever::paint (juce::Graphics& g)
 {
-    // The lever: its grip over the position, its stem entering the slot under the grip's collar. In a
-    // notch the stem stands in the notch; at PARK, the slot's top end, there is none.
+    // The lever from above: its grip across the slot, the collar under it standing on the position. In
+    // a notch the collar stands in the notch; at PARK, the slot's top end, there is none.
     const auto& art = Art::get().lever;
     const float p = pos.value;
     const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f)
                         * juce::jlimit (0.0f, 1.0f, p / 0.5f);
-    const float x = slotX + (notchX - slotX) * inNotch;
-    const float y = yOf (p);
-    const float s = layout::leverSize;
-    const float enters = y - layout::stemIn;
-    const auto box = juce::Rectangle<float> (x - s * 0.5f, enters - s * stemTop, s, s);
+    const auto box = leverBox (yOf (p), slotX + (notchX - slotX) * inNotch);
+    const auto bar = box.withHeight (box.getHeight() * barBottom);
 
-    if (! art.isValid())
+    // Its shadow on the plate, the light being from the upper left: the bar's, soft-edged.
+    for (const auto& [grow, alpha] : { std::pair { 3.0f, 0.12f }, std::pair { 1.5f, 0.18f }, std::pair { 0.0f, 0.25f } })
     {
-        g.setColour (juce::Colour (0xff2a2a30));
-        g.fillEllipse (juce::Rectangle<float> (s * 0.5f, s * 0.6f).withCentre ({ x, y }));
-        return;
+        g.setColour (juce::Colours::black.withAlpha (alpha));
+        g.fillRoundedRectangle (bar.translated (3.0f, 5.0f).expanded (grow), bar.getHeight() * 0.5f + grow);
     }
 
-    // Of the stem, only what enters the slot is seen: a little way under the collar, then it is in the
-    // slot's dark.
-    juce::Path shown;
-    shown.addRectangle (box.withBottom (enters + layout::stemIn + layout::stemStub));
-    const juce::Graphics::ScopedSaveState keep (g);
-    g.reduceClipRegion (shown);
-    g.drawImage (art, box);
+    g.setOpacity (1.0f);        // an image is drawn at the colour's opacity: the shadow's would let the slot through
+    if (art.isValid())
+        g.drawImage (art, box);
+    else
+    {
+        g.setColour (juce::Colour (0xff2a2a30));
+        g.fillRoundedRectangle (bar, bar.getHeight() * 0.5f);
+    }
 }
 
 void GearLever::mouseDown (const juce::MouseEvent& e)
@@ -116,7 +122,7 @@ void GearLever::mouseDown (const juce::MouseEvent& e)
     // Taken by the grip, it goes with the hand from where it was taken; anywhere else on the gate it
     // goes where the hand is.
     const float at = yOf (pos.value);
-    const float grip = at - layout::stemIn - layout::leverSize * (stemTop - 0.35f);
+    const float grip = leverBox (at, 0.0f).getCentreY();
     grabOffset = std::abs (e.position.y - grip) < 32.0f ? at - e.position.y : 0.0f;
     mouseDrag (e);
 }

@@ -16,8 +16,8 @@ namespace orbitamp::redpaw
     and its control draws a stand-in.
 
     The dashboard is the picture with the windscreen already cut out; every control is a render of its
-    own, drawn at its place: the knobs without a pointer (the pointer is drawn), the lever's grip on a
-    stem, the slider and fader caps, the roof's toggle up and down, the square keys and TURBO each up and
+    own, drawn at its place: the knobs without a pointer (the pointer is drawn), the lever's T grip seen
+    from above with its collar, the slider and fader caps, the roof's toggle up and down, the square keys and TURBO each up and
     pressed. */
 struct Art
 {
