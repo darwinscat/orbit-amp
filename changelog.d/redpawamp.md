@@ -15,10 +15,6 @@ OrbitAmp's build or installers.
   or a still picture — chosen from a right click on the glass; a drag across the glass steers.
 - The cyan ring round DRIVE and each tone knob shows where the knob stands — lit from the start of its
   travel to its pointer — and brightens under the hand, easing back a moment after it has gone.
-- Two keys on the roof: on the left the whole face full screen; on the right the landscape alone, the
-  drive across Mars over the whole window — the whole screen in the standalone — with the keys and the
-  steering as they were. Esc, or the key in its corner, brings the dashboard back. Inside a host the
-  left key stands dim, and the landscape fills the plug-in's own window.
 - Everything else the cockpit has, on the dashboard: DRIVE and the three tone knobs, the six keys, undo,
   redo and the four registers on the roof's toggles, REVERB, DELAY and CAB, the INPUT and OUTPUT columns
   with their lamps, GATE and LIMITER, the tuner on the nav screen, presets, the cabinets' window, MIDI.
