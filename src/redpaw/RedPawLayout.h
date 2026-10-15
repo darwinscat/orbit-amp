@@ -91,13 +91,24 @@ inline constexpr float turboSize = 52.0f;       // the button's render
 inline const juce::Point<float> turboName { 921.5f, 682.0f };
 
 /** THE THREE WELLS — REVERB over DELAY on the left, CAB on the right — and the row each one's words are
-    written in: over REVERB's plate, under DELAY's, over CAB's. */
+    written in: on REVERB's and DELAY's upper rims, which the picture is made taller to carry them
+    (Art: `rims`), and over CAB's plate. */
 inline const std::array<juce::Rectangle<float>, 3> wells {{
     { 315.0f,  700.5f, 326.5f, 21.5f },     // REVERB
     { 314.5f,  774.0f, 326.5f, 22.0f },     // DELAY
     { 1053.0f, 730.5f, 309.5f, 24.0f },     // CAB
 }};
-inline const std::array<float, 3> wellNameY {{ 675.0f, 832.0f, 695.0f }};
+inline const std::array<float, 3> wellNameY {{ 690.0f, 762.5f, 695.0f }};
+
+/** REVERB's and DELAY's frames, as the picture painted them: the plate's top (its shadow), where the rim's
+    lit edge ends and its face begins, where the well opens under it, and how far down the end caps'
+    top screws reach. Each upper rim is made `rimLift` taller, upward. */
+struct Rim { float left, right, top, face, well, capScrews, capLeft, capRight; };
+inline const std::array<Rim, 2> rims {{
+    { 276.0f, 681.0f, 683.0f, 691.0f, 699.5f, 703.0f, 316.0f, 637.0f },     // REVERB
+    { 276.0f, 681.0f, 755.5f, 763.0f, 772.5f, 777.0f, 316.0f, 637.0f },     // DELAY
+}};
+inline constexpr float rimLift = 10.0f;
 inline constexpr float sliderCapLength = 54.0f;     // the cap's render, along its well
 inline constexpr float sliderHeight    = 44.0f;     // the slider's box round its well: room for the cap and CAB's notches
 
