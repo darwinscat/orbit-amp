@@ -10,10 +10,11 @@
 namespace orbitamp::redpaw
 {
 
-/** The rover's renders, decoded once from the copies built into the binary (resources/redpaw), each by
-    its file name — so a render can be tried in place of the built-in one by naming its folder in
-    REDPAW_ART_DIR and restarting (face/Renders.h). A render that fails to decode leaves its image null,
-    and its control draws a stand-in.
+/** The rover's renders, decoded once from the copies the product built into its binary (RedPawSkin.h —
+    resources/redpaw for RedPawAmp), each by its file name — so a render can be tried in place of the
+    built-in one by naming its folder in the skin's variable (REDPAW_ART_DIR for RedPawAmp) and
+    restarting (face/Renders.h). A render that fails to decode leaves its image null, and its control
+    draws a stand-in.
 
     The dashboard is the picture with the windscreen already cut out; every control is a render of its
     own, drawn at its place: the knobs without a pointer (the pointer is drawn), the lever's T grip seen

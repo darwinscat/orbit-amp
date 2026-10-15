@@ -5,11 +5,11 @@
 
 #include "RedPawLayout.h"
 #include "RedPawLineup.h"
+#include "RedPawSkin.h"
 
 #include "../ui/Prefs.h"
 
 #include <BinaryData.h>
-#include <RedPawData.h>
 
 namespace orbitamp
 {
@@ -36,11 +36,11 @@ namespace
     const juce::Colour handLight = orange.withAlpha (0.8f);
 
     /** What the windscreen shows, and how often — the machine's, kept with its settings. The landscape
-        as a word, in the order of Windscreen::Mode. */
+        as a word, in the order of Windscreen::Mode; what each is called in the menu is the world's
+        (RedPawSkin.h). */
     const juce::Identifier landscapeKey { "landscape" };
     const juce::Identifier frameRateKey { "landscape_fps" };
     const juce::StringArray landscapeWords { "plains", "1993", "still" };
-    const juce::StringArray landscapeNames { "Plains (GPU)", "1993 (CPU)", "Still" };
 
     /** The nav screen's picture — the machine's too, as a view's number (face::Monitor::View). */
     const juce::Identifier screenKey { "screen" };
@@ -123,7 +123,7 @@ namespace
         return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.faderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
                  juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),     // the family's mark, until the rover has its own
-                 juce::String::fromUTF8 (RedPawData::midi_txt, RedPawData::midi_txtSize),
+                 skin().midiCommands,
                  handLight };       // under the hand, the dashboard's orange
     }
 
@@ -232,6 +232,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 //==============================================================================
 RedPawEditor::RedPawEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Dashboard>(), dashboardPlaces(), dashboardLook()),
+      view (skin().makeView()),
       screen (p)
 {
     using namespace layout;
@@ -277,9 +278,9 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         addToStage (*ring);
 
     // THE WINDSCREEN, under the dashboard: the picture's alpha is its frame.
-    stage.addAndMakeVisible (view, 0);
-    view.setBounds (windscreen.toNearestInt());
-    view.addMouseListener (&glassClicks, false);
+    stage.addAndMakeVisible (*view, 0);
+    view->setBounds (windscreen.toNearestInt());
+    view->addMouseListener (&glassClicks, false);
     glassClicks.menu = [this] { showWindowMenu(); };
 
     // THE GEAR LEVER: the pedal, and everything its channel was left with. Its box is the gate's plate
@@ -345,7 +346,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
 
     // THE NAV SCREEN: along its top the gear, the channel and the speed the windscreen is driving at;
     // under them the picture of the amp at work the machine has chosen.
-    header.speed = [this] { return view.speedKmh(); };
+    header.speed = [this] { return view->speedKmh(); };
     addToStage (header);
     header.setBounds (navHeader.toNearestInt());
     addToStage (screen);
@@ -373,20 +374,20 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
 
     // What the windscreen shows: the machine's choice, the Plains unless it has said otherwise — drawn
     // by this window's context, which paints the face over it.
-    view.setHost (&gl);
+    view->setHost (&gl);
     gl.setOpenGLVersionRequired (juce::OpenGLContext::openGL3_2);
     gl.setRenderer (this);
     gl.setComponentPaintingEnabled (true);
     gl.setContinuousRepainting (false);     // the view asks for each frame, at its own pace
     gl.attachTo (*this);
-    view.setFrameRateCap ((int) prefs::store().get (frameRateKey, 60));
-    view.setMode ((Windscreen::Mode) juce::jmax (0, landscapeWords.indexOf (prefs::store().get (landscapeKey, landscapeWords[0]).toString())));
+    view->setFrameRateCap ((int) prefs::store().get (frameRateKey, 60));
+    view->setMode ((Windscreen::Mode) juce::jmax (0, landscapeWords.indexOf (prefs::store().get (landscapeKey, landscapeWords[0]).toString())));
     placeView();
 }
 
 RedPawEditor::~RedPawEditor()
 {
-    view.removeMouseListener (&glassClicks);
+    view->removeMouseListener (&glassClicks);
     gl.detach();
 }
 
@@ -431,9 +432,9 @@ void RedPawEditor::showSelector (int channel)
 
     header.set (GearLever::names[at], juce::String (lineup().channels[(size_t) channel].name).toUpperCase(), parked);
 
-    view.setGear (gear + 1);
-    view.setTurbo (turboOn);
-    view.setParked (parked);
+    view->setGear (gear + 1);
+    view->setTurbo (turboOn);
+    view->setParked (parked);
     parkSign.setVisible (parked);
 }
 
@@ -498,13 +499,14 @@ void RedPawEditor::addWindowSections (juce::PopupMenu& menu)
 
     // Where the GPU's landscape cannot be had the CPU's drives instead, and the tick says what runs.
     menu.addSectionHeader ("LANDSCAPE");
-    const auto running = view.mode();
+    const auto running = view->mode();
+    const auto& landscapeNames = skin().landscapeNames;
     for (int i = 0; i < landscapeNames.size(); ++i)
         addChoice (menu, landscapeNames[i], (int) running == i,
                    [self, i] (Console& e) { self (e).chooseLandscape ((Windscreen::Mode) i); },
-                   i != (int) Windscreen::Mode::gpu || ! view.status().gpuBroken);
+                   i != (int) Windscreen::Mode::gpu || ! view->status().gpuBroken);
     for (const int fps : { 60, 30 })
-        addChoice (menu, juce::String (fps) + " frames a second", view.frameRateCap() == fps,
+        addChoice (menu, juce::String (fps) + " frames a second", view->frameRateCap() == fps,
                    [self, fps] (Console& e) { self (e).chooseFrameRate (fps); }, running != Windscreen::Mode::still);
 }
 
@@ -549,13 +551,13 @@ void RedPawEditor::showWindowMenu()
 void RedPawEditor::chooseLandscape (Windscreen::Mode mode)
 {
     prefs::store().set (landscapeKey, landscapeWords[(int) mode]);
-    view.setMode (mode);
+    view->setMode (mode);
 }
 
 void RedPawEditor::chooseFrameRate (int fps)
 {
     prefs::store().set (frameRateKey, fps);
-    view.setFrameRateCap (fps);
+    view->setFrameRateCap (fps);
 }
 
 /** Where the windscreen is in the editor's own pixels, for the GL thread: the stage's scale and place. */
@@ -571,7 +573,7 @@ void RedPawEditor::placeView()
 
 void RedPawEditor::newOpenGLContextCreated()
 {
-    view.hostContextCreated();
+    view->hostContextCreated();
 }
 
 void RedPawEditor::renderOpenGL()
@@ -581,12 +583,12 @@ void RedPawEditor::renderOpenGL()
     juce::OpenGLHelpers::clear (juce::Colours::black);
 
     const auto glass = juce::Rectangle<float> ((float) glassX.load(), (float) glassY.load(), (float) glassW.load(), (float) glassH.load()) * k;
-    view.hostRender (glass.toNearestInt(), fw, fh);
+    view->hostRender (glass.toNearestInt(), fw, fh);
 }
 
 void RedPawEditor::openGLContextClosing()
 {
-    view.hostContextClosing();
+    view->hostContextClosing();
 }
 
 } // namespace redpaw

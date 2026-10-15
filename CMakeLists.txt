@@ -865,23 +865,20 @@ set_target_properties(redpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 # channels (src/channels), its own renders in resources/redpaw, its own set, released apart under
 # tags of its own (`redpaw-vX.Y.Z`) — no release workflow yet. Built only when asked for by name.
 # ----------------------------------------------------------------------------
+
+# THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
+# of is said once here — the renders by the file names the face asks for, the sources, the libraries —
+# and each product adds its own skin's file and its own renders.
+set(ROVER_RENDERS
+    dashboard.png midi.txt knob-drive.png knob-tone.png lever.png slider-cap.png fader-cap.png
+    toggle-up.png toggle-down.png key-up.png key-down.png turbo-up.png turbo-down.png)
+
+set(REDPAWAMP_RENDERS ${ROVER_RENDERS})
+list(TRANSFORM REDPAWAMP_RENDERS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/")
 juce_add_binary_data(RedPawAmpData
     NAMESPACE   RedPawData
     HEADER_NAME RedPawData.h
-    SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/dashboard.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/midi.txt"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/knob-drive.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/knob-tone.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/lever.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/slider-cap.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/fader-cap.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/toggle-up.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/toggle-down.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/key-up.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/key-down.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/turbo-up.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/turbo-down.png")
+    SOURCES     ${REDPAWAMP_RENDERS})
 
 # The rover's own version, moved when the ROVER is released (src/Product.h).
 set(REDPAWAMP_VERSION 0.1.0)
@@ -918,9 +915,9 @@ if(APPLE)
         VERBATIM)
 endif()
 
-# What the rover is made of — for the plug-in and for its gates, which are the rover compiled again
-# under a main() of their own.
-set(REDPAWAMP_SOURCES
+# What a rover is made of — for the plug-in and for its gates, which are the rover compiled again
+# under a main() of their own — and what RedPawAmp adds: its skin.
+set(ROVER_SOURCES
     src/PluginProcessor.cpp
     src/Parameters.cpp
     src/ui/Theme.cpp
@@ -944,9 +941,9 @@ set(REDPAWAMP_SOURCES
     src/redpaw/RedPawLineup.cpp
     src/redpaw/RedPawEditor.cpp
     ${REDPAW_VIEW_SOURCES})
-set(REDPAWAMP_LIBRARIES
+set(REDPAWAMP_SOURCES ${ROVER_SOURCES} src/redpaw/RedPawSkin.cpp)
+set(ROVER_LIBRARIES
     OrbitAmpData
-    RedPawAmpData
     felitronics::analysis
     felitronics::appkit
     felitronics::appkit_webp
@@ -965,6 +962,7 @@ set(REDPAWAMP_LIBRARIES
     juce::juce_opengl                # the windscreen, on the GPU
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
+set(REDPAWAMP_LIBRARIES RedPawAmpData ${ROVER_LIBRARIES})
 
 target_sources(RedPawAmp PRIVATE ${REDPAWAMP_SOURCES})
 target_compile_definitions(RedPawAmp PUBLIC

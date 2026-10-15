@@ -33,7 +33,8 @@ private:
 /** RedPawAmp's face over OrbitAmp's processor: the family's console (face/Console.h), laid out on the
     rover's dashboard, with what is the rover's own over it — the gear lever and TURBO, which between
     them pick one of the six channels, the channel's name along the top of the nav screen, and the
-    drive across Mars through the windscreen. */
+    drive across Mars through the windscreen. Every rover wears it, each in a skin of its own
+    (RedPawSkin.h). */
 class RedPawEditor final : public face::Console,
                            private juce::OpenGLRenderer
 {
@@ -42,12 +43,12 @@ public:
     ~RedPawEditor() override;
 
 private:
-    // THE WINDSCREEN: the drive across Mars (view/Windscreen.h), under the dashboard. Its GPU frame is
-    // drawn by this window's own context, which paints the face over it — a GL surface of the view's
-    // own would lie over the picture on the Mac (Windscreen::setHost). What it shows is the machine's
-    // to say: the Plains on the GPU, the 1993 landscape on the CPU, or a still; and at most 30 or 60
-    // frames a second.
-    Windscreen view;
+    // THE WINDSCREEN: the product's world (RedPawSkin.h) — RedPawAmp's the drive across Mars
+    // (view/Windscreen.h) — under the dashboard. Its GPU frame is drawn by this window's own context,
+    // which paints the face over it — a GL surface of the view's own would lie over the picture on the
+    // Mac (Windscreen::setHost). What it shows is the machine's to say: the landscape on the GPU, on the
+    // CPU, or a still; and at most 30 or 60 frames a second.
+    std::unique_ptr<Windscreen> view;
     juce::OpenGLContext gl;
     std::atomic<int> glassX { 0 }, glassY { 0 }, glassW { 0 }, glassH { 0 };     // the windscreen in the editor's pixels
     void placeView();

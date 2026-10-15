@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "RedPawControls.h"
+#include "RedPawSkin.h"
 
 #include "../face/Console.h"
 
@@ -14,10 +15,8 @@ using face::labelLilac;
 namespace
 {
     // The slot and its notches in the lever's own space.
-    constexpr float slotX  = layout::slotX - GearLever::left;
-    constexpr float notchX = layout::notchX - GearLever::left;
-
-    const juce::Colour ringCyan { 0xff3fe6f2 };     // the painted rings' light, a shade brighter: the knobs' and the lever's
+    const float slotX  = layout::slotX - GearLever::left;
+    const float notchX = layout::notchX - GearLever::left;
 
     /** Where the grip's bar ends and its collar begins on the lever's render, down from its top — a
         fraction of the render's height. */
@@ -116,7 +115,7 @@ void GearLever::paint (juce::Graphics& g)
     {
         const float k = box.getWidth() / (float) art.getWidth();
         const float hand = juce::jlimit (0.0f, 1.0f, lit.value);
-        g.setColour (ringCyan.interpolatedWith (orange, hand).withAlpha (0.6f + 0.4f * hand));
+        g.setColour (skin().ringLight.interpolatedWith (orange, hand).withAlpha (0.6f + 0.4f * hand));
         g.drawImage (glow, box.expanded ((float) Art::leverGlowPad * k), juce::RectanglePlacement::stretchToFit, true);
     }
 
@@ -422,8 +421,9 @@ void KnobRing::paint (juce::Graphics& g)
     juce::Path arc, band;
     arc.addCentredArc (c.x, c.y, radius, radius, 0.0f, juce::degreesToRadians (ringFrom), to, true);
     juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (band, arc);
-    juce::DropShadow (ringCyan.withAlpha (0.35f + 0.4f * b), juce::roundToInt (3.0f + 4.0f * b), {}).drawForPath (g, band);
-    g.setColour (ringCyan.withAlpha (0.7f + 0.3f * b));
+    const auto light = skin().ringLight;
+    juce::DropShadow (light.withAlpha (0.35f + 0.4f * b), juce::roundToInt (3.0f + 4.0f * b), {}).drawForPath (g, band);
+    g.setColour (light.withAlpha (0.7f + 0.3f * b));
     g.fillPath (band);
 }
 
