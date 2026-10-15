@@ -119,7 +119,8 @@ namespace
         return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.faderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
                  juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),     // the family's mark, until the rover has its own
-                 juce::String::fromUTF8 (RedPawData::midi_txt, RedPawData::midi_txtSize) };
+                 juce::String::fromUTF8 (RedPawData::midi_txt, RedPawData::midi_txtSize),
+                 juce::Colour (0xff3fe6f2).withAlpha (0.75f) };     // the knobs' rings' cyan, under the hand
     }
 
     /** A render drawn fitted into `box` by its opaque part — the square keys and TURBO, up or down. */
@@ -294,6 +295,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         const auto travelOf = [low, high] (float v) { return (v - low) / (high - low); };
         fader.scale = slotScale;
         fader.capLength = faderCapLength * slotScale;
+        fader.handLight = juce::Colour (0xff3fe6f2).withAlpha (0.75f);
         fader.defaultValue = travelOf (amp.apvts.getParameter (paramId)->convertFrom0to1 (amp.apvts.getParameter (paramId)->getDefaultValue()));
         auto* attachment = follow (paramId, [&fader, travelOf] (float v) { fader.setValue (travelOf (v), false); });
         fader.onGestureStart = [attachment] { attachment->beginGesture(); };

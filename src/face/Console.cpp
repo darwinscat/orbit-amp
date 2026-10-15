@@ -273,6 +273,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
                                                     i == 2 ? juce::jmax (2, channels.cabinets().size()) : 0);
         sliders[i]->capAngle  = places.sliderCapAngle;
         sliders[i]->capLength = places.sliderCapLength;
+        sliders[i]->handLight = look.handLight;
         stage.addAndMakeVisible (*sliders[i]);
         sliders[i]->setBounds (box (places.sliders[i]));
     }
@@ -344,6 +345,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     tuner.setBounds (box (places.tuner));
     tuner.setStrip (places.tunerStrip);
     inFader.capLength = outFader.capLength = places.faderCapLength;
+    inFader.handLight = outFader.handLight = look.handLight;
     inFader.setBounds (box (places.inFader));
     outFader.setBounds (box (places.outFader));
     inMeter.setBounds (box (places.inMeter));

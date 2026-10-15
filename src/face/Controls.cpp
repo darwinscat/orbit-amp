@@ -80,6 +80,20 @@ void drawFitted (juce::Graphics& g, const juce::Image& img, juce::Rectangle<floa
 
 namespace
 {
+    /** A soft light round a cap drawn as drawCap draws it — `colour`, or nothing while it is transparent. */
+    void lightCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle, juce::Colour colour)
+    {
+        if (colour.isTransparent() || ! img.isValid())
+            return;
+        const auto src = opaqueBoundsOnce (img);
+        const float k = length / src.getWidth();
+        const auto box = juce::Rectangle<float> (src.getWidth() * k, src.getHeight() * k).withCentre ({})
+                             .transformedBy (juce::AffineTransform::rotation (angle)).translated (centre.x, centre.y);
+        juce::Path shape;
+        shape.addRoundedRectangle (box, juce::jmin (box.getWidth(), box.getHeight()) * 0.2f);
+        juce::DropShadow (colour, 10, {}).drawForPath (g, shape);
+    }
+
     /** Draws a cap render centred on `centre`, its long axis `length` long, turned by `angle`. */
     void drawCap (juce::Graphics& g, const juce::Image& img, juce::Point<float> centre, float length, float angle)
     {
@@ -680,7 +694,10 @@ void PlateSlider::paint (juce::Graphics& g)
             g.fillRoundedRectangle (juce::Rectangle<float> (3.0f, 9.0f).withCentre ({ nx, cy + 15.0f }), 1.5f);
         }
 
-    drawCap (g, cap, { x, cy }, capLength > 0.0f ? capLength : (float) getHeight() - 4.0f, capAngle);
+    const float length = capLength > 0.0f ? capLength : (float) getHeight() - 4.0f;
+    if (isMouseOverOrDragging (true))
+        lightCap (g, cap, { x, cy }, length, capAngle, handLight);
+    drawCap (g, cap, { x, cy }, length, capAngle);
 }
 
 void PlateSlider::mouseDown (const juce::MouseEvent& e)
@@ -711,6 +728,7 @@ void PlateSlider::mouseUp (const juce::MouseEvent& e)
     if (sliding && onGestureEnd) onGestureEnd();
     if (onHover && ! getLocalBounds().contains (e.getPosition()))
         onHover (false);
+    repaint();      // let go away from it, the hand's light goes
 }
 
 void PlateSlider::mouseDoubleClick (const juce::MouseEvent&)
@@ -764,7 +782,10 @@ void ColumnFader::paint (juce::Graphics& g)
     }
 
     const float y = t.getEnd() - t.getLength() * value;
-    drawCap (g, cap, { cx, y }, capLength > 0.0f ? capLength : (float) getWidth() - 8.0f, 0.0f);
+    const float length = capLength > 0.0f ? capLength : (float) getWidth() - 8.0f;
+    if (isMouseOverOrDragging (true))
+        lightCap (g, cap, { cx, y }, length, 0.0f, handLight);
+    drawCap (g, cap, { cx, y }, length, 0.0f);
 }
 
 void ColumnFader::mouseDown (const juce::MouseEvent& e)
@@ -793,6 +814,7 @@ void ColumnFader::mouseDrag (const juce::MouseEvent& e)
 void ColumnFader::mouseUp (const juce::MouseEvent&)
 {
     if (sliding && onGestureEnd) onGestureEnd();
+    repaint();      // let go away from it, the hand's light goes
 }
 
 void ColumnFader::mouseDoubleClick (const juce::MouseEvent&)

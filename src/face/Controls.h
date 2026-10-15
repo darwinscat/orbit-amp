@@ -270,6 +270,9 @@ public:
     float capAngle = juce::MathConstants<float>::halfPi;
     float capLength = 0.0f;
 
+    /** A soft light round the cap while the hand is over the slider or on it — none unless set. */
+    juce::Colour handLight;
+
     std::function<void()>       onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;
     std::function<void (int)>   onStep;          // stepped only: the position it clicked into
@@ -289,8 +292,8 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
-    void mouseEnter (const juce::MouseEvent&) override { if (onHover) onHover (true); }
-    void mouseExit (const juce::MouseEvent&) override  { if (onHover && ! isMouseButtonDown()) onHover (false); }
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); if (onHover) onHover (true); }
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); if (onHover && ! isMouseButtonDown()) onHover (false); }
 
 private:
     const juce::Image& cap;
@@ -315,6 +318,9 @@ public:
     /** A short fader in a smaller slot: its ends, its line and its scale drawn this much of a column's. */
     float scale = 1.0f;
 
+    /** A soft light round the cap while the hand is over the fader or on it — none unless set. */
+    juce::Colour handLight;
+
     /** The scale down its right edge: this many steps, and the one that is drawn longer — unity, by
         default; none, below zero. */
     int marks = 10, longMark = 5;
@@ -332,6 +338,8 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); }
 
 private:
     const juce::Image& cap;

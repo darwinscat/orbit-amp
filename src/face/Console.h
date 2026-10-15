@@ -107,6 +107,7 @@ public:
         std::array<const juce::Image*, numLamps> lampsLit;  // each lamp as its render painted it lit
         juce::String mark;                                  // the product's mark, as SVG: the build window wears it
         juce::String midiCommands;                          // what the MIDI window lists (Midi.h)
+        juce::Colour handLight {};                          // a light round a slider's or a fader's cap under the hand; none if transparent
     };
 
     Console (AmpProcessor&, std::unique_ptr<Picture>, const Places&, const Look&);
