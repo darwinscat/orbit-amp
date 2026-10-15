@@ -27,6 +27,7 @@ struct Art
     juce::Image leverGlow;             // a soft light the shape of the lever, white, `leverGlowPad` wider all round
     static constexpr int leverGlowPad = 26;    // in the lever render's own pixels
     juce::Image sliderCap, faderCap;
+    juce::Image faderCapLight;         // the fader cap's metal lifted, for the small corner faders
     juce::Image toggleUp, toggleDown;
     juce::Image keyUp, keyDown;
     juce::Image turboUp, turboDown;

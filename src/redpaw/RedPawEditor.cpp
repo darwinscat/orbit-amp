@@ -286,9 +286,10 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     addToStage (turbo);
     turbo.setBounds (juce::Rectangle<float> (turboSize, turboSize).withCentre (layout::turbo).toNearestInt());
 
-    // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg. A
-    // double click puts it back where it opens, a right click is its block's menu, and while it is held
-    // the tag over it says where it stands. While its block is off it stands dim, and still moves.
+    // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg, its
+    // cap lighter than the columns' so a small one reads in its corner. A double click puts it back where
+    // it opens, a right click is its block's menu, and while it is held the tag over it says where it
+    // stands. While its block is off it stands dim, and still moves.
     const auto plateFader = [this] (face::ColumnFader& fader, const LampPlate& plate, const char* paramId, const char* onId,
                                     float low, float high, std::function<void()> menu, const juce::String& name)
     {
@@ -304,7 +305,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         fader.onMenu         = std::move (menu);
         attachment->sendInitialUpdate();
         sayLever (fader, name, [this, paramId] { return getParam (paramId); });
-        follow (onId, [&fader] (float on) { fader.setAlpha (on > 0.5f ? 1.0f : 0.45f); })->sendInitialUpdate();
+        follow (onId, [&fader] (float on) { fader.setAlpha (on > 0.5f ? 1.0f : 0.6f); })->sendInitialUpdate();
         addToStage (fader);
         fader.setBounds (plate.slot.reduced (0.0f, slotRim).withSizeKeepingCentre (faderWidth * slotScale, plate.slot.getHeight() - 2.0f * slotRim).toNearestInt());
     };

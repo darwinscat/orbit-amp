@@ -108,6 +108,22 @@ namespace
         return img;
     }
 
+    /** A RENDER'S METAL LIFTED: each colour raised to `gamma` (under 1 lightens the darks most), its alpha
+        as it was. */
+    juce::Image lifted (const juce::Image& img, float gamma)
+    {
+        if (! img.isValid())
+            return img;
+        auto out = img.convertedToFormat (juce::Image::ARGB).createCopy();
+        juce::Image::BitmapData d (out, juce::Image::BitmapData::readWrite);
+        for (int y = 0; y < d.height; ++y)
+            for (int x = 0; x < d.width; ++x)
+                if (const auto c = d.getPixelColour (x, y); c.getAlpha() > 0)
+                    d.setPixelColour (x, y, juce::Colour::fromFloatRGBA (std::pow (c.getFloatRed(), gamma), std::pow (c.getFloatGreen(), gamma),
+                                                                         std::pow (c.getFloatBlue(), gamma), c.getFloatAlpha()));
+        return out;
+    }
+
     /** A SOFT LIGHT THE SHAPE OF A RENDER: its alpha blurred, white, on a canvas `pad` wider all round —
         drawn tinted under the render, it keeps a dark control in sight on a dark panel. */
     juce::Image glowOf (const juce::Image& img, int pad)
@@ -144,6 +160,7 @@ const Art& Art::get()
         a.leverGlow  = glowOf (a.lever, Art::leverGlowPad);
         a.sliderCap  = load ("slider-cap.png");
         a.faderCap   = load ("fader-cap.png");
+        a.faderCapLight = lifted (a.faderCap, 0.55f);
         a.toggleUp   = load ("toggle-up.png");
         a.toggleDown = load ("toggle-down.png");
         a.keyUp      = load ("key-up.png");

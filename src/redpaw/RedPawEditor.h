@@ -77,7 +77,7 @@ private:
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg:
     // -70 dB to -40, and -3 dB to -0.1, foot to head. While its block is off a fader stands dim, and
     // still moves — the block keeps what it was set to.
-    face::ColumnFader threshold { Art::get().faderCap }, ceiling { Art::get().faderCap };
+    face::ColumnFader threshold { Art::get().faderCapLight }, ceiling { Art::get().faderCapLight };
     std::vector<std::unique_ptr<KnobRing>> rings;   // DRIVE's and the tones': where each knob stands
     NavHeader header;               // on the nav screen: the gear, the pack that is playing, the speed
 
