@@ -230,6 +230,46 @@ void main() {
 }
 )GLSL";
 
+    // The relics: instanced, one draw per variant; aCell is the instance's unwrapped 532 m cell. A
+    // vertex of kind 1 is a solar panel, of kind 2 a track behind the wheels: it follows the ground,
+    // and only some have one.
+    const char* const vsRelicBody = R"GLSL(
+in vec3 aPos; in vec3 aNrm; in vec3 aCol; in float aKind; in vec2 aCell;
+uniform mat4 uViewProj;
+uniform vec3 uCamRel;
+const float RC = 532.0; const int RM = 1250;    // the relic cell, WORLD / RC
+out vec3 vN; out vec3 vRel; out vec3 vCol; out float vDust;
+void main() {
+  ivec2 cij = ivec2 (aCell);
+  ivec2 c = (cij + RM * 64) % RM;
+  vec2 foot = (vec2 (cij) + 0.2 + 0.6 * vec2 (hcell (c, 51u), hcell (c, 52u))) * RC - uCamCell;
+  float ang = 6.2831853 * hcell (c, 54u); float ca = cos (ang), sa = sin (ang);
+  bool track = aKind > 1.5;
+  vDust = track ? 0.0 : (0.35 + 0.5 * hcell (c, 55u)) * (aKind > 0.5 ? 0.4 : 1.0);   // the panels, smoother, hold less of it
+  vec3 lp = aPos; vec3 ln = aNrm;
+  if (track && hcell (c, 56u) > 0.6) lp = vec3 (0.0);
+  lp.xz = vec2 (ca * lp.x - sa * lp.z, sa * lp.x + ca * lp.z);
+  ln.xz = vec2 (ca * ln.x - sa * ln.z, sa * ln.x + ca * ln.z);
+  vec3 wp = vec3 (foot.x + lp.x, 0.0, foot.y + lp.z);
+  wp.y = track ? terrainH (wp.xz) + 0.05 : terrainH (foot) + lp.y;
+  vN = ln; vRel = wp - uCamRel; vCol = aCol;
+  gl_Position = uViewProj * vec4 (wp, 1.0);
+}
+)GLSL";
+
+    const char* const fsRelicBody = R"GLSL(
+in vec3 vN; in vec3 vRel; in vec3 vCol; in float vDust;
+out vec4 fragColor;
+void main() {
+  float dist = length (vRel); vec3 V = vRel / dist;
+  vec3 n = normalize (vN);
+  vec3 alb = mix (vCol, vec3 (0.76, 0.50, 0.30), vDust * smoothstep (0.2, 0.9, n.y));   // the dust settled on what faces up
+  vec3 col = shade (alb, n) + alb * mix (uHorizon, uZenith, 0.5) * 0.25;
+  col = applyHaze (col, dist, V);
+  fragColor = vec4 (col, 1.0);
+}
+)GLSL";
+
     const char* const vsSky = R"GLSL(#version 150
 out vec2 vNdc;
 void main() {
@@ -298,6 +338,8 @@ void main() {
     const juce::String fsTerrainSrc = juce::String ("#version 150\n#define HTEX(uv) texture(uHeight, uv)\n") + glslCommon + glslGrad + glslLight + fsTerrainBody;
     const juce::String vsRockSrc    = juce::String ("#version 150\n#define HTEX(uv) textureLod(uHeight, uv, 0.0)\n") + glslCommon + vsRockBody;
     const juce::String fsRockSrc    = juce::String ("#version 150\n") + glslLight + fsRockBody;
+    const juce::String vsRelicSrc   = juce::String ("#version 150\n#define HTEX(uv) textureLod(uHeight, uv, 0.0)\n") + glslCommon + vsRelicBody;
+    const juce::String fsRelicSrc   = juce::String ("#version 150\n") + glslLight + fsRelicBody;
     const juce::String fsSkySrc     = juce::String ("#version 150\n") + glslLight + fsSkyBody;
 
     // Two lumpy icospheres, 80 flat faces each: 240 vertices of position + normal, the two one after
@@ -343,6 +385,191 @@ void main() {
             for (const V3& P : { A, B, C })
                 for (double d : { P.x, P.y, P.z, n.x, n.y, n.z })
                     out.push_back ((float) d);
+        }
+        return out;
+    }
+
+    //==========================================================================
+    /** THE RELICS' GEOMETRY: boxes, bars, eight-sided wheels and plates with flat normals, each
+        vertex position (3), normal (3), colour (3) and a kind (1): ten floats. Kind 2 is a track. */
+    struct P3 { double x, y, z; };
+    inline P3 operator+ (P3 a, P3 b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+    inline P3 operator- (P3 a, P3 b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+    inline P3 operator* (P3 a, double k) { return { a.x * k, a.y * k, a.z * k }; }
+    inline P3 cross3 (P3 a, P3 b) { return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x }; }
+    inline P3 norm3 (P3 a) { const double l = std::sqrt (a.x * a.x + a.y * a.y + a.z * a.z); return l > 0 ? a * (1 / l) : a; }
+
+    const P3 white { 0.82, 0.80, 0.76 }, grey { 0.62, 0.60, 0.58 }, dark { 0.30, 0.30, 0.32 }, tyre { 0.20, 0.19, 0.18 };
+    const P3 solar { 0.10, 0.12, 0.26 }, foil { 0.75, 0.62, 0.30 }, airbag { 0.70, 0.66, 0.60 }, rut { 0.50, 0.30, 0.19 };
+
+    struct RelicBuilder
+    {
+        std::vector<float> v;
+
+        void tri (P3 A, P3 B, P3 C, P3 n, P3 col, float kind = 0)
+        {
+            for (const P3& P : { A, B, C })
+                for (double d : { P.x, P.y, P.z, n.x, n.y, n.z, col.x, col.y, col.z, (double) kind })
+                    v.push_back ((float) d);
+        }
+        void quad (P3 A, P3 B, P3 C, P3 D, P3 n, P3 col, float kind = 0) { tri (A, B, C, n, col, kind); tri (A, C, D, n, col, kind); }
+
+        /** An axis-aligned box about its centre. Kind 1 is a solar panel: the dust lies thinner on it. */
+        void box (P3 c, P3 s, P3 col, float kind = 0)
+        {
+            const double hx = s.x / 2, hy = s.y / 2, hz = s.z / 2;
+            const P3 p[8] { { c.x - hx, c.y - hy, c.z - hz }, { c.x + hx, c.y - hy, c.z - hz }, { c.x + hx, c.y + hy, c.z - hz }, { c.x - hx, c.y + hy, c.z - hz },
+                            { c.x - hx, c.y - hy, c.z + hz }, { c.x + hx, c.y - hy, c.z + hz }, { c.x + hx, c.y + hy, c.z + hz }, { c.x - hx, c.y + hy, c.z + hz } };
+            quad (p[1], p[0], p[3], p[2], { 0, 0, -1 }, col, kind); quad (p[4], p[5], p[6], p[7], { 0, 0, 1 }, col, kind);
+            quad (p[0], p[4], p[7], p[3], { -1, 0, 0 }, col, kind); quad (p[5], p[1], p[2], p[6], { 1, 0, 0 }, col, kind);
+            quad (p[3], p[7], p[6], p[2], { 0, 1, 0 }, col, kind);  quad (p[0], p[1], p[5], p[4], { 0, -1, 0 }, col, kind);
+        }
+
+        /** A square-section bar of thickness t along a -> b. */
+        void bar (P3 a, P3 b, double t, P3 col)
+        {
+            const P3 u = norm3 (b - a);
+            const P3 ref = std::abs (u.y) < 0.9 ? P3 { 0, 1, 0 } : P3 { 1, 0, 0 };
+            const P3 vv = norm3 (cross3 (u, ref)), w = cross3 (u, vv);
+            const double h = t / 2;
+            P3 C[8]; int k = 0;
+            for (int end = 0; end < 2; ++end)
+                for (double sv : { -1.0, 1.0 })
+                    for (double sw : { -1.0, 1.0 })
+                        C[k++] = (end ? b : a) + vv * (sv * h) + w * (sw * h);
+            quad (C[2], C[3], C[7], C[6], vv, col); quad (C[0], C[4], C[5], C[1], vv * -1.0, col);
+            quad (C[1], C[5], C[7], C[3], w, col);  quad (C[0], C[2], C[6], C[4], w * -1.0, col);
+            quad (C[4], C[6], C[7], C[5], u, col);  quad (C[0], C[1], C[3], C[2], u * -1.0, col);
+        }
+
+        /** An eight-sided wheel on the x axis, with its two faces. */
+        void wheel (P3 c, double r, double w, P3 col)
+        {
+            for (int s = 0; s < 8; ++s)
+            {
+                const double a0 = s / 8.0 * pi * 2, a1 = (s + 1) / 8.0 * pi * 2, am = (a0 + a1) / 2;
+                const P3 L0 { c.x - w / 2, c.y + r * std::cos (a0), c.z + r * std::sin (a0) }, L1 { c.x - w / 2, c.y + r * std::cos (a1), c.z + r * std::sin (a1) };
+                const P3 R0 { c.x + w / 2, L0.y, L0.z }, R1 { c.x + w / 2, L1.y, L1.z };
+                quad (L0, L1, R1, R0, { 0, std::cos (am), std::sin (am) }, col);
+                tri ({ c.x - w / 2, c.y, c.z }, L1, L0, { -1, 0, 0 }, col);
+                tri ({ c.x + w / 2, c.y, c.z }, R0, R1, { 1, 0, 0 }, col);
+            }
+        }
+
+        /** A flat plate, one face, lit from above: its normal is the side that points up. */
+        void plate (P3 A, P3 B, P3 C, P3 col, float kind = 0)
+        {
+            P3 n = norm3 (cross3 (B - A, C - A));
+            if (n.y < 0) n = n * -1.0;
+            tri (A, B, C, n, col, kind);
+        }
+
+        /** A low eight-sided mound: a slack airbag. */
+        void mound (P3 c, double r, double h, P3 col)
+        {
+            for (int s = 0; s < 8; ++s)
+            {
+                const double a0 = s / 8.0 * pi * 2, a1 = (s + 1) / 8.0 * pi * 2;
+                const P3 P0 { c.x + r * std::cos (a0), c.y, c.z + r * std::sin (a0) }, P1 { c.x + r * std::cos (a1), c.y, c.z + r * std::sin (a1) };
+                const P3 T { c.x, c.y + h, c.z };
+                tri (P0, T, P1, norm3 (cross3 (T - P0, P1 - P0)), col);
+            }
+        }
+
+        /** A track: a ribbon on the ground behind the wheel at x, from 2 m back to `length`, kind 2. */
+        void track (double x, double w, double length)
+        {
+            const int segs = (int) std::ceil (length / 2.0);
+            for (int s = 0; s < segs; ++s)
+            {
+                const double z0 = 2.0 + (length - 2.0) * s / segs, z1 = 2.0 + (length - 2.0) * (s + 1) / segs;
+                const double b0 = 0.6 * (z0 / length) * (z0 / length) * (x < 0 ? -1 : 1), b1 = 0.6 * (z1 / length) * (z1 / length) * (x < 0 ? -1 : 1);   // a gentle bend
+                quad ({ x + b0 - w / 2, 0, z0 }, { x + b0 + w / 2, 0, z0 }, { x + b1 + w / 2, 0, z1 }, { x + b1 - w / 2, 0, z1 }, { 0, 1, 0 }, rut, 2);
+            }
+        }
+    };
+
+    /** The four relics, in a frame where -z is ahead and the ground is y = 0; the wheels sit a
+        little below it, sunk in. The sizes are the real machines'. */
+    std::array<std::vector<float>, PlainsWorld::numRelics> buildRelicMeshes()
+    {
+        std::array<std::vector<float>, PlainsWorld::numRelics> out;
+        {   // 0: the car-sized rover — six half-metre wheels on rocker-bogies, a mast with a camera head, the power unit at the back, an arm
+            RelicBuilder m;
+            m.box ({ 0, 1.05, 0 }, { 1.4, 0.55, 1.9 }, white);
+            m.box ({ 0, 1.34, 0 }, { 1.5, 0.04, 2.0 }, grey);
+            m.bar ({ 0.45, 1.35, -0.8 }, { 0.45, 2.35, -0.8 }, 0.12, dark);
+            m.box ({ 0.45, 2.42, -0.8 }, { 0.5, 0.3, 0.26 }, dark);
+            m.bar ({ 0, 1.3, 0.9 }, { 0, 1.8, 1.75 }, 0.42, dark);
+            m.bar ({ -0.45, 1.36, 0.5 }, { -0.45, 1.62, 0.5 }, 0.08, dark);
+            m.wheel ({ -0.45, 1.72, 0.5 }, 0.24, 0.03, white);
+            m.bar ({ 0, 0.95, -0.95 }, { 0.35, 0.55, -1.85 }, 0.1, dark);
+            m.box ({ 0.4, 0.5, -1.95 }, { 0.3, 0.3, 0.3 }, dark);
+            for (double sx : { -1.0, 1.0 })
+            {
+                for (double z : { -1.1, 0.0, 1.1 }) m.wheel ({ sx * 1.15, 0.15, z }, 0.25, 0.4, tyre);
+                m.bar ({ sx * 0.72, 0.95, -0.25 }, { sx * 1.15, 0.15, -1.1 }, 0.09, grey);
+                m.bar ({ sx * 0.72, 0.95, -0.25 }, { sx * 1.0, 0.7, 0.55 }, 0.09, grey);
+                m.bar ({ sx * 1.0, 0.7, 0.55 }, { sx * 1.15, 0.15, 0.0 }, 0.09, grey);
+                m.bar ({ sx * 1.0, 0.7, 0.55 }, { sx * 1.15, 0.15, 1.1 }, 0.09, grey);
+                m.track (sx * 1.15, 0.4, 45);
+            }
+            out[0] = std::move (m.v);
+        }
+        {   // 1: the knee-high rover — a flat solar deck on a gold box, six small wheels, a whip antenna
+            RelicBuilder m;
+            m.box ({ 0, 0.21, 0 }, { 0.42, 0.17, 0.62 }, foil);
+            m.box ({ 0, 0.31, 0 }, { 0.62, 0.02, 0.68 }, solar, 1);
+            m.box ({ 0.12, 0.4, -0.3 }, { 0.12, 0.08, 0.08 }, dark);
+            m.bar ({ -0.22, 0.32, 0.25 }, { -0.22, 0.75, 0.25 }, 0.02, dark);
+            for (double sx : { -1.0, 1.0 })
+            {
+                for (double z : { -0.26, 0.0, 0.26 }) m.wheel ({ sx * 0.31, 0.035, z }, 0.065, 0.08, tyre);
+                m.bar ({ sx * 0.21, 0.2, -0.1 }, { sx * 0.31, 0.035, -0.26 }, 0.03, dark);
+                m.bar ({ sx * 0.21, 0.2, -0.1 }, { sx * 0.27, 0.15, 0.13 }, 0.03, dark);
+                m.bar ({ sx * 0.27, 0.15, 0.13 }, { sx * 0.31, 0.035, 0.0 }, 0.03, dark);
+                m.bar ({ sx * 0.27, 0.15, 0.13 }, { sx * 0.31, 0.035, 0.26 }, 0.03, dark);
+                m.track (sx * 0.31, 0.08, 20);
+            }
+            out[1] = std::move (m.v);
+        }
+        {   // 2: the lander — a base open on three petals, slack airbags between them, a mast
+            RelicBuilder m;
+            m.box ({ 0, 0.4, 0 }, { 1.1, 0.7, 1.1 }, white);
+            for (int k = 0; k < 3; ++k)
+            {
+                const double a = (90 + 120 * k) * pi / 180, ca = std::cos (a), sa = std::sin (a);
+                const P3 dir { ca, 0, sa }, side { -sa, 0, ca };
+                const P3 base = dir * 0.6;
+                m.plate (base + side * 0.75 + P3 { 0, 0.15, 0 }, base - side * 0.75 + P3 { 0, 0.15, 0 }, dir * 2.6 + P3 { 0, 0.6, 0 }, solar, 1);   // open, not flat: a petal that never came all the way down
+                const double ab = a + pi / 3;
+                m.mound ({ std::cos (ab) * 1.3, 0, std::sin (ab) * 1.3 }, 0.95, 0.35, airbag);
+            }
+            m.bar ({ 0.25, 0.75, 0 }, { 0.25, 1.7, 0 }, 0.06, white);
+            m.box ({ 0.25, 1.75, 0 }, { 0.3, 0.12, 0.14 }, dark);
+            m.bar ({ -0.3, 0.75, -0.2 }, { -0.3, 1.1, -0.2 }, 0.03, dark);
+            out[2] = std::move (m.v);
+        }
+        {   // 3: the winged rover — a wide solar deck swept back in two wings, a mast with a camera bar, six wheels
+            RelicBuilder m;
+            m.box ({ 0, 0.6, 0 }, { 1.0, 0.42, 1.3 }, white);
+            m.box ({ 0, 0.83, 0 }, { 1.6, 0.03, 1.5 }, solar, 1);
+            m.box ({ -1.05, 0.81, 0.45 }, { 0.7, 0.03, 0.9 }, solar, 1);
+            m.box ({ 1.05, 0.81, 0.45 }, { 0.7, 0.03, 0.9 }, solar, 1);
+            m.bar ({ 0.3, 0.85, -0.5 }, { 0.3, 1.6, -0.5 }, 0.08, dark);
+            m.box ({ 0.3, 1.66, -0.5 }, { 0.38, 0.14, 0.16 }, dark);
+            m.bar ({ -0.35, 0.85, 0.3 }, { -0.35, 1.05, 0.3 }, 0.05, dark);
+            m.wheel ({ -0.35, 1.15, 0.3 }, 0.14, 0.03, white);
+            for (double sx : { -1.0, 1.0 })
+            {
+                for (double z : { -0.55, 0.05, 0.6 }) m.wheel ({ sx * 0.72, 0.08, z }, 0.13, 0.16, tyre);
+                m.bar ({ sx * 0.5, 0.5, -0.2 }, { sx * 0.72, 0.08, -0.55 }, 0.05, grey);
+                m.bar ({ sx * 0.5, 0.5, -0.2 }, { sx * 0.62, 0.38, 0.32 }, 0.05, grey);
+                m.bar ({ sx * 0.62, 0.38, 0.32 }, { sx * 0.72, 0.08, 0.05 }, 0.05, grey);
+                m.bar ({ sx * 0.62, 0.38, 0.32 }, { sx * 0.72, 0.08, 0.6 }, 0.05, grey);
+                m.track (sx * 0.72, 0.16, 35);
+            }
+            out[3] = std::move (m.v);
         }
         return out;
     }
@@ -397,6 +624,7 @@ bool PlainsGl::create()
 
     if (! compile (terrain, vsTerrainSrc.toRawUTF8(), fsTerrainSrc.toRawUTF8(), "terrain")
         || ! compile (rock, vsRockSrc.toRawUTF8(), fsRockSrc.toRawUTF8(), "rock")
+        || ! compile (relic, vsRelicSrc.toRawUTF8(), fsRelicSrc.toRawUTF8(), "relic")
         || ! compile (sky, vsSky, fsSkySrc.toRawUTF8(), "sky")
         || ! compile (dust, vsDust, fsDust, "dust"))
     {
@@ -433,15 +661,17 @@ void PlainsGl::destroy()
 {
     for (auto& l : level) { if (l.indexBuffer != 0) glDeleteBuffers (1, &l.indexBuffer); l = {}; }
     const auto del = [] (juce::uint32& id, void (*f) (GLsizei, const GLuint*)) { if (id != 0) f (1, &id); id = 0; };
-    del (vboGrid, glDeleteBuffers); del (vboRock, glDeleteBuffers);
-    del (vaoTerrain, glDeleteVertexArrays); del (vaoRock, glDeleteVertexArrays); del (vaoEmpty, glDeleteVertexArrays);
+    del (vboGrid, glDeleteBuffers); del (vboRock, glDeleteBuffers); del (vboRelic, glDeleteBuffers);
+    for (auto& b : relicInstances) del (b, glDeleteBuffers);
+    relicCount.fill (0); relicBx = relicBz = 0x7fffffff;
+    del (vaoTerrain, glDeleteVertexArrays); del (vaoRock, glDeleteVertexArrays); del (vaoRelic, glDeleteVertexArrays); del (vaoEmpty, glDeleteVertexArrays);
     del (texHeight, glDeleteTextures); del (texGrad1, glDeleteTextures); del (texGrad2, glDeleteTextures); del (texDetail, glDeleteTextures);
     del (fboColour, glDeleteTextures); del (fboDepth, glDeleteRenderbuffers); del (fbo, glDeleteFramebuffers);
     fbW = fbH = 0;
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
     query.fill (0);
     queriesWork = false; queriesPending = 0; queryNext = 0;
-    for (auto* p : { &terrain, &rock, &sky, &dust }) { p->program.reset(); p->id = 0; }
+    for (auto* p : { &terrain, &rock, &relic, &sky, &dust }) { p->program.reset(); p->id = 0; }
 }
 
 void PlainsGl::makeTextures()
@@ -528,6 +758,38 @@ void PlainsGl::makeGeometry()
         const auto lp = (GLuint) glGetAttribLocation (rock.id, "aPos"), ln = (GLuint) glGetAttribLocation (rock.id, "aNrm");
         glEnableVertexAttribArray (lp); glVertexAttribPointer (lp, 3, GL_FLOAT, GL_FALSE, 24, nullptr);
         glEnableVertexAttribArray (ln); glVertexAttribPointer (ln, 3, GL_FLOAT, GL_FALSE, 24, (const void*) 12);
+    }
+    glBindVertexArray (0);
+
+    // The relics: the four meshes in one buffer, the instance cells in a small dynamic buffer per variant.
+    glGenVertexArrays (1, &vaoRelic);
+    glBindVertexArray (vaoRelic);
+    {
+        auto meshes = buildRelicMeshes();
+        std::vector<float> all;
+        for (int v = 0; v < PlainsWorld::numRelics; ++v)
+        {
+            relicRange[(size_t) v] = { (int) (all.size() / 10), (int) (meshes[(size_t) v].size() / 10) };
+            all.insert (all.end(), meshes[(size_t) v].begin(), meshes[(size_t) v].end());
+        }
+        glGenBuffers (1, &vboRelic);
+        glBindBuffer (GL_ARRAY_BUFFER, vboRelic);
+        glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (all.size() * sizeof (float)), all.data(), GL_STATIC_DRAW);
+        const auto lp = (GLuint) glGetAttribLocation (relic.id, "aPos"), ln = (GLuint) glGetAttribLocation (relic.id, "aNrm");
+        const auto lc = (GLuint) glGetAttribLocation (relic.id, "aCol"), lk = (GLuint) glGetAttribLocation (relic.id, "aKind");
+        glEnableVertexAttribArray (lp); glVertexAttribPointer (lp, 3, GL_FLOAT, GL_FALSE, 40, nullptr);
+        glEnableVertexAttribArray (ln); glVertexAttribPointer (ln, 3, GL_FLOAT, GL_FALSE, 40, (const void*) 12);
+        glEnableVertexAttribArray (lc); glVertexAttribPointer (lc, 3, GL_FLOAT, GL_FALSE, 40, (const void*) 24);
+        glEnableVertexAttribArray (lk); glVertexAttribPointer (lk, 1, GL_FLOAT, GL_FALSE, 40, (const void*) 36);
+        locRelicCell = glGetAttribLocation (relic.id, "aCell");
+        instancing = glVertexAttribDivisor != nullptr && locRelicCell >= 0;
+        for (auto& b : relicInstances)
+        {
+            glGenBuffers (1, &b);
+            glBindBuffer (GL_ARRAY_BUFFER, b);
+            glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (PlainsWorld::relicWindow * PlainsWorld::relicWindow * 2 * sizeof (float)), nullptr, GL_DYNAMIC_DRAW);
+        }
+        relicCount.fill (0); relicBx = relicBz = 0x7fffffff;
     }
     glBindVertexArray (0);
     glGenVertexArrays (1, &vaoEmpty);   // the sky and the dust draw with no attributes; core needs a VAO bound all the same
@@ -750,6 +1012,46 @@ void PlainsGl::drawScene (int rw, int rh)
         glUniform2i (rock.uniform ("uRockBase"), bx, bz); glUniform1i (rock.uniform ("uRockW"), R.w); glUniform1i (rock.uniform ("uRockM"), (int) std::lround (worldPeriod / R.cell));
         glUniform1f (rock.uniform ("uRockCell"), (float) R.cell); glUniform1f (rock.uniform ("uRockProb"), R.prob); glUniform2f (rock.uniform ("uRockSize"), R.smin, R.smax);
         glDrawArraysInstanced (GL_TRIANGLES, 0, 480, R.w * R.w);
+    }
+
+    // The relics: four instanced draws from the world's lists, remade when the window moves. Rare,
+    // so most frames draw a few or none.
+    if (instancing)
+    {
+        const double shift = PlainsWorld::relicWindow * PlainsWorld::relicCell * 0.3;
+        const int bx = (int) std::floor ((s.x + fx * shift) / PlainsWorld::relicCell) - PlainsWorld::relicWindow / 2;
+        const int bz = (int) std::floor ((s.z + fz * shift) / PlainsWorld::relicCell) - PlainsWorld::relicWindow / 2;
+        if (bx != relicBx || bz != relicBz)
+        {
+            world.relicsInWindow (bx, bz, relicCells);
+            for (int v = 0; v < PlainsWorld::numRelics; ++v)
+            {
+                const auto& cells = relicCells[(size_t) v];
+                relicCount[(size_t) v] = (int) (cells.size() / 2);
+                glBindBuffer (GL_ARRAY_BUFFER, relicInstances[(size_t) v]);
+                if (! cells.empty()) glBufferSubData (GL_ARRAY_BUFFER, 0, (GLsizeiptr) (cells.size() * sizeof (float)), cells.data());
+            }
+            relicBx = bx; relicBz = bz;
+        }
+        bool any = false;
+        for (int n : relicCount) any = any || n > 0;
+        if (any)
+        {
+            glUseProgram (relic.id); glBindVertexArray (vaoRelic);
+            setCommon (relic); setLight (relic);
+            glUniformMatrix4fv (relic.uniform ("uViewProj"), 1, GL_FALSE, VP.data());
+            glUniform3f (relic.uniform ("uCamRel"), camFrac[0], (float) s.camY, camFrac[1]);
+            for (int v = 0; v < PlainsWorld::numRelics; ++v)
+            {
+                if (relicCount[(size_t) v] == 0) continue;
+                glBindBuffer (GL_ARRAY_BUFFER, relicInstances[(size_t) v]);
+                glEnableVertexAttribArray ((GLuint) locRelicCell);
+                glVertexAttribPointer ((GLuint) locRelicCell, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+                glVertexAttribDivisor ((GLuint) locRelicCell, 1);
+                glDrawArraysInstanced (GL_TRIANGLES, relicRange[(size_t) v].first, relicRange[(size_t) v].count, relicCount[(size_t) v]);
+            }
+            glBindBuffer (GL_ARRAY_BUFFER, 0);
+        }
     }
 
     // The sky, where nothing was drawn (depth == 1).

@@ -7,6 +7,9 @@
 #include "IceWorld.h"
 #include "../../redpaw/view/Drive.h"
 
+#include <cmath>
+#include <string>
+
 namespace orbitamp::frostpaw
 {
 
@@ -43,6 +46,21 @@ public:
     float speed() const noexcept override                        { return world.state().speed; }
     float speedFor (int g, bool t) const noexcept override       { return IceWorld::speedFor (g, t); }
     redpaw::Mars1993::Look look1993() const noexcept override    { return redpaw::Mars1993::Look::ice; }
+
+    std::string landmarks (double metres) const override
+    {
+        static const char* const kinds[] { "mast", "gantry", "dish", "module" };
+        std::vector<IceWorld::Structure> found;
+        world.structuresNear (world.state().x, world.state().z, (int) std::ceil (metres / IceWorld::structCell), found);
+        std::string out;
+        for (const auto& st : found)
+        {
+            const double dx = st.x - world.state().x, dz = st.z - world.state().z, d = std::hypot (dx, dz);
+            if (d <= metres)
+                out += std::string (kinds[st.variant]) + " " + std::to_string (st.x) + " " + std::to_string (st.z) + " " + std::to_string (dx) + " " + std::to_string (dz) + " " + std::to_string (d) + "\n";
+        }
+        return out;
+    }
 
     bool create() override                                       { return gl.create(); }
     void destroy() override                                      { gl.destroy(); }

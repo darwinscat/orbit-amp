@@ -7,6 +7,9 @@
 #include "PlainsGl.h"
 #include "PlainsWorld.h"
 
+#include <cmath>
+#include <string>
+
 namespace orbitamp::redpaw
 {
 
@@ -40,6 +43,21 @@ public:
     float speed() const noexcept override                        { return world.state().speed; }
     float speedFor (int g, bool t) const noexcept override       { return PlainsWorld::speedFor (g, t); }
     Mars1993::Look look1993() const noexcept override            { return Mars1993::Look::mars; }
+
+    std::string landmarks (double metres) const override
+    {
+        static const char* const kinds[] { "rover", "small-rover", "lander", "winged-rover" };
+        std::vector<PlainsWorld::Relic> found;
+        world.relicsNear (world.state().x, world.state().z, (int) std::ceil (metres / PlainsWorld::relicCell), found);
+        std::string out;
+        for (const auto& r : found)
+        {
+            const double dx = r.x - world.state().x, dz = r.z - world.state().z, d = std::hypot (dx, dz);
+            if (d <= metres)
+                out += std::string (kinds[r.variant]) + " " + std::to_string (r.x) + " " + std::to_string (r.z) + " " + std::to_string (dx) + " " + std::to_string (dz) + " " + std::to_string (d) + "\n";
+        }
+        return out;
+    }
 
     bool create() override                                       { return gl.create(); }
     void destroy() override                                      { gl.destroy(); }

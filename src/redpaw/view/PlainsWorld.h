@@ -20,7 +20,14 @@ namespace orbitamp::redpaw
     windscreen with dirt.
 
     The height function here and the one in the shaders must agree, or the camera sinks into hills:
-    the constants are the same numbers, written twice. No JUCE in here. */
+    the constants are the same numbers, written twice. No JUCE in here.
+
+    THE RELICS: old machines left on the plains — a car-sized rover of six wheels on rocker-bogies
+    with a mast and a power unit at the back, a knee-high rover under a flat solar deck, a lander open
+    on its petals among its slack airbags, a rover with wing-like solar panels — one in about every
+    other 532 m cell, by a hash, never on a mountain, a mesa or in a canyon: a world fact, so one passed
+    is still there when the rover turns back, and rare enough that meeting one is an event. The drive
+    is pushed around any relic ahead and never passes through one. */
 class PlainsWorld final
 {
 public:
@@ -36,6 +43,20 @@ public:
     static constexpr double dustEaseSeconds = 0.7;    // tau: about 2 s to arrive or clear, never a jump
     static constexpr double parkSeconds = 0.5;        // tau: parked, the rover is standing in about 1.5 s
     static constexpr float parkedYawDegrees = 8.0f;   // parked, the hand turns the view in place, slowly
+
+    /** The relics: one per hashed cell where the hash and the ground allow. */
+    static constexpr double relicCell = 532.0;        // metres; WORLD / relicCell = 1250
+    static constexpr float relicProbability = 0.65f;  // of a cell, before the ground's say: about 1.4 a km^2 stand, one met every 2-3 km
+    static constexpr int relicWindow = 4;             // cells across the renderer's window (2.1 km, 1.7 of it ahead: beyond that a relic is a speck)
+    static constexpr int numRelics = 4;               // the big rover, the small rover, the lander, the winged rover
+
+    struct Relic
+    {
+        double x = 0, z = 0;       // where it stands, absolute world metres (unwrapped: the cell's own)
+        float radius = 0;          // its footprint
+        int variant = 0;
+        int ci = 0, cj = 0;        // the unwrapped cell
+    };
 
     /** Makes the textures. Once, tens of milliseconds. */
     void build();
@@ -92,6 +113,14 @@ public:
         distance from the rover, which fades the dunes out. */
     float terrainHeight (double px, double pz, float dist) const noexcept;
 
+    /** The relic of an unwrapped cell, if the hash puts one there and the ground takes it. */
+    bool relicAt (int ci, int cj, Relic& out) const noexcept;
+    /** Every relic within `cells` cells of (x, z). */
+    void relicsNear (double x, double z, int cells, std::vector<Relic>& out) const;
+    /** The renderer's instance lists: per variant, the unwrapped (i, j) of every relic in the
+        relicWindow x relicWindow cells from (bx, bz), as float pairs. */
+    void relicsInWindow (int bx, int bz, std::array<std::vector<float>, numRelics>& cells) const;
+
 private:
     bool built = false;
     std::vector<float> height;            // level 0, RGBA
@@ -104,8 +133,10 @@ private:
     bool turbo = false, parked = false;
     float steer = 0.0f;
     double yawRate = 0.0, lastSteerTime = -10.0, meanderPhase = 0.0;
+    std::vector<Relic> near;              // scratch for the step's two scans
 
     float tap (int channel, double u, double v) const noexcept;   // bilinear, wrapping, as GL_LINEAR + REPEAT
+    double avoidRelics (double fx, double fz);
 };
 
 } // namespace orbitamp::redpaw

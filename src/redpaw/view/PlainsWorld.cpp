@@ -250,6 +250,78 @@ float PlainsWorld::terrainHeight (double px, double pz, float dist) const noexce
 }
 
 //==============================================================================
+bool PlainsWorld::relicAt (int ci, int cj, Relic& out) const noexcept
+{
+    constexpr int RM = (int) (worldPeriod / relicCell);
+    const int cx = ((ci % RM) + RM) % RM, cz = ((cj % RM) + RM) % RM;
+    if (hcell (cx, cz, 50) > relicProbability)
+        return false;
+    out.x = (ci + 0.2 + 0.6 * hcell (cx, cz, 51)) * relicCell;
+    out.z = (cj + 0.2 + 0.6 * hcell (cx, cz, 52)) * relicCell;
+    // The ground's say: nothing on a mountain, a mesa, or in a canyon — the terms of the height function.
+    if (built)
+    {
+        const float ar = tap (0, out.x / 7000, out.z / 7000), ag = tap (1, out.x / 7000, out.z / 7000), ab = tap (2, out.x / 7000, out.z / 7000);
+        const float bg = tap (1, out.x / 1250 + off1[0], out.z / 1250 + off1[1]);
+        const float mtnMask = smoothstep (0.50f, 0.92f, ar), ridge = 1 - std::abs (2 * ag - 1);
+        const float mesaM = smoothstep (0.60f, 0.64f, bg) * smoothstep (0.35f, 0.6f, ab) * (1 - mtnMask);
+        const float canyonM = smoothstep (0.80f, 0.97f, ridge) * (1 - mtnMask) * smoothstep (0.45f, 0.62f, ab);
+        if (mtnMask > 0.02f || mesaM > 0.02f || canyonM > 0.02f)
+            return false;
+    }
+    const float r = hcell (cx, cz, 53);
+    out.variant = r < 0.35f ? 0 : r < 0.55f ? 1 : r < 0.75f ? 2 : 3;
+    constexpr float radii[numRelics] { 1.7f, 0.5f, 3.2f, 1.4f };
+    out.radius = radii[out.variant];
+    out.ci = ci; out.cj = cj;
+    return true;
+}
+
+void PlainsWorld::relicsNear (double x, double z, int cells, std::vector<Relic>& out) const
+{
+    out.clear();
+    const int ci = (int) std::floor (x / relicCell), cj = (int) std::floor (z / relicCell);
+    Relic r;
+    for (int j = cj - cells; j <= cj + cells; ++j)
+        for (int i = ci - cells; i <= ci + cells; ++i)
+            if (relicAt (i, j, r))
+                out.push_back (r);
+}
+
+void PlainsWorld::relicsInWindow (int bx, int bz, std::array<std::vector<float>, numRelics>& cells) const
+{
+    for (auto& v : cells) v.clear();
+    Relic r;
+    for (int j = 0; j < relicWindow; ++j)
+        for (int i = 0; i < relicWindow; ++i)
+            if (relicAt (bx + i, bz + j, r))
+            {
+                cells[(size_t) r.variant].push_back ((float) (bx + i));
+                cells[(size_t) r.variant].push_back ((float) (bz + j));
+            }
+}
+
+/** A relic ahead: a yaw away from any the rover would pass within its footprint + 8 m in the next
+    ~110 m, growing as it nears; up to 50 degrees a second. Nothing near, nothing added. */
+double PlainsWorld::avoidRelics (double fx, double fz)
+{
+    const double rx = -fz, rz = fx;
+    double yaw = 0;
+    relicsNear (s.x, s.z, 1, near);
+    for (const auto& r : near)
+    {
+        const double dx = r.x - s.x, dz = r.z - s.z, along = dx * fx + dz * fz, lat = dx * rx + dz * rz;
+        if (along < -2 || along > 110) continue;
+        const double clear = r.radius + 8;
+        if (std::abs (lat) > clear + 6) continue;
+        const double urgency = 1 - std::max (0.0, along) / 110;
+        const double side = lat >= 0 ? -1 : 1;                                   // the relic on the right: turn left
+        yaw += side * urgency * (0.4 + 0.6 * (1 - std::min (1.0, std::abs (lat) / (clear + 6)))) * 45 * pi / 180;
+    }
+    return std::clamp (yaw * 180 / pi, -50.0, 50.0) * pi / 180;
+}
+
+//==============================================================================
 void PlainsWorld::setGear (int g) noexcept   { gearWanted = std::clamp (g, 1, numGears); }
 void PlainsWorld::setSteer (float v) noexcept { steer = std::clamp (v, -1.0f, 1.0f); }
 
@@ -283,34 +355,48 @@ void PlainsWorld::step (double dt)
     s.speed += (target - s.speed) * kS;
     s.storm += ((parked ? 0.0f : dustFor (gearWanted, turbo)) - s.storm) * (float) (1 - std::exp (-dt / dustEaseSeconds));
 
-    // Yaw: the player's hand wins; a gentle meander resumes after 1.5 s of no input, plus a lean away
-    // from higher ground 300 m ahead (two height samples, 35 degrees either side). Parked, the hand
-    // turns the view in place and nothing meanders.
+    // Yaw: the player's hand wins, with the push away from a relic ahead added so one steered at is
+    // still passed around; a gentle meander resumes after 1.5 s of no input, plus a lean away from
+    // higher ground 300 m ahead (two height samples, 35 degrees either side). Parked, the hand turns
+    // the view in place and nothing meanders.
     double yawTarget;
     if (parked)
     {
         yawTarget = steer * parkedYawDegrees * pi / 180;
         lastSteerTime = s.time;
     }
-    else if (std::abs (steer) > 0.001f)
-    {
-        yawTarget = steer * 25 * pi / 180;
-        lastSteerTime = s.time;
-    }
     else
     {
-        const float fadeIn = smoothstep (1.5f, 4.5f, (float) (s.time - lastSteerTime));
-        const double fx0 = std::sin (s.heading), fz0 = -std::cos (s.heading), ca = std::cos (0.61), sa = std::sin (0.61);
-        const float hR = terrainHeight (s.x + 300 * (fx0 * ca - fz0 * sa), s.z + 300 * (fz0 * ca + fx0 * sa), 300);
-        const float hL = terrainHeight (s.x + 300 * (fx0 * ca + fz0 * sa), s.z + 300 * (fz0 * ca - fx0 * sa), 300);
-        const double avoid = std::clamp ((hL - hR) * 0.08, -6.0, 6.0) * pi / 180;    // left higher: turn right
-        yawTarget = fadeIn * (4.5 * pi / 180 * std::sin (s.time * 0.11 + meanderPhase) + avoid);
+        const double fx0 = std::sin (s.heading), fz0 = -std::cos (s.heading);
+        const double push = avoidRelics (fx0, fz0);
+        if (std::abs (steer) > 0.001f)
+        {
+            yawTarget = steer * 25 * pi / 180 + push;
+            lastSteerTime = s.time;
+        }
+        else
+        {
+            const float fadeIn = smoothstep (1.5f, 4.5f, (float) (s.time - lastSteerTime));
+            const double ca = std::cos (0.61), sa = std::sin (0.61);
+            const float hR = terrainHeight (s.x + 300 * (fx0 * ca - fz0 * sa), s.z + 300 * (fz0 * ca + fx0 * sa), 300);
+            const float hL = terrainHeight (s.x + 300 * (fx0 * ca + fz0 * sa), s.z + 300 * (fz0 * ca - fx0 * sa), 300);
+            const double avoid = std::clamp ((hL - hR) * 0.08, -6.0, 6.0) * pi / 180;    // left higher: turn right
+            yawTarget = fadeIn * (4.5 * pi / 180 * std::sin (s.time * 0.11 + meanderPhase) + avoid) + push;
+        }
     }
     yawRate += (yawTarget - yawRate) * (1 - std::exp (-dt / 0.35));
     s.heading += yawRate * dt;
 
     const double fx = std::sin (s.heading), fz = -std::cos (s.heading);
     s.x += fx * s.speed * dt; s.z += fz * s.speed * dt; s.travel += s.speed * dt;
+
+    // The hard rule: never inside a relic's footprint — a slide along its edge, never through.
+    relicsNear (s.x, s.z, 1, near);
+    for (const auto& r : near)
+    {
+        const double dx = s.x - r.x, dz = s.z - r.z, d = std::hypot (dx, dz), rr = r.radius + 1.5;
+        if (d < rr && d > 1e-6) { s.x = r.x + dx / d * rr; s.z = r.z + dz / d * rr; }
+    }
     s.x = std::fmod (std::fmod (s.x, worldPeriod) + worldPeriod, worldPeriod);
     s.z = std::fmod (std::fmod (s.z, worldPeriod) + worldPeriod, worldPeriod);
 

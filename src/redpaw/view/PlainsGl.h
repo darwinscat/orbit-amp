@@ -67,10 +67,21 @@ private:
         juce::uint32 id = 0;
         int uniform (const char* name) const;
     };
-    Program terrain, rock, sky, dust;
+    Program terrain, rock, relic, sky, dust;
 
     juce::uint32 texHeight = 0, texGrad1 = 0, texGrad2 = 0, texDetail = 0;
     juce::uint32 vaoTerrain = 0, vboGrid = 0, vaoRock = 0, vboRock = 0, vaoEmpty = 0;
+
+    // The relics: the four meshes in one buffer, and per variant the instance buffer of cells.
+    juce::uint32 vaoRelic = 0, vboRelic = 0;
+    struct Range { int first = 0, count = 0; };
+    std::array<Range, PlainsWorld::numRelics> relicRange;
+    std::array<juce::uint32, PlainsWorld::numRelics> relicInstances {};
+    std::array<int, PlainsWorld::numRelics> relicCount {};
+    std::array<std::vector<float>, PlainsWorld::numRelics> relicCells;
+    int relicBx = 0x7fffffff, relicBz = 0x7fffffff;    // the window the lists were made for
+    int locRelicCell = -1;
+    bool instancing = false;                            // glVertexAttribDivisor is there
 
     static constexpr int N = 128, levels = 9, morphBand = 16;
     struct Level
