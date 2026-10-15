@@ -228,13 +228,16 @@ void KnobRing::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xff05090b).withAlpha (0.62f));
     g.strokePath (whole, juce::PathStrokeType (width + 1.5f));
 
-    // From the start of the travel to the pointer, lit.
+    // From the start of the travel to the pointer, lit: the arc made a band of the ring's own width
+    // first, so that the glow and the light are that band and nothing else — a shadow drawn for the
+    // bare arc would fill the chord it spans, over the knob.
     const float to = juce::degreesToRadians (ringFrom + ringSweep * juce::jlimit (0.0f, 1.0f, shown));
-    juce::Path lit;
-    lit.addCentredArc (c.x, c.y, radius, radius, 0.0f, juce::degreesToRadians (ringFrom), to, true);
-    juce::DropShadow (ringCyan.withAlpha (0.35f + 0.4f * b), juce::roundToInt (3.0f + 4.0f * b), {}).drawForPath (g, lit);
+    juce::Path arc, band;
+    arc.addCentredArc (c.x, c.y, radius, radius, 0.0f, juce::degreesToRadians (ringFrom), to, true);
+    juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (band, arc);
+    juce::DropShadow (ringCyan.withAlpha (0.35f + 0.4f * b), juce::roundToInt (3.0f + 4.0f * b), {}).drawForPath (g, band);
     g.setColour (ringCyan.withAlpha (0.7f + 0.3f * b));
-    g.strokePath (lit, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.fillPath (band);
 }
 
 } // namespace orbitamp::redpaw
