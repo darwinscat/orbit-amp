@@ -7,8 +7,20 @@
 // frame-rate cap. For looking at the view and measuring it. The same can be set from the command line
 // — --mode=gpu|cpu|still --gear=1..3 --turbo --park --scale=0.5 --cap=30 --steer=-1..1 — and --report prints
 // the status line to stdout once a second, so a run can be measured without a hand on it.
+//
+// For a shot without a hand: --at=x,z,heading (world metres, degrees) puts the rover somewhere first,
+// --clock=seconds,metres sets the world's clock, --drive=seconds runs the drive that long at 60 steps a
+// second with the steering held before the first frame, --still=out.png writes the STILL to a file once
+// it has arrived and quits, --stress=n draws the scene n times a frame for the timer (and holds the
+// quality ladder, as --fixed does alone), --quit=seconds ends the run. Built twice: as RedPaw's windscreen over the Plains, and (ORBITAMP_VIEW_DEMO_ICE) as
+// FrostPaw's over the ice.
 
 #include "Windscreen.h"
+#if ORBITAMP_VIEW_DEMO_ICE
+ #include "../../frostpaw/view/IceDrive.h"
+#else
+ #include "PlainsDrive.h"
+#endif
 
 #include <juce_gui_extra/juce_gui_extra.h>
 
@@ -18,25 +30,84 @@ namespace
 {
     constexpr int glassWidth = 1440, glassHeight = 270, lineHeight = 26;
 
-    class Stand final : public juce::Component,
-                        private juce::Timer
+    using Mode = orbitamp::redpaw::Windscreen::Mode;
+
+    struct Args
     {
-    public:
-        explicit Stand (const juce::StringArray& args)
+        Mode mode = Mode::gpu;
+        int gear = 1; bool turbo = false, park = false;
+        float scale = 1.0f, steer = 0.0f; int cap = 60, stress = 1;
+        bool report = false, placed = false, clocked = false, fixed = false;
+        double x = 0, z = 0, heading = 0, clockSeconds = 0, clockMetres = 0, driveSeconds = 0, quitSeconds = 0;
+        juce::String stillFile;
+
+        explicit Args (const juce::StringArray& args)
         {
             for (const auto& a : args)
             {
                 const auto value = a.fromFirstOccurrenceOf ("=", false, false);
-                if (a.startsWith ("--mode="))
-                    view.setMode (value == "cpu" ? Mode::cpu : value == "still" ? Mode::still : Mode::gpu);
-                else if (a.startsWith ("--gear="))  view.setGear (value.getIntValue());
-                else if (a == "--turbo")            view.setTurbo (true);
-                else if (a == "--park")             view.setParked (true);
-                else if (a.startsWith ("--scale=")) view.setRenderScale (value.getFloatValue());
-                else if (a.startsWith ("--cap="))   view.setFrameRateCap (value.getIntValue());
-                else if (a.startsWith ("--steer=")) view.steer (value.getFloatValue());
-                else if (a == "--report")           report = true;
+                const auto parts = juce::StringArray::fromTokens (value, ",", "");
+                if (a.startsWith ("--mode="))        mode = value == "cpu" ? Mode::cpu : value == "still" ? Mode::still : Mode::gpu;
+                else if (a.startsWith ("--gear="))   gear = value.getIntValue();
+                else if (a == "--turbo")             turbo = true;
+                else if (a == "--park")              park = true;
+                else if (a.startsWith ("--scale="))  scale = value.getFloatValue();
+                else if (a.startsWith ("--cap="))    cap = value.getIntValue();
+                else if (a.startsWith ("--steer="))  steer = value.getFloatValue();
+                else if (a == "--report")            report = true;
+                else if (a.startsWith ("--at=") && parts.size() >= 3) { placed = true; x = parts[0].getDoubleValue(); z = parts[1].getDoubleValue(); heading = parts[2].getDoubleValue() * juce::MathConstants<double>::pi / 180; }
+                else if (a.startsWith ("--clock=") && parts.size() >= 2) { clocked = true; clockSeconds = parts[0].getDoubleValue(); clockMetres = parts[1].getDoubleValue(); }
+                else if (a.startsWith ("--drive="))  driveSeconds = value.getDoubleValue();
+                else if (a.startsWith ("--still="))  stillFile = value;
+                else if (a.startsWith ("--stress=")) stress = value.getIntValue();
+                else if (a.startsWith ("--quit="))   quitSeconds = value.getDoubleValue();
+                else if (a == "--fixed")             fixed = true;
             }
+            if (stress > 1)
+                fixed = true;
+        }
+
+        /** The drive, placed and driven as asked before the view takes it. */
+        std::unique_ptr<orbitamp::redpaw::Drive> makeDrive() const
+        {
+           #if ORBITAMP_VIEW_DEMO_ICE
+            std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::frostpaw::IceDrive>();
+           #else
+            std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::redpaw::PlainsDrive>();
+           #endif
+            d->setGear (gear); d->setTurbo (turbo); d->setParked (park);
+            if (placed)
+                d->placeAt (x, z, heading);
+            if (clocked)
+                d->setClock (clockSeconds, clockMetres);
+            if (driveSeconds > 0)
+            {
+                if (! placed)
+                    d->placeAt (31500, 3000, 0);
+                d->setSteer (steer);
+                for (int i = 0, n = juce::roundToInt (driveSeconds * 60); i < n; ++i)
+                    d->step (1.0 / 60);
+            }
+            d->setRepeats (stress);
+            return d;
+        }
+    };
+
+    class Stand final : public juce::Component,
+                        private juce::Timer
+    {
+    public:
+        explicit Stand (const Args& a)
+            : args (a), view (a.makeDrive())
+        {
+            view.setGear (args.gear);
+            view.setTurbo (args.turbo);
+            view.setParked (args.park);
+            view.setRenderScale (args.scale);
+            view.setFrameRateCap (args.cap);
+            view.steer (args.steer);
+            view.setAdaptive (! args.fixed);
+            view.setMode (args.mode);
             addAndMakeVisible (view);
             addAndMakeVisible (line);
             line.setFont (juce::FontOptions (13.0f, juce::Font::plain));
@@ -44,6 +115,7 @@ namespace
             line.setColour (juce::Label::backgroundColourId, juce::Colour (0xff0b0608));
             setSize (glassWidth, glassHeight + lineHeight);
             setWantsKeyboardFocus (true);
+            started = juce::Time::getMillisecondCounterHiRes();
             startTimerHz (4);
         }
 
@@ -78,32 +150,48 @@ namespace
         }
 
     private:
-        using Mode = orbitamp::redpaw::Windscreen::Mode;
+        Args args;
         orbitamp::redpaw::Windscreen view;
         juce::Label line;
-        bool report = false;
         int ticks = 0;
+        double started = 0;
 
         void timerCallback() override
         {
             const auto status = view.statusLine() + "   cap " + juce::String (view.frameRateCap());
             line.setText (status + "      1 2 3 gear   T turbo   0/P park   arrows / drag steer   M mode   S scale   F cap", juce::dontSendNotification);
-            if (report && (++ticks % 4) == 0)
+            if (args.report && (++ticks % 4) == 0)
                 std::cout << status << std::endl;
+            if (args.stillFile.isNotEmpty() && view.mode() == Mode::still && view.stillImage().isValid())
+            {
+                const juce::File out = juce::File::getCurrentWorkingDirectory().getChildFile (args.stillFile);
+                out.deleteFile();
+                juce::FileOutputStream stream (out);
+                if (stream.openedOk())
+                    juce::PNGImageFormat().writeImageToStream (view.stillImage(), stream);
+                std::cout << "still " << out.getFullPathName() << " " << view.stillImage().getWidth() << "x" << view.stillImage().getHeight() << std::endl;
+                juce::JUCEApplication::getInstance()->systemRequestedQuit();
+            }
+            if (args.quitSeconds > 0 && juce::Time::getMillisecondCounterHiRes() - started > args.quitSeconds * 1000)
+                juce::JUCEApplication::getInstance()->systemRequestedQuit();
         }
     };
 
     class Demo final : public juce::JUCEApplication
     {
     public:
+       #if ORBITAMP_VIEW_DEMO_ICE
+        const juce::String getApplicationName() override    { return "FrostPawAmp windscreen"; }
+       #else
         const juce::String getApplicationName() override    { return "RedPawAmp windscreen"; }
+       #endif
         const juce::String getApplicationVersion() override { return "0"; }
 
         void initialise (const juce::String&) override
         {
             window = std::make_unique<Window> (getApplicationName(), juce::Colours::black, juce::DocumentWindow::allButtons);
             window->setUsingNativeTitleBar (true);
-            window->setContentOwned (new Stand (juce::StringArray::fromTokens (getCommandLineParameters(), true)), true);
+            window->setContentOwned (new Stand (Args (juce::StringArray::fromTokens (getCommandLineParameters(), true))), true);
             window->setResizable (true, false);
             window->centreWithSize (window->getWidth(), window->getHeight());
             window->setVisible (true);

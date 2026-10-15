@@ -76,8 +76,9 @@ namespace
     };
 }
 
-void Mars1993::makeMaps (uint16_t seed)
+void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
 {
+    look = lookWanted;
     for (int i = 0; i < 97; ++i)
     {
         const auto widen = [] (uint32_t c) { return (c << 2) | (c >> 4); };    // 6-bit DAC to 8
@@ -85,6 +86,9 @@ void Mars1993::makeMaps (uint16_t seed)
     }
     for (int i = 97; i < 256; ++i)
         pal[(size_t) i] = 0xFF000000u;
+    horizonIndex = 0x50;
+    if (look == Look::ice)
+        makeIcePalette();
 
     // 00f3: the sky. Four fixed seeds give it its large-scale pattern; its heights become palette 64..95.
     const uint32_t s1 = lcg (seed & 0x7FFF);
@@ -113,6 +117,48 @@ void Mars1993::makeMaps (uint16_t seed)
     // Blur 2, in place: the 2 x 2 box on the heights.
     for (uint32_t i = 0; i < 65536; ++i)
         hm[i] = (uint8_t) ((hm[i] + hm[(uint16_t) (i + 1)] + hm[(uint16_t) (i + 0x100)] + hm[(uint16_t) (i + 0x101)]) >> 2);
+}
+
+/** THE ICE MOON'S DAC. The ground's shade is w(u) - w(u + 3) + 32 — the sun low along u — so the 64
+    entries run from a blue shadow through lit ice to white snow; the sky's 32 are black; 97 is the mist
+    on the horizon. From 98, Jupiter: 24 latitudes of the ice world's banding, each lit, at the
+    terminator, and on the night side, then the Spot's three. */
+void Mars1993::makeIcePalette()
+{
+    struct C { float r, g, b; };
+    const auto mix = [] (C a, C b, float t) { return C { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; };
+    const auto ss = [] (float e0, float e1, float x) { const float t = std::clamp ((x - e0) / (e1 - e0), 0.0f, 1.0f); return t * t * (3 - 2 * t); };
+    const auto put = [this] (int i, C c)
+    {
+        const auto q = [] (float v) { return (uint32_t) std::lround (std::clamp (v, 0.0f, 1.0f) * 255); };
+        pal[(size_t) i] = 0xFF000000u | (q (c.r) << 16) | (q (c.g) << 8) | q (c.b);
+    };
+    const C shadow { 0.15f, 0.23f, 0.40f }, lit { 0.70f, 0.77f, 0.87f }, snow { 1.0f, 1.0f, 1.0f };
+    for (int i = 0; i < 64; ++i)
+        put (i, i < 32 ? mix (shadow, lit, (float) i / 32.0f) : mix (lit, snow, (float) (i - 32) / 31.0f));
+    for (int i = 64; i < 96; ++i)
+        put (i, { 0, 0, 0 });
+    put (97, { 0.59f, 0.67f, 0.80f });
+    horizonIndex = 97;
+
+    // Jupiter's bands by latitude, as the ice world's sky shades them, without the festoons.
+    const C zone { 0.95f, 0.90f, 0.80f }, belt { 0.56f, 0.36f, 0.24f };
+    const float light[3] { 1.25f + 0.045f, 0.5f * 1.25f + 0.045f, 0.045f };
+    for (int row = 0; row < 24; ++row)
+    {
+        const float la = (((float) row + 0.5f) / 24.0f - 0.5f) * 3.14159265f;
+        const float band = 0.5f + 0.5f * std::sin (la * 14 + 0.6f), band2 = 0.5f + 0.5f * std::sin (la * 31 + 1.7f);
+        float bm = ss (0.2f, 0.8f, band) * 0.7f + 0.3f * band2;
+        bm += (0.85f - bm) * ss (0.08f, 0.0f, std::abs (la));
+        C c = mix (belt, zone, bm);
+        c = mix (c, { 0.74f, 0.62f, 0.50f }, 0.5f * ss (0.35f, 0.45f, std::abs (la + 0.12f)) * (1 - ss (0.45f, 0.6f, std::abs (la + 0.12f))));
+        c = mix (c, { 0.78f, 0.70f, 0.58f }, ss (0.9f, 1.3f, std::abs (la)));
+        c = mix (c, { 0.62f, 0.60f, 0.68f }, ss (1.15f, 1.45f, std::abs (la)));
+        for (int l = 0; l < 3; ++l)
+            put (98 + row * 3 + l, { c.r * light[l], c.g * light[l], c.b * light[l] });
+    }
+    for (int l = 0; l < 3; ++l)
+        put (170 + l, { 0.80f * light[l], 0.48f * light[l], 0.36f * light[l] });
 }
 
 void Mars1993::setRows (int rows)
@@ -151,7 +197,46 @@ void Mars1993::render (uint16_t camX, uint16_t camY)
         return;
     const uint16_t alt = altitudeAt (camX, camY);
     drawSky (alt, camX, camY);
+    if (look == Look::ice)
+        drawJupiter();
     drawGround (alt, camX, camY);
+}
+
+/** A FLAT JUPITER in the black sky, where the ice world's sky has it: 27 degrees right of straight
+    ahead, 4 up, 9 across to its edge — on this screen, whose horizon is the middle row, the same
+    fractions of the glass as the GPU's picture gives them. Bands by latitude from the palette,
+    lit by the same sun through a terminator in three steps, the Spot in its place; the sky rows
+    only, the ground is drawn over it. No festoons, no limb, no edge: it is 1993. */
+void Mars1993::drawJupiter()
+{
+    const double cx = 0.7063 * w, cy = G - 0.152 * h, r = 0.343 * h;
+    const int y0 = std::max (0, (int) std::floor (cy - r)), y1 = std::min (skyRows - 1, (int) std::ceil (cy + r));
+    // The light: n = u R + v U - z J against the sun, with J, R, U the ice world's sky frame.
+    const auto dir = [] (double azDeg, double elDeg) { const double az = azDeg * 3.14159265358979 / 180, el = elDeg * 3.14159265358979 / 180; return std::array<double, 3> { std::sin (az) * std::cos (el), std::sin (el), -std::cos (az) * std::cos (el) }; };
+    const auto cross = [] (std::array<double, 3> a, std::array<double, 3> b) { return std::array<double, 3> { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] }; };
+    const auto norm = [] (std::array<double, 3> a) { const double l = std::sqrt (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]); return std::array<double, 3> { a[0] / l, a[1] / l, a[2] / l }; };
+    const auto dot = [] (std::array<double, 3> a, std::array<double, 3> b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
+    const auto sun = dir (-118, 16), J = dir (27, 4);
+    const auto R = norm (cross ({ 0, 1, 0 }, J)), U = norm (cross (J, R));
+    const double sR = dot (R, sun), sU = dot (U, sun), sJ = dot (J, sun);
+    uint8_t* fb = frame.data();
+    for (int y = y0; y <= y1; ++y)
+    {
+        const double v = (cy - y) / r;
+        const double half = std::sqrt (std::max (0.0, 1.0 - v * v)) * r;
+        const int x0 = std::max (0, (int) std::ceil (cx - half)), x1 = std::min (w - 1, (int) std::floor (cx + half));
+        const double lat = std::asin (std::clamp (v, -1.0, 1.0));
+        const int row = std::clamp ((int) ((lat / 3.14159265358979 + 0.5) * 24), 0, 23);
+        for (int x = x0; x <= x1; ++x)
+        {
+            const double u = (x - cx) / r, z = std::sqrt (std::max (0.0, 1.0 - u * u - v * v));
+            const double l = u * sR + v * sU - z * sJ;
+            const int light = l > 0.25 ? 0 : (l > 0.0 ? 1 : 2);
+            const double lon = std::asin (std::clamp (u / std::max (std::cos (lat), 1e-6), -1.0, 1.0));
+            const double e = (lon - 0.35) * (lon - 0.35) / (0.21 * 0.21) + (lat - 0.36) * (lat - 0.36) / (0.085 * 0.085);
+            fb[(size_t) y * (size_t) w + (size_t) x] = (uint8_t) (e < 0.8 ? 170 + light : 98 + row * 3 + light);
+        }
+    }
 }
 
 // 0459: the sky. Row r above the horizon looks at a plane at distance K / r: rows of constant v, u
@@ -175,7 +260,7 @@ void Mars1993::drawSky (uint16_t alt, uint16_t camX, uint16_t camY)
     }
     // The horizon line, colour 50h.
     const size_t horizonEnd = (size_t) G * (size_t) w;
-    std::fill (fb + p, fb + horizonEnd, (uint8_t) 0x50);
+    std::fill (fb + p, fb + horizonEnd, horizonIndex);
     p = horizonEnd;
     // "Blank off ~50 lines below the horizon": a ramp by the altitude (09e9..0a1c).
     const uint32_t num = (alt >> 1) + 10;
