@@ -17,13 +17,15 @@ namespace orbitamp::redpaw
 
     The dashboard is the picture with the windscreen already cut out; every control is a render of its
     own, drawn at its place: the knobs without a pointer (the pointer is drawn), the lever's T grip seen
-    from above with its collar, the slider and fader caps, the roof's toggle up and down, the square keys and TURBO each up and
-    pressed. */
+    from above with its collar, the slider and fader caps, the roof's toggle up and down, the square keys
+    and TURBO each up and pressed. */
 struct Art
 {
     juce::Image bg;                    // the dashboard, its windscreen transparent, its lamps out
     juce::Image knobDrive, knobTone;
     juce::Image lever;
+    juce::Image leverGlow;             // a soft light the shape of the lever, white, `leverGlowPad` wider all round
+    static constexpr int leverGlowPad = 26;    // in the lever render's own pixels
     juce::Image sliderCap, faderCap;
     juce::Image toggleUp, toggleDown;
     juce::Image keyUp, keyDown;

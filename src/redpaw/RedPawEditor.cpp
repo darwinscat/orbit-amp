@@ -264,9 +264,9 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     glassClicks.menu = [this] { showWindowMenu(); };
 
     // THE GEAR LEVER: the pedal, and everything its channel was left with. Its box is the gate's plate
-    // and, on the right, as far as the grip reaches over the plate's edge from a notch, with its shadow.
+    // and round it as far as the grip, its light and its shadow reach.
     addToStage (lever);
-    const float leverRight = juce::jmax (gearPlate.getRight(), notchX + leverWidth * 0.5f + 8.0f);
+    const float leverRight = juce::jmax (gearPlate.getRight(), notchX + leverWidth * 0.5f + 16.0f);
     lever.setBounds (juce::Rectangle<float> (GearLever::left, GearLever::top, leverRight - GearLever::left,
                                              gearPlate.getBottom() - GearLever::top).toNearestInt());
     lever.onPosition = [this] (int at) { if (at == GearLever::park) parkIt(); else pullGear (at - GearLever::positionOf (0)); };

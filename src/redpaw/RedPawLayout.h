@@ -82,7 +82,7 @@ inline constexpr float slotX  = 798.3f;         // the stem in the slot
 inline constexpr float notchX = 814.0f;         // ...and in a notch
 inline constexpr float slotTopY = 694.0f;       // PARK: the stem at the slot's top end
 inline const std::array<float, 3> notches {{ 733.8f, 776.0f, 817.5f }};     // the notches' middles
-inline constexpr float leverWidth = 104.0f;     // the lever's render, grip and collar, this wide: in a notch a little over the plate's edge
+inline constexpr float leverWidth = 124.0f;     // the lever's render, grip and collar, this wide: over the plate's edges
 inline constexpr float collarSink = 3.0f;       // how far the collar's foot goes past the position, into the slot
 inline const juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };
 

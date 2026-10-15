@@ -108,6 +108,18 @@ namespace
         return img;
     }
 
+    /** A SOFT LIGHT THE SHAPE OF A RENDER: its alpha blurred, white, on a canvas `pad` wider all round —
+        drawn tinted under the render, it keeps a dark control in sight on a dark panel. */
+    juce::Image glowOf (const juce::Image& img, int pad)
+    {
+        if (! img.isValid())
+            return {};
+        juce::Image glow (juce::Image::ARGB, img.getWidth() + 2 * pad, img.getHeight() + 2 * pad, true);
+        juce::Graphics g (glow);
+        juce::DropShadow (juce::Colours::white, pad / 2, { pad, pad }).drawForImage (g, img);
+        return glow;
+    }
+
     /** THE LAMPS GO OUT (face/Renders.h). On a rusted dashboard warm is everywhere: a lamp is what is
         both warm AND bright — its red well over its blue, and the whole of it lit — so the rust and the
         dust round it stay as they were painted. */
@@ -129,6 +141,7 @@ const Art& Art::get()
         a.knobDrive  = load ("knob-drive.png");
         a.knobTone   = load ("knob-tone.png");
         a.lever      = load ("lever.png");
+        a.leverGlow  = glowOf (a.lever, Art::leverGlowPad);
         a.sliderCap  = load ("slider-cap.png");
         a.faderCap   = load ("fader-cap.png");
         a.toggleUp   = load ("toggle-up.png");

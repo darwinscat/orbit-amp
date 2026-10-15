@@ -17,6 +17,8 @@ namespace
     constexpr float slotX  = layout::slotX - GearLever::left;
     constexpr float notchX = layout::notchX - GearLever::left;
 
+    const juce::Colour ringCyan { 0xff3fe6f2 };     // the painted rings' light, a shade brighter: the knobs' and the lever's
+
     /** Where the grip's bar ends and its collar begins on the lever's render, down from its top — a
         fraction of the render's height. */
     constexpr float barBottom = 0.85f;
@@ -35,6 +37,8 @@ GearLever::GearLever()
     pos.stiffness = 260.0f;     // a heavy lever: it overshoots the notch a hair and comes back
     pos.damping   = 22.0f;
     pos.jump (1.0f);
+    lit.stiffness = 40.0f;      // soft, like the knobs' rings
+    lit.damping   = 13.0f;
     setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
 }
 
@@ -82,7 +86,8 @@ void GearLever::setPosition (int to, bool animate, bool notify)
 
 void GearLever::timerCallback()
 {
-    if (! pos.step (face::frameDt))
+    const bool moving = pos.step (face::frameDt);
+    if (! lit.step (face::frameDt) && ! moving)
         stopTimer();
     repaint();
 }
@@ -105,7 +110,15 @@ void GearLever::paint (juce::Graphics& g)
         g.fillRoundedRectangle (bar.translated (3.0f, 5.0f).expanded (grow), bar.getHeight() * 0.5f + grow);
     }
 
-    g.setOpacity (1.0f);        // an image is drawn at the colour's opacity: the shadow's would let the slot through
+    // A soft cyan light round it, the knobs' rings' own: in sight on the dark plate, warmer under the hand.
+    if (const auto& glow = Art::get().leverGlow; glow.isValid() && art.isValid())
+    {
+        const float k = box.getWidth() / (float) art.getWidth();
+        g.setColour (ringCyan.withAlpha (0.6f + 0.4f * juce::jlimit (0.0f, 1.0f, lit.value)));
+        g.drawImage (glow, box.expanded ((float) Art::leverGlowPad * k), juce::RectanglePlacement::stretchToFit, true);
+    }
+
+    g.setOpacity (1.0f);        // an image is drawn at the colour's opacity: the light's would let the slot through
     if (art.isValid())
         g.drawImage (art, box);
     else
@@ -146,11 +159,16 @@ void GearLever::mouseDrag (const juce::MouseEvent& e)
     repaint();
 }
 
-void GearLever::mouseUp (const juce::MouseEvent&)
+void GearLever::mouseUp (const juce::MouseEvent& e)
 {
     if (! held)
         return;
     held = false;
+    if (! isMouseOver (true) && ! getLocalBounds().contains (e.getPosition()))
+    {
+        lit.target = 0.0f;
+        startTimerHz (60);
+    }
     setPosition (juce::roundToInt (pos.value), true);
     if (onRelease)
         onRelease();
@@ -315,7 +333,6 @@ juce::Image GlassFilm::make (float scale) const
 //==============================================================================
 namespace
 {
-    const juce::Colour ringCyan { 0xff3fe6f2 };     // the painted ring's light, a shade brighter
     constexpr float ringFrom = -135.0f, ringSweep = 270.0f;     // a knob's travel, as ArtKnob turns it
     constexpr double breathHoldMs = 1000.0;
 }
