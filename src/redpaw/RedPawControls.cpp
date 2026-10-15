@@ -229,6 +229,84 @@ void NavHeader::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+GlassFilm::GlassFilm()
+{
+    setInterceptsMouseClicks (false, false);
+}
+
+void GlassFilm::paint (juce::Graphics& g)
+{
+    const float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    if (! film.isValid() || std::abs (scale - filmScale) > 1.0e-3f)
+    {
+        filmScale = scale;
+        film = make (scale);
+    }
+    g.drawImage (film, getLocalBounds().toFloat());
+}
+
+juce::Image GlassFilm::make (float scale) const
+{
+    const auto size = getLocalBounds().toFloat();
+    juce::Image img (juce::Image::ARGB, juce::jmax (1, juce::roundToInt (size.getWidth() * scale)),
+                     juce::jmax (1, juce::roundToInt (size.getHeight() * scale)), true);
+    juce::Graphics g (img);
+    g.addTransform (juce::AffineTransform::scale (scale));
+    juce::Random random (0x52504157);       // the same glass on every machine and every start
+
+    const float w = size.getWidth(), h = size.getHeight();
+
+    // MURK: the glass a shade milky toward one corner, a shade darker at its edges.
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.045f), w * 0.18f, h * 0.15f,
+                                             juce::Colours::transparentWhite, w * 0.75f, h * 0.9f, true));
+    g.fillAll();
+    g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, w * 0.5f, h * 0.5f,
+                                             juce::Colours::black.withAlpha (0.22f), 0.0f, 0.0f, true));
+    g.fillAll();
+
+    // A SHEEN: a soft band of light across it, the way a screen catches the room.
+    {
+        auto sheen = juce::ColourGradient (juce::Colours::transparentWhite, w * 0.30f, 0.0f, juce::Colours::transparentWhite, w * 0.58f, h, false);
+        sheen.addColour (0.5, juce::Colours::white.withAlpha (0.03f));
+        g.setGradientFill (sheen);
+        g.fillAll();
+    }
+
+    // DUST: fine specks, most of them a fraction of a pixel's light, a few soft larger motes.
+    for (int i = 0; i < 420; ++i)
+    {
+        const float d = 0.5f + random.nextFloat() * random.nextFloat() * 1.6f;
+        g.setColour (juce::Colour (0xffe8dccf).withAlpha (0.05f + random.nextFloat() * 0.11f));
+        g.fillEllipse (random.nextFloat() * w, random.nextFloat() * h, d, d);
+    }
+    for (int i = 0; i < 18; ++i)
+    {
+        const float d = 3.0f + random.nextFloat() * 5.0f;
+        const juce::Point<float> c { random.nextFloat() * w, random.nextFloat() * h };
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd8c8b8).withAlpha (0.05f), c,
+                                                 juce::Colours::transparentWhite, c.translated (d, 0.0f), true));
+        g.fillEllipse (juce::Rectangle<float> (d * 2.0f, d * 2.0f).withCentre (c));
+    }
+
+    // SCRATCHES: a few long light ones, mostly the one way a cloth went, gently bent, and a few short.
+    for (int i = 0; i < 14; ++i)
+    {
+        const bool lengthy = i < 6;
+        const float len = lengthy ? w * (0.25f + random.nextFloat() * 0.35f) : 12.0f + random.nextFloat() * 30.0f;
+        const float angle = juce::degreesToRadians (-18.0f + random.nextFloat() * 14.0f + (i % 5 == 4 ? 70.0f : 0.0f));
+        const juce::Point<float> a { random.nextFloat() * w, random.nextFloat() * h };
+        const juce::Point<float> b = a + juce::Point<float> (std::cos (angle), std::sin (angle)) * len;
+        const auto mid = (a + b) * 0.5f + juce::Point<float> (-std::sin (angle), std::cos (angle)) * (random.nextFloat() - 0.5f) * len * 0.08f;
+        juce::Path line;
+        line.startNewSubPath (a);
+        line.quadraticTo (mid, b);
+        g.setColour (juce::Colour (0xffece6f0).withAlpha (lengthy ? 0.06f + random.nextFloat() * 0.05f : 0.08f + random.nextFloat() * 0.06f));
+        g.strokePath (line, juce::PathStrokeType (0.45f + random.nextFloat() * 0.3f));
+    }
+    return img;
+}
+
+//==============================================================================
 namespace
 {
     const juce::Colour ringCyan { 0xff3fe6f2 };     // the painted ring's light, a shade brighter

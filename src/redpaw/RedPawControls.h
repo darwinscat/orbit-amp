@@ -81,6 +81,23 @@ private:
 };
 
 //==============================================================================
+/** THE NAV SCREEN'S GLASS: a little murky, fine dust on it, a few light scratches — laid over everything
+    the screen shows, and faint enough that every number and line under it reads. It never changes: it is
+    made once, from a fixed seed, at the screen's own pixel size, and every paint is a copy of it. It
+    never takes a click. */
+class GlassFilm final : public juce::Component
+{
+public:
+    GlassFilm();
+    void paint (juce::Graphics&) override;
+
+private:
+    juce::Image film;
+    float filmScale = 0.0f;
+    juce::Image make (float scale) const;
+};
+
+//==============================================================================
 /** THE RING ROUND A KNOB: the cyan ring the dashboard paints round each knob's socket, made to say where
     the knob stands — lit from the start of its travel to where its pointer is, the rest dimmed. It
     breathes only when it matters: under the hand, or while the knob turns, it brightens softly, and

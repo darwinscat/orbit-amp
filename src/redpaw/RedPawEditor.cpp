@@ -293,6 +293,10 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
                                                (int) prefs::store().get (screenKey, (int) Monitor::View::spectrum)));
 
+    // ...and its glass, over the lot: a little murky, dusty, lightly scratched.
+    addToStage (glassFilm);
+    glassFilm.setBounds (navHeader.getUnion (tunerScreen).toNearestInt());
+
     // A prototype's hook for looking at the windscreen in a gear, with TURBO, or parked, without a hand
     // on anything: REDPAW_CHANNEL names a channel, 0..5, or "park".
     if (const auto c = juce::SystemStats::getEnvironmentVariable ("REDPAW_CHANNEL", {}); c.equalsIgnoreCase ("park"))
