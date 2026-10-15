@@ -859,6 +859,26 @@ target_link_libraries(redpaw_view_demo PRIVATE
 set_target_properties(redpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ----------------------------------------------------------------------------
+# FrostPawAmp — the ice: the same windscreen looking out on an ice moon (src/frostpaw/view), the drive
+# handed to it as an IceDrive. The sources are listed here for the product to take up, with the
+# windscreen's own; the demo is the same bare window over the ice. Built only when asked for by name.
+# ----------------------------------------------------------------------------
+set(FROSTPAW_VIEW_SOURCES
+    src/frostpaw/view/IceWorld.cpp
+    src/frostpaw/view/IceGl.cpp)
+
+juce_add_gui_app(frostpaw_view_demo PRODUCT_NAME "FrostPawViewDemo")
+target_sources(frostpaw_view_demo PRIVATE src/redpaw/view/WindscreenDemo.cpp ${REDPAW_VIEW_SOURCES} ${FROSTPAW_VIEW_SOURCES})
+target_include_directories(frostpaw_view_demo PRIVATE src)
+target_compile_definitions(frostpaw_view_demo PRIVATE ORBITAMP_VIEW_DEMO_ICE=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(frostpaw_view_demo PRIVATE
+    juce::juce_gui_extra
+    juce::juce_opengl
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(frostpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# ----------------------------------------------------------------------------
 # RedPawAmp — the rover: a third face over the same processor (src/redpaw), the dashboard of a Mars rover
 # with the drive across Mars in its windscreen. Six channels — the Victory V4's six packs — picked as
 # three gears and TURBO. Built like the cockpit: the family's console (src/face) over the family's
