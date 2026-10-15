@@ -285,24 +285,35 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     addToStage (turbo);
     turbo.setBounds (juce::Rectangle<float> (turboSize, turboSize).withCentre (layout::turbo).toNearestInt());
 
-    // GATE'S THRESHOLD: marks every 5 dB, the longer one at -50, where a double click puts it; a right
-    // click is GATE's menu, and while it is held the tag over it says where it stands.
-    const auto travelOf = [] (float db) { return (db - thresholdLowDb) / (thresholdHighDb - thresholdLowDb); };
-    threshold.scale = thresholdScale;
-    threshold.capLength = faderCapLength * thresholdScale;
-    threshold.marks = 6;
+    // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg. A
+    // double click puts it back where it opens, a right click is its block's menu, and while it is held
+    // the tag over it says where it stands. While its block is off it stands dim, and still moves.
+    const auto plateFader = [this] (face::ColumnFader& fader, const LampPlate& plate, const char* paramId, const char* onId,
+                                    float low, float high, std::function<void()> menu, const juce::String& name)
+    {
+        const auto travelOf = [low, high] (float v) { return (v - low) / (high - low); };
+        fader.scale = slotScale;
+        fader.capLength = faderCapLength * slotScale;
+        fader.defaultValue = travelOf (amp.apvts.getParameter (paramId)->convertFrom0to1 (amp.apvts.getParameter (paramId)->getDefaultValue()));
+        auto* attachment = follow (paramId, [&fader, travelOf] (float v) { fader.setValue (travelOf (v), false); });
+        fader.onGestureStart = [attachment] { attachment->beginGesture(); };
+        fader.onChange       = [attachment, low, high] (float travel) { attachment->setValueAsPartOfGesture (juce::jmap (travel, low, high)); };
+        fader.onGestureEnd   = [attachment] { attachment->endGesture(); };
+        fader.onMenu         = std::move (menu);
+        attachment->sendInitialUpdate();
+        sayLever (fader, name, [this, paramId] { return getParam (paramId); });
+        follow (onId, [&fader] (float on) { fader.setAlpha (on > 0.5f ? 1.0f : 0.45f); })->sendInitialUpdate();
+        addToStage (fader);
+        fader.setBounds (plate.slot.reduced (0.0f, slotRim).withSizeKeepingCentre (faderWidth * slotScale, plate.slot.getHeight() - 2.0f * slotRim).toNearestInt());
+    };
+    threshold.marks = 6;            // every 5 dB, the longer at -50
     threshold.longMark = 4;
-    threshold.defaultValue = travelOf (-50.0f);
-    auto* gateThreshold = follow (params::gateThreshold, [this, travelOf] (float db) { threshold.setValue (travelOf (db), false); });
-    threshold.onGestureStart = [gateThreshold] { gateThreshold->beginGesture(); };
-    threshold.onChange       = [gateThreshold] (float travel) { gateThreshold->setValueAsPartOfGesture (juce::jmap (travel, thresholdLowDb, thresholdHighDb)); };
-    threshold.onGestureEnd   = [gateThreshold] { gateThreshold->endGesture(); };
-    threshold.onMenu         = [this] { showGateMenu(); };
-    gateThreshold->sendInitialUpdate();
-    sayLever (threshold, "GATE", [this] { return getParam (params::gateThreshold); });
-    follow (params::gateOn, [this] (float on) { threshold.setAlpha (on > 0.5f ? 1.0f : 0.45f); })->sendInitialUpdate();
-    addToStage (threshold);
-    threshold.setBounds (thresholdSlot.withSizeKeepingCentre (faderWidth * thresholdScale, thresholdSlot.getHeight()).toNearestInt());
+    plateFader (threshold, gatePlate, params::gateThreshold, params::gateOn, thresholdLowDb, thresholdHighDb,
+                [this] { showGateMenu(); }, "GATE");
+    ceiling.marks = 6;              // every half a decibel or so, none longer
+    ceiling.longMark = -1;
+    plateFader (ceiling, limiterPlate, params::limiterCeiling, params::limiterOn, params::limiterCeilingMin, params::limiterCeilingMax,
+                [this] { showOutputMenu(); }, "LIMITER");
 
     // THE NAV SCREEN: along its top the gear, the channel and the speed the windscreen is driving at;
     // under them the picture of the amp at work the machine has chosen.

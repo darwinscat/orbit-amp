@@ -52,10 +52,11 @@ namespace
         return img;
     }
 
-    /** GATE'S THRESHOLD GETS A WELL, right of the gate's lamp (layout::thresholdWell): INPUT's recess as
-        painted, all of it drawn at one smaller size — its top end and its bottom end whole, and of the
-        straight run between them only as much as the well is long. */
-    juce::Image addThresholdWell (juce::Image img)
+    /** THE CORNER LAMPS' PLATES GROW ON THEIR OUTER LEGS (layout::LampPlate): the plate inward of the cut
+        moves inward, cut to its own outline; the room it leaves gets the plate's top edge, plain metal, the plate's bottom edge,
+        each from where the picture has it plain; and down the room, INPUT's slot at a smaller size — its
+        round ends whole, its straight run cut short. */
+    juce::Image widenLampPlates (juce::Image img)
     {
         if (! img.isValid())
             return img;
@@ -67,18 +68,42 @@ namespace
         juce::Graphics g (img);
         g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
 
-        const float s = thresholdScale;
-        const float run = thresholdWell.getHeight() / s - inWellTop - inWellBottom;     // of INPUT's straight run, kept
-        const float srcTop[] { inWell.getY(), inWell.getY() + inWellTop, inWell.getBottom() - inWellBottom };
-        const float srcLen[] { inWellTop, run, inWellBottom };
-
-        float y = thresholdWell.getY();
-        for (int i = 0; i < 3; ++i)
+        // `from` in the picture as painted, drawn over `to` here — both in the dashboard's space.
+        const auto copy = [&] (juce::Rectangle<float> from, juce::Rectangle<float> to)
         {
-            const float len = srcLen[i] * s;
-            g.drawImage (original, px (thresholdWell.getX()), px (y), px (thresholdWell.getRight()) - px (thresholdWell.getX()), px (y + len) - px (y),
-                         px (inWell.getX()), px (srcTop[i]), px (inWell.getRight()) - px (inWell.getX()), px (srcTop[i] + srcLen[i]) - px (srcTop[i]));
-            y += len;
+            g.drawImage (original, px (to.getX()), px (to.getY()), px (to.getRight()) - px (to.getX()), px (to.getBottom()) - px (to.getY()),
+                         px (from.getX()), px (from.getY()), px (from.getRight()) - px (from.getX()), px (from.getBottom()) - px (from.getY()));
+        };
+
+        for (const auto* plate : { &gatePlate, &limiterPlate })
+        {
+            {
+                juce::Path outline;
+                for (size_t i = 0; i < plate->outline.size(); ++i)
+                {
+                    const auto at = plate->outline[i].translated (plate->shift, 0.0f) * k;
+                    if (i == 0) outline.startNewSubPath (at);
+                    else        outline.lineTo (at);
+                }
+                outline.closeSubPath();
+                const juce::Graphics::ScopedSaveState keep (g);
+                g.reduceClipRegion (outline);
+                copy (plate->moved, plate->moved.translated (plate->shift, 0.0f));
+            }
+
+            for (size_t i = 0; i < 3; ++i)
+            {
+                const float top = plate->rows[i], bottom = plate->rows[i + 1];
+                copy ({ plate->from[i], top, lampPlateGrow, bottom - top }, { plate->room, top, lampPlateGrow, bottom - top });
+            }
+
+            const auto& slot = plate->slot;
+            const float end = inSlotEnd * slotScale;
+            const float run = slot.getHeight() / slotScale - 2.0f * inSlotEnd;
+            copy (inSlotRim.withHeight (inSlotEnd), slot.withHeight (end));
+            copy ({ inSlotRim.getX(), inSlotRim.getY() + inSlotEnd, inSlotRim.getWidth(), run },
+                  { slot.getX(), slot.getY() + end, slot.getWidth(), slot.getHeight() - 2.0f * end });
+            copy (inSlotRim.withTrimmedTop (inSlotRim.getHeight() - inSlotEnd), slot.withTrimmedTop (slot.getHeight() - end));
         }
         return img;
     }
@@ -100,7 +125,7 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg         = face::renders::putOutLamps (addThresholdWell (widenRims (load ("dashboard.png"))), layout::lamps, layout::width, lampness, a.lampLit);
+        a.bg         = face::renders::putOutLamps (widenLampPlates (widenRims (load ("dashboard.png"))), layout::lamps, layout::width, lampness, a.lampLit);
         a.knobDrive  = load ("knob-drive.png");
         a.knobTone   = load ("knob-tone.png");
         a.lever      = load ("lever.png");

@@ -149,6 +149,7 @@ protected:
     void addToStage (juce::Component&);
 
     void showGateMenu();            // GATE's plate: the gate the settings menu holds too
+    void showOutputMenu();          // the OUTPUT column: the limiter, and where its ceiling is — and LIMITER's plate
 
     // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
     // for INPUT count from the lever's zero, so the middle of the travel reads 0.
@@ -314,7 +315,6 @@ private:
     void chooseDriveSteps (bool steps);
 
     void showInputMenu();           // the INPUT column: the lever's zero
-    void showOutputMenu();          // the OUTPUT column: the limiter, and where its ceiling is — and LIMITER's plate
     void showTunerMenu();           // the tuner: whether it listens, and whether the amp is silent meanwhile
     void showTunerState();          // ...both written on its glass
 

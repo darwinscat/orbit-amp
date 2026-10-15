@@ -121,21 +121,41 @@ inline const juce::Rectangle<float> outFader { 1588.0f, 447.5f, 24.5f, 235.0f };
 inline constexpr float faderWidth     = 44.0f;      // the fader's box round its slot
 inline constexpr float faderCapLength = 18.0f;      // the cap's render, across its slot
 
-/** GATE'S THRESHOLD: a short fader right of the gate's lamp, on the corner housing's plain face, in a
-    well of INPUT's own kind (Art: `addThresholdWell`) — INPUT's recess as painted, drawn smaller, its two
-    ends whole and only its straight run cut short. -70 dB at the bottom, -40 at the top. */
-inline const juce::Rectangle<float> inWell { 106.0f, 428.75f, 61.5f, 274.0f };      // INPUT's recess, as painted
-inline constexpr float inWellTop = 33.25f, inWellBottom = 32.5f;                    // its ends: the screws, the slot's round ends
-inline const juce::Rectangle<float> inSlot { 125.0f, 447.0f, 25.0f, 237.0f };       // the slot in it
-inline const juce::Rectangle<float> thresholdWell { 136.0f, 804.0f, 40.0f, 115.0f };
-inline constexpr float thresholdScale = 40.0f / 61.5f;                              // the well's size to INPUT's
-inline const juce::Rectangle<float> thresholdSlot {
-    thresholdWell.getX() + (inSlot.getX() - inWell.getX()) * thresholdScale,
-    thresholdWell.getY() + (inSlot.getY() - inWell.getY()) * thresholdScale,
-    inSlot.getWidth() * thresholdScale,
-    thresholdWell.getHeight() - (inWell.getHeight() - inSlot.getHeight()) * thresholdScale };
-inline constexpr float thresholdLowDb = -70.0f, thresholdHighDb = -40.0f;
+/** THE CORNER LAMPS' PLATES GROW ON THEIR OUTER LEGS, each for a fader's slot (Art: `widenLampPlates`):
+    the plate as painted is cut along its outer leg, between its edge and its screws; all of it inward
+    of the cut — the screws, the lamp, the slanted edge — moves `lampPlateGrow` inward, and the room left
+    is filled with the plate's own top and bottom edges and plain metal between, a slot of INPUT's kind
+    cut down it. GATE's threshold in the left one, -70 dB at its foot to -40 at its head; LIMITER's
+    ceiling in the right one, -3 dB to -0.1. */
+inline constexpr float lampPlateGrow = 24.0f;
+struct LampPlate
+{
+    juce::Rectangle<float> moved;       // what moves inward: the plate inward of the cut, with its shadow...
+    std::array<juce::Point<float>, 5> outline;  // ...cut to the plate's own outline, so the panel round it stays put
+    float shift;                        // ...this far, to the right for plus
+    float room;                         // the new room's left edge; it is lampPlateGrow wide
+    std::array<float, 3> from;          // where its pieces are taken from, across: the top edge, the plain metal, the bottom edge
+    std::array<float, 4> rows;          // the pieces' rows, the same where they are taken and where they go
+    juce::Rectangle<float> slot;        // the slot cut down the room, its rim included
+};
+inline const LampPlate gatePlate    { { 37.5f, 794.0f, 107.5f, 106.0f },
+                                      {{ { 37.5f, 795.0f }, { 64.5f, 795.0f }, { 140.0f, 870.5f }, { 140.0f, 900.0f }, { 37.5f, 900.0f } }},
+                                      lampPlateGrow, 37.5f,
+                                      {{ 38.0f, 146.0f, 60.0f }}, {{ 794.0f, 806.0f, 889.0f, 900.0f }},
+                                      { 40.5f, 808.0f, 18.0f, 80.0f } };
+inline const LampPlate limiterPlate { { 1525.0f, 791.0f, 110.5f, 106.0f },
+                                      {{ { 1635.5f, 792.5f }, { 1607.5f, 792.5f }, { 1529.5f, 866.5f }, { 1529.5f, 897.0f }, { 1635.5f, 897.0f } }},
+                                      -lampPlateGrow, 1635.5f - lampPlateGrow,
+                                      {{ 1612.0f, 1502.0f, 1590.0f }}, {{ 791.0f, 803.0f, 886.0f, 897.0f }},
+                                      { 1614.5f, 805.0f, 18.0f, 80.0f } };
 
+/** The slot both are cut from: INPUT's, with its rim, as painted — its round ends kept whole, its straight
+    run cut short. */
+inline const juce::Rectangle<float> inSlotRim { 122.0f, 444.0f, 31.0f, 243.0f };
+inline constexpr float inSlotEnd = 16.0f;                       // each round end, rim and all
+inline constexpr float slotScale = 18.0f / 31.0f;               // the corner slots' size to INPUT's
+inline constexpr float slotRim = 3.0f * slotScale;
+inline constexpr float thresholdLowDb = -70.0f, thresholdHighDb = -40.0f;
 
 /** THE LAMPS THE DASHBOARD LIGHTS ITSELF, each with room round it for its glow: the bars of three over
     the columns, the input's overload and the output's; the slanted ones in the bottom corners, the
@@ -144,8 +164,8 @@ enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
 inline const std::array<juce::Rectangle<float>, numLamps> lamps {{
     { 27.0f,   363.0f, 135.0f, 32.0f },     // the segments 37..152 x 373..385
     { 1510.0f, 363.0f, 132.0f, 32.0f },     // the segments 1520..1632 x 372..385
-    { 45.0f,   824.0f, 62.0f,  63.0f },     // the slant 55..97 x 834..877
-    { 1565.0f, 824.0f, 62.0f,  63.0f },     // the slant 1575..1617 x 834..877
+    { 45.0f + lampPlateGrow,   824.0f, 62.0f, 63.0f },  // the slant 55..97 x 834..877, as painted
+    { 1565.0f - lampPlateGrow, 824.0f, 62.0f, 63.0f },  // the slant 1575..1617 x 834..877, as painted
 }};
 
 /** INPUT and OUTPUT, on the plate under each column's wells, between its screws. */
@@ -154,8 +174,8 @@ inline const juce::Point<float> outputName { 1570.0f, 721.7f };
 
 /** GATE and LIMITER along their own lamps in the bottom corners: each word parallel to its lamp's
     slant, on the plate beside the lamp's housing — GATE down to the right, LIMITER up to the right. */
-inline const juce::Point<float> gateWord    { 110.0f, 824.0f };
-inline const juce::Point<float> limiterWord { 1562.0f, 825.0f };
+inline const juce::Point<float> gateWord    { 110.0f + lampPlateGrow, 824.0f };
+inline const juce::Point<float> limiterWord { 1562.0f - lampPlateGrow, 825.0f };
 inline constexpr float lampSlant = 0.7854f;     // 45 degrees
 
 /** THE PLATES ON THE BOTTOM EDGE, between their screws: PRESET alone on the long one on the left, MEM
