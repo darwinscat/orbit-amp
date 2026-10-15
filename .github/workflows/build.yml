@@ -69,6 +69,10 @@ jobs:
       - name: Build RedPawAmp
         run: cmake --build build --target RedPawAmp_All redpawamp_set_test redpawamp_channel_test
 
+      # ...and the ice moon's rover, the same dashboard in a skin of its own, with the rover's gates run as it.
+      - name: Build FrostPawAmp
+        run: cmake --build build --target FrostPawAmp_All frostpawamp_set_test frostpawamp_channel_test
+
       - name: sccache stats
         if: always()
         run: sccache --show-stats
@@ -142,6 +146,8 @@ jobs:
           # ...and the rover's, the same two over its six channels.
           run_gate redpaw-set "$(find build/redpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
           REDPAW_GATE_OWNS_HOME=1 run_gate redpaw-channel "$(find build/redpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
+          run_gate frostpaw-set "$(find build/frostpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
+          REDPAW_GATE_OWNS_HOME=1 run_gate frostpaw-channel "$(find build/frostpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
 
       - name: Validate (pluginval, VST3)
         shell: bash

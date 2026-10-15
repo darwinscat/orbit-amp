@@ -1021,43 +1021,51 @@ target_link_libraries(RedPawAmp PRIVATE RedPawAmpSet)
 set_target_properties(RedPawAmp ${REDPAWAMP_FORMATS} RedPawAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
 add_dependencies(RedPawAmp_All RedPawAmp_CLAP)
 
-function(redpawamp_console target main product)
+# A ROVER'S GATES, the same for every rover: `amp` says whose — RedPawAmp, FrostPawAmp — and the gate is
+# that product compiled again under a main() of its own, with its skin, its set and its name.
+function(rover_console target main product amp tagPrefix)
+    string(TOUPPER "${amp}" AMP)
     juce_add_console_app(${target} PRODUCT_NAME "${product}")
-    target_sources(${target} PRIVATE ${main} ${REDPAWAMP_SOURCES})
+    target_sources(${target} PRIVATE ${main} ${${AMP}_SOURCES})
     target_include_directories(${target} PRIVATE src "${ORBITAMP_GENERATED_DIR}")
     add_dependencies(${target} OrbitAmpVersionGen)
     target_compile_definitions(${target} PRIVATE
-        ORBITAMP_VERSION="${REDPAWAMP_VERSION}"
-        ORBITAMP_PRODUCT_NAME="RedPawAmp"
-        ORBITAMP_RELEASE_TAG_PREFIX="redpaw-"
+        ORBITAMP_VERSION="${${AMP}_VERSION}"
+        ORBITAMP_PRODUCT_NAME="${amp}"
+        ORBITAMP_RELEASE_TAG_PREFIX="${tagPrefix}"
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0)
-    target_link_libraries(${target} PRIVATE RedPawAmpSet ${REDPAWAMP_LIBRARIES})
+    target_link_libraries(${target} PRIVATE ${amp}Set ${${AMP}_LIBRARIES})
+    set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endfunction()
+
+# ...and its set as it leaves the binary, the set's own reading of it and nothing more.
+function(rover_set_test target product amp)
+    juce_add_console_app(${target} PRODUCT_NAME "${product}")
+    target_sources(${target} PRIVATE
+        tests/RedPawSetTests.cpp
+        src/channels/Set.cpp
+        src/device/FactorySet.cpp)
+    target_include_directories(${target} PRIVATE src)
+    target_compile_definitions(${target} PRIVATE ORBITAMP_PRODUCT_NAME="${amp}" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(${target} PRIVATE
+        ${amp}Set
+        felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
+        juce::juce_core
+        juce::juce_events
+        juce::juce_gui_basics
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
     set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
 
 # Gate for the rover's channels with no window at all: six channels on the V4's six packs, moved by
 # CHANNEL the way a host moves it, each with its own memory and what it opens on.
-redpawamp_console(redpawamp_channel_test tests/RedPawChannelTests.cpp "RedPawAmpChannelTest")
+rover_console(redpawamp_channel_test tests/RedPawChannelTests.cpp "RedPawAmpChannelTest" RedPawAmp "redpaw-")
 
 # Gate for the rover's set as it leaves the binary — laid out whole, once, under the rover's own list,
 # the six packs the six channels' own. Runs entirely in a folder of its own.
-juce_add_console_app(redpawamp_set_test PRODUCT_NAME "RedPawAmpSetTest")
-target_sources(redpawamp_set_test PRIVATE
-    tests/RedPawSetTests.cpp
-    src/channels/Set.cpp
-    src/device/FactorySet.cpp)
-target_include_directories(redpawamp_set_test PRIVATE src)
-target_compile_definitions(redpawamp_set_test PRIVATE ORBITAMP_PRODUCT_NAME="RedPawAmp" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(redpawamp_set_test PRIVATE
-    RedPawAmpSet
-    felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
-    juce::juce_core
-    juce::juce_events
-    juce::juce_gui_basics
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-set_target_properties(redpawamp_set_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+rover_set_test(redpawamp_set_test "RedPawAmpSetTest" RedPawAmp)
 
 # ----------------------------------------------------------------------------
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
@@ -1160,6 +1168,11 @@ target_link_libraries(FrostPawAmp PRIVATE FrostPawAmpSet)
 # Not part of the default build, like the other faces: `--target FrostPawAmp_All` builds every format.
 set_target_properties(FrostPawAmp ${FROSTPAWAMP_FORMATS} FrostPawAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
 add_dependencies(FrostPawAmp_All FrostPawAmp_CLAP)
+
+# Its gates are the rover's, run as FrostPawAmp: its six channels on its packs, and its set laid out
+# under its own list.
+rover_console(frostpawamp_channel_test tests/RedPawChannelTests.cpp "FrostPawAmpChannelTest" FrostPawAmp "frostpaw-")
+rover_set_test(frostpawamp_set_test "FrostPawAmpSetTest" FrostPawAmp)
 
 # ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
