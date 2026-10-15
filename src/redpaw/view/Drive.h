@@ -6,6 +6,7 @@
 #include "Mars1993.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace orbitamp::redpaw
@@ -55,6 +56,10 @@ public:
 
     /** The 1993 landscape's colours for this world. */
     virtual Mars1993::Look look1993() const noexcept = 0;
+
+    /** What stands within `metres` of the rover, one a line — "kind x z dx dz distance" — for a shot
+        aimed at it. A world with nothing standing in it says nothing. */
+    virtual std::string landmarks (double /*metres*/) const { return {}; }
 
     //==========================================================================
     /** The GPU's half — see PlainsGl. create() is false when a shader would not build here. */

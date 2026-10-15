@@ -38,7 +38,7 @@ namespace
         int gear = 1; bool turbo = false, park = false;
         float scale = 1.0f, steer = 0.0f; int cap = 60, stress = 1;
         bool report = false, placed = false, clocked = false, fixed = false;
-        double x = 0, z = 0, heading = 0, clockSeconds = 0, clockMetres = 0, driveSeconds = 0, quitSeconds = 0;
+        double x = 0, z = 0, heading = 0, clockSeconds = 0, clockMetres = 0, driveSeconds = 0, quitSeconds = 0, findMetres = 0;
         juce::String stillFile;
 
         explicit Args (const juce::StringArray& args)
@@ -62,6 +62,7 @@ namespace
                 else if (a.startsWith ("--stress=")) stress = value.getIntValue();
                 else if (a.startsWith ("--quit="))   quitSeconds = value.getDoubleValue();
                 else if (a == "--fixed")             fixed = true;
+                else if (a.startsWith ("--find="))   findMetres = value.getDoubleValue();
             }
             if (stress > 1)
                 fixed = true;
@@ -89,6 +90,12 @@ namespace
                     d->step (1.0 / 60);
             }
             d->setRepeats (stress);
+            if (findMetres > 0)
+            {
+                if (! placed && driveSeconds <= 0)
+                    d->placeAt (31500, 3000, 0);
+                std::cout << d->landmarks (findMetres);
+            }
             return d;
         }
     };
