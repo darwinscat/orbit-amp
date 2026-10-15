@@ -41,6 +41,12 @@ inline const std::array<juce::Point<float>, 6> holes {{
     { 683.3f, 22.7f }, { 727.2f, 22.8f }, { 809.3f, 22.7f }, { 853.3f, 23.1f }, { 897.0f, 23.0f }, { 941.5f, 22.6f },
 }};
 inline constexpr float holeRadius = 12.0f;
+
+/** TWO KEYS ON THE ROOF, each in the plain panel between the toggles' plate and a grille: on the left
+    the whole face full screen, on the right the landscape alone. */
+inline const juce::Point<float> faceScreenKey      { 515.0f, 22.5f };
+inline const juce::Point<float> landscapeScreenKey { 1125.0f, 22.5f };
+inline constexpr float screenKeySize = 40.0f;
 inline constexpr float signOffset = 22.0f;      // a sign's centre, left of its hole's
 
 /** A knob's socket: the cyan ring painted round it, and how big the knob is drawn in it — so that the

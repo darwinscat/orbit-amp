@@ -257,6 +257,31 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     for (auto& ring : rings)
         addToStage (*ring);
 
+    // THE SCREEN KEYS, either side of the toggles: the dashboard's own key, carrying a sign.
+    const auto signedKey = [] (ScreenSign sign)
+    {
+        return [sign] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        {
+            drawRender (g, down ? Art::get().keyDown : Art::get().keyUp, box);
+            drawScreenSign (g, box.reduced (box.getWidth() * 0.34f), sign,
+                            (down ? orange : labelLilac).withAlpha (0.9f));
+        };
+    };
+    for (auto* k : { &faceScreen, &landscapeScreen, &dashboardBack })
+        k->latching = false;
+    faceScreen.drawKey      = signedKey (ScreenSign::expand);
+    landscapeScreen.drawKey = signedKey (ScreenSign::landscape);
+    dashboardBack.drawKey   = signedKey (ScreenSign::collapse);
+    faceScreen.onPress      = [this] { setFullScreen (! fullScreen); };
+    landscapeScreen.onPress = [this] { setLandscapeAlone (true); };
+    dashboardBack.onPress   = [this] { setLandscapeAlone (false); };
+    faceScreen.setEnabled (! amp.runsInHost());       // a host has no screen to give
+    addToStage (faceScreen);
+    addToStage (landscapeScreen);
+    faceScreen.setBounds (juce::Rectangle<float> (screenKeySize, screenKeySize).withCentre (faceScreenKey).toNearestInt());
+    landscapeScreen.setBounds (juce::Rectangle<float> (screenKeySize, screenKeySize).withCentre (landscapeScreenKey).toNearestInt());
+    addChildComponent (dashboardBack);
+
     // THE WINDSCREEN, under the dashboard: the picture's alpha is its frame.
     stage.addAndMakeVisible (view, 0);
     view.setBounds (windscreen.toNearestInt());
@@ -331,6 +356,66 @@ bool RedPawEditor::isParked() const
 }
 
 /** A gear pulled: that pedal, TURBO as it stands — and out of PARK, in the same step of the history. */
+bool RedPawEditor::keyPressed (const juce::KeyPress& key)
+{
+    if (landscapeAlone && key == juce::KeyPress::escapeKey)
+    {
+        setLandscapeAlone (false);
+        return true;
+    }
+    return Console::keyPressed (key);
+}
+
+/** THE LANDSCAPE ALONE: the view leaves the dashboard for the window itself, over everything — the
+    dashboard is put away under it — and in the standalone the window takes the screen. Back, the view
+    goes under the dashboard's glass again, and a screen the landscape took is given back. */
+void RedPawEditor::setLandscapeAlone (bool on)
+{
+    if (on == landscapeAlone)
+        return;
+    landscapeAlone = on;
+    endTapping();
+
+    if (on)
+    {
+        addAndMakeVisible (view);
+        stage.setVisible (false);
+        dashboardBack.setVisible (true);
+        dashboardBack.toFront (false);
+        landscapeTookScreen = ! fullScreen && ! amp.runsInHost();
+        if (landscapeTookScreen)
+            setFullScreen (true);
+    }
+    else
+    {
+        stage.addAndMakeVisible (view, 0);
+        stage.setVisible (true);
+        dashboardBack.setVisible (false);
+        if (landscapeTookScreen)
+            setFullScreen (false);
+        landscapeTookScreen = false;
+    }
+
+    placeLandscape();
+    placeView();
+    view.grabKeyboardFocus();       // the arrows steer it, and the keys it does not use go on to the face
+}
+
+void RedPawEditor::placeLandscape()
+{
+    faceScreen.setOn (fullScreen, false);
+    if (landscapeAlone)
+    {
+        view.setBounds (getLocalBounds());
+        constexpr int key = 40, margin = 12;
+        dashboardBack.setBounds (getWidth() - key - margin, margin, key, key);
+    }
+    else
+    {
+        view.setBounds (layout::windscreen.toNearestInt());
+    }
+}
+
 void RedPawEditor::pullGear (int gear)
 {
     if (isParked())
@@ -492,10 +577,11 @@ void RedPawEditor::chooseFrameRate (int fps)
     view.setFrameRateCap (fps);
 }
 
-/** Where the windscreen is in the editor's own pixels, for the GL thread: the stage's scale and place. */
+/** Where the windscreen is in the editor's own pixels, for the GL thread: on the dashboard, the stage's
+    scale and place; alone, the whole window. */
 void RedPawEditor::placeView()
 {
-    const auto at = (layout::windscreen * stageScale() + stageOrigin()).toNearestInt();
+    const auto at = landscapeAlone ? getLocalBounds() : (layout::windscreen * stageScale() + stageOrigin()).toNearestInt();
     glassX.store (at.getX());
     glassY.store (at.getY());
     glassW.store (at.getWidth());

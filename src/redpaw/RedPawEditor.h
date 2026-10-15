@@ -41,6 +41,9 @@ public:
     explicit RedPawEditor (AmpProcessor&);
     ~RedPawEditor() override;
 
+    /** Esc leaves the landscape alone, as it leaves full screen. */
+    bool keyPressed (const juce::KeyPress&) override;
+
 private:
     // THE WINDSCREEN: the drive across Mars (view/Windscreen.h), under the dashboard. Its GPU frame is
     // drawn by this window's own context, which paints the face over it — a GL surface of the view's
@@ -54,6 +57,17 @@ private:
     void chooseLandscape (Windscreen::Mode);
     void chooseFrameRate (int fps);
     void showWindowMenu();          // a right click on the glass: WINDOW and LANDSCAPE, as the settings menu has them
+
+    // THE TWO SCREEN KEYS ON THE ROOF. The left one takes the whole face full screen — the WINDOW menu's
+    // own — where the rover stands alone; inside a host there is no such screen, and it stands dim. The
+    // right one puts the LANDSCAPE ALONE in the window: the view out of the dashboard and over all of it
+    // — and in the standalone over the whole screen — the drive, the keys and the steering as they
+    // were; Esc, or the small key in its corner, brings the dashboard back.
+    face::PushButton faceScreen { "FULL SCREEN" }, landscapeScreen { "LANDSCAPE" }, dashboardBack { "DASHBOARD" };
+    bool landscapeAlone = false;
+    bool landscapeTookScreen = false;   // the landscape key took the screen, and gives it back
+    void setLandscapeAlone (bool);
+    void placeLandscape();
 
     // A right click on the glass is the view's menu; a left drag across it steers.
     struct GlassClicks final : juce::MouseListener
@@ -93,7 +107,7 @@ private:
     void turboChange (bool thrown) override;
     void addWindowSections (juce::PopupMenu&) override;
     bool pictureRightClicked (juce::Point<int>) override;
-    void stagePlaced() override { placeView(); }
+    void stagePlaced() override { placeLandscape(); placeView(); }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RedPawEditor)
 };

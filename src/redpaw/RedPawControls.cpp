@@ -229,6 +229,44 @@ void NavHeader::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+void drawScreenSign (juce::Graphics& g, juce::Rectangle<float> box, ScreenSign sign, juce::Colour colour)
+{
+    const float s = juce::jmin (box.getWidth(), box.getHeight());
+    const auto r = juce::Rectangle<float> (s, s).withCentre (box.getCentre());
+    const float arm = s * 0.3f, stroke = juce::jmax (1.2f, s * 0.085f);
+
+    // Four corners: each an L at a corner of `r`, its point out (expand) or in (collapse).
+    juce::Path corners;
+    const bool in = sign == ScreenSign::collapse;
+    const juce::Point<float> c[] { r.getTopLeft(), r.getTopRight(), r.getBottomRight(), r.getBottomLeft() };
+    for (int i = 0; i < 4; ++i)
+    {
+        const float sx = (i == 0 || i == 3) ? 1.0f : -1.0f, sy = i < 2 ? 1.0f : -1.0f;     // toward the middle
+        const auto p = in ? c[i] + juce::Point<float> (sx * arm, sy * arm) : c[i];
+        const float dx = in ? -sx : sx, dy = in ? -sy : sy;
+        corners.startNewSubPath (p.x + dx * arm, p.y);
+        corners.lineTo (p);
+        corners.lineTo (p.x, p.y + dy * arm);
+    }
+    g.setColour (colour);
+    g.strokePath (corners, juce::PathStrokeType (stroke, juce::PathStrokeType::mitered, juce::PathStrokeType::square));
+
+    // ...and the landscape: two peaks on a horizon, inside them.
+    if (sign == ScreenSign::landscape)
+    {
+        const auto m = r.reduced (s * 0.24f);
+        juce::Path hills;
+        hills.startNewSubPath (m.getX(), m.getBottom());
+        hills.lineTo (m.getX() + m.getWidth() * 0.38f, m.getY() + m.getHeight() * 0.22f);
+        hills.lineTo (m.getX() + m.getWidth() * 0.58f, m.getY() + m.getHeight() * 0.58f);
+        hills.lineTo (m.getX() + m.getWidth() * 0.74f, m.getY() + m.getHeight() * 0.40f);
+        hills.lineTo (m.getRight(), m.getBottom());
+        hills.closeSubPath();
+        g.fillPath (hills);
+    }
+}
+
+//==============================================================================
 GlassFilm::GlassFilm()
 {
     setInterceptsMouseClicks (false, false);

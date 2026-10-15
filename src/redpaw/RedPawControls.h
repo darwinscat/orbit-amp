@@ -81,6 +81,12 @@ private:
 };
 
 //==============================================================================
+/** The signs the screen keys carry, drawn in `box` in `colour`: four corners pointing out — the whole
+    face full screen; a mountain inside them — the landscape alone; four corners pointing in — back. */
+enum class ScreenSign { expand, landscape, collapse };
+void drawScreenSign (juce::Graphics&, juce::Rectangle<float> box, ScreenSign, juce::Colour);
+
+//==============================================================================
 /** THE NAV SCREEN'S GLASS: a little murky, fine dust on it, a few light scratches — laid over everything
     the screen shows, and faint enough that every number and line under it reads. It never changes: it is
     made once, from a fixed seed, at the screen's own pixel size, and every paint is a copy of it. It
