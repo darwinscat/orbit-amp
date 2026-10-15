@@ -14,6 +14,16 @@ namespace
     /** A render of the product's own, by the rover's file name (RedPawSkin.h). */
     juce::Image load (const char* name) { return face::renders::load (name, skin().renders, skin().rendersFolderVariable); }
 
+    /** A render only some rovers carry: none is no image, not a typo. */
+    juce::Image loadOwn (const char* name)
+    {
+        const auto& binary = skin().renders;
+        for (int i = 0; i < binary.count; ++i)
+            if (juce::String (binary.originalName (binary.names[i])) == name)
+                return load (name);
+        return {};
+    }
+
     /** THE UPPER RIMS OF REVERB'S AND DELAY'S FRAMES GROW, so that the words over each well stand ON its
         frame (layout::rims). The frame's top — its shadow and the rim's lit edge — goes `rimLift` higher,
         and the room it leaves is filled with the frame's own face: along the rim, the rim's face band
@@ -153,6 +163,7 @@ const Art& Art::get()
         a.keyDown    = load ("key-down.png");
         a.turboUp    = load ("turbo-up.png");
         a.turboDown  = load ("turbo-down.png");
+        a.emblem     = loadOwn ("emblem.png");
         return a;
     }();
     return art;

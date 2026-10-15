@@ -218,7 +218,17 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     if (const auto& bg = Art::get().bg; bg.isValid())
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
 
-    engraveMark (g, emblemMark, scale);
+    // The maker's mark: raised in the rover's metal where the skin brings a render of it — cut into bright
+    // steel it read as a stamp — and engraved where it does not.
+    if (const auto& mark = Art::get().emblem; mark.isValid())
+    {
+        g.setOpacity (1.0f);
+        g.drawImage (mark, emblemMark, juce::RectanglePlacement::centred);
+    }
+    else
+    {
+        engraveMark (g, emblemMark, scale);
+    }
 
     // A word on the dust: a shadow under it, so it reads off the rust as well as off the bare metal —
     // where the skin has one (RedPawSkin.h).

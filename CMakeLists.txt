@@ -1107,6 +1107,13 @@ foreach(render IN LISTS ROVER_RENDERS)
         list(APPEND FROSTPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/${render}")
     endif()
 endforeach()
+# ...and renders a rover may carry or not — the maker's mark raised in its own metal, instead of engraved:
+# there when the file is, and nothing in its place when it is not.
+foreach(render IN ITEMS emblem.png)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}" IN_LIST FROSTPAW_OWN_RENDERS)
+        list(APPEND FROSTPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}")
+    endif()
+endforeach()
 juce_add_binary_data(FrostPawAmpData
     NAMESPACE   FrostPawData
     HEADER_NAME FrostPawData.h
