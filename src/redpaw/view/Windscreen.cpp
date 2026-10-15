@@ -4,6 +4,7 @@
 #include "Windscreen.h"
 #include "PlainsDrive.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 
@@ -12,7 +13,22 @@ namespace orbitamp::redpaw
 
 namespace
 {
-    constexpr float tooSlowMs = 4.0f;             // a second's frames above this, and the ladder steps down
+    constexpr float tooSlowMs = 4.0f;             // a second's median frame above this is a slow second
+    constexpr float climbMs = tooSlowMs * 0.75f;  // a calm second: the rung above would cost under this
+    constexpr int slowSecondsToStep = 5;          // slow seconds in a row before the ladder steps down
+    constexpr int calmSecondsToClimb = 30;        // calm seconds in a row before it climbs back a rung
+    constexpr float lowestScale = 0.5f;           // the ladder's foot: it never leaves the mode the player chose
+
+    /** The middle of a second's frame costs: one slow frame — the screen shared with another GL window, a
+        busy moment of the system — moves it no more than one fast frame does. */
+    float medianOf (std::vector<float>& ms)
+    {
+        if (ms.empty())
+            return -1.0f;
+        const auto mid = ms.begin() + (std::ptrdiff_t) (ms.size() / 2);
+        std::nth_element (ms.begin(), mid, ms.end());
+        return *mid;
+    }
     constexpr std::array<float, 3> marsTexelsPerSecond { 2.0f, 5.0f, 10.0f };   // the 1993 drive's gears
     constexpr float marsStrafePerSecond = 6.0f;   // the 1993 view has no heading: steering slides it along u
 
@@ -47,7 +63,7 @@ Windscreen::~Windscreen()
 
 //==============================================================================
 /** THE PLAYER'S CHOICE ALWAYS WINS: whatever the ladder came down to, a mode chosen starts afresh — the
-    Plains at the render scale asked for, the cost forgotten. Only the ladder's own steps are one-way. */
+    Plains at the render scale asked for, the cost forgotten. */
 void Windscreen::setMode (Mode m)
 {
     wanted = running = m;
@@ -61,8 +77,10 @@ void Windscreen::restartLadder()
     scaleInUse.store (scaleWanted);
     gpuMsShared.store (-1.0f);
     gpuFrames.store (0);
+    gpuMsRead = gpuMsAt.load();
     cpuMs = -1.0f;
     cpuFrames = 0;
+    slowSeconds = calmSeconds = 0;
     windowStart = juce::Time::getMillisecondCounterHiRes() * 0.001;
 }
 
@@ -268,23 +286,41 @@ void Windscreen::takeStill()
     repaint();
 }
 
+/** A RUNG DOWN: the scale only — the GPU's scene, or the 1993 landscape's rows. The landscape the player
+    chose stays; at the foot the ladder only waits. */
 void Windscreen::stepDown (const juce::String& why)
 {
-    if (running == Mode::gpu)
-    {
-        const float sc = scaleInUse.load();
-        if (sc > 0.76f)      { scaleInUse.store (0.75f); note = "scale 0.75: " + why; }
-        else if (sc > 0.51f) { scaleInUse.store (0.5f);  note = "scale 0.5: " + why; }
-        else                 { running = Mode::cpu;      note = "CPU: " + why; apply(); }
-    }
-    else if (running == Mode::cpu)
-    {
-        running = Mode::still;
-        note = "still: " + why;
-        apply();
-    }
+    const float sc = scaleInUse.load();
+    if (sc > 0.76f)                      { scaleInUse.store (0.75f);       note = "scale 0.75: " + why; }
+    else if (sc > lowestScale + 0.01f)   { scaleInUse.store (lowestScale); note = "scale 0.5: " + why; }
+    else                                 return;
+    forgetCosts();
+}
+
+/** A RUNG UP, after a calm half minute: back toward the scale the player asked for, never past it. */
+void Windscreen::stepUp()
+{
+    const float sc = scaleInUse.load(), up = rungAbove (sc);
+    if (up <= sc + 0.01f)
+        return;
+    scaleInUse.store (up);
+    note = "scale " + juce::String (up, 2) + ": calm again";
+    forgetCosts();
+}
+
+/** The rung above a scale: 0.5, 0.75, 1 — never past what the player asked for. */
+float Windscreen::rungAbove (float sc) const noexcept
+{
+    return juce::jmin (scaleWanted, sc < 0.74f ? 0.75f : 1.0f);
+}
+
+/** What a frame cost at the old scale says nothing of the new one. */
+void Windscreen::forgetCosts()
+{
     gpuMsShared.store (-1.0f);
+    gpuMsRead = gpuMsAt.load();
     cpuMs = -1.0f;
+    slowSeconds = calmSeconds = 0;
 }
 
 //==============================================================================
@@ -311,9 +347,49 @@ void Windscreen::tick()
         }
         else if (adaptive && frames > 0)
         {
-            const float ms = running == Mode::gpu ? gpuMsShared.load() : (running == Mode::cpu ? cpuMs : -1.0f);
+            float ms = -1.0f;
+            if (running == Mode::gpu)
+            {
+                // The second's frames, as the GL thread wrote them down; a ring overrun keeps the newest.
+                const unsigned at = gpuMsAt.load();
+                const unsigned from = at - gpuMsRead > (unsigned) gpuMsRing.size() ? at - (unsigned) gpuMsRing.size() : gpuMsRead;
+                secondsMs.clear();
+                for (unsigned i = from; i != at; ++i)
+                    secondsMs.push_back (gpuMsRing[i % gpuMsRing.size()].load());
+                gpuMsRead = at;
+                ms = medianOf (secondsMs);
+            }
+            else if (running == Mode::cpu)
+            {
+                ms = cpuMs;
+            }
+
             if (ms > tooSlowMs)
-                stepDown (juce::String (ms, 1) + " ms a frame");
+            {
+                calmSeconds = 0;
+                if (++slowSeconds >= slowSecondsToStep)
+                    stepDown (juce::String (ms, 1) + " ms a frame for " + juce::String (slowSecondsToStep) + " s");
+            }
+            else if (ms >= 0.0f)
+            {
+                slowSeconds = 0;
+
+                // Calm is judged at the rung above, not at this one: the GPU's cost goes with the pixels,
+                // the 1993 landscape's with its rows — a climb back to a rung that was too slow would only
+                // fall again five seconds later, and again half a minute after that.
+                const float sc = scaleInUse.load(), up = rungAbove (sc);
+                const float ratio = up / juce::jmax (0.01f, sc);
+                const float costAbove = ms * (running == Mode::gpu ? ratio * ratio : ratio);
+                if (up > sc + 0.01f && costAbove < climbMs)
+                {
+                    if (++calmSeconds >= calmSecondsToClimb)
+                        stepUp();
+                }
+                else
+                {
+                    calmSeconds = 0;
+                }
+            }
         }
     }
 
@@ -492,7 +568,10 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     speedShared.store (world->speed());
 
     world->render (w, h, scaleInUse.load(), target, x, y);
-    gpuMsShared.store (world->gpuMillis());
+    const float ms = world->gpuMillis();
+    gpuMsShared.store (ms);
+    if (ms >= 0.0f)
+        gpuMsRing[gpuMsAt.fetch_add (1) % gpuMsRing.size()].store (ms);
     gpuFrameW.store (world->frameWidth()); gpuFrameH.store (world->frameHeight());
     ++gpuFrames;
 
