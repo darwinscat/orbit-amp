@@ -22,13 +22,20 @@ namespace orbitamp::redpaw
 
     No JUCE in here: a component shows the picture, this makes it. The integer semantics are the
     binary's — map addresses are 16-bit and wrap, row-internal wraps are 8-bit, the noise is a signed
-    byte — spelled with fixed-width unsigned types so they wrap by definition, never by luck. */
+    byte — spelled with fixed-width unsigned types so they wrap by definition, never by luck.
+
+    The same landscape can wear an ice moon's colours instead of Mars's: the ground's 64 shades run
+    from a blue shadow to white snow, the sky is black, and a flat Jupiter stands over the horizon
+    where the ice world's sky has it. The program's own routines are untouched by the look; only the
+    DAC's entries, the horizon line's colour and the one disc drawn into the sky differ. */
 class Mars1993 final
 {
 public:
+    enum class Look { mars, ice };
+
     /** Makes the sky and the terrain from a seed, as the program did at start — a 15-bit number it
-        took from the clock. About a millisecond. */
-    void makeMaps (uint16_t seed);
+        took from the clock. About a millisecond. The look is the palette. */
+    void makeMaps (uint16_t seed, Look look = Look::mars);
 
     /** Sets the frame's height; the width follows (5.345 : 1, even). Allocates the buffers. */
     void setRows (int rows);
@@ -59,8 +66,12 @@ private:
     double P = 1.0;          // framebuffer pixels per pixel of the original's 256 x 200 screen
     int G = 0;               // the horizon's row: the middle
     int skyRows = 0, hazeRows = 0;
+    Look look = Look::mars;
+    uint8_t horizonIndex = 0x50;   // the horizon line's colour: 50h in the program, a mist on the ice
 
+    void makeIcePalette();
     void drawSky (uint16_t alt, uint16_t camX, uint16_t camY);
+    void drawJupiter();
     void drawGround (uint16_t alt, uint16_t camX, uint16_t camY);
 };
 
