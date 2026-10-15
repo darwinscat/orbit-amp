@@ -89,6 +89,7 @@ public:
         std::vector<juce::Point<float>> emblemFace;         // the plate the mark is on, the hand's target
         juce::Rectangle<float> emblemMark;                  // the box the mark is cut in
         juce::Rectangle<float> version, load, memory, preset, gateDoor, limiterDoor;
+        float gateDoorAngle = 0.0f, limiterDoorAngle = 0.0f;    // GATE and LIMITER turned about their middles, radians
         float readingPx = stage::px11;                      // what CPU and MEM are written at
     };
 

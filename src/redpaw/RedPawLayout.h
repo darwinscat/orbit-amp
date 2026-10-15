@@ -122,9 +122,15 @@ inline const std::array<juce::Rectangle<float>, numLamps> lamps {{
     { 1565.0f, 824.0f, 62.0f,  63.0f },     // the slant 1575..1617 x 834..877
 }};
 
-/** GATE and LIMITER, on the plate under each column's wells, between its screws. */
+/** The plate under each column's wells, between its screws. */
 inline const juce::Point<float> gatePlate    { 101.8f, 721.7f };
 inline const juce::Point<float> limiterPlate { 1570.0f, 721.7f };
+
+/** GATE and LIMITER along their own lamps in the bottom corners: each word parallel to its lamp's
+    slant, on the plate beside the lamp's housing — GATE down to the right, LIMITER up to the right. */
+inline const juce::Point<float> gateWord    { 110.0f, 824.0f };
+inline const juce::Point<float> limiterWord { 1562.0f, 825.0f };
+inline constexpr float lampSlant = 0.7854f;     // 45 degrees
 
 /** THE TWO LONG PLATES on the bottom edge, between their screws: PRESET over MEM on the left, the
     version over CPU on the right. */

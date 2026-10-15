@@ -462,9 +462,13 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     gateDoor.set ({}, "GATE");
     gateDoor.onClick = [this] { showGateMenu(); };
     gateDoor.setBounds (box (places.gateDoor));
+    if (places.gateDoorAngle != 0.0f)
+        gateDoor.setTransform (juce::AffineTransform::rotation (places.gateDoorAngle, places.gateDoor.getCentreX(), places.gateDoor.getCentreY()));
     limiterDoor.set ({}, "LIMITER");
     limiterDoor.onClick = [this] { showOutputMenu(); };
     limiterDoor.setBounds (box (places.limiterDoor));
+    if (places.limiterDoorAngle != 0.0f)
+        limiterDoor.setTransform (juce::AffineTransform::rotation (places.limiterDoorAngle, places.limiterDoor.getCentreX(), places.limiterDoor.getCentreY()));
 
     timerCallback();
     startTimerHz (4);   // the dots are a lookup and the load is a smoothed figure: nobody needs either sooner

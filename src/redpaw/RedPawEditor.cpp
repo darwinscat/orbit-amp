@@ -100,8 +100,10 @@ namespace
         p.version = rowA (rightPlate);
         p.load    = rowB (rightPlate, 110.0f);
 
-        p.gateDoor    = around (gatePlate, 110.0f, 28.0f);
-        p.limiterDoor = around (limiterPlate, 112.0f, 28.0f);
+        p.gateDoor    = around (gateWord, 110.0f, 28.0f);
+        p.limiterDoor = around (limiterWord, 124.0f, 28.0f);
+        p.gateDoorAngle    = lampSlant;
+        p.limiterDoorAngle = -lampSlant;
         p.readingPx   = px13;
         return p;
     }
