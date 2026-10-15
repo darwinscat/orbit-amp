@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "Windscreen.h"
+#include "PlainsDrive.h"
 
 #include <chrono>
 #include <cmath>
@@ -26,7 +27,8 @@ namespace
     }
 }
 
-Windscreen::Windscreen()
+Windscreen::Windscreen (std::unique_ptr<Drive> drive)
+    : world (drive != nullptr ? std::move (drive) : std::make_unique<PlainsDrive>())
 {
     setOpaque (true);
     setWantsKeyboardFocus (true);
@@ -105,10 +107,10 @@ float Windscreen::speedKmh() const noexcept
     switch (running)
     {
         case Mode::gpu:   return speedShared.load() * kmh;
-        case Mode::cpu:   return (float) marsSpeed / marsTexelsPerSecond[(size_t) g - 1] * PlainsWorld::gearSpeed[(size_t) g - 1] * kmh;
+        case Mode::cpu:   return (float) marsSpeed / marsTexelsPerSecond[(size_t) g - 1] * world->speedFor (g, false) * kmh;
         case Mode::still: break;
     }
-    return parkedWanted.load() ? 0.0f : PlainsWorld::speedFor (g, turboWanted.load()) * kmh;
+    return parkedWanted.load() ? 0.0f : world->speedFor (g, turboWanted.load()) * kmh;
 }
 
 //==============================================================================
@@ -144,7 +146,7 @@ juce::String Windscreen::statusLine() const
     juce::String s;
     switch (st.mode)
     {
-        case Mode::gpu:   s << "GPU  Plains"; break;
+        case Mode::gpu:   s << "GPU  " << world->name(); break;
         case Mode::cpu:   s << "CPU  1993"; break;
         case Mode::still: s << "STILL"; break;
     }
@@ -361,7 +363,7 @@ void Windscreen::drawCpuFrame (bool advance)
 {
     if (! marsMade)
     {
-        mars.makeMaps (clockSeed());
+        mars.makeMaps (clockSeed(), world->look1993());
         marsMade = true;
         cpuLast = juce::Time::getMillisecondCounterHiRes() * 0.001;
     }
@@ -457,7 +459,7 @@ void Windscreen::focusLost (FocusChangeType)
 //==============================================================================
 void Windscreen::newOpenGLContextCreated()
 {
-    if (! plains.create())
+    if (! world->create())
         gpuFailed.store (true);
     glLast = juce::Time::getMillisecondCounterHiRes() * 0.001;
 }
@@ -478,33 +480,33 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
     const double dt = juce::jlimit (0.0, 0.05, now - glLast);
     glLast = now;
-    world.setGear (gearWanted.load());
-    world.setTurbo (turboWanted.load());
-    world.setParked (parkedWanted.load());
-    world.setSteer (steering.value());
+    world->setGear (gearWanted.load());
+    world->setTurbo (turboWanted.load());
+    world->setParked (parkedWanted.load());
+    world->setSteer (steering.value());
     const bool wantStill = stillWanted.load();
     if (wantStill)
-        world.place (world.state().x, world.state().z, world.state().heading, gearWanted.load(), turboWanted.load());   // a still is clear air, as the drive would be once settled
+        world->settle (gearWanted.load(), turboWanted.load(), parkedWanted.load());   // where it stands, as the drive would be once settled
     else
-        world.step (dt);
-    speedShared.store (world.state().speed);
+        world->step (dt);
+    speedShared.store (world->speed());
 
-    plains.render (w, h, scaleInUse.load(), target, x, y);
-    gpuMsShared.store (plains.gpuMillis());
-    gpuFrameW.store (plains.frameWidth()); gpuFrameH.store (plains.frameHeight());
+    world->render (w, h, scaleInUse.load(), target, x, y);
+    gpuMsShared.store (world->gpuMillis());
+    gpuFrameW.store (world->frameWidth()); gpuFrameH.store (world->frameHeight());
     ++gpuFrames;
 
     if (wantStill && stillWanted.exchange (false))
     {
         const juce::ScopedLock sl (stillLock);
-        if (plains.readFrame (stillPixels, stillW, stillH))
+        if (world->readFrame (stillPixels, stillW, stillH))
             stillReady.store (true);
     }
 }
 
 void Windscreen::openGLContextClosing()
 {
-    plains.destroy();
+    world->destroy();
 }
 
 } // namespace orbitamp::redpaw

@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include "Drive.h"
 #include "Mars1993.h"
-#include "PlainsGl.h"
 #include "PlainsWorld.h"
 #include "../../face/Steering.h"
 
@@ -12,6 +12,7 @@
 #include <juce_opengl/juce_opengl.h>
 
 #include <atomic>
+#include <memory>
 #include <vector>
 
 namespace orbitamp::redpaw
@@ -25,6 +26,10 @@ namespace orbitamp::redpaw
     rover to a stand and clears the air. Steering is held input: a drag left or right across the glass while the button is down, the
     arrow keys while the view has the focus (a host often keeps the keys, so the drag is the main way),
     or `steer()` from outside.
+
+    The world it looks out on is a Drive handed in at construction — the Plains unless a product passes
+    another (the ice moon's drive, say); the 1993 landscape then wears that world's colours. The glass,
+    the modes, the ladder and the hand are the same over any of them.
 
     Quality looks after itself: the GPU's frame is timed, and when a second's frames average more than
     4 ms the render scale comes down (1.0, 0.75, 0.5), then the CPU takes over, then the still. It never
@@ -40,8 +45,12 @@ class Windscreen final : public juce::Component,
 public:
     enum class Mode { gpu, cpu, still };
 
-    Windscreen();
+    /** With the world to drive across; none is the Plains. */
+    explicit Windscreen (std::unique_ptr<Drive> drive = nullptr);
     ~Windscreen() override;
+
+    /** The world, to be placed or clocked before the first frame. The GL thread's while the GPU draws. */
+    Drive& drive() noexcept { return *world; }
 
     /** The player's choice of mode. */
     void setMode (Mode);
@@ -112,6 +121,8 @@ public:
     Status status() const;
     /** The status in one line, for a label. */
     juce::String statusLine() const;
+    /** The still as kept, when the mode is STILL and it has arrived; else invalid. Message thread. */
+    juce::Image stillImage() const { return still; }
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -123,9 +134,8 @@ public:
     void focusLost (FocusChangeType) override;
 
 private:
-    // The GPU's side. The world and its renderer live on the GL thread while the context is attached.
-    PlainsWorld world;
-    PlainsGl plains { world };
+    // The GPU's side. The drive — the world and its renderer — lives on the GL thread while the context is attached.
+    std::unique_ptr<Drive> world;
     juce::OpenGLContext gl;
     juce::OpenGLContext* host = nullptr;    // the window's, when the view is hosted (setHost)
     bool glAttached = false;                // the GPU's frames are being drawn: in the view's own context, or the host's
