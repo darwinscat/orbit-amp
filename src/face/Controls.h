@@ -32,6 +32,33 @@ juce::Font labelFont (float px);
 void drawLabel (juce::Graphics&, const juce::String&, juce::Rectangle<float> area, float em,
                 juce::Colour, float trackingEm = 0.08f);
 
+/** THE INK A FACE IS LETTERED IN: the words printed on its panel, and the ones there that answer the
+    hand (Legend). The family's unless the face says otherwise, for a dark panel — the names lilac, what
+    they are set to a brighter near-white, a word that says a state orange, and nothing under them. A
+    face of bright metal writes dark, with a light edge a pixel under each word, as if the word were cut
+    into the metal and the cut's lower lip caught the light; and lets no word go fainter than it can
+    still be read at there. */
+struct Ink
+{
+    juce::Colour words  { 0xffc9b8f5 };     // the names
+    juce::Colour values { 0xffece9f6 };     // what they are set to
+    juce::Colour state  = orange;           // a word that says a state: TURBO, DELAY, the register playing
+    juce::Colour edge   {};                 // under each word; none if transparent
+    float leastAlpha = 0.0f;                // the faintest a word is drawn, however dim it is said to be
+
+    static constexpr float edgeDrop = 1.0f;
+
+    /** `colour` at `alpha` — or as faint as this ink lets a word go. */
+    juce::Colour at (juce::Colour colour, float alpha) const { return colour.withAlpha (juce::jmax (alpha, leastAlpha)); }
+
+    /** The edge under a word or a sign written in `colour`: as faint as it is. */
+    juce::Colour under (juce::Colour colour) const { return edge.withMultipliedAlpha (colour.getFloatAlpha()); }
+
+    /** A word as drawLabel writes it, over its edge. */
+    void label (juce::Graphics&, const juce::String&, juce::Rectangle<float> area, float em,
+                juce::Colour, float trackingEm = 0.08f) const;
+};
+
 /** A soft glow under a path — the light the renders give their lit parts. */
 void glow (juce::Graphics&, const juce::Path&, juce::Colour, float radius);
 
@@ -234,6 +261,7 @@ public:
     void flash();
 
     juce::Colour nameColour { 0xffc9b8f5 }, valueColour { 0xffece9f6 };
+    juce::Colour edgeColour;                     // under its words, where the ink has an edge (Ink)
     bool upper = true;                           // false keeps the text's own case
     bool fromLeft = false;                       // true starts the words at the left edge instead of centring
                                                  // them: a number that changes width then moves nothing else

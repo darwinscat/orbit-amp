@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "../face/Controls.h"
 #include "../face/Renders.h"
 #include "view/Windscreen.h"
 
@@ -36,6 +37,12 @@ struct Skin
     /** The light of the rings its picture paints, a shade brighter: the knobs' rings, and the light
         round the lever. */
     juce::Colour ringLight;
+
+    /** THE INK ITS WORDS ARE WRITTEN IN on its panel (face::Ink) — the family's lilac on a dark one, its
+        own dark on bright metal — and what lies under the words printed largest, DRIVE and the tones,
+        INPUT, OUTPUT and TURBO: a shadow; none if transparent. */
+    face::Ink ink;
+    juce::Colour printShadow;
 
     /** What its MIDI window lists. */
     juce::String midiCommands;

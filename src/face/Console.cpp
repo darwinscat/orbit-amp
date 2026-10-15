@@ -155,6 +155,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
       places (where),
       picture (std::move (pic)),
       midiCommands (look.midiCommands),
+      ink (look.ink),
       drive (look.driveKnob, look.drivePointer),
       reverbName (stage::px13),
       cabName (stage::px13),
@@ -278,6 +279,15 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         sliders[i]->setBounds (box (places.sliders[i]));
     }
 
+    // Every word on the panel that answers the hand is written in the face's ink.
+    for (auto* legend : { &reverbName, &cabName, &delayWord, &delayNote, &delayTempo, &gateDoor, &limiterDoor,
+                          &version, &load, &memory, &presetDoor })
+    {
+        legend->nameColour  = ink.words;
+        legend->valueColour = ink.values;
+        legend->edgeColour  = ink.edge;
+    }
+
     // REVERB's name carries the reverb's character, and a click on it opens the list — the same six
     // OrbitAmp's reverb block offers.
     stage.addAndMakeVisible (reverbName);
@@ -295,7 +305,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // or rolled under the wheel, like a knob.
     for (auto* legend : { &delayWord, &delayNote, &delayTempo })
         stage.addAndMakeVisible (legend);
-    delayWord.nameColour = orange;
+    delayWord.nameColour = ink.state;
     delayWord.onClick = [this] { tapTempo(); };
     // Nothing on the plate says the word is a key, so the pointer is told: what a tap on it does —
     // or, with a host conducting, why it does nothing.
@@ -428,7 +438,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     about.setBrandTypeface (theme::displayTypeface());
     addChildComponent (about);
     version.upper = false;
-    version.valueColour = labelLilac.withAlpha (0.85f);
+    version.valueColour = ink.at (ink.words, 0.85f);
     version.set ({}, "v" + amp.updateChecker().currentVersion());
     version.onClick = [this] { about.showAbout (this); };
     stage.addAndMakeVisible (version);
@@ -436,21 +446,21 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
 
     // CPU. A click opens what the number is made of — the window OrbitAmp's footer opens from its DSP
     // figure.
-    load.nameColour = labelLilac.withAlpha (0.85f);
+    load.nameColour = ink.at (ink.words, 0.85f);
     load.fromLeft = true;
     load.onClick = [this] { showLoad(); };
     stage.addAndMakeVisible (load);
     load.setBounds (box (places.load));
 
     // MEM. A reading and nothing else: a click there is a click on the panel.
-    memory.nameColour = memory.valueColour = labelLilac.withAlpha (0.85f);
+    memory.nameColour = memory.valueColour = ink.at (ink.words, 0.85f);
     memory.fromLeft = true;
     memory.setInterceptsMouseClicks (false, false);
     stage.addChildComponent (memory);
     memory.setBounds (box (places.memory));
 
     // PRESET.
-    presetDoor.valueColour = labelLilac.withAlpha (0.85f);
+    presetDoor.valueColour = ink.at (ink.words, 0.85f);
     presetDoor.set ({}, "PRESET");
     presetDoor.onClick = [this] { showPresetMenu(); };
     stage.addAndMakeVisible (presetDoor);
@@ -459,7 +469,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // GATE and LIMITER, over their lamps.
     for (auto* door : { &gateDoor, &limiterDoor })
     {
-        door->valueColour = labelLilac.withAlpha (0.85f);
+        door->valueColour = ink.at (ink.words, 0.85f);
         stage.addAndMakeVisible (door);
     }
     gateDoor.set ({}, "GATE");
@@ -895,9 +905,9 @@ void Console::timerCallback()
 
     // The load turns warm as it climbs — OrbitAmp's thresholds: a number noticed when it starts to matter.
     const float percent = amp.dspLoadPercent();
-    const auto warmth = percent > 80.0f ? orange
-                      : percent > 50.0f ? juce::Colour (0xffece9f6)
-                                        : labelLilac.withAlpha (0.85f);
+    const auto warmth = percent > 80.0f ? ink.state
+                      : percent > 50.0f ? ink.values
+                                        : ink.at (ink.words, 0.85f);
     if (warmth != load.valueColour)
     {
         load.valueColour = warmth;

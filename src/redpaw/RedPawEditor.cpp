@@ -124,7 +124,8 @@ namespace
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
                  juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),     // the family's mark, until the rover has its own
                  skin().midiCommands,
-                 handLight };       // under the hand, the dashboard's orange
+                 handLight,         // under the hand, the dashboard's orange
+                 skin().ink };
     }
 
     /** A render drawn fitted into `box` by its opaque part — the square keys and TURBO, up or down. */
@@ -173,11 +174,18 @@ void Dashboard::paintRoof (juce::Graphics& g) const
 {
     using namespace layout;
 
+    const auto& ink = skin().ink;
     const auto signAt = [] (juce::Point<float> hole) { return juce::Point<float> (hole.x - signOffset, hole.y); };
 
     const bool can[] { canUndo, canRedo };
     for (int i = 0; i < 2; ++i)
-        drawTurnArrow (g, signAt (holes[(size_t) (ovUndo + i)]), 6.0f, i == 0, labelLilac.withAlpha (can[i] ? 1.0f : 0.35f));
+    {
+        const auto at = signAt (holes[(size_t) (ovUndo + i)]);
+        const auto colour = ink.at (ink.words, can[i] ? 1.0f : 0.35f);
+        if (! ink.edge.isTransparent())
+            drawTurnArrow (g, at.translated (0.0f, Ink::edgeDrop), 6.0f, i == 0, ink.under (colour));
+        drawTurnArrow (g, at, 6.0f, i == 0, colour);
+    }
 
     // The gaps between the holes' bezels are narrower than a 13-px capital is wide: the letters are set
     // condensed — as tall as ever, three quarters as wide.
@@ -186,8 +194,8 @@ void Dashboard::paintRoof (juce::Graphics& g) const
         const auto at = signAt (holes[(size_t) (ovFirstRegister + i)]);
         const juce::Graphics::ScopedSaveState keep (g);
         g.addTransform (juce::AffineTransform::scale (0.75f, 1.0f, at.x, at.y));
-        drawLabel (g, juce::String::charToString ((juce::juce_wchar) ('A' + i)), juce::Rectangle<float> (30.0f, 26.0f).withCentre (at),
-                   px13, i == activeRegister ? orange : labelLilac.withAlpha (0.8f), 0.0f);
+        ink.label (g, juce::String::charToString ((juce::juce_wchar) ('A' + i)), juce::Rectangle<float> (30.0f, 26.0f).withCentre (at),
+                   px13, i == activeRegister ? ink.state : ink.at (ink.words, 0.8f), 0.0f);
     }
 }
 
@@ -196,10 +204,11 @@ void Dashboard::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
 
+    const auto& ink = skin().ink;
     for (size_t i = 0; i < switches.size(); ++i)
-        drawLabel (g, switches[i].shortName,
+        ink.label (g, switches[i].shortName,
                    juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keys[i].x, keyNameOver[i] ? keyNameOverY : keyNameUnderY }),
-                   px11, labelLilac.withAlpha (keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
+                   px11, ink.at (ink.words, keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
 }
 
 void Dashboard::paintStatic (juce::Graphics& g, float scale) const
@@ -211,22 +220,26 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 
     engraveMark (g, emblemMark, scale);
 
-    // A word on the dust: a shadow under it, so it reads off the rust as well as off the bare metal.
-    const auto print = [&g] (const juce::String& text, juce::Point<float> at, float w, juce::Colour colour)
+    // A word on the dust: a shadow under it, so it reads off the rust as well as off the bare metal —
+    // where the skin has one (RedPawSkin.h).
+    const auto& ink = skin().ink;
+    const auto shadow = skin().printShadow;
+    const auto print = [&g, &ink, shadow] (const juce::String& text, juce::Point<float> at, float w, juce::Colour colour)
     {
         const auto area = juce::Rectangle<float> (w, 28.0f).withCentre (at);
-        drawLabel (g, text, area.translated (0.0f, 1.5f), px13, juce::Colours::black.withAlpha (0.7f));
-        drawLabel (g, text, area, px13, colour);
+        if (! shadow.isTransparent())
+            drawLabel (g, text, area.translated (0.0f, 1.5f), px13, shadow);
+        ink.label (g, text, area, px13, colour);
     };
 
-    print ("DRIVE", { drive.centre.x, knobNameY }, 200.0f, labelLilac);
+    print ("DRIVE", { drive.centre.x, knobNameY }, 200.0f, ink.words);
     const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
     for (size_t i = 0; i < tones.size(); ++i)
-        print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, labelLilac);
+        print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, ink.words);
 
-    print ("TURBO", turboName, 140.0f, orange);
-    print ("INPUT", inputName, 170.0f, labelLilac);
-    print ("OUTPUT", outputName, 170.0f, labelLilac);
+    print ("TURBO", turboName, 140.0f, ink.state);
+    print ("INPUT", inputName, 170.0f, ink.words);
+    print ("OUTPUT", outputName, 170.0f, ink.words);
 }
 
 //==============================================================================

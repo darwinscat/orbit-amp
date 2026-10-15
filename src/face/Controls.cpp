@@ -26,6 +26,14 @@ void drawLabel (juce::Graphics& g, const juce::String& text, juce::Rectangle<flo
     g.drawText (text.toUpperCase(), area, juce::Justification::centred, false);
 }
 
+void Ink::label (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> area, float em,
+                 juce::Colour colour, float trackingEm) const
+{
+    if (! edge.isTransparent())
+        drawLabel (g, text, area.translated (0.0f, edgeDrop), em, under (colour), trackingEm);
+    drawLabel (g, text, area, em, colour, trackingEm);
+}
+
 void glow (juce::Graphics& g, const juce::Path& p, juce::Colour c, float radius)
 {
     juce::DropShadow (c, juce::jmax (1, juce::roundToInt (radius)), {}).drawForPath (g, p);
@@ -551,26 +559,36 @@ void Legend::paint (juce::Graphics& g)
     const bool lit = isMouseOverOrDragging();
     const bool flashing = juce::Time::getMillisecondCounterHiRes() < flashUntil;
     const auto r = row();
-    const auto shown = [lit, flashing] (juce::Colour c)
+
+    // Under the pointer a word lifts: on a dark panel it brightens; cut into bright metal it deepens,
+    // and its edge catches more of the light.
+    const bool cut = ! edgeColour.isTransparent();
+    const auto shown = [lit, flashing, cut] (juce::Colour c)
     {
-        return flashing ? c.interpolatedWith (juce::Colours::white, 0.85f) : lit ? c.brighter (0.5f) : c;
+        return flashing ? c.interpolatedWith (juce::Colours::white, 0.85f) : ! lit ? c : cut ? c.darker (0.6f) : c.brighter (0.5f);
+    };
+    const auto edge = lit ? edgeColour.withMultipliedAlpha (1.6f) : edgeColour;
+    const auto write = [&g, cut, edge] (const juce::String& text, const juce::Font& font, juce::Rectangle<float> box, juce::Colour c)
+    {
+        g.setFont (font);
+        if (cut)
+        {
+            g.setColour (edge.withMultipliedAlpha (c.getFloatAlpha()));
+            g.drawText (text, box.translated (0.0f, Ink::edgeDrop), juce::Justification::centred, false);
+        }
+        g.setColour (c);
+        g.drawText (text, box, juce::Justification::centred, false);
     };
 
     auto area = fromLeft ? getLocalBounds().toFloat().withWidth (r.width)
                          : getLocalBounds().toFloat().withSizeKeepingCentre (r.width, (float) getHeight());
     if (r.nameWidth > 0.0f)
     {
-        g.setColour (shown (nameColour));
-        g.setFont (r.nameFont);
-        g.drawText (r.name, area.removeFromLeft (r.nameWidth).expanded (2.0f, 0.0f), juce::Justification::centred, false);
+        write (r.name, r.nameFont, area.removeFromLeft (r.nameWidth).expanded (2.0f, 0.0f), shown (nameColour));
         area.removeFromLeft (r.gap);
     }
     if (r.valueWidth > 0.0f)
-    {
-        g.setColour (shown (valueColour));
-        g.setFont (r.valueFont);
-        g.drawText (r.value, area.removeFromLeft (r.valueWidth).expanded (2.0f, 0.0f), juce::Justification::centred, false);
-    }
+        write (r.value, r.valueFont, area.removeFromLeft (r.valueWidth).expanded (2.0f, 0.0f), shown (valueColour));
     if (dot)
     {
         juce::Path p;
