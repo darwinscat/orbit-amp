@@ -1001,13 +1001,15 @@ public:
         next block — see removeHum. */
     core::HumLearnLink humLearn;
 
-    /** What AUTO decided, while AUTO is the mode in force: 50 or 60, and 0 before it has decided or
-        when another mode runs — the family a menu's AUTO line names. */
+    /** AUTO'S STATE, while the stage runs AUTO — under OFF too, which bypasses it and lets it go on
+        listening: 50 or 60 once it has decided, 0 while it is still listening, -1 when the stage runs
+        another mode or none. What a menu's AUTO line and the faces' tag say (prefs::humLabel). */
     int humHeard() const noexcept
     {
-        return (prefs::Hum) humInForce.load (std::memory_order_relaxed) == prefs::Hum::automatic
-                   ? humFamily.load (std::memory_order_relaxed) : 0;
+        return humRuns.load (std::memory_order_relaxed) == (int) prefs::Hum::automatic
+                   ? humFamily.load (std::memory_order_relaxed) : -1;
     }
+    std::atomic<int> humRuns { -1 };    // the mode the stage runs, published per block; -1 while it runs none
 
     /** The output level after everything, and the two latched clip caps (the UI clears them). */
     std::atomic<float> outDb   { -90.0f };

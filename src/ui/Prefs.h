@@ -255,8 +255,9 @@ inline void setHum (Hum h)
 /** The four the machine may hold. A menu offers them as a switch and three modes (HumMenu.h). */
 inline constexpr Hum humChoices[] = { Hum::off, Hum::hz50, Hum::hz60, Hum::automatic };
 
-/** A choice's line in a menu. AUTO's says what it decided once it has — `heard` is the family the
-    stage settled on while AUTO is in force (50 or 60), 0 while it has not or AUTO is not the mode. */
+/** A choice's line in a menu. AUTO's says where it stands while the stage runs it — `heard` is
+    AmpProcessor::humHeard: the family it decided (50 or 60), 0 while it is still listening, -1 when
+    the stage runs another mode. */
 inline juce::String humLabel (Hum h, int heard)
 {
     switch (h)
@@ -266,18 +267,24 @@ inline juce::String humLabel (Hum h, int heard)
         case Hum::hz60:      return "60 Hz";
         case Hum::automatic: break;
     }
-    return heard == 50 || heard == 60 ? juce::String::fromUTF8 ("Auto \xe2\x80\x94 ") + juce::String (heard) + " Hz"
+    const auto dash = juce::String::fromUTF8 ("Auto \xe2\x80\x94 ");
+    return heard == 50 || heard == 60 ? dash + juce::String (heard) + " Hz"
+         : heard == 0                 ? dash + "listening"
                                       : juce::String ("Auto");
 }
 
 /** THE QUICK A/B: OFF from any mode, and from OFF the mode it bypasses (humLastOn). */
 inline Hum humFlip() { return hum() == Hum::off ? humLastOn() : Hum::off; }
 
-/** What a face says for a moment after the flip. */
-inline juce::String humTag (Hum h)
+/** What a face says for a moment after the flip — AUTO's state with it (`heard` as for humLabel). */
+inline juce::String humTag (Hum h, int heard)
 {
-    return h == Hum::off ? juce::String ("HUM OFF")
-                         : juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 ") + (h == Hum::automatic ? juce::String ("Auto") : humLabel (h, 0));
+    const auto on = juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 ");
+    if (h == Hum::off)       return "HUM OFF";
+    if (h != Hum::automatic) return on + humLabel (h, -1);
+    return on + "Auto" + (heard == 50 || heard == 60 ? ", " + juce::String (heard) + " Hz"
+                        : heard == 0                 ? juce::String (", listening")
+                                                     : juce::String());
 }
 
 } // namespace orbitamp::prefs

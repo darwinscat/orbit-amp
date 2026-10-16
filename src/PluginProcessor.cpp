@@ -847,6 +847,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         humStage.setParams (p);
         const bool ready = humStage.prepare (sampleRate, block, getTotalNumInputChannels());
         humApplied = (int) p.mains;
+        humRuns.store (ready ? humApplied : -1, std::memory_order_relaxed);
         humShown   = wanted;
         humDry.setSize (juce::jmax (1, getTotalNumInputChannels()), block, false, true, true);
         humMix     = wanted != (int) prefs::Hum::off ? 1.0f : 0.0f;
@@ -1129,6 +1130,7 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
         p.mains = (felitronics::dehum::Mains) runs;
         humStage.setParams (p);
         humApplied = runs;
+        humRuns.store (runs, std::memory_order_relaxed);
     }
     if (wanted != humShown)
     {

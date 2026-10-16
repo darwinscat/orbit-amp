@@ -33,6 +33,7 @@
 //      bends the signal — the correction's second difference stays under -60 dBFS both ways.
 //  10. The faces' quick A/B (the H key): OFF from a mode, and from OFF back to that mode — kept on the
 //      machine beside the mode — with the words the face's tag says for a moment.
+//  11. AUTO, undecided, says it is listening — in the menus' line and in the tag.
 //  12. Every menu's HUM is a switch and a mode: "On" ticked unless OFF; the tick on the mode in force,
 //      or under OFF on the mode OFF bypasses; a mode picked under OFF switches the hum on in it.
 //
@@ -485,14 +486,16 @@ int main()
         using orbitamp::prefs::humLabel;
         const auto autoFifty = juce::String::fromUTF8 ("Auto \xe2\x80\x94 50 Hz");
         const auto autoSixty = juce::String::fromUTF8 ("Auto \xe2\x80\x94 60 Hz");
+        const auto listening = juce::String::fromUTF8 ("Auto \xe2\x80\x94 listening");
         report ("the menus' lines", humLabel (Hum::off, 50) == "Off" && humLabel (Hum::hz50, 60) == "50 Hz"
-                                    && humLabel (Hum::hz60, 0) == "60 Hz" && humLabel (Hum::automatic, 0) == "Auto"
+                                    && humLabel (Hum::hz60, 0) == "60 Hz" && humLabel (Hum::automatic, -1) == "Auto"
+                                    && humLabel (Hum::automatic, 0) == listening
                                     && humLabel (Hum::automatic, 50) == autoFifty && humLabel (Hum::automatic, 60) == autoSixty,
-                "Off / 50 Hz / 60 Hz / Auto, and " + autoSixty);
+                "Off / 50 Hz / 60 Hz / Auto, " + listening + ", " + autoSixty);
 
         machine (Hum::hz60);
         stream.play (0.1, heard);
-        report ("...AUTO's decision is not named under another mode", amp.humHeard() == 0,
+        report ("...AUTO's state is not named under another mode", amp.humHeard() == -1,
                 juce::String::formatted ("heard %d under 60 Hz", amp.humHeard()));
     }
 
@@ -647,6 +650,7 @@ int main()
         const double bendOff = bend (offAt - 10 * ms, offAt + 100 * ms);
         const long long dry = firstDifference (heard.out, heard.in, offAt + 50 * ms, heard.size());
         const int heldOff = amp.humFamily.load();
+        const auto offLine = orbitamp::prefs::humLabel (Hum::automatic, amp.humHeard());
 
         machine (Hum::automatic);
         const size_t backAt = stream.play (1.0, heard);
@@ -659,6 +663,8 @@ int main()
                                                          && std::abs (amp.humHz.load() - tracked) < 0.01f,
                 juce::String::formatted ("%d Hz -> %d -> %d, tracking %.3f -> %.3f Hz", decided, heldOff,
                                          amp.humFamily.load(), tracked, amp.humHz.load()));
+        report ("...under OFF, AUTO's line still names its decision", offLine == juce::String::fromUTF8 ("Auto \xe2\x80\x94 50 Hz"),
+                "\"" + offLine + "\"");
         report ("...OFF is the input bit for bit once it has faded", dry < 0,
                 dry < 0 ? juce::String ("identical from 50 ms on") : juce::String::formatted ("differs at %.3f s", (double) (dry - (long long) offAt) / sampleRate));
         report ("...neither switch bends the signal", bendOff <= -60.0 && bendBack <= -60.0,
@@ -688,10 +694,26 @@ int main()
                                                                  && second == Hum::hz50 && inForce (amp) == Hum::hz50 && lastOnDisk == "50",
                     juce::String ("50 Hz -> ") + name (first) + " -> " + name (second) + ", kept on the machine as \"" + lastOnDisk + "\"");
         }
-        report ("...and the tag's words", prefs::humTag (Hum::off) == "HUM OFF"
-                                            && prefs::humTag (Hum::hz50) == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 50 Hz")
-                                            && prefs::humTag (Hum::automatic) == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 Auto"),
-                prefs::humTag (Hum::hz50) + " / " + prefs::humTag (Hum::automatic) + " / " + prefs::humTag (Hum::off));
+        report ("...and the tag's words", prefs::humTag (Hum::off, 50) == "HUM OFF"
+                                            && prefs::humTag (Hum::hz50, -1) == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 50 Hz")
+                                            && prefs::humTag (Hum::automatic, -1) == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 Auto"),
+                prefs::humTag (Hum::hz50, -1) + " / " + prefs::humTag (Hum::automatic, -1) + " / " + prefs::humTag (Hum::off, 50));
+    }
+
+    // 11 · AUTO, STILL LISTENING, SAYS SO.
+    {
+        machine (Hum::automatic);
+        stream.humGain = 0.0;               // a rig with no hum: AUTO listens, and decides nothing
+        stream.prepare();
+        stream.play (2.0, heard);
+        const auto line = orbitamp::prefs::humLabel (Hum::automatic, amp.humHeard());
+        const auto tag  = orbitamp::prefs::humTag (Hum::automatic, amp.humHeard());
+        report ("AUTO undecided: \"listening\", in the menus and the tag",
+                amp.humHeard() == 0 && line == juce::String::fromUTF8 ("Auto \xe2\x80\x94 listening")
+                    && tag == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 Auto, listening")
+                    && orbitamp::prefs::humTag (Hum::automatic, 50) == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 Auto, 50 Hz"),
+                "\"" + line + "\" / \"" + tag + "\"");
+        stream.humGain = 1.0;
     }
 
     // 12 · A SWITCH, THEN THE MODE.
@@ -724,7 +746,7 @@ int main()
             const Hum back = prefs::hum();
             report ("HUM in a menu: a switch, then the mode",
                     on == "[x] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; " && off == "[ ] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; "
-                        && offState == "Off" && prefs::humState (0) == "Auto",
+                        && offState == "Off" && prefs::humState (0) == juce::String::fromUTF8 ("Auto \xe2\x80\x94 listening"),
                     "60 Hz: " + on + " OFF: " + off);
             report ("...a mode picked under OFF switches it on; the switch flips", picked == Hum::automatic
                                                                                   && flipped == Hum::off && back == Hum::automatic,

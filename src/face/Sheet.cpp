@@ -19,7 +19,7 @@ void NameTag::show (juce::Point<float> anchor, const juce::String& words)
         return;
 
     const auto font = labelFont (stage::px13).withExtraKerningFactor (0.06f);
-    const float w = juce::GlyphArrangement::getStringWidth (font, text) + 30.0f;
+    const float w = juce::GlyphArrangement::getStringWidth (font, text.toUpperCase()) + 30.0f;   // as drawLabel sets it
     // A pixel of room all round for the outline, which is stroked on the edge of the plate.
     auto box = juce::Rectangle<float> (w, 32.0f).withCentre (anchor).expanded (2.0f).getSmallestIntegerContainer();
     if (const auto* parent = getParentComponent())

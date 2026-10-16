@@ -628,7 +628,7 @@ void Console::flipHum()
     prefs::setHum (prefs::humFlip());
 
     const auto at = inFader.getBoundsInParent().toFloat();
-    sayForAMoment ({ at.getCentreX(), at.getY() - 24.0f }, prefs::humTag (prefs::hum()));
+    sayForAMoment ({ at.getCentreX(), at.getY() - 24.0f }, prefs::humTag (prefs::hum(), amp.humHeard()));
 }
 
 /** G: the gate's On, through the same hands as GATE's menu — and the tag over GATE says where it is. */
