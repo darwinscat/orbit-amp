@@ -350,6 +350,12 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     monitor.show ((Monitor::View) juce::jlimit (0, (int) Monitor::View::numViews - 1,
                                                 (int) prefs::store().get (windowKey, 0)));
     applySky();
+
+    // LEARN from GATE's menu takes the tuner's glass while it runs.
+    addToStage (learnGlass);
+    learnGlass.setBounds (tunerScreen.toNearestInt());
+    learnGlass.inset = { 18.0f, 10.0f };    // where the tuner's own note and ruler start
+    learnGlass.onShow = [this] (bool up) { tuner.setAlpha (up ? 0.0f : 1.0f); };
 }
 
 CatpitEditor::~CatpitEditor()

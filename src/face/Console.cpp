@@ -724,6 +724,8 @@ void Console::showGateMenu()
         addChoice (threshold, juce::String (db) + " dB", std::abs (now - db) <= 2,
                    [db] (Console& e) { e.setParam (params::gateThreshold, (float) db); });
     menu.addSubMenu ("Threshold  " + juce::String (now) + " dB", threshold, on);
+    // LEARN: three seconds of quiet set the threshold and switch the gate on — so the gate off, it is offered too.
+    addChoice (menu, "Learn", learner.isLearning(), [] (Console& e) { e.learner.start(); });
 
     juce::PopupMenu decay;
     for (int i = 0; i < params::gateDecayModes.size(); ++i)
