@@ -17,7 +17,8 @@ namespace orbitamp::face
     OrbitAmp projects on its big overlay — shown where the face already has a screen: one short line
     asking for quiet, the key level growing left to right as it is heard, the threshold it would set
     walking along with it as a dashed line, and at the end the verdict for two seconds — the threshold
-    set, or CANCELLED, or NOTHING HEARD — before the glass goes back to what it showed.
+    set, or CANCELLED, DISTURBED or NOTHING HEARD, and under it the hum's one line when the take taught
+    the hum too (GateLearner::humLine) — before the glass goes back to what it showed.
 
     Written in the family's ink for a dark glass (Ink's own), the trace violet — the measurement at
     work — and the threshold-to-be lilac, as OrbitAmp's overlay draws them. No grid, no frame: bare
@@ -73,7 +74,7 @@ public:
         const float shade = verdict.isEmpty() ? 1.0f : 0.35f;
         if (trace.size() > 1)
         {
-            const float step = area.getWidth() / (float) (core::GateLearn::totalTicks - 1);
+            const float step = area.getWidth() / (float) (learner.ticksInTake() - 1);
             juce::Path curve, under;
             under.startNewSubPath (area.getX(), area.getBottom());
             for (size_t i = 0; i < trace.size(); ++i)
@@ -108,15 +109,29 @@ public:
 
         // The verdict, large, over the trace: the threshold in the ink of a value, anything else in the
         // ink of a name — made smaller only if it would not fit the glass.
+        // The hum's line, when the take taught the hum too, takes the glass's last line, and the verdict
+        // the room left over it.
         if (verdict.isNotEmpty())
         {
+            auto room = area;
+            const auto line = humLine.isNotEmpty() ? room.removeFromBottom (stage::px13 * 1.35f) : juce::Rectangle<float>();
+
             auto big = labelFont (24.0f / stage::readingScale).withExtraKerningFactor (0.06f);
             const float wide = juce::GlyphArrangement::getStringWidth (big, verdict);
-            if (wide > area.getWidth())
-                big = big.withHeight (juce::jmax (stage::px16, big.getHeight() * area.getWidth() / wide));
+            if (wide > room.getWidth())
+                big = big.withHeight (juce::jmax (stage::px16, big.getHeight() * room.getWidth() / wide));
+            if (big.getHeight() > room.getHeight())
+                big = big.withHeight (juce::jmax (stage::px16, room.getHeight()));
             g.setColour (verdictIsValue ? ink.values : ink.words);
             g.setFont (big);
-            g.drawText (verdict, area, juce::Justification::centred, false);
+            g.drawText (verdict, room, juce::Justification::centred, false);
+
+            if (! line.isEmpty())
+            {
+                g.setColour (ink.words);
+                g.setFont (words);
+                g.drawText (humLine, line, juce::Justification::centred, false);
+            }
         }
     }
 
@@ -132,6 +147,7 @@ private:
     GateLearner& learner;
     bool up = false;
     juce::String verdict;           // empty while it is learning
+    juce::String humLine;           // what the hum stage learned in the same quiet, or empty
     bool verdictIsValue = false;
     int holdTicks = 0;
 
@@ -163,7 +179,9 @@ private:
         using Outcome = GateLearner::Outcome;
         verdictIsValue = take.outcome == Outcome::set;
         verdict = verdictIsValue ? decibels (take.thresholdDb)
-                : take.outcome == Outcome::cancelled ? juce::String ("CANCELLED") : juce::String ("NOTHING HEARD");
+                : take.outcome == Outcome::cancelled ? juce::String ("CANCELLED")
+                : take.outcome == Outcome::disturbed ? juce::String ("DISTURBED") : juce::String ("NOTHING HEARD");
+        humLine = GateLearner::humLine (take);
         holdTicks = holdFor;
         repaint();
     }

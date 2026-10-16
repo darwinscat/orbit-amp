@@ -359,7 +359,7 @@ protected:
 
 private:
     // LEARN, from GATE's menu: the gate's own measurement, the one OrbitAmp's GATE runs (ui/GateLearner.h)...
-    GateLearner learner { amp.apvts, amp.gateKeyDb };
+    GateLearner learner { amp.apvts, amp.gateKeyDb, &amp.humLearn };
 
 protected:
     // ...and its picture, which the product lays over a glass of its own and places there (LearnGlass.h).

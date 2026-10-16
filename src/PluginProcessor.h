@@ -13,6 +13,7 @@
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
+#include "core/HumLearnLink.h"
 #include "core/BypassFade.h"
 #include "core/BypassWire.h"
 #include "core/CabinetIr.h"
@@ -912,6 +913,8 @@ private:
     felitronics::dehum::HumRemover<> humStage;
     const std::atomic<int>* humWanted = nullptr;
     int humApplied = -1;
+    long long humLearnSamples = -1;    // how long the learn now running has run; -1 while none does
+    double    humRate = 48000.0;       // the rate it is counted at — the one prepareToPlay was given
     void removeHum (juce::AudioBuffer<float>& buffer) noexcept;
 
 public:
@@ -986,6 +989,10 @@ public:
     std::atomic<float> humHz      { 0.0f };
     std::atomic<bool>  humLocked  { false };
     std::atomic<float> humDb      { (float) felitronics::dehum::HumRemover<>::kSilentDb };
+
+    /** The hum stage's LEARN, asked for by the gate's (core/GateLearn.h) and served at the start of the
+        next block — see removeHum. */
+    core::HumLearnLink humLearn;
 
     /** What AUTO decided, while AUTO is the mode in force: 50 or 60, and 0 before it has decided or
         when another mode runs — the family a menu's AUTO line names. */

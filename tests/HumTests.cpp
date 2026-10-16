@@ -22,6 +22,12 @@
 //   6. A choice made the way the menus make it (prefs::setHum) is written to the machine's settings
 //      and followed by every engine of the product from its next block — two instances here.
 //   7. The menus' lines: AUTO's names what it decided, once it has, and only while it is the mode.
+//   8. One LEARN teaches both. A COLD learn — AUTO undecided, the stage starting from nothing and
+//      letting the hum through while it learns — on a hum over a hiss sets the gate by the hiss, not by
+//      the hum, and keeps a second of floor after the stage settles; a warm one keeps its three
+//      seconds; a cancelled take throws the hum's learn away and the stage goes back to its model; a
+//      string struck in the quiet sets nothing; with OFF the take is the gate's alone. And the hum's
+//      line under the verdict says what was learned.
 //
 // Checks 1-5 set the mode through the cached atomic the engine reads (prefs::humCache) and leave the
 // settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
@@ -31,6 +37,7 @@
 #include <juce_events/juce_events.h>
 
 #include "PluginProcessor.h"
+#include "ui/GateLearner.h"
 
 // OrbitAmp's set (OrbitAmpSet.cpp) is NOT laid out from here: the processor would write it into the
 // machine's real Factory folder.
@@ -43,6 +50,7 @@ void orbitamp::layOutFactorySet() {}
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -115,7 +123,10 @@ namespace
         static constexpr double fundamental = 0.03;  // about -30 dBFS of hum in all
         static constexpr double hissRms     = 1.0e-5; // -100 dBFS: far under anything measured here
 
-        bool humming = true;    // false: the input carries nothing (the demo loop replaces it)
+        bool   humming = true;      // false: the input carries nothing (the demo loop replaces it)
+        double humGain = 1.0;       // 0: the hiss alone
+        double hiss    = hissRms;   // the hiss's RMS
+        std::function<double (long long)> extra;   // anything else on the input, by sample
 
         /** A restart, the way a host makes one: the trim's ramp is seeded from its parameter again. */
         void prepare()
@@ -124,40 +135,49 @@ namespace
             lastGain = trimTarget();
         }
 
-        /** Plays `seconds` more and returns where they start in `heard`. */
+        /** Plays `seconds` more, in whole blocks, and returns where they start in `heard`. */
         size_t play (double seconds, Heard& heard)
         {
+            return playSamples ((long long) std::ceil (seconds * sampleRate / blockSize) * blockSize, heard);
+        }
+
+        /** Plays `count` samples more, in blocks of at most `most`. */
+        size_t playSamples (long long count, Heard& heard, int most = blockSize)
+        {
             const size_t start = heard.size();
-            const int blocks = (int) std::ceil (seconds * sampleRate / blockSize);
-            juce::AudioBuffer<float> buf (2, blockSize);
+            juce::AudioBuffer<float> whole (2, blockSize);
             juce::MidiBuffer midi;
 
-            for (int b = 0; b < blocks; ++b)
+            for (long long done = 0; done < count;)
             {
+                const int m = (int) std::min<long long> (std::min (most, blockSize), count - done);
+                juce::AudioBuffer<float> buf (whole.getArrayOfWritePointers(), 2, m);
                 const float target = trimTarget();
-                const float step   = (target - lastGain) / (float) blockSize;
+                const float step   = (target - lastGain) / (float) m;
                 float g = lastGain;
 
-                for (int i = 0; i < blockSize; ++i, ++n)
+                for (int i = 0; i < m; ++i, ++n)
                 {
                     double hum[2] = { 0.0, 0.0 };
                     if (humming)
                         for (int k = 1; k <= harmonics; ++k)
                         {
                             const double ph = 2.0 * pi * k * mainsHz * (double) n / sampleRate + 0.7 * k;
-                            hum[0] += fundamental / k * std::sin (ph);
-                            hum[1] += 0.8 * fundamental / k * std::sin (ph + 0.3);
+                            hum[0] += humGain * fundamental / k * std::sin (ph);
+                            hum[1] += humGain * 0.8 * fundamental / k * std::sin (ph + 0.3);
                         }
 
                     // A uniform hiss from a fixed seed: the same every run, √3 over its RMS at the peak.
                     seed = seed * 1664525u + 1013904223u;
-                    const double hiss = humming ? hissRms * std::sqrt (3.0) * ((double) (seed >> 8) / 8388608.0 - 1.0) : 0.0;
+                    double h = humming ? hiss * std::sqrt (3.0) * ((double) (seed >> 8) / 8388608.0 - 1.0) : 0.0;
+                    if (extra != nullptr)
+                        h += extra (n);
 
-                    buf.setSample (0, i, (float) (hum[0] + hiss));
-                    buf.setSample (1, i, (float) (hum[1] + hiss));
+                    buf.setSample (0, i, (float) (hum[0] + h));
+                    buf.setSample (1, i, (float) (hum[1] + h));
                     heard.in.push_back (buf.getSample (0, i));
                     heard.hum.push_back ((float) hum[0]);
-                    heard.hiss.push_back ((float) hiss);
+                    heard.hiss.push_back ((float) h);
                     heard.gain.push_back (juce::exactlyEqual (target, lastGain) ? (double) lastGain : (double) g);
                     g += step;
                 }
@@ -165,10 +185,13 @@ namespace
 
                 amp.processBlock (buf, midi);
                 amp.tunerTap.read (*tap);
-                heard.out.insert (heard.out.end(), tap->end() - blockSize, tap->end());
+                heard.out.insert (heard.out.end(), tap->end() - m, tap->end());
+                done += m;
             }
             return start;
         }
+
+        long long now() const noexcept { return n; }
 
     private:
         float trimTarget() const
@@ -463,6 +486,127 @@ int main()
         stream.play (0.1, heard);
         report ("...AUTO's decision is not named under another mode", amp.humHeard() == 0,
                 juce::String::formatted ("heard %d under 60 Hz", amp.humHeard()));
+    }
+
+    // 8 · ONE LEARN TEACHES THE HUM AND THE GATE.
+    {
+        using orbitamp::core::GateLearn;
+        using orbitamp::GateLearner;
+        using Link = orbitamp::core::HumLearnLink;
+        constexpr long long tick = (long long) sampleRate / GateLearn::ticksPerSecond;   // 1600 samples
+
+        // A take as GateLearner runs one: a tick's worth of audio — four blocks of 400, as a host might
+        // send them — then the key level the tick reads.
+        const auto learn = [&] (GateLearn& take)
+        {
+            take.begin();
+            for (int t = 0; t < 400; ++t)
+            {
+                stream.playSamples (tick, heard, 400);
+                if (take.hear (amp.gateKeyDb.load()))
+                    break;
+            }
+            return take.resultDb();
+        };
+
+        stream.hiss = 3.16e-4;       // -70 dBFS of hiss: what a gate learned in quiet should sit above
+        set (amp, params::inTrim, 0.0f);
+
+        // Where the gate belongs — the hiss alone — and where the hum would put it.
+        machine (Hum::off);
+        stream.humGain = 0.0;
+        stream.prepare();
+        GateLearn alone (params::gateHysteresisDb, &amp.humLearn);
+        const float byHiss = learn (alone);
+        stream.humGain = 1.0;
+        GateLearn raw (params::gateHysteresisDb, &amp.humLearn);
+        const float byHum = learn (raw);
+
+        // The cold learn: a fresh start in AUTO, nothing decided.
+        machine (Hum::automatic);
+        stream.prepare();
+        GateLearn cold (params::gateHysteresisDb, &amp.humLearn);
+        const float th = learn (cold);
+        const auto a = cold.humAnswer();
+        const double floorAfter = (double) (cold.ticksInTake() - GateLearn::edgeTicks) / GateLearn::ticksPerSecond
+                                - a.settledAtMs / 1000.0;
+        report ("cold LEARN: the gate sits by the hiss, not the hum", std::abs (th - byHiss) <= 6.0f && th < byHum - 25.0f,
+                juce::String::formatted ("%.1f dB (the hiss alone %.1f, the hum %.1f; the stage's own floor %.1f dBFS)",
+                                         th, byHiss, byHum, a.floorAfterDb));
+        report ("...the hum learned and kept", cold.learnsHum() && a.verdict == Link::learned && a.kept && a.family == 50,
+                juce::String::formatted ("verdict %d, kept %d, %d Hz, %.1f dB, settled at %.0f ms",
+                                         a.verdict, (int) a.kept, a.family, a.humDb, a.settledAtMs));
+        report ("...a second of floor after it settled", cold.ticksInTake() == GateLearn::coldTicks && floorAfter >= 0.95,
+                juce::String::formatted ("%d ticks, %.2f s trusted after the settle", cold.ticksInTake(), floorAfter));
+        {
+            const size_t from = stream.play (0.5, heard);
+            const double left = leftDb (heard, from, heard.size());
+            report ("...and the stage runs what it learned", left <= -40.0, juce::String::formatted ("%.1f dB re the hum", left));
+        }
+
+        GateLearner::Take shown { GateLearner::Outcome::set, th, true, a, 0 };
+        report ("the hum's line under the verdict", GateLearner::humLine (shown) == "HUM 50 Hz " + juce::String (juce::roundToInt (a.humDb)) + " dB",
+                "\"" + GateLearner::humLine (shown) + "\"");
+        GateLearner::Take other { GateLearner::Outcome::set, th, true, { Link::learned, false, 60, -40.0f, 1000.0f, -70.0f }, 50 };
+        GateLearner::Take none { GateLearner::Outcome::set, th, true, { Link::nothingHeard, false, 0, -200.0f, -1.0f, -200.0f }, 0 };
+        GateLearner::Take gateOnly { GateLearner::Outcome::set, th };
+        report ("...the other mains heard; no hum; no hum learn",
+                GateLearner::humLine (other) == "HUM 60 Hz heard, set to 50 Hz" && GateLearner::humLine (none) == "no hum"
+                    && GateLearner::humLine (gateOnly).isEmpty(),
+                "\"" + GateLearner::humLine (other) + "\" / \"" + GateLearner::humLine (none) + "\"");
+
+        // Warm: the stage has its model, so the take keeps its three seconds.
+        GateLearn warm (params::gateHysteresisDb, &amp.humLearn);
+        const float thWarm = learn (warm);
+        report ("warm LEARN: three seconds, the gate by the hiss", warm.ticksInTake() == GateLearn::totalTicks && warm.humAnswer().kept
+                                                                     && std::abs (thWarm - byHiss) <= 3.0f,
+                juce::String::formatted ("%d ticks, %.1f dB, settled at %.0f ms", warm.ticksInTake(), thWarm, warm.humAnswer().settledAtMs));
+
+        // Cancelled a third of the way in: the stage goes back to the model it had.
+        {
+            GateLearn cut (params::gateHysteresisDb, &amp.humLearn);
+            cut.begin();
+            for (int t = 0; t < 30; ++t) { stream.playSamples (tick, heard, 400); cut.hear (amp.gateKeyDb.load()); }
+            const unsigned answersBefore = amp.humLearn.answers.load();
+            cut.stop();
+            stream.play (0.1, heard);
+            const size_t from = stream.play (0.5, heard);
+            const double left = leftDb (heard, from, heard.size());
+            report ("a cancelled take: the hum's learn thrown away", amp.humLearn.learnMs.load() < 0.0f
+                                                                      && amp.humLearn.answers.load() == answersBefore + 1
+                                                                      && amp.humLearn.verdict.load() != Link::learned && left <= -40.0,
+                    juce::String::formatted ("verdict %d, %.1f dB re the hum after", amp.humLearn.verdict.load(), left));
+        }
+
+        // A string struck two seconds in: not a quiet, and nothing is set.
+        {
+            const long long at = stream.now() + 2 * (long long) sampleRate;
+            stream.extra = [at] (long long n)
+            {
+                if (n < at || n >= at + (long long) sampleRate / 2)
+                    return 0.0;
+                const double t = (double) (n - at) / sampleRate;
+                return 0.2 * std::exp (-t / 0.15) * std::sin (2.0 * pi * 196.0 * t);
+            };
+            GateLearn struck (params::gateHysteresisDb, &amp.humLearn);
+            const float thStruck = learn (struck);
+            stream.extra = nullptr;
+            report ("a string in the quiet: DISTURBED, nothing set", struck.disturbed() && thStruck <= GateLearn::nothing,
+                    juce::String::formatted ("verdict %d", struck.humAnswer().verdict));
+        }
+
+        // OFF: the gate's take alone, as it always was.
+        {
+            machine (Hum::off);
+            stream.play (0.1, heard);
+            GateLearn plain (params::gateHysteresisDb, &amp.humLearn);
+            plain.begin();
+            report ("OFF: the take is the gate's alone", ! plain.learnsHum() && plain.ticksInTake() == GateLearn::totalTicks
+                                                          && amp.humLearn.ask.load() == Link::none);
+            plain.stop();
+        }
+
+        stream.hiss = Stream::hissRms;
     }
 
     machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store().get (orbitamp::prefs::humMains, "auto").toString()));

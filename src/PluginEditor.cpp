@@ -33,7 +33,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
                  *p.apvts.getParameter (params::inTrim)),
       outColumn (VolumeColumn::Side::out, p.outDb,     p.outClip,
                  *p.apvts.getParameter (params::outTrim)),
-      gateConsole (p.apvts, p.gateKeyDb),
+      gateConsole (p.apvts, p.gateKeyDb, &p.humLearn),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
@@ -224,8 +224,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     learnOverlay.trace       = &gateConsole.learnTraceRef();
     learnOverlay.totalTicks  = GateConsole::learnTotalTicks;
     learnOverlay.pendingDb   = [this] { return gateConsole.learnPendingDb(); };
-    gateConsole.onLearnBegin = [this] { learnOverlay.begin(); };
-    gateConsole.onLearnDone  = [this] (const juce::String& v) { learnOverlay.finish (v); };
+    gateConsole.onLearnBegin = [this] { learnOverlay.totalTicks = gateConsole.learnTicksInTake(); learnOverlay.begin(); };
+    gateConsole.onLearnDone  = [this] (const juce::String& v, const juce::String& hum) { learnOverlay.finish (v, hum); };
 
     addChildComponent (learnOverlay);
 

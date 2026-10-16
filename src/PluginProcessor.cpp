@@ -23,6 +23,14 @@ static_assert ((int) prefs::Hum::off       == (int) felitronics::dehum::Mains::O
             && (int) prefs::Hum::hz60      == (int) felitronics::dehum::Mains::Hz60
             && (int) prefs::Hum::automatic == (int) felitronics::dehum::Mains::Auto);
 
+// ...and so are the stage's verdict on a learn and the one the link hands to the windows.
+using StageVerdict = felitronics::dehum::HumRemover<>::LearnVerdict;
+static_assert ((int) StageVerdict::Learned      == core::HumLearnLink::learned
+            && (int) StageVerdict::Disturbed    == core::HumLearnLink::disturbed
+            && (int) StageVerdict::NothingHeard == core::HumLearnLink::nothingHeard
+            && (int) StageVerdict::TooShort     == core::HumLearnLink::tooShort
+            && (int) StageVerdict::NotLearning  == core::HumLearnLink::notLearning);
+
 namespace
 {
     /** The engine's parameters, and after them whatever the product adds of its own. */
@@ -836,7 +844,12 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         humStage.setParams (p);
         const bool ready = humStage.prepare (sampleRate, block, getTotalNumInputChannels());
         humApplied = (int) p.mains;
+        humLearnSamples = -1;    // a prepare is a restart, and a restart ends a learn
+        humRate = sampleRate;
         humInForce.store (ready ? humApplied : (int) prefs::Hum::off, std::memory_order_relaxed);
+        humLearn.on.store (ready && humApplied != (int) prefs::Hum::off, std::memory_order_relaxed);
+        humLearn.running.store (false, std::memory_order_relaxed);
+        humLearn.learnMs.store (-1.0f, std::memory_order_relaxed);
         humFamily.store (0, std::memory_order_relaxed);
         humHz.store (0.0f, std::memory_order_relaxed);
         humLocked.store (false, std::memory_order_relaxed);
@@ -1104,6 +1117,25 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
         humStage.setParams (p);
         humApplied = wanted;
         humInForce.store (wanted, std::memory_order_relaxed);
+        humLearn.on.store (wanted != (int) prefs::Hum::off, std::memory_order_relaxed);
+    }
+
+    // THE GATE'S LEARN ASKED FOR THE HUM'S, and it is served here, before this block is heard: the stage
+    // learns where it runs. Its answer goes back field by field through the link (core/HumLearnLink.h)
+    // — atomics, nothing locked, nothing allocated.
+    if (const int ask = humLearn.ask.exchange (core::HumLearnLink::none, std::memory_order_acq_rel);
+        ask == core::HumLearnLink::begin)
+    {
+        humStage.beginLearn();
+        humLearnSamples = humStage.learning() ? 0 : -1;
+    }
+    else if (ask == core::HumLearnLink::keep || ask == core::HumLearnLink::drop)
+    {
+        const auto r = humStage.endLearn (ask == core::HumLearnLink::keep);
+        humLearnSamples = -1;
+        humLearn.tell ({ (int) r.verdict, r.kept,
+                         r.mains == felitronics::dehum::Mains::Hz50 ? 50 : r.mains == felitronics::dehum::Mains::Hz60 ? 60 : 0,
+                         (float) r.humDb, (float) r.settledAtMs, (float) r.floorAfterDb });
     }
 
     // The input's channels and nothing past them; a host that asks for fewer this block stops the rest,
@@ -1118,6 +1150,16 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
     humHz.store ((float) humStage.mainsHz(), std::memory_order_relaxed);
     humLocked.store (humStage.locked(), std::memory_order_relaxed);
     humDb.store ((float) humStage.humDb(), std::memory_order_relaxed);
+
+    // The learn's own clock, at the end of the block it has now heard — what a tick of the take is
+    // read against. A learn the stage ended by itself (a restart) is no learn any more.
+    if (humLearnSamples >= 0 && humStage.learning())
+        humLearnSamples += buffer.getNumSamples();
+    else
+        humLearnSamples = -1;
+    humLearn.learnMs.store (humLearnSamples < 0 ? -1.0f : (float) (1000.0 * (double) humLearnSamples / humRate),
+                            std::memory_order_relaxed);
+    humLearn.running.store (humStage.running(), std::memory_order_relaxed);
 }
 
 void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)

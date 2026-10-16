@@ -37,8 +37,9 @@ namespace orbitamp
 class GateConsole final
 {
 public:
-    GateConsole (juce::AudioProcessorValueTreeState& state, const std::atomic<float>& keyDbSource)
-        : learner (state, keyDbSource),
+    GateConsole (juce::AudioProcessorValueTreeState& state, const std::atomic<float>& keyDbSource,
+                 core::HumLearnLink* humLink = nullptr)
+        : learner (state, keyDbSource, humLink),
           onP    (*state.getParameter (params::gateOn)),
           thP    (*state.getParameter (params::gateThreshold)),
           decayP (*state.getParameter (params::gateDecay)),
@@ -58,7 +59,9 @@ public:
             using Outcome = GateLearner::Outcome;
             onLearnDone (take.outcome == Outcome::set       ? "SET " + juce::String (juce::roundToInt (take.thresholdDb)) + " DB"
                        : take.outcome == Outcome::cancelled ? juce::String ("CANCELLED")
-                                                            : juce::String ("NOTHING HEARD"));   // a muted input teaches nothing
+                       : take.outcome == Outcome::disturbed ? juce::String ("DISTURBED")
+                                                            : juce::String ("NOTHING HEARD"),    // a muted input teaches nothing
+                         GateLearner::humLine (take).toUpperCase());
         };
     }
 
@@ -70,15 +73,17 @@ public:
         // that destructor instead of the macro is how a redundant clear got written here.)
     }
 
-    /** The big LEARN overlay's hooks: measurement started, measurement spoke its verdict. */
-    std::function<void()>              onLearnBegin;
-    std::function<void (juce::String)> onLearnDone;
+    /** The big LEARN overlay's hooks: measurement started, measurement spoke its verdict — and the
+        hum's line under it, empty when the take learned no hum. */
+    std::function<void()>                            onLearnBegin;
+    std::function<void (juce::String, juce::String)> onLearnDone;
 
     /** The overlay draws the measurement from HERE, by pointer — which is the whole reason this
         object outlives every popup and is declared before the overlay that reads it. */
     const std::vector<float>& learnTraceRef() const noexcept { return learner.trace(); }
 
     static constexpr int learnTotalTicks = core::GateLearn::totalTicks;   // 3 s at 30 Hz
+    int learnTicksInTake() const noexcept { return learner.ticksInTake(); }   // ...or 3.5 for a cold hum learn
     static constexpr int learnEdgeTicks  = core::GateLearn::edgeTicks;    // half a second each end, thrown away
 
     /** The threshold LEARN would set if it ended now — the overlay's live dashed line.

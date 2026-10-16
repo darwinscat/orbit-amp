@@ -41,9 +41,10 @@ public:
         startTimerHz (30);
     }
 
-    void finish (const juce::String& verdict)
+    void finish (const juce::String& verdict, const juce::String& humLine = {})
     {
         message   = verdict;
+        hum       = humLine;
         holdTicks = 50;   // the verdict stays readable, then the sheet folds away
     }
 
@@ -124,6 +125,14 @@ public:
             g.setColour (juce::Colours::white);
             theme::drawTracked (g, message, area, theme::displayFont (24.0f), 0.12f,
                                 juce::Justification::centred);
+
+            // What the hum stage learned in the same quiet, one line under the verdict.
+            if (hum.isNotEmpty())
+            {
+                g.setColour (theme::txDim);
+                theme::drawTracked (g, hum, area.withTrimmedTop (area.getHeight() * 0.5f + 20.0f).withHeight (18.0f),
+                                    theme::displayFont (13.0f), 0.08f, juce::Justification::centred);
+            }
         }
     }
 
@@ -147,7 +156,7 @@ private:
              - r.getHeight() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
     }
 
-    juce::String message;
+    juce::String message, hum;
     int holdTicks = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LearnOverlay)
