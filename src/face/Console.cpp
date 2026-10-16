@@ -1313,29 +1313,12 @@ void Console::showSettingsMenu()
         addChoice (menu, params::stereoModes[i], choice (params::stereoMode) == i,
                    [i] (Console& e) { e.setParam (params::stereoMode, (float) i); });
 
-    // The gate: whether it stands in the chain, where it closes, how fast, and where it mutes.
+    // The gate: LEARN, and whether it stands in the chain. Where it closes, how fast and where it mutes
+    // are GATE's own menu's (showGateMenu).
     menu.addSectionHeader ("GATE");
     const bool gateIsOn = getParam (params::gateOn) > 0.5f;
+    addChoice (menu, "Learn", learner.isLearning(), [] (Console& e) { e.learner.start(); });
     addChoice (menu, "On", gateIsOn, [gateIsOn] (Console& e) { e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f); });
-
-    juce::PopupMenu threshold;
-    const int now = juce::roundToInt (getParam (params::gateThreshold));
-    for (int db = -80; db <= -10; db += 5)
-        addChoice (threshold, juce::String (db) + " dB", std::abs (now - db) <= 2,
-                   [db] (Console& e) { e.setParam (params::gateThreshold, (float) db); });
-    menu.addSubMenu ("Threshold  " + juce::String (now) + " dB", threshold, gateIsOn);
-
-    juce::PopupMenu decay;
-    for (int i = 0; i < params::gateDecayModes.size(); ++i)
-        addChoice (decay, params::gateDecayModes[i], choice (params::gateDecay) == i,
-                   [i] (Console& e) { e.setParam (params::gateDecay, (float) i); });
-    menu.addSubMenu ("Closes  " + params::gateDecayModes[choice (params::gateDecay)], decay, gateIsOn);
-
-    juce::PopupMenu position;
-    for (int i = 0; i < params::gatePositions.size(); ++i)
-        addChoice (position, params::gatePositions[i], choice (params::gatePos) == i,
-                   [i] (Console& e) { e.setParam (params::gatePos, (float) i); });
-    menu.addSubMenu ("Mutes at  " + params::gatePositions[choice (params::gatePos)], position, gateIsOn);
 
     // The MIDI inputs are the standalone's; a host routes MIDI itself.
     if (MidiPanel::available())
