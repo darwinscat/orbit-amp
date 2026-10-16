@@ -36,7 +36,7 @@ namespace
    #if ORBITAMP_VIEW_DEMO_ICE
     constexpr int productGears = 3;     // FrostPawAmp
    #else
-    constexpr int productGears = 3;     // RedPawAmp
+    constexpr int productGears = 2;     // RedPawAmp
    #endif
 
     struct Args

@@ -7,11 +7,9 @@ Program Change
 2	COPPER TB
 3	SHERIFF 1
 4	SHERIFF 2
-5	KRAKEN 1
-6	KRAKEN 2
-7	PARK
+5	PARK
 
-The gear is the pedal: CLEAN the Copper, CRUNCH the Sheriff, HI-GAIN the Kraken. TURBO is its second channel. PARK takes the whole amp out of the sound. A controller that numbers its programs from 0 sends 0 to 6 for these.
+The gear is the pedal: CLEAN the Copper, CRUNCH the Sheriff. TURBO is its second channel. PARK takes the whole amp out of the sound. A controller that numbers its programs from 0 sends 0 to 4 for these.
 
 Control Change
 20	TURBO

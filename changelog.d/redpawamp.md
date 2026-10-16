@@ -3,14 +3,14 @@ over the same engine. It is released apart, under tags of its own (`redpaw-vX.Y.
 OrbitAmp's build or installers.
 
 ### Added
-- **RedPawAmp** — six channels on the Victory V4's six packs, picked as three gears and TURBO: the gear
-  lever's CLEAN is the Copper, CRUNCH the Sheriff, HI-GAIN the Kraken, and TURBO plays that pedal's second
-  channel (Copper TB, Sheriff Ch2, Kraken Ch2). Each of the six keeps its own DRIVE, tone, keys, reverb,
-  delay and cabinet, and opens on a room of its own. Keys 1 2 3 pick the gear and T throws TURBO; MIDI
-  Program Change 1–6 picks the six channels, controller 20 is TURBO.
+- **RedPawAmp** — four channels on the Victory V4's packs, picked as two gears and TURBO: the gear
+  lever's CLEAN is the Copper, CRUNCH the Sheriff, and TURBO plays that pedal's second channel (Copper TB,
+  Sheriff Ch2). Each of the four keeps its own DRIVE, tone, keys, reverb, delay and cabinet, and opens on
+  a room of its own. Keys 1 2 pick the gear and T throws TURBO; MIDI Program Change 1–4 picks the four
+  channels, controller 20 is TURBO.
 - **PARK**, the lever's top end: the whole amp out of the sound, the guitar coming through dry and in time,
   the rooms and the delay ringing out — and the drive outside comes to a stand. A gear pulled plays again
-  on the channel that was waiting. 0 or P on the keyboard, Program Change 7, or the PARK parameter in a host.
+  on the channel that was waiting. 0 or P on the keyboard, Program Change 5, or the PARK parameter in a host.
 - Through the windscreen, an endless drive across Mars — on the GPU, as a 1993-style landscape on the CPU,
   or a still picture — chosen from a right click on the glass; a drag across the glass steers.
 - The cyan ring round DRIVE and each tone knob shows where the knob stands — lit from the start of its

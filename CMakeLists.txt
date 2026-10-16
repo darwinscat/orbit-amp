@@ -880,10 +880,11 @@ set_target_properties(frostpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ----------------------------------------------------------------------------
 # RedPawAmp — the rover: a third face over the same processor (src/redpaw), the dashboard of a Mars rover
-# with the drive across Mars in its windscreen. Six channels — the Victory V4's six packs — picked as
-# three gears and TURBO. Built like the cockpit: the family's console (src/face) over the family's
-# channels (src/channels), its own renders in resources/redpaw, its own set, released apart under
-# tags of its own (`redpaw-vX.Y.Z`) — no release workflow yet. Built only when asked for by name.
+# with the drive across Mars in its windscreen. Four channels — the Victory V4's Copper and Sheriff, each
+# pedal's two — picked as two gears and TURBO. Built like the cockpit: the family's console (src/face)
+# over the family's channels (src/channels), its own renders in resources/redpaw, its own set, released
+# apart under tags of its own (`redpaw-vX.Y.Z`) — no release workflow yet. Built only when asked for by
+# name.
 # ----------------------------------------------------------------------------
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
@@ -1006,9 +1007,9 @@ foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
 endforeach()
 
 # THE ROVER'S OWN SET IS INSIDE ITS BINARY, laid out as files when it first starts (src/channels/Set.h):
-# out of the tree's set, the Victory V4's six packs its channels play — each found by the capture it
-# holds — and, until the rovers have cabinets of their own, the ten the cockpit carries. Every rover
-# lists its own packs; the cabinets are every rover's.
+# out of the tree's set, the packs its channels play — the Victory V4's Copper and Sheriff, each found by
+# the capture it holds — and, until the rovers have cabinets of their own, the ten the cockpit carries.
+# Every rover lists its own packs; the cabinets are every rover's.
 set(ROVER_CABINETS
     "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
     "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
@@ -1025,8 +1026,6 @@ set(REDPAWAMP_SET
     "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip"
     ${ROVER_CABINETS})
 
 add_library(RedPawAmpSet INTERFACE)
@@ -1084,20 +1083,20 @@ function(rover_set_test target product amp channels)
     set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
 
-# Gate for the rover's channels with no window at all: six channels on the V4's six packs, moved by
-# CHANNEL the way a host moves it, each with its own memory and what it opens on.
-rover_console(redpawamp_channel_test tests/RedPawChannelTests.cpp "RedPawAmpChannelTest" RedPawAmp "redpaw-" 6)
+# Gate for the rover's channels with no window at all: four channels on the V4's Copper and Sheriff,
+# moved by CHANNEL the way a host moves it, each with its own memory and what it opens on.
+rover_console(redpawamp_channel_test tests/RedPawChannelTests.cpp "RedPawAmpChannelTest" RedPawAmp "redpaw-" 4)
 
 # Gate for the rover's set as it leaves the binary — laid out whole, once, under the rover's own list,
-# the six packs the six channels' own. Runs entirely in a folder of its own.
-rover_set_test(redpawamp_set_test "RedPawAmpSetTest" RedPawAmp 6)
+# the four packs the four channels' own. Runs entirely in a folder of its own.
+rover_set_test(redpawamp_set_test "RedPawAmpSetTest" RedPawAmp 4)
 
 # ----------------------------------------------------------------------------
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
 # over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
-# ice-blue rings. The same controls, the same six channels on the same packs and cabinets, the same
-# MIDI, TURBO and PARK: the rover's, shared, not copied. Released apart under tags of its own
-# (`frostpaw-vX.Y.Z`) — no release workflow yet. Built only when asked for by name.
+# ice-blue rings. The same controls, TURBO and PARK: the rover's, shared, not copied — over channels of
+# its own, six on the V4's six packs in three gears, and the rovers' cabinets. Released apart under tags
+# of its own (`frostpaw-vX.Y.Z`) — no release workflow yet. Built only when asked for by name.
 # ----------------------------------------------------------------------------
 
 # Its renders are in resources/frostpaw, under the rover's names; one that is not there yet is

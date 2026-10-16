@@ -143,7 +143,7 @@ jobs:
           # and its channels with no window, moved the way a host moves them.
           run_gate catpit-set "$(find build/catpitamp_set_test_artefacts -type f -name '*.exe' | head -1)"
           CATPIT_GATE_OWNS_HOME=1 run_gate catpit-channel "$(find build/catpitamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
-          # ...and the rover's, the same two over its six channels.
+          # ...and the rovers', the same two over each one's own channels.
           run_gate redpaw-set "$(find build/redpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
           ROVER_GATE_OWNS_HOME=1 run_gate redpaw-channel "$(find build/redpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
           run_gate frostpaw-set "$(find build/frostpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"

@@ -13,21 +13,18 @@
 namespace orbitamp::redpaw
 {
 
-/** ITS CHANNELS (RedPawLineup.h): the Victory V4's six packs, three gears of two — CLEAN the Copper,
-    CRUNCH the Sheriff, HI-GAIN the Kraken — and TURBO each pedal's second channel. A channel's pack is
-    the capture it plays, known by the `rig_id` its manifest carries. What each opens on: a pedal's first
-    channel a little of its room and as much delay, its TURBO twice as much of both — the Copper in a
-    hall, the Sheriff on a plate, the Kraken in an ambience with no delay at all. The Kraken's two are the
-    hot packs, the ones that would carry FAT. */
+/** ITS CHANNELS (RedPawLineup.h): two gears of two, out of the Victory V4's packs — CLEAN the Copper,
+    CRUNCH the Sheriff — and TURBO each pedal's second channel. A channel's pack is the capture it plays,
+    known by the `rig_id` its manifest carries. What each opens on: a pedal's first channel a little of
+    its room and as much delay, its TURBO twice as much of both — the Copper in a hall, the Sheriff on a
+    plate. */
 const channels::Lineup& lineup()
 {
     static const channels::Lineup rover = roverLineup ({
-        { "Copper",      "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false },
-        { "Copper TB",   "v4-copper-tb-5841",   "Hall",     30.0f, 30.0f, false },
-        { "Sheriff Ch1", "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false },
-        { "Sheriff Ch2", "v4-sheriff-ch2-2f2f", "Plate",    30.0f, 30.0f, false },
-        { "Kraken Ch1",  "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true  },
-        { "Kraken Ch2",  "v4-kraken-ch2-5f71",  "Ambience", 30.0f, 0.0f,  true  },
+        { "Copper",      "v4-copper-4ae0",      "Hall",  15.0f, 15.0f, false },
+        { "Copper TB",   "v4-copper-tb-5841",   "Hall",  30.0f, 30.0f, false },
+        { "Sheriff Ch1", "v4-sheriff-ch1-82ab", "Plate", 15.0f, 15.0f, false },
+        { "Sheriff Ch2", "v4-sheriff-ch2-2f2f", "Plate", 30.0f, 30.0f, false },
     });
     return rover;
 }
