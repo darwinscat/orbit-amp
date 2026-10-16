@@ -28,6 +28,9 @@
 //      seconds; a cancelled take throws the hum's learn away and the stage goes back to its model; a
 //      string struck in the quiet sets nothing; with OFF the take is the gate's alone. And the hum's
 //      line under the verdict says what was learned.
+//   9. OFF IS A BYPASS THAT KEEPS WHAT WAS LEARNED. AUTO locked, OFF for two seconds, AUTO again: the
+//      hum is 40 dB down within 50 ms of the way back, AUTO's decision never moved, and neither switch
+//      bends the signal — the correction's second difference stays under -60 dBFS both ways.
 //
 // Checks 1-5 set the mode through the cached atomic the engine reads (prefs::humCache) and leave the
 // settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
@@ -610,6 +613,54 @@ int main()
     }
 
     machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store().get (orbitamp::prefs::humMains, "auto").toString()));
+
+    // 9 · OFF AND BACK: A/B, NOT A RESTART.
+    {
+        // The correction the input path took off, sample by sample (the trim is at 0 dB here), and the
+        // worst second difference of it over [from, to).
+        const auto bend = [&heard] (size_t from, size_t to)
+        {
+            double worst = 0.0;
+            for (size_t i = std::max<size_t> (from, 1); i + 1 < to; ++i)
+            {
+                const double c0 = (double) heard.in[i - 1] - heard.out[i - 1];
+                const double c1 = (double) heard.in[i]     - heard.out[i];
+                const double c2 = (double) heard.in[i + 1] - heard.out[i + 1];
+                worst = std::max (worst, std::abs (c2 - 2.0 * c1 + c0));
+            }
+            return 20.0 * std::log10 (std::max (worst, 1.0e-12));
+        };
+        const size_t ms = (size_t) (sampleRate / 1000.0);
+
+        set (amp, params::inTrim, 0.0f);
+        machine (Hum::automatic);
+        stream.prepare();
+        stream.play (4.0, heard);
+        const int decided = amp.humFamily.load();
+        const float tracked = amp.humHz.load();
+
+        machine (Hum::off);
+        const size_t offAt = stream.play (2.0, heard);
+        const double bendOff = bend (offAt - 10 * ms, offAt + 100 * ms);
+        const long long dry = firstDifference (heard.out, heard.in, offAt + 50 * ms, heard.size());
+        const int heldOff = amp.humFamily.load();
+
+        machine (Hum::automatic);
+        const size_t backAt = stream.play (1.0, heard);
+        const double bendBack = bend (backAt - 10 * ms, backAt + 100 * ms);
+        const double back = worstDb (heard, backAt + 50 * ms, heard.size());
+
+        report ("OFF and back: the hum 40 dB down within 50 ms", decided == 50 && back <= -40.0,
+                juce::String::formatted ("worst 20 ms from 50 ms on %.1f dB re the hum", back));
+        report ("...AUTO's decision kept through OFF", heldOff == 50 && amp.humFamily.load() == 50
+                                                         && std::abs (amp.humHz.load() - tracked) < 0.01f,
+                juce::String::formatted ("%d Hz -> %d -> %d, tracking %.3f -> %.3f Hz", decided, heldOff,
+                                         amp.humFamily.load(), tracked, amp.humHz.load()));
+        report ("...OFF is the input bit for bit once it has faded", dry < 0,
+                dry < 0 ? juce::String ("identical from 50 ms on") : juce::String::formatted ("differs at %.3f s", (double) (dry - (long long) offAt) / sampleRate));
+        report ("...neither switch bends the signal", bendOff <= -60.0 && bendBack <= -60.0,
+                juce::String::formatted ("second difference %.1f dBFS off, %.1f dBFS back", bendOff, bendBack));
+    }
 
     if (failures == 0)
         std::printf ("\nall hum checks passed\n");

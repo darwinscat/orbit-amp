@@ -224,8 +224,33 @@ inline std::atomic<int>& humCache()
     return cached;
 }
 
+/** THE LAST MODE THAT WAS NOT OFF — what OFF bypasses. OFF does not stop the stage: it goes on
+    running in this mode, learning as it did, and only its output is set aside, so the way back is the
+    hum taken off at once by what was already learned (the processor's removeHum). Kept on the machine
+    beside the mode; AUTO when OFF is all this machine has ever chosen. */
+inline const juce::Identifier humLastOnKey { "hum_last_on" };
+
+inline std::atomic<int>& humLastOnCache()
+{
+    static std::atomic<int> cached { [] {
+        const auto h = humFromWord (store().get (humLastOnKey, humWord (humDefault)).toString());
+        return (int) (h == Hum::off ? humDefault : h);
+    }() };
+    return cached;
+}
+
 inline Hum  hum()            { return (Hum) humCache().load (std::memory_order_relaxed); }
-inline void setHum (Hum h)   { humCache().store ((int) h, std::memory_order_relaxed); store().set (humMains, humWord (h)); }
+inline Hum  humLastOn()      { return (Hum) humLastOnCache().load (std::memory_order_relaxed); }
+inline void setHum (Hum h)
+{
+    humCache().store ((int) h, std::memory_order_relaxed);
+    store().set (humMains, humWord (h));
+    if (h != Hum::off)
+    {
+        humLastOnCache().store ((int) h, std::memory_order_relaxed);
+        store().set (humLastOnKey, humWord (h));
+    }
+}
 
 /** The four a menu offers, in the order it offers them. */
 inline constexpr Hum humChoices[] = { Hum::off, Hum::hz50, Hum::hz60, Hum::automatic };

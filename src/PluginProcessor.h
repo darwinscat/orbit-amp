@@ -912,7 +912,13 @@ private:
         audio thread's alone once prepareToPlay has run. */
     felitronics::dehum::HumRemover<> humStage;
     const std::atomic<int>* humWanted = nullptr;
-    int humApplied = -1;
+    const std::atomic<int>* humLastOn = nullptr;    // what OFF bypasses (prefs::humLastOn)
+    int humApplied = -1;        // the mode the stage runs
+    int humShown   = -1;        // the machine's mode, OFF included, as last published
+    // OFF's crossfade: the input as it came, copied before the stage (sized in prepareToPlay), and how
+    // much of the stage's output is heard, ramped a sample at a time.
+    juce::AudioBuffer<float> humDry;
+    float humMix = 1.0f, humMixStep = 1.0f;
     long long humLearnSamples = -1;    // how long the learn now running has run; -1 while none does
     double    humRate = 48000.0;       // the rate it is counted at — the one prepareToPlay was given
     void removeHum (juce::AudioBuffer<float>& buffer) noexcept;
@@ -979,8 +985,9 @@ public:
 
     /** THE HUM AT THE INPUT, as the stage last heard it — written by the audio thread at the end of
         every block, read by the windows on their own clocks. `humInForce` is the mode the stage is
-        RUNNING, which is the machine's (prefs::hum) unless the stage could not be prepared for this
-        input, and then it is OFF and says so. The rest is the stage's own telemetry: the family AUTO's
+        IN FORCE, which is the machine's (prefs::hum) unless the stage could not be prepared for this
+        input, and then it is OFF and says so. OFF is a bypass: the stage goes on running in the last
+        mode that was not OFF, and only its output is set aside. The rest is the stage's own telemetry: the family AUTO's
         ear decided (50 or 60, 0 while it abstains — whatever the mode), the mains frequency it tracks
         (0 while it takes nothing off), whether that tracker has settled, and the level of the hum it
         is taking off, in dB re a full-scale sine. */

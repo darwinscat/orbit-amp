@@ -182,6 +182,7 @@ AmpProcessor::AmpProcessor()
     // The machine's hum setting, read here on the constructing thread: its first read opens the
     // settings file, and the audio thread must only ever meet the cached atomic.
     humWanted = &prefs::humCache();
+    humLastOn = &prefs::humLastOnCache();
 
     // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
     // burst commits about 0.4 s after you stop moving.
@@ -835,19 +836,25 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     gate.seedEnabled (linkWorks (params::rowGate));
 
     // The hum stage over the channels the INPUT carries — the hum is the input's, and a channel the
-    // host only gives us to write into has none. Given the machine's mode before it is prepared, so
-    // the restart starts in it rather than ramping into it. A prepare it refuses (a layout with no
-    // input at all) leaves it OFF, and the mode in force says OFF rather than the machine's AUTO.
+    // host only gives us to write into has none. Given its mode before it is prepared, so the restart
+    // starts in it rather than ramping into it — the machine's, or under OFF the last one that was not,
+    // OFF's crossfade starting where OFF says. A prepare it refuses (a layout with no input at all)
+    // leaves it OFF, and the mode in force says OFF rather than the machine's AUTO.
     {
+        const int wanted = humWanted->load (std::memory_order_relaxed);
         auto p = humStage.params();
-        p.mains = (felitronics::dehum::Mains) humWanted->load (std::memory_order_relaxed);
+        p.mains = (felitronics::dehum::Mains) (wanted != (int) prefs::Hum::off ? wanted : humLastOn->load (std::memory_order_relaxed));
         humStage.setParams (p);
         const bool ready = humStage.prepare (sampleRate, block, getTotalNumInputChannels());
         humApplied = (int) p.mains;
+        humShown   = wanted;
+        humDry.setSize (juce::jmax (1, getTotalNumInputChannels()), block, false, true, true);
+        humMix     = wanted != (int) prefs::Hum::off ? 1.0f : 0.0f;
+        humMixStep = (float) (1.0 / (felitronics::dehum::HumRemover<>::kRampSeconds * sampleRate));
         humLearnSamples = -1;    // a prepare is a restart, and a restart ends a learn
         humRate = sampleRate;
-        humInForce.store (ready ? humApplied : (int) prefs::Hum::off, std::memory_order_relaxed);
-        humLearn.on.store (ready && humApplied != (int) prefs::Hum::off, std::memory_order_relaxed);
+        humInForce.store (ready ? wanted : (int) prefs::Hum::off, std::memory_order_relaxed);
+        humLearn.on.store (ready && wanted != (int) prefs::Hum::off, std::memory_order_relaxed);
         humLearn.running.store (false, std::memory_order_relaxed);
         humLearn.learnMs.store (-1.0f, std::memory_order_relaxed);
         humFamily.store (0, std::memory_order_relaxed);
@@ -1110,12 +1117,22 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
 
     // The machine's mode, handed over here on the audio thread — the stage's threading contract —
     // and only when it changed: a change of family ramps the old correction out and re-arms.
-    if (const int wanted = humWanted->load (std::memory_order_relaxed); wanted != humApplied)
+    // OFF IS A BYPASS, NOT A STOP. The stage goes on in the last mode that was not OFF, learning as it
+    // did, and only what is heard of it fades — so OFF and back is an A/B: on the way back the hum
+    // comes off at once, by what was learned, with no decision to make again and nothing to relearn.
+    // While it is bypassed the mode in force says OFF, and LEARN is the gate's alone.
+    const int wanted = humWanted->load (std::memory_order_relaxed);
+    if (const int runs = wanted != (int) prefs::Hum::off ? wanted : humLastOn->load (std::memory_order_relaxed);
+        runs != humApplied)
     {
         auto p = humStage.params();
-        p.mains = (felitronics::dehum::Mains) wanted;
+        p.mains = (felitronics::dehum::Mains) runs;
         humStage.setParams (p);
-        humApplied = wanted;
+        humApplied = runs;
+    }
+    if (wanted != humShown)
+    {
+        humShown = wanted;
         humInForce.store (wanted, std::memory_order_relaxed);
         humLearn.on.store (wanted != (int) prefs::Hum::off, std::memory_order_relaxed);
     }
@@ -1140,9 +1157,35 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
 
     // The input's channels and nothing past them; a host that asks for fewer this block stops the rest,
     // which the stage keeps a model for and fades back in when they return.
-    const int numIn = juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels(), humStage.maxChannels());
-    [[maybe_unused]] const bool ran = humStage.process (buffer.getArrayOfWritePointers(), numIn, buffer.getNumSamples());
+    const int numIn = juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels(), humStage.maxChannels(), humDry.getNumChannels());
+    const int n     = juce::jmin (buffer.getNumSamples(), humDry.getNumSamples());
+    const float target = wanted != (int) prefs::Hum::off ? 1.0f : 0.0f;
+    const bool  fading = humMix < 1.0f || target < 1.0f;
+    if (fading)
+        for (int c = 0; c < numIn; ++c)
+            humDry.copyFrom (c, 0, buffer, c, 0, n);
+
+    [[maybe_unused]] const bool ran = humStage.process (buffer.getArrayOfWritePointers(), numIn, n);
     jassert (ran);
+
+    // OFF's crossfade, out = dry + g·(wet - dry) with g ramped over the stage's own 20 ms, a step a
+    // sample. Settled at 0 it is the input as it came, bit for bit; settled at 1 nothing here runs.
+    if (fading)
+    {
+        float g = humMix;
+        for (int c = 0; c < numIn; ++c)
+        {
+            const float* dry = humDry.getReadPointer (c);
+            float* io = buffer.getWritePointer (c);
+            g = humMix;
+            for (int i = 0; i < n; ++i)
+            {
+                g = g < target ? juce::jmin (target, g + humMixStep) : juce::jmax (target, g - humMixStep);
+                io[i] = g <= 0.0f ? dry[i] : g >= 1.0f ? io[i] : dry[i] + g * (io[i] - dry[i]);
+            }
+        }
+        humMix = numIn > 0 ? g : target;
+    }
 
     const auto family = humStage.detected();
     humFamily.store (family == felitronics::dehum::Mains::Hz50 ? 50 : family == felitronics::dehum::Mains::Hz60 ? 60 : 0,
