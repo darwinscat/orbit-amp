@@ -5,7 +5,6 @@
 
 #include "../Parameters.h"
 #include "../core/GateLearn.h"
-#include "Prefs.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -30,22 +29,15 @@ namespace orbitamp
     preset, undo, or take the gate out of the rig; so it watches the gate's switches and threshold as
     they stood at the start, and if any of them moves it stops and writes nothing (cancel). Watched
     HERE rather than through a hook on the history, because a hook is one slot and a host may open two
-    editors.
-
-    WITH A HUM MODE IN FORCE the same quiet teaches the hum stage too (GateLearn.h says how the two
-    share it): the take is handed the processor's link to the stage, and what the stage learned comes
-    back with the threshold, in the same Take — written at the same moment, thrown away by the same
-    cancel. */
+    editors. */
 class GateLearner final : private juce::Timer
 {
 public:
-    GateLearner (juce::AudioProcessorValueTreeState& state, const std::atomic<float>& keyDbSource,
-                 core::HumLearnLink* humLink = nullptr)
+    GateLearner (juce::AudioProcessorValueTreeState& state, const std::atomic<float>& keyDbSource)
         : keyDb (keyDbSource),
           presentP (*state.getParameter (params::gatePresent)),
           onP      (*state.getParameter (params::gateOn)),
-          thP      (*state.getParameter (params::gateThreshold)),
-          take     (params::gateHysteresisDb, humLink)
+          thP      (*state.getParameter (params::gateThreshold))
     {
         onAtt = std::make_unique<juce::ParameterAttachment> (onP, [] (float) {});
         thAtt = std::make_unique<juce::ParameterAttachment> (thP, [] (float) {});
@@ -53,44 +45,16 @@ public:
 
     ~GateLearner() override { stopTimer(); }
 
-    enum class Outcome { set, nothingHeard, cancelled, disturbed };
+    enum class Outcome { set, nothingHeard, cancelled };
 
-    /** HOW A TAKE ENDED — the threshold, and beside it what the hum stage learned in the same quiet. */
+    /** HOW A TAKE ENDED. A second measurement run in the same quiet seconds — a hum learner, say —
+        would bring its answer back here, beside the threshold: written at the same moment, and
+        thrown away by the same cancel. */
     struct Take
     {
         Outcome outcome;
-        float thresholdDb;                  // what was set; core::GateLearn::nothing unless `set`
-        bool  learnedHum = false;           // the hum stage learned in this take
-        core::HumLearnLink::Answer hum {};  // ...and what it said; `verdict` unanswered if it never did
-        int   modeFamily = 0;               // the mode in force at the end: 50 or 60, 0 for AUTO
+        float thresholdDb;      // what was set; core::GateLearn::nothing unless `set`
     };
-
-    /** THE HUM'S ONE LINE, under the verdict — the same words wherever a take is shown, each surface
-        setting them in its own case: what the stage now takes off and how loud it was; what it heard
-        when the mode in force is the other mains, and so keeps the old model; or that there was none.
-        Nothing for a take that learned no hum, or whose hum learn did not finish. */
-    static juce::String humLine (const Take& t)
-    {
-        if (! t.learnedHum)
-            return {};
-
-        const auto hz = [] (int family) { return juce::String (family) + " Hz"; };
-        switch (t.hum.verdict)
-        {
-            case core::HumLearnLink::learned:
-                if (t.hum.kept)
-                    return "HUM " + hz (t.hum.family) + " " + juce::String (juce::roundToInt (t.hum.humDb)) + " dB";
-                if (t.modeFamily != 0 && t.modeFamily != t.hum.family)
-                    return "HUM " + hz (t.hum.family) + " heard, set to " + hz (t.modeFamily);
-                return {};
-
-            case core::HumLearnLink::nothingHeard:
-                return "no hum";
-
-            default:
-                return {};
-        }
-    }
 
     /** Measurement started; measurement ended, however it ended. */
     std::function<void()>             onBegin;
@@ -128,13 +92,10 @@ public:
         stopTimer();
 
         if (onDone != nullptr)
-            onDone ({ Outcome::cancelled, core::GateLearn::nothing });   // the hum's learn went with it
+            onDone ({ Outcome::cancelled, core::GateLearn::nothing });
     }
 
     bool isLearning() const noexcept { return take.isRunning(); }
-
-    /** How many ticks the take now running lasts — a picture's width (GateLearn::ticksInTake). */
-    int ticksInTake() const noexcept { return take.ticksInTake(); }
 
     /** What was heard so far, a reading a tick — a picture draws from HERE, by reference. */
     const std::vector<float>& trace() const noexcept { return take.heard(); }
@@ -168,18 +129,12 @@ private:
         stopTimer();
 
         Take done { Outcome::nothingHeard, core::GateLearn::nothing };   // a muted input teaches nothing
-        done.learnedHum = take.learnsHum();
-        done.hum        = take.humAnswer();
-        done.modeFamily = prefs::hum() == prefs::Hum::hz50 ? 50 : prefs::hum() == prefs::Hum::hz60 ? 60 : 0;
 
-        if (take.disturbed())
-            done.outcome = Outcome::disturbed;          // not a quiet: nothing is set, nothing kept
-        else if (const float th = take.resultDb(); th > core::GateLearn::nothing)
+        if (const float th = take.resultDb(); th > core::GateLearn::nothing)
         {
             thAtt->setValueAsCompleteGesture (th);
             onAtt->setValueAsCompleteGesture (1.0f);
-            done.outcome     = Outcome::set;
-            done.thresholdDb = th;
+            done = { Outcome::set, th };
         }
 
         if (onDone != nullptr)
@@ -192,7 +147,7 @@ private:
     juce::RangedAudioParameter& thP;
     std::unique_ptr<juce::ParameterAttachment> onAtt, thAtt;
 
-    core::GateLearn take;
+    core::GateLearn take { params::gateHysteresisDb };
     float watchPresent = 0.0f, watchOn = 0.0f, watchTh = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateLearner)

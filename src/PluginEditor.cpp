@@ -35,7 +35,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
                  *p.apvts.getParameter (params::inTrim)),
       outColumn (VolumeColumn::Side::out, p.outDb,     p.outClip,
                  *p.apvts.getParameter (params::outTrim)),
-      gateConsole (p.apvts, p.gateKeyDb, &p.humLearn),
+      gateConsole (p.apvts, p.gateKeyDb),
+      humLearner (p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
@@ -223,11 +224,28 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // controls, position included, live in this menu.
 
     // The measurement, projected: the overlay reads the strip's own trace.
-    learnOverlay.trace       = &gateConsole.learnTraceRef();
-    learnOverlay.totalTicks  = GateConsole::learnTotalTicks;
-    learnOverlay.pendingDb   = [this] { return gateConsole.learnPendingDb(); };
-    gateConsole.onLearnBegin = [this] { learnOverlay.totalTicks = gateConsole.learnTicksInTake(); learnOverlay.begin(); };
-    gateConsole.onLearnDone  = [this] (const juce::String& v, const juce::String& hum) { learnOverlay.finish (v, hum); };
+    // The hum's LEARN on the same overlay, in its own words and with no threshold to walk; only one of
+    // the two runs at a time — starting either cancels the other.
+    gateConsole.onLearnBegin = [this]
+    {
+        humLearner.cancel();
+        learnOverlay.title      = "LEARN";
+        learnOverlay.trace      = &gateConsole.learnTraceRef();
+        learnOverlay.totalTicks = GateConsole::learnTotalTicks;
+        learnOverlay.ticksNow   = nullptr;
+        learnOverlay.pendingDb  = [this] { return gateConsole.learnPendingDb(); };
+        learnOverlay.begin();
+    };
+    gateConsole.onLearnDone  = [this] (const juce::String& v) { learnOverlay.finish (v); };
+    humLearner.onBegin = [this]
+    {
+        learnOverlay.title      = "HUM LEARN";
+        learnOverlay.trace      = &humLearner.trace();
+        learnOverlay.ticksNow   = [this] { return humLearner.ticksPlanned(); };
+        learnOverlay.pendingDb  = nullptr;
+        learnOverlay.begin();
+    };
+    humLearner.onDone = [this] (const HumLearner::Take& take) { learnOverlay.finish (HumLearner::words (take).toUpperCase()); };
 
     addChildComponent (learnOverlay);
 
@@ -565,7 +583,7 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 {
     // The switch, then the modes (ui/HumMenu.h), in this menu's capitals.
     const int  heard = amp.humHeard();
-    const auto lines = prefs::humMenu (heard);
+    const auto lines = prefs::humMenu (heard, humLearner.isLearning());
 
     juce::PopupMenu m;
     m.addSectionHeader ("HUM  " + prefs::humState (heard).toUpperCase());
@@ -584,13 +602,21 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
         m.addSubMenu ((juce::String (knobs[k].name) + "  " + knobs[k].say (knobs[k].now)).toUpperCase(), values);
     }
 
-    // Nothing of this window's is reached from the answer, so a window closed under the open menu
-    // leaves nothing to guard.
+    // The answer reaches this window only to start the hum's LEARN, and through a SafePointer: a window
+    // closed under the open menu is left alone.
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [lines, knobs] (int r)
+                     [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs] (int r)
                      {
-                         if (r > 0 && r <= (int) lines.size())
+                         if (r > 0 && r <= (int) lines.size() && lines[(size_t) r - 1].isLearn)
+                         {
+                             if (safe != nullptr)
+                             {
+                                 safe->gateConsole.cancel();
+                                 safe->humLearner.start();
+                             }
+                         }
+                         else if (r > 0 && r <= (int) lines.size())
                              prefs::humPick (lines[(size_t) r - 1]);
                          else if (const int k = r / 100 - 1, i = r % 100;
                                   k >= 0 && k < (int) knobs.size() && i < knobs[(size_t) k].count)

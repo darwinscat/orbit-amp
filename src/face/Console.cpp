@@ -692,14 +692,30 @@ void Console::chooseDriveSteps (bool steps)
     drive.settle();
 }
 
-/** THE HUM'S FOUR LINES (ui/HumMenu.h) — the switch, which flips as the H key does and says so on the
-    tag, and the three modes. */
+/** THE TWO LEARNS, one at a time: starting either cancels the other — the gate's measurement and the
+    hum's both need the same quiet, and each would hear the other's stage at work. */
+void Console::startGateLearn()
+{
+    humLearner.cancel();
+    learner.start();
+}
+
+void Console::startHumLearn()
+{
+    learner.cancel();
+    humLearner.start();
+}
+
+/** THE HUM'S LINES (ui/HumMenu.h) — its LEARN, the switch, which flips as the H key does and says so
+    on the tag, and the three modes. */
 void Console::addHumLines (juce::PopupMenu& menu)
 {
-    for (const auto& line : prefs::humMenu (amp.humHeard()))
+    for (const auto& line : prefs::humMenu (amp.humHeard(), humLearner.isLearning()))
         addChoice (menu, line.text, line.ticked, [line] (Console& e)
         {
-            if (line.isSwitch)
+            if (line.isLearn)
+                e.startHumLearn();
+            else if (line.isSwitch)
                 e.flipHum();
             else
                 prefs::humPick (line);
@@ -785,7 +801,7 @@ void Console::showGateMenu()
     juce::PopupMenu menu;
     menu.addSectionHeader ("GATE");
     // LEARN first: three seconds of quiet set the threshold and switch the gate on — so the gate off, it is offered too.
-    addChoice (menu, "Learn", learner.isLearning(), [] (Console& e) { e.learner.start(); });
+    addChoice (menu, "Learn", learner.isLearning(), [] (Console& e) { e.startGateLearn(); });
     addChoice (menu, "On", on, [on] (Console& e) { e.setParam (params::gateOn, on ? 0.0f : 1.0f); });
 
     juce::PopupMenu threshold;
@@ -1344,7 +1360,7 @@ void Console::mouseDoubleClick (const juce::MouseEvent& e)
     if (gateLight.getBounds().contains (e.getEventRelativeTo (&stage).getPosition()))
     {
         endTapping();
-        learner.start();
+        startGateLearn();
     }
 }
 
@@ -1410,7 +1426,7 @@ void Console::showSettingsMenu()
     // are GATE's own menu's (showGateMenu).
     menu.addSectionHeader ("GATE");
     const bool gateIsOn = getParam (params::gateOn) > 0.5f;
-    addChoice (menu, "Learn", learner.isLearning(), [] (Console& e) { e.learner.start(); });
+    addChoice (menu, "Learn", learner.isLearning(), [] (Console& e) { e.startGateLearn(); });
     addChoice (menu, "On", gateIsOn, [gateIsOn] (Console& e) { e.setParam (params::gateOn, gateIsOn ? 0.0f : 1.0f); });
 
     // The MIDI inputs are the standalone's; a host routes MIDI itself.

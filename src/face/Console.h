@@ -368,11 +368,17 @@ protected:
 
 private:
     // LEARN, from GATE's menu: the gate's own measurement, the one OrbitAmp's GATE runs (ui/GateLearner.h)...
-    GateLearner learner { amp.apvts, amp.gateKeyDb, &amp.humLearn };
+    GateLearner learner { amp.apvts, amp.gateKeyDb };
+
+    // ...the hum's, from HUM's menus — its own, apart from the gate's (ui/HumLearner.h); only one of the
+    // two runs at a time: starting either cancels the other.
+    HumLearner humLearner { amp.humLearn, amp.gateKeyDb, amp.humTuned.quietHz };
+    void startGateLearn();
+    void startHumLearn();
 
 protected:
     // ...and its picture, which the product lays over a glass of its own and places there (LearnGlass.h).
-    LearnGlass learnGlass { learner };
+    LearnGlass learnGlass { learner, humLearner };
 
 private:
     Emblem emblem;

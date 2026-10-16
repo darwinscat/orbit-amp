@@ -22,12 +22,10 @@
 //   6. A choice made the way the menus make it (prefs::setHum) is written to the machine's settings
 //      and followed by every engine of the product from its next block — two instances here.
 //   7. The menus' lines: AUTO's names what it decided, once it has, and only while it is the mode.
-//   8. One LEARN teaches both. A COLD learn — AUTO undecided, the stage starting from nothing and
-//      letting the hum through while it learns — on a hum over a hiss sets the gate by the hiss, not by
-//      the hum, and keeps a second of floor after the stage settles; a warm one keeps its three
-//      seconds; a cancelled take throws the hum's learn away and the stage goes back to its model; a
-//      string struck in the quiet sets nothing; with OFF the take is the gate's alone. And the hum's
-//      line under the verdict says what was learned.
+//   8. HUM'S OWN LEARN, apart from the gate's: a cold one (AUTO undecided, the stage starting from
+//      nothing) and a warm one each end on the stage's own timeline and keep the hum they heard; a
+//      cancelled one throws its learn away and the stage goes back to its model; a string struck in the
+//      quiet is DISTURBED and keeps nothing; and the words the glass says.
 //   9. OFF IS A BYPASS THAT KEEPS WHAT WAS LEARNED. AUTO locked, OFF for two seconds, AUTO again: the
 //      hum is 40 dB down within 50 ms of the way back, AUTO's decision never moved, and neither switch
 //      bends the signal — the correction's second difference stays under -60 dBFS both ways.
@@ -50,7 +48,7 @@
 #include <juce_events/juce_events.h>
 
 #include "PluginProcessor.h"
-#include "ui/GateLearner.h"
+#include "ui/HumLearner.h"
 #include "ui/HumMenu.h"
 
 // OrbitAmp's set (OrbitAmpSet.cpp) is NOT laid out from here: the processor would write it into the
@@ -511,99 +509,70 @@ int main()
                 juce::String::formatted ("heard %d under 60 Hz", amp.humHeard()));
     }
 
-    // 8 · ONE LEARN TEACHES THE HUM AND THE GATE.
+    // 8 · HUM'S OWN LEARN.
     {
-        using orbitamp::core::GateLearn;
-        using orbitamp::GateLearner;
+        using orbitamp::core::HumLearnTake;
+        using orbitamp::HumLearner;
         using Link = orbitamp::core::HumLearnLink;
-        constexpr long long tick = (long long) sampleRate / GateLearn::ticksPerSecond;   // 1600 samples
+        constexpr long long tick = (long long) sampleRate / HumLearnTake::ticksPerSecond;   // 1600 samples
 
-        // A take as GateLearner runs one: a tick's worth of audio — four blocks of 400, as a host might
-        // send them — then the key level the tick reads.
-        const auto learn = [&] (GateLearn& take)
+        // A take as HumLearner runs one: a tick's worth of audio — four blocks of 400, as a host might
+        // send them — then the input's level the tick reads. Returns when it ended, in seconds.
+        const auto learn = [&] (HumLearnTake& take)
         {
-            take.begin();
-            for (int t = 0; t < 400; ++t)
+            take.begin (amp.humTuned.quietHz.load());
+            int t = 0;
+            for (; t < 400; ++t)
             {
                 stream.playSamples (tick, heard, 400);
                 if (take.hear (amp.gateKeyDb.load()))
                     break;
             }
-            return take.resultDb();
+            return (double) (t + 1) / HumLearnTake::ticksPerSecond;
         };
 
-        stream.hiss = 3.16e-4;       // -70 dBFS of hiss: what a gate learned in quiet should sit above
+        stream.hiss = 3.16e-4;       // -70 dBFS of hiss under the hum
         set (amp, params::inTrim, 0.0f);
 
-        // Where the gate belongs — the hiss alone — and where the hum would put it.
-        machine (Hum::off);
-        stream.humGain = 0.0;
-        stream.prepare();
-        GateLearn alone (params::gateHysteresisDb, &amp.humLearn);
-        const float byHiss = learn (alone);
-        stream.humGain = 1.0;
-        GateLearn raw (params::gateHysteresisDb, &amp.humLearn);
-        const float byHum = learn (raw);
-
-        // The cold learn: a fresh start in AUTO, nothing decided.
+        // Cold: a fresh start in AUTO, nothing decided.
         machine (Hum::automatic);
         stream.prepare();
-        GateLearn cold (params::gateHysteresisDb, &amp.humLearn);
-        const float th = learn (cold);
-        const auto a = cold.humAnswer();
-        const double floorAfter = (double) (cold.ticksInTake() - GateLearn::edgeTicks) / GateLearn::ticksPerSecond
-                                - a.settledAtMs / 1000.0;
-        report ("cold LEARN: the gate sits by the hiss, not the hum", std::abs (th - byHiss) <= 6.0f && th < byHum - 25.0f,
-                juce::String::formatted ("%.1f dB (the hiss alone %.1f, the hum %.1f; the stage's own floor %.1f dBFS)",
-                                         th, byHiss, byHum, a.floorAfterDb));
-        report ("...the hum learned and kept", cold.learnsHum() && a.verdict == Link::learned && a.kept && a.family == 50,
-                juce::String::formatted ("verdict %d, kept %d, %d Hz, %.1f dB, settled at %.0f ms",
-                                         a.verdict, (int) a.kept, a.family, a.humDb, a.settledAtMs));
-        report ("...a second of floor after it settled", cold.ticksInTake() == GateLearn::coldTicks && floorAfter >= 0.95,
-                juce::String::formatted ("%d ticks, %.2f s trusted after the settle", cold.ticksInTake(), floorAfter));
+        HumLearnTake cold (amp.humLearn);
+        const double coldEnds = learn (cold);
+        const auto a = cold.answer();
+        report ("HUM LEARN, cold: the hum learned and kept", a.verdict == Link::learned && a.kept && a.family == 50,
+                juce::String::formatted ("verdict %d, kept %d, %d Hz, %.1f dB; settled at %.0f ms, ended at %.2f s",
+                                         a.verdict, (int) a.kept, a.family, a.humDb, a.settledAtMs, coldEnds));
         {
             const size_t from = stream.play (0.5, heard);
             const double left = leftDb (heard, from, heard.size());
             report ("...and the stage runs what it learned", left <= -40.0, juce::String::formatted ("%.1f dB re the hum", left));
         }
 
-        GateLearner::Take shown { GateLearner::Outcome::set, th, true, a, 0 };
-        report ("the hum's line under the verdict", GateLearner::humLine (shown) == "HUM 50 Hz " + juce::String (juce::roundToInt (a.humDb)) + " dB",
-                "\"" + GateLearner::humLine (shown) + "\"");
-        GateLearner::Take other { GateLearner::Outcome::set, th, true, { Link::learned, false, 60, -40.0f, 1000.0f, -70.0f }, 50 };
-        GateLearner::Take none { GateLearner::Outcome::set, th, true, { Link::nothingHeard, false, 0, -200.0f, -1.0f, -200.0f }, 0 };
-        GateLearner::Take gateOnly { GateLearner::Outcome::set, th };
-        report ("...the other mains heard; no hum; no hum learn",
-                GateLearner::humLine (other) == "HUM 60 Hz heard, set to 50 Hz" && GateLearner::humLine (none) == "no hum"
-                    && GateLearner::humLine (gateOnly).isEmpty(),
-                "\"" + GateLearner::humLine (other) + "\" / \"" + GateLearner::humLine (none) + "\"");
-
-        // Warm: the stage has its model, so the take keeps its three seconds.
-        GateLearn warm (params::gateHysteresisDb, &amp.humLearn);
-        const float thWarm = learn (warm);
-        report ("warm LEARN: three seconds, the gate by the hiss", warm.ticksInTake() == GateLearn::totalTicks && warm.humAnswer().kept
-                                                                     && std::abs (thWarm - byHiss) <= 3.0f,
-                juce::String::formatted ("%d ticks, %.1f dB, settled at %.0f ms", warm.ticksInTake(), thWarm, warm.humAnswer().settledAtMs));
+        // Warm: the stage has its model — two and a half seconds.
+        HumLearnTake warm (amp.humLearn);
+        const double warmEnds = learn (warm);
+        report ("HUM LEARN, warm: two and a half seconds, kept", warm.answer().kept && warmEnds < 2.8 && warmEnds >= 2.5,
+                juce::String::formatted ("ended at %.2f s, settled at %.0f ms", warmEnds, warm.answer().settledAtMs));
 
         // Cancelled a third of the way in: the stage goes back to the model it had.
         {
-            GateLearn cut (params::gateHysteresisDb, &amp.humLearn);
-            cut.begin();
+            HumLearnTake cut (amp.humLearn);
+            cut.begin (amp.humTuned.quietHz.load());
             for (int t = 0; t < 30; ++t) { stream.playSamples (tick, heard, 400); cut.hear (amp.gateKeyDb.load()); }
             const unsigned answersBefore = amp.humLearn.answers.load();
             cut.stop();
             stream.play (0.1, heard);
             const size_t from = stream.play (0.5, heard);
             const double left = leftDb (heard, from, heard.size());
-            report ("a cancelled take: the hum's learn thrown away", amp.humLearn.learnMs.load() < 0.0f
-                                                                      && amp.humLearn.answers.load() == answersBefore + 1
-                                                                      && amp.humLearn.verdict.load() != Link::learned && left <= -40.0,
+            report ("a cancelled HUM LEARN: thrown away", amp.humLearn.learnMs.load() < 0.0f && amp.humLearn.answers.load() == answersBefore + 1
+                                                            && amp.humLearn.verdict.load() != Link::learned && left <= -40.0,
                     juce::String::formatted ("verdict %d, %.1f dB re the hum after", amp.humLearn.verdict.load(), left));
         }
 
-        // A string struck two seconds in: not a quiet, and nothing is set.
+        // A string struck a second in: not a quiet, and nothing is kept.
         {
-            const long long at = stream.now() + 2 * (long long) sampleRate;
+            const long long at = stream.now() + (long long) sampleRate;
             stream.extra = [at] (long long n)
             {
                 if (n < at || n >= at + (long long) sampleRate / 2)
@@ -611,23 +580,36 @@ int main()
                 const double t = (double) (n - at) / sampleRate;
                 return 0.2 * std::exp (-t / 0.15) * std::sin (2.0 * pi * 196.0 * t);
             };
-            GateLearn struck (params::gateHysteresisDb, &amp.humLearn);
-            const float thStruck = learn (struck);
+            HumLearnTake struck (amp.humLearn);
+            learn (struck);
             stream.extra = nullptr;
-            report ("a string in the quiet: DISTURBED, nothing set", struck.disturbed() && thStruck <= GateLearn::nothing,
-                    juce::String::formatted ("verdict %d", struck.humAnswer().verdict));
+            report ("a string in the quiet: DISTURBED, nothing kept", struck.answer().verdict == Link::disturbed && ! struck.answer().kept,
+                    juce::String::formatted ("verdict %d", struck.answer().verdict));
         }
 
-        // OFF: the gate's take alone, as it always was.
+        // Picked under OFF, it switches the hum on first, in the mode OFF bypasses.
+        if (const auto file = orbitamp::prefs::store().file(); ! ownHome.empty() && file.isAChildOf (juce::File (juce::String (ownHome))))
         {
-            machine (Hum::off);
+            orbitamp::prefs::setHum (Hum::hz50);
+            orbitamp::prefs::setHum (Hum::off);
+            HumLearner learner (amp.humLearn, amp.gateKeyDb, amp.humTuned.quietHz);
+            learner.start();
+            const Hum after = orbitamp::prefs::hum();
+            learner.cancel();
             stream.play (0.1, heard);
-            GateLearn plain (params::gateHysteresisDb, &amp.humLearn);
-            plain.begin();
-            report ("OFF: the take is the gate's alone", ! plain.learnsHum() && plain.ticksInTake() == GateLearn::totalTicks
-                                                          && amp.humLearn.ask.load() == Link::none);
-            plain.stop();
+            report ("HUM LEARN under OFF switches the hum on first", after == Hum::hz50, juce::String ("now ") + name (after));
+            orbitamp::prefs::setHum (Hum::automatic);      // AUTO again, and the mode OFF bypasses with it
         }
+
+        // The words.
+        const HumLearner::Take kept { HumLearner::Outcome::done, { Link::learned, true, 50, -61.6f, 1750.0f, -90.0f }, 0 };
+        const HumLearner::Take other { HumLearner::Outcome::done, { Link::learned, false, 60, -40.0f, 1000.0f, -70.0f }, 50 };
+        const HumLearner::Take none { HumLearner::Outcome::done, { Link::nothingHeard, false, 0, -200.0f, -1.0f, -200.0f }, 0 };
+        const HumLearner::Take knock { HumLearner::Outcome::done, { Link::disturbed, false, 50, -40.0f, -1.0f, -200.0f }, 0 };
+        report ("HUM LEARN's words", HumLearner::words (kept) == "HUM 50 Hz -62 dB" && HumLearner::words (other) == "HUM 60 Hz heard, set to 50 Hz"
+                                      && HumLearner::words (none) == "no hum" && HumLearner::words (knock) == "DISTURBED"
+                                      && HumLearner::words ({ HumLearner::Outcome::cancelled }) == "CANCELLED",
+                HumLearner::words (kept) + " / " + HumLearner::words (other) + " / " + HumLearner::words (none) + " / " + HumLearner::words (knock));
 
         stream.hiss = Stream::hissRms;
     }
@@ -750,14 +732,14 @@ int main()
             prefs::setHum (Hum::off);
             const auto off = ticks (-1);
             const auto offState = prefs::humState (0);
-            prefs::humPick (prefs::humMenu (-1)[3]);       // AUTO, picked under OFF
+            prefs::humPick (prefs::humMenu (-1)[4]);       // AUTO, picked under OFF
             const Hum picked = prefs::hum();
-            prefs::humPick (prefs::humMenu (-1)[0]);       // the switch: OFF...
+            prefs::humPick (prefs::humMenu (-1)[1]);       // the switch: OFF...
             const Hum flipped = prefs::hum();
-            prefs::humPick (prefs::humMenu (-1)[0]);       // ...and back, to the mode
+            prefs::humPick (prefs::humMenu (-1)[1]);       // ...and back, to the mode
             const Hum back = prefs::hum();
             report ("HUM in a menu: a switch, then the mode",
-                    on == "[x] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; " && off == "[ ] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; "
+                    on == "[ ] Learn; [x] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; " && off == "[ ] Learn; [ ] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; "
                         && offState == "Off" && prefs::humState (0) == juce::String::fromUTF8 ("Auto \xe2\x80\x94 listening"),
                     "60 Hz: " + on + " OFF: " + off);
             report ("...a mode picked under OFF switches it on; the switch flips", picked == Hum::automatic

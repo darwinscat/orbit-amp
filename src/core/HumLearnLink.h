@@ -20,7 +20,7 @@ namespace orbitamp::core
     running has run — the clock the take reads its ticks against, since the stage's answer is in its
     own time, not the window's.
 
-    One processor owns one; JUCE-free, like the gate's measurement it serves (GateLearn.h). */
+    One processor owns one; JUCE-free, like the take that asks through it (HumLearnTake.h). */
 struct HumLearnLink
 {
     enum Ask : int { none, begin, keep, drop };
@@ -46,6 +46,7 @@ struct HumLearnLink
     std::atomic<bool>  on      { false };
     std::atomic<bool>  running { false };
     std::atomic<float> learnMs { -1.0f };   // -1 while no learn runs
+    std::atomic<float> armedAtMs { -1.0f }; // when, in the learn's own time, the stage started on a model (-1: not yet)
 
     // The answer: the fields first, then `answers` — released, so a window that sees the count move
     // (acquire) reads the fields that came with it.

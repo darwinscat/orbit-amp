@@ -932,6 +932,7 @@ private:
     bool tuneHum (felitronics::dehum::HumRemoverParams&) noexcept;
     float humMix = 1.0f, humMixStep = 1.0f;
     long long humLearnSamples = -1;    // how long the learn now running has run; -1 while none does
+    float     humLearnArmedMs = -1.0f; // when in it the stage started on a model; -1 until it has
     double    humRate = 48000.0;       // the rate it is counted at — the one prepareToPlay was given
     void removeHum (juce::AudioBuffer<float>& buffer) noexcept;
 
@@ -1017,7 +1018,7 @@ public:
         std::atomic<int>   harmonics { 0 }, active { 0 };
     } humTuned;
 
-    /** The hum stage's LEARN, asked for by the gate's (core/GateLearn.h) and served at the start of the
+    /** The hum stage's LEARN, asked for by its take (core/HumLearnTake.h) and served at the start of the
         next block — see removeHum. */
     core::HumLearnLink humLearn;
 

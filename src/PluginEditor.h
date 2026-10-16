@@ -10,6 +10,7 @@
 #include "ui/DemoStrip.h"   // TEMPORARY — audition player; goes with the glyph strip
 #include "ui/Footer.h"
 #include "ui/GateConsole.h"
+#include "ui/HumLearner.h"
 #include "ui/VolumeColumn.h"
 #include "ui/LearnOverlay.h"
 #include "ui/DragRuler.h"
@@ -136,6 +137,7 @@ private:
         overlay on purpose: the overlay draws LEARN's trace from a pointer into this object, and
         members die in reverse order, so the reader has to go first. */
     GateConsole   gateConsole;
+    HumLearner    humLearner;       // the hum's own LEARN, from the IN column's menu — never with the gate's
     VolumeColumn  inColumn;         // the input's level and its hand, left of the faceplate
     VolumeColumn  outColumn;        // the output's, mirrored, right of it
     TunerStrip    tunerStrip;       // the always-on needle, between the guards

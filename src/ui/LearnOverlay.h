@@ -32,6 +32,13 @@ public:
     /** The live threshold-to-be, dB (-999 = nothing heard yet) — the dashed corridor. */
     std::function<float()> pendingDb;
 
+    /** A take whose length is not known at its start (the hum's) says it as it goes; none, and
+        `totalTicks` stands. */
+    std::function<int()> ticksNow;
+
+    /** Whose LEARN it projects: the gate's (LEARN) or the hum's (HUM LEARN) — set before begin(). */
+    juce::String title { "LEARN" };
+
     void begin()
     {
         message.clear();
@@ -41,10 +48,9 @@ public:
         startTimerHz (30);
     }
 
-    void finish (const juce::String& verdict, const juce::String& humLine = {})
+    void finish (const juce::String& verdict)
     {
         message   = verdict;
-        hum       = humLine;
         holdTicks = 50;   // the verdict stays readable, then the sheet folds away
     }
 
@@ -60,7 +66,8 @@ public:
         auto area = r.reduced (18.0f, 14.0f);
 
         g.setColour (theme::lilac);
-        theme::drawTracked (g, "LEARN", area.removeFromTop (22.0f), theme::displayFont (16.0f),
+        theme::drawTracked (g, message.isEmpty() && title != "LEARN" ? title + juce::String::fromUTF8 (" \xe2\x80\x94 STAY QUIET") : title,
+                            area.removeFromTop (22.0f), theme::displayFont (16.0f),
                             0.15f, juce::Justification::centredLeft);
         area.removeFromTop (6.0f);
 
@@ -80,7 +87,7 @@ public:
 
         if (trace != nullptr && trace->size() > 1)
         {
-            const float stepW = area.getWidth() / (float) juce::jmax (1, totalTicks - 1);
+            const float stepW = area.getWidth() / (float) juce::jmax (1, (ticksNow != nullptr ? ticksNow() : totalTicks) - 1);
 
             juce::Path curve, fill;
             fill.startNewSubPath (area.getX(), area.getBottom());
@@ -125,14 +132,6 @@ public:
             g.setColour (juce::Colours::white);
             theme::drawTracked (g, message, area, theme::displayFont (24.0f), 0.12f,
                                 juce::Justification::centred);
-
-            // What the hum stage learned in the same quiet, one line under the verdict.
-            if (hum.isNotEmpty())
-            {
-                g.setColour (theme::txDim);
-                theme::drawTracked (g, hum, area.withTrimmedTop (area.getHeight() * 0.5f + 20.0f).withHeight (18.0f),
-                                    theme::displayFont (13.0f), 0.08f, juce::Justification::centred);
-            }
         }
     }
 
@@ -156,7 +155,7 @@ private:
              - r.getHeight() * (juce::jlimit (floorDb, 0.0f, db) - floorDb) / -floorDb;
     }
 
-    juce::String message, hum;
+    juce::String message;
     int holdTicks = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LearnOverlay)

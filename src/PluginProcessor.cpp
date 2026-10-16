@@ -1190,14 +1190,15 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
         humLearn.on.store (wanted != (int) prefs::Hum::off, std::memory_order_relaxed);
     }
 
-    // THE GATE'S LEARN ASKED FOR THE HUM'S, and it is served here, before this block is heard: the stage
-    // learns where it runs. Its answer goes back field by field through the link (core/HumLearnLink.h)
+    // THE HUM'S LEARN, asked for by its take (core/HumLearnTake.h), served here before this block is
+    // heard: the stage learns where it runs. Its answer goes back field by field through the link (core/HumLearnLink.h)
     // — atomics, nothing locked, nothing allocated.
     if (const int ask = humLearn.ask.exchange (core::HumLearnLink::none, std::memory_order_acq_rel);
         ask == core::HumLearnLink::begin)
     {
         humStage.beginLearn();
         humLearnSamples = humStage.learning() ? 0 : -1;
+        humLearnArmedMs = -1.0f;
     }
     else if (ask == core::HumLearnLink::keep || ask == core::HumLearnLink::drop)
     {
@@ -1259,12 +1260,19 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
 
     // The learn's own clock, at the end of the block it has now heard — what a tick of the take is
     // read against. A learn the stage ended by itself (a restart) is no learn any more.
+    // And when in it the stage started on a model — zeroed, with its family, past its ramp — which is
+    // what the take reckons the stage's settled window from.
     if (humLearnSamples >= 0 && humStage.learning())
         humLearnSamples += buffer.getNumSamples();
     else
         humLearnSamples = -1;
-    humLearn.learnMs.store (humLearnSamples < 0 ? -1.0f : (float) (1000.0 * (double) humLearnSamples / humRate),
-                            std::memory_order_relaxed);
+    const float learnMs = humLearnSamples < 0 ? -1.0f : (float) (1000.0 * (double) humLearnSamples / humRate);
+    if (humLearnSamples < 0)
+        humLearnArmedMs = -1.0f;
+    else if (humLearnArmedMs < 0.0f && humStage.running() && ! humStage.swapping())
+        humLearnArmedMs = learnMs;
+    humLearn.learnMs.store (learnMs, std::memory_order_relaxed);
+    humLearn.armedAtMs.store (humLearnArmedMs, std::memory_order_relaxed);
     humLearn.running.store (humStage.running(), std::memory_order_relaxed);
 }
 
