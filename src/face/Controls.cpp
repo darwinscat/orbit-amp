@@ -18,20 +18,41 @@ juce::Font labelFont (float px)
     return felitronics::appkit::brand::wordmarkFont (px);
 }
 
+void writeWords (juce::Graphics& g, const juce::String& text, const juce::Font& font, juce::Rectangle<float> box, float weight)
+{
+    if (weight <= 0.0f)
+    {
+        g.setFont (font);
+        g.drawText (text, box, juce::Justification::centred, false);
+        return;
+    }
+
+    // Laid out the way Graphics::drawText lays it, then filled and traced round at the weight.
+    juce::GlyphArrangement glyphs;
+    glyphs.addCurtailedLineOfText (font, text, 0.0f, 0.0f, box.getWidth(), false);
+    glyphs.justifyGlyphs (0, glyphs.getNumGlyphs(), box.getX(), box.getY(), box.getWidth(), box.getHeight(),
+                          juce::Justification::centred);
+    juce::Path outline;
+    glyphs.createPath (outline);
+    g.fillPath (outline);
+    g.strokePath (outline, juce::PathStrokeType (weight, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
 void drawLabel (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> area, float em,
-                juce::Colour colour, float trackingEm)
+                juce::Colour colour, float trackingEm, float weight)
 {
     g.setColour (colour);
-    g.setFont (labelFont (em).withExtraKerningFactor (trackingEm));
-    g.drawText (text.toUpperCase(), area, juce::Justification::centred, false);
+    writeWords (g, text.toUpperCase(), labelFont (em).withExtraKerningFactor (trackingEm), area, weight);
 }
 
 void Ink::label (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> area, float em,
                  juce::Colour colour, float trackingEm) const
 {
+    if (! shade.isTransparent())
+        drawLabel (g, text, area.translated (0.0f, -edgeDrop), em, over (colour), trackingEm, weight);
     if (! edge.isTransparent())
-        drawLabel (g, text, area.translated (0.0f, edgeDrop), em, under (colour), trackingEm);
-    drawLabel (g, text, area, em, colour, trackingEm);
+        drawLabel (g, text, area.translated (0.0f, edgeDrop), em, under (colour), trackingEm, weight);
+    drawLabel (g, text, area, em, colour, trackingEm, weight);
 }
 
 void glow (juce::Graphics& g, const juce::Path& p, juce::Colour c, float radius)
@@ -568,16 +589,20 @@ void Legend::paint (juce::Graphics& g)
         return flashing ? c.interpolatedWith (juce::Colours::white, 0.85f) : ! lit ? c : cut ? c.darker (0.6f) : c.brighter (0.5f);
     };
     const auto edge = lit ? edgeColour.withMultipliedAlpha (1.6f) : edgeColour;
-    const auto write = [&g, cut, edge] (const juce::String& text, const juce::Font& font, juce::Rectangle<float> box, juce::Colour c)
+    const auto write = [this, &g, cut, edge] (const juce::String& text, const juce::Font& font, juce::Rectangle<float> box, juce::Colour c)
     {
-        g.setFont (font);
+        if (! shadeColour.isTransparent())
+        {
+            g.setColour (shadeColour.withMultipliedAlpha (c.getFloatAlpha()));
+            writeWords (g, text, font, box.translated (0.0f, -Ink::edgeDrop), weight);
+        }
         if (cut)
         {
             g.setColour (edge.withMultipliedAlpha (c.getFloatAlpha()));
-            g.drawText (text, box.translated (0.0f, Ink::edgeDrop), juce::Justification::centred, false);
+            writeWords (g, text, font, box.translated (0.0f, Ink::edgeDrop), weight);
         }
         g.setColour (c);
-        g.drawText (text, box, juce::Justification::centred, false);
+        writeWords (g, text, font, box, weight);
     };
 
     auto area = fromLeft ? getLocalBounds().toFloat().withWidth (r.width)

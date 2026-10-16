@@ -55,6 +55,9 @@ namespace
     // (params::limiterCeilingMin .. Max).
     constexpr float limiterCeilings[] { -0.1f, -0.3f, -0.5f, -1.0f, -2.0f, -3.0f };
 
+    // How much heavier than the ink's weight GATE and LIMITER are cut, on their busy corner plates.
+    constexpr float cornerWeight = 1.6f;
+
     // TURBO's push — see Console.h. Kept with the machine's settings, where the engine reads it too
     // (channels/Engine.h).
     using channels::settings::turboKey, channels::settings::turboPushes, channels::settings::snapTurbo;
@@ -286,7 +289,11 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         legend->nameColour  = ink.words;
         legend->valueColour = ink.values;
         legend->edgeColour  = ink.edge;
+        legend->shadeColour = ink.shade;
+        legend->weight      = ink.weight;
     }
+    // GATE and LIMITER stand on the corner plates, where the panel is busiest: cut deeper than the rest.
+    gateDoor.weight = limiterDoor.weight = ink.weight * cornerWeight;
 
     // REVERB's name carries the reverb's character, and a click on it opens the list — the same six
     // OrbitAmp's reverb block offers.

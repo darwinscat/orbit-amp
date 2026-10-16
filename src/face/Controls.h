@@ -28,16 +28,21 @@ using felitronics::appkit::brand::orange;
 /** The family's label face at a height in px — counted the way the rest of OrbitAmp counts it. */
 juce::Font labelFont (float px);
 
-/** Uppercase, tracked, centred in `area`. */
+/** Uppercase, tracked, centred in `area`; `weight` px heavier than the font draws it (0: the font as it is). */
 void drawLabel (juce::Graphics&, const juce::String&, juce::Rectangle<float> area, float em,
-                juce::Colour, float trackingEm = 0.08f);
+                juce::Colour, float trackingEm = 0.08f, float weight = 0.0f);
+
+/** `text` centred in `box` in the Graphics' colour, as Graphics::drawText puts it there — and with
+    `weight` > 0 each stroke that many px heavier, its outline traced round as well as filled. */
+void writeWords (juce::Graphics&, const juce::String& text, const juce::Font&, juce::Rectangle<float> box, float weight);
 
 /** THE INK A FACE IS LETTERED IN: the words printed on its panel, and the ones there that answer the
     hand (Legend). The family's unless the face says otherwise, for a dark panel — the names lilac, what
     they are set to a brighter near-white, a word that says a state orange, and nothing under them. A
     face of bright metal writes dark, with a light edge a pixel under each word, as if the word were cut
-    into the metal and the cut's lower lip caught the light; and lets no word go fainter than it can
-    still be read at there. */
+    into the metal and the cut's lower lip caught the light — and, cut deeper, a shade a pixel over it,
+    the upper wall in its own shadow, and strokes heavier than the font's; and lets no word go fainter
+    than it can still be read at there. */
 struct Ink
 {
     juce::Colour words  { 0xffc9b8f5 };     // the names
@@ -45,6 +50,8 @@ struct Ink
     juce::Colour state  = orange;           // a word that says a state: TURBO, DELAY, the register playing
     juce::Colour edge   {};                 // under each word; none if transparent
     float leastAlpha = 0.0f;                // the faintest a word is drawn, however dim it is said to be
+    juce::Colour shade  {};                 // over each word; none if transparent
+    float weight = 0.0f;                    // how much heavier than the font a word's strokes are, px
 
     static constexpr float edgeDrop = 1.0f;
 
@@ -54,7 +61,10 @@ struct Ink
     /** The edge under a word or a sign written in `colour`: as faint as it is. */
     juce::Colour under (juce::Colour colour) const { return edge.withMultipliedAlpha (colour.getFloatAlpha()); }
 
-    /** A word as drawLabel writes it, over its edge. */
+    /** The shade over a word written in `colour`: as faint as it is. */
+    juce::Colour over (juce::Colour colour) const { return shade.withMultipliedAlpha (colour.getFloatAlpha()); }
+
+    /** A word as drawLabel writes it, at this ink's weight, between its shade and its edge. */
     void label (juce::Graphics&, const juce::String&, juce::Rectangle<float> area, float em,
                 juce::Colour, float trackingEm = 0.08f) const;
 };
@@ -262,6 +272,8 @@ public:
 
     juce::Colour nameColour { 0xffc9b8f5 }, valueColour { 0xffece9f6 };
     juce::Colour edgeColour;                     // under its words, where the ink has an edge (Ink)
+    juce::Colour shadeColour;                    // over them, where it has a shade
+    float weight = 0.0f;                         // its strokes this many px heavier than the font's
     bool upper = true;                           // false keeps the text's own case
     bool fromLeft = false;                       // true starts the words at the left edge instead of centring
                                                  // them: a number that changes width then moves nothing else
