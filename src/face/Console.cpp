@@ -622,7 +622,7 @@ void Console::sayLever (ColumnFader& fader, const juce::String& name, std::funct
         if (std::abs (db) < 0.05f)
             db = 0.0f;      // never "-0.0"
 
-        const auto at = fader.getBounds().toFloat();
+        const auto at = fader.getBoundsInParent().toFloat();    // as it stands on the stage, turned or not
         nameTag.show ({ at.getCentreX(), at.getY() - 24.0f },
                       name + "  " + (db > 0.0f ? "+" : "") + juce::String (db, 1) + " dB");
     };

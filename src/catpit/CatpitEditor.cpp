@@ -139,6 +139,61 @@ namespace
         return juce::isPositiveAndBelow (x, bg.getWidth()) && juce::isPositiveAndBelow (y, bg.getHeight())
             && bg.getPixelAt (x, y).getAlpha() < 16;
     }
+
+    /** A CORNER'S SLOT, CUT INTO THE PICTURE (layout::CornerSlot): INPUT's well as painted — its rim, the slot
+        down it, the T at its head — at a third of its size, its two ends whole and of its straight run only
+        as much as the slot is long, turned to lie as the slot does; its cut-off corners are the cut's edge.
+        Drawn into the picture at the screen's own pixel size, not into the render: the render is the
+        stage's own size, and a rim one pixel wide, made a third of that, would be gone. */
+    void cutSlot (juce::Graphics& g, const layout::CornerSlot& slot)
+    {
+        using namespace layout;
+
+        const auto& bg = Art::get().bg;
+        if (! bg.isValid())
+            return;
+
+        const float k = (float) bg.getWidth() / width;      // the render's pixels to the unit
+        const float s = cornerSlotScale;
+        const auto well = slot.upright (inWell.getWidth() * s, cornerSlotLength);
+        const float c = inWellChamfer * s;
+
+        const juce::Graphics::ScopedSaveState keep (g);
+        g.addTransform (slot.turn());
+
+        juce::Path cut;
+        cut.startNewSubPath (well.getX() + c, well.getY());
+        cut.lineTo (well.getRight() - c, well.getY());
+        cut.lineTo (well.getRight(), well.getY() + c);
+        cut.lineTo (well.getRight(), well.getBottom() - c);
+        cut.lineTo (well.getRight() - c, well.getBottom());
+        cut.lineTo (well.getX() + c, well.getBottom());
+        cut.lineTo (well.getX(), well.getBottom() - c);
+        cut.lineTo (well.getX(), well.getY() + c);
+        cut.closeSubPath();
+        g.reduceClipRegion (cut);
+
+        // INPUT's well from `from` down, drawn at the slot's size from `to` down.
+        const auto draw = [&] (float from, float to)
+        {
+            g.drawImageTransformed (bg, juce::AffineTransform::translation (-inWell.getX() * k, -from * k)
+                                            .scaled (s / k)
+                                            .translated (well.getX(), to));
+        };
+
+        // The straight run the whole length, then the two ends over it — so no seam shows where they meet.
+        draw (inWell.getY() + inWellTop, well.getY());
+        for (const bool head : { true, false })
+        {
+            const float length = (head ? inWellTop : inWellBottom) * s;
+            const float to = head ? well.getY() : well.getBottom() - length;
+            const juce::Graphics::ScopedSaveState end (g);
+            juce::Path area;
+            area.addRectangle (well.getX(), to, well.getWidth(), length);
+            g.reduceClipRegion (area);
+            draw (head ? inWell.getY() : inWell.getBottom() - inWellBottom, to);
+        }
+    }
 }
 
 //==============================================================================
@@ -254,6 +309,9 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
     if (bg.isValid())
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
 
+    cutSlot (g, gateSlot);
+    cutSlot (g, limiterSlot);
+
     paintEmblem (g, scale);
 
     drawLabel (g, "DRIVE", juce::Rectangle<float> (220.0f, 30.0f).withCentre ({ drive.centre.x, 394.0f }), px15, labelLilac);
@@ -333,6 +391,46 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         turbo.onChange = [this, push] (bool on) { push->setValueAsCompleteGesture (on ? channels.turboDb() : 0.0f); };
         push->sendInitialUpdate();
     }
+
+    // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader in the slot cut into its corner, the
+    // fader turned with its slot (layout::CornerSlot) — INPUT's fader drawn at the slot's size, its cap the
+    // columns'. A double click puts it back where it opens, a right click is its block's menu, and while it
+    // is held the tag over it says where it stands. While its block is off it stands dim, and still moves.
+    const auto cornerFader = [this] (ColumnFader& fader, const CornerSlot& slot, const char* paramId, const char* onId,
+                                     float low, float high, std::function<void()> menu, const juce::String& name)
+    {
+        const auto travelOf = [low, high] (float v) { return (v - low) / (high - low); };
+        const auto* param = amp.apvts.getParameter (paramId);
+        fader.scale = cornerSlotScale;
+        fader.capLength = (layout::inFader.getWidth() - 8.0f) * cornerSlotScale;    // as long, to the slot, as INPUT's
+        fader.defaultValue = travelOf (param->convertFrom0to1 (param->getDefaultValue()));
+        auto* attachment = follow (paramId, [&fader, travelOf] (float v) { fader.setValue (travelOf (v), false); });
+        fader.onGestureStart = [attachment] { attachment->beginGesture(); };
+        fader.onChange       = [attachment, low, high] (float travel) { attachment->setValueAsPartOfGesture (juce::jmap (travel, low, high)); };
+        fader.onGestureEnd   = [attachment] { attachment->endGesture(); };
+        fader.onMenu         = std::move (menu);
+        attachment->sendInitialUpdate();
+        sayLever (fader, name, [this, paramId] { return getParam (paramId); });
+        follow (onId, [&fader] (float on) { fader.setAlpha (on > 0.5f ? 1.0f : 0.6f); })->sendInitialUpdate();
+        if (std::abs (slot.angle) > juce::MathConstants<float>::pi * 0.25f)
+            fader.setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);     // it lies more across than up
+
+        // INPUT's fader stands in its well as its box does in INPUT's; the box is the stage's whole units,
+        // so the turn starts by putting its middle back on the slot's.
+        addToStage (fader);
+        const auto box = slot.upright (layout::inFader.getWidth() * cornerSlotScale,
+                                       cornerSlotLength - (inWell.getHeight() - layout::inFader.getHeight()) * cornerSlotScale).toNearestInt();
+        fader.setBounds (box);
+        fader.setTransform (juce::AffineTransform::translation (slot.centre - box.toFloat().getCentre()).followedBy (slot.turn()));
+    };
+    threshold.marks = 6;            // every 5 dB, the longer at -50
+    threshold.longMark = 4;
+    cornerFader (threshold, gateSlot, params::gateThreshold, params::gateOn, thresholdLowDb, thresholdHighDb,
+                 [this] { showGateMenu(); }, "GATE");
+    ceiling.marks = 6;              // every half a decibel or so, none longer
+    ceiling.longMark = -1;
+    cornerFader (ceiling, limiterSlot, params::limiterCeiling, params::limiterOn, params::limiterCeilingMin, params::limiterCeilingMax,
+                 [this] { showOutputMenu(); }, "LIMITER");
 
     showChannel();
 
