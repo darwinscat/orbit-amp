@@ -130,6 +130,9 @@ public:
         the console. */
     void mouseDown (const juce::MouseEvent&) override;
 
+    /** A double click on GATE's lamp is LEARN — the first line of GATE's menu. */
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+
     /** IRs DROPPED ANYWHERE ON THE FACE become cabinets of the player's own — files, folders of them,
         zips. While they hang over the window a tag over CAB says what letting go will do. */
     bool isInterestedInFileDrag (const juce::StringArray& files) override;

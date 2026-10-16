@@ -1254,6 +1254,20 @@ void Console::mouseDown (const juce::MouseEvent& e)
         showSettingsMenu();
 }
 
+/** A DOUBLE CLICK ON GATE'S LAMP: LEARN, as from GATE's menu. The lamp takes no clicks of its own, so it
+    is the panel under it that hears them. */
+void Console::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu() || e.originalComponent != &stage)
+        return;
+
+    if (gateLight.getBounds().contains (e.getEventRelativeTo (&stage).getPosition()))
+    {
+        endTapping();
+        learner.start();
+    }
+}
+
 void Console::playDemo (int loop)
 {
     const bool start = loop >= 0 || ! amp.demo.isPlaying();
