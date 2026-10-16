@@ -33,6 +33,8 @@
 //      bends the signal — the correction's second difference stays under -60 dBFS both ways.
 //  10. The faces' quick A/B (the H key): OFF from a mode, and from OFF back to that mode — kept on the
 //      machine beside the mode — with the words the face's tag says for a moment.
+//  12. Every menu's HUM is a switch and a mode: "On" ticked unless OFF; the tick on the mode in force,
+//      or under OFF on the mode OFF bypasses; a mode picked under OFF switches the hum on in it.
 //
 // Checks 1-5 set the mode through the cached atomic the engine reads (prefs::humCache) and leave the
 // settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
@@ -43,6 +45,7 @@
 
 #include "PluginProcessor.h"
 #include "ui/GateLearner.h"
+#include "ui/HumMenu.h"
 
 // OrbitAmp's set (OrbitAmpSet.cpp) is NOT laid out from here: the processor would write it into the
 // machine's real Factory folder.
@@ -689,6 +692,44 @@ int main()
                                             && prefs::humTag (Hum::hz50) == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 50 Hz")
                                             && prefs::humTag (Hum::automatic) == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 Auto"),
                 prefs::humTag (Hum::hz50) + " / " + prefs::humTag (Hum::automatic) + " / " + prefs::humTag (Hum::off));
+    }
+
+    // 12 · A SWITCH, THEN THE MODE.
+    {
+        namespace prefs = orbitamp::prefs;
+        const auto file = prefs::store().file();
+        if (ownHome.empty() || ! file.isAChildOf (juce::File (juce::String (ownHome))))
+        {
+            std::printf ("%-52s skip  the settings are not in a home of the gate's own\n", "HUM in a menu: a switch, then the mode");
+        }
+        else
+        {
+            const auto ticks = [] (int autoState)
+            {
+                juce::String t;
+                for (const auto& line : prefs::humMenu (autoState))
+                    t << (line.ticked ? "[x] " : "[ ] ") << line.text << "; ";
+                return t;
+            };
+            prefs::setHum (Hum::hz60);
+            const auto on = ticks (-1);
+            prefs::setHum (Hum::off);
+            const auto off = ticks (-1);
+            const auto offState = prefs::humState (0);
+            prefs::humPick (prefs::humMenu (-1)[3]);       // AUTO, picked under OFF
+            const Hum picked = prefs::hum();
+            prefs::humPick (prefs::humMenu (-1)[0]);       // the switch: OFF...
+            const Hum flipped = prefs::hum();
+            prefs::humPick (prefs::humMenu (-1)[0]);       // ...and back, to the mode
+            const Hum back = prefs::hum();
+            report ("HUM in a menu: a switch, then the mode",
+                    on == "[x] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; " && off == "[ ] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; "
+                        && offState == "Off" && prefs::humState (0) == "Auto",
+                    "60 Hz: " + on + " OFF: " + off);
+            report ("...a mode picked under OFF switches it on; the switch flips", picked == Hum::automatic
+                                                                                  && flipped == Hum::off && back == Hum::automatic,
+                    juce::String ("picked ") + name (picked) + ", flipped " + name (flipped) + ", back " + name (back));
+        }
     }
 
     machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store().get (orbitamp::prefs::humMains, "auto").toString()));

@@ -3,6 +3,7 @@
 
 #include "PluginEditor.h"
 
+#include "ui/HumMenu.h"
 #include "ui/Prefs.h"
 
 namespace orbitamp
@@ -389,14 +390,27 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
-    // H: the hum, OFF and back (prefs::humFlip) — Р under a Russian layout, the same key.
+    // H: the hum, OFF and back (prefs::humFlip) — Р under a Russian layout, the same key. G: the
+    // gate's On, the sound's switch and so an undo step, as its menu sets it — П.
     if (! key.getModifiers().isAnyModifierKeyDown())
-        if (const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
-            letter == 'H' || letter == 0x0420)
+    {
+        const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
+        if (letter == 'H' || letter == 0x0420)
         {
             prefs::setHum (prefs::humFlip());
             return true;
         }
+        if (letter == 'G' || letter == 0x041f)
+        {
+            if (auto* on = amp.apvts.getParameter (params::gateOn))
+            {
+                on->beginChangeGesture();
+                on->setValueNotifyingHost (on->getValue() > 0.5f ? 0.0f : 1.0f);
+                on->endChangeGesture();
+            }
+            return true;
+        }
+    }
 
     return false;
 }
@@ -548,22 +562,23 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
     block. AUTO's line says what it decided, once it has. */
 void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 {
-    const auto now   = prefs::hum();
+    // The switch, then the modes (ui/HumMenu.h), in this menu's capitals.
     const int  heard = amp.humHeard();
+    const auto lines = prefs::humMenu (heard);
 
     juce::PopupMenu m;
-    m.addSectionHeader ("HUM  " + prefs::humLabel (now, heard).toUpperCase());
-    for (int i = 0; i < (int) std::size (prefs::humChoices); ++i)
-        m.addItem (i + 1, prefs::humLabel (prefs::humChoices[i], heard).toUpperCase(), true, prefs::humChoices[i] == now);
+    m.addSectionHeader ("HUM  " + prefs::humState (heard).toUpperCase());
+    for (size_t i = 0; i < lines.size(); ++i)
+        m.addItem ((int) i + 1, lines[i].text.toUpperCase(), true, lines[i].ticked);
 
     // Nothing of this window's is reached from the answer, so a window closed under the open menu
     // leaves nothing to guard.
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [] (int r)
+                     [lines] (int r)
                      {
-                         if (r > 0 && r <= (int) std::size (prefs::humChoices))
-                             prefs::setHum (prefs::humChoices[r - 1]);
+                         if (r > 0 && r <= (int) lines.size())
+                             prefs::humPick (lines[(size_t) r - 1]);
                      });
 }
 

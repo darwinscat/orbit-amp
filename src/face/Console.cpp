@@ -12,6 +12,7 @@
 #include "../core/ProcessMemory.h"
 #include "../device/IrLibrary.h"
 #include "../ui/AboutConfig.h"
+#include "../ui/HumMenu.h"
 #include "../ui/LoadBreakdown.h"
 #include "../ui/Prefs.h"
 
@@ -627,7 +628,23 @@ void Console::flipHum()
     prefs::setHum (prefs::humFlip());
 
     const auto at = inFader.getBoundsInParent().toFloat();
-    nameTag.show ({ at.getCentreX(), at.getY() - 24.0f }, prefs::humTag (prefs::hum()));
+    sayForAMoment ({ at.getCentreX(), at.getY() - 24.0f }, prefs::humTag (prefs::hum()));
+}
+
+/** G: the gate's On, through the same hands as GATE's menu — and the tag over GATE says where it is. */
+void Console::flipGate()
+{
+    endTapping();
+    setParam (params::gateOn, getParam (params::gateOn) > 0.5f ? 0.0f : 1.0f);
+
+    const auto at = gateDoor.getBoundsInParent().toFloat();
+    sayForAMoment ({ at.getCentreX(), at.getY() - 22.0f }, getParam (params::gateOn) > 0.5f ? "GATE ON" : "GATE OFF");
+}
+
+/** The name tag, for a moment and a half — unless something says more meanwhile. */
+void Console::sayForAMoment (juce::Point<float> at, const juce::String& words)
+{
+    nameTag.show (at, words);
     juce::Timer::callAfterDelay (1500, [safe = juce::Component::SafePointer<Console> (this), shown = ++humTagShown]
     {
         if (safe != nullptr && safe->humTagShown == shown)
@@ -674,6 +691,20 @@ void Console::chooseDriveSteps (bool steps)
     drive.settle();
 }
 
+/** THE HUM'S FOUR LINES (ui/HumMenu.h) — the switch, which flips as the H key does and says so on the
+    tag, and the three modes. */
+void Console::addHumLines (juce::PopupMenu& menu)
+{
+    for (const auto& line : prefs::humMenu (amp.humHeard()))
+        addChoice (menu, line.text, line.ticked, [line] (Console& e)
+        {
+            if (line.isSwitch)
+                e.flipHum();
+            else
+                prefs::humPick (line);
+        });
+}
+
 void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool ticked,
                               std::function<void (Console&)> picked, bool enabled)
 {
@@ -703,9 +734,7 @@ void Console::showInputMenu()
         addChoice (menu, decibels (db), db == leverZero, [db] (Console& e) { e.chooseLeverZero (db); });
 
     menu.addSectionHeader ("HUM");
-    const int heard = amp.humHeard();
-    for (const auto h : prefs::humChoices)
-        addChoice (menu, prefs::humLabel (h, heard), h == prefs::hum(), [h] (Console&) { prefs::setHum (h); });
+    addHumLines (menu);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
@@ -1170,10 +1199,15 @@ bool Console::keyPressed (const juce::KeyPress& key)
                 return true;
             }
 
-        // H: the hum, OFF and back — Р under a Russian layout, the same key.
+        // H: the hum, OFF and back — Р under a Russian layout, the same key. G: the gate — П.
         if (letter == 'H' || letter == 0x0420)
         {
             flipHum();
+            return true;
+        }
+        if (letter == 'G' || letter == 0x041f)
+        {
+            flipGate();
             return true;
         }
     }
@@ -1349,13 +1383,11 @@ void Console::showSettingsMenu()
     menu.addSubMenu ("DRIVE turns  " + driveWays[driveSteps ? 1 : 0], way);
 
     // The hum is the machine's, like the lever's zero (prefs::hum): every window of this product and
-    // every engine behind one follow the choice from their next look and their next block. AUTO's
-    // line says what it decided, once it has.
-    const int heard = amp.humHeard();
+    // every engine behind one follow the choice from their next look and their next block. The title
+    // says where it stands — AUTO's state with it.
     juce::PopupMenu hum;
-    for (const auto h : prefs::humChoices)
-        addChoice (hum, prefs::humLabel (h, heard), h == prefs::hum(), [h] (Console&) { prefs::setHum (h); });
-    menu.addSubMenu ("HUM  " + prefs::humLabel (prefs::hum(), heard), hum);
+    addHumLines (hum);
+    menu.addSubMenu ("HUM  " + prefs::humState (amp.humHeard()), hum);
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)

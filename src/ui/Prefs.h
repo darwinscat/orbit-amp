@@ -252,7 +252,7 @@ inline void setHum (Hum h)
     }
 }
 
-/** The four a menu offers, in the order it offers them. */
+/** The four the machine may hold. A menu offers them as a switch and three modes (HumMenu.h). */
 inline constexpr Hum humChoices[] = { Hum::off, Hum::hz50, Hum::hz60, Hum::automatic };
 
 /** A choice's line in a menu. AUTO's says what it decided once it has — `heard` is the family the

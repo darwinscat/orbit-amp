@@ -318,10 +318,14 @@ private:
     void chooseDriveSteps (bool steps);
 
     void showInputMenu();           // the INPUT column: the lever's zero, and the hum
+    void addHumLines (juce::PopupMenu&);    // the hum's switch and its modes, as every menu has them
 
     // THE HUM'S QUICK A/B: H flips it between OFF and the mode OFF bypasses (prefs::humFlip), and the
-    // name tag over INPUT says for a moment which it is now.
+    // name tag over INPUT says for a moment which it is now. G does the same for the gate's On — the
+    // sound's switch, so an undo step — and the tag over GATE says it.
     void flipHum();
+    void flipGate();
+    void sayForAMoment (juce::Point<float> at, const juce::String& words);
     int  humTagShown = 0;           // which flip the tag still speaks for
     void showTunerMenu();           // the tuner: whether it listens, and whether the amp is silent meanwhile
     void showTunerState();          // ...both written on its glass
