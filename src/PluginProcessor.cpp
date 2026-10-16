@@ -24,7 +24,7 @@ static_assert ((int) prefs::Hum::off       == (int) felitronics::dehum::Mains::O
             && (int) prefs::Hum::automatic == (int) felitronics::dehum::Mains::Auto);
 
 // ...and so are the stage's verdict on a learn and the one the link hands to the windows.
-using StageVerdict = felitronics::dehum::HumRemover<>::LearnVerdict;
+using StageVerdict = AmpProcessor::HumStage::LearnVerdict;
 static_assert ((int) StageVerdict::Learned      == core::HumLearnLink::learned
             && (int) StageVerdict::Disturbed    == core::HumLearnLink::disturbed
             && (int) StageVerdict::NothingHeard == core::HumLearnLink::nothingHeard
@@ -183,6 +183,9 @@ AmpProcessor::AmpProcessor()
     // settings file, and the audio thread must only ever meet the cached atomic.
     humWanted = &prefs::humCache();
     humLastOn = &prefs::humLastOnCache();
+    humPlayWanted  = &prefs::humtune::playCache();
+    humQuietWanted = &prefs::humtune::quietCache();
+    humUpToWanted  = &prefs::humtune::upToCache();
 
     // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
     // burst commits about 0.4 s after you stop moving.
@@ -844,6 +847,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         const int wanted = humWanted->load (std::memory_order_relaxed);
         auto p = humStage.params();
         p.mains = (felitronics::dehum::Mains) (wanted != (int) prefs::Hum::off ? wanted : humLastOn->load (std::memory_order_relaxed));
+        humTunedPlay = humTunedQuiet = humTunedUpTo = -1.0f;      // handed over whatever it was before
+        tuneHum (p);
         humStage.setParams (p);
         const bool ready = humStage.prepare (sampleRate, block, getTotalNumInputChannels());
         humApplied = (int) p.mains;
@@ -851,7 +856,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         humShown   = wanted;
         humDry.setSize (juce::jmax (1, getTotalNumInputChannels()), block, false, true, true);
         humMix     = wanted != (int) prefs::Hum::off ? 1.0f : 0.0f;
-        humMixStep = (float) (1.0 / (felitronics::dehum::HumRemover<>::kRampSeconds * sampleRate));
+        humMixStep = (float) (1.0 / (HumStage::kRampSeconds * sampleRate));
         humLearnSamples = -1;    // a prepare is a restart, and a restart ends a learn
         humRate = sampleRate;
         humInForce.store (ready ? wanted : (int) prefs::Hum::off, std::memory_order_relaxed);
@@ -861,7 +866,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         humFamily.store (0, std::memory_order_relaxed);
         humHz.store (0.0f, std::memory_order_relaxed);
         humLocked.store (false, std::memory_order_relaxed);
-        humDb.store ((float) felitronics::dehum::HumRemover<>::kSilentDb, std::memory_order_relaxed);
+        humDb.store ((float) HumStage::kSilentDb, std::memory_order_relaxed);
     }
 
     // The mode's environment default — see modeAutoValue.
@@ -1110,6 +1115,45 @@ void AmpProcessor::sanitiseParameters() noexcept
             guard.value->store (guard.fallback, std::memory_order_relaxed);
 }
 
+/** HOW HARD THE STAGE WORKS — TEMPORARY, for tuning by ear (ui/HumTuning.h). The machine's three
+    numbers into the stage's params when any of them moved, and false when none did. The widths take
+    effect at once; a new reach is a new set of harmonics, which the stage ramps out and learns again.
+    At its default the reach is the stage's own — 24 harmonics under a 2 kHz bound — so the defaults
+    are the stage as it ran before; any other reach runs every harmonic the stage has, under a bound
+    that keeps, at 50 Hz, the last one at or under the frequency named (the stage reckons a harmonic at
+    the top of its lock range). */
+bool AmpProcessor::tuneHum (felitronics::dehum::HumRemoverParams& p) noexcept
+{
+    const float play  = humPlayWanted->load (std::memory_order_relaxed);
+    const float quiet = humQuietWanted->load (std::memory_order_relaxed);
+    const float upTo  = humUpToWanted->load (std::memory_order_relaxed);
+    if (juce::exactlyEqual (play, humTunedPlay) && juce::exactlyEqual (quiet, humTunedQuiet) && juce::exactlyEqual (upTo, humTunedUpTo))
+        return false;
+    humTunedPlay = play;
+    humTunedQuiet = quiet;
+    humTunedUpTo = upTo;
+
+    const felitronics::dehum::HumRemoverParams own;
+    p.bandwidthHz      = (double) play;
+    p.learnBandwidthHz = (double) quiet;
+    if (upTo <= prefs::humtune::upToDefault)
+    {
+        p.harmonics = own.harmonics;
+        p.maxHz     = own.maxHz;
+    }
+    else
+    {
+        p.harmonics = HumStage::kMaxHarmonics;
+        p.maxHz     = (double) upTo * (50.0 + HumStage::kMaxLockRangeHz) / 50.0;
+    }
+
+    humTuned.playHz.store ((float) p.bandwidthHz, std::memory_order_relaxed);
+    humTuned.quietHz.store ((float) p.learnBandwidthHz, std::memory_order_relaxed);
+    humTuned.maxHz.store ((float) p.maxHz, std::memory_order_relaxed);
+    humTuned.harmonics.store (p.harmonics, std::memory_order_relaxed);
+    return true;
+}
+
 void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
 {
     // Refused at prepare: nothing to run, and the mode in force already says OFF.
@@ -1123,14 +1167,21 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
     // comes off at once, by what was learned, with no decision to make again and nothing to relearn.
     // While it is bypassed the mode in force says OFF, and LEARN is the gate's alone.
     const int wanted = humWanted->load (std::memory_order_relaxed);
-    if (const int runs = wanted != (int) prefs::Hum::off ? wanted : humLastOn->load (std::memory_order_relaxed);
-        runs != humApplied)
     {
         auto p = humStage.params();
-        p.mains = (felitronics::dehum::Mains) runs;
-        humStage.setParams (p);
-        humApplied = runs;
-        humRuns.store (runs, std::memory_order_relaxed);
+        bool moved = false;
+        if (const int runs = wanted != (int) prefs::Hum::off ? wanted : humLastOn->load (std::memory_order_relaxed);
+            runs != humApplied)
+        {
+            p.mains = (felitronics::dehum::Mains) runs;
+            humApplied = runs;
+            humRuns.store (runs, std::memory_order_relaxed);
+            moved = true;
+        }
+        if (tuneHum (p))
+            moved = true;
+        if (moved)
+            humStage.setParams (p);
     }
     if (wanted != humShown)
     {
@@ -1202,6 +1253,7 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
     humFamily.store (family == felitronics::dehum::Mains::Hz50 ? 50 : family == felitronics::dehum::Mains::Hz60 ? 60 : 0,
                      std::memory_order_relaxed);
     humHz.store ((float) humStage.mainsHz(), std::memory_order_relaxed);
+    humTuned.active.store (humStage.activeHarmonics(), std::memory_order_relaxed);
     humLocked.store (humStage.locked(), std::memory_order_relaxed);
     humDb.store ((float) humStage.humDb(), std::memory_order_relaxed);
 

@@ -13,6 +13,7 @@
 #include "../device/IrLibrary.h"
 #include "../ui/AboutConfig.h"
 #include "../ui/HumMenu.h"
+#include "../ui/HumTuning.h"
 #include "../ui/LoadBreakdown.h"
 #include "../ui/Prefs.h"
 
@@ -703,6 +704,17 @@ void Console::addHumLines (juce::PopupMenu& menu)
             else
                 prefs::humPick (line);
         });
+
+    // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
+    // its title.
+    for (const auto& knob : prefs::humtune::knobs())
+    {
+        juce::PopupMenu values;
+        for (int i = 0; i < knob.count; ++i)
+            addChoice (values, knob.say (knob.values[i]), juce::exactlyEqual (knob.values[i], knob.now),
+                       [choose = knob.choose, v = knob.values[i]] (Console&) { choose (v); });
+        menu.addSubMenu (juce::String (knob.name) + "  " + knob.say (knob.now), values);
+    }
 }
 
 void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool ticked,

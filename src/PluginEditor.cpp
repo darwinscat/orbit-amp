@@ -4,6 +4,7 @@
 #include "PluginEditor.h"
 
 #include "ui/HumMenu.h"
+#include "ui/HumTuning.h"
 #include "ui/Prefs.h"
 
 namespace orbitamp
@@ -571,14 +572,29 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
     for (size_t i = 0; i < lines.size(); ++i)
         m.addItem ((int) i + 1, lines[i].text.toUpperCase(), true, lines[i].ticked);
 
+    // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
+    // its title; knob k's values answer as 100 (k + 1) + their index.
+    const auto knobs = prefs::humtune::knobs();
+    for (size_t k = 0; k < knobs.size(); ++k)
+    {
+        juce::PopupMenu values;
+        for (int i = 0; i < knobs[k].count; ++i)
+            values.addItem (100 * ((int) k + 1) + i, knobs[k].say (knobs[k].values[i]).toUpperCase(), true,
+                            juce::exactlyEqual (knobs[k].values[i], knobs[k].now));
+        m.addSubMenu ((juce::String (knobs[k].name) + "  " + knobs[k].say (knobs[k].now)).toUpperCase(), values);
+    }
+
     // Nothing of this window's is reached from the answer, so a window closed under the open menu
     // leaves nothing to guard.
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [lines] (int r)
+                     [lines, knobs] (int r)
                      {
                          if (r > 0 && r <= (int) lines.size())
                              prefs::humPick (lines[(size_t) r - 1]);
+                         else if (const int k = r / 100 - 1, i = r % 100;
+                                  k >= 0 && k < (int) knobs.size() && i < knobs[(size_t) k].count)
+                             knobs[(size_t) k].choose (knobs[(size_t) k].values[i]);
                      });
 }
 

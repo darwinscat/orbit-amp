@@ -38,6 +38,9 @@
 //      or under OFF on the mode OFF bypasses; a mode picked under OFF switches the hum on in it.
 //  13. A second input the chain never hears — MONO and STEREO SPACE play channel 1 alone — does not
 //      keep AUTO from deciding: a -60 dBFS hum beside an empty input with its gain up, hissing at -50.
+//  14. HOW HARD IT WORKS — the temporary tuning: its defaults are the stage as it ran before, bit for
+//      bit (the stage of 64 harmonics, its own params, beside the product's of 128), and every choice of
+//      the three reaches the stage's params.
 //
 // Checks 1-5 set the mode through the cached atomic the engine reads (prefs::humCache) and leave the
 // settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
@@ -791,6 +794,100 @@ int main()
         stream.secondHiss = -1.0;
         stream.humGain    = 1.0;
         set (amp, params::stereoMode, (float) orbitamp::params::StereoMode::stereo);
+    }
+
+    // 14 · THE TUNING.
+    {
+        namespace tune = orbitamp::prefs::humtune;
+        const felitronics::dehum::HumRemoverParams own;
+        machine (Hum::automatic);
+        set (amp, params::inTrim, 0.0f);
+        set (amp, params::stereoMode, (float) orbitamp::params::StereoMode::stereo);
+
+        // The defaults, against the stage as it ran before: its own params, its own 64 harmonics.
+        amp.prepareToPlay (sampleRate, blockSize);
+        auto before = std::make_unique<felitronics::dehum::HumRemover<64>>();
+        before->setParams (own);
+        const bool ready = before->prepare (sampleRate, blockSize, 2);
+        juce::AudioBuffer<float> buf (2, blockSize), was (2, blockSize);
+        juce::MidiBuffer midi;
+        auto tap = std::make_unique<std::array<float, orbitamp::core::TunerTap::size>>();
+        long long differs = -1, n = 0;
+        std::uint32_t seed = 4242u;
+        for (int b = 0; b < (int) (5.0 * sampleRate) / blockSize; ++b)
+        {
+            for (int i = 0; i < blockSize; ++i, ++n)
+            {
+                double h0 = 0.0, h1 = 0.0;
+                for (int k = 1; k <= 10; ++k)
+                {
+                    const double ph = 2.0 * pi * k * 50.03 * (double) n / sampleRate + 0.7 * k;
+                    h0 += 0.03 / k * std::sin (ph);
+                    h1 += 0.024 / k * std::sin (ph + 0.3);
+                }
+                seed = seed * 1664525u + 1013904223u;
+                const double hiss = 1.0e-5 * ((double) (seed >> 8) / 8388608.0 - 1.0);
+                buf.setSample (0, i, (float) (h0 + hiss));
+                buf.setSample (1, i, (float) (h1 + hiss));
+            }
+            was.makeCopyOf (buf, true);
+            amp.processBlock (buf, midi);
+            (void) before->process (was.getArrayOfWritePointers(), 2, blockSize);
+            amp.tunerTap.read (*tap);
+            for (int i = 0; i < blockSize && differs < 0; ++i)
+                if (std::memcmp (&(*tap)[(size_t) (orbitamp::core::TunerTap::size - blockSize + i)], was.getReadPointer (0) + i, sizeof (float)) != 0)
+                    differs = n - blockSize + i;
+        }
+        report ("the tuning's defaults are the stage as it was",
+                ready && differs < 0 && juce::exactlyEqual (amp.humTuned.playHz.load(), (float) own.bandwidthHz)
+                    && juce::exactlyEqual (amp.humTuned.quietHz.load(), (float) own.learnBandwidthHz)
+                    && amp.humTuned.harmonics.load() == own.harmonics && juce::exactlyEqual (amp.humTuned.maxHz.load(), (float) own.maxHz)
+                    && amp.humTuned.active.load() == 24,
+                differs < 0 ? juce::String::formatted ("5 s bit for bit; %.2f / %.0f Hz, %d harmonics under %.0f Hz, %d running",
+                                                       amp.humTuned.playHz.load(), amp.humTuned.quietHz.load(), amp.humTuned.harmonics.load(),
+                                                       amp.humTuned.maxHz.load(), amp.humTuned.active.load())
+                            : juce::String::formatted ("differs at sample %lld", differs));
+
+        // Every choice, read back off what the stage was handed.
+        const auto file = orbitamp::prefs::store().file();
+        if (ownHome.empty() || ! file.isAChildOf (juce::File (juce::String (ownHome))))
+        {
+            std::printf ("%-52s skip  the settings are not in a home of the gate's own\n", "every tuning choice reaches the stage");
+        }
+        else
+        {
+            bool widths = true, reach = true;
+            juce::String said;
+            for (const float v : tune::playWidths)
+            {
+                tune::setPlay (v);
+                stream.play (2.0 * blockSize / sampleRate, heard);
+                widths = widths && juce::exactlyEqual (amp.humTuned.playHz.load(), v);
+            }
+            for (const float v : tune::quietWidths)
+            {
+                tune::setQuiet (v);
+                stream.play (2.0 * blockSize / sampleRate, heard);
+                widths = widths && juce::exactlyEqual (amp.humTuned.quietHz.load(), v);
+            }
+            const int harmonicsAt50[] = { 24, 40, 64, 96, 128 };
+            for (size_t i = 0; i < std::size (tune::upTos); ++i)
+            {
+                tune::setUpTo (tune::upTos[i]);
+                stream.play (4.0 * blockSize / sampleRate, heard);
+                reach = reach && amp.humTuned.active.load() == harmonicsAt50[i];
+                said << tune::kHz (tune::upTos[i]) << " -> " << amp.humTuned.active.load() << "; ";
+            }
+            tune::setPlay (tune::playDefault);
+            tune::setQuiet (tune::quietDefault);
+            tune::setUpTo (tune::upToDefault);
+            stream.play (2.0 * blockSize / sampleRate, heard);
+            report ("every tuning choice reaches the stage", widths && reach && amp.humTuned.harmonics.load() == own.harmonics,
+                    "harmonics running at 50 Hz: " + said);
+            report ("...and the tuning's words", tune::hz (0.25f) == "0.25 Hz" && tune::hz (0.5f) == "0.5 Hz" && tune::hz (3.0f) == "3 Hz"
+                                                   && tune::kHz (1200.0f) == "1.2 kHz" && tune::kHz (2000.0f) == "2 kHz",
+                    tune::hz (0.25f) + " / " + tune::hz (3.0f) + " / " + tune::kHz (1200.0f) + " / " + tune::kHz (6400.0f));
+        }
     }
 
     machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store().get (orbitamp::prefs::humMains, "auto").toString()));

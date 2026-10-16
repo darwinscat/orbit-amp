@@ -6,6 +6,7 @@
 #include "Product.h"
 #include "Parameters.h"
 #include "ui/Prefs.h"
+#include "ui/HumTuning.h"
 #include "core/CapturedBlock.h"
 #include "core/DemoPlayer.h"
 #include "core/ScopeTap.h"
@@ -76,6 +77,9 @@ public:
         nothing at all. I wrote one anyway, on a reading of the wrong destructor, and the review
         caught it. */
     ~AmpProcessor() override { apvts.state.removeListener (this); }
+
+    /** The hum stage's type (removeHum): room for 128 harmonics, 6.4 kHz at 50 Hz. */
+    using HumStage = felitronics::dehum::HumRemover<128>;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -909,8 +913,9 @@ private:
     /** The hum stage, from felitronics-core — first on the input, ahead of the trim (processChunk says
         why). It takes its mode through `humWanted`, the machine's cached setting, and is handed it on
         the audio thread when it differs from `humApplied`, the one it was last given; both are the
-        audio thread's alone once prepareToPlay has run. */
-    felitronics::dehum::HumRemover<> humStage;
+        audio thread's alone once prepareToPlay has run. A hundred and twenty-eight harmonics, so a hum
+        can be followed up to 6.4 kHz at 50 Hz; how many of them run is the tuning's (tuneHum). */
+    HumStage humStage;
     const std::atomic<int>* humWanted = nullptr;
     const std::atomic<int>* humLastOn = nullptr;    // what OFF bypasses (prefs::humLastOn)
     int humApplied = -1;        // the mode the stage runs
@@ -918,6 +923,13 @@ private:
     // OFF's crossfade: the input as it came, copied before the stage (sized in prepareToPlay), and how
     // much of the stage's output is heard, ramped a sample at a time.
     juce::AudioBuffer<float> humDry;
+    // How hard the stage works — TEMPORARY, for tuning by ear (ui/HumTuning.h): the machine's three
+    // cached numbers, and the ones the stage was last given.
+    const std::atomic<float>* humPlayWanted  = nullptr;
+    const std::atomic<float>* humQuietWanted = nullptr;
+    const std::atomic<float>* humUpToWanted  = nullptr;
+    float humTunedPlay = -1.0f, humTunedQuiet = -1.0f, humTunedUpTo = -1.0f;
+    bool tuneHum (felitronics::dehum::HumRemoverParams&) noexcept;
     float humMix = 1.0f, humMixStep = 1.0f;
     long long humLearnSamples = -1;    // how long the learn now running has run; -1 while none does
     double    humRate = 48000.0;       // the rate it is counted at — the one prepareToPlay was given
@@ -995,7 +1007,15 @@ public:
     std::atomic<int>   humFamily  { 0 };
     std::atomic<float> humHz      { 0.0f };
     std::atomic<bool>  humLocked  { false };
-    std::atomic<float> humDb      { (float) felitronics::dehum::HumRemover<>::kSilentDb };
+    std::atomic<float> humDb      { (float) HumStage::kSilentDb };
+
+    /** What the stage was last tuned to, as it was handed over — TEMPORARY, with the tuning — and how
+        many harmonics it runs now, published every block. */
+    struct HumTuned
+    {
+        std::atomic<float> playHz { 0.0f }, quietHz { 0.0f }, maxHz { 0.0f };
+        std::atomic<int>   harmonics { 0 }, active { 0 };
+    } humTuned;
 
     /** The hum stage's LEARN, asked for by the gate's (core/GateLearn.h) and served at the start of the
         next block — see removeHum. */
