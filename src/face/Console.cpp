@@ -621,6 +621,20 @@ void Console::chooseLeverZero (int db)
     settleOnSettings();
 }
 
+void Console::flipHum()
+{
+    endTapping();
+    prefs::setHum (prefs::humFlip());
+
+    const auto at = inFader.getBoundsInParent().toFloat();
+    nameTag.show ({ at.getCentreX(), at.getY() - 24.0f }, prefs::humTag (prefs::hum()));
+    juce::Timer::callAfterDelay (1500, [safe = juce::Component::SafePointer<Console> (this), shown = ++humTagShown]
+    {
+        if (safe != nullptr && safe->humTagShown == shown)
+            safe->nameTag.show ({}, {});
+    });
+}
+
 void Console::sayLever (ColumnFader& fader, const juce::String& name, std::function<float()> reading)
 {
     const auto say = [this, &fader, name, reading]
@@ -1149,6 +1163,13 @@ bool Console::keyPressed (const juce::KeyPress& key)
                 amp.history.switchTo (r);
                 return true;
             }
+
+        // H: the hum, OFF and back — Р under a Russian layout, the same key.
+        if (letter == 'H' || letter == 0x0420)
+        {
+            flipHum();
+            return true;
+        }
     }
 
     return false;

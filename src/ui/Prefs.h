@@ -270,4 +270,14 @@ inline juce::String humLabel (Hum h, int heard)
                                       : juce::String ("Auto");
 }
 
+/** THE QUICK A/B: OFF from any mode, and from OFF the mode it bypasses (humLastOn). */
+inline Hum humFlip() { return hum() == Hum::off ? humLastOn() : Hum::off; }
+
+/** What a face says for a moment after the flip. */
+inline juce::String humTag (Hum h)
+{
+    return h == Hum::off ? juce::String ("HUM OFF")
+                         : juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 ") + (h == Hum::automatic ? juce::String ("Auto") : humLabel (h, 0));
+}
+
 } // namespace orbitamp::prefs

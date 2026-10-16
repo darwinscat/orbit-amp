@@ -31,6 +31,8 @@
 //   9. OFF IS A BYPASS THAT KEEPS WHAT WAS LEARNED. AUTO locked, OFF for two seconds, AUTO again: the
 //      hum is 40 dB down within 50 ms of the way back, AUTO's decision never moved, and neither switch
 //      bends the signal — the correction's second difference stays under -60 dBFS both ways.
+//  10. The faces' quick A/B (the H key): OFF from a mode, and from OFF back to that mode — kept on the
+//      machine beside the mode — with the words the face's tag says for a moment.
 //
 // Checks 1-5 set the mode through the cached atomic the engine reads (prefs::humCache) and leave the
 // settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
@@ -612,8 +614,6 @@ int main()
         stream.hiss = Stream::hissRms;
     }
 
-    machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store().get (orbitamp::prefs::humMains, "auto").toString()));
-
     // 9 · OFF AND BACK: A/B, NOT A RESTART.
     {
         // The correction the input path took off, sample by sample (the trim is at 0 dB here), and the
@@ -661,6 +661,37 @@ int main()
         report ("...neither switch bends the signal", bendOff <= -60.0 && bendBack <= -60.0,
                 juce::String::formatted ("second difference %.1f dBFS off, %.1f dBFS back", bendOff, bendBack));
     }
+
+    // 10 · THE QUICK A/B.
+    {
+        namespace prefs = orbitamp::prefs;
+        const auto file = prefs::store().file();
+        if (ownHome.empty() || ! file.isAChildOf (juce::File (juce::String (ownHome))))
+        {
+            std::printf ("%-52s skip  the settings are not in a home of the gate's own\n", "H: OFF and back to the mode it bypasses");
+        }
+        else
+        {
+            prefs::setHum (Hum::hz50);
+            const Hum first = prefs::humFlip();
+            prefs::setHum (first);
+            stream.play (0.1, heard);
+            const Hum offInForce = inForce (amp);
+            const Hum second = prefs::humFlip();
+            prefs::setHum (second);
+            stream.play (0.1, heard);
+            const auto lastOnDisk = juce::JSON::parse (file).getProperty (prefs::humLastOnKey, {}).toString();
+            report ("H: OFF and back to the mode it bypasses", first == Hum::off && offInForce == Hum::off
+                                                                 && second == Hum::hz50 && inForce (amp) == Hum::hz50 && lastOnDisk == "50",
+                    juce::String ("50 Hz -> ") + name (first) + " -> " + name (second) + ", kept on the machine as \"" + lastOnDisk + "\"");
+        }
+        report ("...and the tag's words", prefs::humTag (Hum::off) == "HUM OFF"
+                                            && prefs::humTag (Hum::hz50) == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 50 Hz")
+                                            && prefs::humTag (Hum::automatic) == juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 Auto"),
+                prefs::humTag (Hum::hz50) + " / " + prefs::humTag (Hum::automatic) + " / " + prefs::humTag (Hum::off));
+    }
+
+    machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store().get (orbitamp::prefs::humMains, "auto").toString()));
 
     if (failures == 0)
         std::printf ("\nall hum checks passed\n");

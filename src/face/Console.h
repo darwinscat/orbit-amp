@@ -317,7 +317,12 @@ private:
     void chooseLeverZero (int db);
     void chooseDriveSteps (bool steps);
 
-    void showInputMenu();           // the INPUT column: the lever's zero
+    void showInputMenu();           // the INPUT column: the lever's zero, and the hum
+
+    // THE HUM'S QUICK A/B: H flips it between OFF and the mode OFF bypasses (prefs::humFlip), and the
+    // name tag over INPUT says for a moment which it is now.
+    void flipHum();
+    int  humTagShown = 0;           // which flip the tag still speaks for
     void showTunerMenu();           // the tuner: whether it listens, and whether the amp is silent meanwhile
     void showTunerState();          // ...both written on its glass
 

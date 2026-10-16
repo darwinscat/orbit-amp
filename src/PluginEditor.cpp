@@ -389,6 +389,15 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // H: the hum, OFF and back (prefs::humFlip) — Р under a Russian layout, the same key.
+    if (! key.getModifiers().isAnyModifierKeyDown())
+        if (const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
+            letter == 'H' || letter == 0x0420)
+        {
+            prefs::setHum (prefs::humFlip());
+            return true;
+        }
+
     return false;
 }
 
