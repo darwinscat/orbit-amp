@@ -1254,6 +1254,12 @@ add_executable(orbitamp_tuner_test tests/TunerTests.cpp)
 target_include_directories(orbitamp_tuner_test PRIVATE src)
 target_compile_features(orbitamp_tuner_test PRIVATE cxx_std_20)
 
+# Same gate for the gate's LEARN: known traces in, the threshold out — and the arithmetic held to
+# what OrbitAmp's GateConsole did before the faces came to share it. core::GateLearn is plain C++.
+add_executable(orbitamp_gatelearn_test tests/GateLearnTests.cpp)
+target_include_directories(orbitamp_gatelearn_test PRIVATE src)
+target_compile_features(orbitamp_gatelearn_test PRIVATE cxx_std_20)
+
 # Same gate for the reverb. It links juce_audio_basics because that stage is JUCE-bound by
 # construction (Freeverb) — which is exactly why it is a SEPARATE target: the tone-stack gate above
 # stays JUCE-free, and the split makes the dependency visible instead of quietly universal.

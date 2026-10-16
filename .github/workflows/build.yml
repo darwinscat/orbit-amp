@@ -77,8 +77,8 @@ jobs:
         if: always()
         run: sccache --show-stats
 
-      # The acceptance gates — OrbitAmp's nine, the same ones the local release runs, and each product's own. Console apps land in
-      # <name>_artefacts/Release; the two plain executables sit wherever the generator put them.
+      # The acceptance gates — OrbitAmp's ten, the same ones the local release runs, and each product's own. Console apps land in
+      # <name>_artefacts/Release; the three plain executables sit wherever the generator put them.
       - name: Gates
         shell: bash
         run: |
@@ -136,7 +136,7 @@ jobs:
           for t in captured chain library reverb ribbon set factory; do
             run_gate "$t" "$(find "build/orbitamp_${t}_test_artefacts" -type f -name '*.exe' | head -1)"
           done
-          for t in eqlink tuner; do
+          for t in eqlink tuner gatelearn; do
             run_gate "$t" "$(find build -maxdepth 2 -type f -name "orbitamp_${t}_test.exe" | head -1)"
           done
           # The cockpit's own: its set as it leaves the binary, laid out in a folder of the gate's —
