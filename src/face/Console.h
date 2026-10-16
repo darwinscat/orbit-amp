@@ -7,6 +7,7 @@
 #include "../channels/Engine.h"
 #include "../channels/Presets.h"
 #include "Controls.h"
+#include "LearnGlass.h"
 #include "Picture.h"
 #include "Sheet.h"
 
@@ -356,6 +357,14 @@ private:
 
 protected:
     TunerFace tuner;
+
+private:
+    // LEARN, from GATE's menu: the gate's own measurement, the one OrbitAmp's GATE runs (ui/GateLearner.h)...
+    GateLearner learner { amp.apvts, amp.gateKeyDb };
+
+protected:
+    // ...and its picture, which the product lays over a glass of its own and places there (LearnGlass.h).
+    LearnGlass learnGlass { learner };
 
 private:
     Emblem emblem;

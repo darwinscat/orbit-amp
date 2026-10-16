@@ -378,6 +378,12 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
                                                (int) prefs::store().get (screenKey, (int) Monitor::View::spectrum)));
 
+    // LEARN, from GATE's menu, takes the picture's place while it runs — the parked warning's too.
+    addToStage (learnGlass);
+    learnGlass.setBounds (navPicture.toNearestInt());
+    learnGlass.inset = { 8.0f, 4.0f };      // the top line's words start where the header's do
+    learnGlass.onShow = [this] (bool up) { screen.setAlpha (up ? 0.0f : 1.0f); parkSign.setAlpha (up ? 0.0f : 1.0f); };
+
     // Parked, the warning stands large in the middle of the screen, over the picture dimmed.
     addToStage (parkSign);
     parkSign.setVisible (false);      // showSelector says when
