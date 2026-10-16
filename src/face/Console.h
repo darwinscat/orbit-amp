@@ -173,10 +173,6 @@ protected:
     /** TURBO's controller, thrown on or off. */
     virtual void turboChange (bool /*thrown*/) {}
 
-    /** Whether the face's TURBO pushes the capture — the cockpit's does — so that how hard it pushes is
-        among the settings. */
-    virtual bool turboPushesCapture() const { return false; }
-
     /** The WINDOW section the settings menu opens with: what the product's window shows, and full
         screen; then whatever else is the product's to set there. */
     virtual void addWindowSections (juce::PopupMenu&);

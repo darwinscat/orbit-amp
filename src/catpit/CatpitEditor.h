@@ -92,7 +92,6 @@ private:
     bool channelKey (const juce::KeyPress&) override;
     void programChange (int program) override;
     void turboChange (bool thrown) override;
-    bool turboPushesCapture() const override { return true; }
     void addWindowSections (juce::PopupMenu&) override;
     void stagePlaced() override { placeSky(); }
 

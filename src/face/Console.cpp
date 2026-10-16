@@ -742,8 +742,8 @@ void Console::showGateMenu()
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
 
-/** A RIGHT CLICK ON TURBO: how hard it pushes into the capture. The machine's to say, as in the settings
-    menu — every channel that has TURBO on comes back at the push in force. */
+/** A RIGHT CLICK ON TURBO: how hard it pushes into the capture — here only, the settings menu leaves it to
+    TURBO. The machine's to say: every channel that has TURBO on comes back at the push in force. */
 void Console::showTurboMenu()
 {
     endTapping();
@@ -1286,22 +1286,13 @@ void Console::showSettingsMenu()
     // What the product's window shows, and full screen.
     addWindowSections (menu);
 
-    // What the INPUT lever gives in the middle of its travel, how hard TURBO pushes where it pushes, and
-    // how DRIVE goes between the pack's captures.
+    // What the INPUT lever gives in the middle of its travel, and how DRIVE goes between the pack's
+    // captures. How hard TURBO pushes, where it pushes, is TURBO's own menu's (showTurboMenu).
     menu.addSectionHeader ("INPUT");
     juce::PopupMenu zero;
     for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
         addChoice (zero, decibels (db), db == leverZero, [db] (Console& e) { e.chooseLeverZero (db); });
     menu.addSubMenu ("Lever's zero  " + decibels (leverZero), zero);
-
-    if (turboPushesCapture())
-    {
-        juce::PopupMenu push;
-        const int turboNow = juce::roundToInt (channels.turboDb());
-        for (const int db : turboPushes)
-            addChoice (push, decibels (db), db == turboNow, [db] (Console& e) { e.chooseTurbo (db); });
-        menu.addSubMenu ("TURBO adds  " + decibels (turboNow), push);
-    }
 
     juce::PopupMenu way;
     for (int i = 0; i < driveWays.size(); ++i)
