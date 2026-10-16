@@ -354,6 +354,8 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // these two heights; across, the picture takes the windshield's whole width and runs out under the
     // frame on both sides rather than stopping short of it.
     monitor.setBand ({ 0.0f, 100.0f - windshield.getY(), windshield.getWidth(), 134.0f });
+    // Over the stars a flat line in a pause is a scratch on the glass: SHAPE goes out with the sound.
+    monitor.shapeFadesInSilence = true;
 
     // The throttle picks the channel — its pack, and everything that channel was left with.
     addToStage (lever);

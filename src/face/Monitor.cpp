@@ -14,6 +14,13 @@ namespace
 {
     constexpr int preampBlock   = 1;     // the processor's second captured block: the one the tone stack follows
     constexpr double displayRate = 48000.0;
+
+    // SHAPE in silence: what counts as quiet at the output, for how long, and how fast the line goes and
+    // comes back.
+    constexpr float  quietDb   = -60.0f;
+    constexpr double quietMs   = 100.0;
+    constexpr double fadeOutMs = 200.0;
+    constexpr double fadeInMs  = 30.0;
 }
 
 const juce::StringArray& Monitor::names()
@@ -46,10 +53,29 @@ juce::Rectangle<float> Monitor::band() const
     return area.isEmpty() ? getLocalBounds().toFloat() : area;
 }
 
+void Monitor::followSilence()
+{
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    const double dt  = lastTickMs > 0.0 ? juce::jlimit (0.0, 100.0, now - lastTickMs) : 0.0;
+    lastTickMs = now;
+
+    const bool quiet = amp.outDb.load (std::memory_order_relaxed) < quietDb;
+    if (! quiet)
+        quietSinceMs = -1.0;
+    else if (quietSinceMs < 0.0)
+        quietSinceMs = now;
+
+    const bool gone = quiet && now - quietSinceMs >= quietMs;
+    shapeShown = gone ? (float) juce::jmax (0.0, shapeShown - dt / fadeOutMs)
+                      : (float) juce::jmin (1.0, shapeShown + dt / fadeInMs);
+}
+
 void Monitor::timerCallback()
 {
     if (view != View::spectrum)
     {
+        if (view == View::shape && shapeFadesInSilence)
+            followSilence();
         repaint (band().getSmallestIntegerContainer());     // the scope pictures read their taps as they paint
         return;
     }
@@ -92,7 +118,17 @@ void Monitor::paint (juce::Graphics& g)
 
     const scope::Frame frame = amp.preamp.scope.read (dry, wet) ? scope::Frame { dry.data(), wet.data(), core::ScopeTap::size }
                                                                 : scope::Frame {};
-    if (view == View::shape)          scope::ShapeView::paint (g, r, frame);
+    if (view == View::shape)
+    {
+        if (! shapeFadesInSilence)
+            scope::ShapeView::paint (g, r, frame);
+        else if (shapeShown > 0.0f)
+        {
+            g.beginTransparencyLayer (shapeShown);
+            scope::ShapeView::paint (g, r, frame);
+            g.endTransparencyLayer();
+        }
+    }
     else if (view == View::envelope)  scope::EnvelopeView::paint (g, r, frame, true);
     else if (view == View::transfer)  scope::TransferView::paint (g, r, frame);
 }

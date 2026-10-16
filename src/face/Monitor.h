@@ -49,6 +49,11 @@ public:
     /** Where a picture lies, in this component's own space: by default all of it. */
     void setBand (juce::Rectangle<float> local) { area = local; repaint(); }
 
+    /** SHAPE GOES OUT IN SILENCE, where the face asks for it (the cockpit does): once what the amp puts
+        out has stayed under quietDb for quietMs, the line fades away and the glass is the sky alone; the
+        first sound brings it back at once, so an attack is never missed. */
+    bool shapeFadesInSilence = false;
+
     void paint (juce::Graphics&) override;
 
 private:
@@ -60,6 +65,11 @@ private:
 
     std::array<float, core::ScopeTap::size> dry {}, wet {};   // the scope tap, copied out once a frame
     scope::WaveView waveView;
+
+    float  shapeShown   = 1.0f;     // how much of SHAPE's line is up, 0..1
+    double quietSinceMs = -1.0;     // when the output last went quiet, or -1 while it sounds
+    double lastTickMs   = 0.0;
+    void followSilence();
 
     juce::Rectangle<float> band() const;      // where a picture lies
     void paintSpectrum (juce::Graphics&, juce::Rectangle<float>);
