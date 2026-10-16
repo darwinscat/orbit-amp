@@ -184,4 +184,47 @@ inline std::atomic<int>& tunerReferenceCache()
 inline int  tunerReference()            { return tunerReferenceCache().load (std::memory_order_relaxed); }
 inline void setTunerReference (int hz)  { hz = snapTunerReference (hz); tunerReferenceCache().store (hz, std::memory_order_relaxed); store().set (tunerReferenceHz, hz); }
 
+/** THE HUM AT THE INPUT — which mains the hum on this machine's input is made of: none to take off,
+    50 Hz, 60 Hz, or AUTO, which listens and decides. It is about the wall socket, the cable and the
+    pickups in this room, not about a sound, so it lives on the machine like the tuner's floor and a
+    preset never carries it: a preset that switched it off would put the hum back on every machine it
+    was loaded on. AUTO by default — on a rig with no hum it decides nothing and touches nothing.
+    The processor's audio thread reads it every block, so it is cached like the floor; the processor
+    touches the cache in its constructor, so the first read, which opens the file, is never the audio
+    thread's. Stored as a word, so the file says what it means; a word this build does not know reads
+    as AUTO. The order is felitronics::dehum::Mains's, and the processor holds it to that. */
+inline const juce::Identifier humMains { "hum_mains" };
+
+enum class Hum { off, hz50, hz60, automatic };
+inline constexpr Hum humDefault = Hum::automatic;
+
+inline const char* humWord (Hum h)
+{
+    switch (h)
+    {
+        case Hum::off:       return "off";
+        case Hum::hz50:      return "50";
+        case Hum::hz60:      return "60";
+        case Hum::automatic: break;
+    }
+    return "auto";
+}
+
+inline Hum humFromWord (const juce::String& word)
+{
+    for (const auto h : { Hum::off, Hum::hz50, Hum::hz60 })
+        if (word == humWord (h))
+            return h;
+    return humDefault;
+}
+
+inline std::atomic<int>& humCache()
+{
+    static std::atomic<int> cached { (int) humFromWord (store().get (humMains, humWord (humDefault)).toString()) };
+    return cached;
+}
+
+inline Hum  hum()            { return (Hum) humCache().load (std::memory_order_relaxed); }
+inline void setHum (Hum h)   { humCache().store ((int) h, std::memory_order_relaxed); store().set (humMains, humWord (h)); }
+
 } // namespace orbitamp::prefs

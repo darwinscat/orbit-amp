@@ -133,7 +133,7 @@ jobs:
             set -e
             return 1
           }
-          for t in captured chain library reverb ribbon set factory; do
+          for t in captured chain library reverb ribbon set factory hum; do
             run_gate "$t" "$(find "build/orbitamp_${t}_test_artefacts" -type f -name '*.exe' | head -1)"
           done
           for t in eqlink tuner gatelearn; do

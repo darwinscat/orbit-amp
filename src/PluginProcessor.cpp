@@ -16,6 +16,13 @@ AmpProcessor::FactorySet::FactorySet()
     layOutFactorySet();
 }
 
+// The machine's word for the hum and the stage's are one list in one order: the processor hands one
+// to the other as a number.
+static_assert ((int) prefs::Hum::off       == (int) felitronics::dehum::Mains::Off
+            && (int) prefs::Hum::hz50      == (int) felitronics::dehum::Mains::Hz50
+            && (int) prefs::Hum::hz60      == (int) felitronics::dehum::Mains::Hz60
+            && (int) prefs::Hum::automatic == (int) felitronics::dehum::Mains::Auto);
+
 namespace
 {
     /** The engine's parameters, and after them whatever the product adds of its own. */
@@ -163,6 +170,10 @@ AmpProcessor::AmpProcessor()
     // plugin at all, and an answer built out of the stages' constructor defaults is not an answer.
     updateDelaySettings();
     updateReverbSettings();
+
+    // The machine's hum setting, read here on the constructing thread: its first read opens the
+    // settings file, and the audio thread must only ever meet the cached atomic.
+    humWanted = &prefs::humCache();
 
     // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
     // burst commits about 0.4 s after you stop moving.
@@ -815,6 +826,23 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     gate.prepare (sampleRate, block, channels);
     gate.seedEnabled (linkWorks (params::rowGate));
 
+    // The hum stage over the channels the INPUT carries — the hum is the input's, and a channel the
+    // host only gives us to write into has none. Given the machine's mode before it is prepared, so
+    // the restart starts in it rather than ramping into it. A prepare it refuses (a layout with no
+    // input at all) leaves it OFF, and the mode in force says OFF rather than the machine's AUTO.
+    {
+        auto p = humStage.params();
+        p.mains = (felitronics::dehum::Mains) humWanted->load (std::memory_order_relaxed);
+        humStage.setParams (p);
+        const bool ready = humStage.prepare (sampleRate, block, getTotalNumInputChannels());
+        humApplied = (int) p.mains;
+        humInForce.store (ready ? humApplied : (int) prefs::Hum::off, std::memory_order_relaxed);
+        humFamily.store (0, std::memory_order_relaxed);
+        humHz.store (0.0f, std::memory_order_relaxed);
+        humLocked.store (false, std::memory_order_relaxed);
+        humDb.store ((float) felitronics::dehum::HumRemover<>::kSilentDb, std::memory_order_relaxed);
+    }
+
     // The mode's environment default — see modeAutoValue.
     if (! stateWasRestored)
     {
@@ -1061,6 +1089,37 @@ void AmpProcessor::sanitiseParameters() noexcept
             guard.value->store (guard.fallback, std::memory_order_relaxed);
 }
 
+void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
+{
+    // Refused at prepare: nothing to run, and the mode in force already says OFF.
+    if (! humStage.isPrepared())
+        return;
+
+    // The machine's mode, handed over here on the audio thread — the stage's threading contract —
+    // and only when it changed: a change of family ramps the old correction out and re-arms.
+    if (const int wanted = humWanted->load (std::memory_order_relaxed); wanted != humApplied)
+    {
+        auto p = humStage.params();
+        p.mains = (felitronics::dehum::Mains) wanted;
+        humStage.setParams (p);
+        humApplied = wanted;
+        humInForce.store (wanted, std::memory_order_relaxed);
+    }
+
+    // The input's channels and nothing past them; a host that asks for fewer this block stops the rest,
+    // which the stage keeps a model for and fades back in when they return.
+    const int numIn = juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels(), humStage.maxChannels());
+    [[maybe_unused]] const bool ran = humStage.process (buffer.getArrayOfWritePointers(), numIn, buffer.getNumSamples());
+    jassert (ran);
+
+    const auto family = humStage.detected();
+    humFamily.store (family == felitronics::dehum::Mains::Hz50 ? 50 : family == felitronics::dehum::Mains::Hz60 ? 60 : 0,
+                     std::memory_order_relaxed);
+    humHz.store ((float) humStage.mainsHz(), std::memory_order_relaxed);
+    humLocked.store (humStage.locked(), std::memory_order_relaxed);
+    humDb.store ((float) humStage.humDb(), std::memory_order_relaxed);
+}
+
 void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -1082,6 +1141,15 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // The demo replaces the input rather than mixing into it: a loop you can hear over your own
     // playing is a loop you cannot judge anything by.
     demo.fill (buffer);
+
+    // THE HUM COMES OFF BEFORE ANYTHING ELSE TOUCHES THE INPUT — the trim included. Mains hum is in
+    // the signal the interface hands over, at the level the interface hands it over at; a stage after
+    // the trim would hear a different hum every time the INPUT lever moved, or a preset moved it, and
+    // the hum would be back for as long as the stage took to learn the new one. Here the lever, the
+    // presets and everything after them only ever meet an input the hum has already left. The demo
+    // loop stands in for the input, so it is heard the same way. Zero latency: nothing downstream
+    // moves.
+    removeHum (buffer);
 
     // The input trim FIRST — ahead of the tuner's ear and the gate's key, like the interface
     // knob it stands in for: everything downstream, meters included, hears the trimmed level,

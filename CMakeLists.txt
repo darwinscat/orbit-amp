@@ -581,6 +581,7 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
     felitronics::appkit_webp         # juce::Image <- WebP, for the picture a pack ships
     felitronics::core                # core::BypassWire reads the resampler's delay geometry
+    felitronics::dehum               # the hum off the input, ahead of the trim
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
@@ -706,6 +707,7 @@ set(CATPITAMP_LIBRARIES
     felitronics::appkit
     felitronics::appkit_webp
     felitronics::core
+    felitronics::dehum
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -969,6 +971,7 @@ set(ROVER_LIBRARIES
     felitronics::appkit
     felitronics::appkit_webp
     felitronics::core
+    felitronics::dehum
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -1423,10 +1426,62 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::appkit
     felitronics::appkit_webp         # the panel decodes a pack's photograph — same half the plugin links
     felitronics::core                # core::BypassWire reads the resampler's delay geometry
+    felitronics::dehum
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
     felitronics::convolution         # the cabinet convolves through CabConvolver
+    felitronics::measurement
+    felitronics::nam
+    felitronics::rigplayer
+    felitronics::limiter
+    juce::juce_audio_utils
+    juce::juce_dsp
+    juce::juce_data_structures
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+# ----------------------------------------------------------------------------
+# Gate for the hum at the input, heard through the processor's own input path — the tuner's tap,
+# which listens after the trim: AUTO takes a mains hum off; an INPUT trim moved mid-stream does not
+# bring it back, because the stage sits ahead of the trim; OFF hands the input on bit for bit; and a
+# demo loop with no hum in it passes untouched. Needs no pack: the input path is ahead of every block.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_hum_test PRODUCT_NAME "OrbitAmpHumTest")
+target_sources(orbitamp_hum_test PRIVATE
+    tests/HumTests.cpp
+    src/PluginProcessor.cpp
+    src/PluginEditor.cpp
+    src/Parameters.cpp
+    src/ui/Theme.cpp
+    src/ui/FaceplateView.cpp
+    src/ui/CapturedBlockPanel.cpp
+    src/ui/CabinetBlock.cpp
+    src/ui/EqSection.cpp
+    src/ui/DelayBlock.cpp
+    src/ui/ReverbBlock.cpp
+    src/ui/Chrome.cpp
+    src/ui/DemoStrip.cpp
+    src/ui/Footer.cpp
+    src/ui/SetupPanel.cpp
+    src/ui/library/DeviceListView.cpp
+    src/ui/library/IrTreeView.cpp)
+target_include_directories(orbitamp_hum_test PRIVATE src)
+target_include_directories(orbitamp_hum_test PRIVATE "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_hum_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_hum_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_hum_test PRIVATE
+    OrbitAmpData
+    felitronics::analysis
+    felitronics::appkit
+    felitronics::appkit_webp
+    felitronics::core
+    felitronics::dehum
+    felitronics::dynamics
+    felitronics::eq
+    felitronics::lineareq
+    felitronics::convolution
     felitronics::measurement
     felitronics::nam
     felitronics::rigplayer

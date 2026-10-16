@@ -25,6 +25,7 @@
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/appkit/CompareHistory.h>
 #include <felitronics/appkit/UpdateChecker.h>
+#include <felitronics/dehum/HumRemover.h>
 #include <felitronics/dynamics/NoiseGate.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -904,6 +905,15 @@ private:
     felitronics::dynamics::NoiseGate::Config gateCfg;
     float lastGateDecay = -1.0f;
 
+    /** The hum stage, from felitronics-core — first on the input, ahead of the trim (processChunk says
+        why). It takes its mode through `humWanted`, the machine's cached setting, and is handed it on
+        the audio thread when it differs from `humApplied`, the one it was last given; both are the
+        audio thread's alone once prepareToPlay has run. */
+    felitronics::dehum::HumRemover<> humStage;
+    const std::atomic<int>* humWanted = nullptr;
+    int humApplied = -1;
+    void removeHum (juce::AudioBuffer<float>& buffer) noexcept;
+
 public:
     /** The captured pedal in front, and the captured preamp after it. Each is a device list, the
         stage playing what is chosen from it, that device's measured controls as filters, and the taps
@@ -963,6 +973,19 @@ public:
         Written by the audio thread, read by the strip's thumb and the zoomed gate on their
         repaint clocks. */
     std::atomic<float> gateMeterDb { 0.0f };
+
+    /** THE HUM AT THE INPUT, as the stage last heard it — written by the audio thread at the end of
+        every block, read by the windows on their own clocks. `humInForce` is the mode the stage is
+        RUNNING, which is the machine's (prefs::hum) unless the stage could not be prepared for this
+        input, and then it is OFF and says so. The rest is the stage's own telemetry: the family AUTO's
+        ear decided (50 or 60, 0 while it abstains — whatever the mode), the mains frequency it tracks
+        (0 while it takes nothing off), whether that tracker has settled, and the level of the hum it
+        is taking off, in dB re a full-scale sine. */
+    std::atomic<int>   humInForce { (int) prefs::Hum::off };
+    std::atomic<int>   humFamily  { 0 };
+    std::atomic<float> humHz      { 0.0f };
+    std::atomic<bool>  humLocked  { false };
+    std::atomic<float> humDb      { (float) felitronics::dehum::HumRemover<>::kSilentDb };
 
     /** The output level after everything, and the two latched clip caps (the UI clears them). */
     std::atomic<float> outDb   { -90.0f };
