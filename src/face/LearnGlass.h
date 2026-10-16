@@ -16,9 +16,11 @@ namespace orbitamp::face
 /** LEARN, ON A FACE'S OWN GLASS. The gate's measurement (ui/GateLearner.h) — the same three seconds
     OrbitAmp projects on its big overlay — shown where the face already has a screen: one short line
     asking for quiet, the key level growing left to right as it is heard, the threshold it would set
-    walking along with it as a dashed line, and at the end the verdict for two seconds — the threshold
-    set, or CANCELLED, DISTURBED or NOTHING HEARD, and under it the hum's one line when the take taught
-    the hum too (GateLearner::humLine) — before the glass goes back to what it showed.
+    walking along with it as a dashed line, and at the end the verdict — the threshold set, or
+    CANCELLED, DISTURBED or NOTHING HEARD, and under it the hum's one line when the take taught the hum
+    too (GateLearner::humLine) — until a click puts it away, ten seconds at the most, before the glass
+    goes back to what it showed. Two lines are read with the guitar still in the hands: two seconds
+    were too short for that.
 
     Written in the family's ink for a dark glass (Ink's own), the trace violet — the measurement at
     work — and the threshold-to-be lilac, as OrbitAmp's overlay draws them. No grid, no frame: bare
@@ -152,7 +154,7 @@ private:
     int holdTicks = 0;
 
     static constexpr int ticksPerSecond = core::GateLearn::ticksPerSecond;
-    static constexpr int holdFor = 2 * ticksPerSecond;      // the verdict stays two seconds
+    static constexpr int holdFor = 10 * ticksPerSecond;     // the verdict stays until a click, ten seconds at the most
 
     static juce::String decibels (float db) { return juce::String (juce::roundToInt (db)) + " dB"; }
 
