@@ -691,7 +691,8 @@ void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool t
 }
 
 /** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: what the lever gives in the
-    middle of its travel. */
+    middle of its travel, and the hum the input carries — both the machine's, the four modes here as
+    flat items, AUTO's line naming what it decided once it has. */
 void Console::showInputMenu()
 {
     endTapping();
@@ -700,6 +701,11 @@ void Console::showInputMenu()
     menu.addSectionHeader ("LEVER'S ZERO");
     for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
         addChoice (menu, decibels (db), db == leverZero, [db] (Console& e) { e.chooseLeverZero (db); });
+
+    menu.addSectionHeader ("HUM");
+    const int heard = amp.humHeard();
+    for (const auto h : prefs::humChoices)
+        addChoice (menu, prefs::humLabel (h, heard), h == prefs::hum(), [h] (Console&) { prefs::setHum (h); });
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
