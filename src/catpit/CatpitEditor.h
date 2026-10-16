@@ -83,6 +83,11 @@ private:
     Lever lever;
     GuardButton turbo;
 
+    // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader in the slot cut beside its lamp, with
+    // the columns' cap. While its block is off it stands dim, and still moves.
+    ColumnFader threshold { Art::get().sliderCap };
+    ColumnFader ceiling { Art::get().sliderCap };
+
     void showSelector (int channel) override;
     bool channelKey (const juce::KeyPress&) override;
     void programChange (int program) override;
