@@ -122,6 +122,9 @@ const std::array<float, 3> notches {{ 732.8f, 775.5f, 816.8f }};
 const float leverWidth = 124.0f;
 const float collarSink = 3.0f;
 const juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };
+// Its third notch cut 804..830 down, its slot's lit edge 810..812, the straight run over it 789..803,
+// the plate plain out to 848: filled as RedPawAmp's would be, were it to have fewer gears.
+const NotchFill notchFill { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 2.0f };
 
 const juce::Point<float> turbo { 922.0f, 787.0f };
 const float turboSize = 52.0f;

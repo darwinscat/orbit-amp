@@ -82,6 +82,16 @@ extern const float leverWidth;      // the lever's render, grip and collar, this
 extern const float collarSink;      // how far the collar's foot goes past the position, into the slot
 extern const juce::Rectangle<float> gearPlate;
 
+/** A NOTCH PAINTED PAST THE PRODUCT'S LAST GEAR IS FILLED IN (Art: `fillSpareNotches`), so the slot runs
+    straight there and the lever has nowhere to stand that is not a gear. From `above` the notch's middle
+    to `below` it: the slot's edge, from `left` in the slot's dark to `seam`, is the straight run just
+    over the fill, `run` tall, mirrored down and back, so the edge's lit line goes on unbroken; the plate
+    beside it, from `seam` to `right`, is the plate `plateShift` further right on the same rows, so its
+    grain and its light are the rows' own. The fill fades into the picture over `feather` at its top, its
+    bottom and its right, and the edge into the plate across the seam. */
+struct NotchFill { float above, below, left, seam, right, run, plateShift, feather; };
+extern const NotchFill notchFill;
+
 /** TURBO: the round hole under the hatch the picture shows open, and its name over the hatch. */
 extern const juce::Point<float> turbo;
 extern const float turboSize;       // the button's render

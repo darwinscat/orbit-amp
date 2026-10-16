@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "RedPawArt.h"
+#include "RedPawLineup.h"
 #include "RedPawSkin.h"
 
 #include "../face/Renders.h"
@@ -56,6 +57,48 @@ namespace
                     dst.setPixelColour (x, seam - lift + i, src.getPixelColour (x, seam + (m < band ? m : 2 * band - 1 - m)));
                 }
             }
+        return img;
+    }
+
+    /** THE NOTCHES PAST THE LAST GEAR ARE FILLED IN (layout::NotchFill): a rover of fewer gears than its
+        picture has notches gets its slot straight there. Over each such notch the slot's edge is the
+        straight run above it, mirrored down and back, and the plate beside it is the plate further right
+        on the same rows; faded into the picture at the fill's top, bottom and right. Numbers are in the
+        dashboard's 1672-wide space, measured off it. */
+    juce::Image fillSpareNotches (juce::Image img)
+    {
+        if (! img.isValid() || numGears() >= (int) layout::notches.size())
+            return img;
+
+        const auto& f = layout::notchFill;
+        const float k = (float) img.getWidth() / layout::width;
+        const auto at = [k] (float v) { return juce::roundToInt (v * k); };
+        const auto original = img.createCopy();
+        const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
+
+        const int left = at (f.left), seam = at (f.seam), right = at (f.right), shift = at (f.plateShift);
+        const int run = juce::jmax (1, at (f.run));
+        const float feather = (float) juce::jmax (1, at (f.feather));
+
+        for (size_t n = (size_t) numGears(); n < layout::notches.size(); ++n)
+        {
+            const int top = at (layout::notches[n] - f.above), bottom = at (layout::notches[n] + f.below);
+            for (int y = top; y < bottom; ++y)
+            {
+                const int m = (y - top) % (2 * run);
+                const int edgeRow = top - 1 - (m < run ? m : 2 * run - 1 - m);     // the run over the fill, mirrored down and back
+                const float down = juce::jmin ((float) (y - top + 1) / feather, (float) (bottom - y) / feather);
+
+                for (int x = left; x < right; ++x)
+                {
+                    const float across = juce::jlimit (0.0f, 1.0f, (float) (x - seam) / feather + 0.5f);     // edge to plate
+                    const auto fill = src.getPixelColour (x, edgeRow).interpolatedWith (src.getPixelColour (x + shift, y), across);
+                    const float amount = juce::jlimit (0.0f, 1.0f, juce::jmin (down, (float) (right - x) / feather));
+                    dst.setPixelColour (x, y, src.getPixelColour (x, y).interpolatedWith (fill, amount));
+                }
+            }
+        }
         return img;
     }
 
@@ -149,7 +192,8 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg         = face::renders::putOutLamps (widenLampPlates (widenRims (load ("dashboard.png"))), layout::lamps, layout::width, skin().lampness, a.lampLit);
+        a.bg         = face::renders::putOutLamps (widenLampPlates (widenRims (fillSpareNotches (load ("dashboard.png")))), layout::lamps, layout::width,
+                                                   skin().lampness, a.lampLit);
         a.knobDrive  = load ("knob-drive.png");
         a.knobTone   = load ("knob-tone.png");
         a.lever      = load ("lever.png");
