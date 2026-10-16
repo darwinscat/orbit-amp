@@ -1159,7 +1159,16 @@ void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
 
     // The input's channels and nothing past them; a host that asks for fewer this block stops the rest,
     // which the stage keeps a model for and fades back in when they return.
-    const int numIn = juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels(), humStage.maxChannels(), humDry.getNumChannels());
+    // AND ONLY THE ONES THE CHAIN PLAYS. In MONO and in STEREO SPACE the amp eats channel 0 alone (see
+    // `nch` below), and the stage's ear sums its channels: a second input that never reaches the amp —
+    // an empty socket on the interface with its gain up, hissing — was enough to keep it from ever
+    // hearing the room quiet, so AUTO never decided and the hum it did take off came off slowly.
+    // Outside STEREO the second channel stops, as any channel a host stops does.
+    const auto playing = static_cast<params::StereoMode> (
+        juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
+    const int played = playing == params::StereoMode::stereo ? buffer.getNumChannels() : 1;
+    const int numIn = juce::jmin (juce::jmin (getTotalNumInputChannels(), played, buffer.getNumChannels()),
+                                  humStage.maxChannels(), humDry.getNumChannels());
     const int n     = juce::jmin (buffer.getNumSamples(), humDry.getNumSamples());
     const float target = wanted != (int) prefs::Hum::off ? 1.0f : 0.0f;
     const bool  fading = humMix < 1.0f || target < 1.0f;

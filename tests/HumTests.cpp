@@ -36,6 +36,8 @@
 //  11. AUTO, undecided, says it is listening — in the menus' line and in the tag.
 //  12. Every menu's HUM is a switch and a mode: "On" ticked unless OFF; the tick on the mode in force,
 //      or under OFF on the mode OFF bypasses; a mode picked under OFF switches the hum on in it.
+//  13. A second input the chain never hears — MONO and STEREO SPACE play channel 1 alone — does not
+//      keep AUTO from deciding: a -60 dBFS hum beside an empty input with its gain up, hissing at -50.
 //
 // Checks 1-5 set the mode through the cached atomic the engine reads (prefs::humCache) and leave the
 // settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
@@ -136,6 +138,7 @@ namespace
         double humGain = 1.0;       // 0: the hiss alone
         double hiss    = hissRms;   // the hiss's RMS
         std::function<double (long long)> extra;   // anything else on the input, by sample
+        double secondHiss = -1.0;   // >= 0: channel 2 carries only a hiss of this RMS, a hum of its own none
 
         /** A restart, the way a host makes one: the trim's ramp is seeded from its parameter again. */
         void prepare()
@@ -183,7 +186,13 @@ namespace
                         h += extra (n);
 
                     buf.setSample (0, i, (float) (hum[0] + h));
-                    buf.setSample (1, i, (float) (hum[1] + h));
+                    if (secondHiss >= 0.0)
+                    {
+                        seed2 = seed2 * 1664525u + 1013904223u;
+                        buf.setSample (1, i, (float) (secondHiss * std::sqrt (3.0) * ((double) (seed2 >> 8) / 8388608.0 - 1.0)));
+                    }
+                    else
+                        buf.setSample (1, i, (float) (hum[1] + h));
                     heard.in.push_back (buf.getSample (0, i));
                     heard.hum.push_back ((float) hum[0]);
                     heard.hiss.push_back ((float) h);
@@ -211,7 +220,7 @@ namespace
         AmpProcessor& amp;
         std::unique_ptr<std::array<float, orbitamp::core::TunerTap::size>> tap;
         long long     n = 0;
-        std::uint32_t seed = 12345u;
+        std::uint32_t seed = 12345u, seed2 = 777u;
         float         lastGain = 1.0f;
     };
 
@@ -752,6 +761,36 @@ int main()
                                                                                   && flipped == Hum::off && back == Hum::automatic,
                     juce::String ("picked ") + name (picked) + ", flipped " + name (flipped) + ", back " + name (back));
         }
+    }
+
+    // 13 · THE CHANNELS THE CHAIN PLAYS, AND NO OTHER.
+    {
+        set (amp, params::inTrim, 0.0f);
+        stream.humGain    = 0.03;       // a hum of -60 dBFS, as a quiet pickup's is...
+        stream.secondHiss = 3.16e-3;    // ...beside an empty input hissing at -50 dBFS
+        for (const auto mode : { orbitamp::params::StereoMode::stereoSpace, orbitamp::params::StereoMode::mono })
+        {
+            set (amp, params::stereoMode, (float) mode);
+            machine (Hum::automatic);
+            stream.prepare();
+            double decidedAt = -1.0;
+            for (int b = 1; b <= 8 && decidedAt < 0.0; ++b)
+            {
+                stream.play (0.5, heard);
+                if (amp.humFamily.load() == 50)
+                    decidedAt = 0.5 * b;
+            }
+            stream.play (2.0, heard);       // ...and two seconds to learn, as AUTO gets anywhere
+            const size_t from = stream.play (1.0, heard);
+            const double left = leftDb (heard, from, heard.size());
+            report (mode == orbitamp::params::StereoMode::mono ? "MONO: a hissing second input, and AUTO decides"
+                                                               : "STEREO SPACE: a hissing second input, and AUTO decides",
+                    decidedAt > 0.0 && left <= -40.0,
+                    juce::String::formatted ("decided by %.1f s; 2 s on, %.1f dB re the hum", decidedAt, left));
+        }
+        stream.secondHiss = -1.0;
+        stream.humGain    = 1.0;
+        set (amp, params::stereoMode, (float) orbitamp::params::StereoMode::stereo);
     }
 
     machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store().get (orbitamp::prefs::humMains, "auto").toString()));
