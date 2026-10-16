@@ -1118,8 +1118,8 @@ void AmpProcessor::sanitiseParameters() noexcept
 /** HOW HARD THE STAGE WORKS — TEMPORARY, for tuning by ear (ui/HumTuning.h). The machine's three
     numbers into the stage's params when any of them moved, and false when none did. The widths take
     effect at once; a new reach is a new set of harmonics, which the stage ramps out and learns again.
-    At its default the reach is the stage's own — 24 harmonics under a 2 kHz bound — so the defaults
-    are the stage as it ran before; any other reach runs every harmonic the stage has, under a bound
+    At 1.2 kHz the reach is the stage's own — 24 harmonics under a 2 kHz bound — the stage as it ran
+    before there was a reach to choose; any other runs every harmonic the stage has, under a bound
     that keeps, at 50 Hz, the last one at or under the frequency named (the stage reckons a harmonic at
     the top of its lock range). */
 bool AmpProcessor::tuneHum (felitronics::dehum::HumRemoverParams& p) noexcept
@@ -1136,7 +1136,7 @@ bool AmpProcessor::tuneHum (felitronics::dehum::HumRemoverParams& p) noexcept
     const felitronics::dehum::HumRemoverParams own;
     p.bandwidthHz      = (double) play;
     p.learnBandwidthHz = (double) quiet;
-    if (upTo <= prefs::humtune::upToDefault)
+    if (upTo <= prefs::humtune::upToOwn)
     {
         p.harmonics = own.harmonics;
         p.maxHz     = own.maxHz;

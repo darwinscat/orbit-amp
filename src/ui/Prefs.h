@@ -188,15 +188,17 @@ inline void setTunerReference (int hz)  { hz = snapTunerReference (hz); tunerRef
     50 Hz, 60 Hz, or AUTO, which listens and decides. It is about the wall socket, the cable and the
     pickups in this room, not about a sound, so it lives on the machine like the tuner's floor and a
     preset never carries it: a preset that switched it off would put the hum back on every machine it
-    was loaded on. AUTO by default — on a rig with no hum it decides nothing and touches nothing.
+    was loaded on. OFF on a machine that never chose: the stage still runs, in AUTO, bypassed, so the
+    first On — the H key, a menu's switch, its LEARN — takes the hum off with what it already heard.
     The processor's audio thread reads it every block, so it is cached like the floor; the processor
     touches the cache in its constructor, so the first read, which opens the file, is never the audio
     thread's. Stored as a word, so the file says what it means; a word this build does not know reads
-    as AUTO. The order is felitronics::dehum::Mains's, and the processor holds it to that. */
+    as the default. The order is felitronics::dehum::Mains's, and the processor holds it to that. */
 inline const juce::Identifier humMains { "hum_mains" };
 
 enum class Hum { off, hz50, hz60, automatic };
-inline constexpr Hum humDefault = Hum::automatic;
+inline constexpr Hum humDefault   = Hum::off;
+inline constexpr Hum humFirstOn   = Hum::automatic;    // what OFF bypasses before anything else has been on
 
 inline const char* humWord (Hum h)
 {
@@ -233,8 +235,8 @@ inline const juce::Identifier humLastOnKey { "hum_last_on" };
 inline std::atomic<int>& humLastOnCache()
 {
     static std::atomic<int> cached { [] {
-        const auto h = humFromWord (store().get (humLastOnKey, humWord (humDefault)).toString());
-        return (int) (h == Hum::off ? humDefault : h);
+        const auto h = humFromWord (store().get (humLastOnKey, humWord (humFirstOn)).toString());
+        return (int) (h == Hum::off ? humFirstOn : h);
     }() };
     return cached;
 }

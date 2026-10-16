@@ -16,15 +16,17 @@ namespace orbitamp::prefs::humtune
     they are: the notch's width while the strings sound, its width while the input is quiet, and the
     highest harmonic it takes off. The machine's, like the mode, and like the mode read by the audio
     thread from a cached atomic (the processor's removeHum hands them to the stage when they change).
-    The defaults are the stage as it ran before there was anything to tune, exactly — so an A/B
-    against an earlier build means what it seems to. */
+    The widths default to the stage's own; the reach defaults to 2 kHz, and at 1.2 kHz it is the stage
+    as it ran before there was anything to tune, exactly — so an A/B against an earlier build means
+    what it seems to. */
 inline constexpr float playWidths[]  = { 0.25f, 0.5f, 1.0f, 2.0f, 4.0f };          // Hz, while playing
 inline constexpr float quietWidths[] = { 1.0f, 3.0f, 6.0f };                       // Hz, while quiet
 inline constexpr float upTos[]       = { 1200.0f, 2000.0f, 3200.0f, 4800.0f, 6400.0f };   // Hz
 
 inline constexpr float playDefault  = 0.5f;
 inline constexpr float quietDefault = 3.0f;
-inline constexpr float upToDefault  = 1200.0f;     // the stage's own 24 harmonics, at 50 Hz
+inline constexpr float upToDefault  = 2000.0f;
+inline constexpr float upToOwn      = 1200.0f;     // the stage's own 24 harmonics, at 50 Hz
 
 inline const juce::Identifier playKey  { "hum_width_playing" };
 inline const juce::Identifier quietKey { "hum_width_quiet" };

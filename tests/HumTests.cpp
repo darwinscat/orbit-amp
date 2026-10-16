@@ -36,9 +36,9 @@
 //      or under OFF on the mode OFF bypasses; a mode picked under OFF switches the hum on in it.
 //  13. A second input the chain never hears — MONO and STEREO SPACE play channel 1 alone — does not
 //      keep AUTO from deciding: a -60 dBFS hum beside an empty input with its gain up, hissing at -50.
-//  14. HOW HARD IT WORKS — the temporary tuning: its defaults are the stage as it ran before, bit for
-//      bit (the stage of 64 harmonics, its own params, beside the product's of 128), and every choice of
-//      the three reaches the stage's params.
+//  14. HOW HARD IT WORKS — the temporary tuning: "Up to" 1.2 kHz with the default widths is the stage as it
+//      ran before, bit for bit (the stage of 64 harmonics, its own params, beside the product's of 128), the
+//      defaults are 2 kHz and the widths as they were, and every choice of the three reaches the stage's params.
 //
 // Checks 1-5 set the mode through the cached atomic the engine reads (prefs::humCache) and leave the
 // settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
@@ -343,14 +343,15 @@ int main()
     Stream stream (amp);
     stream.prepare();
 
-    // 0 · AUTO BY DEFAULT — on a machine that has never said otherwise.
+    // 0 · OFF BY DEFAULT — on a machine that has never said otherwise, with AUTO the mode it bypasses.
     {
-        static_assert (orbitamp::prefs::humDefault == Hum::automatic);
+        static_assert (orbitamp::prefs::humDefault == Hum::off && orbitamp::prefs::humFirstOn == Hum::automatic);
         if (orbitamp::prefs::store().get (orbitamp::prefs::humMains).isVoid())
-            report ("a machine that never chose runs AUTO", inForce (amp) == Hum::automatic,
-                    juce::String ("in force: ") + name (inForce (amp)));
+            report ("a machine that never chose: OFF, and its first On is AUTO",
+                    inForce (amp) == Hum::off && orbitamp::prefs::humFlip() == Hum::automatic && amp.humRuns.load() == (int) Hum::automatic,
+                    juce::String ("in force: ") + name (inForce (amp)) + ", first On: " + name (orbitamp::prefs::humFlip()));
         else
-            std::printf ("%-52s skip  this machine has chosen: %s\n", "a machine that never chose runs AUTO",
+            std::printf ("%-52s skip  this machine has chosen: %s\n", "a machine that never chose: OFF",
                          name (orbitamp::prefs::hum()));
     }
 
@@ -786,7 +787,26 @@ int main()
         set (amp, params::inTrim, 0.0f);
         set (amp, params::stereoMode, (float) orbitamp::params::StereoMode::stereo);
 
-        // The defaults, against the stage as it ran before: its own params, its own 64 harmonics.
+        // The defaults: the stage's own widths, and up to 2 kHz — forty harmonics at 50 Hz.
+        amp.prepareToPlay (sampleRate, blockSize);
+        stream.play (3.0, heard);
+        report ("the tuning's defaults: own widths, up to 2 kHz",
+                juce::exactlyEqual (amp.humTuned.playHz.load(), (float) own.bandwidthHz)
+                    && juce::exactlyEqual (amp.humTuned.quietHz.load(), (float) own.learnBandwidthHz)
+                    && amp.humTuned.harmonics.load() == AmpProcessor::HumStage::kMaxHarmonics && amp.humTuned.active.load() == 40,
+                juce::String::formatted ("%.2f / %.0f Hz, %d harmonics under %.0f Hz, %d running", amp.humTuned.playHz.load(),
+                                         amp.humTuned.quietHz.load(), amp.humTuned.harmonics.load(), amp.humTuned.maxHz.load(),
+                                         amp.humTuned.active.load()));
+
+        const auto file = orbitamp::prefs::store().file();
+        const bool ownSettings = ! ownHome.empty() && file.isAChildOf (juce::File (juce::String (ownHome)));
+        if (! ownSettings)
+            std::printf ("%-52s skip  the settings are not in a home of the gate's own\n", "the tuning, chosen");
+
+        // 1.2 kHz, against the stage as it ran before: its own params, its own 64 harmonics.
+        if (ownSettings)
+        {
+        tune::setUpTo (tune::upToOwn);
         amp.prepareToPlay (sampleRate, blockSize);
         auto before = std::make_unique<felitronics::dehum::HumRemover<64>>();
         before->setParams (own);
@@ -820,7 +840,7 @@ int main()
                 if (std::memcmp (&(*tap)[(size_t) (orbitamp::core::TunerTap::size - blockSize + i)], was.getReadPointer (0) + i, sizeof (float)) != 0)
                     differs = n - blockSize + i;
         }
-        report ("the tuning's defaults are the stage as it was",
+        report ("up to 1.2 kHz is the stage as it ran",
                 ready && differs < 0 && juce::exactlyEqual (amp.humTuned.playHz.load(), (float) own.bandwidthHz)
                     && juce::exactlyEqual (amp.humTuned.quietHz.load(), (float) own.learnBandwidthHz)
                     && amp.humTuned.harmonics.load() == own.harmonics && juce::exactlyEqual (amp.humTuned.maxHz.load(), (float) own.maxHz)
@@ -829,14 +849,10 @@ int main()
                                                        amp.humTuned.playHz.load(), amp.humTuned.quietHz.load(), amp.humTuned.harmonics.load(),
                                                        amp.humTuned.maxHz.load(), amp.humTuned.active.load())
                             : juce::String::formatted ("differs at sample %lld", differs));
+        }
 
         // Every choice, read back off what the stage was handed.
-        const auto file = orbitamp::prefs::store().file();
-        if (ownHome.empty() || ! file.isAChildOf (juce::File (juce::String (ownHome))))
-        {
-            std::printf ("%-52s skip  the settings are not in a home of the gate's own\n", "every tuning choice reaches the stage");
-        }
-        else
+        if (ownSettings)
         {
             bool widths = true, reach = true;
             juce::String said;
@@ -864,7 +880,7 @@ int main()
             tune::setQuiet (tune::quietDefault);
             tune::setUpTo (tune::upToDefault);
             stream.play (2.0 * blockSize / sampleRate, heard);
-            report ("every tuning choice reaches the stage", widths && reach && amp.humTuned.harmonics.load() == own.harmonics,
+            report ("every tuning choice reaches the stage", widths && reach && amp.humTuned.harmonics.load() == AmpProcessor::HumStage::kMaxHarmonics,
                     "harmonics running at 50 Hz: " + said);
             report ("...and the tuning's words", tune::hz (0.25f) == "0.25 Hz" && tune::hz (0.5f) == "0.5 Hz" && tune::hz (3.0f) == "3 Hz"
                                                    && tune::kHz (1200.0f) == "1.2 kHz" && tune::kHz (2000.0f) == "2 kHz",
