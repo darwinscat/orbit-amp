@@ -91,6 +91,10 @@ public:
     /** The runner entered or left the hand — the editor slides the drag ruler out beside us. */
     std::function<void (bool)> onTrimDrag;
 
+    /** A right click: the column's menu, where the editor gives it one (the input's: the hum it
+        carries). None, and a right click is a click like any other. */
+    std::function<void (juce::Point<int> screenPos)> onMenu;
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat();
@@ -152,6 +156,14 @@ public:
         {
             gripEd.takeAndHide();
             swallow = true;
+            return;
+        }
+
+        // The menu's click is not a fader drag either.
+        if (e.mods.isPopupMenu() && onMenu != nullptr)
+        {
+            swallow = true;
+            onMenu (e.getScreenPosition());
             return;
         }
 

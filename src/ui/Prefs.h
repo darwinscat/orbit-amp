@@ -227,4 +227,22 @@ inline std::atomic<int>& humCache()
 inline Hum  hum()            { return (Hum) humCache().load (std::memory_order_relaxed); }
 inline void setHum (Hum h)   { humCache().store ((int) h, std::memory_order_relaxed); store().set (humMains, humWord (h)); }
 
+/** The four a menu offers, in the order it offers them. */
+inline constexpr Hum humChoices[] = { Hum::off, Hum::hz50, Hum::hz60, Hum::automatic };
+
+/** A choice's line in a menu. AUTO's says what it decided once it has — `heard` is the family the
+    stage settled on while AUTO is in force (50 or 60), 0 while it has not or AUTO is not the mode. */
+inline juce::String humLabel (Hum h, int heard)
+{
+    switch (h)
+    {
+        case Hum::off:       return "Off";
+        case Hum::hz50:      return "50 Hz";
+        case Hum::hz60:      return "60 Hz";
+        case Hum::automatic: break;
+    }
+    return heard == 50 || heard == 60 ? juce::String::fromUTF8 ("Auto \xe2\x80\x94 ") + juce::String (heard) + " Hz"
+                                      : juce::String ("Auto");
+}
+
 } // namespace orbitamp::prefs

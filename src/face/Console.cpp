@@ -1307,8 +1307,9 @@ void Console::showSettingsMenu()
     // What the product's window shows, and full screen.
     addWindowSections (menu);
 
-    // What the INPUT lever gives in the middle of its travel, and how DRIVE goes between the pack's
-    // captures. How hard TURBO pushes, where it pushes, is TURBO's own menu's (showTurboMenu).
+    // What the INPUT lever gives in the middle of its travel, how DRIVE goes between the pack's
+    // captures, and the hum the input carries. How hard TURBO pushes, where it pushes, is TURBO's own
+    // menu's (showTurboMenu).
     menu.addSectionHeader ("INPUT");
     juce::PopupMenu zero;
     for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
@@ -1319,6 +1320,15 @@ void Console::showSettingsMenu()
     for (int i = 0; i < driveWays.size(); ++i)
         addChoice (way, driveWays[i], (i == 1) == driveSteps, [steps = i == 1] (Console& e) { e.chooseDriveSteps (steps); });
     menu.addSubMenu ("DRIVE turns  " + driveWays[driveSteps ? 1 : 0], way);
+
+    // The hum is the machine's, like the lever's zero (prefs::hum): every window of this product and
+    // every engine behind one follow the choice from their next look and their next block. AUTO's
+    // line says what it decided, once it has.
+    const int heard = amp.humHeard();
+    juce::PopupMenu hum;
+    for (const auto h : prefs::humChoices)
+        addChoice (hum, prefs::humLabel (h, heard), h == prefs::hum(), [h] (Console&) { prefs::setHum (h); });
+    menu.addSubMenu ("HUM  " + prefs::humLabel (prefs::hum(), heard), hum);
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)

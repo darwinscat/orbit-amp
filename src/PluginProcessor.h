@@ -987,6 +987,14 @@ public:
     std::atomic<bool>  humLocked  { false };
     std::atomic<float> humDb      { (float) felitronics::dehum::HumRemover<>::kSilentDb };
 
+    /** What AUTO decided, while AUTO is the mode in force: 50 or 60, and 0 before it has decided or
+        when another mode runs — the family a menu's AUTO line names. */
+    int humHeard() const noexcept
+    {
+        return (prefs::Hum) humInForce.load (std::memory_order_relaxed) == prefs::Hum::automatic
+                   ? humFamily.load (std::memory_order_relaxed) : 0;
+    }
+
     /** The output level after everything, and the two latched clip caps (the UI clears them). */
     std::atomic<float> outDb   { -90.0f };
 

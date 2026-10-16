@@ -19,9 +19,14 @@
 //   3. OFF hands the input on bit for bit — switched off mid-stream, and from a fresh start.
 //   4. The demo loop, which stands in for the input and has no hum in it, passes untouched.
 //   5. The mode is the machine's: a session going out and coming back neither carries nor moves it.
+//   6. A choice made the way the menus make it (prefs::setHum) is written to the machine's settings
+//      and followed by every engine of the product from its next block — two instances here.
+//   7. The menus' lines: AUTO's names what it decided, once it has, and only while it is the mode.
 //
-// The mode is set through the cached atomic the engine reads (prefs::humCache), never through the
-// settings file under it — the gate must not rewrite the choice of the machine it runs on.
+// Checks 1-5 set the mode through the cached atomic the engine reads (prefs::humCache) and leave the
+// settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
+// its own; where the store does not land there (a platform that does not take its settings from HOME),
+// they say so and skip rather than rewrite the choice of the machine they run on.
 
 #include <juce_events/juce_events.h>
 
@@ -36,9 +41,14 @@ void orbitamp::layOutFactorySet() {}
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <vector>
+#if ! defined(_WIN32)
+  #include <unistd.h>      // mkdtemp
+#endif
 
 namespace
 {
@@ -148,7 +158,7 @@ namespace
                     heard.in.push_back (buf.getSample (0, i));
                     heard.hum.push_back ((float) hum[0]);
                     heard.hiss.push_back ((float) hiss);
-                    heard.gain.push_back (target == lastGain ? (double) lastGain : (double) g);
+                    heard.gain.push_back (juce::exactlyEqual (target, lastGain) ? (double) lastGain : (double) g);
                     g += step;
                 }
                 lastGain = target;
@@ -258,6 +268,22 @@ int main()
     std::setvbuf (stdout, nullptr, _IONBF, 0);
     std::printf ("orbitamp hum gate\n");
 
+    // A HOME OF THE GATE'S OWN, before anything has asked where home is: macOS reads it once
+    // (CFFIXED_USER_HOME), and the settings store, the device library and everything else follow it.
+    std::string ownHome;
+  #if ! defined(_WIN32)
+    {
+        const char* tmp = std::getenv ("TMPDIR");
+        std::string pattern = std::string (tmp != nullptr && *tmp != 0 ? tmp : "/tmp") + "/orbitamp-hum-gate-XXXXXX";
+        if (const char* made = mkdtemp (pattern.data()); made != nullptr)
+        {
+            ownHome = made;
+            setenv ("HOME", made, 1);
+            setenv ("CFFIXED_USER_HOME", made, 1);
+        }
+    }
+  #endif
+
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
     // On the heap, as a host holds it: the processor is far bigger than a Windows main thread's stack.
@@ -307,6 +333,10 @@ int main()
         const double worst = worstDb (heard, from, heard.size());
         report ("AUTO: the hum is 40 dB down after lock", left <= -40.0 && worst <= -40.0,
                 juce::String::formatted ("%.1f dB over 1 s, worst 20 ms %.1f dB", left, worst));
+
+        const auto line = orbitamp::prefs::humLabel (Hum::automatic, amp.humHeard());
+        report ("the menus' AUTO line names what it decided", line == juce::String::fromUTF8 ("Auto \xe2\x80\x94 50 Hz"),
+                "\"" + line + "\"");
     }
 
     // 2 · THE TRIM MOVES 6 dB AND THE HUM STAYS OFF.
@@ -362,7 +392,7 @@ int main()
         stream.humming = true;
 
         const long long d = firstDifference (off.out, automatic.out, 0, off.size());
-        report ("the demo loop through AUTO: untouched", d < 0 && amp.humFamily.load() == 0 && amp.humHz.load() == 0.0f,
+        report ("the demo loop through AUTO: untouched", d < 0 && amp.humFamily.load() == 0 && juce::exactlyEqual (amp.humHz.load(), 0.0f),
                 d < 0 ? juce::String::formatted ("9 s identical to OFF, family %d", amp.humFamily.load())
                       : juce::String::formatted ("differs at %.3f s", (double) d / sampleRate));
         const double loud = tapLevelDb (off, 0, off.size());
@@ -381,6 +411,58 @@ int main()
         stream.play (0.1, heard);
         report ("a session neither carries the mode nor moves it", ! carried && orbitamp::prefs::hum() == Hum::hz50 && inForce (amp) == Hum::hz50,
                 juce::String ("in force after the session came back: ") + name (inForce (amp)));
+    }
+
+    // 6 · A CHOICE MADE THE WAY THE MENUS MAKE IT: on the machine's disk, and in every engine.
+    {
+        const auto file = orbitamp::prefs::store().file();
+        if (ownHome.empty() || ! file.isAChildOf (juce::File (juce::String (ownHome))))
+        {
+            std::printf ("%-52s skip  the settings are not in a home of the gate's own: %s\n",
+                         "a menu's choice is kept and every engine follows it", file.getFullPathName().toRawUTF8());
+        }
+        else
+        {
+            // A second instance of the product in the same process, as a host holds two.
+            const auto otherOwned = std::make_unique<AmpProcessor>();
+            auto& other = *otherOwned;
+            other.prepareToPlay (sampleRate, blockSize);
+            juce::AudioBuffer<float> quiet (2, blockSize);
+            juce::MidiBuffer midi;
+
+            bool kept = true, followed = true;
+            juce::String said;
+            for (const auto h : orbitamp::prefs::humChoices)
+            {
+                orbitamp::prefs::setHum (h);
+                const auto onDisk = juce::JSON::parse (file).getProperty (orbitamp::prefs::humMains, {}).toString();
+                kept = kept && onDisk == orbitamp::prefs::humWord (h);
+
+                stream.play ((double) blockSize / sampleRate, heard);
+                quiet.clear();
+                other.processBlock (quiet, midi);
+                followed = followed && inForce (amp) == h && inForce (other) == h;
+                said << name (h) << " -> \"" << onDisk << "\" " << name (inForce (amp)) << "/" << name (inForce (other)) << "; ";
+            }
+            report ("a menu's choice is written to the machine", kept, said);
+            report ("...and both instances' engines follow it", followed);
+        }
+    }
+
+    // 7 · THE MENUS' LINES.
+    {
+        using orbitamp::prefs::humLabel;
+        const auto autoFifty = juce::String::fromUTF8 ("Auto \xe2\x80\x94 50 Hz");
+        const auto autoSixty = juce::String::fromUTF8 ("Auto \xe2\x80\x94 60 Hz");
+        report ("the menus' lines", humLabel (Hum::off, 50) == "Off" && humLabel (Hum::hz50, 60) == "50 Hz"
+                                    && humLabel (Hum::hz60, 0) == "60 Hz" && humLabel (Hum::automatic, 0) == "Auto"
+                                    && humLabel (Hum::automatic, 50) == autoFifty && humLabel (Hum::automatic, 60) == autoSixty,
+                "Off / 50 Hz / 60 Hz / Auto, and " + autoSixty);
+
+        machine (Hum::hz60);
+        stream.play (0.1, heard);
+        report ("...AUTO's decision is not named under another mode", amp.humHeard() == 0,
+                juce::String::formatted ("heard %d under 60 Hz", amp.humHeard()));
     }
 
     machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store().get (orbitamp::prefs::humMains, "auto").toString()));

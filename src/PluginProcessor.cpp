@@ -1151,8 +1151,8 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // moves.
     removeHum (buffer);
 
-    // The input trim FIRST — ahead of the tuner's ear and the gate's key, like the interface
-    // knob it stands in for: everything downstream, meters included, hears the trimmed level,
+    // The input trim next, straight after the hum — ahead of the tuner's ear and the gate's key,
+    // like the interface knob it stands in for: everything downstream, meters included, hears the trimmed level,
     // which is what closes the gain-staging loop. Ramped per block against zipper noise.
     // A volume that is not working ramps to UNITY — it is never simply skipped. Skipping leaves
     // the last gain applied to the previous block and none to this one, which is a step in the

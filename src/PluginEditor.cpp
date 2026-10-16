@@ -261,6 +261,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
 
     inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
+    inColumn.onMenu      = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
@@ -529,6 +530,31 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
 
                          set (on, 1.0f);
                          set (ceil, r == 2 ? -0.3f : r == 3 ? -1.0f : -3.0f);
+                     });
+}
+
+/** A RIGHT CLICK ON THE INPUT COLUMN: the hum the input carries, and what to take off it. It is the
+    machine's, not the sound's (prefs::hum) — a preset neither carries it nor moves it, undo steps over
+    it, and every window and engine of this product follow it from their next look and their next
+    block. AUTO's line says what it decided, once it has. */
+void AmpEditor::showInputMenu (juce::Point<int> screenPos)
+{
+    const auto now   = prefs::hum();
+    const int  heard = amp.humHeard();
+
+    juce::PopupMenu m;
+    m.addSectionHeader ("HUM  " + prefs::humLabel (now, heard).toUpperCase());
+    for (int i = 0; i < (int) std::size (prefs::humChoices); ++i)
+        m.addItem (i + 1, prefs::humLabel (prefs::humChoices[i], heard).toUpperCase(), true, prefs::humChoices[i] == now);
+
+    // Nothing of this window's is reached from the answer, so a window closed under the open menu
+    // leaves nothing to guard.
+    m.showMenuAsync (juce::PopupMenu::Options()
+                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                     [] (int r)
+                     {
+                         if (r > 0 && r <= (int) std::size (prefs::humChoices))
+                             prefs::setHum (prefs::humChoices[r - 1]);
                      });
 }
 

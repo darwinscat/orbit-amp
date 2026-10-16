@@ -42,6 +42,7 @@ public:
         along when this opened from the COLUMN; the column has no menu of its own any more, and
         the trim's reset is its own double-click. */
     void showLimiterMenu (juce::Point<int> screenPos);
+    void showInputMenu (juce::Point<int> screenPos);
 
     /** The strip's checklist: which links are in the rig at all, and — after the separator — the
         two switches that decide what an emptied row does to the window. */
