@@ -49,9 +49,11 @@ public:
     /** Where a picture lies, in this component's own space: by default all of it. */
     void setBand (juce::Rectangle<float> local) { area = local; repaint(); }
 
-    /** SHAPE GOES OUT IN SILENCE, where the face asks for it (the cockpit does): once what the amp puts
-        out has stayed under quietDb for quietMs, the line fades away and the glass is the sky alone; the
-        first sound brings it back at once, so an attack is never missed. */
+    /** SHAPE GOES OUT IN SILENCE, where the face asks for it (the cockpit does): once what the line is
+        drawn from — the preamp's input, the picture's own dry side — has stayed under quietDb for quietMs,
+        the line fades away and the glass is the sky alone; the first sound brings it back at once, so an
+        attack is never missed. Judged there and not at the output: at high gain the output's hiss, and the
+        reverb's and the delay's tails, keep it from ever being quiet in a pause. */
     bool shapeFadesInSilence = false;
 
     void paint (juce::Graphics&) override;
@@ -67,7 +69,8 @@ private:
     scope::WaveView waveView;
 
     float  shapeShown   = 1.0f;     // how much of SHAPE's line is up, 0..1
-    double quietSinceMs = -1.0;     // when the output last went quiet, or -1 while it sounds
+    double quietSinceMs = -1.0;     // when the preamp's input last went quiet, or -1 while it sounds
+    float  dryPeak      = 0.0f;     // the last frame's peak on the preamp's input side
     double lastTickMs   = 0.0;
     void followSilence();
 

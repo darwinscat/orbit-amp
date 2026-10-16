@@ -15,9 +15,9 @@ namespace
     constexpr int preampBlock   = 1;     // the processor's second captured block: the one the tone stack follows
     constexpr double displayRate = 48000.0;
 
-    // SHAPE in silence: what counts as quiet at the output, for how long, and how fast the line goes and
-    // comes back.
-    constexpr float  quietDb   = -60.0f;
+    // SHAPE in silence: what counts as quiet at the preamp's input (a guitar plays there at -30 to -6 dBFS,
+    // its hum and hiss sit at -60 to -80), for how long, and how fast the line goes and comes back.
+    constexpr float  quietDb   = -50.0f;
     constexpr double quietMs   = 100.0;
     constexpr double fadeOutMs = 200.0;
     constexpr double fadeInMs  = 30.0;
@@ -59,7 +59,7 @@ void Monitor::followSilence()
     const double dt  = lastTickMs > 0.0 ? juce::jlimit (0.0, 100.0, now - lastTickMs) : 0.0;
     lastTickMs = now;
 
-    const bool quiet = amp.outDb.load (std::memory_order_relaxed) < quietDb;
+    const bool quiet = juce::Decibels::gainToDecibels (dryPeak, -120.0f) < quietDb;
     if (! quiet)
         quietSinceMs = -1.0;
     else if (quietSinceMs < 0.0)
@@ -116,8 +116,13 @@ void Monitor::paint (juce::Graphics& g)
         return;
     }
 
-    const scope::Frame frame = amp.preamp.scope.read (dry, wet) ? scope::Frame { dry.data(), wet.data(), core::ScopeTap::size }
-                                                                : scope::Frame {};
+    const bool fresh = amp.preamp.scope.read (dry, wet);
+    const scope::Frame frame = fresh ? scope::Frame { dry.data(), wet.data(), core::ScopeTap::size } : scope::Frame {};
+    // What SHAPE's silence is judged by: the peak of the input side it is drawn from; no frame is no sound.
+    dryPeak = 0.0f;
+    if (fresh)
+        for (const float v : dry)
+            dryPeak = juce::jmax (dryPeak, std::abs (v));
     if (view == View::shape)
     {
         if (! shapeFadesInSilence)
