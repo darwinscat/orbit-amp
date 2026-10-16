@@ -55,10 +55,11 @@ const Skin& skin()
         lampness,
         juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
         // On the bright steel the words are written dark — a blue-black graphite, what they are set to
-        // darker still, a state a deeper orange — each over a light edge, as if cut into the metal; and
-        // a dimmed word keeps more than half of its ink. Nothing else lies under the large words.
+        // darker still, a state a deeper orange — each over a faint light edge, as if cut into the metal
+        // (a stronger one greys the thin strokes); and a dimmed word keeps most of its ink. Nothing else
+        // lies under the large words.
         face::Ink { juce::Colour (0xff0b1018), juce::Colour (0xff030507), juce::Colour (0xff8f3507),
-                    juce::Colour (0x9ef0f6fc), 0.55f },
+                    juce::Colour (0x4cf0f6fc), 0.72f },
         juce::Colour(),
         // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
         juce::String::fromUTF8 (FrostPawData::midi_txt, FrostPawData::midi_txtSize),
