@@ -634,7 +634,7 @@ void CatpitEditor::applySky()
         gl.attachTo (*this);
 
         // A shader that will not build on this machine leaves the window dark; look once, and fall back.
-        juce::Timer::callAfterDelay (800, [safe = juce::Component::SafePointer<CatpitEditor> (this)]
+        ::juce::Timer::callAfterDelay (800, [safe = juce::Component::SafePointer<CatpitEditor> (this)]   // from the top: Console inherits Timer privately, and MSVC refuses that base's name here
         {
             if (safe != nullptr && safe->glSky != nullptr && safe->glSky->failed())
             {
