@@ -628,7 +628,7 @@ juce_add_binary_data(CatpitAmpData
 # reaches each at its own next release. This is the number the cockpit shows, stamps its bundle with
 # and compares against the releases that wear its prefix (src/Product.h); it moves when the COCKPIT
 # is released. .github/workflows/release-catpit.yml refuses a tag that disagrees with it.
-set(CATPITAMP_VERSION 0.1.1)
+set(CATPITAMP_VERSION 0.2.0)
 
 # The cockpit's icon. macOS 26 sets any icon that is not its own rounded square on a grey plate —
 # the family's disc came out as a small disc on a light square — so the Mac wears the mark on the
