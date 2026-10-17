@@ -133,6 +133,15 @@ namespace
 {
     int failures = 0;
 
+    // THE SAFETY AT THE DOOR (core/DoorLimiter.h) is late by its oversampler and its lookahead, and the
+    // chain counts that in the latency it reports, always, the limiter in or out. Asked of the limiter
+    // itself, set up as the chain sets it up, so a wire check adds it without restating its arithmetic.
+    int doorLatency (double sampleRate, int blockSize)
+    {
+        felitronics::limiter::TruePeakLimiter door;
+        return door.prepare (sampleRate, blockSize, 2, orbitamp::core::door::config()) ? door.latencySamples() : 0;
+    }
+
     void report (const char* what, bool ok, const juce::String& detail = {})
     {
         if (! ok)
@@ -3014,10 +3023,11 @@ int main()
                          boostLat,  rateBehind (96000.0, boostLat),
                          preampLat, rateBehind (96000.0, preampLat));
 
+            const int door = doorLatency (96000.0, blockSize);
             report ("what the host is told is what the blocks actually cost",
-                    pdc == boostLat + preampLat,
+                    pdc == boostLat + preampLat + door,
                     juce::String (pdc) + " reported, " + juce::String (boostLat + preampLat)
-                      + " summed");
+                      + " summed and the door's " + juce::String (door));
 
             report ("every live latency belongs to a rate the geometry can produce",
                     longest > 0
@@ -3076,7 +3086,7 @@ int main()
 
             const int bothBoost  = hi.boost.latencySamples();
             const int bothPreamp = hi.preamp.latencySamples();
-            const int bothTotal  = bothBoost + bothPreamp;
+            const int bothTotal  = bothBoost + bothPreamp + doorLatency (96000.0, blockSize);   // and the door's
 
             // PRECONDITION: two wires, both with something to carry. Without this the check below
             // passes on a chain where only one block was ever compensated.
@@ -3154,7 +3164,7 @@ int main()
                 // this probe measure an empty stretch of buffer and call it silence.
                 const int ahead = hi.boost.latencySamples();
                 const int lat   = hi.preamp.latencySamples();
-                const int when  = ahead + lat;
+                const int when  = ahead + lat + doorLatency (96000.0, blockSize);   // the door is late too
 
                 set (hi, orbitamp::params::preampOn, 0.0f);      // and now the ~15 ms fade-out
 
@@ -3315,7 +3325,8 @@ int main()
                     late.processBlock (b, midi);
                 }
 
-                const bool bornCold = late.getLatencySamples() == 0;
+                const int  coldDoor = doorLatency (96000.0, blockSize);   // what a chain with no delay of its own reports
+                const bool bornCold = late.getLatencySamples() == coldDoor;
 
                 // The last block before the model lands, with a mark near its end: at zero delay it
                 // goes straight through, and the wire — if it is being fed — has it.
@@ -3327,7 +3338,7 @@ int main()
 
                 late.inlineLoads = true;
 
-                for (int i = 0; i < 200 && late.getLatencySamples() == 0; ++i)
+                for (int i = 0; i < 200 && late.getLatencySamples() == coldDoor; ++i)
                 {
                     late.pumpDeviceWork();
                     juce::Thread::sleep (5);
@@ -3350,26 +3361,30 @@ int main()
                 float here = 0.0f, anywhere = 0.0f;
                 int   at = -1;
 
+                // The mark also leaves once at the door's own latency: it was past the block, in the
+                // door's lookahead, before the delay was born. That copy is not the one in question;
+                // the look-back's is, so the search starts past the first one's few samples.
+                const int doorCopy = mark + coldDoor - blockSize;
                 for (size_t i = 0; i < after.size(); ++i)
-                    if (const float v = std::abs (after[i]); v > anywhere)
+                    if (const float v = std::abs (after[i]); (int) i > doorCopy + 8 && v > anywhere)
                     { anywhere = v; at = (int) i; }
 
                 if (want >= 0 && want < (int) after.size())
                     here = std::abs (after[(size_t) want]);
 
-                std::printf ("wire: a delay BORN mid-session — 0 samples, then %d; the mark from the"
-                             " block before comes back at %d (wanted %d), %.3f\n",
-                             born, at, want, here);
+                std::printf ("wire: a delay BORN mid-session — %d samples (the door's), then %d; the mark"
+                             " from the block before comes back at %d (wanted %d), %.3f\n",
+                             coldDoor, born, at, want, here);
 
                 // PRECONDITIONS: the block really did start with no delay, and really did acquire
                 // one. Without both, this measures a plugin that never changed and passes for it.
                 report ("a block really can acquire its delay mid-session",
-                        bornCold && born > 0 && want >= 0 && want < (int) after.size(),
-                        bornCold ? juce::String ("0 -> ") + juce::String (born)
+                        bornCold && born > coldDoor && want >= 0 && want < (int) after.size(),
+                        bornCold ? juce::String (coldDoor) + " -> " + juce::String (born)
                                  : "it was never cold — this check would be blind");
 
                 report ("the block after the delay is born looks back, not into silence",
-                        bornCold && born > 0 && here > 0.5f && at == want,
+                        bornCold && born > coldDoor && here > 0.5f && at == want,
                         juce::String (here, 3) + " at " + juce::String (at));
             }
         }
