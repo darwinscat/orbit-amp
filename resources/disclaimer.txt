@@ -7,3 +7,5 @@ All equipment photographs used in OrbitAmp are our own original photographs of t
 All third-party trademarks, product names, and logos remain the property of their respective owners. Darwin's Cat and OrbitAmp are not affiliated with, sponsored by, endorsed by, approved by, or licensed by those manufacturers, and no such relationship should be inferred.
 
 OrbitAmp and all NAM captures and cabinet impulse responses distributed with it are provided free of charge. No manufacturer participated in, approved, or supplied these captures or impulse responses unless explicitly stated otherwise.
+
+The NAM captures and cabinet impulse responses are under terms of their own: play, record and perform through them and sell music made with them freely; share the files, changed or unchanged, free of charge and with credit to Darwin's Cat (saying so if you changed them); put them in a program or a device only if its source is published under a GPL-compatible licence (GPL, AGPL), with credit to Darwin's Cat, and in a closed product only with Darwin's Cat's written permission.

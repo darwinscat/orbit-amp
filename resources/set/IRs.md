@@ -1,5 +1,7 @@
 # The cockpit's cabinets
 
+Their terms of use are in [`../CONTENT-LICENSE.md`](../CONTENT-LICENSE.md).
+
 What is in `IRs/`, and where it came from. CatpitAmp carries every one of them in its binary, and
 OrbitAmp's cabinet shelf plays them too; this note stays in the tree.
 
