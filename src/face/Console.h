@@ -423,6 +423,25 @@ private:
     void bindTones();
     void bindButton (PushButton&, const char* paramId);
 
+    /** THE KEYS THAT ARE THE PACK'S. Where the playing pack has switches a hand may throw (Channels::
+        switchesOf, all but the one its channel holds), the four keys right of the filters are those, in
+        the pack's order and under its names: a key to each position of a switch, the one it stands at
+        lit — the IR-X Ch1's BRIGHT 1 · CENTER · BRIGHT 2, the Ch2's TIGHT · FAT — and a switch whose
+        two positions are off and on one key, under the switch's own name. A switch that would not fit
+        whole is left off them; a key no switch has stands dim and says nothing. A pack with none leaves
+        the four keys the layers' (Channels::Flag), as they always were. */
+    struct PackKey
+    {
+        int slot = -1;          // the selector it throws; -1 = no switch on this key
+        int position = -1;      // lit while the switch stands here, and where a press puts it
+        int off = -1;           // an off/on key: where it puts the switch when let up; -1 for a position's key
+    };
+    std::array<PackKey, 4> packKeys;
+    bool packKeysUp = false;                    // the playing pack's switches are on the keys
+    std::array<juce::String, 6> keyNames;       // each key's name for the tag over it, as showKeys last said
+    void keyThrown (int key, bool on);
+    void showKeys();                            // the keys as the playing channel has them; reads only
+
     void showReverbMenu();
     void showDelayMenu();
     void showDelayTime();

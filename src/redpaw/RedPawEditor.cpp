@@ -199,14 +199,15 @@ void Dashboard::paintRoof (juce::Graphics& g) const
     }
 }
 
-/** The keys' names, over or under them by turns — a dimmed key's as dim as the key. */
+/** The keys' names, over or under them by turns — a dimmed key's as dim as the key, and the playing
+    pack's own where its switches are on them. */
 void Dashboard::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
 
     const auto& ink = skin().ink;
-    for (size_t i = 0; i < switches.size(); ++i)
-        ink.label (g, switches[i].shortName,
+    for (size_t i = 0; i < keyNames.size(); ++i)
+        ink.label (g, keyNames[i],
                    juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keys[i].x, keyNameOver[i] ? keyNameOverY : keyNameUnderY }),
                    px11, ink.at (ink.words, keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
 }

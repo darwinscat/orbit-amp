@@ -232,9 +232,10 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         stage.addAndMakeVisible (b);
         const auto at = places.keys[i];
         b.setBounds (around (at, places.keySize, places.keySize));
-        b.onHover = [this, at, &b] (bool over)     // a key that does not answer the hand says nothing either
+        keyNames[i] = switches[i].name;
+        b.onHover = [this, at, &b, i] (bool over)     // a key that does not answer the hand says nothing either
         {
-            nameTag.show (at.translated (0.0f, -40.0f), over && b.isEnabled() ? b.name + "  " + b.stateText() : juce::String());
+            nameTag.show (at.translated (0.0f, -40.0f), over && b.isEnabled() ? keyNames[i] + "  " + b.stateText() : juce::String());
         };
     }
 
@@ -413,18 +414,19 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // the amp, centre detent where every capture was taken.
     bindTones();
 
-    // HPF and LPF switch the cabinet's own cut filters in and out; FAT, BRIGHT, DEPTH and PRESENCE are
-    // kept with the channel and wait for the layers the packs will carry — each dimmed and deaf to the
-    // hand until its own arrives (Channels::layerPlayable).
+    // HPF and LPF switch the cabinet's own cut filters in and out. The four keys right of them are the
+    // playing pack's switches where it has any to throw (packKeys), and otherwise FAT, BRIGHT, DEPTH and
+    // PRESENCE: kept with the channel, waiting for the layers the packs will carry — each dimmed and
+    // deaf to the hand until its own arrives (Channels::layerPlayable). Which of the two they are is
+    // showKeys' to say, on every channel.
     bindButton (*buttons[btHpf], params::cabHpfOn);
     bindButton (*buttons[btLpf], params::cabLpfOn);
-    const std::pair<int, Channels::Flag> layers[] { { btFat, Channels::fat }, { btBright, Channels::bright },
-                                                    { btDepth, Channels::depth }, { btPresence, Channels::presence } };
-    for (const auto& [key, flag] : layers)
-    {
-        buttons[(size_t) key]->onChange = [this, f = flag] (bool on) { channels.setFlag (f, on); };
-        buttons[(size_t) key]->setEnabled (Channels::layerPlayable[(size_t) flag]);
-    }
+    for (int key = btFat; key <= btPresence; ++key)
+        buttons[(size_t) key]->onChange = [this, key] (bool on) { keyThrown (key, on); };
+
+    // A switch moved by anything — a key, an undo, a register, a host — lights the key it stands on.
+    for (int s = 0; s < params::numSelectors; ++s)
+        follow (params::selectorId (params::preampId, s).toRawUTF8(), [this] (float) { showKeys(); });
 
     showChannel();
 
@@ -1130,27 +1132,121 @@ void Console::showChannel()
     const int channel = channels.active();
     showSelector (channel);
     bindTones();        // another channel's pack may keep its Bass, Middle and Treble in other places
-
-    // A layer the packs do not carry yet never shows as thrown — whatever the state says.
-    const auto playable = [] (Channels::Flag f) { return Channels::layerPlayable[(size_t) f]; };
-    const auto thrown = [this, playable] (Channels::Flag f) { return playable (f) && channels.flag (f); };
-    const bool hot = channels.lineup().channels[(size_t) channel].hot;     // FAT is a layer only the hottest packs carry
-    buttons[btFat]->setEnabled (hot && playable (Channels::fat));
-    buttons[btFat]->setOn      (thrown (Channels::fat),      false);
-    buttons[btBright]->setOn   (thrown (Channels::bright),   false);
-    buttons[btDepth]->setOn    (thrown (Channels::depth),    false);
-    buttons[btPresence]->setOn (thrown (Channels::presence), false);
-
-    std::array<bool, 6> live {};
-    for (size_t i = 0; i < live.size(); ++i)
-        live[i] = buttons[i]->isEnabled();
-    picture->setKeysLive (live);
+    showKeys();
 
     // CAB's cap, on the cabinet that is playing. (This is first called while the face is still being
     // built, before the plates exist.)
     if (const int playing = channels.cabinet(); playing >= 0 && sliders[2] != nullptr)
         sliders[2]->setStep (playing, false);
     showCab();
+}
+
+/** The keys under the tones as the playing channel has them (packKeys): the pack's switches where it
+    has any to throw, laid on the four keys a switch at a time, whole or not at all — and the layers
+    otherwise. Reads only. */
+void Console::showKeys()
+{
+    const int channel = channels.active();
+    const auto standsAt = [this] (int slot) { return juce::roundToInt (getParam (params::selectorId (params::preampId, slot).toRawUTF8())); };
+    const auto isOff = [] (const juce::String& v)
+    {
+        const auto w = v.trim().toLowerCase();
+        return w == "off" || w == "0" || w == "false" || w == "no";
+    };
+
+    packKeys = {};
+    std::array<juce::String, 4> named;
+    size_t next = 0;
+    for (const auto& s : channels.switchesOf (channel))
+    {
+        if (s.held)
+            continue;
+        const bool offOn = s.values.size() == 2 && isOff (s.values[0]) != isOff (s.values[1]);
+        if (next + (offOn ? 1 : (size_t) s.values.size()) > packKeys.size())
+            continue;
+        if (offOn)
+        {
+            const int off = isOff (s.values[0]) ? 0 : 1;
+            packKeys[next] = { s.slot, 1 - off, off };
+            named[next++] = s.name.toUpperCase();
+        }
+        else
+            for (int p = 0; p < s.values.size(); ++p)
+            {
+                packKeys[next] = { s.slot, p, -1 };
+                named[next++] = s.values[p].toUpperCase();
+            }
+    }
+    packKeysUp = next > 0;
+
+    std::array<juce::String, 6> shortNames;
+    for (size_t i = 0; i < switches.size(); ++i)
+    {
+        keyNames[i]   = switches[i].name;
+        shortNames[i] = switches[i].shortName;
+    }
+
+    if (packKeysUp)
+    {
+        for (size_t k = 0; k < packKeys.size(); ++k)
+        {
+            const auto& pk = packKeys[k];
+            auto& b = *buttons[btFat + k];
+            b.setEnabled (pk.slot >= 0);
+            b.setOn (pk.slot >= 0 && standsAt (pk.slot) == pk.position, false);
+            keyNames[btFat + k] = shortNames[btFat + k] = named[k];
+        }
+    }
+    else
+    {
+        // A layer the packs do not carry yet never shows as thrown — whatever the state says.
+        const auto playable = [] (Channels::Flag f) { return Channels::layerPlayable[(size_t) f]; };
+        const auto thrown = [this, playable] (Channels::Flag f) { return playable (f) && channels.flag (f); };
+        const bool hot = channels.lineup().channels[(size_t) channel].hot;     // FAT is a layer only the hottest packs carry
+        buttons[btFat]->setEnabled      (hot && playable (Channels::fat));
+        buttons[btBright]->setEnabled   (playable (Channels::bright));
+        buttons[btDepth]->setEnabled    (playable (Channels::depth));
+        buttons[btPresence]->setEnabled (playable (Channels::presence));
+        buttons[btFat]->setOn      (thrown (Channels::fat),      false);
+        buttons[btBright]->setOn   (thrown (Channels::bright),   false);
+        buttons[btDepth]->setOn    (thrown (Channels::depth),    false);
+        buttons[btPresence]->setOn (thrown (Channels::presence), false);
+    }
+
+    std::array<bool, 6> live {};
+    for (size_t i = 0; i < live.size(); ++i)
+        live[i] = buttons[i]->isEnabled();
+    picture->setKeys (live, shortNames);
+}
+
+/** One of the four keys right of the filters, thrown by the hand: a layer, or the pack's switch moved to
+    the position the key is — its other position, for an off/on key let up. A position's key pressed
+    while lit stays lit: the switch leaves it only for another of its keys. */
+void Console::keyThrown (int key, bool on)
+{
+    const auto k = (size_t) (key - btFat);
+
+    if (! packKeysUp)
+    {
+        constexpr Channels::Flag layers[] { Channels::fat, Channels::bright, Channels::depth, Channels::presence };
+        channels.setFlag (layers[k], on);
+        return;
+    }
+
+    const auto pk = packKeys[k];
+    const int to = on ? pk.position : pk.off;
+    if (pk.slot < 0 || to < 0)
+    {
+        buttons[(size_t) key]->setOn (pk.slot >= 0, false);
+        return;
+    }
+
+    if (auto* p = amp.apvts.getParameter (params::selectorId (params::preampId, pk.slot)))
+    {
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (p->convertTo0to1 ((float) to));
+        p->endChangeGesture();      // ...and the switch's follower lights the key it stands on now
+    }
 }
 
 void Console::showRegisterMenu (int index)

@@ -21,11 +21,12 @@ void Picture::setHistory (bool undo, bool redo, int reg)
     repaint (historyArea());
 }
 
-void Picture::setKeysLive (const std::array<bool, 6>& live)
+void Picture::setKeys (const std::array<bool, 6>& live, const std::array<juce::String, 6>& names)
 {
-    if (live == keysLive)
+    if (live == keysLive && names == keyNames)
         return;
     keysLive = live;
+    keyNames = names;
     repaint();
 }
 

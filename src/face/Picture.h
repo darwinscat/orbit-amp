@@ -33,14 +33,16 @@ public:
         stands dim, and the register that is playing has its letter and its lamp lit. */
     void setHistory (bool canUndo, bool canRedo, int activeRegister);
 
-    /** Which of the six keys under the tone knobs answer the hand. The name under one that does not
-        is dimmed with it. */
-    void setKeysLive (const std::array<bool, 6>&);
+    /** Which of the six keys under the tone knobs answer the hand, and what each is called — the name
+        under one that does not is dimmed with it. The names are the playing pack's where its switches
+        are on the keys (Console::showChannel), so they change with the channel. */
+    void setKeys (const std::array<bool, 6>& live, const std::array<juce::String, 6>& names);
 
 protected:
     bool canUndo = false, canRedo = false;
     int  activeRegister = 0;
     std::array<bool, 6> keysLive { true, true, true, true, true, true };
+    std::array<juce::String, 6> keyNames;
 
     /** The picture that never changes, at `scale` physical pixels to the stage's unit. */
     virtual void paintStatic (juce::Graphics&, float scale) const = 0;

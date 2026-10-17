@@ -209,14 +209,15 @@ void Cockpit::paintLive (juce::Graphics& g) const
     paintKeyNames (g);
 }
 
-/** The keys' names, under them — a dimmed key's as dim as the key. */
+/** The keys' names, under them — a dimmed key's as dim as the key, and the playing pack's own where its
+    switches are on them. They stand where the six names of their own set them (keyCentres). */
 void Cockpit::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
 
     const auto keyX = keyCentres();
-    for (size_t i = 0; i < switches.size(); ++i)
-        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
+    for (size_t i = 0; i < keyNames.size(); ++i)
+        drawLabel (g, keyNames[i], juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
                    px11, labelLilac.withAlpha (keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
 }
 
