@@ -14,8 +14,8 @@ namespace orbitamp::redpaw
 {
 
 /** THE GEAR LEVER in the dashboard's straight slot: PARK at its top end, then the product's gears down
-    the slot's notches — CLEAN, CRUNCH, HI-GAIN, as many of them as it has — the gear's name is on the
-    nav screen. It follows the hand up and down the slot while held, sits in a position within reach of
+    the slot's notches — CLEAN, CRUNCH, HI-GAIN, the top ones of them as many as it has — the gear's name
+    is on the nav screen. It follows the hand up and down the slot while held, sits in a position within reach of
     one, and springs into the nearest on release; a click anywhere on the gate puts it at the position
     nearest the click, and so does the wheel, a position at a time. In a notch its stem stands in it.
 
@@ -24,10 +24,20 @@ namespace orbitamp::redpaw
 class GearLever final : public juce::Component, private juce::Timer
 {
 public:
-    /** Its positions, top to bottom: PARK, then the gears — a lever of fewer than three has the first. */
+    /** Its positions, top to bottom: PARK, then the gears. */
     static constexpr int park = 0;
     inline static const juce::StringArray names { "PARK", "CLEAN", "CRUNCH", "HI-GAIN" };
     static int positionOf (int gear) noexcept { return gear + 1; }
+
+    /** A position's name on the nav screen. The gears are named down from the top, as the weather is
+        graded (PlainsWorld::turboDust): a lever of fewer than three has the top names, so its last gear
+        is always HI-GAIN — a rover of two drives CRUNCH and HI-GAIN. */
+    static juce::String nameOf (int position, int gears)
+    {
+        if (position <= park)
+            return names[park];
+        return names[juce::jlimit (1, names.size() - 1, position + names.size() - 1 - gears)];
+    }
     static constexpr float left = 724.0f, top = 600.0f;
 
     /** In the product's gears, as many as the slot's top notches. */

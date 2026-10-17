@@ -461,7 +461,7 @@ void RedPawEditor::showSelector (int channel)
     turbo.setOn (turboOn, false);
     turbo.setEnabled (! parked);
 
-    header.set (GearLever::names[at], juce::String (lineup().channels[(size_t) channel].name).toUpperCase(), parked);
+    header.set (GearLever::nameOf (at, lever.numGears()), juce::String (lineup().channels[(size_t) channel].name).toUpperCase(), parked);
 
     view->setGear (gear + 1);
     view->setTurbo (turboOn);
