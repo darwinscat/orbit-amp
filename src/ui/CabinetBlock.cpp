@@ -246,28 +246,38 @@ void CabinetBlock::showIrMenu()
         return item;
     };
 
-    juce::PopupMenu factory;
-    for (int i = 0; i < params::cabIrNames.size(); ++i)
-        factory.addItem (itemFor (params::cabIrNames[i], 1 + i, ! choice.isUser() && choice.factory == i));
+    // THE SHELF, BY CABINET: a submenu for each, in params::cabShelves' order, and inside it first a
+    // line that says what these IRs are, then their names. A shelf IR keeps its number in the
+    // parameter whichever cabinet shows it, so its item is that number and one more, as it always
+    // was. The cabinet holding the IR that plays wears the tick, so the way to it can be followed.
+    juce::PopupMenu menu;
+
+    for (const auto& shelf : params::cabShelves)
+    {
+        juce::PopupMenu cabinet;
+        cabinet.addSectionHeader (juce::String::fromUTF8 (shelf.about));
+
+        bool holdsChoice = false;
+        for (int i = shelf.first; i < shelf.first + shelf.count; ++i)
+        {
+            const bool ticked = ! choice.isUser() && choice.factory == i;
+            cabinet.addItem (itemFor (params::cabIrNames[i], 1 + i, ticked));
+            holdsChoice = holdsChoice || ticked;
+        }
+
+        menu.addSubMenu (shelf.cabinet, cabinet, true, nullptr, holdsChoice);
+    }
 
     // The player's files are numbered from here, in the order the tree lists them.
     static constexpr int firstFile = 1000;
     auto files = std::make_shared<std::vector<juce::File>>();
 
-    juce::PopupMenu menu;
-
-    if (irsBeneath (library) == 0)
+    if (irsBeneath (library) > 0)
     {
-        // Nothing of the player's own: the shelf is the whole list, as it always was.
-        menu = std::move (factory);
-    }
-    else
-    {
-        // The shelf keeps ONE place however the library grows — the top — and the library is laid
+        // The shelf keeps its place however the library grows — the top — and the library is laid
         // out below it the way SETUP shows it: folders first, each a submenu, then the files. A
         // folder with nothing playable anywhere under it is a shelf with nothing on it, and stays
         // out. A folder holding what plays wears the tick too, so the way to it can be followed.
-        menu.addSubMenu ("Factory", factory, true, nullptr, ! choice.isUser());
         menu.addSeparator();
 
         std::function<bool (juce::PopupMenu&, const device::IrLibrary::Node&)> addTree =

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../Parameters.h"
+#include "GateLearner.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -31,13 +32,13 @@ namespace orbitamp
     opens. It runs for three seconds after the click that started it, keeps a trace the big overlay
     draws from a POINTER into this object, and at the end writes a threshold AND switches the gate
     on. Every one of those outlives a popup; two of them outlive a patch, which is what `cancel()`
-    is for. */
-class GateConsole final : private juce::Timer
+    is for. The measurement itself is GateLearner's (GateLearner.h) — the same one every face's GATE
+    menu runs — and what is this console's is the words it is projected with. */
+class GateConsole final
 {
 public:
     GateConsole (juce::AudioProcessorValueTreeState& state, const std::atomic<float>& keyDbSource)
-        : keyDb (keyDbSource),
-          presentP (*state.getParameter (params::gatePresent)),
+        : learner (state, keyDbSource),
           onP    (*state.getParameter (params::gateOn)),
           thP    (*state.getParameter (params::gateThreshold)),
           decayP (*state.getParameter (params::gateDecay)),
@@ -47,12 +48,22 @@ public:
         thAtt    = std::make_unique<juce::ParameterAttachment> (thP,    [] (float) {});
         decayAtt = std::make_unique<juce::ParameterAttachment> (decayP, [] (float) {});
         posAtt   = std::make_unique<juce::ParameterAttachment> (posP,   [] (float) {});
+
+        learner.onBegin = [this] { if (onLearnBegin != nullptr) onLearnBegin(); };
+        learner.onDone  = [this] (const GateLearner::Take& take)
+        {
+            if (onLearnDone == nullptr)
+                return;
+
+            using Outcome = GateLearner::Outcome;
+            onLearnDone (take.outcome == Outcome::set       ? "SET " + juce::String (juce::roundToInt (take.thresholdDb)) + " DB"
+                       : take.outcome == Outcome::cancelled ? juce::String ("CANCELLED")
+                                                            : juce::String ("NOTHING HEARD"));   // a muted input teaches nothing
+        };
     }
 
-    ~GateConsole() override
+    ~GateConsole()
     {
-        stopTimer();
-
         // The menu's weak reference needs nothing here: `JUCE_DECLARE_WEAK_REFERENCEABLE` declares
         // a `WeakRefMaster` whose own destructor clears, and declares it last, so it is the first
         // member to go. (The bare `WeakReference::Master` is the one that only asserts — reading
@@ -65,42 +76,19 @@ public:
 
     /** The overlay draws the measurement from HERE, by pointer — which is the whole reason this
         object outlives every popup and is declared before the overlay that reads it. */
-    const std::vector<float>& learnTraceRef() const noexcept { return learnTrace; }
+    const std::vector<float>& learnTraceRef() const noexcept { return learner.trace(); }
 
-    static constexpr int learnTotalTicks = 90;   // 3 s at 30 Hz
-    static constexpr int learnEdgeTicks  = 15;   // half a second each end, thrown away
+    static constexpr int learnTotalTicks = core::GateLearn::totalTicks;   // 3 s at 30 Hz
+    static constexpr int learnEdgeTicks  = core::GateLearn::edgeTicks;    // half a second each end, thrown away
 
     /** The threshold LEARN would set if it ended now — the overlay's live dashed line.
         -999 while the trusted window has heard nothing yet. */
-    float learnPendingDb() const
-    {
-        if (! learning || learnPeak <= -119.0f)
-            return -999.0f;
+    float learnPendingDb() const { return learner.pendingDb(); }
 
-        return juce::jlimit (-80.0f, -10.0f, learnPeak + params::gateHysteresisDb);
-    }
+    bool isLearning() const noexcept { return learner.isLearning(); }
 
-    bool isLearning() const noexcept { return learning; }
-
-    /** STOP, and write nothing.
-
-        A measurement takes three seconds, and three seconds is long enough to switch a register,
-        load a preset, undo, or take the gate out of the rig. Finishing into whatever patch happens
-        to be live by then would set a threshold nobody asked for and switch on a gate somebody had
-        just switched off — and it would not look like a bug in the gate. It would look like the
-        gate turning itself on by itself, three seconds after you looked away. */
-    void cancel()
-    {
-        if (! learning)
-            return;
-
-
-        learning = false;
-        stopTimer();
-
-        if (onLearnDone != nullptr)
-            onLearnDone ("CANCELLED");
-    }
+    /** STOP, and write nothing (GateLearner::cancel says why). */
+    void cancel() { learner.cancel(); }
 
     /** The gate's whole console. `withVolume` is gone with the column it belonged to: the trim's
         RESET was the COLUMN's item, and the column has its own door now. */
@@ -127,7 +115,7 @@ public:
         m.addItem (2, "SOFT   -60",  true, matches (-60.0f, false));
         m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
         m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
-        m.addItem (5, "LEARN",       true, learning);
+        m.addItem (5, "LEARN",       true, learner.isLearning());
 
         juce::PopupMenu decay;
         decay.addItem (10, "NORMAL", true, ! metal);
@@ -185,26 +173,7 @@ private:
         {
             // Stay quiet: the fuse burns up the overlay's edge and the threshold lands the full
             // hysteresis above whatever floor was measured.
-            learning   = true;
-            learnTicks = 0;
-            learnPeak  = -120.0f;
-            learnTrace.clear();
-            learnTrace.reserve ((size_t) learnTotalTicks);
-
-            // What the patch looked like when the measurement began. If any of it moves while we
-            // are counting, somebody else is driving — a register recalled, a preset loaded, an
-            // undo, the gate taken out of the rig — and finishing would write into a patch that
-            // is no longer the one that asked. Watched HERE rather than through a hook on the
-            // history, because a hook is one slot and a host may open two editors.
-            watchPresent = presentP.getValue();
-            watchOn      = onP.getValue();
-            watchTh      = thP.getValue();
-
-            startTimerHz (30);
-
-            if (onLearnBegin != nullptr)
-                onLearnBegin();
-
+            learner.start();
             return;
         }
 
@@ -213,69 +182,12 @@ private:
         decayAtt->setValueAsCompleteGesture (choice == 4 ? 1.0f : 0.0f);   // HARD is the metal chop
     }
 
-    /** Only while learning. A console with no face has nothing to repaint the rest of the time,
-        and a timer running for nobody is the thing this whole rework keeps deleting. */
-    void timerCallback() override
-    {
-        if (! learning)
-        {
-            stopTimer();
-            return;
-        }
-
-        // Somebody else moved the gate while we were counting. Stop, and write nothing.
-        if (! juce::approximatelyEqual (presentP.getValue(), watchPresent)
-            || ! juce::approximatelyEqual (onP.getValue(), watchOn)
-            || ! juce::approximatelyEqual (thP.getValue(), watchTh))
-        {
-            cancel();
-            return;
-        }
-
-        const float now = keyDb.load();
-
-        ++learnTicks;
-        learnTrace.push_back (now);   // the waveform on the overlay IS the progress
-
-        // The window's edges are thrown away: the menu click itself, and the hand leaving the
-        // mouse, are not the noise floor.
-        if (learnTicks > learnEdgeTicks && learnTicks <= learnTotalTicks - learnEdgeTicks)
-            learnPeak = juce::jmax (learnPeak, now);
-
-        if (learnTicks < learnTotalTicks)
-            return;
-
-        learning = false;
-        stopTimer();
-
-        // Nothing arrived: a muted input teaches nothing.
-        juce::String verdict = "NOTHING HEARD";
-
-        if (learnPeak >= -75.0f)
-        {
-            const float th = juce::jlimit (-80.0f, -10.0f, learnPeak + params::gateHysteresisDb);
-            thAtt->setValueAsCompleteGesture (th);
-            onAtt->setValueAsCompleteGesture (1.0f);
-            verdict = "SET " + juce::String (juce::roundToInt (th)) + " DB";
-        }
-
-        if (onLearnDone != nullptr)
-            onLearnDone (verdict);
-    }
-
-    const std::atomic<float>& keyDb;
-    juce::RangedAudioParameter& presentP;
+    GateLearner learner;
     juce::RangedAudioParameter& onP;
     juce::RangedAudioParameter& thP;
     juce::RangedAudioParameter& decayP;
     juce::RangedAudioParameter& posP;
     std::unique_ptr<juce::ParameterAttachment> onAtt, thAtt, decayAtt, posAtt;
-
-    bool  learning   = false;
-    int   learnTicks = 0;
-    float learnPeak  = -120.0f;
-    std::vector<float> learnTrace;
-    float watchPresent = 0.0f, watchOn = 0.0f, watchTh = 0.0f;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (GateConsole)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateConsole)

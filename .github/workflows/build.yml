@@ -65,12 +65,20 @@ jobs:
       - name: Build CatpitAmp
         run: cmake --build build --target CatpitAmp_All catpitamp_set_test catpitamp_channel_test
 
+      # The rover likewise: released apart, not in the default build, built here by name with its gates.
+      - name: Build RedPawAmp
+        run: cmake --build build --target RedPawAmp_All redpawamp_set_test redpawamp_channel_test
+
+      # ...and the ice moon's rover, the same dashboard in a skin of its own, with the rover's gates run as it.
+      - name: Build FrostPawAmp
+        run: cmake --build build --target FrostPawAmp_All frostpawamp_set_test frostpawamp_channel_test
+
       - name: sccache stats
         if: always()
         run: sccache --show-stats
 
-      # The seven acceptance gates — the same ones the local release runs. Console apps land in
-      # <name>_artefacts/Release; the two plain executables sit wherever the generator put them.
+      # The acceptance gates — OrbitAmp's ten, the same ones the local release runs, and each product's own. Console apps land in
+      # <name>_artefacts/Release; the three plain executables sit wherever the generator put them.
       - name: Gates
         shell: bash
         run: |
@@ -125,16 +133,21 @@ jobs:
             set -e
             return 1
           }
-          for t in captured chain library reverb ribbon; do
+          for t in captured chain library reverb ribbon set factory hum; do
             run_gate "$t" "$(find "build/orbitamp_${t}_test_artefacts" -type f -name '*.exe' | head -1)"
           done
-          for t in eqlink tuner; do
+          for t in eqlink tuner gatelearn; do
             run_gate "$t" "$(find build -maxdepth 2 -type f -name "orbitamp_${t}_test.exe" | head -1)"
           done
           # The cockpit's own: its set as it leaves the binary, laid out in a folder of the gate's —
           # and its channels with no window, moved the way a host moves them.
           run_gate catpit-set "$(find build/catpitamp_set_test_artefacts -type f -name '*.exe' | head -1)"
           CATPIT_GATE_OWNS_HOME=1 run_gate catpit-channel "$(find build/catpitamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
+          # ...and the rovers', the same two over each one's own channels.
+          run_gate redpaw-set "$(find build/redpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
+          ROVER_GATE_OWNS_HOME=1 run_gate redpaw-channel "$(find build/redpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
+          run_gate frostpaw-set "$(find build/frostpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
+          ROVER_GATE_OWNS_HOME=1 run_gate frostpaw-channel "$(find build/frostpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
 
       - name: Validate (pluginval, VST3)
         shell: bash

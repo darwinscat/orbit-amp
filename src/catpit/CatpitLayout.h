@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../face/Stage.h"
+
 #include <juce_graphics/juce_graphics.h>
 
 #include <array>
@@ -14,21 +16,16 @@
 namespace orbitamp::catpit::layout
 {
 
-inline constexpr float width  = 1672.0f;
-inline constexpr float height = 941.0f;
-
-/** THE READING WIDTH: the window opens this wide, and every label below is sized so that at THIS scale
-    it is 13 px. */
-inline constexpr int   readingWidth   = 1024;
-inline constexpr float readingScale   = (float) readingWidth / width;
-/** The smallest the window may get: a little under the reading width, asked for. Pulled all the way in,
-    a 13-px label is 12.2 px. */
-inline constexpr int   minWindowWidth = 960;
-inline constexpr float px13           = 13.0f / readingScale;   // a 13-px label, in this space
-inline constexpr float px15           = 15.0f / readingScale;
-inline constexpr float px16           = 16.0f / readingScale;
-/** The one exception, asked for: the six keys under the tone knobs wear short names a size down. */
-inline constexpr float px11           = 11.0f / readingScale;
+// The stage's own space and type sizes: the render was composed in the space every face is drawn on.
+using face::stage::width;
+using face::stage::height;
+using face::stage::readingWidth;
+using face::stage::readingScale;
+using face::stage::minWindowWidth;
+using face::stage::px11;
+using face::stage::px13;
+using face::stage::px15;
+using face::stage::px16;
 
 inline const juce::Point<float> windshieldSeed { 836.0f, 164.0f };
 inline const juce::Rectangle<float> windshield { 152.0f, 60.0f, 1368.0f, 210.0f };
@@ -109,6 +106,42 @@ inline const std::array<juce::Rectangle<float>, numLamps> lamps {{
     and 125); right of the version, the limiter's (1546 and 1645). */
 inline const juce::Point<float> gatePlate    { 75.0f, 805.5f };
 inline const juce::Point<float> limiterPlate { 1595.5f, 805.5f };
+
+/** INPUT's well as painted, its rim and all — a corner's slot is cut from it — and its two ends: the top
+    one down past the T the slot's head makes, the bottom one up from where the slot stops. */
+inline const juce::Rectangle<float> inWell { 113.0f, 381.0f, 70.0f, 354.0f };
+inline constexpr float inWellTop = 32.0f, inWellBottom = 24.0f;
+inline constexpr float inWellChamfer = 7.0f;     // its four corners, cut off
+
+/** GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader in a slot cut into its corner: INPUT's
+    well at `cornerSlotScale` of its size, its two ends whole and its straight run cut short to make it
+    `cornerSlotLength` long, laid upright about its middle and then turned (and, for one, mirrored) to lie
+    where it lies — the fader in it turned with it. Each lies along the slanted beam beside its lamp, at
+    the lamp's slant, its head up toward the plate with the word on it; the beam on the right is the
+    mirror of the left one, and so is the slot. -70 dB at GATE's foot to -40 at its head; -3 dB to -0.1
+    at LIMITER's. */
+struct CornerSlot
+{
+    juce::Point<float> centre;
+    float angle;        // the head turned this far from straight up, clockwise, in radians
+    bool mirrored;      // drawn as its mirror image, the fader's scale on its left
+
+    /** The well, upright about the slot's middle, `wide` across. */
+    juce::Rectangle<float> upright (float wide, float length) const { return juce::Rectangle<float> (wide, length).withCentre (centre); }
+
+    /** What lays the upright well where it lies. */
+    juce::AffineTransform turn() const
+    {
+        return (mirrored ? juce::AffineTransform::scale (-1.0f, 1.0f, centre.x, centre.y) : juce::AffineTransform())
+                   .rotated (angle, centre.x, centre.y);
+    }
+};
+inline constexpr float cornerSlotScale  = 0.3f;
+inline constexpr float cornerSlotLength = 76.0f;
+inline constexpr float lampSlant = 0.532f;   // 30.5 degrees off upright: the lamps' sides, and the beams'
+inline const CornerSlot gateSlot    { { 155.5f, 865.0f }, -lampSlant, false };   // above the beam's screw
+inline const CornerSlot limiterSlot { { 1515.5f, 865.0f }, lampSlant, true };
+inline constexpr float thresholdLowDb = -70.0f, thresholdHighDb = -40.0f;
 
 /** The flat plate under the grille, right of the tuner and down-left of the version, on the cockpit's
     bottom edge: what the engine is costing reads here. The words start at its left edge. */

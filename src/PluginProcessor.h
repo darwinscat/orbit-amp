@@ -6,6 +6,7 @@
 #include "Product.h"
 #include "Parameters.h"
 #include "ui/Prefs.h"
+#include "ui/HumTuning.h"
 #include "core/CapturedBlock.h"
 #include "core/DemoPlayer.h"
 #include "core/ScopeTap.h"
@@ -13,10 +14,12 @@
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
+#include "core/HumLearnLink.h"
 #include "core/BypassFade.h"
 #include "core/BypassWire.h"
 #include "core/CabinetIr.h"
-#include "core/SoftLimiter.h"
+#include "core/DoorLimiter.h"
+#include "core/LateWire.h"
 #include "core/DelayStage.h"
 #include "core/ReverbStage.h"
 #include "device/EmbeddedIrs.h"
@@ -24,6 +27,7 @@
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/appkit/CompareHistory.h>
 #include <felitronics/appkit/UpdateChecker.h>
+#include <felitronics/dehum/HumRemover.h>
 #include <felitronics/dynamics/NoiseGate.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -34,7 +38,7 @@ namespace orbitamp
 
 /** WHAT A PRODUCT ADDS TO THE ENGINE THAT IS NOT ITS FACE. A face is there while its window is open;
     this is there for as long as the processor is — what a host can reach with the window shut. The
-    cockpit keeps its four channels in one (catpit/CatpitEngine.h); OrbitAmp has none. */
+    cockpit keeps its four channels in one (channels/Engine.h); OrbitAmp has none. */
 struct ProductEngine
 {
     virtual ~ProductEngine() = default;
@@ -45,6 +49,10 @@ struct ProductEngine
     /** The state changed under the processor — a session opened, a register recalled, a step of the
         history taken. Said from inside the landing itself: it may look, and must not write. */
     virtual void stateLanded() = 0;
+
+    /** A SWITCH THAT PARKS THE WHOLE AMP, where the product has one: the raw value of its parameter,
+        read on the audio thread. Parked, no link of the chain works but the tuner — see linkWorks. */
+    virtual const std::atomic<float>* parkSwitch() const { return nullptr; }
 };
 
 /** The plugin shell. Deliberately thin: the chain (boost -> EQ -> preamp -> EQ -> delay -> reverb ->
@@ -69,6 +77,9 @@ public:
         nothing at all. I wrote one anyway, on a reading of the wrong destructor, and the review
         caught it. */
     ~AmpProcessor() override { apvts.state.removeListener (this); }
+
+    /** The hum stage's type (removeHum): room for 128 harmonics, 6.4 kHz at 50 Hz. */
+    using HumStage = felitronics::dehum::HumRemover<128>;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -143,8 +154,8 @@ public:
         //
         // So while either link that can be set to ring long is in the rig, the answer is never
         // below the flat eight this used to be. Both of the wins survive it — a rig with neither
-        // of them asks for a second and a bit instead of eight, and a hall breathing at double is
-        // no longer cut at eight — and the one case that stays wrong in a caching host is one
+        // of them asks for its cabinet and a tenth instead of eight, and a hall breathing at double
+        // is no longer cut at eight — and the one case that stays wrong in a caching host is one
         // where the old constant was exactly as wrong. Lifting the floor is a thing to do after
         // watching a real session in Cubase and Logic, not before.
         if (linkInRig (params::rowDelay) || linkInRig (params::rowReverb))
@@ -757,6 +768,12 @@ private:
         keep, nothing to normalise, and no way to express "not in the rig but playing". */
     bool linkWorks (params::ChainRow row) const noexcept
     {
+        // PARKED, the amp is out of the sound: every link stands by — the captured blocks' fades and
+        // wires hand the dry signal through at the chain's own latency, the rooms and the delay are no
+        // longer fed and ring out, the trims go to unity — and only the tuner goes on listening.
+        if (row != params::rowTuner && isParked())
+            return false;
+
         const auto* on = rowOn[(size_t) row];
         const auto* in = rowPresent[(size_t) row];
 
@@ -862,6 +879,10 @@ public:
         host's tempo and the block's own does not exist. */
     bool runsInHost() const noexcept { return wrapperType != wrapperType_Standalone; }
 
+    /** Whether the product has parked the whole amp (ProductEngine::parkSwitch): the dry signal
+        passes. Never, for a product with no such switch. */
+    bool isParked() const noexcept { return parked != nullptr && parked->load (std::memory_order_relaxed) > 0.5f; }
+
     /** A PROGRAM CHANGE THAT CAME IN, for a face that plays them. The engine has no programs of its
         own: it keeps the last one a MIDI input sent (0..127, on any channel) until a face that gives
         programs a meaning takes it — the cockpit, whose first four are its channels. -1 when none has
@@ -888,6 +909,32 @@ private:
         here because the engine does not read its config back. */
     felitronics::dynamics::NoiseGate::Config gateCfg;
     float lastGateDecay = -1.0f;
+
+    /** The hum stage, from felitronics-core — first on the input, ahead of the trim (processChunk says
+        why). It takes its mode through `humWanted`, the machine's cached setting, and is handed it on
+        the audio thread when it differs from `humApplied`, the one it was last given; both are the
+        audio thread's alone once prepareToPlay has run. A hundred and twenty-eight harmonics, so a hum
+        can be followed up to 6.4 kHz at 50 Hz; how many of them run is the tuning's (tuneHum). */
+    HumStage humStage;
+    const std::atomic<int>* humWanted = nullptr;
+    const std::atomic<int>* humLastOn = nullptr;    // what OFF bypasses (prefs::humLastOn)
+    int humApplied = -1;        // the mode the stage runs
+    int humShown   = -1;        // the machine's mode, OFF included, as last published
+    // OFF's crossfade: the input as it came, copied before the stage (sized in prepareToPlay), and how
+    // much of the stage's output is heard, ramped a sample at a time.
+    juce::AudioBuffer<float> humDry;
+    // How hard the stage works — TEMPORARY, for tuning by ear (ui/HumTuning.h): the machine's three
+    // cached numbers, and the ones the stage was last given.
+    const std::atomic<float>* humPlayWanted  = nullptr;
+    const std::atomic<float>* humQuietWanted = nullptr;
+    const std::atomic<float>* humUpToWanted  = nullptr;
+    float humTunedPlay = -1.0f, humTunedQuiet = -1.0f, humTunedUpTo = -1.0f;
+    bool tuneHum (felitronics::dehum::HumRemoverParams&) noexcept;
+    float humMix = 1.0f, humMixStep = 1.0f;
+    long long humLearnSamples = -1;    // how long the learn now running has run; -1 while none does
+    float     humLearnArmedMs = -1.0f; // when in it the stage started on a model; -1 until it has
+    double    humRate = 48000.0;       // the rate it is counted at — the one prepareToPlay was given
+    void removeHum (juce::AudioBuffer<float>& buffer) noexcept;
 
 public:
     /** The captured pedal in front, and the captured preamp after it. Each is a device list, the
@@ -948,6 +995,42 @@ public:
         Written by the audio thread, read by the strip's thumb and the zoomed gate on their
         repaint clocks. */
     std::atomic<float> gateMeterDb { 0.0f };
+
+    /** THE HUM AT THE INPUT, as the stage last heard it — written by the audio thread at the end of
+        every block, read by the windows on their own clocks. `humInForce` is the mode the stage is
+        IN FORCE, which is the machine's (prefs::hum) unless the stage could not be prepared for this
+        input, and then it is OFF and says so. OFF is a bypass: the stage goes on running in the last
+        mode that was not OFF, and only its output is set aside. The rest is the stage's own telemetry: the family AUTO's
+        ear decided (50 or 60, 0 while it abstains — whatever the mode), the mains frequency it tracks
+        (0 while it takes nothing off), whether that tracker has settled, and the level of the hum it
+        is taking off, in dB re a full-scale sine. */
+    std::atomic<int>   humInForce { (int) prefs::Hum::off };
+    std::atomic<int>   humFamily  { 0 };
+    std::atomic<float> humHz      { 0.0f };
+    std::atomic<bool>  humLocked  { false };
+    std::atomic<float> humDb      { (float) HumStage::kSilentDb };
+
+    /** What the stage was last tuned to, as it was handed over — TEMPORARY, with the tuning — and how
+        many harmonics it runs now, published every block. */
+    struct HumTuned
+    {
+        std::atomic<float> playHz { 0.0f }, quietHz { 0.0f }, maxHz { 0.0f };
+        std::atomic<int>   harmonics { 0 }, active { 0 };
+    } humTuned;
+
+    /** The hum stage's LEARN, asked for by its take (core/HumLearnTake.h) and served at the start of the
+        next block — see removeHum. */
+    core::HumLearnLink humLearn;
+
+    /** AUTO'S STATE, while the stage runs AUTO — under OFF too, which bypasses it and lets it go on
+        listening: 50 or 60 once it has decided, 0 while it is still listening, -1 when the stage runs
+        another mode or none. What a menu's AUTO line and the faces' tag say (prefs::humLabel). */
+    int humHeard() const noexcept
+    {
+        return humRuns.load (std::memory_order_relaxed) == (int) prefs::Hum::automatic
+                   ? humFamily.load (std::memory_order_relaxed) : -1;
+    }
+    std::atomic<int> humRuns { -1 };    // the mode the stage runs, published per block; -1 while it runs none
 
     /** The output level after everything, and the two latched clip caps (the UI clears them). */
     std::atomic<float> outDb   { -90.0f };
@@ -1078,7 +1161,15 @@ private:
     int   histSamples = 0;
     std::atomic<float>* limiterCeilParam   = nullptr;
     float lastOutGain = 1.0f;
-    core::SoftLimiter limiter;
+    // THE SAFETY AT THE DOOR (core/DoorLimiter.h): a true-peak limiter that sees each peak a
+    // millisecond before it arrives. It always runs, so its state is warm when it is switched in; while
+    // it is out, `limiterLate` hands on the input exactly as late as the limiter would have, so the
+    // chain is equally late either way and a switch is a crossfade between two signals that line up.
+    felitronics::limiter::TruePeakLimiter limiter;
+    core::LateWire limiterLate;
+    bool limiterReady = false;
+    std::atomic<int> limiterLatency { 0 };
+    float limiterCeilingSet = 1.0e9f;      // the ceiling last handed to it, dB
 
     core::CabinetIr cab;
     std::atomic<float>* cabHpfOnParam = nullptr;
@@ -1245,6 +1336,7 @@ public:
     /** The product's own half of the engine, where it has one (ProductEngine) — null for OrbitAmp.
         Declared after everything it reaches into, so that it goes before any of it does. */
     std::unique_ptr<ProductEngine> product;
+    const std::atomic<float>* parked = nullptr;     // the product's park switch, if it has one
 
 private:
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
@@ -1256,9 +1348,9 @@ private:
 juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
 
 /** What a product keeps INSIDE ITS BINARY and plays from disk, put where it is played from. Defined
-    once per target, like the face: OrbitAmp's set rides in its bundles and this does nothing; the
-    cockpit's is in the binary (catpit/CatpitSet.h). The processor calls it before it builds anything
-    of its own — see AmpProcessor::factorySet. */
+    once per target, like the face: OrbitAmp's set in OrbitAmpSet.cpp, the cockpit's beside its lineup
+    (catpit/CatpitLineup.cpp, through channels/Set.h); both are laid out the one way device/FactorySet.h
+    says. The processor calls it before it builds anything of its own — see AmpProcessor::factorySet. */
 void layOutFactorySet();
 
 /** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —

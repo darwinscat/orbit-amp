@@ -59,12 +59,13 @@ jobs:
       - name: Gates
         run: |
           set -euo pipefail
-          for t in captured chain library reverb ribbon; do
+          for t in captured chain library reverb ribbon set factory; do
             bin=$(find "build/orbitamp_${t}_test_artefacts" -type f -perm +111 | head -1)
             echo "-- gate: $t"; "$bin" > /dev/null
           done
           echo "-- gate: eqlink"; ./build/orbitamp_eqlink_test > /dev/null
           echo "-- gate: tuner";  ./build/orbitamp_tuner_test  > /dev/null
+          echo "-- gate: gatelearn"; ./build/orbitamp_gatelearn_test > /dev/null
       # Sign (Developer ID) + notarize + staple. Signing identities + the notarytool
       # keychain-profile name come from repo secrets/vars; the certs + profile live in the
       # runner's Keychain.
@@ -245,12 +246,13 @@ jobs:
       - name: Gates
         run: |
           set -euo pipefail
-          for t in captured chain library reverb ribbon; do
+          for t in captured chain library reverb ribbon set factory; do
             bin=$(find "build/orbitamp_${t}_test_artefacts" -type f -executable | head -1)
             echo "-- gate: $t"; "$bin" > /dev/null
           done
           echo "-- gate: eqlink"; ./build/orbitamp_eqlink_test > /dev/null
           echo "-- gate: tuner";  ./build/orbitamp_tuner_test  > /dev/null
+          echo "-- gate: gatelearn"; ./build/orbitamp_gatelearn_test > /dev/null
       - name: Package (.tar.gz)
         run: |
           VER="${{ steps.v.outputs.version }}"

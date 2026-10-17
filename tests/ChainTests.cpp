@@ -18,6 +18,12 @@
 #include "PluginProcessor.h"
 #include "core/BypassWire.h"
 
+#include <BinaryData.h>
+
+// OrbitAmp's set (OrbitAmpSet.cpp) is NOT laid out from here: the processor would write it into the
+// machine's real Factory folder. Its own gate, OrbitAmpSetTests, lays it out in a folder of its own.
+void orbitamp::layOutFactorySet() {}
+
 #include <felitronics/core/StreamResampler.h>
 
 #include <algorithm>
@@ -1040,6 +1046,58 @@ int main()
 
     }
 
+    // THE FACTORY SHELF IS THREE LISTS that agree only while somebody keeps them in step: the names
+    // the parameter counts, the bytes behind each number, and the cabinets the menu shows them by.
+    // Every name stands in exactly one cabinet, and every number plays the file its name was read
+    // off — cabIrBytes holds a number past its end to the last entry, so a name added without its
+    // file would play another cabinet's IR without a word.
+    {
+        const int names = orbitamp::params::cabIrNames.size();
+
+        std::vector<int> shown ((size_t) names, 0);
+        int astray = 0;
+        for (const auto& shelf : orbitamp::params::cabShelves)
+            for (int i = shelf.first; i < shelf.first + shelf.count; ++i)
+                if (i >= 0 && i < names)
+                    ++shown[(size_t) i];
+                else
+                    ++astray;
+
+        const auto once = std::count (shown.begin(), shown.end(), 1);
+        report ("cabinet: every shelf IR stands in one cabinet, once", astray == 0 && once == names,
+                juce::String (once) + " of " + juce::String (names) + ", " + juce::String (astray) + " past the list");
+
+        // The name a file gives, the way the shelf was named: "08-big-bubba.wav" is BIG BUBBA.
+        const auto nameOfBytes = [] (const char* data)
+        {
+            for (int r = 0; r < BinaryData::namedResourceListSize; ++r)
+            {
+                int size = 0;
+                if (BinaryData::getNamedResource (BinaryData::namedResourceList[r], size) == data)
+                    return juce::String (BinaryData::originalFilenames[r])
+                               .upToLastOccurrenceOf (".", false, false)
+                               .trimCharactersAtStart ("0123456789-")
+                               .replaceCharacter ('-', ' ')
+                               .toUpperCase();
+            }
+            return juce::String();
+        };
+
+        juce::StringArray wrong;
+        for (int i = 0; i < names; ++i)
+            if (nameOfBytes (orbitamp::AmpProcessor::cabIrBytes (i).data) != orbitamp::params::cabIrNames[i])
+                wrong.add (orbitamp::params::cabIrNames[i]);
+
+        report ("...and every one plays the file it is named after", wrong.isEmpty(), wrong.joinIntoString (", "));
+
+        // The default is a NUMBER, and a number names a cabinet only while the list stands still.
+        const auto fresh = std::make_unique<orbitamp::AmpProcessor>();
+        const auto opens = fresh->cabChoice();
+        report ("...and a fresh instance opens on DARK MATTER",
+                ! opens.isUser() && orbitamp::params::cabIrNames[opens.factory] == "DARK MATTER",
+                orbitamp::params::cabIrNames[opens.factory]);
+    }
+
     // A CABINET IR OF THE PLAYER'S OWN travels with the state, whole. Picked from a file, saved with
     // a session — from a register that is not even the active one — and the file thrown away: a
     // fresh instance on the same machine has to play the very same bytes, and must never have held
@@ -1708,10 +1766,12 @@ int main()
     // ...AND ONE INFINITY MUST NOT MUTE THE SAFETY FOR EVER. The limiter's envelope took the peak
     // it heard, an infinity included, and no finite peak ever decays from that: the gain went to
     // zero and the plugin put out exact silence until the limiter was switched off. A quiet tone,
-    // well under the ceiling, one infinite sample, the tone again: it must come back at unity.
+    // well under the ceiling, one infinite sample, the tone again: it must come back at unity. (Of
+    // the limiter the chain plays, set up as it sets it up — core/DoorLimiter.h.)
     {
-        orbitamp::core::SoftLimiter safety;
-        safety.prepare (sampleRate);
+        felitronics::limiter::TruePeakLimiter safety;
+        (void) safety.prepare (sampleRate, blockSize, 2, orbitamp::core::door::config());
+        safety.setParams (orbitamp::core::door::params (-1.0));
 
         juce::AudioBuffer<float> buf (2, blockSize);
         long long phase = 0;
@@ -1730,7 +1790,7 @@ int main()
             if (b == 20)
                 buf.setSample (0, 100, std::numeric_limits<float>::infinity());
 
-            safety.process (buf.getArrayOfWritePointers(), 2, blockSize, true, -1.0f);
+            (void) safety.process (buf.getArrayOfWritePointers(), 2, blockSize);
 
             if (b == 99)
             {
@@ -1748,8 +1808,9 @@ int main()
     // ...and a huge FINITE spike — not a sound, a fault upstream — is met at its full height and
     // then let go of within half a second, not four.
     {
-        orbitamp::core::SoftLimiter safety;
-        safety.prepare (sampleRate);
+        felitronics::limiter::TruePeakLimiter safety;
+        (void) safety.prepare (sampleRate, blockSize, 2, orbitamp::core::door::config());
+        safety.setParams (orbitamp::core::door::params (-1.0));
 
         juce::AudioBuffer<float> buf (2, blockSize);
         long long phase = 0;
@@ -1770,10 +1831,10 @@ int main()
             if (b == spikeBlock)
                 buf.setSample (0, 100, 1.0e30f);
 
-            safety.process (buf.getArrayOfWritePointers(), 2, blockSize, true, -1.0f);
+            (void) safety.process (buf.getArrayOfWritePointers(), 2, blockSize);
 
-            if (b == spikeBlock)
-                spikeOut = buf.getSample (0, 100);
+            if (b == spikeBlock || b == spikeBlock + 1)     // it leaves a lookahead late
+                spikeOut = juce::jmax (spikeOut, buf.getMagnitude (0, 0, blockSize));
 
             if (b == checkBlock)
             {
@@ -2024,12 +2085,19 @@ int main()
     // THE TUNER'S MUTE: silence at the jack while the tuner works, and not a sample of it while the
     // tuner stands by — a link's action in STANDBY is ignored. A quiet tone through a chain with
     // nothing that needs a pack; the last block of each run is what the jack puts out.
+    //
+    // Nothing that rings, either: the echo and the room grow louder with every run the tone goes
+    // on, so a third run came out a few per cent over the first with no mute anywhere near it —
+    // under the tolerance through BIG BUBBA, and over it through a cabinet 3.7 dB louder at 220 Hz.
+    // Without them the two runs are the same number.
     {
         const auto m = std::make_unique<orbitamp::AmpProcessor>();
         m->prepareToPlay (sampleRate, blockSize);
         set (*m, orbitamp::params::stereoMode, 0.0f);
         set (*m, orbitamp::params::boostPresent,  0.0f);
         set (*m, orbitamp::params::preampPresent, 0.0f);
+        set (*m, orbitamp::params::delayPresent,  0.0f);
+        set (*m, orbitamp::params::reverbPresent, 0.0f);
 
         juce::AudioBuffer<float> buf (2, blockSize);
         juce::MidiBuffer midi;
@@ -2244,6 +2312,31 @@ int main()
     // the most likely answer to "it does not react", and if it ever changes this says so.
     report ("the boost ships switched OFF",
             amp.apvts.getRawParameterValue (orbitamp::params::boostOn)->load() < 0.5f);
+    report ("...and out of the rig, as the cockpit's Crunch has it",
+            amp.apvts.getRawParameterValue (orbitamp::params::boostPresent)->load() < 0.5f);
+
+    // Out of the rig, a boost switched on is still no boost at all: everything below measures it,
+    // so it is put in first.
+    set (amp, orbitamp::params::boostPresent, 1.0f);
+
+    // ...and the preamp it opens on is the cockpit's Crunch, found by its name wherever the list puts
+    // it. The parameter's default is a place in that list, so it is the place that is checked.
+    {
+        const auto& packs = amp.preamp.packs;
+        int crunch = -1;
+        for (int i = 0; i < packs.size(); ++i)
+            if (packs.getReference (i).displayName() == "X88-IR Crunch")
+                crunch = i;
+
+        const auto* device = amp.apvts.getParameter (orbitamp::params::preampDevice);
+        const int opens = juce::roundToInt (device->convertFrom0to1 (device->getDefaultValue()));
+
+        if (crunch >= 0)
+            report ("the preamp ships on the X88-IR Crunch", opens == crunch,
+                    juce::isPositiveAndBelow (opens, packs.size()) ? packs.getReference (opens).displayName() : juce::String (opens));
+        else
+            std::printf ("no X88-IR Crunch installed — the preamp's starting device is not checked\n");
+    }
 
     {
         set (amp, orbitamp::params::boostOn, 0.0f);
@@ -2429,6 +2522,7 @@ int main()
             set (solo, orbitamp::params::boostDevice, 0.0f);
             set (solo, orbitamp::params::reverbOn, 0.0f);
             set (solo, orbitamp::params::preampOn, 0.0f);
+            set (solo, orbitamp::params::boostPresent, 1.0f);   // a fresh instance has none in the rig
             set (solo, orbitamp::params::boostOn, 1.0f);
 
             solo.boost.packs.set (0, bare);
@@ -2859,6 +2953,7 @@ int main()
             auto& hi = *hiOwned;
             hi.inlineLoads = true;
             hi.prepareToPlay (96000.0, blockSize);
+            set (hi, orbitamp::params::boostPresent, 1.0f);   // two blocks to measure; a fresh instance has one in the rig
 
             juce::AudioBuffer<float> buf (2, blockSize);
             juce::MidiBuffer midi;
@@ -3339,8 +3434,21 @@ int main()
 
         report ("nothing that rings asks the host for nothing", bare < 0.5,
                 juce::String (bare, 2) + " s");
-        report ("the speaker alone asks for its own impulse", spkr > bare + 0.5 && spkr < 3.0,
-                juce::String (spkr, 2) + " s");
+        // ...exactly as long as the shipping cabinet's file is. Over half a second, this used to say:
+        // true of BIG BUBBA's second and a quarter, and not of DARK MATTER's 4096 samples, which is
+        // as much as that cabinet goes on saying.
+        const double impulse = []
+        {
+            const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+            juce::AudioFormatManager formats;
+            formats.registerFormat (new juce::WavAudioFormat(), true);
+            const std::unique_ptr<juce::AudioFormatReader> reader (
+                formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (shelf.data, (size_t) shelf.size, false)));
+            return reader != nullptr ? (double) reader->lengthInSamples / reader->sampleRate : 0.0;
+        }();
+
+        report ("the speaker alone asks for its own impulse", impulse > 0.0 && std::abs (spkr - (bare + impulse)) < 1.0e-3,
+                juce::String (spkr, 3) + " s, the impulse " + juce::String (impulse, 3) + " s of it");
         report ("a hall at double decay outlives the old eight", room > 9.0 && room < 12.0,
                 juce::String (room, 2) + " s");
         // Nothing can tell a host this number moved, so while a link that CAN be set to ring long

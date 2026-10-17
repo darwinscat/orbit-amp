@@ -84,10 +84,10 @@ public:
         return 0;
     }
 
-    /** Where a user drops packs. Created on first look, so the folder exists to be dropped into. */
-    /** JUCE's userApplicationDataDirectory is ~/Library on macOS, not ~/Library/Application Support —
+    /** The FAMILY's folder, `Darwin's Cat`: every product's own folder is in it, and the set they share.
+        JUCE's userApplicationDataDirectory is ~/Library on macOS, not ~/Library/Application Support —
         without this the folder lands one level too high and nothing a user drops in is ever found. */
-    static juce::File appDataRoot()
+    static juce::File familyRoot()
     {
         auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
 
@@ -95,9 +95,14 @@ public:
         dir = dir.getChildFile ("Application Support");
        #endif
 
-        // The PRODUCT's folder: two faces of one engine each keep a set of their own — devices,
-        // IRs — and neither reads the other's. For OrbitAmp this is the folder it has always been.
-        return dir.getChildFile ("Darwin's Cat").getChildFile (product::name);
+        return dir.getChildFile ("Darwin's Cat");
+    }
+
+    /** The PRODUCT's folder: two faces of one engine each keep what the PLAYER adds — devices, IRs —
+        and neither reads the other's. For OrbitAmp this is the folder it has always been. */
+    static juce::File appDataRoot()
+    {
+        return familyRoot().getChildFile (product::name);
     }
 
     static juce::File directory()
@@ -110,30 +115,46 @@ public:
         return dir;
     }
 
-    /** Where the plugin's own devices live: inside the bundle once a build ships them curated, and
-        until then the machine-local `Factory` folder next to the user's `Devices`. The fallback
-        exists because the factory LAYER is a fact of the product before the bundle carries it —
-        the manager edits only what sits on top of factory, so something has to say which is which.
-        A build that does ship devices wins outright, so the two sources never double-list. */
+    /** THE FAMILY'S `Factory`, beside every product's folder: where each product lays out the set it
+        carries in its binary when it starts (FactorySet.h) — packs at its top, cabinets in `IRs` — so a
+        pack two products carry is one file, and every product's list shows every pack the family has
+        laid out. Not the player's to edit, and not made here — with no build that carries a set, it is
+        absent. */
+    static juce::File factoryDirectory()
+    {
+        return familyRoot().getChildFile ("Factory");
+    }
+
+    /** Where a build from before the family shared one laid its set out: the product's own `Factory`.
+        Not read any more — only emptied, once (FactorySet::retire). */
+    static juce::File formerFactoryDirectory()
+    {
+        return appDataRoot().getChildFile ("Factory");
+    }
+
+    /** Where the devices the builds carry live: the factory folder their sets are laid out in, one for
+        the family. The factory LAYER is a fact of the product — the manager edits only what sits on top
+        of it, so something has to say which is which. It used to be looked for inside the Mac's bundle
+        first; the set is in the binary now, on every system, and is laid out in one place. */
     static juce::File bundledDirectory()
     {
-        const auto inBundle = juce::File::getSpecialLocation (juce::File::currentApplicationFile)
-                                .getChildFile ("Contents").getChildFile ("Resources").getChildFile ("Devices");
-
-        return inBundle.isDirectory() ? inBundle : appDataRoot().getChildFile ("Factory");
+        return factoryDirectory();
     }
 
     /** Everything loadable, ordered green to red by how much gain it is.
 
         Bundled devices first, then whatever the user added — packs and lone models alike, since a
         `.nam` someone dropped in is theirs exactly as much as an `.orbitrig` is. Within each of the
-        two, the character ramp orders the list and the name settles ties. */
-    static juce::Array<Pack> scan (Slot wanted = Slot::any, bool onePerCapture = true)
+        two, the character ramp orders the list and the name settles ties. The two folders are the
+        machine's unless a caller — a gate, in a folder of its own — names others. */
+    static juce::Array<Pack> scan (Slot wanted = Slot::any, bool onePerCapture = true,
+                                   const juce::File& bundled = bundledDirectory(),
+                                   const juce::File& own = directory())
     {
         juce::Array<Pack> packs;
 
-        scanFolder (bundledDirectory(), true, packs);
-        scanFolder (directory(), false, packs);
+        scanFolder (bundled, true, packs);
+        scanFolder (own, false, packs);
 
         // A pack that names a slot we do not have belongs in no list at all, whatever is being
         // asked for — including a scan that asks for `any`.

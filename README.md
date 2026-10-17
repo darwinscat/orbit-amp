@@ -2,6 +2,14 @@
 
 A NAM-based guitar rig with Darwin's Cat's favourite sounds.
 
+## Captures and impulse responses
+
+The code is AGPL-3.0. The NAM captures and cabinet impulse responses are made by Darwin's Cat and are
+under terms of their own, [resources/CONTENT-LICENSE.md](resources/CONTENT-LICENSE.md): play, record,
+perform and sell your music freely; share the files, changed or not, free of charge and with credit; put them only in a program or device
+whose source is published under a GPL-compatible licence, with credit, or in a closed product with
+written permission.
+
 ## Third-party hardware
 
 Third-party manufacturer and product names are used solely to identify the physical hardware

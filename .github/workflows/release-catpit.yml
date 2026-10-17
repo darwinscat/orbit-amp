@@ -86,11 +86,12 @@ jobs:
           # the engine is what this release ships.
           cmake --build build --config Release --parallel --target CatpitAmp_All \
             orbitamp_captured_test orbitamp_chain_test orbitamp_library_test \
-            orbitamp_reverb_test orbitamp_ribbon_test orbitamp_eqlink_test orbitamp_tuner_test
+            orbitamp_reverb_test orbitamp_ribbon_test orbitamp_eqlink_test orbitamp_tuner_test \
+            orbitamp_factory_test
       - name: Gates
         run: |
           set -euo pipefail
-          for t in captured chain library reverb ribbon; do
+          for t in captured chain library reverb ribbon factory; do
             bin=$(find "build/orbitamp_${t}_test_artefacts" -type f -perm +111 | head -1)
             echo "-- gate: $t"; "$bin" > /dev/null
           done
@@ -214,11 +215,12 @@ jobs:
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target CatpitAmp_All \
             orbitamp_captured_test orbitamp_chain_test orbitamp_library_test \
-            orbitamp_reverb_test orbitamp_ribbon_test orbitamp_eqlink_test orbitamp_tuner_test
+            orbitamp_reverb_test orbitamp_ribbon_test orbitamp_eqlink_test orbitamp_tuner_test \
+            orbitamp_factory_test
       - name: Gates
         run: |
           set -euo pipefail
-          for t in captured chain library reverb ribbon; do
+          for t in captured chain library reverb ribbon factory; do
             bin=$(find "build/orbitamp_${t}_test_artefacts" -type f -executable | head -1)
             echo "-- gate: $t"; "$bin" > /dev/null
           done

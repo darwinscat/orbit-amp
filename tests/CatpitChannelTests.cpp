@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for THE COCKPIT'S CHANNELS WITH NO WINDOW (catpit/CatpitEngine.h). A plug-in's window is shut
+// Gate for THE COCKPIT'S CHANNELS WITH NO WINDOW (channels/Engine.h, over catpit/CatpitLineup.h). A plug-in's window is shut
 // for most of its life, and what a host can reach then is the processor's parameters: so a channel
 // has to be something the processor does by itself. No window is built here at all.
 //
@@ -12,9 +12,12 @@
 //   - a hand's switch is one step of the history, and undoing it brings parameter and sound back together;
 //   - a state from before there was a parameter keeps its channel, and the parameter following it is
 //     not a step of its own;
-//   - a channel whose pack is not installed is refused, and the parameter says where the sound stayed.
+//   - a channel whose pack is not installed is refused, and the parameter says where the sound stayed;
+//   - a channel's pack is the capture it holds: renamed, the file is that channel's pack still;
+//   - a channel's tone knobs are its pack's Bass, Middle and Treble, found by name.
 //
 //   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called;
+//   - a cabinet another product lays out in the family's folder is not one of the cockpit's;
 //   - a channel never pulled opens on its own reverb and its own share of delay.
 //
 // It reads the cockpit's packs from where the cockpit reads them, and lays the build's set out there
@@ -22,8 +25,9 @@
 
 #include "PluginProcessor.h"
 #include "Parameters.h"
-#include "catpit/CatpitEngine.h"
-#include "catpit/CatpitPresets.h"
+#include "device/FactorySet.h"
+#include "channels/Engine.h"
+#include "channels/Presets.h"
 
 #include <cmath>
 #include <cstdio>
@@ -44,10 +48,10 @@ int main()
     auto amp = std::make_unique<AmpProcessor>();
     amp->inlineLoads = true;            // no message loop here: a model lands inside the pump
 
-    auto& engine   = catpit::Engine::of (*amp);
+    auto& engine   = channels::Engine::of (*amp);
     auto& channels = engine.channels;
     auto& history  = amp->history;
-    auto* channel  = amp->apvts.getParameter (catpit::Engine::channelId);
+    auto* channel  = amp->apvts.getParameter (engine.channelId());
     auto* drive    = amp->apvts.getParameter (params::preampGain);
     auto* device   = amp->apvts.getParameter (params::preampDevice);
     if (channel == nullptr || drive == nullptr || device == nullptr)
@@ -72,9 +76,19 @@ int main()
     };
 
     bool installed = true;
-    for (int c = 0; c < catpit::Channels::count; ++c)
+    for (int c = 0; c < channels.count(); ++c)
         installed = installed && channels.packFor (c) >= 0;
     check (installed, "all four channels' packs are installed");
+
+    // BASS, MIDDLE and TREBLE are found in each pack by their names — the X88-IR lists them first, in
+    // that order, so every channel's knobs are on the first three places.
+    {
+        bool inPlace = true;
+        for (int c = 0; c < channels.count(); ++c)
+            for (int t = 0; t < 3; ++t)
+                inPlace = inPlace && channels.toneOf (c, t) == params::preampMeasured (t);
+        check (inPlace, "every channel's BASS, MIDDLE and TREBLE are its pack's first three tones, found by name");
+    }
 
     // A processor just built.
     check (channels.adopted(), "a processor just built is the cockpit's already");
@@ -122,9 +136,9 @@ int main()
     // A state from before there was a parameter: it says its channel on the node, and nowhere else.
     {
         auto old = amp->apvts.copyState();
-        if (auto word = old.getChildWithProperty ("id", catpit::Engine::channelId); word.isValid())
+        if (auto word = old.getChildWithProperty ("id", juce::String (engine.channelId())); word.isValid())
             old.removeChild (word, nullptr);
-        if (auto node = old.getChildWithName (catpit::Channels::nodeType); node.isValid())
+        if (auto node = old.getChildWithName (channels.nodeType()); node.isValid())
             node.setProperty ("active", 3, nullptr);
 
         const int before = history.undoDepth();
@@ -147,6 +161,30 @@ int main()
         engine.pump();
         check (missing && channels.active() == from, "a channel whose pack is not installed is refused");
         check (asked() == from, "...and CHANNEL goes back to where the sound stayed");
+
+        amp->preamp.packs = all;
+    }
+
+    // A channel's pack is the capture it holds, not its file's name: the same four under names that
+    // say nothing, in a folder of the gate's own, are the four channels' packs still.
+    {
+        const auto all = amp->preamp.packs;
+        const auto renamed = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                 .getChildFile ("catpit-renamed-test-" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt()));
+        const auto nameOf = [] (int c) { return "Renamed " + juce::String (c) + ".orbitrig.zip"; };
+
+        bool copied = renamed.createDirectory().wasOk();
+        for (int c = 0; c < channels.count(); ++c)
+            copied = copied && channels.packFor (c) >= 0
+                            && all.getReference (channels.packFor (c)).location.copyFileTo (renamed.getChildFile (nameOf (c)));
+
+        amp->preamp.packs = device::DeviceLibrary::scan (device::DeviceLibrary::Slot::preamp, true,
+                                                         renamed, renamed.getChildFile ("none"));
+        bool found = copied;
+        for (int c = 0; c < channels.count(); ++c)
+            found = found && channels.packFor (c) >= 0
+                          && amp->preamp.packs.getReference (channels.packFor (c)).location.getFileName() == nameOf (c);
+        check (found, "a channel's pack is found by the capture it holds, whatever its file is called");
 
         amp->preamp.packs = all;
     }
@@ -177,6 +215,25 @@ int main()
         const int factory = channels.factoryCabinets();
         const int before  = channels.cabinets().size();
         check (factory > 0, "the build's own cabinets are there");
+
+        // ANOTHER PRODUCT'S CABINET in the family's folder, beside the build's own, under a name that
+        // would stand first among them: it is not one of the cockpit's. It goes again with that
+        // product's own list.
+        {
+            const juce::String bytes ("another product's cabinet");
+            const auto family = device::DeviceLibrary::factoryDirectory();
+            device::FactorySet::layOut (family, "AnotherAmp", 1, { { "IRs/00-another.wav", bytes.toRawUTF8(), (size_t) bytes.length() } });
+            channels.readCabinets();
+
+            bool notOurs = family.getChildFile ("IRs/00-another.wav").existsAsFile() && channels.factoryCabinets() == factory
+                        && channels.cabinets().size() == before;
+            for (const auto& c : channels.cabinets())
+                notOurs = notOurs && c.getFileName() != "00-another.wav";
+            check (notOurs, "a cabinet another product lays out beside the build's own is not one of the cockpit's");
+
+            device::FactorySet::layOut (family, "AnotherAmp", 1, {});
+            channels.readCabinets();
+        }
 
         const auto run = juce::String::toHexString (juce::Random::getSystemRandom().nextInt());
         const auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("catpit-channel-test-" + run);
@@ -252,7 +309,7 @@ int main()
                 && std::abs (delay->convertFrom0to1 (delay->getValue()) - mix) < 1.0e-3f;
         };
 
-        catpit::Presets presets (*amp, channels);
+        orbitamp::channels::Presets presets (*amp, channels);
         presets.init();
         ticks();
         check (channels.active() == 0 && opensOn ("Hall", 15.0f), "after INIT the first channel stands in a hall, with a little delay");

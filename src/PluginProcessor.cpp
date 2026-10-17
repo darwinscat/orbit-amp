@@ -16,6 +16,21 @@ AmpProcessor::FactorySet::FactorySet()
     layOutFactorySet();
 }
 
+// The machine's word for the hum and the stage's are one list in one order: the processor hands one
+// to the other as a number.
+static_assert ((int) prefs::Hum::off       == (int) felitronics::dehum::Mains::Off
+            && (int) prefs::Hum::hz50      == (int) felitronics::dehum::Mains::Hz50
+            && (int) prefs::Hum::hz60      == (int) felitronics::dehum::Mains::Hz60
+            && (int) prefs::Hum::automatic == (int) felitronics::dehum::Mains::Auto);
+
+// ...and so are the stage's verdict on a learn and the one the link hands to the windows.
+using StageVerdict = AmpProcessor::HumStage::LearnVerdict;
+static_assert ((int) StageVerdict::Learned      == core::HumLearnLink::learned
+            && (int) StageVerdict::Disturbed    == core::HumLearnLink::disturbed
+            && (int) StageVerdict::NothingHeard == core::HumLearnLink::nothingHeard
+            && (int) StageVerdict::TooShort     == core::HumLearnLink::tooShort
+            && (int) StageVerdict::NotLearning  == core::HumLearnLink::notLearning);
+
 namespace
 {
     /** The engine's parameters, and after them whatever the product adds of its own. */
@@ -143,6 +158,7 @@ AmpProcessor::AmpProcessor()
     // settles as it is built — the cockpit's chain, its channel, its pack — is how the amp starts,
     // and must not be an edit of it.
     product = makeProductEngine (*this);
+    parked = product != nullptr ? product->parkSwitch() : nullptr;
 
     // The names go in BEFORE the history looks, so a plugin that has just opened already knows
     // which device it is playing — and knows it without that knowledge being an edit. Resetting
@@ -162,6 +178,14 @@ AmpProcessor::AmpProcessor()
     // plugin at all, and an answer built out of the stages' constructor defaults is not an answer.
     updateDelaySettings();
     updateReverbSettings();
+
+    // The machine's hum setting, read here on the constructing thread: its first read opens the
+    // settings file, and the audio thread must only ever meet the cached atomic.
+    humWanted = &prefs::humCache();
+    humLastOn = &prefs::humLastOnCache();
+    humPlayWanted  = &prefs::humtune::playCache();
+    humQuietWanted = &prefs::humtune::quietCache();
+    humUpToWanted  = &prefs::humtune::upToCache();
 
     // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
     // burst commits about 0.4 s after you stop moving.
@@ -446,6 +470,17 @@ const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
             { BinaryData::_19pestopaladin_wav,        BinaryData::_19pestopaladin_wavSize },
             { BinaryData::_20donspinacio_wav,         BinaryData::_20donspinacio_wavSize },
             { BinaryData::_21killdill_wav,            BinaryData::_21killdill_wavSize },
+
+            { BinaryData::_02darkmatter_wav,          BinaryData::_02darkmatter_wavSize },
+            { BinaryData::_03ioncavity_wav,           BinaryData::_03ioncavity_wavSize },
+            { BinaryData::_04eventhorizon_wav,        BinaryData::_04eventhorizon_wavSize },
+            { BinaryData::_06coronalflare_wav,        BinaryData::_06coronalflare_wavSize },
+            { BinaryData::_07browndwarf_wav,          BinaryData::_07browndwarf_wavSize },
+            { BinaryData::_08accretiongap_wav,        BinaryData::_08accretiongap_wavSize },
+            { BinaryData::_09dustcloud_wav,           BinaryData::_09dustcloud_wavSize },
+            { BinaryData::_10blueshift_wav,           BinaryData::_10blueshift_wavSize },
+            { BinaryData::_11redgiant_wav,            BinaryData::_11redgiant_wavSize },
+            { BinaryData::_12pulsarbeam_wav,          BinaryData::_12pulsarbeam_wavSize },
         };
 
         return shelf[(size_t) juce::jlimit (0, (int) std::size (shelf) - 1, index)];
@@ -718,7 +753,7 @@ void AmpProcessor::reportLatency()
     // which is why nothing downstream of here may write it down.
     const int bo = boost.latencySamples();
     const int pr = preamp.latencySamples();
-    const int total = bo + pr;
+    const int total = bo + pr + limiterLatency.load();      // ...and the limiter's lookahead and grid, always
 
     // 🔴 THE WIRE IS SIZED FROM THE NUMBER THE BLOCK ACTUALLY REPORTS, here and nowhere else.
     // `latencySamples()` came out of `NamStage::rateMatch` and therefore out of the rates that are
@@ -788,7 +823,12 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     lastOutGain  = linkWorks (params::rowOut) ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
     lastBoostInGain  = juce::Decibels::decibelsToGain (boostInParam->load());
     lastPreampInGain = juce::Decibels::decibelsToGain (preampInParam->load());
-    limiter.prepare (sampleRate);
+    {
+        limiterReady = limiter.prepare (sampleRate, block, juce::jmax (2, channels), core::door::config());
+        limiterLatency.store (limiterReady ? limiter.latencySamples() : 0);
+        limiterLate.prepare (limiterLatency.load(), juce::jmax (2, channels));
+        limiterCeilingSet = 1.0e9f;
+    }
 
     cab.prepare (sampleRate, block, channels);
     cabIrStale = true;   // the pump reloads the chosen IR into the freshly prepared engine
@@ -797,6 +837,37 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // over a block of ungated hum.
     gate.prepare (sampleRate, block, channels);
     gate.seedEnabled (linkWorks (params::rowGate));
+
+    // The hum stage over the channels the INPUT carries — the hum is the input's, and a channel the
+    // host only gives us to write into has none. Given its mode before it is prepared, so the restart
+    // starts in it rather than ramping into it — the machine's, or under OFF the last one that was not,
+    // OFF's crossfade starting where OFF says. A prepare it refuses (a layout with no input at all)
+    // leaves it OFF, and the mode in force says OFF rather than the machine's AUTO.
+    {
+        const int wanted = humWanted->load (std::memory_order_relaxed);
+        auto p = humStage.params();
+        p.mains = (felitronics::dehum::Mains) (wanted != (int) prefs::Hum::off ? wanted : humLastOn->load (std::memory_order_relaxed));
+        humTunedPlay = humTunedQuiet = humTunedUpTo = -1.0f;      // handed over whatever it was before
+        tuneHum (p);
+        humStage.setParams (p);
+        const bool ready = humStage.prepare (sampleRate, block, getTotalNumInputChannels());
+        humApplied = (int) p.mains;
+        humRuns.store (ready ? humApplied : -1, std::memory_order_relaxed);
+        humShown   = wanted;
+        humDry.setSize (juce::jmax (1, getTotalNumInputChannels()), block, false, true, true);
+        humMix     = wanted != (int) prefs::Hum::off ? 1.0f : 0.0f;
+        humMixStep = (float) (1.0 / (HumStage::kRampSeconds * sampleRate));
+        humLearnSamples = -1;    // a prepare is a restart, and a restart ends a learn
+        humRate = sampleRate;
+        humInForce.store (ready ? wanted : (int) prefs::Hum::off, std::memory_order_relaxed);
+        humLearn.on.store (ready && wanted != (int) prefs::Hum::off, std::memory_order_relaxed);
+        humLearn.running.store (false, std::memory_order_relaxed);
+        humLearn.learnMs.store (-1.0f, std::memory_order_relaxed);
+        humFamily.store (0, std::memory_order_relaxed);
+        humHz.store (0.0f, std::memory_order_relaxed);
+        humLocked.store (false, std::memory_order_relaxed);
+        humDb.store ((float) HumStage::kSilentDb, std::memory_order_relaxed);
+    }
 
     // The mode's environment default — see modeAutoValue.
     if (! stateWasRestored)
@@ -1044,6 +1115,167 @@ void AmpProcessor::sanitiseParameters() noexcept
             guard.value->store (guard.fallback, std::memory_order_relaxed);
 }
 
+/** HOW HARD THE STAGE WORKS — TEMPORARY, for tuning by ear (ui/HumTuning.h). The machine's three
+    numbers into the stage's params when any of them moved, and false when none did. The widths take
+    effect at once; a new reach is a new set of harmonics, which the stage ramps out and learns again.
+    At 1.2 kHz the reach is the stage's own — 24 harmonics under a 2 kHz bound — the stage as it ran
+    before there was a reach to choose; any other runs every harmonic the stage has, under a bound
+    that keeps, at 50 Hz, the last one at or under the frequency named (the stage reckons a harmonic at
+    the top of its lock range). */
+bool AmpProcessor::tuneHum (felitronics::dehum::HumRemoverParams& p) noexcept
+{
+    const float play  = humPlayWanted->load (std::memory_order_relaxed);
+    const float quiet = humQuietWanted->load (std::memory_order_relaxed);
+    const float upTo  = humUpToWanted->load (std::memory_order_relaxed);
+    if (juce::exactlyEqual (play, humTunedPlay) && juce::exactlyEqual (quiet, humTunedQuiet) && juce::exactlyEqual (upTo, humTunedUpTo))
+        return false;
+    humTunedPlay = play;
+    humTunedQuiet = quiet;
+    humTunedUpTo = upTo;
+
+    const felitronics::dehum::HumRemoverParams own;
+    p.bandwidthHz      = (double) play;
+    p.learnBandwidthHz = (double) quiet;
+    if (upTo <= prefs::humtune::upToOwn)
+    {
+        p.harmonics = own.harmonics;
+        p.maxHz     = own.maxHz;
+    }
+    else
+    {
+        p.harmonics = HumStage::kMaxHarmonics;
+        p.maxHz     = (double) upTo * (50.0 + HumStage::kMaxLockRangeHz) / 50.0;
+    }
+
+    humTuned.playHz.store ((float) p.bandwidthHz, std::memory_order_relaxed);
+    humTuned.quietHz.store ((float) p.learnBandwidthHz, std::memory_order_relaxed);
+    humTuned.maxHz.store ((float) p.maxHz, std::memory_order_relaxed);
+    humTuned.harmonics.store (p.harmonics, std::memory_order_relaxed);
+    return true;
+}
+
+void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
+{
+    // Refused at prepare: nothing to run, and the mode in force already says OFF.
+    if (! humStage.isPrepared())
+        return;
+
+    // The machine's mode, handed over here on the audio thread — the stage's threading contract —
+    // and only when it changed: a change of family ramps the old correction out and re-arms.
+    // OFF IS A BYPASS, NOT A STOP. The stage goes on in the last mode that was not OFF, learning as it
+    // did, and only what is heard of it fades — so OFF and back is an A/B: on the way back the hum
+    // comes off at once, by what was learned, with no decision to make again and nothing to relearn.
+    // While it is bypassed the mode in force says OFF, and LEARN is the gate's alone.
+    const int wanted = humWanted->load (std::memory_order_relaxed);
+    {
+        auto p = humStage.params();
+        bool moved = false;
+        if (const int runs = wanted != (int) prefs::Hum::off ? wanted : humLastOn->load (std::memory_order_relaxed);
+            runs != humApplied)
+        {
+            p.mains = (felitronics::dehum::Mains) runs;
+            humApplied = runs;
+            humRuns.store (runs, std::memory_order_relaxed);
+            moved = true;
+        }
+        if (tuneHum (p))
+            moved = true;
+        if (moved)
+            humStage.setParams (p);
+    }
+    if (wanted != humShown)
+    {
+        humShown = wanted;
+        humInForce.store (wanted, std::memory_order_relaxed);
+        humLearn.on.store (wanted != (int) prefs::Hum::off, std::memory_order_relaxed);
+    }
+
+    // THE HUM'S LEARN, asked for by its take (core/HumLearnTake.h), served here before this block is
+    // heard: the stage learns where it runs. Its answer goes back field by field through the link (core/HumLearnLink.h)
+    // — atomics, nothing locked, nothing allocated.
+    if (const int ask = humLearn.ask.exchange (core::HumLearnLink::none, std::memory_order_acq_rel);
+        ask == core::HumLearnLink::begin)
+    {
+        humStage.beginLearn();
+        humLearnSamples = humStage.learning() ? 0 : -1;
+        humLearnArmedMs = -1.0f;
+    }
+    else if (ask == core::HumLearnLink::keep || ask == core::HumLearnLink::drop)
+    {
+        const auto r = humStage.endLearn (ask == core::HumLearnLink::keep);
+        humLearnSamples = -1;
+        humLearn.tell ({ (int) r.verdict, r.kept,
+                         r.mains == felitronics::dehum::Mains::Hz50 ? 50 : r.mains == felitronics::dehum::Mains::Hz60 ? 60 : 0,
+                         (float) r.humDb, (float) r.settledAtMs, (float) r.floorAfterDb });
+    }
+
+    // The input's channels and nothing past them; a host that asks for fewer this block stops the rest,
+    // which the stage keeps a model for and fades back in when they return.
+    // AND ONLY THE ONES THE CHAIN PLAYS. In MONO and in STEREO SPACE the amp eats channel 0 alone (see
+    // `nch` below), and the stage's ear sums its channels: a second input that never reaches the amp —
+    // an empty socket on the interface with its gain up, hissing — was enough to keep it from ever
+    // hearing the room quiet, so AUTO never decided and the hum it did take off came off slowly.
+    // Outside STEREO the second channel stops, as any channel a host stops does.
+    const auto playing = static_cast<params::StereoMode> (
+        juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
+    const int played = playing == params::StereoMode::stereo ? buffer.getNumChannels() : 1;
+    const int numIn = juce::jmin (juce::jmin (getTotalNumInputChannels(), played, buffer.getNumChannels()),
+                                  humStage.maxChannels(), humDry.getNumChannels());
+    const int n     = juce::jmin (buffer.getNumSamples(), humDry.getNumSamples());
+    const float target = wanted != (int) prefs::Hum::off ? 1.0f : 0.0f;
+    const bool  fading = humMix < 1.0f || target < 1.0f;
+    if (fading)
+        for (int c = 0; c < numIn; ++c)
+            humDry.copyFrom (c, 0, buffer, c, 0, n);
+
+    [[maybe_unused]] const bool ran = humStage.process (buffer.getArrayOfWritePointers(), numIn, n);
+    jassert (ran);
+
+    // OFF's crossfade, out = dry + g·(wet - dry) with g ramped over the stage's own 20 ms, a step a
+    // sample. Settled at 0 it is the input as it came, bit for bit; settled at 1 nothing here runs.
+    if (fading)
+    {
+        float g = humMix;
+        for (int c = 0; c < numIn; ++c)
+        {
+            const float* dry = humDry.getReadPointer (c);
+            float* io = buffer.getWritePointer (c);
+            g = humMix;
+            for (int i = 0; i < n; ++i)
+            {
+                g = g < target ? juce::jmin (target, g + humMixStep) : juce::jmax (target, g - humMixStep);
+                io[i] = g <= 0.0f ? dry[i] : g >= 1.0f ? io[i] : dry[i] + g * (io[i] - dry[i]);
+            }
+        }
+        humMix = numIn > 0 ? g : target;
+    }
+
+    const auto family = humStage.detected();
+    humFamily.store (family == felitronics::dehum::Mains::Hz50 ? 50 : family == felitronics::dehum::Mains::Hz60 ? 60 : 0,
+                     std::memory_order_relaxed);
+    humHz.store ((float) humStage.mainsHz(), std::memory_order_relaxed);
+    humTuned.active.store (humStage.activeHarmonics(), std::memory_order_relaxed);
+    humLocked.store (humStage.locked(), std::memory_order_relaxed);
+    humDb.store ((float) humStage.humDb(), std::memory_order_relaxed);
+
+    // The learn's own clock, at the end of the block it has now heard — what a tick of the take is
+    // read against. A learn the stage ended by itself (a restart) is no learn any more.
+    // And when in it the stage started on a model — zeroed, with its family, past its ramp — which is
+    // what the take reckons the stage's settled window from.
+    if (humLearnSamples >= 0 && humStage.learning())
+        humLearnSamples += buffer.getNumSamples();
+    else
+        humLearnSamples = -1;
+    const float learnMs = humLearnSamples < 0 ? -1.0f : (float) (1000.0 * (double) humLearnSamples / humRate);
+    if (humLearnSamples < 0)
+        humLearnArmedMs = -1.0f;
+    else if (humLearnArmedMs < 0.0f && humStage.running() && ! humStage.swapping())
+        humLearnArmedMs = learnMs;
+    humLearn.learnMs.store (learnMs, std::memory_order_relaxed);
+    humLearn.armedAtMs.store (humLearnArmedMs, std::memory_order_relaxed);
+    humLearn.running.store (humStage.running(), std::memory_order_relaxed);
+}
+
 void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -1066,8 +1298,17 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // playing is a loop you cannot judge anything by.
     demo.fill (buffer);
 
-    // The input trim FIRST — ahead of the tuner's ear and the gate's key, like the interface
-    // knob it stands in for: everything downstream, meters included, hears the trimmed level,
+    // THE HUM COMES OFF BEFORE ANYTHING ELSE TOUCHES THE INPUT — the trim included. Mains hum is in
+    // the signal the interface hands over, at the level the interface hands it over at; a stage after
+    // the trim would hear a different hum every time the INPUT lever moved, or a preset moved it, and
+    // the hum would be back for as long as the stage took to learn the new one. Here the lever, the
+    // presets and everything after them only ever meet an input the hum has already left. The demo
+    // loop stands in for the input, so it is heard the same way. Zero latency: nothing downstream
+    // moves.
+    removeHum (buffer);
+
+    // The input trim next, straight after the hum — ahead of the tuner's ear and the gate's key,
+    // like the interface knob it stands in for: everything downstream, meters included, hears the trimmed level,
     // which is what closes the gain-staging loop. Ramped per block against zipper noise.
     // A volume that is not working ramps to UNITY — it is never simply skipped. Skipping leaves
     // the last gain applied to the previous block and none to this one, which is a step in the
@@ -1493,25 +1734,50 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         { const auto a = PerfClock::now();
           // Switching a limiter off returns whatever it was holding down in ONE sample: three
           // decibels of grip released instantly is a step upward, which is a click. Its grip is
-          // crossfaded off like any other replacing link.
+          // crossfaded off like any other replacing link — against the input as late as the
+          // limiter makes it, so the two line up.
           const bool limWorks = linkWorks (params::rowLimit);
           const auto limSpan  = blockFade[(size_t) params::rowLimit].advance (numSamples, limWorks);
           const bool limFade  = limSpan.moving && canFade (numSamples, nchBack);
 
-          if (limFade)
-              for (int ch = 0; ch < nchBack; ++ch)
-                  juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
-                                                     buffer.getReadPointer (ch), numSamples);
+          if (limiterReady)
+          {
+              if (const float ceiling = limiterCeilParam->load(); ceiling != limiterCeilingSet)
+              {
+                  limiter.setParams (core::door::params (ceiling));
+                  limiterCeilingSet = ceiling;
+              }
 
-          limiter.process (channels, nchBack, numSamples,
-                           core::BypassFade::runs (limSpan, limWorks), limiterCeilParam->load());
-
-          if (limFade)
-              core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
-                                       nchBack, numSamples, limSpan);
+              if (limFade)
+              {
+                  // A switch under way: the limited signal and the input as late, crossfaded.
+                  limiterLate.pass (channels, fadeDry.getArrayOfWritePointers(), nchBack, numSamples);
+                  (void) limiter.process (channels, nchBack, numSamples);
+                  core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
+                                           nchBack, numSamples, limSpan);
+              }
+              else if (limWorks)
+              {
+                  // In: the wire keeps up with the input, and the limiter takes it.
+                  limiterLate.feed (channels, nchBack, numSamples);
+                  (void) limiter.process (channels, nchBack, numSamples);
+              }
+              else
+              {
+                  // Out: the limiter stays warm on a copy, and the input goes on, late and untouched.
+                  if (canFade (numSamples, nchBack))
+                  {
+                      for (int ch = 0; ch < nchBack; ++ch)
+                          juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
+                                                             buffer.getReadPointer (ch), numSamples);
+                      (void) limiter.process (fadeDry.getArrayOfWritePointers(), nchBack, numSamples);
+                  }
+                  limiterLate.pass (channels, channels, nchBack, numSamples);
+              }
+          }
 
           nsStage[stLimit] = elapsedNs (a); }
-        limiterGrDb.store (juce::Decibels::gainToDecibels (limiter.lastMinGain(), -90.0f));
+        limiterGrDb.store (limiterReady && linkWorks (params::rowLimit) ? (float) limiter.gainReductionDb() : 0.0f);
 
         // The mono chain becomes the stereo output HERE — one copy, after everything. (In STEREO
         // SPACE the copy was made at the seam, and there is nothing left to copy.)
@@ -1541,7 +1807,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                     d[i] = 0.0f;
         }
 
-        if (limiter.lastMinGain() < 0.999f)
+        if (limiterGrDb.load() < -0.01f)
             limiterWorked.store (true);
 
         float peak = 0.0f;

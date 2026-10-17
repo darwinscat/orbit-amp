@@ -1,0 +1,77 @@
+{
+  "format": "orbitrig", "schema": 4,
+  "rig_id": "v4-kraken-ch1-f7fc", "family_id": "victory-v4-kraken", "name": "Monster Roar", "modeled_by": "Darwin's Cat",
+  "picture": "device.webp",
+  "chain": [
+    {
+      "kind": "nam", "slot": "preamp",
+      "gear": { "make": "Victory", "model": "V4 The Kraken", "type": "preamp" },
+      "tone_type": "hi-gain", "voicing": "dist", "circuit": "tube:4", "output_db": 3,
+      "controls": [
+        { "name": "Gain", "role": "gain", "sweep": 300,
+          "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] }
+      ],
+      "files": [
+        { "file": "V4 Kraken Ch1-0001.namz", "settings": { "Gain": "60" }, "lag_samples": 0 },
+        { "file": "V4 Kraken Ch1-0002.namz", "settings": { "Gain": "90" }, "lag_samples": 1 },
+        { "file": "V4 Kraken Ch1-0003.namz", "settings": { "Gain": "120" }, "lag_samples": 1 },
+        { "file": "V4 Kraken Ch1-0004.namz", "settings": { "Gain": "150" }, "lag_samples": 1 },
+        { "file": "V4 Kraken Ch1-0005.namz", "settings": { "Gain": "180" }, "lag_samples": 1 },
+        { "file": "V4 Kraken Ch1-0006.namz", "settings": { "Gain": "210" }, "lag_samples": 2 },
+        { "file": "V4 Kraken Ch1-0007.namz", "settings": { "Gain": "240" }, "lag_samples": 2 },
+        { "file": "V4 Kraken Ch1-0008.namz", "settings": { "Gain": "270" }, "lag_samples": 2 },
+        { "file": "V4 Kraken Ch1-0009.namz", "settings": { "Gain": "300" }, "lag_samples": 2 },
+        { "file": "V4 Kraken Ch1-0001.namz", "settings": { "Gain": "0" }, "input_db": -6.6,
+          "lag_samples": 0 },
+        { "file": "V4 Kraken Ch1-0001.namz", "settings": { "Gain": "30" }, "input_db": -3.3,
+          "lag_samples": 0 }
+      ],
+      "tone": [
+        {
+          "name": "Bass", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "low_shelf", "hz": 145.0, "q": 0.56,
+              "range_db": [-23.999999999999996, 12.000000000000004] }
+          ]
+        },
+        {
+          "name": "Middle", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "bell", "hz": 752.0, "q": 1.03,
+              "range_db": [-11.999999999999996, 9.000000000000004] }
+          ]
+        },
+        {
+          "name": "Treble", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "high_shelf", "hz": 924.0, "q": 0.68,
+              "range_db": [-11.999999999999996, 9.000000000000004], "hz_at": [1793.0, 842.0],
+              "q_at": [0.67, 0.68] }
+          ]
+        },
+        {
+          "name": "Bright", "placement": "post",
+          "reference": "norm", "default": "norm",
+          "positions": [
+            { "value": "norm", "sections": [] },
+            {
+              "value": "-1",
+              "sections": [
+                { "type": "high_shelf", "hz": 2222.0, "q": 0.6, "gain_db": -6.0 }
+              ]
+            },
+            {
+              "value": "-2",
+              "sections": [
+                { "type": "high_shelf", "hz": 2222.0, "q": 0.6, "gain_db": -12.0 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

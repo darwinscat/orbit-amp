@@ -184,4 +184,109 @@ inline std::atomic<int>& tunerReferenceCache()
 inline int  tunerReference()            { return tunerReferenceCache().load (std::memory_order_relaxed); }
 inline void setTunerReference (int hz)  { hz = snapTunerReference (hz); tunerReferenceCache().store (hz, std::memory_order_relaxed); store().set (tunerReferenceHz, hz); }
 
+/** THE HUM AT THE INPUT — which mains the hum on this machine's input is made of: none to take off,
+    50 Hz, 60 Hz, or AUTO, which listens and decides. It is about the wall socket, the cable and the
+    pickups in this room, not about a sound, so it lives on the machine like the tuner's floor and a
+    preset never carries it: a preset that switched it off would put the hum back on every machine it
+    was loaded on. OFF on a machine that never chose: the stage still runs, in AUTO, bypassed, so the
+    first On — the H key, a menu's switch, its LEARN — takes the hum off with what it already heard.
+    The processor's audio thread reads it every block, so it is cached like the floor; the processor
+    touches the cache in its constructor, so the first read, which opens the file, is never the audio
+    thread's. Stored as a word, so the file says what it means; a word this build does not know reads
+    as the default. The order is felitronics::dehum::Mains's, and the processor holds it to that. */
+inline const juce::Identifier humMains { "hum_mains" };
+
+enum class Hum { off, hz50, hz60, automatic };
+inline constexpr Hum humDefault   = Hum::off;
+inline constexpr Hum humFirstOn   = Hum::automatic;    // what OFF bypasses before anything else has been on
+
+inline const char* humWord (Hum h)
+{
+    switch (h)
+    {
+        case Hum::off:       return "off";
+        case Hum::hz50:      return "50";
+        case Hum::hz60:      return "60";
+        case Hum::automatic: break;
+    }
+    return "auto";
+}
+
+inline Hum humFromWord (const juce::String& word)
+{
+    for (const auto h : { Hum::off, Hum::hz50, Hum::hz60 })
+        if (word == humWord (h))
+            return h;
+    return humDefault;
+}
+
+inline std::atomic<int>& humCache()
+{
+    static std::atomic<int> cached { (int) humFromWord (store().get (humMains, humWord (humDefault)).toString()) };
+    return cached;
+}
+
+/** THE LAST MODE THAT WAS NOT OFF — what OFF bypasses. OFF does not stop the stage: it goes on
+    running in this mode, learning as it did, and only its output is set aside, so the way back is the
+    hum taken off at once by what was already learned (the processor's removeHum). Kept on the machine
+    beside the mode; AUTO when OFF is all this machine has ever chosen. */
+inline const juce::Identifier humLastOnKey { "hum_last_on" };
+
+inline std::atomic<int>& humLastOnCache()
+{
+    static std::atomic<int> cached { [] {
+        const auto h = humFromWord (store().get (humLastOnKey, humWord (humFirstOn)).toString());
+        return (int) (h == Hum::off ? humFirstOn : h);
+    }() };
+    return cached;
+}
+
+inline Hum  hum()            { return (Hum) humCache().load (std::memory_order_relaxed); }
+inline Hum  humLastOn()      { return (Hum) humLastOnCache().load (std::memory_order_relaxed); }
+inline void setHum (Hum h)
+{
+    humCache().store ((int) h, std::memory_order_relaxed);
+    store().set (humMains, humWord (h));
+    if (h != Hum::off)
+    {
+        humLastOnCache().store ((int) h, std::memory_order_relaxed);
+        store().set (humLastOnKey, humWord (h));
+    }
+}
+
+/** The four the machine may hold. A menu offers them as a switch and three modes (HumMenu.h). */
+inline constexpr Hum humChoices[] = { Hum::off, Hum::hz50, Hum::hz60, Hum::automatic };
+
+/** A choice's line in a menu. AUTO's says where it stands while the stage runs it — `heard` is
+    AmpProcessor::humHeard: the family it decided (50 or 60), 0 while it is still listening, -1 when
+    the stage runs another mode. */
+inline juce::String humLabel (Hum h, int heard)
+{
+    switch (h)
+    {
+        case Hum::off:       return "Off";
+        case Hum::hz50:      return "50 Hz";
+        case Hum::hz60:      return "60 Hz";
+        case Hum::automatic: break;
+    }
+    const auto dash = juce::String::fromUTF8 ("Auto \xe2\x80\x94 ");
+    return heard == 50 || heard == 60 ? dash + juce::String (heard) + " Hz"
+         : heard == 0                 ? dash + "listening"
+                                      : juce::String ("Auto");
+}
+
+/** THE QUICK A/B: OFF from any mode, and from OFF the mode it bypasses (humLastOn). */
+inline Hum humFlip() { return hum() == Hum::off ? humLastOn() : Hum::off; }
+
+/** What a face says for a moment after the flip — AUTO's state with it (`heard` as for humLabel). */
+inline juce::String humTag (Hum h, int heard)
+{
+    const auto on = juce::String::fromUTF8 ("HUM ON \xe2\x80\x94 ");
+    if (h == Hum::off)       return "HUM OFF";
+    if (h != Hum::automatic) return on + humLabel (h, -1);
+    return on + "Auto" + (heard == 50 || heard == 60 ? ", " + juce::String (heard) + " Hz"
+                        : heard == 0                 ? juce::String (", listening")
+                                                     : juce::String());
+}
+
 } // namespace orbitamp::prefs

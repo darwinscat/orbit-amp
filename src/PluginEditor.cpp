@@ -3,6 +3,8 @@
 
 #include "PluginEditor.h"
 
+#include "ui/HumMenu.h"
+#include "ui/HumTuning.h"
 #include "ui/Prefs.h"
 
 namespace orbitamp
@@ -34,6 +36,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
       outColumn (VolumeColumn::Side::out, p.outDb,     p.outClip,
                  *p.apvts.getParameter (params::outTrim)),
       gateConsole (p.apvts, p.gateKeyDb),
+      humLearner (p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
@@ -221,11 +224,28 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // controls, position included, live in this menu.
 
     // The measurement, projected: the overlay reads the strip's own trace.
-    learnOverlay.trace       = &gateConsole.learnTraceRef();
-    learnOverlay.totalTicks  = GateConsole::learnTotalTicks;
-    learnOverlay.pendingDb   = [this] { return gateConsole.learnPendingDb(); };
-    gateConsole.onLearnBegin = [this] { learnOverlay.begin(); };
+    // The hum's LEARN on the same overlay, in its own words and with no threshold to walk; only one of
+    // the two runs at a time — starting either cancels the other.
+    gateConsole.onLearnBegin = [this]
+    {
+        humLearner.cancel();
+        learnOverlay.title      = "LEARN";
+        learnOverlay.trace      = &gateConsole.learnTraceRef();
+        learnOverlay.totalTicks = GateConsole::learnTotalTicks;
+        learnOverlay.ticksNow   = nullptr;
+        learnOverlay.pendingDb  = [this] { return gateConsole.learnPendingDb(); };
+        learnOverlay.begin();
+    };
     gateConsole.onLearnDone  = [this] (const juce::String& v) { learnOverlay.finish (v); };
+    humLearner.onBegin = [this]
+    {
+        learnOverlay.title      = "HUM LEARN";
+        learnOverlay.trace      = &humLearner.trace();
+        learnOverlay.ticksNow   = [this] { return humLearner.ticksPlanned(); };
+        learnOverlay.pendingDb  = nullptr;
+        learnOverlay.begin();
+    };
+    humLearner.onDone = [this] (const HumLearner::Take& take) { learnOverlay.finish (HumLearner::words (take).toUpperCase()); };
 
     addChildComponent (learnOverlay);
 
@@ -261,6 +281,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
 
     inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
+    inColumn.onMenu      = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
@@ -386,6 +407,28 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     {
         amp.demo.setPlaying (! amp.demo.isPlaying());
         return true;
+    }
+
+    // H: the hum, OFF and back (prefs::humFlip) — Р under a Russian layout, the same key. G: the
+    // gate's On, the sound's switch and so an undo step, as its menu sets it — П.
+    if (! key.getModifiers().isAnyModifierKeyDown())
+    {
+        const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
+        if (letter == 'H' || letter == 0x0420)
+        {
+            prefs::setHum (prefs::humFlip());
+            return true;
+        }
+        if (letter == 'G' || letter == 0x041f)
+        {
+            if (auto* on = amp.apvts.getParameter (params::gateOn))
+            {
+                on->beginChangeGesture();
+                on->setValueNotifyingHost (on->getValue() > 0.5f ? 0.0f : 1.0f);
+                on->endChangeGesture();
+            }
+            return true;
+        }
     }
 
     return false;
@@ -532,6 +575,55 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
                      });
 }
 
+/** A RIGHT CLICK ON THE INPUT COLUMN: the hum the input carries, and what to take off it. It is the
+    machine's, not the sound's (prefs::hum) — a preset neither carries it nor moves it, undo steps over
+    it, and every window and engine of this product follow it from their next look and their next
+    block. AUTO's line says what it decided, once it has. */
+void AmpEditor::showInputMenu (juce::Point<int> screenPos)
+{
+    // The switch, then the modes (ui/HumMenu.h), in this menu's capitals.
+    const int  heard = amp.humHeard();
+    const auto lines = prefs::humMenu (heard, humLearner.isLearning());
+
+    juce::PopupMenu m;
+    m.addSectionHeader ("HUM  " + prefs::humState (heard).toUpperCase());
+    for (size_t i = 0; i < lines.size(); ++i)
+        m.addItem ((int) i + 1, lines[i].text.toUpperCase(), true, lines[i].ticked);
+
+    // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
+    // its title; knob k's values answer as 100 (k + 1) + their index.
+    const auto knobs = prefs::humtune::knobs();
+    for (size_t k = 0; k < knobs.size(); ++k)
+    {
+        juce::PopupMenu values;
+        for (int i = 0; i < knobs[k].count; ++i)
+            values.addItem (100 * ((int) k + 1) + i, knobs[k].say (knobs[k].values[i]).toUpperCase(), true,
+                            juce::exactlyEqual (knobs[k].values[i], knobs[k].now));
+        m.addSubMenu ((juce::String (knobs[k].name) + "  " + knobs[k].say (knobs[k].now)).toUpperCase(), values);
+    }
+
+    // The answer reaches this window only to start the hum's LEARN, and through a SafePointer: a window
+    // closed under the open menu is left alone.
+    m.showMenuAsync (juce::PopupMenu::Options()
+                         .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
+                     [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs] (int r)
+                     {
+                         if (r > 0 && r <= (int) lines.size() && lines[(size_t) r - 1].isLearn)
+                         {
+                             if (safe != nullptr)
+                             {
+                                 safe->gateConsole.cancel();
+                                 safe->humLearner.start();
+                             }
+                         }
+                         else if (r > 0 && r <= (int) lines.size())
+                             prefs::humPick (lines[(size_t) r - 1]);
+                         else if (const int k = r / 100 - 1, i = r % 100;
+                                  k >= 0 && k < (int) knobs.size() && i < knobs[(size_t) k].count)
+                             knobs[(size_t) k].choose (knobs[(size_t) k].values[i]);
+                     });
+}
+
 void AmpEditor::resized()
 {
     const float s = (float) getWidth() / (float) baseWidth;
@@ -651,7 +743,7 @@ juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
     return new AmpEditor (p);
 }
 
-void layOutFactorySet() {}      // OrbitAmp's factory devices ride in its bundles
+// OrbitAmp's set is laid out by OrbitAmpSet.cpp, apart from the face.
 
 // ...and it is the engine as it stands: no parameter of its own, no half of its own.
 void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&) {}

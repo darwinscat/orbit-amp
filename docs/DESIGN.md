@@ -91,10 +91,13 @@ Two consequences worth stating out loud, because both are the model working rath
 IN → tuner → gate → boost → EQ → preamp (voicing) → EQ → delay → reverb → cabinet → limiter → OUT
 ```
 
+A fresh instance — and INIT — is CatpitAmp's Crunch channel: the X88-IR Crunch through DARK MATTER,
+no boost in the chain, IN and OUT in it at unity, the delay on with nothing in its mix, and
+everything else at its parameter's own default.
+
 - **IN / OUT** — the input's level and its volume, the output's mirrored: one rail each, one hand
-  each. **Out of the rig by default**: the volumes that matter are the captured blocks' own IN trims
-  — how hard each model is fed — and a global fader is what a player reaches for when a rig needs
-  fixing, not what a rig needs to start with.
+  each. **In the rig by default, at unity**, as the cockpit's INPUT and OUTPUT faders are. The
+  volumes that matter most are still the captured blocks' own IN trims — how hard each model is fed.
 - **Tuner** — a listener: it taps the raw input, ahead of the gate, because a closed gate would
   blind the needle on a decaying note, which is exactly when you tune. MPM (McLeod) pitch. It is a
   link like any other — out of the rig it does not even listen — and it will grow a mute, at which
@@ -131,7 +134,7 @@ IN → tuner → gate → boost → EQ → preamp (voicing) → EQ → delay →
   where each measured knob acts hardest, and the knob below is the hand. They used to drag, and the
   drag converted decibels into knob travel through a single measured swing — honest as an indicator,
   not as a control, because a tone stack's response is not linear in its dial.
-- **Boost** — a separate captured (neural) block in front.
+- **Boost** — a separate captured (neural) block in front. Out of the rig by default.
 - **Preamp** — the captured voicing. Gain 0–10 maps to the captured positions —
   SMOOTH crossfades between them, STEP lands the dial on them; the biggest knob
   (the hero). The tone console lives in the block — see the EQ entry above.
