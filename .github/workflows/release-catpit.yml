@@ -7,12 +7,13 @@ name: release-catpit
 # A manual run (workflow_dispatch) builds the SAME artifacts but does NOT create a release unless
 # dry_run=false, so they can be downloaded and tried from the run page without publishing.
 #
-#   • macOS  → signed + notarized .zip (VST3 + AU + CLAP + Standalone, universal)  [self-hosted runner]
+#   • macOS  → signed + notarized .pkg + .zip (VST3 + AU + CLAP + Standalone, universal)  [self-hosted runner]
 #   • Windows → .zip (VST3 + CLAP + Standalone; x64 and arm64)
 #   • Linux  → .tar.gz (VST3 + CLAP + Standalone; x86_64 and arm64)
 #
-# Archives only, no installer yet: a player puts the bundles where the host looks for them. The
-# cockpit's packs and cabinets are inside every binary, so a bundle is all there is to carry.
+# An installer on macOS only (installer/build-pkg.sh, as OrbitAmp's); elsewhere a player puts the
+# bundles where the host looks for them. The cockpit's packs and cabinets are inside every binary,
+# so a bundle is all there is to carry.
 #
 # THE RELEASE IS PUBLISHED AS "NOT LATEST", AND THAT IS LOAD-BEARING. Every OrbitAmp build already
 # out there asks GitHub for this repository's LATEST release and expects a tag that reads vX.Y.Z.
@@ -20,8 +21,9 @@ name: release-catpit
 # and they would stop seeing their own updates until OrbitAmp shipped again. The cockpit does not
 # need "latest": it asks for the list and takes the releases that wear its prefix (src/Product.h).
 #
-# Required (signing only): secrets MACOS_APP_IDENTITY, KCH_PWD; var NOTARY_PROFILE — the same ones
-# release.yml uses. The GitHub Release is published with the built-in GITHUB_TOKEN.
+# Required (signing only): secrets MACOS_APP_IDENTITY, MACOS_INSTALLER_IDENTITY, KCH_PWD; var
+# NOTARY_PROFILE — the same ones release.yml uses. The GitHub Release is published with the
+# built-in GITHUB_TOKEN.
 
 on:
   push:
@@ -100,12 +102,13 @@ jobs:
       - name: Sign, notarize, package
         env:
           APP_ID:  ${{ secrets.MACOS_APP_IDENTITY }}
+          INST_ID: ${{ secrets.MACOS_INSTALLER_IDENTITY }}
           NOTARY:  ${{ vars.NOTARY_PROFILE }}
           KCH_PWD: ${{ secrets.KCH_PWD }}
         run: |
           set -euo pipefail
 
-          # Let codesign use the signing key without a GUI prompt — see release.yml.
+          # Let codesign/productsign use the signing keys without a GUI prompt — see release.yml.
           KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
           security unlock-keychain -p "$KCH_PWD" "$KEYCHAIN"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCH_PWD" "$KEYCHAIN" >/dev/null
@@ -156,6 +159,15 @@ jobs:
             cp -R "$b" stage/
           done
           ditto -c -k stage "dist/CatpitAmp-$VER-macOS.zip"
+
+          # build → sign → notarize → staple the .pkg, from the same stapled bundles — see release.yml.
+          installer/build-pkg.sh "$VER" "$REL" dist CatpitAmp
+          productsign --sign "$INST_ID" "dist/CatpitAmp-$VER-macOS.pkg" "dist/CatpitAmp-$VER-macOS-signed.pkg"
+          mv "dist/CatpitAmp-$VER-macOS-signed.pkg" "dist/CatpitAmp-$VER-macOS.pkg"
+          xcrun notarytool submit "dist/CatpitAmp-$VER-macOS.pkg" --keychain-profile "$NOTARY" --wait
+          staple_retry "dist/CatpitAmp-$VER-macOS.pkg"
+          xcrun stapler validate "dist/CatpitAmp-$VER-macOS.pkg"
+          spctl -a -vvv -t install "dist/CatpitAmp-$VER-macOS.pkg" || true
       - uses: actions/upload-artifact@v7
         with:
           name: macos
