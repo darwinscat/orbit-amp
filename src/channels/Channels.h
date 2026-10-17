@@ -53,6 +53,23 @@ public:
     juce::String toneId (int knob) const { return toneOf (active(), knob); }
     juce::String toneOf (int channel, int knob) const;
 
+    /** THE PACK'S SWITCHES: its controls that pick a capture and are not the gain dial, in the order the
+        pack lists them — the IR-X Ch1's Boost and three-way Bright, the Ch2's Tight/Fat and Boost; most
+        packs have none. Each is played from a selector slot of the preamp's (params::selectorId), the
+        same reading the block itself makes of the pack, and a channel keeps where each stands. A channel
+        never pulled opens on the pack's own position; the one the channel HOLDS (Lineup::Channel::held)
+        stands where the lineup puts it, always, and is no hand's to throw. Empty when the channel's pack
+        is not installed. */
+    struct PackSwitch
+    {
+        int  slot = 0;              // params::selectorId (preampId, slot)
+        juce::String name;
+        juce::StringArray values;   // its positions, in the pack's order — the panel's
+        int  opening = 0;           // where a channel never pulled has it, as an index into values
+        bool held = false;
+    };
+    std::vector<PackSwitch> switchesOf (int channel) const;
+
     /** The controls kept in the node rather than in a parameter. */
     enum Flag { fat, bright, depth, presence, numFlags };
 
@@ -200,6 +217,7 @@ private:
     int factory = 0;             // how many of them, from the front, are the build's own
     float turboPush = 9.0f;      // TURBO's push, dB
     float settled (const juce::String& paramId, float value) const;    // a remembered TURBO, at the push in force
+    void  hold (int channel);                                           // its held switch where the lineup puts it
     mutable std::vector<std::optional<juce::String>> irKeys;    // each file's content key, read when first asked for; empty if it would not read
     juce::String keyOfFile (int index) const;
 

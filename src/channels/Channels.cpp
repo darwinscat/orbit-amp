@@ -79,6 +79,8 @@ Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
     for (int t = 0; t < numTones; ++t)                  // the tones each channel's knobs turn, its own place in its own pack
         for (int c = 0; c < count(); ++c)
             kept.addIfNotAlreadyThere (toneOf (c, t));
+    for (int s = 0; s < params::numSelectors; ++s)      // where its pack's switches stand
+        kept.add (params::selectorId (params::preampId, s));
     kept.add (params::cabHpfOn);
     kept.add (params::cabLpfOn);
     kept.add (params::reverbMix);
@@ -293,6 +295,7 @@ void Channels::align()
         set (params::preampDevice, (float) pack);
         amp.settleDeviceNames();
     }
+    hold (active());
 
     if (const int playing = cabinet(); playing < 0)
     {
@@ -357,6 +360,46 @@ juce::String Channels::toneOf (int channel, int knob) const
     return params::preampMeasured (knob);
 }
 
+std::vector<Channels::PackSwitch> Channels::switchesOf (int channel) const
+{
+    std::vector<PackSwitch> out;
+    const int pack = packFor (channel);
+    if (pack < 0)
+        return out;
+
+    const auto& own = line.channels[(size_t) juce::jlimit (0, count() - 1, channel)];
+    for (const auto& stage : amp.preamp.packs.getReference (pack).rig.chain)
+    {
+        if (stage.kind != namz::rig::StageKind::Nam)
+            continue;
+
+        // As the block reads the same pack (core::CapturedBlock::selectors): the captured stage's
+        // controls that pick a file and are not the gain dial, one to a slot, as many as there are slots.
+        for (const auto& c : stage.device.controls)
+            if (c.role != namz::rig::Role::Gain && c.values.size() > 1 && (int) out.size() < params::numSelectors)
+            {
+                PackSwitch s;
+                s.slot = (int) out.size();
+                s.name = juce::String (c.name);
+                for (const auto& v : c.values)
+                    s.values.add (juce::String (v));
+                s.held = own.held.control != nullptr && s.name == own.held.control;
+                s.opening = juce::jmax (0, s.values.indexOf (s.held ? juce::String (own.held.value)
+                                                                    : juce::String (namz::rig::defaultValue (c))));
+                out.push_back (std::move (s));
+            }
+        break;
+    }
+    return out;
+}
+
+void Channels::hold (int channel)
+{
+    for (const auto& s : switchesOf (channel))
+        if (s.held)
+            set (params::selectorId (params::preampId, s.slot), (float) s.opening);
+}
+
 bool Channels::adopt()
 {
     if (node().isValid())
@@ -367,7 +410,7 @@ bool Channels::adopt()
     const int playing = juce::roundToInt (plain (params::preampDevice));
     const bool chosen = playing != juce::roundToInt (defaultOf (0, params::preampDevice));
     int channel = -1;
-    for (int c = 0; c < count(); ++c)
+    for (int c = 0; c < count() && channel < 0; ++c)       // two channels on one pack: the first of them
         if (chosen && packFor (c) >= 0 && packFor (c) == playing)
             channel = c;
 
@@ -478,6 +521,7 @@ void Channels::recall (int channel, const juce::ValueTree& record)
     // No record is a channel never visited: every control at what that channel opens on, every layer off.
     for (const auto& id : kept)
         set (id, settled (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (channel, id)));
+    hold (channel);     // whatever the record says: a host may have moved it while the channel played
     for (int f = 0; f < numFlags; ++f)
         setFlag ((Flag) f, record.isValid() && (bool) record.getProperty (flagIds[(size_t) f], false));
     chooseCabinetNamed (record.getProperty (cabinetId).toString());
@@ -505,6 +549,9 @@ float Channels::defaultOf (int channel, const juce::String& paramId) const
         return *own.reverbMix;
     if (paramId == params::delayMix)
         return own.delayMix;
+    for (const auto& s : switchesOf (channel))     // a switch of its pack where the pack opens it, or where the channel holds it
+        if (paramId == params::selectorId (params::preampId, s.slot))
+            return (float) s.opening;
 
     auto* p = amp.apvts.getParameter (paramId);
     return p != nullptr ? p->convertFrom0to1 (p->getDefaultValue()) : 0.0f;
