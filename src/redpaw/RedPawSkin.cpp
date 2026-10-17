@@ -13,18 +13,20 @@
 namespace orbitamp::redpaw
 {
 
-/** ITS CHANNELS (RedPawLineup.h): two gears of two, out of the Victory V4's packs — CLEAN the Copper,
-    CRUNCH the Sheriff — and TURBO each pedal's second channel. A channel's pack is the capture it plays,
-    known by the `rig_id` its manifest carries. What each opens on: a pedal's first channel a little of
-    its room and as much delay, its TURBO twice as much of both — the Copper in a hall, the Sheriff on a
-    plate. */
+/** ITS CHANNELS (RedPawLineup.h): the Friedman IR-X's two, a gear each — CRUNCH its Ch1, HI-GAIN its
+    Ch2 (the lever names them from the top) — and TURBO that channel's own Boost: the same pack, the
+    gear holding the switch off and its TURBO on (Lineup::Channel::held). The pack's other switches are
+    the hand's, on the keys: Ch1's three-way Bright, Ch2's Tight and Fat. A channel's pack is the capture
+    it plays, known by the `rig_id` its manifest carries. What each opens on: a gear a little of its room
+    and as much delay, its TURBO twice as much of both — Ch1 on a plate, Ch2 in an ambience with no
+    delay at all. */
 const channels::Lineup& lineup()
 {
     static const channels::Lineup rover = roverLineup ({
-        { "Copper",      "v4-copper-4ae0",      "Hall",  15.0f, 15.0f, false },
-        { "Copper TB",   "v4-copper-tb-5841",   "Hall",  30.0f, 30.0f, false },
-        { "Sheriff Ch1", "v4-sheriff-ch1-82ab", "Plate", 15.0f, 15.0f, false },
-        { "Sheriff Ch2", "v4-sheriff-ch2-2f2f", "Plate", 30.0f, 30.0f, false },
+        { "IR-X Ch1",       "ir-x-ch1-poweramp-3e66", "Plate",    15.0f, 15.0f, false, { "Boost", "off" } },
+        { "IR-X Ch1 Boost", "ir-x-ch1-poweramp-3e66", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
+        { "IR-X Ch2",       "ir-x-ch2-poweramp-67e9", "Ambience", 15.0f, 0.0f,  true,  { "Boost", "off" } },
+        { "IR-X Ch2 Boost", "ir-x-ch2-poweramp-67e9", "Ambience", 30.0f, 0.0f,  true,  { "Boost", "on"  } },
     });
     return rover;
 }

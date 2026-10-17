@@ -3,11 +3,12 @@ over the same engine. It is released apart, under tags of its own (`redpaw-vX.Y.
 OrbitAmp's build or installers.
 
 ### Added
-- **RedPawAmp** — four channels on the Victory V4's packs, picked as two gears and TURBO: the gear
-  lever's CLEAN is the Copper, CRUNCH the Sheriff, and TURBO plays that pedal's second channel (Copper TB,
-  Sheriff Ch2). Each of the four keeps its own DRIVE, tone, keys, reverb, delay and cabinet, and opens on
-  a room of its own. Keys 1 2 pick the gear and T throws TURBO; MIDI Program Change 1–4 picks the four
-  channels, controller 20 is TURBO.
+- **RedPawAmp** — four channels on the Friedman IR-X's two, picked as two gears and TURBO: the gear
+  lever's CRUNCH is Ch1, HI-GAIN Ch2, and TURBO throws that channel's Boost. The IR-X's other switches
+  are on the keys right of HPF and LPF, under their own names, the position the switch stands at lit:
+  Ch1's BRIGHT 1, CENTER and BRIGHT 2, Ch2's TIGHT and FAT. Each of the four keeps its own DRIVE, tone,
+  switches, keys, reverb, delay and cabinet, and opens on a room of its own. Keys 1 2 pick the gear and
+  T throws TURBO; MIDI Program Change 1–4 picks the four channels, controller 20 is TURBO.
 - **PARK**, the lever's top end: the whole amp out of the sound, the guitar coming through dry and in time,
   the rooms and the delay ringing out — and the drive outside comes to a stand. A gear pulled plays again
   on the channel that was waiting. 0 or P on the keyboard, Program Change 5, or the PARK parameter in a host.
