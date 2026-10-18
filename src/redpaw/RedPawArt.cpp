@@ -194,8 +194,9 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg         = face::renders::putOutLamps (widenLampPlates (widenRims (fillSpareNotches (load ("dashboard.png")))), layout::lamps, layout::width,
-                                                   skin().lampness, a.lampLit);
+        a.bg         = widenLampPlates (widenRims (fillSpareNotches (load ("dashboard.png"))));
+        if (skin().lampness != nullptr)
+            a.bg = face::renders::putOutLamps (a.bg, layout::lamps, layout::width, skin().lampness, a.lampLit);
         a.knobDrive  = load ("knob-drive.png");
         a.knobTone   = load ("knob-tone.png");
         a.lever      = load ("lever.png");

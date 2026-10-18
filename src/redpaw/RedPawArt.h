@@ -36,7 +36,8 @@ struct Art
     juce::Image emblem;               // the maker's mark raised in the rover's own metal, where it has one; else it is engraved
 
     /** The lamps (layout::lamps), each as the dashboard painted it lit, over the box it is laid back
-        into; what is not the lamp or its glow is transparent. In `bg` they are out. */
+        into; what is not the lamp or its glow is transparent. In `bg` they are out. None where the
+        picture paints no lamp lit (RedPawSkin.h). */
     std::array<juce::Image, layout::numLamps> lampLit;
 
     static const Art& get();

@@ -96,8 +96,11 @@ namespace
             p.lamps[i] = lamps[i];
         p.lampDot = lampDot;
 
-        p.emblemFace = { emblemFace.begin(), emblemFace.end() };
-        p.emblemMark = emblemMark;
+        if (skin().mark)
+        {
+            p.emblemFace = { emblemFace.begin(), emblemFace.end() };
+            p.emblemMark = emblemMark;
+        }
 
         // The bottom plates: PRESET alone on the left, the version in the middle, MEM over CPU on the
         // right.
@@ -230,13 +233,13 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
 
     // The maker's mark: raised in the rover's metal where the skin brings a render of it — cut into bright
-    // steel it read as a stamp — and engraved where it does not.
-    if (const auto& mark = Art::get().emblem; mark.isValid())
+    // steel it read as a stamp — and engraved where it does not; none where the skin has no place for one.
+    if (const auto& mark = Art::get().emblem; skin().mark && mark.isValid())
     {
         g.setOpacity (1.0f);
         g.drawImage (mark, emblemMark, juce::RectanglePlacement::centred);
     }
-    else
+    else if (skin().mark)
     {
         engraveMark (g, emblemMark, scale);
     }
@@ -256,7 +259,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
         ink.label (g, text, area, px13, colour);
     };
 
-    print ("DRIVE", { drive.centre.x, driveNameY }, 200.0f, ink.words);
+    print (skin().driveName, { drive.centre.x, driveNameY }, 200.0f, ink.words);
     const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
     for (size_t i = 0; i < tones.size(); ++i)
         print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, ink.words);

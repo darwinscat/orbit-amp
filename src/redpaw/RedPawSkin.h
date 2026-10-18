@@ -31,7 +31,8 @@ struct Skin
     const char* rendersFolderVariable;
 
     /** How much of a pixel of its picture is a lit lamp, 0..1 (face/Renders.h): the lamps told from
-        what is painted round them. */
+        what is painted round them. None where the picture paints no lamp lit: they are drawn
+        (layout::lampDot). */
     float (*lampness) (juce::Colour);
 
     /** The light of the rings its picture paints, a shade brighter: the knobs' rings, and the light
@@ -52,6 +53,14 @@ struct Skin
         Windscreen::Mode. */
     std::function<std::unique_ptr<Windscreen>()> makeView;
     juce::StringArray landscapeNames;
+
+    /** WHAT ITS DRIVE KNOB IS CALLED, over it. */
+    const char* driveName = "DRIVE";
+
+    /** THE MAKER'S MARK on the emblem plate — engraved, or raised where it brings a render of it. A
+        picture with no place for one yet says so: nothing is cut there, and nothing there answers the
+        hand. */
+    bool mark = true;
 };
 
 /** The product's own. */
