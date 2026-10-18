@@ -394,15 +394,16 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     plateFader (ceiling, limiterPlate, params::limiterCeiling, params::limiterOn, params::limiterCeilingMin, params::limiterCeilingMax,
                 [this] { showOutputMenu(); }, "LIMITER");
 
-    // THE NAV SCREEN: along its top the gear, the channel and the speed the windscreen is driving at;
-    // under them the picture of the amp at work the machine has chosen.
+    // THE NAV SCREEN: along its top the gear, the channel where the skin names it, and the speed the
+    // windscreen is driving at; under them the picture of the amp at work the machine has chosen, the
+    // skin's until then.
     header.speed = [this] { return view->speedKmh(); };
     addToStage (header);
     header.setBounds (navHeader.toNearestInt());
     addToStage (screen);
     screen.setBounds (navPicture.toNearestInt());
     screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
-                                               (int) prefs::store().get (screenKey, (int) Monitor::View::spectrum)));
+                                               (int) prefs::store().get (screenKey, (int) skin().firstScreen)));
 
     // LEARN, from GATE's menu or its own key, takes the picture's place while it runs — the parked
     // warning's too, and the top line's where its place takes that in (RedPawLayout.h) — and lights the key.
@@ -516,7 +517,8 @@ void RedPawEditor::showSelector (int channel)
     turbo.setEnabled (! parked);
     hatch.setShut (parked, isShowing());
 
-    header.set (GearLever::nameOf (at, lever.numGears()), juce::String (lineup().channels[(size_t) channel].name).toUpperCase(), parked);
+    header.set (GearLever::nameOf (at, lever.numGears()),
+                skin().packOnScreen ? juce::String (lineup().channels[(size_t) channel].name).toUpperCase() : juce::String(), parked);
 
     view->setGear (gear + 1);
     view->setTurbo (turboOn);

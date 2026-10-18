@@ -255,15 +255,16 @@ void NavHeader::paint (juce::Graphics& g)
     const auto unit = juce::String ("KM/H"), number = juce::String (juce::jmax (0, shownKmh));
     const auto widthOf = [] (const juce::Font& font, const juce::String& text) { return juce::GlyphArrangement::getStringWidth (font, text) + 2.0f; };
 
-    // A SCREEN TOO NARROW FOR THE THREE ON ONE LINE, and tall enough for three lines: the gear, the
-    // channel under it — set condensed, as tall, where it is wider than the screen — and the speed under
-    // that.
+    // A SCREEN TOO NARROW FOR THEM ON ONE LINE, and tall enough for a line each: the gear, the channel
+    // under it — set condensed, as tall, where it is wider than the screen — and the speed under that;
+    // the gear and the speed alone where the channel is not named.
     const float oneLine = (parked ? 31.0f : 0.0f) + widthOf (words, gear) + 10.0f + widthOf (small, channel)
                         + 8.0f + widthOf (words, number) + 6.0f + widthOf (small, unit);
-    if (oneLine > area.getWidth() && area.getHeight() >= 3.0f * layout::px13)
+    const int lines = channel.isEmpty() ? 2 : 3;
+    if (oneLine > area.getWidth() && area.getHeight() >= (float) lines * layout::px13)
     {
-        const float row = area.getHeight() / 3.0f;
-        auto first = area.removeFromTop (row), second = area.removeFromTop (row), third = area;
+        const float row = area.getHeight() / (float) lines;
+        auto first = area.removeFromTop (row), second = lines == 3 ? area.removeFromTop (row) : juce::Rectangle<float>(), third = area;
         if (parked)
         {
             drawWarning (g, first.removeFromLeft (23.0f).withSizeKeepingCentre (23.0f, 20.0f));
@@ -272,6 +273,7 @@ void NavHeader::paint (juce::Graphics& g)
         g.setColour (orange);
         g.setFont (words);
         g.drawText (gear, first, juce::Justification::centredLeft, false);
+        if (lines == 3)
         {
             const juce::Graphics::ScopedSaveState keep (g);
             const float wide = widthOf (small, channel);

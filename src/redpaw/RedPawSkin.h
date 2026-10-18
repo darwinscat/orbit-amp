@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../face/Controls.h"
+#include "../face/Monitor.h"
 #include "../face/Renders.h"
 #include "view/Windscreen.h"
 
@@ -65,6 +66,11 @@ struct Skin
     /** WHAT THE EDGE COLUMNS ARE CALLED, under them. */
     const char* inputName = "INPUT";
     const char* outputName = "OUTPUT";
+
+    /** THE NAV SCREEN: whether its top line names the pack playing beside the gear, and the picture it
+        shows until the player picks another. */
+    bool packOnScreen = true;
+    face::Monitor::View firstScreen = face::Monitor::View::spectrum;
 };
 
 /** The product's own. */

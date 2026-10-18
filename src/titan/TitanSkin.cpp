@@ -49,6 +49,8 @@ const Skin& skin()
         "GAIN",
         true,                           // the family's cat, cut into the plate between the vents
         "IN", "OUT",                    // the edge columns, short as a cockpit labels them
+        false,                          // the radio's top line the gear and the speed alone...
+        face::Monitor::View::shape,     // ...over the shape the amp gives the sound
     };
     return titan;
 }
@@ -101,17 +103,18 @@ const float keyNameUnderY = 728.0f;
 const std::array<bool, 6> keyNameOver {{ false, false, false, false, false, false }};
 const float keyNameRoom = 52.0f;
 
-// The radio's screen, its glass 122..277 x 530..623: the top line stood three high, the picture under it.
+// The radio's screen, its glass 122..277 x 530..623: the gear over the speed, the picture under them.
 const juce::Rectangle<float> navScreen   { 121.0f, 529.0f, 158.0f, 96.0f };
-const juce::Rectangle<float> navHeader   { 123.0f, 531.0f, 154.0f, 66.0f };
-const juce::Rectangle<float> navPicture  { 123.0f, 598.0f, 154.0f, 24.0f };
+const juce::Rectangle<float> navHeader   { 123.0f, 531.0f, 154.0f, 44.0f };     // a 13-px line each
+const juce::Rectangle<float> navPicture  { 123.0f, 576.0f, 154.0f, 46.0f };
 
 // THE TUNER, the gauge's face, 390..576 across: its seventeen ticks point at 483, 627.5, the end ones
 // 58 degrees either side of the long one straight up, from 87 to 94 out; the little window 453..512
 // x 654..676 under that.
 const juce::Rectangle<float> tunerScreen { 390.0f, 507.0f, 186.0f, 186.0f };
 const face::TunerFace::Dial tunerDial { { 483.0f, 627.5f }, 90.0f, 1.012f, { 453.0f, 654.0f, 59.0f, 22.0f } };
-// LEARN over the whole radio screen, its three lines too: the picture under them is a sliver. Its key is
+// LEARN over the whole radio screen, its top line too: the picture under it is low for the trace and the
+// words. Its key is
 // the upper of the two round holes beside the screen (the hole 308..341 x 554..587, its bezel 302..347),
 // its word on the plate over it, clear of the plate's screws at 515.
 const juce::Rectangle<float> learnArea = navHeader.getUnion (navPicture);
