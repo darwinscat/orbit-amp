@@ -237,6 +237,46 @@ int main()
     check (std::abs (drive->getValue() - 0.3f) < 1.0e-4f, "...and so does the other");
     juce::ignoreUnused (first);
 
+    // TURBO IS AN OPTION OF THE GEAR'S, as its tone is: a gear and its TURBO are one memory. Thrown, only
+    // the pack changes — DRIVE, the delay and BASS stand as they were, BASS on its knob in the other
+    // pack's place — and a gear pulled comes back with TURBO as it was left.
+    {
+        auto* echo = amp->apvts.getParameter (params::delayMix);
+        const auto knob = [&amp, &channels] (int c, int t)
+        {
+            auto* p = amp->apvts.getParameter (channels.toneOf (c, t));
+            return p != nullptr ? p->getValue() : -1.0f;
+        };
+        const int gear = 0, plain = redpaw::channelOf (gear, false), turbo = redpaw::channelOf (gear, true);
+
+        engine.go (plain);
+        drive->setValueNotifyingHost (0.62f);
+        echo->setValueNotifyingHost (0.27f);
+        if (auto* bass = amp->apvts.getParameter (channels.toneOf (plain, 0)))
+            bass->setValueNotifyingHost (0.81f);
+        engine.go (turbo);
+        check (channels.active() == turbo && playing() == channels.packFor (turbo), "TURBO thrown plays the gear's TURBO pack");
+        check (std::abs (drive->getValue() - 0.62f) < 1.0e-4f && std::abs (echo->getValue() - 0.27f) < 1.0e-4f,
+               "...on the gear's DRIVE and delay, as they stood");
+        check (std::abs (knob (turbo, 0) - 0.81f) < 1.0e-4f, "...and its BASS on the gear's, in the TURBO pack's own place");
+
+        drive->setValueNotifyingHost (0.44f);
+        engine.go (plain);
+        check (std::abs (drive->getValue() - 0.44f) < 1.0e-4f && std::abs (knob (plain, 0) - 0.81f) < 1.0e-4f,
+               "TURBO let go: what was turned under it stays, the pack the gear's again");
+
+        engine.go (turbo);
+        engine.go (redpaw::channelOf (1, false));
+        check (channels.leftOn (plain) == turbo, "a gear left under TURBO is left so");
+        engine.go (channels.leftOn (plain));
+        check (channels.active() == turbo && std::abs (drive->getValue() - 0.44f) < 1.0e-4f,
+               "...and pulled again comes back under it, on what it was left with");
+        engine.go (plain);
+        engine.go (redpaw::channelOf (1, false));
+        check (channels.leftOn (plain) == plain, "...and a gear left without it, without it");
+        ticks();
+    }
+
     // A hand's switch: one step, and undone whole.
     asHost (2);
     ticks();
@@ -379,7 +419,7 @@ int main()
         // from before, which names it as it was called then and carries what it is.
         ticks();
         const int home  = channels.active();
-        const int other = home == 0 ? 1 : 0;
+        const int other = channels.memoryOf (home) == 0 ? 2 : 0;      // another gear: a TURBO shares its gear's cabinet
         const auto kept = amp->apvts.copyState();           // this channel, on this cabinet, under its first name
         engine.go (other);
         const auto elsewhere = channels.cabinet();
@@ -405,9 +445,9 @@ int main()
     }
 
     // WHAT EACH CHANNEL OPENS ON. INIT forgets every channel, so each of them is new again: a gear a
-    // little of its room and as much delay, its TURBO twice as much of both — on the V4 the Copper in a
-    // hall, the Sheriff on a plate, the Kraken in an ambience with no delay; on the IR-X Ch1 on a plate,
-    // Ch2 in an ambience with no delay.
+    // little of its room and as much delay, and its TURBO the same, the gear's own — on the V4 the
+    // Copper in a hall, the Sheriff on a plate, the Kraken in an ambience with no delay; on the IR-X Ch1
+    // on a plate, Ch2 in an ambience with no delay.
     {
         auto* room  = amp->apvts.getParameter (params::reverbType);
         auto* mix   = amp->apvts.getParameter (params::reverbMix);
@@ -424,10 +464,10 @@ int main()
         ticks();
 
         struct Opening { const char* reverb; float wet, echo; };
-        const Opening onV4[] { { "Hall", 15.0f, 15.0f }, { "Hall", 30.0f, 30.0f }, { "Plate", 15.0f, 15.0f },
-                               { "Plate", 30.0f, 30.0f }, { "Ambience", 15.0f, 0.0f }, { "Ambience", 30.0f, 0.0f } };
-        const Opening onIrx[] { { "Plate", 15.0f, 15.0f }, { "Plate", 30.0f, 30.0f }, { "Ambience", 15.0f, 0.0f },
-                                { "Ambience", 30.0f, 0.0f } };
+        const Opening onV4[] { { "Hall", 15.0f, 15.0f }, { "Hall", 15.0f, 15.0f }, { "Plate", 15.0f, 15.0f },
+                               { "Plate", 15.0f, 15.0f }, { "Ambience", 15.0f, 0.0f }, { "Ambience", 15.0f, 0.0f } };
+        const Opening onIrx[] { { "Plate", 15.0f, 15.0f }, { "Plate", 15.0f, 15.0f }, { "Ambience", 15.0f, 0.0f },
+                                { "Ambience", 15.0f, 0.0f } };
         const std::vector<Opening> openings = mars ? std::vector<Opening> (std::begin (onIrx), std::end (onIrx))
                                                    : std::vector<Opening> (std::begin (onV4), std::end (onV4));
         const int opening = channels.defaultCabinet();
@@ -454,8 +494,8 @@ int main()
 
     // THE PACK'S SWITCHES (Channels::switchesOf), where a channel holds one — the IR-X's rover. Every
     // channel's Boost stands where the lineup puts it, and a host that throws it is overruled the next
-    // time the channel is pulled; the pack's other switch is each channel's own — a gear and its TURBO
-    // play one pack and keep two — and a channel never pulled since INIT opens it where the pack does.
+    // time the channel is pulled; the pack's other switch is the gear's, its TURBO's too — one memory —
+    // and a gear never pulled since INIT opens it where the pack does.
     if (mars)
     {
         const auto selector = [&amp] (int slot) { return amp->apvts.getParameter (params::selectorId (params::preampId, slot)); };
@@ -492,15 +532,16 @@ int main()
         engine.go (0);
         put (bright, 2);                // BRIGHT 2 on the gear
         engine.go (1);
-        const bool ownOnTurbo = at (bright) == 0 && at (boost) == 1;
-        put (bright, 1);                // CENTER on its TURBO...
+        const bool sharedOnTurbo = at (bright) == 2 && at (boost) == 1;
+        put (bright, 1);                // CENTER under its TURBO...
         put (boost, 0);                 // ...and a host throws the TURBO's Boost off
         engine.go (0);
-        const bool backOnGear = at (bright) == 2 && at (boost) == 0;
-        engine.go (1);
-        const bool backOnTurbo = at (bright) == 1 && at (boost) == 1;
-        check (ownOnTurbo, "a switch moved on a gear is that channel's: its TURBO, on the same pack, has its own");
-        check (backOnGear && backOnTurbo, "each comes back with its own, and the Boost a host threw stands where the lineup holds it again");
+        const bool backOnGear = at (bright) == 1 && at (boost) == 0;
+        engine.go (2);                  // another gear, and back
+        engine.go (0);
+        const bool keptOnGear = at (bright) == 1 && at (boost) == 0;
+        check (sharedOnTurbo, "a switch moved on a gear is its TURBO's too: one memory, the Boost held on");
+        check (backOnGear && keptOnGear, "...and moved under TURBO, the gear's, kept; the Boost a host threw stands where the lineup holds it again");
         ticks();
     }
 

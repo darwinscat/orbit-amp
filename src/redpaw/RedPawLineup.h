@@ -8,9 +8,11 @@
 namespace orbitamp::redpaw
 {
 
-/** THE ROVER'S CHANNELS: each its own pack with its own memory (channels/Lineup.h) — and to the hand,
-    gears of two. The gear is the pedal and TURBO is that pedal's second channel, so the channels go in
-    pairs, gear by gear, TURBO off then on, and a Program Change counts them in that order. PARK, the
+/** THE ROVER'S CHANNELS: each its own pack (channels/Lineup.h) — and to the hand, gears of two. The gear
+    is the pedal and TURBO is that pedal's second channel, so the channels go in pairs, gear by gear,
+    TURBO off then on, and a Program Change counts them in that order. A pair is ONE memory: TURBO is an
+    option of the gear's, as its tone is — thrown, only the pack changes, and a gear pulled comes back
+    with TURBO as it was left (Lineup::pairs). PARK, the
     lever's top end, is no channel: it takes the whole amp out of the sound, and the channel waits for
     the lever to come back. The engine they are kept by is the family's (channels/Engine.h); this file
     is what makes it the rover's.

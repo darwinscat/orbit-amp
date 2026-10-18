@@ -68,8 +68,9 @@ private:
     void renderOpenGL() override;
     void openGLContextClosing() override;
 
-    // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel. TURBO is one
-    // switch for every gear — a gear pulled keeps it as it stands. PARK, the lever's top end, takes
+    // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel — an option of
+    // the gear's, as its tone is: thrown, only the pack changes, and a gear pulled comes back with
+    // TURBO as it was left (channels::Lineup::pairs). PARK, the lever's top end, takes
     // the whole amp out of the sound (ProductEngine::parkSwitch); the channel waits, and TURBO does
     // nothing until a gear is pulled again.
     GearLever lever;

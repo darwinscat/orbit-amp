@@ -531,7 +531,7 @@ void RedPawEditor::pullGear (int gear)
 {
     if (isParked())
         setParam (engine.parkId(), 0.0f);
-    go (channelOf (gear, turboOf (channels.active())));
+    go (channels.leftOn (channelOf (gear, false)));     // TURBO as the gear was left with it
 }
 
 void RedPawEditor::throwTurbo (bool on)

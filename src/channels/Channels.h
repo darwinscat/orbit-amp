@@ -14,9 +14,10 @@ namespace orbitamp::channels
 {
 
 /** THE CHANNELS, AND WHAT EACH REMEMBERS. To the hand a product's channels are so many amps — the
-    cockpit's throttle has four detents, the rover six packs: leaving one leaves its DRIVE, its tone,
+    cockpit's throttle has four detents, the rover three gears: leaving one leaves its DRIVE, its tone,
     its keys, TURBO, the reverb, the delay and the cabinet as they stood, and coming back finds them
-    there. How many there are and what each plays is the product's to say (Lineup.h).
+    there. How many there are and what each plays is the product's to say (Lineup.h) — and whether
+    they go in pairs over one memory, two packs to one gear.
 
     The engine has ONE set of those parameters, and whichever channel is playing owns it. The others
     wait as records in the processor's state tree, under one node of the product's own. Being in
@@ -115,8 +116,18 @@ public:
 
     /** Leaves the playing channel as it stands, switches to `channel`'s pack and puts back what that
         channel was left with — its defaults, the first time it is visited. False, and nothing touched,
-        when that channel's pack is not installed: a channel that cannot be played is not claimed. */
+        when that channel's pack is not installed: a channel that cannot be played is not claimed.
+        To the other of the playing pair (Lineup::pairs) only the pack changes: everything else stands
+        as it is, the tones on their knobs. */
     bool select (int channel);
+
+    /** THE PAIR A CHANNEL IS IN, where the lineup has pairs: the first of the two, whose record keeps
+        their one memory — the channel itself where it has none. */
+    int memoryOf (int channel) const noexcept;
+
+    /** Which of its pair a channel's memory was left playing — the first, where it was never left on
+        the other — and for the pair that is playing, the one playing. */
+    int leftOn (int channel) const;
 
     bool flag (Flag) const;
     void setFlag (Flag, bool);
@@ -203,7 +214,8 @@ public:
     void setTag (const juce::Identifier&, const juce::var&);
 
     /** Every channel written out in full, as a tree of their own: the playing one from the live
-        controls, the others from their records, a channel never visited from its defaults. Two states
+        controls, the others from their records, a channel never visited from its defaults — a pair as
+        one, with which of the two it plays or was left on. Two states
         that would sound the same on every detent give the same tree — which the node itself does not,
         since the playing channel's record there is stale and an unvisited one is missing. TURBO is in
         as on or off: a channel kept under one push is the same channel under another. */
@@ -213,6 +225,7 @@ private:
     AmpProcessor& amp;
     const Lineup& line;
     juce::StringArray kept;      // the parameters a channel remembers
+    juce::StringArray tones;     // ...of them, the places every channel's pack has its tones in
     juce::Array<juce::File> irs; // the product's cabinets, in order
     int factory = 0;             // how many of them, from the front, are the build's own
     float turboPush = 9.0f;      // TURBO's push, dB
@@ -229,6 +242,9 @@ private:
     juce::ValueTree ensureNode();
     void  store (juce::ValueTree record) const;
     void  recall (int channel, const juce::ValueTree& record);
+    std::array<float, numTones> knobs() const;          // where BASS, MIDDLE, TREBLE stand on the pack playing
+    void  turnKnobs (int channel, const std::array<float, numTones>&);  // ...stood so on `channel`'s pack, its other places where it opens them
+    int   knobAt (int channel, const juce::String& paramId) const;      // which knob a place is on `channel`'s pack; -1 for none
     float plain (const juce::String& paramId) const;
     void  set (const juce::String& paramId, float plainValue);
 };
