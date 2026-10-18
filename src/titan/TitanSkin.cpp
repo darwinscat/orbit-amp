@@ -85,8 +85,9 @@ const std::array<Socket, 3> tones {{
     { { 1479.0f, 581.4f }, 44.2f, 2.2f, 76.0f },    // TREBLE
 }};
 // The tones' panel starts at 510 and their housings at 525, too close for a word: theirs stand on the
-// plate over the panel. GAIN's on the console's own plate, between its top edge at 497 and its housing.
-const float knobNameY  = 492.0f;
+// ledge over the panel, its flat 498..508 between its lit top edge and the panel's. GAIN's on the
+// console's own plate, between its top edge at 497 and its housing.
+const float knobNameY  = 503.0f;
 const float driveNameY = 508.5f;
 
 // The six square holes, 42 x 43, two and four. Over them the panel leaves no room for a word: every
