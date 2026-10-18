@@ -92,6 +92,7 @@ public:
     static constexpr double flakeRate = 1.0 / 50, filmRate = 1.0 / 300, flakeCell = 0.0085, fineCell = 0.0033;
     static constexpr double wipeEvery = 60, glassBeta = 32 * deg, glassZb = 0.70, bladeWidth = 1.2;   // the blades' width, times the rovers'
     static constexpr double strokeSeconds = 1.0, pauseSeconds = 0.3, wipeSeconds = 2 * strokeSeconds + pauseSeconds;
+    static constexpr double fastStroke = 0.55, fastPause = 0.12, slowRest = 0.6;    // HI's quicker stroke; LO's rest between wipes
     static constexpr int maxDrops = 180, maxTrails = 900;
     static constexpr double trailLife = 3.5;
     static constexpr double glassYb = -(1 + shear) * vfovHalfTan * glassZb;
@@ -143,6 +144,11 @@ public:
         hand only turns the view in place. */
     void setParked (bool on) noexcept { parked = on; }
     void setSteer (float s) noexcept;                    // -1..1, held input
+    /** THE WIPERS' SPEED, as the four keys under the radio set it: none of their own accord (a wipe
+        running finishes), a wipe a minute, on and on with a rest between, on and on with a quicker
+        stroke. */
+    enum WiperSpeed { wipersOff, wipersInterval, wipersSlow, wipersFast };
+    void setWipers (int speed) noexcept { wiperSpeed = speed; }
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
     bool isParked() const noexcept { return parked; }
@@ -200,14 +206,19 @@ public:
     struct Trail { double s0, t0, s1, t1, w, born; };
     const std::vector<Drop>& drops() const noexcept { return dropList; }
     const std::vector<Trail>& trails() const noexcept { return trailList; }
-    /** The start of the current or last wipe, of the one before, and when deposits began. */
+    /** The start of the current or last wipe, of the one before, and when deposits began; and each
+        wipe's stroke — out, the pause at its far end; back as long as out. */
     double wipeCurrent() const noexcept { return wipeCur; }
     double wipePrevious() const noexcept { return wipePrev; }
+    struct Stroke { double out, pause; double length() const noexcept { return 2 * out + pause; } };
+    const Stroke& strokeCurrent() const noexcept { return strokeCur; }
+    const Stroke& strokePrevious() const noexcept { return strokePrev; }
     double glassSince() const noexcept { return glassT0; }
     /** How far through its stroke every blade is, 0..1, at time t; false when parked. */
     bool wiperFraction (double t, double& f) const noexcept;
-    /** A wipe now, unless one is running. */
+    /** A wipe now, unless one is running: at the speed set's stroke. */
     void startWipe() noexcept;
+    double wipeDue() const noexcept;
 
     /** The timed events, pure functions of the time. */
     double saturnVisibility (double t) const noexcept;   // 0.62..1: never gone, rising out of the haze every 20–40 s
@@ -237,6 +248,8 @@ private:
     std::vector<Drop> dropList;
     std::vector<Trail> trailList;
     double dropAcc = 0, glassT0 = 0, wipeCur = -1e9, wipePrev = -1e9, nextWipe = 60;
+    int wiperSpeed = wipersInterval;
+    Stroke strokeCur { strokeSeconds, pauseSeconds }, strokePrev { strokeSeconds, pauseSeconds };
 
     /** A cached schedule of hashed cycle lengths: the cycle at a time without walking from 0 each frame. */
     struct Schedule

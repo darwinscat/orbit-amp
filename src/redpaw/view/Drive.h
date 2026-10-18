@@ -36,6 +36,9 @@ public:
     virtual void setTurbo (bool on) = 0;
     virtual void setParked (bool on) = 0;
     virtual void setSteer (float amount) = 0;       // -1..1, held
+    /** The wipers' speed, where the face has keys for it: 0 off, 1 a wipe now and then, 2 slow, 3 fast. A
+        world whose wipers keep their own time takes no notice. */
+    virtual void setWipers (int /*speed*/) {}
 
     /** One step of the drive. */
     virtual void step (double dt) = 0;

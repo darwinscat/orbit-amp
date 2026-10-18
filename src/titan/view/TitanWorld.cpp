@@ -431,18 +431,33 @@ void TitanWorld::resetGlass()
 
 bool TitanWorld::wiperFraction (double t, double& f) const noexcept
 {
-    const double a = t - wipeCur;
-    if (a < 0 || a > wipeSeconds) return false;
-    f = a < strokeSeconds ? smoothstep (0, 1, a / strokeSeconds)
-      : a < strokeSeconds + pauseSeconds ? 1
-      : 1 - smoothstep (0, 1, (a - strokeSeconds - pauseSeconds) / strokeSeconds);
+    const double a = t - wipeCur, out = strokeCur.out, pause = strokeCur.pause;
+    if (a < 0 || a > strokeCur.length()) return false;
+    f = a < out ? smoothstep (0, 1, a / out)
+      : a < out + pause ? 1
+      : 1 - smoothstep (0, 1, (a - out - pause) / out);
     return true;
 }
 
 void TitanWorld::startWipe() noexcept
 {
-    if (s.time - wipeCur < wipeSeconds) return;
-    wipePrev = wipeCur; wipeCur = s.time; nextWipe = s.time + wipeEvery;
+    if (s.time - wipeCur < strokeCur.length()) return;
+    wipePrev = wipeCur; strokePrev = strokeCur;
+    wipeCur = s.time; nextWipe = s.time + wipeEvery;
+    strokeCur = wiperSpeed == wipersFast ? Stroke { fastStroke, fastPause } : Stroke { strokeSeconds, pauseSeconds };
+}
+
+// When the wipers' speed has the next wipe start of its own accord: a minute after the last began, a
+// rest after it ended, straight after it — or never.
+double TitanWorld::wipeDue() const noexcept
+{
+    switch (wiperSpeed)
+    {
+        case wipersOff:  return 1e300;
+        case wipersSlow: return wipeCur + strokeCur.length() + slowRest;
+        case wipersFast: return wipeCur + strokeCur.length();
+        default:         return nextWipe;
+    }
 }
 
 void TitanWorld::spawnDrop (int kind)   // positions and radii in glass metres
@@ -459,7 +474,7 @@ void TitanWorld::spawnDrop (int kind)   // positions and radii in glass metres
 void TitanWorld::stepGlass (double dt)
 {
     if (dt <= 0) return;
-    if (s.time >= nextWipe) startWipe();
+    if (s.time >= wipeDue()) startWipe();
     const double sp = s.speed, top = glassTop();
     // Landing: a few from the drizzle (more when moving into it), the downwash's spray (most in a hover),
     // much more on a TURBO dash, a burst over a fizzing field.

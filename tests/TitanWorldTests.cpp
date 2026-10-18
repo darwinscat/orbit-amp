@@ -119,6 +119,37 @@ int main()
         }
     }
 
+    std::printf ("the wipers' four speeds\n");
+    {
+        // From the start, 20 s at each: OFF none, INT none yet (a minute's wait), LO on and on with a
+        // rest, HI on and on at its quicker stroke.
+        const auto wipesIn = [] (int speed, double& stroke)
+        {
+            TitanWorld w (4);
+            w.build();
+            const auto start = w.start();
+            w.place (start[0], start[1], 0, 1, false, false);
+            w.setClock (500, 0);
+            w.setWipers (speed);
+            int wipes = 0;
+            double last = w.wipeCurrent();
+            for (int i = 0; i < 20 * 60; ++i)
+            {
+                w.step (1.0 / 60);
+                if (w.wipeCurrent() != last) { ++wipes; last = w.wipeCurrent(); }
+            }
+            stroke = w.strokeCurrent().out;
+            return wipes;
+        };
+        double stroke = 0;
+        check ("OFF: wipes in 20 s", wipesIn (TitanWorld::wipersOff, stroke), 0, 0);
+        check ("INT: wipes in 20 s", wipesIn (TitanWorld::wipersInterval, stroke), 0, 0);
+        check ("LO: wipes in 20 s, one each 2.9 s", wipesIn (TitanWorld::wipersSlow, stroke), 7, 0);
+        check ("LO: the stroke", stroke, TitanWorld::strokeSeconds, 0);
+        check ("HI: wipes in 20 s, one each 1.22 s", wipesIn (TitanWorld::wipersFast, stroke), 17, 0);
+        check ("HI: the stroke", stroke, TitanWorld::fastStroke, 0);
+    }
+
     if (failures == 0) std::printf ("\nall passed\n");
     else std::printf ("\n%d FAILED\n", failures);
     return failures == 0 ? 0 : 1;

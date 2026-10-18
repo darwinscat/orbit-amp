@@ -123,6 +123,10 @@ const float learnKeySize = 42.0f;
 const juce::Point<float> learnName { 324.5f, 530.0f };
 const float learnNameRoom = 50.0f;      // the plate is 302..355 between its edges
 
+// The wipers' four keys: the row of square holes under the radio's screen, each 35 x 39, 44 apart.
+const std::array<juce::Point<float>, 4> wiperKeys {{ { 136.0f, 667.8f }, { 180.0f, 667.8f }, { 224.0f, 667.8f }, { 268.0f, 667.8f } }};
+const float wiperKeySize = 42.0f;
+
 // The slot is 882..907 across, 517..724 down, and straight: the stem stays in it. Its five ticks, to its
 // right at 926..946.5, are PARK and four places below it — the grip lies along a tick, so the collar's
 // foot is 24 past it — and a fourth gear's tick, past this product's three, is painted over.

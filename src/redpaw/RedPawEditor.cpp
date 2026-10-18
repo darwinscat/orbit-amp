@@ -45,6 +45,9 @@ namespace
     /** The nav screen's picture — the machine's too, as a view's number (face::Monitor::View). */
     const juce::Identifier screenKey { "screen" };
 
+    /** The wipers' speed, where the face has keys for it — the machine's too (Drive::setWipers). */
+    const juce::Identifier wipersKey { "wipers" };
+
     juce::Rectangle<float> around (juce::Point<float> c, float w, float h)
     {
         return juce::Rectangle<float> (w, h).withCentre (c);
@@ -142,6 +145,18 @@ namespace
     void drawRender (juce::Graphics& g, const juce::Image& img, juce::Rectangle<float> box)
     {
         drawFitted (g, img, box);
+    }
+
+    /** A KEY'S OWN WORD, on its face (`key`, the render's opaque part): a size under the names beside the
+        keys, condensed into the face where it is wider, the state's colour while the key is lit. */
+    constexpr float capEm = 10.0f / layout::readingScale;
+    void capWord (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> key, bool lit)
+    {
+        const auto& ink = skin().ink;
+        const juce::Graphics::ScopedSaveState keep (g);
+        condenseInto (g, text, capEm, keyTracking, key.getWidth() * 0.62f, key.getCentre());
+        ink.label (g, text, juce::Rectangle<float> (80.0f, 20.0f).withCentre (key.getCentre()), capEm,
+                   lit ? ink.state : ink.at (ink.words, 0.75f), keyTracking);
     }
 
     /** THE ROOF'S TOGGLE. The two renders are not drawn alike — up, the bat stands over its nut; down,
@@ -439,6 +454,35 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         learnKey.setBounds (juce::Rectangle<float> (learnKeySize, learnKeySize).withCentre (layout::learnKey).toNearestInt());
     }
 
+    // THE WIPERS' SPEED, where the picture paints keys for it: OFF, INT, LO, HI, the speed set lit.
+    if (wiperKeySize > 0.0f)
+    {
+        wipers = juce::jlimit (0, 3, (int) prefs::store().get (wipersKey, 1));
+        const char* words[] { "OFF", "INT", "LO", "HI" };
+        for (int i = 0; i < 4; ++i)
+        {
+            auto& k = *wiperButtons.emplace_back (std::make_unique<PushButton> (words[i]));
+            k.latching = false;
+            k.drawKey = [this, &k, i] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+            {
+                const bool lit = down || wipers == i;
+                const auto& img = lit ? Art::get().keyDown : Art::get().keyUp;
+                drawRender (g, img, box);
+                capWord (g, k.name, fittedArea (img, box), lit);
+                if (k.isMouseOverOrDragging())
+                {
+                    juce::Path face;
+                    face.addRoundedRectangle (fittedArea (img, box).reduced (2.0f), 4.0f);
+                    drawHandRim (g, face, handLight);
+                }
+            };
+            k.onPress = [this, i] { chooseWipers (i); };
+            addToStage (k);
+            k.setBounds (juce::Rectangle<float> (wiperKeySize, wiperKeySize).withCentre (layout::wiperKeys[(size_t) i]).toNearestInt());
+        }
+        view->setWipers (wipers);
+    }
+
     // Parked, the warning stands large in the middle of the screen, over the picture dimmed.
     addToStage (parkSign);
     parkSign.setVisible (false);      // showSelector says when
@@ -626,6 +670,15 @@ void RedPawEditor::chooseScreen (Monitor::View v)
 {
     prefs::store().set (screenKey, (int) v);
     screen.show (v);
+}
+
+void RedPawEditor::chooseWipers (int speed)
+{
+    wipers = speed;
+    prefs::store().set (wipersKey, speed);
+    view->setWipers (speed);
+    for (auto& k : wiperButtons)
+        k->repaint();
 }
 
 void RedPawEditor::showWindowMenu()

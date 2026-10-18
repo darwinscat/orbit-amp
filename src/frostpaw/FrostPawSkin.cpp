@@ -121,6 +121,8 @@ const juce::Point<float> learnKey {};
 const float learnKeySize = 0.0f;                         // ...and no key of its own
 const juce::Point<float> learnName {};
 const float learnNameRoom = 0.0f;
+const std::array<juce::Point<float>, 4> wiperKeys {};    // no keys for the wipers
+const float wiperKeySize = 0.0f;
 
 // The slot is 786..810 across, its top end at 681.5, its notches out to 823.
 const juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };

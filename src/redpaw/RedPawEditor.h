@@ -94,6 +94,12 @@ private:
     face::PushButton learnKey { "LEARN" };
     bool learnShowing = false;
 
+    // THE WIPERS' SPEED on keys of their own, where the picture paints a row for them (RedPawLayout.h):
+    // each word on its key, the speed set lit — the machine's choice, as the landscape is.
+    std::vector<std::unique_ptr<face::PushButton>> wiperButtons;
+    int wipers = 1;
+    void chooseWipers (int speed);
+
     void showScreenMenu();
     void chooseScreen (face::Monitor::View);
     void pullGear (int gear);

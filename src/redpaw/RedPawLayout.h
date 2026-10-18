@@ -87,6 +87,11 @@ extern const float learnKeySize;    // the key's render, whose button fills the 
 extern const juce::Point<float> learnName;
 extern const float learnNameRoom;  // how wide the word may be: a wider one is set condensed into it, as tall
 
+/** THE WIPERS' SPEED: four keys where the picture paints a row of them — OFF, INT, LO, HI, each word on
+    its key, the speed set lit. A size of nought: none, the wipers keep their own time. */
+extern const std::array<juce::Point<float>, 4> wiperKeys;
+extern const float wiperKeySize;    // the key's render, whose face fills the hole
+
 /** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches painted on its right — as many as
     the picture paints — the product's gears, CLEAN, CRUNCH, HI-GAIN, stand in them from the top, as many
     as it has (RedPawLineup.h). A position is where the lever's stem stands: seen from above, as the whole

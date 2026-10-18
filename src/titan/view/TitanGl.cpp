@@ -793,11 +793,12 @@ void main(){
         s << R"GLSL(uniform sampler2D uNoise;
 uniform vec2 uRes, uTan; uniform float uAspect, uTime;
 uniform vec4 uWipe;      // start of the current / last wipe, start of the one before, when deposits began, stroke fraction 0..1 (< -9 = parked)
+uniform vec4 uStroke;    // the current / last wipe's stroke out and its pause at the far end, the one before's (back as long as out)
 uniform vec4 uRotor;     // glint phase (rad), disc tilt (rad), the shadow band's place on the glass (m), its strength
 out vec4 o;
 )GLSL" << glslHash
           << "const vec3 HUB = vec3(" << F (W::rotorHub[0]) << ", " << F (W::rotorHub[1]) << ", " << F (W::rotorHub[2]) << "); const float ROT_R = " << F (W::rotorRadius) << ";\n"
-          << "const float T_OUT = " << F (W::strokeSeconds) << ", T_PAUSE = " << F (W::pauseSeconds) << ", WW = " << F (W::bladeWidth) << ";\n"
+          << "const float WW = " << F (W::bladeWidth) << ";\n"
           << "// the wipers: pivot; stroke start, end, blade in, out; their pane's sides (x = a + b*y in the cabin's pixels)\n"
           << "const int NW = " << (int) wipers.size() << ";\n"
           << "const vec2 WP[NW] = vec2[NW](" << list ([] (const W::Wiper& w) { return "vec2(" + F (w.p[0]) + ", " + F (w.p[1]) + ")"; }) << ");\n"
@@ -844,10 +845,10 @@ float arcTime(vec2 g, int i, bool pane, out bool inA, out float gen, out float r
   inA = pane && rho > a.z && rho < a.w && x > 0.0 && x < 1.0;
   if (!inA) return -1e9;
   x = invSmooth(x);
-  float tOut = uWipe.x + x * T_OUT, tBack = uWipe.x + T_OUT + T_PAUSE + (1.0 - x) * T_OUT;
+  float tOut = uWipe.x + x * uStroke.x, tBack = uWipe.x + uStroke.x + uStroke.y + (1.0 - x) * uStroke.x;
   if (uTime >= tBack) { gen = uWipe.x; return tBack; }
   if (uTime >= tOut) { gen = uWipe.x; return tOut; }
-  gen = uWipe.y; return uWipe.y + T_OUT + T_PAUSE + (1.0 - x) * T_OUT;
+  gen = uWipe.y; return uWipe.y + uStroke.z + uStroke.w + (1.0 - x) * uStroke.z;
 }
 // the line of pushed muck at an arc's limit: its outer and inner radius and the far end of the stroke
 float smearBand(int i, float rho, float phi, float aa){
@@ -901,8 +902,8 @@ void main(){
   float film = age * FILM_RATE * w; film = 0.5 * (1.0 - exp(-film / 0.5));
   if (!inAny && uWipe.x > -1e8) {
     if (band > 0.0) {
-      float pushed = clamp((uWipe.x - max(uWipe.y + T_OUT * 2.0 + T_PAUSE, uWipe.z)) * FLAKE_RATE * w * 1.4, 0.0, 0.7);
-      pushed *= smoothstep(uWipe.x, uWipe.x + T_OUT, uTime);
+      float pushed = clamp((uWipe.x - max(uWipe.y + uStroke.z * 2.0 + uStroke.w, uWipe.z)) * FLAKE_RATE * w * 1.4, 0.0, 0.7);
+      pushed *= smoothstep(uWipe.x, uWipe.x + uStroke.x, uTime);
       float streak = 0.55 + 0.45 * textureLod(uNoise, vec2(bph * 4.0, brh * 30.0), 0.0).a;
       film = max(film, band * pushed * streak);
     }
@@ -1412,6 +1413,7 @@ void TitanGl::drawScene (int rw, int rh)
         glUniform2f (u ("uRes"), (float) rw, (float) rh); glUniform1f (u ("uAspect"), (float) aspect); glUniform1f (u ("uTime"), tf);
         v2 (u ("uTan"), tv * aspect, tv);
         glUniform4f (u ("uWipe"), (float) world.wipeCurrent(), (float) world.wipePrevious(), (float) world.glassSince(), wiping ? (float) wf : -10.0f);
+        glUniform4f (u ("uStroke"), (float) world.strokeCurrent().out, (float) world.strokeCurrent().pause, (float) world.strokePrevious().out, (float) world.strokePrevious().pause);
         glUniform4f (u ("uRotor"), (float) std::fmod (s.rotorPhase, 2 * pi), (float) (W::rotorTilt + 0.03 * s.speed / W::topSpeed + 0.05 * s.boost), (float) rs[0], (float) rs[1]);
         glDrawArrays (GL_TRIANGLES, 0, 3);
     }
