@@ -30,7 +30,7 @@
 //
 // It reads the rover's packs from where the rover reads them, and lays the build's set out there
 // first, as the rover does. Every rover that wears the dashboard runs it as itself — RedPawAmp,
-// FrostPawAmp (CMakeLists.txt: rover_console).
+// FrostPawAmp, AmberPawAmp (CMakeLists.txt: rover_console).
 
 #include "PluginProcessor.h"
 #include "Parameters.h"

@@ -7,7 +7,7 @@
 // writes nothing; that a file damaged
 // or lost comes back; that what an earlier build left behind goes — and that nothing else does; and
 // that the rover's cabinets are its own, whatever another product lays out beside them. Every rover that
-// wears the dashboard runs it as itself — RedPawAmp, FrostPawAmp (CMakeLists.txt: rover_set_test).
+// wears the dashboard runs it as itself — RedPawAmp, FrostPawAmp, AmberPawAmp (CMakeLists.txt: rover_set_test).
 //
 //   RedPawSetTests [folder]     the folder to work in, under the current directory; one of its own
 //                               under the system's temporary folder when none is named

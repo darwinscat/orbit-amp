@@ -78,6 +78,10 @@ jobs:
       - name: Build FrostPawAmp
         run: cmake --build build --target FrostPawAmp_All frostpawamp_set_test frostpawamp_channel_test
 
+      # ...and the helicopter over Titan, the same dashboard in a cockpit of its own, with the rover's gates run as it.
+      - name: Build AmberPawAmp
+        run: cmake --build build --target AmberPawAmp_All amberpawamp_set_test amberpawamp_channel_test
+
       - name: sccache stats
         if: always()
         run: sccache --show-stats
@@ -153,6 +157,8 @@ jobs:
           ROVER_GATE_OWNS_HOME=1 run_gate redpaw-channel "$(find build/redpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
           run_gate frostpaw-set "$(find build/frostpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
           ROVER_GATE_OWNS_HOME=1 run_gate frostpaw-channel "$(find build/frostpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
+          run_gate amberpaw-set "$(find build/amberpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
+          ROVER_GATE_OWNS_HOME=1 run_gate amberpaw-channel "$(find build/amberpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
 
       - name: Validate (pluginval, VST3)
         shell: bash

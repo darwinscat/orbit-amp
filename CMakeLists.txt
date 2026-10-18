@@ -1045,7 +1045,7 @@ target_link_libraries(RedPawAmp PRIVATE RedPawAmpSet)
 set_target_properties(RedPawAmp ${REDPAWAMP_FORMATS} RedPawAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
 add_dependencies(RedPawAmp_All RedPawAmp_CLAP)
 
-# A ROVER'S GATES, the same for every rover: `amp` says whose — RedPawAmp, FrostPawAmp — and the gate is
+# A ROVER'S GATES, the same for every rover: `amp` says whose — RedPawAmp, FrostPawAmp, AmberPawAmp — and the gate is
 # that product compiled again under a main() of its own, with its skin, its set and its name; `channels`
 # is how many channels the gate holds it to (ROVER_CHANNELS), said here apart from the product's lineup.
 function(rover_console target main product amp tagPrefix channels)
@@ -1219,6 +1219,129 @@ rover_console(frostpawamp_channel_test tests/RedPawChannelTests.cpp "FrostPawAmp
 rover_set_test(frostpawamp_set_test "FrostPawAmpSetTest" FrostPawAmp 6)
 
 # ----------------------------------------------------------------------------
+# AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
+# dashboard worn over a cockpit of its own (src/titan/TitanSkin.cpp) — dark gunmetal under a canopy of
+# three panes, its tuner a gauge, its meters dots. The same controls, TURBO and PARK: the rovers', shared,
+# not copied — over the V4's six channels in three gears, as FrostPawAmp has them until it has captures of
+# its own, and the rovers' cabinets. Released apart under tags of its own (`amberpaw-vX.Y.Z`) — no release
+# workflow yet. Built only when asked for by name.
+# ----------------------------------------------------------------------------
+
+# Its renders are in resources/titan, under the rovers' names; one that is not there yet is RedPawAmp's,
+# the way FrostPawAmp's are.
+file(GLOB TITAN_OWN_RENDERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/*")
+set(AMBERPAWAMP_RENDERS "")
+foreach(render IN LISTS ROVER_RENDERS)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/${render}" IN_LIST TITAN_OWN_RENDERS)
+        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/${render}")
+    else()
+        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/${render}")
+    endif()
+endforeach()
+# ...and the renders a rover may carry or not: there when the file is, nothing in its place when it is not.
+foreach(render IN ITEMS emblem.png turbo-lid.png)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/${render}" IN_LIST TITAN_OWN_RENDERS)
+        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/${render}")
+    endif()
+endforeach()
+juce_add_binary_data(AmberPawAmpData
+    NAMESPACE   TitanData
+    HEADER_NAME TitanData.h
+    SOURCES     ${AMBERPAWAMP_RENDERS})
+
+# Its own version, moved when AMBERPAWAMP is released (src/Product.h).
+set(AMBERPAWAMP_VERSION 0.1.0)
+
+juce_add_plugin(AmberPawAmp
+    VERSION                     "${AMBERPAWAMP_VERSION}"
+    PRODUCT_NAME                "AmberPawAmp"
+    COMPANY_NAME                "Darwin's Cat"
+    BUNDLE_ID                   "com.darwinscat.amberpawamp"
+    PLUGIN_MANUFACTURER_CODE    Dcat
+    PLUGIN_CODE                 Ambp
+    FORMATS                     VST3 AU Standalone
+    VST3_CATEGORIES             "Fx" "Distortion"
+    AU_MAIN_TYPE                "kAudioUnitType_Effect"
+    IS_SYNTH                    FALSE
+    NEEDS_MIDI_INPUT            FALSE
+    NEEDS_MIDI_OUTPUT           FALSE
+    IS_MIDI_EFFECT              FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT  "AmberPawAmp needs audio input to process your signal."
+    # A stand-in until it has an icon of its own: its GAIN socket, knob and all, off the cockpit.
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/AmberPawAmp-1024.png"
+    COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
+
+clap_juce_extensions_plugin(TARGET AmberPawAmp
+    CLAP_ID       "com.darwinscat.amberpawamp"
+    CLAP_FEATURES audio-effect "guitar" "amplifier")
+if(APPLE)
+    add_custom_command(TARGET AmberPawAmp_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:AmberPawAmp,JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:AmberPawAmp_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
+
+# A rover, and its skin. Out of its canopy, the drive across Mars until Titan's own view comes.
+set(AMBERPAWAMP_SOURCES ${ROVER_SOURCES} src/titan/TitanSkin.cpp)
+set(AMBERPAWAMP_LIBRARIES AmberPawAmpData ${ROVER_LIBRARIES})
+
+target_sources(AmberPawAmp PRIVATE ${AMBERPAWAMP_SOURCES})
+target_compile_definitions(AmberPawAmp PUBLIC
+    ORBITAMP_VERSION="${AMBERPAWAMP_VERSION}"
+    ORBITAMP_PRODUCT_NAME="AmberPawAmp"
+    ORBITAMP_RELEASE_TAG_PREFIX="amberpaw-"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>)
+target_include_directories(AmberPawAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(AmberPawAmp OrbitAmpVersionGen)
+target_link_libraries(AmberPawAmp PRIVATE ${AMBERPAWAMP_LIBRARIES})
+
+set(AMBERPAWAMP_FORMATS "")
+foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
+    if(TARGET AmberPawAmp_${fmt})
+        list(APPEND AMBERPAWAMP_FORMATS AmberPawAmp_${fmt})
+    endif()
+endforeach()
+
+# ITS SET IS INSIDE ITS BINARY TOO, a list of its own — for now FrostPawAmp's: the V4's six packs its
+# channels play, and the rovers' ten cabinets — laid out under its own list in the family's folder
+# (src/channels/Set.h), where a file another product carries too is one file.
+set(AMBERPAWAMP_SET
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip"
+    ${ROVER_CABINETS})
+
+add_library(AmberPawAmpSet INTERFACE)
+juce_add_binary_data(AmberPawAmpSetData
+    NAMESPACE   ProductSetData
+    HEADER_NAME ProductSetData.h
+    SOURCES     ${AMBERPAWAMP_SET})
+add_dependencies(AmberPawAmpSetData OrbitAmpSetPacks)   # the packs are zipped by the build (THE SET)
+set_target_properties(AmberPawAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+target_link_libraries(AmberPawAmpSet INTERFACE AmberPawAmpSetData)
+target_compile_definitions(AmberPawAmpSet INTERFACE PRODUCT_SET_EMBEDDED=1)
+target_link_libraries(AmberPawAmp PRIVATE AmberPawAmpSet)
+
+# Not part of the default build, like the other faces: `--target AmberPawAmp_All` builds every format.
+set_target_properties(AmberPawAmp ${AMBERPAWAMP_FORMATS} AmberPawAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(AmberPawAmp_All AmberPawAmp_CLAP)
+
+# Its gates are the rover's, run as AmberPawAmp: its six channels on its packs, and its set laid out
+# under its own list.
+rover_console(amberpawamp_channel_test tests/RedPawChannelTests.cpp "AmberPawAmpChannelTest" AmberPawAmp "amberpaw-" 6)
+rover_set_test(amberpawamp_set_test "AmberPawAmpSetTest" AmberPawAmp 6)
+
+# ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.
@@ -1361,6 +1484,17 @@ if(APPLE)
                         --sign "${ORBITAMP_SIGN_IDENTITY}"
                         "$<TARGET_BUNDLE_DIR:FrostPawAmp_Standalone>"
                 COMMENT "FrostPawAmp: signing the standalone so macOS remembers the mic grant"
+                VERBATIM)
+        endif()
+
+        # ...and the helicopter's.
+        if(TARGET AmberPawAmp_Standalone)
+            add_custom_command(TARGET AmberPawAmp_Standalone POST_BUILD
+                COMMAND codesign --force --options runtime --timestamp=none
+                        --entitlements "${CMAKE_CURRENT_SOURCE_DIR}/installer/standalone.entitlements"
+                        --sign "${ORBITAMP_SIGN_IDENTITY}"
+                        "$<TARGET_BUNDLE_DIR:AmberPawAmp_Standalone>"
+                COMMENT "AmberPawAmp: signing the standalone so macOS remembers the mic grant"
                 VERBATIM)
         endif()
     else()
