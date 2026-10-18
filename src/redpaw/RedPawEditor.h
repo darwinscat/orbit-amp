@@ -68,7 +68,7 @@ private:
     void renderOpenGL() override;
     void openGLContextClosing() override;
 
-    void webExtras (const juce::File& dir, juce::DynamicObject& places) override;
+    void webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world) override;
 
     // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel — an option of
     // the gear's, as its tone is: thrown, only the pack changes, and a gear pulled comes back with

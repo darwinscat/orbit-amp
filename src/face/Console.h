@@ -155,6 +155,7 @@ protected:
     const Places places;
     std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the file names exportForWeb gives them
     struct LookForWeb { ArtKnob::Pointer drive {}, tone {}; juce::Colour handLight; Ink ink; } lookForWeb;   // ...and the rest of it
+    std::vector<std::pair<juce::String, juce::Rectangle<float>>> spritesWritten;     // writeSprite's, for spriteBounds
 
     juce::Component stage;
     std::unique_ptr<Picture> picture;
@@ -205,10 +206,14 @@ protected:
         variable ORBITAMP_WEB_EXPORT naming the folder; a player never sees it. */
     void exportForWeb (const juce::File& dir);
 
-    /** The product's part of it: its own renders and files, and in `places` the two keys every world has
-        — "window", the box its live view goes in, and "stills", the files of its stills in the lever's
-        order — whatever else is its own, and its poster (writePoster). */
-    virtual void webExtras (const juce::File& /*dir*/, juce::DynamicObject& /*places*/) {}
+    /** The product's part of it: its own renders (writeSprite) and files; in `places` the two keys every
+        world has — "window", the box its live view goes in, and "stills", the files of its stills in the
+        lever's order; in `world` whatever is its own alone — and its poster (writePoster). */
+    virtual void webExtras (const juce::File& /*dir*/, juce::DynamicObject& /*places*/, juce::DynamicObject& /*world*/) {}
+
+    /** A render of a control written for the site, its opaque box (opaqueBounds) kept for places.json's
+        spriteBounds under the file's stem. */
+    void writeSprite (const juce::File& dir, const juce::String& file, const juce::Image& img);
 
     /** THE POSTER: the whole face as it opens — every control where it stands, the lamps out — with
         `still` in `window` under the glass, at twice the stage's size (poster.png). What shows through the

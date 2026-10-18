@@ -628,15 +628,26 @@ void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window,
     writeForWeb (dir.getChildFile ("poster.png"), poster);
 }
 
+void Console::writeSprite (const juce::File& dir, const juce::String& file, const juce::Image& img)
+{
+    if (! img.isValid())
+        return;
+    writeForWeb (dir.getChildFile (file), img);
+    spritesWritten.push_back ({ file.upToLastOccurrenceOf (".", false, false), opaqueBounds (img) });
+}
+
 void Console::exportForWeb (const juce::File& dir)
 {
     dir.createDirectory();
+    spritesWritten.clear();
     writeForWeb (dir.getChildFile ("cabin.png"), picture->staticImage (2.0f));
     for (const auto& [name, img] : renders)
-        writeForWeb (dir.getChildFile (name), img);
+        writeSprite (dir, name, img);
 
     const auto& p = places;
     auto* o = new juce::DynamicObject();
+    o->setProperty ("format", "orbitamp-web-face");
+    o->setProperty ("schema", 2);       // 2: what is one world's own is under "world"; spriteBounds
     o->setProperty ("stage", rectVar ({ 0.0f, 0.0f, stage::width, stage::height }));
     o->setProperty ("cabin", "cabin.png");
     o->setProperty ("cabinScale", 2.0f);
@@ -789,7 +800,14 @@ void Console::exportForWeb (const juce::File& dir)
         o->setProperty ("look", juce::var (k));
     }
 
-    webExtras (dir, *o);
+    auto* world = new juce::DynamicObject();
+    webExtras (dir, *o, *world);
+    o->setProperty ("world", juce::var (world));
+
+    auto* bounds = new juce::DynamicObject();
+    for (const auto& [name, r] : spritesWritten)
+        bounds->setProperty (name, rectVar (r));
+    o->setProperty ("spriteBounds", juce::var (bounds));
     juce::var json (o);
     dir.getChildFile ("places.json").replaceWithText (juce::JSON::toString (json));
 }

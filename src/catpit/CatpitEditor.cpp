@@ -338,14 +338,14 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
     picture in it is composed for, the throttle's and TURBO's frames, their renders, the sky standing still
     for each channel, the glass's whole rectangle at twice the stage's size (sky-<channel>.png) — and the
     poster, the first channel's still sky through the glass. */
-void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places)
+void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world)
 {
     using namespace layout;
     const auto& art = Art::get();
-    face::writeForWeb (dir.getChildFile ("lever-grip.png"), art.leverGrip);
-    face::writeForWeb (dir.getChildFile ("guard-closed.png"), art.guardClosed);
-    face::writeForWeb (dir.getChildFile ("guard-open.png"), art.guardOpen);
-    face::writeForWeb (dir.getChildFile ("guard-on.png"), art.guardOn);
+    writeSprite (dir, "lever-grip.png", art.leverGrip);
+    writeSprite (dir, "guard-closed.png", art.guardClosed);
+    writeSprite (dir, "guard-open.png", art.guardOpen);
+    writeSprite (dir, "guard-on.png", art.guardOn);
     for (int c = 0; c < channels.count(); ++c)
         face::writeForWeb (dir.getChildFile ("sky-" + juce::String (c) + ".png"), stillSky (c));
 
@@ -379,8 +379,9 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         pushes.add (db);
     turboKind->setProperty ("pushes", pushes);
     turboKind->setProperty ("param", params::blockIn (params::preampId));
-    places.setProperty ("turbo", juce::var (turboKind));
-    places.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render
+    world.setProperty ("turbo", juce::var (turboKind));
+    world.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render
+    world.setProperty ("knobRing", false);
     juce::Array<juce::var> stills;
     for (int c = 0; c < channels.count(); ++c)
         stills.add ("sky-" + juce::String (c) + ".png");

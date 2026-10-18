@@ -335,7 +335,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     drawn in and the corners of the glass in it — the lever's slot, its notches and its PARK end, the gears'
     names, TURBO and its hatch, the wipers' keys; the renders of all of them, the still it ships, and the
     poster, that still through the glass. */
-void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places)
+void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world)
 {
     using namespace layout;
     const auto& art = Art::get();
@@ -345,7 +345,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         { "key-down.png", &art.keyDown }, { "turbo-up.png", &art.turboUp }, { "turbo-down.png", &art.turboDown },
         { "turbo-lid.png", &art.turboLid }, { "emblem.png", &art.emblem } };
     for (const auto& [name, img] : own)
-        face::writeForWeb (dir.getChildFile (name), *img);
+        writeSprite (dir, name, *img);
     if (const auto still = Art::still(); still.isValid())
     {
         dir.getChildFile ("still.jpg").deleteFile();
@@ -415,14 +415,14 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     // TURBO walks to the gear's paired channel: the same pack with its Boost held on (channels::Lineup::pairs).
     auto* turboKind = new juce::DynamicObject();
     turboKind->setProperty ("kind", "pair");
-    places.setProperty ("turbo", juce::var (turboKind));
+    world.setProperty ("turbo", juce::var (turboKind));
     auto* keyRenders = new juce::DynamicObject();      // the keys and the roof's toggles are renders, up and down
     keyRenders->setProperty ("up", "key-up.png");
     keyRenders->setProperty ("down", "key-down.png");
     keyRenders->setProperty ("toggleUp", "toggle-up.png");
     keyRenders->setProperty ("toggleDown", "toggle-down.png");
-    places.setProperty ("keys", juce::var (keyRenders));
-    places.setProperty ("knobRing", true);    // a lit ring round DRIVE and the tones, where each stands (KnobRing)
+    world.setProperty ("keys", juce::var (keyRenders));
+    world.setProperty ("knobRing", true);    // a lit ring round DRIVE and the tones, where each stands (KnobRing)
     juce::Array<juce::var> stills;
     stills.add ("still.jpg");
     places.setProperty ("stills", stills);
