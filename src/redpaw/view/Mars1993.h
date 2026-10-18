@@ -25,9 +25,9 @@ namespace orbitamp::redpaw
     byte — spelled with fixed-width unsigned types so they wrap by definition, never by luck.
 
     The same landscape can wear an ice moon's colours instead of Mars's: the ground's 64 shades run
-    from a blue shadow to white snow, the sky is black, and a flat Jupiter stands over the horizon where
-    the ice world's sky has it. The program's routines are otherwise untouched by the look; the DAC's
-    entries, the horizon line's colour and the one disc drawn
+    from a blue shadow to white snow, the terrain lies at a quarter of its height, the sky is black, and
+    a flat Jupiter stands over the horizon where the ice world's sky has it. The program's routines are
+    otherwise untouched by the look; the DAC's entries, the horizon line's colour and the one disc drawn
     into the sky differ. Or Titan's: an amber haze for the sky, a flat methane sea for the ground — the
     terrain's highest sixteenth left as low islands and a far shore, the rest its level, keeping only a
     swell, shaded by its distance, dark and rough near and calm into the haze — and a violet mist on the
