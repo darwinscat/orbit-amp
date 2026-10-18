@@ -215,7 +215,7 @@ void ParkSign::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xff050304).withAlpha (0.72f));
     g.fillRect (area);
 
-    const float h = juce::jmin (area.getHeight() - 24.0f, 96.0f);
+    const float h = juce::jmin (juce::jmax (area.getHeight() - 24.0f, area.getHeight() * 0.8f), 96.0f);
     const auto box = juce::Rectangle<float> (h * 1.15f, h).withCentre (area.getCentre());
     juce::DropShadow (juce::Colour (0xffe8463a).withAlpha (0.55f), 16, {}).drawForPath (g, warningShape (box));
     drawWarning (g, box);
@@ -252,9 +252,46 @@ void NavHeader::paint (juce::Graphics& g)
     auto area = getLocalBounds().toFloat().reduced (8.0f, 0.0f);
     const auto words = face::labelFont (layout::px15).withExtraKerningFactor (0.04f);
     const auto small = face::labelFont (layout::px13).withExtraKerningFactor (0.04f);
+    const auto unit = juce::String ("KM/H"), number = juce::String (juce::jmax (0, shownKmh));
+    const auto widthOf = [] (const juce::Font& font, const juce::String& text) { return juce::GlyphArrangement::getStringWidth (font, text) + 2.0f; };
+
+    // A SCREEN TOO NARROW FOR THE THREE ON ONE LINE, and tall enough for three lines: the gear, the
+    // channel under it — set condensed, as tall, where it is wider than the screen — and the speed under
+    // that.
+    const float oneLine = (parked ? 31.0f : 0.0f) + widthOf (words, gear) + 10.0f + widthOf (small, channel)
+                        + 8.0f + widthOf (words, number) + 6.0f + widthOf (small, unit);
+    if (oneLine > area.getWidth() && area.getHeight() >= 3.0f * layout::px13)
+    {
+        const float row = area.getHeight() / 3.0f;
+        auto first = area.removeFromTop (row), second = area.removeFromTop (row), third = area;
+        if (parked)
+        {
+            drawWarning (g, first.removeFromLeft (23.0f).withSizeKeepingCentre (23.0f, 20.0f));
+            first.removeFromLeft (8.0f);
+        }
+        g.setColour (orange);
+        g.setFont (words);
+        g.drawText (gear, first, juce::Justification::centredLeft, false);
+        {
+            const juce::Graphics::ScopedSaveState keep (g);
+            const float wide = widthOf (small, channel);
+            if (wide > second.getWidth())
+                g.addTransform (juce::AffineTransform::scale (second.getWidth() / wide, 1.0f, second.getX(), second.getY()));
+            g.setColour (juce::Colour (0xffece9f6));
+            g.setFont (small);
+            g.drawText (channel, second.withWidth (juce::jmax (wide, second.getWidth())), juce::Justification::centredLeft, false);
+        }
+        g.setColour (juce::Colour (0xffece9f6));
+        g.setFont (words);
+        g.drawText (number, third.removeFromLeft (widthOf (words, number)), juce::Justification::centredLeft, false);
+        third.removeFromLeft (6.0f);
+        g.setColour (labelLilac.withAlpha (0.8f));
+        g.setFont (small);
+        g.drawText (unit, third, juce::Justification::centredLeft, false);
+        return;
+    }
 
     // The speed on the right: the number, then its unit a size down.
-    const auto unit = juce::String ("KM/H"), number = juce::String (juce::jmax (0, shownKmh));
     g.setColour (labelLilac.withAlpha (0.8f));
     g.setFont (small);
     g.drawText (unit, area.removeFromRight (juce::GlyphArrangement::getStringWidth (small, unit) + 2.0f),

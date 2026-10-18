@@ -81,7 +81,8 @@ private:
 /** THE NAV SCREEN'S TOP LINE: the gear in orange and the channel that is playing beside it, and on the
     right the rover's speed in km/h — read from the windscreen's own drive, so it climbs and falls as
     the gears change, and stands at nothing when parked. Parked, a red warning triangle stands before
-    PARK: the amp is out of the sound. */
+    PARK: the amp is out of the sound. On a screen too narrow for the three, and tall enough, they stand
+    one under another. */
 class NavHeader final : public juce::Component, private juce::Timer
 {
 public:

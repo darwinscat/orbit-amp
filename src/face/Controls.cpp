@@ -605,6 +605,9 @@ void Legend::paint (juce::Graphics& g)
         writeWords (g, text, font, box, weight);
     };
 
+    const juce::Graphics::ScopedSaveState keep (g);
+    if (fit && r.width > (float) getWidth())
+        g.addTransform (juce::AffineTransform::scale ((float) getWidth() / r.width, 1.0f, fromLeft ? 0.0f : (float) getWidth() * 0.5f, 0.0f));
     auto area = fromLeft ? getLocalBounds().toFloat().withWidth (r.width)
                          : getLocalBounds().toFloat().withSizeKeepingCentre (r.width, (float) getHeight());
     if (r.nameWidth > 0.0f)

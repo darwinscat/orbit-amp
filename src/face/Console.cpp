@@ -469,6 +469,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // figure.
     load.nameColour = ink.at (ink.words, 0.85f);
     load.fromLeft = true;
+    load.fit = places.readingsFit;
     load.onClick = [this] { showLoad(); };
     stage.addAndMakeVisible (load);
     load.setBounds (box (places.load));
@@ -476,6 +477,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // MEM. A reading and nothing else: a click there is a click on the panel.
     memory.nameColour = memory.valueColour = ink.at (ink.words, 0.85f);
     memory.fromLeft = true;
+    memory.fit = places.readingsFit;
     memory.setInterceptsMouseClicks (false, false);
     stage.addChildComponent (memory);
     memory.setBounds (box (places.memory));

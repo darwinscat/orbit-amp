@@ -93,7 +93,8 @@ public:
         juce::Rectangle<float> emblemMark;                  // the box the mark is cut in
         juce::Rectangle<float> version, load, memory, preset, gateDoor, limiterDoor;
         float gateDoorAngle = 0.0f, limiterDoorAngle = 0.0f;    // GATE and LIMITER turned about their middles, radians
-        float readingPx = stage::px11;                      // what CPU and MEM are written at
+        float readingPx = stage::px11;                      // what CPU and MEM are written at...
+        bool readingsFit = false;                           // ...set condensed into their boxes, as tall, where wider (Legend::fit)
         bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...
         TunerFace::Dial tunerDial {};                       // ...or a needle over a dial the picture paints, where it has a reach
         bool tunerMenuOnClick = false;                      // ...and a click on it opens its menu, rather than switching it

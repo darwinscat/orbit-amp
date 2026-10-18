@@ -277,6 +277,7 @@ public:
     bool upper = true;                           // false keeps the text's own case
     bool fromLeft = false;                       // true starts the words at the left edge instead of centring
                                                  // them: a number that changes width then moves nothing else
+    bool fit = false;                            // words wider than its box set condensed into it, as tall
 
     std::function<void()>       onClick, onDoubleClick;
     std::function<void()>       onDragStart, onDragEnd;

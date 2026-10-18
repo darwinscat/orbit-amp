@@ -108,6 +108,7 @@ namespace
         p.version = centrePlate;
         p.memory  = readings[0];
         p.load    = readings[1];
+        p.readingsFit = true;           // on a small screen, condensed into it
 
         p.gateDoor    = around (gateWord, 110.0f, 28.0f);
         p.limiterDoor = around (limiterWord, 124.0f, 28.0f);
