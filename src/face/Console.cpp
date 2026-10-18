@@ -1194,14 +1194,17 @@ void Console::showKeys()
     std::array<juce::String, 6> shortNames;
     for (size_t i = 0; i < switches.size(); ++i)
     {
-        keyNames[i]   = switches[i].name;
-        shortNames[i] = switches[i].shortName;
+        if (! claimed[i])
+            keyNames[i] = switches[i].name;
+        shortNames[i] = claimed[i] ? keyNames[i] : juce::String (switches[i].shortName);
     }
 
     if (packKeysUp)
     {
         for (size_t k = 0; k < packKeys.size(); ++k)
         {
+            if (claimed[btFat + k])
+                continue;
             const auto& pk = packKeys[k];
             auto& b = *buttons[btFat + k];
             b.setEnabled (pk.slot >= 0);
@@ -1215,14 +1218,12 @@ void Console::showKeys()
         const auto playable = [] (Channels::Flag f) { return Channels::layerPlayable[(size_t) f]; };
         const auto thrown = [this, playable] (Channels::Flag f) { return playable (f) && channels.flag (f); };
         const bool hot = channels.lineup().channels[(size_t) channel].hot;     // FAT is a layer only the hottest packs carry
-        buttons[btFat]->setEnabled      (hot && playable (Channels::fat));
-        buttons[btBright]->setEnabled   (playable (Channels::bright));
-        buttons[btDepth]->setEnabled    (playable (Channels::depth));
-        buttons[btPresence]->setEnabled (playable (Channels::presence));
-        buttons[btFat]->setOn      (thrown (Channels::fat),      false);
-        buttons[btBright]->setOn   (thrown (Channels::bright),   false);
-        buttons[btDepth]->setOn    (thrown (Channels::depth),    false);
-        buttons[btPresence]->setOn (thrown (Channels::presence), false);
+        for (int key = btFat; key <= btPresence; ++key)
+            if (const auto f = (Channels::Flag) (Channels::fat + key - btFat); ! claimed[(size_t) key])
+            {
+                buttons[(size_t) key]->setEnabled ((key != btFat || hot) && playable (f));
+                buttons[(size_t) key]->setOn (thrown (f), false);
+            }
     }
 
     std::array<bool, 6> live {};
@@ -1234,6 +1235,16 @@ void Console::showKeys()
 /** One of the four keys right of the filters, thrown by the hand: a layer, or the pack's switch moved to
     the position the key is — its other position, for an off/on key let up. A position's key pressed
     while lit stays lit: the switch leaves it only for another of its keys. */
+void Console::claimKey (int key, const juce::String& name)
+{
+    const auto k = (size_t) key;
+    claimed[k] = true;
+    keyNames[k] = name;
+    buttons[k]->onChange = nullptr;
+    buttons[k]->setEnabled (true);
+    showKeys();
+}
+
 void Console::keyThrown (int key, bool on)
 {
     const auto k = (size_t) (key - btFat);

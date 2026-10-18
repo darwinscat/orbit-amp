@@ -69,6 +69,10 @@ extern const float keyNameRoom;     // how wide a name may be: a wider one is se
     a size down on their keys, the pack's layers' none until the packs carry them. */
 extern const bool keyNamesOnKeys;
 
+/** THE SEARCHLIGHTS' KEYS, where the face has lights to throw (Drive::setLights): which of the six are
+    the left lamp's and the right's, each a lamp's sign on its face; -1 for none. */
+extern const std::array<int, 2> lightKeys;
+
 /** THE NAV SCREEN: along its top the gear, the channel and the rover's speed; under them a picture of
     the amp at work; along its bottom the tuner, one low line. */
 extern const juce::Rectangle<float> navScreen;

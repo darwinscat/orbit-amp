@@ -76,6 +76,8 @@ public:
 
     /** The wipers' speed (Drive::setWipers), where the face has keys for it. */
     void setWipers (int speed) { wipersWanted.store (speed); }
+    /** ...and the searchlights (Drive::setLights). */
+    void setLights (bool left, bool right) { lightsWanted.store ((left ? 1 : 0) | (right ? 2 : 0)); }
 
     /** THE ROVER'S SPEED, km/h, as the view is driving it: eased toward what the gear and TURBO ask for,
         to a stand when parked. In the 1993 landscape its own drive, counted in the Plains' measure; in
@@ -174,7 +176,7 @@ private:
     // The inputs, shared with the GL thread.
     std::atomic<int> gearWanted { 1 };
     std::atomic<bool> turboWanted { false }, parkedWanted { false };
-    std::atomic<int> wipersWanted { 1 };
+    std::atomic<int> wipersWanted { 1 }, lightsWanted { 0 };
     face::Steering steering;        // the drag, the keys, and steer() from outside, as one value
     std::atomic<float> scaleInUse { 1.0f };
     float scaleWanted = 1.0f;

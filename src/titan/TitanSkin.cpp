@@ -104,6 +104,7 @@ const float keyNameUnderY = 728.0f;
 const std::array<bool, 6> keyNameOver {{ false, false, false, false, false, false }};
 const float keyNameRoom = 52.0f;
 const bool keyNamesOnKeys = true;
+const std::array<int, 2> lightKeys {{ 4, 5 }};       // the two under TREBLE: the searchlights, left and right
 
 // The radio's screen, its glass 122..277 x 530..623: the gear along its top, the picture under it — the
 // speed is a hologram on the canopy's middle pane, low over the sea.

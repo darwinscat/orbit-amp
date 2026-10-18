@@ -33,6 +33,7 @@ public:
     void setParked (bool on) override        { world.setParked (on); }
     void setSteer (float amount) override    { world.setSteer (amount); }
     void setWipers (int speed) override      { world.setWipers (speed); }
+    void setLights (bool l, bool r) override { world.setLights (l, r); }
     void step (double dt) override           { world.step (dt); }
 
     /** A still keeps what is on the glass and out on the sea; the flight is evaluated where it stands. */

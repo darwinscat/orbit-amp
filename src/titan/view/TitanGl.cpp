@@ -191,6 +191,7 @@ uniform vec3 uVolcF, uVolcR; uniform float uVolcTop, uErupt;
 uniform vec3 uStormF, uStormR; uniform float uFlash; uniform vec3 uFlashP;
 uniform vec4 uField[2]; uniform vec2 uFieldSeed;
 uniform float uWhite, uDown, uDash;
+uniform vec2 uLamp;      // the searchlights, left and right, 0..1
 uniform int uFlags;
 out vec4 o;
 )GLSL" << glslHash << glslConst()
@@ -198,7 +199,20 @@ out vec4 o;
           << "const float MIST_L = " << F (W::mist.L) << ", MIST_DENS = " << F (W::mistDensity) << ", MIST_HS = " << F (W::mistScaleHeight) << ";\n"
           << "const float CLOUD_L = " << F (W::cloud.L) << ", CLOUD_H = " << F (W::cloudHeight) << ", CLOUD_AMP = " << F (W::cloudAmp) << ";\n"
           << "const float OIL_L = " << F (W::oil.L) << ";\n"
-          << "const float MAGIC_CELL = " << F (W::magicCell) << ", MAGIC_P = " << F (W::magicP) << ", MAGIC_T = " << F (W::magicT) << ";\n";
+          << "const float MAGIC_CELL = " << F (W::magicCell) << ", MAGIC_P = " << F (W::magicP) << ", MAGIC_T = " << F (W::magicT) << ";\n"
+          << R"GLSL(
+// THE SEARCHLIGHTS, under the nose either side, aimed down at the sea ahead and a little out: where a lamp
+// is (eye-relative), where its axis points, and how much of it lights a point in its cone, falling off
+// with distance as light does.
+const vec3 LAMP_C = vec3(1.0, 0.93, 0.80) * 2.4;
+const float LAMP_SIDE = 1.6, LAMP_FWD = 1.2, LAMP_DROP = 1.4, AIM_SIDE = 5.5, AIM_FWD = 26.0, LAMP_COS_IN = 0.9986, LAMP_COS_OUT = 0.9925;
+vec3 lampAt(int k){ float sd = k == 0 ? -1.0 : 1.0; return uHR * (sd * LAMP_SIDE) + uHF * LAMP_FWD + vec3(0.0, uCamY - LAMP_DROP, 0.0); }
+vec3 lampAxis(int k){ float sd = k == 0 ? -1.0 : 1.0; vec3 aim = uHR * (sd * AIM_SIDE) + uHF * AIM_FWD; return normalize(vec3(aim.x, 0.0, aim.z) - lampAt(k)); }
+float lampOn(vec3 q, int k, out vec3 l){
+  vec3 d = q - lampAt(k); float r2 = max(dot(d, d), 4.0); l = d * inversesqrt(r2);
+  return smoothstep(LAMP_COS_OUT, LAMP_COS_IN, dot(l, lampAxis(k))) * (AIM_FWD * AIM_FWD / r2);
+}
+)GLSL";
         for (int i = 0; i < 3; ++i)
         {
             const auto& r = W::ripples[(size_t) i];
@@ -522,6 +536,15 @@ void main(){
     vec3 foamC = mix(FOAM_SH * 0.62, FOAM * 0.68, smoothstep(0.2, 0.9, foamM));
     col = mix(col, foamC, clamp(foamM * 1.1, 0.0, 0.92));
     col += FOAM * (bub * 0.6);
+    // the searchlights' pools on the liquid: a little light in the body, the ripples glittering in it
+    for (int k = 0; k < 2; k++) {
+      float on = k == 0 ? uLamp.x : uLamp.y;
+      if (on <= 0.001) continue;
+      vec3 l; float lit = lampOn(vec3(p.x, 0.0, p.y), k, l);
+      if (lit <= 0.0) continue;
+      float spec = pow(max(dot(n, normalize(-l - dir)), 0.0), 220.0);
+      col += LAMP_C * (on * lit) * (0.11 * (1.0 - Fr) + 2.6 * spec + 0.3 * foamM);
+    }
     col = mix(col, hazeH, 1.0 - exp(-t / HAZE_L));
     tEnd = t;
   }
@@ -536,6 +559,19 @@ void main(){
     float tau = mistSeg(dir, 0.0, s0e, pt0) + mistSeg(dir, 150.0, s1e, pt1) + mistSeg(dir, 900.0, s2e, pt2);
     col = mix(mistC, col, exp(-tau));
     col = mix(col, mistC * 1.15, 0.22 * foamM);
+  }
+  // ---- the searchlights' beams in the haze: what each cone lights along the ray, out to the sea or 90 m
+  if (uLamp.x + uLamp.y > 0.001) {
+    float far = min(tEnd, 90.0), beam = 0.0;
+    for (int k = 0; k < 2; k++) {
+      float on = k == 0 ? uLamp.x : uLamp.y;
+      if (on <= 0.001) continue;
+      for (int i = 0; i < 10; i++) {
+        float tq = far * (float(i) + 0.5) / 10.0;
+        vec3 l; beam += on * lampOn(vec3(0.0, uCamY, 0.0) + dir * tq, k, l) * far / 10.0;
+      }
+    }
+    col += LAMP_C * mix(hazeH, vec3(1.0), 0.5) * (beam * 0.0007);
   }
   // ---- spray on the glass while ploughing through froth
   if (uWhite > 0.003) {
@@ -1344,6 +1380,7 @@ void TitanGl::drawScene (int rw, int rh)
         v2 (u ("uFieldSeed"), fl.size() > 0 ? fl[0].seed : 0.0, fl.size() > 1 ? fl[1].seed : 0.0);
         glUniform1f (u ("uWhite"), (float) s.white); glUniform1f (u ("uDown"), (float) s.down); glUniform1f (u ("uDash"), (float) (s.boost * clamp (s.speed / 20, 0, 1)));
         glUniform1i (u ("uFlags"), flags);
+        glUniform2f (u ("uLamp"), (float) world.light (0), (float) world.light (1));
         glDrawArrays (GL_TRIANGLES, 0, 3);
     }
 

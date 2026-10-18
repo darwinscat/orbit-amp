@@ -385,6 +385,10 @@ protected:
     void startGateLearn();
     void startHumLearn();
 
+    /** A KEY OF THE SIX THE FACE TAKES FOR ITSELF, under a name of its own: the console neither lights it
+        nor answers it from then on — what it does and whether it is lit are the face's. */
+    void claimKey (int key, const juce::String& name);
+
 private:
     Emblem emblem;
 
@@ -444,6 +448,7 @@ private:
     std::array<PackKey, 4> packKeys;
     bool packKeysUp = false;                    // the playing pack's switches are on the keys
     std::array<juce::String, 6> keyNames;       // each key's name for the tag over it, as showKeys last said
+    std::array<bool, 6> claimed {};             // ...and the keys the face has taken for itself
     void keyThrown (int key, bool on);
     void showKeys();                            // the keys as the playing channel has them; reads only
 

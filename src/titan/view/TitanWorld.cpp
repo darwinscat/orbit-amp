@@ -306,6 +306,8 @@ void TitanWorld::settle (int g, bool t, bool p)
     gearWanted = std::clamp (g, 1, gears);
     turbo = t; parked = p;
     s.speed = parked ? 0.0 : speedFor (gearWanted, turbo);
+    for (size_t k = 0; k < 2; ++k)
+        lightLevel[k] = lightWanted[k] ? 1.0 : 0.0;
     s.boost = turbo && ! parked ? 1 : 0;
     step (0);
 }
@@ -554,6 +556,8 @@ void TitanWorld::step (double dt)
     const double kS = 1 - std::exp (-dt / (parked ? parkSeconds : speedSeconds));
     s.speed += (target - s.speed) * kS;
     s.boost += ((turbo && ! parked ? 1 : 0) - s.boost) * (1 - std::exp (-dt / boostSeconds));
+    for (size_t k = 0; k < 2; ++k)
+        lightLevel[k] += ((lightWanted[k] ? 1.0 : 0.0) - lightLevel[k]) * (1 - std::exp (-dt / 0.12));
 
     // Yaw: the hand wins; after 1.5 s without it a gentle meander resumes, plus the lean away from the
     // shore. Parked, the hand turns the view in place and nothing meanders.

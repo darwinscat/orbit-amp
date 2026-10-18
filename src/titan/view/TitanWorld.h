@@ -149,6 +149,11 @@ public:
         stroke. */
     enum WiperSpeed { wipersOff, wipersInterval, wipersSlow, wipersFast };
     void setWipers (int speed) noexcept { wiperSpeed = speed; }
+    /** THE TWO SEARCHLIGHTS under the nose, left and right, each thrown on or off by its key: aimed down
+        at the sea ahead, a pool of light on the liquid and its beam in the haze. Each comes up and goes
+        out in a moment. */
+    void setLights (bool left, bool right) noexcept { lightWanted[0] = left; lightWanted[1] = right; }
+    double light (int which) const noexcept { return lightLevel[(size_t) which]; }
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
     bool isParked() const noexcept { return parked; }
@@ -249,6 +254,8 @@ private:
     std::vector<Trail> trailList;
     double dropAcc = 0, glassT0 = 0, wipeCur = -1e9, wipePrev = -1e9, nextWipe = 60;
     int wiperSpeed = wipersInterval;
+    std::array<bool, 2> lightWanted {};
+    std::array<double, 2> lightLevel {};
     Stroke strokeCur { strokeSeconds, pauseSeconds }, strokePrev { strokeSeconds, pauseSeconds };
 
     /** A cached schedule of hashed cycle lengths: the cycle at a time without walking from 0 each frame. */

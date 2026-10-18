@@ -112,6 +112,7 @@ const float keyNameUnderY = 642.0f;
 const std::array<bool, 6> keyNameOver {{ false, false, false, true, false, true }};
 const float keyNameRoom = 120.0f;
 const bool keyNamesOnKeys = false;     // the names round the keys
+const std::array<int, 2> lightKeys {{ -1, -1 }};      // no searchlights
 
 const juce::Rectangle<float> navScreen   { 563.5f, 424.0f, 436.5f, 191.5f };
 const juce::Rectangle<float> navHeader   { 567.0f, 426.0f, 430.0f, 32.0f };

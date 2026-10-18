@@ -47,6 +47,34 @@ namespace
 
     /** The wipers' speed, where the face has keys for it — the machine's too (Drive::setWipers). */
     const juce::Identifier wipersKey { "wipers" };
+    const juce::Identifier lightsKey { "searchlights" };     // ...and the searchlights, a bit each
+
+    /** A SEARCHLIGHT'S SIGN, as a dashboard writes it: the lamp's round face, flat on the side its beam
+        leaves by, and the beam's four rays — to the left for the left lamp. */
+    void drawLampSign (juce::Graphics& g, juce::Rectangle<float> key, bool left, juce::Colour colour)
+    {
+        const auto box = key.withSizeKeepingCentre (key.getWidth() * 0.5f, key.getHeight() * 0.34f);
+        const float w = box.getWidth(), h = box.getHeight();
+        const float lampW = w * 0.42f, gap = w * 0.1f, rays = w - lampW - gap;
+        juce::Path lamp, beam;
+        const float lx = left ? box.getRight() - lampW : box.getX();
+        // The D: round on the lamp's back, flat where the light leaves.
+        lamp.startNewSubPath (left ? lx : lx + lampW, box.getY());
+        lamp.cubicTo (left ? lx + lampW * 1.3f : lx - lampW * 0.3f, box.getY(),
+                      left ? lx + lampW * 1.3f : lx - lampW * 0.3f, box.getBottom(),
+                      left ? lx : lx + lampW, box.getBottom());
+        lamp.closeSubPath();
+        const float rx0 = left ? box.getX() : box.getRight() - rays, rx1 = rx0 + rays;
+        for (int i = 0; i < 4; ++i)
+        {
+            const float y = box.getY() + h * (0.12f + 0.76f * (float) i / 3.0f);
+            beam.startNewSubPath (rx0, y);
+            beam.lineTo (rx1, y);
+        }
+        g.setColour (colour);
+        g.strokePath (lamp, juce::PathStrokeType (1.6f));
+        g.strokePath (beam, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
 
     juce::Rectangle<float> around (juce::Point<float> c, float w, float h)
     {
@@ -337,6 +365,10 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
             drawRender (g, img, box);
             if (layout::keyNamesOnKeys && i <= btLpf)
                 capWord (g, switches[(size_t) i].shortName, fittedArea (img, box), down);
+            for (int lamp = 0; lamp < 2; ++lamp)
+                if (layout::lightKeys[(size_t) lamp] == i)
+                    drawLampSign (g, fittedArea (img, box), lamp == 0,
+                                  down ? skin().ink.state : skin().ink.at (skin().ink.words, 0.75f));
             if (k.isMouseOverOrDragging() && k.isEnabled())
             {
                 juce::Path face;
@@ -480,6 +512,28 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
             addToStage (key);
             key.setBounds (juce::Rectangle<float> (learnKeySize, learnKeySize).withCentre (learnKeys[(size_t) k]).toNearestInt());
         }
+
+    // THE SEARCHLIGHTS on two of the six keys, where the layout gives them some: each key a lamp, lit
+    // while it burns, kept as the machine's choice.
+    if (lightKeys[0] >= 0)
+    {
+        const int kept = (int) prefs::store().get (lightsKey, 0);
+        const auto throwLights = [this]
+        {
+            const bool l = key (lightKeys[0]).isOn(), r = key (lightKeys[1]).isOn();
+            prefs::store().set (lightsKey, (l ? 1 : 0) | (r ? 2 : 0));
+            view->setLights (l, r);
+        };
+        for (int lamp = 0; lamp < 2; ++lamp)
+        {
+            auto& k = key (lightKeys[(size_t) lamp]);
+            claimKey (lightKeys[(size_t) lamp], lamp == 0 ? "SEARCHLIGHT LEFT" : "SEARCHLIGHT RIGHT");
+            k.latching = true;
+            k.setOn ((kept & (1 << lamp)) != 0, false);
+            k.onChange = [throwLights] (bool) { throwLights(); };
+        }
+        view->setLights ((kept & 1) != 0, (kept & 2) != 0);
+    }
 
     // THE WIPERS' SPEED, where the picture paints keys for it: OFF, INT, LO, HI, the speed set lit.
     if (wiperKeySize > 0.0f)
