@@ -64,6 +64,9 @@ extern const float keyNameOverY;
 extern const float keyNameUnderY;
 extern const std::array<bool, 6> keyNameOver;
 extern const float keyNameRoom;     // how wide a name may be: a wider one is set condensed into it, as tall
+/** ...OR THE NAMES ON THE KEYS' FACES, where the picture leaves them no room round the keys: the filters'
+    a size down on their keys, the pack's layers' none until the packs carry them. */
+extern const bool keyNamesOnKeys;
 
 /** THE NAV SCREEN: along its top the gear, the channel and the rover's speed; under them a picture of
     the amp at work; along its bottom the tuner, one low line. */

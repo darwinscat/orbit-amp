@@ -92,8 +92,8 @@ const std::array<Socket, 3> tones {{
 const float knobNameY  = 503.0f;
 const float driveNameY = 508.5f;
 
-// The six square holes, 42 x 43, two and four. Over them the panel leaves no room for a word: every
-// name stands under its key, condensed where it is wider than the keys' pitch allows.
+// The six square holes, 42 x 43, two and four. The panel leaves no room round them for a word: the
+// filters' names are on their keys, the layers' none.
 const std::array<juce::Point<float>, 6> keys {{
     { 1186.7f, 682.5f }, { 1242.8f, 682.4f }, { 1330.0f, 682.5f }, { 1387.4f, 682.4f }, { 1445.2f, 682.5f }, { 1502.5f, 682.5f },
 }};
@@ -102,6 +102,7 @@ const float keyNameOverY  = 654.0f;
 const float keyNameUnderY = 728.0f;
 const std::array<bool, 6> keyNameOver {{ false, false, false, false, false, false }};
 const float keyNameRoom = 52.0f;
+const bool keyNamesOnKeys = true;
 
 // The radio's screen, its glass 122..277 x 530..623: the gear over the speed, the picture under them.
 const juce::Rectangle<float> navScreen   { 121.0f, 529.0f, 158.0f, 96.0f };

@@ -225,10 +225,12 @@ void Dashboard::paintRoof (juce::Graphics& g) const
 }
 
 /** The keys' names, over or under them by turns — a dimmed key's as dim as the key, and the playing
-    pack's own where its switches are on them. */
+    pack's own where its switches are on them. None round the keys where they are on them. */
 void Dashboard::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
+    if (keyNamesOnKeys)
+        return;
 
     const auto& ink = skin().ink;
     for (size_t i = 0; i < keyNames.size(); ++i)
@@ -322,12 +324,15 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         };
 
     // ...the six square keys, and TURBO, are the dashboard's own buttons, up or pressed — each with the
-    // hand's orange rim round its face while the hand is over it, like everything else that moves.
+    // hand's orange rim round its face while the hand is over it, like everything else that moves; the
+    // filters' names on their faces where the layout puts the names there.
     for (int i = 0; i < 6; ++i)
-        key (i).drawKey = [&k = key (i)] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        key (i).drawKey = [&k = key (i), i] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
         {
             const auto& img = down ? Art::get().keyDown : Art::get().keyUp;
             drawRender (g, img, box);
+            if (layout::keyNamesOnKeys && i <= btLpf)
+                capWord (g, switches[(size_t) i].shortName, fittedArea (img, box), down);
             if (k.isMouseOverOrDragging() && k.isEnabled())
             {
                 juce::Path face;
