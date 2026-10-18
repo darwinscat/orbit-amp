@@ -200,8 +200,8 @@ const juce::Point<float> inputName  { 48.0f, 725.0f };
 const juce::Point<float> outputName { 1624.0f, 725.0f };
 const float columnNameRoom = 76.0f;
 
-// GATE and LIMITER under their slots, level, between the plates' lower screws.
-const juce::Point<float> gateWord    { 87.2f, 872.0f };
+// GATE and LIMITER under their slots, level, low on their plates toward the console's middle.
+const juce::Point<float> gateWord    { 99.2f, 882.0f };
 const juce::Point<float> limiterWord { 1572.0f, 882.0f };
 const float lampSlant = 0.0f;
 
