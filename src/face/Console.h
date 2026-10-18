@@ -154,6 +154,7 @@ protected:
     Presets   presets;
     const Places places;
     std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the file names exportForWeb gives them
+    struct LookForWeb { ArtKnob::Pointer drive {}, tone {}; juce::Colour handLight; Ink ink; } lookForWeb;   // ...and the rest of it
 
     juce::Component stage;
     std::unique_ptr<Picture> picture;

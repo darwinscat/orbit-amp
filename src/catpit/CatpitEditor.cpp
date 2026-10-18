@@ -369,6 +369,18 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     dir.getChildFile ("cockpit.json").replaceWithText (juce::JSON::toString (juce::var (o)));
 
     places.setProperty ("window", rect (glass));
+
+    // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
+    auto* turboKind = new juce::DynamicObject();
+    turboKind->setProperty ("kind", "push");
+    turboKind->setProperty ("db", channels::settings::turboDefault);
+    juce::Array<juce::var> pushes;
+    for (const int db : channels::settings::turboPushes)
+        pushes.add (db);
+    turboKind->setProperty ("pushes", pushes);
+    turboKind->setProperty ("param", params::blockIn (params::preampId));
+    places.setProperty ("turbo", juce::var (turboKind));
+    places.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render
     juce::Array<juce::var> stills;
     for (int c = 0; c < channels.count(); ++c)
         stills.add ("sky-" + juce::String (c) + ".png");

@@ -540,6 +540,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     for (size_t i = 0; i < look.lampsLit.size(); ++i)
         if (look.lampsLit[i] != nullptr)
             renders.push_back ({ "lamp-" + juce::String ((int) i) + ".png", *look.lampsLit[i] });
+    lookForWeb = { look.drivePointer, look.tonePointer, look.handLight, look.ink };
 
     if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_WEB_EXPORT", {}); folder.isNotEmpty())
         juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Console> (this), folder]
@@ -563,6 +564,21 @@ namespace
     {
         auto* o = new juce::DynamicObject();
         o->setProperty ("x", p.x); o->setProperty ("y", p.y);
+        return o;
+    }
+
+    juce::var colourVar (juce::Colour c)
+    {
+        return "#" + juce::String::toHexString ((int) c.getRed()).paddedLeft ('0', 2)
+                   + juce::String::toHexString ((int) c.getGreen()).paddedLeft ('0', 2)
+                   + juce::String::toHexString ((int) c.getBlue()).paddedLeft ('0', 2)
+                   + juce::String::toHexString ((int) c.getAlpha()).paddedLeft ('0', 2);
+    }
+
+    juce::var pointerVar (ArtKnob::Pointer p)
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("inner", p.inner); o->setProperty ("outer", p.outer); o->setProperty ("width", p.width);
         return o;
     }
 
@@ -651,6 +667,128 @@ void Console::exportForWeb (const juce::File& dir)
     o->setProperty ("limiterDoor", rectVar (p.limiterDoor));
     o->setProperty ("gateDoorAngle", p.gateDoorAngle);
     o->setProperty ("limiterDoorAngle", p.limiterDoorAngle);
+    o->setProperty ("emblemFace", listVar (p.emblemFace, pointVar));
+    {
+        auto* m = new juce::DynamicObject();
+        m->setProperty ("count", p.meterDots.count); m->setProperty ("size", p.meterDots.size);
+        o->setProperty ("meterDots", p.meterDots.count > 0 ? juce::var (m) : juce::var());
+    }
+    o->setProperty ("lampDot", p.lampDot);
+    o->setProperty ("readingPx", p.readingPx);
+    o->setProperty ("readingsFit", p.readingsFit);
+    o->setProperty ("tunerStrip", p.tunerStrip);
+    if (p.tunerDial.reach > 0.0f)
+    {
+        auto* d = new juce::DynamicObject();
+        d->setProperty ("pivot", pointVar (p.tunerDial.pivot)); d->setProperty ("reach", p.tunerDial.reach);
+        d->setProperty ("sweep", p.tunerDial.sweep); d->setProperty ("window", rectVar (p.tunerDial.window));
+        o->setProperty ("tunerDial", juce::var (d));
+    }
+
+    // WHAT EACH CHANNEL OPENS ON, in the lever's order: its pack, the switch it holds, the channel it
+    // shares its memory with, its room and its shares of reverb and delay, DRIVE and the tones as they
+    // stand on it, and its pack's switches.
+    {
+        const auto& line = channels.lineup();
+        const auto ranged = [this] (const juce::String& id, float value)
+        {
+            auto* v = new juce::DynamicObject();
+            v->setProperty ("param", id);
+            v->setProperty ("value", value);
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (amp.apvts.getParameter (id)))
+            {
+                v->setProperty ("min", r->getNormalisableRange().start);
+                v->setProperty ("max", r->getNormalisableRange().end);
+            }
+            return juce::var (v);
+        };
+        juce::Array<juce::var> list;
+        for (int c = 0; c < channels.count(); ++c)
+        {
+            const auto& ch = line.channels[(size_t) c];
+            auto* x = new juce::DynamicObject();
+            x->setProperty ("name", ch.name);
+            x->setProperty ("pack", ch.capture);
+            auto* held = new juce::DynamicObject();
+            if (ch.held.control != nullptr)
+                held->setProperty (ch.held.control, ch.held.value);
+            x->setProperty ("held", juce::var (held));
+            x->setProperty ("pair", line.pairs ? juce::var (c ^ 1) : juce::var());
+            x->setProperty ("hot", ch.hot);
+            x->setProperty ("reverb", params::reverbCharacters[juce::roundToInt (channels.defaultOf (c, params::reverbType))]);
+            x->setProperty ("reverbMix", channels.defaultOf (c, params::reverbMix));
+            x->setProperty ("delayMix", channels.defaultOf (c, params::delayMix));
+            x->setProperty ("drive", ranged (params::preampGain, channels.defaultOf (c, params::preampGain)));
+            juce::Array<juce::var> tones;
+            for (int t = 0; t < Channels::numTones; ++t)
+            {
+                const auto id = channels.toneOf (c, t);
+                auto v = ranged (id, channels.defaultOf (c, id));
+                v.getDynamicObject()->setProperty ("name", Channels::toneNames[(size_t) t]);
+                tones.add (v);
+            }
+            x->setProperty ("tones", tones);
+            juce::Array<juce::var> switches;
+            for (const auto& sw : channels.switchesOf (c))
+            {
+                auto* w = new juce::DynamicObject();
+                w->setProperty ("name", sw.name);
+                juce::Array<juce::var> values;
+                for (const auto& v : sw.values)
+                    values.add (v);
+                w->setProperty ("values", values);
+                w->setProperty ("opening", sw.opening);
+                w->setProperty ("held", sw.held);
+                switches.add (juce::var (w));
+            }
+            x->setProperty ("switches", switches);
+            list.add (juce::var (x));
+        }
+        auto* l = new juce::DynamicObject();
+        l->setProperty ("channels", list);
+        l->setProperty ("cabinet", line.openingCabinet);
+        auto* delay = new juce::DynamicObject();
+        delay->setProperty ("division", params::delayDivisions[juce::roundToInt (channels.defaultOf (0, params::delayDiv))]);
+        delay->setProperty ("bpm", channels.defaultOf (0, params::delayBpm));
+        l->setProperty ("delay", juce::var (delay));
+        if (line.parkId != nullptr)
+        {
+            auto* park = new juce::DynamicObject();
+            park->setProperty ("param", line.parkId);
+            park->setProperty ("does", "takes the whole amp out of the sound; the channel waits, TURBO does nothing until a gear is pulled");
+            l->setProperty ("park", juce::var (park));
+        }
+        o->setProperty ("lineup", juce::var (l));
+    }
+
+    // HOW THIS FACE DRAWS THE FAMILY'S CONTROLS — what is its own; what every face shares is in
+    // face/Controls.cpp's constants.
+    {
+        auto* k = new juce::DynamicObject();
+        k->setProperty ("drivePointer", pointerVar (lookForWeb.drive));
+        k->setProperty ("tonePointer", pointerVar (lookForWeb.tone));
+        k->setProperty ("pointerColour", colourVar (juce::Colour (0xffd9c8ff)));
+        k->setProperty ("pointerGlow", colourVar (violet));
+        k->setProperty ("handLight", colourVar (lookForWeb.handLight));
+        auto* ink = new juce::DynamicObject();
+        ink->setProperty ("words", colourVar (lookForWeb.ink.words));
+        ink->setProperty ("values", colourVar (lookForWeb.ink.values));
+        ink->setProperty ("state", colourVar (lookForWeb.ink.state));
+        ink->setProperty ("edge", colourVar (lookForWeb.ink.edge));
+        ink->setProperty ("shade", colourVar (lookForWeb.ink.shade));
+        ink->setProperty ("weight", lookForWeb.ink.weight);
+        ink->setProperty ("leastAlpha", lookForWeb.ink.leastAlpha);
+        ink->setProperty ("edgeDrop", Ink::edgeDrop);
+        k->setProperty ("ink", juce::var (ink));
+        k->setProperty ("labelLilac", colourVar (labelLilac));
+        auto* px = new juce::DynamicObject();
+        px->setProperty ("px11", stage::px11); px->setProperty ("px13", stage::px13);
+        px->setProperty ("px15", stage::px15); px->setProperty ("px16", stage::px16);
+        k->setProperty ("labelPx", juce::var (px));
+        k->setProperty ("keyTracking", keyTracking);
+        o->setProperty ("look", juce::var (k));
+    }
+
     webExtras (dir, *o);
     juce::var json (o);
     dir.getChildFile ("places.json").replaceWithText (juce::JSON::toString (json));

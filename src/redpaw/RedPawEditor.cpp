@@ -411,6 +411,18 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     dir.getChildFile ("rover.json").replaceWithText (juce::JSON::toString (juce::var (o)));
 
     places.setProperty ("window", rect (windscreen));
+
+    // TURBO walks to the gear's paired channel: the same pack with its Boost held on (channels::Lineup::pairs).
+    auto* turboKind = new juce::DynamicObject();
+    turboKind->setProperty ("kind", "pair");
+    places.setProperty ("turbo", juce::var (turboKind));
+    auto* keyRenders = new juce::DynamicObject();      // the keys and the roof's toggles are renders, up and down
+    keyRenders->setProperty ("up", "key-up.png");
+    keyRenders->setProperty ("down", "key-down.png");
+    keyRenders->setProperty ("toggleUp", "toggle-up.png");
+    keyRenders->setProperty ("toggleDown", "toggle-down.png");
+    places.setProperty ("keys", juce::var (keyRenders));
+    places.setProperty ("knobRing", true);    // a lit ring round DRIVE and the tones, where each stands (KnobRing)
     juce::Array<juce::var> stills;
     stills.add ("still.jpg");
     places.setProperty ("stills", stills);
