@@ -58,6 +58,9 @@ namespace
         return t * t * (3 - 2 * t);
     }
 
+    // Saturn's darkest: its night side at the limb, the light's step 0.
+    constexpr double satDark = 0.08 * 0.55;
+
     /** 0219: the recursive-subdivision fractal, depth first, on a 256 x 256 map that wraps through the
         8-bit halves of its address; 0xFF marks a point not yet written. The four edge midpoints are
         written only if unwritten, the centre always. */
@@ -196,7 +199,10 @@ void Mars1993::makeIcePalette()
 /** TITAN'S DAC. The sea's 64 shades from 98, a dark trough through the amber-brown liquid to the haze's
     sheen on a wave; the islands' 32 from 162, the lit shore to a violet-brown shadow; and the first 64,
     which only the haze rows under the horizon take, the far sea fading into the pale violet mist. The
-    sky's 32 are the haze, a darker brown to the amber of the horizon; 97 is the mist on the horizon line. */
+    sky's 32 are the haze, a darker brown to the amber of the horizon; 97 is the mist on the horizon line.
+    From 194, Saturn: 12 latitudes of its bands, each in four steps of light, then its rings' three — all
+    reddened by the haze and mixed, in light, into its middle, a little more of the haze than the GPU's
+    picture shows where the haze is thinnest, this sky being the darker. */
 void Mars1993::makeTitanPalette()
 {
     struct C { float r, g, b; };
@@ -222,6 +228,25 @@ void Mars1993::makeTitanPalette()
         put (i, mix (hazeHigh, hazeLow, (float) (i - 64) / 31.0f));
     put (97, { 0.65f, 0.55f, 0.70f });
     horizonIndex = 97;
+
+    const auto toLight = [] (C c) { return C { std::pow (c.r, 2.2f), std::pow (c.g, 2.2f), std::pow (c.b, 2.2f) }; };
+    const auto toShown = [] (C c) { return C { std::pow (std::max (c.r, 0.0f), 1 / 2.2f), std::pow (std::max (c.g, 0.0f), 1 / 2.2f), std::pow (std::max (c.b, 0.0f), 1 / 2.2f) }; };
+    const auto times = [] (C c, float k) { return C { c.r * k, c.g * k, c.b * k }; };
+    const C haze = toLight (mix (hazeHigh, hazeLow, 0.5f)), tint { 1.0f, 0.85f, 0.65f };   // the haze's middle; what it lets through, reddened
+    const float clear = 0.42f;                                                                 // Saturn's own light that reaches the eye
+    for (int row = 0; row < satRows; ++row)
+    {
+        const float lat = ((float) row + 0.5f) / (float) satRows * 2 - 1;
+        const float band = std::clamp (0.5f + 0.17f * std::sin (lat * 8.5f + 0.7f) + 0.08f * std::sin (lat * 21.0f + 2.0f), 0.0f, 1.0f);
+        const C pc = mix (mix ({ 0.66f, 0.56f, 0.40f }, { 0.82f, 0.74f, 0.56f }, band), { 0.55f, 0.56f, 0.62f }, ss (0.75f, 0.95f, std::abs (lat)));
+        for (int l = 0; l < satLevels; ++l)
+        {
+            const float b = (float) satDark + (1 - (float) satDark) * (float) l / (float) (satLevels - 1);
+            put (satShades + row * satLevels + l, toShown (mix (haze, mix (times ({ pc.r * tint.r, pc.g * tint.g, pc.b * tint.b }, b), haze, 0.2f), clear)));
+        }
+    }
+    for (int l = 0; l < satRingShades; ++l)
+        put (satRing + l, toShown (mix (haze, times ({ 0.70f * tint.r, 0.62f * tint.g, 0.48f * tint.b }, 0.75f + 0.1f * (float) l), 0.5f * clear)));
 }
 
 /** TITAN'S SEA out of the program's terrain: the highest sixteenth of it stays, at half its height, low
@@ -311,6 +336,8 @@ void Mars1993::render (uint16_t camX, uint16_t camY)
     drawSky (alt, camX, camY);
     if (look == Look::ice)
         drawJupiter();
+    else if (look == Look::titan)
+        drawSaturn();
     drawGround (alt, camX, camY);
 }
 
@@ -351,6 +378,53 @@ void Mars1993::drawJupiter()
             fb[(size_t) y * (size_t) w + (size_t) x] = (uint8_t) (e < 0.8 ? jupSpot + light : jupShades + row * jupLevels + light);
         }
     }
+}
+
+/** SATURN in Titan's haze, where the GPU's sky has it: 17 degrees left of straight ahead, 6 up, 2.85
+    across to its edge, its rings 13 degrees off level and open by 0.075 of their width — on this
+    screen, whose horizon is the middle row, the same fractions of the glass as the GPU's picture gives
+    them. The far half of the rings, then the banded disc lit from the right, its terminator soft, its
+    limb darker and the rings' shadow across it, in four steps of light; then the near half of the
+    rings. Their colours are mixed into the haze (the palette's), their edges
+    and the rings' thin line dithered into it. The sky rows only. */
+void Mars1993::drawSaturn()
+{
+    const double ry = 0.06951 * h, rx = ry * squeeze, cx = 0.39328 * w, cy = G - 0.15346 * h;
+    const double tc = std::cos (13 * pi / 180), ts = std::sin (13 * pi / 180), open = 0.075;
+    // The light, from the right and gibbous in the rings' frame, turned with them.
+    const double l0 = 0.62, l1 = 0.22, l2 = 0.75, ll = std::sqrt (l0 * l0 + l1 * l1 + l2 * l2);
+    const double Lx = (tc * l0 - ts * l1) / ll, Ly = (ts * l0 + tc * l1) / ll, Lz = l2 / ll;
+    const double aa = 1 / ry + 0.07;                       // the haze softens its edge
+    const int y0 = std::max (0, (int) std::floor (cy - 1.1 * ry)), y1 = std::min (skyRows - 1, (int) std::ceil (cy + 1.1 * ry));
+    const int x0 = std::max (0, (int) std::floor (cx - 2.35 * rx)), x1 = std::min (w - 1, (int) std::ceil (cx + 2.35 * rx));
+    uint8_t* fb = frame.data();
+    for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x)
+        {
+            const double qx = (x - cx) / rx, qy = (cy - y) / ry;              // planet radii, y up
+            const double ux = tc * qx - ts * qy, uy = ts * qx + tc * qy;      // along the rings' line, across it
+            const double er = std::hypot (ux, uy / open);
+            double ring = smoothstep (1.22, 1.30, er) * (1 - smoothstep (2.18, 2.27, er));
+            ring *= 1 - 0.8 * smoothstep (1.90, 1.93, er) * (1 - smoothstep (1.99, 2.02, er));     // the Cassini division
+            const int ringShade = satRing + std::clamp ((int) ((0.15 + 0.15 * std::sin (er * 31)) / 0.3 * satRingShades), 0, satRingShades - 1);
+            const double threshold = dither (x, y);
+            uint8_t& px = fb[(size_t) y * (size_t) w + (size_t) x];
+            if (uy > 0 && ring > threshold)
+                px = (uint8_t) ringShade;                                     // the far half, behind the disc
+            const double pqx = ux, pqy = uy / 0.9, pr = std::hypot (pqx, pqy);     // the disc, a tenth flatter at the poles
+            if (1 - smoothstep (1 - aa, 1 + aa, pr) > threshold)
+            {
+                const double z = std::sqrt (std::max (1 - pr * pr, 0.0));
+                const double lit = smoothstep (-0.15, 0.45, pqx * Lx + pqy * Ly + z * Lz);
+                double b = (0.08 + 0.92 * lit) * (0.55 + 0.45 * z);
+                b *= 1 - 0.6 * std::exp (-((uy + 0.16) / 0.05) * ((uy + 0.16) / 0.05)) * lit;   // the rings' shadow
+                const int row = std::clamp ((int) ((pqy + 1) / 2 * satRows), 0, satRows - 1);
+                const int light = step ((b - satDark) / (1 - satDark), satLevels, dither (x + 2, y + 2));
+                px = (uint8_t) (satShades + row * satLevels + light);
+            }
+            if (uy <= 0 && ring > threshold)
+                px = (uint8_t) ringShade;                                     // the near half, in front
+        }
 }
 
 // 0459: the sky. Row r above the horizon looks at a plane at distance K / r: rows of constant v, u

@@ -33,8 +33,8 @@ namespace orbitamp::redpaw
     otherwise untouched by the look; the DAC's entries, the horizon line's colour and the one disc drawn
     into the sky differ. Or Titan's: an amber haze for the sky, a flat methane sea for the ground — the
     terrain's highest sixteenth left as low islands and a far shore, the rest its level, keeping only a
-    swell, shaded by its distance, dark and rough near and calm into the haze — and a violet mist on the
-    horizon.
+    swell, shaded by its distance, dark and rough near and calm into the haze — a violet mist on the
+    horizon, and Saturn pale in the haze, its rings nearly edge-on.
 
     The discs in the sky are shaded spheres, their light and their limb in a few steps of the palette
     with a 4 x 4 ordered dither between them, as the period dithered what its palette could not hold. */
@@ -91,8 +91,10 @@ private:
     // which the haze under the horizon starts from.
     static constexpr int seaShades = 98, landShades = 162, seaCode = 96, farSea = 17;
     static constexpr uint8_t seaLevel = 0x80;
-    // The disc's shades: Jupiter's latitudes, each in its steps of light, then the Spot's.
+    // The discs' shades: Jupiter's latitudes, each in its steps of light, then the Spot's; Saturn's on
+    // Titan, after the islands, then its rings'.
     static constexpr int jupShades = 98, jupRows = 24, jupLevels = 6, jupSpot = jupShades + jupRows * jupLevels;
+    static constexpr int satShades = 194, satRows = 12, satLevels = 4, satRing = satShades + satRows * satLevels, satRingShades = 3;
 
     void makeIcePalette();
     void makeTitanPalette();
@@ -100,6 +102,7 @@ private:
     void seaRow (uint8_t* shade, int d) const noexcept;
     void drawSky (uint16_t alt, uint16_t camX, uint16_t camY);
     void drawJupiter();
+    void drawSaturn();
     void drawGround (uint16_t alt, uint16_t camX, uint16_t camY);
 };
 
