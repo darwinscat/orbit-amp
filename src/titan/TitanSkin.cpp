@@ -47,7 +47,7 @@ const Skin& skin()
         [] { return std::make_unique<Windscreen> (std::make_unique<titan::TitanDrive> (numGears())); },
         { "Titan (GPU)", "1993 (CPU)", "Still" },
         "GAIN",
-        false,                          // the plate between the vents is plain metal: no mark there yet
+        true,                           // the family's cat, cut into the plate between the vents
         "IN", "OUT",                    // the edge columns, short as a cockpit labels them
     };
     return titan;
@@ -196,7 +196,7 @@ const juce::Rectangle<float> leftPlate   { 700.0f, 801.0f, 120.0f, 73.0f };
 const std::array<juce::Rectangle<float>, 2> readings {{ { 857.0f, 809.0f, 110.0f, 28.0f }, { 857.0f, 837.0f, 110.0f, 28.0f } }};     // on the screen 851..971
 const juce::Rectangle<float> centrePlate { 700.0f, 760.0f, 275.0f, 30.0f };
 
-// The plain metal between the vents, where a mark would go: none yet (the skin says so).
+// The plain metal between the vents, where the family's mark is cut.
 const std::array<juce::Point<float>, 6> emblemFace {{
     { 786.0f, 402.0f }, { 888.0f, 402.0f }, { 902.0f, 431.0f }, { 888.0f, 460.0f }, { 786.0f, 460.0f }, { 772.0f, 431.0f },
 }};
