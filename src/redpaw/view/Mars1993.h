@@ -29,12 +29,15 @@ namespace orbitamp::redpaw
 
     The same landscape can wear an ice moon's colours instead of Mars's: the ground's 64 shades run
     from a blue shadow to white snow, the terrain lies at a quarter of its height, the sky is black, and
-    a flat Jupiter stands over the horizon where the ice world's sky has it. The program's routines are
+    Jupiter stands over the horizon where the ice world's sky has it. The program's routines are
     otherwise untouched by the look; the DAC's entries, the horizon line's colour and the one disc drawn
     into the sky differ. Or Titan's: an amber haze for the sky, a flat methane sea for the ground — the
     terrain's highest sixteenth left as low islands and a far shore, the rest its level, keeping only a
     swell, shaded by its distance, dark and rough near and calm into the haze — and a violet mist on the
-    horizon. */
+    horizon.
+
+    The discs in the sky are shaded spheres, their light and their limb in a few steps of the palette
+    with a 4 x 4 ordered dither between them, as the period dithered what its palette could not hold. */
 class Mars1993 final
 {
 public:
@@ -44,8 +47,12 @@ public:
         took from the clock. About a millisecond. The look is the palette. */
     void makeMaps (uint16_t seed, Look look = Look::mars);
 
-    /** Sets the frame's height; the width follows (5.345 : 1, even). Allocates the buffers. */
-    void setRows (int rows);
+    /** Sets the frame's height; the width follows (5.345 : 1, even). Allocates the buffers. `glass` is
+        the width over the height of the glass the frame is stretched onto, so that a disc in the sky
+        is round there; 0 is the frame's own. */
+    void setRows (int rows, double glass = 0);
+    /** The glass's width over its height, as last set; 0 is the frame's own. */
+    double shownAspect() const noexcept { return shown; }
 
     /** Draws one frame from a 12.4 fixed-point map position. */
     void render (uint16_t camX, uint16_t camY);
@@ -71,6 +78,8 @@ private:
     std::vector<int32_t> cBuf;
     int w = 0, h = 0;
     double P = 1.0;          // framebuffer pixels per pixel of the original's 256 x 200 screen
+    double shown = 0;        // the glass's aspect (setRows)
+    double squeeze = 1.0;    // a disc's columns per row of its height, for it to be round on the glass
     int G = 0;               // the horizon's row: the middle
     int skyRows = 0, hazeRows = 0;
     Look look = Look::mars;
@@ -82,6 +91,8 @@ private:
     // which the haze under the horizon starts from.
     static constexpr int seaShades = 98, landShades = 162, seaCode = 96, farSea = 17;
     static constexpr uint8_t seaLevel = 0x80;
+    // The disc's shades: Jupiter's latitudes, each in its steps of light, then the Spot's.
+    static constexpr int jupShades = 98, jupRows = 24, jupLevels = 6, jupSpot = jupShades + jupRows * jupLevels;
 
     void makeIcePalette();
     void makeTitanPalette();

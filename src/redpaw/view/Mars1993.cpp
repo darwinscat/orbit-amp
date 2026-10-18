@@ -38,6 +38,25 @@ namespace
     inline uint32_t lcg (uint32_t s) noexcept { return (s * lcgMul + lcgAdd) % lcgMod; }
 
     constexpr double aspect = 5.3451;    // the windscreen box, 1440.5 x 269.5
+    constexpr double pi = 3.14159265358979;
+
+    // The discs' dither: a 4 x 4 ordered matrix, its thresholds in sixteenths.
+    constexpr uint8_t bayer[16] { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+    inline double dither (int x, int y) noexcept { return (bayer[((y & 3) << 2) | (x & 3)] + 0.5) / 16.0; }
+
+    /** 0..1 to one of `levels` steps, the pixel's threshold choosing between the two nearest. */
+    inline int step (double f, int levels, double threshold) noexcept
+    {
+        const double s = std::clamp (f, 0.0, 1.0) * (levels - 1);
+        const int i = (int) s;
+        return std::min (levels - 1, i + (s - i > threshold ? 1 : 0));
+    }
+
+    inline double smoothstep (double e0, double e1, double x) noexcept
+    {
+        const double t = std::clamp ((x - e0) / (e1 - e0), 0.0, 1.0);
+        return t * t * (3 - 2 * t);
+    }
 
     /** 0219: the recursive-subdivision fractal, depth first, on a 256 x 256 map that wraps through the
         8-bit halves of its address; 0xFF marks a point not yet written. The four edge midpoints are
@@ -134,8 +153,8 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
 
 /** THE ICE MOON'S DAC. The ground's shade is w(u) - w(u + 3) + 32 — the sun low along u — so the 64
     entries run from a blue shadow through lit ice to white snow; the sky's 32 are black; 97 is the mist
-    on the horizon. From 98, Jupiter: 24 latitudes of the ice world's banding, each lit, at the
-    terminator, and on the night side, then the Spot's three. */
+    on the horizon. From 98, Jupiter: 24 latitudes of the ice world's banding, each in six steps of
+    light from the night side to the full sun, then the Spot's six. */
 void Mars1993::makeIcePalette()
 {
     struct C { float r, g, b; };
@@ -156,7 +175,7 @@ void Mars1993::makeIcePalette()
 
     // Jupiter's bands by latitude, as the ice world's sky shades them, without the festoons.
     const C zone { 0.95f, 0.90f, 0.80f }, belt { 0.56f, 0.36f, 0.24f };
-    const float light[3] { 1.25f + 0.045f, 0.5f * 1.25f + 0.045f, 0.045f };
+    const auto light = [] (int l) { return 1.25f * (float) l / (float) (jupLevels - 1) + 0.045f; };
     for (int row = 0; row < 24; ++row)
     {
         const float la = (((float) row + 0.5f) / 24.0f - 0.5f) * 3.14159265f;
@@ -167,11 +186,11 @@ void Mars1993::makeIcePalette()
         c = mix (c, { 0.74f, 0.62f, 0.50f }, 0.5f * ss (0.35f, 0.45f, std::abs (la + 0.12f)) * (1 - ss (0.45f, 0.6f, std::abs (la + 0.12f))));
         c = mix (c, { 0.78f, 0.70f, 0.58f }, ss (0.9f, 1.3f, std::abs (la)));
         c = mix (c, { 0.62f, 0.60f, 0.68f }, ss (1.15f, 1.45f, std::abs (la)));
-        for (int l = 0; l < 3; ++l)
-            put (98 + row * 3 + l, { c.r * light[l], c.g * light[l], c.b * light[l] });
+        for (int l = 0; l < jupLevels; ++l)
+            put (jupShades + row * jupLevels + l, { c.r * light (l), c.g * light (l), c.b * light (l) });
     }
-    for (int l = 0; l < 3; ++l)
-        put (170 + l, { 0.80f * light[l], 0.48f * light[l], 0.36f * light[l] });
+    for (int l = 0; l < jupLevels; ++l)
+        put (jupSpot + l, { 0.80f * light (l), 0.48f * light (l), 0.36f * light (l) });
 }
 
 /** TITAN'S DAC. The sea's 64 shades from 98, a dark trough through the amber-brown liquid to the haze's
@@ -252,11 +271,13 @@ void Mars1993::seaRow (uint8_t* shade, int d) const noexcept
         shade[c] = (uint8_t) (seaShades + std::clamp ((int) std::lround (base + (c - seaCode) * swell), 0, 63));
 }
 
-void Mars1993::setRows (int rows)
+void Mars1993::setRows (int rows, double glass)
 {
     rows = std::max (2, rows & ~1);
     h = rows;
     w = 2 * (int) std::lround (rows * aspect / 2.0);
+    shown = glass;
+    squeeze = glass > 0 ? (double) w / h / glass : 1.0;
     P = rows / 200.0;
     G = rows / 2;
     const int line = std::max (1, (int) std::lround (P));      // the horizon line, row 99 of the original
@@ -293,17 +314,18 @@ void Mars1993::render (uint16_t camX, uint16_t camY)
     drawGround (alt, camX, camY);
 }
 
-/** A FLAT JUPITER in the black sky, where the ice world's sky has it: 27 degrees right of straight
-    ahead, 4 up, 9 across to its edge — on this screen, whose horizon is the middle row, the same
-    fractions of the glass as the GPU's picture gives them. Bands by latitude from the palette,
-    lit by the same sun through a terminator in three steps, the Spot in its place; the sky rows
-    only, the ground is drawn over it. No festoons, no limb, no edge: it is 1993. */
+/** JUPITER in the black sky, where the ice world's sky has it: 27 degrees right of straight ahead, 4
+    up, 9 across to its edge — on this screen, whose horizon is the middle row, the same fractions of
+    the glass as the GPU's picture gives them. Bands by latitude from the palette, the Spot in its
+    place; a sphere lit as the GPU lights it, by the same sun, its terminator soft and its limb darker,
+    in six steps of light dithered between. The sky rows only, the ground is drawn over it. No
+    festoons, no edge: it is 1993. */
 void Mars1993::drawJupiter()
 {
-    const double cx = 0.7063 * w, cy = G - 0.152 * h, r = 0.343 * h;
+    const double cx = 0.7063 * w, cy = G - 0.152 * h, r = 0.343 * h, rx = r * squeeze;
     const int y0 = std::max (0, (int) std::floor (cy - r)), y1 = std::min (skyRows - 1, (int) std::ceil (cy + r));
     // The light: n = u R + v U - z J against the sun, with J, R, U the ice world's sky frame.
-    const auto dir = [] (double azDeg, double elDeg) { const double az = azDeg * 3.14159265358979 / 180, el = elDeg * 3.14159265358979 / 180; return std::array<double, 3> { std::sin (az) * std::cos (el), std::sin (el), -std::cos (az) * std::cos (el) }; };
+    const auto dir = [] (double azDeg, double elDeg) { const double az = azDeg * pi / 180, el = elDeg * pi / 180; return std::array<double, 3> { std::sin (az) * std::cos (el), std::sin (el), -std::cos (az) * std::cos (el) }; };
     const auto cross = [] (std::array<double, 3> a, std::array<double, 3> b) { return std::array<double, 3> { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] }; };
     const auto norm = [] (std::array<double, 3> a) { const double l = std::sqrt (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]); return std::array<double, 3> { a[0] / l, a[1] / l, a[2] / l }; };
     const auto dot = [] (std::array<double, 3> a, std::array<double, 3> b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
@@ -314,18 +336,19 @@ void Mars1993::drawJupiter()
     for (int y = y0; y <= y1; ++y)
     {
         const double v = (cy - y) / r;
-        const double half = std::sqrt (std::max (0.0, 1.0 - v * v)) * r;
+        const double half = std::sqrt (std::max (0.0, 1.0 - v * v)) * rx;
         const int x0 = std::max (0, (int) std::ceil (cx - half)), x1 = std::min (w - 1, (int) std::floor (cx + half));
         const double lat = std::asin (std::clamp (v, -1.0, 1.0));
-        const int row = std::clamp ((int) ((lat / 3.14159265358979 + 0.5) * 24), 0, 23);
+        const int row = std::clamp ((int) ((lat / pi + 0.5) * jupRows), 0, jupRows - 1);
         for (int x = x0; x <= x1; ++x)
         {
-            const double u = (x - cx) / r, z = std::sqrt (std::max (0.0, 1.0 - u * u - v * v));
+            const double u = (x - cx) / rx, z = std::sqrt (std::max (0.0, 1.0 - u * u - v * v));
             const double l = u * sR + v * sU - z * sJ;
-            const int light = l > 0.25 ? 0 : (l > 0.0 ? 1 : 2);
+            const double lit = smoothstep (-0.06, 0.34, l) * (0.9 + 0.1 * std::max (l, 0.0)), limb = 0.55 + 0.45 * z;
+            const int light = step (lit * limb, jupLevels, dither (x, y));
             const double lon = std::asin (std::clamp (u / std::max (std::cos (lat), 1e-6), -1.0, 1.0));
             const double e = (lon - 0.35) * (lon - 0.35) / (0.21 * 0.21) + (lat - 0.36) * (lat - 0.36) / (0.085 * 0.085);
-            fb[(size_t) y * (size_t) w + (size_t) x] = (uint8_t) (e < 0.8 ? 170 + light : 98 + row * 3 + light);
+            fb[(size_t) y * (size_t) w + (size_t) x] = (uint8_t) (e < 0.8 ? jupSpot + light : jupShades + row * jupLevels + light);
         }
     }
 }

@@ -472,8 +472,9 @@ void Windscreen::drawCpuFrame (bool advance)
         cpuLast = juce::Time::getMillisecondCounterHiRes() * 0.001;
     }
     const int rows = juce::jmax (50, juce::roundToInt ((float) getHeight() * scaleInUse.load())) & ~1;
-    if (mars.height() != rows)
-        mars.setRows (rows);
+    const double glass = getHeight() > 0 ? (double) getWidth() / getHeight() : 0.0;     // the frame is stretched onto it
+    if (mars.height() != rows || mars.shownAspect() != glass)
+        mars.setRows (rows, glass);
 
     const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
     const double dt = advance ? juce::jlimit (0.0, 0.1, now - cpuLast) : 0.0;
