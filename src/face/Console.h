@@ -54,6 +54,9 @@ enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
     (redo); back is its mirror (undo). */
 void drawTurnArrow (juce::Graphics&, juce::Point<float> centre, float radius, bool back, juce::Colour);
 
+/** A render written as a PNG for the site (Console::exportForWeb); nothing for an invalid one. */
+void writeForWeb (const juce::File&, const juce::Image&);
+
 //==============================================================================
 /** A CONSOLE: the face of a product with channels, over OrbitAmp's processor. What every such face has
     — DRIVE, the three tones and the six keys under them, the history and the four registers in the
@@ -150,6 +153,7 @@ protected:
     Channels& channels;     // ...and these are its
     Presets   presets;
     const Places places;
+    std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the file names exportForWeb gives them
 
     juce::Component stage;
     std::unique_ptr<Picture> picture;
@@ -192,6 +196,13 @@ protected:
 
     /** The stage has been placed in the window again. */
     virtual void stagePlaced() {}
+
+    /** FOR THE SITE: what the web's demo of this face is built from, written into `dir` — the picture
+        that never changes at twice the stage's size, its window transparent (cabin.png); the renders its
+        controls are drawn with; and where everything stands (places.json, in the stage's own 1672 x 941).
+        A product adds what is its own. Done once, when the window first comes up with the environment
+        variable ORBITAMP_WEB_EXPORT naming the folder; a player never sees it. */
+    virtual void exportForWeb (const juce::File& dir) const;
 
     /** To that channel, by a hand: one step of the history. False, and the face back on the channel
         that is playing, when its pack is not installed. */

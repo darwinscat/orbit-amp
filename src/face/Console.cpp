@@ -534,6 +534,99 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     setResizeLimits (minWindowWidth, juce::roundToInt ((float) minWindowWidth * height / width),
                      readingWidth * 2, juce::roundToInt ((float) readingWidth * 2.0f * height / width));
     setSize (readingWidth, juce::roundToInt ((float) readingWidth * height / width));
+
+    renders = { { "knob-drive.png", look.driveKnob }, { "knob-tone.png", look.toneKnob },
+                { "slider-cap.png", look.cap }, { "fader-cap.png", look.faderCap } };
+    for (size_t i = 0; i < look.lampsLit.size(); ++i)
+        if (look.lampsLit[i] != nullptr)
+            renders.push_back ({ "lamp-" + juce::String ((int) i) + ".png", *look.lampsLit[i] });
+
+    if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_WEB_EXPORT", {}); folder.isNotEmpty())
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Console> (this), folder]
+        {
+            if (safe != nullptr)
+                safe->exportForWeb (juce::File (folder));
+        });
+}
+
+namespace
+{
+    juce::var rectVar (juce::Rectangle<float> r)
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("x", r.getX()); o->setProperty ("y", r.getY());
+        o->setProperty ("w", r.getWidth()); o->setProperty ("h", r.getHeight());
+        return o;
+    }
+
+    juce::var pointVar (juce::Point<float> p)
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("x", p.x); o->setProperty ("y", p.y);
+        return o;
+    }
+
+    template <typename Each, typename Range>
+    juce::var listVar (const Range& range, Each each)
+    {
+        juce::Array<juce::var> list;
+        for (const auto& v : range)
+            list.add (each (v));
+        return list;
+    }
+}
+
+void writeForWeb (const juce::File& file, const juce::Image& img)
+{
+    if (! img.isValid())
+        return;
+    file.deleteFile();
+    juce::FileOutputStream out (file);
+    if (out.openedOk())
+        juce::PNGImageFormat().writeImageToStream (img, out);
+}
+
+void Console::exportForWeb (const juce::File& dir) const
+{
+    dir.createDirectory();
+    writeForWeb (dir.getChildFile ("cabin.png"), picture->staticImage (2.0f));
+    for (const auto& [name, img] : renders)
+        writeForWeb (dir.getChildFile (name), img);
+
+    const auto& p = places;
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("stage", rectVar ({ 0.0f, 0.0f, stage::width, stage::height }));
+    o->setProperty ("cabin", "cabin.png");
+    o->setProperty ("cabinScale", 2.0f);
+    o->setProperty ("drive", rectVar (p.drive));
+    o->setProperty ("tones", listVar (p.tones, rectVar));
+    o->setProperty ("keys", listVar (p.keys, pointVar));
+    o->setProperty ("keySize", p.keySize);
+    o->setProperty ("holes", listVar (p.holes, pointVar));
+    o->setProperty ("holeKeySize", p.holeKeySize);
+    o->setProperty ("sliders", listVar (p.sliders, rectVar));
+    o->setProperty ("sliderNames", listVar (p.sliderNames, rectVar));
+    o->setProperty ("sliderCapAngle", p.sliderCapAngle);
+    o->setProperty ("sliderCapLength", p.sliderCapLength);
+    o->setProperty ("faderCapLength", p.faderCapLength);
+    o->setProperty ("inMeter", rectVar (p.inMeter));
+    o->setProperty ("inFader", rectVar (p.inFader));
+    o->setProperty ("outMeter", rectVar (p.outMeter));
+    o->setProperty ("outFader", rectVar (p.outFader));
+    o->setProperty ("tuner", rectVar (p.tuner));
+    o->setProperty ("lamps", listVar (p.lamps, rectVar));
+    o->setProperty ("emblemFace", listVar (p.emblemFace, pointVar));
+    o->setProperty ("emblemMark", rectVar (p.emblemMark));
+    o->setProperty ("version", rectVar (p.version));
+    o->setProperty ("load", rectVar (p.load));
+    o->setProperty ("memory", rectVar (p.memory));
+    o->setProperty ("preset", rectVar (p.preset));
+    o->setProperty ("gateDoor", rectVar (p.gateDoor));
+    o->setProperty ("limiterDoor", rectVar (p.limiterDoor));
+    o->setProperty ("gateDoorAngle", p.gateDoorAngle);
+    o->setProperty ("limiterDoorAngle", p.limiterDoorAngle);
+    juce::var json (o);
+    dir.getChildFile ("places.json").replaceWithText (juce::JSON::toString (json));
 }
 
 Console::~Console()

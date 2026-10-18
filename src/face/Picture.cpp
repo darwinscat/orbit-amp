@@ -30,6 +30,18 @@ void Picture::setKeys (const std::array<bool, 6>& live, const std::array<juce::S
     repaint();
 }
 
+juce::Image Picture::staticImage (float scale) const
+{
+    using namespace stage;
+
+    juce::Image img (juce::Image::ARGB, juce::roundToInt (width * scale), juce::roundToInt (height * scale), true);
+    juce::Graphics g (img);
+    g.addTransform (juce::AffineTransform::scale (scale));
+    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+    paintStatic (g, scale);
+    return img;
+}
+
 void Picture::paint (juce::Graphics& g)
 {
     using namespace stage;

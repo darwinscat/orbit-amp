@@ -334,6 +334,42 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 }
 
 //==============================================================================
+/** The cockpit's own part of the site's demo (Console::exportForWeb): where the glass is and where the
+    picture in it is composed for, the throttle's and TURBO's frames, their renders, and the sky standing
+    still for each channel, the glass's whole rectangle at twice the stage's size (sky-<channel>.png). */
+void CatpitEditor::exportForWeb (const juce::File& dir) const
+{
+    Console::exportForWeb (dir);
+
+    using namespace layout;
+    const auto& art = Art::get();
+    face::writeForWeb (dir.getChildFile ("lever-grip.png"), art.leverGrip);
+    face::writeForWeb (dir.getChildFile ("guard-closed.png"), art.guardClosed);
+    face::writeForWeb (dir.getChildFile ("guard-open.png"), art.guardOpen);
+    face::writeForWeb (dir.getChildFile ("guard-on.png"), art.guardOn);
+    for (int c = 0; c < channels.count(); ++c)
+        face::writeForWeb (dir.getChildFile ("sky-" + juce::String (c) + ".png"), stillSky (c));
+
+    const auto rect = [] (juce::Rectangle<float> r)
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("x", r.getX()); o->setProperty ("y", r.getY());
+        o->setProperty ("w", r.getWidth()); o->setProperty ("h", r.getHeight());
+        return juce::var (o);
+    };
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("glass", rect (glass));
+    o->setProperty ("windshield", rect (windshield));
+    o->setProperty ("leverFrame", rect (leverFrame));
+    o->setProperty ("leverAxis", art.leverAxis);
+    o->setProperty ("turboFrame", rect (turboFrame));
+    juce::Array<juce::var> names;
+    for (int c = 0; c < channels.count(); ++c)
+        names.add (channels.lineup().channels[(size_t) c].name);
+    o->setProperty ("channels", names);
+    dir.getChildFile ("cockpit.json").replaceWithText (juce::JSON::toString (juce::var (o)));
+}
+
 CatpitEditor::CatpitEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Cockpit>(), cockpitPlaces(), cockpitLook()),
       monitor (p)

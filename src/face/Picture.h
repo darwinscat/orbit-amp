@@ -38,6 +38,10 @@ public:
         are on the keys (Console::showChannel), so they change with the channel. */
     void setKeys (const std::array<bool, 6>& live, const std::array<juce::String, 6>& names);
 
+    /** THE PICTURE THAT NEVER CHANGES, on its own: the stage at `scale` pixels to its unit, what the
+        picture leaves bare — its cut-out window — transparent. */
+    juce::Image staticImage (float scale) const;
+
 protected:
     bool canUndo = false, canRedo = false;
     int  activeRegister = 0;
