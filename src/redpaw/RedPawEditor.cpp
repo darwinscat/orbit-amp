@@ -285,7 +285,11 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 
     print ("TURBO", turboName, 140.0f, ink.state);
     if (learnKeySize > 0.0f)
-        print ("LEARN", learnName, 120.0f, ink.words, learnNameRoom);
+        for (size_t k = 0; k < learnNames.size(); ++k)        // each key's LEARN over its name
+        {
+            print ("LEARN", learnNames[k].translated (0.0f, -0.5f * learnLine), 90.0f, ink.words, 0.0f, capEm);
+            print (k == 0 ? "GATE" : "HUM", learnNames[k].translated (0.0f, 0.5f * learnLine), 90.0f, ink.words, 0.0f, capEm);
+        }
     print (skin().inputName, inputName, 170.0f, ink.words, columnNameRoom);
     print (skin().outputName, outputName, 170.0f, ink.words, columnNameRoom);
 
@@ -433,8 +437,8 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
                                                (int) prefs::store().get (screenKey, (int) skin().firstScreen)));
 
-    // LEARN, from GATE's menu or its own key, takes the picture's place while it runs — the parked
-    // warning's too, and the top line's where its place takes that in (RedPawLayout.h) — and lights the key.
+    // LEARN, from the menus or a key of its own, takes the picture's place while it runs — the parked
+    // warning's too, and the top line's where its place takes that in (RedPawLayout.h) — and lights its key.
     addToStage (learnGlass);
     learnGlass.setBounds (learnArea.toNearestInt());
     learnGlass.inset = { 8.0f, 4.0f };      // the top line's words start where the header's do
@@ -444,28 +448,31 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         parkSign.setAlpha (up ? 0.0f : 1.0f);
         if (learnArea.intersects (navHeader))
             header.setAlpha (up ? 0.0f : 1.0f);
-        learnShowing = up;
+        learnShowing = up ? (learnGlass.showsHum() ? 1 : 0) : -1;
         learnKey.repaint();
+        humKey.repaint();
     };
 
     if (learnKeySize > 0.0f)
-    {
-        learnKey.latching = false;
-        learnKey.drawKey = [this] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        for (int k = 0; k < 2; ++k)
         {
-            const auto& img = down || learnShowing ? Art::get().turboDown : Art::get().turboUp;
-            drawRender (g, img, box);
-            if (learnKey.isMouseOverOrDragging() && learnKey.isEnabled())
+            auto& key = k == 0 ? learnKey : humKey;
+            key.latching = false;
+            key.drawKey = [this, &key, k] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
             {
-                juce::Path face;
-                face.addEllipse (fittedArea (img, box).reduced (2.0f));
-                drawHandRim (g, face, handLight);
-            }
-        };
-        learnKey.onPress = [this] { startGateLearn(); };
-        addToStage (learnKey);
-        learnKey.setBounds (juce::Rectangle<float> (learnKeySize, learnKeySize).withCentre (layout::learnKey).toNearestInt());
-    }
+                const auto& img = down || learnShowing == k ? Art::get().turboDown : Art::get().turboUp;
+                drawRender (g, img, box);
+                if (key.isMouseOverOrDragging() && key.isEnabled())
+                {
+                    juce::Path face;
+                    face.addEllipse (fittedArea (img, box).reduced (2.0f));
+                    drawHandRim (g, face, handLight);
+                }
+            };
+            key.onPress = [this, k] { k == 0 ? startGateLearn() : startHumLearn(); };
+            addToStage (key);
+            key.setBounds (juce::Rectangle<float> (learnKeySize, learnKeySize).withCentre (learnKeys[(size_t) k]).toNearestInt());
+        }
 
     // THE WIPERS' SPEED, where the picture paints keys for it: OFF, INT, LO, HI, the speed set lit.
     if (wiperKeySize > 0.0f)

@@ -377,13 +377,13 @@ private:
     // ...the hum's, from HUM's menus — its own, apart from the gate's (ui/HumLearner.h); only one of the
     // two runs at a time: starting either cancels the other.
     HumLearner humLearner { amp.humLearn, amp.gateKeyDb, amp.humTuned.quietHz };
-    void startHumLearn();
 
 protected:
     // ...and its picture, which the product lays over a glass of its own and places there (LearnGlass.h).
     // A face with a key of its own for it starts it as the menu does.
     LearnGlass learnGlass { learner, humLearner };
     void startGateLearn();
+    void startHumLearn();
 
 private:
     Emblem emblem;

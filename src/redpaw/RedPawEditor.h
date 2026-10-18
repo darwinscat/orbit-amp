@@ -90,10 +90,10 @@ private:
     ParkSign parkSign;              // parked: the warning, large, in the screen's middle
     GlassFilm glassFilm;            // the screen's glass, over all of it
 
-    // LEARN's own key, where the picture paints a hole for one (RedPawLayout.h): GATE's learning started
-    // as from its menu, the key lit while the learning shows.
-    face::PushButton learnKey { "LEARN" };
-    bool learnShowing = false;
+    // LEARN's own keys, where the picture paints holes for them (RedPawLayout.h): GATE's learning and
+    // HUM's, each started as from its menu, a key lit while its learning shows.
+    face::PushButton learnKey { "LEARN GATE" }, humKey { "LEARN HUM" };
+    int learnShowing = -1;          // whose learning the glass shows: 0 GATE's, 1 HUM's, -1 none
 
     // THE WIPERS' SPEED on keys of their own, where the picture paints a row for them (RedPawLayout.h):
     // each word on its key, the speed set lit — the machine's choice, as the landscape is.

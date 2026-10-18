@@ -61,6 +61,9 @@ public:
     /** Up, or down again: the product hides what its glass shows otherwise while this is over it. */
     std::function<void (bool up)> onShow;
 
+    /** Whose take the glass shows, or last showed: the hum's, or the gate's. */
+    bool showsHum() const noexcept { return hum; }
+
     /** From the glass's corner to where its words and its trace start. */
     juce::Point<float> inset;
 

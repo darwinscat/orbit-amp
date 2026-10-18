@@ -81,15 +81,15 @@ extern const juce::Rectangle<float> tunerScreen;
     screen is then the top line and the picture alone. */
 extern const face::TunerFace::Dial tunerDial;
 
-/** LEARN: where GATE's learning shows while it runs — over the nav screen's picture, or over the whole
-    screen, its top line too, where the picture is too small to hold it — and a round key of its own
-    where the picture paints a hole for one: lit while the learning shows, its word over it. A size of
-    nought: no key, LEARN only from GATE's menu and its lamp. */
+/** LEARN: where GATE's learning or HUM's shows while it runs — over the nav screen's picture, or over the
+    whole screen, its top line too, where the picture is too small to hold it — and a round key for each
+    where the picture paints holes for them, GATE's over HUM's: lit while its learning shows, LEARN over
+    its name in two lines over it. A size of nought: no keys, LEARN only from the menus and GATE's lamp. */
 extern const juce::Rectangle<float> learnArea;
-extern const juce::Point<float> learnKey;
+extern const std::array<juce::Point<float>, 2> learnKeys;   // GATE's, HUM's
 extern const float learnKeySize;    // the key's render, whose button fills the hole
-extern const juce::Point<float> learnName;
-extern const float learnNameRoom;  // how wide the word may be: a wider one is set condensed into it, as tall
+extern const std::array<juce::Point<float>, 2> learnNames;  // the middle of each key's two lines
+extern const float learnLine;       // ...the two lines apart
 
 /** THE WIPERS' SPEED: four keys where the picture paints a row of them — OFF, INT, LO, HI, each word on
     its key, the speed set lit. A size of nought: none, the wipers keep their own time. */
