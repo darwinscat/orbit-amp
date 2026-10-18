@@ -71,6 +71,7 @@ struct Skin
         shows until the player picks another. */
     bool packOnScreen = true;
     face::Monitor::View firstScreen = face::Monitor::View::spectrum;
+    bool parkSignOnTopLine = true;      // parked, the warning on the top line too, beside the large one
 };
 
 /** The product's own. */

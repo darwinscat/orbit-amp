@@ -315,8 +315,9 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     if (learnKeySize > 0.0f)
         for (size_t k = 0; k < learnNames.size(); ++k)        // each key's LEARN over its name
         {
-            print ("LEARN", learnNames[k].translated (0.0f, -0.5f * learnLine), 90.0f, ink.words, 0.0f, capEm);
-            print (k == 0 ? "GATE" : "HUM", learnNames[k].translated (0.0f, 0.5f * learnLine), 90.0f, ink.words, 0.0f, capEm);
+            constexpr float em = 8.5f / readingScale;     // under the keys' own words
+            print ("LEARN", learnNames[k].translated (0.0f, -0.5f * learnLine), 90.0f, ink.words, 0.0f, em);
+            print (k == 0 ? "GATE" : "HUM", learnNames[k].translated (0.0f, 0.5f * learnLine), 90.0f, ink.words, 0.0f, em);
         }
     print (skin().inputName, inputName, 170.0f, ink.words, columnNameRoom);
     print (skin().outputName, outputName, 170.0f, ink.words, columnNameRoom);
@@ -462,6 +463,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // windscreen is driving at; under them the picture of the amp at work the machine has chosen, the
     // skin's until then.
     header.speed = [this] { return view->speedKmh(); };
+    header.showsWarning = skin().parkSignOnTopLine;
     addToStage (header);
     header.setBounds (navHeader.toNearestInt());
     if (! speedHud.isEmpty())       // ...or the speed on the glass, the screen's top line the gear alone

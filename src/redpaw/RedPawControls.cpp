@@ -258,14 +258,14 @@ void NavHeader::paint (juce::Graphics& g)
     // A SCREEN TOO NARROW FOR THEM ON ONE LINE, and tall enough for a line each: the gear, the channel
     // under it — set condensed, as tall, where it is wider than the screen — and the speed under that;
     // the gear and the speed alone where the channel is not named.
-    const float oneLine = (parked ? 31.0f : 0.0f) + widthOf (words, gear) + 10.0f + widthOf (small, channel)
+    const float oneLine = (parked && showsWarning ? 31.0f : 0.0f) + widthOf (words, gear) + 10.0f + widthOf (small, channel)
                         + (showsSpeed ? 8.0f + widthOf (words, number) + 6.0f + widthOf (small, unit) : 0.0f);
     const int lines = channel.isEmpty() ? 2 : 3;
     if (oneLine > area.getWidth() && area.getHeight() >= (float) lines * layout::px13)
     {
         const float row = area.getHeight() / (float) lines;
         auto first = area.removeFromTop (row), second = lines == 3 ? area.removeFromTop (row) : juce::Rectangle<float>(), third = area;
-        if (parked)
+        if (parked && showsWarning)
         {
             drawWarning (g, first.removeFromLeft (23.0f).withSizeKeepingCentre (23.0f, 20.0f));
             first.removeFromLeft (8.0f);
@@ -313,7 +313,7 @@ void NavHeader::paint (juce::Graphics& g)
     g.setFont (words);
 
     // PARKED, a warning first: a red triangle with its mark — the amp is out of the sound.
-    if (parked)
+    if (parked && showsWarning)
     {
         const float h = 20.0f, w = 23.0f;
         drawWarning (g, area.removeFromLeft (w).withSizeKeepingCentre (w, h));

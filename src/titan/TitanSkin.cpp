@@ -51,6 +51,7 @@ const Skin& skin()
         "IN", "OUT",                    // the edge columns, short as a cockpit labels them
         false,                          // the radio's top line the gear and the speed alone...
         face::Monitor::View::shape,     // ...over the shape the amp gives the sound
+        false,                          // parked, the large warning alone
     };
     return titan;
 }
@@ -127,7 +128,7 @@ const juce::Rectangle<float> learnArea = navHeader.getUnion (navPicture);
 const std::array<juce::Point<float>, 2> learnKeys {{ { 324.5f, 577.5f }, { 324.5f, 661.5f } }};
 const float learnKeySize = 42.0f;
 const std::array<juce::Point<float>, 2> learnNames {{ { 324.5f, 538.0f }, { 324.5f, 620.0f } }};
-const float learnLine = 13.5f;
+const float learnLine = 11.5f;
 
 // The wipers' four keys: the row of square holes under the radio's screen, each 35 x 39, 44 apart.
 const std::array<juce::Point<float>, 4> wiperKeys {{ { 136.0f, 667.8f }, { 180.0f, 667.8f }, { 224.0f, 667.8f }, { 268.0f, 667.8f } }};

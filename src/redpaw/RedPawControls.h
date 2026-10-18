@@ -90,6 +90,7 @@ public:
 
     std::function<float()> speed;       // km/h
     bool showsSpeed = true;             // ...none where the glass shows it (SpeedHud)
+    bool showsWarning = true;           // parked, the warning beside the gear
 
     void set (const juce::String& gear, const juce::String& channel, bool parked);
     void paint (juce::Graphics&) override;
