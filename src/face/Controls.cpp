@@ -982,11 +982,11 @@ void SegmentMeter::setDots (const Dots& d)
 
 void SegmentMeter::paintDots (juce::Graphics& g, float level)
 {
-    // The foot's dot lights at the scale's floor and each one over it a pitch further up the scale; the
+    // The foot's dot lights over the scale's floor and each one over it a pitch further up the scale; the
     // top ones take the segments' orange and red. Out, a dot is what the picture painted.
     const auto area = getLocalBounds().toFloat();
     const float pitch = area.getHeight() / (float) dots.count;
-    for (int i = 0; i < dots.count && (float) i / (float) dots.count <= level; ++i)
+    for (int i = 0; i < dots.count && (float) i / (float) dots.count < level; ++i)
     {
         const float top = (float) (i + 1) / (float) dots.count;
         const juce::Colour hue = top > 0.94f ? juce::Colour (0xffff4646) : top > 0.8f ? orange : violet;
