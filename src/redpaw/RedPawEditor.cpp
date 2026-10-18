@@ -154,7 +154,7 @@ namespace
         const auto& art = Art::get();
         return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.faderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
-                 juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),     // the family's mark, until the rover has its own
+                 Art::mark().isNotEmpty() ? Art::mark() : juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),   // the rover's own mark; the family's, where it has none
                  skin().midiCommands,
                  handLight,         // under the hand, the dashboard's orange
                  skin().ink };

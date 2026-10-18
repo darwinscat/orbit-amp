@@ -931,7 +931,7 @@ target_compile_features(titan_world_test PRIVATE cxx_std_20)
 # of is said once here — the renders by the file names the face asks for, the sources, the libraries —
 # and each product adds its own skin's file and its own renders.
 set(ROVER_RENDERS
-    dashboard.png midi.txt knob-drive.png knob-tone.png lever.png slider-cap.png fader-cap.png
+    dashboard.png midi.txt mark.svg knob-drive.png knob-tone.png lever.png slider-cap.png fader-cap.png
     toggle-up.png toggle-down.png key-up.png key-down.png turbo-up.png turbo-down.png)
 
 set(REDPAWAMP_RENDERS ${ROVER_RENDERS} turbo-lid.png)     # ...and TURBO's hatch shut, its own

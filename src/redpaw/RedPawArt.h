@@ -45,6 +45,10 @@ struct Art
     /** THE STILL the rover ships: one frame of its world, chosen and kept, that its windscreen shows in
         STILL instead of rendering one. Decoded when asked, never held here; invalid where it has none. */
     static juce::Image still();
+
+    /** THE ROVER'S MARK, as SVG: its vehicle seen from the front, as its icon draws it — the build window
+        wears it. Empty where the binary has none. */
+    static juce::String mark();
 };
 
 } // namespace orbitamp::redpaw

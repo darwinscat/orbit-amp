@@ -222,4 +222,17 @@ juce::Image Art::still()
     return loadOwn ("still.jpg");
 }
 
+juce::String Art::mark()
+{
+    const auto& binary = skin().renders;
+    for (int i = 0; i < binary.count; ++i)
+        if (juce::String (binary.originalName (binary.names[i])) == "mark.svg")
+        {
+            int size = 0;
+            if (const char* svg = binary.data (binary.names[i], size); svg != nullptr)
+                return juce::String::fromUTF8 (svg, size);
+        }
+    return {};
+}
+
 } // namespace orbitamp::redpaw
