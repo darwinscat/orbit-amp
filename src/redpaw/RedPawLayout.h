@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "../face/Controls.h"
 #include "../face/Stage.h"
 
 #include <juce_graphics/juce_graphics.h>
@@ -70,6 +71,11 @@ extern const juce::Rectangle<float> navScreen;
 extern const juce::Rectangle<float> navHeader;
 extern const juce::Rectangle<float> navPicture;
 extern const juce::Rectangle<float> tunerScreen;
+
+/** ...OR THE TUNER IS A GAUGE THE PICTURE PAINTS (face::TunerFace::Dial), where this has a reach: a needle
+    over its dial, `tunerScreen` the dial's face, which a click opens the tuner's settings on. The nav
+    screen is then the top line and the picture alone. */
+extern const face::TunerFace::Dial tunerDial;
 
 /** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches painted on its right — as many as
     the picture paints — the product's gears, CLEAN, CRUNCH, HI-GAIN, stand in them from the top, as many

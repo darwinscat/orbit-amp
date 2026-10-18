@@ -364,6 +364,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         stage.addAndMakeVisible (c);
     tuner.setBounds (box (places.tuner));
     tuner.setStrip (places.tunerStrip);
+    tuner.setDial (places.tunerDial);
     inFader.capLength = outFader.capLength = places.faderCapLength;
     inFader.handLight = outFader.handLight = look.handLight;
     inFader.setBounds (box (places.inFader));

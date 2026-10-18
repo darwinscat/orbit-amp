@@ -93,6 +93,7 @@ public:
         float gateDoorAngle = 0.0f, limiterDoorAngle = 0.0f;    // GATE and LIMITER turned about their middles, radians
         float readingPx = stage::px11;                      // what CPU and MEM are written at
         bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...
+        TunerFace::Dial tunerDial {};                       // ...or a needle over a dial the picture paints, where it has a reach
         bool tunerMenuOnClick = false;                      // ...and a click on it opens its menu, rather than switching it
     };
 

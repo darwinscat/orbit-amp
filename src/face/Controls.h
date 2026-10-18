@@ -449,10 +449,26 @@ public:
         numbers under it — for a face whose glass has other work to do. */
     void setStrip (bool);
 
+    /** A GAUGE: no glass of its own, but a dial the face's picture paints — a needle drawn over it,
+        turning about `pivot` under the arc of ticks, `reach` long, `sweep` radians either side of straight
+        up at fifty cents out, where the arc's end ticks are; the note in the little `window` under the
+        pivot, the state between the two, and the pitch its A is tuned to, when that is not 440, over
+        the pivot. In the stage's space; none while `reach` is nothing — and a dial it has is what it
+        is, strip or not. */
+    struct Dial
+    {
+        juce::Point<float> pivot;
+        float reach = 0.0f, sweep = 0.0f;
+        juce::Rectangle<float> window;
+    };
+    void setDial (const Dial&);
+
 private:
     const core::TunerEar& ear;
     bool listening = true, muting = false, strip = false;
+    Dial dial;
     void paintStrip (juce::Graphics&);
+    void paintDial (juce::Graphics&);
     void timerCallback() override { repaint(); }
 };
 

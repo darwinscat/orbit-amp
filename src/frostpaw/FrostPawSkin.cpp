@@ -115,6 +115,7 @@ const juce::Rectangle<float> navScreen   { 563.5f, 424.0f, 436.5f, 191.5f };
 const juce::Rectangle<float> navHeader   { 567.0f, 426.0f, 430.0f, 32.0f };
 const juce::Rectangle<float> navPicture  { 567.0f, 460.0f, 430.0f, 126.0f };
 const juce::Rectangle<float> tunerScreen { 567.0f, 588.0f, 430.0f, 27.0f };
+const face::TunerFace::Dial tunerDial {};      // none: the tuner is the screen's bottom line
 
 // The slot is 786..810 across, its top end at 681.5, its notches out to 823.
 const juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };

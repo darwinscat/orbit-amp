@@ -981,6 +981,81 @@ void TunerFace::setStrip (bool s)
     repaint();
 }
 
+void TunerFace::setDial (const Dial& d)
+{
+    dial = d;
+    repaint();
+}
+
+void TunerFace::paintDial (juce::Graphics& g)
+{
+    const juce::Colour home { 0xff5fc97a };   // the family's in-tune green
+
+    const auto origin = getPosition().toFloat();
+    const auto pivot  = dial.pivot - origin;
+    const auto window = dial.window - origin;
+    const float hub   = dial.reach * 0.07f;
+    const bool live   = listening && ear.live();
+    const auto note   = ear.nearestNote();
+    g.setFont (labelFont (stage::px13));
+
+    // The note in the window, a dash while nothing is heard.
+    if (live)
+    {
+        g.setColour (ear.green() ? home : juce::Colour (0xffece9f6));
+        g.drawText (juce::String (core::PitchTracker::noteName (note.midi)) + juce::String (core::PitchTracker::noteOctave (note.midi)),
+                    window, juce::Justification::centred, false);
+    }
+    else
+    {
+        g.setColour (lilac.withAlpha (0.35f));
+        g.fillRoundedRectangle (juce::Rectangle<float> (18.0f, 3.0f).withCentre (window.getCentre()), 1.5f);
+    }
+
+    // Its state under the pivot — ON, OFF, or MUTE — and over it what its A is tuned to, when that is
+    // not the 440 everyone assumes.
+    g.setColour (! listening ? violet : orange);
+    g.drawText (! listening ? "OFF" : muting ? "MUTE" : "ON",
+                juce::Rectangle<float> (window.getWidth() * 2.0f, window.getY() - pivot.y - hub)
+                    .withPosition (pivot.x - window.getWidth(), pivot.y + hub),
+                juce::Justification::centred, false);
+    if (const int a4 = juce::roundToInt (ear.referenceHz()); a4 != juce::roundToInt (core::PitchTracker::concertA))
+    {
+        g.setColour (lilac.withAlpha (0.8f));
+        g.drawText ("A " + juce::String (a4), juce::Rectangle<float> (window.getWidth() * 2.0f, window.getHeight())
+                                                  .withCentre ({ pivot.x, pivot.y - dial.reach * 0.45f }),
+                    juce::Justification::centred, false);
+    }
+
+    // The needle, while a string is heard: green when it is home, warming to orange by 25 cents out,
+    // tapering from the pivot to the ticks, with a short tail behind it.
+    if (live)
+    {
+        const auto colour = ear.green() ? home
+                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+        const float tail = dial.reach * 0.14f;
+        juce::Path needle;
+        needle.startNewSubPath (-1.6f, tail);
+        needle.lineTo (-0.6f, -dial.reach);
+        needle.lineTo (0.6f, -dial.reach);
+        needle.lineTo (1.6f, tail);
+        needle.closeSubPath();
+        needle.applyTransform (juce::AffineTransform::rotation (dial.sweep * juce::jlimit (-50.0f, 50.0f, ear.needle()) / 50.0f)
+                                   .translated (pivot));
+        glow (g, needle, colour, 6.0f);
+        g.setColour (colour);
+        g.fillPath (needle);
+    }
+
+    // The hub it turns on, over it: a dark boss with the light catching its upper edge.
+    const auto boss = juce::Rectangle<float> (hub * 2.0f, hub * 2.0f).withCentre (pivot);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4a52), boss.getCentreX(), boss.getY(),
+                                             juce::Colour (0xff101013), boss.getCentreX(), boss.getBottom(), false));
+    g.fillEllipse (boss);
+    g.setColour (juce::Colours::black.withAlpha (0.6f));
+    g.drawEllipse (boss, 0.8f);
+}
+
 void TunerFace::paintStrip (juce::Graphics& g)
 {
     const juce::Colour home { 0xff5fc97a };   // the family's in-tune green
@@ -1031,6 +1106,11 @@ void TunerFace::paintStrip (juce::Graphics& g)
 
 void TunerFace::paint (juce::Graphics& g)
 {
+    if (dial.reach > 0.0f)
+    {
+        paintDial (g);
+        return;
+    }
     if (strip)
     {
         paintStrip (g);

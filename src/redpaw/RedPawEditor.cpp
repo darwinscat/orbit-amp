@@ -89,6 +89,7 @@ namespace
         p.outFader = outFader.withSizeKeepingCentre (faderWidth, outFader.getHeight());
         p.tuner = tunerScreen;
         p.tunerStrip = true;            // one low line along the screen's bottom...
+        p.tunerDial = tunerDial;        // ...unless the picture paints the tuner a dial of its own...
         p.tunerMenuOnClick = true;      // ...whose settings a click on it opens
         for (size_t i = 0; i < p.lamps.size(); ++i)
             p.lamps[i] = lamps[i];
@@ -401,9 +402,10 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     parkSign.setVisible (false);      // showSelector says when
     parkSign.setBounds (navPicture.toNearestInt());
 
-    // ...and its glass, over the lot: a little murky, dusty, lightly scratched.
+    // ...and its glass, over the lot: a little murky, dusty, lightly scratched — and the tuner's strip,
+    // where the tuner is not a dial of its own.
     addToStage (glassFilm);
-    glassFilm.setBounds (navHeader.getUnion (tunerScreen).toNearestInt());
+    glassFilm.setBounds ((tunerDial.reach > 0.0f ? navHeader.getUnion (navPicture) : navHeader.getUnion (tunerScreen)).toNearestInt());
 
     // A prototype's hook for looking at the windscreen in a gear, with TURBO, or parked, without a hand
     // on anything: ROVER_CHANNEL names a channel, from 0 to the product's last, or "park".
