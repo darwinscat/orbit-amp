@@ -196,7 +196,7 @@ const std::array<juce::Rectangle<float>, numLamps> lamps {{
 const float lampDot = 11.0f;
 
 // INPUT and OUTPUT on the column's foot, under the slot and the dots, 80 wide between its edges.
-const juce::Point<float> inputName  { 48.0f, 725.0f };
+const juce::Point<float> inputName  { 36.0f, 725.0f };
 const juce::Point<float> outputName { 1624.0f, 725.0f };
 const float columnNameRoom = 76.0f;
 
