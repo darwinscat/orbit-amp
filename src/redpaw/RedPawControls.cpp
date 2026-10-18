@@ -456,7 +456,6 @@ juce::Image GlassFilm::make (float scale) const
 //==============================================================================
 namespace
 {
-    constexpr float ringFrom = -135.0f, ringSweep = 270.0f;     // a knob's travel, as ArtKnob turns it
     constexpr double breathHoldMs = 1000.0;
 }
 
@@ -498,27 +497,27 @@ void KnobRing::paint (juce::Graphics& g)
     if (b > 0.01f)
     {
         juce::Path rim;
-        const float r = (float) knob.getWidth() * 0.46f;
+        const float r = (float) knob.getWidth() * rimOfKnob;
         rim.addEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c));
-        face::drawHandRim (g, rim, orange.withAlpha (0.8f * b));
+        face::drawHandRim (g, rim, orange.withAlpha (rimAlpha * b));
     }
 
     // The rest of the ring dimmed: the painted cyan under a dark veil.
     juce::Path whole;
     whole.addCentredArc (c.x, c.y, radius, radius, 0.0f, 0.0f, juce::MathConstants<float>::twoPi, true);
-    g.setColour (juce::Colour (0xff05090b).withAlpha (0.62f));
-    g.strokePath (whole, juce::PathStrokeType (width + 1.5f));
+    g.setColour (juce::Colour (veil).withAlpha (veilAlpha));
+    g.strokePath (whole, juce::PathStrokeType (width + veilWider));
 
     // From the start of the travel to the pointer, lit: the arc made a band of the ring's own width
     // first, so that the glow and the light are that band and nothing else — a shadow drawn for the
     // bare arc would fill the chord it spans, over the knob.
-    const float to = juce::degreesToRadians (ringFrom + ringSweep * juce::jlimit (0.0f, 1.0f, shown));
+    const float to = juce::degreesToRadians (from + sweep * juce::jlimit (0.0f, 1.0f, shown));
     juce::Path arc, band;
-    arc.addCentredArc (c.x, c.y, radius, radius, 0.0f, juce::degreesToRadians (ringFrom), to, true);
+    arc.addCentredArc (c.x, c.y, radius, radius, 0.0f, juce::degreesToRadians (from), to, true);
     juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (band, arc);
     const auto light = skin().ringLight;
-    juce::DropShadow (light.withAlpha (0.35f + 0.4f * b), juce::roundToInt (3.0f + 4.0f * b), {}).drawForPath (g, band);
-    g.setColour (light.withAlpha (0.7f + 0.3f * b));
+    juce::DropShadow (light.withAlpha (glowAlpha + glowAlphaHand * b), juce::roundToInt (glowRadius + glowRadiusHand * b), {}).drawForPath (g, band);
+    g.setColour (light.withAlpha (litAlpha + litAlphaHand * b));
     g.fillPath (band);
 }
 

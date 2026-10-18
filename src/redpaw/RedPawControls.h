@@ -162,6 +162,14 @@ public:
 
     void paint (juce::Graphics&) override;
 
+    // What it is drawn with — said here so that the site's demo is drawn with it too (RedPawEditor::webExtras).
+    static constexpr float from = -135.0f, sweep = 270.0f;      // a knob's travel, as ArtKnob turns it
+    static constexpr juce::uint32 veil = 0xff05090b;             // the painted ring dimmed under it...
+    static constexpr float veilAlpha = 0.62f, veilWider = 1.5f;  // ...this much, and this much wider than the ring
+    static constexpr float litAlpha = 0.7f, litAlphaHand = 0.3f;         // the lit arc, and how much more under the hand
+    static constexpr float glowAlpha = 0.35f, glowAlphaHand = 0.4f, glowRadius = 3.0f, glowRadiusHand = 4.0f;
+    static constexpr float rimOfKnob = 0.46f, rimAlpha = 0.8f;   // under the hand, an orange rim round the cap, of the knob's width
+
 private:
     const face::ArtKnob& knob;
     const float radius, width;

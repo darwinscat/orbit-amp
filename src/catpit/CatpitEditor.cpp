@@ -396,6 +396,16 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     world.setProperty ("turbo", juce::var (turboKind));
     world.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render
     world.setProperty ("knobRing", false);
+    auto* keyNames = new juce::DynamicObject();      // under the keys, in one row (Cockpit::paintKeyNames)
+    keyNames->setProperty ("onKeys", false);
+    keyNames->setProperty ("y", keyNameY);
+    keyNames->setProperty ("px", px11);
+    keyNames->setProperty ("tracking", face::keyTracking);
+    keyNames->setProperty ("dimmed", face::PushButton::dimmed);
+    keyNames->setProperty ("colour", juce::String::formatted ("#%02x%02x%02x%02x", face::labelLilac.getRed(), face::labelLilac.getGreen(),
+                                                                face::labelLilac.getBlue(), face::labelLilac.getAlpha()));
+    world.setProperty ("keyNames", juce::var (keyNames));
+    world.setProperty ("claimedKeys", juce::Array<juce::var>());
     juce::Array<juce::var> stills;
     for (int c = 0; c < channels.count(); ++c)
         stills.add ("sky-" + juce::String (c) + ".png");

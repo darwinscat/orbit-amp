@@ -421,7 +421,91 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     keyRenders->setProperty ("toggleUp", "toggle-up.png");
     keyRenders->setProperty ("toggleDown", "toggle-down.png");
     world.setProperty ("keys", juce::var (keyRenders));
-    world.setProperty ("knobRing", true);    // a lit ring round DRIVE and the tones, where each stands (KnobRing)
+    const auto colour = [] (juce::Colour c) { return juce::String::formatted ("#%02x%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue(), c.getAlpha()); };
+
+    // THE RINGS ROUND THE KNOBS (KnobRing): each socket's ring, and how it is drawn.
+    const auto socket = [&rect, &point] (const Socket& s)
+    {
+        auto* x = new juce::DynamicObject();
+        x->setProperty ("centre", point (s.centre)); x->setProperty ("radius", s.ring);
+        x->setProperty ("width", s.ringWidth); x->setProperty ("knob", s.knob);
+        juce::ignoreUnused (rect);
+        return juce::var (x);
+    };
+    auto* ring = new juce::DynamicObject();
+    ring->setProperty ("drive", socket (layout::drive));
+    juce::Array<juce::var> toneRings;
+    for (const auto& t : layout::tones)
+        toneRings.add (socket (t));
+    ring->setProperty ("tones", toneRings);
+    ring->setProperty ("from", KnobRing::from);
+    ring->setProperty ("sweep", KnobRing::sweep);
+    ring->setProperty ("light", colour (skin().ringLight));
+    ring->setProperty ("veil", colour (juce::Colour (KnobRing::veil)));
+    ring->setProperty ("veilAlpha", KnobRing::veilAlpha);
+    ring->setProperty ("veilWider", KnobRing::veilWider);
+    ring->setProperty ("litAlpha", KnobRing::litAlpha);
+    ring->setProperty ("litAlphaHand", KnobRing::litAlphaHand);
+    ring->setProperty ("glowAlpha", KnobRing::glowAlpha);
+    ring->setProperty ("glowAlphaHand", KnobRing::glowAlphaHand);
+    ring->setProperty ("glowRadius", KnobRing::glowRadius);
+    ring->setProperty ("glowRadiusHand", KnobRing::glowRadiusHand);
+    ring->setProperty ("rimOfKnob", KnobRing::rimOfKnob);
+    ring->setProperty ("rimAlpha", KnobRing::rimAlpha);
+    world.setProperty ("knobRing", juce::var (ring));
+
+    // THE KNOBS' NAMES over their sockets, and what DRIVE is called on this face.
+    auto* knobNames = new juce::DynamicObject();
+    knobNames->setProperty ("drive", skin().driveName);
+    knobNames->setProperty ("driveY", driveNameY);
+    knobNames->setProperty ("tonesY", knobNameY);
+    knobNames->setProperty ("px", knobNameEm);
+    knobNames->setProperty ("shadow", colour (skin().printShadow));
+    world.setProperty ("knobNames", juce::var (knobNames));
+
+    // THE KEYS' NAMES: over or under each key by turns, condensed into `room` where wider — or, where the
+    // picture leaves no room round them, the filters' on their caps (condensed into 0.62 of the cap, lit in
+    // the state's ink, else the words' at 0.75) and the layers' none until the packs carry them.
+    auto* keyNames = new juce::DynamicObject();
+    keyNames->setProperty ("onKeys", keyNamesOnKeys);
+    keyNames->setProperty ("overY", keyNameOverY);
+    keyNames->setProperty ("underY", keyNameUnderY);
+    juce::Array<juce::var> over;
+    for (const bool b : keyNameOver)
+        over.add (b);
+    keyNames->setProperty ("over", over);
+    keyNames->setProperty ("room", keyNameRoom);
+    keyNames->setProperty ("px", px11);
+    keyNames->setProperty ("capPx", capEm);
+    keyNames->setProperty ("capRoom", 0.62f);
+    keyNames->setProperty ("tracking", face::keyTracking);
+    keyNames->setProperty ("dimmed", face::PushButton::dimmed);
+    world.setProperty ("keyNames", juce::var (keyNames));
+
+    // THE KEYS THE WORLD TAKES FOR ITSELF: the searchlights, where it has lights to throw — each a latching
+    // key with a lamp's sign on its cap (drawLampSign: lit in the state's ink, else the words' at 0.75),
+    // kept as the machine's choice and thrown to the view (Drive::setLights); and the wipers' keys.
+    juce::Array<juce::var> claimed;
+    if (lightKeys[0] >= 0)
+        for (int lamp = 0; lamp < 2; ++lamp)
+        {
+            auto* k = new juce::DynamicObject();
+            k->setProperty ("key", lightKeys[(size_t) lamp]);
+            k->setProperty ("name", lamp == 0 ? "SEARCHLIGHT LEFT" : "SEARCHLIGHT RIGHT");
+            k->setProperty ("does", lamp == 0 ? "lights.left" : "lights.right");
+            k->setProperty ("latching", true);
+            k->setProperty ("sign", lamp == 0 ? "lamp-left" : "lamp-right");
+            claimed.add (juce::var (k));
+        }
+    world.setProperty ("claimedKeys", claimed);
+    if (wiperKeySize > 0.0f)
+    {
+        auto* w = new juce::DynamicObject();
+        w->setProperty ("names", juce::StringArray { "OFF", "INT", "LO", "HI" });
+        w->setProperty ("opening", 1);
+        w->setProperty ("does", "wipers (Drive::setWipers 0..3)");
+        world.setProperty ("wipers", juce::var (w));
+    }
     juce::Array<juce::var> stills;
     stills.add ("still.jpg");
     places.setProperty ("stills", stills);
