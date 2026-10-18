@@ -89,6 +89,8 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
     horizonIndex = 0x50;
     if (look == Look::ice)
         makeIcePalette();
+    else if (look == Look::titan)
+        makeTitanPalette();
 
     // 00f3: the sky. Four fixed seeds give it its large-scale pattern; its heights become palette 64..95.
     const uint32_t s1 = lcg (seed & 0x7FFF);
@@ -159,6 +161,29 @@ void Mars1993::makeIcePalette()
     }
     for (int l = 0; l < 3; ++l)
         put (170 + l, { 0.80f * light[l], 0.48f * light[l], 0.36f * light[l] });
+}
+
+/** TITAN'S DAC. The ground is the methane sea: its 64 shades run from a violet-brown shadow through the
+    dark brown liquid to the amber of the haze it mirrors on the lit slopes — and the haze rows under the
+    horizon, which take the top shades, are that amber fading out. The sky's 32 are the haze, a darker
+    brown to the amber of the horizon; 97 is the violet mist on the horizon line. */
+void Mars1993::makeTitanPalette()
+{
+    struct C { float r, g, b; };
+    const auto mix = [] (C a, C b, float t) { return C { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; };
+    const auto put = [this] (int i, C c)
+    {
+        const auto q = [] (float v) { return (uint32_t) std::lround (std::clamp (v, 0.0f, 1.0f) * 255); };
+        pal[(size_t) i] = 0xFF000000u | (q (c.r) << 16) | (q (c.g) << 8) | q (c.b);
+    };
+    const C shadow { 0.05f, 0.03f, 0.06f }, liquid { 0.18f, 0.11f, 0.07f }, sheen { 0.62f, 0.40f, 0.20f };
+    for (int i = 0; i < 64; ++i)
+        put (i, i < 32 ? mix (shadow, liquid, (float) i / 32.0f) : mix (liquid, sheen, (float) (i - 32) / 31.0f));
+    const C hazeHigh { 0.40f, 0.25f, 0.12f }, hazeLow { 0.81f, 0.54f, 0.25f };
+    for (int i = 64; i < 96; ++i)
+        put (i, mix (hazeHigh, hazeLow, (float) (i - 64) / 31.0f));
+    put (97, { 0.65f, 0.55f, 0.70f });
+    horizonIndex = 97;
 }
 
 void Mars1993::setRows (int rows)
