@@ -113,6 +113,8 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
         makeIcePalette();
     else if (look == Look::titan)
         makeTitanPalette();
+    else
+        makeMarsPalette();
 
     // 00f3: the sky. Four fixed seeds give it its large-scale pattern; its heights become palette 64..95.
     const uint32_t s1 = lcg (seed & 0x7FFF);
@@ -136,22 +138,128 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
         makeSea();
     else
     {
-        // The ice moon's snow lies flatter: its heights at a quarter, its shading at a half. Mars's
-        // ground a little lower: at two thirds, its shading as strong as it was.
-        const bool ice = look == Look::ice;
+        // Mars's plains and the ice moon's snow lie flatter: their heights at a quarter, their shading at
+        // a half.
         for (auto& v : hm)
-            v = (uint8_t) (0x80 + ((int) v - 0x80) * (ice ? 1 : 2) / (ice ? 4 : 3));
+            v = (uint8_t) (0x80 + ((int) v - 0x80) / 4);
         // Colour = w(u) - w(u + 3) + 32, clamped to 0..63: the sun on the horizon, low along u.
         for (uint32_t i = 0; i < 65536; ++i)
         {
-            const int slope = (int) hm[i] - (int) hm[(uint16_t) (i + 3)];
-            const int c = (ice ? slope * 2 : slope * 3 / 2) + 0x20;
+            const int c = ((int) hm[i] - (int) hm[(uint16_t) (i + 3)]) * 2 + 0x20;
             colours[i] = (uint8_t) (c < 0 ? 0 : (c > 0x3F ? 0x3F : c));
         }
     }
+    if (look == Look::mars)
+        makeRanges (s2 ^ 0x5A5Au);
     // Blur 2, in place: the 2 x 2 box on the heights.
     for (uint32_t i = 0; i < 65536; ++i)
         hm[i] = (uint8_t) ((hm[i] + hm[(uint16_t) (i + 1)] + hm[(uint16_t) (i + 0x100)] + hm[(uint16_t) (i + 0x101)]) >> 2);
+}
+
+/** MARS'S DAC, as the GPU's plains are coloured. The ground's 64 from 98, a deep shadow through the
+    ochre to the pale dust the distance fades it to; the first 64, which only the rows under the horizon
+    take, the farthest ground fading into that dust; the sky's 32 a butterscotch from high to low, paler
+    toward the horizon; 97 the dust on the horizon line; from 162, the near range's 32 shades, shadow to
+    sunlit rock a little into the dust, then the far range's 32, paler and nearly the sky. */
+void Mars1993::makeMarsPalette()
+{
+    struct C { float r, g, b; };
+    const auto mix = [] (C a, C b, float t) { return C { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; };
+    const auto ss = [] (float e0, float e1, float x) { const float t = std::clamp ((x - e0) / (e1 - e0), 0.0f, 1.0f); return t * t * (3 - 2 * t); };
+    const auto put = [this] (int i, C c)
+    {
+        const auto q = [] (float v) { return (uint32_t) std::lround (std::clamp (v, 0.0f, 1.0f) * 255); };
+        pal[(size_t) i] = 0xFF000000u | (q (c.r) << 16) | (q (c.g) << 8) | q (c.b);
+    };
+    const C shadow { 0.17f, 0.08f, 0.03f }, ground { 0.47f, 0.24f, 0.10f }, dust { 0.77f, 0.53f, 0.35f };
+    const auto shade = [&] (int i) { return i < 24 ? mix (shadow, ground, (float) i / 24.0f) : mix (ground, dust, (float) (i - 24) / 39.0f); };
+    for (int i = 0; i < 64; ++i)
+        put (groundShades + i, shade (i));
+    for (int i = 0; i < 64; ++i)
+        put (i, mix (shade (farGround), dust, ss (18.0f, 40.0f, (float) i)));
+    const C skyHigh { 0.68f, 0.48f, 0.35f }, skyLow { 0.81f, 0.58f, 0.40f };
+    for (int i = 64; i < 96; ++i)
+        put (i, mix (skyHigh, skyLow, (float) (i - 64) / 31.0f));
+    put (97, dust);
+    horizonIndex = 97;
+    const C rockShadow { 0.34f, 0.20f, 0.12f }, rockLit { 0.80f, 0.52f, 0.32f }, farShadow { 0.62f, 0.43f, 0.30f }, farLit { 0.80f, 0.60f, 0.44f };
+    for (int i = 0; i < rangeShadesEach; ++i)
+    {
+        const float t = (float) i / (float) (rangeShadesEach - 1);
+        put (rangeShades + i, mix (rockShadow, rockLit, t));
+        put (rangeShades + rangeShadesEach + i, mix (farShadow, farLit, t));
+    }
+}
+
+/** THE RANGES ON MARS'S HORIZON, fixed to the glass as mountains at that distance stay put: a near one,
+    peaks with gaps between, and a far one, lower and nearly unbroken — each a ridge in fractions of the
+    frame's height above the horizon line, by midpoint displacement from the seed. */
+void Mars1993::makeRanges (uint32_t seed)
+{
+    uint32_t s = seed;
+    const auto ridge = [&s] (std::array<float, rangeSamples>& r, float rough, float gap, float tallest)
+    {
+        r.fill (0);
+        float amp = 1;
+        for (int stride = rangeSamples / 2; stride >= 1; stride /= 2, amp *= rough)
+            for (int i = stride; i < rangeSamples; i += 2 * stride)
+            {
+                s = lcg (s);
+                const float noise = ((float) s / (float) lcgMod - 0.5f) * amp;
+                r[(size_t) i] = 0.5f * (r[(size_t) (i - stride)] + r[(size_t) ((i + stride) % rangeSamples)]) + noise;
+            }
+        const auto [lo, hi] = std::minmax_element (r.begin(), r.end());
+        const float low = *lo, span = std::max (*hi - *lo, 1e-6f);
+        for (auto& v : r)
+        {
+            const float n = (v - low) / span;
+            v = n > gap ? tallest * std::pow ((n - gap) / (1 - gap), 1.3f) : 0;
+        }
+    };
+    ridge (rangeNear, 0.5f, 0.36f, 0.40f);
+    ridge (rangeFar, 0.52f, 0.32f, 0.12f);
+}
+
+/** Both ranges into the sky rows, the far one first. Each column of a range stands from under the
+    horizon line, where the ground's far edge will cover it, up to its ridge; its rock is the terrain's
+    own shading, taken slantwise across the range's face as gullies, lit brighter where the ridge
+    climbs to the right, the sun being on the left. */
+void Mars1993::drawRanges()
+{
+    uint8_t* fb = frame.data();
+    for (int layer = 0; layer < 2; ++layer)
+    {
+        const auto& r = layer == 0 ? rangeFar : rangeNear;
+        const int base = rangeShades + (1 - layer) * rangeShadesEach;
+        const auto at = [&r] (double s) { const int i = (int) s; const double f = s - i; return r[(size_t) std::clamp (i, 0, rangeSamples - 1)] * (1 - f) + r[(size_t) std::clamp (i + 1, 0, rangeSamples - 1)] * f; };
+        for (int x = 0; x < w; ++x)
+        {
+            const double s = (double) x * (rangeSamples - 1) / std::max (1, w - 1);
+            const double height = at (s) * h;
+            if (height < 0.5)
+                continue;
+            const double climb = (at (s + 24) - at (s - 24)) * h / (48.0 * w / (rangeSamples - 1));   // rows per column, over a flank
+            const int light = (int) std::lround (std::clamp (climb, -1.0, 1.0) * 13);
+            const int top = std::max (0, (int) std::lround (skyRows - height));
+            const double across = x / P * (layer == 0 ? 1.4 : 0.9);
+            for (int y = top; y < G + hazeRows; ++y)
+            {
+                const double up = (skyRows - y) / P * (layer == 0 ? 1.4 : 0.9);
+                const int u = (int) std::lround (0.6 * across + 0.8 * up + layer * 97) & 0xFF, v = (int) std::lround (0.8 * across - 0.6 * up + layer * 61) & 0xFF;
+                const int code = colours[(size_t) ((v << 8) | u)];
+                fb[(size_t) y * (size_t) w + (size_t) x] = (uint8_t) (base + std::clamp (16 + (code - 0x20) + light, 0, rangeShadesEach - 1));
+            }
+        }
+    }
+}
+
+/** A row of Mars's ground at map distance d: the codes into the ground's shades, the near ones short of
+    the palest, and all of them drawn toward the dust with the distance. */
+void Mars1993::plainsRow (uint8_t* shade, int d) const noexcept
+{
+    const double f = dustFar * d / 100.0;
+    for (int c = 0; c < 64; ++c)
+        shade[c] = (uint8_t) (groundShades + std::clamp ((int) std::lround (c * (double) nearTop / 63 * (1 - f) + 63 * f), 0, 63));
 }
 
 /** THE ICE MOON'S DAC. The ground's shade is w(u) - w(u + 3) + 32 — the sun low along u — so the 64
@@ -338,6 +446,8 @@ void Mars1993::render (uint16_t camX, uint16_t camY)
         drawJupiter();
     else if (look == Look::titan)
         drawSaturn();
+    else
+        drawRanges();
     drawGround (alt, camX, camY);
 }
 
@@ -437,14 +547,20 @@ void Mars1993::drawSky (uint16_t alt, uint16_t camX, uint16_t camY)
     const int64_t X9 = (int64_t) camX * 512, Y9 = (int64_t) camY * 512;
     const int lead = (int) std::lround (w / 2.0 - 128 * P);       // columns left of the original's window
     size_t p = 0;
+    uint8_t tone[256];                                                // the sky's value to its shade: itself, but on Mars
+    for (int v = 0; v < 256; ++v)
+        tone[v] = (uint8_t) v;
     for (int y = 0; y < skyRows; ++y)
     {
+        if (look == Look::mars)        // the clouds at half their contrast, over a sky paler toward the horizon
+            for (int v = 64; v < 96; ++v)
+                tone[v] = (uint8_t) (64 + std::clamp ((v - 64) / 2 + (int) std::lround (16.0 * y / std::max (1, skyRows - 1)), 0, 31));
         const int64_t D = (int64_t) std::floor ((double) K / ((G - y) / P - 1.0));   // K / (99 - y) at P = 1
         const uint32_t esi = (uint32_t) (X9 - D), ebp = (uint32_t) (Y9 + D);
         const uint32_t step = (uint32_t) (int64_t) std::floor ((double) D / (128 * P));  // shr eax, 7
         uint32_t L = (((ebp >> 16) & 0xFFu) << 24) | (((esi >> 16) & 0xFFu) << 16) | (esi & 0xFFFFu);
         L -= (uint32_t) lead * step;
-        for (int x = 0; x < w; ++x) { fb[p++] = sky[L >> 16]; L += step; }
+        for (int x = 0; x < w; ++x) { fb[p++] = tone[sky[L >> 16]]; L += step; }
     }
     // The horizon line, colour 50h.
     const size_t horizonEnd = (size_t) G * (size_t) w;
@@ -475,13 +591,15 @@ void Mars1993::drawGround (uint16_t alt, uint16_t camX, uint16_t camY)
     const int fy = camY & 15, vCam = (camY >> 4) & 0xFF;
     const int64_t X12 = (int64_t) camX * 4096;
     const int halfW = w >> 1;
-    uint8_t shade[256];                                              // a texel's colour code to its shade: itself, but on Titan
+    uint8_t shade[256];                                              // a texel's colour code to its shade: itself, but on Mars and Titan
     for (int c = 0; c < 256; ++c)
         shade[c] = (uint8_t) c;
     for (int k = 60; k >= 1; --k)
     {
         if (look == Look::titan)
             seaRow (shade, distances[k]);
+        else if (look == Look::mars)
+            plainsRow (shade, distances[k]);
         const int D = (distances[k] << 4) + (fy ^ 15);              // distance in 1/16 texel
         int y0; uint32_t kq;
         if (k == 1) { y0 = 32000; kq = 0; }                          // the nearest row is pinned to the bottom

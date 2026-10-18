@@ -11,8 +11,8 @@ namespace orbitamp::redpaw
 {
 
 /** THE 1993 LANDSCAPE. Tim J. Clarke's MARS.EXE, transliterated from its disassembly routine by
-    routine: the same plasma fractal and random generator, the same blur taps, the same 96-entry
-    palette, the same sky, perspective and far-to-near vertical-line renderer, drawn on the CPU into an
+    routine: the same plasma fractal and random generator, the same blur taps, the same sky,
+    perspective and far-to-near vertical-line renderer, drawn on the CPU into an
     8-bit indexed framebuffer. Where the program's own prose and its code disagree, the code wins.
 
     The frame is a pure function of (seed, position, rows): nothing is kept between frames but the
@@ -24,14 +24,14 @@ namespace orbitamp::redpaw
     binary's — map addresses are 16-bit and wrap, row-internal wraps are 8-bit, the noise is a signed
     byte — spelled with fixed-width unsigned types so they wrap by definition, never by luck.
 
-    One liberty with the program's look: Mars's terrain lies at two thirds of its height, a little less
-    mountainous, its shading as strong as it was.
+    Its look is the GPU's plains rather than the program's own: a butterscotch sky, paler low, its clouds
+    faint; ochre ground, rolling plains at a quarter of the terrain's height, every row of it drawn
+    toward the dust with its distance; and two ranges of mountains standing on the horizon, a near one
+    and a far, paler one.
 
-    The same landscape can wear an ice moon's colours instead of Mars's: the ground's 64 shades run
-    from a blue shadow to white snow, the terrain lies at a quarter of its height, the sky is black, and
-    Jupiter stands over the horizon where the ice world's sky has it. The program's routines are
-    otherwise untouched by the look; the DAC's entries, the horizon line's colour and the one disc drawn
-    into the sky differ. Or Titan's: an amber haze for the sky, a flat methane sea for the ground — the
+    The same landscape can wear an ice moon's colours instead: the ground's 64 shades run from a blue
+    shadow to white snow, the terrain lies at a quarter of its height, the sky is black, and Jupiter
+    stands over the horizon where the ice world's sky has it. Or Titan's: an amber haze for the sky, a flat methane sea for the ground — the
     terrain's highest sixteenth left as low islands and a far shore, the rest its level, keeping only a
     swell, shaded by its distance, dark and rough near and calm into the haze — a violet mist on the
     horizon, and Saturn pale in the haze, its rings nearly edge-on.
@@ -91,11 +91,25 @@ private:
     // which the haze under the horizon starts from.
     static constexpr int seaShades = 98, landShades = 162, seaCode = 96, farSea = 17;
     static constexpr uint8_t seaLevel = 0x80;
+    // Mars's: where its ground's shades lie, the palest a near code reaches, how far toward the dust the
+    // farthest row is drawn, and the shade the middle code takes there, which the haze under the
+    // horizon starts from.
+    static constexpr int groundShades = 98, nearTop = 48;
+    static constexpr double dustFar = 0.35;
+    static constexpr int farGround = (int) (32.0 * nearTop / 63 * (1 - dustFar) + 63 * dustFar + 0.5);
     // The discs' shades: Jupiter's latitudes, each in its steps of light, then the Spot's; Saturn's on
     // Titan, after the islands, then its rings'.
     static constexpr int jupShades = 98, jupRows = 24, jupLevels = 6, jupSpot = jupShades + jupRows * jupLevels;
     static constexpr int satShades = 194, satRows = 12, satLevels = 4, satRing = satShades + satRows * satLevels, satRingShades = 3;
 
+    // ...and its ranges: their ridges, and where their shades lie, the near range's then the far's.
+    static constexpr int rangeSamples = 1024, rangeShades = 162, rangeShadesEach = 32;
+    std::array<float, rangeSamples> rangeNear {}, rangeFar {};
+
+    void makeMarsPalette();
+    void makeRanges (uint32_t seed);
+    void plainsRow (uint8_t* shade, int d) const noexcept;
+    void drawRanges();
     void makeIcePalette();
     void makeTitanPalette();
     void makeSea();
