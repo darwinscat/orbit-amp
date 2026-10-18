@@ -811,7 +811,14 @@ ColumnFader::ColumnFader (const juce::Image& c) : cap (c)
 juce::Range<float> ColumnFader::travel() const
 {
     const float end = 26.0f * scale;
-    return { end, (float) getHeight() - end };
+    return { end, runLength() - end };
+}
+
+void ColumnFader::setAcross (bool a)
+{
+    across = a;
+    setMouseCursor (a ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::UpDownResizeCursor);
+    repaint();
 }
 
 void ColumnFader::setValue (float v, bool notify)
@@ -827,7 +834,12 @@ void ColumnFader::setValue (float v, bool notify)
 
 void ColumnFader::paint (juce::Graphics& g)
 {
-    const float cx = (float) getWidth() * 0.5f;
+    // Lying across, it is drawn upright and turned a quarter to the right: its head to the right.
+    const juce::Graphics::ScopedSaveState keep (g);
+    if (across)
+        g.addTransform (juce::AffineTransform::rotation (juce::MathConstants<float>::halfPi).translated ((float) getWidth(), 0.0f));
+
+    const float cx = crossWidth() * 0.5f;
     const auto t = travel();
 
     const float k = scale;
@@ -840,11 +852,11 @@ void ColumnFader::paint (juce::Graphics& g)
         const float y = t.getEnd() - t.getLength() * (float) i / (float) marks;
         const float len = (i == longMark ? 12.0f : 7.0f) * k;
         g.setColour (orange.withAlpha (i == longMark ? 0.95f : 0.6f));
-        g.fillRect (juce::Rectangle<float> ((float) getWidth() - 6.0f * k - len, y - 0.8f, len, 1.6f));
+        g.fillRect (juce::Rectangle<float> (crossWidth() - 6.0f * k - len, y - 0.8f, len, 1.6f));
     }
 
     const float y = t.getEnd() - t.getLength() * value;
-    const float length = capLength > 0.0f ? capLength : (float) getWidth() - 8.0f;
+    const float length = capLength > 0.0f ? capLength : crossWidth() - 8.0f;
     drawCap (g, cap, { cx, y }, length, 0.0f);
     if (isMouseOverOrDragging (true))
         rimCap (g, cap, { cx, y }, length, 0.0f, handLight);
@@ -861,8 +873,8 @@ void ColumnFader::mouseDown (const juce::MouseEvent& e)
     const auto t = travel();
     const float y = t.getEnd() - t.getLength() * value;
     if (onGestureStart) onGestureStart();
-    if (std::abs (e.position.y - y) > 16.0f)
-        setValue ((t.getEnd() - e.position.y) / t.getLength(), true);
+    if (std::abs (along (e.position) - y) > 16.0f)
+        setValue ((t.getEnd() - along (e.position)) / t.getLength(), true);
     dragStartValue = value;
 }
 
@@ -870,7 +882,8 @@ void ColumnFader::mouseDrag (const juce::MouseEvent& e)
 {
     if (! sliding)
         return;
-    setValue (dragStartValue - (float) e.getDistanceFromDragStartY() / travel().getLength(), true);
+    const float moved = across ? (float) -e.getDistanceFromDragStartX() : (float) e.getDistanceFromDragStartY();
+    setValue (dragStartValue - moved / travel().getLength(), true);
 }
 
 void ColumnFader::mouseUp (const juce::MouseEvent&)

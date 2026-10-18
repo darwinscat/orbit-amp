@@ -372,7 +372,12 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         sayLever (fader, name, [this, paramId] { return getParam (paramId); });
         follow (onId, [&fader] (float on) { fader.setAlpha (on > 0.5f ? 1.0f : 0.6f); })->sendInitialUpdate();
         addToStage (fader);
-        fader.setBounds (plate.slot.reduced (0.0f, slotRim).withSizeKeepingCentre (faderWidth * slotScale, plate.slot.getHeight() - 2.0f * slotRim).toNearestInt());
+        const bool across = plate.slot.getWidth() > plate.slot.getHeight();     // a slot lying across: the fader runs left to right
+        const auto run = plate.slot.reduced (across ? slotRim : 0.0f, across ? 0.0f : slotRim);
+        const float breadth = faderWidth * slotScale;
+        fader.setAcross (across);
+        fader.setBounds ((across ? run.withSizeKeepingCentre (run.getWidth(), breadth)
+                                 : run.withSizeKeepingCentre (breadth, run.getHeight())).toNearestInt());
     };
     threshold.marks = 6;            // every 5 dB, the longer at -50
     threshold.longMark = 4;

@@ -116,7 +116,8 @@ extern const std::array<float, 3> wellNameY;
 
 /** REVERB's and DELAY's frames, as the picture painted them: the plate's top (its shadow), where the rim's
     lit edge ends and its face begins, where the well opens under it, and how far down the end caps'
-    top screws reach. Each upper rim is made `rimLift` taller, upward. */
+    top screws reach. Each upper rim is made `rimLift` taller, upward; none where the picture has room
+    for the words as painted. */
 struct Rim { float left, right, top, face, well, capScrews, capLeft, capRight; };
 extern const std::array<Rim, 2> rims;           // REVERB, DELAY
 extern const float rimLift;
@@ -136,7 +137,9 @@ extern const float faderCapLength;      // the cap's render, across its slot
     of the cut — the screws, the lamp, the slanted edge — moves `lampPlateGrow` inward, and the room left
     is filled with the plate's own top and bottom edges and plain metal between, a slot of INPUT's kind
     cut down it. GATE's threshold in the left one, -70 dB at its foot to -40 at its head; LIMITER's
-    ceiling in the right one, -3 dB to -0.1. */
+    ceiling in the right one, -3 dB to -0.1. A picture that paints the slots itself grows the plates
+    nothing (`lampPlateGrow` nothing): only `slot` is read, as painted — and a slot lying across takes a
+    fader lying across, its foot on the left. */
 extern const float lampPlateGrow;
 struct LampPlate
 {

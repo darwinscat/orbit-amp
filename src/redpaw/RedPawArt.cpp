@@ -29,10 +29,11 @@ namespace
         frame (layout::rims). The frame's top — its shadow and the rim's lit edge — goes `rimLift` higher,
         and the room it leaves is filled with the frame's own face: along the rim, the rim's face band
         mirrored back and forth; on the end caps, the plain face under their top screws, so the screws
-        keep their shape. Numbers are in the dashboard's 1672-wide space, measured off it. */
+        keep their shape. Numbers are in the dashboard's 1672-wide space, measured off it. A picture with
+        room for the words as it is painted lifts them nothing. */
     juce::Image widenRims (juce::Image img)
     {
-        if (! img.isValid())
+        if (! img.isValid() || layout::rimLift <= 0.0f)
             return img;
 
         const float k = (float) img.getWidth() / layout::width;
@@ -105,10 +106,11 @@ namespace
     /** THE CORNER LAMPS' PLATES GROW ON THEIR OUTER LEGS (layout::LampPlate): the plate inward of the cut
         moves inward, cut to its own outline; the room it leaves gets the plate's top edge, plain metal, the plate's bottom edge,
         each from where the picture has it plain; and down the room, INPUT's slot at a smaller size — its
-        round ends whole, its straight run cut short. */
+        round ends whole, its straight run cut short. A picture that paints the corner slots itself grows
+        its plates nothing. */
     juce::Image widenLampPlates (juce::Image img)
     {
-        if (! img.isValid())
+        if (! img.isValid() || layout::lampPlateGrow <= 0.0f)
             return img;
 
         using namespace layout;

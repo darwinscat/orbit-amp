@@ -372,6 +372,11 @@ public:
         default; none, below zero. */
     int marks = 10, longMark = 5;
 
+    /** LYING ACROSS, in a slot that runs left to right: its foot on the left, its head on the right, the
+        hand dragging it sideways — everything else as it is upright, turned a quarter to the right (its
+        scale under it). */
+    void setAcross (bool);
+
     std::function<void()>       onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;
     std::function<void()>       onMenu;          // a right click, when set — and then it does not move the cap
@@ -392,6 +397,10 @@ private:
     const juce::Image& cap;
     float value = 0.5f, dragStartValue = 0.0f;
     bool  sliding = false;                       // false through a right click that opened the menu
+    bool  across = false;
+    float runLength() const noexcept   { return (float) (across ? getWidth() : getHeight()); }    // along its travel
+    float crossWidth() const noexcept  { return (float) (across ? getHeight() : getWidth()); }    // ...and across it
+    float along (juce::Point<float> p) const noexcept { return across ? (float) getWidth() - p.x : p.y; }   // down from its head
     juce::Range<float> travel() const;
 };
 
