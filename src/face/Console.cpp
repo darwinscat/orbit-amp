@@ -586,7 +586,33 @@ void writeForWeb (const juce::File& file, const juce::Image& img)
         juce::PNGImageFormat().writeImageToStream (img, out);
 }
 
-void Console::exportForWeb (const juce::File& dir) const
+void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
+                           std::initializer_list<juce::Component*> hidden)
+{
+    std::vector<std::pair<juce::Component*, bool>> was;
+    for (auto* c : hidden)
+        if (c != nullptr)
+        {
+            was.push_back ({ c, c->isVisible() });
+            c->setVisible (false);
+        }
+
+    const float k = 2.0f;
+    juce::Image poster (juce::Image::ARGB, juce::roundToInt (stage::width * k), juce::roundToInt (stage::height * k), true);
+    {
+        juce::Graphics g (poster);
+        g.fillAll (juce::Colours::black);
+        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+        if (still.isValid())
+            g.drawImage (still, window * k, juce::RectanglePlacement::stretchToFit);
+        g.drawImageAt (stage.createComponentSnapshot (stage.getLocalBounds(), true, k), 0, 0);
+    }
+    for (const auto& [c, visible] : was)
+        c->setVisible (visible);
+    writeForWeb (dir.getChildFile ("poster.png"), poster);
+}
+
+void Console::exportForWeb (const juce::File& dir)
 {
     dir.createDirectory();
     writeForWeb (dir.getChildFile ("cabin.png"), picture->staticImage (2.0f));
@@ -625,6 +651,7 @@ void Console::exportForWeb (const juce::File& dir) const
     o->setProperty ("limiterDoor", rectVar (p.limiterDoor));
     o->setProperty ("gateDoorAngle", p.gateDoorAngle);
     o->setProperty ("limiterDoorAngle", p.limiterDoorAngle);
+    webExtras (dir, *o);
     juce::var json (o);
     dir.getChildFile ("places.json").replaceWithText (juce::JSON::toString (json));
 }

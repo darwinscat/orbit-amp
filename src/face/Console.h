@@ -199,10 +199,21 @@ protected:
 
     /** FOR THE SITE: what the web's demo of this face is built from, written into `dir` — the picture
         that never changes at twice the stage's size, its window transparent (cabin.png); the renders its
-        controls are drawn with; and where everything stands (places.json, in the stage's own 1672 x 941).
-        A product adds what is its own. Done once, when the window first comes up with the environment
+        controls are drawn with; where everything stands (places.json, in the stage's own 1672 x 941); and
+        what the product adds (webExtras). Done once, when the window first comes up with the environment
         variable ORBITAMP_WEB_EXPORT naming the folder; a player never sees it. */
-    virtual void exportForWeb (const juce::File& dir) const;
+    void exportForWeb (const juce::File& dir);
+
+    /** The product's part of it: its own renders and files, and in `places` the two keys every world has
+        — "window", the box its live view goes in, and "stills", the files of its stills in the lever's
+        order — whatever else is its own, and its poster (writePoster). */
+    virtual void webExtras (const juce::File& /*dir*/, juce::DynamicObject& /*places*/) {}
+
+    /** THE POSTER: the whole face as it opens — every control where it stands, the lamps out — with
+        `still` in `window` under the glass, at twice the stage's size (poster.png). What shows through the
+        window live is `hidden` while it is taken, the still in its place. */
+    void writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
+                      std::initializer_list<juce::Component*> hidden);
 
     /** To that channel, by a hand: one step of the history. False, and the face back on the channel
         that is playing, when its pack is not installed. */

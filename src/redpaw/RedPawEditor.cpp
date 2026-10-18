@@ -331,13 +331,12 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 }
 
 //==============================================================================
-/** The rover's own part of the site's demo (Console::exportForWeb): the windscreen — the box its view is
+/** The rover's own part of the site's demo (Console::webExtras): the windscreen — the box its view is
     drawn in and the corners of the glass in it — the lever's slot, its notches and its PARK end, the gears'
-    names, TURBO and its hatch, the wipers' keys; the renders of all of them, and the still it ships. */
-void RedPawEditor::exportForWeb (const juce::File& dir) const
+    names, TURBO and its hatch, the wipers' keys; the renders of all of them, the still it ships, and the
+    poster, that still through the glass. */
+void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places)
 {
-    Console::exportForWeb (dir);
-
     using namespace layout;
     const auto& art = Art::get();
     const std::pair<const char*, const juce::Image*> own[] {
@@ -410,6 +409,12 @@ void RedPawEditor::exportForWeb (const juce::File& dir) const
     o->setProperty ("wiperKeySize", wiperKeySize);
     o->setProperty ("gears", lever.numGears());
     dir.getChildFile ("rover.json").replaceWithText (juce::JSON::toString (juce::var (o)));
+
+    places.setProperty ("window", rect (windscreen));
+    juce::Array<juce::var> stills;
+    stills.add ("still.jpg");
+    places.setProperty ("stills", stills);
+    writePoster (dir, windscreen, Art::still(), { view.get() });
 }
 
 RedPawEditor::RedPawEditor (AmpProcessor& p)

@@ -94,7 +94,7 @@ private:
     void turboChange (bool thrown) override;
     void addWindowSections (juce::PopupMenu&) override;
     void stagePlaced() override { placeSky(); }
-    void exportForWeb (const juce::File& dir) const override;
+    void webExtras (const juce::File& dir, juce::DynamicObject& places) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CatpitEditor)
 };

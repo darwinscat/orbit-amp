@@ -334,13 +334,12 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 }
 
 //==============================================================================
-/** The cockpit's own part of the site's demo (Console::exportForWeb): where the glass is and where the
-    picture in it is composed for, the throttle's and TURBO's frames, their renders, and the sky standing
-    still for each channel, the glass's whole rectangle at twice the stage's size (sky-<channel>.png). */
-void CatpitEditor::exportForWeb (const juce::File& dir) const
+/** The cockpit's own part of the site's demo (Console::webExtras): where the glass is and where the
+    picture in it is composed for, the throttle's and TURBO's frames, their renders, the sky standing still
+    for each channel, the glass's whole rectangle at twice the stage's size (sky-<channel>.png) — and the
+    poster, the first channel's still sky through the glass. */
+void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places)
 {
-    Console::exportForWeb (dir);
-
     using namespace layout;
     const auto& art = Art::get();
     face::writeForWeb (dir.getChildFile ("lever-grip.png"), art.leverGrip);
@@ -368,6 +367,13 @@ void CatpitEditor::exportForWeb (const juce::File& dir) const
         names.add (channels.lineup().channels[(size_t) c].name);
     o->setProperty ("channels", names);
     dir.getChildFile ("cockpit.json").replaceWithText (juce::JSON::toString (juce::var (o)));
+
+    places.setProperty ("window", rect (glass));
+    juce::Array<juce::var> stills;
+    for (int c = 0; c < channels.count(); ++c)
+        stills.add ("sky-" + juce::String (c) + ".png");
+    places.setProperty ("stills", stills);
+    writePoster (dir, glass, stillSky (channels.active()), { &space, &still, &monitor });
 }
 
 CatpitEditor::CatpitEditor (AmpProcessor& p)
