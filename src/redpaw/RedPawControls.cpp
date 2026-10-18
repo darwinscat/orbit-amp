@@ -432,4 +432,41 @@ void KnobRing::paint (juce::Graphics& g)
     g.fillPath (band);
 }
 
+//==============================================================================
+TurboLid::TurboLid()
+{
+    setInterceptsMouseClicks (false, false);
+    shown.stiffness = 60.0f;    // a hatch, not a key: about half a second, with no bounce
+    shown.damping   = 16.0f;
+}
+
+void TurboLid::setShut (bool shut, bool animate)
+{
+    shown.target = shut ? 1.0f : 0.0f;
+    if (animate)
+    {
+        startTimerHz (60);
+        return;
+    }
+    shown.jump (shown.target);
+    stopTimer();
+    repaint();
+}
+
+void TurboLid::paint (juce::Graphics& g)
+{
+    const auto& art = Art::get().turboLid;
+    if (! art.isValid() || shown.value <= 0.0f)
+        return;
+    g.setOpacity (juce::jlimit (0.0f, 1.0f, shown.value));
+    g.drawImage (art, layout::turboLid.translated (-(float) getX(), -(float) getY()));
+}
+
+void TurboLid::timerCallback()
+{
+    if (! shown.step (face::frameDt))
+        stopTimer();
+    repaint();
+}
+
 } // namespace orbitamp::redpaw

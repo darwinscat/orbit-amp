@@ -74,6 +74,7 @@ private:
     // nothing until a gear is pulled again.
     GearLever lever;
     face::PushButton turbo { "TURBO" };
+    TurboLid hatch;             // over it: TURBO's hatch, shut while parked
 
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg:
     // -70 dB to -40, and -3 dB to -0.1, foot to head. While its block is off a fader stands dim, and

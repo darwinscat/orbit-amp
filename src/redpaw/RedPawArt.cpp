@@ -207,6 +207,7 @@ const Art& Art::get()
         a.keyDown    = load ("key-down.png");
         a.turboUp    = load ("turbo-up.png");
         a.turboDown  = load ("turbo-down.png");
+        a.turboLid   = loadOwn ("turbo-lid.png");
         a.emblem     = loadOwn ("emblem.png");
         return a;
     }();

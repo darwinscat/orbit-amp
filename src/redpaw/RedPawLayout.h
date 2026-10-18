@@ -96,6 +96,7 @@ extern const NotchFill notchFill;
 extern const juce::Point<float> turbo;
 extern const float turboSize;       // the button's render
 extern const juce::Point<float> turboName;
+extern const juce::Rectangle<float> turboLid;   // the hatch shut (Art::turboLid): from the open cover's top to the frame's foot
 
 /** THE THREE WELLS — REVERB over DELAY on the left, CAB on the right — and the row each one's words are
     written in: on REVERB's and DELAY's upper rims, which the picture is made taller to carry them

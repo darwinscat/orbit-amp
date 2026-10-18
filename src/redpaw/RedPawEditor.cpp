@@ -336,6 +336,8 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     turbo.onPress = [this] { throwTurbo (! turboOf (channels.active())); };
     addToStage (turbo);
     turbo.setBounds (juce::Rectangle<float> (turboSize, turboSize).withCentre (layout::turbo).toNearestInt());
+    addToStage (hatch);         // after the button, so over it
+    hatch.setBounds (layout::turboLid.getSmallestIntegerContainer());
 
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg, its
     // cap lighter than the columns' so a small one reads in its corner. A double click puts it back where
@@ -460,6 +462,7 @@ void RedPawEditor::showSelector (int channel)
         lever.setPosition (at, true, false);
     turbo.setOn (turboOn, false);
     turbo.setEnabled (! parked);
+    hatch.setShut (parked, isShowing());
 
     header.set (GearLever::nameOf (at, lever.numGears()), juce::String (lineup().channels[(size_t) channel].name).toUpperCase(), parked);
 

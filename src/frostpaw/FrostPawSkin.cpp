@@ -130,6 +130,7 @@ const NotchFill notchFill { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 
 const juce::Point<float> turbo { 922.0f, 787.0f };
 const float turboSize = 52.0f;
 const juce::Point<float> turboName { 921.5f, 682.0f };
+const juce::Rectangle<float> turboLid { 873.5f, 689.0f, 101.0f, 168.0f };     // where a hatch of its own would go; none yet
 
 const std::array<juce::Rectangle<float>, 3> wells {{
     { 315.0f,  700.5f, 326.5f, 21.5f },     // REVERB

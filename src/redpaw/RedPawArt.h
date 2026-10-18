@@ -32,7 +32,8 @@ struct Art
     juce::Image toggleUp, toggleDown;
     juce::Image keyUp, keyDown;
     juce::Image turboUp, turboDown;
-    juce::Image emblem;                // the maker's mark raised in the rover's own metal, where it has one; else it is engraved
+    juce::Image turboLid;              // TURBO's hatch shut, over layout::turboLid, where the rover has one; else it stays open
+    juce::Image emblem;               // the maker's mark raised in the rover's own metal, where it has one; else it is engraved
 
     /** The lamps (layout::lamps), each as the dashboard painted it lit, over the box it is laid back
         into; what is not the lamp or its glow is transparent. In `bg` they are out. */

@@ -897,7 +897,7 @@ set(ROVER_RENDERS
     dashboard.png midi.txt knob-drive.png knob-tone.png lever.png slider-cap.png fader-cap.png
     toggle-up.png toggle-down.png key-up.png key-down.png turbo-up.png turbo-down.png)
 
-set(REDPAWAMP_RENDERS ${ROVER_RENDERS})
+set(REDPAWAMP_RENDERS ${ROVER_RENDERS} turbo-lid.png)     # ...and TURBO's hatch shut, its own
 list(TRANSFORM REDPAWAMP_RENDERS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/")
 juce_add_binary_data(RedPawAmpData
     NAMESPACE   RedPawData
@@ -1113,9 +1113,10 @@ foreach(render IN LISTS ROVER_RENDERS)
         list(APPEND FROSTPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/${render}")
     endif()
 endforeach()
-# ...and renders a rover may carry or not — the maker's mark raised in its own metal, instead of engraved:
-# there when the file is, and nothing in its place when it is not.
-foreach(render IN ITEMS emblem.png)
+# ...and renders a rover may carry or not — the maker's mark raised in its own metal, instead of engraved;
+# TURBO's hatch shut, instead of open on PARK too: there when the file is, and nothing in its place when it
+# is not. Never RedPawAmp's: a rusted hatch on frosted steel would be a patch.
+foreach(render IN ITEMS emblem.png turbo-lid.png)
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}" IN_LIST FROSTPAW_OWN_RENDERS)
         list(APPEND FROSTPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}")
     endif()

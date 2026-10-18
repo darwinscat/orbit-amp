@@ -152,4 +152,24 @@ private:
     void timerCallback() override;
 };
 
+//==============================================================================
+/** TURBO'S HATCH, SHUT ON PARK. The picture shows the hatch open over TURBO's hole; parked, the render of it
+    shut (Art::turboLid) comes up over the open one and the button in about half a second, and goes again
+    the same way when a gear is pulled — a parked TURBO is deaf anyway. A rover whose skin has no such
+    render keeps the hatch open always. It lies over layout::turboLid and never takes a click. */
+class TurboLid final : public juce::Component, private juce::Timer
+{
+public:
+    TurboLid();
+
+    /** `animate` off puts it there at once — for a face just built. */
+    void setShut (bool shut, bool animate);
+
+    void paint (juce::Graphics&) override;
+
+private:
+    face::Glide shown;              // 0 open .. 1 shut
+    void timerCallback() override;
+};
+
 } // namespace orbitamp::redpaw
