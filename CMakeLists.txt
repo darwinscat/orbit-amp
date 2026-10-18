@@ -937,6 +937,15 @@ juce_add_binary_data(RedPawAmpData
 # The rover's own version, moved when the ROVER is released (src/Product.h).
 set(REDPAWAMP_VERSION 0.1.0)
 
+# Its icon: its vehicle seen from the front, drawn as the cockpit's mark is — in the family's lilac with
+# the orange dot — on the cockpit's rounded square with the violet round its edge. On the Mac the
+# square macOS 26 expects (824 of the 1024 canvas, margins and all); elsewhere the same on the whole canvas.
+if(APPLE)
+    set(REDPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/RedPawAmp-macOS-1024.png")
+else()
+    set(REDPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/RedPawAmp-1024.png")
+endif()
+
 juce_add_plugin(RedPawAmp
     VERSION                     "${REDPAWAMP_VERSION}"
     PRODUCT_NAME                "RedPawAmp"
@@ -954,8 +963,8 @@ juce_add_plugin(RedPawAmp
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "RedPawAmp needs audio input to process your signal."
-    # A stand-in until the rover has an icon of its own: its DRIVE socket, knob and all, off the dashboard.
-    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/RedPawAmp-1024.png"
+    # Bundle / executable icon — its vehicle on the square; see REDPAWAMP_ICON.
+    ICON_BIG                    "${REDPAWAMP_ICON}"
     COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
 
 clap_juce_extensions_plugin(TARGET RedPawAmp
@@ -1159,6 +1168,15 @@ juce_add_binary_data(FrostPawAmpData
 # Its own version, moved when FROSTPAWAMP is released (src/Product.h).
 set(FROSTPAWAMP_VERSION 0.1.0)
 
+# Its icon: its vehicle seen from the front, drawn as the cockpit's mark is — in the family's lilac with
+# the orange dot — on the cockpit's rounded square with the violet round its edge. On the Mac the
+# square macOS 26 expects (824 of the 1024 canvas, margins and all); elsewhere the same on the whole canvas.
+if(APPLE)
+    set(FROSTPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/FrostPawAmp-macOS-1024.png")
+else()
+    set(FROSTPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/FrostPawAmp-1024.png")
+endif()
+
 juce_add_plugin(FrostPawAmp
     VERSION                     "${FROSTPAWAMP_VERSION}"
     PRODUCT_NAME                "FrostPawAmp"
@@ -1176,8 +1194,8 @@ juce_add_plugin(FrostPawAmp
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "FrostPawAmp needs audio input to process your signal."
-    # A stand-in until it has an icon of its own: its DRIVE socket, knob and all, off the dashboard.
-    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/FrostPawAmp-1024.png"
+    # Bundle / executable icon — its vehicle on the square; see FROSTPAWAMP_ICON.
+    ICON_BIG                    "${FROSTPAWAMP_ICON}"
     COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
 
 clap_juce_extensions_plugin(TARGET FrostPawAmp
@@ -1282,6 +1300,15 @@ juce_add_binary_data(AmberPawAmpData
 # Its own version, moved when AMBERPAWAMP is released (src/Product.h).
 set(AMBERPAWAMP_VERSION 0.1.0)
 
+# Its icon: its vehicle seen from the front, drawn as the cockpit's mark is — in the family's lilac with
+# the orange dot — on the cockpit's rounded square with the violet round its edge. On the Mac the
+# square macOS 26 expects (824 of the 1024 canvas, margins and all); elsewhere the same on the whole canvas.
+if(APPLE)
+    set(AMBERPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/AmberPawAmp-macOS-1024.png")
+else()
+    set(AMBERPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/AmberPawAmp-1024.png")
+endif()
+
 juce_add_plugin(AmberPawAmp
     VERSION                     "${AMBERPAWAMP_VERSION}"
     PRODUCT_NAME                "AmberPawAmp"
@@ -1299,8 +1326,8 @@ juce_add_plugin(AmberPawAmp
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "AmberPawAmp needs audio input to process your signal."
-    # A stand-in until it has an icon of its own: its GAIN socket, knob and all, off the cockpit.
-    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/AmberPawAmp-1024.png"
+    # Bundle / executable icon — its vehicle on the square; see AMBERPAWAMP_ICON.
+    ICON_BIG                    "${AMBERPAWAMP_ICON}"
     COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
 
 clap_juce_extensions_plugin(TARGET AmberPawAmp
