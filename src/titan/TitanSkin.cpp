@@ -82,20 +82,21 @@ const float signOffset = 27.0f;
 // GAIN's ring, white, 89..92 out from its middle; the knob's knurl inside it. The tones' rings 43.4..44.9.
 const Socket drive { { 732.7f, 624.5f }, 90.8f, 3.0f, 160.0f };
 const std::array<Socket, 3> tones {{
-    { { 1217.1f, 581.4f }, 44.2f, 2.2f, 76.0f },    // BASS
-    { { 1348.2f, 581.5f }, 44.2f, 2.2f, 76.0f },    // MIDDLE
-    { { 1479.0f, 581.4f }, 44.2f, 2.2f, 76.0f },    // TREBLE
+    { { 1217.1f, 589.4f }, 44.2f, 2.2f, 76.0f },    // BASS
+    { { 1348.2f, 589.5f }, 44.2f, 2.2f, 76.0f },    // MIDDLE
+    { { 1479.0f, 589.4f }, 44.2f, 2.2f, 76.0f },    // TREBLE
 }};
-// The tones' panel starts at 510 and their housings at 525, too close for a word: theirs stand on the
-// ledge over the panel, its flat 498..508 between its lit top edge and the panel's. GAIN's on the
-// console's own plate, between its top edge at 497 and its housing.
-const float knobNameY  = 503.0f;
+// The tones' panel starts at 512 under its lit top edge, and their housings — moved down toward the keys
+// in the picture, which leaves room over them — at 531.5: their words stand between, a size down. GAIN's
+// on the console's own plate, between its top edge at 497 and its housing.
+const float knobNameY  = 522.0f;
+const float knobNameEm = 12.0f / readingScale;
 const float driveNameY = 508.5f;
 
 // The six square holes, 42 x 43, two and four. The panel leaves no room round them for a word: the
 // filters' names are on their keys, the layers' none.
 const std::array<juce::Point<float>, 6> keys {{
-    { 1186.7f, 682.5f }, { 1242.8f, 682.4f }, { 1330.0f, 682.5f }, { 1387.4f, 682.4f }, { 1445.2f, 682.5f }, { 1502.5f, 682.5f },
+    { 1186.7f, 687.5f }, { 1242.8f, 687.4f }, { 1330.0f, 687.5f }, { 1387.4f, 687.4f }, { 1445.2f, 687.5f }, { 1502.5f, 687.5f },
 }};
 const float keySize       = 50.0f;
 const float keyNameOverY  = 654.0f;

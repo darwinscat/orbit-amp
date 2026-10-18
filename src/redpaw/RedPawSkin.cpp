@@ -85,6 +85,7 @@ const std::array<Socket, 3> tones {{
     { { 1363.3f, 494.9f }, 40.6f, 2.2f, 104.0f },   // TREBLE
 }};
 const float knobNameY  = 423.0f;
+const float knobNameEm = px13;
 const float driveNameY = 423.0f;
 
 const std::array<juce::Point<float>, 6> keys {{

@@ -281,7 +281,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     print (skin().driveName, { drive.centre.x, driveNameY }, 200.0f, ink.words);
     const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
     for (size_t i = 0; i < tones.size(); ++i)
-        print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, ink.words);
+        print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, ink.words, 0.0f, knobNameEm);
 
     print ("TURBO", turboName, 140.0f, ink.state);
     if (learnKeySize > 0.0f)

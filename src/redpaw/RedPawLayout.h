@@ -53,6 +53,7 @@ struct Socket { juce::Point<float> centre; float ring; float ringWidth; float kn
 extern const Socket drive;
 extern const std::array<Socket, 3> tones;       // BASS, MIDDLE, TREBLE
 extern const float knobNameY;       // BASS, MIDDLE, TREBLE: on the panel over the sockets
+extern const float knobNameEm;      // ...how big they are written
 extern const float driveNameY;      // ...and DRIVE's own word, over its socket
 
 /** THE SIX SQUARE KEYS under the tones: the two filters, the divider, the pack's four layers. A name
