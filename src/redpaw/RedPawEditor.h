@@ -68,6 +68,8 @@ private:
     void renderOpenGL() override;
     void openGLContextClosing() override;
 
+    void exportForWeb (const juce::File& dir) const override;
+
     // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel — an option of
     // the gear's, as its tone is: thrown, only the pack changes, and a gear pulled comes back with
     // TURBO as it was left (channels::Lineup::pairs). PARK, the lever's top end, takes

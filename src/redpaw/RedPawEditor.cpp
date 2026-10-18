@@ -331,6 +331,87 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 }
 
 //==============================================================================
+/** The rover's own part of the site's demo (Console::exportForWeb): the windscreen — the box its view is
+    drawn in and the corners of the glass in it — the lever's slot, its notches and its PARK end, the gears'
+    names, TURBO and its hatch, the wipers' keys; the renders of all of them, and the still it ships. */
+void RedPawEditor::exportForWeb (const juce::File& dir) const
+{
+    Console::exportForWeb (dir);
+
+    using namespace layout;
+    const auto& art = Art::get();
+    const std::pair<const char*, const juce::Image*> own[] {
+        { "lever.png", &art.lever }, { "lever-glow.png", &art.leverGlow }, { "fader-cap-light.png", &art.faderCapLight },
+        { "toggle-up.png", &art.toggleUp }, { "toggle-down.png", &art.toggleDown }, { "key-up.png", &art.keyUp },
+        { "key-down.png", &art.keyDown }, { "turbo-up.png", &art.turboUp }, { "turbo-down.png", &art.turboDown },
+        { "turbo-lid.png", &art.turboLid }, { "emblem.png", &art.emblem } };
+    for (const auto& [name, img] : own)
+        face::writeForWeb (dir.getChildFile (name), *img);
+    if (const auto still = Art::still(); still.isValid())
+    {
+        dir.getChildFile ("still.jpg").deleteFile();
+        juce::FileOutputStream out (dir.getChildFile ("still.jpg"));
+        juce::JPEGImageFormat jpeg;
+        jpeg.setQuality (0.9f);
+        if (out.openedOk())
+            jpeg.writeImageToStream (still, out);
+    }
+
+    const auto rect = [] (juce::Rectangle<float> r)
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("x", r.getX()); o->setProperty ("y", r.getY());
+        o->setProperty ("w", r.getWidth()); o->setProperty ("h", r.getHeight());
+        return juce::var (o);
+    };
+    const auto point = [] (juce::Point<float> p)
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("x", p.x); o->setProperty ("y", p.y);
+        return juce::var (o);
+    };
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("windscreen", rect (windscreen));
+    juce::Array<juce::var> corners;
+    for (const auto& c : windscreenCorners)
+        corners.add (point (c));
+    o->setProperty ("windscreenCorners", corners);
+
+    auto* l = new juce::DynamicObject();
+    l->setProperty ("slot", rect (gateSlot));
+    l->setProperty ("slotX", slotX);
+    l->setProperty ("notchX", notchX);
+    l->setProperty ("parkY", slotTopY);
+    juce::Array<juce::var> stops, names;
+    for (int g = 0; g < lever.numGears(); ++g)
+        stops.add (notches[(size_t) g]);
+    for (int at = 0; at <= lever.numGears(); ++at)
+        names.add (GearLever::nameOf (at, lever.numGears()));
+    l->setProperty ("notches", stops);
+    l->setProperty ("names", names);      // PARK first, then the gears from the top
+    l->setProperty ("leverWidth", leverWidth);
+    l->setProperty ("collarSink", collarSink);
+    l->setProperty ("leverBox", point ({ leverLeft, leverTop }));
+    l->setProperty ("plate", rect (gearPlate));
+    l->setProperty ("glowPad", Art::leverGlowPad);
+    o->setProperty ("lever", juce::var (l));
+
+    auto* t = new juce::DynamicObject();
+    t->setProperty ("centre", point (layout::turbo));
+    t->setProperty ("size", turboSize);
+    t->setProperty ("name", point (turboName));
+    t->setProperty ("lid", rect (turboLid));
+    o->setProperty ("turbo", juce::var (t));
+
+    juce::Array<juce::var> wipers;
+    for (const auto& k : wiperKeys)
+        wipers.add (point (k));
+    o->setProperty ("wiperKeys", wiperKeySize > 0.0f ? juce::var (wipers) : juce::var());
+    o->setProperty ("wiperKeySize", wiperKeySize);
+    o->setProperty ("gears", lever.numGears());
+    dir.getChildFile ("rover.json").replaceWithText (juce::JSON::toString (juce::var (o)));
+}
+
 RedPawEditor::RedPawEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Dashboard>(), dashboardPlaces(), dashboardLook()),
       view (skin().makeView()),
