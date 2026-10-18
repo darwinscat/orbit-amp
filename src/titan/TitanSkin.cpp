@@ -4,7 +4,7 @@
 #include "../redpaw/RedPawSkin.h"
 #include "../redpaw/RedPawLayout.h"
 #include "../redpaw/RedPawLineup.h"
-#include "../redpaw/view/PlainsDrive.h"
+#include "view/TitanDrive.h"
 
 #include <TitanData.h>
 
@@ -43,9 +43,9 @@ const Skin& skin()
         face::Ink {},                   // the family's lilac on the dark gunmetal...
         juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words
         juce::String::fromUTF8 (TitanData::midi_txt, TitanData::midi_txtSize),
-        // Mars out of the canopy until Titan's own sea comes (view/PlainsDrive.h).
-        [] { return std::make_unique<Windscreen> (std::make_unique<PlainsDrive> (numGears())); },
-        { "Plains (GPU)", "1993 (CPU)", "Still" },
+        // Titan's methane sea out of the canopy, flown low over (view/TitanDrive.h).
+        [] { return std::make_unique<Windscreen> (std::make_unique<titan::TitanDrive> (numGears())); },
+        { "Titan (GPU)", "1993 (CPU)", "Still" },
         "GAIN",
         false,                          // the plate between the vents is plain metal: no mark there yet
     };

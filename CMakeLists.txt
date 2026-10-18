@@ -1311,8 +1311,8 @@ if(APPLE)
         VERBATIM)
 endif()
 
-# A rover, and its skin. Out of its canopy, the drive across Mars until Titan's own view comes.
-set(AMBERPAWAMP_SOURCES ${ROVER_SOURCES} src/titan/TitanSkin.cpp)
+# A rover, and its skin. Out of its canopy, the flight over Titan's methane sea (src/titan/view).
+set(AMBERPAWAMP_SOURCES ${ROVER_SOURCES} ${TITAN_VIEW_SOURCES} src/titan/TitanSkin.cpp)
 set(AMBERPAWAMP_LIBRARIES AmberPawAmpData ${ROVER_LIBRARIES})
 
 target_sources(AmberPawAmp PRIVATE ${AMBERPAWAMP_SOURCES})
