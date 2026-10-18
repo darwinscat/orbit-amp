@@ -266,6 +266,8 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
         print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, ink.words);
 
     print ("TURBO", turboName, 140.0f, ink.state);
+    if (learnKeySize > 0.0f)
+        print ("LEARN", learnName, 120.0f, ink.words, learnNameRoom);
     print (skin().inputName, inputName, 170.0f, ink.words, columnNameRoom);
     print (skin().outputName, outputName, 170.0f, ink.words, columnNameRoom);
 }
@@ -402,11 +404,39 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
                                                (int) prefs::store().get (screenKey, (int) Monitor::View::spectrum)));
 
-    // LEARN, from GATE's menu, takes the picture's place while it runs — the parked warning's too.
+    // LEARN, from GATE's menu or its own key, takes the picture's place while it runs — the parked
+    // warning's too, and the top line's where its place takes that in (RedPawLayout.h) — and lights the key.
     addToStage (learnGlass);
-    learnGlass.setBounds (navPicture.toNearestInt());
+    learnGlass.setBounds (learnArea.toNearestInt());
     learnGlass.inset = { 8.0f, 4.0f };      // the top line's words start where the header's do
-    learnGlass.onShow = [this] (bool up) { screen.setAlpha (up ? 0.0f : 1.0f); parkSign.setAlpha (up ? 0.0f : 1.0f); };
+    learnGlass.onShow = [this] (bool up)
+    {
+        screen.setAlpha (up ? 0.0f : 1.0f);
+        parkSign.setAlpha (up ? 0.0f : 1.0f);
+        if (learnArea.intersects (navHeader))
+            header.setAlpha (up ? 0.0f : 1.0f);
+        learnShowing = up;
+        learnKey.repaint();
+    };
+
+    if (learnKeySize > 0.0f)
+    {
+        learnKey.latching = false;
+        learnKey.drawKey = [this] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        {
+            const auto& img = down || learnShowing ? Art::get().turboDown : Art::get().turboUp;
+            drawRender (g, img, box);
+            if (learnKey.isMouseOverOrDragging() && learnKey.isEnabled())
+            {
+                juce::Path face;
+                face.addEllipse (fittedArea (img, box).reduced (2.0f));
+                drawHandRim (g, face, handLight);
+            }
+        };
+        learnKey.onPress = [this] { startGateLearn(); };
+        addToStage (learnKey);
+        learnKey.setBounds (juce::Rectangle<float> (learnKeySize, learnKeySize).withCentre (layout::learnKey).toNearestInt());
+    }
 
     // Parked, the warning stands large in the middle of the screen, over the picture dimmed.
     addToStage (parkSign);

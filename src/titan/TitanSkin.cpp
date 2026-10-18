@@ -111,6 +111,14 @@ const juce::Rectangle<float> navPicture  { 123.0f, 598.0f, 154.0f, 24.0f };
 // x 654..676 under that.
 const juce::Rectangle<float> tunerScreen { 390.0f, 507.0f, 186.0f, 186.0f };
 const face::TunerFace::Dial tunerDial { { 483.0f, 627.5f }, 90.0f, 1.012f, { 453.0f, 654.0f, 59.0f, 22.0f } };
+// LEARN over the whole radio screen, its three lines too: the picture under them is a sliver. Its key is
+// the upper of the two round holes beside the screen (the hole 308..341 x 554..587, its bezel 302..347),
+// its word on the plate over it, clear of the plate's screws at 515.
+const juce::Rectangle<float> learnArea = navHeader.getUnion (navPicture);
+const juce::Point<float> learnKey { 324.5f, 571.5f };
+const float learnKeySize = 42.0f;
+const juce::Point<float> learnName { 324.5f, 530.0f };
+const float learnNameRoom = 50.0f;      // the plate is 302..355 between its edges
 
 // The slot is 882..907 across, 517..724 down, and straight: the stem stays in it. Its five ticks, to its
 // right at 926..946.5, are PARK and four places below it — the grip lies along a tick, so the collar's

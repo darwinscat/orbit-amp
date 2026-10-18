@@ -88,6 +88,12 @@ private:
     face::Monitor screen;
     ParkSign parkSign;              // parked: the warning, large, in the screen's middle
     GlassFilm glassFilm;            // the screen's glass, over all of it
+
+    // LEARN's own key, where the picture paints a hole for one (RedPawLayout.h): GATE's learning started
+    // as from its menu, the key lit while the learning shows.
+    face::PushButton learnKey { "LEARN" };
+    bool learnShowing = false;
+
     void showScreenMenu();
     void chooseScreen (face::Monitor::View);
     void pullGear (int gear);

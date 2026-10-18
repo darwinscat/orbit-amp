@@ -77,6 +77,16 @@ extern const juce::Rectangle<float> tunerScreen;
     screen is then the top line and the picture alone. */
 extern const face::TunerFace::Dial tunerDial;
 
+/** LEARN: where GATE's learning shows while it runs — over the nav screen's picture, or over the whole
+    screen, its top line too, where the picture is too small to hold it — and a round key of its own
+    where the picture paints a hole for one: lit while the learning shows, its word over it. A size of
+    nought: no key, LEARN only from GATE's menu and its lamp. */
+extern const juce::Rectangle<float> learnArea;
+extern const juce::Point<float> learnKey;
+extern const float learnKeySize;    // the key's render, whose button fills the hole
+extern const juce::Point<float> learnName;
+extern const float learnNameRoom;  // how wide the word may be: a wider one is set condensed into it, as tall
+
 /** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches painted on its right — as many as
     the picture paints — the product's gears, CLEAN, CRUNCH, HI-GAIN, stand in them from the top, as many
     as it has (RedPawLineup.h). A position is where the lever's stem stands: seen from above, as the whole
