@@ -218,11 +218,11 @@ const std::array<juce::Point<float>, 6> emblemFace {{
 }};
 const juce::Rectangle<float> emblemMark { 799.5f, 403.0f, 76.0f, 76.0f };
 
-// ...and the maker's words low beside it, on the strips under the vents, 461..490 down: 655..785 on the
-// left, 890..1035 on the right.
-const juce::Point<float> poweredBy { 721.0f, 476.0f };
-const juce::Point<float> makerName { 958.0f, 476.0f };
-const float makerRoom = 124.0f;
+// ...and the maker's words low beside it, on the strips under the vents, 461..490 down, close in to the
+// plate's edges at 792 and 888.
+const juce::Point<float> poweredBy { 735.0f, 476.0f };
+const juce::Point<float> makerName { 947.0f, 476.0f };
+const float makerRoom = 110.0f;
 
 } // namespace layout
 

@@ -264,15 +264,16 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     // where the skin has one (RedPawSkin.h).
     const auto& ink = skin().ink;
     const auto shadow = skin().printShadow;
-    const auto print = [&g, &ink, shadow] (const juce::String& text, juce::Point<float> at, float w, juce::Colour colour, float room = 0.0f)
+    const auto print = [&g, &ink, shadow] (const juce::String& text, juce::Point<float> at, float w, juce::Colour colour,
+                                           float room = 0.0f, float em = px13)
     {
         const auto area = juce::Rectangle<float> (w, 28.0f).withCentre (at);
         const juce::Graphics::ScopedSaveState keep (g);
         if (room > 0.0f)
-            condenseInto (g, text, px13, 0.08f, room, at);
+            condenseInto (g, text, em, 0.08f, room, at);
         if (! shadow.isTransparent())
-            drawLabel (g, text, area.translated (0.0f, 1.5f), px13, shadow);
-        ink.label (g, text, area, px13, colour);
+            drawLabel (g, text, area.translated (0.0f, 1.5f), em, shadow);
+        ink.label (g, text, area, em, colour);
     };
 
     print (skin().driveName, { drive.centre.x, driveNameY }, 200.0f, ink.words);
@@ -286,11 +287,11 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     print (skin().inputName, inputName, 170.0f, ink.words, columnNameRoom);
     print (skin().outputName, outputName, 170.0f, ink.words, columnNameRoom);
 
-    // The maker's words beside the mark, a little quieter than the controls' names.
+    // The maker's words beside the mark, a size under the controls' names and a little quieter.
     if (makerRoom > 0.0f)
     {
-        print ("POWERED BY", poweredBy, 220.0f, ink.at (ink.words, 0.8f), makerRoom);
-        print ("DARWIN'S CAT", makerName, 240.0f, ink.at (ink.words, 0.8f), makerRoom);
+        print ("POWERED BY", poweredBy, 220.0f, ink.at (ink.words, 0.8f), makerRoom, px11);
+        print ("DARWIN'S CAT", makerName, 240.0f, ink.at (ink.words, 0.8f), makerRoom, px11);
     }
 }
 
