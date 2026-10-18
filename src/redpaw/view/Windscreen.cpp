@@ -120,6 +120,15 @@ void Windscreen::setFrameRateCap (int fpsCap)
     cap = fpsCap >= 60 ? 60 : 30;
 }
 
+void Windscreen::setPicture (std::function<juce::Image()> p)
+{
+    picture = std::move (p);
+    still = {};
+    stillShipped = false;
+    if (running == Mode::still)
+        takeStill();
+}
+
 float Windscreen::speedKmh() const noexcept
 {
     constexpr float kmh = 3.6f;
@@ -188,6 +197,11 @@ void Windscreen::apply()
 {
     stillReady.store (false);
     stillWanted.store (false);
+    if (running != Mode::still && stillShipped)
+    {
+        still = {};             // the product's picture goes with STILL
+        stillShipped = false;
+    }
     switch (running)
     {
         case Mode::gpu:
@@ -271,10 +285,22 @@ void Windscreen::hostRender (juce::Rectangle<int> glass, int frameWidth, int fra
     glViewport (0, 0, frameWidth, frameHeight);
 }
 
-/** One frame, kept. From the GPU where it works — the GL thread reads it back and the pulse collects
-    it — else from the 1993 landscape at once. */
+/** One frame, kept: the product's own picture where it brings one — else rendered, from the GPU where
+    it works (the GL thread reads it back and the pulse collects it), else from the 1993 landscape at once. */
 void Windscreen::takeStill()
 {
+    if (picture != nullptr && ! stillShipped)
+        if (auto shipped = picture(); shipped.isValid())
+        {
+            still = shipped;
+            stillShipped = true;
+        }
+    if (stillShipped)
+    {
+        detachGl();
+        repaint();
+        return;
+    }
     if (! gpuFailed.load())
     {
         attachGl();

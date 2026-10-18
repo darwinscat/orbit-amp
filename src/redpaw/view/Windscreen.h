@@ -12,6 +12,7 @@
 #include <juce_opengl/juce_opengl.h>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -133,6 +134,11 @@ public:
     /** The still as kept, when the mode is STILL and it has arrived; else invalid. Message thread. */
     juce::Image stillImage() const { return still; }
 
+    /** THE STILL AS SHIPPED: where the product brings a picture of its world, STILL shows that — asked
+        for when STILL comes on, let go when it goes off — and renders nothing; else, or when it gives an
+        invalid one, STILL renders a frame of its own. Message thread. */
+    void setPicture (std::function<juce::Image()> picture);
+
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -172,6 +178,8 @@ private:
     std::vector<juce::uint8> stillPixels;
     int stillW = 0, stillH = 0;
     juce::Image still;
+    std::function<juce::Image()> picture;
+    bool stillShipped = false;           // `still` is the product's picture
 
     // The inputs, shared with the GL thread.
     std::atomic<int> gearWanted { 1 };

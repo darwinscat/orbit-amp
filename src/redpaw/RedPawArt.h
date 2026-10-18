@@ -41,6 +41,10 @@ struct Art
     std::array<juce::Image, layout::numLamps> lampLit;
 
     static const Art& get();
+
+    /** THE STILL the rover ships: one frame of its world, chosen and kept, that its windscreen shows in
+        STILL instead of rendering one. Decoded when asked, never held here; invalid where it has none. */
+    static juce::Image still();
 };
 
 } // namespace orbitamp::redpaw

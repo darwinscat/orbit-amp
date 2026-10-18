@@ -594,6 +594,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     gl.setContinuousRepainting (false);     // the view asks for each frame, at its own pace
     gl.attachTo (*this);
     view->setFrameRateCap ((int) prefs::store().get (frameRateKey, 60));
+    view->setPicture ([] { return Art::still(); });     // STILL is the rover's own picture, where it ships one
     view->setMode ((Windscreen::Mode) juce::jmax (0, landscapeWords.indexOf (prefs::store().get (landscapeKey, landscapeWords[0]).toString())));
     placeView();
 }

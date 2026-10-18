@@ -217,4 +217,9 @@ const Art& Art::get()
     return art;
 }
 
+juce::Image Art::still()
+{
+    return loadOwn ("still.jpg");
+}
+
 } // namespace orbitamp::redpaw
