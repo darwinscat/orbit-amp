@@ -25,11 +25,13 @@ namespace orbitamp::redpaw
     byte — spelled with fixed-width unsigned types so they wrap by definition, never by luck.
 
     The same landscape can wear an ice moon's colours instead of Mars's: the ground's 64 shades run
-    from a blue shadow to white snow, the sky is black, and a flat Jupiter stands over the horizon
-    where the ice world's sky has it. The program's own routines are untouched by the look; only the
-    DAC's entries, the horizon line's colour and the one disc drawn into the sky differ. Or Titan's: an
-    amber haze for the sky, a dark brown methane sea for the ground, its slopes catching the haze, and a
-    violet mist on the horizon — the palette alone, no disc. */
+    from a blue shadow to white snow, the sky is black, and a flat Jupiter stands over the horizon where
+    the ice world's sky has it. The program's routines are otherwise untouched by the look; the DAC's
+    entries, the horizon line's colour and the one disc drawn
+    into the sky differ. Or Titan's: an amber haze for the sky, a flat methane sea for the ground — the
+    terrain's highest sixteenth left as low islands and a far shore, the rest its level, keeping only a
+    swell, shaded by its distance, dark and rough near and calm into the haze — and a violet mist on the
+    horizon. */
 class Mars1993 final
 {
 public:
@@ -71,8 +73,17 @@ private:
     Look look = Look::mars;
     uint8_t horizonIndex = 0x50;   // the horizon line's colour: 50h in the program, a mist on the ice
 
+    // Titan's: where its shades lie in the DAC — the sea's, trough to sheen, then the islands', lit to
+    // shadow, so a span from one to the other passes the sheen, a wet shore, never the dark — the code
+    // round which a sea texel keeps its swell, the sea's height, and the sea's shade at the farthest row,
+    // which the haze under the horizon starts from.
+    static constexpr int seaShades = 98, landShades = 162, seaCode = 96, farSea = 17;
+    static constexpr uint8_t seaLevel = 0x80;
+
     void makeIcePalette();
     void makeTitanPalette();
+    void makeSea();
+    void seaRow (uint8_t* shade, int d) const noexcept;
     void drawSky (uint16_t alt, uint16_t camX, uint16_t camY);
     void drawJupiter();
     void drawGround (uint16_t alt, uint16_t camX, uint16_t camY);

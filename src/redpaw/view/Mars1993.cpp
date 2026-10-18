@@ -110,11 +110,16 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
     // w = (w + w[+4] + w[+0202h] + w[-0101h]) / 4.
     for (uint32_t i = 0; i < 65536; ++i)
         hm[i] = (uint8_t) ((hm[i] + hm[(uint16_t) (i + 0x0004)] + hm[(uint16_t) (i + 0x0202)] + hm[(uint16_t) (i + 0xFEFF)]) >> 2);
-    // Colour = w(u) - w(u + 3) + 32, clamped to 0..63: the sun on the horizon, low along u.
-    for (uint32_t i = 0; i < 65536; ++i)
+    if (look == Look::titan)
+        makeSea();
+    else
     {
-        const int c = (int) hm[i] - (int) hm[(uint16_t) (i + 3)] + 0x20;
-        colours[i] = (uint8_t) (c < 0 ? 0 : (c > 0x3F ? 0x3F : c));
+        // Colour = w(u) - w(u + 3) + 32, clamped to 0..63: the sun on the horizon, low along u.
+        for (uint32_t i = 0; i < 65536; ++i)
+        {
+            const int c = (int) hm[i] - (int) hm[(uint16_t) (i + 3)] + 0x20;
+            colours[i] = (uint8_t) (c < 0 ? 0 : (c > 0x3F ? 0x3F : c));
+        }
     }
     // Blur 2, in place: the 2 x 2 box on the heights.
     for (uint32_t i = 0; i < 65536; ++i)
@@ -163,27 +168,82 @@ void Mars1993::makeIcePalette()
         put (170 + l, { 0.80f * light[l], 0.48f * light[l], 0.36f * light[l] });
 }
 
-/** TITAN'S DAC. The ground is the methane sea: its 64 shades run from a violet-brown shadow through the
-    dark brown liquid to the amber of the haze it mirrors on the lit slopes — and the haze rows under the
-    horizon, which take the top shades, are that amber fading out. The sky's 32 are the haze, a darker
-    brown to the amber of the horizon; 97 is the violet mist on the horizon line. */
+/** TITAN'S DAC. The sea's 64 shades from 98, a dark trough through the amber-brown liquid to the haze's
+    sheen on a wave; the islands' 32 from 162, the lit shore to a violet-brown shadow; and the first 64,
+    which only the haze rows under the horizon take, the far sea fading into the pale violet mist. The
+    sky's 32 are the haze, a darker brown to the amber of the horizon; 97 is the mist on the horizon line. */
 void Mars1993::makeTitanPalette()
 {
     struct C { float r, g, b; };
     const auto mix = [] (C a, C b, float t) { return C { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; };
+    const auto ss = [] (float e0, float e1, float x) { const float t = std::clamp ((x - e0) / (e1 - e0), 0.0f, 1.0f); return t * t * (3 - 2 * t); };
     const auto put = [this] (int i, C c)
     {
         const auto q = [] (float v) { return (uint32_t) std::lround (std::clamp (v, 0.0f, 1.0f) * 255); };
         pal[(size_t) i] = 0xFF000000u | (q (c.r) << 16) | (q (c.g) << 8) | q (c.b);
     };
-    const C shadow { 0.05f, 0.03f, 0.06f }, liquid { 0.18f, 0.11f, 0.07f }, sheen { 0.62f, 0.40f, 0.20f };
+    const C trough { 0.12f, 0.08f, 0.05f }, liquid { 0.42f, 0.28f, 0.14f }, sheen { 0.60f, 0.42f, 0.23f };
+    const auto sea = [&] (int i) { return i < 32 ? mix (trough, liquid, (float) i / 32.0f) : mix (liquid, sheen, (float) (i - 32) / 31.0f); };
     for (int i = 0; i < 64; ++i)
-        put (i, i < 32 ? mix (shadow, liquid, (float) i / 32.0f) : mix (liquid, sheen, (float) (i - 32) / 31.0f));
+        put (seaShades + i, sea (i));
+    const C shore { 0.12f, 0.08f, 0.07f }, lit { 0.50f, 0.35f, 0.20f };
+    for (int i = 0; i < 32; ++i)
+        put (landShades + 31 - i, mix (shore, lit, (float) i / 31.0f));
+    const C mist { 0.60f, 0.50f, 0.52f };
+    for (int i = 0; i < 64; ++i)
+        put (i, mix (sea (farSea), mist, ss (18.0f, 40.0f, (float) i)));
     const C hazeHigh { 0.40f, 0.25f, 0.12f }, hazeLow { 0.81f, 0.54f, 0.25f };
     for (int i = 64; i < 96; ++i)
         put (i, mix (hazeHigh, hazeLow, (float) (i - 64) / 31.0f));
     put (97, { 0.65f, 0.55f, 0.70f });
     horizonIndex = 97;
+}
+
+/** TITAN'S SEA out of the program's terrain: the highest sixteenth of it stays, at half its height, low
+    islands and a far shore rising from the level of the rest, shaded as the program shades its ground.
+    The rest is the sea, flat, its texels keeping only a swell — long crests across the way ahead and the
+    terrain's own small detail — as a signed code round 96, which the ground's rows turn into a shade by
+    their distance. */
+void Mars1993::makeSea()
+{
+    auto& hm = heights;
+    std::array<int, 256> count {};
+    for (auto v : hm)
+        ++count[v];
+    int level = 254, above = 0;
+    while (level > 0 && above + count[(size_t) level] <= 65536 / 16)
+        above += count[(size_t) level--];
+    const std::vector<uint8_t> ground (hm.begin(), hm.end());
+    for (uint32_t i = 0; i < 65536; ++i)
+    {
+        const int g = ground[i], up = g - level;
+        if (up > 0)
+        {
+            hm[i] = (uint8_t) (seaLevel + up / 2);
+            colours[i] = (uint8_t) std::clamp (g - (int) ground[(uint16_t) (i + 3)] + 16, 0, 31);
+        }
+        else
+        {
+            const int u = (int) (i & 0xFF), v = (int) (i >> 8);
+            const double swell = 11.0 * std::sin (6.283185307179586 * (37 * v + 3 * u) / 256.0)
+                               + 5.0 * std::sin (6.283185307179586 * (61 * v - 11 * u) / 256.0);
+            const int s = g - (int) ground[(uint16_t) (i + 0x0200)] + (int) std::lround (swell);
+            hm[i] = seaLevel;
+            colours[i] = (uint8_t) (seaCode + std::clamp (s, -31, 31));
+        }
+    }
+}
+
+/** A row of Titan's ground at map distance d: the islands' codes to their shades, the sea's to the
+    sea's — brighter and its swell full near, darker and calmer toward the haze. */
+void Mars1993::seaRow (uint8_t* shade, int d) const noexcept
+{
+    for (int c = 0; c < 32; ++c)
+        shade[c] = (uint8_t) (landShades + 31 - c);
+    const double t = d / (d + 20.0);
+    const double base = 34 - 20 * t, swell = 1 - 0.85 * t;
+    for (int c = 64; c < 128; ++c)
+        shade[c] = (uint8_t) (seaShades + std::clamp ((int) std::lround (base + (c - seaCode) * swell), 0, 63));
 }
 
 void Mars1993::setRows (int rows)
@@ -312,8 +372,13 @@ void Mars1993::drawGround (uint16_t alt, uint16_t camX, uint16_t camY)
     const int fy = camY & 15, vCam = (camY >> 4) & 0xFF;
     const int64_t X12 = (int64_t) camX * 4096;
     const int halfW = w >> 1;
+    uint8_t shade[256];                                              // a texel's colour code to its shade: itself, but on Titan
+    for (int c = 0; c < 256; ++c)
+        shade[c] = (uint8_t) c;
     for (int k = 60; k >= 1; --k)
     {
+        if (look == Look::titan)
+            seaRow (shade, distances[k]);
         const int D = (distances[k] << 4) + (fy ^ 15);              // distance in 1/16 texel
         int y0; uint32_t kq;
         if (k == 1) { y0 = 32000; kq = 0; }                          // the nearest row is pinned to the bottom
@@ -335,8 +400,8 @@ void Mars1993::drawGround (uint16_t alt, uint16_t camX, uint16_t camY)
             int yn = y0 - (int) ((hh * kq) >> 16);
             if (yn < 0) yn = -1; else if (yn >= h) yn = h - 1;
             const int yo = ybuf[x]; ybuf[x] = yn;
-            const int c0 = colours[idx];
-            const int col = (int) ((uint32_t) (((((int) colours[idx1] - c0) * (int) (frac >> 8)) << 1) + (c0 << 8)) & 0xFFFFu);   // 8.8
+            const int c0 = shade[colours[idx]];
+            const int col = (int) ((uint32_t) (((((int) shade[colours[idx1]] - c0) * (int) (frac >> 8)) << 1) + (c0 << 8)) & 0xFFFFu);   // 8.8
             if (yo >= yn) { cbuf[x] = col; continue; }
             const int old = cbuf[x]; cbuf[x] = col;
             const int n = yn - yo;
