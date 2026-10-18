@@ -103,8 +103,8 @@ private:
 
 //==============================================================================
 /** THE SPEED AS A HOLOGRAM ON THE GLASS, where the layout has room for one (RedPawLayout.h): the number
-    large and the unit under it, in a pale green that glows, between two brackets — a head-up display,
-    light laid over the world outside. It never takes a click: the glass under it steers. */
+    large and the unit under it, in a pale green that glows — a head-up display, light laid over the
+    world outside. It never takes a click: the glass under it steers. */
 class SpeedHud final : public juce::Component, private juce::Timer
 {
 public:

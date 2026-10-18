@@ -107,11 +107,12 @@ const bool keyNamesOnKeys = true;
 const std::array<int, 2> lightKeys {{ 4, 5 }};       // the two under TREBLE: the searchlights, left and right
 
 // The radio's screen, its glass 122..277 x 530..623: the gear along its top, the picture under it — the
-// speed is a hologram on the canopy's middle pane, low over the sea.
+// speed is a hologram in the top right corner of the canopy's middle pane, under the overhead strip and
+// clear of the post (its glass edge x = 1262 - 0.43 y).
 const juce::Rectangle<float> navScreen   { 121.0f, 529.0f, 158.0f, 96.0f };
 const juce::Rectangle<float> navHeader   { 123.0f, 531.0f, 154.0f, 22.0f };
 const juce::Rectangle<float> navPicture  { 123.0f, 555.0f, 154.0f, 67.0f };
-const juce::Rectangle<float> speedHud    { 741.0f, 292.0f, 190.0f, 74.0f };
+const juce::Rectangle<float> speedHud    { 1050.0f, 58.0f, 140.0f, 56.0f };
 
 // THE TUNER, the gauge's face, 390..576 across: its seventeen ticks point at 483, 627.5, the end ones
 // 58 degrees either side of the long one straight up, from 87 to 94 out; the little window 453..512

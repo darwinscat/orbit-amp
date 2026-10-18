@@ -369,14 +369,6 @@ void SpeedHud::paint (juce::Graphics& g)
     lit.addPath (glyphs ("KM/H", face::labelFont (h * 0.20f).withExtraKerningFactor (0.2f),
                          { box.getCentreX(), box.getY() + h * 0.86f }));
 
-    // Two brackets either side, the light's frame.
-    juce::Path frame;
-    const float in = h * 0.18f, x0 = box.getX() + 2.0f, x1 = box.getRight() - 2.0f, y0 = box.getY() + 3.0f, y1 = box.getBottom() - 3.0f;
-    frame.startNewSubPath (x0 + in, y0); frame.lineTo (x0, y0); frame.lineTo (x0, y1); frame.lineTo (x0 + in, y1);
-    frame.startNewSubPath (x1 - in, y0); frame.lineTo (x1, y0); frame.lineTo (x1, y1); frame.lineTo (x1 - in, y1);
-    juce::Path stroked;
-    juce::PathStrokeType (1.6f).createStrokedPath (stroked, frame);
-    lit.addPath (stroked);
 
     juce::DropShadow (light.withAlpha (0.55f), juce::roundToInt (h * 0.16f), {}).drawForPath (g, lit);
     g.setColour (light.withAlpha (0.82f));
