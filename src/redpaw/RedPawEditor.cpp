@@ -266,8 +266,8 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
         print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, ink.words);
 
     print ("TURBO", turboName, 140.0f, ink.state);
-    print ("INPUT", inputName, 170.0f, ink.words, columnNameRoom);
-    print ("OUTPUT", outputName, 170.0f, ink.words, columnNameRoom);
+    print (skin().inputName, inputName, 170.0f, ink.words, columnNameRoom);
+    print (skin().outputName, outputName, 170.0f, ink.words, columnNameRoom);
 }
 
 //==============================================================================

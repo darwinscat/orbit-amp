@@ -48,6 +48,7 @@ const Skin& skin()
         { "Titan (GPU)", "1993 (CPU)", "Still" },
         "GAIN",
         false,                          // the plate between the vents is plain metal: no mark there yet
+        "IN", "OUT",                    // the edge columns, short as a cockpit labels them
     };
     return titan;
 }

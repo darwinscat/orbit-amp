@@ -61,6 +61,10 @@ struct Skin
         picture with no place for one yet says so: nothing is cut there, and nothing there answers the
         hand. */
     bool mark = true;
+
+    /** WHAT THE EDGE COLUMNS ARE CALLED, under them. */
+    const char* inputName = "INPUT";
+    const char* outputName = "OUTPUT";
 };
 
 /** The product's own. */
