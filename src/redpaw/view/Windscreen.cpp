@@ -28,7 +28,9 @@ namespace
         std::nth_element (ms.begin(), mid, ms.end());
         return *mid;
     }
-    constexpr std::array<float, PlainsWorld::maxGears> marsTexelsPerSecond { 2.0f, 5.0f, 10.0f };   // the 1993 drive's gears, the first first
+    constexpr std::array<float, 4> marsTexelsPerSecond { 2.0f, 5.0f, 10.0f, 16.0f };   // the 1993 drive's gears, the first first: as many as a lever of four
+    /** The 1993 drive's pace in a gear; a lever longer than the table runs its top gears at the table's last. */
+    float marsTexels (int gear) noexcept { return marsTexelsPerSecond[(size_t) juce::jlimit (1, (int) marsTexelsPerSecond.size(), gear) - 1]; }
     constexpr float marsStrafePerSecond = 6.0f;   // the 1993 view has no heading: steering slides it along u
 
     /** The 1993 program took its seed from the clock, 18.2 ticks a second since midnight, 15 bits kept. */
@@ -125,7 +127,7 @@ float Windscreen::speedKmh() const noexcept
     switch (running)
     {
         case Mode::gpu:   return speedShared.load() * kmh;
-        case Mode::cpu:   return (float) marsSpeed / marsTexelsPerSecond[(size_t) g - 1] * world->speedFor (g, false) * kmh;
+        case Mode::cpu:   return (float) marsSpeed / marsTexels (g) * world->speedFor (g, false) * kmh;
         case Mode::still: break;
     }
     return parkedWanted.load() ? 0.0f : world->speedFor (g, turboWanted.load()) * kmh;
@@ -452,7 +454,7 @@ void Windscreen::drawCpuFrame (bool advance)
     cpuLast = now;
     const int g = gearWanted.load();
     const bool parked = parkedWanted.load();
-    const double want = parked ? 0.0 : marsTexelsPerSecond[(size_t) g - 1] * (turboWanted.load() ? PlainsWorld::turboFactor : 1.0f);
+    const double want = parked ? 0.0 : marsTexels (g) * (turboWanted.load() ? PlainsWorld::turboFactor : 1.0f);
     marsSpeed += (want - marsSpeed) * (1 - std::exp (-dt / (parked ? PlainsWorld::parkSeconds : 0.28)));
     marsPos += marsSpeed * 16 * dt;
     if (! parked)

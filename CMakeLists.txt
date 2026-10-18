@@ -882,6 +882,33 @@ target_link_libraries(frostpaw_view_demo PRIVATE
 set_target_properties(frostpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ----------------------------------------------------------------------------
+# Titan — the methane sea: the same windscreen as a helicopter's canopy over Titan (src/titan/view), the
+# drive handed to it as a TitanDrive. The sources are listed here for the product to take up, with the
+# windscreen's own; the demo is the bare window over the sea, in the canopy's shape. Built only when asked
+# for by name.
+# ----------------------------------------------------------------------------
+set(TITAN_VIEW_SOURCES
+    src/titan/view/TitanWorld.cpp
+    src/titan/view/TitanGl.cpp)
+
+juce_add_gui_app(titan_view_demo PRODUCT_NAME "TitanViewDemo")
+target_sources(titan_view_demo PRIVATE src/redpaw/view/WindscreenDemo.cpp ${REDPAW_VIEW_SOURCES} ${TITAN_VIEW_SOURCES})
+target_include_directories(titan_view_demo PRIVATE src)
+target_compile_definitions(titan_view_demo PRIVATE ORBITAMP_VIEW_DEMO_TITAN=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(titan_view_demo PRIVATE
+    juce::juce_gui_extra
+    juce::juce_opengl
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(titan_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
+# gears, Saturn, the wipers' panes. JUCE-free, links only the world.
+add_executable(titan_world_test tests/TitanWorldTests.cpp src/titan/view/TitanWorld.cpp)
+target_include_directories(titan_world_test PRIVATE src)
+target_compile_features(titan_world_test PRIVATE cxx_std_20)
+
+# ----------------------------------------------------------------------------
 # RedPawAmp — the rover: a third face over the same processor (src/redpaw), the dashboard of a Mars rover
 # with the drive across Mars in its windscreen. Four channels — the Friedman IR-X's two, each with its
 # Boost off and on — picked as two gears and TURBO. Built like the cockpit: the family's console (src/face)

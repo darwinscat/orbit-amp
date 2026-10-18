@@ -27,11 +27,13 @@ namespace orbitamp::redpaw
     The same landscape can wear an ice moon's colours instead of Mars's: the ground's 64 shades run
     from a blue shadow to white snow, the sky is black, and a flat Jupiter stands over the horizon
     where the ice world's sky has it. The program's own routines are untouched by the look; only the
-    DAC's entries, the horizon line's colour and the one disc drawn into the sky differ. */
+    DAC's entries, the horizon line's colour and the one disc drawn into the sky differ. Or Titan's: an
+    amber haze for the sky, a dark brown methane sea for the ground, its slopes catching the haze, and a
+    violet mist on the horizon — the palette alone, no disc. */
 class Mars1993 final
 {
 public:
-    enum class Look { mars, ice };
+    enum class Look { mars, ice, titan };
 
     /** Makes the sky and the terrain from a seed, as the program did at start — a 15-bit number it
         took from the clock. About a millisecond. The look is the palette. */
@@ -70,6 +72,7 @@ private:
     uint8_t horizonIndex = 0x50;   // the horizon line's colour: 50h in the program, a mist on the ice
 
     void makeIcePalette();
+    void makeTitanPalette();
     void drawSky (uint16_t alt, uint16_t camX, uint16_t camY);
     void drawJupiter();
     void drawGround (uint16_t alt, uint16_t camX, uint16_t camY);

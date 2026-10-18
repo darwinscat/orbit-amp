@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// THE WINDSCREEN ON ITS OWN. A window the windscreen's shape with the view in it and a line under it
+// THE WINDSCREEN ON ITS OWN. A window the windscreen's shape (over Titan the cabin's whole canopy) with the view in it and a line under it
 // saying what it is doing — no audio, no dashboard. Keys 1 2 ... are the gears, T is TURBO, 0 or P is PARK, the arrows
 // steer (or drag across the glass), M cycles GPU / CPU / STILL, S cycles the render scale, F the
 // frame-rate cap. For looking at the view and measuring it. The same can be set from the command line
-// — --mode=gpu|cpu|still --gears=1..3 --gear=1..gears --turbo --park --scale=0.5 --cap=30 --steer=-1..1 — and --report prints
+// — --mode=gpu|cpu|still --gears=1..4 --gear=1..gears --turbo --park --scale=0.5 --cap=30 --steer=-1..1 — and --report prints
 // the status line to stdout once a second, so a run can be measured without a hand on it.
 //
 // For a shot without a hand: --at=x,z,heading (world metres, degrees) puts the rover somewhere first,
 // --clock=seconds,metres sets the world's clock, --drive=seconds runs the drive that long at 60 steps a
 // second with the steering held before the first frame, --still=out.png writes the STILL to a file once
 // it has arrived and quits, --stress=n draws the scene n times a frame for the timer (and holds the
-// quality ladder, as --fixed does alone), --quit=seconds ends the run. Built twice: as RedPaw's windscreen over the Plains, and (ORBITAMP_VIEW_DEMO_ICE) as
-// FrostPaw's over the ice — each in its product's gears unless --gears says otherwise.
+// quality ladder, as --fixed does alone), --quit=seconds ends the run. Built three times: as RedPaw's windscreen over the Plains, (ORBITAMP_VIEW_DEMO_ICE) as
+// FrostPaw's over the ice, and (ORBITAMP_VIEW_DEMO_TITAN) as the canopy over Titan's sea — each in its product's gears unless --gears says otherwise.
 
 #include "Windscreen.h"
-#if ORBITAMP_VIEW_DEMO_ICE
+#if ORBITAMP_VIEW_DEMO_TITAN
+ #include "../../titan/view/TitanDrive.h"
+#elif ORBITAMP_VIEW_DEMO_ICE
  #include "../../frostpaw/view/IceDrive.h"
 #else
  #include "PlainsDrive.h"
@@ -28,12 +30,18 @@
 
 namespace
 {
+   #if ORBITAMP_VIEW_DEMO_TITAN
+    constexpr int glassWidth = 1672, glassHeight = 418, lineHeight = 26;    // the cabin's whole canopy, not a rover's windscreen
+   #else
     constexpr int glassWidth = 1440, glassHeight = 270, lineHeight = 26;
+   #endif
 
     using Mode = orbitamp::redpaw::Windscreen::Mode;
 
     /** The product's gears, as its lever has them (redpaw/RedPawLineup.h): the demo has no lineup. */
-   #if ORBITAMP_VIEW_DEMO_ICE
+   #if ORBITAMP_VIEW_DEMO_TITAN
+    constexpr int productGears = 4;     // the Titan face
+   #elif ORBITAMP_VIEW_DEMO_ICE
     constexpr int productGears = 3;     // FrostPawAmp
    #else
     constexpr int productGears = 2;     // RedPawAmp
@@ -79,7 +87,9 @@ namespace
         /** The drive, placed and driven as asked before the view takes it. */
         std::unique_ptr<orbitamp::redpaw::Drive> makeDrive() const
         {
-           #if ORBITAMP_VIEW_DEMO_ICE
+           #if ORBITAMP_VIEW_DEMO_TITAN
+            std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::titan::TitanDrive> (gears);
+           #elif ORBITAMP_VIEW_DEMO_ICE
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::frostpaw::IceDrive> (gears);
            #else
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::redpaw::PlainsDrive> (gears);
@@ -195,7 +205,9 @@ namespace
     class Demo final : public juce::JUCEApplication
     {
     public:
-       #if ORBITAMP_VIEW_DEMO_ICE
+       #if ORBITAMP_VIEW_DEMO_TITAN
+        const juce::String getApplicationName() override    { return "Titan canopy"; }
+       #elif ORBITAMP_VIEW_DEMO_ICE
         const juce::String getApplicationName() override    { return "FrostPawAmp windscreen"; }
        #else
         const juce::String getApplicationName() override    { return "RedPawAmp windscreen"; }
