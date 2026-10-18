@@ -357,6 +357,16 @@ add_custom_target(OrbitAmpVersionGen ALL
 #
 # CLAP rides via clap-juce-extensions below — one extra format, no source changes.
 # ----------------------------------------------------------------------------
+# OrbitAmp's icon. macOS 26 sets any icon that is not its own rounded square on a grey plate — the
+# family's disc came out as a small disc on a light square — so the Mac wears the orbit on the cockpit's
+# rounded square (824 of the 1024 canvas, margins and all), the violet round its edge. Windows and Linux
+# keep the disc.
+if(APPLE)
+    set(ORBITAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/OrbitAmp-macOS-1024.png")
+else()
+    set(ORBITAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/OrbitAmp-1024.png")
+endif()
+
 juce_add_plugin(OrbitAmp
     PRODUCT_NAME                "OrbitAmp"
     COMPANY_NAME                "Darwin's Cat"
@@ -376,11 +386,11 @@ juce_add_plugin(OrbitAmp
     # audio-input entitlement at signing time. Plug-in formats run in the host and don't.
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "OrbitAmp needs audio input to process your signal."
-    # Bundle / executable icon — the cat on the family ground (resources/icon/OrbitAmp-1024.png).
+    # Bundle / executable icon — the orbit; see ORBITAMP_ICON.
     # One 1024-square PNG is enough: juceaide builds the macOS .icns for every bundle and the
     # Windows .ico from it. No ICON_SMALL on purpose — see OrbitCab: juceaide reads the pair
     # small-then-big while JUCEUtils appends big-then-small, and passing both can swap the slots.
-    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/OrbitAmp-1024.png"
+    ICON_BIG                    "${ORBITAMP_ICON}"
     COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN}
 )
 
