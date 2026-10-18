@@ -285,6 +285,13 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
         print ("LEARN", learnName, 120.0f, ink.words, learnNameRoom);
     print (skin().inputName, inputName, 170.0f, ink.words, columnNameRoom);
     print (skin().outputName, outputName, 170.0f, ink.words, columnNameRoom);
+
+    // The maker's words beside the mark, a little quieter than the controls' names.
+    if (makerRoom > 0.0f)
+    {
+        print ("POWERED BY", poweredBy, 220.0f, ink.at (ink.words, 0.8f), makerRoom);
+        print ("DARWIN'S CAT", makerName, 240.0f, ink.at (ink.words, 0.8f), makerRoom);
+    }
 }
 
 //==============================================================================

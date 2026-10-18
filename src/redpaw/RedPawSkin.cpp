@@ -193,6 +193,8 @@ const std::array<juce::Point<float>, 6> emblemFace {{
     { 809.0f, 295.6f }, { 865.0f, 295.6f }, { 888.0f, 335.0f }, { 865.0f, 375.0f }, { 809.0f, 375.0f }, { 787.0f, 335.0f },
 }};
 const juce::Rectangle<float> emblemMark { 813.0f, 310.0f, 50.0f, 50.0f };
+const juce::Point<float> poweredBy {}, makerName {};      // no room beside the plate for the maker's words
+const float makerRoom = 0.0f;
 
 } // namespace layout
 

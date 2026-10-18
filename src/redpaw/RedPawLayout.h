@@ -215,4 +215,11 @@ extern const juce::Rectangle<float> centrePlate;
 extern const std::array<juce::Point<float>, 6> emblemFace;
 extern const juce::Rectangle<float> emblemMark;
 
+/** THE MAKER'S WORDS beside the mark, where the picture has room for them: POWERED BY low on its left,
+    DARWIN'S CAT low on its right, each set condensed into its room where it is wider. A room of
+    nought: none. */
+extern const juce::Point<float> poweredBy;
+extern const juce::Point<float> makerName;
+extern const float makerRoom;
+
 } // namespace orbitamp::redpaw::layout
