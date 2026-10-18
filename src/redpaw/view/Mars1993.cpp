@@ -114,16 +114,16 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
         makeSea();
     else
     {
-        // The ice moon's snow lies flatter: its heights at a quarter, its shading at a half.
+        // The ice moon's snow lies flatter: its heights at a quarter, its shading at a half. Mars's
+        // ground a little lower: at two thirds, its shading as strong as it was.
         const bool ice = look == Look::ice;
-        if (ice)
-            for (auto& v : hm)
-                v = (uint8_t) (0x80 + ((int) v - 0x80) / 4);
+        for (auto& v : hm)
+            v = (uint8_t) (0x80 + ((int) v - 0x80) * (ice ? 1 : 2) / (ice ? 4 : 3));
         // Colour = w(u) - w(u + 3) + 32, clamped to 0..63: the sun on the horizon, low along u.
         for (uint32_t i = 0; i < 65536; ++i)
         {
             const int slope = (int) hm[i] - (int) hm[(uint16_t) (i + 3)];
-            const int c = (ice ? slope * 2 : slope) + 0x20;
+            const int c = (ice ? slope * 2 : slope * 3 / 2) + 0x20;
             colours[i] = (uint8_t) (c < 0 ? 0 : (c > 0x3F ? 0x3F : c));
         }
     }

@@ -24,6 +24,9 @@ namespace orbitamp::redpaw
     binary's — map addresses are 16-bit and wrap, row-internal wraps are 8-bit, the noise is a signed
     byte — spelled with fixed-width unsigned types so they wrap by definition, never by luck.
 
+    One liberty with the program's look: Mars's terrain lies at two thirds of its height, a little less
+    mountainous, its shading as strong as it was.
+
     The same landscape can wear an ice moon's colours instead of Mars's: the ground's 64 shades run
     from a blue shadow to white snow, the terrain lies at a quarter of its height, the sky is black, and
     a flat Jupiter stands over the horizon where the ice world's sky has it. The program's routines are
