@@ -204,7 +204,7 @@ out vec4 o;
 // THE SEARCHLIGHTS, under the nose either side, aimed down at the sea ahead and a little out: where a lamp
 // is (eye-relative), where its axis points, and how much of it lights a point in its cone, falling off
 // with distance as light does.
-const vec3 LAMP_C = vec3(1.0, 0.93, 0.80) * 2.4;
+const vec3 LAMP_C = vec3(1.0, 0.93, 0.80) * 1.2;
 const float LAMP_SIDE = 1.6, LAMP_FWD = 1.2, LAMP_DROP = 1.4, AIM_SIDE = 5.5, AIM_FWD = 26.0, LAMP_COS_IN = 0.9986, LAMP_COS_OUT = 0.9925;
 vec3 lampAt(int k){ float sd = k == 0 ? -1.0 : 1.0; return uHR * (sd * LAMP_SIDE) + uHF * LAMP_FWD + vec3(0.0, uCamY - LAMP_DROP, 0.0); }
 vec3 lampAxis(int k){ float sd = k == 0 ? -1.0 : 1.0; vec3 aim = uHR * (sd * AIM_SIDE) + uHF * AIM_FWD; return normalize(vec3(aim.x, 0.0, aim.z) - lampAt(k)); }
@@ -543,7 +543,7 @@ void main(){
       vec3 l; float lit = lampOn(vec3(p.x, 0.0, p.y), k, l);
       if (lit <= 0.0) continue;
       float spec = pow(max(dot(n, normalize(-l - dir)), 0.0), 220.0);
-      col += LAMP_C * (on * lit) * (0.11 * (1.0 - Fr) + 2.6 * spec + 0.3 * foamM);
+      col += LAMP_C * (on * lit) * (0.07 * (1.0 - Fr) + 2.6 * spec + 0.3 * foamM);
     }
     col = mix(col, hazeH, 1.0 - exp(-t / HAZE_L));
     tEnd = t;
@@ -571,7 +571,7 @@ void main(){
         vec3 l; beam += on * lampOn(vec3(0.0, uCamY, 0.0) + dir * tq, k, l) * far / 10.0;
       }
     }
-    col += LAMP_C * mix(hazeH, vec3(1.0), 0.5) * (beam * 0.0007);
+    col += LAMP_C * mix(hazeH, vec3(1.0), 0.5) * (beam * 0.0005);
   }
   // ---- spray on the glass while ploughing through froth
   if (uWhite > 0.003) {
