@@ -647,7 +647,7 @@ void Console::exportForWeb (const juce::File& dir)
     const auto& p = places;
     auto* o = new juce::DynamicObject();
     o->setProperty ("format", "orbitamp-web-face");
-    o->setProperty ("schema", 2);       // 2: what is one world's own is under "world"; spriteBounds
+    o->setProperty ("schema", 3);       // 2: what is one world's own is under "world"; spriteBounds. 3: the world's whole map there
     o->setProperty ("stage", rectVar ({ 0.0f, 0.0f, stage::width, stage::height }));
     o->setProperty ("cabin", "cabin.png");
     o->setProperty ("cabinScale", 2.0f);

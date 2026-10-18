@@ -366,7 +366,21 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     for (int c = 0; c < channels.count(); ++c)
         names.add (channels.lineup().channels[(size_t) c].name);
     o->setProperty ("channels", names);
-    dir.getChildFile ("cockpit.json").replaceWithText (juce::JSON::toString (juce::var (o)));
+    auto* lever = new juce::DynamicObject();      // the throttle's own space (Lever), its box the frame widened left
+    lever->setProperty ("box", rect (leverFrame.withLeft (leverFrame.getX() - (float) Lever::overhang)));
+    lever->setProperty ("slotX", Lever::slotX);
+    lever->setProperty ("firstY", Lever::firstY);
+    lever->setProperty ("detentStep", Lever::detentStep);
+    lever->setProperty ("lampX", Lever::lampX);
+    lever->setProperty ("namesX", Lever::namesX);
+    lever->setProperty ("gripLength", Lever::gripLength);
+    lever->setProperty ("gripGrowth", Lever::gripGrowth);
+    lever->setProperty ("stiffness", Lever::stiffness);
+    lever->setProperty ("damping", Lever::damping);
+    o->setProperty ("lever", juce::var (lever));
+    for (const auto& p : o->getProperties())       // all of it in places.json's "world", which is all the site reads...
+        world.setProperty (p.name, p.value);
+    dir.getChildFile ("cockpit.json").replaceWithText (juce::JSON::toString (juce::var (o)));     // ...and on its own (the var takes `o`)
 
     places.setProperty ("window", rect (glass));
 

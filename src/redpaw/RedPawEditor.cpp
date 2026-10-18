@@ -400,6 +400,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     t->setProperty ("size", turboSize);
     t->setProperty ("name", point (turboName));
     t->setProperty ("lid", rect (turboLid));
+    t->setProperty ("kind", "pair");      // TURBO walks to the gear's paired channel (channels::Lineup::pairs)
     o->setProperty ("turbo", juce::var (t));
 
     juce::Array<juce::var> wipers;
@@ -408,14 +409,12 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     o->setProperty ("wiperKeys", wiperKeySize > 0.0f ? juce::var (wipers) : juce::var());
     o->setProperty ("wiperKeySize", wiperKeySize);
     o->setProperty ("gears", lever.numGears());
-    dir.getChildFile ("rover.json").replaceWithText (juce::JSON::toString (juce::var (o)));
+    for (const auto& p : o->getProperties())       // all of it in places.json's "world", which is all the site reads...
+        world.setProperty (p.name, p.value);
+    dir.getChildFile ("rover.json").replaceWithText (juce::JSON::toString (juce::var (o)));     // ...and on its own (the var takes `o`)
 
     places.setProperty ("window", rect (windscreen));
 
-    // TURBO walks to the gear's paired channel: the same pack with its Boost held on (channels::Lineup::pairs).
-    auto* turboKind = new juce::DynamicObject();
-    turboKind->setProperty ("kind", "pair");
-    world.setProperty ("turbo", juce::var (turboKind));
     auto* keyRenders = new juce::DynamicObject();      // the keys and the roof's toggles are renders, up and down
     keyRenders->setProperty ("up", "key-up.png");
     keyRenders->setProperty ("down", "key-down.png");

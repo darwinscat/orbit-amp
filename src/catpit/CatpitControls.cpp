@@ -10,20 +10,11 @@ namespace orbitamp::catpit
 //==============================================================================
 // The lever's own space: the 261 x 217 AMP MODE frame plus `overhang` to its left, where the grip
 // reaches past the frame. The slot on the left, the four names on the right, a lamp beside each.
-namespace
-{
-    constexpr float slotX      = (float) Lever::overhang + 42.0f;
-    constexpr float firstY     = 50.0f;
-    constexpr float detentStep = 43.0f;
-    constexpr float lampX      = (float) Lever::overhang + 92.0f;
-    constexpr float namesX     = (float) Lever::overhang + 102.0f;
-    constexpr float gripLength = 92.0f;      // end to end; the stem is not in its middle (Art::leverAxis)
-}
 
 Lever::Lever()
 {
-    pos.stiffness = 260.0f;     // heavier than a toggle: it overshoots the notch a hair and comes back
-    pos.damping   = 22.0f;
+    pos.stiffness = stiffness;
+    pos.damping   = damping;
     pos.jump (0.0f);
 }
 
@@ -111,7 +102,7 @@ void Lever::paint (juce::Graphics& g)
     // The grip: pulled toward you it comes a little closer, so it grows as it travels down. Its stem
     // stays in the slot; the bar hangs further to the left of it than to the right, clear of the names.
     const float y = firstY + detentStep * pos.value;
-    const float length = gripLength * (1.0f + 0.05f * pos.value);
+    const float length = gripLength * (1.0f + gripGrowth * pos.value);
     const auto& art = Art::get();
     if (art.leverGrip.isValid())
     {
