@@ -432,6 +432,13 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     header.speed = [this] { return view->speedKmh(); };
     addToStage (header);
     header.setBounds (navHeader.toNearestInt());
+    if (! speedHud.isEmpty())       // ...or the speed on the glass, the screen's top line the gear alone
+    {
+        hud.speed = header.speed;
+        header.showsSpeed = false;
+        addToStage (hud);
+        hud.setBounds (speedHud.toNearestInt());
+    }
     addToStage (screen);
     screen.setBounds (navPicture.toNearestInt());
     screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,

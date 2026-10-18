@@ -118,6 +118,7 @@ const juce::Rectangle<float> navHeader   { 567.0f, 426.0f, 430.0f, 32.0f };
 const juce::Rectangle<float> navPicture  { 567.0f, 460.0f, 430.0f, 126.0f };
 const juce::Rectangle<float> tunerScreen { 567.0f, 588.0f, 430.0f, 27.0f };
 const face::TunerFace::Dial tunerDial {};      // none: the tuner is the screen's bottom line
+const juce::Rectangle<float> speedHud {};      // none: the speed is on the nav screen
 const juce::Rectangle<float> learnArea = navPicture;     // LEARN over the picture...
 const std::array<juce::Point<float>, 2> learnKeys {};
 const float learnKeySize = 0.0f;                         // ...and no keys of its own

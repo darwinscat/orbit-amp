@@ -89,6 +89,7 @@ public:
     NavHeader();
 
     std::function<float()> speed;       // km/h
+    bool showsSpeed = true;             // ...none where the glass shows it (SpeedHud)
 
     void set (const juce::String& gear, const juce::String& channel, bool parked);
     void paint (juce::Graphics&) override;
@@ -97,6 +98,24 @@ private:
     juce::String gear, channel;
     bool parked = false;
     int  shownKmh = -1;
+    void timerCallback() override;
+};
+
+//==============================================================================
+/** THE SPEED AS A HOLOGRAM ON THE GLASS, where the layout has room for one (RedPawLayout.h): the number
+    large and the unit under it, in a pale green that glows, between two brackets — a head-up display,
+    light laid over the world outside. It never takes a click: the glass under it steers. */
+class SpeedHud final : public juce::Component, private juce::Timer
+{
+public:
+    SpeedHud();
+
+    std::function<float()> speed;       // km/h
+
+    void paint (juce::Graphics&) override;
+
+private:
+    int shownKmh = -1;
     void timerCallback() override;
 };
 

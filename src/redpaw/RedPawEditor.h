@@ -83,6 +83,7 @@ private:
     face::ColumnFader threshold { Art::get().faderCapLight }, ceiling { Art::get().faderCapLight };
     std::vector<std::unique_ptr<KnobRing>> rings;   // DRIVE's and the tones': where each knob stands
     NavHeader header;               // on the nav screen: the gear, the pack that is playing, the speed
+    SpeedHud hud;                   // ...or the speed on the glass, where the layout puts it there
 
     // THE NAV SCREEN'S PICTURE of the amp at work (face/Monitor.h), the machine's choice; a right click
     // on the screen offers the five.

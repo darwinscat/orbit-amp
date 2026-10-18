@@ -259,7 +259,7 @@ void NavHeader::paint (juce::Graphics& g)
     // under it — set condensed, as tall, where it is wider than the screen — and the speed under that;
     // the gear and the speed alone where the channel is not named.
     const float oneLine = (parked ? 31.0f : 0.0f) + widthOf (words, gear) + 10.0f + widthOf (small, channel)
-                        + 8.0f + widthOf (words, number) + 6.0f + widthOf (small, unit);
+                        + (showsSpeed ? 8.0f + widthOf (words, number) + 6.0f + widthOf (small, unit) : 0.0f);
     const int lines = channel.isEmpty() ? 2 : 3;
     if (oneLine > area.getWidth() && area.getHeight() >= (float) lines * layout::px13)
     {
@@ -283,27 +283,34 @@ void NavHeader::paint (juce::Graphics& g)
             g.setFont (small);
             g.drawText (channel, second.withWidth (juce::jmax (wide, second.getWidth())), juce::Justification::centredLeft, false);
         }
-        g.setColour (juce::Colour (0xffece9f6));
-        g.setFont (words);
-        g.drawText (number, third.removeFromLeft (widthOf (words, number)), juce::Justification::centredLeft, false);
-        third.removeFromLeft (6.0f);
-        g.setColour (labelLilac.withAlpha (0.8f));
-        g.setFont (small);
-        g.drawText (unit, third, juce::Justification::centredLeft, false);
+        if (showsSpeed)
+        {
+            g.setColour (juce::Colour (0xffece9f6));
+            g.setFont (words);
+            g.drawText (number, third.removeFromLeft (widthOf (words, number)), juce::Justification::centredLeft, false);
+            third.removeFromLeft (6.0f);
+            g.setColour (labelLilac.withAlpha (0.8f));
+            g.setFont (small);
+            g.drawText (unit, third, juce::Justification::centredLeft, false);
+        }
         return;
     }
 
     // The speed on the right: the number, then its unit a size down.
-    g.setColour (labelLilac.withAlpha (0.8f));
-    g.setFont (small);
-    g.drawText (unit, area.removeFromRight (juce::GlyphArrangement::getStringWidth (small, unit) + 2.0f),
-                juce::Justification::centredRight, false);
-    area.removeFromRight (6.0f);
-    g.setColour (juce::Colour (0xffece9f6));
+    if (showsSpeed)
+    {
+        g.setColour (labelLilac.withAlpha (0.8f));
+        g.setFont (small);
+        g.drawText (unit, area.removeFromRight (juce::GlyphArrangement::getStringWidth (small, unit) + 2.0f),
+                    juce::Justification::centredRight, false);
+        area.removeFromRight (6.0f);
+        g.setColour (juce::Colour (0xffece9f6));
+        g.setFont (words);
+        g.drawText (number, area.removeFromRight (juce::GlyphArrangement::getStringWidth (words, number) + 2.0f),
+                    juce::Justification::centredRight, false);
+        area.removeFromRight (8.0f);
+    }
     g.setFont (words);
-    g.drawText (number, area.removeFromRight (juce::GlyphArrangement::getStringWidth (words, number) + 2.0f),
-                juce::Justification::centredRight, false);
-    area.removeFromRight (8.0f);
 
     // PARKED, a warning first: a red triangle with its mark — the amp is out of the sound.
     if (parked)
@@ -321,6 +328,59 @@ void NavHeader::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xffece9f6));
     g.setFont (small);      // the channel a size down: at the gear's size the longest would not fit beside the speed
     g.drawText (channel, area, juce::Justification::centredLeft, true);
+}
+
+//==============================================================================
+SpeedHud::SpeedHud()
+{
+    setInterceptsMouseClicks (false, false);
+    startTimerHz (10);
+}
+
+void SpeedHud::timerCallback()
+{
+    if (const int kmh = speed ? juce::roundToInt (speed()) : 0; kmh != shownKmh)
+    {
+        shownKmh = kmh;
+        repaint();
+    }
+}
+
+void SpeedHud::paint (juce::Graphics& g)
+{
+    const auto box = getLocalBounds().toFloat();
+    const juce::Colour light { 0xff9dffc8 };        // the projector's green, pale as the haze outside
+    const float h = box.getHeight();
+
+    // The number and its unit as outlines, so the light can glow round them as well as fill them.
+    const auto glyphs = [] (const juce::String& text, const juce::Font& font, juce::Point<float> centre)
+    {
+        juce::GlyphArrangement ga;
+        ga.addLineOfText (font, text, 0.0f, 0.0f);
+        juce::Path p;
+        ga.createPath (p);
+        const auto b = p.getBounds();
+        p.applyTransform (juce::AffineTransform::translation (centre.x - b.getCentreX(), centre.y - b.getCentreY()));
+        return p;
+    };
+    juce::Path lit;
+    lit.addPath (glyphs (juce::String (juce::jmax (0, shownKmh)), face::labelFont (h * 0.62f).withExtraKerningFactor (0.06f),
+                         { box.getCentreX(), box.getY() + h * 0.40f }));
+    lit.addPath (glyphs ("KM/H", face::labelFont (h * 0.20f).withExtraKerningFactor (0.2f),
+                         { box.getCentreX(), box.getY() + h * 0.86f }));
+
+    // Two brackets either side, the light's frame.
+    juce::Path frame;
+    const float in = h * 0.18f, x0 = box.getX() + 2.0f, x1 = box.getRight() - 2.0f, y0 = box.getY() + 3.0f, y1 = box.getBottom() - 3.0f;
+    frame.startNewSubPath (x0 + in, y0); frame.lineTo (x0, y0); frame.lineTo (x0, y1); frame.lineTo (x0 + in, y1);
+    frame.startNewSubPath (x1 - in, y0); frame.lineTo (x1, y0); frame.lineTo (x1, y1); frame.lineTo (x1 - in, y1);
+    juce::Path stroked;
+    juce::PathStrokeType (1.6f).createStrokedPath (stroked, frame);
+    lit.addPath (stroked);
+
+    juce::DropShadow (light.withAlpha (0.55f), juce::roundToInt (h * 0.16f), {}).drawForPath (g, lit);
+    g.setColour (light.withAlpha (0.82f));
+    g.fillPath (lit);
 }
 
 //==============================================================================

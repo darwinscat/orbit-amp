@@ -76,6 +76,10 @@ extern const juce::Rectangle<float> navHeader;
 extern const juce::Rectangle<float> navPicture;
 extern const juce::Rectangle<float> tunerScreen;
 
+/** ...OR THE SPEED AS A HOLOGRAM ON THE GLASS (SpeedHud), where this is not empty: the nav screen's top
+    line is then the gear alone. */
+extern const juce::Rectangle<float> speedHud;
+
 /** ...OR THE TUNER IS A GAUGE THE PICTURE PAINTS (face::TunerFace::Dial), where this has a reach: a needle
     over its dial, `tunerScreen` the dial's face, which a click opens the tuner's settings on. The nav
     screen is then the top line and the picture alone. */
