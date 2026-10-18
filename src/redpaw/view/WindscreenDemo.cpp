@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// THE WINDSCREEN ON ITS OWN. A window the windscreen's shape with the view in it and a line under it
+// THE WINDSCREEN ON ITS OWN. A window the windscreen's shape (over Titan the cabin's whole canopy) with the view in it and a line under it
 // saying what it is doing — no audio, no dashboard. Keys 1 2 ... are the gears, T is TURBO, 0 or P is PARK, the arrows
 // steer (or drag across the glass), M cycles GPU / CPU / STILL, S cycles the render scale, F the
 // frame-rate cap. For looking at the view and measuring it. The same can be set from the command line
@@ -30,7 +30,11 @@
 
 namespace
 {
+   #if ORBITAMP_VIEW_DEMO_TITAN
+    constexpr int glassWidth = 1672, glassHeight = 418, lineHeight = 26;    // the cabin's whole canopy, not a rover's windscreen
+   #else
     constexpr int glassWidth = 1440, glassHeight = 270, lineHeight = 26;
+   #endif
 
     using Mode = orbitamp::redpaw::Windscreen::Mode;
 
