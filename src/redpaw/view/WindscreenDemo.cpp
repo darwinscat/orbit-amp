@@ -17,7 +17,7 @@
 
 #include "Windscreen.h"
 #if ORBITAMP_VIEW_DEMO_TITAN
- #include "../../titan/view/TitanDrive.h"
+ #include "../../amberpaw/view/TitanDrive.h"
 #elif ORBITAMP_VIEW_DEMO_ICE
  #include "../../frostpaw/view/IceDrive.h"
 #else
@@ -88,7 +88,7 @@ namespace
         std::unique_ptr<orbitamp::redpaw::Drive> makeDrive() const
         {
            #if ORBITAMP_VIEW_DEMO_TITAN
-            std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::titan::TitanDrive> (gears);
+            std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::amberpaw::TitanDrive> (gears);
            #elif ORBITAMP_VIEW_DEMO_ICE
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::frostpaw::IceDrive> (gears);
            #else

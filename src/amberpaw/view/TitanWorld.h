@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace orbitamp::titan
+namespace orbitamp::amberpaw
 {
 
 /** THE METHANE SEA, THE CPU'S HALF. A helicopter flying low over Titan's sea, seen through the whole
@@ -280,4 +280,4 @@ private:
     void spawnDrop (int kind);
 };
 
-} // namespace orbitamp::titan
+} // namespace orbitamp::amberpaw

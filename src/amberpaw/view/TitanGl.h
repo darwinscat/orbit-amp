@@ -11,7 +11,7 @@
 #include <memory>
 #include <vector>
 
-namespace orbitamp::titan
+namespace orbitamp::amberpaw
 {
 
 /** THE METHANE SEA ON THE GPU. No per-pixel ray march of the scene; a frame is six passes.
@@ -106,4 +106,4 @@ private:
     void noteCost (float ms);
 };
 
-} // namespace orbitamp::titan
+} // namespace orbitamp::amberpaw

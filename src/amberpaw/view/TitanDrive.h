@@ -10,11 +10,11 @@
 #include <cmath>
 #include <string>
 
-namespace orbitamp::titan
+namespace orbitamp::amberpaw
 {
 
 /** THE METHANE SEA AS A DRIVE: TitanWorld and TitanGl behind the windscreen's face. A product passes one
-    to the windscreen — `Windscreen (std::make_unique<titan::TitanDrive> (gears))` — and the glass is the
+    to the windscreen — `Windscreen (std::make_unique<amberpaw::TitanDrive> (gears))` — and the glass is the
     cabin's whole canopy, 1672 x 418, looking out over Titan's sea from a helicopter flying low; the 1993
     landscape wears Titan's colours. */
 class TitanDrive final : public redpaw::Drive
@@ -82,4 +82,4 @@ private:
     TitanGl gl { world };
 };
 
-} // namespace orbitamp::titan
+} // namespace orbitamp::amberpaw

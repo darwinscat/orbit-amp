@@ -892,29 +892,29 @@ target_link_libraries(frostpaw_view_demo PRIVATE
 set_target_properties(frostpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ----------------------------------------------------------------------------
-# Titan — the methane sea: the same windscreen as a helicopter's canopy over Titan (src/titan/view), the
+# Titan — the methane sea: the same windscreen as a helicopter's canopy over Titan (src/amberpaw/view), the
 # drive handed to it as a TitanDrive. The sources are listed here for the product to take up, with the
 # windscreen's own; the demo is the bare window over the sea, in the canopy's shape. Built only when asked
 # for by name.
 # ----------------------------------------------------------------------------
-set(TITAN_VIEW_SOURCES
-    src/titan/view/TitanWorld.cpp
-    src/titan/view/TitanGl.cpp)
+set(AMBERPAW_VIEW_SOURCES
+    src/amberpaw/view/TitanWorld.cpp
+    src/amberpaw/view/TitanGl.cpp)
 
-juce_add_gui_app(titan_view_demo PRODUCT_NAME "TitanViewDemo")
-target_sources(titan_view_demo PRIVATE src/redpaw/view/WindscreenDemo.cpp ${REDPAW_VIEW_SOURCES} ${TITAN_VIEW_SOURCES})
-target_include_directories(titan_view_demo PRIVATE src)
-target_compile_definitions(titan_view_demo PRIVATE ORBITAMP_VIEW_DEMO_TITAN=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(titan_view_demo PRIVATE
+juce_add_gui_app(amberpaw_view_demo PRODUCT_NAME "AmberPawViewDemo")
+target_sources(amberpaw_view_demo PRIVATE src/redpaw/view/WindscreenDemo.cpp ${REDPAW_VIEW_SOURCES} ${AMBERPAW_VIEW_SOURCES})
+target_include_directories(amberpaw_view_demo PRIVATE src)
+target_compile_definitions(amberpaw_view_demo PRIVATE ORBITAMP_VIEW_DEMO_TITAN=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(amberpaw_view_demo PRIVATE
     juce::juce_gui_extra
     juce::juce_opengl
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
-set_target_properties(titan_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
+set_target_properties(amberpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
 # gears, Saturn, the wipers' panes. JUCE-free, links only the world.
-add_executable(titan_world_test tests/TitanWorldTests.cpp src/titan/view/TitanWorld.cpp)
+add_executable(titan_world_test tests/TitanWorldTests.cpp src/amberpaw/view/TitanWorld.cpp)
 target_include_directories(titan_world_test PRIVATE src)
 target_compile_features(titan_world_test PRIVATE cxx_std_20)
 
@@ -1278,33 +1278,33 @@ rover_set_test(frostpawamp_set_test "FrostPawAmpSetTest" FrostPawAmp 6)
 
 # ----------------------------------------------------------------------------
 # AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
-# dashboard worn over a cockpit of its own (src/titan/TitanSkin.cpp) — dark gunmetal under a canopy of
+# dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy of
 # three panes, its tuner a gauge, its meters dots. The same controls, TURBO and PARK: the rovers', shared,
 # not copied — over the V4's six channels in three gears, as FrostPawAmp has them until it has captures of
 # its own, and the rovers' cabinets. Released apart under tags of its own (`amberpaw-vX.Y.Z`) — no release
 # workflow yet. Built only when asked for by name.
 # ----------------------------------------------------------------------------
 
-# Its renders are in resources/titan, under the rovers' names; one that is not there yet is RedPawAmp's,
+# Its renders are in resources/amberpaw, under the rovers' names; one that is not there yet is RedPawAmp's,
 # the way FrostPawAmp's are.
-file(GLOB TITAN_OWN_RENDERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/*")
+file(GLOB AMBERPAW_OWN_RENDERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/*")
 set(AMBERPAWAMP_RENDERS "")
 foreach(render IN LISTS ROVER_RENDERS)
-    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/${render}" IN_LIST TITAN_OWN_RENDERS)
-        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/${render}")
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}" IN_LIST AMBERPAW_OWN_RENDERS)
+        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
     else()
         list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/${render}")
     endif()
 endforeach()
 # ...and the renders a rover may carry or not: there when the file is, nothing in its place when it is not.
 foreach(render IN ITEMS emblem.png turbo-lid.png still.jpg)
-    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/${render}" IN_LIST TITAN_OWN_RENDERS)
-        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/titan/${render}")
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}" IN_LIST AMBERPAW_OWN_RENDERS)
+        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
     endif()
 endforeach()
 juce_add_binary_data(AmberPawAmpData
-    NAMESPACE   TitanData
-    HEADER_NAME TitanData.h
+    NAMESPACE   AmberPawData
+    HEADER_NAME AmberPawData.h
     SOURCES     ${AMBERPAWAMP_RENDERS})
 
 # Its own version, moved when AMBERPAWAMP is released (src/Product.h).
@@ -1351,8 +1351,8 @@ if(APPLE)
         VERBATIM)
 endif()
 
-# A rover, and its skin. Out of its canopy, the flight over Titan's methane sea (src/titan/view).
-set(AMBERPAWAMP_SOURCES ${ROVER_SOURCES} ${TITAN_VIEW_SOURCES} src/titan/TitanSkin.cpp)
+# A rover, and its skin. Out of its canopy, the flight over Titan's methane sea (src/amberpaw/view).
+set(AMBERPAWAMP_SOURCES ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp)
 set(AMBERPAWAMP_LIBRARIES AmberPawAmpData ${ROVER_LIBRARIES})
 
 target_sources(AmberPawAmp PRIVATE ${AMBERPAWAMP_SOURCES})

@@ -8,7 +8,7 @@
 #include <set>
 #include <utility>
 
-namespace orbitamp::titan
+namespace orbitamp::amberpaw
 {
 
 namespace
@@ -586,4 +586,4 @@ void TitanWorld::step (double dt)
     stepGlass (dt);
 }
 
-} // namespace orbitamp::titan
+} // namespace orbitamp::amberpaw

@@ -7,7 +7,7 @@
 #include <cmath>
 #include <cstdio>
 
-namespace orbitamp::titan
+namespace orbitamp::amberpaw
 {
 
 using namespace juce::gl;
@@ -1500,4 +1500,4 @@ void TitanGl::drawScene (int rw, int rh)
     glUseProgram (0);
 }
 
-} // namespace orbitamp::titan
+} // namespace orbitamp::amberpaw

@@ -6,7 +6,7 @@
 #include "../redpaw/RedPawLineup.h"
 #include "view/TitanDrive.h"
 
-#include <TitanData.h>
+#include <AmberPawData.h>
 
 /** AMBERPAWAMP'S OWN (redpaw/RedPawSkin.h): a helicopter's cockpit over Titan's methane sea — dark
     gunmetal under a canopy of three panes, white rings and white ticks, no lamp painted lit. The face
@@ -35,16 +35,16 @@ const channels::Lineup& lineup()
 const Skin& skin()
 {
     static const Skin titan {
-        { TitanData::namedResourceList, TitanData::namedResourceListSize,
-          TitanData::getNamedResourceOriginalFilename, TitanData::getNamedResource },
-        "TITAN_ART_DIR",
+        { AmberPawData::namedResourceList, AmberPawData::namedResourceListSize,
+          AmberPawData::getNamedResourceOriginalFilename, AmberPawData::getNamedResource },
+        "AMBERPAW_ART_DIR",
         nullptr,                        // no lamp is painted lit: they are drawn (layout::lampDot)
         juce::Colour (0xfff2f6ff),      // the painted rings' white, a shade brighter
         face::Ink {},                   // the family's lilac on the dark gunmetal...
         juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words
-        juce::String::fromUTF8 (TitanData::midi_txt, TitanData::midi_txtSize),
+        juce::String::fromUTF8 (AmberPawData::midi_txt, AmberPawData::midi_txtSize),
         // Titan's methane sea out of the canopy, flown low over (view/TitanDrive.h).
-        [] { return std::make_unique<Windscreen> (std::make_unique<titan::TitanDrive> (numGears())); },
+        [] { return std::make_unique<Windscreen> (std::make_unique<amberpaw::TitanDrive> (numGears())); },
         { "Titan (GPU)", "1993 (CPU)", "Still" },
         "GAIN",
         true,                           // the family's cat, cut into the plate between the vents

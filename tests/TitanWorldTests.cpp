@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Headless gate for titan::TitanWorld — the methane sea's CPU half against the view's prototype. The
+// Headless gate for amberpaw::TitanWorld — the methane sea's CPU half against the view's prototype. The
 // start search reads the shore through the generated noise, so finding the prototype's start, to the
 // last digit, says the noise is the prototype's; a scripted flight from it says the drive, the events
 // placed on the course and the canopy's drops and wipers step as the prototype steps them. The numbers
@@ -11,12 +11,12 @@
 //
 // JUCE-free, like the code under test.
 
-#include "titan/view/TitanWorld.h"
+#include "amberpaw/view/TitanWorld.h"
 
 #include <cmath>
 #include <cstdio>
 
-using orbitamp::titan::TitanWorld;
+using orbitamp::amberpaw::TitanWorld;
 
 namespace
 {
