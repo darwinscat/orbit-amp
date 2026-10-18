@@ -122,12 +122,13 @@ const juce::Rectangle<float> tunerScreen { 390.0f, 507.0f, 186.0f, 186.0f };
 const face::TunerFace::Dial tunerDial { { 483.0f, 627.5f }, 90.0f, 1.012f, { 453.0f, 654.0f, 59.0f, 22.0f } };
 // LEARN over the whole radio screen, its top line too: the picture under it is low for the trace and the
 // words. Its keys are the two round holes beside the screen, GATE's over HUM's, moved apart in the
-// picture for their words — the bezels 553..602 and 637..686, 302..347 across — each key's LEARN over
+// picture for their words and to the middle of their plate — the bezels 553..602 and 637..686, 305..350
+// across — each key's LEARN over
 // its name in two lines over it, clear of the plate's screws at 515.
 const juce::Rectangle<float> learnArea = navHeader.getUnion (navPicture);
-const std::array<juce::Point<float>, 2> learnKeys {{ { 324.5f, 577.5f }, { 324.5f, 661.5f } }};
+const std::array<juce::Point<float>, 2> learnKeys {{ { 327.5f, 577.5f }, { 327.5f, 661.5f } }};
 const float learnKeySize = 42.0f;
-const std::array<juce::Point<float>, 2> learnNames {{ { 324.5f, 538.0f }, { 324.5f, 620.0f } }};
+const std::array<juce::Point<float>, 2> learnNames {{ { 327.5f, 538.0f }, { 327.5f, 620.0f } }};
 const float learnLine = 11.5f;
 
 // The wipers' four keys: the row of square holes under the radio's screen, each 35 x 39, 44 apart.
