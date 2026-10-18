@@ -181,6 +181,8 @@ const std::array<juce::Rectangle<float>, numLamps> lamps {{
     { 45.0f + lampPlateGrow,   824.0f, 62.0f, 63.0f },  // the slant 55..97 x 834..877, as painted
     { 1565.0f - lampPlateGrow, 824.0f, 62.0f, 63.0f },  // the slant 1575..1617 x 834..877, as painted
 }};
+const float lampDot = 0.0f;                     // none: the picture paints them lit
+const face::SegmentMeter::Dots meterDots {};    // none: segments down the wells
 
 const juce::Point<float> inputName  { 101.8f, 721.7f };
 const juce::Point<float> outputName { 1570.0f, 721.7f };

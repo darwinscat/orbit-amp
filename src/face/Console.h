@@ -85,6 +85,8 @@ public:
         float sliderCapLength = 0.0f;
         float faderCapLength = 0.0f;                        // ...and the columns' (ColumnFader)
         juce::Rectangle<float> inMeter, inFader, outMeter, outFader;
+        SegmentMeter::Dots meterDots {};                    // the meters as dots the picture paints, where there is a count
+        float lampDot = 0.0f;                               // a lamp the picture does not paint lit, drawn by code this wide (Lamp::dot)
         juce::Rectangle<float> tuner;
         std::array<juce::Rectangle<float>, numLamps> lamps;
         std::vector<juce::Point<float>> emblemFace;         // the plate the mark is on, the hand's target

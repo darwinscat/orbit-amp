@@ -161,9 +161,16 @@ inline constexpr float thresholdLowDb = -70.0f, thresholdHighDb = -40.0f;
 
 /** THE LAMPS THE DASHBOARD LIGHTS ITSELF, each with room round it for its glow: the bars of three over
     the columns, the input's overload and the output's; the slanted ones in the bottom corners, the
-    gate's and the limiter's. The picture paints them lit; Art puts them out. */
+    gate's and the limiter's. The picture paints them lit; Art puts them out. A picture that paints none
+    lit has them drawn, each a round glass `lampDot` across in the middle of its box (face::Lamp::dot);
+    none where that is nothing. */
 enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
 extern const std::array<juce::Rectangle<float>, numLamps> lamps;
+extern const float lampDot;
+
+/** THE METERS AS DOTS THE PICTURE PAINTS (face::SegmentMeter::Dots), where there is a count: the dots
+    down the middle of inMeter's and outMeter's boxes, a pitch apart. None: segments down their wells. */
+extern const face::SegmentMeter::Dots meterDots;
 
 /** INPUT and OUTPUT, on the plate under each column's wells, between its screws; a word wider than the
     room it has there is set condensed into it, as tall. */

@@ -403,9 +403,22 @@ public:
     explicit SegmentMeter (std::function<float()> readDb);
     void paint (juce::Graphics&) override;
 
+    /** DOTS: the meter as a column of round lamps its picture paints out — `count` of them, a pitch apart
+        down the middle of its box, each `size` across — lit from the foot up as the level climbs, each
+        from its own place on the scale, the top ones orange and red as the segments are. None while
+        `count` is nothing: segments down its well. */
+    struct Dots
+    {
+        int count = 0;
+        float size = 0.0f;
+    };
+    void setDots (const Dots&);
+
 private:
     std::function<float()> readDb;
     float shown = -90.0f;
+    Dots dots;
+    void paintDots (juce::Graphics&, float level);
     void timerCallback() override;
 };
 
@@ -419,6 +432,11 @@ class Lamp final : public juce::Component, private juce::Timer
 public:
     Lamp (const juce::Image& lit, std::function<float()> level, double holdMs, double fadeMs);
     void paint (juce::Graphics&) override;
+
+    /** A LAMP ITS PICTURE DOES NOT PAINT — no render of it lit — is drawn by code: a round glass `dot`
+        across in the middle of its box, dark while out, burning in `light`. None while `dot` is nothing. */
+    float dot = 0.0f;
+    juce::Colour light;
 
 private:
     const juce::Image& lit;

@@ -371,6 +371,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     outFader.setBounds (box (places.outFader));
     inMeter.setBounds (box (places.inMeter));
     outMeter.setBounds (box (places.outMeter));
+    inMeter.setDots (places.meterDots);
+    outMeter.setDots (places.meterDots);
 
     for (auto* lamp : { &inClip, &outClip, &gateLight, &limiterLight })
         stage.addAndMakeVisible (lamp);
@@ -378,6 +380,13 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     outClip.setBounds (box (places.lamps[outClipLamp]));
     gateLight.setBounds (box (places.lamps[gateLamp]));
     limiterLight.setBounds (box (places.lamps[limiterLamp]));
+
+    // Where the picture paints no lamp lit, each is drawn: the overloads in the meters' red, GATE and
+    // LIMITER in the family's orange.
+    for (auto* lamp : { &inClip, &outClip, &gateLight, &limiterLight })
+        lamp->dot = places.lampDot;
+    inClip.light = outClip.light = juce::Colour (0xffff4646);
+    gateLight.light = limiterLight.light = orange;
 
     // What has an obvious home in the engine is wired to it; the rest only moves for now.
     bind (drive, params::preampGain);

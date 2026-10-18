@@ -85,6 +85,7 @@ namespace
 
         p.inMeter  = inMeter;
         p.outMeter = outMeter;
+        p.meterDots = meterDots;
         p.inFader  = inFader.withSizeKeepingCentre (faderWidth, inFader.getHeight());
         p.outFader = outFader.withSizeKeepingCentre (faderWidth, outFader.getHeight());
         p.tuner = tunerScreen;
@@ -93,6 +94,7 @@ namespace
         p.tunerMenuOnClick = true;      // ...whose settings a click on it opens
         for (size_t i = 0; i < p.lamps.size(); ++i)
             p.lamps[i] = lamps[i];
+        p.lampDot = lampDot;
 
         p.emblemFace = { emblemFace.begin(), emblemFace.end() };
         p.emblemMark = emblemMark;

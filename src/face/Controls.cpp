@@ -933,16 +933,66 @@ void Lamp::timerCallback()
 
 void Lamp::paint (juce::Graphics& g)
 {
+    if (! lit.isValid() && dot > 0.0f)
+    {
+        // Out, a dark glass in the panel with a faint rim of light; lit, a light as strong as it burns,
+        // and its glow round it.
+        const auto glass = juce::Rectangle<float> (dot, dot).withCentre (getLocalBounds().toFloat().getCentre());
+        g.setColour (juce::Colour (0xff070709));
+        g.fillEllipse (glass);
+        g.setColour (juce::Colours::white.withAlpha (0.16f));
+        g.drawEllipse (glass.reduced (0.6f), 0.9f);
+        if (shown > 0.0f)
+        {
+            juce::Path burning;
+            burning.addEllipse (glass.reduced (dot * 0.12f));
+            glow (g, burning, light.withAlpha (shown), dot * 0.9f);
+            g.setColour (light.withAlpha (shown));
+            g.fillPath (burning);
+        }
+        return;
+    }
     if (shown <= 0.0f || ! lit.isValid())
         return;
     g.setOpacity (shown);
     g.drawImage (lit, getLocalBounds().toFloat());
 }
 
+void SegmentMeter::setDots (const Dots& d)
+{
+    dots = d;
+    repaint();
+}
+
+void SegmentMeter::paintDots (juce::Graphics& g, float level)
+{
+    // The foot's dot lights at the scale's floor and each one over it a pitch further up the scale; the
+    // top ones take the segments' orange and red. Out, a dot is what the picture painted.
+    const auto area = getLocalBounds().toFloat();
+    const float pitch = area.getHeight() / (float) dots.count;
+    for (int i = 0; i < dots.count && (float) i / (float) dots.count <= level; ++i)
+    {
+        const float top = (float) (i + 1) / (float) dots.count;
+        const juce::Colour hue = top > 0.94f ? juce::Colour (0xffff4646) : top > 0.8f ? orange : violet;
+        juce::Path lamp;
+        lamp.addEllipse (juce::Rectangle<float> (dots.size, dots.size)
+                             .withCentre ({ area.getCentreX(), area.getBottom() - pitch * ((float) i + 0.5f) }));
+        glow (g, lamp, hue, dots.size * 0.6f);
+        g.setColour (hue);
+        g.fillPath (lamp);
+    }
+}
+
 void SegmentMeter::paint (juce::Graphics& g)
 {
     constexpr int segments = 26;
     constexpr float floorDb = -60.0f, topDb = 6.0f;
+
+    if (dots.count > 0)
+    {
+        paintDots (g, juce::jlimit (0.0f, 1.0f, (shown - floorDb) / (topDb - floorDb)));
+        return;
+    }
 
     const auto area = getLocalBounds().toFloat().reduced (12.0f, 14.0f);
     const float step = area.getHeight() / (float) segments;
