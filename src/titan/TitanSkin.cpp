@@ -202,7 +202,7 @@ const float columnNameRoom = 76.0f;
 
 // GATE and LIMITER under their slots, level, between the plates' lower screws.
 const juce::Point<float> gateWord    { 87.2f, 872.0f };
-const juce::Point<float> limiterWord { 1584.0f, 872.0f };
+const juce::Point<float> limiterWord { 1572.0f, 882.0f };
 const float lampSlant = 0.0f;
 
 // PRESET on the left of the two little screens low in the middle, MEM over CPU on the right one, the
