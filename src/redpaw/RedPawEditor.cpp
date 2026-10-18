@@ -97,17 +97,11 @@ namespace
         p.emblemMark = emblemMark;
 
         // The bottom plates: PRESET alone on the left, the version in the middle, MEM over CPU on the
-        // right — the two readings starting at one edge, where MEM of its usual width would be centred,
-        // so that a number that changes width moves nothing else.
-        const auto reading = [] (juce::Rectangle<float> plate, float row)
-        {
-            constexpr float usual = 170.0f;
-            return juce::Rectangle<float> (plate.getCentreX() - usual * 0.5f, plate.getY() + row, usual + 40.0f, 28.0f);
-        };
+        // right.
         p.preset  = leftPlate;
         p.version = centrePlate;
-        p.memory  = reading (rightPlate, 1.0f);
-        p.load    = reading (rightPlate, 29.0f);
+        p.memory  = readings[0];
+        p.load    = readings[1];
 
         p.gateDoor    = around (gateWord, 110.0f, 28.0f);
         p.limiterDoor = around (limiterWord, 124.0f, 28.0f);
@@ -126,6 +120,15 @@ namespace
                  skin().midiCommands,
                  handLight,         // under the hand, the dashboard's orange
                  skin().ink };
+    }
+
+    /** A WORD WIDER THAN ITS ROOM is set condensed into it — as tall as ever, narrower — about `centre`:
+        what follows is drawn so. */
+    void condenseInto (juce::Graphics& g, const juce::String& text, float em, float trackingEm, float room, juce::Point<float> centre)
+    {
+        const float wide = juce::GlyphArrangement::getStringWidth (labelFont (em).withExtraKerningFactor (trackingEm), text.toUpperCase());
+        if (wide > room)
+            g.addTransform (juce::AffineTransform::scale (room / wide, 1.0f, centre.x, centre.y));
     }
 
     /** A render drawn fitted into `box` by its opaque part — the square keys and TURBO, up or down. */
@@ -207,9 +210,13 @@ void Dashboard::paintKeyNames (juce::Graphics& g) const
 
     const auto& ink = skin().ink;
     for (size_t i = 0; i < keyNames.size(); ++i)
-        ink.label (g, keyNames[i],
-                   juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keys[i].x, keyNameOver[i] ? keyNameOverY : keyNameUnderY }),
+    {
+        const juce::Point<float> at { keys[i].x, keyNameOver[i] ? keyNameOverY : keyNameUnderY };
+        const juce::Graphics::ScopedSaveState keep (g);
+        condenseInto (g, keyNames[i], px11, keyTracking, keyNameRoom, at);
+        ink.label (g, keyNames[i], juce::Rectangle<float> (120.0f, 20.0f).withCentre (at),
                    px11, ink.at (ink.words, keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
+    }
 }
 
 void Dashboard::paintStatic (juce::Graphics& g, float scale) const
@@ -235,22 +242,25 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     // where the skin has one (RedPawSkin.h).
     const auto& ink = skin().ink;
     const auto shadow = skin().printShadow;
-    const auto print = [&g, &ink, shadow] (const juce::String& text, juce::Point<float> at, float w, juce::Colour colour)
+    const auto print = [&g, &ink, shadow] (const juce::String& text, juce::Point<float> at, float w, juce::Colour colour, float room = 0.0f)
     {
         const auto area = juce::Rectangle<float> (w, 28.0f).withCentre (at);
+        const juce::Graphics::ScopedSaveState keep (g);
+        if (room > 0.0f)
+            condenseInto (g, text, px13, 0.08f, room, at);
         if (! shadow.isTransparent())
             drawLabel (g, text, area.translated (0.0f, 1.5f), px13, shadow);
         ink.label (g, text, area, px13, colour);
     };
 
-    print ("DRIVE", { drive.centre.x, knobNameY }, 200.0f, ink.words);
+    print ("DRIVE", { drive.centre.x, driveNameY }, 200.0f, ink.words);
     const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
     for (size_t i = 0; i < tones.size(); ++i)
         print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, ink.words);
 
     print ("TURBO", turboName, 140.0f, ink.state);
-    print ("INPUT", inputName, 170.0f, ink.words);
-    print ("OUTPUT", outputName, 170.0f, ink.words);
+    print ("INPUT", inputName, 170.0f, ink.words, columnNameRoom);
+    print ("OUTPUT", outputName, 170.0f, ink.words, columnNameRoom);
 }
 
 //==============================================================================
@@ -312,8 +322,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // and round it as far as the grip, its light and its shadow reach.
     addToStage (lever);
     const float leverRight = juce::jmax (gearPlate.getRight(), notchX + leverWidth * 0.5f + 16.0f);
-    lever.setBounds (juce::Rectangle<float> (GearLever::left, GearLever::top, leverRight - GearLever::left,
-                                             gearPlate.getBottom() - GearLever::top).toNearestInt());
+    lever.setBounds (juce::Rectangle<float> (leverLeft, leverTop, leverRight - leverLeft, gearPlate.getBottom() - leverTop).toNearestInt());
     lever.onPosition = [this] (int at) { if (at == GearLever::park) parkIt(); else pullGear (at - GearLever::positionOf (0)); };
     lever.onRelease  = [this] { showChannel(); };  // held, it follows the hand; let go, it follows the state
 

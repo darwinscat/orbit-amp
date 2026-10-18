@@ -20,7 +20,7 @@ namespace orbitamp::redpaw
     nearest the click, and so does the wheel, a position at a time. In a notch its stem stands in it.
 
     Its box is the gate's plate and the room over it the grip stands up into: in the dashboard's space
-    from `left`, `top`. */
+    from layout::leverLeft, layout::leverTop. */
 class GearLever final : public juce::Component, private juce::Timer
 {
 public:
@@ -38,7 +38,6 @@ public:
             return names[park];
         return names[juce::jlimit (1, names.size() - 1, position + names.size() - 1 - gears)];
     }
-    static constexpr float left = 724.0f, top = 600.0f;
 
     /** In the product's gears, as many as the slot's top notches. */
     explicit GearLever (int gears);
@@ -65,7 +64,7 @@ public:
 
 private:
     const int gears;
-    std::array<float, 4> heights {};    // each position's height in the dashboard's space: PARK, then the notches
+    std::vector<float> heights;         // each position's height in the dashboard's space: PARK, then the gears' notches
     face::Glide pos;            // where the stem stands: 0..gears, one to a position
     face::Glide lit;            // the light round the grip: 0 resting .. 1 under the hand
     int  position = 1;

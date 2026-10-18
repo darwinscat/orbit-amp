@@ -15,8 +15,8 @@ using face::labelLilac;
 namespace
 {
     // The slot and its notches in the lever's own space.
-    const float slotX  = layout::slotX - GearLever::left;
-    const float notchX = layout::notchX - GearLever::left;
+    const float slotX  = layout::slotX - layout::leverLeft;
+    const float notchX = layout::notchX - layout::leverLeft;
 
     /** Where the grip's bar ends and its collar begins on the lever's render, down from its top — a
         fraction of the render's height. */
@@ -36,11 +36,10 @@ GearLever::GearLever (int g)
 {
     // Each position's height in the dashboard's space: PARK at the slot's top end, the gears in the
     // notches from the top. A notch past the last gear is no position.
-    static_assert (std::tuple_size_v<decltype (heights)> == 1 + std::tuple_size_v<std::remove_const_t<decltype (layout::notches)>>);
     jassert (gears == g);
-    heights[0] = layout::slotTopY;
+    heights.push_back (layout::slotTopY);
     for (int i = 0; i < gears; ++i)
-        heights[(size_t) i + 1] = layout::notches[(size_t) i];
+        heights.push_back (layout::notches[(size_t) i]);
 
     pos.stiffness = 260.0f;     // a heavy lever: it overshoots the notch a hair and comes back
     pos.damping   = 22.0f;
@@ -55,13 +54,13 @@ float GearLever::yOf (float at) const noexcept
     const int last = numPositions() - 1;
     const float p = juce::jlimit (0.0f, (float) last, at);
     const int i = juce::jmin (last - 1, (int) p);
-    return juce::jmap (p - (float) i, heights[(size_t) i], heights[(size_t) i + 1]) - top;
+    return juce::jmap (p - (float) i, heights[(size_t) i], heights[(size_t) i + 1]) - layout::leverTop;
 }
 
 float GearLever::positionAt (float y) const noexcept
 {
     const int last = numPositions() - 1;
-    y += top;
+    y += layout::leverTop;
     if (y <= heights.front()) return 0.0f;
     for (int i = 0; i < last; ++i)
         if (y <= heights[(size_t) i + 1])

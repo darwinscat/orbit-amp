@@ -8,6 +8,7 @@
 #include <juce_graphics/juce_graphics.h>
 
 #include <array>
+#include <vector>
 
 /** Where everything sits on the rover's dashboard, in the picture's own coordinates (1672 x 941; the
     picture itself is twice that). Measured off the picture — the cyan rings fitted as circles, the
@@ -50,7 +51,8 @@ struct Socket { juce::Point<float> centre; float ring; float ringWidth; float kn
 
 extern const Socket drive;
 extern const std::array<Socket, 3> tones;       // BASS, MIDDLE, TREBLE
-extern const float knobNameY;       // DRIVE, BASS, MIDDLE, TREBLE: on the panel over the sockets
+extern const float knobNameY;       // BASS, MIDDLE, TREBLE: on the panel over the sockets
+extern const float driveNameY;      // ...and DRIVE's own word, over its socket
 
 /** THE SIX SQUARE KEYS under the tones: the two filters, the divider, the pack's four layers. A name
     stands over or under its key — neighbours by turns, since at 11 px they are wider than the keys'
@@ -60,6 +62,7 @@ extern const float keySize;         // the key's render, whose face fills its ho
 extern const float keyNameOverY;
 extern const float keyNameUnderY;
 extern const std::array<bool, 6> keyNameOver;
+extern const float keyNameRoom;     // how wide a name may be: a wider one is set condensed into it, as tall
 
 /** THE NAV SCREEN: along its top the gear, the channel and the rover's speed; under them a picture of
     the amp at work; along its bottom the tuner, one low line. */
@@ -68,19 +71,20 @@ extern const juce::Rectangle<float> navHeader;
 extern const juce::Rectangle<float> navPicture;
 extern const juce::Rectangle<float> tunerScreen;
 
-/** THE GEAR LEVER'S SLOT: straight, its top end PARK, and three notches painted on its right — the
-    product's gears, CLEAN, CRUNCH, HI-GAIN, stand in them from the top, as many as it has (RedPawLineup.h).
-    A position is where the lever's stem stands: seen from above, as the whole
+/** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches painted on its right — as many as
+    the picture paints — the product's gears, CLEAN, CRUNCH, HI-GAIN, stand in them from the top, as many
+    as it has (RedPawLineup.h). A position is where the lever's stem stands: seen from above, as the whole
     dashboard is, the lever is its T grip lying across the slot, the stem's collar under the grip's
     middle standing on the position — in a notch, in the notch. */
 extern const juce::Rectangle<float> gateSlot;
 extern const float slotX;           // the stem in the slot
 extern const float notchX;          // ...and in a notch
 extern const float slotTopY;        // PARK: the stem at the slot's top end
-extern const std::array<float, 3> notches;      // the notches' middles, as painted, top to bottom
+extern const std::vector<float> notches;        // the notches' middles, as painted, top to bottom
 extern const float leverWidth;      // the lever's render, grip and collar, this wide: over the plate's edges
 extern const float collarSink;      // how far the collar's foot goes past the position, into the slot
 extern const juce::Rectangle<float> gearPlate;
+extern const float leverLeft, leverTop;     // the lever's box: the plate, and the room over it the grip stands up into
 
 /** A NOTCH PAINTED PAST THE PRODUCT'S LAST GEAR IS FILLED IN (Art: `fillSpareNotches`), so the slot runs
     straight there and the lever has nowhere to stand that is not a gear. From `above` the notch's middle
@@ -155,9 +159,11 @@ inline constexpr float thresholdLowDb = -70.0f, thresholdHighDb = -40.0f;
 enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
 extern const std::array<juce::Rectangle<float>, numLamps> lamps;
 
-/** INPUT and OUTPUT, on the plate under each column's wells, between its screws. */
+/** INPUT and OUTPUT, on the plate under each column's wells, between its screws; a word wider than the
+    room it has there is set condensed into it, as tall. */
 extern const juce::Point<float> inputName;
 extern const juce::Point<float> outputName;
+extern const float columnNameRoom;
 
 /** GATE and LIMITER along their own lamps in the bottom corners: each word parallel to its lamp's
     slant, on the plate beside the lamp's housing — GATE down to the right, LIMITER up to the right. */
@@ -167,9 +173,10 @@ extern const float lampSlant;
 
 /** THE PLATES ON THE BOTTOM EDGE, between their screws: PRESET alone on the long one on the left, MEM
     over CPU on the long one on the right, and the version on the short one in the middle, under the
-    gate's block. */
+    gate's block. MEM's and CPU's rows each start where MEM of its usual width would be centred, so that
+    a number that changes width moves nothing else. */
 extern const juce::Rectangle<float> leftPlate;
-extern const juce::Rectangle<float> rightPlate;
+extern const std::array<juce::Rectangle<float>, 2> readings;     // MEM over CPU
 extern const juce::Rectangle<float> centrePlate;
 
 /** The emblem plate under the windscreen: a flat hexagon the family's mark is cut into, clear of its six

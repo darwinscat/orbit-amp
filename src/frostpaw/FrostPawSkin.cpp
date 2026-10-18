@@ -99,7 +99,8 @@ const std::array<Socket, 3> tones {{
     { { 1240.6f, 495.1f }, 40.6f, 2.4f, 104.0f },   // MIDDLE
     { { 1363.4f, 494.8f }, 40.6f, 2.4f, 104.0f },   // TREBLE
 }};
-const float knobNameY = 423.0f;
+const float knobNameY  = 423.0f;
+const float driveNameY = 423.0f;
 
 const std::array<juce::Point<float>, 6> keys {{
     { 1093.5f, 603.5f }, { 1141.5f, 603.5f }, { 1226.5f, 603.5f }, { 1280.5f, 603.5f }, { 1333.5f, 603.5f }, { 1388.0f, 603.5f },
@@ -108,6 +109,7 @@ const float keySize      = 48.0f;    // the key's render, whose face fills the 3
 const float keyNameOverY = 563.0f;
 const float keyNameUnderY = 642.0f;
 const std::array<bool, 6> keyNameOver {{ false, false, false, true, false, true }};
+const float keyNameRoom = 120.0f;
 
 const juce::Rectangle<float> navScreen   { 563.5f, 424.0f, 436.5f, 191.5f };
 const juce::Rectangle<float> navHeader   { 567.0f, 426.0f, 430.0f, 32.0f };
@@ -119,10 +121,11 @@ const juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
 const float slotX  = 798.3f;
 const float notchX = 814.0f;
 const float slotTopY = 694.0f;
-const std::array<float, 3> notches {{ 732.8f, 775.5f, 816.8f }};
+const std::vector<float> notches { 732.8f, 775.5f, 816.8f };
 const float leverWidth = 124.0f;
 const float collarSink = 3.0f;
 const juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };
+const float leverLeft = 724.0f, leverTop = 600.0f;
 // Its third notch cut 804..830 down, its slot's lit edge 810..812, the straight run over it 789..803,
 // the plate plain out to 848: filled as RedPawAmp's would be, were it to have fewer gears.
 const NotchFill notchFill { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 2.0f };
@@ -180,13 +183,14 @@ const std::array<juce::Rectangle<float>, numLamps> lamps {{
 
 const juce::Point<float> inputName  { 101.8f, 721.7f };
 const juce::Point<float> outputName { 1570.0f, 721.7f };
+const float columnNameRoom = 170.0f;
 
 const juce::Point<float> gateWord    { 110.0f + lampPlateGrow, 824.0f };
 const juce::Point<float> limiterWord { 1562.0f - lampPlateGrow, 825.0f };
 const float lampSlant = 0.7854f;     // 45 degrees
 
 const juce::Rectangle<float> leftPlate   { 340.0f, 852.0f, 262.0f, 57.0f };
-const juce::Rectangle<float> rightPlate  { 1103.0f, 852.0f, 229.0f, 57.0f };
+const std::array<juce::Rectangle<float>, 2> readings {{ { 1132.5f, 853.0f, 210.0f, 28.0f }, { 1132.5f, 881.0f, 210.0f, 28.0f } }};     // on the right plate, 1103..1332
 const juce::Rectangle<float> centrePlate { 755.0f, 895.0f, 195.0f, 33.0f };
 
 const std::array<juce::Point<float>, 6> emblemFace {{
