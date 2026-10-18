@@ -204,11 +204,12 @@ const juce::Rectangle<float> leftPlate   { 700.0f, 801.0f, 120.0f, 73.0f };
 const std::array<juce::Rectangle<float>, 2> readings {{ { 857.0f, 809.0f, 110.0f, 28.0f }, { 857.0f, 837.0f, 110.0f, 28.0f } }};     // on the screen 851..971
 const juce::Rectangle<float> centrePlate { 700.0f, 760.0f, 275.0f, 30.0f };
 
-// The plain metal between the vents, where the family's mark is cut.
+// The plain metal between the vents, where the family's mark is cut: narrowing down past the vents to
+// the seam over the little screens.
 const std::array<juce::Point<float>, 6> emblemFace {{
-    { 786.0f, 402.0f }, { 888.0f, 402.0f }, { 902.0f, 431.0f }, { 888.0f, 460.0f }, { 786.0f, 460.0f }, { 772.0f, 431.0f },
+    { 775.0f, 396.0f }, { 901.0f, 396.0f }, { 890.0f, 442.0f }, { 878.0f, 489.0f }, { 797.0f, 489.0f }, { 786.0f, 442.0f },
 }};
-const juce::Rectangle<float> emblemMark { 812.0f, 406.0f, 50.0f, 50.0f };
+const juce::Rectangle<float> emblemMark { 799.5f, 403.0f, 76.0f, 76.0f };
 
 } // namespace layout
 
