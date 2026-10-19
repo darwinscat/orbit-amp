@@ -5,6 +5,7 @@
 
 #include "../Product.h"
 #include "../device/FactorySet.h"
+#include "../device/FactoryShelf.h"
 
 #if PRODUCT_SET_EMBEDDED
  #include <ProductSetData.h>
@@ -12,14 +13,9 @@
 
 namespace orbitamp::channels::set
 {
-namespace
-{
-    constexpr const char* cabinetsName = "IRs";
-}
-
 juce::File cabinetsIn (const juce::File& factory)
 {
-    return factory.getChildFile (cabinetsName);
+    return factory.getChildFile (device::shelf::folderName);
 }
 
 juce::Array<juce::File> ownCabinets (const juce::File& factory)
@@ -27,7 +23,7 @@ juce::Array<juce::File> ownCabinets (const juce::File& factory)
     juce::Array<juce::File> own;
 
     for (const auto& path : device::FactorySet::listOf (factory, product::name))
-        if (path.startsWith (juce::String (cabinetsName) + "/"))
+        if (path.startsWith (juce::String (device::shelf::folderName) + "/"))
             if (const auto file = factory.getChildFile (path); file.isAChildOf (cabinetsIn (factory)) && file.existsAsFile())
                 own.add (file);
 
@@ -36,15 +32,15 @@ juce::Array<juce::File> ownCabinets (const juce::File& factory)
 
 int layOut (const juce::File& factory, juce::int64 build)
 {
-    std::vector<device::FactorySet::Entry> carried;
+    // The family's shelf first — a face carries Darwin's Cat's own cabinets of it, OrbitAmp alone the
+    // whole — and the product's own packs.
+    auto carried = device::shelf::carried (device::shelf::ours);
 
    #if PRODUCT_SET_EMBEDDED
     for (int i = 0; i < ProductSetData::namedResourceListSize; ++i)
     {
         const auto name = juce::String::fromUTF8 (ProductSetData::originalFilenames[i]);
-        const bool pack    = name.endsWithIgnoreCase (".orbitrig.zip");
-        const bool cabinet = name.endsWithIgnoreCase (".wav") || name.endsWithIgnoreCase (".aif") || name.endsWithIgnoreCase (".aiff");
-        if (! pack && ! cabinet)
+        if (! name.endsWithIgnoreCase (".orbitrig.zip"))
             continue;
 
         int size = 0;
@@ -52,7 +48,7 @@ int layOut (const juce::File& factory, juce::int64 build)
         if (data == nullptr)
             continue;
 
-        carried.push_back ({ pack ? name : juce::String (cabinetsName) + "/" + name, data, (size_t) size });
+        carried.push_back ({ name, data, (size_t) size });
     }
    #endif
 

@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 // Gate for THE ROVER'S CHANNELS WITH NO WINDOW (channels/Engine.h, over redpaw/RedPawLineup.h): the
-// product's channels on the Victory V4's packs, as many as it plays — ROVER_CHANNELS, which the build says
-// for each rover (CMakeLists.txt: rover_console). A plug-in's window is shut for most of its life, and what a
+// product's channels on its packs — the Friedman IR-X's two on Mars, the Victory V4's elsewhere — as
+// many as it plays: ROVER_CHANNELS, which the build says for each rover (CMakeLists.txt: rover_console). A plug-in's window is shut for most of its life, and what a
 // host can reach then is the processor's parameters: so a channel has to be something the processor
 // does by itself. No window is built here at all.
 //
@@ -18,7 +18,10 @@
 //   - a channel's pack is the capture it holds: renamed, the file is that channel's pack still;
 //   - a channel's tone knobs are its pack's Bass, Middle and Treble, found by name — the Copper's
 //     pack lists them in an order of its own;
-//   - the channels are gears of two, the V4's pedals in order: a gear's pair is its pedal's two channels;
+//   - the channels are gears of two: on the V4 a gear's pair is its pedal's two channels, on the IR-X
+//     one channel of it with its Boost off and on;
+//   - a switch a channel holds stands where the lineup puts it, whatever a host did to it; the pack's
+//     other switches are each channel's own, and a channel never pulled opens them where the pack does;
 //   - PARK takes the whole amp out of the sound: the guitar comes through dry, the channel waits;
 //
 //   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called;
@@ -27,11 +30,13 @@
 //
 // It reads the rover's packs from where the rover reads them, and lays the build's set out there
 // first, as the rover does. Every rover that wears the dashboard runs it as itself — RedPawAmp,
-// FrostPawAmp (CMakeLists.txt: rover_console).
+// FrostPawAmp, AmberPawAmp (CMakeLists.txt: rover_console).
 
 #include "PluginProcessor.h"
 #include "Parameters.h"
 #include "device/FactorySet.h"
+#include "device/FactoryShelf.h"
+#include "device/IrLibrary.h"
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 #include "redpaw/RedPawLineup.h"
@@ -42,6 +47,18 @@
 #ifndef ROVER_CHANNELS
  #error "the build says how many channels the rover plays"
 #endif
+
+namespace
+{
+    /** A run's own mark in an IR's last samples: the gates of every product share the family's IRs
+        folder, and one IR left behind twice, by two runs, would be one sound under two names. */
+    void markOfRun (juce::MemoryBlock& bytes, const juce::String& run)
+    {
+        const auto mark = (juce::uint32) run.getHexValue32();
+        for (size_t b = 0; b < 4 && b + 2 <= bytes.getSize(); ++b)
+            bytes[bytes.getSize() - 2 - b] = (char) (bytes[bytes.getSize() - 2 - b] ^ (char) (mark >> (8 * b)));
+    }
+}
 
 int main()
 {
@@ -55,6 +72,23 @@ int main()
         if (! ok)
             ++failed;
     };
+
+    // AN IR OF BEFORE, in the product's own folder, for the first start to gather into the family's — only
+    // where the home is the gate's own (ROVER_GATE_OWNS_HOME), and as if this product had never gathered here.
+    const bool ownsHome = juce::SystemStats::getEnvironmentVariable ("ROVER_GATE_OWNS_HOME", {}).isNotEmpty();
+    const auto seedRun  = juce::String::toHexString (juce::Random::getSystemRandom().nextInt());
+    const auto formerIr = device::IrLibrary::formerDirectory().getChildFile ("Old Pack").getChildFile ("gathered-" + seedRun + ".wav");
+    if (ownsHome)
+    {
+        // An IR of its own: the shelf's DARK MATTER with its last sample nudged, like no other here.
+        const auto& shelf = device::shelf::irs()[(size_t) params::cabIrDefault];
+        juce::MemoryBlock bytes (shelf.data, (size_t) shelf.size);
+        bytes[bytes.getSize() - 1] = (char) (bytes[bytes.getSize() - 1] ^ 4);
+        markOfRun (bytes, seedRun);
+        formerIr.getParentDirectory().createDirectory();
+        formerIr.replaceWithData (bytes.getData(), bytes.getSize());
+        prefs::setBool (prefs::irsGathered, false);
+    }
 
     auto amp = std::make_unique<AmpProcessor>();
     amp->inlineLoads = true;            // no message loop here: a model lands inside the pump
@@ -93,14 +127,16 @@ int main()
     std::printf ("      %d channels, %d gears\n", channels.count(), redpaw::numGears());
     check (channels.count() == ROVER_CHANNELS && installed, "all the product's channels' packs are installed");
 
-    // BASS, MIDDLE and TREBLE are found in each pack by their names. The Sheriff's and the Kraken's list
-    // them first, in that order; the Copper's two list Tone, Treble, Middle, Bass — so there BASS is the
-    // fourth place, MIDDLE the third and TREBLE the second.
+    const bool mars = juce::String (ORBITAMP_PRODUCT_NAME) == "RedPawAmp";     // the IR-X's rover; the V4's elsewhere
+
+    // BASS, MIDDLE and TREBLE are found in each pack by their names. The IR-X's, the Sheriff's and the
+    // Kraken's list them first, in that order; the Copper's two list Tone, Treble, Middle, Bass — so
+    // there BASS is the fourth place, MIDDLE the third and TREBLE the second.
     {
         bool found = true;
         for (int c = 0; c < channels.count(); ++c)
         {
-            const bool copper = redpaw::gearOf (c) == 0;
+            const bool copper = juce::String (redpaw::lineup().channels[(size_t) c].capture).startsWith ("v4-copper");
             const int places[] { copper ? 3 : 0, copper ? 2 : 1, copper ? 1 : 2 };
             for (int t = 0; t < 3; ++t)
                 found = found && channels.toneOf (c, t) == params::preampMeasured (places[t]);
@@ -108,20 +144,28 @@ int main()
         check (found, "every channel's BASS, MIDDLE and TREBLE are its pack's own, found by name wherever its list has them");
     }
 
-    // GEARS OF TWO, the V4's pedals in order, as far as the product goes: CLEAN the Copper and the
-    // Copper TB, CRUNCH the Sheriff's two, HI-GAIN the Kraken's two — TURBO the second of each.
+    // GEARS OF TWO, as far as the product goes, TURBO the second of each. On the V4, a pedal's two
+    // channels: CLEAN the Copper and the Copper TB, CRUNCH the Sheriff's two, HI-GAIN the Kraken's two.
+    // On the IR-X, one of its channels with the Boost held off, then on: CRUNCH Ch1, HI-GAIN Ch2.
     {
-        const char* pairs[][2] { { "v4-copper-4ae0", "v4-copper-tb-5841" }, { "v4-sheriff-ch1-82ab", "v4-sheriff-ch2-2f2f" },
-                                 { "v4-kraken-ch1-f7fc", "v4-kraken-ch2-5f71" } };
-        bool paired = redpaw::numGears() * 2 == ROVER_CHANNELS && redpaw::numGears() <= (int) std::size (pairs);
+        const char* v4[][2]  { { "v4-copper-4ae0", "v4-copper-tb-5841" }, { "v4-sheriff-ch1-82ab", "v4-sheriff-ch2-2f2f" },
+                               { "v4-kraken-ch1-f7fc", "v4-kraken-ch2-5f71" } };
+        const char* irx[][2] { { "ir-x-ch1-poweramp-3e66", "ir-x-ch1-poweramp-3e66" }, { "ir-x-ch2-poweramp-67e9", "ir-x-ch2-poweramp-67e9" } };
+        const auto& pairs = mars ? irx : v4;
+        const int known   = mars ? (int) std::size (irx) : (int) std::size (v4);
+        bool paired = redpaw::numGears() * 2 == ROVER_CHANNELS && redpaw::numGears() <= known;
         for (int g = 0; paired && g < redpaw::numGears(); ++g)
             for (int t = 0; t < 2; ++t)
             {
                 const int c = redpaw::channelOf (g, t == 1);
+                const auto& own = redpaw::lineup().channels[(size_t) c];
+                const juce::String held = own.held.control == nullptr ? juce::String() : juce::String (own.held.control) + "=" + own.held.value;
                 paired = paired && redpaw::gearOf (c) == g && redpaw::turboOf (c) == (t == 1)
-                              && juce::String (redpaw::lineup().channels[(size_t) c].capture) == pairs[g][t];
+                              && juce::String (own.capture) == pairs[g][t]
+                              && held == (mars ? juce::String (t == 1 ? "Boost=on" : "Boost=off") : juce::String());
             }
-        check (paired, "each gear is a pedal's two channels, TURBO the second");
+        check (paired, mars ? "each gear is one of the IR-X's channels, its TURBO the same with the Boost on"
+                            : "each gear is a pedal's two channels, TURBO the second");
     }
 
     // A processor just built.
@@ -193,6 +237,23 @@ int main()
             std::printf ("      parked: %d samples late, the worst sample %.2g off the input\n", late, (double) worst);
             check (worst < 1.0e-3f, "parked, the input comes out as it went in, as late as the chain reports");
 
+            // ...through the player's own levels: a master turned down holds the dry guitar down too.
+            if (auto* master = amp->apvts.getParameter (params::outTrim))
+            {
+                const float was = master->getValue();
+                master->setValueNotifyingHost (master->convertTo0to1 (-12.0f));
+                play();                              // the master's ramp settles
+                play();
+                const float g = juce::Decibels::decibelsToGain (-12.0f);
+                float down = 0.0f;
+                for (size_t n = (size_t) (block * 8); n < out.size(); ++n)
+                    down = juce::jmax (down, std::abs (out[n] - g * in[n - (size_t) late]));
+                std::printf ("      parked under OUT at -12 dB: the worst sample %.2g off the input 12 dB down\n", (double) down);
+                check (down < 1.0e-3f, "parked, OUT still holds the level: at -12 dB the dry input comes out 12 dB down");
+                master->setValueNotifyingHost (was);
+                play();
+            }
+
             park->setValueNotifyingHost (0.0f);
             check (! amp->isParked(), "...and the amp plays again when PARK is let go");
             amp->releaseResources();
@@ -223,6 +284,46 @@ int main()
     engine.pump();
     check (std::abs (drive->getValue() - 0.3f) < 1.0e-4f, "...and so does the other");
     juce::ignoreUnused (first);
+
+    // TURBO IS AN OPTION OF THE GEAR'S, as its tone is: a gear and its TURBO are one memory. Thrown, only
+    // the pack changes — DRIVE, the delay and BASS stand as they were, BASS on its knob in the other
+    // pack's place — and a gear pulled comes back with TURBO as it was left.
+    {
+        auto* echo = amp->apvts.getParameter (params::delayMix);
+        const auto knob = [&amp, &channels] (int c, int t)
+        {
+            auto* p = amp->apvts.getParameter (channels.toneOf (c, t));
+            return p != nullptr ? p->getValue() : -1.0f;
+        };
+        const int gear = 0, plain = redpaw::channelOf (gear, false), turbo = redpaw::channelOf (gear, true);
+
+        engine.go (plain);
+        drive->setValueNotifyingHost (0.62f);
+        echo->setValueNotifyingHost (0.27f);
+        if (auto* bass = amp->apvts.getParameter (channels.toneOf (plain, 0)))
+            bass->setValueNotifyingHost (0.81f);
+        engine.go (turbo);
+        check (channels.active() == turbo && playing() == channels.packFor (turbo), "TURBO thrown plays the gear's TURBO pack");
+        check (std::abs (drive->getValue() - 0.62f) < 1.0e-4f && std::abs (echo->getValue() - 0.27f) < 1.0e-4f,
+               "...on the gear's DRIVE and delay, as they stood");
+        check (std::abs (knob (turbo, 0) - 0.81f) < 1.0e-4f, "...and its BASS on the gear's, in the TURBO pack's own place");
+
+        drive->setValueNotifyingHost (0.44f);
+        engine.go (plain);
+        check (std::abs (drive->getValue() - 0.44f) < 1.0e-4f && std::abs (knob (plain, 0) - 0.81f) < 1.0e-4f,
+               "TURBO let go: what was turned under it stays, the pack the gear's again");
+
+        engine.go (turbo);
+        engine.go (redpaw::channelOf (1, false));
+        check (channels.leftOn (plain) == turbo, "a gear left under TURBO is left so");
+        engine.go (channels.leftOn (plain));
+        check (channels.active() == turbo && std::abs (drive->getValue() - 0.44f) < 1.0e-4f,
+               "...and pulled again comes back under it, on what it was left with");
+        engine.go (plain);
+        engine.go (redpaw::channelOf (1, false));
+        check (channels.leftOn (plain) == plain, "...and a gear left without it, without it");
+        ticks();
+    }
 
     // A hand's switch: one step, and undone whole.
     asHost (2);
@@ -276,12 +377,17 @@ int main()
         const auto all = amp->preamp.packs;
         const auto renamed = juce::File::getSpecialLocation (juce::File::tempDirectory)
                                  .getChildFile ("redpaw-renamed-test-" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt()));
-        const auto nameOf = [] (int c) { return "Renamed " + juce::String (c) + ".orbitrig.zip"; };
+        // One file to a pack — two channels may play the same one — named after the pack, not the channel.
+        std::vector<juce::String> names;
+        for (int c = 0; c < channels.count(); ++c)
+            names.push_back ("Renamed " + juce::String (channels.packFor (c)) + ".orbitrig.zip");
+        const auto nameOf = [&names] (int c) { return names[(size_t) c]; };
 
         bool copied = renamed.createDirectory().wasOk();
         for (int c = 0; c < channels.count(); ++c)
             copied = copied && channels.packFor (c) >= 0
-                            && all.getReference (channels.packFor (c)).location.copyFileTo (renamed.getChildFile (nameOf (c)));
+                            && (renamed.getChildFile (nameOf (c)).existsAsFile()
+                                || all.getReference (channels.packFor (c)).location.copyFileTo (renamed.getChildFile (nameOf (c))));
 
         amp->preamp.packs = device::DeviceLibrary::scan (device::DeviceLibrary::Slot::preamp, true,
                                                          renamed, renamed.getChildFile ("none"));
@@ -331,12 +437,13 @@ int main()
         const auto early = scratch.getChildFile ("00-first-" + run + ".wav");
         const auto late  = scratch.getChildFile ("zz-last-" + run + ".wav");
         const auto big   = scratch.getChildFile ("too-big-" + run + ".wav");
-        const auto nudged = [&channels] (const juce::File& to, char by)
+        const auto nudged = [&channels, &run] (const juce::File& to, char by)
         {
             juce::MemoryBlock bytes;
             channels.cabinets().getFirst().loadFileAsData (bytes);
             if (bytes.getSize() > 0)
                 bytes[bytes.getSize() - 1] = (char) (bytes[bytes.getSize() - 1] ^ by);
+            markOfRun (bytes, run);
             to.replaceWithData (bytes.getData(), bytes.getSize());
         };
         nudged (early, 1);
@@ -353,6 +460,16 @@ int main()
         check (added.first >= factory && channels.cabinets()[added.first].getFileName() == early.getFileName(),
                "...a name that would sort first still stands after the build's own");
         check (added.refused.size() == 1 && added.refused[0] == big.getFileName(), "an IR too big for a session is refused, by name");
+        check (channels.cabinets()[added.first].getParentDirectory() == device::DeviceLibrary::familyRoot().getChildFile ("IRs"),
+               "...and what is taken in lands in the family's own IRs folder, beside Factory");
+
+        // THE IR OF BEFORE, gathered at the first start: copied into the family's folder, in its own
+        // folder, and still where it was.
+        const auto gathered = device::IrLibrary::directory().getChildFile ("Old Pack").getChildFile (formerIr.getFileName());
+        check (gathered.existsAsFile() && formerIr.existsAsFile() && gathered.hasIdenticalContentTo (formerIr),
+               "the player's IRs of before are copied into the family's folder, folders and all, and left where they were");
+        check (channels.cabinets().indexOf (gathered) >= factory, "...and are among the player's cabinets");
+        check (prefs::getBool (prefs::irsGathered, false), "...once: the product remembers it has gathered them");
 
         channels.chooseCabinet (added.first);
         check (channels.cabinet() == added.first, "a cabinet taken in plays");
@@ -361,7 +478,7 @@ int main()
         // from before, which names it as it was called then and carries what it is.
         ticks();
         const int home  = channels.active();
-        const int other = home == 0 ? 1 : 0;
+        const int other = channels.memoryOf (home) == 0 ? 2 : 0;      // another gear: a TURBO shares its gear's cabinet
         const auto kept = amp->apvts.copyState();           // this channel, on this cabinet, under its first name
         engine.go (other);
         const auto elsewhere = channels.cabinet();
@@ -386,9 +503,10 @@ int main()
         check (channels.cabinet() == now && ! channels.cabinetIsStale(), "...which settling puts right");
     }
 
-    // WHAT EACH CHANNEL OPENS ON. INIT forgets every channel, so each of them is new again: a pedal's
-    // first channel a little of its room and as much delay, its TURBO twice as much of both — the
-    // Copper in a hall, the Sheriff on a plate, the Kraken in an ambience with no delay.
+    // WHAT EACH CHANNEL OPENS ON. INIT forgets every channel, so each of them is new again: a gear a
+    // little of its room and as much delay, and its TURBO the same, the gear's own — on the V4 the
+    // Copper in a hall, the Sheriff on a plate, the Kraken in an ambience with no delay; on the IR-X Ch1
+    // on a plate, Ch2 in an ambience with no delay.
     {
         auto* room  = amp->apvts.getParameter (params::reverbType);
         auto* mix   = amp->apvts.getParameter (params::reverbMix);
@@ -405,14 +523,19 @@ int main()
         ticks();
 
         struct Opening { const char* reverb; float wet, echo; };
-        const Opening openings[] { { "Hall", 15.0f, 15.0f }, { "Hall", 30.0f, 30.0f }, { "Plate", 15.0f, 15.0f },
-                                   { "Plate", 30.0f, 30.0f }, { "Ambience", 15.0f, 0.0f }, { "Ambience", 30.0f, 0.0f } };
+        const Opening onV4[] { { "Hall", 15.0f, 15.0f }, { "Hall", 15.0f, 15.0f }, { "Plate", 15.0f, 15.0f },
+                               { "Plate", 15.0f, 15.0f }, { "Ambience", 15.0f, 0.0f }, { "Ambience", 15.0f, 0.0f } };
+        const Opening onIrx[] { { "Plate", 15.0f, 15.0f }, { "Plate", 15.0f, 15.0f }, { "Ambience", 15.0f, 0.0f },
+                                { "Ambience", 15.0f, 0.0f } };
+        const std::vector<Opening> openings = mars ? std::vector<Opening> (std::begin (onIrx), std::end (onIrx))
+                                                   : std::vector<Opening> (std::begin (onV4), std::end (onV4));
         const int opening = channels.defaultCabinet();
-        bool each = channels.active() == 0 && channels.count() <= (int) std::size (openings), onIt = true;
+        bool each = channels.active() == 0 && channels.count() <= (int) openings.size(), onIt = true;
         for (int c = 0; each && c < channels.count(); ++c)
         {
             engine.go (c);
-            each = each && opensOn (openings[c].reverb, openings[c].wet, openings[c].echo);
+            const auto& o = openings[(size_t) c];
+            each = each && opensOn (o.reverb, o.wet, o.echo);
             onIt = onIt && channels.cabinet() == opening;
         }
         check (each, "after INIT each channel opens on its own room, its own share of it and of delay");
@@ -423,8 +546,61 @@ int main()
         delay->setValueNotifyingHost (delay->convertTo0to1 (40.0f));
         engine.go (0);
         engine.go (last);
-        const auto& lastOpens = openings[std::min ((size_t) last, std::size (openings) - 1)];
+        const auto& lastOpens = openings[std::min ((size_t) last, openings.size() - 1)];
         check (opensOn (lastOpens.reverb, lastOpens.wet, 40.0f), "what a hand has set on a channel is kept over what it opens on");
+        ticks();
+    }
+
+    // THE PACK'S SWITCHES (Channels::switchesOf), where a channel holds one — the IR-X's rover. Every
+    // channel's Boost stands where the lineup puts it, and a host that throws it is overruled the next
+    // time the channel is pulled; the pack's other switch is the gear's, its TURBO's too — one memory —
+    // and a gear never pulled since INIT opens it where the pack does.
+    if (mars)
+    {
+        const auto selector = [&amp] (int slot) { return amp->apvts.getParameter (params::selectorId (params::preampId, slot)); };
+        const auto at  = [&selector] (int slot) { auto* p = selector (slot); return p != nullptr ? juce::roundToInt (p->convertFrom0to1 (p->getValue())) : -1; };
+        const auto put = [&selector] (int slot, int to) { if (auto* p = selector (slot)) p->setValueNotifyingHost (p->convertTo0to1 ((float) to)); };
+
+        orbitamp::channels::Presets presets (*amp, channels);
+        presets.init();
+        ticks();
+
+        bool held = true, opens = true, free = false;
+        for (int c = 0; c < channels.count(); ++c)
+        {
+            engine.go (c);
+            for (const auto& s : channels.switchesOf (c))
+                if (s.held)
+                    held = held && at (s.slot) == s.opening && s.values[s.opening] == (redpaw::turboOf (c) ? "on" : "off");
+                else
+                {
+                    free = true;
+                    opens = opens && at (s.slot) == s.opening;
+                }
+        }
+        check (held, "every channel's Boost stands where the lineup puts it: off on a gear, on on its TURBO");
+        check (free && opens, "...and its pack's other switch opens where the pack does");
+
+        // Ch1's: the Boost held, the three-way Bright the hand's.
+        int boost = -1, bright = -1;
+        for (const auto& s : channels.switchesOf (0))
+            (s.held ? boost : bright) = s.slot;
+        check (boost >= 0 && bright >= 0 && channels.switchesOf (0)[(size_t) bright].values.size() == 3,
+               "Ch1 holds its Boost and leaves its three-way Bright to the hand");
+
+        engine.go (0);
+        put (bright, 2);                // BRIGHT 2 on the gear
+        engine.go (1);
+        const bool sharedOnTurbo = at (bright) == 2 && at (boost) == 1;
+        put (bright, 1);                // CENTER under its TURBO...
+        put (boost, 0);                 // ...and a host throws the TURBO's Boost off
+        engine.go (0);
+        const bool backOnGear = at (bright) == 1 && at (boost) == 0;
+        engine.go (2);                  // another gear, and back
+        engine.go (0);
+        const bool keptOnGear = at (bright) == 1 && at (boost) == 0;
+        check (sharedOnTurbo, "a switch moved on a gear is its TURBO's too: one memory, the Boost held on");
+        check (backOnGear && keptOnGear, "...and moved under TURBO, the gear's, kept; the Boost a host threw stands where the lineup holds it again");
         ticks();
     }
 

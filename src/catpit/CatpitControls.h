@@ -26,6 +26,17 @@ public:
     /** The grip is wider than the frame's left margin: the lever's box starts this far left of the frame. */
     static constexpr int overhang = 34;
 
+    // The lever's own space: the 261 x 217 AMP MODE frame plus `overhang` to its left, where the grip
+    // reaches past the frame. The slot on the left, the four names on the right, a lamp beside each.
+    static constexpr float slotX      = (float) overhang + 42.0f;
+    static constexpr float firstY     = 50.0f;
+    static constexpr float detentStep = 43.0f;
+    static constexpr float lampX      = (float) overhang + 92.0f;
+    static constexpr float namesX     = (float) overhang + 102.0f;
+    static constexpr float gripLength = 92.0f;      // end to end; the stem is not in its middle (Art::leverAxis)
+    static constexpr float gripGrowth = 0.05f;      // pulled toward you, it comes a little closer: this much longer a detent
+    static constexpr float stiffness  = 260.0f, damping = 22.0f;     // heavier than a toggle: it overshoots a hair and comes back
+
     Lever();
 
     std::function<void (int)>   onDetent;     // the detent it settled in (or snapped into while held)

@@ -209,14 +209,15 @@ void Cockpit::paintLive (juce::Graphics& g) const
     paintKeyNames (g);
 }
 
-/** The keys' names, under them — a dimmed key's as dim as the key. */
+/** The keys' names, under them — a dimmed key's as dim as the key, and the playing pack's own where its
+    switches are on them. They stand where the six names of their own set them (keyCentres). */
 void Cockpit::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
 
     const auto keyX = keyCentres();
-    for (size_t i = 0; i < switches.size(); ++i)
-        drawLabel (g, switches[i].shortName, juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
+    for (size_t i = 0; i < keyNames.size(); ++i)
+        drawLabel (g, keyNames[i], juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
                    px11, labelLilac.withAlpha (keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
 }
 
@@ -333,6 +334,101 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 }
 
 //==============================================================================
+/** The cockpit's own part of the site's demo (Console::webExtras): where the glass is and where the
+    picture in it is composed for, the throttle's and TURBO's frames, their renders, the sky standing still
+    for each channel, the glass's whole rectangle at twice the stage's size (sky-<channel>.png) — and the
+    poster, the first channel's still sky through the glass. */
+void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world)
+{
+    using namespace layout;
+    const auto& art = Art::get();
+    writeSprite (dir, "lever-grip.png", art.leverGrip);
+    writeSprite (dir, "guard-closed.png", art.guardClosed);
+    writeSprite (dir, "guard-open.png", art.guardOpen);
+    writeSprite (dir, "guard-on.png", art.guardOn);
+
+    // WHAT THE WINDSHIELD SHOWS OVER THE SKY as the cockpit opens — SHAPE, in its band, going out with the
+    // sound (Monitor).
+    auto* window = new juce::DynamicObject();
+    window->setProperty ("firstView", Monitor::names()[(int) monitor.shown()]);
+    window->setProperty ("shape", monitor.shapeForWeb());
+    world.setProperty ("monitor", juce::var (window));
+    for (int c = 0; c < channels.count(); ++c)
+        face::writeForWeb (dir.getChildFile ("sky-" + juce::String (c) + ".png"), stillSky (c));
+
+    const auto rect = [] (juce::Rectangle<float> r)
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("x", r.getX()); o->setProperty ("y", r.getY());
+        o->setProperty ("w", r.getWidth()); o->setProperty ("h", r.getHeight());
+        return juce::var (o);
+    };
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("glass", rect (glass));
+    o->setProperty ("windshield", rect (windshield));
+    o->setProperty ("leverFrame", rect (leverFrame));
+    o->setProperty ("leverAxis", art.leverAxis);
+    o->setProperty ("turboFrame", rect (turboFrame));
+    juce::Array<juce::var> names;
+    for (int c = 0; c < channels.count(); ++c)
+        names.add (channels.lineup().channels[(size_t) c].name);
+    o->setProperty ("channels", names);
+    auto* lever = new juce::DynamicObject();      // the throttle's own space (Lever), its box the frame widened left
+    lever->setProperty ("box", rect (leverFrame.withLeft (leverFrame.getX() - (float) Lever::overhang)));
+    lever->setProperty ("slotX", Lever::slotX);
+    lever->setProperty ("firstY", Lever::firstY);
+    lever->setProperty ("detentStep", Lever::detentStep);
+    lever->setProperty ("lampX", Lever::lampX);
+    lever->setProperty ("namesX", Lever::namesX);
+    lever->setProperty ("gripLength", Lever::gripLength);
+    lever->setProperty ("gripGrowth", Lever::gripGrowth);
+    lever->setProperty ("stiffness", Lever::stiffness);
+    lever->setProperty ("damping", Lever::damping);
+    o->setProperty ("lever", juce::var (lever));
+    for (const auto& p : o->getProperties())       // all of it in places.json's "world", which is all the site reads...
+        world.setProperty (p.name, p.value);
+    dir.getChildFile ("cockpit.json").replaceWithText (juce::JSON::toString (juce::var (o)));     // ...and on its own (the var takes `o`)
+
+    places.setProperty ("window", rect (glass));
+
+    // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
+    auto* turboKind = new juce::DynamicObject();
+    turboKind->setProperty ("kind", "push");
+    turboKind->setProperty ("db", channels::settings::turboDefault);
+    juce::Array<juce::var> pushes;
+    for (const int db : channels::settings::turboPushes)
+        pushes.add (db);
+    turboKind->setProperty ("pushes", pushes);
+    turboKind->setProperty ("param", params::blockIn (params::preampId));
+    world.setProperty ("turbo", juce::var (turboKind));
+    world.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render
+    world.setProperty ("knobRing", false);
+    auto* keyNames = new juce::DynamicObject();      // under the keys, in one row (Cockpit::paintKeyNames)
+    keyNames->setProperty ("onKeys", false);
+    keyNames->setProperty ("y", keyNameY);
+    keyNames->setProperty ("px", px11);
+    keyNames->setProperty ("tracking", face::keyTracking);
+    keyNames->setProperty ("dimmed", face::PushButton::dimmed);
+    keyNames->setProperty ("colour", juce::String::formatted ("#%02x%02x%02x%02x", face::labelLilac.getRed(), face::labelLilac.getGreen(),
+                                                                face::labelLilac.getBlue(), face::labelLilac.getAlpha()));
+    world.setProperty ("keyNames", juce::var (keyNames));
+    world.setProperty ("claimedKeys", juce::Array<juce::var>());
+    juce::Array<juce::var> stills;
+    for (int c = 0; c < channels.count(); ++c)
+        stills.add ("sky-" + juce::String (c) + ".png");
+    places.setProperty ("stills", stills);
+    writePoster (dir, glass, stillSky (channels.active()), { &space, &still, &monitor });
+
+    // ...and one for each channel the throttle can stand in, the channel's own still sky in the glass.
+    webPoses.count = channels.count();
+    webPoses.standAt = [this] (int channel) { go (channel); this->lever.setDetent (channel, false, false); };
+    webPoses.still = [] (int channel) { return stillSky (channel); };
+    webPoses.window = glass;
+    webPoses.hidden = { &space, &still, &monitor };
+    webPatch ("gateFader", { &threshold });
+    webPatch ("limiterFader", { &ceiling });
+}
+
 CatpitEditor::CatpitEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Cockpit>(), cockpitPlaces(), cockpitLook()),
       monitor (p)
@@ -446,9 +542,10 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         stars = (Stars) juce::jmax (0, starsWords.indexOf (word));
     }
 
-    // ...and so does what the windshield shows over it: nothing, or a picture of the amp at work.
+    // ...and so does what the windshield shows over it: nothing, or a picture of the amp at work — the
+    // shape it gives the sound, as every face of the family opens on.
     monitor.show ((Monitor::View) juce::jlimit (0, (int) Monitor::View::numViews - 1,
-                                                (int) prefs::store().get (windowKey, 0)));
+                                                (int) prefs::store().get (windowKey, (int) Monitor::View::shape)));
     applySky();
 
     // LEARN from GATE's menu takes the tuner's glass while it runs.

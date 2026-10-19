@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # ----------------------------------------------------------------------------
 # orbit-amp — the device / voicing PLAYER plugin (C++/JUCE). Felitronics line, by Darwin's Cat.
 #
-# The chain:  boost -> EQ -> preamp (voicing) -> EQ -> delay -> reverb -> cabinet.
+# The chain:  preamp (voicing) -> EQ -> delay -> reverb -> cabinet.
 #
 # One CMake config builds VST3 + AU + Standalone. JUCE 8 and the felitronics libraries are
 # fetched by CMake (FetchContent) — NOT vendored, NOT system-installed. Each dependency is
@@ -96,8 +96,10 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # letting FetchContent take the tag.
 #
 # v0.51.0 is the first release felitronics-guitar-core accepts: nam, rigplayer and poweramp left core
-# for that repository in it (see below). v0.60.0 is the freshest, and the first with felitronics::dehum,
-# the HumRemover the input's HUM stage is built on, so nothing older builds here. Between v0.31.0 and
+# for that repository in it (see below). v0.60.0 is the first with felitronics::dehum, the HumRemover
+# the input's HUM stage is built on. v0.61.0 is the freshest, and the first with felitronics::delay and
+# felitronics::reverb — the echo and the room, which were this repository's own stages until they moved
+# there, so nothing older builds here. Between v0.31.0 and
 # v0.53.0, nothing this plugin calls plays differently INSIDE a running stream —
 # the probe loops render bit-identically on both — and what moved is at a stream's edges: a re-prepared
 # capture no longer answers with the previous stream's tail, its warm-up is counted at the new rate, a
@@ -106,7 +108,18 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # v0.53.0 glides are in stages this plugin does not link. Past v0.53.0 two things reach this graph, and
 # neither plays here: WaveShaper gains four shapes while Asym — the only one the power amp's TubeStage
 # sets — keeps its expressions, and eq's Tilt at slope 6 turns first-order, a band no block here builds.
-set(ORBITAMP_FCORE_TAG "v0.60.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+#
+# v0.61.0 DOES play differently, in the two stages it brings, and it was measured before they replaced
+# ours: both renders side by side on the same program at 44.1, 48 and 96 kHz, in blocks of 64, 512 and a
+# ragged run. At knobs that stand still the echo is within 2.4e-7 of ours and the five plain rooms within
+# 3e-14; MODULATED is within 6.5e-5 at full mix on a hot program — its chorus reads its line at a position
+# kept in double where ours rounded it to float, so that distance is the tail's slope times a rounding and
+# halves with the level. With a knob moving, the echo's head now LANDS: ours parked short of a new time
+# for good, the repeats 28 samples early at 1.5 s and 112 at 6 s (48 kHz), and the old echo is the new
+# one read at that parked head to within 4e-8 — a time, not a level or a tone. A fresh room no longer
+# leaks the dry into its first 10 ms, and an Intel build plays the arm64 sound: the framework's Freeverb
+# under ours quantised its state on x86-64, up to 1e-6.
+set(ORBITAMP_FCORE_TAG "v0.61.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -357,6 +370,16 @@ add_custom_target(OrbitAmpVersionGen ALL
 #
 # CLAP rides via clap-juce-extensions below — one extra format, no source changes.
 # ----------------------------------------------------------------------------
+# OrbitAmp's icon. macOS 26 sets any icon that is not its own rounded square on a grey plate — the
+# family's disc came out as a small disc on a light square — so the Mac wears the orbit on the cockpit's
+# rounded square (824 of the 1024 canvas, margins and all), the violet round its edge. Windows and Linux
+# keep the disc.
+if(APPLE)
+    set(ORBITAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/OrbitAmp-macOS-1024.png")
+else()
+    set(ORBITAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/OrbitAmp-1024.png")
+endif()
+
 juce_add_plugin(OrbitAmp
     PRODUCT_NAME                "OrbitAmp"
     COMPANY_NAME                "Darwin's Cat"
@@ -376,11 +399,11 @@ juce_add_plugin(OrbitAmp
     # audio-input entitlement at signing time. Plug-in formats run in the host and don't.
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "OrbitAmp needs audio input to process your signal."
-    # Bundle / executable icon — the cat on the family ground (resources/icon/OrbitAmp-1024.png).
+    # Bundle / executable icon — the orbit; see ORBITAMP_ICON.
     # One 1024-square PNG is enough: juceaide builds the macOS .icns for every bundle and the
     # Windows .ico from it. No ICON_SMALL on purpose — see OrbitCab: juceaide reads the pair
     # small-then-big while JUCEUtils appends big-then-small, and passing both can swap the slots.
-    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/OrbitAmp-1024.png"
+    ICON_BIG                    "${ORBITAMP_ICON}"
     COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN}
 )
 
@@ -520,7 +543,9 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/notice.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/disclaimer.txt"   # ...and its long form, with the list
 
-        # The cabinet IRs — orbitcab's, referenced there like everything shared: one copy in the
+        # THE FAMILY'S CABINET SHELF (src/device/FactoryShelf.h): every product links this data, plays
+        # its cabinets from it and lays them out in the family's Factory/IRs, in the shelf's folders —
+        # these in `Other`. orbitcab's, referenced there like everything shared: one copy in the
         # ecosystem.
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/01-cookie-monster.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/02-darth-genocider.wav"
@@ -544,9 +569,9 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/20-don-spinacio.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav"
 
-        # ...and the Orange PPC212V's ten, the cabinets CatpitAmp plays, referenced in the set's
-        # folder rather than copied: one copy in the tree. resources/set/IRs.md says what they are and
-        # how they were shot.
+        # ...and Darwin's Cat's own ten, shot off the Orange, in `Orange PPC212V`: referenced in the
+        # set's folder rather than copied, one copy in the tree. resources/set/IRs.md says what they
+        # are and how they were shot.
         "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
         "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
         "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
@@ -583,6 +608,8 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::appkit_webp         # juce::Image <- WebP, for the picture a pack ships
     felitronics::core                # core::BypassWire reads the resampler's delay geometry
     felitronics::dehum               # the hum off the input, ahead of the trim
+    felitronics::delay               # the echo (TapeDelay) and its knob law — sync, DARK, ranges
+    felitronics::reverb              # the room (AmpReverb), and the reverb face's picture of it
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
@@ -709,6 +736,8 @@ set(CATPITAMP_LIBRARIES
     felitronics::appkit_webp
     felitronics::core
     felitronics::dehum
+    felitronics::delay
+    felitronics::reverb
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -750,25 +779,15 @@ endforeach()
 
 # THE COCKPIT'S OWN SET IS INSIDE ITS BINARY — every format's, on every system — and the amp lays it
 # out as files when it first starts (src/channels/Set.h says why). Out of the tree's set
-# (resources/set), the cockpit carries what its four channels play and nothing else: the X88-IR's four
-# packs — a channel finds its own by the capture it holds, not by the file's name — and the ten
-# cabinets CAB steps through, in the order of their names. Without a set, the cockpit would play only
-# what the player puts in its own Devices and IRs folders.
+# (resources/set), the cockpit carries what its four channels play: the X88-IR's four packs — a channel
+# finds its own by the capture it holds, not by the file's name. The cabinets CAB steps through are the
+# family's shelf, which every product carries in the data they all link (OrbitAmpData) and lays out
+# with its packs. Without a set, the cockpit would play only what the player puts in the Devices folder.
 set(CATPITAMP_SET
     "${ORBITAMP_SET_ZIPPED}/X88-IR Normal.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/X88-IR Altered.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/X88-IR Crunch.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/X88-IR Overdrive.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
-    "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
-    "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
-    "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
-    "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
-    "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
-    "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
-    "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
-    "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
-    "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav")
+    "${ORBITAMP_SET_ZIPPED}/X88-IR Overdrive.orbitrig.zip")
 
 # What reads the set says whether there is one: with none, there is no data to link and nothing to ask.
 # Every product's set data goes by the one name, ProductSetData, which channels/Set.cpp reads: a target
@@ -833,6 +852,7 @@ target_include_directories(catpitamp_set_test PRIVATE src)
 target_compile_definitions(catpitamp_set_test PRIVATE ORBITAMP_PRODUCT_NAME="CatpitAmp" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(catpitamp_set_test PRIVATE
     CatpitAmpSet
+    OrbitAmpData                     # the family's cabinet shelf
     juce::juce_core
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
@@ -882,9 +902,36 @@ target_link_libraries(frostpaw_view_demo PRIVATE
 set_target_properties(frostpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ----------------------------------------------------------------------------
+# Titan — the methane sea: the same windscreen as a helicopter's canopy over Titan (src/amberpaw/view), the
+# drive handed to it as a TitanDrive. The sources are listed here for the product to take up, with the
+# windscreen's own; the demo is the bare window over the sea, in the canopy's shape. Built only when asked
+# for by name.
+# ----------------------------------------------------------------------------
+set(AMBERPAW_VIEW_SOURCES
+    src/amberpaw/view/TitanWorld.cpp
+    src/amberpaw/view/TitanGl.cpp)
+
+juce_add_gui_app(amberpaw_view_demo PRODUCT_NAME "AmberPawViewDemo")
+target_sources(amberpaw_view_demo PRIVATE src/redpaw/view/WindscreenDemo.cpp ${REDPAW_VIEW_SOURCES} ${AMBERPAW_VIEW_SOURCES})
+target_include_directories(amberpaw_view_demo PRIVATE src)
+target_compile_definitions(amberpaw_view_demo PRIVATE ORBITAMP_VIEW_DEMO_TITAN=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(amberpaw_view_demo PRIVATE
+    juce::juce_gui_extra
+    juce::juce_opengl
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(amberpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# The sea's CPU half against the prototype it was ported from: the start, five scripted flights, the
+# gears, Saturn, the wipers' panes. JUCE-free, links only the world.
+add_executable(titan_world_test tests/TitanWorldTests.cpp src/amberpaw/view/TitanWorld.cpp)
+target_include_directories(titan_world_test PRIVATE src)
+target_compile_features(titan_world_test PRIVATE cxx_std_20)
+
+# ----------------------------------------------------------------------------
 # RedPawAmp — the rover: a third face over the same processor (src/redpaw), the dashboard of a Mars rover
-# with the drive across Mars in its windscreen. Four channels — the Victory V4's Copper and Sheriff, each
-# pedal's two — picked as two gears and TURBO. Built like the cockpit: the family's console (src/face)
+# with the drive across Mars in its windscreen. Four channels — the Friedman IR-X's two, each with its
+# Boost off and on — picked as two gears and TURBO. Built like the cockpit: the family's console (src/face)
 # over the family's channels (src/channels), its own renders in resources/redpaw, its own set, released
 # apart under tags of its own (`redpaw-vX.Y.Z`) — no release workflow yet. Built only when asked for by
 # name.
@@ -894,11 +941,14 @@ set_target_properties(frostpaw_view_demo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 # of is said once here — the renders by the file names the face asks for, the sources, the libraries —
 # and each product adds its own skin's file and its own renders.
 set(ROVER_RENDERS
-    dashboard.png midi.txt knob-drive.png knob-tone.png lever.png slider-cap.png fader-cap.png
+    dashboard.png midi.txt mark.svg knob-drive.png knob-tone.png lever.png slider-cap.png fader-cap.png
     toggle-up.png toggle-down.png key-up.png key-down.png turbo-up.png turbo-down.png)
 
-set(REDPAWAMP_RENDERS ${ROVER_RENDERS})
+set(REDPAWAMP_RENDERS ${ROVER_RENDERS} turbo-lid.png)     # ...and TURBO's hatch shut, its own
 list(TRANSFORM REDPAWAMP_RENDERS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/")
+# ...and the STILL it ships, one frame of its world, where there is one: never another rover's.
+file(GLOB REDPAWAMP_STILL CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/still.jpg")
+list(APPEND REDPAWAMP_RENDERS ${REDPAWAMP_STILL})
 juce_add_binary_data(RedPawAmpData
     NAMESPACE   RedPawData
     HEADER_NAME RedPawData.h
@@ -906,6 +956,15 @@ juce_add_binary_data(RedPawAmpData
 
 # The rover's own version, moved when the ROVER is released (src/Product.h).
 set(REDPAWAMP_VERSION 0.1.0)
+
+# Its icon: its vehicle seen from the front, drawn as the cockpit's mark is — in the family's lilac with
+# the orange dot — on the cockpit's rounded square with the violet round its edge. On the Mac the
+# square macOS 26 expects (824 of the 1024 canvas, margins and all); elsewhere the same on the whole canvas.
+if(APPLE)
+    set(REDPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/RedPawAmp-macOS-1024.png")
+else()
+    set(REDPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/RedPawAmp-1024.png")
+endif()
 
 juce_add_plugin(RedPawAmp
     VERSION                     "${REDPAWAMP_VERSION}"
@@ -924,8 +983,8 @@ juce_add_plugin(RedPawAmp
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "RedPawAmp needs audio input to process your signal."
-    # A stand-in until the rover has an icon of its own: its DRIVE socket, knob and all, off the dashboard.
-    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/RedPawAmp-1024.png"
+    # Bundle / executable icon — its vehicle on the square; see REDPAWAMP_ICON.
+    ICON_BIG                    "${REDPAWAMP_ICON}"
     COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
 
 clap_juce_extensions_plugin(TARGET RedPawAmp
@@ -973,6 +1032,8 @@ set(ROVER_LIBRARIES
     felitronics::appkit_webp
     felitronics::core
     felitronics::dehum
+    felitronics::delay
+    felitronics::reverb
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -1011,26 +1072,12 @@ foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
 endforeach()
 
 # THE ROVER'S OWN SET IS INSIDE ITS BINARY, laid out as files when it first starts (src/channels/Set.h):
-# out of the tree's set, the packs its channels play — the Victory V4's Copper and Sheriff, each found by
-# the capture it holds — and, until the rovers have cabinets of their own, the ten the cockpit carries.
-# Every rover lists its own packs; the cabinets are every rover's.
-set(ROVER_CABINETS
-    "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
-    "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
-    "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
-    "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
-    "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
-    "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
-    "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
-    "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
-    "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
-    "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav")
+# out of the tree's set, the packs its channels play — the Friedman IR-X's two, each found by the capture
+# it holds. Every rover lists its own packs; the cabinets are the family's shelf, in the data every
+# product links (OrbitAmpData), and every rover lays them out with its packs.
 set(REDPAWAMP_SET
-    "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
-    ${ROVER_CABINETS})
+    "${ORBITAMP_SET_ZIPPED}/IR-X Ch1 PowerAmp.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/IR-X Ch2 PowerAmp.orbitrig.zip")
 
 add_library(RedPawAmpSet INTERFACE)
 juce_add_binary_data(RedPawAmpSetData
@@ -1047,7 +1094,7 @@ target_link_libraries(RedPawAmp PRIVATE RedPawAmpSet)
 set_target_properties(RedPawAmp ${REDPAWAMP_FORMATS} RedPawAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
 add_dependencies(RedPawAmp_All RedPawAmp_CLAP)
 
-# A ROVER'S GATES, the same for every rover: `amp` says whose — RedPawAmp, FrostPawAmp — and the gate is
+# A ROVER'S GATES, the same for every rover: `amp` says whose — RedPawAmp, FrostPawAmp, AmberPawAmp — and the gate is
 # that product compiled again under a main() of its own, with its skin, its set and its name; `channels`
 # is how many channels the gate holds it to (ROVER_CHANNELS), said here apart from the product's lineup.
 function(rover_console target main product amp tagPrefix channels)
@@ -1078,6 +1125,7 @@ function(rover_set_test target product amp channels)
     target_compile_definitions(${target} PRIVATE ORBITAMP_PRODUCT_NAME="${amp}" ROVER_CHANNELS=${channels} JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(${target} PRIVATE
         ${amp}Set
+        OrbitAmpData                     # the family's cabinet shelf
         felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
         juce::juce_core
         juce::juce_events
@@ -1087,12 +1135,12 @@ function(rover_set_test target product amp channels)
     set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
 
-# Gate for the rover's channels with no window at all: four channels on the V4's Copper and Sheriff,
-# moved by CHANNEL the way a host moves it, each with its own memory and what it opens on.
+# Gate for the rover's channels with no window at all: four channels on the IR-X's two, the Boost each
+# holds, moved by CHANNEL the way a host moves it, each with its own memory and what it opens on.
 rover_console(redpawamp_channel_test tests/RedPawChannelTests.cpp "RedPawAmpChannelTest" RedPawAmp "redpaw-" 4)
 
 # Gate for the rover's set as it leaves the binary — laid out whole, once, under the rover's own list,
-# the four packs the four channels' own. Runs entirely in a folder of its own.
+# the two packs its four channels play. Runs entirely in a folder of its own.
 rover_set_test(redpawamp_set_test "RedPawAmpSetTest" RedPawAmp 4)
 
 # ----------------------------------------------------------------------------
@@ -1115,9 +1163,10 @@ foreach(render IN LISTS ROVER_RENDERS)
         list(APPEND FROSTPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/${render}")
     endif()
 endforeach()
-# ...and renders a rover may carry or not — the maker's mark raised in its own metal, instead of engraved:
-# there when the file is, and nothing in its place when it is not.
-foreach(render IN ITEMS emblem.png)
+# ...and renders a rover may carry or not — the maker's mark raised in its own metal, instead of engraved;
+# TURBO's hatch shut, instead of open on PARK too: there when the file is, and nothing in its place when it
+# is not. Never RedPawAmp's: a rusted hatch on frosted steel would be a patch.
+foreach(render IN ITEMS emblem.png turbo-lid.png still.jpg)
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}" IN_LIST FROSTPAW_OWN_RENDERS)
         list(APPEND FROSTPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}")
     endif()
@@ -1129,6 +1178,15 @@ juce_add_binary_data(FrostPawAmpData
 
 # Its own version, moved when FROSTPAWAMP is released (src/Product.h).
 set(FROSTPAWAMP_VERSION 0.1.0)
+
+# Its icon: its vehicle seen from the front, drawn as the cockpit's mark is — in the family's lilac with
+# the orange dot — on the cockpit's rounded square with the violet round its edge. On the Mac the
+# square macOS 26 expects (824 of the 1024 canvas, margins and all); elsewhere the same on the whole canvas.
+if(APPLE)
+    set(FROSTPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/FrostPawAmp-macOS-1024.png")
+else()
+    set(FROSTPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/FrostPawAmp-1024.png")
+endif()
 
 juce_add_plugin(FrostPawAmp
     VERSION                     "${FROSTPAWAMP_VERSION}"
@@ -1147,8 +1205,8 @@ juce_add_plugin(FrostPawAmp
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT  "FrostPawAmp needs audio input to process your signal."
-    # A stand-in until it has an icon of its own: its DRIVE socket, knob and all, off the dashboard.
-    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/FrostPawAmp-1024.png"
+    # Bundle / executable icon — its vehicle on the square; see FROSTPAWAMP_ICON.
+    ICON_BIG                    "${FROSTPAWAMP_ICON}"
     COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
 
 clap_juce_extensions_plugin(TARGET FrostPawAmp
@@ -1188,16 +1246,15 @@ foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
 endforeach()
 
 # ITS SET IS INSIDE ITS BINARY TOO, a list of its own — the V4's six packs its channels play, and the
-# rovers' ten cabinets — laid out under its own list in the family's folder (src/channels/Set.h), where a
-# file another product carries too is one file.
+# family's cabinet shelf — laid out under its own list in the family's folder (src/channels/Set.h), where
+# a file another product carries too is one file.
 set(FROSTPAWAMP_SET
     "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip"
-    ${ROVER_CABINETS})
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip")
 
 add_library(FrostPawAmpSet INTERFACE)
 juce_add_binary_data(FrostPawAmpSetData
@@ -1220,6 +1277,137 @@ rover_console(frostpawamp_channel_test tests/RedPawChannelTests.cpp "FrostPawAmp
 rover_set_test(frostpawamp_set_test "FrostPawAmpSetTest" FrostPawAmp 6)
 
 # ----------------------------------------------------------------------------
+# AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
+# dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy of
+# three panes, its tuner a gauge, its meters dots. The same controls, TURBO and PARK: the rovers', shared,
+# not copied — over the V4's six channels in three gears, as FrostPawAmp has them until it has captures of
+# its own, and the rovers' cabinets. Released apart under tags of its own (`amberpaw-vX.Y.Z`) — no release
+# workflow yet. Built only when asked for by name.
+# ----------------------------------------------------------------------------
+
+# Its renders are in resources/amberpaw, under the rovers' names; one that is not there yet is RedPawAmp's,
+# the way FrostPawAmp's are.
+file(GLOB AMBERPAW_OWN_RENDERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/*")
+set(AMBERPAWAMP_RENDERS "")
+foreach(render IN LISTS ROVER_RENDERS)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}" IN_LIST AMBERPAW_OWN_RENDERS)
+        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+    else()
+        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/${render}")
+    endif()
+endforeach()
+# ...and the renders a rover may carry or not: there when the file is, nothing in its place when it is not.
+foreach(render IN ITEMS emblem.png turbo-lid.png still.jpg)
+    if("${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}" IN_LIST AMBERPAW_OWN_RENDERS)
+        list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
+    endif()
+endforeach()
+juce_add_binary_data(AmberPawAmpData
+    NAMESPACE   AmberPawData
+    HEADER_NAME AmberPawData.h
+    SOURCES     ${AMBERPAWAMP_RENDERS})
+
+# Its own version, moved when AMBERPAWAMP is released (src/Product.h).
+set(AMBERPAWAMP_VERSION 0.1.0)
+
+# Its icon: its vehicle seen from the front, drawn as the cockpit's mark is — in the family's lilac with
+# the orange dot — on the cockpit's rounded square with the violet round its edge. On the Mac the
+# square macOS 26 expects (824 of the 1024 canvas, margins and all); elsewhere the same on the whole canvas.
+if(APPLE)
+    set(AMBERPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/AmberPawAmp-macOS-1024.png")
+else()
+    set(AMBERPAWAMP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/AmberPawAmp-1024.png")
+endif()
+
+juce_add_plugin(AmberPawAmp
+    VERSION                     "${AMBERPAWAMP_VERSION}"
+    PRODUCT_NAME                "AmberPawAmp"
+    COMPANY_NAME                "Darwin's Cat"
+    BUNDLE_ID                   "com.darwinscat.amberpawamp"
+    PLUGIN_MANUFACTURER_CODE    Dcat
+    PLUGIN_CODE                 Ambp
+    FORMATS                     VST3 AU Standalone
+    VST3_CATEGORIES             "Fx" "Distortion"
+    AU_MAIN_TYPE                "kAudioUnitType_Effect"
+    IS_SYNTH                    FALSE
+    NEEDS_MIDI_INPUT            FALSE
+    NEEDS_MIDI_OUTPUT           FALSE
+    IS_MIDI_EFFECT              FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT  "AmberPawAmp needs audio input to process your signal."
+    # Bundle / executable icon — its vehicle on the square; see AMBERPAWAMP_ICON.
+    ICON_BIG                    "${AMBERPAWAMP_ICON}"
+    COPY_PLUGIN_AFTER_BUILD     ${ORBITAMP_COPY_PLUGIN})
+
+clap_juce_extensions_plugin(TARGET AmberPawAmp
+    CLAP_ID       "com.darwinscat.amberpawamp"
+    CLAP_FEATURES audio-effect "guitar" "amplifier")
+if(APPLE)
+    add_custom_command(TARGET AmberPawAmp_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:AmberPawAmp,JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:AmberPawAmp_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
+
+# A rover, and its skin. Out of its canopy, the flight over Titan's methane sea (src/amberpaw/view).
+set(AMBERPAWAMP_SOURCES ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp)
+set(AMBERPAWAMP_LIBRARIES AmberPawAmpData ${ROVER_LIBRARIES})
+
+target_sources(AmberPawAmp PRIVATE ${AMBERPAWAMP_SOURCES})
+target_compile_definitions(AmberPawAmp PUBLIC
+    ORBITAMP_VERSION="${AMBERPAWAMP_VERSION}"
+    ORBITAMP_PRODUCT_NAME="AmberPawAmp"
+    ORBITAMP_RELEASE_TAG_PREFIX="amberpaw-"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>)
+target_include_directories(AmberPawAmp PUBLIC "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(AmberPawAmp OrbitAmpVersionGen)
+target_link_libraries(AmberPawAmp PRIVATE ${AMBERPAWAMP_LIBRARIES})
+
+set(AMBERPAWAMP_FORMATS "")
+foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
+    if(TARGET AmberPawAmp_${fmt})
+        list(APPEND AMBERPAWAMP_FORMATS AmberPawAmp_${fmt})
+    endif()
+endforeach()
+
+# ITS SET IS INSIDE ITS BINARY TOO, a list of its own — for now FrostPawAmp's: the V4's six packs its
+# channels play, and the family's cabinet shelf — laid out under its own list in the family's folder
+# (src/channels/Set.h), where a file another product carries too is one file.
+set(AMBERPAWAMP_SET
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip")
+
+add_library(AmberPawAmpSet INTERFACE)
+juce_add_binary_data(AmberPawAmpSetData
+    NAMESPACE   ProductSetData
+    HEADER_NAME ProductSetData.h
+    SOURCES     ${AMBERPAWAMP_SET})
+add_dependencies(AmberPawAmpSetData OrbitAmpSetPacks)   # the packs are zipped by the build (THE SET)
+set_target_properties(AmberPawAmpSetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+target_link_libraries(AmberPawAmpSet INTERFACE AmberPawAmpSetData)
+target_compile_definitions(AmberPawAmpSet INTERFACE PRODUCT_SET_EMBEDDED=1)
+target_link_libraries(AmberPawAmp PRIVATE AmberPawAmpSet)
+
+# Not part of the default build, like the other faces: `--target AmberPawAmp_All` builds every format.
+set_target_properties(AmberPawAmp ${AMBERPAWAMP_FORMATS} AmberPawAmpData PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(AmberPawAmp_All AmberPawAmp_CLAP)
+
+# Its gates are the rover's, run as AmberPawAmp: its six channels on its packs, and its set laid out
+# under its own list.
+rover_console(amberpawamp_channel_test tests/RedPawChannelTests.cpp "AmberPawAmpChannelTest" AmberPawAmp "amberpaw-" 6)
+rover_set_test(amberpawamp_set_test "AmberPawAmpSetTest" AmberPawAmp 6)
+
+# ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
 # the point of keeping core::EqLink free of JUCE: the DSP is testable without a host, a GUI, or
 # an audio device. Non-zero exit on any failure.
@@ -1232,6 +1420,7 @@ target_include_directories(orbitamp_pack_probe PRIVATE src)
 target_compile_definitions(orbitamp_pack_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_pack_probe PRIVATE
     felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
+    felitronics::delay felitronics::reverb   # Parameters.h names the delay's ladder and the room's characters from them
     juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
@@ -1241,6 +1430,7 @@ target_include_directories(orbitamp_render_probe PRIVATE src)
 target_compile_definitions(orbitamp_render_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_render_probe PRIVATE
     felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
+    felitronics::delay felitronics::reverb   # Parameters.h names the delay's ladder and the room's characters from them
     juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
@@ -1250,6 +1440,7 @@ target_include_directories(orbitamp_level_probe PRIVATE src)
 target_compile_definitions(orbitamp_level_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_level_probe PRIVATE
     felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
+    felitronics::delay felitronics::reverb   # Parameters.h names the delay's ladder and the room's characters from them
     juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
@@ -1278,17 +1469,16 @@ add_executable(orbitamp_gatelearn_test tests/GateLearnTests.cpp)
 target_include_directories(orbitamp_gatelearn_test PRIVATE src)
 target_compile_features(orbitamp_gatelearn_test PRIVATE cxx_std_20)
 
-# Same gate for the reverb. It links juce_audio_basics because that stage is JUCE-bound by
-# construction (Freeverb) — which is exactly why it is a SEPARATE target: the tone-stack gate above
-# stays JUCE-free, and the split makes the dependency visible instead of quietly universal.
+# Same gate for the reverb — felitronics::reverb's AmpReverb, the room this plugin plays. It needs no
+# JUCE any more (the room no longer stands on the framework's Freeverb); it stays a console app so its
+# binary lands where the release workflows look for every gate's.
 juce_add_console_app(orbitamp_reverb_test PRODUCT_NAME "OrbitAmpReverbTest")
 target_sources(orbitamp_reverb_test PRIVATE tests/ReverbStageTests.cpp)
 target_include_directories(orbitamp_reverb_test PRIVATE src)
 target_compile_definitions(orbitamp_reverb_test PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_reverb_test PRIVATE
-    felitronics::eq
-    juce::juce_audio_basics
+    felitronics::reverb
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
@@ -1364,6 +1554,17 @@ if(APPLE)
                 COMMENT "FrostPawAmp: signing the standalone so macOS remembers the mic grant"
                 VERBATIM)
         endif()
+
+        # ...and the helicopter's.
+        if(TARGET AmberPawAmp_Standalone)
+            add_custom_command(TARGET AmberPawAmp_Standalone POST_BUILD
+                COMMAND codesign --force --options runtime --timestamp=none
+                        --entitlements "${CMAKE_CURRENT_SOURCE_DIR}/installer/standalone.entitlements"
+                        --sign "${ORBITAMP_SIGN_IDENTITY}"
+                        "$<TARGET_BUNDLE_DIR:AmberPawAmp_Standalone>"
+                COMMENT "AmberPawAmp: signing the standalone so macOS remembers the mic grant"
+                VERBATIM)
+        endif()
     else()
         message(STATUS "Standalone signing: no '${ORBITAMP_SIGN_IDENTITY}' identity — staying ad-hoc (mic prompt every launch)")
     endif()
@@ -1420,6 +1621,7 @@ target_include_directories(orbitamp_chain_test PRIVATE src)
 target_include_directories(orbitamp_chain_test PRIVATE "${ORBITAMP_GENERATED_DIR}")   # the same faces, the same stamp
 add_dependencies(orbitamp_chain_test OrbitAmpVersionGen)
 target_compile_definitions(orbitamp_chain_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                      ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}"   # the channels' gate plays the set in place
                                                       JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE
     OrbitAmpData
@@ -1428,6 +1630,8 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::appkit_webp         # the panel decodes a pack's photograph — same half the plugin links
     felitronics::core                # core::BypassWire reads the resampler's delay geometry
     felitronics::dehum
+    felitronics::delay
+    felitronics::reverb
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -1479,6 +1683,8 @@ target_link_libraries(orbitamp_hum_test PRIVATE
     felitronics::appkit_webp
     felitronics::core
     felitronics::dehum
+    felitronics::delay
+    felitronics::reverb
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -1508,6 +1714,8 @@ target_link_libraries(orbitamp_captured_test PRIVATE
     felitronics::nam
     felitronics::rigplayer
     felitronics::limiter
+    felitronics::delay               # Parameters.h takes the delay's ladder and ranges from it...
+    felitronics::reverb              # ...and the room's characters
     juce::juce_audio_basics
     juce::juce_audio_processors
     juce::juce_dsp
@@ -1523,7 +1731,8 @@ target_link_libraries(orbitamp_captured_test PRIVATE
 juce_add_console_app(orbitamp_library_test PRODUCT_NAME "OrbitAmpLibraryTest")
 target_sources(orbitamp_library_test PRIVATE tests/LibraryTests.cpp)
 target_include_directories(orbitamp_library_test PRIVATE src)
-target_compile_definitions(orbitamp_library_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(orbitamp_library_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+                                                        ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}")   # the set's manifests, read in place
 target_link_libraries(orbitamp_library_test PRIVATE
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events
@@ -1533,7 +1742,7 @@ target_link_libraries(orbitamp_library_test PRIVATE
 
 # ----------------------------------------------------------------------------
 # Gate for OrbitAmp's set as it leaves the binary — every pack of the set laid out under a name the
-# device list tells apart, once, byte for byte. Runs entirely in a temp folder: the machine's real
+# device list tells apart, and the family's cabinet shelf in its folders, once, byte for byte. Runs entirely in a temp folder: the machine's real
 # Factory folder is never written.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
@@ -1544,6 +1753,7 @@ target_include_directories(orbitamp_set_test PRIVATE src)
 target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_set_test PRIVATE
     OrbitAmpSetData
+    OrbitAmpData                     # the family's cabinet shelf
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events
     juce::juce_gui_basics

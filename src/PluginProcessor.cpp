@@ -4,9 +4,9 @@
 #include "PluginProcessor.h"
 #include "Product.h"
 #include "Parameters.h"
+#include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
 
-#include <BinaryData.h>
 
 namespace orbitamp
 {
@@ -14,6 +14,24 @@ namespace orbitamp
 AmpProcessor::FactorySet::FactorySet()
 {
     layOutFactorySet();
+}
+
+void gatherFormerIrs()
+{
+    static const bool once = []
+    {
+        if (prefs::getBool (prefs::irsGathered, false))
+            return true;
+
+        const auto gathered = device::IrLibrary::gather (device::IrLibrary::formerDirectory(),
+                                                         device::IrLibrary::directory(), product::name);
+
+        // A file that would not copy is tried again on the next start; what was copied is not copied twice.
+        if (gathered.failed == 0)
+            prefs::setBool (prefs::irsGathered, true);
+        return true;
+    }();
+    juce::ignoreUnused (once);
 }
 
 // The machine's word for the hum and the stage's are one list in one order: the processor hands one
@@ -101,9 +119,7 @@ AmpProcessor::AmpProcessor()
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
     tunerMuteParam     = apvts.getRawParameterValue (params::tunerMute);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
-    boostInParam       = apvts.getRawParameterValue (params::blockIn (params::boostId));
     preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
-    boostSmoothParam   = apvts.getRawParameterValue (params::blockSmooth (params::boostId));
     preampSmoothParam  = apvts.getRawParameterValue (params::blockSmooth (params::preampId));
     cabHpfOnParam      = apvts.getRawParameterValue (params::cabHpfOn);
     cabHpfHzParam      = apvts.getRawParameterValue (params::cabHpfHz);
@@ -149,7 +165,6 @@ AmpProcessor::AmpProcessor()
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
             if (auto* raw = apvts.getRawParameterValue (ranged->paramID))
                 parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (ranged->getDefaultValue()) });
-    boostGainParam  = apvts.getRawParameterValue (params::boostGain);
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
     rescanDevices();
@@ -386,7 +401,7 @@ void AmpProcessor::rescanDevices()
     // when it ends — so it is opened only when there is actually something to suppress, and a
     // rescan that changes nothing (the usual one) leaves the timeline exactly as it found it.
     std::vector<std::pair<juce::RangedAudioParameter*, float>> writes;
-    bool nameFirstDevice[numCaptured] = { false, false };
+    bool nameFirstDevice[numCaptured] = { false };
 
     for (size_t b = 0; b < numCaptured; ++b)
     {
@@ -412,7 +427,8 @@ void AmpProcessor::rescanDevices()
                              && blockAt (b).selectedName().isNotEmpty();
     }
 
-    if (! writes.empty() || nameFirstDevice[0] || nameFirstDevice[1])
+    if (! writes.empty() || std::find (std::begin (nameFirstDevice), std::end (nameFirstDevice), true)
+                                != std::end (nameFirstDevice))
     {
         // Following a device that the FOLDER moved is the plugin agreeing with itself, not an
         // edit: recorded, it would be an undo step whose undo puts the number back on the wrong
@@ -447,46 +463,19 @@ void AmpProcessor::rescanDevices()
 
 const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
 {
+    // The family's shelf (device/FactoryShelf.h), in the parameter's order: OrbitAmp plays it from its
+    // binary by the index `cabIr` keeps, whatever the folder it is laid out in holds.
+    static const auto shelf = []
     {
-        static const IrBytes shelf[] = {
-            { BinaryData::_01cookiemonster_wav,       BinaryData::_01cookiemonster_wavSize },
-            { BinaryData::_02darthgenocider_wav,      BinaryData::_02darthgenocider_wavSize },
-            { BinaryData::_03kittenslayer_wav,        BinaryData::_03kittenslayer_wavSize },
-            { BinaryData::_04kaijutamer_wav,          BinaryData::_04kaijutamer_wavSize },
-            { BinaryData::_05iceburnsuicide_wav,      BinaryData::_05iceburnsuicide_wavSize },
-            { BinaryData::_06verticallipstabber_wav,  BinaryData::_06verticallipstabber_wavSize },
-            { BinaryData::_07manslaughterjoe_wav,     BinaryData::_07manslaughterjoe_wavSize },
-            { BinaryData::_08bigbubba_wav,            BinaryData::_08bigbubba_wavSize },
-            { BinaryData::_09devilscunnilingus_wav,   BinaryData::_09devilscunnilingus_wavSize },
-            { BinaryData::_10october32th_wav,         BinaryData::_10october32th_wavSize },
-            { BinaryData::_11wumbo_wav,               BinaryData::_11wumbo_wavSize },
-            { BinaryData::_12worldcollider_wav,       BinaryData::_12worldcollider_wavSize },
-            { BinaryData::_13cannibalchoir_wav,       BinaryData::_13cannibalchoir_wavSize },
-            { BinaryData::_14cathoderayfleshburn_wav, BinaryData::_14cathoderayfleshburn_wavSize },
-            { BinaryData::_15impalerjim_wav,          BinaryData::_15impalerjim_wavSize },
-            { BinaryData::_16nachoguacamole_wav,      BinaryData::_16nachoguacamole_wavSize },
-            { BinaryData::_17picklepunisher_wav,      BinaryData::_17picklepunisher_wavSize },
-            { BinaryData::_18wasabiwarrior_wav,       BinaryData::_18wasabiwarrior_wavSize },
-            { BinaryData::_19pestopaladin_wav,        BinaryData::_19pestopaladin_wavSize },
-            { BinaryData::_20donspinacio_wav,         BinaryData::_20donspinacio_wavSize },
-            { BinaryData::_21killdill_wav,            BinaryData::_21killdill_wavSize },
+        std::vector<IrBytes> out;
+        for (const auto& ir : device::shelf::irs())
+            out.push_back ({ ir.data, ir.size, ir.folder });
+        return out;
+    }();
 
-            { BinaryData::_02darkmatter_wav,          BinaryData::_02darkmatter_wavSize },
-            { BinaryData::_03ioncavity_wav,           BinaryData::_03ioncavity_wavSize },
-            { BinaryData::_04eventhorizon_wav,        BinaryData::_04eventhorizon_wavSize },
-            { BinaryData::_06coronalflare_wav,        BinaryData::_06coronalflare_wavSize },
-            { BinaryData::_07browndwarf_wav,          BinaryData::_07browndwarf_wavSize },
-            { BinaryData::_08accretiongap_wav,        BinaryData::_08accretiongap_wavSize },
-            { BinaryData::_09dustcloud_wav,           BinaryData::_09dustcloud_wavSize },
-            { BinaryData::_10blueshift_wav,           BinaryData::_10blueshift_wavSize },
-            { BinaryData::_11redgiant_wav,            BinaryData::_11redgiant_wavSize },
-            { BinaryData::_12pulsarbeam_wav,          BinaryData::_12pulsarbeam_wavSize },
-        };
-
-        return shelf[(size_t) juce::jlimit (0, (int) std::size (shelf) - 1, index)];
-    }
+    jassert (shelf.size() == (size_t) params::cabIrNames.size());
+    return shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
 }
-
 
 AmpProcessor::CabChoice AmpProcessor::cabChoice() const
 {
@@ -627,7 +616,6 @@ void AmpProcessor::pumpDeviceWork()
         block.pump (inlineLoads ? nullptr : &modelPool);
     };
 
-    pump (boost,    boostGainParam,  boostSmoothParam,  params::boostMeasured,  params::boostId);
     pump (preamp,   preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
 
     // A model that landed may carry rate-matching the host has to know about.
@@ -746,22 +734,20 @@ void AmpProcessor::fitWire (int index, int lat)
 
 void AmpProcessor::reportLatency()
 {
-    // In series: each captured block's models — a capture taken at another rate is resampled on
-    // the way in and out, and that has a length. TWO stages sum here, so a 44.1 kHz session on
-    // 48 kHz packs reports 122 samples, and a 96 kHz one 192. It was eight until the kernel behind
-    // the rate match was replaced; the number is the resampler's geometry and it will move again,
-    // which is why nothing downstream of here may write it down.
-    const int bo = boost.latencySamples();
+    // In series: the captured block's models — a capture taken at another rate is resampled on the
+    // way in and out, and that has a length: a 44.1 kHz session on 48 kHz packs reports 61 samples,
+    // and a 96 kHz one 96. It was four until the kernel behind the rate match was replaced; the
+    // number is the resampler's geometry and it will move again, which is why nothing downstream of
+    // here may write it down.
     const int pr = preamp.latencySamples();
-    const int total = bo + pr + limiterLatency.load();      // ...and the limiter's lookahead and grid, always
+    const int total = pr + limiterLatency.load();      // ...and the limiter's lookahead and grid, always
 
     // 🔴 THE WIRE IS SIZED FROM THE NUMBER THE BLOCK ACTUALLY REPORTS, here and nowhere else.
     // `latencySamples()` came out of `NamStage::rateMatch` and therefore out of the rates that are
     // really in play; every ceiling this class used to carry was computed from a model rate NOBODY
     // PROMISED, and such a ceiling is not too low, it is wrong — the run rate can walk, without
     // limit while audio runs, and no static number survives that.
-    fitWire (0, bo);
-    fitWire (1, pr);
+    fitWire (0, pr);
 
     // THE WIRE'S REFUSAL, PICKED UP OFF THE AUDIO THREAD. `BypassWire` cannot say anything from
     // inside `process` without allocating or writing to a stream on the audio thread, so it
@@ -773,12 +759,12 @@ void AmpProcessor::reportLatency()
     // message stops naming numbers. So both numbers go in, and whether it fits now is a comparison
     // the reader can make instead of a claim they have to take.
     if (! wireRefusalSeen)
-        for (int i = 0; i < 2; ++i)
+        for (int i = 0; i < (int) numCaptured; ++i)
             if (wire[(size_t) i].everShortened())
             {
                 wireRefusalSeen = true;
 
-                const int asked   = i == 0 ? bo : pr;
+                const int asked   = blockAt ((size_t) i).latencySamples();
                 const int carries = wire[(size_t) i].capacity();
 
                 juce::Logger::writeToLog (
@@ -821,7 +807,6 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // it — a bypassed +24 dB would open playback at nearly sixteen times.
     lastTrimGain = linkWorks (params::rowIn)  ? juce::Decibels::decibelsToGain (inTrimParam->load())  : 1.0f;
     lastOutGain  = linkWorks (params::rowOut) ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
-    lastBoostInGain  = juce::Decibels::decibelsToGain (boostInParam->load());
     lastPreampInGain = juce::Decibels::decibelsToGain (preampInParam->load());
     {
         limiterReady = limiter.prepare (sampleRate, block, juce::jmax (2, channels), core::door::config());
@@ -884,9 +869,10 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         }
     }
 
-    delay.prepare (sampleRate, block);
-    reverb.prepare (sampleRate, block);
-    boost.prepare (sampleRate, block, channels);
+    // Over the channels the bus carries — one or two, by the layouts this plugin accepts. A prepare
+    // either refuses keeps that link out of the sound (see delayReady), the way the limiter's does.
+    delayReady  = delay.prepare (sampleRate, block, channels);
+    reverbReady = reverb.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
     demo.prepare (sampleRate);
     scopeDry.setSize (1, block);
@@ -911,7 +897,6 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // place this happened is up to 33 ms later, which at 96 kHz is about fifty blocks of bypass
     // path short by the difference — or a whole fifteen-millisecond crossfade combing inside that
     // window. Reassigned on every prepare because `this` is what they capture.
-    boost .onLanded = [this] { reportLatency(); };
     preamp.onLanded = [this] { reportLatency(); };
 
     // Snapped, not faded: a chain that arrives switched off is silent from its first sample.
@@ -959,7 +944,10 @@ void AmpProcessor::updateDelaySettings() noexcept
 
         const int div = juce::jlimit (0, params::delayDivisions.size() - 1,
                                       juce::roundToInt (delayDivParam->load()));
-        ms = (float) ((double) params::delayDivisionBeats[div] * 60000.0 / bpm);
+        // The delay's own ladder, at the conducting tempo however slow a host goes; a note longer
+        // than the line is cut to the line by the delay itself. Not divisionMs: that floors the
+        // tempo at the BPM field's 40, and a slower host's echo would leave its time.
+        ms = (float) ((double) felitronics::delay::kDivisionBeats[div] * 60000.0 / bpm);
     }
 
     delay.setTimeMs (ms);
@@ -967,9 +955,7 @@ void AmpProcessor::updateDelaySettings() noexcept
 
     // DARK is a percent of darkness; the corner it buys falls log-evenly from the bright
     // ceiling to the dark floor, so every degree of the knob darkens by the same ear-step.
-    delay.setDarkHz (params::delayDarkHiHz
-                     * std::pow (params::delayDarkLoHz / params::delayDarkHiHz,
-                                 delayDarkParam->load() * 0.01f));
+    delay.setDarkHz (felitronics::delay::darkHzForPercent (delayDarkParam->load()));
 
     delay.setOffsetMs (delayOffsetParam->load());
     delay.setMix (delayMixParam->load() * 0.01f);
@@ -980,7 +966,7 @@ void AmpProcessor::updateReverbSettings() noexcept
     const int index = juce::jlimit (0, params::reverbCharacters.size() - 1,
                                     juce::roundToInt (reverbTypeParam->load()));
 
-    reverb.setCharacter (static_cast<core::ReverbStage::Character> (index));
+    reverb.setCharacter (static_cast<felitronics::reverb::Character> (index));
     reverb.setMix (reverbMixParam->load() * 0.01f);   // the face reads percent
     reverb.setDecay (reverbDecayParam->load());
     reverb.setPredelayMs (reverbPredelayParam->load());
@@ -1037,7 +1023,7 @@ void AmpProcessor::updateEqSettings() noexcept
         const auto mode = static_cast<params::EqMode> (juce::roundToInt (
             apvts.getRawParameterValue (params::blockEqMode (params::eqBlockId (l)))->load()));
 
-        const auto& blockFor = l == 0 ? boost : preamp;
+        const auto& blockFor = blockAt ((size_t) l);
 
         if (mode == params::EqMode::native && blockFor.hasWearableTone())
         {
@@ -1335,7 +1321,6 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // per block per player, live from the next block.
     {
         const bool comp = packCompParam->load() > 0.5f;
-        boost.setInputTrims (comp);
         preamp.setInputTrims (comp);
     }
 
@@ -1359,7 +1344,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // The captured blocks take a BUFFER — this alias holds only the channels the chain works.
     juce::AudioBuffer<float> chainView (const_cast<float**> (channels), nch, numSamples);
 
-    // gate -> boost -> EQ -> preamp -> EQ -> delay -> reverb. The gate stands at the very
+    // gate -> preamp -> EQ -> delay -> reverb. The gate stands at the very
     // front, right after the tuner's ear: it keys off the raw guitar — the cleanest key there is —
     // and kills the hum before any dirt can multiply it. Its enable crossfade makes the toggle
     // pop-free, so it runs unconditionally and the switch is an argument.
@@ -1400,8 +1385,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // A captured block, whole: the capture, then its own EQ, then its own volume.
     //
     // The EQ sits AFTER the nonlinearity because that is what it is for here — colouring what the
-    // device made, not deciding what the device eats. The boost's lands in front of the preamp,
-    // which is where a real amplifier keeps its tone stack; the preamp's stands after the last
+    // device made, not deciding what the device eats. The preamp's stands after the last
     // nonlinearity, colouring what the amp made before the room and the speaker have it.
     //
     // It also goes dark with the block. The EQ is part of the block now, not a link that happens to
@@ -1412,7 +1396,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // beside it has to be metering everything the block did — the EQ included.
     const auto captured = [&] (auto& blk, int l, params::ChainRow row,
                                std::atomic<float>* inParam, float& lastInGain,
-                               std::atomic<float>& blockOutDb, int stBlock, int stEq)
+                               std::atomic<float>& outDbOf, int stBlock, int stEq)
     {
         // A link that REPLACES the signal has no tail of its own to ride out, so dropping it out
         // of the path would be a step in the waveform. It is crossfaded against what it was
@@ -1554,9 +1538,9 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
             core::BypassFade::blend (chainView.getArrayOfWritePointers(),
                                      fadeDry.getArrayOfReadPointers(), nch, numSamples, span);
 
-        blockOutDb.store (on ? juce::Decibels::gainToDecibels (
-                                   chainView.getMagnitude (0, 0, numSamples), -90.0f)
-                             : -90.0f);
+        outDbOf.store (on ? juce::Decibels::gainToDecibels (
+                                chainView.getMagnitude (0, 0, numSamples), -90.0f)
+                          : -90.0f);
 
         // ONE tap per block, at the block's output, which is now also the EQ's output — the curve
         // and the spectrum drawn under it finally describe the same point. A switched-off block
@@ -1574,11 +1558,10 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         }
     };
 
-    captured (boost,  0, params::rowBoost,  boostInParam,  lastBoostInGain,  boostOutDb,  stBoost,  stEq1);
-    captured (preamp, 1, params::rowPreamp, preampInParam, lastPreampInGain, preampOutDb, stPreamp, stEq2);
+    captured (preamp, 0, params::rowPreamp, preampInParam, lastPreampInGain, blockOutDb[0], stPreamp, stPreampEq);
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
-    // (boost hiss, preamp hiss) dies here too, and the reverb tail past it rings out.
+    // (the preamp's hiss) dies here too, and the reverb tail past it rings out.
     if (! muteAtStart)
         gate.applyGain (channels, nch, numSamples);
 
@@ -1601,7 +1584,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     {
         const bool inRig = linkInRig (params::rowDelay);
         const auto span  = blockFade[(size_t) params::rowDelay].advance (numSamples, inRig);
-        const bool run   = core::BypassFade::runs (span, inRig);
+        const bool run   = delayReady && core::BypassFade::runs (span, inRig);
         const bool fade  = span.moving && canFade (numSamples, nchBack);
 
         if (run)
@@ -1613,7 +1596,8 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                     juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                        buffer.getReadPointer (ch), numSamples);
 
-            delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
+            // Prepared for every channel the bus carries, so it cannot refuse this block.
+            (void) delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
 
             if (fade)
                 core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
@@ -1633,7 +1617,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     const auto reverbSpan  = blockFade[(size_t) params::rowReverb].advance (numSamples, reverbInRig);
     const bool reverbFade  = reverbSpan.moving && canFade (numSamples, nchBack);
 
-    if (core::BypassFade::runs (reverbSpan, reverbInRig))
+    if (reverbReady && core::BypassFade::runs (reverbSpan, reverbInRig))
         { const auto a = PerfClock::now();
           const bool fed = linkWorks (params::rowReverb);
 
@@ -1651,7 +1635,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
             tin.publishIfDue (eqSpectrumOrder,
                               juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
 
-          reverb.process (channels, nchBack, numSamples, fed);
+          (void) reverb.process (channels, nchBack, numSamples, fed);   // as the delay: it cannot refuse
 
           { auto& tout = reverbSpectrumTap[1];
             const float* w = reverb.addedWet (0);

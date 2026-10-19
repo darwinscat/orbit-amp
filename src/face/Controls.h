@@ -277,6 +277,7 @@ public:
     bool upper = true;                           // false keeps the text's own case
     bool fromLeft = false;                       // true starts the words at the left edge instead of centring
                                                  // them: a number that changes width then moves nothing else
+    bool fit = false;                            // words wider than its box set condensed into it, as tall
 
     std::function<void()>       onClick, onDoubleClick;
     std::function<void()>       onDragStart, onDragEnd;
@@ -372,6 +373,11 @@ public:
         default; none, below zero. */
     int marks = 10, longMark = 5;
 
+    /** LYING ACROSS, in a slot that runs left to right: its foot on the left, its head on the right, the
+        hand dragging it sideways — everything else as it is upright, turned a quarter to the right (its
+        scale under it). */
+    void setAcross (bool);
+
     std::function<void()>       onGestureStart, onGestureEnd;
     std::function<void (float)> onChange;
     std::function<void()>       onMenu;          // a right click, when set — and then it does not move the cap
@@ -392,6 +398,10 @@ private:
     const juce::Image& cap;
     float value = 0.5f, dragStartValue = 0.0f;
     bool  sliding = false;                       // false through a right click that opened the menu
+    bool  across = false;
+    float runLength() const noexcept   { return (float) (across ? getWidth() : getHeight()); }    // along its travel
+    float crossWidth() const noexcept  { return (float) (across ? getHeight() : getWidth()); }    // ...and across it
+    float along (juce::Point<float> p) const noexcept { return across ? (float) getWidth() - p.x : p.y; }   // down from its head
     juce::Range<float> travel() const;
 };
 
@@ -403,9 +413,22 @@ public:
     explicit SegmentMeter (std::function<float()> readDb);
     void paint (juce::Graphics&) override;
 
+    /** DOTS: the meter as a column of round lamps its picture paints out — `count` of them, a pitch apart
+        down the middle of its box, each `size` across — lit from the foot up as the level climbs, each
+        from its own place on the scale, the top ones orange and red as the segments are. None while
+        `count` is nothing: segments down its well. */
+    struct Dots
+    {
+        int count = 0;
+        float size = 0.0f;
+    };
+    void setDots (const Dots&);
+
 private:
     std::function<float()> readDb;
     float shown = -90.0f;
+    Dots dots;
+    void paintDots (juce::Graphics&, float level);
     void timerCallback() override;
 };
 
@@ -419,6 +442,11 @@ class Lamp final : public juce::Component, private juce::Timer
 public:
     Lamp (const juce::Image& lit, std::function<float()> level, double holdMs, double fadeMs);
     void paint (juce::Graphics&) override;
+
+    /** A LAMP ITS PICTURE DOES NOT PAINT — no render of it lit — is drawn by code: a round glass `dot`
+        across in the middle of its box, dark while out, burning in `light`. None while `dot` is nothing. */
+    float dot = 0.0f;
+    juce::Colour light;
 
 private:
     const juce::Image& lit;
@@ -449,10 +477,36 @@ public:
         numbers under it — for a face whose glass has other work to do. */
     void setStrip (bool);
 
+    /** A GAUGE: no glass of its own, but a dial the face's picture paints — a needle drawn over it,
+        turning about `pivot` under the arc of ticks, `reach` long, `sweep` radians either side of straight
+        up at fifty cents out, where the arc's end ticks are; the note in the little `window` under the
+        pivot, the state between the two, and the pitch its A is tuned to, when that is not 440, over
+        the pivot. In the stage's space; none while `reach` is nothing — and a dial it has is what it
+        is, strip or not. */
+    struct Dial
+    {
+        juce::Point<float> pivot;
+        float reach = 0.0f, sweep = 0.0f;
+        juce::Rectangle<float> window;
+    };
+    void setDial (const Dial&);
+
+    /** ITS INK, the same on every face: its state violet while it is off, orange while it listens; the
+        note `heard`, `home` when the string is in tune; the dash while nothing is heard lilac at
+        `idleAlpha`, the octave and the pitch its A is tuned to lilac at `quietAlpha`, the numbers under the
+        ruler lilac at `numberAlpha`; the ticks violet, the centre orange, at `majorAlpha` and `minorAlpha`;
+        the needle `home`, warming to orange by `warmCents` out. */
+    static inline const juce::Colour home  { 0xff5fc97a };   // the family's in-tune green
+    static inline const juce::Colour heard { 0xffece9f6 };
+    static constexpr float idleAlpha = 0.35f, quietAlpha = 0.8f, numberAlpha = 0.6f;
+    static constexpr float majorAlpha = 0.9f, minorAlpha = 0.4f, warmCents = 25.0f;
+
 private:
     const core::TunerEar& ear;
     bool listening = true, muting = false, strip = false;
+    Dial dial;
     void paintStrip (juce::Graphics&);
+    void paintDial (juce::Graphics&);
     void timerCallback() override { repaint(); }
 };
 

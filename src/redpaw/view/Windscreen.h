@@ -11,7 +11,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_opengl/juce_opengl.h>
 
+#include <array>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -74,10 +76,21 @@ public:
     void setParked (bool on);
     bool isParked() const noexcept { return parkedWanted.load(); }
 
+    /** The wipers' speed (Drive::setWipers), where the face has keys for it. */
+    void setWipers (int speed) { wipersWanted.store (speed); }
+    /** ...and the searchlights (Drive::setLights). */
+    void setLights (bool left, bool right) { lightsWanted.store ((left ? 1 : 0) | (right ? 2 : 0)); }
+
     /** THE ROVER'S SPEED, km/h, as the view is driving it: eased toward what the gear and TURBO ask for,
         to a stand when parked. In the 1993 landscape its own drive, counted in the Plains' measure; in
         the still, what the gear asks for — nothing moves there to ease. Message thread. */
     float speedKmh() const noexcept;
+
+    /** THE 1993 DRIVE'S PACE: texels a second in each gear, the first first — a lever longer than the
+        table runs its top gears at the last — twice that with TURBO; eased to it with this time constant,
+        and to a stand with the Plains' park time. */
+    static constexpr std::array<float, 4> texelsPerSecond1993 { 2.0f, 5.0f, 10.0f, 16.0f };
+    static constexpr double speedSeconds1993 = 0.28;
 
     /** Held steering input from outside, -1..1; 0 lets go. Adds to the view's own drag and keys. */
     void steer (float amount) noexcept;
@@ -128,6 +141,11 @@ public:
     /** The still as kept, when the mode is STILL and it has arrived; else invalid. Message thread. */
     juce::Image stillImage() const { return still; }
 
+    /** THE STILL AS SHIPPED: where the product brings a picture of its world, STILL shows that — asked
+        for when STILL comes on, let go when it goes off — and renders nothing; else, or when it gives an
+        invalid one, STILL renders a frame of its own. Message thread. */
+    void setPicture (std::function<juce::Image()> picture);
+
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -167,10 +185,13 @@ private:
     std::vector<juce::uint8> stillPixels;
     int stillW = 0, stillH = 0;
     juce::Image still;
+    std::function<juce::Image()> picture;
+    bool stillShipped = false;           // `still` is the product's picture
 
     // The inputs, shared with the GL thread.
     std::atomic<int> gearWanted { 1 };
     std::atomic<bool> turboWanted { false }, parkedWanted { false };
+    std::atomic<int> wipersWanted { 1 }, lightsWanted { 0 };
     face::Steering steering;        // the drag, the keys, and steer() from outside, as one value
     std::atomic<float> scaleInUse { 1.0f };
     float scaleWanted = 1.0f;

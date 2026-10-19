@@ -7,6 +7,7 @@
 #include "../channels/Channels.h"
 
 #include <functional>
+#include <vector>
 
 namespace orbitamp::face
 {
@@ -16,10 +17,11 @@ using channels::Channels;
 /** THE CABINETS' WINDOW (a face's Sheet shows it): every cabinet CAB steps through, by name, where
     the slider gives each a few pixels of its travel.
 
-    TWO LISTS THAT NEVER MIX. FACTORY is what the build carries; YOURS is what the player has added —
-    dropped on the face, or taken in with ADD. A click on a row plays that cabinet. The rows stand in
-    columns, since a face's window is wide and not tall, and when there are more columns than the
-    window has room for, the lists scroll sideways.
+    LISTS THAT NEVER MIX. What the build carries comes first, a list for each folder of the family's
+    shelf it lies in (ORANGE PPC212V, OTHER — device/FactoryShelf.h), each headed by its folder's name;
+    YOURS, after them, is what the player has added — dropped on the face, or taken in with ADD. A click
+    on a row plays that cabinet. The rows stand in columns, since a face's window is wide and not tall,
+    and when there are more columns than the window has room for, the lists scroll sideways.
 
     THE KEYS under them: ADD takes files in; SAVE hands the cabinet that is playing out as a file; and
     RENAME and REMOVE are for a cabinet of the player's own — the build's are not the player's to
@@ -45,7 +47,7 @@ public:
     void refresh();
 
 private:
-    /** The two lists, laid out in columns — as wide as they need, behind a viewport when that is too wide. */
+    /** The lists, laid out in columns — as wide as they need, behind a viewport when that is too wide. */
     class Lists final : public juce::Component
     {
     public:
@@ -63,8 +65,9 @@ private:
     private:
         CabPanel& owner;
         int deep = 1;                   // rows to a column
-        int wide[2] { 0, 0 };           // a column's width in each list: its longest name's, within reason
+        std::vector<int> wide;          // a column's width in each list: its longest name's, within reason
         int hovered = -1;
+        int groupOf (int index) const;
         int columnsOf (int group) const;
         int leftOf (int group) const;
     };
@@ -72,8 +75,15 @@ private:
     const Channels& channels;
     const juce::Point<int> room;
 
-    // What the lists were last laid out from.
+    // What the lists were last laid out from: the files, and the lists they stand in — the shelf's
+    // folders one by one, then the player's, last of all.
+    struct Group
+    {
+        juce::String heading;
+        int first = 0, count = 0;
+    };
     juce::Array<juce::File> files;
+    std::vector<Group> groups;
     int factory = 0, playing = -1;
 
     Lists lists { *this };

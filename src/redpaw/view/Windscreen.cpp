@@ -28,7 +28,12 @@ namespace
         std::nth_element (ms.begin(), mid, ms.end());
         return *mid;
     }
-    constexpr std::array<float, PlainsWorld::maxGears> marsTexelsPerSecond { 2.0f, 5.0f, 10.0f };   // the 1993 drive's gears, the first first
+    /** The 1993 drive's pace in a gear (Windscreen::texelsPerSecond1993). */
+    float marsTexels (int gear) noexcept
+    {
+        const auto& pace = Windscreen::texelsPerSecond1993;
+        return pace[(size_t) juce::jlimit (1, (int) pace.size(), gear) - 1];
+    }
     constexpr float marsStrafePerSecond = 6.0f;   // the 1993 view has no heading: steering slides it along u
 
     /** The 1993 program took its seed from the clock, 18.2 ticks a second since midnight, 15 bits kept. */
@@ -118,6 +123,15 @@ void Windscreen::setFrameRateCap (int fpsCap)
     cap = fpsCap >= 60 ? 60 : 30;
 }
 
+void Windscreen::setPicture (std::function<juce::Image()> p)
+{
+    picture = std::move (p);
+    still = {};
+    stillShipped = false;
+    if (running == Mode::still)
+        takeStill();
+}
+
 float Windscreen::speedKmh() const noexcept
 {
     constexpr float kmh = 3.6f;
@@ -125,7 +139,7 @@ float Windscreen::speedKmh() const noexcept
     switch (running)
     {
         case Mode::gpu:   return speedShared.load() * kmh;
-        case Mode::cpu:   return (float) marsSpeed / marsTexelsPerSecond[(size_t) g - 1] * world->speedFor (g, false) * kmh;
+        case Mode::cpu:   return (float) marsSpeed / marsTexels (g) * world->speedFor (g, false) * kmh;
         case Mode::still: break;
     }
     return parkedWanted.load() ? 0.0f : world->speedFor (g, turboWanted.load()) * kmh;
@@ -186,6 +200,11 @@ void Windscreen::apply()
 {
     stillReady.store (false);
     stillWanted.store (false);
+    if (running != Mode::still && stillShipped)
+    {
+        still = {};             // the product's picture goes with STILL
+        stillShipped = false;
+    }
     switch (running)
     {
         case Mode::gpu:
@@ -269,10 +288,22 @@ void Windscreen::hostRender (juce::Rectangle<int> glass, int frameWidth, int fra
     glViewport (0, 0, frameWidth, frameHeight);
 }
 
-/** One frame, kept. From the GPU where it works — the GL thread reads it back and the pulse collects
-    it — else from the 1993 landscape at once. */
+/** One frame, kept: the product's own picture where it brings one — else rendered, from the GPU where
+    it works (the GL thread reads it back and the pulse collects it), else from the 1993 landscape at once. */
 void Windscreen::takeStill()
 {
+    if (picture != nullptr && ! stillShipped)
+        if (auto shipped = picture(); shipped.isValid())
+        {
+            still = shipped;
+            stillShipped = true;
+        }
+    if (stillShipped)
+    {
+        detachGl();
+        repaint();
+        return;
+    }
     if (! gpuFailed.load())
     {
         attachGl();
@@ -444,16 +475,17 @@ void Windscreen::drawCpuFrame (bool advance)
         cpuLast = juce::Time::getMillisecondCounterHiRes() * 0.001;
     }
     const int rows = juce::jmax (50, juce::roundToInt ((float) getHeight() * scaleInUse.load())) & ~1;
-    if (mars.height() != rows)
-        mars.setRows (rows);
+    const double glass = getHeight() > 0 ? (double) getWidth() / getHeight() : 0.0;     // the frame is stretched onto it
+    if (mars.height() != rows || mars.shownAspect() != glass)
+        mars.setRows (rows, glass);
 
     const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
     const double dt = advance ? juce::jlimit (0.0, 0.1, now - cpuLast) : 0.0;
     cpuLast = now;
     const int g = gearWanted.load();
     const bool parked = parkedWanted.load();
-    const double want = parked ? 0.0 : marsTexelsPerSecond[(size_t) g - 1] * (turboWanted.load() ? PlainsWorld::turboFactor : 1.0f);
-    marsSpeed += (want - marsSpeed) * (1 - std::exp (-dt / (parked ? PlainsWorld::parkSeconds : 0.28)));
+    const double want = parked ? 0.0 : marsTexels (g) * (turboWanted.load() ? PlainsWorld::turboFactor : 1.0f);
+    marsSpeed += (want - marsSpeed) * (1 - std::exp (-dt / (parked ? PlainsWorld::parkSeconds : speedSeconds1993)));
     marsPos += marsSpeed * 16 * dt;
     if (! parked)
         marsX += steering.value() * marsStrafePerSecond * 16 * dt;
@@ -560,6 +592,8 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     world->setTurbo (turboWanted.load());
     world->setParked (parkedWanted.load());
     world->setSteer (steering.value());
+    world->setWipers (wipersWanted.load());
+    world->setLights ((lightsWanted.load() & 1) != 0, (lightsWanted.load() & 2) != 0);
     const bool wantStill = stillWanted.load();
     if (wantStill)
         world->settle (gearWanted.load(), turboWanted.load(), parkedWanted.load());   // where it stands, as the drive would be once settled

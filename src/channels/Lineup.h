@@ -23,6 +23,15 @@ struct Lineup
         std::optional<float> reverbMix;     // ...how much of it — the parameter's own default when not said
         float delayMix;         // ...and how much delay
         bool  hot;              // its pack is one of the hottest, the ones that carry FAT
+
+        /** A SWITCH OF ITS PACK THE CHANNEL HOLDS: that control at that position, whatever a record or a
+            hand says — so two channels can play one pack, as the IR-X's Boost off and on are a gear and
+            its TURBO. None when `control` is not said; the pack's other switches stay the hand's. */
+        struct Held
+        {
+            const char* control = nullptr;
+            const char* value   = nullptr;
+        } held {};
     };
 
     const char* nodeType;       // the product's node in the state tree, where the channels' memory is kept
@@ -35,6 +44,12 @@ struct Lineup
     /** PARK, where the product has it: a switch of its own that takes the whole amp out of the sound
         (ProductEngine::parkSwitch) — its parameter's id, or none. */
     const char* parkId = nullptr;
+
+    /** CHANNELS IN PAIRS OVER ONE MEMORY, where the product has them: each channel and the next play
+        their two packs over one set of everything else — DRIVE, the tones by their knobs, the keys, the
+        cabinet, the reverb, the delay — the rover's gear and its TURBO, which is an option of the gear's
+        as its tone is. What a pair opens on is the first's. */
+    bool pairs = false;
 
     int count() const noexcept { return (int) channels.size(); }
 };

@@ -12,15 +12,8 @@ namespace orbitamp::face
 
 namespace
 {
-    constexpr int preampBlock   = 1;     // the processor's second captured block: the one the tone stack follows
+    constexpr int preampBlock   = 0;     // the processor's captured block: the one the tone stack follows
     constexpr double displayRate = 48000.0;
-
-    // SHAPE in silence: what counts as quiet at the preamp's input (a guitar plays there at -30 to -6 dBFS,
-    // its hum and hiss sit at -60 to -80), for how long, and how fast the line goes and comes back.
-    constexpr float  quietDb   = -50.0f;
-    constexpr double quietMs   = 100.0;
-    constexpr double fadeOutMs = 200.0;
-    constexpr double fadeInMs  = 30.0;
 }
 
 const juce::StringArray& Monitor::names()
@@ -175,6 +168,50 @@ void Monitor::paintSpectrum (juce::Graphics& g, juce::Rectangle<float> r)
     // over it.
     draw (before, juce::Colour (0xff9fb0cc).withAlpha (0.7f), 1.1f);
     draw (after,  orange, 1.4f);
+}
+
+juce::var Monitor::shapeForWeb() const
+{
+    const auto colour = [] (juce::Colour c) { return juce::String::formatted ("#%02x%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue(), c.getAlpha()); };
+    const auto stroke = [&colour] (juce::Colour c, float width, const char* tap)
+    {
+        auto* s = new juce::DynamicObject();
+        s->setProperty ("colour", colour (c));
+        s->setProperty ("width", width);
+        s->setProperty ("tap", tap);
+        return juce::var (s);
+    };
+
+    // One cycle of what goes into the amp, lilac, and of what comes out of it, orange, both scaled by the
+    // one factor that brings the window's peak to `fill` of the half-height and each clamped there.
+    auto* shape = new juce::DynamicObject();
+    shape->setProperty ("dry", stroke (theme::lilac.withAlpha (scope::ShapeView::dryAlpha), scope::ShapeView::dryWidth,
+                                       "the amp's input: the captured block's own, after INPUT, the hum and the gate, before the model; channel 0"));
+    shape->setProperty ("wet", stroke (theme::orange, scope::ShapeView::wetWidth,
+                                       "the amp's output: the model's, before the tone stack, the delay, the room and the cabinet; channel 0"));
+    shape->setProperty ("tapSamples", core::ScopeTap::size);         // the last this many samples of both, at the session's rate
+    shape->setProperty ("window", "back from the last rising zero crossing of dry in the tap's later half (its end if none)");
+    shape->setProperty ("samples", scope::ShapeView::samples);
+    shape->setProperty ("fill", scope::ShapeView::fill);
+    shape->setProperty ("peakFloor", scope::ShapeView::peakFloor);  // the factor's floor: silence stays a flat line
+    shape->setProperty ("fps", 60);
+    shape->setProperty ("noFrame", "no fresh tap since the last frame: nothing drawn");
+
+    const auto b = band().translated ((float) getX(), (float) getY());
+    auto* where = new juce::DynamicObject();
+    where->setProperty ("x", b.getX()); where->setProperty ("y", b.getY());
+    where->setProperty ("w", b.getWidth()); where->setProperty ("h", b.getHeight());
+    shape->setProperty ("band", juce::var (where));
+
+    auto* silence = new juce::DynamicObject();
+    silence->setProperty ("fades", shapeFadesInSilence);
+    silence->setProperty ("judgedOn", "dry's peak over the tap; no frame is no sound");
+    silence->setProperty ("quietDb", quietDb);
+    silence->setProperty ("quietMs", quietMs);
+    silence->setProperty ("fadeOutMs", fadeOutMs);
+    silence->setProperty ("fadeInMs", fadeInMs);
+    shape->setProperty ("silence", juce::var (silence));
+    return juce::var (shape);
 }
 
 } // namespace orbitamp::face

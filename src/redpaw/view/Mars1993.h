@@ -11,8 +11,8 @@ namespace orbitamp::redpaw
 {
 
 /** THE 1993 LANDSCAPE. Tim J. Clarke's MARS.EXE, transliterated from its disassembly routine by
-    routine: the same plasma fractal and random generator, the same blur taps, the same 96-entry
-    palette, the same sky, perspective and far-to-near vertical-line renderer, drawn on the CPU into an
+    routine: the same plasma fractal and random generator, the same blur taps, the same sky,
+    perspective and far-to-near vertical-line renderer, drawn on the CPU into an
     8-bit indexed framebuffer. Where the program's own prose and its code disagree, the code wins.
 
     The frame is a pure function of (seed, position, rows): nothing is kept between frames but the
@@ -24,21 +24,35 @@ namespace orbitamp::redpaw
     binary's — map addresses are 16-bit and wrap, row-internal wraps are 8-bit, the noise is a signed
     byte — spelled with fixed-width unsigned types so they wrap by definition, never by luck.
 
-    The same landscape can wear an ice moon's colours instead of Mars's: the ground's 64 shades run
-    from a blue shadow to white snow, the sky is black, and a flat Jupiter stands over the horizon
-    where the ice world's sky has it. The program's own routines are untouched by the look; only the
-    DAC's entries, the horizon line's colour and the one disc drawn into the sky differ. */
+    Its look is the GPU's plains rather than the program's own: a butterscotch sky, paler low, its clouds
+    faint; ochre ground, rolling plains at a quarter of the terrain's height, every row of it drawn
+    toward the dust with its distance; and two ranges of mountains standing on the horizon, a near one
+    and a far, paler one.
+
+    The same landscape can wear an ice moon's colours instead: the ground's 64 shades run from a blue
+    shadow to white snow, the terrain lies at a quarter of its height, the sky is black, and Jupiter
+    stands over the horizon where the ice world's sky has it. Or Titan's: an amber haze for the sky, a flat methane sea for the ground — the
+    terrain's highest sixteenth left as low islands and a far shore, the rest its level, keeping only a
+    swell, shaded by its distance, dark and rough near and calm into the haze — a violet mist on the
+    horizon, and Saturn pale in the haze, its rings nearly edge-on.
+
+    The discs in the sky are shaded spheres, their light and their limb in a few steps of the palette
+    with a 4 x 4 ordered dither between them, as the period dithered what its palette could not hold. */
 class Mars1993 final
 {
 public:
-    enum class Look { mars, ice };
+    enum class Look { mars, ice, titan };
 
     /** Makes the sky and the terrain from a seed, as the program did at start — a 15-bit number it
         took from the clock. About a millisecond. The look is the palette. */
     void makeMaps (uint16_t seed, Look look = Look::mars);
 
-    /** Sets the frame's height; the width follows (5.345 : 1, even). Allocates the buffers. */
-    void setRows (int rows);
+    /** Sets the frame's height; the width follows (5.345 : 1, even). Allocates the buffers. `glass` is
+        the width over the height of the glass the frame is stretched onto, so that a disc in the sky
+        is round there; 0 is the frame's own. */
+    void setRows (int rows, double glass = 0);
+    /** The glass's width over its height, as last set; 0 is the frame's own. */
+    double shownAspect() const noexcept { return shown; }
 
     /** Draws one frame from a 12.4 fixed-point map position. */
     void render (uint16_t camX, uint16_t camY);
@@ -64,14 +78,45 @@ private:
     std::vector<int32_t> cBuf;
     int w = 0, h = 0;
     double P = 1.0;          // framebuffer pixels per pixel of the original's 256 x 200 screen
+    double shown = 0;        // the glass's aspect (setRows)
+    double squeeze = 1.0;    // a disc's columns per row of its height, for it to be round on the glass
     int G = 0;               // the horizon's row: the middle
     int skyRows = 0, hazeRows = 0;
     Look look = Look::mars;
     uint8_t horizonIndex = 0x50;   // the horizon line's colour: 50h in the program, a mist on the ice
 
+    // Titan's: where its shades lie in the DAC — the sea's, trough to sheen, then the islands', lit to
+    // shadow, so a span from one to the other passes the sheen, a wet shore, never the dark — the code
+    // round which a sea texel keeps its swell, the sea's height, and the sea's shade at the farthest row,
+    // which the haze under the horizon starts from.
+    static constexpr int seaShades = 98, landShades = 162, seaCode = 96, farSea = 17;
+    static constexpr uint8_t seaLevel = 0x80;
+    // Mars's: where its ground's shades lie, the palest a near code reaches, how far toward the dust the
+    // farthest row is drawn, and the shade the middle code takes there, which the haze under the
+    // horizon starts from.
+    static constexpr int groundShades = 98, nearTop = 48;
+    static constexpr double dustFar = 0.35;
+    static constexpr int farGround = (int) (32.0 * nearTop / 63 * (1 - dustFar) + 63 * dustFar + 0.5);
+    // The discs' shades: Jupiter's latitudes, each in its steps of light, then the Spot's; Saturn's on
+    // Titan, after the islands, then its rings'.
+    static constexpr int jupShades = 98, jupRows = 24, jupLevels = 6, jupSpot = jupShades + jupRows * jupLevels;
+    static constexpr int satShades = 194, satRows = 12, satLevels = 4, satRing = satShades + satRows * satLevels, satRingShades = 3;
+
+    // ...and its ranges: their ridges, and where their shades lie, the near range's then the far's.
+    static constexpr int rangeSamples = 1024, rangeShades = 162, rangeShadesEach = 32;
+    std::array<float, rangeSamples> rangeNear {}, rangeFar {};
+
+    void makeMarsPalette();
+    void makeRanges (uint32_t seed);
+    void plainsRow (uint8_t* shade, int d) const noexcept;
+    void drawRanges();
     void makeIcePalette();
+    void makeTitanPalette();
+    void makeSea();
+    void seaRow (uint8_t* shade, int d) const noexcept;
     void drawSky (uint16_t alt, uint16_t camX, uint16_t camY);
     void drawJupiter();
+    void drawSaturn();
     void drawGround (uint16_t alt, uint16_t camX, uint16_t camY);
 };
 

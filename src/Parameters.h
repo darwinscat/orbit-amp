@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <felitronics/delay/DelayLaw.h>
+#include <felitronics/reverb/AmpReverb.h>
+
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace orbitamp::params
@@ -10,12 +13,8 @@ namespace orbitamp::params
 
 // Parameter IDs. Stable strings — a host stores these in its session, so renaming one breaks every
 // saved project that used it.
-inline constexpr const char* boostOn     = "boost_on";
 inline constexpr const char* preampOn    = "preamp_on";
 inline constexpr const char* reverbOn    = "reverb_on";
-
-inline constexpr const char* boostGain  = "boost_gain";
-inline constexpr const char* boostTone  = "boost_tone";
 
 /** The input trim — the interface knob the interface may not have: ±24 dB ahead of EVERYTHING,
     the tuner's ear and the gate's key included, so the IN meter closes the gain-staging loop:
@@ -44,8 +43,8 @@ inline constexpr float gateHysteresisDb = 6.0f;
 
 /** Where the gate MUTES. It always KEYS off the raw input — that is the whole dual-detection
     idea — but the VCA can stand at the chain's start or after the preamp, ahead of the reverb.
-    Pre-Reverb is the G-String architecture and the default: it kills the hiss the boost and the
-    preamp ADD (which a gate at the start never meets), the clean key never pumps on distortion
+    Pre-Reverb is the G-String architecture and the default: it kills the hiss the preamp ADDS
+    (which a gate at the start never meets), the clean key never pumps on distortion
     sustain, and the reverb tail rings out past it. Start remains for the player who wants the
     nonlinearity itself to fall silent between notes. */
 inline constexpr const char* gatePos = "gate_pos";
@@ -90,12 +89,16 @@ inline juce::String selectorId (const char* blk, int i)
     return juce::String (blk) + "_sel" + juce::String (i + 1);
 }
 
-inline constexpr const char* boostId  = "boost";
 inline constexpr const char* preampId = "preamp";
 
-/** A captured block's own parameters, derived from its id prefix — the same shape for the boost,
-    the preamp, and whatever captured block comes next. The named constants around them predate
-    these and stay for call sites that mean a specific block. */
+/** What a player reads where the preamp is named — its arrow, its face, its lanes in a host. To a
+    player the block is the AMP; its ids keep the `preamp` they were born with, because a host
+    stores those and a new spelling buys nothing. */
+inline constexpr const char* preampName = "Amp";
+
+/** A captured block's own parameters, derived from its id prefix — the same shape for the preamp
+    and whatever captured block comes next. The named constants around them predate these and stay
+    for call sites that mean a specific block. */
 inline juce::String blockOn       (const char* blk) { return juce::String (blk) + "_on"; }
 inline juce::String blockDevice   (const char* blk) { return juce::String (blk) + "_device"; }
 inline juce::String blockGain     (const char* blk) { return juce::String (blk) + "_gain"; }
@@ -118,12 +121,12 @@ inline juce::String blockSmooth   (const char* blk) { return juce::String (blk) 
 
     …which is why the loudness fix stopped living here. A pack now states its own output level
     (`chain[].output_db`, namz schema 4) and the player applies it after everything: that is the
-    number that makes a boost stop cooking the preamp it feeds, and it changes volume and nothing
-    else. This hand is for drive; that one is for balance. */
+    number that makes a hot pack stop cooking whatever comes after it, and it changes volume and
+    nothing else. This hand is for drive; that one is for balance. */
 inline juce::String blockIn (const char* blk) { return juce::String (blk) + "_in"; }
 
 /** Asymmetric on purpose. Forty-eight down and twelve up: cutting is what gain staging mostly
-    asks for — a hot interface, a hot pack, a boost feeding a preamp — and now that the hand
+    asks for — a hot interface, a hot pack — and now that the hand
     rides a full-height wall there is room for a real cut; twelve decibels of boost is already
     more than a capture wants before it stops being the device that was captured. The SAME
     reach on both walls: the IN trim and the console's LEVEL move over one ladder. */
@@ -144,44 +147,31 @@ inline constexpr float captureColdDb = -18.0f;
 
 inline juce::String blockMeasured (const char* blk, int i) { return juce::String (blk) + "_meas" + juce::String (i + 1); }
 
-/** A pedal's TONE controls — the ones a player computes rather than selects. How many a device has
-    varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge; a Victory V4 preamp five), but a host
-    needs a fixed set of parameters, so five slots are reserved and the loaded pack decides what each
-    one drives. A slot with nothing behind it is hidden rather than shown doing nothing. */
-inline constexpr int boostNumMeasured = 5;
-inline juce::String boostMeasured (int i) { return "boost_meas" + juce::String (i + 1); }
 /** Which device is loaded, as an index into the scanned list. An index rather than a choice list:
     a host fixes a Choice's names at construction, and this list is whatever the player has on disk
     the moment the plugin opens.
 
-    THE INDEX IS THE HOST'S HANDLE, NOT THE IDENTITY. The list is sorted bundled-first and then
-    along the gain ramp, so one new pack dropped into the Devices folder renumbers every device
+    THE INDEX IS THE HOST'S HANDLE, NOT THE IDENTITY. The list is in the AMP menu's order, so one
+    new pack dropped into the Devices folder renumbers every device
     after it. What the state actually carries is the device's NAME, in a property beside this
     parameter (`AmpProcessor::deviceAimSuffix`), and the name is what decides on the way back. */
-inline constexpr const char* boostDevice = "boost_device";
 inline constexpr int maxDevices = 128;
-
-/** The pedal tone control's sweep, as the descriptor models it: a first-order low pass whose corner
-    moves. The measured example fitted 800 Hz at the dark end; wide open it is out of the way. */
-inline constexpr float boostToneLoHz = 800.0f;
-inline constexpr float boostToneHiHz = 20000.0f;
 
 inline constexpr const char* preampDevice = "preamp_device";
 inline constexpr const char* preampGain   = "preamp_gain";
 
-/** The preamp's measured controls, same arrangement as the boost's: a fixed set of slots, and the
-    loaded device decides what each one drives. */
+/** The preamp's TONE controls — the ones a player computes rather than selects. How many a device
+    has varies (SM7 has three: EQ-Lo, EQ-Hi and a two-position Edge; a Victory V4 preamp five), but a
+    host needs a fixed set of parameters, so five slots are reserved and the loaded pack decides what
+    each one drives. A slot with nothing behind it is hidden rather than shown doing nothing. */
 inline constexpr int preampNumMeasured = 5;
 inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String (i + 1); }
 
-/** The EQ, one per captured block and BELONGING to it — index 0 is the boost's, index 1 the
-    preamp's. Each sits after its block's nonlinearity, which is what makes it a colour control
-    rather than a distortion-character one, and each goes dark with its block's switch.
-
-    Their places in the chain are not arbitrary: the boost's lands in front of the preamp, which
-    is where a real amplifier keeps its tone stack, so there is no PRE/POST switch — the
-    nonlinearity downstream is already being fed by one. The preamp's stands after the last
-    nonlinearity in the chain, shaping what the amp MADE before the room and the speaker have it.
+/** The EQ, one per captured block and BELONGING to it — there is one captured block, the preamp,
+    so there is one console, index 0. It sits after the block's nonlinearity, which is what makes it
+    a colour control rather than a distortion-character one, and it goes dark with the block's
+    switch. Standing after the last nonlinearity in the chain, it shapes what the amp MADE before
+    the room and the speaker have it.
 
     THERE IS NO ENABLE. The block's switch is the EQ's switch, and a flat link is bit-transparent
     anyway — `core::EqLink` skips a band sitting at exactly 0 dB — so "off" and "flat" were the same
@@ -192,12 +182,11 @@ inline juce::String preampMeasured (int i) { return "preamp_meas" + juce::String
     The console grammar: HPF/LPF with a slope choice, LO/HI shelves with free corners (gain + freq,
     no Q), bells B1/B2 (gain + freq + Q) and the narrow switchable B3 — the surgical slot. Bells are
     indexed 0..2 for the id helpers. */
-inline constexpr int numEqLinks = 2;
+inline constexpr int numEqLinks = 1;
 
-/** Which block a console belongs to. The two have always been the same question asked twice — the
-    id helper below already answered it — and the DSP now has to ask it too, to know whose tone
-    stack is in the signal. */
-inline constexpr const char* eqBlockId (int l) { return l == 0 ? boostId : preampId; }
+/** Which block a console belongs to. The id helper below answers it, and the DSP asks it too, to
+    know whose tone stack is in the signal. */
+inline constexpr const char* eqBlockId (int) { return preampId; }
 
 inline juce::String eqId (int l, const char* leaf)
 {
@@ -231,11 +220,11 @@ inline constexpr float eqLevelMinDb = -48.0f, eqLevelMaxDb = 12.0f;   // the wal
 inline constexpr const char* cabOn = "cab_on";
 inline constexpr const char* cabIr = "cab_ir";
 
-// The cabinet IRs on the factory shelf — display names derived from the files. What a session keeps
-// of `cabIr` is an INDEX into this list, so a new cabinet joins at the end and nothing already here
-// ever moves: a session saved on WUMBO opens on WUMBO. The menu does not show them in this order;
-// it shows them by cabinet (cabShelves, below). DARK MATTER is the shipping default, the cabinet a
-// CatpitAmp channel opens on too.
+// The cabinet IRs on the factory shelf — the family's (device/FactoryShelf.h), display names derived
+// from the files. What a session keeps of `cabIr` is an INDEX into this list, so a new cabinet joins
+// at the end and nothing already here ever moves: a session saved on WUMBO opens on WUMBO. The menu
+// does not show them in this order; it shows them by the shelf's folders, and inside each by cabinet
+// (cabShelves, below). DARK MATTER is the shipping default, the cabinet every face's channels open on too.
 inline const juce::StringArray cabIrNames {
     // orbitcab's set: the Jesters Brutal Pack's fifteen, then the Jesters Emerald Pack's six.
     "COOKIE MONSTER", "DARTH GENOCIDER", "KITTEN SLAYER", "KAIJU TAMER", "ICEBURN SUICIDE",
@@ -250,24 +239,21 @@ inline const juce::StringArray cabIrNames {
 };
 inline constexpr int cabIrDefault = 21;   // DARK MATTER
 
-/** THE SHELF BY CABINET, as the IR menu lays it out: a submenu for each, in this order, named
-    `cabinet` and opening on `about` — a line that says what its IRs are: the cabinet, its speakers,
-    where they come from — and then `count` names of cabIrNames from `first` on. Between them they
-    hold every name on the shelf once. `about` is UTF-8. */
+/** THE SHELF BY CABINET, as the IR menu lays it out: inside the submenu of the shelf's folder its IRs
+    lie in (device/FactoryShelf.h — a folder may hold more than one cabinet), each in this order, as
+    `about` — a line that says what its IRs are: the cabinet, its speakers, where they come from — and
+    then `count` names of cabIrNames from `first` on. Between them they hold every name on the shelf
+    once. `about` is UTF-8. */
 struct CabShelf
 {
-    const char* cabinet;
     const char* about;
     int first, count;
 };
 
 inline constexpr CabShelf cabShelves[] {
-    { "Orange PPC212V",
-      "Orange PPC212V \xc2\xb7 G12M-65 Creamback \xc2\xb7 SM57 + e906 + U87 Ai mix \xc2\xb7 Darwin's Cat", 21, 10 },
-    { "Behringer BG412S",
-      "mod. Behringer BG412S \xc2\xb7 Celestion V30 / Rockdriver Jr / Eminence DV-77 \xc2\xb7 Jesters Brutal Pack 1.0", 0, 15 },
-    { "Marshall 1960AX",
-      "Marshall 1960AX \xc2\xb7 Celestion G12M Greenback 25W \xc2\xb7 Jesters Emerald Pack", 15, 6 },
+    { "Orange PPC212V \xc2\xb7 G12M-65 Creamback \xc2\xb7 SM57 + e906 + U87 Ai mix \xc2\xb7 Darwin's Cat", 21, 10 },
+    { "mod. Behringer BG412S \xc2\xb7 Celestion V30 / Rockdriver Jr / Eminence DV-77 \xc2\xb7 Jesters Brutal Pack 1.0", 0, 15 },
+    { "Marshall 1960AX \xc2\xb7 Celestion G12M Greenback 25W \xc2\xb7 Jesters Emerald Pack", 15, 6 },
 };
 
 /** A cabinet IR of the player's OWN — not a parameter, because it is not a number: three
@@ -300,7 +286,7 @@ inline constexpr float cabTrimMin  = 0.001f;   // the ms floor lives in the pict
 /** How many channels the chain works, and from where. MONO: one signal end to end, the copy to the
     other channel after everything — the truth of a guitar chain, and one neural pass. STEREO: two
     takes on one bus, each through its own amp, everything twice. STEREO SPACE: mono where the
-    sound is made — boost, preamp, their consoles, one neural pass — and stereo from the delay on,
+    sound is made — the preamp, its console, one neural pass — and stereo from the delay on,
     where the space is: the delay's OFFSET spreads one signal into two, the reverb rooms what it
     made, and the cabinet, the master and the limiter follow in stereo. */
 /** A BYPASS FOR THE ALIAS TRIMS, and for nothing else. `files[].input_db` is what a pack says about
@@ -368,27 +354,26 @@ inline constexpr const char* delayDark    = "delay_dark";
 inline constexpr const char* delayOffset  = "delay_offset";
 inline constexpr const char* delayMix     = "delay_mix";
 
-/** The sync ladder, longest first, dotted and triplet beside each plain value. The table is
-    the same fact in quarter notes: ms = beats x 60000 / BPM. */
-inline const juce::StringArray delayDivisions { "1/1", "1/2.", "1/2", "1/2T", "1/4.", "1/4",
-                                                "1/4T", "1/8.", "1/8", "1/8T", "1/16.", "1/16",
-                                                "1/16T" };
-inline constexpr float delayDivisionBeats[] = { 4.0f, 3.0f, 2.0f, 4.0f / 3.0f, 1.5f, 1.0f,
-                                                2.0f / 3.0f, 0.75f, 0.5f, 1.0f / 3.0f, 0.375f,
-                                                0.25f, 1.0f / 6.0f };
-inline constexpr int delayDivDefault = 5;   // 1/4
+/** The sync ladder, longest first, dotted and triplet beside each plain value — the delay's own
+    (felitronics::delay::kDivisionNames), so the choice a session stores is the step the engine
+    counts. Its length in quarter notes is the engine's too: felitronics::delay::divisionMs. */
+inline const juce::StringArray delayDivisions { felitronics::delay::kDivisionNames,
+                                                felitronics::delay::kNumDivisions };
+inline constexpr int delayDivDefault = felitronics::delay::kDivisionDefault;   // 1/4
 
 /** The BPM the sync runs on when no host is conducting — the standalone's field — or when the
     player has told the delay to keep its own (`delayHostTempo` off). */
-inline constexpr float delayBpmMin = 40.0f, delayBpmMax = 240.0f, delayBpmDefault = 120.0f;
+inline constexpr float delayBpmMin     = felitronics::delay::kBpmMin,       // 40
+                       delayBpmMax     = felitronics::delay::kBpmMax,       // 240
+                       delayBpmDefault = felitronics::delay::kBpmDefault;   // 120
 
-inline constexpr float delayTimeMinMs = 20.0f, delayTimeMaxMs = 2000.0f;
-inline constexpr float delayOffsetMaxMs = 30.0f;
+inline constexpr float delayTimeMinMs   = felitronics::delay::kTimeMinMs,   // 20
+                       delayTimeMaxMs   = felitronics::delay::kTimeMaxMs;   // 2000
+inline constexpr float delayOffsetMaxMs = felitronics::delay::kOffsetMaxMs; // 30
 /** DARK is a percent of darkness, so the knob's direction tells the truth: clockwise darkens.
     The engine maps it onto the loop's low pass corner, the bright ceiling falling log-evenly
-    to the dark floor. */
-inline constexpr float delayDarkLoHz = 800.0f, delayDarkHiHz = 16000.0f;
-inline constexpr float delayDarkDefaultPct = 45.0f;   // ~4 kHz — the tape-ish middle
+    to the dark floor (felitronics::delay::darkHzForPercent, 16 kHz down to 800 Hz). */
+inline constexpr float delayDarkDefaultPct = felitronics::delay::kDarkDefaultPct;   // ~4 kHz — the tape-ish middle
 
 inline constexpr const char* reverbType     = "reverb_type";
 inline constexpr const char* reverbMix      = "reverb_mix";
@@ -402,10 +387,12 @@ inline constexpr const char* reverbDecay    = "reverb_decay";
 inline constexpr const char* reverbPredelay = "reverb_predelay";
 inline constexpr const char* reverbHpfHz    = "reverb_hpf_hz";
 
-/** Reverb characters, in the order of the design's simple case. Size and damping follow from the
-    character rather than being loose knobs — the design calls for Mix only. */
-inline const juce::StringArray reverbCharacters { "Ambience", "Room", "Hall", "Plate", "Spring",
-                                                  "Modulated" };
+/** Reverb characters, in the order of the design's simple case — the room's own
+    (felitronics::reverb::kCharacterNames), so the index a session stores is the character the engine
+    plays. Size and damping follow from the character rather than being loose knobs — the design
+    calls for Mix only. */
+inline const juce::StringArray reverbCharacters { felitronics::reverb::kCharacterNames,
+                                                  felitronics::reverb::kNumCharacters };
 
 /** Tone range. The measured hardware spanned about -10..+8 per control and up to 20 dB of travel on
     presence; the survey's conclusion on the narrower first pass was that the ranges were too small.
@@ -453,7 +440,6 @@ inline constexpr const char* tunerOn       = "tuner_on";
     tuner standing by does not mute, like any link's action in STANDBY. */
 inline constexpr const char* tunerMute     = "tuner_mute";
 inline constexpr const char* gatePresent   = "gate_present";
-inline constexpr const char* boostPresent  = "boost_present";
 inline constexpr const char* preampPresent = "preamp_present";
 inline constexpr const char* delayPresent  = "delay_present";
 inline constexpr const char* reverbPresent = "reverb_present";
@@ -480,7 +466,7 @@ inline constexpr const char* outOn         = "out_on";
 /** The DSP cost entries, in the order the chain runs them: a captured block is followed by its own
     console. Here rather than in the processor so a link can name its stage and the footer can
     label one, without either of them having to know about the other. */
-enum Stage { stTotal, stTuner, stGate, stBoost, stEq1, stPreamp, stEq2, stDelay, stReverb,
+enum Stage { stTotal, stTuner, stGate, stPreamp, stPreampEq, stDelay, stReverb,
              stCab, stLimit, stOut, numStages };
 
 /** What the breakdown calls a stage. TWO spellings, both ASCII on purpose: the copied report runs
@@ -492,10 +478,8 @@ inline constexpr StageName stageNames[numStages] = {
     { "TOTAL",  "TOTAL"     },
     { "TUNER",  "TUNER"     },
     { "GATE",   "GATE"      },
-    { "BOOST",  "BOOST"     },
-    { "B-EQ",   "BOOST EQ"  },
-    { "PREAMP", "PREAMP"    },
-    { "P-EQ",   "PREAMP EQ" },
+    { "AMP",    "AMP"       },
+    { "AMP EQ", "AMP EQ"    },
     { "DELAY",  "DELAY"     },
     { "REVERB", "REVERB"    },
     { "CAB",    "CAB"       },
@@ -506,7 +490,7 @@ inline constexpr StageName stageNames[numStages] = {
 /** A link's place in the chain — by NAME, not by arithmetic. The order is the chain's order and
     doubles as the index into `chainLinks`; naming the places is what lets one stand down without
     every row after it sliding under somebody's `i - first` sum. */
-enum ChainRow { rowIn, rowTuner, rowGate, rowBoost, rowPreamp, rowDelay, rowReverb, rowCab,
+enum ChainRow { rowIn, rowTuner, rowGate, rowPreamp, rowDelay, rowReverb, rowCab,
                 rowLimit, rowOut, numChainRows };
 
 /** One link of the chain. */
@@ -525,8 +509,7 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* IN     */ { "IN",     false, true,  inOn,      inPresent,     numStages, numStages },
     /* TUNER  */ { "TUNER",  false, true,  tunerOn,   tunerPresent,  stTuner,  numStages },
     /* GATE   */ { "GATE",   false, false, gateOn,    gatePresent,   stGate,   numStages },
-    /* BOOST  */ { "BOOST",  true,  true,  boostOn,   boostPresent,  stBoost,  stEq1     },
-    /* PREAMP */ { "PREAMP", true,  true,  preampOn,  preampPresent, stPreamp, stEq2     },
+    /* AMP    */ { "AMP",    true,  true,  preampOn,  preampPresent, stPreamp, stPreampEq },
     /* DELAY  */ { "DELAY",  false, true,  delayOn,   delayPresent,  stDelay,  numStages },
     /* REVERB */ { "REVERB", false, true,  reverbOn,  reverbPresent, stReverb, numStages },
     /* CAB IR */ { "CAB IR", true,  true,  cabOn,     cabPresent,    stCab,    numStages },
@@ -535,7 +518,7 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
 };
 
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL
-    belongs to nobody, so it is always shown. Walked rather than tabulated: ten links, twelve
+    belongs to nobody, so it is always shown. Walked rather than tabulated: nine links, ten
     stages, and one table that cannot fall out of step with itself. */
 inline constexpr int rowForStage (Stage s)
 {

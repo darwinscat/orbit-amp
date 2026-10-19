@@ -126,7 +126,7 @@ void DelayBlock::timerCallback()
     // The pulse's memory advances every tick, silence included — a quiet bucket is what lets
     // a note READ as a note when it arrives. A switched-off block feeds zeros: its line hears
     // nothing, so its comb goes still rather than replaying the last thing it saw.
-    const float in = isBlockOn() ? amp.delayTaps().envIn.load (std::memory_order_relaxed) : 0.0f;
+    const float in = isBlockOn() ? amp.delayTaps().inputPeak() : 0.0f;
 
     // The host's tempo can move under a running session — a tempo track — and nothing calls us.
     if (const auto t = hostConducts() ? amp.hostTempoBpm() : 0.0f; ! juce::approximatelyEqual (t, shownHostTempo))
@@ -152,8 +152,8 @@ void DelayBlock::paintComb (juce::Graphics& g, juce::Rectangle<float> r)
     g.fillRoundedRectangle (r, theme::radiusSm);
 
     const auto& taps  = amp.delayTaps();
-    const float timeT = juce::jmax (1.0f, taps.shownTimeMs.load (std::memory_order_relaxed));
-    const float offMs = taps.shownOffsetMs.load (std::memory_order_relaxed);
+    const float timeT = juce::jmax (1.0f, taps.shownTimeMs());
+    const float offMs = taps.shownOffsetMs();
     const float reps  = plain (params::delayRepeats) * 0.01f;
     const float darkA = plain (params::delayDark) * 0.01f;
     const float mixA  = plain (params::delayMix) * 0.01f;

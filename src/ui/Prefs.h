@@ -289,4 +289,10 @@ inline juce::String humTag (Hum h, int heard)
                                                      : juce::String());
 }
 
+/** THE PLAYER'S IRS OF BEFORE ARE GATHERED: set once this product has copied the IRs it kept in its own
+    folder into the family's (device::IrLibrary::gather), so it does so once on this machine — the
+    plugin and the standalone alike, since they share this store. Not a switch anyone flips; the store
+    is where the product remembers what it has done here. */
+inline const juce::Identifier irsGathered { "irs_gathered" };
+
 } // namespace orbitamp::prefs

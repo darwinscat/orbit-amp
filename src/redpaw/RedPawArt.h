@@ -32,13 +32,23 @@ struct Art
     juce::Image toggleUp, toggleDown;
     juce::Image keyUp, keyDown;
     juce::Image turboUp, turboDown;
-    juce::Image emblem;                // the maker's mark raised in the rover's own metal, where it has one; else it is engraved
+    juce::Image turboLid;              // TURBO's hatch shut, over layout::turboLid, where the rover has one; else it stays open
+    juce::Image emblem;               // the maker's mark raised in the rover's own metal, where it has one; else it is engraved
 
     /** The lamps (layout::lamps), each as the dashboard painted it lit, over the box it is laid back
-        into; what is not the lamp or its glow is transparent. In `bg` they are out. */
+        into; what is not the lamp or its glow is transparent. In `bg` they are out. None where the
+        picture paints no lamp lit (RedPawSkin.h). */
     std::array<juce::Image, layout::numLamps> lampLit;
 
     static const Art& get();
+
+    /** THE STILL the rover ships: one frame of its world, chosen and kept, that its windscreen shows in
+        STILL instead of rendering one. Decoded when asked, never held here; invalid where it has none. */
+    static juce::Image still();
+
+    /** THE ROVER'S MARK, as SVG: its vehicle seen from the front, as its icon draws it — the build window
+        wears it. Empty where the binary has none. */
+    static juce::String mark();
 };
 
 } // namespace orbitamp::redpaw

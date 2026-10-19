@@ -54,6 +54,9 @@ enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
     (redo); back is its mirror (undo). */
 void drawTurnArrow (juce::Graphics&, juce::Point<float> centre, float radius, bool back, juce::Colour);
 
+/** A render written as a PNG for the site (Console::exportForWeb); nothing for an invalid one. */
+void writeForWeb (const juce::File&, const juce::Image&);
+
 //==============================================================================
 /** A CONSOLE: the face of a product with channels, over OrbitAmp's processor. What every such face has
     — DRIVE, the three tones and the six keys under them, the history and the four registers in the
@@ -85,14 +88,18 @@ public:
         float sliderCapLength = 0.0f;
         float faderCapLength = 0.0f;                        // ...and the columns' (ColumnFader)
         juce::Rectangle<float> inMeter, inFader, outMeter, outFader;
+        SegmentMeter::Dots meterDots {};                    // the meters as dots the picture paints, where there is a count
+        float lampDot = 0.0f;                               // a lamp the picture does not paint lit, drawn by code this wide (Lamp::dot)
         juce::Rectangle<float> tuner;
         std::array<juce::Rectangle<float>, numLamps> lamps;
         std::vector<juce::Point<float>> emblemFace;         // the plate the mark is on, the hand's target
         juce::Rectangle<float> emblemMark;                  // the box the mark is cut in
         juce::Rectangle<float> version, load, memory, preset, gateDoor, limiterDoor;
         float gateDoorAngle = 0.0f, limiterDoorAngle = 0.0f;    // GATE and LIMITER turned about their middles, radians
-        float readingPx = stage::px11;                      // what CPU and MEM are written at
+        float readingPx = stage::px11;                      // what CPU and MEM are written at...
+        bool readingsFit = false;                           // ...set condensed into their boxes, as tall, where wider (Legend::fit)
         bool tunerStrip = false;                            // the tuner in one low line (TunerFace::setStrip)...
+        TunerFace::Dial tunerDial {};                       // ...or a needle over a dial the picture paints, where it has a reach
         bool tunerMenuOnClick = false;                      // ...and a click on it opens its menu, rather than switching it
     };
 
@@ -146,6 +153,10 @@ protected:
     Channels& channels;     // ...and these are its
     Presets   presets;
     const Places places;
+    std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the file names exportForWeb gives them
+    struct LookForWeb { ArtKnob::Pointer drive {}, tone {}; juce::Colour handLight; Ink ink; } lookForWeb;   // ...and the rest of it
+    std::vector<std::pair<juce::String, juce::Rectangle<float>>> spritesWritten;     // writeSprite's, for spriteBounds
+    void poseNext (const juce::File& dir, int pose);
 
     juce::Component stage;
     std::unique_ptr<Picture> picture;
@@ -188,6 +199,48 @@ protected:
 
     /** The stage has been placed in the window again. */
     virtual void stagePlaced() {}
+
+    /** FOR THE SITE: what the web's demo of this face is built from, written into `dir` — the picture
+        that never changes at twice the stage's size, its window transparent (cabin.png); the renders its
+        controls are drawn with; where everything stands (places.json, in the stage's own 1672 x 941); and
+        what the product adds (webExtras). Done once, when the window first comes up with the environment
+        variable ORBITAMP_WEB_EXPORT naming the folder; a player never sees it. */
+    void exportForWeb (const juce::File& dir);
+
+    /** The product's part of it: its own renders (writeSprite) and files; in `places` the two keys every
+        world has — "window", the box its live view goes in, and "stills", the files of its stills in the
+        lever's order; in `world` whatever is its own alone — and its poster (writePoster). */
+    virtual void webExtras (const juce::File& /*dir*/, juce::DynamicObject& /*places*/, juce::DynamicObject& /*world*/) {}
+
+    /** A render of a control written for the site, its opaque box (opaqueBounds) kept for places.json's
+        spriteBounds under the file's stem. */
+    void writeSprite (const juce::File& dir, const juce::String& file, const juce::Image& img);
+
+    /** THE POSTER: the whole face as it opens — every control where it stands, the lamps out — with
+        `still` in `window` under the glass, at twice the stage's size (poster.png). What shows through the
+        window live is `hidden` while it is taken, the still in its place. */
+    void writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
+                      const std::vector<juce::Component*>& hidden, const juce::String& file = "poster.png");
+
+    /** A POSTER FOR EACH PLACE OF THE LEVER, for a page that opens on another channel than the app does:
+        how many places there are, how the face is stood in one (no animation), the still under the glass
+        there, and the window and its live layers as for the poster. Set by webExtras; exportForWeb then
+        stands the face in each in turn and writes poster-<n>.png once it has settled, and done.txt last. */
+    struct WebPoses
+    {
+        int count = 0;
+        std::function<void (int)> standAt;
+        std::function<juce::Image (int)> still;
+        juce::Rectangle<float> window;
+        std::vector<juce::Component*> hidden;
+    };
+    WebPoses webPoses;
+
+    /** THE PATCHES OF THE POSTER: where the face draws, on its hull, a control the site will not work — the
+        history and the registers in the roof, the tuner, GATE's and LIMITER's doors, the version, PRESET,
+        CPU and MEM; a product adds its own (webPatch). Each the box round the component as it stands. */
+    std::vector<std::pair<juce::String, juce::Rectangle<float>>> webPatches;
+    void webPatch (const juce::String& name, std::initializer_list<const juce::Component*> parts);
 
     /** To that channel, by a hand: one step of the history. False, and the face back on the channel
         that is playing, when its pack is not installed. */
@@ -373,12 +426,17 @@ private:
     // ...the hum's, from HUM's menus — its own, apart from the gate's (ui/HumLearner.h); only one of the
     // two runs at a time: starting either cancels the other.
     HumLearner humLearner { amp.humLearn, amp.gateKeyDb, amp.humTuned.quietHz };
-    void startGateLearn();
-    void startHumLearn();
 
 protected:
     // ...and its picture, which the product lays over a glass of its own and places there (LearnGlass.h).
+    // A face with a key of its own for it starts it as the menu does.
     LearnGlass learnGlass { learner, humLearner };
+    void startGateLearn();
+    void startHumLearn();
+
+    /** A KEY OF THE SIX THE FACE TAKES FOR ITSELF, under a name of its own: the console neither lights it
+        nor answers it from then on — what it does and whether it is lit are the face's. */
+    void claimKey (int key, const juce::String& name);
 
 private:
     Emblem emblem;
@@ -422,6 +480,26 @@ private:
     std::array<juce::String, 3> toneBound;
     void bindTones();
     void bindButton (PushButton&, const char* paramId);
+
+    /** THE KEYS THAT ARE THE PACK'S. Where the playing pack has switches a hand may throw (Channels::
+        switchesOf, all but the one its channel holds), the four keys right of the filters are those, in
+        the pack's order and under its names: a key to each position of a switch, the one it stands at
+        lit — the IR-X Ch1's BRIGHT 1 · CENTER · BRIGHT 2, the Ch2's TIGHT · FAT — and a switch whose
+        two positions are off and on one key, under the switch's own name. A switch that would not fit
+        whole is left off them; a key no switch has stands dim and says nothing. A pack with none leaves
+        the four keys the layers' (Channels::Flag), as they always were. */
+    struct PackKey
+    {
+        int slot = -1;          // the selector it throws; -1 = no switch on this key
+        int position = -1;      // lit while the switch stands here, and where a press puts it
+        int off = -1;           // an off/on key: where it puts the switch when let up; -1 for a position's key
+    };
+    std::array<PackKey, 4> packKeys;
+    bool packKeysUp = false;                    // the playing pack's switches are on the keys
+    std::array<juce::String, 6> keyNames;       // each key's name for the tag over it, as showKeys last said
+    std::array<bool, 6> claimed {};             // ...and the keys the face has taken for itself
+    void keyThrown (int key, bool on);
+    void showKeys();                            // the keys as the playing channel has them; reads only
 
     void showReverbMenu();
     void showDelayMenu();

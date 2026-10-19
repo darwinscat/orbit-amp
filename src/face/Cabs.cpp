@@ -17,21 +17,33 @@ namespace
 
     using panel::textPx, panel::ink, panel::dim, panel::faint, panel::write;
 
-    constexpr const char* headings[] { "Factory", "Yours" };
+    constexpr const char* factoryHeading = "Factory";      // the build's own at the top of the shelf, in no folder
+    constexpr const char* yoursHeading   = "Yours";
 }
 
 //==============================================================================
 CabPanel::Lists::Lists (CabPanel& p) : owner (p) {}
 
+int CabPanel::Lists::groupOf (int index) const
+{
+    for (int g = 0; g < (int) owner.groups.size(); ++g)
+        if (index < owner.groups[(size_t) g].first + owner.groups[(size_t) g].count)
+            return g;
+    return juce::jmax (0, (int) owner.groups.size() - 1);
+}
+
 int CabPanel::Lists::columnsOf (int group) const
 {
-    const int rows = group == 0 ? owner.factory : owner.files.size() - owner.factory;
+    const int rows = owner.groups[(size_t) group].count;
     return juce::jmax (1, (rows + deep - 1) / deep);        // a list with nothing in it still has its heading
 }
 
 int CabPanel::Lists::leftOf (int group) const
 {
-    return group == 0 ? 0 : columnsOf (0) * wide[0] + groupGap;
+    int left = 0;
+    for (int g = 0; g < group; ++g)
+        left += columnsOf (g) * wide[(size_t) g] + groupGap;
+    return left;
 }
 
 void CabPanel::Lists::layOut (int rowsToAColumn)
@@ -42,25 +54,29 @@ void CabPanel::Lists::layOut (int rowsToAColumn)
     // A column is as wide as its list's longest name wants — a name cut short is a cabinet half told —
     // but no wider than is reasonable: past that the name is cut, and the file can be renamed.
     const auto font = panel::textFont (namePx);
-    for (int group = 0; group < 2; ++group)
+    wide.assign (owner.groups.size(), narrowest);
+    int tallest = 2;                                        // two: the empty list says two lines
+    for (size_t group = 0; group < owner.groups.size(); ++group)
     {
+        const auto& list = owner.groups[group];
         float longest = 0.0f;
-        for (int i = group == 0 ? 0 : owner.factory; i < (group == 0 ? owner.factory : owner.files.size()); ++i)
+        for (int i = list.first; i < list.first + list.count; ++i)
             longest = juce::jmax (longest, juce::GlyphArrangement::getStringWidth (font, Channels::cabinetName (owner.files.getReference (i)).toUpperCase()));
         wide[group] = juce::jlimit (narrowest, widest, nameLeft + juce::roundToInt (std::ceil (longest)) + 2 + nameRight + rowGap);
+        tallest = juce::jmax (tallest, list.count);
     }
 
-    const int own = owner.files.size() - owner.factory;
-    const int tallest = juce::jlimit (2, deep, juce::jmax (owner.factory, own));    // two: the empty list says two lines
-    setSize (leftOf (1) + columnsOf (1) * wide[1], titleH + tallest * rowH);
+    const int last = (int) owner.groups.size() - 1;
+    setSize (leftOf (last) + columnsOf (last) * wide[(size_t) last], titleH + juce::jmin (deep, tallest) * rowH);
     repaint();
 }
 
 juce::Rectangle<int> CabPanel::Lists::row (int index) const
 {
-    const int group = index < owner.factory ? 0 : 1;
-    const int k = index - (group == 0 ? 0 : owner.factory);
-    return { leftOf (group) + (k / deep) * wide[group], titleH + (k % deep) * rowH, wide[group] - rowGap, rowH };
+    const int group = groupOf (index);
+    const int k = index - owner.groups[(size_t) group].first;
+    const int w = wide[(size_t) group];
+    return { leftOf (group) + (k / deep) * w, titleH + (k % deep) * rowH, w - rowGap, rowH };
 }
 
 int CabPanel::Lists::rowAt (juce::Point<int> p) const
@@ -73,16 +89,17 @@ int CabPanel::Lists::rowAt (juce::Point<int> p) const
 
 void CabPanel::Lists::paint (juce::Graphics& g)
 {
-    for (int group = 0; group < 2; ++group)
-        write (g, headings[group], { leftOf (group) + 8, 4, wide[group] - 16, titleH - 8 }, textPx, faint);
+    const int yours = (int) owner.groups.size() - 1;
+    for (int group = 0; group <= yours; ++group)
+        write (g, owner.groups[(size_t) group].heading, { leftOf (group) + 8, 4, wide[(size_t) group] - 16, titleH - 8 }, textPx, faint);
 
     // The line between what is the build's and what is the player's.
     g.setColour (violet.withAlpha (0.28f));
-    g.fillRect (leftOf (1) - groupGap / 2, 2, 1, getHeight() - 4);
+    g.fillRect (leftOf (yours) - groupGap / 2, 2, 1, getHeight() - 4);
 
     if (owner.files.size() == owner.factory)
     {
-        const auto first = juce::Rectangle<int> (leftOf (1) + 8, titleH, wide[1] - 16, rowH);
+        const auto first = juce::Rectangle<int> (leftOf (yours) + 8, titleH, wide[(size_t) yours] - 16, rowH);
         write (g, "Drop IR files here", first, textPx, dim);
         write (g, "or press Add", first.translated (0, rowH), textPx, dim);
     }
@@ -189,6 +206,21 @@ void CabPanel::refresh()
 
     if (relaid)
     {
+        // The build's own, a list for each folder of the shelf they lie in, in the order they stand; the
+        // player's last. A build that carries none still heads its empty list, as it always has.
+        groups.clear();
+        for (int i = 0; i < factory; ++i)
+        {
+            const auto folder  = channels.cabinetFolder (i);
+            const auto heading = folder.isEmpty() ? juce::String (factoryHeading) : folder;
+            if (groups.empty() || groups.back().heading != heading)
+                groups.push_back ({ heading, i, 0 });
+            ++groups.back().count;
+        }
+        if (groups.empty())
+            groups.push_back ({ factoryHeading, 0, 0 });
+        groups.push_back ({ yoursHeading, factory, files.size() - factory });
+
         const int keysW = keyW * 6 + keyGap * 4 + okGap;
         const int deep  = juce::jmax (fewestRows, (room.y - pad * 2 - gap - keyH - titleH) / rowH);
         lists.layOut (deep);

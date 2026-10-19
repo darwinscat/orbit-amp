@@ -32,7 +32,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     : BlockFrame ("Reverb", BlockFrame::Kind::dsp), amp (processor)
 {
     startTimerHz (30);
-    display.prepare (displayRate, (int) (displayRate * tailSeconds));
+    (void) display.prepare (displayRate, (int) (displayRate * tailSeconds), 2);   // 48 kHz, two channels: cannot refuse
 
     addAndMakeVisible (character);
     addAndMakeVisible (view);
@@ -298,24 +298,20 @@ void ReverbBlock::refreshTail()
 {
     const int index = juce::jlimit (0, params::reverbCharacters.size() - 1, character.getSelection());
 
-    display.setCharacter (static_cast<core::ReverbStage::Character> (index));
+    display.setCharacter (static_cast<felitronics::reverb::Character> (index));
     display.setMix ((float) mix.getValue() * 0.01f);
     display.setDecay ((float) decay.getValue());
     display.setPredelayMs ((float) pre.getValue());
+    // A restart lands the room on its new setting at once — no ramp to run in before the impulse,
+    // so the tail measured is the one the setting makes.
     display.reset();
 
-    // juce::Reverb ramps its gains over ~10 ms, so a fresh setting has to be run in before the
-    // impulse — otherwise the tail is measured mid-ramp and the picture lags the sound.
     const int n = (int) (displayRate * tailSeconds);
     std::vector<float> left ((size_t) n, 0.0f), right ((size_t) n, 0.0f);
     float* channels[2] = { left.data(), right.data() };
 
-    display.process (channels, 2, juce::jmin (n, (int) (displayRate * 0.05)));
-
-    std::fill (left.begin(), left.end(), 0.0f);
-    std::fill (right.begin(), right.end(), 0.0f);
     left[0] = right[0] = 1.0f;
-    display.process (channels, 2, n);
+    (void) display.process (channels, 2, n);   // prepared, two channels: cannot refuse
 
     // The stage ADDS the wet and leaves the dry alone — so the impulse itself is still sitting at
     // sample zero, and measured it would spike the envelope to 0 dB before the room says a word.

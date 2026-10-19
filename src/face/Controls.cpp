@@ -605,6 +605,9 @@ void Legend::paint (juce::Graphics& g)
         writeWords (g, text, font, box, weight);
     };
 
+    const juce::Graphics::ScopedSaveState keep (g);
+    if (fit && r.width > (float) getWidth())
+        g.addTransform (juce::AffineTransform::scale ((float) getWidth() / r.width, 1.0f, fromLeft ? 0.0f : (float) getWidth() * 0.5f, 0.0f));
     auto area = fromLeft ? getLocalBounds().toFloat().withWidth (r.width)
                          : getLocalBounds().toFloat().withSizeKeepingCentre (r.width, (float) getHeight());
     if (r.nameWidth > 0.0f)
@@ -811,7 +814,14 @@ ColumnFader::ColumnFader (const juce::Image& c) : cap (c)
 juce::Range<float> ColumnFader::travel() const
 {
     const float end = 26.0f * scale;
-    return { end, (float) getHeight() - end };
+    return { end, runLength() - end };
+}
+
+void ColumnFader::setAcross (bool a)
+{
+    across = a;
+    setMouseCursor (a ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::UpDownResizeCursor);
+    repaint();
 }
 
 void ColumnFader::setValue (float v, bool notify)
@@ -827,7 +837,12 @@ void ColumnFader::setValue (float v, bool notify)
 
 void ColumnFader::paint (juce::Graphics& g)
 {
-    const float cx = (float) getWidth() * 0.5f;
+    // Lying across, it is drawn upright and turned a quarter to the right: its head to the right.
+    const juce::Graphics::ScopedSaveState keep (g);
+    if (across)
+        g.addTransform (juce::AffineTransform::rotation (juce::MathConstants<float>::halfPi).translated ((float) getWidth(), 0.0f));
+
+    const float cx = crossWidth() * 0.5f;
     const auto t = travel();
 
     const float k = scale;
@@ -840,11 +855,11 @@ void ColumnFader::paint (juce::Graphics& g)
         const float y = t.getEnd() - t.getLength() * (float) i / (float) marks;
         const float len = (i == longMark ? 12.0f : 7.0f) * k;
         g.setColour (orange.withAlpha (i == longMark ? 0.95f : 0.6f));
-        g.fillRect (juce::Rectangle<float> ((float) getWidth() - 6.0f * k - len, y - 0.8f, len, 1.6f));
+        g.fillRect (juce::Rectangle<float> (crossWidth() - 6.0f * k - len, y - 0.8f, len, 1.6f));
     }
 
     const float y = t.getEnd() - t.getLength() * value;
-    const float length = capLength > 0.0f ? capLength : (float) getWidth() - 8.0f;
+    const float length = capLength > 0.0f ? capLength : crossWidth() - 8.0f;
     drawCap (g, cap, { cx, y }, length, 0.0f);
     if (isMouseOverOrDragging (true))
         rimCap (g, cap, { cx, y }, length, 0.0f, handLight);
@@ -861,8 +876,8 @@ void ColumnFader::mouseDown (const juce::MouseEvent& e)
     const auto t = travel();
     const float y = t.getEnd() - t.getLength() * value;
     if (onGestureStart) onGestureStart();
-    if (std::abs (e.position.y - y) > 16.0f)
-        setValue ((t.getEnd() - e.position.y) / t.getLength(), true);
+    if (std::abs (along (e.position) - y) > 16.0f)
+        setValue ((t.getEnd() - along (e.position)) / t.getLength(), true);
     dragStartValue = value;
 }
 
@@ -870,7 +885,8 @@ void ColumnFader::mouseDrag (const juce::MouseEvent& e)
 {
     if (! sliding)
         return;
-    setValue (dragStartValue - (float) e.getDistanceFromDragStartY() / travel().getLength(), true);
+    const float moved = across ? (float) -e.getDistanceFromDragStartX() : (float) e.getDistanceFromDragStartY();
+    setValue (dragStartValue - moved / travel().getLength(), true);
 }
 
 void ColumnFader::mouseUp (const juce::MouseEvent&)
@@ -933,16 +949,66 @@ void Lamp::timerCallback()
 
 void Lamp::paint (juce::Graphics& g)
 {
+    if (! lit.isValid() && dot > 0.0f)
+    {
+        // Out, a dark glass in the panel with a faint rim of light; lit, a light as strong as it burns,
+        // and its glow round it.
+        const auto glass = juce::Rectangle<float> (dot, dot).withCentre (getLocalBounds().toFloat().getCentre());
+        g.setColour (juce::Colour (0xff070709));
+        g.fillEllipse (glass);
+        g.setColour (juce::Colours::white.withAlpha (0.16f));
+        g.drawEllipse (glass.reduced (0.6f), 0.9f);
+        if (shown > 0.0f)
+        {
+            juce::Path burning;
+            burning.addEllipse (glass.reduced (dot * 0.12f));
+            glow (g, burning, light.withAlpha (shown), dot * 0.9f);
+            g.setColour (light.withAlpha (shown));
+            g.fillPath (burning);
+        }
+        return;
+    }
     if (shown <= 0.0f || ! lit.isValid())
         return;
     g.setOpacity (shown);
     g.drawImage (lit, getLocalBounds().toFloat());
 }
 
+void SegmentMeter::setDots (const Dots& d)
+{
+    dots = d;
+    repaint();
+}
+
+void SegmentMeter::paintDots (juce::Graphics& g, float level)
+{
+    // The foot's dot lights over the scale's floor and each one over it a pitch further up the scale; the
+    // top ones take the segments' orange and red. Out, a dot is what the picture painted.
+    const auto area = getLocalBounds().toFloat();
+    const float pitch = area.getHeight() / (float) dots.count;
+    for (int i = 0; i < dots.count && (float) i / (float) dots.count < level; ++i)
+    {
+        const float top = (float) (i + 1) / (float) dots.count;
+        const juce::Colour hue = top > 0.94f ? juce::Colour (0xffff4646) : top > 0.8f ? orange : violet;
+        juce::Path lamp;
+        lamp.addEllipse (juce::Rectangle<float> (dots.size, dots.size)
+                             .withCentre ({ area.getCentreX(), area.getBottom() - pitch * ((float) i + 0.5f) }));
+        glow (g, lamp, hue, dots.size * 0.6f);
+        g.setColour (hue);
+        g.fillPath (lamp);
+    }
+}
+
 void SegmentMeter::paint (juce::Graphics& g)
 {
     constexpr int segments = 26;
     constexpr float floorDb = -60.0f, topDb = 6.0f;
+
+    if (dots.count > 0)
+    {
+        paintDots (g, juce::jlimit (0.0f, 1.0f, (shown - floorDb) / (topDb - floorDb)));
+        return;
+    }
 
     const auto area = getLocalBounds().toFloat().reduced (12.0f, 14.0f);
     const float step = area.getHeight() / (float) segments;
@@ -981,10 +1047,81 @@ void TunerFace::setStrip (bool s)
     repaint();
 }
 
+void TunerFace::setDial (const Dial& d)
+{
+    dial = d;
+    repaint();
+}
+
+void TunerFace::paintDial (juce::Graphics& g)
+{
+    const auto origin = getPosition().toFloat();
+    const auto pivot  = dial.pivot - origin;
+    const auto window = dial.window - origin;
+    const float hub   = dial.reach * 0.07f;
+    const bool live   = listening && ear.live();
+    const auto note   = ear.nearestNote();
+    g.setFont (labelFont (stage::px13));
+
+    // The note in the window, a dash while nothing is heard.
+    if (live)
+    {
+        g.setColour (ear.green() ? home : heard);
+        g.drawText (juce::String (core::PitchTracker::noteName (note.midi)) + juce::String (core::PitchTracker::noteOctave (note.midi)),
+                    window, juce::Justification::centred, false);
+    }
+    else
+    {
+        g.setColour (lilac.withAlpha (idleAlpha));
+        g.fillRoundedRectangle (juce::Rectangle<float> (18.0f, 3.0f).withCentre (window.getCentre()), 1.5f);
+    }
+
+    // Its state under the pivot — ON, OFF, or MUTE — and over it what its A is tuned to, when that is
+    // not the 440 everyone assumes.
+    g.setColour (! listening ? violet : orange);
+    g.drawText (! listening ? "OFF" : muting ? "MUTE" : "ON",
+                juce::Rectangle<float> (window.getWidth() * 2.0f, window.getY() - pivot.y - hub)
+                    .withPosition (pivot.x - window.getWidth(), pivot.y + hub),
+                juce::Justification::centred, false);
+    if (const int a4 = juce::roundToInt (ear.referenceHz()); a4 != juce::roundToInt (core::PitchTracker::concertA))
+    {
+        g.setColour (lilac.withAlpha (quietAlpha));
+        g.drawText ("A " + juce::String (a4), juce::Rectangle<float> (window.getWidth() * 2.0f, window.getHeight())
+                                                  .withCentre ({ pivot.x, pivot.y - dial.reach * 0.45f }),
+                    juce::Justification::centred, false);
+    }
+
+    // The needle, while a string is heard: green when it is home, warming to orange by 25 cents out,
+    // tapering from the pivot to the ticks, with a short tail behind it.
+    if (live)
+    {
+        const auto colour = ear.green() ? home
+                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+        const float tail = dial.reach * 0.14f;
+        juce::Path needle;
+        needle.startNewSubPath (-1.6f, tail);
+        needle.lineTo (-0.6f, -dial.reach);
+        needle.lineTo (0.6f, -dial.reach);
+        needle.lineTo (1.6f, tail);
+        needle.closeSubPath();
+        needle.applyTransform (juce::AffineTransform::rotation (dial.sweep * juce::jlimit (-50.0f, 50.0f, ear.needle()) / 50.0f)
+                                   .translated (pivot));
+        glow (g, needle, colour, 6.0f);
+        g.setColour (colour);
+        g.fillPath (needle);
+    }
+
+    // The hub it turns on, over it: a dark boss with the light catching its upper edge.
+    const auto boss = juce::Rectangle<float> (hub * 2.0f, hub * 2.0f).withCentre (pivot);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a4a52), boss.getCentreX(), boss.getY(),
+                                             juce::Colour (0xff101013), boss.getCentreX(), boss.getBottom(), false));
+    g.fillEllipse (boss);
+    g.setColour (juce::Colours::black.withAlpha (0.6f));
+    g.drawEllipse (boss, 0.8f);
+}
+
 void TunerFace::paintStrip (juce::Graphics& g)
 {
-    const juce::Colour home { 0xff5fc97a };   // the family's in-tune green
-
     auto area = getLocalBounds().toFloat().reduced (10.0f, 1.0f);
     const bool live = listening && ear.live();
     const auto note = ear.nearestNote();
@@ -996,13 +1133,13 @@ void TunerFace::paintStrip (juce::Graphics& g)
     auto noteArea = area.removeFromLeft (54.0f);
     if (live)
     {
-        g.setColour (ear.green() ? home : juce::Colour (0xffece9f6));
+        g.setColour (ear.green() ? home : heard);
         g.drawText (juce::String (core::PitchTracker::noteName (note.midi)) + juce::String (core::PitchTracker::noteOctave (note.midi)),
                     noteArea, juce::Justification::centredLeft, false);
     }
     else
     {
-        g.setColour (lilac.withAlpha (0.35f));
+        g.setColour (lilac.withAlpha (idleAlpha));
         g.fillRoundedRectangle (juce::Rectangle<float> (18.0f, 3.0f).withCentre ({ noteArea.getX() + 12.0f, noteArea.getCentreY() }), 1.5f);
     }
 
@@ -1014,13 +1151,13 @@ void TunerFace::paintStrip (juce::Graphics& g)
     {
         const bool major = c % 25 == 0;
         const float h = ruler.getHeight() * (major ? 0.8f : 0.4f);
-        g.setColour ((c == 0 ? orange : violet).withAlpha (major ? 0.9f : 0.4f));
+        g.setColour ((c == 0 ? orange : violet).withAlpha (major ? majorAlpha : minorAlpha));
         g.fillRect (juce::Rectangle<float> (xOf ((float) c) - 0.75f, ruler.getCentreY() - h * 0.5f, 1.5f, h));
     }
     if (live)
     {
         const auto colour = ear.green() ? home
-                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
         juce::Path needle;
         needle.addRoundedRectangle (juce::Rectangle<float> (3.0f, ruler.getHeight()).withCentre ({ xOf (ear.needle()), ruler.getCentreY() }), 1.5f);
         glow (g, needle, colour, 5.0f);
@@ -1031,13 +1168,16 @@ void TunerFace::paintStrip (juce::Graphics& g)
 
 void TunerFace::paint (juce::Graphics& g)
 {
+    if (dial.reach > 0.0f)
+    {
+        paintDial (g);
+        return;
+    }
     if (strip)
     {
         paintStrip (g);
         return;
     }
-
-    const juce::Colour home { 0xff5fc97a };   // the family's in-tune green
 
     auto area = getLocalBounds().toFloat().reduced (18.0f, 10.0f);
     const bool live = listening && ear.live();      // switched off, the ear keeps the last note it heard
@@ -1049,7 +1189,7 @@ void TunerFace::paint (juce::Graphics& g)
     // What it measures from, over the note — said only when it is not the 440 everyone assumes.
     if (const int a4 = juce::roundToInt (ear.referenceHz()); a4 != juce::roundToInt (core::PitchTracker::concertA))
     {
-        g.setColour (lilac.withAlpha (0.8f));
+        g.setColour (lilac.withAlpha (quietAlpha));
         g.setFont (labelFont (stage::px13));
         g.drawText ("A " + juce::String (a4), noteArea.withHeight (20.0f), juce::Justification::centredLeft, false);
     }
@@ -1062,10 +1202,10 @@ void TunerFace::paint (juce::Graphics& g)
     if (live)
     {
         const auto name = juce::String (core::PitchTracker::noteName (note.midi));
-        g.setColour (ear.green() ? home : juce::Colour (0xffece9f6));
+        g.setColour (ear.green() ? home : heard);
         g.setFont (labelFont (52.0f));
         g.drawText (name, noteArea.withTrimmedRight (26.0f), juce::Justification::centredRight, false);
-        g.setColour (lilac.withAlpha (0.8f));
+        g.setColour (lilac.withAlpha (quietAlpha));
         g.setFont (labelFont (stage::px13));
         g.drawText (juce::String (core::PitchTracker::noteOctave (note.midi)),
                     noteArea.removeFromRight (24.0f).withTrimmedTop (noteArea.getHeight() * 0.42f),
@@ -1073,7 +1213,7 @@ void TunerFace::paint (juce::Graphics& g)
     }
     else
     {
-        g.setColour (lilac.withAlpha (0.35f));
+        g.setColour (lilac.withAlpha (idleAlpha));
         g.fillRoundedRectangle (juce::Rectangle<float> (30.0f, 5.0f).withCentre (noteArea.getCentre()), 2.5f);
     }
 
@@ -1088,12 +1228,12 @@ void TunerFace::paint (juce::Graphics& g)
     {
         const bool major = c % 25 == 0;
         const float h = major ? ruler.getHeight() * 0.8f : ruler.getHeight() * 0.45f;
-        g.setColour ((c == 0 ? orange : violet).withAlpha (major ? 0.9f : 0.4f));
+        g.setColour ((c == 0 ? orange : violet).withAlpha (major ? majorAlpha : minorAlpha));
         g.fillRect (juce::Rectangle<float> (xOf ((float) c) - 1.0f, ruler.getCentreY() - h * 0.5f, 2.0f, h));
     }
     for (int c = -50; c <= 50; c += 25)
     {
-        g.setColour (lilac.withAlpha (0.6f));
+        g.setColour (lilac.withAlpha (numberAlpha));
         g.setFont (labelFont (stage::px13));
         g.drawText ((c > 0 ? "+" : "") + juce::String (c), juce::Rectangle<float> (60.0f, numbers.getHeight())
                         .withCentre ({ xOf ((float) c), numbers.getCentreY() }), juce::Justification::centred, false);
@@ -1103,7 +1243,7 @@ void TunerFace::paint (juce::Graphics& g)
     {
         const float x = xOf (ear.needle());
         const auto colour = ear.green() ? home
-                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
         juce::Path needle;
         needle.addRoundedRectangle (juce::Rectangle<float> (4.0f, ruler.getHeight()).withCentre ({ x, ruler.getCentreY() }), 2.0f);
         glow (g, needle, colour, 8.0f);

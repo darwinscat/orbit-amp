@@ -22,12 +22,12 @@ namespace orbitamp::redpaw
 const channels::Lineup& lineup()
 {
     static const channels::Lineup rover = roverLineup ({
-        { "Copper",      "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false },
-        { "Copper TB",   "v4-copper-tb-5841",   "Hall",     30.0f, 30.0f, false },
-        { "Sheriff Ch1", "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false },
-        { "Sheriff Ch2", "v4-sheriff-ch2-2f2f", "Plate",    30.0f, 30.0f, false },
-        { "Kraken Ch1",  "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true  },
-        { "Kraken Ch2",  "v4-kraken-ch2-5f71",  "Ambience", 30.0f, 0.0f,  true  },
+        { "Clean",         "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false },
+        { "Clean Turbo",   "v4-copper-tb-5841",   "Hall",     30.0f, 30.0f, false },
+        { "Crunch",        "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false },
+        { "Crunch Turbo",  "v4-sheriff-ch2-2f2f", "Plate",    30.0f, 30.0f, false },
+        { "Hi-Gain",       "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true  },
+        { "Hi-Gain Turbo", "v4-kraken-ch2-5f71",  "Ambience", 30.0f, 0.0f,  true  },
     });
     return rover;
 }
@@ -99,7 +99,9 @@ const std::array<Socket, 3> tones {{
     { { 1240.6f, 495.1f }, 40.6f, 2.4f, 104.0f },   // MIDDLE
     { { 1363.4f, 494.8f }, 40.6f, 2.4f, 104.0f },   // TREBLE
 }};
-const float knobNameY = 423.0f;
+const float knobNameY  = 423.0f;
+const float knobNameEm = px13;
+const float driveNameY = 423.0f;
 
 const std::array<juce::Point<float>, 6> keys {{
     { 1093.5f, 603.5f }, { 1141.5f, 603.5f }, { 1226.5f, 603.5f }, { 1280.5f, 603.5f }, { 1333.5f, 603.5f }, { 1388.0f, 603.5f },
@@ -108,21 +110,35 @@ const float keySize      = 48.0f;    // the key's render, whose face fills the 3
 const float keyNameOverY = 563.0f;
 const float keyNameUnderY = 642.0f;
 const std::array<bool, 6> keyNameOver {{ false, false, false, true, false, true }};
+const float keyNameRoom = 120.0f;
+const bool keyNamesOnKeys = false;     // the names round the keys
+const std::array<int, 2> lightKeys {{ -1, -1 }};      // no searchlights
 
 const juce::Rectangle<float> navScreen   { 563.5f, 424.0f, 436.5f, 191.5f };
 const juce::Rectangle<float> navHeader   { 567.0f, 426.0f, 430.0f, 32.0f };
 const juce::Rectangle<float> navPicture  { 567.0f, 460.0f, 430.0f, 126.0f };
 const juce::Rectangle<float> tunerScreen { 567.0f, 588.0f, 430.0f, 27.0f };
+const face::TunerFace::Dial tunerDial {};      // none: the tuner is the screen's bottom line
+const juce::Rectangle<float> speedHud {};      // none: the speed is on the nav screen
+const juce::Rectangle<float> learnArea = navPicture;     // LEARN over the picture...
+const std::array<juce::Point<float>, 2> learnKeys {};
+const float learnKeySize = 0.0f;                         // ...and no keys of its own
+const std::array<juce::Point<float>, 2> learnNames {};
+const float learnLine = 0.0f;
+const std::array<juce::Point<float>, 4> wiperKeys {};    // no keys for the wipers
+const float wiperKeySize = 0.0f;
 
 // The slot is 786..810 across, its top end at 681.5, its notches out to 823.
 const juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
 const float slotX  = 798.3f;
 const float notchX = 814.0f;
 const float slotTopY = 694.0f;
-const std::array<float, 3> notches {{ 732.8f, 775.5f, 816.8f }};
+const std::vector<float> notches { 732.8f, 775.5f, 816.8f };
+const std::vector<float> stops = notches;
 const float leverWidth = 124.0f;
 const float collarSink = 3.0f;
 const juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };
+const float leverLeft = 724.0f, leverTop = 600.0f;
 // Its third notch cut 804..830 down, its slot's lit edge 810..812, the straight run over it 789..803,
 // the plate plain out to 848: filled as RedPawAmp's would be, were it to have fewer gears.
 const NotchFill notchFill { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 2.0f };
@@ -130,6 +146,7 @@ const NotchFill notchFill { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 
 const juce::Point<float> turbo { 922.0f, 787.0f };
 const float turboSize = 52.0f;
 const juce::Point<float> turboName { 921.5f, 682.0f };
+const juce::Rectangle<float> turboLid { 873.5f, 689.0f, 101.0f, 168.0f };     // where a hatch of its own would go; none yet
 
 const std::array<juce::Rectangle<float>, 3> wells {{
     { 315.0f,  700.5f, 326.5f, 21.5f },     // REVERB
@@ -176,22 +193,27 @@ const std::array<juce::Rectangle<float>, numLamps> lamps {{
     { 45.0f + lampPlateGrow,   824.0f, 62.0f, 63.0f },  // the slant 55..97 x 834..877, as painted
     { 1565.0f - lampPlateGrow, 824.0f, 62.0f, 63.0f },  // the slant 1575..1617 x 834..877, as painted
 }};
+const float lampDot = 0.0f;                     // none: the picture paints them lit
+const face::SegmentMeter::Dots meterDots {};    // none: segments down the wells
 
 const juce::Point<float> inputName  { 101.8f, 721.7f };
 const juce::Point<float> outputName { 1570.0f, 721.7f };
+const float columnNameRoom = 170.0f;
 
 const juce::Point<float> gateWord    { 110.0f + lampPlateGrow, 824.0f };
 const juce::Point<float> limiterWord { 1562.0f - lampPlateGrow, 825.0f };
 const float lampSlant = 0.7854f;     // 45 degrees
 
 const juce::Rectangle<float> leftPlate   { 340.0f, 852.0f, 262.0f, 57.0f };
-const juce::Rectangle<float> rightPlate  { 1103.0f, 852.0f, 229.0f, 57.0f };
+const std::array<juce::Rectangle<float>, 2> readings {{ { 1132.5f, 853.0f, 210.0f, 28.0f }, { 1132.5f, 881.0f, 210.0f, 28.0f } }};     // on the right plate, 1103..1332
 const juce::Rectangle<float> centrePlate { 755.0f, 895.0f, 195.0f, 33.0f };
 
 const std::array<juce::Point<float>, 6> emblemFace {{
     { 809.0f, 295.6f }, { 865.0f, 295.6f }, { 888.0f, 335.0f }, { 865.0f, 375.0f }, { 809.0f, 375.0f }, { 787.0f, 335.0f },
 }};
 const juce::Rectangle<float> emblemMark { 813.0f, 310.0f, 50.0f, 50.0f };
+const juce::Point<float> poweredBy {}, makerName {};      // no room beside the plate for the maker's words
+const float makerRoom = 0.0f;
 
 } // namespace layout
 

@@ -292,6 +292,57 @@ int main()
         report ("a stranger's file is not planned",      IrLibrary::planMove (root, { work.getChildFile ("src/Cab 4x12.wav") }, root).isEmpty());
     }
 
+    // ---- IRs of before: gathered into the family's folder, copied, never moved -----------------
+    {
+        const auto family = work.getChildFile ("gather/Darwin's Cat/IRs");
+        const auto former = work.getChildFile ("gather/Darwin's Cat/RedPawAmp/IRs");
+        const auto put = [] (const juce::File& f, const char* bytes)
+        {
+            f.getParentDirectory().createDirectory();
+            f.replaceWithText (bytes);
+            return f;
+        };
+
+        put (former.getChildFile ("Same.wav"), "one IR");
+        put (former.getChildFile ("Clash.wav"), "the rover's own");
+        put (former.getChildFile ("Vendor Pack/Close/57.wav"), "a pack's");
+        put (former.getChildFile ("Twice.wav"), "the rover's twice");
+        put (former.getChildFile ("readme.txt"), "not an IR");
+        put (former.getChildFile (".hidden.wav"), "the Finder's");
+
+        put (family.getChildFile ("Same.wav"), "one IR");                    // the same IR, there already
+        put (family.getChildFile ("Clash.wav"), "the cockpit's own");        // another IR of the same name
+        put (family.getChildFile ("Twice.wav"), "the cockpit's twice");
+        put (family.getChildFile ("Twice (RedPawAmp).wav"), "yet another");  // ...and even the name it would take is taken
+
+        const auto first = IrLibrary::gather (former, family, "RedPawAmp");
+        const auto text = [] (const juce::File& f) { return f.existsAsFile() ? f.loadFileAsString() : juce::String ("(none)"); };
+
+        report ("IRs of before: three copied, none failed",   first.copied == 3 && first.failed == 0,
+                juce::String (first.copied) + " copied, " + juce::String (first.failed) + " failed");
+        report ("...the same name with the same bytes skipped",
+                text (family.getChildFile ("Same.wav")) == "one IR" && ! family.getChildFile ("Same (RedPawAmp).wav").exists());
+        report ("...the same name with other bytes kept both",
+                text (family.getChildFile ("Clash.wav")) == "the cockpit's own"
+                    && text (family.getChildFile ("Clash (RedPawAmp).wav")) == "the rover's own");
+        report ("...numbered when even that name is taken",
+                text (family.getChildFile ("Twice (RedPawAmp).wav")) == "yet another"
+                    && text (family.getChildFile ("Twice (RedPawAmp) 2.wav")) == "the rover's twice");
+        report ("...its folders kept",                        text (family.getChildFile ("Vendor Pack/Close/57.wav")) == "a pack's");
+        report ("...and what is not an IR left behind",       ! family.getChildFile ("readme.txt").exists()
+                                                                  && ! family.getChildFile (".hidden.wav").exists());
+        report ("nothing of before moved or changed",         text (former.getChildFile ("Same.wav")) == "one IR"
+                                                                  && text (former.getChildFile ("Clash.wav")) == "the rover's own"
+                                                                  && text (former.getChildFile ("Vendor Pack/Close/57.wav")) == "a pack's"
+                                                                  && text (former.getChildFile ("Twice.wav")) == "the rover's twice");
+
+        const auto again = IrLibrary::gather (former, family, "RedPawAmp");
+        report ("a second gathering copies nothing",          again.copied == 0 && again.failed == 0
+                                                                  && ! family.getChildFile ("Clash (RedPawAmp) 2.wav").exists()
+                                                                  && ! family.getChildFile ("Twice (RedPawAmp) 3.wav").exists());
+        report ("no folder of before, nothing gathered",      IrLibrary::gather (work.getChildFile ("gather/none"), family, "RedPawAmp").copied == 0);
+    }
+
     // ---- IR remove: only the guard is ours -----------------------------------------------------
     {
         const auto root = work.getChildFile ("irs-remove");
@@ -428,6 +479,156 @@ int main()
         report ("...the build's over the player's",       has ("RAT", true) && ! has ("RAT", false));
         report ("...and nothing without an id is merged", has ("Mystery", false) && has ("Mystery 2", false)
                                                             && has ("clean", false));
+    }
+
+    // ---- Devices: one family, one device, its packs its channels ------------------------------
+    {
+        using Shelf = DeviceLibrary::Shelf;
+
+        const auto names = [] (const std::vector<DeviceLibrary::Device>& devices)
+        {
+            juce::StringArray out;
+            for (const auto& d : devices)
+                out.add (d.name);
+            return out.joinIntoString (", ");
+        };
+
+        const auto named = [] (const std::vector<DeviceLibrary::Device>& devices, const juce::String& name)
+            -> const DeviceLibrary::Device*
+        {
+            for (const auto& d : devices)
+                if (d.name == name)
+                    return &d;
+            return nullptr;
+        };
+
+        const auto channels = [] (const DeviceLibrary::Device* d)
+        {
+            return d != nullptr ? d->channelNames.joinIntoString (", ") : juce::String ("(no device)");
+        };
+
+        const auto inOrder = [] (const Shelf& shelf, int count)
+        {
+            const auto order = shelf.order();
+            bool same = order.size() == count;
+            for (int i = 0; same && i < count; ++i)
+                same = order[i] == i;
+            return same;
+        };
+
+        // The set as the build carries it, read in place: every manifest is the real one.
+        const juce::File set (ORBITAMP_SET_DIR);
+        const auto none = work.getChildFile ("devices-none");
+        const auto factory = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, set.getChildFile ("Devices"), none);
+        const auto shelf = DeviceLibrary::shelfOf (factory);
+
+        report ("the set's packs make five devices, by name",  names (shelf.factory) == "IR-X, V4 Copper, V4 Kraken, V4 Sheriff, X88-IR",
+                names (shelf.factory));
+        report ("...a device is its packs' common words",      named (shelf.factory, "V4 Kraken") != nullptr
+                                                                  && named (shelf.factory, "IR-X") != nullptr);
+        report ("X88-IR: one alias, so the stems name them",   channels (named (shelf.factory, "X88-IR")) == "Normal, Altered, Crunch, Overdrive",
+                channels (named (shelf.factory, "X88-IR")));
+        report ("IR-X: distinct aliases name the channels",    channels (named (shelf.factory, "IR-X")) == "Channel 1, Channel 2",
+                channels (named (shelf.factory, "IR-X")));
+        report ("V4 Copper: crunch before hi-gain",            channels (named (shelf.factory, "V4 Copper")) == "Ember Mantra, Ember Anthem",
+                channels (named (shelf.factory, "V4 Copper")));
+        report ("V4 Kraken: one tone, the file names decide",  channels (named (shelf.factory, "V4 Kraken")) == "Monster Roar, Monster Fang",
+                channels (named (shelf.factory, "V4 Kraken")));
+        report ("the list is in the menu's order",             inOrder (shelf, factory.size()));
+
+        // The player's own folder: devices at its top, and folders inside it mirrored as they lie.
+        const auto own = work.getChildFile ("devices-own");
+        const auto lay = [&set] (const juce::File& into, const juce::String& from, const juce::String& as = {},
+                                 const juce::String& slot = {}, const juce::String& family = {})
+        {
+            auto manifest = set.getChildFile ("Devices/" + from + ".orbitrig/rig.json").loadFileAsString();
+
+            if (slot.isNotEmpty())   // a booster of make-believe: a set pack's manifest, made a pedal of its own
+                manifest = manifest.replace ("\"slot\": \"preamp\"", "\"slot\": \"" + slot + "\"")
+                                   .replace ("\"family_id\": \"victory-v4-sheriff\"", "\"family_id\": \"" + family + "\"")
+                                   .replace ("\"rig_id\": \"", "\"rig_id\": \"" + family + "-");
+
+            const auto folder = into.getChildFile ((as.isNotEmpty() ? as : from) + ".orbitrig");
+            folder.createDirectory();
+            folder.getChildFile ("rig.json").replaceWithText (manifest);
+        };
+
+        lay (own, "IR-X Ch2 PowerAmp");
+        lay (own, "IR-X Ch1 PowerAmp");
+        lay (own.getChildFile ("OLD/preamps"), "V4 Kraken Ch2");
+        lay (own.getChildFile ("OLD/preamps"), "V4 Kraken Ch1");
+        lay (own.getChildFile ("OLD/boosters"), "V4 Sheriff Ch1", "TS Test", "pedal", "ts-test");
+        own.getChildFile ("OLD/empty").createDirectory();
+
+        const auto mine = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, none, own);
+        const auto ownShelf = DeviceLibrary::shelfOf (mine);
+        const auto* old = ownShelf.folders.size() == 1 ? &ownShelf.folders.front() : nullptr;
+
+        const auto folderNames = [] (const std::vector<DeviceLibrary::Folder>& folders)
+        {
+            juce::StringArray out;
+            for (const auto& f : folders)
+                out.add (f.name);
+            return out.joinIntoString (", ");
+        };
+
+        report ("the top of the player's folder is grouped too", ownShelf.own.size() == 1
+                                                                    && channels (named (ownShelf.own, "IR-X")) == "Channel 1, Channel 2",
+                names (ownShelf.own));
+        report ("a folder in it is a submenu, as on disk",      old != nullptr && old->name == "OLD" && old->devices.empty()
+                                                                    && folderNames (old->folders) == "boosters, preamps",
+                old != nullptr ? old->name + ": " + folderNames (old->folders) : folderNames (ownShelf.folders));
+
+        const auto* preamps = old != nullptr && old->folders.size() == 2 ? &old->folders[1] : nullptr;
+        const auto* boosters = old != nullptr && old->folders.size() == 2 ? &old->folders[0] : nullptr;
+        bool loose = preamps != nullptr && names (preamps->devices) == "V4 Kraken Ch1, V4 Kraken Ch2";
+        if (preamps != nullptr)
+            for (const auto& d : preamps->devices)
+                loose = loose && d.channels.size() == 1;
+
+        report ("...its packs one per line, by file name",     loose, preamps != nullptr ? names (preamps->devices) : juce::String());
+        report ("...a booster is on the AMP's list",            boosters != nullptr && names (boosters->devices) == "TS Test",
+                boosters != nullptr ? names (boosters->devices) : juce::String());
+        report ("...and a folder with nothing in it is not",    old != nullptr && old->folders.size() == 2);
+        report ("devices first, then the folders, in order",    inOrder (ownShelf, mine.size()) && mine.size() == 5
+                                                                    && mine.getReference (0).folder.isEmpty()
+                                                                    && mine.getReference (4).folder.joinIntoString ("/") == "OLD/preamps",
+                juce::String (mine.size()) + " packs");
+
+        // What the set does not happen to show: the family, not the name, makes a device; a family
+        // whose files share no first word is called by its id; a pack with no family is alone; and
+        // two channels of one tone go by their file names as a person reads numbers.
+        const auto pack = [] (const juce::String& name, const juce::String& family, const juce::String& alias, int character)
+        {
+            DeviceLibrary::Pack p;
+            p.name = name;
+            p.familyId = family;
+            p.alias = alias;
+            p.character = character;
+            p.bundled = true;
+            return p;
+        };
+
+        juce::Array<DeviceLibrary::Pack> made;
+        made.add (pack ("Foo A",      "foo-a",  "Foo",   0));
+        made.add (pack ("Foo B",      "foo-b",  "Foo",   0));
+        made.add (pack ("Alpha One",  "greek",  "Same",  1));
+        made.add (pack ("Beta Two",   "greek",  "Same",  0));
+        made.add (pack ("Loner Amp",  "",       "",      2));
+        made.add (pack ("Amp Ch10",   "numbers", "",     1));
+        made.add (pack ("Amp Ch2",    "numbers", "",     1));
+
+        const auto madeShelf = DeviceLibrary::shelfOf (made);
+
+        report ("one name, two families: two devices",          named (madeShelf.factory, "Foo A") != nullptr
+                                                                    && named (madeShelf.factory, "Foo B") != nullptr,
+                names (madeShelf.factory));
+        report ("no common word: the family's id names it",    channels (named (madeShelf.factory, "greek")) == "Beta Two, Alpha One",
+                channels (named (madeShelf.factory, "greek")));
+        report ("no family: a device of its own",               named (madeShelf.factory, "Loner Amp") != nullptr
+                                                                    && named (madeShelf.factory, "Loner Amp")->channels.size() == 1);
+        report ("one tone: Ch2 before Ch10",                    channels (named (madeShelf.factory, "Amp")) == "Ch2, Ch10",
+                channels (named (madeShelf.factory, "Amp")));
     }
 
     // ---- Devices: remove refuses what is not the user's ----------------------------------------

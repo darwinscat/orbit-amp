@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "DeviceLibrary.h"   // appDataRoot — the IRs live beside the Devices folder
+#include "DeviceLibrary.h"   // familyRoot — the IRs live beside the family's Factory folder
 
 #include <juce_core/juce_core.h>
 
@@ -12,7 +12,9 @@
 namespace orbitamp::device
 {
 
-/** The user's cabinet IRs on disk: a folder tree under `.../OrbitAmp/IRs`.
+/** The user's cabinet IRs on disk: a folder tree under `Darwin's Cat/IRs`, beside `Factory` — ONE FOR
+    THE WHOLE FAMILY. Every product reads and writes the same folder, so an IR a player takes in with one
+    of them is there in all of them; a product's own `IRs` of before is only gathered from, once (gather).
 
     There is no pack format here — a vendor "pack" is just a folder of wavs, or the zip of one, so
     importing either makes a plain folder in the tree and the folder IS the pack. That also means
@@ -27,7 +29,7 @@ public:
     /** Where the user's IRs live. Created on first look, so there is a folder to drop into. */
     static juce::File directory()
     {
-        auto dir = DeviceLibrary::appDataRoot().getChildFile ("IRs");
+        auto dir = DeviceLibrary::familyRoot().getChildFile ("IRs");
 
         if (! dir.isDirectory())
             dir.createDirectory();
@@ -35,11 +37,71 @@ public:
         return dir;
     }
 
+    /** Where a product kept the player's IRs before the family shared one folder: its own `IRs`, beside
+        its Devices. Not read any more — only gathered from, once; never made, and never written. */
+    static juce::File formerDirectory()
+    {
+        return DeviceLibrary::appDataRoot().getChildFile ("IRs");
+    }
+
+    /** What a gathering did: how many files it copied, and how many it could not. */
+    struct Gathered
+    {
+        int copied = 0;
+        int failed = 0;
+    };
+
+    /** THE PLAYER'S IRS OF BEFORE, GATHERED: every IR under `former` — a product's own `IRs` from before
+        the family shared one — COPIED into `into`, in the folders it lay in there. Nothing in `former` is
+        moved, changed or taken away: a build of before, still installed, goes on reading it.
+
+        A file already in `into` under the same name and with the same bytes is that IR, and is not
+        copied again. One under the same name with other bytes is another IR, and both are kept: the one
+        gathered goes in beside it under a name that says whose it was — "name (RedPawAmp).wav" — and
+        numbered after that, "name (RedPawAmp) 2.wav", when even that name holds other bytes. So a second
+        gathering copies nothing, and two products that each kept an IR of one name end with both. */
+    static Gathered gather (const juce::File& former, const juce::File& into, const juce::String& product)
+    {
+        Gathered g;
+
+        if (! former.isDirectory() || into == former || into.isAChildOf (former))
+            return g;
+
+        const auto whose = juce::File::createLegalFileName (product.trim());
+
+        for (const auto& f : former.findChildFiles (juce::File::findFiles | juce::File::ignoreHiddenFiles, true,
+                                                    "*", juce::File::FollowSymlinks::no))
+        {
+            if (! isAudioFile (f))
+                continue;
+
+            auto target = into.getChildFile (f.getRelativePathFrom (former));
+            const auto dir  = target.getParentDirectory();
+            const auto kept = target.getFileNameWithoutExtension() + " (" + whose + ")";
+
+            for (int n = 1; target.exists() && ! target.hasIdenticalContentTo (f); ++n)
+                target = dir.getChildFile ((n == 1 ? kept : kept + " " + juce::String (n)) + f.getFileExtension());
+
+            if (target.exists())
+                continue;       // that very IR, there already
+
+            if (dir.createDirectory() && f.copyFileTo (target))
+                ++g.copied;
+            else
+                ++g.failed;
+        }
+
+        return g;
+    }
+
     /** What counts as an IR on disk. Vendors ship wav almost always, aiff sometimes; everything
-        else in a pack (readme, license, artwork) is not an IR and stays out of the tree. */
+        else in a pack (readme, license, artwork) is not an IR and stays out of the tree — and so is a
+        file hidden by its name, as every system but Windows hides it: the "._name.wav" the Finder leaves
+        beside each file on a shared drive is no IR on Windows either, where a walk that skips hidden
+        files still finds it. */
     static bool isAudioFile (const juce::File& f)
     {
-        return f.existsAsFile() && f.hasFileExtension ("wav;aif;aiff");
+        return f.existsAsFile() && f.hasFileExtension ("wav;aif;aiff") && ! f.getFileName().startsWithChar ('.');
     }
 
     /** What an import will take: an IR itself, a zip of them, or a folder holding some. */

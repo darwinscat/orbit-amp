@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Headless acceptance gate for core::ReverbStage — that Mix actually crossfades, that a tail exists
-// and decays, and that disabling the block cannot spill the previous tail back in. Returns non-zero
-// on any failure.
-//
-// Links juce_audio_basics: unlike the tone stack, this stage is JUCE-bound by construction (Freeverb).
+// Headless acceptance gate for the room this plugin plays, felitronics::reverb::AmpReverb — that Mix
+// adds rather than replaces, that a tail exists and decays, and that disabling the block cannot spill
+// the previous tail back in. Returns non-zero on any failure.
 
-#include "core/ReverbStage.h"
+#include <felitronics/reverb/AmpReverb.h>
 
 #include <cmath>
 #include <limits>
 #include <cstdio>
+#include <string>
 #include <vector>
 
-using orbitamp::core::ReverbStage;
+using felitronics::reverb::AmpReverb;
+using felitronics::reverb::Character;
 
 namespace
 {
@@ -31,14 +31,14 @@ namespace
     constexpr double sampleRate = 48000.0;
 
     /** Feeds one impulse, then silence, and returns the peak level over a window (in ms). */
-    double tailPeak (ReverbStage& r, int fromMs, int toMs)
+    double tailPeak (AmpReverb& r, int fromMs, int toMs)
     {
         const int n = (int) (sampleRate * toMs / 1000.0);
         std::vector<float> left ((size_t) n, 0.0f), right ((size_t) n, 0.0f);
         left[0] = right[0] = 1.0f;
 
         float* channels[2] = { left.data(), right.data() };
-        r.process (channels, 2, n);
+        (void) r.process (channels, 2, n);
 
         const int from = (int) (sampleRate * fromMs / 1000.0);
         double peak = 0.0;
@@ -51,8 +51,8 @@ namespace
 
 int main()
 {
-    ReverbStage r;
-    r.prepare (sampleRate, (int) sampleRate * 3);   // the tests hand whole seconds in one call
+    AmpReverb r;
+    (void) r.prepare (sampleRate, (int) sampleRate * 3, 2);   // the tests hand whole seconds in one call
 
     // An amp's reverb ADDS to the dry signal, it does not crossfade away from it. So the dry path
     // must sit at unity at EVERY mix setting — including the maximum. This is the behaviour the
@@ -62,18 +62,18 @@ int main()
         r.setMix (mix);
         r.reset();
 
-        // juce::Reverb ramps its gains over ~10 ms so a mix change never zips. Run silence through
-        // first so the measurement is of the settled level, not of a gain still on its way there.
+        // The room glides a changed setting in over ~10 ms so a move never zips. Run silence through
+        // first so the measurement is of the settled level, whatever a restart does with the glide.
         {
             std::vector<float> l (4800, 0.0f), rr (4800, 0.0f);
             float* warm[2] = { l.data(), rr.data() };
-            r.process (warm, 2, 4800);
+            (void) r.process (warm, 2, 4800);
         }
 
         std::vector<float> left (256, 0.0f), right (256, 0.0f);
         left[0] = right[0] = 1.0f;
         float* channels[2] = { left.data(), right.data() };
-        r.process (channels, 2, 256);
+        (void) r.process (channels, 2, 256);
 
         return (double) left[0];
     };
@@ -88,7 +88,7 @@ int main()
         std::vector<float> left (256, 0.0f), right (256, 0.0f);
         left[0] = right[0] = 1.0f;
         float* channels[2] = { left.data(), right.data() };
-        r.process (channels, 2, 256);
+        (void) r.process (channels, 2, 256);
 
         double spill = 0.0;
         for (size_t i = 1; i < left.size(); ++i)
@@ -100,7 +100,7 @@ int main()
 
     // Fully wet: there must still be a tail 200 ms after the impulse, and it must be decaying.
     r.setMix (1.0f);
-    r.setCharacter (ReverbStage::Character::hall);
+    r.setCharacter (Character::hall);
     r.reset();
     const double early = tailPeak (r, 50, 150);
     r.reset();
@@ -117,7 +117,7 @@ int main()
     {
         std::vector<float> left (4096, 0.0f), right (4096, 0.0f);
         float* channels[2] = { left.data(), right.data() };
-        r.process (channels, 2, 4096);
+        (void) r.process (channels, 2, 4096);
 
         double residue = 0.0;
         for (float v : left)
@@ -129,10 +129,10 @@ int main()
 
     // Character must be audible: a spring is small and damped, a hall is not.
     r.setMix (1.0f);
-    r.setCharacter (ReverbStage::Character::spring);
+    r.setCharacter (Character::spring);
     r.reset();
     const double spring = tailPeak (r, 300, 500);
-    r.setCharacter (ReverbStage::Character::hall);
+    r.setCharacter (Character::hall);
     r.reset();
     const double hall = tailPeak (r, 300, 500);
 
@@ -151,9 +151,9 @@ int main()
 
         const auto poisonRun = [&] (float poison, float mix)
         {
-            ReverbStage room;
-            room.prepare (sampleRate, block);
-            room.setCharacter (ReverbStage::Character::hall);
+            AmpReverb room;
+            (void) room.prepare (sampleRate, block, 2);
+            room.setCharacter (Character::hall);
             room.setMix (mix);
 
             std::vector<float> l ((size_t) block), rr ((size_t) block);
@@ -170,7 +170,7 @@ int main()
                 if (b == 20)
                     l[100] = rr[100] = poison;
 
-                room.process (ch, 2, block);
+                (void) room.process (ch, 2, block);
 
                 if (b > 20)
                     for (int i = 0; i < block; ++i)
@@ -203,8 +203,8 @@ int main()
     // restarts: a tail that is not a number never reaches the dry.
     {
         constexpr int block = 256;
-        ReverbStage room;
-        room.prepare (sampleRate, block);
+        AmpReverb room;
+        (void) room.prepare (sampleRate, block, 2);
         room.setMix (1.0f);
 
         std::vector<float> l ((size_t) block, 0.0f), rr ((size_t) block, 0.0f);
@@ -217,7 +217,7 @@ int main()
             for (int i = 0; i < block; ++i)
                 l[(size_t) i] = rr[(size_t) i] = (b < 4 && i % 2 == 0) ? 3.0e38f : (b < 4 ? -3.0e38f : 0.25f);
 
-            room.process (ch, 2, block);
+            (void) room.process (ch, 2, block);
         }
 
         bool finite = true;

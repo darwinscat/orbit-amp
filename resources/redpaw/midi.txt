@@ -3,13 +3,13 @@ RedPawAmp MIDI commands
 The rover listens to every MIDI input that is switched on, on all 16 channels.
 
 Program Change
-1	COPPER
-2	COPPER TB
-3	SHERIFF 1
-4	SHERIFF 2
+1	CRUNCH
+2	CRUNCH TURBO
+3	HI-GAIN
+4	HI-GAIN TURBO
 5	PARK
 
-The gear is the pedal: CLEAN the Copper, CRUNCH the Sheriff. TURBO is its second channel. PARK takes the whole amp out of the sound. A controller that numbers its programs from 0 sends 0 to 4 for these.
+PARK takes the whole amp out of the sound. A controller that numbers its programs from 0 sends 0 to 4 for these.
 
 Control Change
 20	TURBO

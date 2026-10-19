@@ -11,7 +11,7 @@ namespace orbitamp::channels
 
 namespace
 {
-    constexpr int preampConsole = 1;        // the preamp's universal console: kept flat, the tones are the pack's
+    constexpr int preampConsole = 0;        // the preamp's universal console: kept flat, the tones are the pack's
 
     using Suppress = felitronics::appkit::CompareHistory::ScopedSuppress;
 }
@@ -153,7 +153,6 @@ void Engine::setUpChain (bool firstTime)
     setParam (params::inOn,          1.0f);
     setParam (params::outPresent,    1.0f);
     setParam (params::outOn,         1.0f);
-    setParam (params::boostPresent,  0.0f);
     setParam (params::preampPresent, 1.0f);
     setParam (params::preampOn,      1.0f);
     setParam (params::delayPresent,  1.0f);
@@ -177,9 +176,15 @@ void Engine::setUpChain (bool firstTime)
     if (firstTime)
         setParam (params::blockIn (params::preampId), 0.0f);
 
-    // ...and with as much delay as its channel opens on, not as much as the engine does.
+    // ...and with as much delay as its channel opens on, not as much as the engine does — and its pack's
+    // switches where the pack opens them, the one the channel holds where it holds it.
     if (firstTime)
+    {
         setParam (params::delayMix, channels.defaultOf (channels.active(), params::delayMix));
+        for (int s = 0; s < params::numSelectors; ++s)
+            setParam (params::selectorId (params::preampId, s),
+                      channels.defaultOf (channels.active(), params::selectorId (params::preampId, s)));
+    }
 
     // BASS / MIDDLE / TREBLE are the pack's own tone stack. The universal console's three bands they
     // used to ride stand flat behind it: a pack with no tone of its own falls to that console, and

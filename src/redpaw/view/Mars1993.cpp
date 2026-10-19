@@ -38,6 +38,28 @@ namespace
     inline uint32_t lcg (uint32_t s) noexcept { return (s * lcgMul + lcgAdd) % lcgMod; }
 
     constexpr double aspect = 5.3451;    // the windscreen box, 1440.5 x 269.5
+    constexpr double pi = 3.14159265358979;
+
+    // The discs' dither: a 4 x 4 ordered matrix, its thresholds in sixteenths.
+    constexpr uint8_t bayer[16] { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+    inline double dither (int x, int y) noexcept { return (bayer[((y & 3) << 2) | (x & 3)] + 0.5) / 16.0; }
+
+    /** 0..1 to one of `levels` steps, the pixel's threshold choosing between the two nearest. */
+    inline int step (double f, int levels, double threshold) noexcept
+    {
+        const double s = std::clamp (f, 0.0, 1.0) * (levels - 1);
+        const int i = (int) s;
+        return std::min (levels - 1, i + (s - i > threshold ? 1 : 0));
+    }
+
+    inline double smoothstep (double e0, double e1, double x) noexcept
+    {
+        const double t = std::clamp ((x - e0) / (e1 - e0), 0.0, 1.0);
+        return t * t * (3 - 2 * t);
+    }
+
+    // Saturn's darkest: its night side at the limb, the light's step 0.
+    constexpr double satDark = 0.08 * 0.55;
 
     /** 0219: the recursive-subdivision fractal, depth first, on a 256 x 256 map that wraps through the
         8-bit halves of its address; 0xFF marks a point not yet written. The four edge midpoints are
@@ -89,6 +111,10 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
     horizonIndex = 0x50;
     if (look == Look::ice)
         makeIcePalette();
+    else if (look == Look::titan)
+        makeTitanPalette();
+    else
+        makeMarsPalette();
 
     // 00f3: the sky. Four fixed seeds give it its large-scale pattern; its heights become palette 64..95.
     const uint32_t s1 = lcg (seed & 0x7FFF);
@@ -108,21 +134,138 @@ void Mars1993::makeMaps (uint16_t seed, Look lookWanted)
     // w = (w + w[+4] + w[+0202h] + w[-0101h]) / 4.
     for (uint32_t i = 0; i < 65536; ++i)
         hm[i] = (uint8_t) ((hm[i] + hm[(uint16_t) (i + 0x0004)] + hm[(uint16_t) (i + 0x0202)] + hm[(uint16_t) (i + 0xFEFF)]) >> 2);
-    // Colour = w(u) - w(u + 3) + 32, clamped to 0..63: the sun on the horizon, low along u.
-    for (uint32_t i = 0; i < 65536; ++i)
+    if (look == Look::titan)
+        makeSea();
+    else
     {
-        const int c = (int) hm[i] - (int) hm[(uint16_t) (i + 3)] + 0x20;
-        colours[i] = (uint8_t) (c < 0 ? 0 : (c > 0x3F ? 0x3F : c));
+        // Mars's plains and the ice moon's snow lie flatter: their heights at a quarter, their shading at
+        // a half.
+        for (auto& v : hm)
+            v = (uint8_t) (0x80 + ((int) v - 0x80) / 4);
+        // Colour = w(u) - w(u + 3) + 32, clamped to 0..63: the sun on the horizon, low along u.
+        for (uint32_t i = 0; i < 65536; ++i)
+        {
+            const int c = ((int) hm[i] - (int) hm[(uint16_t) (i + 3)]) * 2 + 0x20;
+            colours[i] = (uint8_t) (c < 0 ? 0 : (c > 0x3F ? 0x3F : c));
+        }
     }
+    if (look == Look::mars)
+        makeRanges (s2 ^ 0x5A5Au);
     // Blur 2, in place: the 2 x 2 box on the heights.
     for (uint32_t i = 0; i < 65536; ++i)
         hm[i] = (uint8_t) ((hm[i] + hm[(uint16_t) (i + 1)] + hm[(uint16_t) (i + 0x100)] + hm[(uint16_t) (i + 0x101)]) >> 2);
 }
 
+/** MARS'S DAC, as the GPU's plains are coloured. The ground's 64 from 98, a deep shadow through the
+    ochre to the pale dust the distance fades it to; the first 64, which only the rows under the horizon
+    take, the farthest ground fading into that dust; the sky's 32 a butterscotch from high to low, paler
+    toward the horizon; 97 the dust on the horizon line; from 162, the near range's 32 shades, shadow to
+    sunlit rock a little into the dust, then the far range's 32, paler and nearly the sky. */
+void Mars1993::makeMarsPalette()
+{
+    struct C { float r, g, b; };
+    const auto mix = [] (C a, C b, float t) { return C { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; };
+    const auto ss = [] (float e0, float e1, float x) { const float t = std::clamp ((x - e0) / (e1 - e0), 0.0f, 1.0f); return t * t * (3 - 2 * t); };
+    const auto put = [this] (int i, C c)
+    {
+        const auto q = [] (float v) { return (uint32_t) std::lround (std::clamp (v, 0.0f, 1.0f) * 255); };
+        pal[(size_t) i] = 0xFF000000u | (q (c.r) << 16) | (q (c.g) << 8) | q (c.b);
+    };
+    const C shadow { 0.17f, 0.08f, 0.03f }, ground { 0.47f, 0.24f, 0.10f }, dust { 0.77f, 0.53f, 0.35f };
+    const auto shade = [&] (int i) { return i < 24 ? mix (shadow, ground, (float) i / 24.0f) : mix (ground, dust, (float) (i - 24) / 39.0f); };
+    for (int i = 0; i < 64; ++i)
+        put (groundShades + i, shade (i));
+    for (int i = 0; i < 64; ++i)
+        put (i, mix (shade (farGround), dust, ss (18.0f, 40.0f, (float) i)));
+    const C skyHigh { 0.68f, 0.48f, 0.35f }, skyLow { 0.81f, 0.58f, 0.40f };
+    for (int i = 64; i < 96; ++i)
+        put (i, mix (skyHigh, skyLow, (float) (i - 64) / 31.0f));
+    put (97, dust);
+    horizonIndex = 97;
+    const C rockShadow { 0.34f, 0.20f, 0.12f }, rockLit { 0.80f, 0.52f, 0.32f }, farShadow { 0.62f, 0.43f, 0.30f }, farLit { 0.80f, 0.60f, 0.44f };
+    for (int i = 0; i < rangeShadesEach; ++i)
+    {
+        const float t = (float) i / (float) (rangeShadesEach - 1);
+        put (rangeShades + i, mix (rockShadow, rockLit, t));
+        put (rangeShades + rangeShadesEach + i, mix (farShadow, farLit, t));
+    }
+}
+
+/** THE RANGES ON MARS'S HORIZON, fixed to the glass as mountains at that distance stay put: a near one,
+    peaks with gaps between, and a far one, lower and nearly unbroken — each a ridge in fractions of the
+    frame's height above the horizon line, by midpoint displacement from the seed. */
+void Mars1993::makeRanges (uint32_t seed)
+{
+    uint32_t s = seed;
+    const auto ridge = [&s] (std::array<float, rangeSamples>& r, float rough, float gap, float tallest)
+    {
+        r.fill (0);
+        float amp = 1;
+        for (int stride = rangeSamples / 2; stride >= 1; stride /= 2, amp *= rough)
+            for (int i = stride; i < rangeSamples; i += 2 * stride)
+            {
+                s = lcg (s);
+                const float noise = ((float) s / (float) lcgMod - 0.5f) * amp;
+                r[(size_t) i] = 0.5f * (r[(size_t) (i - stride)] + r[(size_t) ((i + stride) % rangeSamples)]) + noise;
+            }
+        const auto [lo, hi] = std::minmax_element (r.begin(), r.end());
+        const float low = *lo, span = std::max (*hi - *lo, 1e-6f);
+        for (auto& v : r)
+        {
+            const float n = (v - low) / span;
+            v = n > gap ? tallest * std::pow ((n - gap) / (1 - gap), 1.3f) : 0;
+        }
+    };
+    ridge (rangeNear, 0.5f, 0.36f, 0.40f);
+    ridge (rangeFar, 0.52f, 0.32f, 0.12f);
+}
+
+/** Both ranges into the sky rows, the far one first. Each column of a range stands from under the
+    horizon line, where the ground's far edge will cover it, up to its ridge; its rock is the terrain's
+    own shading, taken slantwise across the range's face as gullies, lit brighter where the ridge
+    climbs to the right, the sun being on the left. */
+void Mars1993::drawRanges()
+{
+    uint8_t* fb = frame.data();
+    for (int layer = 0; layer < 2; ++layer)
+    {
+        const auto& r = layer == 0 ? rangeFar : rangeNear;
+        const int base = rangeShades + (1 - layer) * rangeShadesEach;
+        const auto at = [&r] (double s) { const int i = (int) s; const double f = s - i; return r[(size_t) std::clamp (i, 0, rangeSamples - 1)] * (1 - f) + r[(size_t) std::clamp (i + 1, 0, rangeSamples - 1)] * f; };
+        for (int x = 0; x < w; ++x)
+        {
+            const double s = (double) x * (rangeSamples - 1) / std::max (1, w - 1);
+            const double height = at (s) * h;
+            if (height < 0.5)
+                continue;
+            const double climb = (at (s + 24) - at (s - 24)) * h / (48.0 * w / (rangeSamples - 1));   // rows per column, over a flank
+            const int light = (int) std::lround (std::clamp (climb, -1.0, 1.0) * 13);
+            const int top = std::max (0, (int) std::lround (skyRows - height));
+            const double across = x / P * (layer == 0 ? 1.4 : 0.9);
+            for (int y = top; y < G + hazeRows; ++y)
+            {
+                const double up = (skyRows - y) / P * (layer == 0 ? 1.4 : 0.9);
+                const int u = (int) std::lround (0.6 * across + 0.8 * up + layer * 97) & 0xFF, v = (int) std::lround (0.8 * across - 0.6 * up + layer * 61) & 0xFF;
+                const int code = colours[(size_t) ((v << 8) | u)];
+                fb[(size_t) y * (size_t) w + (size_t) x] = (uint8_t) (base + std::clamp (16 + (code - 0x20) + light, 0, rangeShadesEach - 1));
+            }
+        }
+    }
+}
+
+/** A row of Mars's ground at map distance d: the codes into the ground's shades, the near ones short of
+    the palest, and all of them drawn toward the dust with the distance. */
+void Mars1993::plainsRow (uint8_t* shade, int d) const noexcept
+{
+    const double f = dustFar * d / 100.0;
+    for (int c = 0; c < 64; ++c)
+        shade[c] = (uint8_t) (groundShades + std::clamp ((int) std::lround (c * (double) nearTop / 63 * (1 - f) + 63 * f), 0, 63));
+}
+
 /** THE ICE MOON'S DAC. The ground's shade is w(u) - w(u + 3) + 32 — the sun low along u — so the 64
     entries run from a blue shadow through lit ice to white snow; the sky's 32 are black; 97 is the mist
-    on the horizon. From 98, Jupiter: 24 latitudes of the ice world's banding, each lit, at the
-    terminator, and on the night side, then the Spot's three. */
+    on the horizon. From 98, Jupiter: 24 latitudes of the ice world's banding, each in six steps of
+    light from the night side to the full sun, then the Spot's six. */
 void Mars1993::makeIcePalette()
 {
     struct C { float r, g, b; };
@@ -143,7 +286,7 @@ void Mars1993::makeIcePalette()
 
     // Jupiter's bands by latitude, as the ice world's sky shades them, without the festoons.
     const C zone { 0.95f, 0.90f, 0.80f }, belt { 0.56f, 0.36f, 0.24f };
-    const float light[3] { 1.25f + 0.045f, 0.5f * 1.25f + 0.045f, 0.045f };
+    const auto light = [] (int l) { return 1.25f * (float) l / (float) (jupLevels - 1) + 0.045f; };
     for (int row = 0; row < 24; ++row)
     {
         const float la = (((float) row + 0.5f) / 24.0f - 0.5f) * 3.14159265f;
@@ -154,18 +297,120 @@ void Mars1993::makeIcePalette()
         c = mix (c, { 0.74f, 0.62f, 0.50f }, 0.5f * ss (0.35f, 0.45f, std::abs (la + 0.12f)) * (1 - ss (0.45f, 0.6f, std::abs (la + 0.12f))));
         c = mix (c, { 0.78f, 0.70f, 0.58f }, ss (0.9f, 1.3f, std::abs (la)));
         c = mix (c, { 0.62f, 0.60f, 0.68f }, ss (1.15f, 1.45f, std::abs (la)));
-        for (int l = 0; l < 3; ++l)
-            put (98 + row * 3 + l, { c.r * light[l], c.g * light[l], c.b * light[l] });
+        for (int l = 0; l < jupLevels; ++l)
+            put (jupShades + row * jupLevels + l, { c.r * light (l), c.g * light (l), c.b * light (l) });
     }
-    for (int l = 0; l < 3; ++l)
-        put (170 + l, { 0.80f * light[l], 0.48f * light[l], 0.36f * light[l] });
+    for (int l = 0; l < jupLevels; ++l)
+        put (jupSpot + l, { 0.80f * light (l), 0.48f * light (l), 0.36f * light (l) });
 }
 
-void Mars1993::setRows (int rows)
+/** TITAN'S DAC. The sea's 64 shades from 98, a dark trough through the amber-brown liquid to the haze's
+    sheen on a wave; the islands' 32 from 162, the lit shore to a violet-brown shadow; and the first 64,
+    which only the haze rows under the horizon take, the far sea fading into the pale violet mist. The
+    sky's 32 are the haze, a darker brown to the amber of the horizon; 97 is the mist on the horizon line.
+    From 194, Saturn: 12 latitudes of its bands, each in four steps of light, then its rings' three — all
+    reddened by the haze and mixed, in light, into its middle, a little more of the haze than the GPU's
+    picture shows where the haze is thinnest, this sky being the darker. */
+void Mars1993::makeTitanPalette()
+{
+    struct C { float r, g, b; };
+    const auto mix = [] (C a, C b, float t) { return C { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; };
+    const auto ss = [] (float e0, float e1, float x) { const float t = std::clamp ((x - e0) / (e1 - e0), 0.0f, 1.0f); return t * t * (3 - 2 * t); };
+    const auto put = [this] (int i, C c)
+    {
+        const auto q = [] (float v) { return (uint32_t) std::lround (std::clamp (v, 0.0f, 1.0f) * 255); };
+        pal[(size_t) i] = 0xFF000000u | (q (c.r) << 16) | (q (c.g) << 8) | q (c.b);
+    };
+    const C trough { 0.12f, 0.08f, 0.05f }, liquid { 0.42f, 0.28f, 0.14f }, sheen { 0.60f, 0.42f, 0.23f };
+    const auto sea = [&] (int i) { return i < 32 ? mix (trough, liquid, (float) i / 32.0f) : mix (liquid, sheen, (float) (i - 32) / 31.0f); };
+    for (int i = 0; i < 64; ++i)
+        put (seaShades + i, sea (i));
+    const C shore { 0.12f, 0.08f, 0.07f }, lit { 0.50f, 0.35f, 0.20f };
+    for (int i = 0; i < 32; ++i)
+        put (landShades + 31 - i, mix (shore, lit, (float) i / 31.0f));
+    const C mist { 0.60f, 0.50f, 0.52f };
+    for (int i = 0; i < 64; ++i)
+        put (i, mix (sea (farSea), mist, ss (18.0f, 40.0f, (float) i)));
+    const C hazeHigh { 0.40f, 0.25f, 0.12f }, hazeLow { 0.81f, 0.54f, 0.25f };
+    for (int i = 64; i < 96; ++i)
+        put (i, mix (hazeHigh, hazeLow, (float) (i - 64) / 31.0f));
+    put (97, { 0.65f, 0.55f, 0.70f });
+    horizonIndex = 97;
+
+    const auto toLight = [] (C c) { return C { std::pow (c.r, 2.2f), std::pow (c.g, 2.2f), std::pow (c.b, 2.2f) }; };
+    const auto toShown = [] (C c) { return C { std::pow (std::max (c.r, 0.0f), 1 / 2.2f), std::pow (std::max (c.g, 0.0f), 1 / 2.2f), std::pow (std::max (c.b, 0.0f), 1 / 2.2f) }; };
+    const auto times = [] (C c, float k) { return C { c.r * k, c.g * k, c.b * k }; };
+    const C haze = toLight (mix (hazeHigh, hazeLow, 0.5f)), tint { 1.0f, 0.85f, 0.65f };   // the haze's middle; what it lets through, reddened
+    const float clear = 0.42f;                                                                 // Saturn's own light that reaches the eye
+    for (int row = 0; row < satRows; ++row)
+    {
+        const float lat = ((float) row + 0.5f) / (float) satRows * 2 - 1;
+        const float band = std::clamp (0.5f + 0.17f * std::sin (lat * 8.5f + 0.7f) + 0.08f * std::sin (lat * 21.0f + 2.0f), 0.0f, 1.0f);
+        const C pc = mix (mix ({ 0.66f, 0.56f, 0.40f }, { 0.82f, 0.74f, 0.56f }, band), { 0.55f, 0.56f, 0.62f }, ss (0.75f, 0.95f, std::abs (lat)));
+        for (int l = 0; l < satLevels; ++l)
+        {
+            const float b = (float) satDark + (1 - (float) satDark) * (float) l / (float) (satLevels - 1);
+            put (satShades + row * satLevels + l, toShown (mix (haze, mix (times ({ pc.r * tint.r, pc.g * tint.g, pc.b * tint.b }, b), haze, 0.2f), clear)));
+        }
+    }
+    for (int l = 0; l < satRingShades; ++l)
+        put (satRing + l, toShown (mix (haze, times ({ 0.70f * tint.r, 0.62f * tint.g, 0.48f * tint.b }, 0.75f + 0.1f * (float) l), 0.5f * clear)));
+}
+
+/** TITAN'S SEA out of the program's terrain: the highest sixteenth of it stays, at half its height, low
+    islands and a far shore rising from the level of the rest, shaded as the program shades its ground.
+    The rest is the sea, flat, its texels keeping only a swell — long crests across the way ahead and the
+    terrain's own small detail — as a signed code round 96, which the ground's rows turn into a shade by
+    their distance. */
+void Mars1993::makeSea()
+{
+    auto& hm = heights;
+    std::array<int, 256> count {};
+    for (auto v : hm)
+        ++count[v];
+    int level = 254, above = 0;
+    while (level > 0 && above + count[(size_t) level] <= 65536 / 16)
+        above += count[(size_t) level--];
+    const std::vector<uint8_t> ground (hm.begin(), hm.end());
+    for (uint32_t i = 0; i < 65536; ++i)
+    {
+        const int g = ground[i], up = g - level;
+        if (up > 0)
+        {
+            hm[i] = (uint8_t) (seaLevel + up / 2);
+            colours[i] = (uint8_t) std::clamp (g - (int) ground[(uint16_t) (i + 3)] + 16, 0, 31);
+        }
+        else
+        {
+            const int u = (int) (i & 0xFF), v = (int) (i >> 8);
+            const double swell = 11.0 * std::sin (6.283185307179586 * (37 * v + 3 * u) / 256.0)
+                               + 5.0 * std::sin (6.283185307179586 * (61 * v - 11 * u) / 256.0);
+            const int s = g - (int) ground[(uint16_t) (i + 0x0200)] + (int) std::lround (swell);
+            hm[i] = seaLevel;
+            colours[i] = (uint8_t) (seaCode + std::clamp (s, -31, 31));
+        }
+    }
+}
+
+/** A row of Titan's ground at map distance d: the islands' codes to their shades, the sea's to the
+    sea's — brighter and its swell full near, darker and calmer toward the haze. */
+void Mars1993::seaRow (uint8_t* shade, int d) const noexcept
+{
+    for (int c = 0; c < 32; ++c)
+        shade[c] = (uint8_t) (landShades + 31 - c);
+    const double t = d / (d + 20.0);
+    const double base = 34 - 20 * t, swell = 1 - 0.85 * t;
+    for (int c = 64; c < 128; ++c)
+        shade[c] = (uint8_t) (seaShades + std::clamp ((int) std::lround (base + (c - seaCode) * swell), 0, 63));
+}
+
+void Mars1993::setRows (int rows, double glass)
 {
     rows = std::max (2, rows & ~1);
     h = rows;
     w = 2 * (int) std::lround (rows * aspect / 2.0);
+    shown = glass;
+    squeeze = glass > 0 ? (double) w / h / glass : 1.0;
     P = rows / 200.0;
     G = rows / 2;
     const int line = std::max (1, (int) std::lround (P));      // the horizon line, row 99 of the original
@@ -199,20 +444,25 @@ void Mars1993::render (uint16_t camX, uint16_t camY)
     drawSky (alt, camX, camY);
     if (look == Look::ice)
         drawJupiter();
+    else if (look == Look::titan)
+        drawSaturn();
+    else
+        drawRanges();
     drawGround (alt, camX, camY);
 }
 
-/** A FLAT JUPITER in the black sky, where the ice world's sky has it: 27 degrees right of straight
-    ahead, 4 up, 9 across to its edge — on this screen, whose horizon is the middle row, the same
-    fractions of the glass as the GPU's picture gives them. Bands by latitude from the palette,
-    lit by the same sun through a terminator in three steps, the Spot in its place; the sky rows
-    only, the ground is drawn over it. No festoons, no limb, no edge: it is 1993. */
+/** JUPITER in the black sky, where the ice world's sky has it: 27 degrees right of straight ahead, 4
+    up, 9 across to its edge — on this screen, whose horizon is the middle row, the same fractions of
+    the glass as the GPU's picture gives them. Bands by latitude from the palette, the Spot in its
+    place; a sphere lit as the GPU lights it, by the same sun, its terminator soft and its limb darker,
+    in six steps of light dithered between. The sky rows only, the ground is drawn over it. No
+    festoons, no edge: it is 1993. */
 void Mars1993::drawJupiter()
 {
-    const double cx = 0.7063 * w, cy = G - 0.152 * h, r = 0.343 * h;
+    const double cx = 0.7063 * w, cy = G - 0.152 * h, r = 0.343 * h, rx = r * squeeze;
     const int y0 = std::max (0, (int) std::floor (cy - r)), y1 = std::min (skyRows - 1, (int) std::ceil (cy + r));
     // The light: n = u R + v U - z J against the sun, with J, R, U the ice world's sky frame.
-    const auto dir = [] (double azDeg, double elDeg) { const double az = azDeg * 3.14159265358979 / 180, el = elDeg * 3.14159265358979 / 180; return std::array<double, 3> { std::sin (az) * std::cos (el), std::sin (el), -std::cos (az) * std::cos (el) }; };
+    const auto dir = [] (double azDeg, double elDeg) { const double az = azDeg * pi / 180, el = elDeg * pi / 180; return std::array<double, 3> { std::sin (az) * std::cos (el), std::sin (el), -std::cos (az) * std::cos (el) }; };
     const auto cross = [] (std::array<double, 3> a, std::array<double, 3> b) { return std::array<double, 3> { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] }; };
     const auto norm = [] (std::array<double, 3> a) { const double l = std::sqrt (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]); return std::array<double, 3> { a[0] / l, a[1] / l, a[2] / l }; };
     const auto dot = [] (std::array<double, 3> a, std::array<double, 3> b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
@@ -223,20 +473,68 @@ void Mars1993::drawJupiter()
     for (int y = y0; y <= y1; ++y)
     {
         const double v = (cy - y) / r;
-        const double half = std::sqrt (std::max (0.0, 1.0 - v * v)) * r;
+        const double half = std::sqrt (std::max (0.0, 1.0 - v * v)) * rx;
         const int x0 = std::max (0, (int) std::ceil (cx - half)), x1 = std::min (w - 1, (int) std::floor (cx + half));
         const double lat = std::asin (std::clamp (v, -1.0, 1.0));
-        const int row = std::clamp ((int) ((lat / 3.14159265358979 + 0.5) * 24), 0, 23);
+        const int row = std::clamp ((int) ((lat / pi + 0.5) * jupRows), 0, jupRows - 1);
         for (int x = x0; x <= x1; ++x)
         {
-            const double u = (x - cx) / r, z = std::sqrt (std::max (0.0, 1.0 - u * u - v * v));
+            const double u = (x - cx) / rx, z = std::sqrt (std::max (0.0, 1.0 - u * u - v * v));
             const double l = u * sR + v * sU - z * sJ;
-            const int light = l > 0.25 ? 0 : (l > 0.0 ? 1 : 2);
+            const double lit = smoothstep (-0.06, 0.34, l) * (0.9 + 0.1 * std::max (l, 0.0)), limb = 0.55 + 0.45 * z;
+            const int light = step (lit * limb, jupLevels, dither (x, y));
             const double lon = std::asin (std::clamp (u / std::max (std::cos (lat), 1e-6), -1.0, 1.0));
             const double e = (lon - 0.35) * (lon - 0.35) / (0.21 * 0.21) + (lat - 0.36) * (lat - 0.36) / (0.085 * 0.085);
-            fb[(size_t) y * (size_t) w + (size_t) x] = (uint8_t) (e < 0.8 ? 170 + light : 98 + row * 3 + light);
+            fb[(size_t) y * (size_t) w + (size_t) x] = (uint8_t) (e < 0.8 ? jupSpot + light : jupShades + row * jupLevels + light);
         }
     }
+}
+
+/** SATURN in Titan's haze, where the GPU's sky has it: 17 degrees left of straight ahead, 6 up, 2.85
+    across to its edge, its rings 13 degrees off level and open by 0.075 of their width — on this
+    screen, whose horizon is the middle row, the same fractions of the glass as the GPU's picture gives
+    them. The far half of the rings, then the banded disc lit from the right, its terminator soft, its
+    limb darker and the rings' shadow across it, in four steps of light; then the near half of the
+    rings. Their colours are mixed into the haze (the palette's), their edges
+    and the rings' thin line dithered into it. The sky rows only. */
+void Mars1993::drawSaturn()
+{
+    const double ry = 0.06951 * h, rx = ry * squeeze, cx = 0.39328 * w, cy = G - 0.15346 * h;
+    const double tc = std::cos (13 * pi / 180), ts = std::sin (13 * pi / 180), open = 0.075;
+    // The light, from the right and gibbous in the rings' frame, turned with them.
+    const double l0 = 0.62, l1 = 0.22, l2 = 0.75, ll = std::sqrt (l0 * l0 + l1 * l1 + l2 * l2);
+    const double Lx = (tc * l0 - ts * l1) / ll, Ly = (ts * l0 + tc * l1) / ll, Lz = l2 / ll;
+    const double aa = 1 / ry + 0.07;                       // the haze softens its edge
+    const int y0 = std::max (0, (int) std::floor (cy - 1.1 * ry)), y1 = std::min (skyRows - 1, (int) std::ceil (cy + 1.1 * ry));
+    const int x0 = std::max (0, (int) std::floor (cx - 2.35 * rx)), x1 = std::min (w - 1, (int) std::ceil (cx + 2.35 * rx));
+    uint8_t* fb = frame.data();
+    for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x)
+        {
+            const double qx = (x - cx) / rx, qy = (cy - y) / ry;              // planet radii, y up
+            const double ux = tc * qx - ts * qy, uy = ts * qx + tc * qy;      // along the rings' line, across it
+            const double er = std::hypot (ux, uy / open);
+            double ring = smoothstep (1.22, 1.30, er) * (1 - smoothstep (2.18, 2.27, er));
+            ring *= 1 - 0.8 * smoothstep (1.90, 1.93, er) * (1 - smoothstep (1.99, 2.02, er));     // the Cassini division
+            const int ringShade = satRing + std::clamp ((int) ((0.15 + 0.15 * std::sin (er * 31)) / 0.3 * satRingShades), 0, satRingShades - 1);
+            const double threshold = dither (x, y);
+            uint8_t& px = fb[(size_t) y * (size_t) w + (size_t) x];
+            if (uy > 0 && ring > threshold)
+                px = (uint8_t) ringShade;                                     // the far half, behind the disc
+            const double pqx = ux, pqy = uy / 0.9, pr = std::hypot (pqx, pqy);     // the disc, a tenth flatter at the poles
+            if (1 - smoothstep (1 - aa, 1 + aa, pr) > threshold)
+            {
+                const double z = std::sqrt (std::max (1 - pr * pr, 0.0));
+                const double lit = smoothstep (-0.15, 0.45, pqx * Lx + pqy * Ly + z * Lz);
+                double b = (0.08 + 0.92 * lit) * (0.55 + 0.45 * z);
+                b *= 1 - 0.6 * std::exp (-((uy + 0.16) / 0.05) * ((uy + 0.16) / 0.05)) * lit;   // the rings' shadow
+                const int row = std::clamp ((int) ((pqy + 1) / 2 * satRows), 0, satRows - 1);
+                const int light = step ((b - satDark) / (1 - satDark), satLevels, dither (x + 2, y + 2));
+                px = (uint8_t) (satShades + row * satLevels + light);
+            }
+            if (uy <= 0 && ring > threshold)
+                px = (uint8_t) ringShade;                                     // the near half, in front
+        }
 }
 
 // 0459: the sky. Row r above the horizon looks at a plane at distance K / r: rows of constant v, u
@@ -249,14 +547,20 @@ void Mars1993::drawSky (uint16_t alt, uint16_t camX, uint16_t camY)
     const int64_t X9 = (int64_t) camX * 512, Y9 = (int64_t) camY * 512;
     const int lead = (int) std::lround (w / 2.0 - 128 * P);       // columns left of the original's window
     size_t p = 0;
+    uint8_t tone[256];                                                // the sky's value to its shade: itself, but on Mars
+    for (int v = 0; v < 256; ++v)
+        tone[v] = (uint8_t) v;
     for (int y = 0; y < skyRows; ++y)
     {
+        if (look == Look::mars)        // the clouds at half their contrast, over a sky paler toward the horizon
+            for (int v = 64; v < 96; ++v)
+                tone[v] = (uint8_t) (64 + std::clamp ((v - 64) / 2 + (int) std::lround (16.0 * y / std::max (1, skyRows - 1)), 0, 31));
         const int64_t D = (int64_t) std::floor ((double) K / ((G - y) / P - 1.0));   // K / (99 - y) at P = 1
         const uint32_t esi = (uint32_t) (X9 - D), ebp = (uint32_t) (Y9 + D);
         const uint32_t step = (uint32_t) (int64_t) std::floor ((double) D / (128 * P));  // shr eax, 7
         uint32_t L = (((ebp >> 16) & 0xFFu) << 24) | (((esi >> 16) & 0xFFu) << 16) | (esi & 0xFFFFu);
         L -= (uint32_t) lead * step;
-        for (int x = 0; x < w; ++x) { fb[p++] = sky[L >> 16]; L += step; }
+        for (int x = 0; x < w; ++x) { fb[p++] = tone[sky[L >> 16]]; L += step; }
     }
     // The horizon line, colour 50h.
     const size_t horizonEnd = (size_t) G * (size_t) w;
@@ -287,8 +591,15 @@ void Mars1993::drawGround (uint16_t alt, uint16_t camX, uint16_t camY)
     const int fy = camY & 15, vCam = (camY >> 4) & 0xFF;
     const int64_t X12 = (int64_t) camX * 4096;
     const int halfW = w >> 1;
+    uint8_t shade[256];                                              // a texel's colour code to its shade: itself, but on Mars and Titan
+    for (int c = 0; c < 256; ++c)
+        shade[c] = (uint8_t) c;
     for (int k = 60; k >= 1; --k)
     {
+        if (look == Look::titan)
+            seaRow (shade, distances[k]);
+        else if (look == Look::mars)
+            plainsRow (shade, distances[k]);
         const int D = (distances[k] << 4) + (fy ^ 15);              // distance in 1/16 texel
         int y0; uint32_t kq;
         if (k == 1) { y0 = 32000; kq = 0; }                          // the nearest row is pinned to the bottom
@@ -310,8 +621,8 @@ void Mars1993::drawGround (uint16_t alt, uint16_t camX, uint16_t camY)
             int yn = y0 - (int) ((hh * kq) >> 16);
             if (yn < 0) yn = -1; else if (yn >= h) yn = h - 1;
             const int yo = ybuf[x]; ybuf[x] = yn;
-            const int c0 = colours[idx];
-            const int col = (int) ((uint32_t) (((((int) colours[idx1] - c0) * (int) (frac >> 8)) << 1) + (c0 << 8)) & 0xFFFFu);   // 8.8
+            const int c0 = shade[colours[idx]];
+            const int col = (int) ((uint32_t) (((((int) shade[colours[idx1]] - c0) * (int) (frac >> 8)) << 1) + (c0 << 8)) & 0xFFFFu);   // 8.8
             if (yo >= yn) { cbuf[x] = col; continue; }
             const int old = cbuf[x]; cbuf[x] = col;
             const int n = yn - yo;

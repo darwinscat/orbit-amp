@@ -68,12 +68,16 @@ private:
     void renderOpenGL() override;
     void openGLContextClosing() override;
 
-    // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel. TURBO is one
-    // switch for every gear — a gear pulled keeps it as it stands. PARK, the lever's top end, takes
+    void webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world) override;
+
+    // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel — an option of
+    // the gear's, as its tone is: thrown, only the pack changes, and a gear pulled comes back with
+    // TURBO as it was left (channels::Lineup::pairs). PARK, the lever's top end, takes
     // the whole amp out of the sound (ProductEngine::parkSwitch); the channel waits, and TURBO does
     // nothing until a gear is pulled again.
     GearLever lever;
     face::PushButton turbo { "TURBO" };
+    TurboLid hatch;             // over it: TURBO's hatch, shut while parked
 
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg:
     // -70 dB to -40, and -3 dB to -0.1, foot to head. While its block is off a fader stands dim, and
@@ -81,12 +85,25 @@ private:
     face::ColumnFader threshold { Art::get().faderCapLight }, ceiling { Art::get().faderCapLight };
     std::vector<std::unique_ptr<KnobRing>> rings;   // DRIVE's and the tones': where each knob stands
     NavHeader header;               // on the nav screen: the gear, the pack that is playing, the speed
+    SpeedHud hud;                   // ...or the speed on the glass, where the layout puts it there
 
     // THE NAV SCREEN'S PICTURE of the amp at work (face/Monitor.h), the machine's choice; a right click
     // on the screen offers the five.
     face::Monitor screen;
     ParkSign parkSign;              // parked: the warning, large, in the screen's middle
     GlassFilm glassFilm;            // the screen's glass, over all of it
+
+    // LEARN's own keys, where the picture paints holes for them (RedPawLayout.h): GATE's learning and
+    // HUM's, each started as from its menu, a key lit while its learning shows.
+    face::PushButton learnKey { "LEARN GATE" }, humKey { "LEARN HUM" };
+    int learnShowing = -1;          // whose learning the glass shows: 0 GATE's, 1 HUM's, -1 none
+
+    // THE WIPERS' SPEED on keys of their own, where the picture paints a row for them (RedPawLayout.h):
+    // each word on its key, the speed set lit — the machine's choice, as the landscape is.
+    std::vector<std::unique_ptr<face::PushButton>> wiperButtons;
+    int wipers = 1;
+    void chooseWipers (int speed);
+
     void showScreenMenu();
     void chooseScreen (face::Monitor::View);
     void pullGear (int gear);

@@ -36,6 +36,11 @@ public:
     virtual void setTurbo (bool on) = 0;
     virtual void setParked (bool on) = 0;
     virtual void setSteer (float amount) = 0;       // -1..1, held
+    /** The wipers' speed, where the face has keys for it: 0 off, 1 a wipe now and then, 2 slow, 3 fast. A
+        world whose wipers keep their own time takes no notice. */
+    virtual void setWipers (int /*speed*/) {}
+    /** Searchlights, left and right, where the face has keys for them; a world with none takes no notice. */
+    virtual void setLights (bool /*left*/, bool /*right*/) {}
 
     /** One step of the drive. */
     virtual void step (double dt) = 0;
@@ -56,6 +61,9 @@ public:
     virtual float speed() const noexcept = 0;
     /** The speed the gear and TURBO ask for, m/s. */
     virtual float speedFor (int gear, bool turbo) const noexcept = 0;
+    /** How the speed is eased to what is asked, a time constant in seconds: driving, and coming to a stand. */
+    struct Ease { double drive = 0.0, park = 0.0; };
+    virtual Ease ease() const noexcept = 0;
 
     /** The 1993 landscape's colours for this world. */
     virtual Mars1993::Look look1993() const noexcept = 0;

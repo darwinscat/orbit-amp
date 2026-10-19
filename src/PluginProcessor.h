@@ -20,15 +20,15 @@
 #include "core/CabinetIr.h"
 #include "core/DoorLimiter.h"
 #include "core/LateWire.h"
-#include "core/DelayStage.h"
-#include "core/ReverbStage.h"
 #include "device/EmbeddedIrs.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/appkit/CompareHistory.h>
 #include <felitronics/appkit/UpdateChecker.h>
 #include <felitronics/dehum/HumRemover.h>
+#include <felitronics/delay/TapeDelay.h>
 #include <felitronics/dynamics/NoiseGate.h>
+#include <felitronics/reverb/AmpReverb.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <array>
@@ -55,9 +55,8 @@ struct ProductEngine
     virtual const std::atomic<float>* parkSwitch() const { return nullptr; }
 };
 
-/** The plugin shell. Deliberately thin: the chain (boost -> EQ -> preamp -> EQ -> delay -> reverb ->
-    cabinet) lands in src/core/ behind small engines, and this class only pumps
-    buffers into them and owns state. */
+/** The plugin shell. Deliberately thin: the chain (preamp -> EQ -> delay -> reverb -> cabinet) lands
+    in src/core/ behind small engines, and this class only pumps buffers into them and owns state. */
 class AmpProcessor final : public juce::AudioProcessor,
                            private juce::Timer,
                            private juce::ValueTree::Listener
@@ -228,15 +227,14 @@ public:
         shrank it the value stuck. A wanted size and a current size are two different facts. */
     static constexpr float preferredScale = 1.0f;
 
-    /** The two captured blocks, addressed by number, so the aim, the name pump and the seed can
-        all walk them the same way instead of each carrying its own pair of lambdas. */
-    static constexpr size_t numCaptured = 2;
+    /** The captured blocks, addressed by number, so the aim, the name pump and the seed can all walk
+        them the same way. There is one — the preamp — and the walk stays a walk, so a block that
+        joins it is a row here and not a second copy of every loop. */
+    static constexpr size_t numCaptured = 1;
 
-    core::CapturedBlock& blockAt (size_t b) noexcept { return b == 0 ? boost : preamp; }
-    static const char*   deviceIdOf (size_t b) noexcept
-    { return b == 0 ? params::boostDevice : params::preampDevice; }
-    static juce::String  measuredIdOf (size_t b, int i)
-    { return b == 0 ? params::boostMeasured (i) : params::preampMeasured (i); }
+    core::CapturedBlock& blockAt (size_t) noexcept { return preamp; }
+    static const char*   deviceIdOf (size_t) noexcept { return params::preampDevice; }
+    static juce::String  measuredIdOf (size_t, int i) { return params::preampMeasured (i); }
 
     /** THE STATE AS IT SHOULD BE WRITTEN DOWN — the live tree with its names reconciled first.
 
@@ -311,12 +309,12 @@ private:
 
         `namesPrimed` is the first tick, which only takes the baseline. */
     bool  namesPrimed = false;
-    float lastDeviceValue[numCaptured] { -1.0f, -1.0f };
+    float lastDeviceValue[numCaptured] { -1.0f };
     float lastSwitchValue[numCaptured][core::CapturedBlock::numMeasured] { };
 
     /** What the aim itself last wrote, so a value that no longer reads it can be told from one
         that does — which is how a hand on the control wins against an aim still in flight. */
-    float aimWroteDevice[numCaptured] { -1.0f, -1.0f };
+    float aimWroteDevice[numCaptured] { -1.0f };
     float aimWroteSwitch[numCaptured][core::CapturedBlock::numMeasured] { };
 
     // MUST precede `updater`: the checker takes the store by reference and is destroyed before it.
@@ -351,7 +349,7 @@ private:
 
         Both parameters a host sees are numbers, and both numbers are places in a list that belongs
         to this machine on this day. The device's is an index into whatever packs are on disk,
-        sorted bundled-first and then along the gain ramp — drop one new pack in and everything
+        in the AMP menu's order — drop one new pack in and everything
         after it renumbers. A switch's is a fraction, an index into the pack's own position list —
         repack a device one position shorter and every old session reopens on a different position.
         Both drift silently, and the second is the one a player would never think to check.
@@ -400,7 +398,7 @@ private:
         // not run until it is: the positions being aimed at belong to the named pack, and asking
         // the pack that happens to be loaded whether it has a position called "Lead" is asking
         // the wrong device a question about the right one.
-        bool deviceSettled[numCaptured] = { true, true };
+        bool deviceSettled[numCaptured] = { true };
 
         const auto aimDevice = [&] (size_t b)
         {
@@ -770,8 +768,10 @@ private:
     {
         // PARKED, the amp is out of the sound: every link stands by — the captured blocks' fades and
         // wires hand the dry signal through at the chain's own latency, the rooms and the delay are no
-        // longer fed and ring out, the trims go to unity — and only the tuner goes on listening.
-        if (row != params::rowTuner && isParked())
+        // longer fed and ring out, the blocks' trims go to unity — but the tuner goes on listening, and
+        // the player's own levels, IN and OUT, go on holding: the dry guitar comes out where they put
+        // the amp, not at full level past a master turned down.
+        if (row != params::rowTuner && row != params::rowIn && row != params::rowOut && isParked())
             return false;
 
         const auto* on = rowOn[(size_t) row];
@@ -863,13 +863,16 @@ private:
     float editorScale = preferredScale;
 
     std::array<core::EqLink, params::numEqLinks> eqLinks;
-    core::DelayStage  delay;
-    core::ReverbStage reverb;
+    felitronics::delay::TapeDelay  delay;
+    felitronics::reverb::AmpReverb reverb;
+    // A prepare either stage refuses (no channel to carry, more than two) leaves it out of the sound:
+    // the dry passes as if the link were out of the rig, rather than a stage nobody built being run.
+    bool delayReady = false, reverbReady = false;
 
 public:
     /** The delay's picture taps, read-only: the face draws its comb from the same numbers the
         heads are actually standing on. */
-    const core::DelayStage& delayTaps() const noexcept { return delay; }
+    const felitronics::delay::TapeDelay& delayTaps() const noexcept { return delay; }
 
     /** The tempo the host reported at the last block, or 0 when it reports none — the standalone,
         or a host that does not say. For the delay's face, which shows the number that conducts. */
@@ -937,20 +940,19 @@ private:
     void removeHum (juce::AudioBuffer<float>& buffer) noexcept;
 
 public:
-    /** The captured pedal in front, and the captured preamp after it. Each is a device list, the
-        stage playing what is chosen from it, that device's measured controls as filters, and the taps
-        its pictures read. The library and the loading live on the message thread; the audio thread
-        only ever meets a model that is already in memory. */
-    core::CapturedBlock boost    { device::DeviceLibrary::Slot::pedal };
-    core::CapturedBlock preamp   { device::DeviceLibrary::Slot::preamp };
+    /** The captured preamp: a device list, the stage playing what is chosen from it, that device's
+        measured controls as filters, and the taps its pictures read. The library and the loading
+        live on the message thread; the audio thread only ever meets a model that is already in
+        memory. */
+    core::CapturedBlock preamp   { device::DeviceLibrary::ampSlot };
 
     /** Re-scans the devices folder and loads whatever the device parameters point at. Message
         thread. */
     void rescanDevices();
 
-    /** The cabinet shelf — the embedded IR set, in params::cabIrNames order. The face draws the
-        same bytes the engine convolves. */
-    struct IrBytes { const char* data; int size; };
+    /** The cabinet shelf — the family's (device/FactoryShelf.h), in params::cabIrNames order, and the
+        folder of it each IR lies in. The face draws the same bytes the engine convolves. */
+    struct IrBytes { const char* data; int size; const char* folder; };
     static const IrBytes& cabIrBytes (int index);
 
     /** WHAT THE CABINET PLAYS, as the state says it: an IR of the player's own when the state names
@@ -1035,15 +1037,15 @@ public:
     /** The output level after everything, and the two latched clip caps (the UI clears them). */
     std::atomic<float> outDb   { -90.0f };
 
-    /** The level at every joint of the chain — the gain-staging story, readable per stage. */
-    std::atomic<float> boostOutDb  { -90.0f };
-    std::atomic<float> preampOutDb { -90.0f };
+    /** The level at every joint of the chain — the gain-staging story, readable per stage. Each
+        captured block's output, indexed like blockSpectrumTap — 0 is the preamp. */
+    std::array<std::atomic<float>, numCaptured> blockOutDb { -90.0f };
 
     /** What each captured block is FEEDING ITS MODEL, after its own input trim. Measured at the
         model's door rather than the block's, because that is the level the question is about: a
         capture answers to what goes in, and the meter has to be reading the same point the trim
-        beside it moves. Indexed like blockSpectrumTap — 0 boost, 1 preamp. */
-    std::array<std::atomic<float>, 2> blockInDb { -90.0f, -90.0f };
+        beside it moves. Indexed like blockSpectrumTap — 0 is the preamp. */
+    std::array<std::atomic<float>, numCaptured> blockInDb { -90.0f };
     std::atomic<float> cabOutDb    { -90.0f };
     std::atomic<bool>  inClip  { false };
     std::atomic<bool>  outClip { false };
@@ -1054,7 +1056,7 @@ public:
     /** The per-stage DSP load, orbitcab's grammar: each stage's wall-clock as a smoothed % of
         the block's real-time budget. Indexed by Stage; the footer badge reads these. */
     // The list itself lives with the parameters now — see params::Stage. Pulled in whole so
-    // every `nsStage[stBoost]` in this class still reads the way it always did.
+    // every `nsStage[stPreamp]` in this class still reads the way it always did.
     using Stage = params::Stage;
     using enum params::Stage;
     std::atomic<float> stageLoad[numStages] {};
@@ -1082,12 +1084,12 @@ public:
         EQ's output too. The curve and the spectrum drawn under it therefore describe the same
         point, and there is one FFT per block rather than two at the same place. Lock-free SPSC with
         a starve-tolerant reader, so several views may sip from it. */
-    std::array<felitronics::analysis::RollingSpectrumTap, 2> blockSpectrumTap;
+    std::array<felitronics::analysis::RollingSpectrumTap, numCaptured> blockSpectrumTap;
 
     /** The pair's other half: what the EQ eats — the capture's voice before the console colours
         it. With the output tap above, an EQ pane shows before and after, the way the cabinet's
         picture does. */
-    std::array<felitronics::analysis::RollingSpectrumTap, 2> blockInSpectrumTap;
+    std::array<felitronics::analysis::RollingSpectrumTap, numCaptured> blockInSpectrumTap;
 
     /** The cabinet's own pair — what goes into the IR and what leaves it, for the picture's faint
         spectra. Pushed around the convolution, channel 0, only while the cabinet is on. */
@@ -1120,7 +1122,7 @@ public:
     static constexpr int eqSpectrumOrderBig = 14;   // 16384 — the constant-Q pane's longest tier
 
     /** What resolution each block's pair is publishing at, written by that block's face. */
-    std::array<std::atomic<int>, 2> blockSpectrumOrder;
+    std::array<std::atomic<int>, numCaptured> blockSpectrumOrder;
 
     /** The raw input's peak this block, in dB, over the channels the chain works — the level the
         gate KEYS off, for the meter the thresholds are drawn on. Same writer, same readers. */
@@ -1203,16 +1205,13 @@ private:
         one, and each register's. */
     void embedCabIrs (juce::ValueTree& tree) const;
 
-    std::atomic<float>* boostInParam  = nullptr;
     std::atomic<float>* preampInParam = nullptr;
-    std::atomic<float>* boostSmoothParam  = nullptr;
     std::atomic<float>* preampSmoothParam = nullptr;
-    float lastBoostInGain  = 1.0f;
     float lastPreampInGain = 1.0f;
 
     /** Whether each captured block was in the path last block — so the trim can ARRIVE at what
         the player set instead of sliding up to it while the block is already audible. */
-    bool blockWasOn[2] { true, true };
+    bool blockWasOn[numCaptured] { true };
     float lastTrimGain = 1.0f;
 
     /** The two switches of every link, straight off `params::chainLinks` — plus the two ends,
@@ -1243,7 +1242,6 @@ private:
     std::atomic<float>* reverbHpfHzParam    = nullptr;
 
     std::atomic<float>* packCompParam    = nullptr;
-    std::atomic<float>* boostGainParam  = nullptr;
     std::atomic<float>* preampGainParam = nullptr;
     juce::AudioBuffer<float> scopeDry;   // a block's input, kept for its pictures
 
@@ -1257,7 +1255,7 @@ private:
         not arrive early the moment somebody stands a rate-matching model down. Only runs when the
         block is not working — while it is working the model carries its own latency and there is
         nothing to imitate. */
-    core::BypassWire wire[2];
+    core::BypassWire wire[numCaptured];
 
     /** Set once `reportLatency` has seen a wire refuse and has said so. Message thread only. */
     bool wireRefusalSeen = false;
@@ -1268,14 +1266,18 @@ public:
         will comb. Latched; a `prepareToPlay` clears the wires and this follows on the next pump. */
     bool bypassWireRefused() const noexcept
     {
-        return wire[0].everShortened() || wire[1].everShortened();
+        for (const auto& w : wire)
+            if (w.everShortened())
+                return true;
+
+        return false;
     }
 
     /** How long wire `index` currently is, in samples. Sized from the delay its block reports and
         from nothing else — no ceiling is computed anywhere — so this reads back as that delay. */
     int bypassWireCapacity (int index) const noexcept
     {
-        return wire[(size_t) juce::jlimit (0, 1, index)].capacity();
+        return wire[(size_t) juce::jlimit (0, (int) numCaptured - 1, index)].capacity();
     }
 
 private:
@@ -1352,6 +1354,13 @@ juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
     (catpit/CatpitLineup.cpp, through channels/Set.h); both are laid out the one way device/FactorySet.h
     says. The processor calls it before it builds anything of its own — see AmpProcessor::factorySet. */
 void layOutFactorySet();
+
+/** THE PLAYER'S IRS OF BEFORE, gathered into the family's folder: what the product kept in its own `IRs`
+    is copied into `Darwin's Cat/IRs` (device::IrLibrary::gather) — once in a process, and once on this
+    machine (prefs::irsGathered), tried again on the next start only where a file could not be copied.
+    Every product's layOutFactorySet calls it beside its set, so a gate that stands that in for nothing
+    never reaches the machine's real folders. */
+void gatherFormerIrs();
 
 /** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —
     once per target again. OrbitAmp adds no parameter and has no such half: it answers null. */

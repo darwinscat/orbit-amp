@@ -2,12 +2,12 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 // Gate for THE ROVER'S SET AS IT LEAVES THE BINARY (channels/Set.h, over the rover's set data): that
-// what is laid out is what was built in, byte for byte — the Victory V4's packs, one for each of the
-// product's channels (ROVER_CHANNELS, as the build says), and the cabinets; that a start after the first
+// what is laid out is what was built in, byte for byte — the packs the product's channels play
+// (ROVER_CHANNELS of them, as the build says), and the cabinets; that a start after the first
 // writes nothing; that a file damaged
 // or lost comes back; that what an earlier build left behind goes — and that nothing else does; and
 // that the rover's cabinets are its own, whatever another product lays out beside them. Every rover that
-// wears the dashboard runs it as itself — RedPawAmp, FrostPawAmp (CMakeLists.txt: rover_set_test).
+// wears the dashboard runs it as itself — RedPawAmp, FrostPawAmp, AmberPawAmp (CMakeLists.txt: rover_set_test).
 //
 //   RedPawSetTests [folder]     the folder to work in, under the current directory; one of its own
 //                               under the system's temporary folder when none is named
@@ -18,6 +18,7 @@
 #include "channels/Set.h"
 #include "device/DeviceLibrary.h"
 #include "device/FactorySet.h"
+#include "device/FactoryShelf.h"
 
 #if PRODUCT_SET_EMBEDDED
  #include <ProductSetData.h>
@@ -56,20 +57,35 @@ int main (int argc, char** argv)
     // What the binary carries, as the layout sorts it.
     struct Carried { juce::File file; const char* data; int size; };
     std::vector<Carried> carried;
-    int packs = 0, cabinets = 0;
+    int packs = 0, cabinets = 0, stray = 0;
     juce::int64 bytes = 0;
    #if PRODUCT_SET_EMBEDDED
     for (int i = 0; i < ProductSetData::namedResourceListSize; ++i)
     {
         const auto name = juce::String::fromUTF8 (ProductSetData::originalFilenames[i]);
-        const bool pack = name.endsWithIgnoreCase (".orbitrig.zip");
+        if (! name.endsWithIgnoreCase (".orbitrig.zip"))
+        {
+            ++stray;        // the product's own data holds its packs; the cabinets are the family's
+            continue;
+        }
         int size = 0;
         const char* data = ProductSetData::getNamedResource (ProductSetData::namedResourceList[i], size);
-        carried.push_back ({ (pack ? factory : set::cabinetsIn (factory)).getChildFile (name), data, size });
-        (pack ? packs : cabinets) += 1;
+        carried.push_back ({ factory.getChildFile (name), data, size });
+        ++packs;
         bytes += size;
     }
    #endif
+
+    // ...and Darwin's Cat's own cabinets of the family's shelf, in their folder: OrbitAmp alone carries
+    // the whole of it.
+    for (const auto& ir : orbitamp::device::shelf::irs())
+    {
+        if (juce::String (ir.folder) != orbitamp::device::shelf::ours)
+            continue;
+        carried.push_back ({ factory.getChildFile (orbitamp::device::shelf::pathOf (ir)), ir.data, ir.size });
+        ++cabinets;
+        bytes += ir.size;
+    }
     std::printf ("the binary carries %d packs, %d cabinets, %lld bytes\n", packs, cabinets, (long long) bytes);
 
     const auto allThere = [&carried]
@@ -89,14 +105,34 @@ int main (int argc, char** argv)
     check (allThere(), "...each of them byte for byte what was built in");
     check (carried.empty() || list.existsAsFile(), "...and the rover's own list of them");
 
-    // THE CHANNELS' PACKS, each by the capture it holds: the V4's in order, as far as the product goes —
-    // Copper, Copper TB, the Sheriff's two, the Kraken's two — and nothing else among the packs.
+    // THE FAMILY'S SHELF, Darwin's Cat's own ten in the Orange's folder, none in Other — those are
+    // OrbitAmp's — and none loose at the top.
     {
-        const juce::StringArray v4 { "v4-copper-4ae0", "v4-copper-tb-5841", "v4-sheriff-ch1-82ab",
-                                     "v4-sheriff-ch2-2f2f", "v4-kraken-ch1-f7fc", "v4-kraken-ch2-5f71" };
+        const auto shelf = set::cabinetsIn (factory);
+        const auto in = [&shelf] (const char* folder) { return shelf.getChildFile (folder).findChildFiles (juce::File::findFiles, false, "*.wav").size(); };
+        check (stray == 0, "the rover's own set data holds packs alone");
+        check (in ("Orange PPC212V") == 10 && in ("Other") == 0 && shelf.findChildFiles (juce::File::findFiles, false).isEmpty(),
+               "the cabinets lie in the Orange's folder, all ten, none in Other and none loose");
+        check (shelf.getChildFile ("Orange PPC212V/02-dark-matter.wav").existsAsFile(), "...DARK MATTER among the Orange's");
+    }
+
+    // THE CHANNELS' PACKS, each by the capture it holds, and nothing else among the packs. On Mars the
+    // Friedman IR-X's two, each played by two channels (a gear, and its TURBO with the Boost thrown);
+    // elsewhere the V4's in order, one to a channel, as far as the product goes — Copper, Copper TB,
+    // the Sheriff's two, the Kraken's two.
+    {
         juce::StringArray wanted;
-        for (int i = 0; i < juce::jmin (ROVER_CHANNELS, v4.size()); ++i)
-            wanted.add (v4[i]);
+        if (juce::String (ORBITAMP_PRODUCT_NAME) == "RedPawAmp")
+        {
+            wanted = { "ir-x-ch1-poweramp-3e66", "ir-x-ch2-poweramp-67e9" };
+        }
+        else
+        {
+            const juce::StringArray v4 { "v4-copper-4ae0", "v4-copper-tb-5841", "v4-sheriff-ch1-82ab",
+                                         "v4-sheriff-ch2-2f2f", "v4-kraken-ch1-f7fc", "v4-kraken-ch2-5f71" };
+            for (int i = 0; i < juce::jmin (ROVER_CHANNELS, v4.size()); ++i)
+                wanted.add (v4[i]);
+        }
         juce::StringArray found;
         for (const auto& c : carried)
             if (c.file.getFileName().endsWithIgnoreCase (".orbitrig.zip"))
@@ -104,9 +140,9 @@ int main (int argc, char** argv)
         found.sort (false);
         auto sorted = wanted;
         sorted.sort (false);
-        check (packs == ROVER_CHANNELS && found == sorted,
+        check (packs == wanted.size() && found == sorted,
                "the " + juce::String (packs) + " packs are the " + juce::String (ROVER_CHANNELS) + " channels' captures: " + found.joinIntoString (" "));
-        check (cabinets == 10, "...and the ten cabinets with them");
+        check (cabinets == 10, "...and Darwin's Cat's own ten cabinets with them");
     }
 
     // Every start after it.
@@ -159,7 +195,7 @@ int main (int argc, char** argv)
         const auto own = set::ownCabinets (factory);
         bool mine = own.size() == cabinets;
         for (const auto& c : carried)
-            mine = mine && (c.file.getParentDirectory() != set::cabinetsIn (factory) || own.contains (c.file));
+            mine = mine && (! c.file.isAChildOf (set::cabinetsIn (factory)) || own.contains (c.file));
         check (mine, "the rover's cabinets are the ones it carries, all " + juce::String (own.size()) + " of them");
         check (! own.contains (set::cabinetsIn (factory).getChildFile ("50-another.wav")), "...and not the other product's");
         check (! own.contains (players), "...nor a file of the player's");

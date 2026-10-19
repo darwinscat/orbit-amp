@@ -29,10 +29,11 @@ namespace
         frame (layout::rims). The frame's top — its shadow and the rim's lit edge — goes `rimLift` higher,
         and the room it leaves is filled with the frame's own face: along the rim, the rim's face band
         mirrored back and forth; on the end caps, the plain face under their top screws, so the screws
-        keep their shape. Numbers are in the dashboard's 1672-wide space, measured off it. */
+        keep their shape. Numbers are in the dashboard's 1672-wide space, measured off it. A picture with
+        room for the words as it is painted lifts them nothing. */
     juce::Image widenRims (juce::Image img)
     {
-        if (! img.isValid())
+        if (! img.isValid() || layout::rimLift <= 0.0f)
             return img;
 
         const float k = (float) img.getWidth() / layout::width;
@@ -60,14 +61,25 @@ namespace
         return img;
     }
 
-    /** THE NOTCHES PAST THE LAST GEAR ARE FILLED IN (layout::NotchFill): a rover of fewer gears than its
-        picture has notches gets its slot straight there. Over each such notch the slot's edge is the
-        straight run above it, mirrored down and back, and the plate beside it is the plate further right
-        on the same rows; faded into the picture at the fill's top, bottom and right. Numbers are in the
-        dashboard's 1672-wide space, measured off it. */
-    juce::Image fillSpareNotches (juce::Image img)
+    /** THE PAINTED NOTCHES FIT TO THE GEARS (layout::NotchFill): a notch painted where no gear stands is
+        filled in, so the slot runs straight there — over it the slot's edge is the straight run above it,
+        mirrored down and back, and the plate beside it is the plate further right on the same rows — and
+        where a gear stands with no notch painted, the painted one nearest it is copied there, the same rows
+        of the picture moved. Each is faded into the picture at its top, bottom and right. Numbers are in
+        the dashboard's 1672-wide space, measured off it. */
+    juce::Image fitNotches (juce::Image img)
     {
-        if (! img.isValid() || numGears() >= (int) layout::notches.size())
+        const auto gearsAt = std::vector<float> (layout::stops.begin(), layout::stops.begin() + juce::jmin ((std::ptrdiff_t) numGears(), (std::ptrdiff_t) layout::stops.size()));
+        const auto among = [] (float y, const std::vector<float>& ys)
+        {
+            return std::any_of (ys.begin(), ys.end(), [y] (float v) { return std::abs (v - y) < 1.0f; });
+        };
+        std::vector<float> filled, cut;
+        for (const float y : layout::notches)
+            if (! among (y, gearsAt)) filled.push_back (y);
+        for (const float y : gearsAt)
+            if (! among (y, layout::notches)) cut.push_back (y);
+        if (! img.isValid() || (filled.empty() && cut.empty()))
             return img;
 
         const auto& f = layout::notchFill;
@@ -81,9 +93,9 @@ namespace
         const int run = juce::jmax (1, at (f.run));
         const float feather = (float) juce::jmax (1, at (f.feather));
 
-        for (size_t n = (size_t) numGears(); n < layout::notches.size(); ++n)
+        for (const float notch : filled)
         {
-            const int top = at (layout::notches[n] - f.above), bottom = at (layout::notches[n] + f.below);
+            const int top = at (notch - f.above), bottom = at (notch + f.below);
             for (int y = top; y < bottom; ++y)
             {
                 const int m = (y - top) % (2 * run);
@@ -99,16 +111,34 @@ namespace
                 }
             }
         }
+
+        // Over the fills: the notches of the gears the picture has none for, each its nearest painted one.
+        for (const float notch : cut)
+        {
+            const float from = *std::min_element (layout::notches.begin(), layout::notches.end(),
+                                                  [notch] (float a, float b) { return std::abs (a - notch) < std::abs (b - notch); });
+            const int top = at (notch - f.above), bottom = at (notch + f.below), rows = at (from) - at (notch);
+            for (int y = top; y < bottom; ++y)
+            {
+                const float down = juce::jmin ((float) (y - top + 1) / feather, (float) (bottom - y) / feather);
+                for (int x = left; x < right; ++x)
+                {
+                    const float amount = juce::jlimit (0.0f, 1.0f, juce::jmin (down, (float) (right - x) / feather));
+                    dst.setPixelColour (x, y, dst.getPixelColour (x, y).interpolatedWith (src.getPixelColour (x, y + rows), amount));
+                }
+            }
+        }
         return img;
     }
 
     /** THE CORNER LAMPS' PLATES GROW ON THEIR OUTER LEGS (layout::LampPlate): the plate inward of the cut
         moves inward, cut to its own outline; the room it leaves gets the plate's top edge, plain metal, the plate's bottom edge,
         each from where the picture has it plain; and down the room, INPUT's slot at a smaller size — its
-        round ends whole, its straight run cut short. */
+        round ends whole, its straight run cut short. A picture that paints the corner slots itself grows
+        its plates nothing. */
     juce::Image widenLampPlates (juce::Image img)
     {
-        if (! img.isValid())
+        if (! img.isValid() || layout::lampPlateGrow <= 0.0f)
             return img;
 
         using namespace layout;
@@ -192,8 +222,9 @@ const Art& Art::get()
     static const Art art = []
     {
         Art a;
-        a.bg         = face::renders::putOutLamps (widenLampPlates (widenRims (fillSpareNotches (load ("dashboard.png")))), layout::lamps, layout::width,
-                                                   skin().lampness, a.lampLit);
+        a.bg         = widenLampPlates (widenRims (fitNotches (load ("dashboard.png"))));
+        if (skin().lampness != nullptr)
+            a.bg = face::renders::putOutLamps (a.bg, layout::lamps, layout::width, skin().lampness, a.lampLit);
         a.knobDrive  = load ("knob-drive.png");
         a.knobTone   = load ("knob-tone.png");
         a.lever      = load ("lever.png");
@@ -207,10 +238,29 @@ const Art& Art::get()
         a.keyDown    = load ("key-down.png");
         a.turboUp    = load ("turbo-up.png");
         a.turboDown  = load ("turbo-down.png");
+        a.turboLid   = loadOwn ("turbo-lid.png");
         a.emblem     = loadOwn ("emblem.png");
         return a;
     }();
     return art;
+}
+
+juce::Image Art::still()
+{
+    return loadOwn ("still.jpg");
+}
+
+juce::String Art::mark()
+{
+    const auto& binary = skin().renders;
+    for (int i = 0; i < binary.count; ++i)
+        if (juce::String (binary.originalName (binary.names[i])) == "mark.svg")
+        {
+            int size = 0;
+            if (const char* svg = binary.data (binary.names[i], size); svg != nullptr)
+                return juce::String::fromUTF8 (svg, size);
+        }
+    return {};
 }
 
 } // namespace orbitamp::redpaw

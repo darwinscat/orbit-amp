@@ -246,27 +246,40 @@ void CabinetBlock::showIrMenu()
         return item;
     };
 
-    // THE SHELF, BY CABINET: a submenu for each, in params::cabShelves' order, and inside it first a
-    // line that says what these IRs are, then their names. A shelf IR keeps its number in the
-    // parameter whichever cabinet shows it, so its item is that number and one more, as it always
-    // was. The cabinet holding the IR that plays wears the tick, so the way to it can be followed.
+    // THE SHELF, BY ITS FOLDERS — the ones the family lays it out in (device/FactoryShelf.h): a submenu
+    // for each, in the order params::cabShelves first comes to it, and inside it each of its cabinets
+    // in turn, a line that says what these IRs are and then their names. A shelf IR keeps its number in
+    // the parameter whichever folder shows it, so its item is that number and one more, as it always
+    // was. The folder holding the IR that plays wears the tick, so the way to it can be followed.
     juce::PopupMenu menu;
+
+    struct Folder
+    {
+        juce::String name;
+        juce::PopupMenu items;
+        bool holdsChoice = false;
+    };
+    std::vector<Folder> folders;
 
     for (const auto& shelf : params::cabShelves)
     {
-        juce::PopupMenu cabinet;
-        cabinet.addSectionHeader (juce::String::fromUTF8 (shelf.about));
+        const juce::String name (AmpProcessor::cabIrBytes (shelf.first).folder);
+        auto at = std::find_if (folders.begin(), folders.end(), [&name] (const Folder& f) { return f.name == name; });
+        if (at == folders.end())
+            at = folders.insert (folders.end(), Folder { name, {}, false });
 
-        bool holdsChoice = false;
+        at->items.addSectionHeader (juce::String::fromUTF8 (shelf.about));
+
         for (int i = shelf.first; i < shelf.first + shelf.count; ++i)
         {
             const bool ticked = ! choice.isUser() && choice.factory == i;
-            cabinet.addItem (itemFor (params::cabIrNames[i], 1 + i, ticked));
-            holdsChoice = holdsChoice || ticked;
+            at->items.addItem (itemFor (params::cabIrNames[i], 1 + i, ticked));
+            at->holdsChoice = at->holdsChoice || ticked;
         }
-
-        menu.addSubMenu (shelf.cabinet, cabinet, true, nullptr, holdsChoice);
     }
+
+    for (auto& folder : folders)
+        menu.addSubMenu (folder.name, folder.items, true, nullptr, folder.holdsChoice);
 
     // The player's files are numbered from here, in the order the tree lists them.
     static constexpr int firstFile = 1000;
