@@ -20,6 +20,11 @@
 # build. The bundles are expected to be codesigned and stapled already (sign-family-macos.sh). The .pkg
 # is signed only when INSTALLER_IDENTITY names a Developer ID Installer identity; without it, it is built
 # unsigned, and productsign can sign it later.
+#
+# SIGNED BY productsign, NOT BY productbuild --sign. The package is built unsigned and productsign signs
+# it, as every release before did. On the signing runner, which has no one at its screen, productbuild's
+# own signing cannot reach the Installer key ("SignData failed … CSSMERR_CSP_NO_USER_INTERACTION") where
+# productsign can, from the same unlocked keychain.
 set -euo pipefail
 
 VERSION="${1:?usage: build-family-pkg.sh <version> <build-dir> <out-dir>}"
@@ -142,8 +147,8 @@ EOF
 
 PKG="$OUT/darwinscat-amps-$VERSION-macos.pkg"
 if [ -n "${INSTALLER_IDENTITY:-}" ]; then
-  productbuild --distribution "$work/Distribution.xml" --package-path "$work/components" \
-    --sign "$INSTALLER_IDENTITY" --timestamp "$PKG"
+  productbuild --distribution "$work/Distribution.xml" --package-path "$work/components" "$work/unsigned.pkg"
+  productsign --sign "$INSTALLER_IDENTITY" "$work/unsigned.pkg" "$PKG"
 else
   productbuild --distribution "$work/Distribution.xml" --package-path "$work/components" "$PKG"
 fi
