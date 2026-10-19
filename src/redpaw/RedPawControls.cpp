@@ -377,7 +377,7 @@ void NavHeader::paint (juce::Graphics& g)
 SpeedHud::SpeedHud()
 {
     setInterceptsMouseClicks (false, false);
-    startTimerHz (10);
+    startTimerHz (refreshHz);
 }
 
 void SpeedHud::timerCallback()
@@ -392,7 +392,7 @@ void SpeedHud::timerCallback()
 void SpeedHud::paint (juce::Graphics& g)
 {
     const auto box = getLocalBounds().toFloat();
-    const juce::Colour light { 0xff9dffc8 };        // the projector's green, pale as the haze outside
+    const juce::Colour ink { light };
     const float h = box.getHeight();
 
     // The number and its unit as outlines, so the light can glow round them as well as fill them.
@@ -407,14 +407,14 @@ void SpeedHud::paint (juce::Graphics& g)
         return p;
     };
     juce::Path lit;
-    lit.addPath (glyphs (juce::String (juce::jmax (0, shownKmh)), face::labelFont (h * 0.62f).withExtraKerningFactor (0.06f),
-                         { box.getCentreX(), box.getY() + h * 0.40f }));
-    lit.addPath (glyphs ("KM/H", face::labelFont (h * 0.20f).withExtraKerningFactor (0.2f),
-                         { box.getCentreX(), box.getY() + h * 0.86f }));
+    lit.addPath (glyphs (juce::String (juce::jmax (0, shownKmh)), face::labelFont (h * numberOfHeight).withExtraKerningFactor (numberKerning),
+                         { box.getCentreX(), box.getY() + h * numberCentreOfHeight }));
+    lit.addPath (glyphs (unit, face::labelFont (h * unitOfHeight).withExtraKerningFactor (unitKerning),
+                         { box.getCentreX(), box.getY() + h * unitCentreOfHeight }));
 
 
-    juce::DropShadow (light.withAlpha (0.55f), juce::roundToInt (h * 0.16f), {}).drawForPath (g, lit);
-    g.setColour (light.withAlpha (0.82f));
+    juce::DropShadow (ink.withAlpha (glowAlpha), juce::roundToInt (h * glowOfHeight), {}).drawForPath (g, lit);
+    g.setColour (ink.withAlpha (lightAlpha));
     g.fillPath (lit);
 }
 

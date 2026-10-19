@@ -2,7 +2,7 @@ uniform mat4 uProj; uniform vec2 uResolution; uniform float uTravel, uTime, uSpe
 out float vA; out vec2 vUv;
 #include "common/ih.glsl"
 #include "common/hs.glsl"
-void main() {
+void body() {
   int id = gl_VertexID; uint pi = uint (id / 6); int ci = id - int (pi) * 6;
   vec2 corner = vec2 ((ci == 1 || ci == 2 || ci == 4) ? 1.0 : 0.0, (ci == 2 || ci == 4 || ci == 5) ? 1.0 : 0.0);
   float rx = hs (pi, 1u), ry = hs (pi, 2u), rz = hs (pi, 3u), rw = hs (pi, 4u), rs = hs (pi, 5u);
@@ -30,3 +30,8 @@ void main() {
   vA = fadeIn * (0.45 + 0.45 * rw) * smoothstep (0.7, 2.0, z) * (0.35 + 0.65 * smoothstep (range, 6.0, z)) * thin;
   vUv = corner;
 }
+
+// Attribute 0, always 0 (gpu::attributeless): read, so a browser sees the program take an attribute and does not
+// emulate one for it — adding it changes no position.
+in float aZero;
+void main() { body(); gl_Position.x += aZero; }

@@ -5,7 +5,7 @@ out vec2 vUv; flat out int vPart; flat out int vType; out vec3 vCol; out float v
 const float LAMP_H = 1.95;
 vec3 toView(vec3 P){ return vec3(dot(P, uCamR), dot(P, uCamU), dot(P, uCamF)); }
 vec2 toPx(vec3 v){ return (vec2(v.x / (v.z * uTan.x), v.y / (v.z * uTan.y) + uShear) * 0.5 + 0.5) * uRes; }
-void main(){
+void body(){
   int q = gl_VertexID / 6, cv = gl_VertexID - q * 6;
   int bi = q / 3, part = q - bi * 3;
   vPart = part; vType = 0; vUv = vec2(0.0); vCol = vec3(0.0); vA = 0.0; vDist = 0.0;
@@ -49,3 +49,8 @@ void main(){
     vUv = vec2(c.x, (yy - m.y) / spread); vA = blink;
   }
 }
+
+// Attribute 0, always 0 (gpu::attributeless): read, so a browser sees the program take an attribute and does not
+// emulate one for it — adding it changes no position.
+in float aZero;
+void main() { body(); gl_Position.x += aZero; }

@@ -568,6 +568,42 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     nav->setProperty ("header", rect (navHeader));
     nav->setProperty ("picture", rect (navPicture));
     nav->setProperty ("speedHud", speedHud.isEmpty() ? juce::var() : rect (speedHud));
+    if (! speedHud.isEmpty())
+    {
+        // ...and how the speed on the glass is drawn there (SpeedHud's constants): a share of the box's height
+        // each size and place, the colours as #rrggbbaa.
+        const auto colour = [] (juce::Colour c, float alpha) { c = c.withAlpha (alpha); return juce::String::formatted ("#%02x%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue(), c.getAlpha()); };
+        const auto line = [] (const char* text, float size, float kerning, float centre)
+        {
+            auto* l = new juce::DynamicObject();
+            l->setProperty ("text", text); l->setProperty ("sizeOfHeight", size);
+            l->setProperty ("kerning", kerning); l->setProperty ("centreYOfHeight", centre);
+            return juce::var (l);
+        };
+        auto* look = new juce::DynamicObject();
+        look->setProperty ("reads", "the shown view's speed (Windscreen::speedKmh), rounded, at least 0, refreshHz times a second");
+        look->setProperty ("refreshHz", SpeedHud::refreshHz);
+        look->setProperty ("font", "labelFont: the family's label face (Michroma), its size its height as JUCE counts it");
+        look->setProperty ("number", line ("<km/h>", SpeedHud::numberOfHeight, SpeedHud::numberKerning, SpeedHud::numberCentreOfHeight));
+        look->setProperty ("unit", line (SpeedHud::unit, SpeedHud::unitOfHeight, SpeedHud::unitKerning, SpeedHud::unitCentreOfHeight));
+        look->setProperty ("centredX", true);
+        look->setProperty ("fill", colour (juce::Colour (SpeedHud::light), SpeedHud::lightAlpha));
+        auto* glow = new juce::DynamicObject();
+        glow->setProperty ("colour", colour (juce::Colour (SpeedHud::light), SpeedHud::glowAlpha));
+        glow->setProperty ("radiusOfHeight", SpeedHud::glowOfHeight);
+        glow->setProperty ("how", "juce::DropShadow round the glyphs' outlines, no offset, drawn under the fill");
+        look->setProperty ("glow", juce::var (glow));
+        nav->setProperty ("speedHudLook", juce::var (look));
+    }
+    // THE SCREEN'S GROUND is no colour: what shows under its picture is the cabin's own glass, cabin.png's
+    // pixels in the box, and the screen's glass (GlassFilm: murk, dust, scratches) is laid over everything it
+    // shows — nav-glass.png, at twice the stage's size, over its box.
+    writeForWeb (dir.getChildFile ("nav-glass.png"), glassFilm.picture (2.0f));
+    auto* glass = new juce::DynamicObject();
+    glass->setProperty ("sprite", "nav-glass.png");
+    glass->setProperty ("box", rect (glassFilm.getBounds().toFloat()));
+    glass->setProperty ("ground", "nothing filled: the cabin picture's pixels in the screen, the glass over all it shows");
+    nav->setProperty ("glass", juce::var (glass));
     nav->setProperty ("learn", rect (learnArea));
     nav->setProperty ("packOnScreen", skin().packOnScreen);
     nav->setProperty ("firstScreen", Monitor::names()[(int) skin().firstScreen]);

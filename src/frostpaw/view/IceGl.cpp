@@ -313,7 +313,7 @@ void IceGl::destroy()
     del (vboGrid, glDeleteBuffers); del (vboSteel, glDeleteBuffers);
     for (auto& b : instanceBuffer) del (b, glDeleteBuffers);
     instanceCount.fill (0); instanceBx = instanceBz = 0x7fffffff;
-    del (vaoTerrain, glDeleteVertexArrays); del (vaoSteel, glDeleteVertexArrays); del (vaoEmpty, glDeleteVertexArrays);
+    del (vaoTerrain, glDeleteVertexArrays); del (vaoSteel, glDeleteVertexArrays); del (vaoEmpty, glDeleteVertexArrays); del (vboEmpty, glDeleteBuffers);
     del (texHeight, glDeleteTextures); del (texGrad1, glDeleteTextures); del (texGrad2, glDeleteTextures); del (texDetail, glDeleteTextures);
     del (fboColour, glDeleteTextures); del (fboDepth, glDeleteRenderbuffers); del (fbo, glDeleteFramebuffers);
     fbW = fbH = 0;
@@ -427,7 +427,7 @@ void IceGl::makeGeometry()
         instanceCount.fill (0); instanceBx = instanceBz = 0x7fffffff;
     }
     glBindVertexArray (0);
-    glGenVertexArrays (1, &vaoEmpty);   // the sky and the snow draw with no attributes; core needs a VAO bound all the same
+    vaoEmpty = gpu::attributeless (vboEmpty);   // the sky and the snow draw with no attributes (gpu::attributeless)
     glBindBuffer (GL_ARRAY_BUFFER, 0);
 }
 
