@@ -39,7 +39,7 @@
 #endif
 
 [Setup]
-; OrbitAmp's AppId (installer/orbitamp.iss), kept on purpose: OrbitAmp's installer came first, so an
+; OrbitAmp's AppId (its own installer's, up to 0.7.0), kept on purpose: OrbitAmp's installer came first, so an
 ; OrbitAmp already installed is upgraded by this Setup in place — one entry under Installed apps, now
 ; the family's — rather than left beside it. Do NOT change it.
 AppId={{62EA38AA-F6FB-446B-B92A-7F097A8ED667}

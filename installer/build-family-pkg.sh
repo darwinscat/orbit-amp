@@ -17,9 +17,9 @@
 #   e.g. installer/build-family-pkg.sh 0.8.0 build dist
 # <build-dir> is the CMake build dir: each amp's bundles are read from
 # <build-dir>/<Amp>_artefacts/Release/{VST3,AU,CLAP,Standalone}, and an amp missing one stops the
-# build. The bundles are expected to be codesigned already (as for build-pkg.sh). The .pkg is signed
-# only when INSTALLER_IDENTITY names a Developer ID Installer identity; without it, it is built
-# unsigned, and productsign can sign it later as release.sh does build-pkg.sh's.
+# build. The bundles are expected to be codesigned and stapled already (sign-family-macos.sh). The .pkg
+# is signed only when INSTALLER_IDENTITY names a Developer ID Installer identity; without it, it is built
+# unsigned, and productsign can sign it later.
 set -euo pipefail
 
 VERSION="${1:?usage: build-family-pkg.sh <version> <build-dir> <out-dir>}"
@@ -58,7 +58,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/components" "$OUT"
 
-# The amp's earlier installers (build-pkg.sh) placed all its formats under ONE receipt, named like
+# The amp's own installers of up to 0.7.0 placed all its formats under ONE receipt, named like
 # its bundle id. Each format has a receipt of its own now, and installing any of them retires the
 # old one: the files it listed are this installer's, or are left as they were when the player
 # unticked their format. Forgetting a receipt touches no file; an amp that never had one skips it.

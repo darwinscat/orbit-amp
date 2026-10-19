@@ -1,12 +1,13 @@
 # Installers
 
-Two kinds live here. The **per-amp** ones (`build-pkg.sh`, `orbitamp.iss`, `release.sh`) make one
-amp's release, as OrbitAmp and CatpitAmp have shipped so far. The **family** ones make ONE release of
-several amps — «Darwin's Cat Amps» — with one installer per system, in which the player picks amps
-and formats; everything is ticked to begin with.
+The amps are released together, as ONE release — «Darwin's Cat Amps», one version (`version.sh`), one
+tag `vX.Y.Z` — with one installer per system, in which the player picks amps and formats; everything is
+ticked to begin with. (Up to 0.7.0 OrbitAmp and CatpitAmp shipped apart, each with installers of its
+own.)
 
 The family's amps are listed once, in `family.ini` (`amps=OrbitAmp CatpitAmp RedPawAmp`), and all
-three family installers read that line. Taking an amp into the family is adding its name there.
+family scripts read that line, and so does CMake's `Family_All`. Taking an amp into the family is adding
+its name there.
 
 Every installer only places bundles. Each amp carries its own data inside its binary, and keeps its
 identity — bundle id `com.darwinscat.<amp>`, plug-in code, manufacturer `Dcat` — so a DAW session
@@ -18,7 +19,7 @@ finds the same plug-in in the same place.
 
 - **In:** the version; the CMake build dir, from which every amp's
   `<Amp>_artefacts/Release/{VST3,AU,CLAP,Standalone}` is read — already codesigned and stapled, as
-  `release.sh` and the release workflows leave them; the out dir. A bundle without its binary stops it.
+  `sign-family-macos.sh` leaves them; the out dir. A bundle without its binary stops it.
 - **Out:** `dist/darwinscat-amps-<version>-macos.pkg`, a product archive with one component package per
   amp × format. Customize shows each amp with VST3, Audio Unit, CLAP and Standalone under it.
 - **Signing:** only with `INSTALLER_IDENTITY` set (`productbuild --sign`); without it the package is
@@ -31,7 +32,7 @@ finds the same plug-in in the same place.
 | CLAP       | `/Library/Audio/Plug-Ins/CLAP`        | `com.darwinscat.<amp>.clap`        |
 | Standalone | `/Applications`                       | `com.darwinscat.<amp>.standalone`  |
 
-`build-pkg.sh` kept a whole amp under ONE receipt, `com.darwinscat.<amp>`. One receipt cannot be
+The per-amp installers of up to 0.7.0 kept a whole amp under ONE receipt, `com.darwinscat.<amp>`. One receipt cannot be
 four choices, so each format has its own now, and every component's postinstall forgets the amp's
 old receipt (`pkgutil --forget` — the files stay; the new receipts list them). No bundle is
 relocatable: Installer places it where the table says, never over a same-id copy it found
@@ -47,7 +48,7 @@ somewhere else on the disk.
 - **Components:** `<amp>`, with `<amp>\vst3`, `<amp>\clap`, `<amp>\standalone` under it. VST3 and
   CLAP go to `Common Files\VST3` and `Common Files\CLAP`, the apps to `Program Files\Darwin's Cat Amps`
   with a Start-menu entry each. The uninstaller removes all of it.
-- **AppId** is OrbitAmp's (`orbitamp.iss`): an installed OrbitAmp is upgraded in place — one entry
+- **AppId** is OrbitAmp's own installer's, up to 0.7.0: an installed OrbitAmp is upgraded in place — one entry
   under Installed apps, now the family's — and its old folder and uninstaller are cleared.
 - **Silent:** `/VERYSILENT` installs everything; `/COMPONENTS="*orbitamp,catpitamp\vst3"` picks
   (a `*` takes an amp with all its formats). `/CURRENTUSER` installs without administrator rights,
@@ -71,15 +72,39 @@ the player alone it places into `~/.vst3`, `~/.clap` and `~/.local/bin`, with a 
 What it placed is listed in `~/.local/share/darwinscat-amps/installed` (or `/usr/local/share/…`),
 where it also leaves `uninstall.sh`, which removes exactly that.
 
-## In the release workflow
+## The zip — `build-family-zip.sh` (macOS, Windows)
 
-What the family release will call, once it is wired in:
+    installer/build-family-zip.sh 0.8.0 build dist macos
+    installer/build-family-zip.sh 0.8.0 build dist windows-arm64
 
-- **macOS:** build `Family_All` — every format of every amp `family.ini` names, each amp's `_All`
-  with its CLAP — sign, notarize and staple the bundles as the per-amp jobs do, then
-  `INSTALLER_IDENTITY="$INST_ID" installer/build-family-pkg.sh "$VER" build dist`, and
-  notarize and staple the package.
-- **Windows x64:** the same targets, then
-  `ISCC.exe /DAppVersion=$VER installer\darwinscat-amps.iss`.
-- **Linux, x86_64 and arm64:** the same targets, then
-  `installer/build-family-linux.sh "$VER" build dist <arch>`.
+- **In:** the version; the CMake build dir; the out dir; the system that names the archive.
+- **Out:** `dist/darwinscat-amps-<version>-<system>.zip`, one folder `darwinscat-amps-<version>-<system>/`
+  with `VST3/`, `AU/` (macOS), `CLAP/` and `Standalone/` — every amp of `family.ini` in each.
+- **No `._` entries:** the bundles are copied and archived without extended attributes or resource forks
+  (`ditto --norsrc --noextattr`), which a bare `ditto -c -k` stores as AppleDouble `._` files — the zips
+  released up to 0.7.0 carried one beside nearly every file. On Windows it archives with `7z`.
+
+## In the release workflow — `.github/workflows/release.yml`
+
+One workflow, on a tag `vX.Y.Z` (or by hand, building without publishing unless told). Before anything is
+built, `installer/version.sh "$TAG"` refuses a tag that is not `v` + the tree's version, and
+`tools/changelog-collect.mjs --notes` refuses a version `CHANGELOG.md` has no section for. Then every system
+builds `--target Family_All Family_Gates` and runs `tools/run-gates.sh build Release` — the one gate list,
+`tests/gates.txt` — before it packs:
+
+- **macOS** (the self-hosted signing runner, universal): `sign-family-macos.sh "$VER" build dist` — every
+  bundle signed, one notarization for all of them, a ticket stapled on each; then `build-family-zip.sh …
+  macos` and `INSTALLER_IDENTITY=… build-family-pkg.sh`, the package notarized and stapled.
+- **Windows x64:** `ISCC.exe /DAppVersion=$VER installer\darwinscat-amps.iss` (Inno Setup 6 or 7, looked
+  for, not assumed), and `build-family-zip.sh … windows-x64`. **Windows arm64:** the zip only.
+- **Linux, x86_64 and arm64:** `build-family-linux.sh "$VER" build dist <arch>`.
+
+The release `vX.Y.Z` is published as the repository's latest, with every file and a `SHA256SUMS`, and the
+release's section of `CHANGELOG.md` as its notes.
+
+## Locally — `release.sh`
+
+`installer/release.sh` is the macOS job on this machine: a fresh `build-release/` with every sibling override
+off, the same targets, the same gates, `sign-family-macos.sh`, and `SHA256SUMS` — into `dist/`. It needs the
+Developer ID identities in the login keychain and a notarytool profile (`NOTARY_PROFILE`, default
+`loki-notary`).
