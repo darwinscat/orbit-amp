@@ -105,8 +105,10 @@ extern const std::array<juce::Point<float>, 4> wiperKeys;
 extern const float wiperKeySize;    // the key's render, whose face fills the hole
 
 /** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches painted on its right — as many as
-    the picture paints — the product's gears, CLEAN, CRUNCH, HI-GAIN, stand in them from the top, as many
-    as it has (RedPawLineup.h). A position is where the lever's stem stands: seen from above, as the whole
+    the picture paints — the product's gears, CLEAN, CRUNCH, HI-GAIN, stand at its `stops` from the top, as
+    many as it has (RedPawLineup.h): in the painted notches, or, where a product spreads fewer gears down a
+    slot painted for more, at places of its own, a notch cut there out of the picture's own (Art). A
+    position is where the lever's stem stands: seen from above, as the whole
     dashboard is, the lever is its T grip lying across the slot, the stem's collar under the grip's
     middle standing on the position — in a notch, in the notch. */
 extern const juce::Rectangle<float> gateSlot;
@@ -114,13 +116,15 @@ extern const float slotX;           // the stem in the slot
 extern const float notchX;          // ...and in a notch
 extern const float slotTopY;        // PARK: the stem at the slot's top end
 extern const std::vector<float> notches;        // the notches' middles, as painted, top to bottom
+extern const std::vector<float> stops;          // ...and where the gears stand, top to bottom
 extern const float leverWidth;      // the lever's render, grip and collar, this wide: over the plate's edges
 extern const float collarSink;      // how far the collar's foot goes past the position, into the slot
 extern const juce::Rectangle<float> gearPlate;
 extern const float leverLeft, leverTop;     // the lever's box: the plate, and the room over it the grip stands up into
 
-/** A NOTCH PAINTED PAST THE PRODUCT'S LAST GEAR IS FILLED IN (Art: `fillSpareNotches`), so the slot runs
-    straight there and the lever has nowhere to stand that is not a gear. From `above` the notch's middle
+/** A NOTCH PAINTED WHERE NO GEAR STANDS IS FILLED IN (Art: `fitNotches`), so the slot runs straight
+    there and the lever has nowhere to stand that is not a gear; where a gear stands with no notch painted,
+    the painted one nearest it is copied there, over the same rows and faded in the same way. From `above` the notch's middle
     to `below` it: the slot's edge, from `left` in the slot's dark to `seam`, is the straight run just
     over the fill, `run` tall, mirrored down and back, so the edge's lit line goes on unbroken; the plate
     beside it, from `seam` to `right`, is the plate `plateShift` further right on the same rows, so its

@@ -381,12 +381,12 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     l->setProperty ("slotX", slotX);
     l->setProperty ("notchX", notchX);
     l->setProperty ("parkY", slotTopY);
-    juce::Array<juce::var> stops, names;
+    juce::Array<juce::var> gearsAt, names;
     for (int g = 0; g < lever.numGears(); ++g)
-        stops.add (notches[(size_t) g]);
+        gearsAt.add (stops[(size_t) g]);
     for (int at = 0; at <= lever.numGears(); ++at)
         names.add (GearLever::nameOf (at, lever.numGears()));
-    l->setProperty ("notches", stops);
+    l->setProperty ("notches", gearsAt);     // where the gears stand: the notches the face shows
     l->setProperty ("names", names);      // PARK first, then the gears from the top
     l->setProperty ("leverWidth", leverWidth);
     l->setProperty ("collarSink", collarSink);

@@ -119,6 +119,10 @@ const float slotX  = 798.3f;
 const float notchX = 814.0f;
 const float slotTopY = 694.0f;
 const std::vector<float> notches { 733.8f, 776.0f, 817.5f };
+// Two gears down a slot painted for three, spread evenly: PARK, then a step of 61.75 to the middle and
+// another to the third notch, so the slot is the lever's to its end. The first two are filled in, and the
+// middle one is the second, copied up.
+const std::vector<float> stops { 755.75f, 817.5f };
 const float leverWidth = 124.0f;
 const float collarSink = 3.0f;
 const juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };

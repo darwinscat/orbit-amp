@@ -37,14 +37,14 @@ juce::Rectangle<float> GearLever::standingBox() const
 }
 
 GearLever::GearLever (int g)
-    : gears (juce::jlimit (1, (int) layout::notches.size(), g))
+    : gears (juce::jlimit (1, (int) layout::stops.size(), g))
 {
-    // Each position's height in the dashboard's space: PARK at the slot's top end, the gears in the
-    // notches from the top. A notch past the last gear is no position.
+    // Each position's height in the dashboard's space: PARK at the slot's top end, the gears at their
+    // stops from the top. A stop past the last gear is no position.
     jassert (gears == g);
     heights.push_back (layout::slotTopY);
     for (int i = 0; i < gears; ++i)
-        heights.push_back (layout::notches[(size_t) i]);
+        heights.push_back (layout::stops[(size_t) i]);
 
     pos.stiffness = 260.0f;     // a heavy lever: it overshoots the notch a hair and comes back
     pos.damping   = 22.0f;

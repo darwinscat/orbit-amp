@@ -143,6 +143,7 @@ const float slotX  = 894.5f;
 const float notchX = 894.5f;
 const float slotTopY = 548.9f;
 const std::vector<float> notches { 587.5f, 627.0f, 666.3f, 704.7f };
+const std::vector<float> stops = notches;
 const float leverWidth = 136.0f;
 const float collarSink = 24.0f;
 const juce::Rectangle<float> gearPlate { 867.0f, 507.0f, 53.0f, 229.0f };
