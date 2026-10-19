@@ -13,7 +13,7 @@ void main() {
   vec3 iceE = vec3 (0.82, 0.88, 0.97) * (0.7 + 0.3 * max (-R.y, 0.0));
   vec3 env = mix (iceE, skyE, smoothstep (-0.04, 0.06, R.y));
   env = mix (env, uMist, 0.5 * exp (-abs (R.y) / 0.05));
-  float cosT = max (dot (n, -V), 0.0);
+  float cosT = clamp (dot (n, -V), 0.0, 1.0);    // to one as well: past it by an ulp, pow below would take a negative
   float fres = 0.56 + 0.44 * pow (1.0 - cosT, 5.0);
   vec3 H = normalize (uSun - V);
   float ndh = max (dot (n, H), 0.0);

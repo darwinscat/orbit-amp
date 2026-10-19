@@ -349,6 +349,12 @@ void PlainsWorld::place (double x, double z, double heading, int g, bool t)
     step (0.0);
 }
 
+void PlainsWorld::settle() noexcept
+{
+    s.speed = parked ? 0.0f : speedFor (gearWanted, turbo);
+    s.storm = parked ? 0.0f : dustFor (gearWanted, turbo);
+}
+
 void PlainsWorld::step (double dt)
 {
     s.time += dt;

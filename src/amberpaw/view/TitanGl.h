@@ -5,10 +5,12 @@
 
 #include "TitanWorld.h"
 
-#include <juce_opengl/juce_opengl.h>
+#include "../../shaders/Gpu.h"
 
+#include <algorithm>
 #include <array>
-#include <memory>
+#include <cstdint>
+#include <string>
 #include <vector>
 
 namespace orbitamp::amberpaw
@@ -43,7 +45,8 @@ namespace orbitamp::amberpaw
     Every texture offset is fract (position / period) in doubles, so the shaders work in camera-
     relative floats and nothing jitters. Draws into an offscreen frame of its own at a render scale,
     then blits it to the frame buffer it is given. GLSL 1.50 core, as JUCE's 3.2 core context on every
-    platform. GL thread only. */
+    platform — or, the same code built for the site, GLSL ES 3.00 over WebGL 2 (src/shaders/Gpu.h). GL
+    thread only. */
 class TitanGl final
 {
 public:
@@ -55,50 +58,53 @@ public:
 
     /** Draws the world's state: the scene at (w * scale) x (h * scale), blitted to `targetFrameBuffer`
         over (x, y, w, h) — GL's own pixels, from its bottom-left corner. */
-    void render (int w, int h, float scale, juce::uint32 targetFrameBuffer, int x = 0, int y = 0);
+    void render (int w, int h, float scale, std::uint32_t targetFrameBuffer, int x = 0, int y = 0);
 
     /** What the last frames cost on the GPU, milliseconds, a running mean; -1 until known. Timer
-        queries where the driver has them, else a finished frame timed once a second. */
+        queries where the driver has them, else a finished frame timed once a second; on the web, -1. */
     float gpuMillis() const noexcept { return gpuMs; }
 
     /** The offscreen frame as RGBA bytes, rows bottom-up as GL has them. */
-    bool readFrame (std::vector<juce::uint8>& rgba, int& w, int& h);
+    bool readFrame (std::vector<std::uint8_t>& rgba, int& w, int& h);
 
     /** The scene's last frame size. */
     int frameWidth() const noexcept  { return fbW; }
     int frameHeight() const noexcept { return fbH; }
 
     /** The scene drawn this many times a frame, for measuring: the timer then reads that many scenes. */
-    void setRepeats (int times) noexcept { repeats = juce::jlimit (1, 16, times); }
+    void setRepeats (int times) noexcept { repeats = std::clamp (times, 1, 16); }
+
+    /** Why create() said no: the shader that would not build and the driver's words. */
+    const std::string& error() const noexcept { return trouble; }
 
 private:
     TitanWorld& world;
 
     struct Program
     {
-        std::unique_ptr<juce::OpenGLShaderProgram> program;
-        juce::uint32 id = 0;
+        std::uint32_t id = 0;
         int uniform (const char* name) const;
     };
     Program profile, scene, buoys, spray, drizzle, glass, glassDrops, glassTrails;
 
-    juce::uint32 texNoise = 0, texRipple = 0, texProfile = 0, fboProfile = 0;
-    juce::uint32 vaoEmpty = 0, vaoDrops = 0, vboDrops = 0, vaoTrails = 0, vboTrails = 0;
+    std::uint32_t texNoise = 0, texRipple = 0, texProfile = 0, fboProfile = 0;
+    std::uint32_t vaoEmpty = 0, vaoDrops = 0, vboDrops = 0, vaoTrails = 0, vboTrails = 0;
     std::vector<float> dropData, trailData;     // six vertices a drop / a trail, its values on each
 
-    juce::uint32 fbo = 0, fboColour = 0;
+    std::uint32_t fbo = 0, fboColour = 0;
     int fbW = 0, fbH = 0;
     int repeats = 1;
 
     // The frame timer.
     bool queriesWork = false;
-    std::array<juce::uint32, 4> query {};
+    std::array<std::uint32_t, 4> query {};
     int queryNext = 0, queriesPending = 0;
     float gpuMs = -1.0f;
     int frameCounter = 0;
     double probeStart = 0.0;
+    std::string trouble;
 
-    bool compile (Program&, const juce::String& vs, const juce::String& fs, const char* what);
+    bool compile (Program&, const std::string& vs, const std::string& fs, const char* what);
     void makeTextures();
     void makeBuffers();
     void ensureFrame (int w, int h);

@@ -395,6 +395,12 @@ void IceWorld::place (double x, double z, double heading, int g, bool t, bool p)
     step (0.0);
 }
 
+void IceWorld::settle() noexcept
+{
+    s.speed = parked ? 0.0f : speedFor (gearWanted, turbo);
+    s.snow = snowFor (gearWanted, turbo, parked);
+}
+
 void IceWorld::step (double dt)
 {
     s.time += dt;

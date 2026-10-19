@@ -11,7 +11,8 @@ vec2 craterGrad (vec2 p, float mask) {
   float R = CRC * (0.045 + 0.16 * k * k);
   vec2 dv = p - ctr; float L = max (length (dv), 1e-3); float d = L / R;
   if (d > 1.6) return vec2 (0.0);
-  float rim = exp (-pow ((d - 1.0) / 0.22, 2.0));
+  float r = (d - 1.0) / 0.22;          // squared, not pow (): pow of a negative is undefined in GLSL, NaN on some GPUs
+  float rim = exp (-r * r);
   float dhdd = mask * R * (0.24 * 2.0 * d * step (d, 1.0) + 0.065 * rim * (-2.0 * (d - 1.0) / (0.22 * 0.22)));
   return dhdd * dv / (L * R);
 }

@@ -111,6 +111,11 @@ public:
         evaluated directly. For a still, and for the start. */
     void place (double x, double z, double heading, int gear, bool turbo, bool parked = false);
 
+    /** The speed and the snow where the gear, TURBO and PARK are taking them, at once rather than eased to: the
+        rover standing, or at its gear's speed, wherever it is. The site's view starts so, and is put so when
+        asked for a gear or PARK "settled". */
+    void settle() noexcept;
+
     /** The clock, for a still: `time` turns Jupiter and moves Io, `travel` sets the flakes' phase. */
     void setClock (double time, double travel) noexcept { s.time = time; s.travel = travel; }
 

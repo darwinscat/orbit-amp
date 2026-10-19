@@ -9,13 +9,14 @@
 #include <cmath>
 #include <cstdio>
 #include <initializer_list>
+#include <string>
 #include <utility>
 #include <vector>
 
 namespace orbitamp::amberpaw
 {
 
-using namespace juce::gl;
+using namespace orbitamp::gpu;
 
 namespace
 {
@@ -26,12 +27,15 @@ namespace
     inline double clamp (double x, double a, double b) noexcept { return std::max (a, std::min (b, x)); }
     inline double wrap (double a, double m) noexcept { return a - std::floor (a / m) * m; }
 
+    /** To the nearest, a half to the even one, as JUCE's roundToInt does it: the frame's size at a render scale. */
+    inline int roundToInt (float x) noexcept { return (int) std::lrint ((double) x); }
+
     //==========================================================================
     // The shaders are written from the world's numbers: a constant is printed as the prototype printed
     // it, six decimals, so the two compile the same arithmetic.
-    juce::String F (double v) { char b[48]; std::snprintf (b, sizeof b, "%.6f", v); return b; }
+    std::string F (double v) { char b[48]; std::snprintf (b, sizeof b, "%.6f", v); return b; }
     using C3 = std::array<double, 3>;
-    juce::String V3 (C3 a) { return "vec3(" + F (a[0]) + ", " + F (a[1]) + ", " + F (a[2]) + ")"; }
+    std::string V3 (C3 a) { return "vec3(" + F (a[0]) + ", " + F (a[1]) + ", " + F (a[2]) + ")"; }
 
     // The palette: picked as sRGB, used linear — amber-brown haze, violet shadows and fog.
     C3 lin (double r, double g, double b) { return { std::pow (r / 255, 2.2), std::pow (g / 255, 2.2), std::pow (b / 255, 2.2) }; }
@@ -93,25 +97,35 @@ namespace
 
     //==========================================================================
     // THE SHADERS are files in resources/shaders/titan (src/shaders/Shaders.h), written without the
-    // #version, which glsl() puts in front of them. What a file asks for by name — `#include <world>` — is
+    // #version, which glsl() puts in front of them — the app's or the web's (src/shaders/Gpu.h). What a file asks for by name — `#include <world>` — is
     // written here, from the world's numbers. titan/full.vert is the full-screen triangle the profile, the
     // scene and the canopy draw over; titan/buoy.vert is pass 3's, the beacon buoys — body, lamp glow, and
     // the lamp's glitter column on the liquid. The drops on the glass (titan/glass-drop.*) are lens
     // sprites, six vertices a drop with its values on each — the centre uv, the two radii in uv (an
     // ellipse, flatter higher up) and the alpha; the thin wet trails behind crawling drops
     // (titan/glass-trail.*) are six vertices a segment.
-    juce::String glsl (const char* path, std::initializer_list<std::pair<const char*, juce::String>> numbers = {})
+    std::string glsl (const char* path, std::initializer_list<std::pair<const char*, std::string>> numbers = {})
     {
         std::vector<shaders::Written> written;
         for (const auto& [name, text] : numbers)
-            written.push_back ({ name, text.toStdString() });
-        return "#version 150\n" + juce::String (shaders::source (path, written));
+            written.push_back ({ name, text });
+        return gpu::header() + shaders::source (path, written);
     }
 
-    // The world's numbers, for every pass that draws in its light: `<world>`, with titan/util.glsl after it.
-    juce::String worldNumbers()
+    /** Shader text written a piece at a time: words, numbers F() has printed, and whole numbers in decimal. */
+    struct Text
     {
-        juce::String s;
+        std::string s;
+        Text& operator<< (const std::string& t) { s += t; return *this; }
+        Text& operator<< (const char* t)        { s += t; return *this; }
+        Text& operator<< (int v)                { s += std::to_string (v); return *this; }
+        operator const std::string&() const noexcept { return s; }
+    };
+
+    // The world's numbers, for every pass that draws in its light: `<world>`, with titan/util.glsl after it.
+    std::string worldNumbers()
+    {
+        Text s;
         s << "const float TAN_MIN = " << F (W::tanMin) << ", TAN_MAX = " << F (W::tanMax) << ";\n"
           << "const float PROF_X0 = " << F (W::profX0) << ", PROF_X1 = " << F (W::profX1) << ";\n"
           << "const float BMIN[5] = float[5](" << F (W::bandMin[0]) << ", " << F (W::bandMin[1]) << ", " << F (W::bandMin[2]) << ", " << F (W::bandMin[3]) << ", " << F (W::bandMin[4]) << ");\n"
@@ -122,9 +136,9 @@ namespace
 
     //==========================================================================
     // Pass 1: the shore profile, one texel per (screen column, distance band).
-    juce::String fsProfile()
+    std::string fsProfile()
     {
-        juce::String s;
+        Text s;
         s << "const float LA = " << F (W::land.LA) << ", LB = " << F (W::land.LB) << ", LC = " << F (W::land.LC) << ", DUNE_P = " << F (W::land.duneP) << ";\n"
           << "const float C0 = " << F (W::land.C0) << ", C1 = " << F (W::land.C1) << ", NEAR0 = " << F (W::land.near0) << ", NEAR1 = " << F (W::land.near1) << ";\n"
           << "const vec2 DUNE_N = vec2(" << F (std::sin (W::duneAngle)) << ", " << F (std::cos (W::duneAngle)) << ");\n"
@@ -135,10 +149,10 @@ namespace
 
     //==========================================================================
     // Pass 2: the sky, the far events, the shore, the sea, the mist.
-    juce::String fsScene (double rippleRms)
+    std::string fsScene (double rippleRms)
     {
         const auto& P = pal();
-        juce::String s, ripples;
+        Text s, ripples;
         s << "const float CORE_W2 = 0.0036, CORE_AMP = 1.1;               // the sun's core in the haze: sigma ~3.4 deg\n"
           << "const float MIST_L = " << F (W::mist.L) << ", MIST_DENS = " << F (W::mistDensity) << ", MIST_HS = " << F (W::mistScaleHeight) << ";\n"
           << "const float CLOUD_L = " << F (W::cloud.L) << ", CLOUD_H = " << F (W::cloudHeight) << ", CLOUD_AMP = " << F (W::cloudAmp) << ";\n"
@@ -159,38 +173,38 @@ namespace
     //==========================================================================
     // The particle passes draw a capsule sprite from a (where it was) to b (where it is), in pixels:
     // titan/capsule.glsl, shared by the two.
-    juce::String fsCapsule()
+    std::string fsCapsule()
     {
         return glsl ("titan/capsule.frag", { { "world", worldNumbers() } });
     }
 
     // Pass 5: the drizzle — pea-sized drops drifting down like snow, world-anchored in a wrapping box ahead.
-    juce::String vsDrizzle()
+    std::string vsDrizzle()
     {
-        juce::String s;
+        Text s;
         s << "const float B = " << F (W::dropBox) << ", HB = " << F (W::dropBoxHeight) << ";\n";
         return glsl ("titan/drizzle.vert", { { "drizzle", s } });
     }
 
     // Pass 4: the downwash kicks the liquid up — a low ring of soft mist and flung droplets, ahead and around.
-    juce::String vsSpray()
+    std::string vsSpray()
     {
         return glsl ("titan/spray.vert");
     }
 
     // Pass 3: the beacon buoys — body, lamp glow, and the lamp's glitter column on the liquid.
-    juce::String fsBuoy()
+    std::string fsBuoy()
     {
         return glsl ("titan/buoy.frag", { { "world", worldNumbers() } });
     }
 
     //==========================================================================
     // Pass 6: the canopy. Over the scene: the rotor, its shadow, the tholin film and flakes, the wipers.
-    juce::String fsGlass()
+    std::string fsGlass()
     {
         const auto& wipers = W::wipers();
-        const auto list = [&wipers] (auto&& one) { juce::String s; for (size_t i = 0; i < wipers.size(); ++i) s << (i ? ", " : "") << one (wipers[i]); return s; };
-        juce::String s;
+        const auto list = [&wipers] (auto&& one) { Text s; for (size_t i = 0; i < wipers.size(); ++i) s << (i ? ", " : "") << one (wipers[i]); return s.s; };
+        Text s;
         s << "const vec3 HUB = vec3(" << F (W::rotorHub[0]) << ", " << F (W::rotorHub[1]) << ", " << F (W::rotorHub[2]) << "); const float ROT_R = " << F (W::rotorRadius) << ";\n"
           << "const float WW = " << F (W::bladeWidth) << ";\n"
           << "// the wipers: pivot; stroke start, end, blade in, out; their pane's sides (x = a + b*y in the cabin's pixels)\n"
@@ -211,23 +225,23 @@ int TitanGl::Program::uniform (const char* name) const
     return glGetUniformLocation (id, name);
 }
 
-bool TitanGl::compile (Program& p, const juce::String& vs, const juce::String& fs, const char* what)
+bool TitanGl::compile (Program& p, const std::string& vs, const std::string& fs, const char* what)
 {
-    auto s = std::make_unique<juce::OpenGLShaderProgram> (*juce::OpenGLContext::getCurrentContext());
-    if (! s->addVertexShader (vs) || ! s->addFragmentShader (fs) || ! s->link())
+    std::string log;
+    p.id = gpu::program (vs, fs, log);
+    if (p.id == 0)
     {
-        DBG ("titan: the " << what << " shader did not build — " << s->getLastError());
-        juce::ignoreUnused (what);
+        trouble = std::string ("the ") + what + " shader did not build — " + log;
+        gpu::note ("titan: " + trouble);
         return false;
     }
-    p.id = s->getProgramID();
-    p.program = std::move (s);
     return true;
 }
 
 bool TitanGl::create()
 {
-    if (juce::OpenGLContext::getCurrentContext() == nullptr)
+    trouble.clear();
+    if (! gpu::current())
         return false;
     world.build();
 
@@ -248,17 +262,14 @@ bool TitanGl::create()
 
     // The frame timer: a timer query where the driver has one. Asked once; an error means no.
     while (glGetError() != GL_NO_ERROR) {}
-    if (glGenQueries != nullptr && glGetQueryObjectui64v != nullptr)
+    if (gpu::timerQueries())
     {
         glGenQueries ((GLsizei) query.size(), query.data());
-        glBeginQuery (GL_TIME_ELAPSED, query[0]);
-        glEndQuery (GL_TIME_ELAPSED);
+        gpu::beginTimer (query[0]);
+        gpu::endTimer();
         queriesWork = glGetError() == GL_NO_ERROR;
         if (queriesWork)
-        {
-            GLuint64 ns = 0;
-            glGetQueryObjectui64v (query[0], GL_QUERY_RESULT, &ns);   // drains the probe
-        }
+            gpu::timerNanoseconds (query[0]);   // drains the probe
         else
         {
             glDeleteQueries ((GLsizei) query.size(), query.data());
@@ -271,7 +282,7 @@ bool TitanGl::create()
 
 void TitanGl::destroy()
 {
-    const auto del = [] (juce::uint32& id, void (*f) (GLsizei, const GLuint*)) { if (id != 0) f (1, &id); id = 0; };
+    const auto del = [] (std::uint32_t& id, void (*f) (GLsizei, const GLuint*)) { if (id != 0) f (1, &id); id = 0; };
     del (vboDrops, glDeleteBuffers); del (vboTrails, glDeleteBuffers);
     del (vaoEmpty, glDeleteVertexArrays); del (vaoDrops, glDeleteVertexArrays); del (vaoTrails, glDeleteVertexArrays);
     del (texNoise, glDeleteTextures); del (texRipple, glDeleteTextures); del (texProfile, glDeleteTextures); del (fboProfile, glDeleteFramebuffers);
@@ -280,12 +291,12 @@ void TitanGl::destroy()
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
     query.fill (0);
     queriesWork = false; queriesPending = 0; queryNext = 0;
-    for (auto* p : { &profile, &scene, &buoys, &spray, &drizzle, &glass, &glassDrops, &glassTrails }) { p->program.reset(); p->id = 0; }
+    for (auto* p : { &profile, &scene, &buoys, &spray, &drizzle, &glass, &glassDrops, &glassTrails }) { if (p->id != 0) glDeleteProgram (p->id); p->id = 0; }
 }
 
 void TitanGl::makeTextures()
 {
-    const auto rgba8 = [] (juce::uint32& id, int size, const std::vector<juce::uint8>& px)
+    const auto rgba8 = [] (std::uint32_t& id, int size, const std::vector<std::uint8_t>& px)
     {
         glGenTextures (1, &id);
         glBindTexture (GL_TEXTURE_2D, id);
@@ -373,17 +384,17 @@ void TitanGl::noteCost (float ms)
     gpuMs = gpuMs < 0 ? ms : gpuMs + (ms - gpuMs) * 0.1f;
 }
 
-void TitanGl::render (int w, int h, float scale, juce::uint32 target, int x, int y)
+void TitanGl::render (int w, int h, float scale, std::uint32_t target, int x, int y)
 {
     if (scene.id == 0 || w <= 0 || h <= 0)
         return;
-    const int rw = std::max (2, juce::roundToInt ((float) w * scale)), rh = std::max (2, juce::roundToInt ((float) h * scale));
+    const int rw = std::max (2, roundToInt ((float) w * scale)), rh = std::max (2, roundToInt ((float) h * scale));
     ensureFrame (rw, rh);
     glBindFramebuffer (GL_FRAMEBUFFER, fbo);
 
     // The timer: queries, read back a few frames late so nothing waits — or, without them, one frame
-    // in sixty finished and clocked.
-    const bool probe = ! queriesWork && (frameCounter % 60) == 0;
+    // in sixty finished and clocked. On the web, neither (gpu::timerQueries).
+    const bool probe = ! gpu::web && ! queriesWork && (frameCounter % 60) == 0;
     ++frameCounter;
     if (queriesWork)
     {
@@ -393,14 +404,12 @@ void TitanGl::render (int w, int h, float scale, juce::uint32 target, int x, int
             GLuint available = 0;
             glGetQueryObjectuiv (oldest, GL_QUERY_RESULT_AVAILABLE, &available);
             if (! available) break;
-            GLuint64 ns = 0;
-            glGetQueryObjectui64v (oldest, GL_QUERY_RESULT, &ns);
-            noteCost ((float) ns * 1.0e-6f);
+            noteCost ((float) gpu::timerNanoseconds (oldest) * 1.0e-6f);
             --queriesPending;
         }
         if (queriesPending < (int) query.size())
         {
-            glBeginQuery (GL_TIME_ELAPSED, query[(size_t) queryNext]);
+            gpu::beginTimer (query[(size_t) queryNext]);
             queryNext = (queryNext + 1) % (int) query.size();
             ++queriesPending;
         }
@@ -408,18 +417,18 @@ void TitanGl::render (int w, int h, float scale, juce::uint32 target, int x, int
     else if (probe)
     {
         glFinish();
-        probeStart = juce::Time::getMillisecondCounterHiRes();
+        probeStart = gpu::milliseconds();
     }
 
     for (int i = 0; i < repeats; ++i)
         drawScene (rw, rh);
 
     if (queriesWork)
-        glEndQuery (GL_TIME_ELAPSED);
+        gpu::endTimer();
     else if (probe)
     {
         glFinish();
-        noteCost ((float) (juce::Time::getMillisecondCounterHiRes() - probeStart));
+        noteCost ((float) (gpu::milliseconds() - probeStart));
     }
 
     glBindFramebuffer (GL_READ_FRAMEBUFFER, fbo);
@@ -428,7 +437,7 @@ void TitanGl::render (int w, int h, float scale, juce::uint32 target, int x, int
     glBindFramebuffer (GL_FRAMEBUFFER, target);
 }
 
-bool TitanGl::readFrame (std::vector<juce::uint8>& rgba, int& w, int& h)
+bool TitanGl::readFrame (std::vector<std::uint8_t>& rgba, int& w, int& h)
 {
     if (fbo == 0)
         return false;
