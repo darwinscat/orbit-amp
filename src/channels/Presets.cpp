@@ -24,42 +24,19 @@ namespace
 
 Presets::Presets (AmpProcessor& p, Channels& c) : amp (p), channels (c) {}
 
-juce::String Presets::extension()
+PresetStore Presets::store()
 {
-    return "." + juce::String (product::name).toLowerCase();
-}
-
-juce::File Presets::directory()
-{
-    auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
-
-   #if JUCE_MAC
-    dir = dir.getChildFile ("Application Support");     // JUCE answers ~/Library here, one level too high
-   #endif
-
-    dir = dir.getChildFile ("Darwin's Cat").getChildFile (product::name).getChildFile ("Presets");
-    if (! dir.isDirectory())
-        dir.createDirectory();
-    return dir;
+    return { product::name, "." + juce::String (product::name).toLowerCase() };
 }
 
 juce::StringArray Presets::names()
 {
-    juce::StringArray out;
-    for (const auto& f : directory().findChildFiles (juce::File::findFiles, false, "*" + extension()))
-        out.add (f.getFileNameWithoutExtension());
-    out.sortNatural();
-    return out;
-}
-
-juce::File Presets::fileFor (const juce::String& name)
-{
-    return directory().getChildFile (juce::File::createLegalFileName (name) + extension());
+    return store().names();
 }
 
 bool Presets::exists (const juce::String& name)
 {
-    return name.isNotEmpty() && fileFor (name).existsAsFile();
+    return store().exists (name);
 }
 
 juce::String Presets::current() const
@@ -119,9 +96,7 @@ void Presets::mark (const juce::String& name)
 
 bool Presets::load (const juce::String& name)
 {
-    juce::ValueTree tree;
-    if (auto xml = juce::XmlDocument::parse (fileFor (name)))
-        tree = juce::ValueTree::fromXml (*xml);
+    auto tree = store().read (name);
     if (! tree.isValid())
         return false;
 
@@ -157,8 +132,7 @@ bool Presets::save (const juce::String& name)
         return false;
 
     mark (name);    // first, so the file itself says whose sound it is
-    auto xml = amp.presetForSaving().createXml();
-    if (xml == nullptr || ! fileFor (name).replaceWithText (xml->toString()))
+    if (! store().write (name, amp.presetForSaving()))
         return false;
 
     amp.history.markSaved();
@@ -170,7 +144,7 @@ bool Presets::rename (const juce::String& to)
     const auto from = current();
     if (to.isEmpty() || to == from || ! exists (from) || exists (to))
         return false;
-    if (! fileFor (from).moveFileTo (fileFor (to)))
+    if (! store().move (from, to))
         return false;
 
     // The file moved; the sound did not. Only the name on the node changes.
@@ -182,7 +156,7 @@ bool Presets::rename (const juce::String& to)
 bool Presets::removeCurrent()
 {
     const auto name = current();
-    if (! exists (name) || ! fileFor (name).deleteFile())
+    if (! exists (name) || ! store().remove (name))
         return false;
     mark ({});
     return true;
