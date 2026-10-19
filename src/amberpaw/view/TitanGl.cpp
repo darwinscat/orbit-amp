@@ -25,6 +25,12 @@ namespace
 
     inline double fract (double x) noexcept { return x - std::floor (x); }
     inline double clamp (double x, double a, double b) noexcept { return std::max (a, std::min (b, x)); }
+
+    // THE GUITAR (worlds/Play.h): the searchlights flare with each attack and a little while it sounds, the
+    // buoys' lamps light with it between their own blinks (and the storm strikes, TitanWorld::flash) —
+    // nothing of it in silence, so a silent frame is the frame it always was.
+    constexpr double searchlightOfHit = 0.7, searchlightOfGlow = 0.2;
+    constexpr float buoyOfHit = 0.85f, buoyOfGlow = 0.25f;
     inline double wrap (double a, double m) noexcept { return a - std::floor (a / m) * m; }
 
     /** To the nearest, a half to the even one, as JUCE's roundToInt does it: the frame's size at a render scale. */
@@ -541,7 +547,8 @@ void TitanGl::drawScene (int rw, int rh)
         v2 (u ("uFieldSeed"), fl.size() > 0 ? fl[0].seed : 0.0, fl.size() > 1 ? fl[1].seed : 0.0);
         glUniform1f (u ("uWhite"), (float) s.white); glUniform1f (u ("uDown"), (float) s.down); glUniform1f (u ("uDash"), (float) (s.boost * clamp (s.speed / 20, 0, 1)));
         glUniform1i (u ("uFlags"), flags);
-        glUniform2f (u ("uLamp"), (float) world.light (0), (float) world.light (1));
+        const double flare = 1.0 + searchlightOfHit * world.playing().hit() + searchlightOfGlow * world.playing().glow();
+        glUniform2f (u ("uLamp"), (float) (world.light (0) * flare), (float) (world.light (1) * flare));
         glDrawArrays (GL_TRIANGLES, 0, 3);
     }
 
@@ -566,6 +573,7 @@ void TitanGl::drawScene (int rw, int rh)
             buoyBuf[i * 4] = (float) (o.x - cx); buoyBuf[i * 4 + 1] = (float) (o.z - cz); buoyBuf[i * 4 + 2] = (float) o.type; buoyBuf[i * 4 + 3] = (float) o.phase;
         }
         glUniform4fv (u ("uBuoy"), 8, buoyBuf); glUniform1i (u ("uBuoyN"), nb);
+        glUniform1f (u ("uPlay"), std::min (1.0f, buoyOfHit * world.playing().hit() + buoyOfGlow * world.playing().glow()));
         glDrawArrays (GL_TRIANGLES, 0, nb * 3 * 6);
     }
 

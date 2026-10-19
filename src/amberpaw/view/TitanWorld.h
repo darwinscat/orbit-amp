@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../../worlds/Play.h"
+
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -151,6 +153,13 @@ public:
         out in a moment. */
     void setLights (bool left, bool right) noexcept { lightWanted[0] = left; lightWanted[1] = right; }
     double light (int which) const noexcept { return lightLevel[(size_t) which]; }
+    /** THE GUITAR: the amp's input's peak since the last step (worlds/Play.h). What it does, stepped with the
+        flight — the searchlights and the buoys' lamps flare with it, and a hard attack (strikeRise) strikes
+        a bolt in the storm, no sooner than strikeGap after the last; silence after place() and settle(). */
+    void hear (float peak) noexcept { play.hear (peak); }
+    const worlds::Play& playing() const noexcept { return play; }
+    static constexpr float strikeRise = 0.6f;
+    static constexpr double strikeGap = 1.2;
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
     int numGears() const noexcept { return gears; }
@@ -252,6 +261,9 @@ private:
     int wiperSpeed = wipersInterval;
     std::array<bool, 2> lightWanted {};
     std::array<double, 2> lightLevel {};
+    worlds::Play play;
+    double struck = -1e9;     // when the guitar last struck a bolt
+    uint32_t strikes = 0;     // how many it has: each its own place in the storm
     Stroke strokeCur { strokeSeconds, pauseSeconds }, strokePrev { strokeSeconds, pauseSeconds };
 
     /** A cached schedule of hashed cycle lengths: the cycle at a time without walking from 0 each frame. */

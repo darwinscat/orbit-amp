@@ -1,5 +1,6 @@
 uniform vec3 uCamR, uCamU, uCamF, uHR;
 uniform vec2 uTan, uRes; uniform float uShear, uCamY, uTime;
+uniform float uPlay;   // how far the guitar lights the lamps between their blinks: 0 in silence
 uniform vec4 uBuoy[8]; uniform int uBuoyN;
 out vec2 vUv; flat out int vPart; flat out int vType; out vec3 vCol; out float vA; out float vDist;
 const float LAMP_H = 1.95;
@@ -22,6 +23,7 @@ void body(){
   float focal = uRes.y / (2.0 * uTan.y);
   float per = 2.2 + 1.2 * fract(Bu.w * 7.3), ph = mod(uTime + Bu.w * 9.0, per);
   float blink = smoothstep(0.0, 0.05, ph) * (1.0 - smoothstep(0.3, 0.5, ph));
+  blink += (1.0 - blink) * uPlay;
   vec3 lampC = vType == 0 ? vec3(1.0, 0.12, 0.07) : (vType == 1 ? vec3(0.16, 1.0, 0.42) : vec3(1.0, 0.62, 0.12));
   float haze = exp(-vDist / 9000.0);
   vCol = lampC * haze;

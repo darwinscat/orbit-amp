@@ -298,6 +298,7 @@ void TitanWorld::place (double x, double z, double heading, int g, bool t)
     s.yawRate = 0; lastSteerTime = s.time; s.foam = 0; s.rotorPhase = s.time * 0.9;
     resetEvents();
     resetGlass();
+    play.reset(); struck = -1e9;
     step (0);
 }
 
@@ -309,6 +310,7 @@ void TitanWorld::settle (int g, bool t)
     for (size_t k = 0; k < 2; ++k)
         lightLevel[k] = lightWanted[k] ? 1.0 : 0.0;
     s.boost = turbo ? 1 : 0;
+    play.reset(); struck = -1e9;
     step (0);
 }
 
@@ -349,7 +351,16 @@ TitanWorld::Flash TitanWorld::flash (double t) const noexcept   // two or three 
     const double h1 = hashOf (k, 11), h2 = hashOf (k, 12), h3 = hashOf (k, 13), h4 = hashOf (k, 14);
     const auto g = [&c] (double centre, double w) { const double x = (c.a - centre) / w; return std::exp (-x * x); };
     const double f = g (0.03, 0.04) + 0.75 * g (0.15, 0.05) + (h3 > 0.5 ? 0.55 * g (0.34, 0.07) : 0);
-    return { f * (0.6 + 0.4 * h4), (h1 - 0.5) * 0.22 + 0.01, 0.03 + 0.05 * h2, h4 < 0.5 };
+    const Flash timed { f * (0.6 + 0.4 * h4), (h1 - 0.5) * 0.22 + 0.01, 0.03 + 0.05 * h2, h4 < 0.5 };
+
+    // ...and the guitar's: the same strike, at its full, a bolt to the sea every time, somewhere of its own.
+    const double a = t - struck;
+    if (a < 0 || a > 0.6)
+        return timed;
+    const double p1 = hashOf (strikes, 21), p2 = hashOf (strikes, 22);
+    const auto gp = [a] (double centre, double w) { const double x = (a - centre) / w; return std::exp (-x * x); };
+    const Flash played { gp (0.03, 0.04) + 0.75 * gp (0.15, 0.05) + 0.55 * gp (0.34, 0.07), (p1 - 0.5) * 0.22 + 0.01, 0.03 + 0.05 * p2, true };
+    return played.f >= timed.f ? played : timed;
 }
 
 //==============================================================================
@@ -552,6 +563,12 @@ void TitanWorld::stepGlass (double dt)
 void TitanWorld::step (double dt)
 {
     s.time += dt;
+    play.step (dt);
+    if (play.rise() >= strikeRise && s.time - struck >= strikeGap)
+    {
+        struck = s.time;
+        ++strikes;
+    }
     const double target = speedFor (gearWanted, turbo);
     const double kS = 1 - std::exp (-dt / speedSeconds);
     s.speed += (target - s.speed) * kS;
