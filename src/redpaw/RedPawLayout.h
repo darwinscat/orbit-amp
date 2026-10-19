@@ -16,10 +16,12 @@
     dark wells and slots as boxes — not guessed, so a control lands in the socket that was painted for
     it. The window scales this space as a whole.
 
-    EVERY ROVER'S PICTURE IS MEASURED FOR ITSELF. The dashboard is worn by more than one product, each
-    over a picture of its own painted to the same plan (RedPawSkin.h): what is said here is what there
-    is to measure; the numbers are the product's own, in its skin's file — redpaw/RedPawSkin.cpp for
-    RedPawAmp, frostpaw/FrostPawSkin.cpp for FrostPawAmp — and a target compiles exactly one. */
+    EVERY ROVER'S PICTURE IS MEASURED FOR ITSELF, AGAINST ONE PLAN. The dashboard is worn by more than
+    one product, each over a picture of its own painted to the same plan (RedPawSkin.h). The plan is said
+    once, here (Plan), as RedPawAmp's picture — the first, the one the others were painted to — measures
+    it; each product's skin's file says only where its own picture measures otherwise:
+    redpaw/RedPawSkin.cpp nowhere, frostpaw/FrostPawSkin.cpp in a few places, amberpaw/AmberPawSkin.cpp,
+    a cockpit of its own, nearly everywhere. A target compiles exactly one. */
 namespace orbitamp::redpaw::layout
 {
 
@@ -34,170 +36,294 @@ using face::stage::px13;
 using face::stage::px15;
 using face::stage::px16;
 
-/** THE WINDSCREEN: the picture's cut-out, a trapezoid narrowing toward the dashboard, and the box round
-    it. The view out of it fills the box and lies UNDER the picture, whose alpha is the window's frame;
-    the emblem's plate rises into the bottom of it. */
-extern const std::array<juce::Point<float>, 6> windscreenCorners;
-extern const juce::Rectangle<float> windscreen;
-
-/** THE ROOF'S SIX HOLES, left to right: two, the divider, four. A key's sign stands in the gap left of
-    its hole; there is no room above or under them. */
-extern const std::array<juce::Point<float>, 6> holes;
-extern const float holeRadius;
-extern const float signOffset;      // a sign's centre, left of its hole's
-
 /** A knob's socket: the cyan ring painted round it, and how big the knob is drawn in it — so that the
     ring stays in sight all round. */
 struct Socket { juce::Point<float> centre; float ring; float ringWidth; float knob; };
 
-extern const Socket drive;
-extern const std::array<Socket, 3> tones;       // BASS, MIDDLE, TREBLE
-extern const float knobNameY;       // BASS, MIDDLE, TREBLE: on the panel over the sockets
-extern const float knobNameEm;      // ...how big they are written
-extern const float driveNameY;      // ...and DRIVE's own word, over its socket
+/** The lamps the dashboard lights itself (Plan::lamps). */
+enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
 
-/** THE SIX SQUARE KEYS under the tones: the two filters, the divider, the pack's four layers. A name
-    stands over or under its key — neighbours by turns, since at 11 px they are wider than the keys'
-    pitch: the filters and FAT and DEPTH under, BRIGHT and PRESENCE over. */
-extern const std::array<juce::Point<float>, 6> keys;
-extern const float keySize;         // the key's render, whose face fills its hole
-extern const float keyNameOverY;
-extern const float keyNameUnderY;
-extern const std::array<bool, 6> keyNameOver;
-extern const float keyNameRoom;     // how wide a name may be: a wider one is set condensed into it, as tall
-/** ...OR THE NAMES ON THE KEYS' FACES, where the picture leaves them no room round the keys: the filters'
-    a size down on their keys, the pack's layers' none until the packs carry them. */
-extern const bool keyNamesOnKeys;
-
-/** THE SEARCHLIGHTS' KEYS, where the face has lights to throw (Drive::setLights): which of the six are
-    the left lamp's and the right's, each a lamp's sign on its face; -1 for none. */
-extern const std::array<int, 2> lightKeys;
-
-/** THE NAV SCREEN: along its top the gear, the channel and the rover's speed; under them a picture of
-    the amp at work; along its bottom the tuner, one low line. */
-extern const juce::Rectangle<float> navScreen;
-extern const juce::Rectangle<float> navHeader;
-extern const juce::Rectangle<float> navPicture;
-extern const juce::Rectangle<float> tunerScreen;
-
-/** ...OR THE SPEED AS A HOLOGRAM ON THE GLASS (SpeedHud), where this is not empty: the nav screen's top
-    line is then the gear alone. */
-extern const juce::Rectangle<float> speedHud;
-
-/** ...OR THE TUNER IS A GAUGE THE PICTURE PAINTS (face::TunerFace::Dial), where this has a reach: a needle
-    over its dial, `tunerScreen` the dial's face, which a click opens the tuner's settings on. The nav
-    screen is then the top line and the picture alone. */
-extern const face::TunerFace::Dial tunerDial;
-
-/** LEARN: where GATE's learning or HUM's shows while it runs — over the nav screen's picture, or over the
-    whole screen, its top line too, where the picture is too small to hold it — and a round key for each
-    where the picture paints holes for them, GATE's over HUM's: lit while its learning shows, LEARN over
-    its name in two lines over it. A size of nought: no keys, LEARN only from the menus and GATE's lamp. */
-extern const juce::Rectangle<float> learnArea;
-extern const std::array<juce::Point<float>, 2> learnKeys;   // GATE's, HUM's
-extern const float learnKeySize;    // the key's render, whose button fills the hole
-extern const std::array<juce::Point<float>, 2> learnNames;  // the middle of each key's two lines
-extern const float learnLine;       // ...the two lines apart
-
-/** THE WIPERS' SPEED: four keys where the picture paints a row of them — OFF, INT, LO, HI, each word on
-    its key, the speed set lit. A size of nought: none, the wipers keep their own time. */
-extern const std::array<juce::Point<float>, 4> wiperKeys;
-extern const float wiperKeySize;    // the key's render, whose face fills the hole
-
-/** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches on its right — the product's gears,
-    CLEAN, CRUNCH, HI-GAIN, stand at its `stops` from the top, as many as it has (RedPawLineup.h): in the
-    notches the picture paints, or, where a product spreads fewer gears down a slot painted for more, at
-    places of its own, the picture baked with its notches there and none where no gear stands
-    (tools/bake-art). A position is where the lever's stem stands: seen from above, as the whole
-    dashboard is, the lever is its T grip lying across the slot, the stem's collar under the grip's
-    middle standing on the position — in a notch, in the notch. */
-extern const juce::Rectangle<float> gateSlot;
-extern const float slotX;           // the stem in the slot
-extern const float notchX;          // ...and in a notch
-extern const float slotTopY;        // PARK: the stem at the slot's top end
-extern const std::vector<float> stops;          // where the gears stand, top to bottom
-extern const float leverWidth;      // the lever's render, grip and collar, this wide: over the plate's edges
-extern const float collarSink;      // how far the collar's foot goes past the position, into the slot
-extern const juce::Rectangle<float> gearPlate;
-extern const float leverLeft, leverTop;     // the lever's box: the plate, and the room over it the grip stands up into
-
-/** TURBO: the round hole under the hatch the picture shows open, and its name over the hatch. */
-extern const juce::Point<float> turbo;
-extern const float turboSize;       // the button's render
-extern const juce::Point<float> turboName;
-extern const juce::Rectangle<float> turboLid;   // the hatch shut (Art::turboLid): from the open cover's top to the frame's foot
-
-/** THE THREE WELLS — REVERB over DELAY on the left, CAB on the right — and the row each one's words are
-    written in: on REVERB's and DELAY's upper rims, which the picture is baked taller to carry them where
-    it was painted without room for them (tools/bake-art), and over CAB's plate. */
-extern const std::array<juce::Rectangle<float>, 3> wells;      // REVERB, DELAY, CAB
-extern const std::array<float, 3> wellNameY;
-
-extern const float sliderCapLength;     // the cap's render, along its well
-extern const float sliderHeight;        // the slider's box round its well: room for the cap and CAB's notches
-
-// Each side column holds two wells: the narrow one a meter, the slot a fader's.
-extern const juce::Rectangle<float> inMeter;
-extern const juce::Rectangle<float> inFader;
-extern const juce::Rectangle<float> outMeter;
-extern const juce::Rectangle<float> outFader;
-extern const float faderWidth;          // the fader's box round its slot
-extern const float faderCapLength;      // the cap's render, across its slot
-
-/** THE CORNER LAMPS' PLATES, each with a fader's slot down its outer leg, its rim included — painted, or
-    the plate baked grown on that leg with a slot of INPUT's kind cut down it (tools/bake-art): GATE's
-    threshold in the left one, -70 dB at its foot to -40 at its head; LIMITER's ceiling in the right one,
-    -3 dB to -0.1. A slot lying across takes a fader lying across, its foot on the left. */
-extern const juce::Rectangle<float> thresholdSlot;
-extern const juce::Rectangle<float> ceilingSlot;
-extern const float slotScale;           // the corner slots' size to INPUT's
-extern const float slotRim;
 inline constexpr float thresholdLowDb = -70.0f, thresholdHighDb = -40.0f;
 
-/** THE LAMPS THE DASHBOARD LIGHTS ITSELF, each with room round it for its glow: the bars of three over
-    the columns, the input's overload and the output's; the slanted ones in the bottom corners, the
-    gate's and the limiter's. The picture paints them lit; it is baked with them out and each cut out of
-    it (tools/bake-art), to be laid back over its box. A picture that paints none
-    lit has them drawn, each a round glass `lampDot` across in the middle of its box (face::Lamp::dot);
-    none where that is nothing. */
-enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
-extern const std::array<juce::Rectangle<float>, numLamps> lamps;
-extern const float lampDot;
+/** THE PLAN, AS REDPAWAMP'S PICTURE MEASURES IT. A skin's own is this with the values its picture
+    measures otherwise, each named (`.navScreen { ... }`), in the order they stand here; a value written
+    in terms of another — LEARN over the picture, the corner slots' rims — follows that other where a
+    skin moves it. */
+struct Plan
+{
+    /** THE WINDSCREEN: the picture's cut-out, a trapezoid narrowing toward the dashboard, and the box
+        round it. The view out of it fills the box and lies UNDER the picture, whose alpha is the window's
+        frame; the emblem's plate rises into the bottom of it. */
+    std::array<juce::Point<float>, 6> windscreenCorners {{
+        { 122.0f, 47.5f }, { 1550.0f, 47.5f }, { 1556.0f, 60.0f }, { 1464.0f, 317.0f }, { 208.5f, 317.0f }, { 115.5f, 60.0f },
+    }};
+    juce::Rectangle<float> windscreen { 115.5f, 47.5f, 1440.5f, 269.5f };
 
-/** THE METERS AS DOTS THE PICTURE PAINTS (face::SegmentMeter::Dots), where there is a count: the dots
-    down the middle of inMeter's and outMeter's boxes, a pitch apart. None: segments down their wells. */
-extern const face::SegmentMeter::Dots meterDots;
+    /** THE ROOF'S SIX HOLES, left to right: two, the divider, four. A key's sign stands in the gap left
+        of its hole; there is no room above or under them. */
+    std::array<juce::Point<float>, 6> holes {{
+        { 683.3f, 22.7f }, { 727.2f, 22.8f }, { 809.3f, 22.7f }, { 853.3f, 23.1f }, { 897.0f, 23.0f }, { 941.5f, 22.6f },
+    }};
+    float holeRadius = 12.0f;
+    float signOffset = 22.0f;       // a sign's centre, left of its hole's
 
-/** INPUT and OUTPUT, on the plate under each column's wells, between its screws; a word wider than the
-    room it has there is set condensed into it, as tall. */
-extern const juce::Point<float> inputName;
-extern const juce::Point<float> outputName;
-extern const float columnNameRoom;
+    /** DRIVE's socket and the tones' (Socket), and the words over them. */
+    Socket drive { { 374.3f, 538.3f }, 71.7f, 3.0f, 132.0f };
+    std::array<Socket, 3> tones {{
+        { { 1118.3f, 495.0f }, 40.6f, 2.2f, 104.0f },   // BASS
+        { { 1240.5f, 495.0f }, 40.6f, 2.2f, 104.0f },   // MIDDLE
+        { { 1363.3f, 494.9f }, 40.6f, 2.2f, 104.0f },   // TREBLE
+    }};
+    float knobNameY  = 423.0f;      // BASS, MIDDLE, TREBLE: on the panel over the sockets
+    float knobNameEm = px13;        // ...how big they are written
+    float driveNameY = 423.0f;      // ...and DRIVE's own word, over its socket
 
-/** GATE and LIMITER along their own lamps in the bottom corners: each word parallel to its lamp's
-    slant, on the plate beside the lamp's housing — GATE down to the right, LIMITER up to the right. */
-extern const juce::Point<float> gateWord;
-extern const juce::Point<float> limiterWord;
-extern const float lampSlant;
+    /** THE SIX SQUARE KEYS under the tones: the two filters, the divider, the pack's four layers. A name
+        stands over or under its key — neighbours by turns, since at 11 px they are wider than the keys'
+        pitch: the filters and FAT and DEPTH under, BRIGHT and PRESENCE over. */
+    std::array<juce::Point<float>, 6> keys {{
+        { 1093.5f, 603.5f }, { 1141.5f, 603.5f }, { 1226.5f, 603.5f }, { 1280.5f, 603.5f }, { 1333.5f, 603.5f }, { 1388.0f, 603.5f },
+    }};
+    float keySize       = 48.0f;    // the key's render, whose face fills the 37 x 41 hole
+    float keyNameOverY  = 563.0f;
+    float keyNameUnderY = 642.0f;
+    std::array<bool, 6> keyNameOver {{ false, false, false, true, false, true }};
+    float keyNameRoom = 120.0f;     // how wide a name may be: a wider one is set condensed into it, as tall
+    /** ...OR THE NAMES ON THE KEYS' FACES, where the picture leaves them no room round the keys: the
+        filters' a size down on their keys, the pack's layers' none until the packs carry them. */
+    bool keyNamesOnKeys = false;    // the names round the keys
 
-/** THE PLATES ON THE BOTTOM EDGE, between their screws: PRESET alone on the long one on the left, MEM
-    over CPU on the long one on the right, and the version on the short one in the middle, under the
-    gate's block. MEM's and CPU's rows each start where MEM of its usual width would be centred, so that
-    a number that changes width moves nothing else. */
-extern const juce::Rectangle<float> leftPlate;
-extern const std::array<juce::Rectangle<float>, 2> readings;     // MEM over CPU
-extern const juce::Rectangle<float> centrePlate;
+    /** THE SEARCHLIGHTS' KEYS, where the face has lights to throw (Drive::setLights): which of the six
+        are the left lamp's and the right's, each a lamp's sign on its face; -1 for none. */
+    std::array<int, 2> lightKeys {{ -1, -1 }};      // no searchlights
 
-/** The emblem plate under the windscreen: a flat hexagon the family's mark is cut into, clear of its six
-    screws. */
-extern const std::array<juce::Point<float>, 6> emblemFace;
-extern const juce::Rectangle<float> emblemMark;
+    /** THE NAV SCREEN: along its top the gear, the channel and the rover's speed; under them a picture of
+        the amp at work; along its bottom the tuner, one low line. */
+    juce::Rectangle<float> navScreen  { 563.5f, 423.5f, 436.5f, 195.0f };
+    juce::Rectangle<float> navHeader  { 567.0f, 426.0f, 430.0f, 32.0f };
+    juce::Rectangle<float> navPicture { 567.0f, 460.0f, 430.0f, 126.0f };
 
-/** THE MAKER'S WORDS beside the mark, where the picture has room for them: POWERED BY low on its left,
-    DARWIN'S CAT low on its right, each set condensed into its room where it is wider. A room of
-    nought: none. */
-extern const juce::Point<float> poweredBy;
-extern const juce::Point<float> makerName;
-extern const float makerRoom;
+    /** ...OR THE SPEED AS A HOLOGRAM ON THE GLASS (SpeedHud), where this is not empty: the nav screen's
+        top line is then the gear alone. */
+    juce::Rectangle<float> speedHud {};             // none: the speed is on the nav screen
+
+    juce::Rectangle<float> tunerScreen { 567.0f, 588.0f, 430.0f, 27.0f };     // the tuner, the screen's bottom line
+
+    /** ...OR THE TUNER IS A GAUGE THE PICTURE PAINTS (face::TunerFace::Dial), where this has a reach: a
+        needle over its dial, `tunerScreen` the dial's face, which a click opens the tuner's settings on.
+        The nav screen is then the top line and the picture alone. */
+    face::TunerFace::Dial tunerDial {};             // none: the tuner is the screen's bottom line
+
+    /** LEARN: where GATE's learning or HUM's shows while it runs — over the nav screen's picture, or over
+        the whole screen, its top line too, where the picture is too small to hold it — and a round key
+        for each where the picture paints holes for them, GATE's over HUM's: lit while its learning shows,
+        LEARN over its name in two lines over it. A size of nought: no keys, LEARN only from the menus and
+        GATE's lamp. */
+    juce::Rectangle<float> learnArea = navPicture;  // LEARN over the picture...
+    std::array<juce::Point<float>, 2> learnKeys {}; // GATE's, HUM's
+    float learnKeySize = 0.0f;                      // ...and no keys of its own (the key's render, whose button fills the hole)
+    std::array<juce::Point<float>, 2> learnNames {};    // the middle of each key's two lines
+    float learnLine = 0.0f;                         // ...the two lines apart
+
+    /** THE WIPERS' SPEED: four keys where the picture paints a row of them — OFF, INT, LO, HI, each word
+        on its key, the speed set lit. A size of nought: none, the wipers keep their own time. */
+    std::array<juce::Point<float>, 4> wiperKeys {};     // no keys for the wipers
+    float wiperKeySize = 0.0f;                      // the key's render, whose face fills the hole
+
+    /** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches on its right — the product's
+        gears, CLEAN, CRUNCH, HI-GAIN, stand at its `stops` from the top, as many as it has
+        (RedPawLineup.h): in the notches the picture paints, or, where a product spreads fewer gears down a
+        slot painted for more, at places of its own, the picture baked with its notches there and none
+        where no gear stands (tools/bake-art). A position is where the lever's stem stands: seen from
+        above, as the whole dashboard is, the lever is its T grip lying across the slot, the stem's collar
+        under the grip's middle standing on the position — in a notch, in the notch.
+
+        The slot is 785.5..811 across, its top end at 681, its notches out to 823. */
+    juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
+    float slotX  = 798.3f;          // the stem in the slot
+    float notchX = 814.0f;          // ...and in a notch
+    float slotTopY = 694.0f;        // PARK: the stem at the slot's top end
+    // Where the gears stand, top to bottom. Two gears down a slot painted for three notches, 733.8, 776
+    // and 817.5, spread evenly: PARK, then a step of 61.75 to the middle and another to the third notch,
+    // so the slot is the lever's to its end — the picture baked with the first two filled in and the
+    // middle one the second, copied up (tools/bake-art).
+    std::vector<float> stops { 755.75f, 817.5f };
+    float leverWidth = 124.0f;      // the lever's render, grip and collar, this wide: over the plate's edges
+    float collarSink = 3.0f;        // how far the collar's foot goes past the position, into the slot
+    juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };
+    float leverLeft = 724.0f, leverTop = 600.0f;    // the lever's box: the plate, and the room over it the grip stands up into
+
+    /** TURBO: the round hole under the hatch the picture shows open, and its name over the hatch. */
+    juce::Point<float> turbo { 921.5f, 787.3f };
+    float turboSize = 52.0f;        // the button's render
+    juce::Point<float> turboName { 921.5f, 682.0f };
+    juce::Rectangle<float> turboLid { 873.5f, 689.0f, 101.0f, 168.0f };   // the hatch shut (Art::turboLid): from the open cover's top to the frame's foot
+
+    /** THE THREE WELLS — REVERB over DELAY on the left, CAB on the right — and the row each one's words
+        are written in: on REVERB's and DELAY's upper rims, which the picture is baked taller to carry them
+        where it was painted without room for them (tools/bake-art), and over CAB's plate. */
+    std::array<juce::Rectangle<float>, 3> wells {{
+        { 315.0f,  700.5f, 326.5f, 21.5f },     // REVERB
+        { 314.5f,  774.0f, 326.5f, 22.0f },     // DELAY
+        { 1053.0f, 730.5f, 309.5f, 24.0f },     // CAB
+    }};
+    std::array<float, 3> wellNameY {{ 690.0f, 762.5f, 695.0f }};
+
+    float sliderCapLength = 54.0f;  // the cap's render, along its well
+    float sliderHeight    = 44.0f;  // the slider's box round its well: room for the cap and CAB's notches
+
+    // Each side column holds two wells: the narrow one a meter, the slot a fader's.
+    juce::Rectangle<float> inMeter  { 48.0f,   444.5f, 34.5f, 244.0f };
+    juce::Rectangle<float> inFader  { 124.5f,  447.0f, 25.0f, 235.5f };
+    juce::Rectangle<float> outMeter { 1512.0f, 448.0f, 34.5f, 237.0f };
+    juce::Rectangle<float> outFader { 1588.0f, 447.5f, 24.5f, 235.0f };
+    float faderWidth     = 44.0f;   // the fader's box round its slot
+    float faderCapLength = 18.0f;   // the cap's render, across its slot
+
+    /** THE METERS AS DOTS THE PICTURE PAINTS (face::SegmentMeter::Dots), where there is a count: the dots
+        down the middle of inMeter's and outMeter's boxes, a pitch apart. None: segments down their wells. */
+    face::SegmentMeter::Dots meterDots {};          // none: segments down the wells
+
+    /** THE CORNER LAMPS' PLATES, each with a fader's slot down its outer leg, its rim included — painted,
+        or the plate baked grown on that leg with a slot of INPUT's kind cut down it (tools/bake-art):
+        GATE's threshold in the left one, -70 dB at its foot to -40 at its head; LIMITER's ceiling in the
+        right one, -3 dB to -0.1. A slot lying across takes a fader lying across, its foot on the left.
+
+        Each corner plate grown 24 on its outer leg, a slot cut down the room (tools/bake-art). */
+    juce::Rectangle<float> thresholdSlot { 40.5f, 808.0f, 18.0f, 80.0f };
+    juce::Rectangle<float> ceilingSlot   { 1614.5f, 805.0f, 18.0f, 80.0f };
+    float slotScale = 18.0f / 31.0f;                // the corner slots' size to INPUT's
+    float slotRim = 3.0f * slotScale;
+
+    /** THE LAMPS THE DASHBOARD LIGHTS ITSELF, each with room round it for its glow: the bars of three
+        over the columns, the input's overload and the output's; the slanted ones in the bottom corners,
+        the gate's and the limiter's. The picture paints them lit; it is baked with them out and each cut
+        out of it (tools/bake-art), to be laid back over its box. A picture that paints none lit has them
+        drawn, each a round glass `lampDot` across in the middle of its box (face::Lamp::dot); none where
+        that is nothing. */
+    std::array<juce::Rectangle<float>, numLamps> lamps {{
+        { 27.0f,   363.0f, 135.0f, 32.0f },     // the segments 37..152 x 373..385
+        { 1510.0f, 363.0f, 132.0f, 32.0f },     // the segments 1520..1632 x 372..385
+        { 69.0f,   824.0f, 62.0f, 63.0f },      // the slant 55..97 x 834..877 as painted, moved in with its plate
+        { 1541.0f, 824.0f, 62.0f, 63.0f },      // the slant 1575..1617 x 834..877 as painted, moved in with its plate
+    }};
+    float lampDot = 0.0f;                           // none: the picture paints them lit
+
+    /** INPUT and OUTPUT, on the plate under each column's wells, between its screws; a word wider than
+        the room it has there is set condensed into it, as tall. */
+    juce::Point<float> inputName  { 101.8f, 721.7f };
+    juce::Point<float> outputName { 1570.0f, 721.7f };
+    float columnNameRoom = 170.0f;
+
+    /** GATE and LIMITER along their own lamps in the bottom corners: each word parallel to its lamp's
+        slant, on the plate beside the lamp's housing — GATE down to the right, LIMITER up to the right. */
+    juce::Point<float> gateWord    { 134.0f, 824.0f };
+    juce::Point<float> limiterWord { 1538.0f, 825.0f };
+    float lampSlant = 0.7854f;      // 45 degrees
+
+    /** THE PLATES ON THE BOTTOM EDGE, between their screws: PRESET alone on the long one on the left, MEM
+        over CPU on the long one on the right, and the version on the short one in the middle, under the
+        gate's block. MEM's and CPU's rows each start where MEM of its usual width would be centred, so
+        that a number that changes width moves nothing else. */
+    juce::Rectangle<float> leftPlate { 340.0f, 852.0f, 262.0f, 57.0f };
+    std::array<juce::Rectangle<float>, 2> readings {{ { 1132.5f, 853.0f, 210.0f, 28.0f }, { 1132.5f, 881.0f, 210.0f, 28.0f } }};     // MEM over CPU, on the right plate, 1103..1332
+    juce::Rectangle<float> centrePlate { 755.0f, 895.0f, 195.0f, 33.0f };
+
+    /** The emblem plate under the windscreen: a flat hexagon the family's mark is cut into, clear of its
+        six screws. */
+    std::array<juce::Point<float>, 6> emblemFace {{
+        { 809.0f, 295.6f }, { 865.0f, 295.6f }, { 888.0f, 335.0f }, { 865.0f, 375.0f }, { 809.0f, 375.0f }, { 787.0f, 335.0f },
+    }};
+    juce::Rectangle<float> emblemMark { 813.0f, 310.0f, 50.0f, 50.0f };
+
+    /** THE MAKER'S WORDS beside the mark, where the picture has room for them: POWERED BY low on its
+        left, DARWIN'S CAT low on its right, each set condensed into its room where it is wider. A room of
+        nought: none. */
+    juce::Point<float> poweredBy {}, makerName {};  // no room beside the plate for the maker's words
+    float makerRoom = 0.0f;
+};
+
+/** The product's own plan, in its skin's file. It is made as the program starts, in no set order with
+    what other files make then — a rectangle is not a constant to the compiler — so it is read in a
+    function, never in what another file makes at its start. */
+extern const Plan plan;
+
+// ...and each of its measures under its own name, as the face reads them.
+inline const auto& windscreenCorners = plan.windscreenCorners;
+inline const auto& windscreen        = plan.windscreen;
+inline const auto& holes             = plan.holes;
+inline const auto& holeRadius        = plan.holeRadius;
+inline const auto& signOffset        = plan.signOffset;
+inline const auto& drive             = plan.drive;
+inline const auto& tones             = plan.tones;
+inline const auto& knobNameY         = plan.knobNameY;
+inline const auto& knobNameEm        = plan.knobNameEm;
+inline const auto& driveNameY        = plan.driveNameY;
+inline const auto& keys              = plan.keys;
+inline const auto& keySize           = plan.keySize;
+inline const auto& keyNameOverY      = plan.keyNameOverY;
+inline const auto& keyNameUnderY     = plan.keyNameUnderY;
+inline const auto& keyNameOver       = plan.keyNameOver;
+inline const auto& keyNameRoom       = plan.keyNameRoom;
+inline const auto& keyNamesOnKeys    = plan.keyNamesOnKeys;
+inline const auto& lightKeys         = plan.lightKeys;
+inline const auto& navScreen         = plan.navScreen;
+inline const auto& navHeader         = plan.navHeader;
+inline const auto& navPicture        = plan.navPicture;
+inline const auto& speedHud          = plan.speedHud;
+inline const auto& tunerScreen       = plan.tunerScreen;
+inline const auto& tunerDial         = plan.tunerDial;
+inline const auto& learnArea         = plan.learnArea;
+inline const auto& learnKeys         = plan.learnKeys;
+inline const auto& learnKeySize      = plan.learnKeySize;
+inline const auto& learnNames        = plan.learnNames;
+inline const auto& learnLine         = plan.learnLine;
+inline const auto& wiperKeys         = plan.wiperKeys;
+inline const auto& wiperKeySize      = plan.wiperKeySize;
+inline const auto& gateSlot          = plan.gateSlot;
+inline const auto& slotX             = plan.slotX;
+inline const auto& notchX            = plan.notchX;
+inline const auto& slotTopY          = plan.slotTopY;
+inline const auto& stops             = plan.stops;
+inline const auto& leverWidth        = plan.leverWidth;
+inline const auto& collarSink        = plan.collarSink;
+inline const auto& gearPlate         = plan.gearPlate;
+inline const auto& leverLeft         = plan.leverLeft;
+inline const auto& leverTop          = plan.leverTop;
+inline const auto& turbo             = plan.turbo;
+inline const auto& turboSize         = plan.turboSize;
+inline const auto& turboName         = plan.turboName;
+inline const auto& turboLid          = plan.turboLid;
+inline const auto& wells             = plan.wells;
+inline const auto& wellNameY         = plan.wellNameY;
+inline const auto& sliderCapLength   = plan.sliderCapLength;
+inline const auto& sliderHeight      = plan.sliderHeight;
+inline const auto& inMeter           = plan.inMeter;
+inline const auto& inFader           = plan.inFader;
+inline const auto& outMeter          = plan.outMeter;
+inline const auto& outFader          = plan.outFader;
+inline const auto& faderWidth        = plan.faderWidth;
+inline const auto& faderCapLength    = plan.faderCapLength;
+inline const auto& meterDots         = plan.meterDots;
+inline const auto& thresholdSlot     = plan.thresholdSlot;
+inline const auto& ceilingSlot       = plan.ceilingSlot;
+inline const auto& slotScale         = plan.slotScale;
+inline const auto& slotRim           = plan.slotRim;
+inline const auto& lamps             = plan.lamps;
+inline const auto& lampDot           = plan.lampDot;
+inline const auto& inputName         = plan.inputName;
+inline const auto& outputName        = plan.outputName;
+inline const auto& columnNameRoom    = plan.columnNameRoom;
+inline const auto& gateWord          = plan.gateWord;
+inline const auto& limiterWord       = plan.limiterWord;
+inline const auto& lampSlant         = plan.lampSlant;
+inline const auto& leftPlate         = plan.leftPlate;
+inline const auto& readings          = plan.readings;
+inline const auto& centrePlate       = plan.centrePlate;
+inline const auto& emblemFace        = plan.emblemFace;
+inline const auto& emblemMark        = plan.emblemMark;
+inline const auto& poweredBy         = plan.poweredBy;
+inline const auto& makerName         = plan.makerName;
+inline const auto& makerRoom         = plan.makerRoom;
 
 } // namespace orbitamp::redpaw::layout

@@ -17,15 +17,23 @@ namespace orbitamp::redpaw
     the lever to come back. The engine they are kept by is the family's (channels/Engine.h); this file
     is what makes it the rover's.
 
-    WHICH CHANNELS, AND SO HOW MANY GEARS, IS THE PRODUCT'S: each rover lists its own in a file of its
-    own — RedPawAmp's in redpaw/RedPawSkin.cpp, FrostPawAmp's in frostpaw/FrostPawSkin.cpp — and
-    whatever counts gears counts its pairs: the lever's notches, the keys, the programs, the nav screen's
-    names, the window. */
+    WHICH CHANNELS, AND SO HOW MANY GEARS, IS THE PRODUCT'S: each rover says its own in a file of its
+    own — RedPawAmp's listed in redpaw/RedPawSkin.cpp; FrostPawAmp's and AmberPawAmp's the V4's, listed
+    once here (v4Lineup) — and whatever counts gears counts its pairs: the lever's notches, the keys, the
+    programs, the nav screen's names, the window. */
 const channels::Lineup& lineup();
 
 /** A rover's lineup over the channels it plays: the names its memory is kept under, its CHANNEL, INPUT's
     zero, the cabinet a channel opens on and PARK, are every rover's. */
 channels::Lineup roverLineup (std::vector<channels::Lineup::Channel>);
+
+/** THE VICTORY V4'S SIX PACKS AS A ROVER PLAYS THEM, three gears of two — CLEAN the Copper, CRUNCH the
+    Sheriff, HI-GAIN the Kraken — and TURBO each pedal's second channel, each found by the capture it
+    plays. What each opens on: a pedal's first channel a little of its room and as much delay, its TURBO
+    twice as much of both — the Copper in a hall, the Sheriff on a plate, the Kraken in an ambience with
+    no delay at all. The Kraken's two are the hot packs, the ones that would carry FAT. FrostPawAmp's
+    channels, and AmberPawAmp's until it has captures of its own. */
+channels::Lineup v4Lineup();
 
 /** As many gears as the product has pairs of channels — at most as many as the lever's slot has
     notches. */

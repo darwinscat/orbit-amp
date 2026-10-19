@@ -21,6 +21,18 @@ channels::Lineup roverLineup (std::vector<channels::Lineup::Channel> channels)
              true };            // a gear and its TURBO: one memory
 }
 
+channels::Lineup v4Lineup()
+{
+    return roverLineup ({
+        { "Clean",         "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false },
+        { "Clean Turbo",   "v4-copper-tb-5841",   "Hall",     30.0f, 30.0f, false },
+        { "Crunch",        "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false },
+        { "Crunch Turbo",  "v4-sheriff-ch2-2f2f", "Plate",    30.0f, 30.0f, false },
+        { "Hi-Gain",       "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true  },
+        { "Hi-Gain Turbo", "v4-kraken-ch2-5f71",  "Ambience", 30.0f, 0.0f,  true  },
+    });
+}
+
 int numGears() noexcept
 {
     return lineup().count() / 2;
