@@ -88,7 +88,7 @@ private:
     Program profile, scene, buoys, spray, drizzle, glass, glassDrops, glassTrails;
 
     std::uint32_t texNoise = 0, texRipple = 0, texProfile = 0, fboProfile = 0;
-    std::uint32_t vaoEmpty = 0, vaoDrops = 0, vboDrops = 0, vaoTrails = 0, vboTrails = 0;
+    std::uint32_t vaoEmpty = 0, vboEmpty = 0, vaoDrops = 0, vboDrops = 0, vaoTrails = 0, vboTrails = 0;
     std::vector<float> dropData, trailData;     // six vertices a drop / a trail, its values on each
 
     std::uint32_t fbo = 0, fboColour = 0;

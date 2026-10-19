@@ -9,7 +9,7 @@ out vec3 vCol; out float vA;
 #include "titan/capsule.glsl"
 #include <drizzle>
 #include "titan/topx.glsl"
-void main(){
+void body(){
   int id = gl_VertexID / 6; int cv = gl_VertexID - id * 6;
   uint u = uint(id);
   float h1 = h01(u, 11u), h2 = h01(u, 12u), h3 = h01(u, 13u), h4 = h01(u, 14u), h5 = h01(u, 15u), h6 = h01(u, 16u);
@@ -37,3 +37,8 @@ void main(){
   vCol = uAmb * 0.8;
   vCol = mix(vCol, uAmb, 1.0 - exp(-v0.z / 300.0));
 }
+
+// Attribute 0, always 0 (gpu::attributeless): read, so a browser sees the program take an attribute and does not
+// emulate one for it — adding it changes no position.
+in float aZero;
+void main() { body(); gl_Position.x += aZero; }

@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace orbitamp::gpu
 {
@@ -65,6 +66,28 @@ inline bool current() noexcept
    #endif
 }
 
+/** A VERTEX ARRAY FOR DRAWS THAT TAKE NO ATTRIBUTES — full-screen passes, particles made from the vertex's index —
+    but one: aZero, attribute 0, a zero for each of up to attributelessVertices vertices in `buffer`, which such a
+    vertex shader adds to its position. Core GL wants a vertex array bound for any draw, and a browser on desktop GL
+    emulates attribute 0 for a program that takes no attribute at all (Firefox on the Mac says so in its console).
+    The caller deletes both. */
+inline constexpr int attributelessVertices = 1 << 16;
+inline GLuint attributeless (GLuint& buffer)
+{
+    GLuint vao = 0;
+    glGenVertexArrays (1, &vao);
+    glBindVertexArray (vao);
+    const std::vector<GLfloat> zeros ((size_t) attributelessVertices, 0.0f);
+    glGenBuffers (1, &buffer);
+    glBindBuffer (GL_ARRAY_BUFFER, buffer);
+    glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (zeros.size() * sizeof (GLfloat)), zeros.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray (0);
+    glVertexAttribPointer (0, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glBindVertexArray (0);
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
+    return vao;
+}
+
 /** A program out of a vertex and a fragment shader's source: its id, or 0 when either would not compile or
     the two would not link — the driver's words in `log`. The shaders go with the program. */
 inline GLuint program (const std::string& vertex, const std::string& fragment, std::string& log)
@@ -95,6 +118,11 @@ inline GLuint program (const std::string& vertex, const std::string& fragment, s
     GLint linked = GL_FALSE;
     if (stage (GL_VERTEX_SHADER, vertex) && stage (GL_FRAGMENT_SHADER, fragment))
     {
+        // A mesh's positions at location 0, where it has them, or the zero an attribute-less pass reads
+        // (attributeless): a draw whose attribute 0 is no array a browser has to emulate on desktop GL (Firefox
+        // says so), and an instanced one might otherwise get its cells there.
+        glBindAttribLocation (id, 0, "aPos");
+        glBindAttribLocation (id, 0, "aZero");
         glLinkProgram (id);
         glGetProgramiv (id, GL_LINK_STATUS, &linked);
         if (linked == GL_FALSE)

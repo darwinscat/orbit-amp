@@ -82,7 +82,7 @@ private:
     Program terrain, steel, sky, snow;
 
     std::uint32_t texHeight = 0, texGrad1 = 0, texGrad2 = 0, texDetail = 0;
-    std::uint32_t vaoTerrain = 0, vboGrid = 0, vaoSteel = 0, vboSteel = 0, vaoEmpty = 0;
+    std::uint32_t vaoTerrain = 0, vboGrid = 0, vaoSteel = 0, vboSteel = 0, vaoEmpty = 0, vboEmpty = 0;
 
     static constexpr int N = 128, levels = 8, morphBand = 16;
     struct Level

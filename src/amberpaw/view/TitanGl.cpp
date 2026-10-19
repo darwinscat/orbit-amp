@@ -284,7 +284,7 @@ void TitanGl::destroy()
 {
     const auto del = [] (std::uint32_t& id, void (*f) (GLsizei, const GLuint*)) { if (id != 0) f (1, &id); id = 0; };
     del (vboDrops, glDeleteBuffers); del (vboTrails, glDeleteBuffers);
-    del (vaoEmpty, glDeleteVertexArrays); del (vaoDrops, glDeleteVertexArrays); del (vaoTrails, glDeleteVertexArrays);
+    del (vaoEmpty, glDeleteVertexArrays); del (vboEmpty, glDeleteBuffers); del (vaoDrops, glDeleteVertexArrays); del (vaoTrails, glDeleteVertexArrays);
     del (texNoise, glDeleteTextures); del (texRipple, glDeleteTextures); del (texProfile, glDeleteTextures); del (fboProfile, glDeleteFramebuffers);
     del (fboColour, glDeleteTextures); del (fbo, glDeleteFramebuffers);
     fbW = fbH = 0;
@@ -335,7 +335,7 @@ void TitanGl::makeTextures()
 
 void TitanGl::makeBuffers()
 {
-    glGenVertexArrays (1, &vaoEmpty);   // the full-screen passes and the particles draw with no attributes; core needs a VAO bound all the same
+    vaoEmpty = gpu::attributeless (vboEmpty);   // the full-screen passes and the particles draw with no attributes (gpu::attributeless)
 
     dropData.assign ((size_t) TitanWorld::maxDrops * 6 * 5, 0.0f);
     glGenVertexArrays (1, &vaoDrops);

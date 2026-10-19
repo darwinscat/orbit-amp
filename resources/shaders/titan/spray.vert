@@ -8,7 +8,7 @@ out vec3 vCol; out float vA;
 const float G = 1.35;                                // Titan's gravity
 #include "titan/topx.glsl"
 vec3 posAt(vec3 p0, vec3 v0, vec3 vt, float a, float k){ return p0 + vt * a + (v0 - vt) * ((1.0 - exp(-k * a)) / k); }
-void main(){
+void body(){
   int id = gl_VertexID / 6; int cv = gl_VertexID - id * 6;
   uint u = uint(id);
   float h1 = h01(u, 21u), h2 = h01(u, 22u), h3 = h01(u, 23u), h4 = h01(u, 24u), h5 = h01(u, 25u), h6 = h01(u, 26u), h7 = h01(u, 27u), h8 = h01(u, 28u), h9 = h01(u, 29u);
@@ -42,3 +42,8 @@ void main(){
   vCol = mix(uAmb * (mist ? 1.05 : 0.9), uFoamC * 0.9, clamp(uFoam, 0.0, 1.0));
   vSoft = mist ? 1.0 : 0.0;
 }
+
+// Attribute 0, always 0 (gpu::attributeless): read, so a browser sees the program take an attribute and does not
+// emulate one for it — adding it changes no position.
+in float aZero;
+void main() { body(); gl_Position.x += aZero; }

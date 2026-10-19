@@ -75,7 +75,7 @@ private:
     Program terrain, rock, relic, sky, dust;
 
     std::uint32_t texHeight = 0, texGrad1 = 0, texGrad2 = 0, texDetail = 0;
-    std::uint32_t vaoTerrain = 0, vboGrid = 0, vaoRock = 0, vboRock = 0, vaoEmpty = 0;
+    std::uint32_t vaoTerrain = 0, vboGrid = 0, vaoRock = 0, vboRock = 0, vaoEmpty = 0, vboEmpty = 0;
 
     // The relics: the four meshes in one buffer, and per variant the instance buffer of cells.
     std::uint32_t vaoRelic = 0, vboRelic = 0;

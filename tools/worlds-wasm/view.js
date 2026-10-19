@@ -198,7 +198,7 @@ function viewOffscreenWebGL2 ()
         try
         {
             const gl = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas (1, 1).getContext ('webgl2') : null;
-            if (gl) { viewOffscreenGl = true; gl.getExtension ('WEBGL_lose_context')?.loseContext (); }
+            viewOffscreenGl = !! gl;     // let go, not lost on purpose: a lost context is a warning in some consoles
         }
         catch (e) { viewOffscreenGl = false; }
     }
