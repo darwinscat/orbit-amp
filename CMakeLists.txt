@@ -156,8 +156,10 @@ set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the
 # as core: a sibling checkout when present, the pinned tag otherwise. It builds them by default, so
 # there is no switch to throw here any more (core refuses the old FELITRONICS_WITH_NAM outright). The
 # NAM module fetches NeuralAmpModelerCore and the namz codec itself — the overrides below only spare a
-# second clone of trees this machine already has, and fall back to the pins when they are gone.
-set(ORBITAMP_GUITAR_TAG "v0.1.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
+# second clone of trees this machine already has, and fall back to the pins when they are gone. From v0.1.1
+# it takes Eigen from Darwin's Cat's own mirror, github.com/darwinscat/eigen, instead of NeuralAmpModelerCore's
+# submodule on gitlab.com: a build now asks GitHub alone.
+set(ORBITAMP_GUITAR_TAG "v0.1.1" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
 set(ORBITAMP_GUITAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-guitar-core"
     CACHE PATH "Local felitronics-guitar-core checkout (used if present); else the pinned release is fetched")
 
