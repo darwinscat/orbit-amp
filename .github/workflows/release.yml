@@ -5,7 +5,7 @@ name: release
 # A manual run (workflow_dispatch) builds the SAME artifacts but does NOT create a release unless
 # dry_run=false, so you can download + test installers from the run page without publishing.
 #
-#   • macOS   → one signed + notarized .pkg and one .zip: every amp, VST3 + AU + CLAP + Standalone, universal  [self-hosted runner]
+#   • macOS   → one signed + notarized .pkg, universal, and a .zip for arm64 and for x86_64: every amp, VST3 + AU + CLAP + Standalone  [self-hosted runner]
 #   • Windows → one Inno Setup .exe (x64), and a .zip for x64 and for arm64: every amp, VST3 + CLAP + Standalone
 #   • Linux   → one .tar.xz for x86_64 and for arm64: every amp, VST3 + CLAP + Standalone, with install.sh
 #
