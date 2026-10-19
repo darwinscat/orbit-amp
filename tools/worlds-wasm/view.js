@@ -33,6 +33,10 @@
 // time for the same gear, PARK and canvas aspect. When WebGL 2 or a shader is not to be had, `onFallback (reason)`
 // is called with the driver's log and nothing is drawn — show a still in its place.
 //
+// `hold: true` keeps the first frame: the view draws it, settled, says it is ready and stands there — no time goes
+// by — until view.start(), whose first frame steps no time either; so a poster made of that first frame can stay over
+// the canvas until the page lifts it, and the view moves only then.
+//
 // Two options are a bench's, not the view's: `test`, a frame set up as the app's view demo sets its own (see
 // worldDrawn below) and handed to `onFrame ({ width, height, data })`, its RGBA rows top-down; and `worker: false`,
 // the page's thread whatever the browser can do.
@@ -47,7 +51,7 @@ const viewAttributes = { antialias: false, alpha: false, depth: false, stencil: 
     wants it. What it has to say goes to `post`; what the page says comes to the function returned. */
 function worldDrawn (canvas, options, post, world)
 {
-    const { gears = 2, test = null, place = null } = options;
+    const { gears = 2, test = null, place = null, hold = false } = options;
     let gear = options.gear ?? 1, turbo = !! options.turbo, parked = !! options.parked;
     let wipers = options.wipers ?? 0, lights = options.lights || [false, false];
     let cssW = options.cssW || 0, cssH = options.cssH || 0, dpr = options.dpr || 1;
@@ -133,6 +137,14 @@ function worldDrawn (canvas, options, post, world)
             return;
         }
         ready = true;
+        if (hold && ! test)
+        {
+            // The first frame, settled, drawn with no step and kept until the page starts the view.
+            size ();
+            M._view_draw (width, height);
+            drawn = true;
+            post ({ type: 'ready' });
+        }
         if (test)
         {
             // The bench's frame: drawn with no step after it and kept; the scene's own pixels, as the app's STILL.
@@ -210,7 +222,7 @@ function viewOffscreenWebGL2 ()
     the module's own, which a worker loads. */
 function createWorldView (canvas, world, url, { steer = false, onFallback = () => {}, onReady = () => {}, onFrame = () => {},
                                                 gears = 2, gear = 1, parked = false, turbo = false, wipers = 0, lights = [false, false],
-                                                place = null, test = null, worker = true } = {})
+                                                place = null, test = null, worker = true, hold = false } = {})
 {
     let failed = false, quality = VIEW_RUNGS[0], settleReady = null, gone = () => {};
     const readyPromise = new Promise (r => { settleReady = r; });
@@ -227,7 +239,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
     const options = { gears, gear, parked, turbo, place: place && place.map (Number),
                       wipers: viewClamp (Math.round (+wipers) || 0, 0, 3), lights: [!! (lights && lights[0]), !! (lights && lights[1])],
                       test: test && { at: test.at || null, clock: test.clock || null, drive: +test.drive || 0, steer: +test.steer || 0, still: !! test.still },
-                      on: ! document.hidden, ...measured () };
+                      hold: !! hold, on: ! document.hidden && ! hold, ...measured () };
 
     // Where the canvas goes to a worker, everything else goes with it; else the view is here, on a canvas that
     // has WebGL 2 or never draws.
@@ -249,7 +261,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
     }
 
     // Off screen, in a hidden tab or stopped, no frames.
-    let wanted = true, onScreen = true;
+    let wanted = ! hold, onScreen = true;
     const run = () => send ({ type: 'run', on: wanted && onScreen && ! document.hidden });
     const seen = new IntersectionObserver (([e]) => { onScreen = e.isIntersecting; run (); });
     seen.observe (canvas);
