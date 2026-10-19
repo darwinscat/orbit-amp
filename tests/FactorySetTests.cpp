@@ -13,7 +13,7 @@
 //     else is touched.
 //
 // What a single product's lay-out does — byte for byte, a second start writes nothing, a damaged file
-// comes back — is the cockpit's set gate's to hold (CatpitSetTests). This works in a folder of its own
+// comes back — is the cockpit's and the rovers' set gate's to hold (AmpSetTests). This works in a folder of its own
 // under the system's temporary folder, and leaves it behind to be looked at.
 
 #include "device/FactorySet.h"

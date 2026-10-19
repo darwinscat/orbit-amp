@@ -548,7 +548,7 @@ endfunction()
 
 # AN AMP'S GATES are the amp compiled again under a main() of its own — its sources, its libraries, its
 # set, the family's version and its name, as add_amp was given them — and are built only when asked for by name.
-# CHANNELS is how many channels the gate holds it to (ROVER_CHANNELS), said apart from the amp's lineup.
+# CHANNELS is how many channels the gate holds it to (GATE_CHANNELS), said apart from the amp's lineup.
 function(amp_console target product amp main)
     cmake_parse_arguments(PARSE_ARGV 4 GATE "" "CHANNELS" "")
     get_target_property(sources ${amp} AMP_SOURCES)
@@ -561,7 +561,7 @@ function(amp_console target product amp main)
         ORBITAMP_VERSION="${PROJECT_VERSION}"
         ORBITAMP_PRODUCT_NAME="${amp}")
     if(GATE_CHANNELS)
-        target_compile_definitions(${target} PRIVATE ROVER_CHANNELS=${GATE_CHANNELS})
+        target_compile_definitions(${target} PRIVATE GATE_CHANNELS=${GATE_CHANNELS})
     endif()
     target_compile_definitions(${target} PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(${target} PRIVATE ${amp}Set ${libraries})
@@ -580,7 +580,7 @@ function(amp_set_test target product amp main)
     target_include_directories(${target} PRIVATE src)
     target_compile_definitions(${target} PRIVATE ORBITAMP_PRODUCT_NAME="${amp}")
     if(GATE_CHANNELS)
-        target_compile_definitions(${target} PRIVATE ROVER_CHANNELS=${GATE_CHANNELS})
+        target_compile_definitions(${target} PRIVATE GATE_CHANNELS=${GATE_CHANNELS})
     endif()
     target_compile_definitions(${target} PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(${target} PRIVATE
@@ -1075,30 +1075,25 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
 # standalone cannot give.
 amp_console(catpitamp_memory_probe  "CatpitAmpMemoryProbe"  CatpitAmp  tests/MemoryProbe.cpp)
 
-# Gate for the cockpit's channels with no window at all: that the processor is a four-channel amp by
-# itself, and CHANNEL — the parameter a host reaches it by — moves it.
-amp_console(catpitamp_channel_test  "CatpitAmpChannelTest"  CatpitAmp  tests/CatpitChannelTests.cpp)
-
-# Gate for the cockpit's set as it leaves the binary — laid out whole, once, and nothing else in the
-# folder touched. Runs entirely in a folder of its own, under the cockpit's name, which is the name of
-# its list in the folder.
-amp_set_test(catpitamp_set_test     "CatpitAmpSetTest"      CatpitAmp  tests/CatpitSetTests.cpp
-    LIBRARIES juce::juce_core)
-
-# A ROVER'S GATES, the same for every rover, run as that rover. Its channels with no window at all — as
-# many as CHANNELS says, the Boost each holds, moved by CHANNEL the way a host moves it, each with its
-# own memory and what it opens on — and its set as it leaves the binary, laid out whole, once, under its
-# own list, in a folder of its own; that one reads pack manifests (DeviceLibrary.h, through namz).
-set(ROVER_SET_GATE_LIBRARIES felitronics::nam juce::juce_core juce::juce_events juce::juce_gui_basics)
-amp_console(redpawamp_channel_test    "RedPawAmpChannelTest"    RedPawAmp    tests/RedPawChannelTests.cpp  CHANNELS 4)
-amp_set_test(redpawamp_set_test       "RedPawAmpSetTest"        RedPawAmp    tests/RedPawSetTests.cpp      CHANNELS 4
-    LIBRARIES ${ROVER_SET_GATE_LIBRARIES})
-amp_console(frostpawamp_channel_test  "FrostPawAmpChannelTest"  FrostPawAmp  tests/RedPawChannelTests.cpp  CHANNELS 6)
-amp_set_test(frostpawamp_set_test     "FrostPawAmpSetTest"      FrostPawAmp  tests/RedPawSetTests.cpp      CHANNELS 6
-    LIBRARIES ${ROVER_SET_GATE_LIBRARIES})
-amp_console(amberpawamp_channel_test  "AmberPawAmpChannelTest"  AmberPawAmp  tests/RedPawChannelTests.cpp  CHANNELS 6)
-amp_set_test(amberpawamp_set_test     "AmberPawAmpSetTest"      AmberPawAmp  tests/RedPawSetTests.cpp      CHANNELS 6
-    LIBRARIES ${ROVER_SET_GATE_LIBRARIES})
+# AN AMP'S GATES, the same two for the cockpit and every rover, run as that amp — what tells one amp
+# from another, the gates read in tests/AmpGate.h. Its channels with no window at all — as many as
+# CHANNELS says, each with its own memory and what it opens on, moved by CHANNEL the way a host moves
+# it; the rover's gears and the Boost each holds, PARK, the cockpit's DRIVE on its dial — and its set as
+# it leaves the binary, laid out whole, once, under its own list, in a folder of its own, and nothing
+# else in the folder touched; that one reads pack manifests (DeviceLibrary.h, through namz).
+set(AMP_SET_GATE_LIBRARIES felitronics::nam juce::juce_core juce::juce_events juce::juce_gui_basics)
+amp_console(catpitamp_channel_test    "CatpitAmpChannelTest"    CatpitAmp    tests/AmpChannelTests.cpp  CHANNELS 4)
+amp_set_test(catpitamp_set_test       "CatpitAmpSetTest"        CatpitAmp    tests/AmpSetTests.cpp      CHANNELS 4
+    LIBRARIES ${AMP_SET_GATE_LIBRARIES})
+amp_console(redpawamp_channel_test    "RedPawAmpChannelTest"    RedPawAmp    tests/AmpChannelTests.cpp  CHANNELS 4)
+amp_set_test(redpawamp_set_test       "RedPawAmpSetTest"        RedPawAmp    tests/AmpSetTests.cpp      CHANNELS 4
+    LIBRARIES ${AMP_SET_GATE_LIBRARIES})
+amp_console(frostpawamp_channel_test  "FrostPawAmpChannelTest"  FrostPawAmp  tests/AmpChannelTests.cpp  CHANNELS 6)
+amp_set_test(frostpawamp_set_test     "FrostPawAmpSetTest"      FrostPawAmp  tests/AmpSetTests.cpp      CHANNELS 6
+    LIBRARIES ${AMP_SET_GATE_LIBRARIES})
+amp_console(amberpawamp_channel_test  "AmberPawAmpChannelTest"  AmberPawAmp  tests/AmpChannelTests.cpp  CHANNELS 6)
+amp_set_test(amberpawamp_set_test     "AmberPawAmpSetTest"      AmberPawAmp  tests/AmpSetTests.cpp      CHANNELS 6
+    LIBRARIES ${AMP_SET_GATE_LIBRARIES})
 
 # ----------------------------------------------------------------------------
 # THE FAMILY'S RELEASE: `--target Family_All` builds every format of every amp installer/family.ini
