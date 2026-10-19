@@ -742,7 +742,7 @@ juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
     return new AmpEditor (p);
 }
 
-// OrbitAmp's set is laid out by OrbitAmpSet.cpp, apart from the face.
+// OrbitAmp's first start is OrbitAmpStart.cpp's, apart from the face.
 
 // ...and it is the engine as it stands: no parameter of its own, no half of its own.
 void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&) {}

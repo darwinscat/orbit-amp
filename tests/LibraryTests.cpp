@@ -434,19 +434,23 @@ int main()
         report ("another capture with the same name: both", other == into.getChildFile ("Tube Screamer Mini 2.orbitrig")
                                                            && renamed.isDirectory());
 
+        // What the build ships is what this product's list in the factory names (device/FactorySet.h).
         pack (factory, "RAT", "rat-2-3ab8");
+        factory.getChildFile ("sets").createDirectory();
+        factory.getChildFile ("sets").getChildFile (juce::String (orbitamp::product::name) + ".txt").replaceWithText ("RAT.orbitrig\n");
         juce::String refused;
         report ("a capture the build ships is refused",  DeviceLibrary::importDevice (pack (src, "Rodent", "rat-2-3ab8"),
                                                                                      into, factory, retire, &refused) == juce::File()
                                                            && ! into.getChildFile ("Rodent.orbitrig").exists());
         report ("...and says which pack it already is",  refused == "RAT", refused);
 
-        // ...and so is one the build has put away in a folder of the factory (OrbitAmpSet.h: OLD).
-        pack (factory.getChildFile ("OLD"), "Big Muff", "big-muff-77c1");
+        // ...but one another product ships beside it, which this product's list does not name, is no
+        // capture this one plays: it is the player's to install.
+        pack (factory, "Big Muff", "big-muff-77c1");
         refused.clear();
-        report ("a capture the build put away is refused too", DeviceLibrary::importDevice (pack (src, "Muff", "big-muff-77c1"),
-                                                                                           into, factory, retire, &refused) == juce::File()
-                                                                 && ! into.getChildFile ("Muff.orbitrig").exists() && refused == "Big Muff",
+        report ("a capture only another product ships imports", DeviceLibrary::importDevice (pack (src, "Muff", "big-muff-77c1"),
+                                                                                            into, factory, retire, &refused) != juce::File()
+                                                                  && into.getChildFile ("Muff.orbitrig").exists() && refused.isEmpty(),
                 refused);
 
         report ("a lone model has no rig_id to merge by", DeviceLibrary::rigIdOf (work.getChildFile ("dev-src/clean.nam")).isEmpty());
@@ -532,10 +536,13 @@ int main()
             return same;
         };
 
-        // The set as the build carries it, read in place: every manifest is the real one.
+        // The tree's set, read in place as a factory every pack of which counts: every manifest is the real one.
         const juce::File set (ORBITAMP_SET_DIR);
         const auto none = work.getChildFile ("devices-none");
-        const auto factory = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, set.getChildFile ("Devices"), none);
+        juce::StringArray everyPack;
+        for (const auto& f : set.getChildFile ("Devices").findChildFiles (juce::File::findDirectories, false, "*.orbitrig"))
+            everyPack.add (f.getFileName());
+        const auto factory = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, set.getChildFile ("Devices"), none, everyPack);
         const auto shelf = DeviceLibrary::shelfOf (factory);
 
         report ("the set's packs make five devices, by name",  names (shelf.factory) == "IR-X, V4 Copper, V4 Kraken, V4 Sheriff, X88-IR",

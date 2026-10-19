@@ -51,9 +51,9 @@
 #include "ui/HumLearner.h"
 #include "ui/HumMenu.h"
 
-// OrbitAmp's set (OrbitAmpSet.cpp) is NOT laid out from here: the processor would write it into the
-// machine's real Factory folder.
-void orbitamp::layOutFactorySet() {}
+// OrbitAmp's first start (OrbitAmpStart.cpp) is NOT made from here: it would gather IRs in the machine's
+// real folders.
+void orbitamp::firstStart() {}
 
 #include <algorithm>
 #include <array>

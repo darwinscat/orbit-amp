@@ -10,10 +10,10 @@
 namespace orbitamp::redpaw
 {
 
-/** The rover's renders, decoded once from the copies the product built into its binary (RedPawSkin.h —
-    resources/redpaw for RedPawAmp), each by its file name — so a render can be tried in place of the
-    built-in one by naming its folder in the skin's variable (REDPAW_ART_DIR for RedPawAmp) and
-    restarting (face/Renders.h). A render that fails to decode leaves its image null, and its control
+/** The rover's renders, decoded once from the product's own folder in the family's factory folder
+    (Faces/<product>, laid out from resources/redpaw for RedPawAmp), each by its file name — so a render
+    can be tried in place of the laid-out one by naming its folder in the skin's variable (REDPAW_ART_DIR
+    for RedPawAmp) and restarting (face/Renders.h). A render that fails to decode leaves its image null, and its control
     draws a stand-in.
 
     Each is as tools/bake-art made it, drawn as it is. The dashboard is the picture with the windscreen
@@ -48,7 +48,7 @@ struct Art
     static juce::Image still();
 
     /** THE ROVER'S MARK, as SVG: its vehicle seen from the front, as its icon draws it — the build window
-        wears it. Empty where the binary has none. */
+        wears it. Empty where the product has none. */
     static juce::String mark();
 };
 

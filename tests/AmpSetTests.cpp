@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// Gate for AN AMP'S SET AS IT LEAVES THE BINARY (channels/Set.h, over the amp's set data): that what is
-// laid out is what was built in, byte for byte — the packs the product's channels play (GATE_CHANNELS
-// of them, as the build says), and the cabinets; that a start after the first writes nothing; that a
-// file damaged or lost comes back; that what an earlier build left behind goes — and that nothing else
-// does; and that the amp's cabinets are its own, whatever another product lays out beside them. Every
-// amp over the channels' engine runs it as itself — CatpitAmp, RedPawAmp, FrostPawAmp, AmberPawAmp
-// (CMakeLists.txt: amp_set_test), each as AmpGate.h knows it.
+// Gate for AN AMP'S SET AS THE BUILD LAYS IT OUT in the factory folder (CMakeLists.txt: THE FACTORY
+// FOLDER), under the amp's own list there (channels/Set.h): that the list names the packs the product's
+// channels play (GATE_CHANNELS of them, as the build says) and nothing else among the packs, Darwin's
+// Cat's own ten cabinets and none of the shelf's Other, and the face's own pictures in its own folder;
+// that every file it names is there; and that the amp's cabinets are its own, whatever another product
+// lays out beside them. Every amp over the channels' engine runs it as itself — CatpitAmp, RedPawAmp,
+// FrostPawAmp, AmberPawAmp (CMakeLists.txt: amp_set_test), each as AmpGate.h knows it.
 //
-//   AmpSetTests [folder]     the folder to work in, under the current directory; one of its own
-//                            under the system's temporary folder when none is named
-//
-// It works in that folder alone, and leaves it behind to be looked at.
+// It reads the build's own <build>/Factory (gate_reads_factory) — never the machine's — and, for the
+// product beside it, a folder of its own under the system's temporary folder, which it leaves behind.
 
 #include "AmpGate.h"
 #include "Product.h"
@@ -21,94 +19,43 @@
 #include "device/FactorySet.h"
 #include "device/FactoryShelf.h"
 
-#if PRODUCT_SET_EMBEDDED
- #include <ProductSetData.h>
-#endif
-
 #include <cstdio>
-#include <cstring>
 
-int main (int argc, char** argv)
+int main()
 {
     using namespace orbitamp::channels;
+    using orbitamp::device::FactorySet;
 
     const auto& product = gate::product();
     const juce::String amp (product.amp);
+    const juce::String name (orbitamp::product::name);
     gate::Checks check;
 
-    const auto root = argc > 1 ? juce::File::getCurrentWorkingDirectory().getChildFile (juce::String (juce::CharPointer_UTF8 (argv[1])))
-                               : juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                     .getChildFile (juce::String (product.name).toLowerCase() + "-set-test-"
-                                                    + juce::String::toHexString (juce::Random::getSystemRandom().nextInt()));
+    const auto factory = FactorySet::location();
+    const auto list = FactorySet::listOf (factory, name);
+    std::printf ("reading %s\n", factory.getFullPathName().toRawUTF8());
+    check (list.size() > 0, "the " + amp + " has a list in the build's factory folder, " + juce::String (list.size()) + " files");
 
-    // The real folder's own shape: an apostrophe and a space on the way down. The family's, not the amp's.
-    const auto factory = root.getChildFile ("Darwin's Cat").getChildFile ("Factory");
-    const auto list    = factory.getChildFile ("sets").getChildFile (juce::String (orbitamp::product::name) + ".txt");
-    const juce::int64 build = 20261014120000;     // the build the gate plays: a stamp of make-believe
-    std::printf ("in %s\n", factory.getFullPathName().toRawUTF8());
-    check (! factory.exists(), "the folder is not there before the first start");
-
-    // What the binary carries, as the layout sorts it.
-    struct Carried { juce::File file; const char* data; int size; };
-    std::vector<Carried> carried;
-    int packs = 0, cabinets = 0, stray = 0;
-    juce::int64 bytes = 0;
-   #if PRODUCT_SET_EMBEDDED
-    for (int i = 0; i < ProductSetData::namedResourceListSize; ++i)
+    juce::StringArray packs, cabinets, pictures, astray, missing;
+    const juce::String faces ("Faces/" + name + "/");
+    for (const auto& path : list)
     {
-        const auto name = juce::String::fromUTF8 (ProductSetData::originalFilenames[i]);
-        if (! name.endsWithIgnoreCase (".orbitrig.zip"))
-        {
-            ++stray;        // the product's own data holds its packs; the cabinets are the family's
-            continue;
-        }
-        int size = 0;
-        const char* data = ProductSetData::getNamedResource (ProductSetData::namedResourceList[i], size);
-        carried.push_back ({ factory.getChildFile (name), data, size });
-        ++packs;
-        bytes += size;
+        if (path.endsWithIgnoreCase (".orbitrig.zip") && ! path.containsChar ('/'))
+            packs.add (path);
+        else if (path.startsWith (juce::String (orbitamp::device::shelf::folderName) + "/"))
+            cabinets.add (path);
+        else if (path.startsWith (faces))
+            pictures.add (path);
+        else
+            astray.add (path);
+
+        if (factory.getChildFile (path).getSize() <= 0)
+            missing.add (path);
     }
-   #endif
-
-    // ...and Darwin's Cat's own cabinets of the family's shelf, in their folder: OrbitAmp alone carries
-    // the whole of it.
-    for (const auto& ir : orbitamp::device::shelf::irs())
-    {
-        if (juce::String (ir.folder) != orbitamp::device::shelf::ours)
-            continue;
-        carried.push_back ({ factory.getChildFile (orbitamp::device::shelf::pathOf (ir)), ir.data, ir.size });
-        ++cabinets;
-        bytes += ir.size;
-    }
-    std::printf ("the binary carries %d packs, %d cabinets, %lld bytes\n", packs, cabinets, (long long) bytes);
-
-    const auto allThere = [&carried]
-    {
-        for (const auto& c : carried)
-        {
-            juce::MemoryBlock there;
-            if (! c.file.loadFileAsData (there) || there.getSize() != (size_t) c.size
-                || std::memcmp (there.getData(), c.data, (size_t) c.size) != 0)
-                return false;
-        }
-        return true;
-    };
-
-    // The first start.
-    check (set::layOut (factory, build) == (int) carried.size(), "the first start writes every file of the set");
-    check (allThere(), "...each of them byte for byte what was built in");
-    check (carried.empty() || list.existsAsFile(), "...and the " + amp + "'s own list of them");
-
-    // THE FAMILY'S SHELF, Darwin's Cat's own ten in the Orange's folder, none in Other — those are
-    // OrbitAmp's — and none loose at the top.
-    {
-        const auto shelf = set::cabinetsIn (factory);
-        const auto in = [&shelf] (const char* folder) { return shelf.getChildFile (folder).findChildFiles (juce::File::findFiles, false, "*.wav").size(); };
-        check (stray == 0, "the " + amp + "'s own set data holds packs alone");
-        check (in ("Orange PPC212V") == 10 && in ("Other") == 0 && shelf.findChildFiles (juce::File::findFiles, false).isEmpty(),
-               "the cabinets lie in the Orange's folder, all ten, none in Other and none loose");
-        check (shelf.getChildFile ("Orange PPC212V/02-dark-matter.wav").existsAsFile(), "...DARK MATTER among the Orange's");
-    }
+    check (astray.isEmpty(), "the list names packs, cabinets and the " + amp + "'s own pictures, nothing else"
+                                 + (astray.isEmpty() ? juce::String() : ": " + astray.joinIntoString (", ")));
+    check (missing.isEmpty(), "every file it names is there, with something in it"
+                                  + (missing.isEmpty() ? juce::String() : ": " + missing.joinIntoString (", ")));
 
     // THE CHANNELS' PACKS, each by the capture it holds, and nothing else among the packs: one for every
     // capture the channels the build plays hold — two channels may play one, as a rover's gear and its
@@ -118,71 +65,69 @@ int main (int argc, char** argv)
         for (const auto& c : gate::played())
             wanted.addIfNotAlreadyThere (c.capture);
         juce::StringArray found;
-        for (const auto& c : carried)
-            if (c.file.getFileName().endsWithIgnoreCase (".orbitrig.zip"))
-                found.add (orbitamp::device::DeviceLibrary::rigIdOf (c.file));
+        for (const auto& p : packs)
+            found.add (orbitamp::device::DeviceLibrary::rigIdOf (factory.getChildFile (p)));
         found.sort (false);
-        auto sorted = wanted;
-        sorted.sort (false);
-        check (packs == wanted.size() && found == sorted,
-               "the " + juce::String (packs) + " packs are the " + juce::String (GATE_CHANNELS) + " channels' captures: " + found.joinIntoString (" "));
-        check (cabinets == 10, "...and Darwin's Cat's own ten cabinets with them");
+        wanted.sort (false);
+        check (found == wanted, "the " + juce::String (packs.size()) + " packs are the " + juce::String (GATE_CHANNELS)
+                                    + " channels' captures: " + found.joinIntoString (" "));
     }
 
-    // Every start after it.
-    std::vector<juce::Time> stamps;
-    for (const auto& c : carried)
-        stamps.push_back (c.file.getLastModificationTime());
-    juce::Thread::sleep (1100);       // a file system that keeps whole seconds would hide a rewrite
-    check (set::layOut (factory, build) == 0, "the second start writes nothing");
-    bool untouched = true;
-    for (size_t i = 0; i < carried.size(); ++i)
-        untouched = untouched && carried[i].file.getLastModificationTime() == stamps[i];
-    check (untouched, "...and no file's date has moved");
-
-    if (! carried.empty())
+    // THE FAMILY'S SHELF, Darwin's Cat's own ten in the Orange's folder, none in Other — those are
+    // OrbitAmp's — and the ones the amp steps through are those ten.
     {
-        // A file damaged, a file lost.
-        const auto& first = carried.front();
-        const auto& last  = carried.back();
-        first.file.replaceWithData (first.data, (size_t) first.size / 2);
-        check (set::layOut (factory, build) == 1 && allThere(), "a file cut short is written again");
-        last.file.deleteFile();
-        check (set::layOut (factory, build) == 1 && allThere(), "a file that went missing comes back");
+        int orange = 0, other = 0;
+        for (const auto& c : cabinets)
+            (c.startsWith ("IRs/Orange PPC212V/") ? orange : other) += 1;
+        check (orange == 10 && other == 0, "the cabinets are the Orange's ten, none in Other: " + juce::String (orange) + " + " + juce::String (other));
+        check (cabinets.contains ("IRs/Orange PPC212V/02-dark-matter.wav"), "...DARK MATTER among them");
 
-        // What an earlier build laid here and this one does not carry.
-        const auto leftPack = factory.getChildFile ("Gone.orbitrig.zip");
-        const auto leftCab  = set::cabinetsIn (factory).getChildFile ("99-gone.wav");
-        leftPack.replaceWithText ("an earlier build's pack");
-        leftCab.replaceWithText ("an earlier build's cabinet");
-        list.appendText ("Gone.orbitrig.zip\nIRs/99-gone.wav\n");
+        const auto ownCabinets = set::ownCabinets (factory);
+        bool mine = ownCabinets.size() == cabinets.size();
+        for (const auto& c : cabinets)
+            mine = mine && ownCabinets.contains (factory.getChildFile (c));
+        check (mine, "the " + amp + "'s cabinets are the ones its list names, all " + juce::String (ownCabinets.size()) + " of them");
+    }
 
-        // ...beside a file the list does not name, and a line that points out of the folder.
-        const auto players = set::cabinetsIn (factory).getChildFile ("mine.wav");
-        const auto outside = root.getChildFile ("outside.txt");
-        players.replaceWithText ("the player's own");
-        outside.replaceWithText ("not the amp's");
-        list.appendText ("../../outside.txt\n" + outside.getFullPathName() + "\n");
+    // THE FACE'S OWN PICTURES, in its own folder of the factory: what it opens on among them.
+    {
+        const auto first = juce::String (product.amp) == "cockpit" ? "cockpit.webp" : "dashboard.webp";
+        check (pictures.contains (faces + first) && pictures.contains (faces + "midi.txt"),
+               "its pictures lie in " + faces + ", " + juce::String (pictures.size()) + " of them, " + first + " and its MIDI sheet among them");
+    }
 
-        check (set::layOut (factory, build) == 2, "two files an earlier build left are taken away");
-        check (! leftPack.exists() && ! leftCab.exists(), "...those two");
-        check (players.existsAsFile(), "a file the list does not name stays");
-        check (outside.existsAsFile(), "a line that points out of the folder takes nothing away");
-        check (allThere(), "the set is whole after it");
-        check (set::layOut (factory, build) == 0, "and the next start writes nothing again");
+    // ANOTHER PRODUCT IN THE SAME FOLDER, with a cabinet of its own beside the amp's, under a name that
+    // would stand first among them: it is not one of the amp's. In a folder of its own, laid out as the
+    // build's is.
+    {
+        const auto root = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                              .getChildFile (juce::String (product.name).toLowerCase() + "-set-test-"
+                                             + juce::String::toHexString (juce::Random::getSystemRandom().nextInt()));
+        const auto beside = root.getChildFile ("Darwin's Cat").getChildFile ("Factory");
+        std::printf ("beside another product, in %s\n", beside.getFullPathName().toRawUTF8());
 
-        // ANOTHER PRODUCT IN THE SAME FOLDER, with a cabinet of its own beside the amp's.
-        const juce::String another ("another product's cabinet");
-        orbitamp::device::FactorySet::layOut (factory, "AnotherAmp", build, { { "IRs/50-another.wav", another.toRawUTF8(), (size_t) another.length() } });
-        check (set::cabinetsIn (factory).getChildFile ("50-another.wav").existsAsFile(), "another product lays a cabinet out beside the " + amp + "'s");
+        const auto lay = [&beside] (const juce::String& path, const juce::String& text)
+        {
+            const auto file = beside.getChildFile (path);
+            file.create();
+            file.replaceWithText (text);
+        };
+        for (const auto& c : cabinets)
+        {
+            beside.getChildFile (c).getParentDirectory().createDirectory();
+            factory.getChildFile (c).copyFileTo (beside.getChildFile (c));
+        }
+        lay (juce::String (FactorySet::listsName) + "/" + name + ".txt", list.joinIntoString ("\n") + "\n");
+        lay ("IRs/Orange PPC212V/00-another.wav", "another product's cabinet");
+        lay (juce::String (FactorySet::listsName) + "/AnotherAmp.txt", "IRs/Orange PPC212V/00-another.wav\n");
+        const auto players = beside.getChildFile ("IRs/mine.wav");
+        lay ("IRs/mine.wav", "the player's own");
 
-        const auto own = set::ownCabinets (factory);
-        bool mine = own.size() == cabinets;
-        for (const auto& c : carried)
-            mine = mine && (! c.file.isAChildOf (set::cabinetsIn (factory)) || own.contains (c.file));
-        check (mine, "the " + amp + "'s cabinets are the ones it carries, all " + juce::String (own.size()) + " of them");
-        check (! own.contains (set::cabinetsIn (factory).getChildFile ("50-another.wav")), "...and not the other product's");
-        check (! own.contains (players), "...nor a file of the player's");
+        const auto ownCabinets = set::ownCabinets (beside);
+        check (ownCabinets.size() == cabinets.size(), "beside another product's, the " + amp + "'s cabinets are still its "
+                                                          + juce::String (cabinets.size()) + ": " + juce::String (ownCabinets.size()));
+        check (! ownCabinets.contains (beside.getChildFile ("IRs/Orange PPC212V/00-another.wav")), "...and not the other product's");
+        check (! ownCabinets.contains (players), "...nor a file of the player's");
     }
 
     return check.finish();

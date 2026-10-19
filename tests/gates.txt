@@ -30,6 +30,7 @@ hum                orbitamp_hum_test
 eqlink             orbitamp_eqlink_test
 tuner              orbitamp_tuner_test
 gatelearn          orbitamp_gatelearn_test
+nofactory          orbitamp_no_factory_test
 
 # The sea's CPU half (AmberPawAmp's windscreen), against the prototype it was ported from.
 titan-world        titan_world_test
@@ -39,10 +40,12 @@ titan-world        titan_world_test
 # its own — and here it always is.
 catpit-set         catpitamp_set_test
 catpit-channel     catpitamp_channel_test     CATPIT_GATE_OWNS_HOME=1
+catpit-nofactory   catpitamp_no_factory_test
 
 # ...and each rover's, the same two over its own channels.
 redpaw-set         redpawamp_set_test
 redpaw-channel     redpawamp_channel_test     ROVER_GATE_OWNS_HOME=1
+redpaw-nofactory   redpawamp_no_factory_test
 frostpaw-set       frostpawamp_set_test
 frostpaw-channel   frostpawamp_channel_test   ROVER_GATE_OWNS_HOME=1
 amberpaw-set       amberpawamp_set_test

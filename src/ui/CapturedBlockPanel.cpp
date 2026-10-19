@@ -5,6 +5,7 @@
 
 #include "../AmpChannels.h"
 #include "../PluginProcessor.h"
+#include "FactoryMissing.h"
 
 #include <felitronics/appkit/WebpImage.h>
 
@@ -1269,8 +1270,20 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
 
     if (caption.isEmpty())
     {
+        // ...and why, where it is that the family's factory folder is not there: what OrbitAmp plays out
+        // of the box lies in it (ui/FactoryMissing.h). Looked at once in a process.
+        static const bool noFactory = ! device::FactorySet::isThere();
+        auto area = contentArea();
+        if (noFactory)
+        {
+            auto below = area.removeFromBottom (area.getHeight() / 2).reduced (12, 0);
+            g.setColour (theme::txDim);
+            g.setFont (juce::FontOptions (13.0f));
+            g.drawFittedText (ui::factoryMissingLine(), below, juce::Justification::centredTop, 4, 1.0f);
+        }
+
         g.setColour (theme::txFaint.withAlpha (0.5f));
-        theme::drawTracked (g, "No device loaded", contentArea().toFloat(), theme::displayFont (13.0f),
+        theme::drawTracked (g, "No device loaded", area.toFloat(), theme::displayFont (13.0f),
                             0.1f, juce::Justification::centred);
     }
 

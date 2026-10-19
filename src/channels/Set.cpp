@@ -7,10 +7,6 @@
 #include "../device/FactorySet.h"
 #include "../device/FactoryShelf.h"
 
-#if PRODUCT_SET_EMBEDDED
- #include <ProductSetData.h>
-#endif
-
 namespace orbitamp::channels::set
 {
 juce::File cabinetsIn (const juce::File& factory)
@@ -30,28 +26,4 @@ juce::Array<juce::File> ownCabinets (const juce::File& factory)
     return own;
 }
 
-int layOut (const juce::File& factory, juce::int64 build)
-{
-    // The family's shelf first — a face carries Darwin's Cat's own cabinets of it, OrbitAmp alone the
-    // whole — and the product's own packs.
-    auto carried = device::shelf::carried (device::shelf::ours);
-
-   #if PRODUCT_SET_EMBEDDED
-    for (int i = 0; i < ProductSetData::namedResourceListSize; ++i)
-    {
-        const auto name = juce::String::fromUTF8 (ProductSetData::originalFilenames[i]);
-        if (! name.endsWithIgnoreCase (".orbitrig.zip"))
-            continue;
-
-        int size = 0;
-        const char* data = ProductSetData::getNamedResource (ProductSetData::namedResourceList[i], size);
-        if (data == nullptr)
-            continue;
-
-        carried.push_back ({ name, data, (size_t) size });
-    }
-   #endif
-
-    return device::FactorySet::layOut (factory, product::name, build, carried);
-}
 } // namespace orbitamp::channels::set

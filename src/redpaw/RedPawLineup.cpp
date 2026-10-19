@@ -4,10 +4,6 @@
 #include "RedPawLineup.h"
 
 #include "../channels/Engine.h"
-#include "../channels/Set.h"
-#include "../device/FactorySet.h"
-
-#include <OrbitAmpVersion.h>
 
 namespace orbitamp::redpaw
 {
@@ -54,13 +50,10 @@ std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor& p)
     return std::make_unique<channels::Engine> (p, redpaw::lineup());
 }
 
-/** The rover's set is in its binary (channels/Set.h), laid out in the family's Factory folder once in a
-    process, as the build this is. The rover is new: there is no `Factory` of its own from before to
-    empty — but the player's IRs it kept in its own folder are gathered into the family's (gatherFormerIrs). */
-void layOutFactorySet()
+/** The rover's first start in a process: the player's IRs it kept in its own folder are gathered into the
+    family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the installer. */
+void firstStart()
 {
-    static const int laid = channels::set::layOut (device::DeviceLibrary::factoryDirectory(), version::kBuildNumber);
-    juce::ignoreUnused (laid);
     gatherFormerIrs();
 }
 

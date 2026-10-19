@@ -6,6 +6,9 @@
 #   ORBITAMP_CABINETS_EVERY_PRODUCT   the folder every product carries (OrbitAmpData)
 #   ORBITAMP_CABINETS_ORBITAMP        the folders OrbitAmp alone carries (OrbitAmpShelfOtherData)
 #
+# — and, beside each, the same files as paths inside the factory folder, IRs/<folder>/<file>, in the same
+# order: ORBITAMP_CABINETS_EVERY_PRODUCT_AT and ORBITAMP_CABINETS_ORBITAMP_AT (THE FACTORY FOLDER).
+#
 # A catalog that breaks one of its rules stops the configure with the line that broke it, rather than
 # building a shelf whose numbers would mean other cabinets than a session saved them on.
 
@@ -155,6 +158,8 @@ function(orbitamp_cabinet_catalog catalog resources header)
     # The table, in the order of the numbers — which run from 0 with none left out — and the files with it.
     set(every "")
     set(orbitamp "")
+    set(everyAt "")
+    set(orbitampAt "")
     set(table "")
     set(opens "")
     math(EXPR last "${irs} - 1")
@@ -162,10 +167,13 @@ function(orbitamp_cabinet_catalog catalog resources header)
         if(NOT DEFINED _ir_${number}_name)
             message(FATAL_ERROR "${catalog}: the numbers run from 0 with none left out, and ${number} is not there")
         endif()
+        set(laid "IRs/${_ir_${number}_folder}/${_ir_${number}_file}")
         if(_ir_${number}_folder STREQUAL ours)
             list(APPEND every "${_ir_${number}_path}")
+            list(APPEND everyAt "${laid}")
         else()
             list(APPEND orbitamp "${_ir_${number}_path}")
+            list(APPEND orbitampAt "${laid}")
         endif()
         if(_ir_${number}_name STREQUAL default)
             set(opens ${number})
@@ -247,4 +255,6 @@ ${shown}};
 
     set(ORBITAMP_CABINETS_EVERY_PRODUCT "${every}" PARENT_SCOPE)
     set(ORBITAMP_CABINETS_ORBITAMP "${orbitamp}" PARENT_SCOPE)
+    set(ORBITAMP_CABINETS_EVERY_PRODUCT_AT "${everyAt}" PARENT_SCOPE)
+    set(ORBITAMP_CABINETS_ORBITAMP_AT "${orbitampAt}" PARENT_SCOPE)
 endfunction()

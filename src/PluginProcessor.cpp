@@ -11,9 +11,9 @@
 namespace orbitamp
 {
 
-AmpProcessor::FactorySet::FactorySet()
+AmpProcessor::FirstStart::FirstStart()
 {
-    layOutFactorySet();
+    firstStart();
 }
 
 void gatherFormerIrs()
@@ -462,8 +462,8 @@ void AmpProcessor::rescanDevices()
 
 const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
 {
-    // The family's shelf (device/FactoryShelf.h), in the parameter's order: OrbitAmp plays it from its
-    // binary by the index `cabIr` keeps, whatever the folder it is laid out in holds.
+    // The family's shelf (device/FactoryShelf.h), in the parameter's order: OrbitAmp plays it from memory,
+    // read once out of the factory folder, by the index `cabIr` keeps.
     static const auto shelf = []
     {
         std::vector<IrBytes> out;
@@ -475,8 +475,10 @@ const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
     jassert (shelf.size() == (size_t) params::cabIrNames.size());
     const auto& ir = shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
 
-    // A place the build holds empty — a face carries none of the shelf's `Other` — plays DARK MATTER, the
-    // cabinet every product opens on: a host that moves the number there hears a cabinet the build has.
+    // A place the product holds empty — a face plays none of the shelf's `Other` — plays DARK MATTER, the
+    // cabinet every product opens on: a host that moves the number there hears a cabinet the product has.
+    // With the factory folder missing that one is empty too, and no bytes is what the cabinet is given:
+    // the cabinet loads nothing then: where it is loaded, an IR with no bytes is passed over.
     return ir.data != nullptr ? ir : shelf[(size_t) params::cabIrDefault];
 }
 
@@ -691,11 +693,8 @@ void AmpProcessor::pumpDeviceWork()
 
             if (choice.isUser())
                 cab.load (choice.bytes->getData(), choice.bytes->getSize());
-            else
-            {
-                const auto& bytes = cabIrBytes (choice.factory);
-                cab.load (bytes.data, (size_t) bytes.size);
-            }
+            else if (const auto& bytes = cabIrBytes (choice.factory); bytes.data != nullptr)
+                cab.load (bytes.data, (size_t) bytes.size);     // none, with the factory folder missing
         }
     }
     else if (cabIrStale.exchange (false))
@@ -706,11 +705,9 @@ void AmpProcessor::pumpDeviceWork()
         // bytes never move (the store keeps them for its whole life), and the tick re-checks.
         if (const auto* own = cabUserIr.load())
             cab.load (own->getData(), own->getSize());
-        else
-        {
-            const auto& shelf = cabIrBytes (juce::roundToInt (apvts.getRawParameterValue (params::cabIr)->load()));
+        else if (const auto& shelf = cabIrBytes (juce::roundToInt (apvts.getRawParameterValue (params::cabIr)->load()));
+                 shelf.data != nullptr)
             cab.load (shelf.data, (size_t) shelf.size);
-        }
     }
 
     // An IR the convolver turned away mid-crossfade gets its next chance here.

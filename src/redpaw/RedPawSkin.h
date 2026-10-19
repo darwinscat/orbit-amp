@@ -27,9 +27,9 @@ namespace orbitamp::redpaw
     the bake's (tools/bake-art), done once. */
 struct Skin
 {
-    /** Where its renders are built into its binary (RedPawArt.h) — every one under the rover's file
-        name — and the environment variable that names a folder to try new ones from. */
-    face::renders::Binary renders;
+    /** The environment variable that names a folder to try new renders from (face/Renders.h). Its own
+        renders lie in its folder of the factory, Faces/<product>, every one under the rover's file name
+        (RedPawArt.h). */
     const char* rendersFolderVariable;
 
     /** The light of the rings its picture paints, a shade brighter: the knobs' rings, and the light
