@@ -367,7 +367,7 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     o->setProperty ("glass", rect (glass));
     o->setProperty ("windshield", rect (windshield));
     o->setProperty ("leverFrame", rect (leverFrame));
-    o->setProperty ("leverAxis", art.leverAxis);
+    o->setProperty ("leverAxis", gripAxis);
     o->setProperty ("turboFrame", rect (turboFrame));
     juce::Array<juce::var> names;
     for (int c = 0; c < channels.count(); ++c)

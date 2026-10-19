@@ -33,7 +33,7 @@ public:
     static constexpr float detentStep = 43.0f;
     static constexpr float lampX      = (float) overhang + 92.0f;
     static constexpr float namesX     = (float) overhang + 102.0f;
-    static constexpr float gripLength = 92.0f;      // end to end; the stem is not in its middle (Art::leverAxis)
+    static constexpr float gripLength = 92.0f;      // end to end; the stem is not in its middle (layout::gripAxis)
     static constexpr float gripGrowth = 0.05f;      // pulled toward you, it comes a little closer: this much longer a detent
     static constexpr float stiffness  = 260.0f, damping = 22.0f;     // heavier than a toggle: it overshoots a hair and comes back
 

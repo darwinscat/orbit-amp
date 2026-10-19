@@ -27,7 +27,6 @@ using face::stage::px13;
 using face::stage::px15;
 using face::stage::px16;
 
-inline const juce::Point<float> windshieldSeed { 836.0f, 164.0f };
 inline const juce::Rectangle<float> windshield { 152.0f, 60.0f, 1368.0f, 210.0f };
 /** ALL THE GLASS: the box round the whole cut-out. The overhead panel hangs into the windshield from the
     top, and on either side of it the glass runs on upward — two wedges, 31 rows tall at their outer ends
@@ -40,10 +39,8 @@ struct Socket { juce::Point<float> centre; float radius; };
 
 inline const Socket drive  { { 653.6f, 503.6f }, 92.4f };
 
-/** The tone knobs stand with their top edges level with DRIVE's, which is `toneLift` higher than the
-    render painted their sockets — Art lifts the painted rings to match. The centres below are where
-    they stand NOW. */
-inline constexpr float toneLift = 24.5f;
+/** The tone knobs stand with their top edges level with DRIVE's, higher than the render painted their
+    sockets — the picture is baked with the painted rings lifted to match (tools/bake-art). */
 inline const std::array<Socket, 3> tones {{
     { { 1060.3f, 476.9f }, 62.2f },    // BASS
     { { 1209.6f, 477.0f }, 62.4f },    // MIDDLE
@@ -59,11 +56,13 @@ inline constexpr float keyGroupX   = 1060.3f;    // the filters' middle: BASS
 inline constexpr float keyRowRight = 1418.0f;    // the last name ends here, short of the plate's corner screw
 
 inline const juce::Rectangle<float> leverFrame { 254.0f, 376.0f, 261.0f, 217.0f };
-/** The TURBO frame stands `turboLift` higher than the render painted it, so that its name, which is
-    printed in its top line, is read in the row it always was — beside DRIVE's and the tones'. The
-    picture is corrected to match in CatpitArt. */
-inline constexpr float turboLift = 14.0f;
-inline const juce::Rectangle<float> turboFrame { 799.0f, 415.0f - turboLift, 165.0f, 180.0f };
+/** The TURBO frame stands higher than the render painted it, so that its name, which is printed in its
+    top line, is read in the row it always was — beside DRIVE's and the tones'. The picture is baked to
+    match (tools/bake-art). */
+inline const juce::Rectangle<float> turboFrame { 799.0f, 401.0f, 165.0f, 180.0f };
+/** THE THROTTLE'S GRIP, rebuilt with its bar reaching further to the left of its stem than to the right
+    (tools/bake-art): the stem stands this far across it, 0 its left end — as the tool reports it. */
+inline constexpr float gripAxis = 0.629746854f;
 
 inline const std::array<juce::Rectangle<float>, 3> sliderInsets {{
     { 258.0f, 660.0f, 342.0f, 53.0f },     // REVERB

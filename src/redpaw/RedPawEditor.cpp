@@ -806,7 +806,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // cap lighter than the columns' so a small one reads in its corner. A double click puts it back where
     // it opens, a right click is its block's menu, and while it is held the tag over it says where it
     // stands. While its block is off it stands dim, and still moves.
-    const auto plateFader = [this] (face::ColumnFader& fader, const LampPlate& plate, const char* paramId, const char* onId,
+    const auto plateFader = [this] (face::ColumnFader& fader, juce::Rectangle<float> slot, const char* paramId, const char* onId,
                                     float low, float high, std::function<void()> menu, const juce::String& name)
     {
         const auto travelOf = [low, high] (float v) { return (v - low) / (high - low); };
@@ -823,8 +823,8 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         sayLever (fader, name, [this, paramId] { return getParam (paramId); });
         follow (onId, [&fader] (float on) { fader.setAlpha (on > 0.5f ? 1.0f : 0.6f); })->sendInitialUpdate();
         addToStage (fader);
-        const bool across = plate.slot.getWidth() > plate.slot.getHeight();     // a slot lying across: the fader runs left to right
-        const auto run = plate.slot.reduced (across ? slotRim : 0.0f, across ? 0.0f : slotRim);
+        const bool across = slot.getWidth() > slot.getHeight();     // a slot lying across: the fader runs left to right
+        const auto run = slot.reduced (across ? slotRim : 0.0f, across ? 0.0f : slotRim);
         const float breadth = faderWidth * slotScale;
         fader.setAcross (across);
         fader.setBounds ((across ? run.withSizeKeepingCentre (run.getWidth(), breadth)
@@ -832,11 +832,11 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     };
     threshold.marks = 6;            // every 5 dB, the longer at -50
     threshold.longMark = 4;
-    plateFader (threshold, gatePlate, params::gateThreshold, params::gateOn, thresholdLowDb, thresholdHighDb,
+    plateFader (threshold, thresholdSlot, params::gateThreshold, params::gateOn, thresholdLowDb, thresholdHighDb,
                 [this] { showGateMenu(); }, "GATE");
     ceiling.marks = 6;              // every half a decibel or so, none longer
     ceiling.longMark = -1;
-    plateFader (ceiling, limiterPlate, params::limiterCeiling, params::limiterOn, params::limiterCeilingMin, params::limiterCeilingMax,
+    plateFader (ceiling, ceilingSlot, params::limiterCeiling, params::limiterOn, params::limiterCeilingMin, params::limiterCeilingMax,
                 [this] { showOutputMenu(); }, "LIMITER");
 
     // THE NAV SCREEN: along its top the gear, the channel where the skin names it, and the speed the

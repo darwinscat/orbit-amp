@@ -38,7 +38,6 @@ const Skin& skin()
         { AmberPawData::namedResourceList, AmberPawData::namedResourceListSize,
           AmberPawData::getNamedResourceOriginalFilename, AmberPawData::getNamedResource },
         "AMBERPAW_ART_DIR",
-        nullptr,                        // no lamp is painted lit: they are drawn (layout::lampDot)
         juce::Colour (0xfff2f6ff),      // the painted rings' white, a shade brighter
         face::Ink {},                   // the family's lilac on the dark gunmetal...
         juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words
@@ -142,15 +141,11 @@ const juce::Rectangle<float> gateSlot { 882.0f, 517.0f, 25.0f, 207.0f };
 const float slotX  = 894.5f;
 const float notchX = 894.5f;
 const float slotTopY = 548.9f;
-const std::vector<float> notches { 587.5f, 627.0f, 666.3f, 704.7f };
-const std::vector<float> stops = notches;
+const std::vector<float> stops { 587.5f, 627.0f, 666.3f, 704.7f };
 const float leverWidth = 136.0f;
 const float collarSink = 24.0f;
 const juce::Rectangle<float> gearPlate { 867.0f, 507.0f, 53.0f, 229.0f };
 const float leverLeft = 812.0f, leverTop = 510.0f;
-// The spare tick's white bar is 926..946.5 x 702..708: over it, the plain plate just above, mirrored down
-// and back, faded in at the fill's top, bottom and right.
-const NotchFill notchFill { 9.0f, 9.0f, 921.0f, 960.0f, 953.0f, 9.0f, 0.0f, 2.0f };
 
 // TURBO's round hole under the red cover, 992..1071 across; the cover is painted open, and has no render
 // of its own shut.
@@ -168,8 +163,6 @@ const std::array<juce::Rectangle<float>, 3> wells {{
 }};
 const std::array<float, 3> wellNameY {{ 774.0f, 835.0f, 775.0f }};
 
-const std::array<Rim, 2> rims {};       // none lifted
-const float rimLift = 0.0f;
 const float sliderCapLength = 54.0f;
 const float sliderHeight    = 32.0f;
 
@@ -185,12 +178,8 @@ const face::SegmentMeter::Dots meterDots { 8, 9.0f };
 
 // The corner plates' slots are painted, 59..148 and 1523..1612 x 841..857, rim and all a little more,
 // and lie across: GATE's threshold and LIMITER's ceiling go left to right in them. Nothing grows.
-const float lampPlateGrow = 0.0f;
-const LampPlate gatePlate    { {}, {}, 0.0f, 0.0f, {}, {}, { 57.0f, 839.0f, 93.0f, 21.0f } };
-const LampPlate limiterPlate { {}, {}, 0.0f, 0.0f, {}, {}, { 1521.0f, 839.0f, 93.0f, 21.0f } };
-
-const juce::Rectangle<float> inSlotRim { 20.0f, 492.0f, 27.0f, 221.0f };
-const float inSlotEnd = 13.0f;
+const juce::Rectangle<float> thresholdSlot { 57.0f, 839.0f, 93.0f, 21.0f };
+const juce::Rectangle<float> ceilingSlot   { 1521.0f, 839.0f, 93.0f, 21.0f };
 const float slotScale = 21.0f / 27.0f;
 const float slotRim = 3.0f * slotScale;
 

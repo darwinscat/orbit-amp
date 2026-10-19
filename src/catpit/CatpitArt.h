@@ -11,15 +11,15 @@ namespace orbitamp::catpit
 {
 
 /** The cockpit's renders, decoded once at startup from the copies built into the binary
-    (resources/catpit), already at the size the window can need at its largest on a retina screen.
-    A render that fails to decode leaves its image null, and its control draws a stand-in. */
+    (resources/catpit), as tools/bake-art made them: the panel corrected and its lamps cut out, the grip
+    rebuilt, each already at the size the window can need at its largest on a retina screen. A render
+    that fails to decode leaves its image null, and its control draws a stand-in. */
 struct Art
 {
     juce::Image bg;            // the cockpit, its windshield cut out to transparent
     juce::Image knobDrive;     // the big knurled knob, no pointer — the pointer is drawn
     juce::Image knobTone;      // the ringed knob, no pointer
-    juce::Image leverGrip;     // the throttle's T-grip, rebuilt with the bar reaching further left of its stem
-    float leverAxis = 0.5f;    // where that stem stands across the grip, 0 = its left end
+    juce::Image leverGrip;     // the throttle's T-grip, rebuilt with the bar reaching further left of its stem (layout::gripAxis)
     juce::Image guardClosed, guardOpen, guardOn;
     juce::Image sliderCap;
 
