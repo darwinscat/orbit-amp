@@ -59,6 +59,25 @@ namespace
         }
         return true;
     }
+
+    /** Every `from` in `text` made `to`, left to right, a replaced word never read again: juce::String::replace. */
+    std::string replaced (std::string_view text, std::string_view from, std::string_view to)
+    {
+        std::string out;
+        out.reserve (text.size());
+        for (size_t at = 0;;)
+        {
+            const auto next = text.find (from, at);
+            if (next == std::string_view::npos)
+            {
+                out += text.substr (at);
+                return out;
+            }
+            out += text.substr (at, next - at);
+            out += to;
+            at = next + from.size();
+        }
+    }
 }
 
 std::string assemble (std::string_view text, Find find, const std::vector<Written>& written)
@@ -95,6 +114,22 @@ std::string_view file (std::string_view path) noexcept
 std::string source (std::string_view path, const std::vector<Written>& written)
 {
     return assemble (file (path), file, written);
+}
+
+std::string vertexToV3 (std::string_view code, std::string_view head)
+{
+    if (head.empty())
+        return std::string (code);
+    return std::string (head) + replaced (replaced (code, "attribute", "in"), "varying", "out");
+}
+
+std::string fragmentToV3 (std::string_view code, std::string_view head)
+{
+    if (head.empty())
+        return std::string (code);
+    // JUCE writes "out " JUCE_MEDIUMP " vec4 fragColor;", JUCE_MEDIUMP being nothing on the desktop: two spaces.
+    return std::string (head) + "out  vec4 fragColor;\n"
+         + replaced (replaced (replaced (code, "varying", "in"), "texture2D", "texture"), "gl_FragColor", "fragColor");
 }
 
 } // namespace orbitamp::shaders

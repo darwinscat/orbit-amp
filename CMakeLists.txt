@@ -810,6 +810,7 @@ set(CATPITAMP_SOURCES
     src/catpit/CatpitLineup.cpp
     src/catpit/CatpitSpace.cpp
     src/catpit/CatpitGlSky.cpp
+    src/catpit/CatpitSkyGl.cpp
     src/catpit/CatpitEditor.cpp
     src/shaders/Shaders.cpp)
 set(CATPITAMP_LIBRARIES
