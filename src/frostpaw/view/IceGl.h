@@ -9,6 +9,7 @@
 
 #include <array>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace orbitamp::frostpaw
@@ -111,7 +112,7 @@ private:
     int frameCounter = 0;
     double probeStart = 0.0;
 
-    bool compile (Program&, const char* vs, const char* fs, const char* what);
+    bool compile (Program&, const std::string& vs, const std::string& fs, const char* what);
     void makeTextures();
     void makeGeometry();
     void ensureFrame (int w, int h);
