@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Channels.h"
+#include "../PresetStore.h"
 
 namespace orbitamp::channels
 {
@@ -12,7 +13,8 @@ namespace orbitamp::channels
     playing, the reverb, the delay, the cabinet, OUTPUT — in a file of the product's own, in a folder of
     its own: its chain is fixed, and a preset from OrbitAmp's looser one, or another product's, does
     not lie in it. The folder is the product's (`Darwin's Cat/<product>/Presets`), and so is the file's
-    extension: its name in lower case, `.catpitamp` for the cockpit.
+    extension: its name in lower case, `.catpitamp` for the cockpit. The files are kept the way every amp
+    of the family keeps them (PresetStore.h).
 
     INPUT is not in a preset. It is set to the guitar and the interface, not to a sound, and a preset
     that moved it would be undoing a setting made once for the room. Nor is PARK, where the product has
@@ -28,11 +30,10 @@ namespace orbitamp::channels
 class Presets
 {
 public:
-    static juce::String extension();
-
     Presets (AmpProcessor&, Channels&);
 
-    static juce::File directory();
+    /** The product's folder and its files: `Darwin's Cat/<product>/Presets`, `.<product in lower case>`. */
+    static PresetStore store();
     static juce::StringArray names();
     static bool exists (const juce::String& name);
 
@@ -54,7 +55,6 @@ private:
     AmpProcessor& amp;
     Channels& channels;
 
-    static juce::File fileFor (const juce::String& name);
     juce::String sound() const;
     void mark (const juce::String& name);
 };
