@@ -1,0 +1,49 @@
+# THE GATES — the one list every runner runs: the pull request's CI (.github/workflows/build.yml), the
+# family's release on every system it builds on (.github/workflows/release.yml), and the local release
+# (installer/release.sh). A release with a red gate is not a release. Taking a gate in, or out, is a line
+# here and nowhere else.
+#
+# One gate a line:   <name>  <target>  [VAR=value ...]  [skip=<system>[,<system>]]
+#
+#   <name>     what the runner calls it, and the name of its log (<build>/gates/<name>.log)
+#   <target>   the CMake target that builds it; CMakeLists.txt refuses a name that is no target, and
+#              `--target Family_Gates` builds every gate of the list
+#   VAR=value  set in the gate's environment, and nowhere else
+#   skip=      the systems it does NOT run on — macos, windows, linux — each with its reason in a
+#              comment above the line. None today: every gate runs everywhere.
+#
+# Every gate runs in a home of its own, made empty for it (tools/run-gates.sh), so a gate that writes
+# where a player's amp would — the family's Factory folder, the player's IRs — writes into that home,
+# never the runner's or the machine's owner's. (On Windows the home is the runner's own profile: Windows
+# finds AppData without asking the environment. The workflows run the gates only on hosted runners,
+# which are thrown away after the job.)
+
+# OrbitAmp's own — the engine every amp plays.
+captured           orbitamp_captured_test
+chain              orbitamp_chain_test
+library            orbitamp_library_test
+reverb             orbitamp_reverb_test
+ribbon             orbitamp_ribbon_test
+set                orbitamp_set_test
+factory            orbitamp_factory_test
+hum                orbitamp_hum_test
+eqlink             orbitamp_eqlink_test
+tuner              orbitamp_tuner_test
+gatelearn          orbitamp_gatelearn_test
+
+# The sea's CPU half (AmberPawAmp's windscreen), against the prototype it was ported from.
+titan-world        titan_world_test
+
+# The cockpit's own: its set as it leaves the binary, and its channels with no window, moved the way a
+# host moves them. The channel gate takes files into the player's IRs folder only when told the home is
+# its own — and here it always is.
+catpit-set         catpitamp_set_test
+catpit-channel     catpitamp_channel_test     CATPIT_GATE_OWNS_HOME=1
+
+# ...and each rover's, the same two over its own channels.
+redpaw-set         redpawamp_set_test
+redpaw-channel     redpawamp_channel_test     ROVER_GATE_OWNS_HOME=1
+frostpaw-set       frostpawamp_set_test
+frostpaw-channel   frostpawamp_channel_test   ROVER_GATE_OWNS_HOME=1
+amberpaw-set       amberpawamp_set_test
+amberpaw-channel   amberpawamp_channel_test   ROVER_GATE_OWNS_HOME=1

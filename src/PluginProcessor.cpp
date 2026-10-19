@@ -76,12 +76,11 @@ AmpProcessor::AmpProcessor()
                    markSwitchAimsPending();   // a recalled register carries its own named positions
                },
                felitronics::appkit::CompareHistory::Config {}),
-      // GitHub's release list for THIS repo, the running version, and the badge's own settings file.
-      // The checker asks nothing on its own — see updateChecker(). The repository releases both faces,
-      // so each asks for the releases that wear ITS tag prefix (see Product.h): OrbitAmp's is empty,
-      // which is the plain "latest release" it has always asked for.
+      // GitHub's latest release of THIS repo, the running version, and the badge's own settings file.
+      // The checker asks nothing on its own — see updateChecker(). The repository releases every amp
+      // together, under the family's plain vX.Y.Z, so every amp asks for that "latest release", as
+      // OrbitAmp always has: no tag prefix (see Product.h).
       updater ({ .ownerRepo      = "darwinscat/orbit-amp",
-                 .tagPrefix      = product::tagPrefix,
                  .productName    = product::name,
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })

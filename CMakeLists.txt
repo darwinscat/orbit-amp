@@ -19,7 +19,11 @@ cmake_minimum_required(VERSION 3.22)
 # because that is where CMake reads it. Elsewhere than the Mac nothing reads it at all.
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
 
-project(OrbitAmp VERSION 0.7.0 LANGUAGES C CXX)
+# THE FAMILY'S VERSION, said here and nowhere else. Every amp this tree builds is released together, as
+# Darwin's Cat Amps, under one tag, vX.Y.Z — and this is its number: every amp shows it, stamps its bundles
+# with it and compares the family's releases against it (add_amp). The release refuses a tag that says
+# another (installer/version.sh, which reads it from this line).
+project(OrbitAmp VERSION 0.8.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -375,20 +379,17 @@ add_custom_target(OrbitAmpVersionGen ALL
 # Standalone, and a CLAP through clap-juce-extensions — over the same processor; what differs is its
 # face, its name, its number and what it carries.
 #
-#   add_amp(<Name>  VERSION <x.y.z>  CODE <code>  [TAG_PREFIX <prefix>]  [BY_NAME]  [LTO]
+#   add_amp(<Name>  CODE <code>  [BY_NAME]  [LTO]
 #           SOURCES <files...>  LIBRARIES <targets...>  [ART <namespace> <files...>]  [SET [<packs...>]])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
-#   VERSION     THE PRODUCT'S version — the number it shows, stamps its bundle with and compares against
-#               the releases that wear its prefix (src/Product.h).
+#               The name is the amp's own on the compiler's line too (src/Product.h): its settings, its
+#               presets and its update check go by it.
 #   CODE        its 4-char plug-in code, unique per plugin (OrbitCab holds `Orbt`). LOCK it before the
 #               first release: changing it afterwards makes hosts treat it as a different plugin. The
 #               manufacturer code is the family's, Dcat (Darwin's Cat — >=1 uppercase, AU rule; same as
 #               OrbitCab).
-#   TAG_PREFIX  what its release tags wear before the version. Given, the amp is told its name and its
-#               prefix; OrbitAmp gives none — its tags wear nothing, and it is what src/Product.h says
-#               when nothing is said.
 #   BY_NAME     not part of the default build (see below).
 #   LTO         JUCE's recommended link-time optimisation flags too, which OrbitAmp has always linked and
 #               the faces never have.
@@ -398,11 +399,12 @@ add_custom_target(OrbitAmpVersionGen ALL
 #   SET         the packs it carries INSIDE ITS BINARY, by their folders' names in the tree's set (THE
 #               SET), less `.orbitrig` — its <Name>Set. Said with no packs, the amp has a set that is empty.
 #
-# What an amp was given is kept on its target, where its gates read it (amp_console): a gate is the amp
-# compiled again, never a second copy of its lists.
+# Every amp's version is THE FAMILY'S, the project's (above): the amps are released together, so no row
+# says a number of its own. What an amp was given is kept on its target, where its gates read it
+# (amp_console): a gate is the amp compiled again, never a second copy of its lists.
 # ----------------------------------------------------------------------------
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;LTO" "VERSION;CODE;TAG_PREFIX" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;LTO" "CODE" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
 
     # Its icon. macOS 26 sets any icon that is not its own rounded square on a grey plate — the family's
@@ -416,7 +418,7 @@ function(add_amp name)
     endif()
 
     juce_add_plugin(${name}
-        VERSION                     "${AMP_VERSION}"
+        VERSION                     "${PROJECT_VERSION}"
         PRODUCT_NAME                "${name}"
         COMPANY_NAME                "Darwin's Cat"
         BUNDLE_ID                   "com.darwinscat.${id}"
@@ -462,16 +464,13 @@ function(add_amp name)
             VERBATIM)
     endif()
 
-    # THE PRODUCT'S version, not the plugin wrapper's. `JucePlugin_VersionString` exists only inside a
+    # THE FAMILY'S version, not the plugin wrapper's. `JucePlugin_VersionString` exists only inside a
     # target juce_add_plugin built, and the headless gates compile the very same UI sources without it —
-    # so a face that read it built as a plugin and failed as a test. This one is the amp's, defined for
-    # everything that compiles a face.
-    target_compile_definitions(${name} PUBLIC ORBITAMP_VERSION="${AMP_VERSION}")
-    if(DEFINED AMP_TAG_PREFIX)
-        target_compile_definitions(${name} PUBLIC
-            ORBITAMP_PRODUCT_NAME="${name}"
-            ORBITAMP_RELEASE_TAG_PREFIX="${AMP_TAG_PREFIX}")
-    endif()
+    # so a face that read it built as a plugin and failed as a test. This one is defined for everything
+    # that compiles a face, with the amp's name beside it.
+    target_compile_definitions(${name} PUBLIC
+        ORBITAMP_VERSION="${PROJECT_VERSION}"
+        ORBITAMP_PRODUCT_NAME="${name}")
     target_compile_definitions(${name} PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
@@ -527,10 +526,10 @@ function(add_amp name)
         endif()
     endforeach()
 
-    # BY_NAME: not part of the default build. The amps are released apart, and OrbitAmp's own build — a
-    # contributor's, a pull request's, a release's — must never fail on a face. Whoever wants one asks
-    # for it by name: one format (`cmake --build build --target CatpitAmp_Standalone`), or all of them —
-    # `--target CatpitAmp_All`.
+    # BY_NAME: not part of the default build. OrbitAmp's own build — a contributor's, a pull request's —
+    # must never fail on a face. Whoever wants one asks for it by name: one format (`cmake --build build
+    # --target CatpitAmp_Standalone`), or all of them — `--target CatpitAmp_All`; the family's release
+    # asks for every amp it carries (Family_All).
     if(AMP_BY_NAME)
         set(own ${name} ${formats})
         if(TARGET ${name}Data)
@@ -542,20 +541,16 @@ function(add_amp name)
     # <Name>_All is every format: the CLAP joins it here, since its wrapper does not add itself.
     add_dependencies(${name}_All ${name}_CLAP)
 
-    set_property(TARGET ${name} PROPERTY AMP_VERSION "${AMP_VERSION}")
-    set_property(TARGET ${name} PROPERTY AMP_TAG_PREFIX "${AMP_TAG_PREFIX}")
     set_property(TARGET ${name} PROPERTY AMP_SOURCES ${AMP_SOURCES})
     set_property(TARGET ${name} PROPERTY AMP_LIBRARIES ${libraries})
     set(AMPS ${AMPS} ${name} PARENT_SCOPE)
 endfunction()
 
 # AN AMP'S GATES are the amp compiled again under a main() of its own — its sources, its libraries, its
-# set, its version and its name, as add_amp was given them — and are built only when asked for by name.
+# set, the family's version and its name, as add_amp was given them — and are built only when asked for by name.
 # CHANNELS is how many channels the gate holds it to (ROVER_CHANNELS), said apart from the amp's lineup.
 function(amp_console target product amp main)
     cmake_parse_arguments(PARSE_ARGV 4 GATE "" "CHANNELS" "")
-    get_target_property(version ${amp} AMP_VERSION)
-    get_target_property(prefix ${amp} AMP_TAG_PREFIX)
     get_target_property(sources ${amp} AMP_SOURCES)
     get_target_property(libraries ${amp} AMP_LIBRARIES)
     juce_add_console_app(${target} PRODUCT_NAME "${product}")
@@ -563,9 +558,8 @@ function(amp_console target product amp main)
     target_include_directories(${target} PRIVATE src "${ORBITAMP_GENERATED_DIR}")
     add_dependencies(${target} OrbitAmpVersionGen)
     target_compile_definitions(${target} PRIVATE
-        ORBITAMP_VERSION="${version}"
-        ORBITAMP_PRODUCT_NAME="${amp}"
-        ORBITAMP_RELEASE_TAG_PREFIX="${prefix}")
+        ORBITAMP_VERSION="${PROJECT_VERSION}"
+        ORBITAMP_PRODUCT_NAME="${amp}")
     if(GATE_CHANNELS)
         target_compile_definitions(${target} PRIVATE ROVER_CHANNELS=${GATE_CHANNELS})
     endif()
@@ -1005,19 +999,14 @@ set(ROVER_LIBRARIES
 # ----------------------------------------------------------------------------
 # THE AMPS — the family's table, one row an amp (THE FAMILY says what a row says).
 #
-# Every face is RELEASED APART FROM ORBITAMP, from the same tree: a version of its own, and tags of its
-# own — `catpit-vX.Y.Z` beside OrbitAmp's `vX.Y.Z` — so neither waits for the other and a fix in the
-# engine reaches each at its own next release. Its version moves when THAT amp is released; OrbitAmp's is
-# the project's. .github/workflows/release-catpit.yml refuses a tag that disagrees with the cockpit's.
+# The amps are RELEASED TOGETHER, as Darwin's Cat Amps: one version, the project's, and one tag, vX.Y.Z,
+# for every amp installer/family.ini names (.github/workflows/release.yml). Until 0.8.0 the cockpit had a
+# version and tags of its own, catpit-vX.Y.Z; from 0.8.0 on every amp's update check reads the family's.
 # ----------------------------------------------------------------------------
-set(CATPITAMP_VERSION 0.2.0)
-set(REDPAWAMP_VERSION 0.1.0)
-set(FROSTPAWAMP_VERSION 0.1.0)
-set(AMBERPAWAMP_VERSION 0.1.0)
 
 # OrbitAmp — the player of the whole library, and the default build. Its set is no SET of its own but
 # THE SET whole (OrbitAmpSetData, above).
-add_amp(OrbitAmp      VERSION ${PROJECT_VERSION}      CODE Oamp
+add_amp(OrbitAmp      CODE Oamp
     SOURCES   ${ORBITAMP_SOURCES}
     LIBRARIES
         OrbitAmpData                 # the mark, the notice, the demo loops — BinaryData::*
@@ -1032,7 +1021,7 @@ add_amp(OrbitAmp      VERSION ${PROJECT_VERSION}      CODE Oamp
 # capture it holds, not by the file's name. The cabinets CAB steps through are the family's shelf, which
 # every product carries in the data they all link (OrbitAmpData) and lays out with its packs. Without a
 # set, the cockpit would play only what the player puts in the Devices folder.
-add_amp(CatpitAmp     VERSION ${CATPITAMP_VERSION}    CODE Ctpt    TAG_PREFIX catpit-     BY_NAME
+add_amp(CatpitAmp     CODE Ctpt    BY_NAME
     ART       CatpitData ${CATPITAMP_RENDERS}
     SOURCES   ${CATPITAMP_SOURCES}
     LIBRARIES
@@ -1047,8 +1036,8 @@ add_amp(CatpitAmp     VERSION ${CATPITAMP_VERSION}    CODE Ctpt    TAG_PREFIX ca
 # with the drive across Mars in its windscreen. Four channels — the Friedman IR-X's two, each with its
 # Boost off and on — picked as two gears and TURBO. Built like the cockpit: the family's console over the
 # family's channels, its own renders in resources/redpaw, and its own set — the packs its channels play,
-# the IR-X's two, each found by the capture it holds. No release workflow yet.
-add_amp(RedPawAmp     VERSION ${REDPAWAMP_VERSION}    CODE Rdpw    TAG_PREFIX redpaw-     BY_NAME
+# the IR-X's two, each found by the capture it holds.
+add_amp(RedPawAmp     CODE Rdpw    BY_NAME
     ART       RedPawData ${REDPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} src/redpaw/RedPawSkin.cpp
     LIBRARIES RedPawAmpData ${ROVER_LIBRARIES}
@@ -1059,8 +1048,8 @@ add_amp(RedPawAmp     VERSION ${REDPAWAMP_VERSION}    CODE Rdpw    TAG_PREFIX re
 # ice-blue rings. The same controls, TURBO and PARK: the rover's, shared, not copied — over channels of
 # its own, six on the V4's six packs in three gears, and the rovers' cabinets; its set laid out under its
 # own list in the family's folder (src/channels/Set.h), where a file another product carries too is one
-# file. No release workflow yet.
-add_amp(FrostPawAmp   VERSION ${FROSTPAWAMP_VERSION}  CODE Frpw    TAG_PREFIX frostpaw-   BY_NAME
+# file. Not in the family's release yet (installer/family.ini).
+add_amp(FrostPawAmp   CODE Frpw    BY_NAME
     ART       FrostPawData ${FROSTPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp
     LIBRARIES FrostPawAmpData ${ROVER_LIBRARIES}
@@ -1070,9 +1059,9 @@ add_amp(FrostPawAmp   VERSION ${FROSTPAWAMP_VERSION}  CODE Frpw    TAG_PREFIX fr
 # dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy
 # of three panes, its tuner a gauge, its meters dots — and out of its canopy, the flight over the sea.
 # The same controls, TURBO and PARK: the rovers', shared, not copied — over the V4's six channels in three
-# gears, its set for now FrostPawAmp's until it has captures of its own, and the rovers' cabinets. No
-# release workflow yet.
-add_amp(AmberPawAmp   VERSION ${AMBERPAWAMP_VERSION}  CODE Ambp    TAG_PREFIX amberpaw-   BY_NAME
+# gears, its set for now FrostPawAmp's until it has captures of its own, and the rovers' cabinets. Not in
+# the family's release yet (installer/family.ini).
+add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     ART       AmberPawData ${AMBERPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp
     LIBRARIES AmberPawAmpData ${ROVER_LIBRARIES}
@@ -1387,3 +1376,65 @@ target_link_libraries(orbitamp_factory_test PRIVATE
     juce::juce_core
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
+
+# ----------------------------------------------------------------------------
+# THE GATES — tests/gates.txt is the one list, read here the way tools/run-gates.sh reads it. Every target
+# it names must be one (a gate nobody builds is a gate that never runs), and `--target Family_Gates` builds
+# them all, the faces' too, which no other build asks for. What the runner needs to find each — its name,
+# the binary as THIS build placed it, its environment — is written out per configuration, to
+# <build>/gates/<config>.txt: no runner guesses where a generator put an executable. A gate the list skips
+# on this system is left out of both.
+# ----------------------------------------------------------------------------
+set(GATES_TXT "${CMAKE_CURRENT_SOURCE_DIR}/tests/gates.txt")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${GATES_TXT}")
+if(APPLE)
+    set(_gate_system macos)
+elseif(WIN32)
+    set(_gate_system windows)
+else()
+    set(_gate_system linux)
+endif()
+file(STRINGS "${GATES_TXT}" _gate_lines ENCODING UTF-8 REGEX "^[^#]")
+add_custom_target(Family_Gates)
+set(_gate_manifest "")
+foreach(line IN LISTS _gate_lines)
+    string(REGEX MATCHALL "[^ \t\r]+" fields "${line}")
+    list(LENGTH fields n)
+    if(n EQUAL 0)
+        continue()
+    endif()
+    if(n LESS 2)
+        message(FATAL_ERROR "tests/gates.txt: \"${line}\" names no target")
+    endif()
+    list(GET fields 0 gate)
+    list(GET fields 1 target)
+    set(rest "")
+    if(n GREATER 2)
+        list(SUBLIST fields 2 -1 rest)
+    endif()
+    set(env "")
+    set(skipped OFF)
+    foreach(field IN LISTS rest)
+        if(field MATCHES "^skip=(.*)$")
+            string(REPLACE "," ";" systems "${CMAKE_MATCH_1}")
+            if(_gate_system IN_LIST systems)
+                set(skipped ON)
+            endif()
+        elseif(field MATCHES "^[A-Za-z_][A-Za-z0-9_]*=")
+            list(APPEND env "${field}")
+        else()
+            message(FATAL_ERROR "tests/gates.txt: \"${field}\" in gate ${gate} is neither VAR=value nor skip=")
+        endif()
+    endforeach()
+    if(NOT TARGET ${target})
+        message(FATAL_ERROR "tests/gates.txt: gate ${gate} names ${target}, which is no target of this tree")
+    endif()
+    if(skipped)
+        message(STATUS "Gate ${gate} is skipped on ${_gate_system} (tests/gates.txt)")
+        continue()
+    endif()
+    add_dependencies(Family_Gates ${target})
+    list(JOIN env " " env)
+    string(APPEND _gate_manifest "${gate}\t$<TARGET_FILE:${target}>\t${env}\n")
+endforeach()
+file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/gates/$<CONFIG>.txt" CONTENT "${_gate_manifest}")
