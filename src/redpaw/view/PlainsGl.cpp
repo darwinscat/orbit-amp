@@ -5,13 +5,14 @@
 
 #include "../../shaders/Shaders.h"
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 
 namespace orbitamp::redpaw
 {
 
-using namespace juce::gl;
+using namespace orbitamp::gpu;
 
 namespace
 {
@@ -28,7 +29,7 @@ namespace
     constexpr RockSet boulders { 25.0, 32, 0.045f, 1.2f,  4.2f };    // boulders, an 800 m window
 
     // THE SHADERS are files in resources/shaders/plains (src/shaders/Shaders.h), written without the
-    // #version, which glsl() puts in front of them. plains/height.glsl is the height function, shared by
+    // #version, which glsl() puts in front of them — the app's or the web's (src/shaders/Gpu.h). plains/height.glsl is the height function, shared by
     // the terrain's two shaders and the rock and relic vertex shaders: HTEX in it is textureLod (.., 0) in
     // a vertex shader and texture() in a fragment shader, and glsl() defines it for the stage it builds.
     // plains/grad.glsl is the analytic world-space gradient of terrainH from the gradient textures, the
@@ -40,7 +41,7 @@ namespace
     enum class Htex { none, vertex, fragment };
     std::string glsl (const char* path, Htex htex = Htex::none)
     {
-        std::string s ("#version 150\n");
+        std::string s (gpu::header());
         if (htex == Htex::vertex)   s += "#define HTEX(uv) textureLod(uHeight, uv, 0.0)\n";
         if (htex == Htex::fragment) s += "#define HTEX(uv) texture(uHeight, uv)\n";
         return s + shaders::source (path);
@@ -280,6 +281,9 @@ namespace
 
     inline double fract (double x) noexcept { return x - std::floor (x); }
 
+    /** To the nearest, a half to the even one, as JUCE's roundToInt does it: the frame's size at a render scale. */
+    inline int roundToInt (float x) noexcept { return (int) std::lrint ((double) x); }
+
     using Mat4 = std::array<float, 16>;   // column-major
     Mat4 multiply (const Mat4& a, const Mat4& b)
     {
@@ -308,21 +312,21 @@ int PlainsGl::Program::uniform (const char* name) const
 
 bool PlainsGl::compile (Program& p, const std::string& vs, const std::string& fs, const char* what)
 {
-    auto s = std::make_unique<juce::OpenGLShaderProgram> (*juce::OpenGLContext::getCurrentContext());
-    if (! s->addVertexShader (vs) || ! s->addFragmentShader (fs) || ! s->link())
+    std::string log;
+    p.id = gpu::program (vs, fs, log);
+    if (p.id == 0)
     {
-        DBG ("redpaw: the " << what << " shader did not build — " << s->getLastError());
-        juce::ignoreUnused (what);
+        trouble = std::string ("the ") + what + " shader did not build — " + log;
+        gpu::note ("redpaw: " + trouble);
         return false;
     }
-    p.id = s->getProgramID();
-    p.program = std::move (s);
     return true;
 }
 
 bool PlainsGl::create()
 {
-    if (juce::OpenGLContext::getCurrentContext() == nullptr)
+    trouble.clear();
+    if (! gpu::current())
         return false;
     world.build();
 
@@ -340,17 +344,14 @@ bool PlainsGl::create()
 
     // The frame timer: a timer query where the driver has one. Asked once; an error means no.
     while (glGetError() != GL_NO_ERROR) {}
-    if (glGenQueries != nullptr && glGetQueryObjectui64v != nullptr)
+    if (gpu::timerQueries())
     {
         glGenQueries ((GLsizei) query.size(), query.data());
-        glBeginQuery (GL_TIME_ELAPSED, query[0]);
-        glEndQuery (GL_TIME_ELAPSED);
+        gpu::beginTimer (query[0]);
+        gpu::endTimer();
         queriesWork = glGetError() == GL_NO_ERROR;
         if (queriesWork)
-        {
-            GLuint64 ns = 0;
-            glGetQueryObjectui64v (query[0], GL_QUERY_RESULT, &ns);   // drains the probe
-        }
+            gpu::timerNanoseconds (query[0]);   // drains the probe
         else
         {
             glDeleteQueries ((GLsizei) query.size(), query.data());
@@ -364,7 +365,7 @@ bool PlainsGl::create()
 void PlainsGl::destroy()
 {
     for (auto& l : level) { if (l.indexBuffer != 0) glDeleteBuffers (1, &l.indexBuffer); l = {}; }
-    const auto del = [] (juce::uint32& id, void (*f) (GLsizei, const GLuint*)) { if (id != 0) f (1, &id); id = 0; };
+    const auto del = [] (std::uint32_t& id, void (*f) (GLsizei, const GLuint*)) { if (id != 0) f (1, &id); id = 0; };
     del (vboGrid, glDeleteBuffers); del (vboRock, glDeleteBuffers); del (vboRelic, glDeleteBuffers);
     for (auto& b : relicInstances) del (b, glDeleteBuffers);
     relicCount.fill (0); relicBx = relicBz = 0x7fffffff;
@@ -375,19 +376,20 @@ void PlainsGl::destroy()
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
     query.fill (0);
     queriesWork = false; queriesPending = 0; queryNext = 0;
-    for (auto* p : { &terrain, &rock, &relic, &sky, &dust }) { p->program.reset(); p->id = 0; }
+    for (auto* p : { &terrain, &rock, &relic, &sky, &dust }) { if (p->id != 0) glDeleteProgram (p->id); p->id = 0; }
 }
 
 void PlainsGl::makeTextures()
 {
     const int n = PlainsWorld::texSize;
+    const GLenum heightFormat = gpu::filteredFloatFormat();
     glGenTextures (1, &texHeight);
     glBindTexture (GL_TEXTURE_2D, texHeight);
     {
         int size = n, lvl = 0;
         for (const auto& mip : world.heightMips())
         {
-            glTexImage2D (GL_TEXTURE_2D, lvl++, GL_RGBA32F, size, size, 0, GL_RGBA, GL_FLOAT, mip.data());
+            glTexImage2D (GL_TEXTURE_2D, lvl++, (GLint) heightFormat, size, size, 0, GL_RGBA, GL_FLOAT, mip.data());
             size >>= 1;
         }
         glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, lvl - 1);
@@ -397,7 +399,7 @@ void PlainsGl::makeTextures()
     glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-    const auto rgba8 = [] (juce::uint32& id, int size, const std::vector<juce::uint8>& px)
+    const auto rgba8 = [] (std::uint32_t& id, int size, const std::vector<std::uint8_t>& px)
     {
         glGenTextures (1, &id);
         glBindTexture (GL_TEXTURE_2D, id);
@@ -433,9 +435,9 @@ void PlainsGl::makeGeometry()
     for (int j = 0; j < N; ++j)
         for (int i = 0; i < N; ++i)
         {
-            const size_t o = (size_t) (j * N + i) * 6; const juce::uint16 v = (juce::uint16) (j * (N + 1) + i);
-            fullIndices[o] = v; fullIndices[o + 1] = (juce::uint16) (v + 1); fullIndices[o + 2] = (juce::uint16) (v + N + 2);
-            fullIndices[o + 3] = v; fullIndices[o + 4] = (juce::uint16) (v + N + 2); fullIndices[o + 5] = (juce::uint16) (v + N + 1);
+            const size_t o = (size_t) (j * N + i) * 6; const std::uint16_t v = (std::uint16_t) (j * (N + 1) + i);
+            fullIndices[o] = v; fullIndices[o + 1] = (std::uint16_t) (v + 1); fullIndices[o + 2] = (std::uint16_t) (v + N + 2);
+            fullIndices[o + 3] = v; fullIndices[o + 4] = (std::uint16_t) (v + N + 2); fullIndices[o + 5] = (std::uint16_t) (v + N + 1);
         }
     ringIndices.resize (fullIndices.size());
     for (int k = 0; k < levels; ++k)
@@ -443,7 +445,7 @@ void PlainsGl::makeGeometry()
         auto& L = level[(size_t) k];
         glGenBuffers (1, &L.indexBuffer);
         glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, L.indexBuffer);
-        glBufferData (GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr) (fullIndices.size() * sizeof (juce::uint16)), fullIndices.data(), k == 0 ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW);
+        glBufferData (GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr) (fullIndices.size() * sizeof (std::uint16_t)), fullIndices.data(), k == 0 ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW);
         L.count = (int) fullIndices.size();
         L.cell = cell0 * std::pow (2.0, k);
         L.holeX = L.holeY = -1;
@@ -486,7 +488,7 @@ void PlainsGl::makeGeometry()
         glEnableVertexAttribArray (lc); glVertexAttribPointer (lc, 3, GL_FLOAT, GL_FALSE, 40, (const void*) 24);
         glEnableVertexAttribArray (lk); glVertexAttribPointer (lk, 1, GL_FLOAT, GL_FALSE, 40, (const void*) 36);
         locRelicCell = glGetAttribLocation (relic.id, "aCell");
-        instancing = glVertexAttribDivisor != nullptr && locRelicCell >= 0;
+        instancing = gpu::loaded (glVertexAttribDivisor) && locRelicCell >= 0;
         for (auto& b : relicInstances)
         {
             glGenBuffers (1, &b);
@@ -510,7 +512,7 @@ void PlainsGl::rebuildRing (Level& L, int hx, int hy)   // leaves out the N/2 x 
         else { put ((size_t) j * N * 6, (size_t) (j * N + hx) * 6); put ((size_t) (j * N + hx + H) * 6, (size_t) (j + 1) * N * 6); }
     }
     glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, L.indexBuffer);
-    glBufferSubData (GL_ELEMENT_ARRAY_BUFFER, 0, (GLsizeiptr) (n * sizeof (juce::uint16)), ringIndices.data());
+    glBufferSubData (GL_ELEMENT_ARRAY_BUFFER, 0, (GLsizeiptr) (n * sizeof (std::uint16_t)), ringIndices.data());
     L.count = (int) n; L.holeX = hx; L.holeY = hy;
 }
 
@@ -538,17 +540,17 @@ void PlainsGl::noteCost (float ms)
     gpuMs = gpuMs < 0 ? ms : gpuMs + (ms - gpuMs) * 0.1f;
 }
 
-void PlainsGl::render (int w, int h, float scale, juce::uint32 target, int x, int y)
+void PlainsGl::render (int w, int h, float scale, std::uint32_t target, int x, int y)
 {
     if (terrain.id == 0 || w <= 0 || h <= 0)
         return;
-    const int rw = std::max (2, juce::roundToInt ((float) w * scale)), rh = std::max (2, juce::roundToInt ((float) h * scale));
+    const int rw = std::max (2, roundToInt ((float) w * scale)), rh = std::max (2, roundToInt ((float) h * scale));
     ensureFrame (rw, rh);
     glBindFramebuffer (GL_FRAMEBUFFER, fbo);
 
     // The timer: queries, read back a few frames late so nothing waits — or, without them, one frame
-    // in sixty finished and clocked.
-    const bool probe = ! queriesWork && (frameCounter % 60) == 0;
+    // in sixty finished and clocked. On the web, neither (gpu::timerQueries).
+    const bool probe = ! gpu::web && ! queriesWork && (frameCounter % 60) == 0;
     ++frameCounter;
     if (queriesWork)
     {
@@ -558,14 +560,12 @@ void PlainsGl::render (int w, int h, float scale, juce::uint32 target, int x, in
             GLuint available = 0;
             glGetQueryObjectuiv (oldest, GL_QUERY_RESULT_AVAILABLE, &available);
             if (! available) break;
-            GLuint64 ns = 0;
-            glGetQueryObjectui64v (oldest, GL_QUERY_RESULT, &ns);
-            noteCost ((float) ns * 1.0e-6f);
+            noteCost ((float) gpu::timerNanoseconds (oldest) * 1.0e-6f);
             --queriesPending;
         }
         if (queriesPending < (int) query.size())
         {
-            glBeginQuery (GL_TIME_ELAPSED, query[(size_t) queryNext]);
+            gpu::beginTimer (query[(size_t) queryNext]);
             queryNext = (queryNext + 1) % (int) query.size();
             ++queriesPending;
         }
@@ -573,18 +573,18 @@ void PlainsGl::render (int w, int h, float scale, juce::uint32 target, int x, in
     else if (probe)
     {
         glFinish();
-        probeStart = juce::Time::getMillisecondCounterHiRes();
+        probeStart = gpu::milliseconds();
     }
 
     for (int i = 0; i < repeats; ++i)
         drawScene (rw, rh);
 
     if (queriesWork)
-        glEndQuery (GL_TIME_ELAPSED);
+        gpu::endTimer();
     else if (probe)
     {
         glFinish();
-        noteCost ((float) (juce::Time::getMillisecondCounterHiRes() - probeStart));
+        noteCost ((float) (gpu::milliseconds() - probeStart));
     }
 
     glBindFramebuffer (GL_READ_FRAMEBUFFER, fbo);
@@ -593,7 +593,7 @@ void PlainsGl::render (int w, int h, float scale, juce::uint32 target, int x, in
     glBindFramebuffer (GL_FRAMEBUFFER, target);
 }
 
-bool PlainsGl::readFrame (std::vector<juce::uint8>& rgba, int& w, int& h)
+bool PlainsGl::readFrame (std::vector<std::uint8_t>& rgba, int& w, int& h)
 {
     if (fbo == 0)
         return false;
