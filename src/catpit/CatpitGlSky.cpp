@@ -50,10 +50,13 @@ void GlSky::newOpenGLContextCreated()
     // cloud sideways by as far as the turns have swept it since it came up out of the distance (uDrift,
     // uCloudDrift); a star's streak then runs back toward where the sweep brought it from as well
     // (uSlide). Flying straight, all of it is nothing and the sky is the one it always was.
+    //
+    // The sources are read as the UTF-8 they are: their comments carry dashes, and a String taken from
+    // bytes as ASCII stopped at them in a debug build.
     const auto vertexShader = shaders::source ("catpit/sky.vert"), fragmentShader = shaders::source ("catpit/sky.frag");
     auto s = std::make_unique<juce::OpenGLShaderProgram> (context);
-    if (! s->addVertexShader (juce::OpenGLHelpers::translateVertexShaderToV3 (vertexShader.c_str()))
-        || ! s->addFragmentShader (juce::OpenGLHelpers::translateFragmentShaderToV3 (fragmentShader.c_str()))
+    if (! s->addVertexShader (juce::OpenGLHelpers::translateVertexShaderToV3 (juce::String::fromUTF8 (vertexShader.c_str())))
+        || ! s->addFragmentShader (juce::OpenGLHelpers::translateFragmentShaderToV3 (juce::String::fromUTF8 (fragmentShader.c_str())))
         || ! s->link())
     {
         DBG ("catpit: the sky's shader did not build — " << s->getLastError());
