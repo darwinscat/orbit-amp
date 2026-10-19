@@ -61,7 +61,9 @@ DisableProgramGroupPage=yes
 DisableDirPage=yes
 OutputDir=output
 OutputBaseFilename=darwinscat-amps-{#AppVersion}-windows-x64-setup
-Compression=lzma2
+; The strongest LZMA2 Inno has, in a process of its own, so the compressor has the memory it asks for.
+Compression=lzma2/ultra64
+LZMAUseSeparateProcess=yes
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
