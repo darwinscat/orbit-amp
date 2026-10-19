@@ -1581,7 +1581,8 @@ if(APPLE)
     # what macOS keys its icon cache on. A bundle first built before it had an icon kept the blank
     # placeholder in the Dock and the app switcher for good, with the right icon sitting inside it.
     # So the bundle is touched after every build, and the system looks again.
-    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone RedPawAmp_Standalone FrostPawAmp_Standalone)
+    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone RedPawAmp_Standalone FrostPawAmp_Standalone
+                       AmberPawAmp_Standalone)
         if(TARGET ${standalone})
             add_custom_command(TARGET ${standalone} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E touch_nocreate "$<TARGET_BUNDLE_DIR:${standalone}>"
