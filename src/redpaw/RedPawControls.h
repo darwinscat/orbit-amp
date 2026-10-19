@@ -125,6 +125,18 @@ public:
 
     std::function<float()> speed;       // km/h
 
+    /** HOW IT IS DRAWN, the site's demo's too (RedPawEditor::webExtras): the km/h as a whole number, at least 0,
+        read this many times a second; the number and its unit as outlines of the family's label face (labelFont,
+        its size its height as JUCE counts it), each centred across the box at its share of the box's height, the
+        kerning JUCE's extra kerning factor; a glow of the light round both — JUCE's DropShadow, no offset, its
+        radius this share of the height — and the light filled over it. */
+    static constexpr int refreshHz = 10;
+    static constexpr juce::uint32 light = 0xff9dffc8;     // the projector's green, pale as the haze outside
+    static constexpr float lightAlpha = 0.82f, glowAlpha = 0.55f, glowOfHeight = 0.16f;
+    static constexpr float numberOfHeight = 0.62f, numberKerning = 0.06f, numberCentreOfHeight = 0.40f;
+    static constexpr const char* unit = "KM/H";
+    static constexpr float unitOfHeight = 0.20f, unitKerning = 0.2f, unitCentreOfHeight = 0.86f;
+
     void paint (juce::Graphics&) override;
 
 private:
