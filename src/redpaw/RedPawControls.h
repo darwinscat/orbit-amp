@@ -30,6 +30,10 @@ public:
     inline static const juce::StringArray names { "PARK", "CLEAN", "CRUNCH", "HI-GAIN" };
     static int positionOf (int gear) noexcept { return gear + 1; }
 
+    /** Where the grip's bar ends and its collar begins on the lever's render, down from its top — a
+        fraction of the render's height. The bar is what the hand takes. */
+    static constexpr float barBottom = 0.85f;
+
     /** A position's name on the nav screen. The gears are named down from the top, as the weather is
         graded (PlainsWorld::turboDust): a lever of fewer than three has the top names, so its last gear
         is always HI-GAIN — a rover of two drives CRUNCH and HI-GAIN. */

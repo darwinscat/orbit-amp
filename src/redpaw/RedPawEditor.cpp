@@ -390,6 +390,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     l->setProperty ("names", names);      // PARK first, then the gears from the top
     l->setProperty ("leverWidth", leverWidth);
     l->setProperty ("collarSink", collarSink);
+    l->setProperty ("gripBar", GearLever::barBottom);       // the render's top part the hand takes it by
     l->setProperty ("leverBox", point ({ leverLeft, leverTop }));
     l->setProperty ("plate", rect (gearPlate));
     l->setProperty ("glowPad", Art::leverGlowPad);
