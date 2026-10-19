@@ -10,14 +10,12 @@ namespace orbitamp
 {
 
 FaceplateView::FaceplateView (AmpProcessor& processor)
-    : boost (processor, processor.boost, "Boost", params::boostId, 0,
-             processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
-      preamp (processor, processor.preamp, "Preamp", params::preampId, 1,
-              processor.blockSpectrumTap[1], processor.blockInSpectrumTap[1]),
+    : preamp (processor, processor.preamp, params::preampName, params::preampId, 0,
+              processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
       delay (processor), reverb (processor), cabinet (processor)
 {
-    for (auto* b : { (BlockFrame*) &boost, (BlockFrame*) &preamp, (BlockFrame*) &delay,
-                     (BlockFrame*) &reverb, (BlockFrame*) &cabinet })
+    for (auto* b : { (BlockFrame*) &preamp, (BlockFrame*) &delay, (BlockFrame*) &reverb,
+                     (BlockFrame*) &cabinet })
     {
         addAndMakeVisible (*b);
 
@@ -33,7 +31,6 @@ BlockFrame& FaceplateView::frame (Block b)
 {
     switch (b)
     {
-        case Block::boost:   return boost;
         case Block::preamp:  return preamp;
         case Block::delay:   return delay;
         case Block::reverb:  return reverb;
@@ -66,10 +63,7 @@ void FaceplateView::resized()
 
     // ONE law for both rows: the width splits evenly among the blocks that stand in the row, in
     // chain order. The share is recomputed as the walk goes, so the rounding remainder never
-    // piles up against the right edge — and the arithmetic keeps the panel's ONE middle line
-    // whenever the counts are even: a half is (W-g)/2, and the first two of four quarters spend
-    // exactly a half plus its gap, so the third quarter starts where the preamp does. An odd
-    // count (thirds) has no middle to keep, which is the price of an odd count.
+    // piles up against the right edge.
     const auto lay = [this] (juce::Rectangle<int> row, std::initializer_list<Block> order)
     {
         int standing = 0;
@@ -92,7 +86,7 @@ void FaceplateView::resized()
         }
     };
 
-    lay (row1, { Block::boost, Block::preamp });
+    lay (row1, { Block::preamp });
     lay (row2, { Block::delay, Block::reverb, Block::cabinet });
 }
 

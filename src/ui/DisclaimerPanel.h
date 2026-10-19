@@ -330,7 +330,7 @@ private:
             switch (s)
             {
                 case Slot::pedal:    return "PEDAL";
-                case Slot::preamp:   return "PREAMP";
+                case Slot::preamp:   return "AMP";
                 case Slot::any:
                 case Slot::none:     break;   // a slot this instrument does not have has no word
             }

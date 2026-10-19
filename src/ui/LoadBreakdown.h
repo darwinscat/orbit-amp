@@ -20,9 +20,8 @@ namespace orbitamp
 struct LoadBreakdown final : public juce::Component,
                              private juce::Timer
 {
-    /** WHAT A FACE MAY MAKE ITS OWN. Its words for the stages — the cockpit's packs are whole amps,
-        so the row OrbitAmp calls PREAMP reads AMP there; an empty answer keeps the chain's own name —
-        and the three weights the text is set in. Left alone, it is OrbitAmp's. */
+    /** WHAT A FACE MAY MAKE ITS OWN. Its words for the stages — an empty answer keeps the chain's
+        own name — and the three weights the text is set in. Left alone, it is OrbitAmp's. */
     std::function<juce::String (int stage, bool brief)> nameOf;
     juce::Colour text { theme::tx }, dim { theme::txDim }, faint { theme::txFaint };
 
@@ -173,10 +172,10 @@ struct LoadBreakdown final : public juce::Component,
             const bool working = stageWorking (i);
 
             g.setColour (total ? text : working ? dim : faint);
-            // Wide enough for the longest name there is — PREAMP EQ, which at 13 px with this
-            // tracking is a shade under ninety. `drawTracked` does not clip, and the bar is
-            // painted after the label, so a column measured for the SECOND longest name reads
-            // as a bar that has eaten the end of a word.
+            // Wide enough for a name of nine letters, which at 13 px with this tracking is a shade
+            // under ninety — the chain's own are shorter, and a face may bring its own. `drawTracked`
+            // does not clip, and the bar is painted after the label, so a column measured for the
+            // SECOND longest name reads as a bar that has eaten the end of a word.
             theme::drawTracked (g, stageName (i, false), row.removeFromLeft (96).toFloat(),
                                 theme::displayFont (13.0f), 0.08f, juce::Justification::centredLeft);
 

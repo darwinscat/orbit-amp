@@ -3,6 +3,7 @@
 
 #include "CapturedBlockPanel.h"
 
+#include "../AmpChannels.h"
 #include "../PluginProcessor.h"
 
 #include <felitronics/appkit/WebpImage.h>
@@ -102,7 +103,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
       // The OUT wall's hand IS the console's LEVEL fader — one parameter, two doors: the fader
       // in the console's row and the grip on the wall move together, the attachment's echo
       // keeping them honest.
-      outMeter ("OUT", eqLink == 0 ? processor.boostOutDb : processor.preampOutDb,
+      outMeter ("OUT", processor.blockOutDb[(size_t) eqLink],
                 *processor.apvts.getParameter (params::eqLevel (eqLink)), false)
 {
     // The console's widgets become children of this block, which places them. The spectrum behind
@@ -223,28 +224,23 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         *amp.apvts.getParameter (params::blockDevice (blk)),
         [this] (float v)
         {
-            const int i = juce::roundToInt (v);
-            device.setSelection (i);
-            block.selectIfMoved (i);
+            block.selectIfMoved (juce::roundToInt (v));
             deviceChanged();
         });
 
-    device.onPick = [this] (int i)
+    // The list is not flat: devices, and the player's folders as submenus. The combo shows the
+    // device; the channel row under the border shows which of its channels plays.
+    device.onOpen = [this] { showDeviceMenu(); };
+
+    // A PICK, and only a pick, goes through the channels' memory: a restored session, an undo or a
+    // host automating the device index move the parameter too, and what they set is what they
+    // meant — the attachment above only follows them.
+    addChildComponent (channelRow);
+    channelRow.onPick = [this] (int k)
     {
-        deviceAttachment->setValueAsCompleteGesture ((float) i);
-        block.select (i);   // message thread — it reads files
-
-        // A PICK, and only a pick. Every slot goes back to what this pack says it should be —
-        // otherwise the new device arrives wearing the last one's settings, which are not even
-        // about the same controls.
-        //
-        // Deliberately not done on every device change: a restored session moves this parameter
-        // too, and resetting there would throw away exactly the settings the session was saved to
-        // keep. A host automating the device index keeps whatever it is automating, which is what
-        // automation means.
-        resetToPackDefaults();
-
-        deviceChanged();
+        if (const auto* d = shelf.deviceOf (AmpChannels (amp).playing()))
+            if (juce::isPositiveAndBelow (k, d->channels.size()))
+                playPack (d->channels[k]);
     };
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
@@ -433,22 +429,27 @@ void CapturedBlockPanel::deviceChanged()
     const auto tones     = block.tones();
     const auto positions = block.gainPositions();
 
-    // The list IS the combo: what a player has, greenest first. Nothing invented, nothing curated
-    // into groups — the character ramp does the ordering a "type" heading used to.
-    juce::Array<VoicingSelector::Entry> entries;
-    bool sawUser = false;
-
-    for (const auto& pack : block.packs)
+    // The combo names the DEVICE, in the colour of the channel that plays; the row of keys names
+    // its channels, the playing one lit — and is not there for a device of one.
+    shelf = device::DeviceLibrary::shelfOf (block.packs);
     {
-        VoicingSelector::Entry e;
-        e.name = pack.displayName();
-        e.character = pack.character;
-        e.startsSection = ! pack.bundled && ! sawUser;   // the rule between shipped and added
-        sawUser = sawUser || ! pack.bundled;
-        entries.add (std::move (e));
-    }
+        const int playing = AmpChannels (amp).playing();
+        const auto* dev   = shelf.deviceOf (playing);
 
-    device.setEntries (std::move (entries));
+        juce::Array<VoicingSelector::Entry> entries;
+        if (dev != nullptr)
+            entries.add ({ dev->name, block.packs.getReference (playing).character, false });
+
+        device.setEntries (std::move (entries));
+        device.setSelection (0);
+
+        if (dev != nullptr && dev->channels.size() > 1)
+            channelRow.setChannels (dev->channelNames, dev->channels.indexOf (playing));
+        else
+            channelRow.setChannels ({}, -1);
+
+        channelRow.setVisible (channelRow.count() > 1 && expandedViz < 0);
+    }
 
     caption = block.deviceName();
 
@@ -567,7 +568,7 @@ void CapturedBlockPanel::deviceChanged()
     gain.setNotches (juce::jmax (0, positions.size()));
     gain.setTooltip (block.dialName().isNotEmpty() ? block.dialName().toUpperCase() : juce::String ("GAIN"));
 
-    for (int i = 0; i < params::boostNumMeasured; ++i)
+    for (int i = 0; i < Block::numMeasured; ++i)
     {
         auto& slot = slots[(size_t) i];
 
@@ -607,7 +608,7 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
 
     const auto tones = block.tones();
 
-    for (int i = 0; i < params::boostNumMeasured && i < (int) tones.size(); ++i)
+    for (int i = 0; i < Block::numMeasured && i < (int) tones.size(); ++i)
     {
         const auto& m = tones[(size_t) i];
 
@@ -703,37 +704,11 @@ void CapturedBlockPanel::applyEqMode()
     }
 }
 
-void CapturedBlockPanel::resetToPackDefaults()
-{
-    const auto write = [this] (const juce::String& id, float plain)
-    {
-        if (auto* p = amp.apvts.getParameter (id))
-        {
-            p->beginChangeGesture();
-            p->setValueNotifyingHost (p->convertTo0to1 (plain));
-            p->endChangeGesture();
-        }
-    };
-
-    // The measured slots. A pack names where its knob starts — and it is NOT the reference
-    // position, which is usually an end of travel and therefore the wrong thing to reach for. An
-    // unclaimed slot goes to the middle, which is what it means when nothing is behind it.
-    resetToneSlotsToPackDefaults();
-
-    // ...and the selecting ones, which have the same problem for the same reason: slot one is an
-    // octave switch on one device and something else entirely on the next.
-    const auto list = block.selectors();
-
-    for (int i = 0; i < params::numSelectors; ++i)
-        write (params::selectorId (blk, i),
-               (float) (i < list.size() ? list.getReference (i).defaultIndex : 0));
-}
-
 void CapturedBlockPanel::resetToneSlotsToPackDefaults()
 {
     const auto tones = block.tones();
 
-    for (int i = 0; i < params::boostNumMeasured; ++i)
+    for (int i = 0; i < Block::numMeasured; ++i)
         if (auto* p = amp.apvts.getParameter (params::blockMeasured (blk, i)))
         {
             const float plain = (float) (i < (int) tones.size() ? Block::defaultNorm (tones[(size_t) i]) : 0.5);
@@ -741,6 +716,84 @@ void CapturedBlockPanel::resetToneSlotsToPackDefaults()
             p->setValueNotifyingHost (p->convertTo0to1 (plain));
             p->endChangeGesture();
         }
+}
+
+void CapturedBlockPanel::playPack (int index)
+{
+    if (AmpChannels (amp).play (index))
+        deviceChanged();
+}
+
+void CapturedBlockPanel::showDeviceMenu()
+{
+    using Library = device::DeviceLibrary;
+
+    shelf = Library::shelfOf (block.packs);   // the folder may have changed since the face was built
+
+    AmpChannels channels (amp);
+    const auto* playing = shelf.deviceOf (channels.playing());
+
+    juce::PopupMenu menu;
+    std::vector<int> picks;   // an item's id, less one, is the pack it plays
+
+    const auto add = [&] (juce::PopupMenu& into, const Library::Device& d)
+    {
+        // A device opens on the channel it was last left on — the one its colour is.
+        const int opens = channels.openingOf (d);
+
+        juce::PopupMenu::Item item (d.name);
+        item.itemID   = (int) picks.size() + 1;
+        item.colour   = theme::characterColour (block.packs.getReference (opens).character);
+        item.isTicked = &d == playing;
+        into.addItem (item);
+        picks.push_back (opens);
+    };
+
+    // The family's own on top, then the player's, a rule between: the list stays one list.
+    for (const auto* part : { &shelf.factory, &shelf.own })
+    {
+        if (! part->empty() && menu.getNumItems() > 0)
+            menu.addSeparator();
+
+        for (const auto& d : *part)
+            add (menu, d);
+    }
+
+    // ...and each folder of the player's as a submenu, as the disk has it — OLD ▸ preamps ▸ ….
+    std::function<bool (juce::PopupMenu&, const Library::Folder&)> addFolder;
+    addFolder = [&] (juce::PopupMenu& into, const Library::Folder& f)
+    {
+        juce::PopupMenu sub;
+        bool holdsPlaying = false;
+
+        for (const auto& d : f.devices)
+        {
+            holdsPlaying = holdsPlaying || &d == playing;
+            add (sub, d);
+        }
+
+        for (const auto& inner : f.folders)
+            holdsPlaying = addFolder (sub, inner) || holdsPlaying;
+
+        into.addSubMenu (f.name, sub, true, nullptr, holdsPlaying);
+        return holdsPlaying;
+    };
+
+    if (! shelf.folders.empty() && menu.getNumItems() > 0)
+        menu.addSeparator();
+
+    for (const auto& f : shelf.folders)
+        addFolder (menu, f);
+
+    if (menu.getNumItems() == 0)
+        return;
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&device),
+                        [safe = juce::Component::SafePointer<CapturedBlockPanel> (this), picks] (int choice)
+                        {
+                            if (safe != nullptr && choice > 0 && choice <= (int) picks.size())
+                                safe->playPack (picks[(size_t) (choice - 1)]);
+                        });
 }
 
 void CapturedBlockPanel::buildSelectors()
@@ -893,6 +946,14 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     auto column = top.removeFromLeft (columnW);
     top.removeFromLeft (gap);
 
+    // The channel keys stand over the picture, at its top — a device of one channel has none, and
+    // the picture keeps the room.
+    if (channelRow.count() > 1)
+    {
+        channelRow.setBounds (top.removeFromTop (ChannelRow::rowH));
+        top.removeFromTop (6);
+    }
+
     // Only the SELECTING controls stand here — the ones that pick a capture. A measured control is
     // a band of the curve and belongs in the console's row, whatever shape its own control has.
     // Each takes ONE line off the bottom — name, lever, chosen position — and GAIN gets the rest,
@@ -927,6 +988,7 @@ void CapturedBlockPanel::setControlsVisible (bool v)
     inMeter.setVisible (v);
     outMeter.setVisible (v);
     device.setEnabled (v);
+    channelRow.setVisible (v && channelRow.count() > 1);
 
     for (auto& slot : slots)
     {

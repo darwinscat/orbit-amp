@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # ----------------------------------------------------------------------------
 # orbit-amp — the device / voicing PLAYER plugin (C++/JUCE). Felitronics line, by Darwin's Cat.
 #
-# The chain:  boost -> EQ -> preamp (voicing) -> EQ -> delay -> reverb -> cabinet.
+# The chain:  preamp (voicing) -> EQ -> delay -> reverb -> cabinet.
 #
 # One CMake config builds VST3 + AU + Standalone. JUCE 8 and the felitronics libraries are
 # fetched by CMake (FetchContent) — NOT vendored, NOT system-installed. Each dependency is
@@ -1600,6 +1600,7 @@ target_include_directories(orbitamp_chain_test PRIVATE src)
 target_include_directories(orbitamp_chain_test PRIVATE "${ORBITAMP_GENERATED_DIR}")   # the same faces, the same stamp
 add_dependencies(orbitamp_chain_test OrbitAmpVersionGen)
 target_compile_definitions(orbitamp_chain_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                      ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}"   # the channels' gate plays the set in place
                                                       JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE
     OrbitAmpData
@@ -1703,7 +1704,8 @@ target_link_libraries(orbitamp_captured_test PRIVATE
 juce_add_console_app(orbitamp_library_test PRODUCT_NAME "OrbitAmpLibraryTest")
 target_sources(orbitamp_library_test PRIVATE tests/LibraryTests.cpp)
 target_include_directories(orbitamp_library_test PRIVATE src)
-target_compile_definitions(orbitamp_library_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(orbitamp_library_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+                                                        ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}")   # the set's manifests, read in place
 target_link_libraries(orbitamp_library_test PRIVATE
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events

@@ -17,8 +17,8 @@
 ## What orbit-amp is
 
 A guitar tone plugin (VST3 / AU / CLAP / standalone; JUCE; macOS, Windows, Linux). It plays
-captured neural voicings through a full chain — boost and preamp, each with its own EQ, then
-delay, reverb and cabinet — on a compact, resizable faceplate. AGPL-3.0-or-later.
+captured neural voicings through a full chain — a captured preamp with its own EQ, then delay,
+reverb and cabinet — on a compact, resizable faceplate. AGPL-3.0-or-later.
 
 ## Philosophy
 
@@ -69,7 +69,7 @@ HAS at all.
 
 **STANDBY is an insert's bypass, exactly as a DAW means it.** A link stops taking new signal but
 keeps running, so a delay's repeats and a reverb's tail ring OUT instead of being chopped; a link
-that *replaces* the signal rather than adding to it — boost, preamp, cabinet — crossfades to the
+that *replaces* the signal rather than adding to it — preamp, cabinet — crossfades to the
 signal it was handed over fifteen milliseconds. Nothing is ever cut: switching, and leaving the rig,
 both fade.
 
@@ -88,12 +88,15 @@ Two consequences worth stating out loud, because both are the model working rath
 ## Signal chain
 
 ```
-IN → tuner → gate → boost → EQ → preamp (voicing) → EQ → delay → reverb → cabinet → limiter → OUT
+IN → tuner → gate → preamp (voicing) → EQ → delay → reverb → cabinet → limiter → OUT
 ```
 
 A fresh instance — and INIT — is CatpitAmp's Crunch channel: the X88-IR Crunch through DARK MATTER,
-no boost in the chain, IN and OUT in it at unity, the delay on with nothing in its mix, and
-everything else at its parameter's own default.
+IN and OUT in the chain at unity, the delay on with nothing in its mix, and everything else at its
+parameter's own default.
+
+There is no boost block: two captured blocks in a row were one too many. A pack that calls itself a
+pedal is still read; it is simply not offered by a block of its own.
 
 - **IN / OUT** — the input's level and its volume, the output's mirrored: one rail each, one hand
   each. **In the rig by default, at unity**, as the cockpit's INPUT and OUTPUT faders are. The
@@ -106,7 +109,7 @@ everything else at its parameter's own default.
   Schmitt + hold, transient-safe open, pop-free enable. Dual detection: it always
   KEYS off the raw guitar, and the MUTE lands where the player says — at the START
   of the chain, or at its END, which is the default: it falls after the preamp and
-  its console, so the hiss the boost and the preamp ADD dies too, the clean key
+  its console, so the hiss the preamp ADDS dies too, the clean key
   never pumps, and whatever the delay and the room are still holding rings out
   under it. Named for the chain rather than for one block, because a rig may have
   no reverb in it — it used to read "pre-reverb", which was a strange thing to see
@@ -118,10 +121,9 @@ everything else at its parameter's own default.
   the grab — two hands on one scale, told apart by proximity, which is not something anyone can aim.
   The menu's header carries the current number, because the threshold is continuous and three
   positions are three points on it. Off by default.
-- **EQ** — DSP, and **part of the captured block, not a separate link**: each
+- **EQ** — DSP, and **part of the captured block, not a separate link**: the
   console sits right AFTER its block's nonlinearity, colouring what the device
-  made — the boost's EQ feeds the preamp, and the preamp's sits where a real amplifier keeps its
-  tone stack. It goes dark with its block. Its row of hands sits under the curve or over it, a
+  made — where a real amplifier keeps its tone stack. It goes dark with its block. Its row of hands sits under the curve or over it, a
   choice in Setup. Two faces
   per console: DEVICE TONE — the pack's own measured knobs, and the one a block
   wears until you say otherwise — and UNIVERSAL EQ, our parametric in their place:
@@ -134,7 +136,6 @@ everything else at its parameter's own default.
   where each measured knob acts hardest, and the knob below is the hand. They used to drag, and the
   drag converted decibels into knob travel through a single measured swing — honest as an indicator,
   not as a control, because a tone stack's response is not linear in its dial.
-- **Boost** — a separate captured (neural) block in front. Out of the rig by default.
 - **Preamp** — the captured voicing. Gain 0–10 maps to the captured positions —
   SMOOTH crossfades between them, STEP lands the dial on them; the biggest knob
   (the hero). The tone console lives in the block — see the EQ entry above.
@@ -168,7 +169,7 @@ on STEREO.
 
 | thing | how |
 |---|---|
-| boost / preamp nonlinearity | neural profile (captured) |
+| preamp nonlinearity | neural profile (captured) |
 | gain positions | discrete captured profiles, 0–10 |
 | tone / EQ | the device's measured knobs, or our parametric in their place |
 | loudness-vs-gain | our own curve (capture normalises it away) |
@@ -210,7 +211,7 @@ place things are hidden.
 
 | page | what | whose life |
 |---|---|---|
-| **LIBRARY** | a sub-tab each for the preamp packs, the boost packs and the IRs, and the one switch that is about packs | folders are the machine's; the switch travels with the preset |
+| **LIBRARY** | a sub-tab each for the preamp packs and the IRs, and the one switch that is about packs | folders are the machine's; the switch travels with the preset |
 | **VIEW** | what this window shows, and only that | **this machine only** |
 
 Each page says which of those two lifetimes it has, quietly, beside its own tabs. Nobody should

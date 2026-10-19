@@ -1412,18 +1412,12 @@ void Console::playMidi()
             along (channels.toneId (t), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
 }
 
-/** THE LOAD, ITEMISED — OrbitAmp's window, in the face's words and colours. A product's packs are
-    whole amps, with the boost and the power stage inside them, so the row OrbitAmp calls PREAMP is
-    the AMP here, and its console the amp's. */
+/** THE LOAD, ITEMISED — OrbitAmp's window, in the face's colours. Its words are already the face's:
+    a product's packs are whole amps, with the boost and the power stage inside them, and OrbitAmp
+    calls that row the AMP too. */
 void Console::showLoad()
 {
     auto panel = std::make_unique<LoadBreakdown> (amp);
-    panel->nameOf = [] (int which, bool brief) -> juce::String
-    {
-        if (which == params::stPreamp)  return "AMP";
-        if (which == params::stEq2)     return brief ? "A-EQ" : "AMP EQ";
-        return {};
-    };
     panel->dim   = labelLilac.withAlpha (0.85f);
     panel->faint = labelLilac.withAlpha (0.45f);
     showSheet (std::move (panel));

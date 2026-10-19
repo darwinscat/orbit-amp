@@ -42,9 +42,7 @@ public:
 
     /** Tone slots a host can see. Parameters exist for this many, and the loaded pack decides what
         each one turns — five, because the biggest preamp pack ships five. */
-    static constexpr int numMeasured = params::boostNumMeasured;
-    static_assert (params::preampNumMeasured == params::boostNumMeasured,
-                   "one block serves every captured slot, so the tone slot counts have to agree");
+    static constexpr int numMeasured = params::preampNumMeasured;
 
     /** The picture's frequency axis: the player draws its tone on a 20 Hz – 20 kHz grid. */
     static constexpr double toneLoHz = 20.0;
@@ -67,7 +65,7 @@ public:
     /** Re-reads the folder and STAYS ON THE DEVICE THAT IS PLAYING. Message thread.
 
         It used to re-select by the index it was handed, which is the one thing an index cannot
-        survive: the list is sorted bundled-first and then along the gain ramp, so importing a pack
+        survive: the list is in the AMP menu's order, so importing a pack
         that sorts earlier moves everything after it down one — and a rescan happens exactly when
         a pack has just been imported. The block would come back playing its neighbour.
 
@@ -88,7 +86,7 @@ public:
     /** Loads the device at `index` — the HOST's handle on the choice, and only that.
 
         The index is not an identity and cannot be one: the list is whatever is on disk today,
-        sorted bundled-first and then along the gain ramp, so dropping one new pack into the folder
+        in the AMP menu's order, so dropping one new pack into the folder
         renumbers everything after it. What the state carries is the NAME (see `selectedName` and
         `AmpProcessor::applySwitchAims`); this takes the number the name resolved to.
 
@@ -140,7 +138,7 @@ public:
         the list shows and what travels with the file when it is copied to another machine.
 
         This is the identity the state saves. The parameter beside it is an index into a list that
-        is sorted bundled-first and then along the gain ramp, so ONE new pack dropped into the
+        is in the AMP menu's order, so ONE new pack dropped into the
         folder renumbers every device after it and every session that named one by number now names
         a different one — silently, and with the loaded device's name still printed on the block to
         say so. Empty when nothing is loaded. */

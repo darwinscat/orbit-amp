@@ -12,7 +12,7 @@ namespace orbitamp::face
 
 namespace
 {
-    constexpr int preampBlock   = 1;     // the processor's second captured block: the one the tone stack follows
+    constexpr int preampBlock   = 0;     // the processor's captured block: the one the tone stack follows
     constexpr double displayRate = 48000.0;
 
     // SHAPE in silence: what counts as quiet at the preamp's input (a guitar plays there at -30 to -6 dBFS,

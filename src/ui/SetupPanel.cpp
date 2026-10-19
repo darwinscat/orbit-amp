@@ -14,29 +14,26 @@ SetupPanel::SetupPanel (AmpProcessor& processor) : amp (processor)
 {
     setWantsKeyboardFocus (true);
 
-    for (auto* devices : { &preampDevices, &boostDevices })
-        devices->onChanged = [this]
-        {
-            if (onDevicesChanged)
-                onDevicesChanged();
-        };
+    preampDevices.onChanged = [this]
+    {
+        if (onDevicesChanged)
+            onDevicesChanged();
+    };
 
     closeButton.onClick = [this] { setVisible (false); };
 
-    // ---- LIBRARY: the three lists behind their own sub-tabs, and the one switch that is about
+    // ---- LIBRARY: the two lists behind their own sub-tabs, and the one switch that is about
     //      the packs rather than about the window. ----
     // It is a HOLDER, not a surface: its own sub-tabs are painted by the panel behind it, so a
     // click in that strip has to fall through to the panel or the tabs cannot be picked at all.
     libraryPage.setInterceptsMouseClicks (false, true);
     addAndMakeVisible (libraryPage);
-    for (auto* v : { (juce::Component*) &preampDevices, (juce::Component*) &boostDevices,
-                     (juce::Component*) &irs })
+    for (auto* v : { (juce::Component*) &preampDevices, (juce::Component*) &irs })
         libraryPage.addAndMakeVisible (*v);
     libraryPage.addAndMakeVisible (packSwitches);
 
-    libraries.push_back ({ "PREAMP", &preampDevices, [this] { preampDevices.rebuild(); }, {} });
-    libraries.push_back ({ "BOOST",  &boostDevices,  [this] { boostDevices.rebuild(); },  {} });
-    libraries.push_back ({ "IR",     &irs,           [this] { irs.rebuild(); },           {} });
+    libraries.push_back ({ "AMP", &preampDevices, [this] { preampDevices.rebuild(); }, {} });
+    libraries.push_back ({ "IR",  &irs,           [this] { irs.rebuild(); },           {} });
 
     {
         auto* p = amp.apvts.getParameter (params::packLevelComp);
