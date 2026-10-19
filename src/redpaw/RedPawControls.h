@@ -19,13 +19,15 @@ namespace orbitamp::redpaw
     reach of one, and springs into the nearest on release; dragged from anywhere else on the gate it goes
     where the hand is. A press that does not travel slides it into the position nearest the press — on the
     grip, the one it stands in — and so does the wheel, a position at a time. In a notch its stem stands in it.
+    How it moves between its positions is every lever's (face::DetentLever); the grip, the still press and
+    the light under the hand are its own.
 
     Its box is the gate's plate and the room over it the grip stands up into: in the dashboard's space
     from layout::leverLeft, layout::leverTop. */
-class GearLever final : public juce::Component, private juce::Timer
+class GearLever final : public face::DetentLever
 {
 public:
-    /** Its positions, top to bottom: PARK, then the gears. */
+    /** Its positions — its places — top to bottom: PARK, then the gears. */
     static constexpr int park = 0;
     inline static const juce::StringArray names { "PARK", "CLEAN", "CRUNCH", "HI-GAIN" };
     static int positionOf (int gear) noexcept { return gear + 1; }
@@ -44,40 +46,24 @@ public:
         return names[juce::jlimit (1, names.size() - 1, position + names.size() - 1 - gears)];
     }
 
-    /** In the product's gears, as many as the slot's top notches. */
+    /** In the product's gears, as many as the slot's top notches; it stands in the first. */
     explicit GearLever (int gears);
 
-    int numGears() const noexcept     { return gears; }
-    int numPositions() const noexcept { return gears + 1; }
-
-    std::function<void (int)>   onPosition;   // the position it settled in (or snapped into while held)
-    std::function<void()>       onRelease;    // the hand has let go
-
-    int  getPosition() const noexcept { return position; }
-    bool isHeld() const noexcept  { return held; }
-
-    /** `notify` off moves the lever without reporting it — for following a state that moved by itself. */
-    void setPosition (int, bool animate, bool notify = true);
+    int numGears() const noexcept { return numPlaces() - 1; }
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
-    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     void mouseEnter (const juce::MouseEvent&) override { lit.target = 1.0f; startTimerHz (60); }
-    void mouseExit (const juce::MouseEvent&) override  { if (! held) { lit.target = 0.0f; startTimerHz (60); } }
+    void mouseExit (const juce::MouseEvent&) override  { if (! isHeld()) { lit.target = 0.0f; startTimerHz (60); } }
 
 private:
-    const int gears;
     std::vector<float> heights;         // each position's height in the dashboard's space: PARK, then the gears' notches
-    face::Glide pos;            // where the stem stands: 0..gears, one to a position
     face::Glide lit;            // the light round the grip: 0 resting .. 1 under the hand
-    int  position = 1;
-    bool held = false;
-    float grabOffset = 0.0f;
 
-    float yOf (float position) const noexcept;      // in the lever's own space
-    float positionAt (float y) const noexcept;
+    float yOf (float position) const noexcept override;      // in the lever's own space
+    float travelAt (float y) const noexcept override;
     juce::Rectangle<float> leverBox (float y, float x) const;     // the render's box, its collar standing on (x, y)
     juce::Rectangle<float> standingBox() const;                  // the render's box where the lever stands now
     void  timerCallback() override;

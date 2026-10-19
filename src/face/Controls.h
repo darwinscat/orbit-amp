@@ -112,6 +112,74 @@ struct Glide
 };
 
 //==============================================================================
+/** A LEVER THAT STANDS IN PLACES down a slot — the cockpit's throttle, a rover's gear lever. How it moves
+    is the same in every face and is said here once: held, it follows the hand, and within reach of a
+    place it sits IN it — the notch under the palm — and the hand has to pull it out; let go, it springs
+    into the nearest place on a heavy lever's spring; the wheel moves it a place at a time, toward the
+    slot's far end for a wheel turned toward you. Each face says the rest itself: where each place stands
+    (yOf, travelAt), what the hand takes it by and where a press sends it — its own mouseDown, mouseDrag
+    and mouseUp, made of take, follow and letGo — and how it is drawn. */
+class DetentLever : public juce::Component, protected juce::Timer
+{
+public:
+    /** Within this much of a place, a fraction of the way to the next one, a held lever sits in it. */
+    static constexpr float notchReach = 0.22f;
+
+    std::function<void (int)>   onPlace;      // the place it settled in (or snapped into while held)
+    std::function<void()>       onRelease;    // the hand has let go
+    std::function<void (float)> onTravel;     // where it stands, 0..numPlaces()-1, every movement
+
+    int  numPlaces() const noexcept { return places; }
+    int  getPlace() const noexcept  { return place; }
+    bool isHeld() const noexcept    { return held; }
+
+    /** `notify` off moves the lever without reporting it — for following a state that moved by itself. */
+    void setPlace (int, bool animate, bool notify = true);
+
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+
+protected:
+    /** `places` of them, standing in `start`; it springs into a place on a spring this stiff and damped. */
+    DetentLever (int places, int start, float stiffness, float damping);
+
+    /** The face's geometry: the height in the lever's own space where it stands at `travel` — 0 at the
+        first place, one to a place — and the travel a height is, kept within the slot. */
+    virtual float yOf (float travel) const noexcept = 0;
+    virtual float travelAt (float y) const noexcept = 0;
+
+    /** Where it stands now: between two places while it travels, a hair past one as it springs in. */
+    float travel() const noexcept { return pos.value; }
+
+    /** The hand has taken it at height `y`: by the grip, it goes with the hand from where it was taken;
+        anywhere else it goes where the hand is. */
+    void take (bool byTheGrip, float y);
+
+    /** Where the hand at height `y` puts it, the way it was taken. */
+    float underHand (float y) const noexcept { return travelAt (y + grabOffset); }
+
+    /** Held, it goes where the hand at height `y` puts it — into a place, within reach of one. */
+    void follow (float y);
+
+    /** The hand has let go with the lever at `to`: it springs into the place nearest that. */
+    void letGo (float to);
+
+    /** One frame of its glide toward its place: false once it stands there. */
+    bool glide() noexcept { return pos.step (frameDt); }
+
+    /** It has moved: drawn again, and where it stands told. */
+    void travelled();
+
+    void timerCallback() override;
+
+private:
+    const int places;
+    int   place;
+    bool  held = false;
+    float grabOffset = 0.0f;
+    Glide pos;
+};
+
+//==============================================================================
 /** A knob from a pointer-less render: the render stays still — its light belongs to the room, not to
     the knob — and only the pointer turns, drawn on top. 270 degrees of sweep, drag up to raise. */
 class ArtKnob final : public juce::Component

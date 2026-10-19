@@ -14,10 +14,12 @@ namespace orbitamp::catpit
 using namespace face;
 
 //==============================================================================
-/** THE THROTTLE. Four detents — CLEAN, EDGE, CRUNCH, HI-GAIN — down the slot, and pulling it toward
-    you (down) is going faster. It follows the hand while held, sticks to a detent within reach of one
-    (that is the click under the palm), and springs into the nearest one on release. */
-class Lever final : public juce::Component, private juce::Timer
+/** THE THROTTLE. Four detents — CLEAN, EDGE, CRUNCH, HI-GAIN — down the slot, its places
+    (face::DetentLever), and pulling it toward you (down) is going faster. It follows the hand while held,
+    sticks to a detent within reach of one (that is the click under the palm), and springs into the
+    nearest one on release. Pressed anywhere on the slot it comes to the hand at once — near the grip,
+    the grip goes with the hand from where it was taken — and a press on a name sends it to that name. */
+class Lever final : public DetentLever
 {
 public:
     static constexpr int numDetents = 4;
@@ -39,33 +41,15 @@ public:
 
     Lever();
 
-    std::function<void (int)>   onDetent;     // the detent it settled in (or snapped into while held)
-    std::function<void()>       onRelease;    // the hand has let go
-    std::function<void (float)> onTravel;     // continuous position, 0..numDetents-1, every movement
-
-    int  getDetent() const noexcept { return detent; }
-    bool isHeld() const noexcept    { return held; }
-
-    /** `notify` off moves the lever without reporting it — for following a state that moved by itself. */
-    void setDetent (int d, bool animate, bool notify = true);
-
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
-    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
 
 private:
-    Glide pos;
-    int   detent = 0;
-    bool  held = false;
-    float grabOffset = 0.0f;
-
-    float detentY (int i) const noexcept;
-    float posFromY (float y) const noexcept;
+    float yOf (float travel) const noexcept override;
+    float travelAt (float y) const noexcept override;
     int   labelAt (juce::Point<float>) const noexcept;
-    void  travelled();
-    void  timerCallback() override;
 };
 
 //==============================================================================

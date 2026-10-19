@@ -721,14 +721,14 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     writePoster (dir, windscreen, Art::still(), { view.get() });
 
     // ...and one for each place of the lever, PARK first: the hatch shut there only, TURBO off.
-    webPoses.count = lever.numPositions();
+    webPoses.count = lever.numPlaces();
     webPoses.standAt = [this] (int at)
     {
         if (at == GearLever::park)
             parkIt();
         else
             pullGear (at - GearLever::positionOf (0));
-        lever.setPosition (at, false, false);
+        lever.setPlace (at, false, false);
         hatch.setShut (at == GearLever::park, false);
     };
     webPoses.still = [] (int) { return Art::still(); };
@@ -813,7 +813,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     addToStage (lever);
     const float leverRight = juce::jmax (gearPlate.getRight(), notchX + leverWidth * 0.5f + 16.0f);
     lever.setBounds (juce::Rectangle<float> (leverLeft, leverTop, leverRight - leverLeft, gearPlate.getBottom() - leverTop).toNearestInt());
-    lever.onPosition = [this] (int at) { if (at == GearLever::park) parkIt(); else pullGear (at - GearLever::positionOf (0)); };
+    lever.onPlace    = [this] (int at) { if (at == GearLever::park) parkIt(); else pullGear (at - GearLever::positionOf (0)); };
     lever.onRelease  = [this] { showChannel(); };  // held, it follows the hand; let go, it follows the state
 
     // PARK may move with no hand on the lever: a host's automation, an undo.
@@ -1055,8 +1055,8 @@ void RedPawEditor::showSelector (int channel)
     const bool parked = isParked();
     const int at = parked ? GearLever::park : GearLever::positionOf (gear);
 
-    if (! lever.isHeld() && lever.getPosition() != at)
-        lever.setPosition (at, true, false);
+    if (! lever.isHeld() && lever.getPlace() != at)
+        lever.setPlace (at, true, false);
     turbo.setOn (turboOn, false);
     turbo.setEnabled (! parked);
     hatch.setShut (parked, isShowing());
@@ -1086,7 +1086,7 @@ bool RedPawEditor::channelKey (const juce::KeyPress& key)
     if (at >= 0)
     {
         if (! lever.isHeld())
-            lever.setPosition (at, true);
+            lever.setPlace (at, true);
         return true;
     }
 

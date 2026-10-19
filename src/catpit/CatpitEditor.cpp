@@ -421,7 +421,7 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
 
     // ...and one for each channel the throttle can stand in, the channel's own still sky in the glass.
     webPoses.count = channels.count();
-    webPoses.standAt = [this] (int channel) { go (channel); this->lever.setDetent (channel, false, false); };
+    webPoses.standAt = [this] (int channel) { go (channel); this->lever.setPlace (channel, false, false); };
     webPoses.still = [] (int channel) { return stillSky (channel); };
     webPoses.window = glass;
     webPoses.hidden = { &space, &still, &monitor };
@@ -463,12 +463,12 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         if (glSky != nullptr)
             glSky->setThrottle (t);
     };
-    lever.onDetent  = [this] (int d) { go (d); };
+    lever.onPlace   = [this] (int d) { go (d); };
     lever.onRelease = [this] { showChannel(); };   // held, it follows the hand; let go, it follows the state
     // A prototype's hook for looking at the window at speed without a hand on the lever.
     if (const auto d = juce::SystemStats::getEnvironmentVariable ("CATPIT_DETENT", {}); d.isNotEmpty())
         engine.go (d.getIntValue());
-    lever.setDetent (channels.active(), false, false);
+    lever.setPlace (channels.active(), false, false);
 
     // The helm turns whichever sky is flying.
     steering.onChange = [this] (float s)
@@ -562,8 +562,8 @@ CatpitEditor::~CatpitEditor()
 
 void CatpitEditor::showSelector (int channel)
 {
-    if (! lever.isHeld() && lever.getDetent() != channel)
-        lever.setDetent (channel, true, false);
+    if (! lever.isHeld() && lever.getPlace() != channel)
+        lever.setPlace (channel, true, false);
     still.setChannel (channel);
 }
 
@@ -575,7 +575,7 @@ bool CatpitEditor::channelKey (const juce::KeyPress& key)
         return false;
 
     if (! lever.isHeld())
-        lever.setDetent (channel, true);
+        lever.setPlace (channel, true);
     return true;
 }
 
@@ -584,7 +584,7 @@ bool CatpitEditor::channelKey (const juce::KeyPress& key)
 void CatpitEditor::programChange (int program)
 {
     if (program >= 0 && program < Lever::numDetents && ! lever.isHeld())
-        lever.setDetent (program, true);
+        lever.setPlace (program, true);
 }
 
 /** TURBO's controller: the push, or none. */
@@ -711,7 +711,7 @@ void CatpitEditor::applySky()
     if (wantGpu && glSky == nullptr)
     {
         glSky = std::make_unique<GlSky> (gl);
-        glSky->setThrottle ((float) lever.getDetent() / (float) (Lever::numDetents - 1));
+        glSky->setThrottle ((float) lever.getPlace() / (float) (Lever::numDetents - 1));
         glSky->setSteer (steering.value());
         gl.setRenderer (glSky.get());
         gl.setComponentPaintingEnabled (true);
