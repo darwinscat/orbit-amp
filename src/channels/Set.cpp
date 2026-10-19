@@ -32,8 +32,9 @@ juce::Array<juce::File> ownCabinets (const juce::File& factory)
 
 int layOut (const juce::File& factory, juce::int64 build)
 {
-    // The family's shelf first — every product carries the whole of it — and the product's own packs.
-    auto carried = device::shelf::carried();
+    // The family's shelf first — a face carries Darwin's Cat's own cabinets of it, OrbitAmp alone the
+    // whole — and the product's own packs.
+    auto carried = device::shelf::carried (device::shelf::ours);
 
    #if PRODUCT_SET_EMBEDDED
     for (int i = 0; i < ProductSetData::namedResourceListSize; ++i)

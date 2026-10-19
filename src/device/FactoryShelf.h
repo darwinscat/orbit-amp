@@ -12,16 +12,16 @@
 namespace orbitamp::device::shelf
 {
 
-/** THE FAMILY'S CABINET SHELF: every cabinet IR a Darwin's Cat amp carries, the same for every product
-    of the family — Darwin's Cat's own, shot off the Orange (resources/set/IRs.md says what they are),
-    and the third-party ones OrbitAmp has always played (resources/ir). Inside the binary of each, in
-    the data every product links (OrbitAmpData), and laid out with the product's set in the family's
-    `Factory/IRs` (FactorySet.h), so that a cabinet is one file on the machine however many of the
-    family carry it.
+/** THE FAMILY'S CABINET SHELF: every cabinet IR a Darwin's Cat amp carries — Darwin's Cat's own, shot
+    off the Orange (resources/set/IRs.md says what they are), and the third-party ones OrbitAmp has always
+    played (resources/ir). Inside the binary of each, in the data every product links (OrbitAmpData), and
+    laid out with the product's set in the family's `Factory/IRs` (FactorySet.h), so that a cabinet is one
+    file on the machine however many of the family carry it.
 
     ON THE SHELF IN FOLDERS, one for each maker's cabinets — `Orange PPC112` for Darwin's Cat's own and
-    `Other` for the rest — and every product's cabinet list shows the shelf by them. A cabinet joining
-    the shelf joins a folder, or brings a new one.
+    `Other` for the rest. OrbitAmp carries the whole shelf and lists it by them, a submenu each; the faces
+    carry Darwin's Cat's own folder alone (`carried (ours)`), one list. A cabinet joining the shelf joins
+    a folder, or brings a new one.
 
     IN THE ORDER OF THE `cab_ir` PARAMETER (params::cabIrNames): what an OrbitAmp session keeps of its
     cabinet is an index into this list, so a cabinet joins it at the end and nothing already here ever
@@ -115,14 +115,16 @@ inline juce::String pathOf (const Ir& ir)
     return juce::String (folderName) + "/" + ir.folder + "/" + ir.file;
 }
 
-/** The shelf as a set's files, for a product to lay out with its own (FactorySet::layOut). */
-inline std::vector<FactorySet::Entry> carried()
+/** The shelf as a set's files, for a product to lay out with its own (FactorySet::layOut): the whole of
+    it, or the one folder named. */
+inline std::vector<FactorySet::Entry> carried (const char* onlyFolder = nullptr)
 {
     std::vector<FactorySet::Entry> out;
 
     for (const auto& ir : irs())
         if (ir.data != nullptr && ir.file.isNotEmpty())
-            out.push_back ({ pathOf (ir), ir.data, (size_t) ir.size });
+            if (onlyFolder == nullptr || juce::String (ir.folder) == onlyFolder)
+                out.push_back ({ pathOf (ir), ir.data, (size_t) ir.size });
 
     return out;
 }

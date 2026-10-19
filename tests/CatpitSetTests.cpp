@@ -68,9 +68,12 @@ int main (int argc, char** argv)
     }
    #endif
 
-    // ...and the family's cabinet shelf, in its folders: every product carries the whole of it.
+    // ...and Darwin's Cat's own cabinets of the family's shelf, in their folder: OrbitAmp alone carries
+    // the whole of it.
     for (const auto& ir : orbitamp::device::shelf::irs())
     {
+        if (juce::String (ir.folder) != orbitamp::device::shelf::ours)
+            continue;
         carried.push_back ({ factory.getChildFile (orbitamp::device::shelf::pathOf (ir)), ir.data, ir.size });
         ++cabinets;
         bytes += ir.size;
@@ -94,14 +97,14 @@ int main (int argc, char** argv)
     check (allThere(), "...each of them byte for byte what was built in");
     check (carried.empty() || list.existsAsFile(), "...and the cockpit's own list of them");
 
-    // THE FAMILY'S SHELF, in its folders: Darwin's Cat's own ten in the Orange's, the twenty-one others
-    // in Other, and none loose at the top.
+    // THE FAMILY'S SHELF, Darwin's Cat's own ten in the Orange's folder, none in Other — those are
+    // OrbitAmp's — and none loose at the top.
     {
         const auto shelf = set::cabinetsIn (factory);
         const auto in = [&shelf] (const char* folder) { return shelf.getChildFile (folder).findChildFiles (juce::File::findFiles, false, "*.wav").size(); };
         check (stray == 0, "the cockpit's own set data holds packs alone");
-        check (in ("Orange PPC112") == 10 && in ("Other") == 21 && shelf.findChildFiles (juce::File::findFiles, false).isEmpty(),
-               "the cabinets lie in the shelf's folders: ten in Orange PPC112, twenty-one in Other, none loose");
+        check (in ("Orange PPC112") == 10 && in ("Other") == 0 && shelf.findChildFiles (juce::File::findFiles, false).isEmpty(),
+               "the cabinets lie in the Orange's folder, all ten, none in Other and none loose");
         check (shelf.getChildFile ("Orange PPC112/02-dark-matter.wav").existsAsFile(), "...DARK MATTER among the Orange's");
     }
 
