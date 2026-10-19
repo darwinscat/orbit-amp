@@ -540,6 +540,12 @@ endfunction()
 # says a number of its own. What an amp was given is kept on its target, where its gates read it
 # (amp_console): a gate is the amp compiled again, never a second copy of its lists.
 # ----------------------------------------------------------------------------
+
+# THE CODECS NO AMP READS: an amp opens WAV and AIFF — its demo loops, a player's IRs — and nothing else,
+# but registerBasicFormats() (src/core/DemoPlayer.h) pulls in every codec JUCE builds, so the ones it would
+# never be handed are not built: Ogg Vorbis, FLAC, and Windows Media. Said for every amp and its gates alike.
+set(AMP_UNREAD_CODECS JUCE_USE_OGGVORBIS=0 JUCE_USE_FLAC=0 JUCE_USE_WINDOWS_MEDIA_FORMAT=0)
+
 function(add_amp name)
     cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
@@ -613,6 +619,7 @@ function(add_amp name)
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0   # JUCE 8 has no splash requirement on any tier, incl. AGPLv3
+        ${AMP_UNREAD_CODECS}           # ...nor a codec it never reads (above)
         $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>)   # the standalone offers ASIO beside WASAPI; JUCE carries the SDK
 
     target_include_directories(${name} PUBLIC "${ORBITAMP_GENERATED_DIR}")   # OrbitAmpVersion.h
@@ -711,7 +718,7 @@ function(amp_console target product amp main)
     if(GATE_CHANNELS)
         target_compile_definitions(${target} PRIVATE GATE_CHANNELS=${GATE_CHANNELS})
     endif()
-    target_compile_definitions(${target} PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_compile_definitions(${target} PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
     target_link_libraries(${target} PRIVATE ${libraries})
     if(GATE_NO_FACTORY)
         gate_reads_factory(${target} "${CMAKE_CURRENT_BINARY_DIR}/no-factory/Factory")
