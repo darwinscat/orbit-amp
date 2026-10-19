@@ -65,6 +65,11 @@ public:
 
     void paint (juce::Graphics&) override;
 
+    /** SHAPE as the site's demo draws it (Console::webExtras): its two strokes and the taps they are drawn
+        from, the window, the fill and the floor, the silence rules — and whether this glass fades it —
+        and the band it lies in, in the parent's space. */
+    juce::var shapeForWeb() const;
+
 private:
     AmpProcessor& amp;
     View view = View::none;

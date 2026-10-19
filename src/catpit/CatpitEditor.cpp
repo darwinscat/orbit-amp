@@ -346,6 +346,13 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     writeSprite (dir, "guard-closed.png", art.guardClosed);
     writeSprite (dir, "guard-open.png", art.guardOpen);
     writeSprite (dir, "guard-on.png", art.guardOn);
+
+    // WHAT THE WINDSHIELD SHOWS OVER THE SKY as the cockpit opens — SHAPE, in its band, going out with the
+    // sound (Monitor).
+    auto* window = new juce::DynamicObject();
+    window->setProperty ("firstView", Monitor::names()[(int) monitor.shown()]);
+    window->setProperty ("shape", monitor.shapeForWeb());
+    world.setProperty ("monitor", juce::var (window));
     for (int c = 0; c < channels.count(); ++c)
         face::writeForWeb (dir.getChildFile ("sky-" + juce::String (c) + ".png"), stillSky (c));
 

@@ -573,38 +573,9 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     nav->setProperty ("firstScreen", Monitor::names()[(int) skin().firstScreen]);
     nav->setProperty ("parkSignOnTopLine", skin().parkSignOnTopLine);
 
-    // SHAPE, the screen's first picture (face::Monitor, scope::ShapeView), edge to edge across `picture`:
-    // one cycle of what goes into the amp, lilac, and of what comes out of it, orange, both scaled by the
-    // one factor that brings the window's peak to `fill` of the half-height and each clamped there.
-    auto* shape = new juce::DynamicObject();
-    const auto stroke = [&colour] (juce::Colour c, float width, const char* tap)
-    {
-        auto* s = new juce::DynamicObject();
-        s->setProperty ("colour", colour (c));
-        s->setProperty ("width", width);
-        s->setProperty ("tap", tap);
-        return juce::var (s);
-    };
-    shape->setProperty ("dry", stroke (theme::lilac.withAlpha (scope::ShapeView::dryAlpha), scope::ShapeView::dryWidth,
-                                       "the amp's input: the captured block's own, after INPUT, the hum and the gate, before the model; channel 0"));
-    shape->setProperty ("wet", stroke (theme::orange, scope::ShapeView::wetWidth,
-                                       "the amp's output: the model's, before the tone stack, the delay, the room and the cabinet; channel 0"));
-    shape->setProperty ("tapSamples", core::ScopeTap::size);         // the last this many samples of both, at the session's rate
-    shape->setProperty ("window", "back from the last rising zero crossing of dry in the tap's later half (its end if none)");
-    shape->setProperty ("samples", scope::ShapeView::samples);
-    shape->setProperty ("fill", scope::ShapeView::fill);
-    shape->setProperty ("peakFloor", scope::ShapeView::peakFloor);  // the factor's floor: silence stays a flat line
-    shape->setProperty ("fps", 60);
-    shape->setProperty ("noFrame", "no fresh tap since the last frame: nothing drawn");
-    auto* silence = new juce::DynamicObject();
-    silence->setProperty ("fades", false);                         // a rover's line stays; the cockpit's goes (shapeFadesInSilence)
-    silence->setProperty ("judgedOn", "dry's peak over the tap");
-    silence->setProperty ("quietDb", Monitor::quietDb);
-    silence->setProperty ("quietMs", Monitor::quietMs);
-    silence->setProperty ("fadeOutMs", Monitor::fadeOutMs);
-    silence->setProperty ("fadeInMs", Monitor::fadeInMs);
-    shape->setProperty ("silence", juce::var (silence));
-    nav->setProperty ("shape", juce::var (shape));
+    // SHAPE, the screen's first picture, as the screen draws it — edge to edge across `picture`, and not
+    // fading in a pause.
+    nav->setProperty ("shape", screen.shapeForWeb());
 
     // PARKED, the picture goes at once and the screen is the large warning's (ParkSign::paint): darkened,
     // the red triangle in its middle.
