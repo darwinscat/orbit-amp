@@ -1,3 +1,7 @@
 # The factory packs are zipped by the build as their files are, byte for byte (CMakeLists.txt, THE SET):
 # a rig.json checked out with CRLF on Windows would be a different pack there. Still shown as text in a diff.
 resources/set/Devices/** -text
+
+# The shaders are built into the binary as their files are, too (CMakeLists.txt, THE SHADERS), and were
+# string literals before, which have no CR on any system: LF everywhere, so every system compiles one text.
+resources/shaders/** text eol=lf

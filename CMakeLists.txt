@@ -627,6 +627,41 @@ target_link_libraries(OrbitAmp PRIVATE
 )
 
 # ----------------------------------------------------------------------------
+# THE SHADERS: every GLSL program the faces draw with — the windscreens' worlds and the cockpit's sky —
+# as files in resources/shaders, a folder a world and what several share in common/, put together by
+# src/shaders/Shaders.h. One copy of each, as files rather than string literals, so that whatever else
+# draws these views — the site, the same C++ in WebAssembly — reads the very same text. Built into the
+# binary of every target that compiles a renderer; a file put there is carried from the next build on,
+# with nobody to remember to list it. Binary data knows a file by its name alone, and the worlds' files
+# share names (plains/sky.frag, ice/sky.frag), so their paths are written beside it in the same order.
+# ----------------------------------------------------------------------------
+set(ORBITAMP_SHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/shaders")
+file(GLOB_RECURSE ORBITAMP_SHADER_FILES CONFIGURE_DEPENDS
+    "${ORBITAMP_SHADER_DIR}/*.glsl" "${ORBITAMP_SHADER_DIR}/*.vert" "${ORBITAMP_SHADER_DIR}/*.frag")
+list(SORT ORBITAMP_SHADER_FILES)
+set(_orbitamp_shader_paths "")
+foreach(file IN LISTS ORBITAMP_SHADER_FILES)
+    file(RELATIVE_PATH path "${ORBITAMP_SHADER_DIR}" "${file}")
+    string(APPEND _orbitamp_shader_paths "    \"${path}\",\n")
+endforeach()
+file(CONFIGURE OUTPUT "${ORBITAMP_GENERATED_DIR}/ShaderPaths.h" @ONLY CONTENT
+"// Written by CMakeLists.txt (THE SHADERS): the paths in resources/shaders of the files ShaderData carries, in its order.
+#pragma once
+namespace orbitamp::shaders
+{
+inline constexpr const char* embeddedPaths[] =
+{
+@_orbitamp_shader_paths@};
+}
+")
+juce_add_binary_data(OrbitAmpShaders
+    NAMESPACE   ShaderData
+    HEADER_NAME ShaderData.h
+    SOURCES     ${ORBITAMP_SHADER_FILES})
+target_include_directories(OrbitAmpShaders INTERFACE "${ORBITAMP_GENERATED_DIR}")   # ShaderPaths.h
+set_target_properties(OrbitAmpShaders PROPERTIES EXCLUDE_FROM_ALL TRUE)   # OrbitAmp itself draws none
+
+# ----------------------------------------------------------------------------
 # CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and two
 # faces, each target compiling exactly one `makeEditor`. Standalone only, for now. Its renders are in
 # resources/catpit and are built into the binary under a namespace of their own, beside OrbitAmp's data.
@@ -727,10 +762,12 @@ set(CATPITAMP_SOURCES
     src/catpit/CatpitLineup.cpp
     src/catpit/CatpitSpace.cpp
     src/catpit/CatpitGlSky.cpp
-    src/catpit/CatpitEditor.cpp)
+    src/catpit/CatpitEditor.cpp
+    src/shaders/Shaders.cpp)
 set(CATPITAMP_LIBRARIES
     OrbitAmpData
     CatpitAmpData
+    OrbitAmpShaders                  # the sky's shaders
     felitronics::analysis
     felitronics::appkit
     felitronics::appkit_webp
@@ -868,13 +905,15 @@ set(REDPAW_VIEW_SOURCES
     src/redpaw/view/Mars1993.cpp
     src/redpaw/view/PlainsWorld.cpp
     src/redpaw/view/PlainsGl.cpp
-    src/redpaw/view/Windscreen.cpp)
+    src/redpaw/view/Windscreen.cpp
+    src/shaders/Shaders.cpp)
 
 juce_add_gui_app(redpaw_view_demo PRODUCT_NAME "RedPawViewDemo")
 target_sources(redpaw_view_demo PRIVATE src/redpaw/view/WindscreenDemo.cpp ${REDPAW_VIEW_SOURCES})
 target_include_directories(redpaw_view_demo PRIVATE src)
 target_compile_definitions(redpaw_view_demo PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(redpaw_view_demo PRIVATE
+    OrbitAmpShaders
     juce::juce_gui_extra
     juce::juce_opengl
     juce::juce_recommended_config_flags
@@ -895,6 +934,7 @@ target_sources(frostpaw_view_demo PRIVATE src/redpaw/view/WindscreenDemo.cpp ${R
 target_include_directories(frostpaw_view_demo PRIVATE src)
 target_compile_definitions(frostpaw_view_demo PRIVATE ORBITAMP_VIEW_DEMO_ICE=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(frostpaw_view_demo PRIVATE
+    OrbitAmpShaders
     juce::juce_gui_extra
     juce::juce_opengl
     juce::juce_recommended_config_flags
@@ -916,6 +956,7 @@ target_sources(amberpaw_view_demo PRIVATE src/redpaw/view/WindscreenDemo.cpp ${R
 target_include_directories(amberpaw_view_demo PRIVATE src)
 target_compile_definitions(amberpaw_view_demo PRIVATE ORBITAMP_VIEW_DEMO_TITAN=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(amberpaw_view_demo PRIVATE
+    OrbitAmpShaders
     juce::juce_gui_extra
     juce::juce_opengl
     juce::juce_recommended_config_flags
@@ -1027,6 +1068,7 @@ set(ROVER_SOURCES
 set(REDPAWAMP_SOURCES ${ROVER_SOURCES} src/redpaw/RedPawSkin.cpp)
 set(ROVER_LIBRARIES
     OrbitAmpData
+    OrbitAmpShaders                  # the windscreens' shaders
     felitronics::analysis
     felitronics::appkit
     felitronics::appkit_webp

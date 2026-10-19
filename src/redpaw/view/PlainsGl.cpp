@@ -3,6 +3,8 @@
 
 #include "PlainsGl.h"
 
+#include "../../shaders/Shaders.h"
+
 #include <cmath>
 #include <map>
 
@@ -25,322 +27,24 @@ namespace
     constexpr RockSet rocks    { 3.5,  32, 0.30f,  0.22f, 1.0f };    // near rocks, a 112 m window
     constexpr RockSet boulders { 25.0, 32, 0.045f, 1.2f,  4.2f };    // boulders, an 800 m window
 
-    // Shared by the terrain's two shaders and the rock vertex shader: the height function. HTEX is
-    // textureLod (.., 0) in a vertex shader and texture() in a fragment shader.
-    const char* const glslCommon = R"GLSL(
-uniform sampler2D uHeight;
-uniform vec2 uCamCell;      // the integer world xz the frame is relative to (exact in float)
-uniform vec2 uCamFrac;      // the camera's xz minus uCamCell
-uniform vec2 uTexOff0, uTexOff1, uTexOff2;  // fract (uCamCell / L_i) (+ the fixed layer offsets), from doubles
-const float L0 = 7000.0, L1 = 1250.0, L2 = 190.0;
-const float CRC = 350.0;                    // the crater cell
-const int   CRM = 1900;                     // WORLD / CRC
-uint ih (uint x) { x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u; return x; }
-float hcell (ivec2 c, uint s) { return float (ih (uint (c.x) * 0x9E3779B1u ^ ih (uint (c.y) * 0x85EBCA77u ^ s))) * (1.0 / 4294967296.0); }
-float craters (vec2 p, float mask) {         // p = absolute world xz
-  vec2 q = p / CRC; vec2 fc = floor (q);
-  ivec2 c = (ivec2 (fc) + CRM * 64) % CRM;   // never negative, wraps with the world
-  float r0 = hcell (c, 1u);
-  if (r0 > 0.42 || mask < 0.01) return 0.0;
-  vec2 ctr = (fc + 0.25 + 0.5 * vec2 (hcell (c, 2u), hcell (c, 3u))) * CRC;
-  float k = hcell (c, 4u);
-  float R = CRC * (0.045 + 0.16 * k * k);    // 16 .. 72 m radius
-  float d = length (p - ctr) / R;
-  if (d > 1.6) return 0.0;
-  float bowl = -(1.0 - d * d) * step (d, 1.0);
-  float rim = exp (-pow ((d - 1.0) / 0.22, 2.0));
-  return mask * R * (0.24 * bowl + 0.065 * rim);
-}
-float terrainH (vec2 pr, out vec4 a, out vec4 b, out vec4 c) {   // pr = world xz relative to uCamCell, metres
-  a = HTEX (uTexOff0 + pr / L0);
-  b = HTEX (uTexOff1 + pr / L1);
-  c = HTEX (uTexOff2 + pr / L2);
-  float dist = length (pr - uCamFrac);
-  float mtnMask = smoothstep (0.50, 0.92, a.r);
-  float mtn = 430.0 * pow (mtnMask, 1.25) * (0.5 + 0.9 * b.b);
-  float swell = (a.a - 0.5) * 90.0;
-  float hills = (b.r - 0.5) * 48.0 * (0.4 + 0.6 * a.g);
-  float plainM = 1.0 - mtnMask;
-  float mesaM = smoothstep (0.60, 0.64, b.g) * smoothstep (0.35, 0.6, a.b) * plainM;
-  float mesa = mesaM * 24.0 * (1.0 + 0.35 * (c.g - 0.5));
-  float canyon = -smoothstep (0.80, 0.97, 1.0 - abs (2.0 * a.g - 1.0)) * 34.0 * plainM * smoothstep (0.45, 0.62, a.b);
-  float fade = 1.0 - smoothstep (800.0, 2500.0, dist);
-  float dune = ((c.r - 0.5) * 5.0 + (c.b - 0.5) * 1.3) * fade;
-  float crm = plainM * (1.0 - mesaM) * smoothstep (0.90, 0.75, 1.0 - abs (2.0 * a.g - 1.0));
-  return swell + mtn + hills + mesa + canyon + dune + craters (pr + uCamCell, crm);
-}
-float terrainH (vec2 pr) { vec4 a, b, c; return terrainH (pr, a, b, c); }
-)GLSL";
-
-    // The analytic world-space gradient of terrainH from the gradient textures: the per-pixel normal.
-    // uGrad1 = (dR/du, dR/dv, dB/du, dB/dv) and uGrad2 = (dG/du, dG/dv, dA/du, dA/dv) per uv unit, as
-    // 0.5 + 0.5 * g / gmax in RGBA8; uGS1 = (gmaxR, gmaxB), uGS2 = (gmaxG, gmaxA).
-    const char* const glslGrad = R"GLSL(
-uniform sampler2D uGrad1, uGrad2; uniform vec2 uGS1, uGS2;
-float dss (float e0, float e1, float x) { float t = clamp ((x - e0) / (e1 - e0), 0.0, 1.0); return 6.0 * t * (1.0 - t) / (e1 - e0); }
-vec2 craterGrad (vec2 p, float mask) {
-  vec2 q = p / CRC; vec2 fc = floor (q);
-  ivec2 c = (ivec2 (fc) + CRM * 64) % CRM;
-  float r0 = hcell (c, 1u);
-  if (r0 > 0.42 || mask < 0.01) return vec2 (0.0);
-  vec2 ctr = (fc + 0.25 + 0.5 * vec2 (hcell (c, 2u), hcell (c, 3u))) * CRC;
-  float k = hcell (c, 4u);
-  float R = CRC * (0.045 + 0.16 * k * k);
-  vec2 dv = p - ctr; float L = max (length (dv), 1e-3); float d = L / R;
-  if (d > 1.6) return vec2 (0.0);
-  float rim = exp (-pow ((d - 1.0) / 0.22, 2.0));
-  float dhdd = mask * R * (0.24 * 2.0 * d * step (d, 1.0) + 0.065 * rim * (-2.0 * (d - 1.0) / (0.22 * 0.22)));
-  return dhdd * dv / (L * R);
-}
-vec2 terrainGrad (vec2 pr, vec4 a, vec4 b, vec4 c) {
-  vec2 uv0 = uTexOff0 + pr / L0, uv1 = uTexOff1 + pr / L1, uv2 = uTexOff2 + pr / L2;
-  vec4 s1 = vec4 (uGS1.x, uGS1.x, uGS1.y, uGS1.y), s2 = vec4 (uGS2.x, uGS2.x, uGS2.y, uGS2.y);
-  vec4 g1a = (texture (uGrad1, uv0) * 2.0 - 1.0) * s1 / L0, g2a = (texture (uGrad2, uv0) * 2.0 - 1.0) * s2 / L0;
-  vec4 g1b = (texture (uGrad1, uv1) * 2.0 - 1.0) * s1 / L1, g2b = (texture (uGrad2, uv1) * 2.0 - 1.0) * s2 / L1;
-  vec4 g1c = (texture (uGrad1, uv2) * 2.0 - 1.0) * s1 / L2;
-  vec2 gAr = g1a.xy, gAb = g1a.zw, gAg = g2a.xy, gAa = g2a.zw;
-  vec2 gBr = g1b.xy, gBb = g1b.zw, gBg = g2b.xy;
-  vec2 gCr = g1c.xy, gCb = g1c.zw;
-  float dist = length (pr - uCamFrac);
-  float mtnMask = smoothstep (0.50, 0.92, a.r); vec2 dM = dss (0.50, 0.92, a.r) * gAr;
-  vec2 g = 430.0 * (1.25 * pow (mtnMask, 0.25) * dM * (0.5 + 0.9 * b.b) + pow (mtnMask, 1.25) * 0.9 * gBb);
-  g += 90.0 * gAa;
-  g += 48.0 * (gBr * (0.4 + 0.6 * a.g) + (b.r - 0.5) * 0.6 * gAg);
-  float plainM = 1.0 - mtnMask; vec2 dPlain = -dM;
-  float m1 = smoothstep (0.60, 0.64, b.g), m2 = smoothstep (0.35, 0.6, a.b);
-  vec2 dm1 = dss (0.60, 0.64, b.g) * gBg, dm2 = dss (0.35, 0.6, a.b) * gAb;
-  float mesaM = m1 * m2 * plainM;
-  g += 24.0 * (1.0 + 0.35 * (c.g - 0.5)) * (dm1 * m2 * plainM + m1 * dm2 * plainM + m1 * m2 * dPlain);
-  float ridge = 1.0 - abs (2.0 * a.g - 1.0); vec2 dRidge = -2.0 * sign (2.0 * a.g - 1.0) * gAg;
-  float c3 = smoothstep (0.80, 0.97, ridge), c4 = smoothstep (0.45, 0.62, a.b);
-  vec2 dc3 = dss (0.80, 0.97, ridge) * dRidge, dc4 = dss (0.45, 0.62, a.b) * gAb;
-  g += -34.0 * (dc3 * plainM * c4 + c3 * dPlain * c4 + c3 * plainM * dc4);
-  float fade = 1.0 - smoothstep (800.0, 2500.0, dist);
-  g += fade * (5.0 * gCr + 1.3 * gCb);
-  float crm = plainM * (1.0 - mesaM) * smoothstep (0.90, 0.75, ridge);
-  g += craterGrad (pr + uCamCell, crm);
-  return g;
-}
-)GLSL";
-
-    const char* const glslLight = R"GLSL(
-uniform vec3 uSun, uHorizon, uZenith, uSunGlow;
-uniform float uHazeK, uStorm;
-vec3 applyHaze (vec3 col, float dist, vec3 V) {
-  float f = 1.0 - exp (-dist * uHazeK);
-  f = max (f, smoothstep (11500.0, 15800.0, dist));
-  float s = max (dot (V, uSun), 0.0);
-  vec3 hz = uHorizon + uSunGlow * (pow (s, 8.0) * 0.55 + s * s * 0.14);
-  return mix (col, hz, f);
-}
-vec3 shade (vec3 alb, vec3 n) {
-  float ndl = max (dot (n, uSun), 0.0);
-  vec3 sunC = vec3 (1.0, 0.86, 0.70) * (1.3 - 0.45 * uStorm);
-  vec3 amb = mix (uHorizon, uZenith, 0.5) * (0.5 + 0.25 * uStorm) * (0.55 + 0.45 * n.y);
-  return alb * (amb + sunC * ndl);
-}
-)GLSL";
-
-    const char* const vsTerrainBody = R"GLSL(
-in vec2 aGrid;
-uniform vec2 uLvlOrigin; uniform float uCellSize, uMorphOn;
-uniform mat4 uViewProj;
-out vec3 vPos; out vec4 vA, vB, vC;
-void main() {
-  vec2 pr = uLvlOrigin + aGrid * uCellSize;
-  float h = terrainH (pr, vA, vB, vC);
-  vec2 par = mod (aGrid, 2.0);
-  vec2 d = par * uCellSize;
-  float hc = 0.5 * (terrainH (pr - d) + terrainH (pr + d));   // the height on the coarser lattice
-  float b = max (abs (aGrid.x - 64.0), abs (aGrid.y - 64.0));
-  float alpha = clamp ((b - 48.0) / 15.0, 0.0, 1.0) * uMorphOn;
-  h = mix (h, hc, alpha);
-  vPos = vec3 (pr.x, h, pr.y);
-  gl_Position = uViewProj * vec4 (vPos, 1.0);
-}
-)GLSL";
-
-    const char* const fsTerrainBody = R"GLSL(
-uniform sampler2D uDetail;
-uniform vec3 uCamRel;
-uniform vec2 uDetOff0, uDetOff1;
-in vec3 vPos; in vec4 vA, vB, vC;
-out vec4 fragColor;
-void main() {
-  vec3 rel = vPos - uCamRel; float dist = length (rel); vec3 V = rel / dist;
-  vec2 g = terrainGrad (vPos.xz, vA, vB, vC);
-  vec3 n = normalize (vec3 (-g.x, 1.0, -g.y));
-  vec3 d1 = texture (uDetail, uDetOff0 + vPos.xz / 1.75).rgb * 2.0 - 1.0;
-  vec3 d2 = texture (uDetail, uDetOff1 + vPos.xz / 0.35).rgb * 2.0 - 1.0;
-  float df1 = exp (-dist / 140.0), df2 = exp (-dist / 30.0);
-  n = normalize (n + vec3 (d1.x, 0.0, d1.y) * 0.55 * df1 + vec3 (d2.x, 0.0, d2.y) * 0.25 * df2);
-  float slope = 1.0 - n.y;
-  vec4 pat = vB;
-  vec3 dust = mix (vec3 (0.72, 0.45, 0.27), vec3 (0.80, 0.55, 0.34), pat.a);
-  vec3 rock = vec3 (0.38, 0.22, 0.14);
-  vec3 alb = mix (dust, rock, smoothstep (0.12, 0.45, slope));
-  alb *= 1.0 + 0.16 * d1.z * df1 + 0.10 * d2.z * df2;
-  alb *= 0.9 + 0.2 * pat.g;
-  vec3 col = shade (alb, n);
-  col = applyHaze (col, dist, V);
-  fragColor = vec4 (col, 1.0);
-}
-)GLSL";
-
-    const char* const vsRockBody = R"GLSL(
-in vec3 aPos; in vec3 aNrm;
-uniform mat4 uViewProj;
-uniform ivec2 uRockBase; uniform int uRockW, uRockM; uniform float uRockCell, uRockProb; uniform vec2 uRockSize;
-uniform vec3 uCamRel;
-out vec3 vN; out vec3 vRel; out float vTint;
-void main() {
-  int ii = gl_InstanceID;
-  ivec2 cij = ivec2 (ii % uRockW, ii / uRockW) + uRockBase;
-  ivec2 c = (cij + uRockM * 8) % uRockM;
-  float r0 = hcell (c, 11u);
-  int variant = (hcell (c, 19u) < 0.5) ? 0 : 1;
-  int myVar = gl_VertexID / 240;
-  vec2 cen = (vec2 (cij) + vec2 (hcell (c, 12u), hcell (c, 13u))) * uRockCell;
-  vec2 pr = cen - uCamCell;
-  float m = HTEX (uTexOff0 + pr / L0).r;
-  if (r0 > uRockProb || variant != myVar || m > 0.62) { gl_Position = vec4 (0.0, 0.0, 2.0, 1.0); vN = vec3 (0, 1, 0); vRel = vec3 (0); vTint = 0.0; return; }
-  float gh = terrainH (pr);
-  float s = mix (uRockSize.x, uRockSize.y, pow (hcell (c, 14u), 2.2));
-  vec3 sc = s * vec3 (0.7 + 0.6 * hcell (c, 15u), 0.5 + 0.5 * hcell (c, 16u), 0.7 + 0.6 * hcell (c, 17u));
-  float ang = 6.2831853 * hcell (c, 18u); float ca = cos (ang), sa = sin (ang);
-  vec3 lp = aPos * sc; vec3 ln = normalize (aNrm / sc);
-  lp.xz = vec2 (ca * lp.x - sa * lp.z, sa * lp.x + ca * lp.z);
-  ln.xz = vec2 (ca * ln.x - sa * ln.z, sa * ln.x + ca * ln.z);
-  vec3 wp = vec3 (pr.x + lp.x, gh + lp.y - 0.3 * sc.y, pr.y + lp.z);
-  vN = ln; vRel = wp - uCamRel; vTint = hcell (c, 20u);
-  gl_Position = uViewProj * vec4 (wp, 1.0);
-}
-)GLSL";
-
-    const char* const fsRockBody = R"GLSL(
-in vec3 vN; in vec3 vRel; in float vTint;
-out vec4 fragColor;
-void main() {
-  float dist = length (vRel); vec3 V = vRel / dist;
-  vec3 alb = mix (vec3 (0.42, 0.27, 0.19), vec3 (0.58, 0.40, 0.28), vTint);
-  vec3 n = normalize (vN);
-  vec3 col = shade (alb, n) + alb * mix (uHorizon, uZenith, 0.5) * 0.25;   // a little sky fill: rocks are not holes
-  col = applyHaze (col, dist, V);
-  fragColor = vec4 (col, 1.0);
-}
-)GLSL";
-
-    // The relics: instanced, one draw per variant; aCell is the instance's unwrapped 532 m cell. A
-    // vertex of kind 1 is a solar panel, of kind 2 a track behind the wheels: it follows the ground,
-    // and only some have one.
-    const char* const vsRelicBody = R"GLSL(
-in vec3 aPos; in vec3 aNrm; in vec3 aCol; in float aKind; in vec2 aCell;
-uniform mat4 uViewProj;
-uniform vec3 uCamRel;
-const float RC = 532.0; const int RM = 1250;    // the relic cell, WORLD / RC
-out vec3 vN; out vec3 vRel; out vec3 vCol; out float vDust;
-void main() {
-  ivec2 cij = ivec2 (aCell);
-  ivec2 c = (cij + RM * 64) % RM;
-  vec2 foot = (vec2 (cij) + 0.2 + 0.6 * vec2 (hcell (c, 51u), hcell (c, 52u))) * RC - uCamCell;
-  float ang = 6.2831853 * hcell (c, 54u); float ca = cos (ang), sa = sin (ang);
-  bool track = aKind > 1.5;
-  vDust = track ? 0.0 : (0.35 + 0.5 * hcell (c, 55u)) * (aKind > 0.5 ? 0.4 : 1.0);   // the panels, smoother, hold less of it
-  vec3 lp = aPos; vec3 ln = aNrm;
-  if (track && hcell (c, 56u) > 0.6) lp = vec3 (0.0);
-  lp.xz = vec2 (ca * lp.x - sa * lp.z, sa * lp.x + ca * lp.z);
-  ln.xz = vec2 (ca * ln.x - sa * ln.z, sa * ln.x + ca * ln.z);
-  vec3 wp = vec3 (foot.x + lp.x, 0.0, foot.y + lp.z);
-  wp.y = track ? terrainH (wp.xz) + 0.05 : terrainH (foot) + lp.y;
-  vN = ln; vRel = wp - uCamRel; vCol = aCol;
-  gl_Position = uViewProj * vec4 (wp, 1.0);
-}
-)GLSL";
-
-    const char* const fsRelicBody = R"GLSL(
-in vec3 vN; in vec3 vRel; in vec3 vCol; in float vDust;
-out vec4 fragColor;
-void main() {
-  float dist = length (vRel); vec3 V = vRel / dist;
-  vec3 n = normalize (vN);
-  vec3 alb = mix (vCol, vec3 (0.76, 0.50, 0.30), vDust * smoothstep (0.2, 0.9, n.y));   // the dust settled on what faces up
-  vec3 col = shade (alb, n) + alb * mix (uHorizon, uZenith, 0.5) * 0.25;
-  col = applyHaze (col, dist, V);
-  fragColor = vec4 (col, 1.0);
-}
-)GLSL";
-
-    const char* const vsSky = R"GLSL(#version 150
-out vec2 vNdc;
-void main() {
-  vec2 p = vec2 ((gl_VertexID == 1) ? 3.0 : -1.0, (gl_VertexID == 2) ? 3.0 : -1.0);
-  vNdc = p; gl_Position = vec4 (p, 1.0, 1.0);
-}
-)GLSL";
-
-    const char* const fsSkyBody = R"GLSL(
-uniform vec3 uCamFwd, uCamRight, uCamUp; uniform vec2 uTanHalf; uniform float uShear, uSunInt, uTime;
-in vec2 vNdc;
-out vec4 fragColor;
-void main() {
-  vec3 dir = normalize (uCamFwd + uCamRight * (vNdc.x * uTanHalf.x) + uCamUp * ((vNdc.y - uShear) * uTanHalf.y));
-  float t = clamp (dir.y, 0.0, 1.0);
-  vec3 col = mix (uHorizon, uZenith, pow (t, 0.55));
-  float s = max (dot (dir, uSun), 0.0);
-  col += uSunGlow * (pow (s, 8.0) * 0.55 + s * s * 0.14);
-  col += vec3 (1.0, 0.97, 0.90) * uSunInt * (smoothstep (0.99993, 0.99998, s) + 0.25 * pow (s, 400.0));
-  // Phobos and Deimos: two pale specks drifting slowly.
-  vec3 m1 = normalize (vec3 (-0.55, 0.42 + 0.02 * sin (uTime * 0.01), -0.72));
-  vec3 m2 = normalize (vec3 (0.62, 0.55, -0.55 + 0.01 * sin (uTime * 0.013)));
-  col += vec3 (0.95, 0.9, 0.85) * (0.9 * smoothstep (0.999985, 0.999995, dot (dir, m1)) + 0.5 * smoothstep (0.999994, 0.999998, dot (dir, m2))) * (1.0 - uStorm);
-  fragColor = vec4 (col, 1.0);
-}
-)GLSL";
-
-    const char* const vsDust = R"GLSL(#version 150
-uniform mat4 uProj; uniform vec2 uResolution; uniform float uTravel, uTime, uSpeed, uStorm;
-out float vA; out vec2 vUv;
-uint ih (uint x) { x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u; return x; }
-float hs (uint i, uint s) { return float (ih (i * 0x9E3779B1u ^ ih (s * 0x85EBCA77u))) * (1.0 / 4294967296.0); }
-void main() {
-  int id = gl_VertexID; uint pi = uint (id / 6); int ci = id - int (pi) * 6;
-  vec2 corner = vec2 ((ci == 1 || ci == 2 || ci == 4) ? 1.0 : 0.0, (ci == 2 || ci == 4 || ci == 5) ? 1.0 : 0.0);
-  float rx = hs (pi, 1u), ry = hs (pi, 2u), rz = hs (pi, 3u), rw = hs (pi, 4u);
-  if (hs (pi, 5u) > uStorm) { gl_Position = vec4 (0.0, 0.0, 2.0, 1.0); vA = 0.0; vUv = vec2 (0.0); return; }   // a light dust is sparse, not faint
-  const float range = 70.0;
-  float z = fract (rz - (uTravel * 1.2 + uTime * 9.0) / range) * range + 2.5;   // metres ahead, flowing toward the eye
-  vec3 P = vec3 ((rx * 2.0 - 1.0) * 30.0, (ry * 2.0 - 1.0) * 6.5 - 0.5, -z);
-  float len = min (0.4 + uSpeed * 0.09, z - 1.4);
-  vec3 P2 = P + vec3 (0.0, 0.0, len);                       // the nearer end of the streak
-  vec4 a = uProj * vec4 (P, 1.0), b = uProj * vec4 (P2, 1.0);
-  vec2 na = a.xy / a.w, nb = b.xy / b.w;
-  vec2 hres = uResolution * 0.5;
-  vec2 dpx = (nb - na) * hres; float L = length (dpx); vec2 dirpx = dpx / max (L, 1e-3);
-  vec2 perp = vec2 (-dirpx.y, dirpx.x);
-  float thick = 1.4 + 22.0 / z;
-  vec2 ppx = mix (na, nb, corner.x) * hres + perp * (corner.y - 0.5) * thick;
-  gl_Position = vec4 (ppx / hres, 0.0, 1.0);
-  vA = min (1.0, 0.4 + 0.6 * uStorm) * (0.10 + 0.42 * smoothstep (70.0, 8.0, z)) * (0.5 + 0.5 * rw);
-  vUv = corner;
-}
-)GLSL";
-
-    const char* const fsDust = R"GLSL(#version 150
-in float vA; in vec2 vUv;
-out vec4 fragColor;
-void main() {
-  float a = vA * pow (1.0 - abs (vUv.y * 2.0 - 1.0), 1.5) * smoothstep (0.0, 0.2, vUv.x) * smoothstep (1.0, 0.8, vUv.x);
-  fragColor = vec4 (vec3 (0.92, 0.76, 0.56), a);
-}
-)GLSL";
-
-    const juce::String vsTerrainSrc = juce::String ("#version 150\n#define HTEX(uv) textureLod(uHeight, uv, 0.0)\n") + glslCommon + vsTerrainBody;
-    const juce::String fsTerrainSrc = juce::String ("#version 150\n#define HTEX(uv) texture(uHeight, uv)\n") + glslCommon + glslGrad + glslLight + fsTerrainBody;
-    const juce::String vsRockSrc    = juce::String ("#version 150\n#define HTEX(uv) textureLod(uHeight, uv, 0.0)\n") + glslCommon + vsRockBody;
-    const juce::String fsRockSrc    = juce::String ("#version 150\n") + glslLight + fsRockBody;
-    const juce::String vsRelicSrc   = juce::String ("#version 150\n#define HTEX(uv) textureLod(uHeight, uv, 0.0)\n") + glslCommon + vsRelicBody;
-    const juce::String fsRelicSrc   = juce::String ("#version 150\n") + glslLight + fsRelicBody;
-    const juce::String fsSkySrc     = juce::String ("#version 150\n") + glslLight + fsSkyBody;
+    // THE SHADERS are files in resources/shaders/plains (src/shaders/Shaders.h), written without the
+    // #version, which glsl() puts in front of them. plains/height.glsl is the height function, shared by
+    // the terrain's two shaders and the rock and relic vertex shaders: HTEX in it is textureLod (.., 0) in
+    // a vertex shader and texture() in a fragment shader, and glsl() defines it for the stage it builds.
+    // plains/grad.glsl is the analytic world-space gradient of terrainH from the gradient textures, the
+    // per-pixel normal: uGrad1 = (dR/du, dR/dv, dB/du, dB/dv) and uGrad2 = (dG/du, dG/dv, dA/du, dA/dv)
+    // per uv unit, as 0.5 + 0.5 * g / gmax in RGBA8; uGS1 = (gmaxR, gmaxB), uGS2 = (gmaxG, gmaxA). The
+    // relics (plains/relic.vert) are instanced, one draw per variant; aCell is the instance's unwrapped
+    // 532 m cell. A vertex of kind 1 is a solar panel, of kind 2 a track behind the wheels: it follows
+    // the ground, and only some have one.
+    enum class Htex { none, vertex, fragment };
+    std::string glsl (const char* path, Htex htex = Htex::none)
+    {
+        std::string s ("#version 150\n");
+        if (htex == Htex::vertex)   s += "#define HTEX(uv) textureLod(uHeight, uv, 0.0)\n";
+        if (htex == Htex::fragment) s += "#define HTEX(uv) texture(uHeight, uv)\n";
+        return s + shaders::source (path);
+    }
 
     // Two lumpy icospheres, 80 flat faces each: 240 vertices of position + normal, the two one after
     // the other. Watertight; the lumps are the generator's stream, the same every time.
@@ -602,7 +306,7 @@ int PlainsGl::Program::uniform (const char* name) const
     return glGetUniformLocation (id, name);
 }
 
-bool PlainsGl::compile (Program& p, const char* vs, const char* fs, const char* what)
+bool PlainsGl::compile (Program& p, const std::string& vs, const std::string& fs, const char* what)
 {
     auto s = std::make_unique<juce::OpenGLShaderProgram> (*juce::OpenGLContext::getCurrentContext());
     if (! s->addVertexShader (vs) || ! s->addFragmentShader (fs) || ! s->link())
@@ -622,11 +326,11 @@ bool PlainsGl::create()
         return false;
     world.build();
 
-    if (! compile (terrain, vsTerrainSrc.toRawUTF8(), fsTerrainSrc.toRawUTF8(), "terrain")
-        || ! compile (rock, vsRockSrc.toRawUTF8(), fsRockSrc.toRawUTF8(), "rock")
-        || ! compile (relic, vsRelicSrc.toRawUTF8(), fsRelicSrc.toRawUTF8(), "relic")
-        || ! compile (sky, vsSky, fsSkySrc.toRawUTF8(), "sky")
-        || ! compile (dust, vsDust, fsDust, "dust"))
+    if (! compile (terrain, glsl ("plains/terrain.vert", Htex::vertex), glsl ("plains/terrain.frag", Htex::fragment), "terrain")
+        || ! compile (rock, glsl ("plains/rock.vert", Htex::vertex), glsl ("plains/rock.frag"), "rock")
+        || ! compile (relic, glsl ("plains/relic.vert", Htex::vertex), glsl ("plains/relic.frag"), "relic")
+        || ! compile (sky, glsl ("common/sky.vert"), glsl ("plains/sky.frag"), "sky")
+        || ! compile (dust, glsl ("plains/dust.vert"), glsl ("plains/dust.frag"), "dust"))
     {
         destroy();
         return false;
