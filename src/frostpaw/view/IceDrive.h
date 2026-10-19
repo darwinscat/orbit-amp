@@ -30,6 +30,7 @@ public:
     void setGear (int g) override            { world.setGear (g); }
     void setTurbo (bool on) override         { world.setTurbo (on); }
     void setSteer (float amount) override    { world.setSteer (amount); }
+    void hear (float peak) override          { world.hear (peak); }
     void step (double dt) override           { world.step (dt); }
 
     /** A still is the gear's own weather. */

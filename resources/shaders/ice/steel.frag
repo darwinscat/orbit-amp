@@ -1,7 +1,8 @@
 #include "ice/light.glsl"
 
 uniform sampler2D uDetail; uniform float uJupCos;
-in vec3 vN; in vec3 vRel; in vec3 vWorld; in float vSeed;
+uniform vec3 uLamp;   // what the guitar lights a lamp with: 0 in silence
+in vec3 vN; in vec3 vRel; in vec3 vWorld; in float vSeed; in float vLamp;
 out vec4 fragColor;
 void main() {
   float dist = length (vRel); vec3 V = vRel / dist;
@@ -28,6 +29,7 @@ void main() {
   float fr = smoothstep (0.35, 0.8, n.y) * smoothstep (0.25, 0.65, texture (uDetail, vWorld.xz * 0.35 + vSeed).b + 0.25 * n.y);
   vec3 snowC = shadeSnow (vec3 (0.93, 0.95, 0.99), n);
   col = mix (col, snowC, fr);
+  col += uLamp * vLamp;
   col = applyHaze (col, dist, V);
   fragColor = vec4 (col, 1.0);
 }

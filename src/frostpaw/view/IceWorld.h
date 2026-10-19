@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../../worlds/Play.h"
+
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -89,6 +91,8 @@ public:
     void setGear (int g) noexcept;                       // 1..numGears()
     void setTurbo (bool on) noexcept { turbo = on; }
     void setSteer (float s) noexcept;                    // -1..1, held input
+    /** The guitar: the amp's input's peak since the last step (worlds/Play.h). */
+    void hear (float peak) noexcept { play.hear (peak); }
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
     int numGears() const noexcept { return gears; }
@@ -127,6 +131,8 @@ public:
         float avoidYaw = 0.0f;           // radians a second the steel ahead is pushing the heading by
     };
     const State& state() const noexcept { return s; }
+    /** What the guitar is doing, stepped with the drive; silence after place(). */
+    const worlds::Play& playing() const noexcept { return play; }
 
     /** The height function, the mirror of the shaders': metres at absolute world xz. `dist` is the
         distance from the rover, which fades the dunes, the blocks and the drifts out. */
@@ -150,6 +156,7 @@ private:
     std::array<float, 4> gmax { 1, 1, 1, 1 };
 
     State s;
+    worlds::Play play;
     const int gears;
     int gearWanted = 1;
     bool turbo = false;

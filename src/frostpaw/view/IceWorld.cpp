@@ -403,6 +403,7 @@ void IceWorld::place (double x, double z, double heading, int g, bool t)
     yawRate = 0.0;
     s.camY = 0.0; s.pitch = 0.0;
     lastSteerTime = s.time;
+    play.reset();
     step (0.0);
 }
 
@@ -415,6 +416,7 @@ void IceWorld::settle() noexcept
 void IceWorld::step (double dt)
 {
     s.time += dt;
+    play.step (dt);
     const float target = speedFor (gearWanted, turbo);
     const float kS = (float) (1 - std::exp (-dt / speedSeconds));
     s.speed += (target - s.speed) * kS;

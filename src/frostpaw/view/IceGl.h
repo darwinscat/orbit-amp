@@ -79,7 +79,7 @@ private:
         std::uint32_t id = 0;
         int uniform (const char* name) const;
     };
-    Program terrain, steel, sky, snow;
+    Program terrain, steel, sky, snow, glow;
 
     std::uint32_t texHeight = 0, texGrad1 = 0, texGrad2 = 0, texDetail = 0;
     std::uint32_t vaoTerrain = 0, vboGrid = 0, vaoSteel = 0, vboSteel = 0, vaoEmpty = 0, vboEmpty = 0;
@@ -103,6 +103,10 @@ private:
     int instanceBx = 0x7fffffff, instanceBz = 0x7fffffff;    // the window the lists were made for
     int locCell = -1;
     bool instancing = false;                                  // glVertexAttribDivisor is there
+    // The lamps at the steel's tips, per variant in its own frame (x y z size), and the glow pass's cells.
+    std::array<std::vector<std::array<float, 4>>, IceWorld::numVariants> lampsOf;
+    std::uint32_t vaoGlow = 0;
+    int locGlowCell = -1;
 
     std::uint32_t fbo = 0, fboColour = 0, fboDepth = 0;
     int fbW = 0, fbH = 0;
