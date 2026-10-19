@@ -50,12 +50,14 @@ std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor& p)
 /** The cockpit's set is in its binary (channels/Set.h). Once in a process, however many of the amp it
     holds: the first one built lays it out, and the folder is the same for all of them — as the build
     this is, so that of two products carrying one file the newer build's stands. The cockpit's own
-    `Factory` of before is emptied with it, of what a build of before laid there. */
+    `Factory` of before is emptied with it, of what a build of before laid there, and the player's IRs
+    it kept in its own folder are gathered into the family's (gatherFormerIrs). */
 void layOutFactorySet()
 {
     static const int laid = device::FactorySet::retire (device::DeviceLibrary::formerFactoryDirectory())
                           + channels::set::layOut (device::DeviceLibrary::factoryDirectory(), version::kBuildNumber);
     juce::ignoreUnused (laid);
+    gatherFormerIrs();
 }
 
 } // namespace orbitamp

@@ -35,6 +35,8 @@
 #include "PluginProcessor.h"
 #include "Parameters.h"
 #include "device/FactorySet.h"
+#include "device/FactoryShelf.h"
+#include "device/IrLibrary.h"
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 #include "redpaw/RedPawLineup.h"
@@ -45,6 +47,18 @@
 #ifndef ROVER_CHANNELS
  #error "the build says how many channels the rover plays"
 #endif
+
+namespace
+{
+    /** A run's own mark in an IR's last samples: the gates of every product share the family's IRs
+        folder, and one IR left behind twice, by two runs, would be one sound under two names. */
+    void markOfRun (juce::MemoryBlock& bytes, const juce::String& run)
+    {
+        const auto mark = (juce::uint32) run.getHexValue32();
+        for (size_t b = 0; b < 4 && b + 2 <= bytes.getSize(); ++b)
+            bytes[bytes.getSize() - 2 - b] = (char) (bytes[bytes.getSize() - 2 - b] ^ (char) (mark >> (8 * b)));
+    }
+}
 
 int main()
 {
@@ -58,6 +72,23 @@ int main()
         if (! ok)
             ++failed;
     };
+
+    // AN IR OF BEFORE, in the product's own folder, for the first start to gather into the family's — only
+    // where the home is the gate's own (ROVER_GATE_OWNS_HOME), and as if this product had never gathered here.
+    const bool ownsHome = juce::SystemStats::getEnvironmentVariable ("ROVER_GATE_OWNS_HOME", {}).isNotEmpty();
+    const auto seedRun  = juce::String::toHexString (juce::Random::getSystemRandom().nextInt());
+    const auto formerIr = device::IrLibrary::formerDirectory().getChildFile ("Old Pack").getChildFile ("gathered-" + seedRun + ".wav");
+    if (ownsHome)
+    {
+        // An IR of its own: the shelf's DARK MATTER with its last sample nudged, like no other here.
+        const auto& shelf = device::shelf::irs()[(size_t) params::cabIrDefault];
+        juce::MemoryBlock bytes (shelf.data, (size_t) shelf.size);
+        bytes[bytes.getSize() - 1] = (char) (bytes[bytes.getSize() - 1] ^ 4);
+        markOfRun (bytes, seedRun);
+        formerIr.getParentDirectory().createDirectory();
+        formerIr.replaceWithData (bytes.getData(), bytes.getSize());
+        prefs::setBool (prefs::irsGathered, false);
+    }
 
     auto amp = std::make_unique<AmpProcessor>();
     amp->inlineLoads = true;            // no message loop here: a model lands inside the pump
@@ -389,12 +420,13 @@ int main()
         const auto early = scratch.getChildFile ("00-first-" + run + ".wav");
         const auto late  = scratch.getChildFile ("zz-last-" + run + ".wav");
         const auto big   = scratch.getChildFile ("too-big-" + run + ".wav");
-        const auto nudged = [&channels] (const juce::File& to, char by)
+        const auto nudged = [&channels, &run] (const juce::File& to, char by)
         {
             juce::MemoryBlock bytes;
             channels.cabinets().getFirst().loadFileAsData (bytes);
             if (bytes.getSize() > 0)
                 bytes[bytes.getSize() - 1] = (char) (bytes[bytes.getSize() - 1] ^ by);
+            markOfRun (bytes, run);
             to.replaceWithData (bytes.getData(), bytes.getSize());
         };
         nudged (early, 1);
@@ -411,6 +443,16 @@ int main()
         check (added.first >= factory && channels.cabinets()[added.first].getFileName() == early.getFileName(),
                "...a name that would sort first still stands after the build's own");
         check (added.refused.size() == 1 && added.refused[0] == big.getFileName(), "an IR too big for a session is refused, by name");
+        check (channels.cabinets()[added.first].getParentDirectory() == device::DeviceLibrary::familyRoot().getChildFile ("IRs"),
+               "...and what is taken in lands in the family's own IRs folder, beside Factory");
+
+        // THE IR OF BEFORE, gathered at the first start: copied into the family's folder, in its own
+        // folder, and still where it was.
+        const auto gathered = device::IrLibrary::directory().getChildFile ("Old Pack").getChildFile (formerIr.getFileName());
+        check (gathered.existsAsFile() && formerIr.existsAsFile() && gathered.hasIdenticalContentTo (formerIr),
+               "the player's IRs of before are copied into the family's folder, folders and all, and left where they were");
+        check (channels.cabinets().indexOf (gathered) >= factory, "...and are among the player's cabinets");
+        check (prefs::getBool (prefs::irsGathered, false), "...once: the product remembers it has gathered them");
 
         channels.chooseCabinet (added.first);
         check (channels.cabinet() == added.first, "a cabinet taken in plays");

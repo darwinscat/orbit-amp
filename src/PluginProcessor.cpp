@@ -7,7 +7,6 @@
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
 
-#include <BinaryData.h>
 
 namespace orbitamp
 {
@@ -15,6 +14,24 @@ namespace orbitamp
 AmpProcessor::FactorySet::FactorySet()
 {
     layOutFactorySet();
+}
+
+void gatherFormerIrs()
+{
+    static const bool once = []
+    {
+        if (prefs::getBool (prefs::irsGathered, false))
+            return true;
+
+        const auto gathered = device::IrLibrary::gather (device::IrLibrary::formerDirectory(),
+                                                         device::IrLibrary::directory(), product::name);
+
+        // A file that would not copy is tried again on the next start; what was copied is not copied twice.
+        if (gathered.failed == 0)
+            prefs::setBool (prefs::irsGathered, true);
+        return true;
+    }();
+    juce::ignoreUnused (once);
 }
 
 // The machine's word for the hum and the stage's are one list in one order: the processor hands one

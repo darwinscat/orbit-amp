@@ -1353,6 +1353,13 @@ juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
     says. The processor calls it before it builds anything of its own — see AmpProcessor::factorySet. */
 void layOutFactorySet();
 
+/** THE PLAYER'S IRS OF BEFORE, gathered into the family's folder: what the product kept in its own `IRs`
+    is copied into `Darwin's Cat/IRs` (device::IrLibrary::gather) — once in a process, and once on this
+    machine (prefs::irsGathered), tried again on the next start only where a file could not be copied.
+    Every product's layOutFactorySet calls it beside its set, so a gate that stands that in for nothing
+    never reaches the machine's real folders. */
+void gatherFormerIrs();
+
 /** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —
     once per target again. OrbitAmp adds no parameter and has no such half: it answers null. */
 void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);

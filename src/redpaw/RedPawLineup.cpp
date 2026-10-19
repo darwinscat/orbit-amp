@@ -43,11 +43,13 @@ std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor& p)
 }
 
 /** The rover's set is in its binary (channels/Set.h), laid out in the family's Factory folder once in a
-    process, as the build this is. The rover is new: there is no folder of its own from before to empty. */
+    process, as the build this is. The rover is new: there is no `Factory` of its own from before to
+    empty — but the player's IRs it kept in its own folder are gathered into the family's (gatherFormerIrs). */
 void layOutFactorySet()
 {
     static const int laid = channels::set::layOut (device::DeviceLibrary::factoryDirectory(), version::kBuildNumber);
     juce::ignoreUnused (laid);
+    gatherFormerIrs();
 }
 
 } // namespace orbitamp

@@ -14,7 +14,8 @@ namespace orbitamp
 /** OrbitAmp's set is in its binary (OrbitAmpSet.h). Once in a process, however many of the amp it
     holds: the first one built lays it out, and the folder is the same for all of them — as the build
     this is, so that of two products carrying one file the newer build's stands. OrbitAmp's own
-    `Factory` of before is emptied with it, of what a build of before laid there. Apart from the face,
+    `Factory` of before is emptied with it, of what a build of before laid there, and the player's IRs
+    it kept in its own folder are gathered into the family's (gatherFormerIrs). Apart from the face,
     in a file of its own, so that a gate built on the face does not lay the set out in the machine's
     real folder. */
 void layOutFactorySet()
@@ -23,6 +24,7 @@ void layOutFactorySet()
                           + device::FactorySet::layOut (device::DeviceLibrary::factoryDirectory(), product::name,
                                                         version::kBuildNumber, set::carried());
     juce::ignoreUnused (laid);
+    gatherFormerIrs();
 }
 
 } // namespace orbitamp

@@ -98,8 +98,9 @@ public:
         return dir.getChildFile ("Darwin's Cat");
     }
 
-    /** The PRODUCT's folder: two faces of one engine each keep what the PLAYER adds — devices, IRs —
-        and neither reads the other's. For OrbitAmp this is the folder it has always been. */
+    /** The PRODUCT's folder: two faces of one engine each keep the devices the PLAYER adds, and neither
+        reads the other's. The player's IRs are the family's (IrLibrary). For OrbitAmp this is the folder
+        it has always been. */
     static juce::File appDataRoot()
     {
         return familyRoot().getChildFile (product::name);

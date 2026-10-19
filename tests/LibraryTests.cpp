@@ -292,6 +292,57 @@ int main()
         report ("a stranger's file is not planned",      IrLibrary::planMove (root, { work.getChildFile ("src/Cab 4x12.wav") }, root).isEmpty());
     }
 
+    // ---- IRs of before: gathered into the family's folder, copied, never moved -----------------
+    {
+        const auto family = work.getChildFile ("gather/Darwin's Cat/IRs");
+        const auto former = work.getChildFile ("gather/Darwin's Cat/RedPawAmp/IRs");
+        const auto put = [] (const juce::File& f, const char* bytes)
+        {
+            f.getParentDirectory().createDirectory();
+            f.replaceWithText (bytes);
+            return f;
+        };
+
+        put (former.getChildFile ("Same.wav"), "one IR");
+        put (former.getChildFile ("Clash.wav"), "the rover's own");
+        put (former.getChildFile ("Vendor Pack/Close/57.wav"), "a pack's");
+        put (former.getChildFile ("Twice.wav"), "the rover's twice");
+        put (former.getChildFile ("readme.txt"), "not an IR");
+        put (former.getChildFile (".hidden.wav"), "the Finder's");
+
+        put (family.getChildFile ("Same.wav"), "one IR");                    // the same IR, there already
+        put (family.getChildFile ("Clash.wav"), "the cockpit's own");        // another IR of the same name
+        put (family.getChildFile ("Twice.wav"), "the cockpit's twice");
+        put (family.getChildFile ("Twice (RedPawAmp).wav"), "yet another");  // ...and even the name it would take is taken
+
+        const auto first = IrLibrary::gather (former, family, "RedPawAmp");
+        const auto text = [] (const juce::File& f) { return f.existsAsFile() ? f.loadFileAsString() : juce::String ("(none)"); };
+
+        report ("IRs of before: three copied, none failed",   first.copied == 3 && first.failed == 0,
+                juce::String (first.copied) + " copied, " + juce::String (first.failed) + " failed");
+        report ("...the same name with the same bytes skipped",
+                text (family.getChildFile ("Same.wav")) == "one IR" && ! family.getChildFile ("Same (RedPawAmp).wav").exists());
+        report ("...the same name with other bytes kept both",
+                text (family.getChildFile ("Clash.wav")) == "the cockpit's own"
+                    && text (family.getChildFile ("Clash (RedPawAmp).wav")) == "the rover's own");
+        report ("...numbered when even that name is taken",
+                text (family.getChildFile ("Twice (RedPawAmp).wav")) == "yet another"
+                    && text (family.getChildFile ("Twice (RedPawAmp) 2.wav")) == "the rover's twice");
+        report ("...its folders kept",                        text (family.getChildFile ("Vendor Pack/Close/57.wav")) == "a pack's");
+        report ("...and what is not an IR left behind",       ! family.getChildFile ("readme.txt").exists()
+                                                                  && ! family.getChildFile (".hidden.wav").exists());
+        report ("nothing of before moved or changed",         text (former.getChildFile ("Same.wav")) == "one IR"
+                                                                  && text (former.getChildFile ("Clash.wav")) == "the rover's own"
+                                                                  && text (former.getChildFile ("Vendor Pack/Close/57.wav")) == "a pack's"
+                                                                  && text (former.getChildFile ("Twice.wav")) == "the rover's twice");
+
+        const auto again = IrLibrary::gather (former, family, "RedPawAmp");
+        report ("a second gathering copies nothing",          again.copied == 0 && again.failed == 0
+                                                                  && ! family.getChildFile ("Clash (RedPawAmp) 2.wav").exists()
+                                                                  && ! family.getChildFile ("Twice (RedPawAmp) 3.wav").exists());
+        report ("no folder of before, nothing gathered",      IrLibrary::gather (work.getChildFile ("gather/none"), family, "RedPawAmp").copied == 0);
+    }
+
     // ---- IR remove: only the guard is ours -----------------------------------------------------
     {
         const auto root = work.getChildFile ("irs-remove");
