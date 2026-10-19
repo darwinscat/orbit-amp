@@ -87,7 +87,11 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release \
             -DORBITAMP_JUCE_DIR= -DORBITAMP_FCORE_DIR= -DORBITAMP_GUITAR_DIR= -DORBITAMP_APPKIT_DIR= \
             -DORBITAMP_NAM_CORE_SRC= -DORBITAMP_NAMZ_SRC= \
-            -DORBITAMP_COPY_PLUGIN=OFF
+            -DORBITAMP_COPY_PLUGIN=OFF \
+            -DORBITAMP_DEV_FACTORY=OFF
+          # NO DEV FACTORY: a released amp reads the factory folder the installer lays out, never this
+          # runner's build/Factory — which on this runner, a working laptop, is there (CMakeLists.txt:
+          # THE FACTORY FOLDER). The gates read build/Factory whatever this says.
           # EIGHT JOBS, NOT ALL OF THEM. This runner is someone's working laptop: `--parallel` with no number
           # is unlimited under Makefiles, and the universal build ran two hundred compilers at once.
           cmake --build build --config Release --parallel 8 --target Family_All Family_Gates
@@ -133,7 +137,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build
         run: |
-          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF
           cmake --build build --config Release --parallel --target Family_All Family_Gates
       - name: Gates
         shell: bash
@@ -201,7 +205,7 @@ jobs:
             libglu1-mesa-dev mesa-common-dev
       - name: Build
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF
           cmake --build build --target Family_All Family_Gates
       - name: Gates
         run: tools/run-gates.sh build Release

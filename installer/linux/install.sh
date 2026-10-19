@@ -13,6 +13,10 @@
 #   CLAP          ~/.clap/<Amp>.clap                      /usr/lib/clap/<Amp>.clap
 #   Standalone    ~/.local/bin/<Amp>                      /usr/local/bin/<Amp>
 #                 + a menu entry in ~/.local/share/applications or /usr/local/share/applications
+#   the data      ~/.local/share/darwinscat-amps/Factory  /usr/local/share/darwinscat-amps/Factory
+#
+# THE AMPS' DATA — packs, cabinets, pictures, one copy for every amp — is placed whatever is picked: no
+# amp carries any in its binary. The amps look for it in the player's folder, then in every user's.
 #
 # CLAP names one folder for every user, /usr/lib/clap, and hosts look there and in ~/.clap only.
 # Whatever was placed is listed in <share>/darwinscat-amps/installed, and uninstall.sh, copied there
@@ -26,7 +30,7 @@ VERSION="$(ini version)"
 AMPS="$(ini amps)"
 FORMATS="vst3 clap standalone"
 
-usage() { sed -n '2,19s/^# \{0,1\}//p' "$0"; }
+usage() { sed -n '2,23s/^# \{0,1\}//p' "$0"; }
 die() { echo "install.sh: $*" >&2; exit 1; }
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 commas() { printf '%s' "$1" | tr ',' ' '; }
@@ -128,6 +132,11 @@ $2/$name"
 }
 
 placed=""
+
+# The data first, always: the amps play nothing without it.
+echo "Data        $DATA/Factory"
+place "$here/Factory" "$DATA"
+
 for pick in $chosen; do
   amp="${pick%%:*}"; f="${pick#*:}"
   case $f in

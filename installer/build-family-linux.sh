@@ -5,6 +5,7 @@
 # user. Inside:
 #
 #   VST3/<Amp>.vst3   CLAP/<Amp>.clap   Standalone/<Amp>   icons/<Amp>.png
+#   Factory/          the amps' data — packs, cabinets, pictures — which install.sh always places
 #   install.sh   uninstall.sh   release.ini (the family's name, version and amps)
 #
 # A player who would rather place things by hand finds each format in its own folder.
@@ -12,7 +13,8 @@
 # Usage: build-family-linux.sh <version> <build-dir> <out-dir> [arch]
 #   e.g. installer/build-family-linux.sh 0.8.0 build dist
 # <build-dir> is the CMake build dir: each amp is read from <build-dir>/<Amp>_artefacts/Release, and an
-# amp missing a format stops the build. <arch> names the tarball (default: uname -m).
+# amp missing a format stops the build; the data is <build-dir>/Shipped/Factory, the folder of the release's
+# amps alone (CMakeLists.txt: THE FACTORY FOLDER). <arch> names the tarball (default: uname -m).
 set -euo pipefail
 
 VERSION="${1:?usage: build-family-linux.sh <version> <build-dir> <out-dir> [arch]}"
@@ -40,6 +42,11 @@ for amp in $AMPS; do
   done
 done
 
+FACTORY="$BUILD/Shipped/Factory"
+for amp in $AMPS; do
+  [ -s "$FACTORY/sets/$amp.txt" ] || { echo "build-family-linux.sh: no $FACTORY/sets/$amp.txt — build Family_All" >&2; exit 1; }
+done
+
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 root="$work/$NAME"
@@ -56,6 +63,7 @@ for amp in $AMPS; do
   if [ -f "$icon" ]; then cp "$icon" "$root/icons/$amp.png"; fi
 done
 
+cp -R "$FACTORY" "$root/Factory"
 cp "$HERE/linux/install.sh" "$HERE/linux/uninstall.sh" "$root/"
 chmod 755 "$root/install.sh" "$root/uninstall.sh"
 printf 'name=%s\nversion=%s\namps=%s\n' "$FAMILY" "$VERSION" "$AMPS" > "$root/release.ini"

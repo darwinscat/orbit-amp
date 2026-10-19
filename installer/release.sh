@@ -35,7 +35,8 @@ cmake -S . -B "$BUILD" -DCMAKE_BUILD_TYPE=Release \
   -DORBITAMP_APPKIT_DIR= \
   -DORBITAMP_NAM_CORE_SRC= \
   -DORBITAMP_NAMZ_SRC= \
-  -DORBITAMP_COPY_PLUGIN=OFF
+  -DORBITAMP_COPY_PLUGIN=OFF \
+  -DORBITAMP_DEV_FACTORY=OFF        # a released amp reads the installed factory folder, never build/Factory
 
 # 2. Build the family and its gates, then run them — a release with a red gate is not a release.
 cmake --build "$BUILD" --parallel --target Family_All Family_Gates

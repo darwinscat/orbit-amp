@@ -8,16 +8,20 @@
 #   AU          → /Library/Audio/Plug-Ins/Components/<Amp>.component   com.darwinscat.<amp>.au
 #   CLAP        → /Library/Audio/Plug-Ins/CLAP/<Amp>.clap              com.darwinscat.<amp>.clap
 #   Standalone  → /Applications/<Amp>.app                             com.darwinscat.<amp>.standalone
+#   the data    → /Library/Application Support/Darwin's Cat/Factory    com.darwinscat.amps.factory
 #
-# The installer only places bundles. Every amp carries its own data inside its binary, and its
-# identity — bundle id, plug-in and manufacturer codes — is the one it always had, so a DAW session
-# finds the same plug-in in the same place.
+# THE AMPS' DATA is a component of its own, chosen and greyed out: the packs, the cabinets and the faces'
+# pictures every amp plays, ONE copy of each (src/device/FactorySet.h). No amp carries any of it in its
+# binary, so a player cannot untick it. It is the folder of the release's amps alone, as the build put it
+# together (<build>/Shipped/Factory, CMakeLists.txt: THE FACTORY FOLDER), each amp's list with it. Every
+# amp keeps its identity — bundle id, plug-in and manufacturer codes — so a DAW session finds the same
+# plug-in in the same place.
 #
 # Usage: build-family-pkg.sh <version> <build-dir> <out-dir>
 #   e.g. installer/build-family-pkg.sh 0.8.0 build dist
 # <build-dir> is the CMake build dir: each amp's bundles are read from
 # <build-dir>/<Amp>_artefacts/Release/{VST3,AU,CLAP,Standalone}, and an amp missing one stops the
-# build. The bundles are expected to be codesigned and stapled already (sign-family-macos.sh). The .pkg
+# build; the data from <build-dir>/Shipped/Factory, which must hold every amp's list. The bundles are expected to be codesigned and stapled already (sign-family-macos.sh). The .pkg
 # is signed only when INSTALLER_IDENTITY names a Developer ID Installer identity; without it, it is built
 # unsigned, and productsign can sign it later.
 #
@@ -58,6 +62,10 @@ for amp in $AMPS; do
     [ -s "$b/Contents/MacOS/$amp" ] || { echo "build-family-pkg.sh: no binary in $b" >&2; exit 1; }
   done
 done
+FACTORY="$BUILD/Shipped/Factory"
+for amp in $AMPS; do
+  [ -s "$FACTORY/sets/$amp.txt" ] || { echo "build-family-pkg.sh: no $FACTORY/sets/$amp.txt — build Family_All" >&2; exit 1; }
+done
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -84,6 +92,22 @@ EOF
 }
 
 outline=""; choices=""; refs=""
+
+# The data first, as the folder its install location holds — with no bundle in it, nothing to pin.
+fid="com.darwinscat.amps.factory"
+mkdir -p "$work/stage/$fid"
+ditto --norsrc --noextattr --noacl "$FACTORY" "$work/stage/$fid/Factory"
+pkgbuild --quiet \
+  --root "$work/stage/$fid" \
+  --install-location "/Library/Application Support/Darwin's Cat" \
+  --identifier "$fid" \
+  --version "$VERSION" \
+  "$work/components/$fid.pkg"
+outline+="        <line choice=\"factory\"/>"$'\n'
+choices+="    <choice id=\"factory\" title=\"The amps' data\" description=\"The packs, cabinets and pictures every amp plays, in /Library/Application Support/Darwin's Cat/Factory. Always installed.\" start_selected=\"true\" enabled=\"false\">"$'\n'
+choices+="        <pkg-ref id=\"$fid\"/>"$'\n'
+choices+="    </choice>"$'\n'
+refs+="    <pkg-ref id=\"$fid\" version=\"$VERSION\" onConclusion=\"none\">$fid.pkg</pkg-ref>"$'\n'
 for amp in $AMPS; do
   low="$(printf '%s' "$amp" | tr '[:upper:]' '[:lower:]')"
   legacy="com.darwinscat.$low"
@@ -132,7 +156,8 @@ for amp in $AMPS; do
   outline+="        </line>"$'\n'
 done
 
-# Customize is offered, not forced: Install with nothing touched places everything.
+# Customize is offered, not forced: Install with nothing touched places everything, and the data whatever
+# is unticked.
 cat > "$work/Distribution.xml" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
