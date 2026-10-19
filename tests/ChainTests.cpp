@@ -293,6 +293,31 @@ int main()
         report ("no boost is left: not a parameter, not a link", strays.isEmpty(), strays.joinIntoString (", "));
     }
 
+    // ...and the block is called AMP wherever a player reads its name: its arrow in the strip, its
+    // two rows in the load window, and every lane a host shows for it. The ids keep `preamp_`.
+    {
+        juce::StringArray said;
+        const auto check = [&said] (const juce::String& name)
+        {
+            if (name.containsIgnoreCase ("preamp"))
+                said.add (name);
+        };
+
+        for (const auto& link : orbitamp::params::chainLinks)
+            check (link.name);
+
+        for (const auto& stage : orbitamp::params::stageNames)
+        {
+            check (stage.brief);
+            check (stage.full);
+        }
+
+        for (auto* p : amp.getParameters())
+            check (p->getName (64));
+
+        report ("the block is the AMP wherever its name is read", said.isEmpty(), said.joinIntoString (", "));
+    }
+
     // THE BYPASS WIRE, on its own — the delay it carries, the geometry it is SIZED from, and the
     // comb that appears the moment the two disagree. It only runs when a pack's rate differs from
     // the session's, so the chain above — at 48 kHz against 48 kHz packs — never touches it, and

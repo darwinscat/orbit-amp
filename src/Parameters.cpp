@@ -104,7 +104,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Bool> (juce::ParameterID { inPresent,     1 }, "Input In Rig",    true),
                 std::make_unique<Bool> (juce::ParameterID { tunerPresent,  1 }, "Tuner In Rig",    true),
                 std::make_unique<Bool> (juce::ParameterID { gatePresent,   1 }, "Gate In Rig",     true),
-                std::make_unique<Bool> (juce::ParameterID { preampPresent, 1 }, "Preamp In Rig",   true),
+                std::make_unique<Bool> (juce::ParameterID { preampPresent, 1 }, "Amp In Rig",      true),
                 std::make_unique<Bool> (juce::ParameterID { delayPresent,  1 }, "Delay In Rig",    true),
                 std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Rig",   true),
                 std::make_unique<Bool> (juce::ParameterID { cabPresent,    1 }, "Cabinet In Rig",  true),
@@ -121,7 +121,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Bool> (juce::ParameterID { tunerMute, 1 }, "Tuner Mute", false));
 
     // Block power. Both are the sound, so both start on.
-    layout.add (std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, "Preamp", true),
+    layout.add (std::make_unique<Bool> (juce::ParameterID { preampOn, 1 }, preampName, true),
                 std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", true));
 
     // The input trim, ahead of everything. Unity by default: it exists to fix a rig, not to be
@@ -160,35 +160,36 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     for (const char* blk : { preampId })
     {
         const juce::NormalisableRange<float> trim (blockTrimMinDb, blockTrimMaxDb, 0.1f);
+        const juce::String label = blk == preampId ? preampName : blk;   // the block's name, as a host shows it
 
         layout.add (std::make_unique<Float> (juce::ParameterID { blockIn (blk), 1 },
-                                             juce::String (blk) + " In", trim, 0.0f));
+                                             label + " In", trim, 0.0f));
 
         // The DEVICE's own tone by default: a captured pedal arrives wearing its own knobs, and
         // the console is the scalpel you reach for past them.
         layout.add (std::make_unique<Choice> (juce::ParameterID { blockEqMode (blk), 1 },
-                                              juce::String (blk) + " EQ", eqModes, 0));
+                                              label + " EQ", eqModes, 0));
 
         // The dial's motion between captures. STEP by default — the captured positions are the
         // device as it was shot — and SMOOTH for whoever wants every angle between them.
         layout.add (std::make_unique<Bool> (juce::ParameterID { blockSmooth (blk), 1 },
-                                            juce::String (blk) + " Smooth", false));
+                                            label + " Smooth", false));
 
         const auto& def = blk == preampId ? preampDef : BlockDefaults();
         for (int i = 0; i < numSelectors; ++i)
             layout.add (std::make_unique<Int> (juce::ParameterID { selectorId (blk, i), 1 },
-                                               juce::String (blk) + " Select " + juce::String (i + 1),
+                                               label + " Select " + juce::String (i + 1),
                                                0, 15, def.sel[(size_t) i]));
     }
 
-    layout.add (std::make_unique<Int> (juce::ParameterID { preampDevice, 1 }, "Preamp Device",
+    layout.add (std::make_unique<Int> (juce::ParameterID { preampDevice, 1 }, juce::String (preampName) + " Device",
                                        0, maxDevices - 1, preampDef.device));
 
     // Normalised 0..1: a measured control's real span is degrees on some device's dial, and the pack
     // is what knows it. The parameter stays the same shape whatever loads.
     for (int i = 0; i < preampNumMeasured; ++i)
         layout.add (std::make_unique<Float> (juce::ParameterID { preampMeasured (i), 1 },
-                                             "Preamp " + juce::String (i + 1),
+                                             juce::String (preampName) + " " + juce::String (i + 1),
                                              juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
                                              preampDef.meas[(size_t) i]));
 
@@ -210,7 +211,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // nothing the values did not.
     for (int l = 0; l < numEqLinks; ++l)
     {
-        const juce::String name = "EQ ";
+        const juce::String name = juce::String (preampName) + " EQ ";
         const juce::NormalisableRange<float> tone { -toneRangeDb, toneRangeDb, 0.1f };
         const juce::NormalisableRange<float> q    { 0.3f, 6.0f, 0.01f, 0.5f };
         const juce::NormalisableRange<float> qN   { 1.0f, 18.0f, 0.01f, 0.5f };   // the surgical bell runs narrow

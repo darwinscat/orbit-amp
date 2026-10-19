@@ -88,6 +88,11 @@ inline juce::String selectorId (const char* blk, int i)
 
 inline constexpr const char* preampId = "preamp";
 
+/** What a player reads where the preamp is named — its arrow, its face, its lanes in a host. To a
+    player the block is the AMP; its ids keep the `preamp` they were born with, because a host
+    stores those and a new spelling buys nothing. */
+inline constexpr const char* preampName = "Amp";
+
 /** A captured block's own parameters, derived from its id prefix — the same shape for the preamp
     and whatever captured block comes next. The named constants around them predate these and stay
     for call sites that mean a specific block. */
@@ -472,8 +477,8 @@ inline constexpr StageName stageNames[numStages] = {
     { "TOTAL",  "TOTAL"     },
     { "TUNER",  "TUNER"     },
     { "GATE",   "GATE"      },
-    { "PREAMP", "PREAMP"    },
-    { "P-EQ",   "PREAMP EQ" },
+    { "AMP",    "AMP"       },
+    { "AMP EQ", "AMP EQ"    },
     { "DELAY",  "DELAY"     },
     { "REVERB", "REVERB"    },
     { "CAB",    "CAB"       },
@@ -503,7 +508,7 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* IN     */ { "IN",     false, true,  inOn,      inPresent,     numStages, numStages },
     /* TUNER  */ { "TUNER",  false, true,  tunerOn,   tunerPresent,  stTuner,  numStages },
     /* GATE   */ { "GATE",   false, false, gateOn,    gatePresent,   stGate,   numStages },
-    /* PREAMP */ { "PREAMP", true,  true,  preampOn,  preampPresent, stPreamp, stPreampEq },
+    /* AMP    */ { "AMP",    true,  true,  preampOn,  preampPresent, stPreamp, stPreampEq },
     /* DELAY  */ { "DELAY",  false, true,  delayOn,   delayPresent,  stDelay,  numStages },
     /* REVERB */ { "REVERB", false, true,  reverbOn,  reverbPresent, stReverb, numStages },
     /* CAB IR */ { "CAB IR", true,  true,  cabOn,     cabPresent,    stCab,    numStages },

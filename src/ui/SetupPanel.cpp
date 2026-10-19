@@ -32,8 +32,8 @@ SetupPanel::SetupPanel (AmpProcessor& processor) : amp (processor)
         libraryPage.addAndMakeVisible (*v);
     libraryPage.addAndMakeVisible (packSwitches);
 
-    libraries.push_back ({ "PREAMP", &preampDevices, [this] { preampDevices.rebuild(); }, {} });
-    libraries.push_back ({ "IR",     &irs,           [this] { irs.rebuild(); },           {} });
+    libraries.push_back ({ "AMP", &preampDevices, [this] { preampDevices.rebuild(); }, {} });
+    libraries.push_back ({ "IR",  &irs,           [this] { irs.rebuild(); },           {} });
 
     {
         auto* p = amp.apvts.getParameter (params::packLevelComp);

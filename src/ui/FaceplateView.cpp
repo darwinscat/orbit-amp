@@ -10,7 +10,7 @@ namespace orbitamp
 {
 
 FaceplateView::FaceplateView (AmpProcessor& processor)
-    : preamp (processor, processor.preamp, "Preamp", params::preampId, 0,
+    : preamp (processor, processor.preamp, params::preampName, params::preampId, 0,
               processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
       delay (processor), reverb (processor), cabinet (processor)
 {
