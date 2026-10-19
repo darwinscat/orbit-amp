@@ -796,6 +796,19 @@ void Console::exportForWeb (const juce::File& dir)
         auto* l = new juce::DynamicObject();
         l->setProperty ("channels", list);
         l->setProperty ("cabinet", line.openingCabinet);
+        // ...and the cabinets CAB steps through, in its order — the build's own, as an export has no
+        // player's beside them — with the positions its slider has, a tick each.
+        juce::Array<juce::var> cabinets;
+        for (const auto& file : channels.cabinets())
+        {
+            auto* cab = new juce::DynamicObject();
+            cab->setProperty ("file", Channels::cabinetStem (file));
+            cab->setProperty ("name", Channels::cabinetName (file));
+            cab->setProperty ("folder", channels.cabinetFolder (cabinets.size()));
+            cabinets.add (juce::var (cab));
+        }
+        l->setProperty ("cabinets", cabinets);
+        l->setProperty ("cabSteps", juce::jmax (2, channels.cabinets().size()));
         auto* delay = new juce::DynamicObject();
         delay->setProperty ("division", params::delayDivisions[juce::roundToInt (channels.defaultOf (0, params::delayDiv))]);
         delay->setProperty ("bpm", channels.defaultOf (0, params::delayBpm));
@@ -804,7 +817,7 @@ void Console::exportForWeb (const juce::File& dir)
         {
             auto* park = new juce::DynamicObject();
             park->setProperty ("param", line.parkId);
-            park->setProperty ("does", "takes the whole amp out of the sound; the channel waits, TURBO does nothing until a gear is pulled");
+            park->setProperty ("does", "takes the whole amp out of the sound, INPUT and OUTPUT still holding the dry guitar's level; the channel waits, TURBO does nothing until a gear is pulled");
             l->setProperty ("park", juce::var (park));
         }
         o->setProperty ("lineup", juce::var (l));
