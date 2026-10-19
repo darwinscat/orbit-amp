@@ -535,9 +535,10 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
         stars = (Stars) juce::jmax (0, starsWords.indexOf (word));
     }
 
-    // ...and so does what the windshield shows over it: nothing, or a picture of the amp at work.
+    // ...and so does what the windshield shows over it: nothing, or a picture of the amp at work — the
+    // shape it gives the sound, as every face of the family opens on.
     monitor.show ((Monitor::View) juce::jlimit (0, (int) Monitor::View::numViews - 1,
-                                                (int) prefs::store().get (windowKey, 0)));
+                                                (int) prefs::store().get (windowKey, (int) Monitor::View::shape)));
     applySky();
 
     // LEARN from GATE's menu takes the tuner's glass while it runs.

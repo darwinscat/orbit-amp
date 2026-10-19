@@ -71,7 +71,7 @@ struct Skin
         its channels are its favourite sounds, not a maker's boxes, and it names no device anywhere — and
         the picture it shows until the player picks another. */
     bool packOnScreen = false;
-    face::Monitor::View firstScreen = face::Monitor::View::spectrum;
+    face::Monitor::View firstScreen = face::Monitor::View::shape;      // the family's first picture: what the amp does to the sound
     bool parkSignOnTopLine = true;      // parked, the warning on the top line too, beside the large one
 };
 

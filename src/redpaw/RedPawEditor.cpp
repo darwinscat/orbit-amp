@@ -985,6 +985,9 @@ void RedPawEditor::showSelector (int channel)
     view->setGear (gear + 1);
     view->setTurbo (turboOn);
     view->setParked (parked);
+    // Parked, the amp is out of the sound and its picture with it: the screen dark but for the large
+    // warning.
+    screen.setVisible (! parked);
     parkSign.setVisible (parked);
 }
 
