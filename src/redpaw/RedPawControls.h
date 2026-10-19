@@ -185,6 +185,9 @@ public:
     GlassFilm();
     void paint (juce::Graphics&) override;
 
+    /** The glass at a scale of the stage, as paint draws it: for the site's demo. */
+    juce::Image picture (float scale) const { return make (scale); }
+
 private:
     juce::Image film;
     float filmScale = 0.0f;

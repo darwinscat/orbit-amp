@@ -595,6 +595,15 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         look->setProperty ("glow", juce::var (glow));
         nav->setProperty ("speedHudLook", juce::var (look));
     }
+    // THE SCREEN'S GROUND is no colour: what shows under its picture is the cabin's own glass, cabin.png's
+    // pixels in the box, and the screen's glass (GlassFilm: murk, dust, scratches) is laid over everything it
+    // shows — nav-glass.png, at twice the stage's size, over its box.
+    writeForWeb (dir.getChildFile ("nav-glass.png"), glassFilm.picture (2.0f));
+    auto* glass = new juce::DynamicObject();
+    glass->setProperty ("sprite", "nav-glass.png");
+    glass->setProperty ("box", rect (glassFilm.getBounds().toFloat()));
+    glass->setProperty ("ground", "nothing filled: the cabin picture's pixels in the screen, the glass over all it shows");
+    nav->setProperty ("glass", juce::var (glass));
     nav->setProperty ("learn", rect (learnArea));
     nav->setProperty ("packOnScreen", skin().packOnScreen);
     nav->setProperty ("firstScreen", Monitor::names()[(int) skin().firstScreen]);
