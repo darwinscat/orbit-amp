@@ -14,13 +14,6 @@ namespace
 {
     constexpr int preampBlock   = 0;     // the processor's captured block: the one the tone stack follows
     constexpr double displayRate = 48000.0;
-
-    // SHAPE in silence: what counts as quiet at the preamp's input (a guitar plays there at -30 to -6 dBFS,
-    // its hum and hiss sit at -60 to -80), for how long, and how fast the line goes and comes back.
-    constexpr float  quietDb   = -50.0f;
-    constexpr double quietMs   = 100.0;
-    constexpr double fadeOutMs = 200.0;
-    constexpr double fadeInMs  = 30.0;
 }
 
 const juce::StringArray& Monitor::names()

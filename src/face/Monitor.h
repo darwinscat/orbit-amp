@@ -56,6 +56,13 @@ public:
         reverb's and the delay's tails, keep it from ever being quiet in a pause. */
     bool shapeFadesInSilence = false;
 
+    /** ...what counts as quiet at the preamp's input (a guitar plays there at -30 to -6 dBFS, its hum and
+        hiss sit at -60 to -80), for how long, and how fast the line goes and comes back. */
+    static constexpr float  quietDb   = -50.0f;
+    static constexpr double quietMs   = 100.0;
+    static constexpr double fadeOutMs = 200.0;
+    static constexpr double fadeInMs  = 30.0;
+
     void paint (juce::Graphics&) override;
 
 private:

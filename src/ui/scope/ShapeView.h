@@ -15,6 +15,13 @@ namespace orbitamp::scope
     which is the warm-versus-angry difference without a word of explanation. */
 struct ShapeView
 {
+    /** How it is drawn — the window back from the crossing, how much of the half-height the peak fills,
+        the floor that keeps silence flat, and the two traces' strokes (the site's demo reads these). */
+    static constexpr int   samples   = 600;
+    static constexpr float fill      = 0.92f;
+    static constexpr float peakFloor = 0.02f;
+    static constexpr float dryAlpha  = 0.75f, dryWidth = 1.0f, wetWidth = 1.6f;
+
     static void paint (juce::Graphics& g, juce::Rectangle<float> r, const Frame& f)
     {
         if (f.isEmpty())
@@ -26,20 +33,20 @@ struct ShapeView
         for (int i = f.size - 2; i > f.size / 2; --i)
             if (f.dry[i] <= 0.0f && f.dry[i + 1] > 0.0f) { end = i; break; }
 
-        const int n = juce::jmin (600, end);
+        const int n = juce::jmin (samples, end);
         const int from = end - n;
 
         // Normalised to the window's own peak — ONE factor for both traces, so the wet-to-dry
         // difference survives. Form is scale-invariant; the level lives on the rails and in
         // WAVE. The floor keeps silence flat instead of blowing its noise up to full height.
-        float peak = 0.02f;
+        float peak = peakFloor;
         for (int i = from; i < from + n; ++i)
             peak = juce::jmax (peak, juce::jmax (std::abs (f.dry[i]), std::abs (f.wet[i])));
 
-        const float norm = 0.92f / peak;
+        const float norm = fill / peak;
 
-        trace (g, r, f.dry + from, n, norm, theme::lilac.withAlpha (0.75f), 1.0f);
-        trace (g, r, f.wet + from, n, norm, theme::orange, 1.6f);
+        trace (g, r, f.dry + from, n, norm, theme::lilac.withAlpha (dryAlpha), dryWidth);
+        trace (g, r, f.wet + from, n, norm, theme::orange, wetWidth);
     }
 
 private:
