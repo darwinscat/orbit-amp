@@ -15,6 +15,8 @@ on:
       - 'CMakeLists.txt'
       - 'resources/**'
       - 'tests/**'
+      - 'tools/run-gates.sh'
+      - 'installer/family.ini'
       - '.github/workflows/build.yml'
   push:
     branches: [main]
@@ -64,101 +66,36 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      # The cockpit is released apart and is not part of the default build, so that OrbitAmp's build
-      # can never fail on it. It is built here by name, every format of it: this is the only place a
-      # pull request meets MSVC with it.
+      # The cockpit is not part of the default build, so that OrbitAmp's build can never fail on it. It
+      # is built here by name, every format of it: this is the only place a pull request meets MSVC with it.
       - name: Build CatpitAmp
-        run: cmake --build build --target CatpitAmp_All catpitamp_set_test catpitamp_channel_test
+        run: cmake --build build --target CatpitAmp_All
 
-      # The rover likewise: released apart, not in the default build, built here by name with its gates.
+      # The rover likewise: not in the default build, built here by name.
       - name: Build RedPawAmp
-        run: cmake --build build --target RedPawAmp_All redpawamp_set_test redpawamp_channel_test
+        run: cmake --build build --target RedPawAmp_All
 
-      # ...and the ice moon's rover, the same dashboard in a skin of its own, with the rover's gates run as it.
+      # ...and the ice moon's rover, the same dashboard in a skin of its own.
       - name: Build FrostPawAmp
-        run: cmake --build build --target FrostPawAmp_All frostpawamp_set_test frostpawamp_channel_test
+        run: cmake --build build --target FrostPawAmp_All
 
-      # ...and the helicopter over Titan, the same dashboard in a cockpit of its own, with the rover's gates run as it.
+      # ...and the helicopter over Titan, the same dashboard in a cockpit of its own.
       - name: Build AmberPawAmp
-        run: cmake --build build --target AmberPawAmp_All amberpawamp_set_test amberpawamp_channel_test
+        run: cmake --build build --target AmberPawAmp_All
+
+      # Every gate of the one list (tests/gates.txt) — the faces' are built only when asked for.
+      - name: Build the gates
+        run: cmake --build build --target Family_Gates
 
       - name: sccache stats
         if: always()
         run: sccache --show-stats
 
-      # The acceptance gates — OrbitAmp's ten, the same ones the local release runs, and each product's own. Console apps land in
-      # <name>_artefacts/Release; the three plain executables sit wherever the generator put them.
+      # The acceptance gates: the one list (tests/gates.txt), the same the family's release runs on every
+      # system and the local release runs — run, logged and, on Windows, diagnosed by tools/run-gates.sh.
       - name: Gates
         shell: bash
-        run: |
-          set -euo pipefail
-          # The gates SAY WHAT THEY FOUND and what they printed. Swallowing stdout into /dev/null
-          # turned every failure into a bare exit code — 127 read as "no such command" for two days
-          # when `main()` returns the number of failed checks, so it may equally have been 127 of
-          # them. A gate whose output is thrown away can only ever tell you that something is wrong.
-          run_gate() {
-            local name="$1" bin="$2"
-            echo "-- gate: $name"
-            if [ -z "$bin" ] || [ ! -f "$bin" ]; then
-              echo "   NOT FOUND (nothing matched under build/)"; return 1
-            fi
-            echo "   $bin"
-            # Both streams, and to a FILE: printf to a pipe is block-buffered, so a process that
-            # dies before it flushes tells you nothing at all — which is exactly what `chain` did.
-            # The status is captured on the line that RUNS it. After an `if`, `$?` is the status of
-            # the `if` itself — 0 when the condition was false and there is no else — so reading it
-            # there reported a crashed gate as "exited 0".
-            local code=0
-            "$bin" > "gate-$name.log" 2>&1 || code=$?
-            cat "gate-$name.log"
-            [ "$code" -eq 0 ] && return 0
-            echo "   ^ gate $name exited $code"
-
-            # 127 out of bash, from a file that demonstrably exists and printed nothing, is bash's
-            # exec emulation giving up — it cannot tell us WHY. Windows can. Run it again through
-            # cmd, which reports the real NTSTATUS: 0xC0000135 is a DLL the loader could not find,
-            # 0xC0000005 an access violation, and a small number is the program's own answer.
-            # THREE WAYS IN, because the last round proved the binary itself is healthy — a valid
-            # PE32+ console image with every import resolved — so what fails is how bash reaches it.
-            # `%ERRORLEVEL%` inside a cmd string is expanded BEFORE the command runs, so the previous
-            # probe reported a stale zero; the status is taken from the launcher here instead.
-            # EVERY probe runs. `set -e` killed the last round on the first one, so the rest never
-            # spoke — which is how two rounds went by learning one fact each.
-            set +e
-            local win; win="$(cygpath -w "$bin")"
-            echo "   --- the file itself ---"
-            ls -l "$bin"; stat -c '%s bytes' "$bin" 2>/dev/null
-            echo "   --- msys path ---";  "$bin";        echo "   status: $?"
-            echo "   --- windows path ---"; "$win";      echo "   status: $?"
-            echo "   --- through cmd ---";  cmd //c "$win"; echo "   status: $?"
-
-            # THE FULL 32-BIT CODE. bash and cmd both hand back a byte, and a byte cannot tell the
-            # program's own 127 from the low byte of an NTSTATUS — 0xC0000xxx means the process died
-            # before it could answer, and every guess so far has hung on which of the two it is.
-            echo "   --- raw exit code, from PowerShell ---"
-            GATEBIN="$win" powershell -NoProfile -Command '& { & $env:GATEBIN; Write-Host ("raw exit: {0} = 0x{0:X8}" -f $LASTEXITCODE) }' 2>&1 | tail -6
-
-            echo "   --- subsystem ---";    file "$bin" 2>&1 | head -2
-            set -e
-            return 1
-          }
-          for t in captured chain library reverb ribbon set factory hum; do
-            run_gate "$t" "$(find "build/orbitamp_${t}_test_artefacts" -type f -name '*.exe' | head -1)"
-          done
-          for t in eqlink tuner gatelearn; do
-            run_gate "$t" "$(find build -maxdepth 2 -type f -name "orbitamp_${t}_test.exe" | head -1)"
-          done
-          # The cockpit's own: its set as it leaves the binary, laid out in a folder of the gate's —
-          # and its channels with no window, moved the way a host moves them.
-          run_gate catpit-set "$(find build/catpitamp_set_test_artefacts -type f -name '*.exe' | head -1)"
-          CATPIT_GATE_OWNS_HOME=1 run_gate catpit-channel "$(find build/catpitamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
-          # ...and the rovers', the same two over each one's own channels.
-          run_gate redpaw-set "$(find build/redpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
-          ROVER_GATE_OWNS_HOME=1 run_gate redpaw-channel "$(find build/redpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
-          run_gate frostpaw-set "$(find build/frostpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
-          ROVER_GATE_OWNS_HOME=1 run_gate frostpaw-channel "$(find build/frostpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
-          run_gate amberpaw-set "$(find build/amberpawamp_set_test_artefacts -type f -name '*.exe' | head -1)"
-          ROVER_GATE_OWNS_HOME=1 run_gate amberpaw-channel "$(find build/amberpawamp_channel_test_artefacts -type f -name '*.exe' | head -1)"
+        run: tools/run-gates.sh build Release
 
       - name: Validate (pluginval, VST3)
         shell: bash

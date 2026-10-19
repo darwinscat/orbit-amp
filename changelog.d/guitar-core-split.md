@@ -1,3 +1,5 @@
+Amps: all
+
 ### Fixed
 - **A captured device no longer replays a moment of the last sound when the host restarts the audio.**
   Changing the buffer size or the sample rate — and, in some hosts, pressing play — prepares the plugin

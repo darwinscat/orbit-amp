@@ -1,3 +1,5 @@
+Amps: CatpitAmp, RedPawAmp, FrostPawAmp, AmberPawAmp
+
 ### Changed
 - **Every amp but OrbitAmp is lighter** — by 5.7 MB in each format on the Mac, where the binary holds an Apple
   Silicon half and an Intel one, and by 2.8 MB elsewhere. CatpitAmp and the rovers carry the Orange PPC212V's

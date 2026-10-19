@@ -1,6 +1,7 @@
+Amps: RedPawAmp
+
 This tree now builds a third product beside OrbitAmp and CatpitAmp: RedPawAmp, the dashboard of a Mars rover
-over the same engine. It is released apart, under tags of its own (`redpaw-vX.Y.Z`), and is not part of
-OrbitAmp's build or installers.
+over the same engine. It comes in the family's release beside them.
 
 ### Added
 - **RedPawAmp** — four channels, picked as two gears and TURBO: the gear lever's CRUNCH and HI-GAIN, and

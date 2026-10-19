@@ -1,3 +1,5 @@
+Amps: all
+
 ### Changed
 - **The build time in the About window reads on your own clock, and says which zone.** It used to show
   the UTC stamp as a bare time, so a build made just after midnight in Berlin read as the evening before.

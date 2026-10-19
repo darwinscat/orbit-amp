@@ -1,3 +1,5 @@
+Amps: all
+
 ### Changed
 - **Of two Darwin's Cat amps that carry the same pack, the newer build's copy is the one in the shared
   `Factory` folder**, and both play it. An older amp started afterwards leaves that copy as it is,

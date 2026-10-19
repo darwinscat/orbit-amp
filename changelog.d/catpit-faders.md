@@ -1,3 +1,5 @@
+Amps: CatpitAmp
+
 ### Added
 - **CatpitAmp**: GATE's threshold and LIMITER's ceiling each on a short fader, in a slot cut into the
   slanted beam beside its corner lamp and lying at the lamp's slant — the gate from -70 dB at its foot to

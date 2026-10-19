@@ -1,3 +1,5 @@
+Amps: CatpitAmp, RedPawAmp, FrostPawAmp, AmberPawAmp
+
 ### Changed
 - **CatpitAmp, RedPawAmp, FrostPawAmp and AmberPawAmp carry their pictures finished.** Each used to correct
   its panel picture every time it opened — the cockpit its windshield, its tone sockets and its TURBO frame,

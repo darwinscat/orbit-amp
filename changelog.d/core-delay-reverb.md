@@ -1,3 +1,5 @@
+Amps: all
+
 ### Fixed
 - **The delay's repeats arrive exactly when TIME says.** After the time was changed, the echo settled a
   hair short of the new time and stayed there — at 48 kHz, 28 samples early at 1.5 s and 2.3 ms at a

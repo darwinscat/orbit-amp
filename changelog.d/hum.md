@@ -1,3 +1,5 @@
+Amps: OrbitAmp, CatpitAmp
+
 ### Added
 - **HUM — mains hum taken off the input** (OrbitAmp and CatpitAmp). Before the input trim, the 50 or 60 Hz hum
   and its harmonics are cancelled by a comb of notches that follows the mains. The notches are 0.5 Hz wide while

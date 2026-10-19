@@ -1,3 +1,5 @@
+Amps: OrbitAmp
+
 ### Removed
 - **OrbitAmp has no BOOST block any more.** The chain is the tuner, the gate, the preamp with its EQ,
   the delay, the reverb, the cabinet and the limiter: the boost, its EQ, its arrow in the strip, its

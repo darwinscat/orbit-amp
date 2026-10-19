@@ -1,3 +1,5 @@
+Amps: all
+
 ### Fixed
 - **The delay no longer reads past the end of its own memory.** On an Apple Silicon Mac it did so at its
   default settings, 31 times a second, whether it was switched on or only in the rig; on any machine

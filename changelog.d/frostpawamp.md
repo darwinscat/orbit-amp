@@ -1,6 +1,8 @@
+Amps: FrostPawAmp
+
 This tree now builds a fourth product beside OrbitAmp, CatpitAmp and RedPawAmp: FrostPawAmp, a rover on an
-ice moon — RedPawAmp's dashboard in frosted stainless steel, over the same engine. It is released apart,
-under tags of its own (`frostpaw-vX.Y.Z`), and is not part of OrbitAmp's build or installers.
+ice moon — RedPawAmp's dashboard in frosted stainless steel, over the same engine. It comes
+in the family's release beside them.
 
 ### Added
 - **FrostPawAmp** — the same dashboard as RedPawAmp, control for control, over six channels, picked as
