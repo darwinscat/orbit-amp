@@ -12,13 +12,6 @@ namespace orbitamp::redpaw
 using face::orange;
 using face::labelLilac;
 
-namespace
-{
-    // The slot and its notches in the lever's own space.
-    const float slotX  = layout::slotX - layout::leverLeft;
-    const float notchX = layout::notchX - layout::leverLeft;
-}
-
 juce::Rectangle<float> GearLever::leverBox (float y, float x) const
 {
     const auto& art = Art::get().lever;
@@ -29,7 +22,10 @@ juce::Rectangle<float> GearLever::leverBox (float y, float x) const
 
 juce::Rectangle<float> GearLever::standingBox() const
 {
-    // In a notch the collar stands in the notch; at PARK, the slot's top end, there is none.
+    // In a notch the collar stands in the notch; at PARK, the slot's top end, there is none. The slot and
+    // its notches in the lever's own space, read here and not as the program starts (RedPawLayout.h).
+    const float slotX  = layout::slotX - layout::leverLeft;
+    const float notchX = layout::notchX - layout::leverLeft;
     const float p = pos.value;
     const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f)
                         * juce::jlimit (0.0f, 1.0f, p / 0.5f);
