@@ -26,25 +26,23 @@ juce::Rectangle<float> GearLever::standingBox() const
     // its notches in the lever's own space, read here and not as the program starts (RedPawLayout.h).
     const float slotX  = layout::slotX - layout::leverLeft;
     const float notchX = layout::notchX - layout::leverLeft;
-    const float p = pos.value;
+    const float p = travel();
     const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f)
                         * juce::jlimit (0.0f, 1.0f, p / 0.5f);
     return leverBox (yOf (p), slotX + (notchX - slotX) * inNotch);
 }
 
 GearLever::GearLever (int g)
-    : gears (juce::jlimit (1, (int) layout::stops.size(), g))
+    : DetentLever (juce::jlimit (1, (int) layout::stops.size(), g) + 1, positionOf (0),
+                   260.0f, 22.0f)      // a heavy lever: it overshoots the notch a hair and comes back
 {
     // Each position's height in the dashboard's space: PARK at the slot's top end, the gears at their
     // stops from the top. A stop past the last gear is no position.
-    jassert (gears == g);
+    jassert (numGears() == g);
     heights.push_back (layout::slotTopY);
-    for (int i = 0; i < gears; ++i)
+    for (int i = 0; i < numGears(); ++i)
         heights.push_back (layout::stops[(size_t) i]);
 
-    pos.stiffness = 260.0f;     // a heavy lever: it overshoots the notch a hair and comes back
-    pos.damping   = 22.0f;
-    pos.jump (1.0f);
     lit.stiffness = 40.0f;      // soft, like the knobs' rings
     lit.damping   = 13.0f;
     setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
@@ -52,15 +50,15 @@ GearLever::GearLever (int g)
 
 float GearLever::yOf (float at) const noexcept
 {
-    const int last = numPositions() - 1;
+    const int last = numPlaces() - 1;
     const float p = juce::jlimit (0.0f, (float) last, at);
     const int i = juce::jmin (last - 1, (int) p);
     return juce::jmap (p - (float) i, heights[(size_t) i], heights[(size_t) i + 1]) - layout::leverTop;
 }
 
-float GearLever::positionAt (float y) const noexcept
+float GearLever::travelAt (float y) const noexcept
 {
-    const int last = numPositions() - 1;
+    const int last = numPlaces() - 1;
     y += layout::leverTop;
     if (y <= heights.front()) return 0.0f;
     for (int i = 0; i < last; ++i)
@@ -69,31 +67,13 @@ float GearLever::positionAt (float y) const noexcept
     return (float) last;
 }
 
-void GearLever::setPosition (int to, bool animate, bool notify)
-{
-    to = juce::jlimit (0, numPositions() - 1, to);
-    const bool changed = to != position;
-    position = to;
-    if (animate)
-    {
-        pos.target = (float) to;
-        startTimerHz (60);
-    }
-    else
-    {
-        pos.jump ((float) to);
-        repaint();
-    }
-    if (changed && notify && onPosition)
-        onPosition (position);
-}
-
 void GearLever::timerCallback()
 {
-    const bool moving = pos.step (face::frameDt);
+    // Its light glides on the same frames as the lever, and the frames go on until both stand still.
+    const bool moving = glide();
     if (! lit.step (face::frameDt) && ! moving)
         stopTimer();
-    repaint();
+    travelled();
 }
 
 void GearLever::paint (juce::Graphics& g)
@@ -132,58 +112,31 @@ void GearLever::paint (juce::Graphics& g)
 
 void GearLever::mouseDown (const juce::MouseEvent& e)
 {
-    held = true;
-    stopTimer();
     // Taken by the grip — the bar the hand sees, not the room round it, where the next position up
     // already is — it goes with the hand from where it was taken; anywhere else on the gate it waits:
     // dragged, it goes where the hand is, and let go where it was pressed, into the position nearest the
     // press (mouseUp).
     const auto box = standingBox();
-    const bool grip = box.withHeight (box.getHeight() * barBottom).contains (e.position);
-    grabOffset = grip ? yOf (pos.value) - e.position.y : 0.0f;
+    take (box.withHeight (box.getHeight() * barBottom).contains (e.position), e.position.y);
 }
 
 void GearLever::mouseDrag (const juce::MouseEvent& e)
 {
-    if (! held || ! e.mouseWasDraggedSinceMouseDown())
-        return;
-
-    // The notch: within reach of one the lever sits IN it, and the hand has to pull it out.
-    const float raw = positionAt (e.position.y + grabOffset);
-    const int nearest = juce::roundToInt (raw);
-    const float p = std::abs (raw - (float) nearest) < 0.22f ? (float) nearest : raw;
-
-    pos.jump (p);
-    if (juce::exactlyEqual (p, (float) nearest) && nearest != position)
-    {
-        position = nearest;
-        if (onPosition) onPosition (position);
-    }
-    repaint();
+    if (isHeld() && e.mouseWasDraggedSinceMouseDown())
+        follow (e.position.y);
 }
 
 void GearLever::mouseUp (const juce::MouseEvent& e)
 {
-    if (! held)
+    if (! isHeld())
         return;
-    held = false;
     if (! isMouseOver (true) && ! getLocalBounds().contains (e.getPosition()))
     {
         lit.target = 0.0f;
         startTimerHz (60);
     }
     // A press that did not travel: the position nearest it — on the grip, the one the lever stands in.
-    const float to = e.mouseWasDraggedSinceMouseDown() ? pos.value : positionAt (e.position.y + grabOffset);
-    setPosition (juce::roundToInt (to), true);
-    if (onRelease)
-        onRelease();
-}
-
-void GearLever::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
-{
-    const float d = w.isReversed ? -w.deltaY : w.deltaY;
-    if (std::abs (d) > 0.0f)
-        setPosition (position + (d < 0.0f ? 1 : -1), true);
+    letGo (e.mouseWasDraggedSinceMouseDown() ? travel() : underHand (e.position.y));
 }
 
 //==============================================================================

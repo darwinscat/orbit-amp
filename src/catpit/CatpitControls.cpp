@@ -11,16 +11,11 @@ namespace orbitamp::catpit
 // The lever's own space: the 261 x 217 AMP MODE frame plus `overhang` to its left, where the grip
 // reaches past the frame. The slot on the left, the four names on the right, a lamp beside each.
 
-Lever::Lever()
-{
-    pos.stiffness = stiffness;
-    pos.damping   = damping;
-    pos.jump (0.0f);
-}
+Lever::Lever() : DetentLever (numDetents, 0, stiffness, damping) {}
 
-float Lever::detentY (int i) const noexcept { return firstY + detentStep * (float) i; }
+float Lever::yOf (float travel) const noexcept { return firstY + detentStep * travel; }
 
-float Lever::posFromY (float y) const noexcept
+float Lever::travelAt (float y) const noexcept
 {
     return juce::jlimit (0.0f, (float) (numDetents - 1), (y - firstY) / detentStep);
 }
@@ -29,40 +24,7 @@ int Lever::labelAt (juce::Point<float> p) const noexcept
 {
     if (p.x < lampX - 8.0f)
         return -1;
-    return juce::jlimit (0, numDetents - 1, juce::roundToInt (posFromY (p.y)));
-}
-
-void Lever::setDetent (int d, bool animate, bool notify)
-{
-    d = juce::jlimit (0, numDetents - 1, d);
-    const bool changed = d != detent;
-    detent = d;
-    if (animate)
-    {
-        pos.target = (float) d;
-        startTimerHz (60);
-    }
-    else
-    {
-        pos.jump ((float) d);
-        travelled();
-    }
-    if (changed && notify && onDetent)
-        onDetent (detent);
-}
-
-void Lever::travelled()
-{
-    repaint();
-    if (onTravel)
-        onTravel (pos.value);
-}
-
-void Lever::timerCallback()
-{
-    if (! pos.step (frameDt))
-        stopTimer();
-    travelled();
+    return juce::jlimit (0, numDetents - 1, juce::roundToInt (travelAt (p.y)));
 }
 
 void Lever::paint (juce::Graphics& g)
@@ -76,14 +38,14 @@ void Lever::paint (juce::Graphics& g)
     for (int i = 0; i < numDetents; ++i)
     {
         g.setColour (juce::Colour (0xff2a2836));
-        g.fillRect (juce::Rectangle<float> (slotX - 20.0f, detentY (i) - 1.0f, 40.0f, 2.0f));
+        g.fillRect (juce::Rectangle<float> (slotX - 20.0f, yOf ((float) i) - 1.0f, 40.0f, 2.0f));
     }
 
     // The names, a lamp beside each; the one it sits in lit orange.
     for (int i = 0; i < numDetents; ++i)
     {
-        const bool here = i == detent;
-        const auto lamp = juce::Rectangle<float> (12.0f, 6.0f).withCentre ({ lampX, detentY (i) });
+        const bool here = i == getPlace();
+        const auto lamp = juce::Rectangle<float> (12.0f, 6.0f).withCentre ({ lampX, yOf ((float) i) });
         if (here)
         {
             juce::Path lp;
@@ -93,7 +55,7 @@ void Lever::paint (juce::Graphics& g)
         g.setColour (here ? orange : juce::Colour (0xff3a2a22));
         g.fillRoundedRectangle (lamp, 2.0f);
 
-        const auto row = juce::Rectangle<float> (namesX, detentY (i) - 14.0f, (float) getWidth() - namesX - 6.0f, 28.0f);
+        const auto row = juce::Rectangle<float> (namesX, yOf ((float) i) - 14.0f, (float) getWidth() - namesX - 6.0f, 28.0f);
         g.setColour (here ? orange : lilac.withAlpha (0.75f));
         g.setFont (labelFont (layout::px16));
         g.drawText (names[i], row, juce::Justification::centredLeft, false);
@@ -101,8 +63,8 @@ void Lever::paint (juce::Graphics& g)
 
     // The grip: pulled toward you it comes a little closer, so it grows as it travels down. Its stem
     // stays in the slot; the bar hangs further to the left of it than to the right, clear of the names.
-    const float y = firstY + detentStep * pos.value;
-    const float length = gripLength * (1.0f + gripGrowth * pos.value);
+    const float y = yOf (travel());
+    const float length = gripLength * (1.0f + gripGrowth * travel());
     const auto& art = Art::get();
     if (art.leverGrip.isValid())
     {
@@ -122,50 +84,25 @@ void Lever::mouseDown (const juce::MouseEvent& e)
     const auto p = e.position;
     if (const int l = labelAt (p); l >= 0)
     {
-        setDetent (l, true);
+        setPlace (l, true);
         return;
     }
-    held = true;
-    stopTimer();
-    const float gripY = firstY + detentStep * pos.value;
-    grabOffset = std::abs (p.y - gripY) < 30.0f ? gripY - p.y : 0.0f;
-    mouseDrag (e);
+    // Pressed on the slot it comes to the hand at once; within reach of the grip it is the grip that
+    // goes with the hand, from where it was taken.
+    take (std::abs (p.y - yOf (travel())) < 30.0f, p.y);
+    follow (p.y);
 }
 
 void Lever::mouseDrag (const juce::MouseEvent& e)
 {
-    if (! held)
-        return;
-
-    // The notch: within reach of a detent the grip sits IN it, and the hand has to pull it out.
-    const float raw = posFromY (e.position.y + grabOffset);
-    const int nearest = juce::roundToInt (raw);
-    const float p = std::abs (raw - (float) nearest) < 0.22f ? (float) nearest : raw;
-
-    pos.jump (p);
-    if (juce::exactlyEqual (p, (float) nearest) && nearest != detent)
-    {
-        detent = nearest;
-        if (onDetent) onDetent (detent);
-    }
-    travelled();
+    if (isHeld())
+        follow (e.position.y);
 }
 
 void Lever::mouseUp (const juce::MouseEvent&)
 {
-    if (! held)
-        return;
-    held = false;
-    setDetent (juce::roundToInt (pos.value), true);
-    if (onRelease)
-        onRelease();
-}
-
-void Lever::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
-{
-    const float d = w.isReversed ? -w.deltaY : w.deltaY;
-    if (std::abs (d) > 0.0f)
-        setDetent (detent + (d < 0.0f ? 1 : -1), true);
+    if (isHeld())
+        letGo (travel());
 }
 
 //==============================================================================

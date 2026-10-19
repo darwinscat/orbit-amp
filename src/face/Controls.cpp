@@ -162,6 +162,86 @@ namespace
 }
 
 //==============================================================================
+DetentLever::DetentLever (int n, int start, float stiffness, float damping)
+    : places (n), place (start)
+{
+    pos.stiffness = stiffness;
+    pos.damping   = damping;
+    pos.jump ((float) start);
+}
+
+void DetentLever::setPlace (int to, bool animate, bool notify)
+{
+    to = juce::jlimit (0, places - 1, to);
+    const bool changed = to != place;
+    place = to;
+    if (animate)
+    {
+        pos.target = (float) to;
+        startTimerHz (60);
+    }
+    else
+    {
+        pos.jump ((float) to);
+        travelled();
+    }
+    if (changed && notify && onPlace)
+        onPlace (place);
+}
+
+void DetentLever::travelled()
+{
+    repaint();
+    if (onTravel)
+        onTravel (pos.value);
+}
+
+void DetentLever::timerCallback()
+{
+    if (! glide())
+        stopTimer();
+    travelled();
+}
+
+void DetentLever::take (bool byTheGrip, float y)
+{
+    held = true;
+    stopTimer();
+    grabOffset = byTheGrip ? yOf (pos.value) - y : 0.0f;
+}
+
+void DetentLever::follow (float y)
+{
+    // The notch: within reach of a place the lever sits IN it, and the hand has to pull it out.
+    const float raw = underHand (y);
+    const int nearest = juce::roundToInt (raw);
+    const float p = std::abs (raw - (float) nearest) < notchReach ? (float) nearest : raw;
+
+    pos.jump (p);
+    if (juce::exactlyEqual (p, (float) nearest) && nearest != place)
+    {
+        place = nearest;
+        if (onPlace) onPlace (place);
+    }
+    travelled();
+}
+
+void DetentLever::letGo (float to)
+{
+    held = false;
+    setPlace (juce::roundToInt (to), true);
+    if (onRelease)
+        onRelease();
+}
+
+void DetentLever::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
+{
+    const float d = w.isReversed ? -w.deltaY : w.deltaY;
+    if (std::abs (d) > 0.0f)
+        setPlace (place + (d < 0.0f ? 1 : -1), true);
+}
+
+//==============================================================================
 ArtKnob::ArtKnob (const juce::Image& a, Pointer p) : art (a), ptr (p)
 {
     setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
