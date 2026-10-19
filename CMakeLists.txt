@@ -1620,6 +1620,7 @@ target_include_directories(orbitamp_chain_test PRIVATE src)
 target_include_directories(orbitamp_chain_test PRIVATE "${ORBITAMP_GENERATED_DIR}")   # the same faces, the same stamp
 add_dependencies(orbitamp_chain_test OrbitAmpVersionGen)
 target_compile_definitions(orbitamp_chain_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                      ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}"   # the channels' gate plays the set in place
                                                       JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE
     OrbitAmpData

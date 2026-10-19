@@ -11,6 +11,7 @@
 #include "scope/DeviceScope.h"
 #include "Knob.h"
 #include "VSwitch.h"
+#include "ChannelRow.h"
 #include "VoicingSelector.h"
 
 #include <felitronics/appkit/DeviceGlyph.h>
@@ -71,22 +72,20 @@ private:
         from before the move. */
     void refreshMeterOffsets();
 
+    /** A HAND'S PICK — a device out of the menu, a key of the channel row: the channel the amp
+        leaves keeps what it was set to, and the one it plays comes back as it was left
+        (AmpChannels.h). */
+    void playPack (int index);
+
+    /** The AMP's menu: the devices, then the folders of the player's own, mirrored. */
+    void showDeviceMenu();
+
     Block::Feed lastFeed;           // the marks as the hint last put them into words…
     bool        saidFeed = false;   // …and whether it has put them into any yet
 
     /** The tone slots alone back to the pack's defaults — the console's RESET, when the block
         wears the device's own knobs. */
     void resetToneSlotsToPackDefaults();
-
-    /** Puts every slot back where the loaded pack says a player starts.
-
-        The measured slots and the selector slots are SLOTS, not controls: `preamp_meas1` exists
-        always and what it turns is whatever the pack decided. So its value cannot survive a device
-        change — 0.7 of a Tube Screamer's Tone and 0.7 of an SM7's EQ-Lo are different physical
-        things wearing one number. GAIN is the exception and keeps its place: every device has one
-        and it means the same thing on all of them, which is what makes two devices comparable at
-        the same dial position. */
-    void resetToPackDefaults();
 
     /** The device's OWN tone controls as console bands — one to three of whatever it happened to
         have, in the order the pack lists them. Empty when it measured nothing, which is what makes
@@ -125,7 +124,14 @@ private:
     const int     link;   // which console/tap is this block's
     felitronics::analysis::RollingSpectrumTap& toneTap;
 
+    /** The DEVICE — its name on the block's top border, and the menu of every device under it. */
     VoicingSelector device;
+
+    /** The devices as the menu has them, read from the block's list each time the device changes. */
+    device::DeviceLibrary::Shelf shelf;
+
+    /** The playing device's channels, one key each, over the picture. Hidden for a device of one. */
+    ChannelRow channelRow;
 
     /** The block's own EQ, after the capture. Not a link that happens to be drawn here — the
         block owns it, its switch darkens it, and the curve's spectrum is this block's output. */

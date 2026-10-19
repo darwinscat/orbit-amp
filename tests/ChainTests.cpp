@@ -15,6 +15,7 @@
 
 #include <juce_events/juce_events.h>
 
+#include "AmpChannels.h"
 #include "PluginProcessor.h"
 #include "core/BypassWire.h"
 
@@ -2324,6 +2325,140 @@ int main()
                     w.runs.load() > 0 && torn.load() == 0 && mix >= 0.0f && mix <= 99.0f
                         && std::abs (mix - std::round (mix)) < 0.01f,
                     juce::String (w.runs.load()) + " saves, " + juce::String (torn.load()) + " torn");
+        }
+    }
+
+    // ---- THE AMP'S CHANNELS: each remembers its own settings -----------------------------------
+    //
+    // On a processor of its own, playing the set where it lies in the tree — so it runs on a machine
+    // with nothing installed, as this half of the gate does. Every switch goes the way a hand's does,
+    // through AmpChannels, which is what the panel's menu and channel keys call.
+    {
+        namespace P = orbitamp::params;
+        using Library = orbitamp::device::DeviceLibrary;
+
+        const auto m = std::make_unique<orbitamp::AmpProcessor>();
+        m->inlineLoads = true;
+        m->prepareToPlay (sampleRate, blockSize);
+
+        const auto devices = juce::File (ORBITAMP_SET_DIR).getChildFile ("Devices");
+        const auto nowhere = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("orbitamp-no-devices");
+        const auto library = Library::scan (Library::ampSlot, true, devices, nowhere);
+
+        const auto indexOf = [&library] (const juce::String& name)
+        {
+            for (int i = 0; i < library.size(); ++i)
+                if (library.getReference (i).displayName() == name)
+                    return i;
+            return -1;
+        };
+
+        const int ch1 = indexOf ("IR-X Ch1 PowerAmp"), ch2 = indexOf ("IR-X Ch2 PowerAmp"), x88 = indexOf ("X88-IR Crunch");
+
+        const auto value = [] (orbitamp::AmpProcessor& p, const juce::String& id)
+        {
+            auto* param = p.apvts.getParameter (id);
+            return param->convertFrom0to1 (param->getValue());
+        };
+
+        const auto near = [] (float a, float b) { return std::abs (a - b) < 1.0e-3f; };
+
+        const auto ticks = [] (orbitamp::AmpProcessor& p)
+        {
+            for (int i = 0; i < 40; ++i)
+            {
+                p.pumpDeviceWork();
+                p.history.tick();
+            }
+        };
+
+        if (ch1 < 0 || ch2 < 0 || x88 < 0)
+        {
+            report ("the set's IR-X and X88-IR are in the tree", false);
+        }
+        else
+        {
+            m->preamp.packs = library;
+            orbitamp::AmpChannels channels (*m);
+
+            channels.play (ch1);
+            ticks (*m);
+
+            // Channel 1 as a hand leaves it.
+            set (*m, P::preampGain, 7.5f);
+            set (*m, P::preampMeasured (0), 0.2f);
+            set (*m, P::selectorId (P::preampId, 0), 1.0f);
+            set (*m, P::blockSmooth (P::preampId), 0.0f);
+            set (*m, P::eqLoDb (0), 4.0f);
+            set (*m, P::eqLevel (0), -3.0f);
+
+            report ("a hand's switch plays the other channel",   channels.play (ch2) && channels.playing() == ch2
+                                                                    && m->preamp.selectedName() == "IR-X Ch2 PowerAmp",
+                    m->preamp.selectedName());
+
+            const auto opening = orbitamp::device::PackOpening::of (library.getReference (ch2));
+            report ("...one never visited opens on its pack's own", near (value (*m, P::preampMeasured (0)), opening.meas[0])
+                                                                    && near (value (*m, P::selectorId (P::preampId, 0)), (float) opening.sel[0]));
+            report ("...and on the DRIVE and EQ the hand had",    near (value (*m, P::preampGain), 7.5f) && near (value (*m, P::eqLoDb (0)), 4.0f));
+
+            // Channel 2 as the hand leaves it.
+            set (*m, P::preampGain, 2.0f);
+            set (*m, P::eqLoDb (0), -5.0f);
+            set (*m, P::blockSmooth (P::preampId), 1.0f);
+
+            channels.play (ch1);
+            report ("a channel comes back with what it was left with",
+                    near (value (*m, P::preampGain), 7.5f) && near (value (*m, P::preampMeasured (0)), 0.2f)
+                        && near (value (*m, P::selectorId (P::preampId, 0)), 1.0f)
+                        && near (value (*m, P::blockSmooth (P::preampId)), 0.0f)
+                        && near (value (*m, P::eqLoDb (0)), 4.0f) && near (value (*m, P::eqLevel (0)), -3.0f),
+                    "DRIVE " + juce::String (value (*m, P::preampGain)) + ", LO " + juce::String (value (*m, P::eqLoDb (0))));
+
+            channels.play (ch2);
+            report ("...and so does the other",                   near (value (*m, P::preampGain), 2.0f) && near (value (*m, P::eqLoDb (0)), -5.0f)
+                                                                    && near (value (*m, P::blockSmooth (P::preampId)), 1.0f));
+
+            // Another device, and back by the menu: the IR-X opens on the channel it was left on.
+            channels.play (x88);
+            const auto shelf = Library::shelfOf (m->preamp.packs);
+            const auto* irx = shelf.deviceOf (ch1);
+            report ("a device opens on the channel it was left on", irx != nullptr && channels.openingOf (*irx) == ch2);
+
+            // The memory is the state's: a session saved here and opened elsewhere keeps it.
+            juce::MemoryBlock saved;
+            m->getStateInformation (saved);
+
+            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            r->inlineLoads = true;
+            r->prepareToPlay (sampleRate, blockSize);
+            r->preamp.packs = library;
+            r->setStateInformation (saved.getData(), (int) saved.getSize());
+            ticks (*r);
+
+            const auto node = r->apvts.state.getChildWithName (orbitamp::AmpChannels::nodeType());
+            const auto record = node.getChildWithProperty (orbitamp::AmpChannels::keyId(), library.getReference (ch1).rigId);
+            report ("the memory rides the session, a record per rig_id", record.isValid() && near ((float) record[P::preampGain], 7.5f),
+                    juce::String (node.getNumChildren()) + " records");
+
+            orbitamp::AmpChannels restored (*r);
+            report ("...and a restored session switches back to it", restored.play (ch1) && near (value (*r, P::preampGain), 7.5f)
+                                                                       && near (value (*r, P::eqLoDb (0)), 4.0f));
+
+            // One step of the history, and undone whole.
+            ticks (*m);
+            const int depth = m->history.undoDepth();
+            const float driveBefore = value (*m, P::preampGain);
+            channels.play (ch1);
+            ticks (*m);
+            report ("a channel switch is one step of the history", m->history.undoDepth() == depth + 1,
+                    juce::String (m->history.undoDepth() - depth) + " steps");
+            m->history.undo();
+            ticks (*m);
+            report ("...and undo brings back the device and its knobs", channels.playing() == x88
+                                                                           && m->preamp.selectedName() == "X88-IR Crunch"
+                                                                           && near (value (*m, P::preampGain), driveBefore),
+                    m->preamp.selectedName() + " at " + juce::String (channels.playing()) + ", DRIVE "
+                        + juce::String (value (*m, P::preampGain)));
         }
     }
 
