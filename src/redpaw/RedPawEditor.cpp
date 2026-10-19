@@ -590,6 +590,9 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     type->setProperty ("unitColour", colour (labelLilac.withAlpha (0.8f)));
     nav->setProperty ("type", juce::var (type));
     juce::Array<juce::var> lines;
+    int topKmh = 0;
+    for (int g = 1; g <= lever.numGears(); ++g)
+        topKmh = juce::jmax (topKmh, juce::roundToInt (view->drive().speedFor (g, true) * 3.6f));
     const auto line = [&] (int at, int channel)
     {
         const bool parked = at == GearLever::park;
@@ -608,6 +611,18 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         x->setProperty ("room", f.room);
         x->setProperty ("lines", f.lines);
         x->setProperty ("shown", f.shown);
+
+        // ...and what it shows while the speed is eased there, since the number takes room from the
+        // channel: [from km/h, shown] wherever that changes, from a stand to the world's top speed.
+        juce::Array<juce::var> byKmh;
+        juce::String was;
+        for (int k = 0; k <= topKmh; ++k)
+            if (const auto s = header.fit (gearName, name, k, parked).shown; k == 0 || s != was)
+            {
+                byKmh.add (juce::var (juce::Array<juce::var> { k, s }));
+                was = s;
+            }
+        x->setProperty ("shownByKmh", byKmh);
         lines.add (juce::var (x));
     };
     for (int c = 0; c < (int) lineup().channels.size(); ++c)
