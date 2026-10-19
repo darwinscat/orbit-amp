@@ -148,8 +148,8 @@ inline juce::String blockMeasured (const char* blk, int i) { return juce::String
     a host fixes a Choice's names at construction, and this list is whatever the player has on disk
     the moment the plugin opens.
 
-    THE INDEX IS THE HOST'S HANDLE, NOT THE IDENTITY. The list is sorted bundled-first and then
-    along the gain ramp, so one new pack dropped into the Devices folder renumbers every device
+    THE INDEX IS THE HOST'S HANDLE, NOT THE IDENTITY. The list is in the AMP menu's order, so one
+    new pack dropped into the Devices folder renumbers every device
     after it. What the state actually carries is the device's NAME, in a property beside this
     parameter (`AmpProcessor::deviceAimSuffix`), and the name is what decides on the way back. */
 inline constexpr int maxDevices = 128;

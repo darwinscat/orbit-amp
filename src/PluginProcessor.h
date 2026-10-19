@@ -349,7 +349,7 @@ private:
 
         Both parameters a host sees are numbers, and both numbers are places in a list that belongs
         to this machine on this day. The device's is an index into whatever packs are on disk,
-        sorted bundled-first and then along the gain ramp — drop one new pack in and everything
+        in the AMP menu's order — drop one new pack in and everything
         after it renumbers. A switch's is a fraction, an index into the pack's own position list —
         repack a device one position shorter and every old session reopens on a different position.
         Both drift silently, and the second is the one a player would never think to check.
@@ -939,7 +939,7 @@ public:
         measured controls as filters, and the taps its pictures read. The library and the loading
         live on the message thread; the audio thread only ever meets a model that is already in
         memory. */
-    core::CapturedBlock preamp   { device::DeviceLibrary::Slot::preamp };
+    core::CapturedBlock preamp   { device::DeviceLibrary::ampSlot };
 
     /** Re-scans the devices folder and loads whatever the device parameters point at. Message
         thread. */

@@ -1723,7 +1723,8 @@ target_link_libraries(orbitamp_captured_test PRIVATE
 juce_add_console_app(orbitamp_library_test PRODUCT_NAME "OrbitAmpLibraryTest")
 target_sources(orbitamp_library_test PRIVATE tests/LibraryTests.cpp)
 target_include_directories(orbitamp_library_test PRIVATE src)
-target_compile_definitions(orbitamp_library_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(orbitamp_library_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+                                                        ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}")   # the set's manifests, read in place
 target_link_libraries(orbitamp_library_test PRIVATE
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events

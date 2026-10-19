@@ -4,8 +4,7 @@
 #include "Parameters.h"
 
 #include "device/DeviceLibrary.h"
-
-#include <felitronics/rigplayer/ToneKnobs.h>
+#include "device/PackOpening.h"
 
 namespace orbitamp::params
 {
@@ -36,45 +35,10 @@ namespace
             if (pack.displayName() != wantedName)
                 continue;
 
+            const auto opening = device::PackOpening::of (pack);
             d.device = i;
-
-            for (const auto& st : pack.rig.chain)
-            {
-                if (st.kind != namz::rig::StageKind::Nam)
-                    continue;
-
-                for (int t = 0; t < (int) st.tone.size() && t < preampNumMeasured; ++t)
-                {
-                    const auto& tone = st.tone[(size_t) t];
-                    const auto  start = felitronics::rigplayer::toneStart (tone);
-
-                    if (tone.sweep > 0)
-                    {
-                        double norm = 0.5;
-                        if (felitronics::rigplayer::toneNorm (tone, start, norm))
-                            d.meas[(size_t) t] = (float) norm;
-                    }
-                    else
-                    {
-                        const int n = (int) tone.positions.size();
-                        for (int k = 0; k < n; ++k)
-                            if (tone.positions[(size_t) k].value == start)
-                                d.meas[(size_t) t] = n > 1 ? (float) k / (float) (n - 1) : 0.0f;
-                    }
-                }
-
-                int selSlot = 0;
-                for (const auto& c : st.device.controls)
-                    if (c.role != namz::rig::Role::Gain && c.values.size() > 1 && selSlot < numSelectors)
-                    {
-                        const auto def = namz::rig::defaultValue (c);
-                        for (int k = 0; k < (int) c.values.size(); ++k)
-                            if (c.values[(size_t) k] == def)
-                                d.sel[(size_t) selSlot] = k;
-                        ++selSlot;
-                    }
-                break;
-            }
+            d.meas   = opening.meas;
+            d.sel    = opening.sel;
             break;
         }
 
@@ -91,7 +55,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // setUpChain) and finds them already so.
     //
     // The device a fresh instance opens on, and everything its pack says about starting it.
-    const auto preampDef = blockDefaults (device::DeviceLibrary::Slot::preamp, "X88-IR Crunch");
+    const auto preampDef = blockDefaults (device::DeviceLibrary::ampSlot, "X88-IR Crunch");
     using Bool   = juce::AudioParameterBool;
     using Choice = juce::AudioParameterChoice;
     using Float  = juce::AudioParameterFloat;

@@ -84,7 +84,7 @@ private:
     /** LIBRARY's own body: the sub-tabs pick which of these shows, and the one switch that is
         about the packs rather than about the window sits under them. */
     juce::Component libraryPage;
-    DeviceListView  preampDevices { device::DeviceLibrary::Slot::preamp };
+    DeviceListView  preampDevices { device::DeviceLibrary::ampSlot };
     IrTreeView      irs;
     SettingsList    packSwitches;
 

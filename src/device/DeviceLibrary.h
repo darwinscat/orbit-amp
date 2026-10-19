@@ -35,6 +35,11 @@ public:
         does not have: it is not ours to place, so it is offered nowhere. */
     enum class Slot { pedal, preamp, any, none };
 
+    /** WHAT THE AMP PLAYS: every pack whose slot this instrument has — preamps, amps, and the
+        boosters too, since the AMP is the one captured block there is and a pedal's capture is a
+        sound a player put in their folder to hear. */
+    static constexpr Slot ampSlot = Slot::any;
+
     static Slot slotFromString (const std::string& s)
     {
         const auto l = juce::String (s).trim().toLowerCase();
@@ -57,6 +62,8 @@ public:
         int           character = 0;    // place on the ramp, from the stage's tone_type
         Slot          slot = Slot::any; // which block it belongs in front of
         juce::String  rigId;            // the manifest's `rig_id` — the capture's identity; empty for a lone model
+        juce::String  familyId;         // the manifest's `family_id` — the DEVICE this pack is a channel of
+        juce::StringArray folder;       // the folders of the player's Devices folder it lies in, outermost first
         juce::Time    modified;         // when the file on disk last changed — the tie-break between copies
         namz::rig::Rig rig;
 
@@ -141,20 +148,21 @@ public:
         return factoryDirectory();
     }
 
-    /** Everything loadable, ordered green to red by how much gain it is.
+    /** Everything loadable, in the order the AMP's menu lists it (see `Shelf`).
 
-        Bundled devices first, then whatever the user added — packs and lone models alike, since a
-        `.nam` someone dropped in is theirs exactly as much as an `.orbitrig` is. Within each of the
-        two, the character ramp orders the list and the name settles ties. The two folders are the
-        machine's unless a caller — a gate, in a folder of its own — names others. */
+        Bundled devices first, then whatever the user added at the top of their folder — packs and
+        lone models alike, since a `.nam` someone dropped in is theirs exactly as much as an
+        `.orbitrig` is — then what lies in the folders inside it. The player's folder is read to any
+        depth; the factory one only at its top, where the build lays its packs. The two folders are
+        the machine's unless a caller — a gate, in a folder of its own — names others. */
     static juce::Array<Pack> scan (Slot wanted = Slot::any, bool onePerCapture = true,
                                    const juce::File& bundled = bundledDirectory(),
                                    const juce::File& own = directory())
     {
         juce::Array<Pack> packs;
 
-        scanFolder (bundled, true, packs);
-        scanFolder (own, false, packs);
+        scanFolder (bundled, true, packs, {}, 0);
+        scanFolder (own, false, packs, {}, maxFolderDepth);
 
         // A pack that names a slot we do not have belongs in no list at all, whatever is being
         // asked for — including a scan that asks for `any`.
@@ -169,14 +177,211 @@ public:
             packs.removeIf ([wanted] (const Pack& p)
                             { return p.slot != wanted && p.slot != Slot::any; });
 
-        std::sort (packs.begin(), packs.end(), [] (const Pack& a, const Pack& b)
-        {
-            if (a.bundled != b.bundled)       return a.bundled;
-            if (a.character != b.character)   return a.character < b.character;
-            return a.name < b.name;
-        });
-
+        arrange (packs);
         return packs;
+    }
+
+    //==============================================================================
+    /** A DEVICE: one manifest `family_id`, and its packs are its CHANNELS — the X88-IR's four, the
+        IR-X's two. A pack that names no family, a lone model, and every pack inside a folder of the
+        player's are devices of one channel each.
+
+        Its NAME is what the file names of its packs share, word by word from the front: "IR-X Ch1
+        PowerAmp" and "IR-X Ch2 PowerAmp" are the IR-X, "V4 Kraken Ch1" and "Ch2" the V4 Kraken, and a
+        device of one pack is called what its file is. Files that share no first word fall back to the
+        family's id.
+
+        A CHANNEL is called by its pack's alias, the manifest's `name` — "Channel 1", "Ember Mantra" —
+        where the aliases tell the channels apart. Where they do not (all four X88-IR packs say
+        "X88-IR") it is called by its file's name with the device's cut off: "X88-IR Crunch" is the
+        X88-IR's CRUNCH. The channels stand clean to hi-gain, as their packs' tone types say, and
+        file names settle ties. */
+    struct Device
+    {
+        juce::String      name;
+        juce::Array<int>  channels;       // the packs, as indices into the list it was read from, in channel order
+        juce::StringArray channelNames;   // in the same order
+    };
+
+    /** A folder inside the player's Devices folder, as the disk has it: its packs one per line by
+        file name — a folder is where a player keeps what they put away, and it is listed, not
+        grouped — and the folders inside it. Folders with no pack anywhere in them are not here. */
+    struct Folder
+    {
+        juce::String        name;
+        std::vector<Device> devices;
+        std::vector<Folder> folders;
+    };
+
+    /** WHAT THE AMP'S MENU LISTS: the family's devices from Factory, the devices at the top of the
+        player's own folder, and each folder in it, mirrored. Each part is in the order of its names. */
+    struct Shelf
+    {
+        std::vector<Device> factory;
+        std::vector<Device> own;
+        std::vector<Folder> folders;
+
+        /** The device the pack at `index` is a channel of; nullptr for an index the shelf does not hold. */
+        const Device* deviceOf (int index) const
+        {
+            for (const auto* part : { &factory, &own })
+                for (const auto& d : *part)
+                    if (d.channels.contains (index))
+                        return &d;
+
+            return deviceIn (folders, index);
+        }
+
+        /** Every pack, in the order the menu shows it — a device's channels together, in channel order. */
+        juce::Array<int> order() const
+        {
+            juce::Array<int> out;
+
+            for (const auto* part : { &factory, &own })
+                for (const auto& d : *part)
+                    out.addArray (d.channels);
+
+            walk (folders, out);
+            return out;
+        }
+
+    private:
+        static const Device* deviceIn (const std::vector<Folder>& in, int index)
+        {
+            for (const auto& f : in)
+            {
+                for (const auto& d : f.devices)
+                    if (d.channels.contains (index))
+                        return &d;
+
+                if (const auto* d = deviceIn (f.folders, index))
+                    return d;
+            }
+
+            return nullptr;
+        }
+
+        static void walk (const std::vector<Folder>& in, juce::Array<int>& out)
+        {
+            for (const auto& f : in)
+            {
+                for (const auto& d : f.devices)
+                    out.addArray (d.channels);
+
+                walk (f.folders, out);
+            }
+        }
+    };
+
+    /** The shelf a list of packs makes. Indices in it are into `packs`. */
+    static Shelf shelfOf (const juce::Array<Pack>& packs)
+    {
+        Shelf shelf;
+
+        for (const bool bundled : { true, false })
+        {
+            // One family, one device — within its place: the build's and the player's are two lists.
+            juce::StringArray keys;
+            std::vector<juce::Array<int>> members;
+
+            for (int i = 0; i < packs.size(); ++i)
+            {
+                const auto& p = packs.getReference (i);
+
+                if (p.bundled != bundled || ! p.folder.isEmpty())
+                    continue;
+
+                // No family, no one to share a device with: a key nothing else can have.
+                const auto key = p.familyId.isNotEmpty() ? p.familyId : "\x01" + juce::String (i);
+
+                int k = keys.indexOf (key);
+                if (k < 0)
+                {
+                    keys.add (key);
+                    members.emplace_back();
+                    k = keys.size() - 1;
+                }
+
+                members[(size_t) k].add (i);
+            }
+
+            auto& part = bundled ? shelf.factory : shelf.own;
+
+            for (size_t k = 0; k < members.size(); ++k)
+                part.push_back (deviceFrom (packs, members[k]));
+
+            sortByName (part);
+        }
+
+        for (int i = 0; i < packs.size(); ++i)
+        {
+            const auto& p = packs.getReference (i);
+
+            if (p.folder.isEmpty())
+                continue;
+
+            auto* level = &shelf.folders;
+            Folder* here = nullptr;
+
+            for (const auto& name : p.folder)
+            {
+                auto it = std::find_if (level->begin(), level->end(),
+                                        [&name] (const Folder& f) { return f.name == name; });
+                if (it == level->end())
+                {
+                    level->push_back ({ name, {}, {} });
+                    it = level->end() - 1;
+                }
+
+                here  = &*it;
+                level = &here->folders;
+            }
+
+            Device d;
+            d.name = p.displayName();
+            d.channels.add (i);
+            d.channelNames.add (p.displayName());
+            here->devices.push_back (std::move (d));
+        }
+
+        sortFolders (shelf.folders);
+        return shelf;
+    }
+
+    /** Puts `packs` in the shelf's order — the menu's, so a host stepping the device parameter walks
+        the list the player sees. */
+    static void arrange (juce::Array<Pack>& packs)
+    {
+        juce::Array<Pack> out;
+
+        for (const int i : shelfOf (packs).order())
+            out.add (packs.getReference (i));
+
+        packs = std::move (out);
+    }
+
+    /** The words two or more names start with in common — "V4 Kraken" of "V4 Kraken Ch1" and "V4
+        Kraken Ch2"; all of a lone name; nothing when the first words differ. */
+    static juce::StringArray commonLeadingWords (const juce::StringArray& names)
+    {
+        if (names.isEmpty())
+            return {};
+
+        auto common = juce::StringArray::fromTokens (names[0], false);
+
+        for (int n = 1; n < names.size(); ++n)
+        {
+            const auto words = juce::StringArray::fromTokens (names[n], false);
+            int same = 0;
+
+            while (same < common.size() && same < words.size() && common[same] == words[same])
+                ++same;
+
+            common.removeRange (same, common.size() - same);
+        }
+
+        common.removeEmptyStrings();
+        return common;
     }
 
     /** A named entry's bytes — the model files, or the manifest itself. Empty when missing. */
@@ -364,6 +569,82 @@ public:
     }
 
 private:
+    /** How deep into the player's folder the scanner goes. A folder linked into itself is a loop the
+        disk can hold, and this is where it stops. */
+    static constexpr int maxFolderDepth = 8;
+
+    /** The device a family's packs make — see `Device`. */
+    static Device deviceFrom (const juce::Array<Pack>& packs, juce::Array<int> members)
+    {
+        std::sort (members.begin(), members.end(), [&packs] (int a, int b)
+        {
+            const auto& pa = packs.getReference (a);
+            const auto& pb = packs.getReference (b);
+
+            if (pa.character != pb.character)
+                return pa.character < pb.character;
+
+            return pa.name.compareNatural (pb.name) < 0;
+        });
+
+        juce::StringArray stems, aliases;
+
+        for (const int i : members)
+        {
+            stems.add (packs.getReference (i).displayName());
+            aliases.add (packs.getReference (i).alias);
+        }
+
+        const auto common = commonLeadingWords (stems);
+        const auto& first = packs.getReference (members.getFirst());
+
+        Device d;
+        d.channels = members;
+        d.name = ! common.isEmpty()         ? common.joinIntoString (" ")
+               : first.familyId.isNotEmpty() ? first.familyId
+                                             : first.displayName();
+
+        // The aliases name the channels only when they tell every one of them apart.
+        auto distinct = aliases;
+        distinct.removeDuplicates (true);
+        const bool byAlias = ! aliases.contains ({}) && distinct.size() == aliases.size();
+
+        for (int c = 0; c < members.size(); ++c)
+        {
+            if (byAlias)
+            {
+                d.channelNames.add (aliases[c]);
+                continue;
+            }
+
+            auto words = juce::StringArray::fromTokens (stems[c], false);
+            words.removeEmptyStrings();
+            words.removeRange (0, common.size());
+
+            d.channelNames.add (words.isEmpty() ? stems[c] : words.joinIntoString (" "));
+        }
+
+        return d;
+    }
+
+    static void sortByName (std::vector<Device>& devices)
+    {
+        std::stable_sort (devices.begin(), devices.end(), [] (const Device& a, const Device& b)
+                          { return a.name.compareNatural (b.name) < 0; });
+    }
+
+    static void sortFolders (std::vector<Folder>& folders)
+    {
+        std::stable_sort (folders.begin(), folders.end(), [] (const Folder& a, const Folder& b)
+                          { return a.name.compareNatural (b.name) < 0; });
+
+        for (auto& f : folders)
+        {
+            sortByName (f.devices);
+            sortFolders (f.folders);
+        }
+    }
+
     /** The packs directly in `dir` whose manifest names this `rig_id`. */
     static juce::Array<juce::File> installedWithRigId (const juce::File& dir, const juce::String& rigId)
     {
@@ -382,7 +663,10 @@ private:
         return found;
     }
 
-    static void scanFolder (const juce::File& dir, bool bundled, juce::Array<Pack>& out)
+    /** The packs in `dir`, and — `depth` levels down — in the folders inside it, each pack knowing
+        which folders it was found in. */
+    static void scanFolder (const juce::File& dir, bool bundled, juce::Array<Pack>& out,
+                            const juce::StringArray& within, int depth)
     {
         if (! dir.isDirectory())
             return;
@@ -398,6 +682,7 @@ private:
                 p.location = f;
                 p.zipped   = zipped;
                 p.bundled  = bundled;
+                p.folder   = within;
                 p.modified = f.getLastModificationTime();
 
                 const auto manifest = readEntry (p, "rig.json");
@@ -412,6 +697,7 @@ private:
                 p.name  = f.getFileName().upToFirstOccurrenceOf (".", false, false).trim();
                 p.alias = juce::String (p.rig.name).trim();
                 p.rigId = juce::String (p.rig.rigId).trim();
+                p.familyId = juce::String (p.rig.familyId).trim();
                 if (p.name.isEmpty())
                     p.name = p.alias;
 
@@ -443,6 +729,7 @@ private:
                 p.location = f;
                 p.loose    = true;
                 p.bundled  = bundled;
+                p.folder   = within;
                 p.character = characterFromToneType (value ("tone_type"));
                 p.slot = slotFromString (! value ("slot").empty() ? value ("slot")
                                                                  : value ("gear_type"));
@@ -462,6 +749,15 @@ private:
                 p.rig.chain.push_back (std::move (stage));
 
                 out.add (std::move (p));
+                continue;
+            }
+
+            // Any other folder is one of the player's own, and what lies in it is theirs too.
+            if (f.isDirectory() && depth > 0)
+            {
+                auto inner = within;
+                inner.add (f.getFileName());
+                scanFolder (f, bundled, out, inner, depth - 1);
             }
         }
     }
