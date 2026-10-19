@@ -75,9 +75,9 @@ where it also leaves `uninstall.sh`, which removes exactly that.
 
 What the family release will call, once it is wired in:
 
-- **macOS:** build `OrbitAmp_All OrbitAmp_CLAP CatpitAmp_All RedPawAmp_All` (OrbitAmp's CLAP is not part
-  of `OrbitAmp_All` and has to be named), sign, notarize and staple the bundles as the per-amp jobs
-  do, then `INSTALLER_IDENTITY="$INST_ID" installer/build-family-pkg.sh "$VER" build dist`, and
+- **macOS:** build `Family_All` — every format of every amp `family.ini` names, each amp's `_All`
+  with its CLAP — sign, notarize and staple the bundles as the per-amp jobs do, then
+  `INSTALLER_IDENTITY="$INST_ID" installer/build-family-pkg.sh "$VER" build dist`, and
   notarize and staple the package.
 - **Windows x64:** the same targets, then
   `ISCC.exe /DAppVersion=$VER installer\darwinscat-amps.iss`.
