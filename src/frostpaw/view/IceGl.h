@@ -5,10 +5,11 @@
 
 #include "IceWorld.h"
 
-#include <juce_opengl/juce_opengl.h>
+#include "../../shaders/Gpu.h"
 
+#include <algorithm>
 #include <array>
-#include <memory>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -38,7 +39,8 @@ namespace orbitamp::frostpaw
     Precision: every shader position is relative to the integer metre cell under the rover, and the
     texture and lineae offsets are computed in doubles, so the picture is as steady at 665 km as at the
     start. Draws into an offscreen frame of its own at a render scale, then blits it to the frame buffer
-    it is given. GLSL 1.50 core, as JUCE's 3.2 core context on every platform. GL thread only. */
+    it is given. GLSL 1.50 core, as JUCE's 3.2 core context on every platform — or, the same code built
+    for the site, GLSL ES 3.00 over WebGL 2 (src/shaders/Gpu.h). GL thread only. */
 class IceGl final
 {
 public:
@@ -50,67 +52,70 @@ public:
 
     /** Draws the world's state: the scene at (w * scale) x (h * scale), blitted to `targetFrameBuffer`
         over (x, y, w, h) — GL's own pixels, from its bottom-left corner. */
-    void render (int w, int h, float scale, juce::uint32 targetFrameBuffer, int x = 0, int y = 0);
+    void render (int w, int h, float scale, std::uint32_t targetFrameBuffer, int x = 0, int y = 0);
 
     /** What the last frames cost on the GPU, milliseconds, a running mean; -1 until known. Timer
-        queries where the driver has them, else a finished frame timed once a second. */
+        queries where the driver has them, else a finished frame timed once a second; on the web, -1. */
     float gpuMillis() const noexcept { return gpuMs; }
 
     /** The offscreen frame as RGBA bytes, rows bottom-up as GL has them. */
-    bool readFrame (std::vector<juce::uint8>& rgba, int& w, int& h);
+    bool readFrame (std::vector<std::uint8_t>& rgba, int& w, int& h);
 
     /** The scene's last frame size. */
     int frameWidth() const noexcept  { return fbW; }
     int frameHeight() const noexcept { return fbH; }
 
     /** The scene drawn this many times a frame, for measuring: the timer then reads that many scenes. */
-    void setRepeats (int times) noexcept { repeats = juce::jlimit (1, 16, times); }
+    void setRepeats (int times) noexcept { repeats = std::clamp (times, 1, 16); }
+
+    /** Why create() said no: the shader that would not build and the driver's words. */
+    const std::string& error() const noexcept { return trouble; }
 
 private:
     IceWorld& world;
 
     struct Program
     {
-        std::unique_ptr<juce::OpenGLShaderProgram> program;
-        juce::uint32 id = 0;
+        std::uint32_t id = 0;
         int uniform (const char* name) const;
     };
     Program terrain, steel, sky, snow;
 
-    juce::uint32 texHeight = 0, texGrad1 = 0, texGrad2 = 0, texDetail = 0;
-    juce::uint32 vaoTerrain = 0, vboGrid = 0, vaoSteel = 0, vboSteel = 0, vaoEmpty = 0;
+    std::uint32_t texHeight = 0, texGrad1 = 0, texGrad2 = 0, texDetail = 0;
+    std::uint32_t vaoTerrain = 0, vboGrid = 0, vaoSteel = 0, vboSteel = 0, vaoEmpty = 0;
 
     static constexpr int N = 128, levels = 8, morphBand = 16;
     struct Level
     {
-        juce::uint32 indexBuffer = 0;
+        std::uint32_t indexBuffer = 0;
         int count = 0, holeX = -1, holeY = -1;
         double cell = 1.0, ox = 0.0, oz = 0.0;
     };
     std::array<Level, levels> level;
-    std::vector<juce::uint16> fullIndices, ringIndices;
+    std::vector<std::uint16_t> fullIndices, ringIndices;
 
     // The steel: the four meshes in one buffer, and per variant the instance buffer of cells.
     struct Range { int first = 0, count = 0; };
     std::array<Range, IceWorld::numVariants> steelRange;
-    std::array<juce::uint32, IceWorld::numVariants> instanceBuffer {};
+    std::array<std::uint32_t, IceWorld::numVariants> instanceBuffer {};
     std::array<int, IceWorld::numVariants> instanceCount {};
     std::array<std::vector<float>, IceWorld::numVariants> instanceCells;
     int instanceBx = 0x7fffffff, instanceBz = 0x7fffffff;    // the window the lists were made for
     int locCell = -1;
     bool instancing = false;                                  // glVertexAttribDivisor is there
 
-    juce::uint32 fbo = 0, fboColour = 0, fboDepth = 0;
+    std::uint32_t fbo = 0, fboColour = 0, fboDepth = 0;
     int fbW = 0, fbH = 0;
     int repeats = 1;
 
     // The frame timer.
     bool queriesWork = false;
-    std::array<juce::uint32, 4> query {};
+    std::array<std::uint32_t, 4> query {};
     int queryNext = 0, queriesPending = 0;
     float gpuMs = -1.0f;
     int frameCounter = 0;
     double probeStart = 0.0;
+    std::string trouble;
 
     bool compile (Program&, const std::string& vs, const std::string& fs, const char* what);
     void makeTextures();
