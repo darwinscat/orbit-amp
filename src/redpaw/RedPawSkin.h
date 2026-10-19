@@ -67,9 +67,10 @@ struct Skin
     const char* inputName = "INPUT";
     const char* outputName = "OUTPUT";
 
-    /** THE NAV SCREEN: whether its top line names the pack playing beside the gear, and the picture it
-        shows until the player picks another. */
-    bool packOnScreen = true;
+    /** THE NAV SCREEN: whether its top line names the pack playing beside the gear — a rover's does not:
+        its channels are its favourite sounds, not a maker's boxes, and it names no device anywhere — and
+        the picture it shows until the player picks another. */
+    bool packOnScreen = false;
     face::Monitor::View firstScreen = face::Monitor::View::spectrum;
     bool parkSignOnTopLine = true;      // parked, the warning on the top line too, beside the large one
 };

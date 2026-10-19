@@ -22,12 +22,12 @@ namespace orbitamp::redpaw
 const channels::Lineup& lineup()
 {
     static const channels::Lineup heli = roverLineup ({
-        { "Copper",      "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false },
-        { "Copper TB",   "v4-copper-tb-5841",   "Hall",     30.0f, 30.0f, false },
-        { "Sheriff Ch1", "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false },
-        { "Sheriff Ch2", "v4-sheriff-ch2-2f2f", "Plate",    30.0f, 30.0f, false },
-        { "Kraken Ch1",  "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true  },
-        { "Kraken Ch2",  "v4-kraken-ch2-5f71",  "Ambience", 30.0f, 0.0f,  true  },
+        { "Clean",         "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false },
+        { "Clean Turbo",   "v4-copper-tb-5841",   "Hall",     30.0f, 30.0f, false },
+        { "Crunch",        "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false },
+        { "Crunch Turbo",  "v4-sheriff-ch2-2f2f", "Plate",    30.0f, 30.0f, false },
+        { "Hi-Gain",       "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true  },
+        { "Hi-Gain Turbo", "v4-kraken-ch2-5f71",  "Ambience", 30.0f, 0.0f,  true  },
     });
     return heli;
 }
