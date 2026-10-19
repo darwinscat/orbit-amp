@@ -506,6 +506,79 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         w->setProperty ("does", "wipers (Drive::setWipers 0..3)");
         world.setProperty ("wipers", juce::var (w));
     }
+
+    // THE SPEEDS the gears drive at, km/h as the nav screen reads them once eased: each gear, then each
+    // with TURBO; parked, none.
+    juce::Array<juce::var> kmh, turboKmh;
+    for (int g = 1; g <= lever.numGears(); ++g)
+    {
+        kmh.add (view->drive().speedFor (g, false) * 3.6f);
+        turboKmh.add (view->drive().speedFor (g, true) * 3.6f);
+    }
+    auto* speeds = new juce::DynamicObject();
+    speeds->setProperty ("kmh", kmh);
+    speeds->setProperty ("turboKmh", turboKmh);
+    world.setProperty ("speeds", juce::var (speeds));
+
+    // THE NAV SCREEN: its boxes, how its top line is set (NavHeader::paint — sizes in the stage's units,
+    // a font's size its height as JUCE counts it, ascent and descent), what the skin puts on it, and what
+    // the line shows at each place of the lever with each channel there — the channel cut with an
+    // ellipsis where it is wider than its room.
+    auto* nav = new juce::DynamicObject();
+    nav->setProperty ("screen", rect (navScreen));
+    nav->setProperty ("header", rect (navHeader));
+    nav->setProperty ("picture", rect (navPicture));
+    nav->setProperty ("speedHud", speedHud.isEmpty() ? juce::var() : rect (speedHud));
+    nav->setProperty ("learn", rect (learnArea));
+    nav->setProperty ("packOnScreen", skin().packOnScreen);
+    nav->setProperty ("firstScreen", Monitor::names()[(int) skin().firstScreen]);
+    nav->setProperty ("parkSignOnTopLine", skin().parkSignOnTopLine);
+    auto* type = new juce::DynamicObject();
+    type->setProperty ("gearPx", px15);
+    type->setProperty ("channelPx", px13);
+    type->setProperty ("speedPx", px15);
+    type->setProperty ("unitPx", px13);
+    type->setProperty ("unit", "KM/H");
+    type->setProperty ("kerning", 0.04f);
+    type->setProperty ("insetX", 8.0f);
+    type->setProperty ("warning", rect ({ 0.0f, 0.0f, 23.0f, 20.0f }));
+    type->setProperty ("afterWarning", 8.0f);
+    type->setProperty ("afterGear", 10.0f);
+    type->setProperty ("beforeSpeed", 8.0f);
+    type->setProperty ("beforeUnit", 6.0f);
+    type->setProperty ("widthPad", 2.0f);       // every word's measured width + 2
+    type->setProperty ("gearColour", colour (orange));
+    type->setProperty ("wordsColour", colour (juce::Colour (0xffece9f6)));
+    type->setProperty ("unitColour", colour (labelLilac.withAlpha (0.8f)));
+    nav->setProperty ("type", juce::var (type));
+    juce::Array<juce::var> lines;
+    const auto line = [&] (int at, int channel)
+    {
+        const bool parked = at == GearLever::park;
+        const auto gearName = GearLever::nameOf (at, lever.numGears());
+        const auto name = skin().packOnScreen ? juce::String (lineup().channels[(size_t) channel].name).toUpperCase() : juce::String();
+        const int speed = parked ? 0 : juce::roundToInt (view->drive().speedFor (gearOf (channel) + 1, turboOf (channel)) * 3.6f);
+        const auto f = header.fit (gearName, name, speed, parked);
+        auto* x = new juce::DynamicObject();
+        x->setProperty ("place", at);
+        x->setProperty ("channel", channel);
+        x->setProperty ("turbo", turboOf (channel));
+        x->setProperty ("gear", gearName);
+        x->setProperty ("text", name);
+        x->setProperty ("kmh", speed);
+        x->setProperty ("wanted", f.wanted);
+        x->setProperty ("room", f.room);
+        x->setProperty ("lines", f.lines);
+        x->setProperty ("shown", f.shown);
+        lines.add (juce::var (x));
+    };
+    for (int c = 0; c < (int) lineup().channels.size(); ++c)
+        line (GearLever::positionOf (gearOf (c)), c);
+    for (int c = 0; c < (int) lineup().channels.size(); ++c)
+        line (GearLever::park, c);
+    nav->setProperty ("lines", lines);
+    world.setProperty ("nav", juce::var (nav));
+
     juce::Array<juce::var> stills;
     stills.add ("still.jpg");
     places.setProperty ("stills", stills);

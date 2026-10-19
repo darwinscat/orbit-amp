@@ -95,6 +95,12 @@ public:
     void set (const juce::String& gear, const juce::String& channel, bool parked);
     void paint (juce::Graphics&) override;
 
+    /** WHAT THE TOP LINE MAKES of a gear, a channel and a speed at this width: the width the three want on
+        one line, how many lines they stand on, and the channel as one line shows it, cut with an ellipsis
+        where it is wider than the room left beside the gear and the speed. */
+    struct Fit { float wanted = 0.0f, room = 0.0f; int lines = 1; juce::String shown; };
+    Fit fit (const juce::String& gear, const juce::String& channel, int kmh, bool parked) const;
+
 private:
     juce::String gear, channel;
     bool parked = false;

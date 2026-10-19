@@ -247,6 +247,32 @@ void NavHeader::timerCallback()
     }
 }
 
+NavHeader::Fit NavHeader::fit (const juce::String& g, const juce::String& c, int kmh, bool p) const
+{
+    const auto area = getLocalBounds().toFloat().reduced (8.0f, 0.0f);
+    const auto words = face::labelFont (layout::px15).withExtraKerningFactor (0.04f);
+    const auto small = face::labelFont (layout::px13).withExtraKerningFactor (0.04f);
+    const auto unit = juce::String ("KM/H"), number = juce::String (juce::jmax (0, kmh));
+    const auto widthOf = [] (const juce::Font& font, const juce::String& text) { return juce::GlyphArrangement::getStringWidth (font, text) + 2.0f; };
+
+    Fit f;
+    const float beside = (p && showsWarning ? 31.0f : 0.0f) + widthOf (words, g) + 10.0f
+                       + (showsSpeed ? 8.0f + widthOf (words, number) + 6.0f + widthOf (small, unit) : 0.0f);
+    f.wanted = beside + widthOf (small, c);
+    f.room = juce::jmax (0.0f, area.getWidth() - beside);
+    if (const int lines = c.isEmpty() ? 2 : 3; f.wanted > area.getWidth() && area.getHeight() >= (float) lines * layout::px13)
+        f.lines = lines;
+
+    juce::GlyphArrangement cut;
+    cut.addCurtailedLineOfText (small, c, 0.0f, 0.0f, f.room, true);
+    for (int i = 0; i < cut.getNumGlyphs(); ++i)
+        if (const auto ch = cut.getGlyph (i).getCharacter(); ch != 0)      // the ellipsis is a glyph of no character
+            f.shown << juce::String::charToString (ch);
+    if (f.shown != c)
+        f.shown << juce::String::charToString ((juce::juce_wchar) 0x2026);
+    return f;
+}
+
 void NavHeader::paint (juce::Graphics& g)
 {
     auto area = getLocalBounds().toFloat().reduced (8.0f, 0.0f);
@@ -258,10 +284,7 @@ void NavHeader::paint (juce::Graphics& g)
     // A SCREEN TOO NARROW FOR THEM ON ONE LINE, and tall enough for a line each: the gear, the channel
     // under it — set condensed, as tall, where it is wider than the screen — and the speed under that;
     // the gear and the speed alone where the channel is not named.
-    const float oneLine = (parked && showsWarning ? 31.0f : 0.0f) + widthOf (words, gear) + 10.0f + widthOf (small, channel)
-                        + (showsSpeed ? 8.0f + widthOf (words, number) + 6.0f + widthOf (small, unit) : 0.0f);
-    const int lines = channel.isEmpty() ? 2 : 3;
-    if (oneLine > area.getWidth() && area.getHeight() >= (float) lines * layout::px13)
+    if (const int lines = fit (gear, channel, shownKmh, parked).lines; lines > 1)
     {
         const float row = area.getHeight() / (float) lines;
         auto first = area.removeFromTop (row), second = lines == 3 ? area.removeFromTop (row) : juce::Rectangle<float>(), third = area;
