@@ -3,10 +3,10 @@ ice moon — RedPawAmp's dashboard in frosted stainless steel, over the same eng
 under tags of its own (`frostpaw-vX.Y.Z`), and is not part of OrbitAmp's build or installers.
 
 ### Added
-- **FrostPawAmp** — the same dashboard as RedPawAmp, control for control, over six channels on the Victory
-  V4's six packs, picked as three gears and TURBO — CLEAN the Copper, CRUNCH the Sheriff, HI-GAIN the
-  Kraken, TURBO the pedal's second channel over the gear's own DRIVE, tone, reverb, delay and cabinet,
-  and a gear pulled coming back with TURBO as it was left — and PARK at the lever's top end; DRIVE and
+- **FrostPawAmp** — the same dashboard as RedPawAmp, control for control, over six channels, picked as
+  three gears and TURBO — CLEAN, CRUNCH and HI-GAIN, TURBO each gear's second sound over the gear's own
+  DRIVE, tone, reverb, delay and cabinet, and a gear pulled coming back with TURBO as it was left — and
+  PARK at the lever's top end; DRIVE and
   the three tone knobs with their rings, the six
   keys, the roof's history and registers, REVERB, DELAY and CAB, the INPUT and OUTPUT columns, GATE's
   threshold and LIMITER's ceiling on their corner faders, the tuner and the nav screen; the same keys,

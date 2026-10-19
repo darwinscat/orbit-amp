@@ -3,13 +3,12 @@ over the same engine. It is released apart, under tags of its own (`redpaw-vX.Y.
 OrbitAmp's build or installers.
 
 ### Added
-- **RedPawAmp** — four channels on the Friedman IR-X's two, picked as two gears and TURBO: the gear
-  lever's CRUNCH is Ch1, HI-GAIN Ch2, and TURBO throws that channel's Boost. The IR-X's other switches
-  are on the keys right of HPF and LPF, under their own names, the position the switch stands at lit:
-  Ch1's BRIGHT 1, CENTER and BRIGHT 2, Ch2's TIGHT and FAT. Each gear keeps its own DRIVE, tone,
-  switches, keys, reverb, delay and cabinet, and opens on a room of its own; TURBO is an option of the
-  gear's, as its tone is — thrown, only the Boost changes, and a gear pulled comes back with TURBO as it
-  was left. Keys 1 2 pick the gear and
+- **RedPawAmp** — four channels, picked as two gears and TURBO: the gear lever's CRUNCH and HI-GAIN, and
+  TURBO over either. Each gear's own switches are on the keys right of HPF and LPF, under their own names,
+  the position the switch stands at lit: CRUNCH's BRIGHT 1, CENTER and BRIGHT 2, HI-GAIN's TIGHT and FAT.
+  Each gear keeps its own DRIVE, tone, switches, keys, reverb, delay and cabinet, and opens on a room of its
+  own; TURBO is an option of the gear's, as its tone is — thrown, nothing else on the dashboard moves, and a
+  gear pulled comes back with TURBO as it was left. Keys 1 2 pick the gear and
   T throws TURBO; MIDI Program Change 1–4 picks the four channels, controller 20 is TURBO.
 - **PARK**, the lever's top end: the whole amp out of the sound, the guitar coming through dry and in time
   — at the INPUT and OUTPUT columns' levels, as the amp was, never louder past a master turned down —
