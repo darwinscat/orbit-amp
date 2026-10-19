@@ -1,7 +1,9 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Changelog
 
-All notable changes to **OrbitAmp** are documented here. The format follows
+All notable changes to **Darwin's Cat Amps** — the amps released together from this repository, under
+one version — are documented here: each release with a part for every amp at once and one for each amp.
+Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 

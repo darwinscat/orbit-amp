@@ -1,3 +1,5 @@
+Amps: CatpitAmp, RedPawAmp, FrostPawAmp
+
 ### Added
 - **CatpitAmp, RedPawAmp, FrostPawAmp**: LEARN in GATE's menu — OrbitAmp's own measurement: three seconds
   of quiet, and the gate's threshold set the hysteresis above the loudest of them, the gate switched on.

@@ -1,7 +1,8 @@
+Amps: AmberPawAmp
+
 This tree now builds a fifth product beside OrbitAmp, CatpitAmp, RedPawAmp and FrostPawAmp: AmberPawAmp, a
 helicopter over Titan's methane sea — the rovers' dashboard worn as a cockpit of its own, over the same
-engine. It is released apart, under tags of its own (`amberpaw-vX.Y.Z`), and is not part of OrbitAmp's build
-or installers.
+engine. It comes in the family's release beside them.
 
 ### Added
 - **AmberPawAmp** — the rovers' controls, control for control, in a helicopter's cockpit under a canopy of

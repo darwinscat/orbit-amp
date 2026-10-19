@@ -1,3 +1,5 @@
+Amps: all
+
 ### Changed
 - **The cabinet convolves through Darwin's Cat's own convolver**, the one OrbitCab plays, instead of
   JUCE's. At 48 kHz it sounds exactly as before. At other session rates it follows the IR more

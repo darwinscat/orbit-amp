@@ -1,3 +1,5 @@
+Amps: OrbitAmp
+
 ### Added
 - **The X88-IR comes with OrbitAmp**: its four channels as four preamp packs — X88-IR Normal, Altered,
   Crunch and Overdrive, the captures CatpitAmp plays. They ride inside the plug-in and the app

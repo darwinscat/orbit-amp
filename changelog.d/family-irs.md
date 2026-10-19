@@ -1,3 +1,5 @@
+Amps: all
+
 ### Changed
 - **One cabinet shelf for the whole family**, laid out in `Darwin's Cat/Factory/IRs`, one folder to a
   maker: **Orange PPC212V** for Darwin's Cat's own ten, **Other** for the 21 third-party ones OrbitAmp has
