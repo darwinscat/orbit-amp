@@ -276,6 +276,23 @@ int main()
     std::printf ("  prepared\n\n");
     set (amp, orbitamp::params::stereoMode, 0.0f);   // the gate measures the chain, not the environment default
 
+    // THE CHAIN HAS ONE CAPTURED BLOCK, the amp. The boost in front of it is gone, and with it every
+    // parameter it had: a host must not be offered a lane for a block that is not there, and the
+    // strip must not draw an arrow for it.
+    {
+        juce::StringArray strays;
+        for (auto* p : amp.getParameters())
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
+                if (ranged->paramID.startsWith ("boost_"))
+                    strays.add (ranged->paramID);
+
+        for (const auto& link : orbitamp::params::chainLinks)
+            if (juce::String (link.name) == "BOOST")
+                strays.add ("the BOOST link");
+
+        report ("no boost is left: not a parameter, not a link", strays.isEmpty(), strays.joinIntoString (", "));
+    }
+
     // THE BYPASS WIRE, on its own — the delay it carries, the geometry it is SIZED from, and the
     // comb that appears the moment the two disagree. It only runs when a pack's rate differs from
     // the session's, so the chain above — at 48 kHz against 48 kHz packs — never touches it, and
@@ -570,8 +587,8 @@ int main()
         // 2d · A WARM WINDOW. The wire is fed on every block, including the ones where it carries
         //      nothing, because a window filled only while the delay is live is EMPTY the first
         //      time the delay becomes live — and hands out its own length in silence. That is not
-        //      a corner: the boost ships switched off, so a model landing at another rate into a
-        //      bypassed block is the ordinary way this happens.
+        //      a corner: a player picks a device with the block switched off, so a model landing at
+        //      another rate into a bypassed block is the ordinary way this happens.
         {
             Wire w;
             w.prepare (96);
@@ -1218,7 +1235,6 @@ int main()
 
         set (*b, orbitamp::params::stereoMode, 0.0f);
         set (*b, orbitamp::params::cabOn, 1.0f);
-        set (*b, orbitamp::params::boostPresent,  0.0f);
         set (*b, orbitamp::params::preampPresent, 0.0f);
         settleCabinet (*b);
         const auto own = run (*b);
@@ -1737,7 +1753,6 @@ int main()
             p->inlineLoads = true;
             set (*p, orbitamp::params::stereoMode, 0.0f);
             set (*p, orbitamp::params::cabOn, 1.0f);
-            set (*p, orbitamp::params::boostPresent,  0.0f);
             set (*p, orbitamp::params::preampPresent, 0.0f);
             set (*p, orbitamp::params::delayPresent,  0.0f);
             set (*p, orbitamp::params::cabLpfOn, cut ? 1.0f : 0.0f);
@@ -1861,9 +1876,9 @@ int main()
     }
 
     // THE WHOLE CHAIN, one bad sample at the door. Everything that holds state and needs no pack —
-    // the gate, both EQ links, the delay, the reverb, the cabinet, the limiter — in the rig and on,
-    // a quiet tone, one NaN on both channels, the tone again; the captured blocks stand out, since
-    // without a pack they have nothing to play. Four seconds later every sample is a number and the
+    // the gate, the EQ link, the delay, the reverb, the cabinet, the limiter — in the rig and on,
+    // a quiet tone, one NaN on both channels, the tone again; the captured block stands out, since
+    // without a pack it has nothing to play. Four seconds later every sample is a number and the
     // level is the level of the same run with no NaN in it — the delay and the room are still
     // building at that point, so the fair comparison is a twin, not the level before. The gate
     // needs nothing of its own for this: its key heals itself and its audio is a multiply, which is
@@ -1887,7 +1902,6 @@ int main()
                                     orbitamp::params::gatePresent, orbitamp::params::delayPresent,
                                     orbitamp::params::reverbPresent, orbitamp::params::cabPresent })
                 set (*c, id, 1.0f);
-            set (*c, orbitamp::params::boostPresent,  0.0f);
             set (*c, orbitamp::params::preampPresent, 0.0f);
             set (*c, orbitamp::params::gateThreshold, -70.0f);   // the tone stays open
 
@@ -1979,7 +1993,6 @@ int main()
             set (*c, orbitamp::params::stereoMode, 0.0f);
             for (const auto* id : { orbitamp::params::delayOn, orbitamp::params::reverbOn, orbitamp::params::cabOn })
                 set (*c, id, 1.0f);
-            set (*c, orbitamp::params::boostPresent,  0.0f);
             set (*c, orbitamp::params::preampPresent, 0.0f);
 
             juce::MidiBuffer midi;
@@ -2050,7 +2063,6 @@ int main()
             set (*c, orbitamp::params::stereoMode, 0.0f);
             set (*c, orbitamp::params::reverbOn, 1.0f);
             set (*c, orbitamp::params::reverbMix, 100.0f);
-            set (*c, orbitamp::params::boostPresent,  0.0f);
             set (*c, orbitamp::params::preampPresent, 0.0f);
             set (*c, orbitamp::params::cabPresent,    0.0f);
             set (*c, orbitamp::params::delayPresent,  0.0f);
@@ -2103,7 +2115,6 @@ int main()
         const auto m = std::make_unique<orbitamp::AmpProcessor>();
         m->prepareToPlay (sampleRate, blockSize);
         set (*m, orbitamp::params::stereoMode, 0.0f);
-        set (*m, orbitamp::params::boostPresent,  0.0f);
         set (*m, orbitamp::params::preampPresent, 0.0f);
         set (*m, orbitamp::params::delayPresent,  0.0f);
         set (*m, orbitamp::params::reverbPresent, 0.0f);
@@ -2291,7 +2302,7 @@ int main()
         }
     }
 
-    if (amp.boost.packs.isEmpty())
+    if (amp.preamp.packs.isEmpty())
     {
         // NOT a bare `return 0` any more. Everything above this line is the wire on its own bench
         // and needs no library at all — it was moved in front of this exit precisely so a machine
@@ -2302,11 +2313,9 @@ int main()
         return failures == 0 ? 0 : 1;
     }
 
-    std::printf ("device: %s\n\n", amp.boost.packs.getReference (0).displayName().toRawUTF8());
-
-    // Everything else off, so what is measured is the boost and nothing standing in front of it.
-    // The EQ consoles have no enable of their own — they ship flat, and a flat link is
-    // bit-transparent, so there is nothing to switch off here.
+    // Everything else off, so what is measured is the preamp and nothing standing behind it.
+    // The EQ console has no enable of its own — it ships flat, and a flat link is bit-transparent,
+    // so there is nothing to switch off here.
     set (amp, orbitamp::params::reverbOn, 0.0f);
 
     // Both younger than this gate, both in every path, both OFF here for the same reason the
@@ -2317,18 +2326,7 @@ int main()
     set (amp, orbitamp::params::cabOn, 0.0f);
     set (amp, orbitamp::params::limiterOn, 0.0f);
 
-    // The state a player meets on first launch. Worth stating as a check rather than a comment: it is
-    // the most likely answer to "it does not react", and if it ever changes this says so.
-    report ("the boost ships switched OFF",
-            amp.apvts.getRawParameterValue (orbitamp::params::boostOn)->load() < 0.5f);
-    report ("...and out of the rig, as the cockpit's Crunch has it",
-            amp.apvts.getRawParameterValue (orbitamp::params::boostPresent)->load() < 0.5f);
-
-    // Out of the rig, a boost switched on is still no boost at all: everything below measures it,
-    // so it is put in first.
-    set (amp, orbitamp::params::boostPresent, 1.0f);
-
-    // ...and the preamp it opens on is the cockpit's Crunch, found by its name wherever the list puts
+    // The preamp a fresh instance opens on is the cockpit's Crunch, found by its name wherever the list puts
     // it. The parameter's default is a place in that list, so it is the place that is checked.
     {
         const auto& packs = amp.preamp.packs;
@@ -2347,26 +2345,28 @@ int main()
             std::printf ("no X88-IR Crunch installed — the preamp's starting device is not checked\n");
     }
 
+    std::printf ("device: %s\n\n", amp.preamp.selectedName().toRawUTF8());
+
     {
-        set (amp, orbitamp::params::boostOn, 0.0f);
-        set (amp, orbitamp::params::boostGain, 0.0f);
+        set (amp, orbitamp::params::preampOn, 0.0f);
+        set (amp, orbitamp::params::preampGain, 0.0f);
         const auto quiet = run (amp);
 
-        set (amp, orbitamp::params::boostGain, 10.0f);
+        set (amp, orbitamp::params::preampGain, 10.0f);
         const auto loud = run (amp);
 
-        report ("...and while it is off, its gain does nothing",
+        report ("while the preamp is off, its gain does nothing",
                 differencePercent (quiet, loud) < 0.001,
                 juce::String (differencePercent (quiet, loud), 4) + "% different");
     }
 
-    set (amp, orbitamp::params::boostOn, 1.0f);
+    set (amp, orbitamp::params::preampOn, 1.0f);
 
     {
-        set (amp, orbitamp::params::boostGain, 0.0f);
+        set (amp, orbitamp::params::preampGain, 0.0f);
         const auto low = run (amp);
 
-        set (amp, orbitamp::params::boostGain, 10.0f);
+        set (amp, orbitamp::params::preampGain, 10.0f);
         const auto high = run (amp);
 
         std::printf ("\ngain 0 -> rms %.5f, gain 10 -> rms %.5f\n", rms (low), rms (high));
@@ -2384,10 +2384,10 @@ int main()
     // The contract changed — a block wears the device's own controls unless you ask for ours — and
     // the check wakes up exactly as it was written.
     {
-        const auto tones = amp.boost.tones();
+        const auto tones = amp.preamp.tones();
 
         int sweep = -1;
-        for (int i = 0; i < (int) tones.size() && i < orbitamp::params::boostNumMeasured; ++i)
+        for (int i = 0; i < (int) tones.size() && i < orbitamp::params::preampNumMeasured; ++i)
             if (tones[(size_t) i].positions.size() > 2) { sweep = i; break; }
 
         if (sweep < 0)
@@ -2431,12 +2431,12 @@ int main()
                 const double probeHz = m.grid.fLo * std::pow (m.grid.fHi / m.grid.fLo,
                                                               (double) bestIndex / (double) (points - 1));
 
-                // The gain check above leaves the pedal at 10, and a capture at full drive
+                // The gain check above leaves the preamp at 10, and a capture at full drive
                 // saturates — compression that eats exactly the level difference this probe
                 // listens for. The knob is probed where the chain is linear enough to pass it.
-                set (amp, orbitamp::params::boostGain, 0.0f);
+                set (amp, orbitamp::params::preampGain, 0.0f);
 
-                const auto id = orbitamp::params::boostMeasured (sweep);
+                const auto id = orbitamp::params::preampMeasured (sweep);
                 std::printf ("measured control: %s, probed at %.0f Hz where it promises %.1f dB\n",
                              juce::String (m.name).toRawUTF8(), probeHz, promisedDb);
 
@@ -2457,49 +2457,25 @@ int main()
         }
     }
 
-    // The EQ links, and the thing their PLACES exist for: the SAME filter before and after the
-    // capture is not the same sound. eq2, after the boost, colours what came out. eq1, ahead of it,
-    // changes what arrives at the nonlinearity, so it changes what kind of distortion happens at
-    // all — which is how one captured voice becomes two instruments, and is the reason the EQ is a
-    // link of the chain rather than a section of a block.
+    // The preamp's EQ, after the capture: it colours what came out.
     {
-        set (amp, orbitamp::params::boostGain, 8.0f);   // well into the dirt, or there is no
-                                                        // nonlinearity for eq1 to act on
+        set (amp, orbitamp::params::preampGain, 8.0f);   // well into the dirt, as a player has it
         const auto clean = run (amp);
 
-        // The same cut in both places: 800 Hz high-pass, well inside a guitar's body.
-        for (int l = 0; l < orbitamp::params::numEqLinks; ++l)
-        {
-            set (amp, orbitamp::params::eqHpfOn (l), 1.0f);
-            set (amp, orbitamp::params::eqHpfHz (l), 800.0f);
-        }
-
         // A console is armed by its VALUES now, which is the whole point of dropping the enable:
-        // there is no state in which the curve says one thing and the audio does another.
-        for (int l = 0; l < orbitamp::params::numEqLinks; ++l)
-            set (amp, orbitamp::params::eqHpfOn (l), 0.0f);
-
-        set (amp, orbitamp::params::eqHpfOn (1), 1.0f);
-        const auto post = run (amp);
-        set (amp, orbitamp::params::eqHpfOn (1), 0.0f);
-
+        // there is no state in which the curve says one thing and the audio does another. The cut
+        // is an 800 Hz high-pass, well inside a guitar's body.
+        set (amp, orbitamp::params::eqHpfHz (0), 800.0f);
         set (amp, orbitamp::params::eqHpfOn (0), 1.0f);
-        const auto pre = run (amp);
+        const auto post = run (amp);
         set (amp, orbitamp::params::eqHpfOn (0), 0.0f);
 
-        std::printf ("\nEQ consoles: flat %.5f, preamp's %.5f, boost's %.5f\n",
-                     rms (clean), rms (post), rms (pre));
-        std::printf ("the preamp's differs from flat by %.1f%%, the boost's from it by %.1f%%\n\n",
-                     differencePercent (clean, post), differencePercent (post, pre));
+        std::printf ("\nEQ console: flat %.5f, the preamp's %.5f — %.1f%% apart\n\n",
+                     rms (clean), rms (post), differencePercent (clean, post));
 
         report ("a block's EQ reaches the audio",
                 differencePercent (clean, post) > 5.0,
                 juce::String (differencePercent (clean, post), 1) + "% different");
-
-        // They are not interchangeable and must not be: the boost's console feeds the preamp, so it
-        // changes what the next nonlinearity is given; the preamp's only colours what came out.
-        report ("...and the boost's console is not the preamp's", differencePercent (post, pre) > 5.0,
-                juce::String (differencePercent (post, pre), 1) + "% apart");
     }
 
     // A capture with no gain axis still answers its gain knob — the knob DRIVES where it cannot
@@ -2507,11 +2483,11 @@ int main()
     // gain does nothing is not a preamp.
     {
         auto* stageDef = const_cast<namz::rig::Stage*> (
-            amp.boost.packs.getReference (0).rig.firstKnown());
+            amp.preamp.packs.getReference (0).rig.firstKnown());
 
         if (stageDef != nullptr)
         {
-            auto bare = amp.boost.packs.getReference (0);
+            auto bare = amp.preamp.packs.getReference (0);
             auto* bareStage = const_cast<namz::rig::Stage*> (bare.rig.firstKnown());
             // One file and no controls: exactly what a dropped-in .nam becomes. Leaving the other
             // twenty in place would leave the stage with nothing it could load at all.
@@ -2528,19 +2504,17 @@ int main()
             solo.prepareToPlay (sampleRate, blockSize);
             // The bare pack stands at list position 0; the device parameter's factory default is a
             // NAMED pack now, and the pump would walk away to it mid-check.
-            set (solo, orbitamp::params::boostDevice, 0.0f);
+            set (solo, orbitamp::params::preampDevice, 0.0f);
             set (solo, orbitamp::params::reverbOn, 0.0f);
-            set (solo, orbitamp::params::preampOn, 0.0f);
-            set (solo, orbitamp::params::boostPresent, 1.0f);   // a fresh instance has none in the rig
-            set (solo, orbitamp::params::boostOn, 1.0f);
+            set (solo, orbitamp::params::preampOn, 1.0f);
 
-            solo.boost.packs.set (0, bare);
-            solo.boost.select (0);
+            solo.preamp.packs.set (0, bare);
+            solo.preamp.select (0);
 
-            set (solo, orbitamp::params::boostGain, 2.0f);
+            set (solo, orbitamp::params::preampGain, 2.0f);
             const auto quiet = run (solo);
 
-            set (solo, orbitamp::params::boostGain, 8.0f);
+            set (solo, orbitamp::params::preampGain, 8.0f);
             const auto hard = run (solo);
 
             std::printf ("\nno gain axis: knob 2 -> rms %.5f, knob 8 -> rms %.5f\n\n",
@@ -2555,7 +2529,6 @@ int main()
     // The gate, through the whole plugin: under its threshold the chain goes quiet, over it
     // nothing is touched. Everything else off, so what is measured is the gate on a bare wire.
     {
-        set (amp, orbitamp::params::boostOn, 0.0f);
         set (amp, orbitamp::params::preampOn, 0.0f);
 
         // -46 dBFS, under a -20 dB threshold: hum, as far as the gate is concerned. Both mute
@@ -2879,12 +2852,11 @@ int main()
         set (amp, orbitamp::params::limitPresent, 1.0f);
         set (amp, orbitamp::params::limiterOn, 1.0f);
         set (amp, orbitamp::params::limiterCeiling, -6.0f);
-        set (amp, orbitamp::params::boostOn, 1.0f);
 
         juce::AudioBuffer<float> buf (2, blockSize);
         juce::MidiBuffer midi;
         int   phase = 0;
-        float last = 0.0f, quietJump = 0.0f, switchJump = 0.0f;
+        float last = 0.0f, quietJump = 0.0f, switchJump = 0.0f, gripDb = 0.0f;
         int   measuring = 0;   // 1 = the calm before, 2 = across the switch
 
         for (int block = 0; block < 40; ++block)
@@ -2902,6 +2874,7 @@ int main()
             // released waveform against a squashed one and call the difference a step.
             if (block == 20)
             {
+                gripDb = amp.limiterGrDb.load();                // how hard it held, the block before
                 set (amp, orbitamp::params::limiterOn, 0.0f);   // let go, mid-note
                 measuring = 2;                                  // across the release
             }
@@ -2923,17 +2896,20 @@ int main()
             }
         }
 
-        // Against ITSELF, not against a number I picked: a driven sine through a boost has a slope
-        // of its own, and what matters is whether letting go adds to it.
-        std::printf ("\nlimiter: biggest jump settled %.5f, across the release %.5f\n",
-                     quietJump, switchJump);
+        // Against ITSELF, not against a number I picked: a sine through the chain has a slope of
+        // its own, and what matters is whether letting go adds to it.
+        std::printf ("\nlimiter: gripping %.1f dB, biggest jump settled %.5f, across the release %.5f\n",
+                     gripDb, quietJump, switchJump);
+
+        // PRECONDITION: it has to have been holding something, or letting go releases nothing.
+        report ("the safety really is gripping before it lets go", gripDb < -1.0f,
+                juce::String (gripDb, 1) + " dB");
 
         report ("letting the safety go does not step the waveform",
                 switchJump < quietJump * 1.4f,
                 juce::String (switchJump, 5) + " vs " + juce::String (quietJump, 5));
 
         set (amp, orbitamp::params::limiterOn, 1.0f);
-        set (amp, orbitamp::params::boostOn, 0.0f);
         set (amp, orbitamp::params::limiterCeiling, -0.3f);
     }
 
@@ -2962,7 +2938,6 @@ int main()
             auto& hi = *hiOwned;
             hi.inlineLoads = true;
             hi.prepareToPlay (96000.0, blockSize);
-            set (hi, orbitamp::params::boostPresent, 1.0f);   // two blocks to measure; a fresh instance has one in the rig
 
             juce::AudioBuffer<float> buf (2, blockSize);
             juce::MidiBuffer midi;
@@ -2977,15 +2952,14 @@ int main()
 
             const int pdc      = hi.getLatencySamples();
             const int perStage = stageLatency (96000.0, 48000.0);   // what THIS test would predict
-            const int cap      = juce::jmax (hi.bypassWireCapacity (0), hi.bypassWireCapacity (1));
 
-            // The PDC is the SUM over the blocks that actually hold a rate-matching model, and how
-            // many that is depends on what is installed — so the number to compare is not the sum
-            // but whether the sum is built out of this stage figure at all.
+            // The PDC is the captured block's model when it is rate-matching, and whether it is
+            // depends on what is installed — so the number to compare is whether it is built out of
+            // this stage figure at all.
             std::printf ("\nwire: a live 96 kHz session reports %d samples of PDC = %d stage(s) of"
-                         " %d; this test's own arithmetic says %d a stage, the wires carry %d / %d\n",
+                         " %d; this test's own arithmetic says %d a stage, the wire carries %d\n",
                          pdc, perStage > 0 ? pdc / perStage : 0, perStage, perStage,
-                         hi.bypassWireCapacity (0), hi.bypassWireCapacity (1));
+                         hi.bypassWireCapacity (0));
 
             // PRECONDITION: there has to BE a rate match, or this check passes by measuring
             // nothing — which is the failure mode the whole comb bench above is built to refuse.
@@ -2994,13 +2968,9 @@ int main()
                             : "PDC is zero: no installed pack is off the session rate, so this "
                               "check would be blind");
 
-            // PER BLOCK, not against the sum. Each captured block has its OWN wire, so a wire has
-            // to outlast the longest single block and not the two of them added together — the
-            // comparison against the sum both under- and over-states it, and two 16 kHz packs at
-            // 96 kHz would have failed it while every wire was long enough.
-            const int boostLat  = hi.boost.latencySamples();
+            // PER BLOCK, not against the PDC. The captured block has its OWN wire, and the PDC
+            // carries the door's latency too, which no wire is asked for.
             const int preampLat = hi.preamp.latencySamples();
-            const int longest   = juce::jmax (boostLat, preampLat);
 
             // WHICH RATE EACH LIVE LATENCY BELONGS TO, found by asking the geometry forward rather
             // than inverting it by hand. The inversion `m = D·host/(L − D)` that used to stand here
@@ -3019,20 +2989,17 @@ int main()
                 return -1.0;   // a rate outside the grid: reported, never guessed at
             };
 
-            std::printf ("      boost %d samples (a %.0f Hz pack), preamp %d (%.0f Hz)\n",
-                         boostLat,  rateBehind (96000.0, boostLat),
+            std::printf ("      preamp %d samples (a %.0f Hz pack)\n",
                          preampLat, rateBehind (96000.0, preampLat));
 
             const int door = doorLatency (96000.0, blockSize);
-            report ("what the host is told is what the blocks actually cost",
-                    pdc == boostLat + preampLat + door,
-                    juce::String (pdc) + " reported, " + juce::String (boostLat + preampLat)
-                      + " summed and the door's " + juce::String (door));
+            report ("what the host is told is what the block actually costs",
+                    pdc == preampLat + door,
+                    juce::String (pdc) + " reported, " + juce::String (preampLat)
+                      + " the block's and the door's " + juce::String (door));
 
-            report ("every live latency belongs to a rate the geometry can produce",
-                    longest > 0
-                      && (boostLat  == 0 || rateBehind (96000.0, boostLat)  > 0.0)
-                      && (preampLat == 0 || rateBehind (96000.0, preampLat) > 0.0));
+            report ("the live latency belongs to a rate the geometry can produce",
+                    preampLat > 0 && rateBehind (96000.0, preampLat) > 0.0);
 
             // 🔴 EXACTLY, not "at least", and the invariant has two terms because the wire has two
             //    jobs: it CARRIES the delay its block reports, and it REMEMBERS a block's worth of
@@ -3040,30 +3007,23 @@ int main()
             //    larger of those, and nothing else — a rate-derived ceiling would read 224 at
             //    48 kHz or 416 at 96, and that is precisely what no longer exists.
             const int floorSamples = blockSize;
-            report ("each wire is the larger of its block's delay and one block of memory",
-                    hi.bypassWireCapacity (0) == juce::jmax (floorSamples, boostLat)
-                      && hi.bypassWireCapacity (1) == juce::jmax (floorSamples, preampLat),
-                    juce::String (hi.bypassWireCapacity (0)) + " and "
-                      + juce::String (hi.bypassWireCapacity (1)) + " against delays "
-                      + juce::String (boostLat) + "/" + juce::String (preampLat)
-                      + ", floor " + juce::String (floorSamples));
-
-            juce::ignoreUnused (cap);
+            report ("the wire is the larger of its block's delay and one block of memory",
+                    hi.bypassWireCapacity (0) == juce::jmax (floorSamples, preampLat),
+                    juce::String (hi.bypassWireCapacity (0)) + " against a delay of "
+                      + juce::String (preampLat) + ", floor " + juce::String (floorSamples));
 
             // 🔴 AND THE PRODUCT PROMISE ITSELF, THROUGH THE WHOLE PLUGIN: a bypassed block is a
-            //    wire the same length as the block it replaces, so a session whose blocks are both
+            //    wire the same length as the block it replaces, so a session whose block is
             //    switched off has to delay by exactly the PDC it reports — no more, no less. This
             //    is the only check here that LISTENS, and it is the one that a wire quietly
             //    shortened back to 64 samples, or a PDC quietly doubled, cannot survive.
             //
-            //    🔴 BOTH BLOCKS FIRST. A model is not loaded until its block is RUN, so leaving
-            //    the boost switched off left it at zero latency and this measured ONE wire while
-            //    claiming to measure two — deleting the boost's compensation would have gone
-            //    unnoticed. They are both switched on, both made to report a delay, and only then
-            //    stood down.
+            //    🔴 THE BLOCK FIRST. A model is not loaded until its block is RUN, so a block left
+            //    switched off sits at zero latency and this would measure a wire with nothing to
+            //    carry. It is switched on, made to report a delay, and only then stood down.
             const auto blocksOut = [&] ()
             {
-                for (const char* off : { orbitamp::params::boostOn,   orbitamp::params::preampOn,
+                for (const char* off : { orbitamp::params::preampOn,
                                          orbitamp::params::gateOn,    orbitamp::params::delayOn,
                                          orbitamp::params::reverbOn,  orbitamp::params::cabOn,
                                          orbitamp::params::limiterOn, orbitamp::params::delayPresent,
@@ -3072,11 +3032,9 @@ int main()
                     set (hi, off, 0.0f);
             };
 
-            set (hi, orbitamp::params::boostOn,  1.0f);
             set (hi, orbitamp::params::preampOn, 1.0f);
 
-            for (int i = 0; i < 60 && (hi.boost.latencySamples() == 0
-                                        || hi.preamp.latencySamples() == 0); ++i)
+            for (int i = 0; i < 60 && hi.preamp.latencySamples() == 0; ++i)
             {
                 buf.clear();
                 hi.processBlock (buf, midi);
@@ -3084,14 +3042,13 @@ int main()
                 juce::Thread::sleep (5);
             }
 
-            const int bothBoost  = hi.boost.latencySamples();
-            const int bothPreamp = hi.preamp.latencySamples();
-            const int bothTotal  = bothBoost + bothPreamp + doorLatency (96000.0, blockSize);   // and the door's
+            const int onPreamp = hi.preamp.latencySamples();
+            const int onTotal  = onPreamp + doorLatency (96000.0, blockSize);   // and the door's
 
-            // PRECONDITION: two wires, both with something to carry. Without this the check below
-            // passes on a chain where only one block was ever compensated.
-            report ("both captured blocks really are rate-matching", bothBoost > 0 && bothPreamp > 0,
-                    juce::String (bothBoost) + " + " + juce::String (bothPreamp));
+            // PRECONDITION: a wire with something to carry. Without this the check below passes on
+            // a chain whose block was never compensated.
+            report ("the captured block really is rate-matching", onPreamp > 0,
+                    juce::String (onPreamp) + " samples");
 
             blocksOut();
 
@@ -3127,9 +3084,9 @@ int main()
                 if (const float v = std::abs (tail[i]); v > peak)
                 { peak = v; landedAt = (int) i; }
 
-            std::printf ("wire: an impulse through two bypassed blocks at 96 kHz lands at sample %d"
-                         " (peak %.3f); the plugin reports %d samples of PDC, the blocks cost"
-                         " %d + %d\n", landedAt, peak, reported, bothBoost, bothPreamp);
+            std::printf ("wire: an impulse through a bypassed block at 96 kHz lands at sample %d"
+                         " (peak %.3f); the plugin reports %d samples of PDC, the block costs"
+                         " %d\n", landedAt, peak, reported, onPreamp);
 
             // PRECONDITION: the impulse has to have SURVIVED. A chain that swallowed it would
             // report `landedAt == 0` off a peak of nothing and look like zero delay.
@@ -3137,9 +3094,9 @@ int main()
                     juce::String (peak, 3) + " out of 1.0");
 
             report ("a bypassed block delays by exactly what the host is told it does",
-                    peak > 0.5f && landedAt == reported && reported == bothTotal,
+                    peak > 0.5f && landedAt == reported && reported == onTotal,
                     "landed at " + juce::String (landedAt) + ", reported " + juce::String (reported)
-                      + ", blocks cost " + juce::String (bothTotal));
+                      + ", the block costs " + juce::String (onTotal));
 
             // 🔴 AND THE CROSSFADE, which is the other half of the wire and the half the comb bench
             //    above only simulates. A block on its way out blends what the model made against
@@ -3158,13 +3115,9 @@ int main()
                     hi.pumpDeviceWork();
                 }
 
-                // WHERE THE MARK IS EXPECTED, and it is not the preamp's latency alone: the boost
-                // stands bypassed in front of it and its wire is a real delay, so the mark arrives
-                // after BOTH. Reading only the preamp's number is what made the first version of
-                // this probe measure an empty stretch of buffer and call it silence.
-                const int ahead = hi.boost.latencySamples();
+                // WHERE THE MARK IS EXPECTED: after the preamp's latency, and the door's too.
                 const int lat   = hi.preamp.latencySamples();
-                const int when  = ahead + lat + doorLatency (96000.0, blockSize);   // the door is late too
+                const int when  = lat + doorLatency (96000.0, blockSize);   // the door is late too
 
                 set (hi, orbitamp::params::preampOn, 0.0f);      // and now the ~15 ms fade-out
 
@@ -3225,9 +3178,8 @@ int main()
                 const float onTime2 = peakOver (gap + when - 2, gap + when + 2);
 
                 std::printf ("wire: mid-crossfade, two marks 300 apart read %.4f before either is"
-                             " due, then %.4f -> %.4f at +%d (%d bypassed ahead + %d fading,"
-                             " fade is %d)\n",
-                             early, onTime1, onTime2, when, ahead, lat, fadeLen);
+                             " due, then %.4f -> %.4f at +%d (%d fading, fade is %d)\n",
+                             early, onTime1, onTime2, when, lat, fadeLen);
 
                 report ("the crossfade is actually running when the marks go in",
                         onTime1 > 0.05f && onTime2 > onTime1 * 1.05f,
@@ -3247,7 +3199,7 @@ int main()
             }
 
             // 🔴 GROWTH THROUGH THE PROCESSOR, WITH THE FLOOR OUT OF THE WAY. Everything above ran
-            //    at a 512-sample block, so the memory floor was 512 and both delays were 96: the
+            //    at a 512-sample block, so the memory floor was 512 and the delay was 96: the
             //    wire never had to grow, and `fitWire` could have been deleted entirely without a
             //    single check noticing. A small block puts the floor UNDER the delay, and then the
             //    only way the numbers come out right is if the growth path actually runs.
@@ -3268,10 +3220,10 @@ int main()
                     juce::Thread::sleep (2);
                 }
 
-                const int smLat = juce::jmax (sm.boost.latencySamples(), sm.preamp.latencySamples());
-                const int smCap = juce::jmax (sm.bypassWireCapacity (0), sm.bypassWireCapacity (1));
+                const int smLat = sm.preamp.latencySamples();
+                const int smCap = sm.bypassWireCapacity (0);
 
-                std::printf ("wire: at a %d-sample block the floor is under the delay — longest"
+                std::printf ("wire: at a %d-sample block the floor is under the delay — the"
                              " delay %d, wire grew to %d\n", tiny, smLat, smCap);
 
                 // PRECONDITION: the floor really is under the delay, or this measures the floor.
@@ -3306,7 +3258,7 @@ int main()
                 late.prepareToPlay (96000.0, blockSize);
                 set (late, orbitamp::params::stereoMode, 0.0f);
 
-                for (const char* off : { orbitamp::params::boostOn,   orbitamp::params::preampOn,
+                for (const char* off : { orbitamp::params::preampOn,
                                          orbitamp::params::gateOn,    orbitamp::params::delayOn,
                                          orbitamp::params::reverbOn,  orbitamp::params::cabOn,
                                          orbitamp::params::limiterOn, orbitamp::params::delayPresent,

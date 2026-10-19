@@ -102,7 +102,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
       // The OUT wall's hand IS the console's LEVEL fader — one parameter, two doors: the fader
       // in the console's row and the grip on the wall move together, the attachment's echo
       // keeping them honest.
-      outMeter ("OUT", eqLink == 0 ? processor.boostOutDb : processor.preampOutDb,
+      outMeter ("OUT", processor.blockOutDb[(size_t) eqLink],
                 *processor.apvts.getParameter (params::eqLevel (eqLink)), false)
 {
     // The console's widgets become children of this block, which places them. The spectrum behind
@@ -567,7 +567,7 @@ void CapturedBlockPanel::deviceChanged()
     gain.setNotches (juce::jmax (0, positions.size()));
     gain.setTooltip (block.dialName().isNotEmpty() ? block.dialName().toUpperCase() : juce::String ("GAIN"));
 
-    for (int i = 0; i < params::boostNumMeasured; ++i)
+    for (int i = 0; i < Block::numMeasured; ++i)
     {
         auto& slot = slots[(size_t) i];
 
@@ -607,7 +607,7 @@ std::vector<EqSection::Band> CapturedBlockPanel::nativeBands() const
 
     const auto tones = block.tones();
 
-    for (int i = 0; i < params::boostNumMeasured && i < (int) tones.size(); ++i)
+    for (int i = 0; i < Block::numMeasured && i < (int) tones.size(); ++i)
     {
         const auto& m = tones[(size_t) i];
 
@@ -733,7 +733,7 @@ void CapturedBlockPanel::resetToneSlotsToPackDefaults()
 {
     const auto tones = block.tones();
 
-    for (int i = 0; i < params::boostNumMeasured; ++i)
+    for (int i = 0; i < Block::numMeasured; ++i)
         if (auto* p = amp.apvts.getParameter (params::blockMeasured (blk, i)))
         {
             const float plain = (float) (i < (int) tones.size() ? Block::defaultNorm (tones[(size_t) i]) : 0.5);

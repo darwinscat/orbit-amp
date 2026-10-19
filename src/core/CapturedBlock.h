@@ -42,9 +42,7 @@ public:
 
     /** Tone slots a host can see. Parameters exist for this many, and the loaded pack decides what
         each one turns — five, because the biggest preamp pack ships five. */
-    static constexpr int numMeasured = params::boostNumMeasured;
-    static_assert (params::preampNumMeasured == params::boostNumMeasured,
-                   "one block serves every captured slot, so the tone slot counts have to agree");
+    static constexpr int numMeasured = params::preampNumMeasured;
 
     /** The picture's frequency axis: the player draws its tone on a 20 Hz – 20 kHz grid. */
     static constexpr double toneLoHz = 20.0;

@@ -23,10 +23,10 @@ namespace orbitamp
 
 class AmpProcessor;
 
-/** The face every captured block wears — the boost in front, the preamp behind it, and whatever
-    captured block comes next. One class, because the question is always the same: which device,
-    which capture of it, and what its own controls do. Which BLOCK it is arrives as a reference and
-    an id prefix, and nothing else in the file knows.
+/** The face every captured block wears — the preamp, and whatever captured block comes next. One
+    class, because the question is always the same: which device, which capture of it, and what its
+    own controls do. Which BLOCK it is arrives as a reference and an id prefix, and nothing else in
+    the file knows.
 
     The pack says what this device HAS: how many positions its gain was captured at, which of its
     knobs were measured instead, whether one of them is a two-position switch, and what the circuit
@@ -40,8 +40,8 @@ class CapturedBlockPanel final : public BlockFrame,
 public:
     using Block = core::CapturedBlock;
 
-    /** `eqLink` is which of the two EQ consoles is this block's — they belong to the blocks now,
-        and the index is the only thing that still says which is which. */
+    /** `eqLink` is which EQ console is this block's — they belong to the blocks now, and the index
+        is the only thing that says which is which. */
     CapturedBlockPanel (AmpProcessor&, Block&, const juce::String& title, const char* blockId,
                         int eqLink, felitronics::analysis::RollingSpectrumTap& toneSpectrumTap,
                         felitronics::analysis::RollingSpectrumTap& toneInSpectrumTap);
@@ -54,7 +54,7 @@ public:
     void setEqRowOnTop (bool onTop) { eq.setRowOnTop (onTop); resized(); }
 
     /** Puts a thrown-open picture back in its corner. Returns whether there was one — the editor
-        asks both blocks and stops at the first that answers, so one Escape closes one thing. */
+        asks every block and stops at the first that answers, so one Escape closes one thing. */
     bool foldPicture();
 
 private:
@@ -80,7 +80,7 @@ private:
 
     /** Puts every slot back where the loaded pack says a player starts.
 
-        The measured slots and the selector slots are SLOTS, not controls: `boost_meas1` exists
+        The measured slots and the selector slots are SLOTS, not controls: `preamp_meas1` exists
         always and what it turns is whatever the pack decided. So its value cannot survive a device
         change — 0.7 of a Tube Screamer's Tone and 0.7 of an SM7's EQ-Lo are different physical
         things wearing one number. GAIN is the exception and keeps its place: every device has one
@@ -122,7 +122,7 @@ private:
     AmpProcessor& amp;
     Block&        block;
     const char*   blk;
-    const int     link;   // which of the two consoles/taps is this block's
+    const int     link;   // which console/tap is this block's
     felitronics::analysis::RollingSpectrumTap& toneTap;
 
     VoicingSelector device;
@@ -194,7 +194,7 @@ private:
         int measuredIndex = -1;
     };
 
-    std::array<Slot, (size_t) params::boostNumMeasured> slots;
+    std::array<Slot, (size_t) Block::numMeasured> slots;
 
     /** A device's other selecting controls — the ones that pick a FILE rather than shape one. Fur
         Coat's octave is the first of them: two captures at every dial position, and without this

@@ -93,7 +93,6 @@ juce::String Presets::sound() const
     setInTree (tree, params::blockSmooth (params::preampId), 1.0f);    // ...nor DRIVE's way: as every state had it before there was a choice
     setInTree (tree, params::blockIn (params::preampId), 0.0f);        // ...nor TURBO's push: Channels::whole says on or off
     setInTree (tree, params::preampDevice, 0.0f);
-    setInTree (tree, params::boostDevice, 0.0f);
 
     // CHANNEL the parameter says nothing the node does not, and is left out whole: a preset marked
     // before the parameter existed carries a fingerprint with no such line in it.

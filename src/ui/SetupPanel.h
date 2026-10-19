@@ -85,7 +85,6 @@ private:
         about the packs rather than about the window sits under them. */
     juce::Component libraryPage;
     DeviceListView  preampDevices { device::DeviceLibrary::Slot::preamp };
-    DeviceListView  boostDevices  { device::DeviceLibrary::Slot::pedal };
     IrTreeView      irs;
     SettingsList    packSwitches;
 

@@ -120,10 +120,10 @@ public:
         It replaces clearing the wire whenever it was not carrying, and the difference is a click.
         A window filled only while the delay is live is COLD the first time the delay becomes live:
         a model landing at another rate into a block that stands bypassed made the through-path
-        open with `delay` samples of silence — 96 of them at 96 kHz, and the boost ships switched
-        off, so that is an ordinary Tuesday and not a corner. Fed every block there is nothing to
-        go cold. `felitronics::core::DryAligner` learned this first and states the same rule: a
-        ring fed only while a stage runs emits its latency in zeros. */
+        open with `delay` samples of silence — 96 of them at 96 kHz, and a player picking a device
+        with the block switched off is an ordinary Tuesday and not a corner. Fed every block there
+        is nothing to go cold. `felitronics::core::DryAligner` learned this first and states the
+        same rule: a ring fed only while a stage runs emits its latency in zeros. */
     void advance (const float* const* in, int numChannels, int numSamples) noexcept
     {
         process (in, nullptr, numChannels, numSamples, 0);

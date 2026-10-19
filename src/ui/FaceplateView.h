@@ -14,32 +14,31 @@ namespace orbitamp
 
 class AmpProcessor;
 
-/** The faceplate: the whole chain at once, five blocks in two rows.
+/** The faceplate: the whole chain at once, four blocks in two rows.
 
     There used to be three ways to look at this — a map of thumbs across the top, an overview of the
     blocks, and a lens that threw one block across the panel. Three ways to show one signal path, and
     a map is only worth its room while something is hidden. Nothing is hidden here: the row is the
     order, and what a block is set to is written on its face.
 
-    Row one is the pair that makes the sound — the captured pedal and the captured preamp. Row two
-    is what happens to it afterwards, in chain order: delay, reverb, cabinet. ONE law
-    for both rows: the width splits evenly among the blocks that STAND in the row — halves or the
-    whole of row one, quarters up to the whole of row two — because which blocks a player keeps on
-    the panel is the player's own business, chosen in the LAYOUT popup. */
+    Row one is what makes the sound — the captured preamp, across the whole row. Row two is what
+    happens to it afterwards, in chain order: delay, reverb, cabinet. ONE law for both rows: the
+    width splits evenly among the blocks that STAND in the row — the whole of row one, quarters up to
+    the whole of row two — because which blocks a player keeps on the panel is the player's own
+    business, chosen in the LAYOUT popup. */
 class FaceplateView : public juce::Component
 {
 public:
     explicit FaceplateView (AmpProcessor&);
 
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
-    void deviceChanged() { boost.deviceChanged(); preamp.deviceChanged(); }
+    void deviceChanged() { preamp.deviceChanged(); }
 
-    /** Both consoles at once: two blocks wearing their hands on different sides of their curves
-        is not a choice, it is a rig that has come apart. */
-    void setEqRowOnTop (bool onTop) { boost.setEqRowOnTop (onTop); preamp.setEqRowOnTop (onTop); }
+    /** Where the console's row of hands sits, over its curve or under it. */
+    void setEqRowOnTop (bool onTop) { preamp.setEqRowOnTop (onTop); }
 
     /** The blocks the LAYOUT popup can stand down, in chain order. */
-    enum class Block { boost, preamp, delay, reverb, cabinet };
+    enum class Block { preamp, delay, reverb, cabinet };
 
     /** Show or hide one block. Hidden is GONE, not dimmed: the row re-splits evenly among
         whoever remains, and the CALLER puts the block's power parameter out with it — a hidden
@@ -54,15 +53,16 @@ public:
         repaint();
     }
 
-    /** Escape's errand: put a thrown-open picture back. One Escape folds one picture, so a player
-        who opened two of them gets out of them one at a time rather than all at once. */
-    bool foldPicture() { return boost.foldPicture() || preamp.foldPicture(); }
+    /** Escape's errand: put a thrown-open picture back. One Escape folds one picture. */
+    bool foldPicture() { return preamp.foldPicture(); }
 
-    /** Whether any block of a row still stands: 0 is the pair, 1 the chain's tail. */
+    /** Whether any block of a row still stands: 0 is the preamp's, 1 the chain's tail. */
     bool rowPopulated (int row) const
     {
-        return row == 0 ? shownFlags[0] || shownFlags[1]
-                        : shownFlags[2] || shownFlags[3] || shownFlags[4];
+        const auto shown = [this] (Block b) { return shownFlags[(size_t) b]; };
+
+        return row == 0 ? shown (Block::preamp)
+                        : shown (Block::delay) || shown (Block::reverb) || shown (Block::cabinet);
     }
 
 /** Whether an emptied row's height is GIVEN to whoever is left (the default) or leaves with it.
@@ -130,15 +130,14 @@ private:
 
     BlockFrame& frame (Block b);
 
-    CapturedBlockPanel boost;
     CapturedBlockPanel preamp;
     DelayBlock         delay;
     ReverbBlock        reverb;
     CabinetBlock       cabinet;
 
-    /** Who stands on the panel, indexed by Block. The core four out of the box; the delay is
+    /** Who stands on the panel, indexed by Block. The core three out of the box; the delay is
         reached for, not found already on. */
-    std::array<bool, 5> shownFlags { true, true, false, true, true };
+    std::array<bool, 4> shownFlags { true, false, true, true };
 
     bool fillsHeight = true;   // see setFillsHeight
 

@@ -19,7 +19,6 @@ namespace
     {
         switch (row)
         {
-            case params::rowBoost:  return FaceplateView::Block::boost;
             case params::rowPreamp: return FaceplateView::Block::preamp;
             case params::rowDelay:  return FaceplateView::Block::delay;
             case params::rowReverb: return FaceplateView::Block::reverb;

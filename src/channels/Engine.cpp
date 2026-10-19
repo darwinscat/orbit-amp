@@ -11,7 +11,7 @@ namespace orbitamp::channels
 
 namespace
 {
-    constexpr int preampConsole = 1;        // the preamp's universal console: kept flat, the tones are the pack's
+    constexpr int preampConsole = 0;        // the preamp's universal console: kept flat, the tones are the pack's
 
     using Suppress = felitronics::appkit::CompareHistory::ScopedSuppress;
 }
@@ -153,7 +153,6 @@ void Engine::setUpChain (bool firstTime)
     setParam (params::inOn,          1.0f);
     setParam (params::outPresent,    1.0f);
     setParam (params::outOn,         1.0f);
-    setParam (params::boostPresent,  0.0f);
     setParam (params::preampPresent, 1.0f);
     setParam (params::preampOn,      1.0f);
     setParam (params::delayPresent,  1.0f);

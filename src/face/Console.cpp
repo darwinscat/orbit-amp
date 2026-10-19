@@ -1353,8 +1353,8 @@ void Console::showLoad()
     auto panel = std::make_unique<LoadBreakdown> (amp);
     panel->nameOf = [] (int which, bool brief) -> juce::String
     {
-        if (which == params::stPreamp)  return "AMP";
-        if (which == params::stEq2)     return brief ? "A-EQ" : "AMP EQ";
+        if (which == params::stPreamp)   return "AMP";
+        if (which == params::stPreampEq) return brief ? "A-EQ" : "AMP EQ";
         return {};
     };
     panel->dim   = labelLilac.withAlpha (0.85f);
