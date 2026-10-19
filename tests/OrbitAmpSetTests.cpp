@@ -8,7 +8,7 @@
 // name four times; that the AMP's menu shows the X88-IR and the IR-X as the family's devices and the
 // V4's six in one OLD, a player's own OLD and a rover's copies of the V4 notwithstanding; and that a start
 // after the first writes nothing. How a set is laid out — what is rewritten, what an earlier build left
-// that goes — is the cockpit's gate's to hold (CatpitSetTests): it is the same code.
+// that goes — is the cockpit's and the rovers' set gate's to hold (AmpSetTests): it is the same code.
 //
 // It works in a folder of its own under the system's temporary folder — the machine's real Factory
 // and Devices folders are never read or written — and leaves it behind to be looked at.
