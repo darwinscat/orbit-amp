@@ -201,6 +201,9 @@ public:
 
     void paint (juce::Graphics&) override;
 
+    /** Its spring: a hatch, not a key — about half a second, with no bounce. */
+    static constexpr float stiffness = 60.0f, damping = 16.0f;
+
 private:
     face::Glide shown;              // 0 open .. 1 shut
     void timerCallback() override;

@@ -401,6 +401,16 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     t->setProperty ("name", point (turboName));
     t->setProperty ("lid", rect (turboLid));
     t->setProperty ("kind", "pair");      // TURBO walks to the gear's paired channel (channels::Lineup::pairs)
+    // ...and parked: the button deaf, drawn at `alpha` at once; and where the rover has a hatch's render,
+    // the hatch shut over it on its spring (TurboLid), open again when a gear is pulled.
+    auto* atPark = new juce::DynamicObject();
+    atPark->setProperty ("alpha", face::PushButton::dimmed);
+    atPark->setProperty ("lid", Art::get().turboLid.isValid() ? juce::var ("turbo-lid.png") : juce::var());
+    auto* spring = new juce::DynamicObject();
+    spring->setProperty ("stiffness", TurboLid::stiffness);
+    spring->setProperty ("damping", TurboLid::damping);
+    atPark->setProperty ("lidSpring", juce::var (spring));
+    t->setProperty ("parked", juce::var (atPark));
     o->setProperty ("turbo", juce::var (t));
 
     juce::Array<juce::var> wipers;

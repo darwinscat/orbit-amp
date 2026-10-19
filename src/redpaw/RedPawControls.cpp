@@ -548,8 +548,8 @@ void KnobRing::paint (juce::Graphics& g)
 TurboLid::TurboLid()
 {
     setInterceptsMouseClicks (false, false);
-    shown.stiffness = 60.0f;    // a hatch, not a key: about half a second, with no bounce
-    shown.damping   = 16.0f;
+    shown.stiffness = stiffness;
+    shown.damping   = damping;
 }
 
 void TurboLid::setShut (bool shut, bool animate)
