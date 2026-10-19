@@ -7,12 +7,14 @@
 #
 #     source ~/emsdk/emsdk_env.sh
 #     emcmake cmake -S tools/worlds-wasm -B build-wasm -G Ninja
-#     cmake --build build-wasm            # -> build-wasm/plains-wasm.mjs + plains-wasm.wasm
+#     cmake --build build-wasm            # -> build-wasm/plains-wasm.mjs + .wasm, ice-wasm.*, titan-wasm.*
 #
-# plains-wasm.mjs is the ES module the page imports, createPlainsView (plains-view.js); the .wasm beside it
-# is fetched by it. The renderer and the world are src/redpaw/view's PlainsGl and PlainsWorld over WebGL 2
-# (src/shaders/Gpu.h); the shaders are resources/shaders, carried into the .wasm the way the app's build
-# carries them (CMakeLists.txt, THE SHADERS) and put together by the same src/shaders/Shaders.cpp.
+# Each world is an ES module the page imports — plains-wasm.mjs exports createPlainsView (plains-view.js),
+# ice-wasm.mjs createIceView (ice-view.js), titan-wasm.mjs createTitanView (titan-view.js), each behind the
+# one view of view.js — and the .wasm beside it is fetched by it. The renderers and the worlds are the app's
+# (src/redpaw/view, src/frostpaw/view, src/amberpaw/view) over WebGL 2 (src/shaders/Gpu.h); the shaders are
+# resources/shaders, carried into the .wasm the way the app's build carries them (CMakeLists.txt, THE SHADERS)
+# and put together by the same src/shaders/Shaders.cpp.
 
 cmake_minimum_required(VERSION 3.22)
 project(OrbitAmpWorldsWasm LANGUAGES CXX)
@@ -119,25 +121,47 @@ inline const char* getNamedResourceOriginalFilename (const char* name)
 ")
 
 # ----------------------------------------------------------------------------
-# THE PLAINS: RedPawAmp's windscreen.
+# A WORLD: its own file of calls (plains.cpp, ...) over the app's world and renderer, built to <name>-wasm.mjs
+# + .wasm; view.js at the end of the module, the world's <name>-view.js after it. Every world exports the calls
+# view.h names; `EXTRA` are a world's own beyond them.
 # ----------------------------------------------------------------------------
-add_executable(plains_wasm
-    plains.cpp
-    "${ORBITAMP_ROOT}/src/redpaw/view/PlainsGl.cpp"
-    "${ORBITAMP_ROOT}/src/redpaw/view/PlainsWorld.cpp"
-    "${ORBITAMP_ROOT}/src/shaders/Shaders.cpp")
-target_include_directories(plains_wasm PRIVATE "${ORBITAMP_ROOT}/src" "${ORBITAMP_GENERATED_DIR}")
-target_compile_options(plains_wasm PRIVATE -O3 -Wall -Wextra)
-set(_view_js "${CMAKE_CURRENT_SOURCE_DIR}/plains-view.js")
-target_link_options(plains_wasm PRIVATE
-    -O3
-    -sENVIRONMENT=web,worker
-    -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createPlainsModule
-    -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
-    -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB
-    -sFILESYSTEM=0
-    "-sEXPORTED_FUNCTIONS=_plains_make,_plains_build,_plains_context,_plains_create,_plains_error,_plains_gear,_plains_turbo,_plains_park,_plains_settle,_plains_frame,_plains_draw,_plains_test,_plains_read,_plains_read_width,_plains_read_height,_plains_destroy"
-    "-sEXPORTED_RUNTIME_METHODS=HEAPU8,UTF8ToString"
-    "--extern-post-js=${_view_js}")
-set_property(TARGET plains_wasm APPEND PROPERTY LINK_DEPENDS "${_view_js}")
-set_target_properties(plains_wasm PROPERTIES OUTPUT_NAME "plains-wasm" SUFFIX ".mjs")
+set(ORBITAMP_VIEW_CALLS
+    _view_make _view_build _view_context _view_create _view_error _view_gear _view_turbo _view_park _view_settle
+    _view_frame _view_draw _view_test _view_read _view_read_width _view_read_height _view_destroy)
+
+function(orbitamp_world name factory)
+    cmake_parse_arguments(W "" "" "SOURCES;EXTRA" ${ARGN})
+    add_executable(${name}_wasm ${name}.cpp ${W_SOURCES} "${ORBITAMP_ROOT}/src/shaders/Shaders.cpp")
+    target_include_directories(${name}_wasm PRIVATE "${ORBITAMP_ROOT}/src" "${ORBITAMP_GENERATED_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(${name}_wasm PRIVATE -O3 -Wall -Wextra)
+    set(calls ${ORBITAMP_VIEW_CALLS} ${W_EXTRA})
+    list(JOIN calls "," calls)
+    set(view "${CMAKE_CURRENT_SOURCE_DIR}/view.js")
+    set(world_view "${CMAKE_CURRENT_SOURCE_DIR}/${name}-view.js")
+    target_link_options(${name}_wasm PRIVATE
+        -O3
+        -sENVIRONMENT=web,worker
+        -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=${factory}
+        -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
+        -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB
+        -sFILESYSTEM=0
+        "-sEXPORTED_FUNCTIONS=${calls}"
+        "-sEXPORTED_RUNTIME_METHODS=HEAPU8,UTF8ToString"
+        "--extern-post-js=${view}"
+        "--extern-post-js=${world_view}")
+    set_property(TARGET ${name}_wasm APPEND PROPERTY LINK_DEPENDS "${view}" "${world_view}")
+    set_target_properties(${name}_wasm PROPERTIES OUTPUT_NAME "${name}-wasm" SUFFIX ".mjs")
+endfunction()
+
+# THE PLAINS: RedPawAmp's windscreen.
+orbitamp_world(plains createPlainsModule SOURCES
+    "${ORBITAMP_ROOT}/src/redpaw/view/PlainsGl.cpp" "${ORBITAMP_ROOT}/src/redpaw/view/PlainsWorld.cpp")
+
+# THE ICE: FrostPawAmp's windscreen.
+orbitamp_world(ice createIceModule SOURCES
+    "${ORBITAMP_ROOT}/src/frostpaw/view/IceGl.cpp" "${ORBITAMP_ROOT}/src/frostpaw/view/IceWorld.cpp")
+
+# TITAN: AmberPawAmp's canopy — with the wipers' keys and the searchlights' switches of its own.
+orbitamp_world(titan createTitanModule SOURCES
+    "${ORBITAMP_ROOT}/src/amberpaw/view/TitanGl.cpp" "${ORBITAMP_ROOT}/src/amberpaw/view/TitanWorld.cpp"
+    EXTRA _view_wipers _view_lights)
