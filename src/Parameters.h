@@ -38,6 +38,11 @@ inline constexpr float limiterCeilingMax = -0.1f;
 inline constexpr const char* gateOn        = "gate_on";
 inline constexpr const char* gateThreshold = "gate_threshold";
 
+/** Where the threshold may stand, dBFS — the parameter's span (Parameters.cpp says why the ceiling is
+    -10), and with it every other way in: the faces' menu, and where LEARN may land. */
+inline constexpr float gateThresholdMin = -80.0f;
+inline constexpr float gateThresholdMax = -10.0f;
+
 /** Mirrors the engine's Schmitt hysteresis (felitronics NoiseGate::Config default): the CLOSE
     level sits this far under the OPEN level. The meter draws both marks, so the number the
     display promises is the number the state machine runs. */

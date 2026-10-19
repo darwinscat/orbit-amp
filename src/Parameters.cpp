@@ -112,7 +112,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // fires". Found live, against a speaker feeding the mic exactly that.
     layout.add (std::make_unique<Bool>  (juce::ParameterID { gateOn, 1 }, "Gate", false),
                 std::make_unique<Float> (juce::ParameterID { gateThreshold, 1 }, "Gate Threshold",
-                                         juce::NormalisableRange<float> (-80.0f, -10.0f, 1.0f), -50.0f),
+                                         juce::NormalisableRange<float> (gateThresholdMin, gateThresholdMax, 1.0f), -50.0f),
                 std::make_unique<Choice> (juce::ParameterID { gatePos, 1 }, "Gate Mute At",
                                           gatePositions, 1),
                 std::make_unique<Choice> (juce::ParameterID { gateDecay, 1 }, "Gate Decay",

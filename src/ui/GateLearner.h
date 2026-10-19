@@ -147,7 +147,7 @@ private:
     juce::RangedAudioParameter& thP;
     std::unique_ptr<juce::ParameterAttachment> onAtt, thAtt;
 
-    core::GateLearn take { params::gateHysteresisDb };
+    core::GateLearn take { params::gateHysteresisDb, params::gateThresholdMin, params::gateThresholdMax };
     float watchPresent = 0.0f, watchOn = 0.0f, watchTh = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateLearner)
