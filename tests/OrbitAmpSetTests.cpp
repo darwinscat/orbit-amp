@@ -2,9 +2,10 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 // Gate for ORBITAMP'S SET AS IT LEAVES THE BINARY (OrbitAmpSet.h): that it carries every pack of the
-// set — the X88-IR's four, the Victory V4's six — laid out byte for byte what was built in; that each
-// lies under the name of the capture it holds; that the preamp list shows each by a name of its own,
-// not one name four times; and that a start after the first writes nothing. How a set is laid out —
+// set — the X88-IR's four, the Victory V4's six, the Friedman IR-X's two — and the family's cabinet
+// shelf in its folders, laid out byte for byte what was built in; that each pack lies under the name
+// of the capture it holds; that the preamp list shows each by a name of its own, not one name four
+// times; and that a start after the first writes nothing. How a set is laid out —
 // what is rewritten, what an earlier build left that goes — is the cockpit's gate's to hold
 // (CatpitSetTests): it is the same code.
 //
@@ -45,18 +46,18 @@ int main()
     // would otherwise go missing from the product without a word.
     const juce::StringArray wanted { "X88-IR Normal", "X88-IR Altered", "X88-IR Crunch", "X88-IR Overdrive",
                                      "V4 Copper", "V4 Copper TB", "V4 Sheriff Ch1", "V4 Sheriff Ch2",
-                                     "V4 Kraken Ch1", "V4 Kraken Ch2" };
+                                     "V4 Kraken Ch1", "V4 Kraken Ch2", "IR-X Ch1 PowerAmp", "IR-X Ch2 PowerAmp" };
 
     const auto carried = set::carried();
     const juce::int64 build = 20261014120000;     // the build the gate plays: a stamp of make-believe
-    juce::StringArray names;
+    juce::StringArray names, cabinets;
     for (const auto& e : carried)
-        names.add (e.path.upToFirstOccurrenceOf (".", false, false));
+        (e.path.endsWithIgnoreCase (".orbitrig.zip") ? names : cabinets).add (e.path.upToFirstOccurrenceOf (".", false, false));
 
-    bool everyOne = carried.size() == (size_t) wanted.size();
+    bool everyOne = names.size() == wanted.size();
     for (const auto& w : wanted)
         everyOne = everyOne && names.contains (w);
-    check (everyOne, "the binary carries every pack of the set — the X88-IR's four, the V4's six: "
+    check (everyOne, "the binary carries every pack of the set — the X88-IR's four, the V4's six, the IR-X's two: "
                          + names.joinIntoString (", "));
 
     // The first start.
@@ -71,10 +72,22 @@ int main()
     }
     check (whole, "...each of them byte for byte what was built in");
 
+    // The family's shelf, which every product lays out the same way: Darwin's Cat's own ten in the
+    // Orange's folder, the twenty-one others in Other.
+    {
+        const auto shelf = factory.getChildFile ("IRs");
+        const auto in = [&shelf] (const char* folder) { return shelf.getChildFile (folder).findChildFiles (juce::File::findFiles, false, "*.wav").size(); };
+        check (cabinets.size() == 31 && in ("Orange PPC112") == 10 && in ("Other") == 21,
+               "...the cabinets among them in the shelf's folders: ten in Orange PPC112, twenty-one in Other");
+    }
+
     // A name is a promise about the capture: "X88-IR Crunch" is the pack whose rig_id is x88-ir-crunch-….
     juce::StringArray astray;
     for (const auto& e : carried)
     {
+        if (! e.path.endsWithIgnoreCase (".orbitrig.zip"))
+            continue;
+
         const auto file = factory.getChildFile (e.path);
         const auto stem = file.getFileName().upToFirstOccurrenceOf (".", false, false);
         const auto rig  = DeviceLibrary::rigIdOf (file);

@@ -4,6 +4,7 @@
 #include "PluginProcessor.h"
 #include "Product.h"
 #include "Parameters.h"
+#include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
 
 #include <BinaryData.h>
@@ -447,46 +448,19 @@ void AmpProcessor::rescanDevices()
 
 const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
 {
+    // The family's shelf (device/FactoryShelf.h), in the parameter's order: OrbitAmp plays it from its
+    // binary by the index `cabIr` keeps, whatever the folder it is laid out in holds.
+    static const auto shelf = []
     {
-        static const IrBytes shelf[] = {
-            { BinaryData::_01cookiemonster_wav,       BinaryData::_01cookiemonster_wavSize },
-            { BinaryData::_02darthgenocider_wav,      BinaryData::_02darthgenocider_wavSize },
-            { BinaryData::_03kittenslayer_wav,        BinaryData::_03kittenslayer_wavSize },
-            { BinaryData::_04kaijutamer_wav,          BinaryData::_04kaijutamer_wavSize },
-            { BinaryData::_05iceburnsuicide_wav,      BinaryData::_05iceburnsuicide_wavSize },
-            { BinaryData::_06verticallipstabber_wav,  BinaryData::_06verticallipstabber_wavSize },
-            { BinaryData::_07manslaughterjoe_wav,     BinaryData::_07manslaughterjoe_wavSize },
-            { BinaryData::_08bigbubba_wav,            BinaryData::_08bigbubba_wavSize },
-            { BinaryData::_09devilscunnilingus_wav,   BinaryData::_09devilscunnilingus_wavSize },
-            { BinaryData::_10october32th_wav,         BinaryData::_10october32th_wavSize },
-            { BinaryData::_11wumbo_wav,               BinaryData::_11wumbo_wavSize },
-            { BinaryData::_12worldcollider_wav,       BinaryData::_12worldcollider_wavSize },
-            { BinaryData::_13cannibalchoir_wav,       BinaryData::_13cannibalchoir_wavSize },
-            { BinaryData::_14cathoderayfleshburn_wav, BinaryData::_14cathoderayfleshburn_wavSize },
-            { BinaryData::_15impalerjim_wav,          BinaryData::_15impalerjim_wavSize },
-            { BinaryData::_16nachoguacamole_wav,      BinaryData::_16nachoguacamole_wavSize },
-            { BinaryData::_17picklepunisher_wav,      BinaryData::_17picklepunisher_wavSize },
-            { BinaryData::_18wasabiwarrior_wav,       BinaryData::_18wasabiwarrior_wavSize },
-            { BinaryData::_19pestopaladin_wav,        BinaryData::_19pestopaladin_wavSize },
-            { BinaryData::_20donspinacio_wav,         BinaryData::_20donspinacio_wavSize },
-            { BinaryData::_21killdill_wav,            BinaryData::_21killdill_wavSize },
+        std::vector<IrBytes> out;
+        for (const auto& ir : device::shelf::irs())
+            out.push_back ({ ir.data, ir.size, ir.folder });
+        return out;
+    }();
 
-            { BinaryData::_02darkmatter_wav,          BinaryData::_02darkmatter_wavSize },
-            { BinaryData::_03ioncavity_wav,           BinaryData::_03ioncavity_wavSize },
-            { BinaryData::_04eventhorizon_wav,        BinaryData::_04eventhorizon_wavSize },
-            { BinaryData::_06coronalflare_wav,        BinaryData::_06coronalflare_wavSize },
-            { BinaryData::_07browndwarf_wav,          BinaryData::_07browndwarf_wavSize },
-            { BinaryData::_08accretiongap_wav,        BinaryData::_08accretiongap_wavSize },
-            { BinaryData::_09dustcloud_wav,           BinaryData::_09dustcloud_wavSize },
-            { BinaryData::_10blueshift_wav,           BinaryData::_10blueshift_wavSize },
-            { BinaryData::_11redgiant_wav,            BinaryData::_11redgiant_wavSize },
-            { BinaryData::_12pulsarbeam_wav,          BinaryData::_12pulsarbeam_wavSize },
-        };
-
-        return shelf[(size_t) juce::jlimit (0, (int) std::size (shelf) - 1, index)];
-    }
+    jassert (shelf.size() == (size_t) params::cabIrNames.size());
+    return shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
 }
-
 
 AmpProcessor::CabChoice AmpProcessor::cabChoice() const
 {

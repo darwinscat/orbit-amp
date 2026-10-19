@@ -18,6 +18,7 @@
 #include "channels/Set.h"
 #include "device/DeviceLibrary.h"
 #include "device/FactorySet.h"
+#include "device/FactoryShelf.h"
 
 #if PRODUCT_SET_EMBEDDED
  #include <ProductSetData.h>
@@ -56,20 +57,32 @@ int main (int argc, char** argv)
     // What the binary carries, as the layout sorts it.
     struct Carried { juce::File file; const char* data; int size; };
     std::vector<Carried> carried;
-    int packs = 0, cabinets = 0;
+    int packs = 0, cabinets = 0, stray = 0;
     juce::int64 bytes = 0;
    #if PRODUCT_SET_EMBEDDED
     for (int i = 0; i < ProductSetData::namedResourceListSize; ++i)
     {
         const auto name = juce::String::fromUTF8 (ProductSetData::originalFilenames[i]);
-        const bool pack = name.endsWithIgnoreCase (".orbitrig.zip");
+        if (! name.endsWithIgnoreCase (".orbitrig.zip"))
+        {
+            ++stray;        // the product's own data holds its packs; the cabinets are the family's
+            continue;
+        }
         int size = 0;
         const char* data = ProductSetData::getNamedResource (ProductSetData::namedResourceList[i], size);
-        carried.push_back ({ (pack ? factory : set::cabinetsIn (factory)).getChildFile (name), data, size });
-        (pack ? packs : cabinets) += 1;
+        carried.push_back ({ factory.getChildFile (name), data, size });
+        ++packs;
         bytes += size;
     }
    #endif
+
+    // ...and the family's cabinet shelf, in its folders: every product carries the whole of it.
+    for (const auto& ir : orbitamp::device::shelf::irs())
+    {
+        carried.push_back ({ factory.getChildFile (orbitamp::device::shelf::pathOf (ir)), ir.data, ir.size });
+        ++cabinets;
+        bytes += ir.size;
+    }
     std::printf ("the binary carries %d packs, %d cabinets, %lld bytes\n", packs, cabinets, (long long) bytes);
 
     const auto allThere = [&carried]
@@ -88,6 +101,17 @@ int main (int argc, char** argv)
     check (set::layOut (factory, build) == (int) carried.size(), "the first start writes every file of the set");
     check (allThere(), "...each of them byte for byte what was built in");
     check (carried.empty() || list.existsAsFile(), "...and the rover's own list of them");
+
+    // THE FAMILY'S SHELF, in its folders: Darwin's Cat's own ten in the Orange's, the twenty-one others
+    // in Other, and none loose at the top.
+    {
+        const auto shelf = set::cabinetsIn (factory);
+        const auto in = [&shelf] (const char* folder) { return shelf.getChildFile (folder).findChildFiles (juce::File::findFiles, false, "*.wav").size(); };
+        check (stray == 0, "the rover's own set data holds packs alone");
+        check (in ("Orange PPC112") == 10 && in ("Other") == 21 && shelf.findChildFiles (juce::File::findFiles, false).isEmpty(),
+               "the cabinets lie in the shelf's folders: ten in Orange PPC112, twenty-one in Other, none loose");
+        check (shelf.getChildFile ("Orange PPC112/02-dark-matter.wav").existsAsFile(), "...DARK MATTER among the Orange's");
+    }
 
     // THE CHANNELS' PACKS, each by the capture it holds, and nothing else among the packs. On Mars the
     // Friedman IR-X's two, each played by two channels (a gear, and its TURBO with the Boost thrown);
@@ -115,7 +139,7 @@ int main (int argc, char** argv)
         sorted.sort (false);
         check (packs == wanted.size() && found == sorted,
                "the " + juce::String (packs) + " packs are the " + juce::String (ROVER_CHANNELS) + " channels' captures: " + found.joinIntoString (" "));
-        check (cabinets == 10, "...and the ten cabinets with them");
+        check (cabinets == 31, "...and the family's thirty-one cabinets with them");
     }
 
     // Every start after it.
@@ -168,7 +192,7 @@ int main (int argc, char** argv)
         const auto own = set::ownCabinets (factory);
         bool mine = own.size() == cabinets;
         for (const auto& c : carried)
-            mine = mine && (c.file.getParentDirectory() != set::cabinetsIn (factory) || own.contains (c.file));
+            mine = mine && (! c.file.isAChildOf (set::cabinetsIn (factory)) || own.contains (c.file));
         check (mine, "the rover's cabinets are the ones it carries, all " + juce::String (own.size()) + " of them");
         check (! own.contains (set::cabinetsIn (factory).getChildFile ("50-another.wav")), "...and not the other product's");
         check (! own.contains (players), "...nor a file of the player's");

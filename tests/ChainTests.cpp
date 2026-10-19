@@ -1099,6 +1099,17 @@ int main()
 
         report ("...and every one plays the file it is named after", wrong.isEmpty(), wrong.joinIntoString (", "));
 
+        // The menu shows a cabinet inside the folder of the family's shelf its IRs lie in: all of
+        // them in one, or a cabinet would stand in a folder that holds only part of it.
+        juce::StringArray split;
+        for (const auto& shelf : orbitamp::params::cabShelves)
+            for (int i = shelf.first; i < shelf.first + shelf.count; ++i)
+                if (juce::String (orbitamp::AmpProcessor::cabIrBytes (i).folder) != orbitamp::AmpProcessor::cabIrBytes (shelf.first).folder)
+                    split.addIfNotAlreadyThere (juce::String::fromUTF8 (shelf.about).upToFirstOccurrenceOf (" \xc2\xb7", false, false));
+        report ("...every cabinet's IRs lie in one folder of the shelf", split.isEmpty(), split.joinIntoString (", "));
+        report ("...and DARK MATTER in Darwin's Cat's own, the Orange's",
+                juce::String (orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault).folder) == "Orange PPC112");
+
         // The default is a NUMBER, and a number names a cabinet only while the list stands still.
         const auto fresh = std::make_unique<orbitamp::AmpProcessor>();
         const auto opens = fresh->cabChoice();

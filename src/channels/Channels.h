@@ -140,8 +140,8 @@ public:
 
     /** THE PRODUCT'S OWN CABINETS: every IR file in its two places — the ones the build carries, laid
         out in the family's factory folder under the product's own list (Set.h; another product's
-        cabinets beside them are not among them), and the player's IRs folder beside its Devices —
-        in the order of their names, so a leading number is how the order is chosen. Read when the
+        cabinets beside them are not among them), folder by folder of the shelf, and the player's own
+        IRs folder — in the order of their names, so a leading number is how the order is chosen. Read when the
         engine is built and again each time the face opens: the folder is the player's to add to
         between two looks. CAB has as many positions as there are of them. */
     const juce::Array<juce::File>& cabinets() const noexcept { return irs; }
@@ -186,6 +186,11 @@ public:
     /** The one that is playing, as an index into cabinets(); -1 when the sound's cabinet is none of them. */
     int  cabinet() const;
     void chooseCabinet (int index);
+
+    /** THE FOLDER OF THE FACTORY SHELF a cabinet of the build's own lies in — `Orange PPC112`, `Other`
+        (device/FactoryShelf.h) — as the panel heads its lists by them; empty for one at the top of the
+        shelf, and for a cabinet of the player's. */
+    juce::String cabinetFolder (int index) const;
 
     /** A cabinet's name as the panel says it: the file's, without its leading number. */
     static juce::String cabinetName (const juce::File&);

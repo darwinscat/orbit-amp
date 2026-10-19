@@ -530,7 +530,9 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/notice.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/disclaimer.txt"   # ...and its long form, with the list
 
-        # The cabinet IRs — orbitcab's, referenced there like everything shared: one copy in the
+        # THE FAMILY'S CABINET SHELF (src/device/FactoryShelf.h): every product links this data, plays
+        # its cabinets from it and lays them out in the family's Factory/IRs, in the shelf's folders —
+        # these in `Other`. orbitcab's, referenced there like everything shared: one copy in the
         # ecosystem.
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/01-cookie-monster.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/02-darth-genocider.wav"
@@ -554,9 +556,9 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/20-don-spinacio.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav"
 
-        # ...and the Orange PPC212V's ten, the cabinets CatpitAmp plays, referenced in the set's
-        # folder rather than copied: one copy in the tree. resources/set/IRs.md says what they are and
-        # how they were shot.
+        # ...and Darwin's Cat's own ten, shot off the Orange, in `Orange PPC112`: referenced in the
+        # set's folder rather than copied, one copy in the tree. resources/set/IRs.md says what they
+        # are and how they were shot.
         "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
         "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
         "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
@@ -760,25 +762,15 @@ endforeach()
 
 # THE COCKPIT'S OWN SET IS INSIDE ITS BINARY — every format's, on every system — and the amp lays it
 # out as files when it first starts (src/channels/Set.h says why). Out of the tree's set
-# (resources/set), the cockpit carries what its four channels play and nothing else: the X88-IR's four
-# packs — a channel finds its own by the capture it holds, not by the file's name — and the ten
-# cabinets CAB steps through, in the order of their names. Without a set, the cockpit would play only
-# what the player puts in its own Devices and IRs folders.
+# (resources/set), the cockpit carries what its four channels play: the X88-IR's four packs — a channel
+# finds its own by the capture it holds, not by the file's name. The cabinets CAB steps through are the
+# family's shelf, which every product carries in the data they all link (OrbitAmpData) and lays out
+# with its packs. Without a set, the cockpit would play only what the player puts in the Devices folder.
 set(CATPITAMP_SET
     "${ORBITAMP_SET_ZIPPED}/X88-IR Normal.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/X88-IR Altered.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/X88-IR Crunch.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/X88-IR Overdrive.orbitrig.zip"
-    "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
-    "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
-    "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
-    "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
-    "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
-    "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
-    "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
-    "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
-    "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
-    "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav")
+    "${ORBITAMP_SET_ZIPPED}/X88-IR Overdrive.orbitrig.zip")
 
 # What reads the set says whether there is one: with none, there is no data to link and nothing to ask.
 # Every product's set data goes by the one name, ProductSetData, which channels/Set.cpp reads: a target
@@ -843,6 +835,7 @@ target_include_directories(catpitamp_set_test PRIVATE src)
 target_compile_definitions(catpitamp_set_test PRIVATE ORBITAMP_PRODUCT_NAME="CatpitAmp" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(catpitamp_set_test PRIVATE
     CatpitAmpSet
+    OrbitAmpData                     # the family's cabinet shelf
     juce::juce_core
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
@@ -1061,23 +1054,11 @@ endforeach()
 
 # THE ROVER'S OWN SET IS INSIDE ITS BINARY, laid out as files when it first starts (src/channels/Set.h):
 # out of the tree's set, the packs its channels play — the Friedman IR-X's two, each found by the capture
-# it holds — and, until the rovers have cabinets of their own, the ten the cockpit carries.
-# Every rover lists its own packs; the cabinets are every rover's.
-set(ROVER_CABINETS
-    "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
-    "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
-    "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
-    "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
-    "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
-    "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
-    "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
-    "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
-    "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
-    "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav")
+# it holds. Every rover lists its own packs; the cabinets are the family's shelf, in the data every
+# product links (OrbitAmpData), and every rover lays them out with its packs.
 set(REDPAWAMP_SET
     "${ORBITAMP_SET_ZIPPED}/IR-X Ch1 PowerAmp.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/IR-X Ch2 PowerAmp.orbitrig.zip"
-    ${ROVER_CABINETS})
+    "${ORBITAMP_SET_ZIPPED}/IR-X Ch2 PowerAmp.orbitrig.zip")
 
 add_library(RedPawAmpSet INTERFACE)
 juce_add_binary_data(RedPawAmpSetData
@@ -1125,6 +1106,7 @@ function(rover_set_test target product amp channels)
     target_compile_definitions(${target} PRIVATE ORBITAMP_PRODUCT_NAME="${amp}" ROVER_CHANNELS=${channels} JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(${target} PRIVATE
         ${amp}Set
+        OrbitAmpData                     # the family's cabinet shelf
         felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
         juce::juce_core
         juce::juce_events
@@ -1245,16 +1227,15 @@ foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
 endforeach()
 
 # ITS SET IS INSIDE ITS BINARY TOO, a list of its own — the V4's six packs its channels play, and the
-# rovers' ten cabinets — laid out under its own list in the family's folder (src/channels/Set.h), where a
-# file another product carries too is one file.
+# family's cabinet shelf — laid out under its own list in the family's folder (src/channels/Set.h), where
+# a file another product carries too is one file.
 set(FROSTPAWAMP_SET
     "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Copper TB.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip"
-    ${ROVER_CABINETS})
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip")
 
 add_library(FrostPawAmpSet INTERFACE)
 juce_add_binary_data(FrostPawAmpSetData
@@ -1377,7 +1358,7 @@ foreach(fmt IN ITEMS VST3 AU Standalone CLAP)
 endforeach()
 
 # ITS SET IS INSIDE ITS BINARY TOO, a list of its own — for now FrostPawAmp's: the V4's six packs its
-# channels play, and the rovers' ten cabinets — laid out under its own list in the family's folder
+# channels play, and the family's cabinet shelf — laid out under its own list in the family's folder
 # (src/channels/Set.h), where a file another product carries too is one file.
 set(AMBERPAWAMP_SET
     "${ORBITAMP_SET_ZIPPED}/V4 Copper.orbitrig.zip"
@@ -1385,8 +1366,7 @@ set(AMBERPAWAMP_SET
     "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch1.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Sheriff Ch2.orbitrig.zip"
     "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch1.orbitrig.zip"
-    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip"
-    ${ROVER_CABINETS})
+    "${ORBITAMP_SET_ZIPPED}/V4 Kraken Ch2.orbitrig.zip")
 
 add_library(AmberPawAmpSet INTERFACE)
 juce_add_binary_data(AmberPawAmpSetData
@@ -1733,7 +1713,7 @@ target_link_libraries(orbitamp_library_test PRIVATE
 
 # ----------------------------------------------------------------------------
 # Gate for OrbitAmp's set as it leaves the binary — every pack of the set laid out under a name the
-# device list tells apart, once, byte for byte. Runs entirely in a temp folder: the machine's real
+# device list tells apart, and the family's cabinet shelf in its folders, once, byte for byte. Runs entirely in a temp folder: the machine's real
 # Factory folder is never written.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
@@ -1744,6 +1724,7 @@ target_include_directories(orbitamp_set_test PRIVATE src)
 target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_set_test PRIVATE
     OrbitAmpSetData
+    OrbitAmpData                     # the family's cabinet shelf
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events
     juce::juce_gui_basics

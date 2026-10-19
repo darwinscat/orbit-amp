@@ -231,11 +231,11 @@ inline constexpr float eqLevelMinDb = -48.0f, eqLevelMaxDb = 12.0f;   // the wal
 inline constexpr const char* cabOn = "cab_on";
 inline constexpr const char* cabIr = "cab_ir";
 
-// The cabinet IRs on the factory shelf — display names derived from the files. What a session keeps
-// of `cabIr` is an INDEX into this list, so a new cabinet joins at the end and nothing already here
-// ever moves: a session saved on WUMBO opens on WUMBO. The menu does not show them in this order;
-// it shows them by cabinet (cabShelves, below). DARK MATTER is the shipping default, the cabinet a
-// CatpitAmp channel opens on too.
+// The cabinet IRs on the factory shelf — the family's (device/FactoryShelf.h), display names derived
+// from the files. What a session keeps of `cabIr` is an INDEX into this list, so a new cabinet joins
+// at the end and nothing already here ever moves: a session saved on WUMBO opens on WUMBO. The menu
+// does not show them in this order; it shows them by the shelf's folders, and inside each by cabinet
+// (cabShelves, below). DARK MATTER is the shipping default, the cabinet every face's channels open on too.
 inline const juce::StringArray cabIrNames {
     // orbitcab's set: the Jesters Brutal Pack's fifteen, then the Jesters Emerald Pack's six.
     "COOKIE MONSTER", "DARTH GENOCIDER", "KITTEN SLAYER", "KAIJU TAMER", "ICEBURN SUICIDE",
@@ -250,24 +250,21 @@ inline const juce::StringArray cabIrNames {
 };
 inline constexpr int cabIrDefault = 21;   // DARK MATTER
 
-/** THE SHELF BY CABINET, as the IR menu lays it out: a submenu for each, in this order, named
-    `cabinet` and opening on `about` — a line that says what its IRs are: the cabinet, its speakers,
-    where they come from — and then `count` names of cabIrNames from `first` on. Between them they
-    hold every name on the shelf once. `about` is UTF-8. */
+/** THE SHELF BY CABINET, as the IR menu lays it out: inside the submenu of the shelf's folder its IRs
+    lie in (device/FactoryShelf.h — a folder may hold more than one cabinet), each in this order, as
+    `about` — a line that says what its IRs are: the cabinet, its speakers, where they come from — and
+    then `count` names of cabIrNames from `first` on. Between them they hold every name on the shelf
+    once. `about` is UTF-8. */
 struct CabShelf
 {
-    const char* cabinet;
     const char* about;
     int first, count;
 };
 
 inline constexpr CabShelf cabShelves[] {
-    { "Orange PPC212V",
-      "Orange PPC212V \xc2\xb7 G12M-65 Creamback \xc2\xb7 SM57 + e906 + U87 Ai mix \xc2\xb7 Darwin's Cat", 21, 10 },
-    { "Behringer BG412S",
-      "mod. Behringer BG412S \xc2\xb7 Celestion V30 / Rockdriver Jr / Eminence DV-77 \xc2\xb7 Jesters Brutal Pack 1.0", 0, 15 },
-    { "Marshall 1960AX",
-      "Marshall 1960AX \xc2\xb7 Celestion G12M Greenback 25W \xc2\xb7 Jesters Emerald Pack", 15, 6 },
+    { "Orange PPC212V \xc2\xb7 G12M-65 Creamback \xc2\xb7 SM57 + e906 + U87 Ai mix \xc2\xb7 Darwin's Cat", 21, 10 },
+    { "mod. Behringer BG412S \xc2\xb7 Celestion V30 / Rockdriver Jr / Eminence DV-77 \xc2\xb7 Jesters Brutal Pack 1.0", 0, 15 },
+    { "Marshall 1960AX \xc2\xb7 Celestion G12M Greenback 25W \xc2\xb7 Jesters Emerald Pack", 15, 6 },
 };
 
 /** A cabinet IR of the player's OWN — not a parameter, because it is not a number: three

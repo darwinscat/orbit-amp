@@ -948,9 +948,9 @@ public:
         thread. */
     void rescanDevices();
 
-    /** The cabinet shelf — the embedded IR set, in params::cabIrNames order. The face draws the
-        same bytes the engine convolves. */
-    struct IrBytes { const char* data; int size; };
+    /** The cabinet shelf — the family's (device/FactoryShelf.h), in params::cabIrNames order, and the
+        folder of it each IR lies in. The face draws the same bytes the engine convolves. */
+    struct IrBytes { const char* data; int size; const char* folder; };
     static const IrBytes& cabIrBytes (int index);
 
     /** WHAT THE CABINET PLAYS, as the state says it: an IR of the player's own when the state names

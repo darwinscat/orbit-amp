@@ -40,17 +40,24 @@ namespace
         return set::ownCabinets (factory());
     }
 
-    /** The cabinets among `files`, in the order of their names. One too big to be kept inside a session
-        (EmbeddedIrs) cannot be played, and a cabinet that cannot be played is not one. */
-    juce::Array<juce::File> cabinetsAmong (const juce::Array<juce::File>& files)
+    /** The cabinets among `files`, in the order of their names — and, given the `shelf` they lie on,
+        folder by folder in the order of the folders' names first. One too big to be kept inside a
+        session (EmbeddedIrs) cannot be played, and a cabinet that cannot be played is not one. */
+    juce::Array<juce::File> cabinetsAmong (const juce::Array<juce::File>& files, const juce::File& shelf = {})
     {
         juce::Array<juce::File> found;
         for (const auto& f : files)
             if (device::IrLibrary::isAudioFile (f) && f.getSize() <= device::EmbeddedIrs::maxBytes)
                 found.add (f);
 
-        std::sort (found.begin(), found.end(), [] (const juce::File& x, const juce::File& y)
+        std::sort (found.begin(), found.end(), [&shelf] (const juce::File& x, const juce::File& y)
         {
+            if (shelf != juce::File())
+                if (const int folders = x.getParentDirectory().getRelativePathFrom (shelf)
+                                            .compareNatural (y.getParentDirectory().getRelativePathFrom (shelf));
+                    folders != 0)
+                    return folders < 0;
+
             return x.getFileName().compareNatural (y.getFileName()) < 0;
         });
         return found;
@@ -103,7 +110,7 @@ void Channels::readCabinets()
     // The build's own stand first and the player's after them, each group in the order of its names:
     // what a player adds never lands among the factory ones. The build's own are the ones the product's
     // list names, not whatever another product laid out beside them.
-    irs = cabinetsAmong (bundledCabinets());
+    irs = cabinetsAmong (bundledCabinets(), set::cabinetsIn (device::DeviceLibrary::factoryDirectory()));
     factory = irs.size();
     irs.addArray (cabinetsIn (device::IrLibrary::directory()));
     irKeys.clear();
@@ -148,6 +155,16 @@ juce::String Channels::cabinetStem (const juce::File& file)
     if (digits > 0 && digits < name.length())
         name = name.substring (digits).trimCharactersAtStart ("-_. ");
     return name;
+}
+
+juce::String Channels::cabinetFolder (int index) const
+{
+    if (index < 0 || index >= juce::jmin (factory, irs.size()))
+        return {};
+
+    const auto shelf = set::cabinetsIn (device::DeviceLibrary::factoryDirectory());
+    const auto dir   = irs.getReference (index).getParentDirectory();
+    return dir.isAChildOf (shelf) ? dir.getRelativePathFrom (shelf).replaceCharacter ('\\', '/') : juce::String();
 }
 
 juce::String Channels::cabinetName (const juce::File& file)
