@@ -133,11 +133,31 @@ private:
 };
 
 //==============================================================================
+/** THE WARNING, wherever it stands — the top line's, small, and the parked screen's, large: a red triangle,
+    its corners rounded, an exclamation mark cut dark into it. Its measures in twentieths of its height. */
+struct Warning
+{
+    static constexpr juce::uint32 red = 0xffe8463a, cut = 0xff160606;
+    static constexpr float unit = 20.0f;                  // the triangle's height in these
+    static constexpr float corner = 2.5f;                 // the corners' rounding
+    static constexpr float barWidth = 2.6f, barHeight = 8.0f, barRadius = 1.3f;
+    static constexpr float barCentre = 0.52f;             // ...its middle this far down the triangle
+    static constexpr float dot = 2.8f, dotUp = 3.6f;      // the dot's size, its middle this far over the base
+};
+
 /** PARKED, IN THE MIDDLE OF THE NAV SCREEN: the warning triangle the top line carries, large, over the
     picture dimmed — the amp is out of the sound. Shown only while parked; it never takes a click. */
 class ParkSign final : public juce::Component
 {
 public:
+    /** How it is drawn: the screen darkened under it, the triangle as tall as the screen less a margin —
+        no less than a share of it, no more than a cap — and a little wider, and its red glow. */
+    static constexpr juce::uint32 dim = 0xff050304;
+    static constexpr float dimAlpha = 0.72f;
+    static constexpr float margin = 24.0f, atLeast = 0.8f, atMost = 96.0f, widthOfHeight = 1.15f;
+    static constexpr float glowAlpha = 0.55f;
+    static constexpr int   glowRadius = 16;
+
     ParkSign() { setInterceptsMouseClicks (false, false); }
     void paint (juce::Graphics&) override;
 };

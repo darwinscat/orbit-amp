@@ -198,30 +198,32 @@ namespace
     {
         juce::Path sign;
         sign.addTriangle (box.getCentreX(), box.getY(), box.getRight(), box.getBottom(), box.getX(), box.getBottom());
-        return sign.createPathWithRoundedCorners (2.5f * box.getHeight() / 20.0f);
+        return sign.createPathWithRoundedCorners (Warning::corner * box.getHeight() / Warning::unit);
     }
 
     /** The warning: the red triangle, an exclamation mark cut dark into it. */
     void drawWarning (juce::Graphics& g, juce::Rectangle<float> box)
     {
-        const float h = box.getHeight(), k = h / 20.0f;
-        g.setColour (juce::Colour (0xffe8463a));
+        const float h = box.getHeight(), k = h / Warning::unit;
+        g.setColour (juce::Colour (Warning::red));
         g.fillPath (warningShape (box));
-        g.setColour (juce::Colour (0xff160606));
-        g.fillRoundedRectangle (juce::Rectangle<float> (2.6f * k, 8.0f * k).withCentre ({ box.getCentreX(), box.getY() + h * 0.52f }), 1.3f * k);
-        g.fillEllipse (juce::Rectangle<float> (2.8f * k, 2.8f * k).withCentre ({ box.getCentreX(), box.getBottom() - 3.6f * k }));
+        g.setColour (juce::Colour (Warning::cut));
+        g.fillRoundedRectangle (juce::Rectangle<float> (Warning::barWidth * k, Warning::barHeight * k)
+                                    .withCentre ({ box.getCentreX(), box.getY() + h * Warning::barCentre }), Warning::barRadius * k);
+        g.fillEllipse (juce::Rectangle<float> (Warning::dot * k, Warning::dot * k)
+                           .withCentre ({ box.getCentreX(), box.getBottom() - Warning::dotUp * k }));
     }
 }
 
 void ParkSign::paint (juce::Graphics& g)
 {
     const auto area = getLocalBounds().toFloat();
-    g.setColour (juce::Colour (0xff050304).withAlpha (0.72f));
+    g.setColour (juce::Colour (dim).withAlpha (dimAlpha));
     g.fillRect (area);
 
-    const float h = juce::jmin (juce::jmax (area.getHeight() - 24.0f, area.getHeight() * 0.8f), 96.0f);
-    const auto box = juce::Rectangle<float> (h * 1.15f, h).withCentre (area.getCentre());
-    juce::DropShadow (juce::Colour (0xffe8463a).withAlpha (0.55f), 16, {}).drawForPath (g, warningShape (box));
+    const float h = juce::jmin (juce::jmax (area.getHeight() - margin, area.getHeight() * atLeast), atMost);
+    const auto box = juce::Rectangle<float> (h * widthOfHeight, h).withCentre (area.getCentre());
+    juce::DropShadow (juce::Colour (Warning::red).withAlpha (glowAlpha), glowRadius, {}).drawForPath (g, warningShape (box));
     drawWarning (g, box);
 }
 

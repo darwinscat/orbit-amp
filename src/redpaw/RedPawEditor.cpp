@@ -581,7 +581,42 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     // the red triangle in its middle.
     auto* parkedScreen = new juce::DynamicObject();
     parkedScreen->setProperty ("picture", "hidden at once, no fade");
-    parkedScreen->setProperty ("sign", "ParkSign::paint (src/redpaw/RedPawControls.cpp): the picture box filled #050304 at 0.72, the triangle centred, its height min(max(h - 24, 0.8 h), 96), width 1.15 x that, a #e8463a glow at 0.55, radius 16");
+    parkedScreen->setProperty ("sign", "ParkSign::paint (src/redpaw/RedPawControls.cpp): the picture box darkened, the warning centred in it, glowing");
+    {
+        // ...and in numbers: the box H the picture's height; the triangle's height min (max (H - margin,
+        // atLeast x H), atMost), its width widthOfHeight x that; the mark in twentieths of the triangle's
+        // height, k = height / unit.
+        auto* data = new juce::DynamicObject();
+        auto* dim = new juce::DynamicObject();
+        dim->setProperty ("colour", colour (juce::Colour (ParkSign::dim)));
+        dim->setProperty ("alpha", ParkSign::dimAlpha);
+        data->setProperty ("dim", juce::var (dim));
+        auto* tri = new juce::DynamicObject();
+        tri->setProperty ("margin", ParkSign::margin);
+        tri->setProperty ("atLeast", ParkSign::atLeast);
+        tri->setProperty ("atMost", ParkSign::atMost);
+        tri->setProperty ("widthOfHeight", ParkSign::widthOfHeight);
+        tri->setProperty ("colour", colour (juce::Colour (Warning::red)));
+        tri->setProperty ("apex", "top centre; base along the bottom, corner to corner");
+        tri->setProperty ("cornerRadius", Warning::corner);           // in k
+        data->setProperty ("triangle", juce::var (tri));
+        auto* mark = new juce::DynamicObject();
+        mark->setProperty ("unit", Warning::unit);
+        mark->setProperty ("colour", colour (juce::Colour (Warning::cut)));
+        mark->setProperty ("barWidth", Warning::barWidth);
+        mark->setProperty ("barHeight", Warning::barHeight);
+        mark->setProperty ("barRadius", Warning::barRadius);
+        mark->setProperty ("barCentreOfHeight", Warning::barCentre);   // from the triangle's top
+        mark->setProperty ("dot", Warning::dot);
+        mark->setProperty ("dotUp", Warning::dotUp);                  // its middle over the base, in k
+        data->setProperty ("mark", juce::var (mark));
+        auto* glow = new juce::DynamicObject();
+        glow->setProperty ("colour", colour (juce::Colour (Warning::red)));
+        glow->setProperty ("alpha", ParkSign::glowAlpha);
+        glow->setProperty ("radius", ParkSign::glowRadius);
+        data->setProperty ("glow", juce::var (glow));
+        parkedScreen->setProperty ("signData", juce::var (data));
+    }
     nav->setProperty ("parked", juce::var (parkedScreen));
     auto* type = new juce::DynamicObject();
     type->setProperty ("gearPx", px15);
