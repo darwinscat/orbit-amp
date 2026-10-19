@@ -7,6 +7,238 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-10-19 — Darwin's Cat Amps: OrbitAmp, CatpitAmp and RedPawAmp in one installer
+
+### Every amp
+
+#### Changed
+- **The build time in the About window reads on your own clock, and says which zone.** It used to show
+  the UTC stamp as a bare time, so a build made just after midnight in Berlin read as the evening before.
+- **The cabinet convolves through Darwin's Cat's own convolver**, the one OrbitCab plays, instead of
+  JUCE's. At 48 kHz it sounds exactly as before. At other session rates it follows the IR more
+  closely: across the factory shelf, JUCE's was 1.5 to 2.5 dB off between 8 and 16 kHz and over
+  4 dB in the top octave; this one is a tenth of a decibel off below 16 kHz and under one above. The
+  cabinet's level is the same at every rate.
+- **On an Intel Mac or PC the reverb plays exactly what it plays on Apple Silicon.** The two used to
+  part by up to a millionth of full scale, some 120 dB down.
+- **One cabinet shelf for the whole family**, laid out in `Darwin's Cat/Factory/IRs`, one folder to a
+  maker: **Orange PPC212V** for Darwin's Cat's own ten, **Other** for the 21 third-party ones OrbitAmp has
+  always played. OrbitAmp carries all 31; CatpitAmp and RedPawAmp carry the
+  Orange's ten, as before, from the same shelf.
+- The cabinet lists follow those folders: OrbitAmp's IR menu has a submenu for each, with each cabinet's
+  line inside, and the faces' cabinet window heads the Orange's list before YOURS.
+- **One folder for your own IRs, for the whole family**: `Darwin's Cat/IRs`, beside `Factory`. OrbitAmp's SETUP
+  tree adds, renames, deletes and drags there, and the faces take dropped files in there, so an IR you add in one
+  product is there in all of them.
+- On its first start, each product **copies** the IRs it kept in its own `Darwin's Cat/<Product>/IRs` into the
+  family folder, once, folders and all. The old folder is left as it was. An IR already there under the same
+  name with the same bytes is not copied again; one with the same name and other bytes is kept beside it as
+  "name (Product).wav".
+- The version window lists `felitronics-guitar-core`, where the capture player now comes from, beside the
+  other libraries the build was made from.
+- **Of two Darwin's Cat amps that carry the same pack, the newer build's copy is the one in the shared
+  `Factory` folder**, and both play it. An older amp started afterwards leaves that copy as it is,
+  instead of the two writing their own back in turn every time either starts. A copy that has gone
+  missing is put back by whichever amp starts first.
+- **The packs Darwin's Cat's amps come with lie in one folder they share**, `Darwin's Cat/Factory`, beside
+  each amp's own folder: a pack two of them carry is one file there, and OrbitAmp's device list shows
+  every pack laid out in it, whichever amp laid it there. When an amp stops carrying a pack, the pack
+  stays as long as another amp still carries it. What you add yourself stays in OrbitAmp's own `Devices`
+  folder, as before.
+
+#### Fixed
+- **About counts the build from the release it follows.** The number of commits past the last release counted
+  from whichever tag in the tree was made last — CatpitAmp's own, after its release — so OrbitAmp's About
+  counted from CatpitAmp's release. It counts from the releases' `vX.Y.Z` now, in every product.
+- **The delay's repeats arrive exactly when TIME says.** After the time was changed, the echo settled a
+  hair short of the new time and stayed there — at 48 kHz, 28 samples early at 1.5 s and 2.3 ms at a
+  whole note at 40 BPM — so every repeat came that much early. It now lands on the time it is set to.
+- **A reverb that has just been loaded no longer lets a flash of the dry guitar into its first 10 ms.**
+- **The delay no longer reads past the end of its own memory.** On an Apple Silicon Mac it did so at its
+  default settings, 31 times a second, whether it was switched on or only in the rig; on any machine
+  some offset and time settings did the same. Whatever it found there was added to the sound. Usually
+  that was silence. When it was not, it was a click or a burst of noise, and the limiter could pull the
+  level down for a moment after it.
+- **A captured device no longer replays a moment of the last sound when the host restarts the audio.**
+  Changing the buffer size or the sample rate — and, in some hosts, pressing play — prepares the plugin
+  again, and a capture could answer the first silence after that with a scrap of what it was playing
+  before. It now starts clean.
+- **After a sample-rate change, moving a dial across a pack's captures crossfades to the next one when it
+  is ready — not before, and not long after.** The wait was still counted at the old rate: half as long
+  as the capture needs after going from 48 to 96 kHz, four times too long after going from 192 down to 48.
+- **With PACK LEVEL COMP off, restarting the audio no longer shifts a device's level for a moment.** For
+  about 40 ms it played at the pack's own input trim — the one the switch turns off — and then crept back.
+- **macOS 11 Big Sur and later**, on Apple Silicon and on Intel: every format of every amp says so, and opens there.
+  OrbitAmp 0.7.0 and CatpitAmp 0.2.0 said nothing, and were marked for the macOS of the machine that built them —
+  macOS 26 — so an older Mac would not open them.
+
+#### Dependencies
+- `felitronics-core` **v0.53.0 → v0.59.0.** Nothing the plugin plays sounds different.
+- `felitronics-appkit` **v0.21.0 → v0.21.1** — the build time above.
+- `felitronics-appkit` **v0.21.1 → v0.22.0** — the update check can tell one product's releases from
+  another's in a repository that ships several, and the family's mark is drawn at its size instead of
+  faded. Nothing OrbitAmp plays sounds different.
+- `felitronics-core` **v0.60.0 → v0.61.0** — the delay and the reverb now come from it, the same code
+  the browser demo plays. With the knobs standing still the delay sounds as it did to within 2.4e-7
+  and the reverb to within 6.5e-5 (MODULATED; the other five rooms within 3e-14).
+- `felitronics-core` **v0.31.0 → v0.53.0.** The capture player — the NAM engine and the pack player — moved
+  out of it into its own library.
+- `felitronics-guitar-core` **v0.1.0**, new: that library.
+- `felitronics-core` **v0.59.0 → v0.60.0**: the first release with `felitronics::dehum`, the hum canceller HUM
+  is built on.
+
+### OrbitAmp
+
+#### Added
+- **HUM — mains hum taken off the input** (OrbitAmp and CatpitAmp). Before the input trim, the 50 or 60 Hz hum
+  and its harmonics are cancelled by a comb of notches that follows the mains. The notches are 0.5 Hz wide while
+  you play, so a note beside a harmonic is barely touched, and 3 Hz wide while the strings are quiet, so the hum
+  is learned fast. The ring a note leaves in a notch is put back when the note stops, so a palm-muted chug no
+  longer drags an after-ring behind it.
+- **Off / 50 / 60 / Auto**, a machine setting shared by every window. Auto listens and decides 50 or 60 Hz by
+  itself in the first quiet second, and its line says "listening" until then. On a machine that never chose,
+  HUM starts Off and its first On is Auto. Off is a bypass: the stage keeps learning, and the way back is instant.
+  It listens only to the inputs the chain plays, so a hissing unused input does not hold Auto back.
+- **Where**: CatpitAmp has it in the INPUT lever's menu and in the settings menu's INPUT section, OrbitAmp in its
+  input column. The **H** key flips HUM between Off and the last mode, and on the cockpit a tag says which.
+- **LEARN** heads every HUM menu: mute the strings, press it, and the stage learns the hum in a couple of
+  seconds and shows its verdict. The gate's LEARN stays the gate's own.
+- Machine settings for tuning by ear: the notch width while playing (0.25–4 Hz), the width while quiet
+  (1–6 Hz) and how high it reaches (1.2–6.4 kHz, 2 kHz by default).
+- Known limits: a note held longer than 3 s with a partial on a mains harmonic can leave a short ring after it
+  stops. The plain case is the A string on 50 Hz mains, 5 × 110 = 11 × 50. A soft attack right after a note can
+  leave one too.
+- **Ten cabinet IRs of our own: the Orange PPC212V**, the cabinets CatpitAmp plays — DARK MATTER, ION
+  CAVITY, EVENT HORIZON, CORONAL FLARE, BROWN DWARF, ACCRETION GAP, DUST CLOUD, BLUE SHIFT, RED GIANT and
+  PULSAR BEAM. Darwin's Cat shot them on one 2x12, each IR a mix of three microphones at once: an SM57,
+  an e906 and a U87 Ai.
+- **Six Victory V4 packs come with OrbitAmp, in the AMP's OLD**: V4 Copper, V4 Copper TB, V4 Sheriff Ch1,
+  V4 Sheriff Ch2, V4 Kraken Ch1 and V4 Kraken Ch2 — The Copper, The Sheriff and The Kraken, captured by
+  Darwin's Cat. They ride inside the plug-in and the app like the X88-IR's, and are laid out in
+  `Darwin's Cat/Factory/OLD` the first time OrbitAmp starts. They are not among the family's devices: the top
+  of the AMP's menu lists the X88-IR and the IR-X, and the V4's six are in its OLD submenu, one to a line. If
+  you keep an `OLD` folder of your own in `Devices`, the menu still has one OLD, with yours and these in it. A
+  copy of one of them already in your own `Devices` folder stays there; the lists show the one that came with
+  OrbitAmp.
+- **The X88-IR comes with OrbitAmp**: its four channels as four preamp packs — X88-IR Normal, Altered,
+  Crunch and Overdrive, the captures CatpitAmp plays. They ride inside the plug-in and the app
+  themselves, in every format and on every system, and are laid out in `Darwin's Cat/Factory`, the folder
+  Darwin's Cat's amps share, the first time OrbitAmp starts. A copy of one of them already in your own
+  `Devices` folder stays there; the
+  lists show the one that came with OrbitAmp.
+
+#### Changed
+- **OrbitAmp's PREAMP is called AMP**, as the faces call it: its arrow in the strip, its face on the
+  panel, its list in SETUP, its rows in the load window (AMP and AMP EQ) and its controls as a host
+  lists them. A session keeps its settings: only the names a player reads changed.
+- **The Cab IR menu is sorted by cabinet**: Orange PPC212V, Behringer BG412S and Marshall 1960AX, each a
+  submenu that opens on a line saying what its IRs are — the cabinet, its speakers, and where they come
+  from. They are always there, at the top; your own IR library follows below them when it holds any.
+  A preset or a session saved on one of the factory IRs opens on the same one.
+- **A new OrbitAmp opens on DARK MATTER**, the first of the Orange's, instead of BIG BUBBA. A preset or a
+  session keeps the cabinet it was saved with.
+- **A new OrbitAmp opens as CatpitAmp's Crunch channel**: the X88-IR Crunch through DARK MATTER, with no
+  boost in the chain, the input and output columns in it at unity, and the delay switched on with its
+  mix at zero. INIT goes back to the same. A preset or a session keeps what it was saved with.
+
+#### Removed
+- **OrbitAmp has no BOOST block any more.** The chain is the tuner, the gate, the preamp with its EQ,
+  the delay, the reverb, the cabinet and the limiter: the boost, its EQ, its arrow in the strip, its
+  face on the panel, its row in the load window, its list in SETUP and its parameters are gone. The
+  preamp has the faceplate's first row to itself. A preset or a session saved with a boost in it
+  opens without one.
+
+### CatpitAmp
+
+#### Added
+- **CatpitAmp**: GATE's threshold and LIMITER's ceiling each on a short fader, in a slot cut into the
+  slanted beam beside its corner lamp and lying at the lamp's slant — the gate from -70 dB at its foot to
+  -40 at its head, the limiter from -3 dB to -0.1. Dim while its block is off; a double click puts it back
+  where it opens, a right click is that block's menu, and while it is held a tag says where it stands.
+  The lamps and the words over them light and open their menus as before.
+- **CatpitAmp, RedPawAmp**: LEARN in GATE's menu — OrbitAmp's own measurement: three seconds
+  of quiet, and the gate's threshold set the hysteresis above the loudest of them, the gate switched on.
+  While it listens, the face's own screen shows it — CatpitAmp's tuner glass, the rovers' nav screen:
+  LEARN — STAY QUIET, the level growing across, the threshold it would set dashed; then the threshold
+  set, CANCELLED or NOTHING HEARD for two seconds, and the screen as it was. A click on the screen
+  meanwhile cancels it, and so does anything that moves the gate — a preset, an undo, a register, its
+  fader.
+- **HUM — mains hum taken off the input** (OrbitAmp and CatpitAmp). Before the input trim, the 50 or 60 Hz hum
+  and its harmonics are cancelled by a comb of notches that follows the mains. The notches are 0.5 Hz wide while
+  you play, so a note beside a harmonic is barely touched, and 3 Hz wide while the strings are quiet, so the hum
+  is learned fast. The ring a note leaves in a notch is put back when the note stops, so a palm-muted chug no
+  longer drags an after-ring behind it.
+- **Off / 50 / 60 / Auto**, a machine setting shared by every window. Auto listens and decides 50 or 60 Hz by
+  itself in the first quiet second, and its line says "listening" until then. On a machine that never chose,
+  HUM starts Off and its first On is Auto. Off is a bypass: the stage keeps learning, and the way back is instant.
+  It listens only to the inputs the chain plays, so a hissing unused input does not hold Auto back.
+- **Where**: CatpitAmp has it in the INPUT lever's menu and in the settings menu's INPUT section, OrbitAmp in its
+  input column. The **H** key flips HUM between Off and the last mode, and on the cockpit a tag says which.
+- **LEARN** heads every HUM menu: mute the strings, press it, and the stage learns the hum in a couple of
+  seconds and shows its verdict. The gate's LEARN stays the gate's own.
+- Machine settings for tuning by ear: the notch width while playing (0.25–4 Hz), the width while quiet
+  (1–6 Hz) and how high it reaches (1.2–6.4 kHz, 2 kHz by default).
+- Known limits: a note held longer than 3 s with a partial on a mains harmonic can leave a short ring after it
+  stops. The plain case is the A string on 50 Hz mains, 5 × 110 = 11 × 50. A soft attack right after a note can
+  leave one too.
+
+#### Changed
+- **CatpitAmp and RedPawAmp carry their pictures finished.** Each used to correct
+  its panel picture every time it opened — the cockpit its windshield, its tone sockets and its TURBO frame,
+  a rover its rims, its lever's notches and its corner plates, each the lamps it lights itself. That is now
+  done once, in the tree, and the products carry the result as lossless WebP. What a player sees is the
+  same, pixel for pixel, and each product is smaller — by 4 to 8 MB on a Mac.
+- **Every amp but OrbitAmp is lighter** — by 5.7 MB in each format on the Mac, where the binary holds an Apple
+  Silicon half and an Intel one, and by 2.8 MB elsewhere. CatpitAmp and the rovers carry the Orange PPC212V's
+  ten cabinets, the ones they list and play, and no longer the 21 third-party IRs that only OrbitAmp lists. A
+  host that moves their Cabinet IR parameter to one of those 21 gets DARK MATTER, the cabinet they open on.
+
+### RedPawAmp
+
+This tree now builds a third product beside OrbitAmp and CatpitAmp: RedPawAmp, the dashboard of a Mars rover
+over the same engine. It comes in the family's release beside them.
+
+#### Added
+- **CatpitAmp, RedPawAmp**: LEARN in GATE's menu — OrbitAmp's own measurement: three seconds
+  of quiet, and the gate's threshold set the hysteresis above the loudest of them, the gate switched on.
+  While it listens, the face's own screen shows it — CatpitAmp's tuner glass, the rovers' nav screen:
+  LEARN — STAY QUIET, the level growing across, the threshold it would set dashed; then the threshold
+  set, CANCELLED or NOTHING HEARD for two seconds, and the screen as it was. A click on the screen
+  meanwhile cancels it, and so does anything that moves the gate — a preset, an undo, a register, its
+  fader.
+- **RedPawAmp** — four channels, picked as two gears and TURBO: the gear lever's CRUNCH and HI-GAIN, and
+  TURBO over either. Each gear's own switches are on the keys right of HPF and LPF, under their own names,
+  the position the switch stands at lit: CRUNCH's BRIGHT 1, CENTER and BRIGHT 2, HI-GAIN's TIGHT and FAT.
+  Each gear keeps its own DRIVE, tone, switches, keys, reverb, delay and cabinet, and opens on a room of its
+  own; TURBO is an option of the gear's, as its tone is — thrown, nothing else on the dashboard moves, and a
+  gear pulled comes back with TURBO as it was left. Keys 1 2 pick the gear and
+  T throws TURBO; MIDI Program Change 1–4 picks the four channels, controller 20 is TURBO.
+- **PARK**, the lever's top end: the whole amp out of the sound, the guitar coming through dry and in time
+  — at the INPUT and OUTPUT columns' levels, as the amp was, never louder past a master turned down —
+  the rooms and the delay ringing out — and the drive outside comes to a stand. A gear pulled plays again
+  on the channel that was waiting. 0 or P on the keyboard, Program Change 5, or the PARK parameter in a host.
+- Through the windscreen, an endless drive across Mars — on the GPU, as a 1993-style landscape on the CPU,
+  or a still picture — chosen from a right click on the glass; a drag across the glass steers.
+- The cyan ring round DRIVE and each tone knob shows where the knob stands — lit from the start of its
+  travel to its pointer — and brightens under the hand, easing back a moment after it has gone.
+- GATE's threshold and LIMITER's ceiling each on a short fader down its corner lamp's plate: the gate
+  from -70 dB at its foot to -40 at its head, the limiter from -3 dB to -0.1. Dim while its block is off,
+  and a right click on it is that block's menu.
+- Everything else the cockpit has, on the dashboard: DRIVE and the three tone knobs, the six keys, undo,
+  redo and the four registers on the roof's toggles, REVERB, DELAY and CAB, the INPUT and OUTPUT columns
+  with their lamps, GATE and LIMITER, the tuner on the nav screen, presets, the cabinets' window, MIDI.
+
+#### Changed
+- **CatpitAmp and RedPawAmp carry their pictures finished.** Each used to correct
+  its panel picture every time it opened — the cockpit its windshield, its tone sockets and its TURBO frame,
+  a rover its rims, its lever's notches and its corner plates, each the lamps it lights itself. That is now
+  done once, in the tree, and the products carry the result as lossless WebP. What a player sees is the
+  same, pixel for pixel, and each product is smaller — by 4 to 8 MB on a Mac.
+- **Every amp but OrbitAmp is lighter** — by 5.7 MB in each format on the Mac, where the binary holds an Apple
+  Silicon half and an Intel one, and by 2.8 MB elsewhere. CatpitAmp and the rovers carry the Orange PPC212V's
+  ten cabinets, the ones they list and play, and no longer the 21 third-party IRs that only OrbitAmp lists. A
+  host that moves their Cabinet IR parameter to one of those 21 gets DARK MATTER, the cabinet they open on.
+
 ## [0.7.0] — 2026-09-13 — your own cabinets, and a plugin that does not go quiet
 
 Two things a player will notice first. The cabinet plays IRs of your own, and a preset carries
