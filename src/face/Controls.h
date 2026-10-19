@@ -491,6 +491,16 @@ public:
     };
     void setDial (const Dial&);
 
+    /** ITS INK, the same on every face: its state violet while it is off, orange while it listens; the
+        note `heard`, `home` when the string is in tune; the dash while nothing is heard lilac at
+        `idleAlpha`, the octave and the pitch its A is tuned to lilac at `quietAlpha`, the numbers under the
+        ruler lilac at `numberAlpha`; the ticks violet, the centre orange, at `majorAlpha` and `minorAlpha`;
+        the needle `home`, warming to orange by `warmCents` out. */
+    static inline const juce::Colour home  { 0xff5fc97a };   // the family's in-tune green
+    static inline const juce::Colour heard { 0xffece9f6 };
+    static constexpr float idleAlpha = 0.35f, quietAlpha = 0.8f, numberAlpha = 0.6f;
+    static constexpr float majorAlpha = 0.9f, minorAlpha = 0.4f, warmCents = 25.0f;
+
 private:
     const core::TunerEar& ear;
     bool listening = true, muting = false, strip = false;

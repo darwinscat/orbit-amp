@@ -835,6 +835,23 @@ void Console::exportForWeb (const juce::File& dir)
         px->setProperty ("px15", stage::px15); px->setProperty ("px16", stage::px16);
         k->setProperty ("labelPx", juce::var (px));
         k->setProperty ("keyTracking", keyTracking);
+
+        // ...and the tuner's ink, the same on every face — what its screen is written with, whatever the
+        // hull's ink is (TunerFace).
+        auto* t = new juce::DynamicObject();
+        t->setProperty ("off", colourVar (violet));
+        t->setProperty ("on", colourVar (orange));          // ON, and MUTE
+        t->setProperty ("note", colourVar (TunerFace::heard));
+        t->setProperty ("inTune", colourVar (TunerFace::home));
+        t->setProperty ("idle", colourVar (lilac.withAlpha (TunerFace::idleAlpha)));       // the dash while nothing is heard
+        t->setProperty ("quiet", colourVar (lilac.withAlpha (TunerFace::quietAlpha)));     // the octave, "A 442"
+        t->setProperty ("numbers", colourVar (lilac.withAlpha (TunerFace::numberAlpha)));  // under the ruler, on a screen of its own
+        t->setProperty ("tick", colourVar (violet));
+        t->setProperty ("centreTick", colourVar (orange));
+        t->setProperty ("majorTickAlpha", TunerFace::majorAlpha);
+        t->setProperty ("minorTickAlpha", TunerFace::minorAlpha);
+        t->setProperty ("needleWarmsToOrangeByCents", TunerFace::warmCents);
+        k->setProperty ("tuner", juce::var (t));
         o->setProperty ("look", juce::var (k));
     }
 
