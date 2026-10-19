@@ -768,8 +768,10 @@ private:
     {
         // PARKED, the amp is out of the sound: every link stands by — the captured blocks' fades and
         // wires hand the dry signal through at the chain's own latency, the rooms and the delay are no
-        // longer fed and ring out, the trims go to unity — and only the tuner goes on listening.
-        if (row != params::rowTuner && isParked())
+        // longer fed and ring out, the blocks' trims go to unity — but the tuner goes on listening, and
+        // the player's own levels, IN and OUT, go on holding: the dry guitar comes out where they put
+        // the amp, not at full level past a master turned down.
+        if (row != params::rowTuner && row != params::rowIn && row != params::rowOut && isParked())
             return false;
 
         const auto* on = rowOn[(size_t) row];

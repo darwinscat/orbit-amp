@@ -11,7 +11,8 @@ OrbitAmp's build or installers.
   gear's, as its tone is — thrown, only the Boost changes, and a gear pulled comes back with TURBO as it
   was left. Keys 1 2 pick the gear and
   T throws TURBO; MIDI Program Change 1–4 picks the four channels, controller 20 is TURBO.
-- **PARK**, the lever's top end: the whole amp out of the sound, the guitar coming through dry and in time,
+- **PARK**, the lever's top end: the whole amp out of the sound, the guitar coming through dry and in time
+  — at the INPUT and OUTPUT columns' levels, as the amp was, never louder past a master turned down —
   the rooms and the delay ringing out — and the drive outside comes to a stand. A gear pulled plays again
   on the channel that was waiting. 0 or P on the keyboard, Program Change 5, or the PARK parameter in a host.
 - Through the windscreen, an endless drive across Mars — on the GPU, as a 1993-style landscape on the CPU,

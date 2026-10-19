@@ -237,6 +237,23 @@ int main()
             std::printf ("      parked: %d samples late, the worst sample %.2g off the input\n", late, (double) worst);
             check (worst < 1.0e-3f, "parked, the input comes out as it went in, as late as the chain reports");
 
+            // ...through the player's own levels: a master turned down holds the dry guitar down too.
+            if (auto* master = amp->apvts.getParameter (params::outTrim))
+            {
+                const float was = master->getValue();
+                master->setValueNotifyingHost (master->convertTo0to1 (-12.0f));
+                play();                              // the master's ramp settles
+                play();
+                const float g = juce::Decibels::decibelsToGain (-12.0f);
+                float down = 0.0f;
+                for (size_t n = (size_t) (block * 8); n < out.size(); ++n)
+                    down = juce::jmax (down, std::abs (out[n] - g * in[n - (size_t) late]));
+                std::printf ("      parked under OUT at -12 dB: the worst sample %.2g off the input 12 dB down\n", (double) down);
+                check (down < 1.0e-3f, "parked, OUT still holds the level: at -12 dB the dry input comes out 12 dB down");
+                master->setValueNotifyingHost (was);
+                play();
+            }
+
             park->setValueNotifyingHost (0.0f);
             check (! amp->isParked(), "...and the amp plays again when PARK is let go");
             amp->releaseResources();
