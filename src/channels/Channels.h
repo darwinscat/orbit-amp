@@ -187,7 +187,7 @@ public:
     int  cabinet() const;
     void chooseCabinet (int index);
 
-    /** THE FOLDER OF THE FACTORY SHELF a cabinet of the build's own lies in — `Orange PPC112`, `Other`
+    /** THE FOLDER OF THE FACTORY SHELF a cabinet of the build's own lies in — `Orange PPC212V`, `Other`
         (device/FactoryShelf.h) — as the panel heads its lists by them; empty for one at the top of the
         shelf, and for a cabinet of the player's. */
     juce::String cabinetFolder (int index) const;

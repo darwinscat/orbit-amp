@@ -569,7 +569,7 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/20-don-spinacio.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav"
 
-        # ...and Darwin's Cat's own ten, shot off the Orange, in `Orange PPC112`: referenced in the
+        # ...and Darwin's Cat's own ten, shot off the Orange, in `Orange PPC212V`: referenced in the
         # set's folder rather than copied, one copy in the tree. resources/set/IRs.md says what they
         # are and how they were shot.
         "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"

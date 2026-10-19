@@ -77,8 +77,8 @@ int main()
     {
         const auto shelf = factory.getChildFile ("IRs");
         const auto in = [&shelf] (const char* folder) { return shelf.getChildFile (folder).findChildFiles (juce::File::findFiles, false, "*.wav").size(); };
-        check (cabinets.size() == 31 && in ("Orange PPC112") == 10 && in ("Other") == 21,
-               "...the cabinets among them in the shelf's folders: ten in Orange PPC112, twenty-one in Other");
+        check (cabinets.size() == 31 && in ("Orange PPC212V") == 10 && in ("Other") == 21,
+               "...the cabinets among them in the shelf's folders: ten in Orange PPC212V, twenty-one in Other");
     }
 
     // A name is a promise about the capture: "X88-IR Crunch" is the pack whose rig_id is x88-ir-crunch-….

@@ -18,7 +18,7 @@ using channels::Channels;
     the slider gives each a few pixels of its travel.
 
     LISTS THAT NEVER MIX. What the build carries comes first, a list for each folder of the family's
-    shelf it lies in (ORANGE PPC112, OTHER — device/FactoryShelf.h), each headed by its folder's name;
+    shelf it lies in (ORANGE PPC212V, OTHER — device/FactoryShelf.h), each headed by its folder's name;
     YOURS, after them, is what the player has added — dropped on the face, or taken in with ADD. A click
     on a row plays that cabinet. The rows stand in columns, since a face's window is wide and not tall,
     and when there are more columns than the window has room for, the lists scroll sideways.

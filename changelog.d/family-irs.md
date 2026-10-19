@@ -1,6 +1,6 @@
 ### Changed
 - **One cabinet shelf for the whole family**, laid out in `Darwin's Cat/Factory/IRs`, one folder to a
-  maker: **Orange PPC112** for Darwin's Cat's own ten, **Other** for the 21 third-party ones OrbitAmp has
+  maker: **Orange PPC212V** for Darwin's Cat's own ten, **Other** for the 21 third-party ones OrbitAmp has
   always played. OrbitAmp carries all 31; CatpitAmp, RedPawAmp, FrostPawAmp and AmberPawAmp carry the
   Orange's ten, as before, from the same shelf.
 - The cabinet lists follow those folders: OrbitAmp's IR menu has a submenu for each, with each cabinet's

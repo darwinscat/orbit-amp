@@ -1151,7 +1151,7 @@ int main()
                     split.addIfNotAlreadyThere (juce::String::fromUTF8 (shelf.about).upToFirstOccurrenceOf (" \xc2\xb7", false, false));
         report ("...every cabinet's IRs lie in one folder of the shelf", split.isEmpty(), split.joinIntoString (", "));
         report ("...and DARK MATTER in Darwin's Cat's own, the Orange's",
-                juce::String (orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault).folder) == "Orange PPC112");
+                juce::String (orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault).folder) == "Orange PPC212V");
 
         // The default is a NUMBER, and a number names a cabinet only while the list stands still.
         const auto fresh = std::make_unique<orbitamp::AmpProcessor>();

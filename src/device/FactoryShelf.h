@@ -18,7 +18,7 @@ namespace orbitamp::device::shelf
     laid out with the product's set in the family's `Factory/IRs` (FactorySet.h), so that a cabinet is one
     file on the machine however many of the family carry it.
 
-    ON THE SHELF IN FOLDERS, one for each maker's cabinets — `Orange PPC112` for Darwin's Cat's own and
+    ON THE SHELF IN FOLDERS, one for each maker's cabinets — `Orange PPC212V` for Darwin's Cat's own and
     `Other` for the rest. OrbitAmp carries the whole shelf and lists it by them, a submenu each; the faces
     carry Darwin's Cat's own folder alone (`carried (ours)`), one list. A cabinet joining the shelf joins
     a folder, or brings a new one.
@@ -31,7 +31,7 @@ namespace orbitamp::device::shelf
 inline constexpr const char* folderName = "IRs";
 
 /** The shelf's folders. */
-inline constexpr const char* ours  = "Orange PPC112";
+inline constexpr const char* ours  = "Orange PPC212V";
 inline constexpr const char* other = "Other";
 
 /** One IR of the shelf: the folder it lies in, its file's name as the tree has it, and its bytes. */

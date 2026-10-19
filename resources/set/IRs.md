@@ -4,7 +4,7 @@ Their terms of use are in [`../CONTENT-LICENSE.md`](../CONTENT-LICENSE.md).
 
 What is in `IRs/`, and where it came from. Every product of the family carries every one of them in
 its binary, on the family's cabinet shelf (`src/device/FactoryShelf.h`), and lays them out in
-`Darwin's Cat/Factory/IRs/Orange PPC112`; this note stays in the tree.
+`Darwin's Cat/Factory/IRs/Orange PPC212V`; this note stays in the tree.
 
 ## `02` … `12` — the Orange PPC212V
 

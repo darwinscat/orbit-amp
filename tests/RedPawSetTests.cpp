@@ -111,9 +111,9 @@ int main (int argc, char** argv)
         const auto shelf = set::cabinetsIn (factory);
         const auto in = [&shelf] (const char* folder) { return shelf.getChildFile (folder).findChildFiles (juce::File::findFiles, false, "*.wav").size(); };
         check (stray == 0, "the rover's own set data holds packs alone");
-        check (in ("Orange PPC112") == 10 && in ("Other") == 0 && shelf.findChildFiles (juce::File::findFiles, false).isEmpty(),
+        check (in ("Orange PPC212V") == 10 && in ("Other") == 0 && shelf.findChildFiles (juce::File::findFiles, false).isEmpty(),
                "the cabinets lie in the Orange's folder, all ten, none in Other and none loose");
-        check (shelf.getChildFile ("Orange PPC112/02-dark-matter.wav").existsAsFile(), "...DARK MATTER among the Orange's");
+        check (shelf.getChildFile ("Orange PPC212V/02-dark-matter.wav").existsAsFile(), "...DARK MATTER among the Orange's");
     }
 
     // THE CHANNELS' PACKS, each by the capture it holds, and nothing else among the packs. On Mars the
