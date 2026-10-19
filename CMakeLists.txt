@@ -525,7 +525,8 @@ add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 # system — and laid out in the family's Factory folder when it starts (src/device/FactorySet.h says
 # why a bundle will not do). OrbitAmp is the player of the whole library: it carries EVERY pack in
 # resources/set/Devices, each under its own name — every folder there, zipped. A pack added there is
-# carried from the next build on, with nobody to remember to list it.
+# carried from the next build on, with nobody to remember to list it. Where in the folder each lies is
+# OrbitAmpSet.h's to say: the family's devices at its top, the V4's six put away in its OLD.
 list(LENGTH ORBITAMP_SET_PACKS ORBITAMP_SET_COUNT)
 message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the binary")
 juce_add_binary_data(OrbitAmpSetData

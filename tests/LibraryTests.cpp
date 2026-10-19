@@ -441,6 +441,14 @@ int main()
                                                            && ! into.getChildFile ("Rodent.orbitrig").exists());
         report ("...and says which pack it already is",  refused == "RAT", refused);
 
+        // ...and so is one the build has put away in a folder of the factory (OrbitAmpSet.h: OLD).
+        pack (factory.getChildFile ("OLD"), "Big Muff", "big-muff-77c1");
+        refused.clear();
+        report ("a capture the build put away is refused too", DeviceLibrary::importDevice (pack (src, "Muff", "big-muff-77c1"),
+                                                                                           into, factory, retire, &refused) == juce::File()
+                                                                 && ! into.getChildFile ("Muff.orbitrig").exists() && refused == "Big Muff",
+                refused);
+
         report ("a lone model has no rig_id to merge by", DeviceLibrary::rigIdOf (work.getChildFile ("dev-src/clean.nam")).isEmpty());
 
         // The selectors' list: copies already on disk show once.
@@ -463,6 +471,9 @@ int main()
         list.add (entry ("Mystery",   "",    false, 1));
         list.add (entry ("Mystery 2", "",    false, 2));
         list.add (entry ("clean",     "ts",  false, 1, true));
+        list.add (entry ("V4",        "v4",  true,  500));   // a build put it away in OLD...
+        list.getReference (list.size() - 1).folder.add ("OLD");
+        list.add (entry ("V4",        "v4",  true,  5));     // ...and another lays its own at the top, later
 
         DeviceLibrary::keepOnePerCapture (list);
 
@@ -474,9 +485,14 @@ int main()
             return false;
         };
 
-        report ("copies on disk: one entry per capture",  list.size() == 5, juce::String (list.size()) + " entries");
+        report ("copies on disk: one entry per capture",  list.size() == 6, juce::String (list.size()) + " entries");
         report ("...the newest of the player's copies",   has ("TS 2", false) && ! has ("TS", false));
         report ("...the build's over the player's",       has ("RAT", true) && ! has ("RAT", false));
+
+        bool putAway = false;
+        for (const auto& p : list)
+            putAway = putAway || (p.rigId == "v4" && p.folder.joinIntoString ("/") == "OLD");
+        report ("...of the builds', the one put away",    putAway);
         report ("...and nothing without an id is merged", has ("Mystery", false) && has ("Mystery 2", false)
                                                             && has ("clean", false));
     }
