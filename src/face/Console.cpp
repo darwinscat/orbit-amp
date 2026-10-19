@@ -628,6 +628,16 @@ void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window,
     writeForWeb (dir.getChildFile (file), poster);
 }
 
+void Console::webPatch (const juce::String& name, std::initializer_list<const juce::Component*> parts)
+{
+    juce::Rectangle<float> box;
+    for (const auto* c : parts)
+        if (c != nullptr && c->isVisible())
+            box = box.isEmpty() ? c->getBoundsInParent().toFloat() : box.getUnion (c->getBoundsInParent().toFloat());
+    if (! box.isEmpty())
+        webPatches.push_back ({ name, box });
+}
+
 void Console::poseNext (const juce::File& dir, int pose)
 {
     if (pose >= webPoses.count)
@@ -823,6 +833,24 @@ void Console::exportForWeb (const juce::File& dir)
 
     auto* world = new juce::DynamicObject();
     webPoses = {};
+    webPatches.clear();
+    {
+        std::vector<const juce::Component*> roof;
+        for (const auto& k : overhead)
+            roof.push_back (k.get());
+        juce::Rectangle<float> history = picture->historyBox().toFloat();     // the signs and the lamps by the keys
+        for (const auto* k : roof)
+            if (k != nullptr && k->isVisible())
+                history = history.getUnion (k->getBoundsInParent().toFloat());
+        webPatches.push_back ({ "history", history });
+    }
+    webPatch ("tuner", { &tuner });
+    webPatch ("gate", { &gateDoor });
+    webPatch ("limiter", { &limiterDoor });
+    webPatch ("version", { &version });
+    webPatch ("preset", { &presetDoor });
+    webPatch ("load", { &load });
+    webPatch ("memory", { &memory });
     webExtras (dir, *o, *world);
     o->setProperty ("world", juce::var (world));
     juce::Array<juce::var> posters;
@@ -833,6 +861,14 @@ void Console::exportForWeb (const juce::File& dir)
         posters.add (juce::var (poster));
     }
     o->setProperty ("posters", posters);
+    juce::Array<juce::var> patches;
+    for (const auto& [name, r] : webPatches)
+    {
+        auto v = rectVar (r);
+        v.getDynamicObject()->setProperty ("name", name);
+        patches.add (v);
+    }
+    o->setProperty ("posterPatches", patches);
 
     auto* bounds = new juce::DynamicObject();
     for (const auto& [name, r] : spritesWritten)

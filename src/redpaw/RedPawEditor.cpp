@@ -525,6 +525,17 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     webPoses.still = [] (int) { return Art::still(); };
     webPoses.window = windscreen;
     webPoses.hidden = { view.get() };
+    webPatch ("gateFader", { &threshold });
+    webPatch ("limiterFader", { &ceiling });
+    webPatch ("nav", { &header, &screen, &parkSign, &glassFilm });
+    webPatch ("learn", { &learnKey, &humKey });
+    std::vector<const juce::Component*> wiperKeys;
+    juce::Rectangle<float> wipersBox;
+    for (const auto& k : wiperButtons)
+        if (k != nullptr && k->isVisible())
+            wipersBox = wipersBox.isEmpty() ? k->getBoundsInParent().toFloat() : wipersBox.getUnion (k->getBoundsInParent().toFloat());
+    if (! wipersBox.isEmpty())
+        webPatches.push_back ({ "wipers", wipersBox });
 }
 
 RedPawEditor::RedPawEditor (AmpProcessor& p)

@@ -418,6 +418,8 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     webPoses.still = [] (int channel) { return stillSky (channel); };
     webPoses.window = glass;
     webPoses.hidden = { &space, &still, &monitor };
+    webPatch ("gateFader", { &threshold });
+    webPatch ("limiterFader", { &ceiling });
 }
 
 CatpitEditor::CatpitEditor (AmpProcessor& p)

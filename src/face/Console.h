@@ -236,6 +236,12 @@ protected:
     };
     WebPoses webPoses;
 
+    /** THE PATCHES OF THE POSTER: where the face draws, on its hull, a control the site will not work — the
+        history and the registers in the roof, the tuner, GATE's and LIMITER's doors, the version, PRESET,
+        CPU and MEM; a product adds its own (webPatch). Each the box round the component as it stands. */
+    std::vector<std::pair<juce::String, juce::Rectangle<float>>> webPatches;
+    void webPatch (const juce::String& name, std::initializer_list<const juce::Component*> parts);
+
     /** To that channel, by a hand: one step of the history. False, and the face back on the channel
         that is playing, when its pack is not installed. */
     bool go (int channel);

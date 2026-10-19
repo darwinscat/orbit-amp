@@ -42,6 +42,9 @@ public:
         picture leaves bare — its cut-out window — transparent. */
     juce::Image staticImage (float scale) const;
 
+    /** Where the history's signs and lamps are drawn (historyArea), for whoever must know the place. */
+    juce::Rectangle<int> historyBox() const { return historyArea(); }
+
 protected:
     bool canUndo = false, canRedo = false;
     int  activeRegister = 0;
