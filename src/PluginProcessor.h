@@ -951,7 +951,8 @@ public:
     void rescanDevices();
 
     /** The cabinet shelf — the family's (device/FactoryShelf.h), in params::cabIrNames order, and the
-        folder of it each IR lies in. The face draws the same bytes the engine convolves. */
+        folder of it each IR lies in. The face draws the same bytes the engine convolves. A number the
+        build does not carry (a face, and the shelf's `Other`) is DARK MATTER's, the default's. */
     struct IrBytes { const char* data; int size; const char* folder; };
     static const IrBytes& cabIrBytes (int index);
 

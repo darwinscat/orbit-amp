@@ -474,7 +474,11 @@ const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
     }();
 
     jassert (shelf.size() == (size_t) params::cabIrNames.size());
-    return shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
+    const auto& ir = shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
+
+    // A place the build holds empty — a face carries none of the shelf's `Other` — plays DARK MATTER, the
+    // cabinet every product opens on: a host that moves the number there hears a cabinet the build has.
+    return ir.data != nullptr ? ir : shelf[(size_t) params::cabIrDefault];
 }
 
 AmpProcessor::CabChoice AmpProcessor::cabChoice() const
