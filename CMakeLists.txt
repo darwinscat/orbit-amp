@@ -682,6 +682,21 @@ add_dependencies(OrbitAmpSetData OrbitAmpSetPacks)
 # felitronics_appkit_SOURCE_DIR is set by FetchContent above and points at whichever source won
 # (local checkout or fetched release).
 # ----------------------------------------------------------------------------
+
+# THE CABINET CATALOG (resources/cabinets.txt): every cabinet IR the family carries, each said once — its
+# number, its name, the folder of the shelf it lies in and its file. cmake/CabinetCatalog.cmake reads it
+# into the files the two data below carry, in the order of their numbers, and into the table the code
+# plays them by, generated/CabinetCatalog.h: the `cab_ir` parameter's names and default (src/Parameters.h)
+# and the shelf's folders (src/device/FactoryShelf.h). A cabinet joining the shelf is a line there, and its
+# file; nothing here or in the code lists one. What compiles Parameters.h links OrbitAmpCabinetCatalog for
+# the table — whatever links OrbitAmpData has it already.
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CabinetCatalog.cmake")
+orbitamp_cabinet_catalog("${CMAKE_CURRENT_SOURCE_DIR}/resources/cabinets.txt"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/resources"
+                         "${ORBITAMP_GENERATED_DIR}/CabinetCatalog.h")
+add_library(OrbitAmpCabinetCatalog INTERFACE)
+target_include_directories(OrbitAmpCabinetCatalog INTERFACE "${ORBITAMP_GENERATED_DIR}")   # CabinetCatalog.h
+
 juce_add_binary_data(OrbitAmpData
     SOURCES
         "${felitronics_appkit_SOURCE_DIR}/assets/catlogo.svg"
@@ -693,52 +708,25 @@ juce_add_binary_data(OrbitAmpData
 
         # THE FAMILY'S CABINET SHELF (src/device/FactoryShelf.h): every product links this data, plays
         # its cabinets from it and lays them out in the family's Factory/IRs, in the shelf's folders —
-        # here Darwin's Cat's own ten, shot off the Orange, in `Orange PPC212V`: referenced in the
-        # set's folder rather than copied, one copy in the tree. resources/set/IRs.md says what they
-        # are and how they were shot. The rest of the shelf is OrbitAmp's alone (OrbitAmpShelfOther).
-        "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
-        "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
-        "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
-        "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
-        "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
-        "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
-        "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
-        "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
-        "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
-        "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav"
+        # here the folder every product carries, Darwin's Cat's own ten, shot off the Orange, in
+        # `Orange PPC212V`: referenced in the set's folder rather than copied, one copy in the tree.
+        # The cabinet catalog above says which files they are; resources/set/IRs.md says what they are
+        # and how they were shot. The rest of the shelf is OrbitAmp's alone (OrbitAmpShelfOther).
+        ${ORBITAMP_CABINETS_EVERY_PRODUCT}
 )
+target_link_libraries(OrbitAmpData INTERFACE OrbitAmpCabinetCatalog)   # ...and the table it is played by
 
 # ...and the shelf's `Other`: the 21 third-party IRs OrbitAmp has always played, orbitcab's, referenced
-# there like everything shared — one copy in the ecosystem. ORBITAMP'S ALONE. A face lays out and lists
-# Darwin's Cat's own folder of the shelf and nothing else, so in a face they were 2.8 MB that nothing
-# ever reached; they are data of their own now, which only what is OrbitAmp links — the plug-in, and the
-# gates that play OrbitAmp's shelf. What links them says so (SHELF_CARRIES_OTHER), and where they are not
-# linked the shelf holds their places empty: a number `cab_ir` keeps is the same cabinet in every product.
+# there like everything shared — one copy in the ecosystem. ORBITAMP'S ALONE — the catalog's folders that
+# OrbitAmp carries. A face lays out and lists Darwin's Cat's own folder of the shelf and nothing else, so
+# in a face they were 2.8 MB that nothing ever reached; they are data of their own now, which only what is
+# OrbitAmp links — the plug-in, and the gates that play OrbitAmp's shelf. What links them says so
+# (SHELF_CARRIES_OTHER), and where they are not linked the shelf holds their places empty: a number
+# `cab_ir` keeps is the same cabinet in every product.
 juce_add_binary_data(OrbitAmpShelfOtherData
     NAMESPACE   ShelfOtherData
     HEADER_NAME ShelfOtherData.h
-    SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/01-cookie-monster.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/02-darth-genocider.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/03-kitten-slayer.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/04-kaiju-tamer.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/05-iceburn-suicide.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/06-vertical-lip-stabber.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/07-manslaughter-joe.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/08-big-bubba.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/09-devils-cunnilingus.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/10-october-32th.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/11-wumbo.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/12-world-collider.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/13-cannibal-choir.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/14-cathode-ray-fleshburn.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/15-impaler-jim.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/16-nacho-guacamole.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/17-pickle-punisher.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/18-wasabi-warrior.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/19-pesto-paladin.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/20-don-spinacio.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav")
+    SOURCES     ${ORBITAMP_CABINETS_ORBITAMP})
 add_library(OrbitAmpShelfOther INTERFACE)
 target_link_libraries(OrbitAmpShelfOther INTERFACE OrbitAmpShelfOtherData)
 target_compile_definitions(OrbitAmpShelfOther INTERFACE SHELF_CARRIES_OTHER=1)
@@ -1135,6 +1123,7 @@ function(orbitamp_probe target product main)
     target_link_libraries(${target} PRIVATE
         felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
         felitronics::delay felitronics::reverb   # Parameters.h names the delay's ladder and the room's characters from them
+        OrbitAmpCabinetCatalog                   # ...and the cabinets from the catalog's table
         juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
         juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 endfunction()
@@ -1309,6 +1298,7 @@ target_link_libraries(orbitamp_captured_test PRIVATE
     felitronics::limiter
     felitronics::delay               # Parameters.h takes the delay's ladder and ranges from it...
     felitronics::reverb              # ...and the room's characters
+    OrbitAmpCabinetCatalog           # ...and the cabinets, from the catalog's table
     juce::juce_audio_basics
     juce::juce_audio_processors
     juce::juce_dsp

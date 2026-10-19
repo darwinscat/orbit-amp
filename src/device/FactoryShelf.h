@@ -6,9 +6,11 @@
 #include "FactorySet.h"
 
 #include <BinaryData.h>
+#include <CabinetCatalog.h>   // written by CMake from resources/cabinets.txt
 
-/** Whether this build carries the shelf's `Other` — OrbitAmp does; the faces do not. Said by the data that
-    holds those IRs (CMakeLists.txt: OrbitAmpShelfOther), which is linked only where it is said. */
+/** Whether this build carries the shelf's `Other` — the folders the cabinet catalog gives OrbitAmp alone.
+    OrbitAmp does; the faces do not. Said by the data that holds those IRs (CMakeLists.txt:
+    OrbitAmpShelfOther), which is linked only where it is said. */
 #ifndef SHELF_CARRIES_OTHER
  #define SHELF_CARRIES_OTHER 0
 #endif
@@ -37,14 +39,15 @@ namespace orbitamp::device::shelf
 
     IN THE ORDER OF THE `cab_ir` PARAMETER (params::cabIrNames): what an OrbitAmp session keeps of its
     cabinet is an index into this list, so a cabinet joins it at the end and nothing already here ever
-    moves — wherever its folder stands, and whether or not the build carries it. */
+    moves — wherever its folder stands, and whether or not the build carries it. The cabinet catalog
+    (resources/cabinets.txt) says every IR of it once — its number, its folder, its name, its file — and
+    CMake builds the files into the data and the catalog into the table read here. */
 
 /** Where the shelf lies in a factory folder. */
 inline constexpr const char* folderName = "IRs";
 
-/** The shelf's folders. */
-inline constexpr const char* ours  = "Orange PPC212V";
-inline constexpr const char* other = "Other";
+/** The shelf's folder every product carries — Darwin's Cat's own. */
+inline constexpr const char* ours = catalog::ours;
 
 /** One IR of the shelf: the folder it lies in, its file's name as the tree has it, and its bytes — no
     bytes and no name for one the build does not carry. */
@@ -61,78 +64,41 @@ inline const std::vector<Ir>& irs()
 {
     static const std::vector<Ir> shelf = []
     {
-        struct Held { const char* folder; const char* data; int size; };
-
-        // `Other`'s IRs where the build carries them, and their places, empty, where it does not.
-       #if SHELF_CARRIES_OTHER
-        #define ORBITAMP_SHELF_OTHER(ir) { other, ShelfOtherData::ir, ShelfOtherData::ir##Size }
-       #else
-        #define ORBITAMP_SHELF_OTHER(ir) { other, nullptr, 0 }
-       #endif
-
-        const Held held[] {
-            // The Jesters Brutal Pack's fifteen, then the Jesters Emerald Pack's six.
-            ORBITAMP_SHELF_OTHER (_01cookiemonster_wav),
-            ORBITAMP_SHELF_OTHER (_02darthgenocider_wav),
-            ORBITAMP_SHELF_OTHER (_03kittenslayer_wav),
-            ORBITAMP_SHELF_OTHER (_04kaijutamer_wav),
-            ORBITAMP_SHELF_OTHER (_05iceburnsuicide_wav),
-            ORBITAMP_SHELF_OTHER (_06verticallipstabber_wav),
-            ORBITAMP_SHELF_OTHER (_07manslaughterjoe_wav),
-            ORBITAMP_SHELF_OTHER (_08bigbubba_wav),
-            ORBITAMP_SHELF_OTHER (_09devilscunnilingus_wav),
-            ORBITAMP_SHELF_OTHER (_10october32th_wav),
-            ORBITAMP_SHELF_OTHER (_11wumbo_wav),
-            ORBITAMP_SHELF_OTHER (_12worldcollider_wav),
-            ORBITAMP_SHELF_OTHER (_13cannibalchoir_wav),
-            ORBITAMP_SHELF_OTHER (_14cathoderayfleshburn_wav),
-            ORBITAMP_SHELF_OTHER (_15impalerjim_wav),
-            ORBITAMP_SHELF_OTHER (_16nachoguacamole_wav),
-            ORBITAMP_SHELF_OTHER (_17picklepunisher_wav),
-            ORBITAMP_SHELF_OTHER (_18wasabiwarrior_wav),
-            ORBITAMP_SHELF_OTHER (_19pestopaladin_wav),
-            ORBITAMP_SHELF_OTHER (_20donspinacio_wav),
-            ORBITAMP_SHELF_OTHER (_21killdill_wav),
-
-            // Darwin's Cat's own, in the order of their files.
-            { ours, BinaryData::_02darkmatter_wav,           BinaryData::_02darkmatter_wavSize },
-            { ours, BinaryData::_03ioncavity_wav,            BinaryData::_03ioncavity_wavSize },
-            { ours, BinaryData::_04eventhorizon_wav,         BinaryData::_04eventhorizon_wavSize },
-            { ours, BinaryData::_06coronalflare_wav,         BinaryData::_06coronalflare_wavSize },
-            { ours, BinaryData::_07browndwarf_wav,           BinaryData::_07browndwarf_wavSize },
-            { ours, BinaryData::_08accretiongap_wav,         BinaryData::_08accretiongap_wavSize },
-            { ours, BinaryData::_09dustcloud_wav,            BinaryData::_09dustcloud_wavSize },
-            { ours, BinaryData::_10blueshift_wav,            BinaryData::_10blueshift_wavSize },
-            { ours, BinaryData::_11redgiant_wav,             BinaryData::_11redgiant_wavSize },
-            { ours, BinaryData::_12pulsarbeam_wav,           BinaryData::_12pulsarbeam_wavSize },
-        };
-        #undef ORBITAMP_SHELF_OTHER
-
-        // The file's name is the one the binary keeps beside the bytes: said once, in the tree — in
-        // whichever of the two data holds them.
-        const auto fileOf = [] (const char* data)
+        // An IR's bytes, found by its file's name in the data that holds its folder: Darwin's Cat's own
+        // in the data every product links, the rest in `Other`'s, where the build carries it — and none
+        // where it does not, so its place is held empty.
+        const auto held = [] (const catalog::Ir& ir, int& size) -> const char*
         {
-            for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+            const auto file = juce::String::fromUTF8 (ir.file);
+
+            if (juce::String (ir.folder) == ours)
             {
-                int size = 0;
-                if (BinaryData::getNamedResource (BinaryData::namedResourceList[i], size) == data)
-                    return juce::String::fromUTF8 (BinaryData::originalFilenames[i]);
+                for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+                    if (juce::String::fromUTF8 (BinaryData::originalFilenames[i]) == file)
+                        return BinaryData::getNamedResource (BinaryData::namedResourceList[i], size);
+                return nullptr;
             }
+
            #if SHELF_CARRIES_OTHER
             for (int i = 0; i < ShelfOtherData::namedResourceListSize; ++i)
-            {
-                int size = 0;
-                if (ShelfOtherData::getNamedResource (ShelfOtherData::namedResourceList[i], size) == data)
-                    return juce::String::fromUTF8 (ShelfOtherData::originalFilenames[i]);
-            }
+                if (juce::String::fromUTF8 (ShelfOtherData::originalFilenames[i]) == file)
+                    return ShelfOtherData::getNamedResource (ShelfOtherData::namedResourceList[i], size);
            #endif
-            return juce::String();
+            return nullptr;
         };
 
         std::vector<Ir> out;
 
-        for (const auto& h : held)
-            out.push_back ({ h.folder, h.data != nullptr ? fileOf (h.data) : juce::String(), h.data, h.size });
+        for (const auto& ir : catalog::irs)
+        {
+            int size = 0;
+            const char* data = held (ir, size);
+
+            if (data != nullptr)
+                out.push_back ({ ir.folder, juce::String::fromUTF8 (ir.file), data, size });
+            else
+                out.push_back ({ ir.folder, juce::String(), nullptr, 0 });
+        }
 
         return out;
     }();

@@ -1,0 +1,78 @@
+# THE CABINET CATALOG: every cabinet IR a Darwin's Cat amp carries, each said ONCE, here. CMake reads it
+# (cmake/CabinetCatalog.cmake) to put the files into the binaries — Darwin's Cat's own into the data every
+# product links, the rest into the data OrbitAmp alone links — and to write the table the code plays them
+# by (<build>/generated/CabinetCatalog.h): the names and the default of the `cab_ir` parameter, the
+# shelf's folders the products lay them out in (src/device/FactoryShelf.h), and the cabinets the IR menu
+# shows them by (src/Parameters.h, cabShelves).
+#
+# ADDING A CABINET IR IS ONE LINE: an `ir` line under its cabinet, with the next number nobody has had,
+# and its file in the tree. A new cabinet is a `cabinet` line with its IRs under it; a new maker's, a
+# `folder` line as well. The menu shows a cabinet as one run of numbers, so a new IR goes under the
+# cabinet that holds the last number, or under a cabinet of its own — CMake says so when it does not.
+#
+# Four kinds of line, their fields parted by `|` (the spaces around a field are not part of it):
+#
+#   folder  | <name> | <who carries it>
+#       A folder of the shelf, under Factory/IRs. `every product` is the folder the faces lay out and
+#       list too — one folder is — and `OrbitAmp` is one that OrbitAmp alone carries: in a face its
+#       places are held with nothing in them.
+#
+#   cabinet | <folder> | <about>
+#       A cabinet, in the order the IR menu shows them: the folder its IRs lie in, and the line that
+#       heads them in that folder's submenu — the cabinet, its speakers, where they come from.
+#
+#   ir      | <number> | <name> | <file>
+#       An IR of the cabinet above it. THE NUMBER IS FOR GOOD: what a session or a preset keeps of its
+#       cabinet is this number, so it never moves and is never given to another IR — a session saved on
+#       WUMBO opens on WUMBO. The numbers run from 0 with none left out, and a cabinet's IRs stand in
+#       one run of them, in the order the menu shows them. The name is the one the player reads; the
+#       file is under resources/, and its name is the one it is laid out under, so no two may share one.
+#
+#   default | <name>
+#       The cabinet a fresh instance opens on, and every face's channels too.
+
+folder  | Orange PPC212V | every product
+folder  | Other          | OrbitAmp
+
+# Darwin's Cat's own, shot off the Orange (resources/set/IRs.md says what they are and how), in the
+# order of their files.
+cabinet | Orange PPC212V | Orange PPC212V · G12M-65 Creamback · SM57 + e906 + U87 Ai mix · Darwin's Cat
+ir      | 21 | DARK MATTER           | set/IRs/02-dark-matter.wav
+ir      | 22 | ION CAVITY            | set/IRs/03-ion-cavity.wav
+ir      | 23 | EVENT HORIZON         | set/IRs/04-event-horizon.wav
+ir      | 24 | CORONAL FLARE         | set/IRs/06-coronal-flare.wav
+ir      | 25 | BROWN DWARF           | set/IRs/07-brown-dwarf.wav
+ir      | 26 | ACCRETION GAP         | set/IRs/08-accretion-gap.wav
+ir      | 27 | DUST CLOUD            | set/IRs/09-dust-cloud.wav
+ir      | 28 | BLUE SHIFT            | set/IRs/10-blue-shift.wav
+ir      | 29 | RED GIANT             | set/IRs/11-red-giant.wav
+ir      | 30 | PULSAR BEAM           | set/IRs/12-pulsar-beam.wav
+
+# orbitcab's set, the IRs OrbitAmp has always played: the Jesters Brutal Pack's fifteen...
+cabinet | Other | mod. Behringer BG412S · Celestion V30 / Rockdriver Jr / Eminence DV-77 · Jesters Brutal Pack 1.0
+ir      |  0 | COOKIE MONSTER        | ir/01-cookie-monster.wav
+ir      |  1 | DARTH GENOCIDER       | ir/02-darth-genocider.wav
+ir      |  2 | KITTEN SLAYER         | ir/03-kitten-slayer.wav
+ir      |  3 | KAIJU TAMER           | ir/04-kaiju-tamer.wav
+ir      |  4 | ICEBURN SUICIDE       | ir/05-iceburn-suicide.wav
+ir      |  5 | VERTICAL LIP STABBER  | ir/06-vertical-lip-stabber.wav
+ir      |  6 | MANSLAUGHTER JOE      | ir/07-manslaughter-joe.wav
+ir      |  7 | BIG BUBBA             | ir/08-big-bubba.wav
+ir      |  8 | DEVILS CUNNILINGUS    | ir/09-devils-cunnilingus.wav
+ir      |  9 | OCTOBER 32TH          | ir/10-october-32th.wav
+ir      | 10 | WUMBO                 | ir/11-wumbo.wav
+ir      | 11 | WORLD COLLIDER        | ir/12-world-collider.wav
+ir      | 12 | CANNIBAL CHOIR        | ir/13-cannibal-choir.wav
+ir      | 13 | CATHODE RAY FLESHBURN | ir/14-cathode-ray-fleshburn.wav
+ir      | 14 | IMPALER JIM           | ir/15-impaler-jim.wav
+
+# ...and the Jesters Emerald Pack's six.
+cabinet | Other | Marshall 1960AX · Celestion G12M Greenback 25W · Jesters Emerald Pack
+ir      | 15 | NACHO GUACAMOLE       | ir/16-nacho-guacamole.wav
+ir      | 16 | PICKLE PUNISHER       | ir/17-pickle-punisher.wav
+ir      | 17 | WASABI WARRIOR        | ir/18-wasabi-warrior.wav
+ir      | 18 | PESTO PALADIN         | ir/19-pesto-paladin.wav
+ir      | 19 | DON SPINACIO          | ir/20-don-spinacio.wav
+ir      | 20 | KILL DILL             | ir/21-kill-dill.wav
+
+default | DARK MATTER

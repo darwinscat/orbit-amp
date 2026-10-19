@@ -1099,11 +1099,12 @@ int main()
 
     }
 
-    // THE FACTORY SHELF IS THREE LISTS that agree only while somebody keeps them in step: the names
-    // the parameter counts, the bytes behind each number, and the cabinets the menu shows them by.
+    // THE FACTORY SHELF IS ONE CATALOG (resources/cabinets.txt), read three ways: the names the
+    // parameter counts, the bytes behind each number, and the cabinets the menu shows them by. CMake
+    // holds the catalog to its numbers; what is left to see here is what the three readings make of it.
     // Every name stands in exactly one cabinet, and every number plays the file its name was read
-    // off — cabIrBytes holds a number past its end to the last entry, so a name added without its
-    // file would play another cabinet's IR without a word.
+    // off — cabIrBytes holds a number past its end to the last entry, so a name given the wrong file
+    // would play another cabinet's IR without a word.
     {
         const int names = orbitamp::params::cabIrNames.size();
 
