@@ -31,27 +31,12 @@ const channels::Lineup& lineup()
     return rover;
 }
 
-namespace
-{
-    /** THE LAMPS GO OUT (face/Renders.h). On a rusted dashboard warm is everywhere: a lamp is what is
-        both warm AND bright — its red well over its blue, and the whole of it lit — so the rust and the
-        dust round it stay as they were painted. */
-    float lampness (juce::Colour c)
-    {
-        const float r = c.getFloatRed(), g = c.getFloatGreen(), b = c.getFloatBlue();
-        const float warm   = (r - b - 0.25f) / 0.25f;
-        const float bright = (0.3f * r + 0.59f * g + 0.11f * b - 0.38f) / 0.18f;
-        return juce::jmin (juce::jlimit (0.0f, 1.0f, warm), juce::jlimit (0.0f, 1.0f, bright));
-    }
-}
-
 const Skin& skin()
 {
     static const Skin mars {
         { RedPawData::namedResourceList, RedPawData::namedResourceListSize,
           RedPawData::getNamedResourceOriginalFilename, RedPawData::getNamedResource },
         "REDPAW_ART_DIR",
-        lampness,
         juce::Colour (0xff3fe6f2),      // the painted rings' light, a shade brighter
         face::Ink {},                   // the family's lilac on the dark rust...
         juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words, so they read off the dust
@@ -118,19 +103,14 @@ const juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
 const float slotX  = 798.3f;
 const float notchX = 814.0f;
 const float slotTopY = 694.0f;
-const std::vector<float> notches { 733.8f, 776.0f, 817.5f };
-// Two gears down a slot painted for three, spread evenly: PARK, then a step of 61.75 to the middle and
-// another to the third notch, so the slot is the lever's to its end. The first two are filled in, and the
-// middle one is the second, copied up.
+// Two gears down a slot painted for three notches, 733.8, 776 and 817.5, spread evenly: PARK, then a step
+// of 61.75 to the middle and another to the third notch, so the slot is the lever's to its end — the
+// picture baked with the first two filled in and the middle one the second, copied up (tools/bake-art).
 const std::vector<float> stops { 755.75f, 817.5f };
 const float leverWidth = 124.0f;
 const float collarSink = 3.0f;
 const juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };
 const float leverLeft = 724.0f, leverTop = 600.0f;
-// A notch is cut 805..829 down and out to 824, its bevels' corners reaching 803.5 and 831.5 on the slot's
-// lit edge, 809.5..811.5; the straight run over the third is 789..803.5. The plate right of it is plain
-// out to 850.
-const NotchFill notchFill { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 2.0f };
 
 const juce::Point<float> turbo { 921.5f, 787.3f };
 const float turboSize = 52.0f;
@@ -144,11 +124,6 @@ const std::array<juce::Rectangle<float>, 3> wells {{
 }};
 const std::array<float, 3> wellNameY {{ 690.0f, 762.5f, 695.0f }};
 
-const std::array<Rim, 2> rims {{
-    { 276.0f, 681.0f, 683.0f, 691.0f, 699.5f, 703.0f, 316.0f, 637.0f },     // REVERB
-    { 276.0f, 681.0f, 755.5f, 763.0f, 772.5f, 777.0f, 316.0f, 637.0f },     // DELAY
-}};
-const float rimLift = 10.0f;
 const float sliderCapLength = 54.0f;
 const float sliderHeight    = 44.0f;
 
@@ -159,28 +134,17 @@ const juce::Rectangle<float> outFader { 1588.0f, 447.5f, 24.5f, 235.0f };
 const float faderWidth     = 44.0f;
 const float faderCapLength = 18.0f;
 
-const float lampPlateGrow = 24.0f;
-const LampPlate gatePlate    { { 37.5f, 794.0f, 107.5f, 106.0f },
-                               {{ { 37.5f, 795.0f }, { 64.5f, 795.0f }, { 140.0f, 870.5f }, { 140.0f, 900.0f }, { 37.5f, 900.0f } }},
-                               lampPlateGrow, 37.5f,
-                               {{ 38.0f, 146.0f, 60.0f }}, {{ 794.0f, 806.0f, 889.0f, 900.0f }},
-                               { 40.5f, 808.0f, 18.0f, 80.0f } };
-const LampPlate limiterPlate { { 1525.0f, 791.0f, 110.5f, 106.0f },
-                               {{ { 1635.5f, 792.5f }, { 1607.5f, 792.5f }, { 1529.5f, 866.5f }, { 1529.5f, 897.0f }, { 1635.5f, 897.0f } }},
-                               -lampPlateGrow, 1635.5f - lampPlateGrow,
-                               {{ 1612.0f, 1502.0f, 1590.0f }}, {{ 791.0f, 803.0f, 886.0f, 897.0f }},
-                               { 1614.5f, 805.0f, 18.0f, 80.0f } };
-
-const juce::Rectangle<float> inSlotRim { 122.0f, 444.0f, 31.0f, 243.0f };
-const float inSlotEnd = 16.0f;
+// Each corner plate grown 24 on its outer leg, a slot cut down the room (tools/bake-art).
+const juce::Rectangle<float> thresholdSlot { 40.5f, 808.0f, 18.0f, 80.0f };
+const juce::Rectangle<float> ceilingSlot   { 1614.5f, 805.0f, 18.0f, 80.0f };
 const float slotScale = 18.0f / 31.0f;
 const float slotRim = 3.0f * slotScale;
 
 const std::array<juce::Rectangle<float>, numLamps> lamps {{
     { 27.0f,   363.0f, 135.0f, 32.0f },     // the segments 37..152 x 373..385
     { 1510.0f, 363.0f, 132.0f, 32.0f },     // the segments 1520..1632 x 372..385
-    { 45.0f + lampPlateGrow,   824.0f, 62.0f, 63.0f },  // the slant 55..97 x 834..877, as painted
-    { 1565.0f - lampPlateGrow, 824.0f, 62.0f, 63.0f },  // the slant 1575..1617 x 834..877, as painted
+    { 69.0f,   824.0f, 62.0f, 63.0f },      // the slant 55..97 x 834..877 as painted, moved in with its plate
+    { 1541.0f, 824.0f, 62.0f, 63.0f },      // the slant 1575..1617 x 834..877 as painted, moved in with its plate
 }};
 const float lampDot = 0.0f;                     // none: the picture paints them lit
 const face::SegmentMeter::Dots meterDots {};    // none: segments down the wells
@@ -189,8 +153,8 @@ const juce::Point<float> inputName  { 101.8f, 721.7f };
 const juce::Point<float> outputName { 1570.0f, 721.7f };
 const float columnNameRoom = 170.0f;
 
-const juce::Point<float> gateWord    { 110.0f + lampPlateGrow, 824.0f };
-const juce::Point<float> limiterWord { 1562.0f - lampPlateGrow, 825.0f };
+const juce::Point<float> gateWord    { 134.0f, 824.0f };
+const juce::Point<float> limiterWord { 1538.0f, 825.0f };
 const float lampSlant = 0.7854f;     // 45 degrees
 
 const juce::Rectangle<float> leftPlate   { 340.0f, 852.0f, 262.0f, 57.0f };

@@ -22,19 +22,15 @@ namespace orbitamp::redpaw
     out of the window, and its own channels and so its own number of gears (RedPawLineup.h).
 
     What is a product's own is said in a file of its own — redpaw/RedPawSkin.cpp, frostpaw/FrostPawSkin.cpp
-    — with its channels and the numbers its picture was measured to (RedPawLayout.h), and a target
-    compiles exactly one, as it compiles exactly one makeEditor. */
+    — with its channels and where its picture puts each thing (RedPawLayout.h), and a target compiles
+    exactly one, as it compiles exactly one makeEditor. How its picture was corrected to stand that way is
+    the bake's (tools/bake-art), done once. */
 struct Skin
 {
     /** Where its renders are built into its binary (RedPawArt.h) — every one under the rover's file
         name — and the environment variable that names a folder to try new ones from. */
     face::renders::Binary renders;
     const char* rendersFolderVariable;
-
-    /** How much of a pixel of its picture is a lit lamp, 0..1 (face/Renders.h): the lamps told from
-        what is painted round them. None where the picture paints no lamp lit: they are drawn
-        (layout::lampDot). */
-    float (*lampness) (juce::Colour);
 
     /** The light of the rings its picture paints, a shade brighter: the knobs' rings, and the light
         round the lever. */

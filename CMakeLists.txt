@@ -664,26 +664,53 @@ set_target_properties(OrbitAmpShaders PROPERTIES EXCLUDE_FROM_ALL TRUE)   # Orbi
 # ----------------------------------------------------------------------------
 # CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and two
 # faces, each target compiling exactly one `makeEditor`. Standalone only, for now. Its renders are in
-# resources/catpit and are built into the binary under a namespace of their own, beside OrbitAmp's data.
+# resources/catpit, as bake-art made them (below), and are built into the binary under a namespace of
+# their own, beside OrbitAmp's data.
 # ----------------------------------------------------------------------------
 juce_add_binary_data(CatpitAmpData
     NAMESPACE   CatpitData
     HEADER_NAME CatpitData.h
     SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/cockpit.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/cockpit.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/lamp-0.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/lamp-1.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/lamp-2.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/lamp-3.webp"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/midi.txt"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/knob-drive.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/knob-tone.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/throttle-grip.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-closed.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-open.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-on.png"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/fader-cap.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/knob-drive.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/knob-tone.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/throttle-grip.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-closed.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-open.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/guard-on.webp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/fader-cap.webp"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-clean.jpg"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-edge.jpg"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-crunch.jpg"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/sky-hi-gain.jpg"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/mark.svg")
+
+# BAKE-ART — the faces' pictures as they ship (tools/bake-art/BakeArt.cpp): each face's renders as painted,
+# in resources/<face>/source, corrected and cut once into the lossless WebP its product carries, in
+# resources/<face>. No product builds it or waits for it: it is run by hand, on a Mac, when a render or a
+# number it was measured to changes — `--target orbitamp_bake_art`, then the tool, or the tool --check.
+juce_add_console_app(orbitamp_bake_art PRODUCT_NAME "OrbitAmpBakeArt")
+target_sources(orbitamp_bake_art PRIVATE
+    tools/bake-art/BakeArt.cpp
+    tools/bake-art/Rover.cpp
+    tools/bake-art/Cockpit.cpp
+    src/face/Renders.cpp)
+target_include_directories(orbitamp_bake_art PRIVATE src)
+target_compile_definitions(orbitamp_bake_art PRIVATE
+    ORBITAMP_RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_bake_art PRIVATE
+    felitronics::appkit_webp
+    juce::juce_gui_basics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(orbitamp_bake_art PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # RELEASED APART FROM ORBITAMP, from the same tree: a version of its own, and tags of its own —
 # `catpit-vX.Y.Z` beside OrbitAmp's `vX.Y.Z` — so neither waits for the other and a fix in the engine
@@ -979,13 +1006,16 @@ target_compile_features(titan_world_test PRIVATE cxx_std_20)
 # ----------------------------------------------------------------------------
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
-# of is said once here — the renders by the file names the face asks for, the sources, the libraries —
-# and each product adds its own skin's file and its own renders.
+# of is said once here — the renders by the file names the face asks for, as bake-art made them, the
+# sources, the libraries — and each product adds its own skin's file and its own renders. The lamps a
+# dashboard paints lit, cut out of it, are a rover's own too: there where its picture paints them.
 set(ROVER_RENDERS
-    dashboard.png midi.txt mark.svg knob-drive.png knob-tone.png lever.png slider-cap.png fader-cap.png
-    toggle-up.png toggle-down.png key-up.png key-down.png turbo-up.png turbo-down.png)
+    dashboard.webp midi.txt mark.svg knob-drive.webp knob-tone.webp lever.webp lever-glow.webp
+    slider-cap.webp fader-cap.webp fader-cap-light.webp toggle-up.webp toggle-down.webp key-up.webp
+    key-down.webp turbo-up.webp turbo-down.webp)
+set(ROVER_LAMPS lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp)
 
-set(REDPAWAMP_RENDERS ${ROVER_RENDERS} turbo-lid.png)     # ...and TURBO's hatch shut, its own
+set(REDPAWAMP_RENDERS ${ROVER_RENDERS} ${ROVER_LAMPS} turbo-lid.webp)     # ...its lamps, and TURBO's hatch shut, its own
 list(TRANSFORM REDPAWAMP_RENDERS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/")
 # ...and the STILL it ships, one frame of its world, where there is one: never another rover's.
 file(GLOB REDPAWAMP_STILL CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/still.jpg")
@@ -1208,7 +1238,7 @@ endforeach()
 # ...and renders a rover may carry or not — the maker's mark raised in its own metal, instead of engraved;
 # TURBO's hatch shut, instead of open on PARK too: there when the file is, and nothing in its place when it
 # is not. Never RedPawAmp's: a rusted hatch on frosted steel would be a patch.
-foreach(render IN ITEMS emblem.png turbo-lid.png still.jpg)
+foreach(render IN ITEMS emblem.webp turbo-lid.webp still.jpg ${ROVER_LAMPS})
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}" IN_LIST FROSTPAW_OWN_RENDERS)
         list(APPEND FROSTPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/frostpaw/${render}")
     endif()
@@ -1339,7 +1369,7 @@ foreach(render IN LISTS ROVER_RENDERS)
     endif()
 endforeach()
 # ...and the renders a rover may carry or not: there when the file is, nothing in its place when it is not.
-foreach(render IN ITEMS emblem.png turbo-lid.png still.jpg)
+foreach(render IN ITEMS emblem.webp turbo-lid.webp still.jpg ${ROVER_LAMPS})
     if("${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}" IN_LIST AMBERPAW_OWN_RENDERS)
         list(APPEND AMBERPAWAMP_RENDERS "${CMAKE_CURRENT_SOURCE_DIR}/resources/amberpaw/${render}")
     endif()

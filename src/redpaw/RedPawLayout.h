@@ -104,34 +104,22 @@ extern const float learnLine;       // ...the two lines apart
 extern const std::array<juce::Point<float>, 4> wiperKeys;
 extern const float wiperKeySize;    // the key's render, whose face fills the hole
 
-/** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches painted on its right — as many as
-    the picture paints — the product's gears, CLEAN, CRUNCH, HI-GAIN, stand at its `stops` from the top, as
-    many as it has (RedPawLineup.h): in the painted notches, or, where a product spreads fewer gears down a
-    slot painted for more, at places of its own, a notch cut there out of the picture's own (Art). A
-    position is where the lever's stem stands: seen from above, as the whole
+/** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches on its right — the product's gears,
+    CLEAN, CRUNCH, HI-GAIN, stand at its `stops` from the top, as many as it has (RedPawLineup.h): in the
+    notches the picture paints, or, where a product spreads fewer gears down a slot painted for more, at
+    places of its own, the picture baked with its notches there and none where no gear stands
+    (tools/bake-art). A position is where the lever's stem stands: seen from above, as the whole
     dashboard is, the lever is its T grip lying across the slot, the stem's collar under the grip's
     middle standing on the position — in a notch, in the notch. */
 extern const juce::Rectangle<float> gateSlot;
 extern const float slotX;           // the stem in the slot
 extern const float notchX;          // ...and in a notch
 extern const float slotTopY;        // PARK: the stem at the slot's top end
-extern const std::vector<float> notches;        // the notches' middles, as painted, top to bottom
-extern const std::vector<float> stops;          // ...and where the gears stand, top to bottom
+extern const std::vector<float> stops;          // where the gears stand, top to bottom
 extern const float leverWidth;      // the lever's render, grip and collar, this wide: over the plate's edges
 extern const float collarSink;      // how far the collar's foot goes past the position, into the slot
 extern const juce::Rectangle<float> gearPlate;
 extern const float leverLeft, leverTop;     // the lever's box: the plate, and the room over it the grip stands up into
-
-/** A NOTCH PAINTED WHERE NO GEAR STANDS IS FILLED IN (Art: `fitNotches`), so the slot runs straight
-    there and the lever has nowhere to stand that is not a gear; where a gear stands with no notch painted,
-    the painted one nearest it is copied there, over the same rows and faded in the same way. From `above` the notch's middle
-    to `below` it: the slot's edge, from `left` in the slot's dark to `seam`, is the straight run just
-    over the fill, `run` tall, mirrored down and back, so the edge's lit line goes on unbroken; the plate
-    beside it, from `seam` to `right`, is the plate `plateShift` further right on the same rows, so its
-    grain and its light are the rows' own. The fill fades into the picture over `feather` at its top, its
-    bottom and its right, and the edge into the plate across the seam. */
-struct NotchFill { float above, below, left, seam, right, run, plateShift, feather; };
-extern const NotchFill notchFill;
 
 /** TURBO: the round hole under the hatch the picture shows open, and its name over the hatch. */
 extern const juce::Point<float> turbo;
@@ -140,18 +128,11 @@ extern const juce::Point<float> turboName;
 extern const juce::Rectangle<float> turboLid;   // the hatch shut (Art::turboLid): from the open cover's top to the frame's foot
 
 /** THE THREE WELLS — REVERB over DELAY on the left, CAB on the right — and the row each one's words are
-    written in: on REVERB's and DELAY's upper rims, which the picture is made taller to carry them
-    (Art: `rims`), and over CAB's plate. */
+    written in: on REVERB's and DELAY's upper rims, which the picture is baked taller to carry them where
+    it was painted without room for them (tools/bake-art), and over CAB's plate. */
 extern const std::array<juce::Rectangle<float>, 3> wells;      // REVERB, DELAY, CAB
 extern const std::array<float, 3> wellNameY;
 
-/** REVERB's and DELAY's frames, as the picture painted them: the plate's top (its shadow), where the rim's
-    lit edge ends and its face begins, where the well opens under it, and how far down the end caps'
-    top screws reach. Each upper rim is made `rimLift` taller, upward; none where the picture has room
-    for the words as painted. */
-struct Rim { float left, right, top, face, well, capScrews, capLeft, capRight; };
-extern const std::array<Rim, 2> rims;           // REVERB, DELAY
-extern const float rimLift;
 extern const float sliderCapLength;     // the cap's render, along its well
 extern const float sliderHeight;        // the slider's box round its well: room for the cap and CAB's notches
 
@@ -163,39 +144,20 @@ extern const juce::Rectangle<float> outFader;
 extern const float faderWidth;          // the fader's box round its slot
 extern const float faderCapLength;      // the cap's render, across its slot
 
-/** THE CORNER LAMPS' PLATES GROW ON THEIR OUTER LEGS, each for a fader's slot (Art: `widenLampPlates`):
-    the plate as painted is cut along its outer leg, between its edge and its screws; all of it inward
-    of the cut — the screws, the lamp, the slanted edge — moves `lampPlateGrow` inward, and the room left
-    is filled with the plate's own top and bottom edges and plain metal between, a slot of INPUT's kind
-    cut down it. GATE's threshold in the left one, -70 dB at its foot to -40 at its head; LIMITER's
-    ceiling in the right one, -3 dB to -0.1. A picture that paints the slots itself grows the plates
-    nothing (`lampPlateGrow` nothing): only `slot` is read, as painted — and a slot lying across takes a
-    fader lying across, its foot on the left. */
-extern const float lampPlateGrow;
-struct LampPlate
-{
-    juce::Rectangle<float> moved;       // what moves inward: the plate inward of the cut, with its shadow...
-    std::array<juce::Point<float>, 5> outline;  // ...cut to the plate's own outline, so the panel round it stays put
-    float shift;                        // ...this far, to the right for plus
-    float room;                         // the new room's left edge; it is lampPlateGrow wide
-    std::array<float, 3> from;          // where its pieces are taken from, across: the top edge, the plain metal, the bottom edge
-    std::array<float, 4> rows;          // the pieces' rows, the same where they are taken and where they go
-    juce::Rectangle<float> slot;        // the slot cut down the room, its rim included
-};
-extern const LampPlate gatePlate;
-extern const LampPlate limiterPlate;
-
-/** The slot both are cut from: INPUT's, with its rim, as painted — its round ends kept whole, its straight
-    run cut short. */
-extern const juce::Rectangle<float> inSlotRim;
-extern const float inSlotEnd;           // each round end, rim and all
+/** THE CORNER LAMPS' PLATES, each with a fader's slot down its outer leg, its rim included — painted, or
+    the plate baked grown on that leg with a slot of INPUT's kind cut down it (tools/bake-art): GATE's
+    threshold in the left one, -70 dB at its foot to -40 at its head; LIMITER's ceiling in the right one,
+    -3 dB to -0.1. A slot lying across takes a fader lying across, its foot on the left. */
+extern const juce::Rectangle<float> thresholdSlot;
+extern const juce::Rectangle<float> ceilingSlot;
 extern const float slotScale;           // the corner slots' size to INPUT's
 extern const float slotRim;
 inline constexpr float thresholdLowDb = -70.0f, thresholdHighDb = -40.0f;
 
 /** THE LAMPS THE DASHBOARD LIGHTS ITSELF, each with room round it for its glow: the bars of three over
     the columns, the input's overload and the output's; the slanted ones in the bottom corners, the
-    gate's and the limiter's. The picture paints them lit; Art puts them out. A picture that paints none
+    gate's and the limiter's. The picture paints them lit; it is baked with them out and each cut out of
+    it (tools/bake-art), to be laid back over its box. A picture that paints none
     lit has them drawn, each a round glass `lampDot` across in the middle of its box (face::Lamp::dot);
     none where that is nothing. */
 enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };

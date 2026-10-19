@@ -32,27 +32,12 @@ const channels::Lineup& lineup()
     return rover;
 }
 
-namespace
-{
-    /** THE LAMPS GO OUT (face/Renders.h). On frosted steel and ice nothing is warm but the amber lamps
-        and the light they throw: a lamp is what is warm — its red well over its blue — and lit, so the
-        steel, the frost and the ice-blue strips stay as they were painted. */
-    float lampness (juce::Colour c)
-    {
-        const float r = c.getFloatRed(), g = c.getFloatGreen(), b = c.getFloatBlue();
-        const float warm   = (r - b - 0.25f) / 0.25f;
-        const float bright = (0.3f * r + 0.59f * g + 0.11f * b - 0.38f) / 0.18f;
-        return juce::jmin (juce::jlimit (0.0f, 1.0f, warm), juce::jlimit (0.0f, 1.0f, bright));
-    }
-}
-
 const Skin& skin()
 {
     static const Skin ice {
         { FrostPawData::namedResourceList, FrostPawData::namedResourceListSize,
           FrostPawData::getNamedResourceOriginalFilename, FrostPawData::getNamedResource },
         "FROSTPAW_ART_DIR",
-        lampness,
         juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
         // On the bright steel the words are written dark — a blue-black graphite, what they are set to
         // darker still, a state a deeper orange — each cut deep into the metal: strokes heavier than the
@@ -133,15 +118,11 @@ const juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
 const float slotX  = 798.3f;
 const float notchX = 814.0f;
 const float slotTopY = 694.0f;
-const std::vector<float> notches { 732.8f, 775.5f, 816.8f };
-const std::vector<float> stops = notches;
+const std::vector<float> stops { 732.8f, 775.5f, 816.8f };     // in its three notches
 const float leverWidth = 124.0f;
 const float collarSink = 3.0f;
 const juce::Rectangle<float> gearPlate { 742.0f, 655.0f, 116.0f, 222.0f };
 const float leverLeft = 724.0f, leverTop = 600.0f;
-// Its third notch cut 804..830 down, its slot's lit edge 810..812, the straight run over it 789..803,
-// the plate plain out to 848: filled as RedPawAmp's would be, were it to have fewer gears.
-const NotchFill notchFill { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 2.0f };
 
 const juce::Point<float> turbo { 922.0f, 787.0f };
 const float turboSize = 52.0f;
@@ -155,11 +136,6 @@ const std::array<juce::Rectangle<float>, 3> wells {{
 }};
 const std::array<float, 3> wellNameY {{ 690.0f, 762.5f, 695.0f }};
 
-const std::array<Rim, 2> rims {{
-    { 276.0f, 681.0f, 683.0f, 691.0f, 699.5f, 703.0f, 316.0f, 637.0f },     // REVERB
-    { 276.0f, 681.0f, 755.5f, 763.0f, 772.5f, 777.0f, 316.0f, 637.0f },     // DELAY
-}};
-const float rimLift = 10.0f;
 const float sliderCapLength = 54.0f;
 const float sliderHeight    = 44.0f;
 
@@ -170,28 +146,17 @@ const juce::Rectangle<float> outFader { 1588.0f, 447.5f, 24.5f, 235.0f };
 const float faderWidth     = 44.0f;
 const float faderCapLength = 18.0f;
 
-const float lampPlateGrow = 24.0f;
-const LampPlate gatePlate    { { 37.5f, 794.0f, 107.5f, 106.0f },
-                               {{ { 37.5f, 795.0f }, { 64.5f, 795.0f }, { 140.0f, 870.5f }, { 140.0f, 900.0f }, { 37.5f, 900.0f } }},
-                               lampPlateGrow, 37.5f,
-                               {{ 38.0f, 146.0f, 60.0f }}, {{ 794.0f, 806.0f, 889.0f, 900.0f }},
-                               { 40.5f, 808.0f, 18.0f, 80.0f } };
-const LampPlate limiterPlate { { 1525.0f, 791.0f, 110.5f, 106.0f },
-                               {{ { 1635.5f, 792.5f }, { 1607.5f, 792.5f }, { 1529.5f, 866.5f }, { 1529.5f, 897.0f }, { 1635.5f, 897.0f } }},
-                               -lampPlateGrow, 1635.5f - lampPlateGrow,
-                               {{ 1612.0f, 1502.0f, 1590.0f }}, {{ 791.0f, 803.0f, 886.0f, 897.0f }},
-                               { 1614.5f, 805.0f, 18.0f, 80.0f } };
-
-const juce::Rectangle<float> inSlotRim { 122.0f, 444.0f, 31.0f, 243.0f };
-const float inSlotEnd = 16.0f;
+// Each corner plate grown 24 on its outer leg, a slot cut down the room (tools/bake-art).
+const juce::Rectangle<float> thresholdSlot { 40.5f, 808.0f, 18.0f, 80.0f };
+const juce::Rectangle<float> ceilingSlot   { 1614.5f, 805.0f, 18.0f, 80.0f };
 const float slotScale = 18.0f / 31.0f;
 const float slotRim = 3.0f * slotScale;
 
 const std::array<juce::Rectangle<float>, numLamps> lamps {{
     { 27.0f,   363.0f, 135.0f, 32.0f },     // the segments 40..152 x 372..386
     { 1510.0f, 363.0f, 132.0f, 32.0f },     // the segments 1520..1631 x 372..386
-    { 45.0f + lampPlateGrow,   824.0f, 62.0f, 63.0f },  // the slant 55..97 x 834..877, as painted
-    { 1565.0f - lampPlateGrow, 824.0f, 62.0f, 63.0f },  // the slant 1575..1617 x 834..877, as painted
+    { 69.0f,   824.0f, 62.0f, 63.0f },      // the slant 55..97 x 834..877 as painted, moved in with its plate
+    { 1541.0f, 824.0f, 62.0f, 63.0f },      // the slant 1575..1617 x 834..877 as painted, moved in with its plate
 }};
 const float lampDot = 0.0f;                     // none: the picture paints them lit
 const face::SegmentMeter::Dots meterDots {};    // none: segments down the wells
@@ -200,8 +165,8 @@ const juce::Point<float> inputName  { 101.8f, 721.7f };
 const juce::Point<float> outputName { 1570.0f, 721.7f };
 const float columnNameRoom = 170.0f;
 
-const juce::Point<float> gateWord    { 110.0f + lampPlateGrow, 824.0f };
-const juce::Point<float> limiterWord { 1562.0f - lampPlateGrow, 825.0f };
+const juce::Point<float> gateWord    { 134.0f, 824.0f };
+const juce::Point<float> limiterWord { 1538.0f, 825.0f };
 const float lampSlant = 0.7854f;     // 45 degrees
 
 const juce::Rectangle<float> leftPlate   { 340.0f, 852.0f, 262.0f, 57.0f };

@@ -5,12 +5,13 @@
 
 #include <juce_graphics/juce_graphics.h>
 
-#include <array>
-#include <functional>
+#include <cstddef>
 
-/** HOW A FACE'S RENDERS ARE MADE READY: found by their file names, and the lamps a background render
-    paints lit taken out of it, to be lit again from the engine. Each face keeps its renders in a
-    binary-data namespace of its own; this is what it does with them, said once. */
+/** HOW A FACE'S RENDERS ARE FOUND: by their file names. Each face keeps its renders in a binary-data
+    namespace of its own; this is what it does with them, said once. What a face draws is its renders as
+    they are — each corrected where the picture was painted otherwise than the face stands now, its lit
+    lamps cut out of it, its derived sprites made, once, by tools/bake-art, which writes them as lossless
+    WebP — and decoded here to exactly the pixels that tool made. */
 namespace orbitamp::face::renders
 {
 
@@ -23,35 +24,25 @@ struct Binary
     const char* (*data) (const char*, int& size);           // getNamedResource
 };
 
-/** A render by its file name, as it was made — whatever format it decodes to: the copy built into
-    the binary — or, when the environment variable `folderVariable` names a folder that has one, the
-    file from there, so a new render can be tried by restarting rather than rebuilding. */
+/** A render by its file name, as it was made — a WebP by decodeWebp, any other format as JUCE decodes it:
+    the copy built into the binary — or, when the environment variable `folderVariable` names a folder
+    that has one, the file from there, so a new render can be tried by restarting rather than rebuilding
+    (tools/bake-art --out bakes into such a folder). */
 juce::Image decode (const char* name, const Binary&, const char* folderVariable);
 
 /** ...and the same, as ARGB, ready to be drawn from. */
 juce::Image load (const char* name, const Binary&, const char* folderVariable);
 
-/** THE LAMPS GO OUT. A render paints lit the lamps a face lights itself. Each, in its box (`boxes`, in
-    the face's 1672-wide stage), is taken out as it was painted, glow and all, into `lit` — to be laid
-    back over at the strength it burns; in the picture it is put out: how much of a pixel is the lamp's
-    (`lampness`, 0..1) is how far it is taken down to the dark warm grey of a lamp that is off, so the
-    glow on the plate round it goes too. What the lamp did not touch stays as it was, in the picture
-    and out of the copy. */
-template <size_t N>
-juce::Image putOutLamps (juce::Image img, const std::array<juce::Rectangle<float>, N>& boxes, float stageWidth,
-                         const std::function<float (juce::Colour)>& lampness, std::array<juce::Image, N>& lit);
-
-juce::Image putOutLamp (juce::Image& img, juce::Rectangle<float> box, float stageWidth,
-                        const std::function<float (juce::Colour)>& lampness);
-
-template <size_t N>
-juce::Image putOutLamps (juce::Image img, const std::array<juce::Rectangle<float>, N>& boxes, float stageWidth,
-                         const std::function<float (juce::Colour)>& lampness, std::array<juce::Image, N>& lit)
+/** HOW A STRAIGHT COLOUR IS PREMULTIPLIED HERE: times its alpha over 255, rounded to the nearest — so that
+    every premultiplied value up to its alpha is some straight value's, and a picture tools/bake-art took
+    from what a face drew comes back as exactly what it drew. JUCE's own (PixelARGB::premultiply) never
+    reaches the alpha itself from an alpha of 128 up, and a white glow lives there. */
+inline juce::uint8 premultiplied (juce::uint8 value, juce::uint8 alpha) noexcept
 {
-    if (img.isValid())
-        for (size_t i = 0; i < N; ++i)
-            lit[i] = putOutLamp (img, boxes[i], stageWidth, lampness);
-    return img;
+    return alpha == 255 ? value : (juce::uint8) (((unsigned) value * alpha + 127u) / 255u);
 }
+
+/** WebP bytes as an ARGB juce::Image, premultiplied as above; invalid when they are not one picture. */
+juce::Image decodeWebp (const void* data, size_t size);
 
 } // namespace orbitamp::face::renders

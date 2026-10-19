@@ -108,7 +108,7 @@ void Lever::paint (juce::Graphics& g)
     {
         const float height = length * (float) art.leverGrip.getHeight() / (float) art.leverGrip.getWidth();
         g.setOpacity (1.0f);     // an image is drawn at the brush's opacity, and the last name left it dimmed
-        g.drawImage (art.leverGrip, { slotX - art.leverAxis * length, y - height * 0.5f, length, height });
+        g.drawImage (art.leverGrip, { slotX - layout::gripAxis * length, y - height * 0.5f, length, height });
     }
     else
     {
