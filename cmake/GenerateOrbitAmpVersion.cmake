@@ -47,13 +47,17 @@ set(_hash       "unknown")
 set(_dirty      "false")
 set(_buildcount "-1")          # commits since the last tag; -1 = unknown (no git / no tag)
 if(GIT_EXECUTABLE AND SRC_DIR)
+    # --match, as the dependency rows below: the tree carries the faces' own tags beside the releases'
+    # vX.Y.Z (catpit-v0.2.0, catpit-proto-1), and "the nearest tag" counted the build from whichever was
+    # made last — OrbitAmp's About read catpit-v0.2.0-103, a hundred commits past another product's release.
+
     # Does the repo carry ANY tag? (describe --always silently falls back to a bare hash, which
     # is indistinguishable from a real describe — so we probe for a tag explicitly.)
-    execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --abbrev=0
+    execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --abbrev=0 --match "v[0-9]*"
         WORKING_DIRECTORY "${SRC_DIR}"
         RESULT_VARIABLE _tag_rc OUTPUT_QUIET ERROR_QUIET)
 
-    execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --always --dirty
+    execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --always --dirty --match "v[0-9]*"
         WORKING_DIRECTORY "${SRC_DIR}"
         RESULT_VARIABLE _desc_rc OUTPUT_VARIABLE _desc_out
         OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)

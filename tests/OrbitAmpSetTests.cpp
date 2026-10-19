@@ -2,12 +2,13 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 // Gate for ORBITAMP'S SET AS IT LEAVES THE BINARY (OrbitAmpSet.h): that it carries every pack of the
-// set — the X88-IR's four, the Victory V4's six, the Friedman IR-X's two — and the family's cabinet
-// shelf in its folders, laid out byte for byte what was built in; that each pack lies under the name
-// of the capture it holds; that the preamp list shows each by a name of its own, not one name four
-// times; and that a start after the first writes nothing. How a set is laid out —
-// what is rewritten, what an earlier build left that goes — is the cockpit's gate's to hold
-// (CatpitSetTests): it is the same code.
+// set — the X88-IR's four, the Friedman IR-X's two, and the Victory V4's six, put away in OLD — and the
+// family's cabinet shelf in its folders, laid out byte for byte what was built in; that each pack lies
+// under the name of the capture it holds; that the preamp list shows each by a name of its own, not one
+// name four times; that the AMP's menu shows the X88-IR and the IR-X as the family's devices and the
+// V4's six in one OLD, a player's own OLD and a rover's copies of the V4 notwithstanding; and that a start
+// after the first writes nothing. How a set is laid out — what is rewritten, what an earlier build left
+// that goes — is the cockpit's gate's to hold (CatpitSetTests): it is the same code.
 //
 // It works in a folder of its own under the system's temporary folder — the machine's real Factory
 // and Devices folders are never read or written — and leaves it behind to be looked at.
@@ -48,17 +49,39 @@ int main()
                                      "V4 Copper", "V4 Copper TB", "V4 Sheriff Ch1", "V4 Sheriff Ch2",
                                      "V4 Kraken Ch1", "V4 Kraken Ch2", "IR-X Ch1 PowerAmp", "IR-X Ch2 PowerAmp" };
 
+    // A path's last part, up to its first dot: "OLD/V4 Copper.orbitrig.zip" is V4 Copper.
+    const auto stemOf = [] (const juce::String& path)
+    {
+        return path.fromLastOccurrenceOf ("/", false, false).upToFirstOccurrenceOf (".", false, false);
+    };
+
     const auto carried = set::carried();
     const juce::int64 build = 20261014120000;     // the build the gate plays: a stamp of make-believe
     juce::StringArray names, cabinets;
     for (const auto& e : carried)
-        (e.path.endsWithIgnoreCase (".orbitrig.zip") ? names : cabinets).add (e.path.upToFirstOccurrenceOf (".", false, false));
+        (e.path.endsWithIgnoreCase (".orbitrig.zip") ? names : cabinets).add (stemOf (e.path));
 
     bool everyOne = names.size() == wanted.size();
     for (const auto& w : wanted)
         everyOne = everyOne && names.contains (w);
     check (everyOne, "the binary carries every pack of the set — the X88-IR's four, the V4's six, the IR-X's two: "
                          + names.joinIntoString (", "));
+
+    // THE V4'S SIX ARE PUT AWAY: in the factory's OLD, the family's devices at its top.
+    {
+        juce::StringArray put, top;
+        for (const auto& e : carried)
+            if (e.path.endsWithIgnoreCase (".orbitrig.zip"))
+                (e.path.startsWith (juce::String (set::oldFolder) + "/") ? put : top).add (stemOf (e.path));
+
+        bool v4 = put.size() == set::old.size();
+        for (const auto& o : set::old)
+            v4 = v4 && put.contains (o) && o.startsWith ("V4 ");
+        for (const auto& t : top)
+            v4 = v4 && ! t.startsWith ("V4 ");
+        check (v4 && put.size() + top.size() == wanted.size(),
+               "...the V4's six in OLD, the rest at the top: " + put.joinIntoString (", ") + " | " + top.joinIntoString (", "));
+    }
 
     // The first start.
     check (FactorySet::layOut (factory, product::name, build, carried) == (int) carried.size(), "the first start writes every one of them");
@@ -107,8 +130,81 @@ int main()
         allListed = allListed && listed.contains (w);
     check (allListed, "the preamp list shows each by a name of its own: " + listed.joinIntoString (", "));
 
+    // WHAT THE AMP'S MENU SHOWS (DeviceLibrary::shelfOf, which the menu is built from): the family's
+    // devices on top, and the folders after them — read from these two folders as the amp reads its own.
+    const auto menu = [&factory, &own]
+    {
+        const auto packs = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, factory, own);
+        const auto shelf = DeviceLibrary::shelfOf (packs);
+
+        juce::StringArray devices, folders, old, inOld;
+        bool oneEach = true;
+        for (const auto& d : shelf.factory)
+            devices.add (d.name);
+        for (const auto& f : shelf.folders)
+        {
+            folders.add (f.name);
+            if (f.name != set::oldFolder)
+                continue;
+            for (const auto& d : f.devices)
+            {
+                old.add (d.name);
+                oneEach = oneEach && d.channels.size() == 1;
+            }
+            for (const auto& inner : f.folders)
+                inOld.add (inner.name);
+        }
+
+        struct Menu { juce::StringArray devices, folders, old, inOld; bool oneEach; };
+        return Menu { devices, folders, old, inOld, oneEach };
+    };
+
+    const auto v4InOld = [] (const juce::StringArray& old)
+    {
+        bool all = true;
+        for (const auto& o : set::old)
+            all = all && old.contains (o);
+        return all;
+    };
+
+    {
+        const auto m = menu();
+        check (m.devices.joinIntoString (", ") == "IR-X, X88-IR", "the AMP's menu: the family's devices are the IR-X and the X88-IR: "
+                                                                    + m.devices.joinIntoString (", "));
+        check (m.folders.joinIntoString (", ") == "OLD" && m.old.size() == 6 && v4InOld (m.old) && m.oneEach,
+               "...and OLD holds the V4's six, one to a line: " + m.folders.joinIntoString (", ") + " / " + m.old.joinIntoString (", "));
+    }
+
+    // A PLAYER'S OWN OLD — a model of his at its top, and a folder in it with another — is the same OLD.
+    own.getChildFile ("OLD/preamps").createDirectory();
+    own.getChildFile ("OLD/My Old Amp.nam").replaceWithText ("{}");
+    own.getChildFile ("OLD/preamps/Older Amp.nam").replaceWithText ("{}");
+    {
+        const auto m = menu();
+        check (m.folders.joinIntoString (", ") == "OLD" && m.old.size() == 7 && v4InOld (m.old) && m.old.contains ("My Old Amp")
+                   && m.inOld.joinIntoString (", ") == "preamps",
+               "a player's own OLD and the factory's are one OLD: " + m.folders.joinIntoString (", ") + " / "
+                   + m.old.joinIntoString (", ") + " | " + m.inOld.joinIntoString (", "));
+    }
+
     // Every start after it.
     check (FactorySet::layOut (factory, product::name, build, carried) == 0, "the second start writes nothing");
+
+    // A ROVER THAT PLAYS THE V4 lays its own copies at the top of the folder, as FrostPawAmp and AmberPawAmp
+    // do — later, so the newer files. The menu still shows them put away.
+    {
+        std::vector<FactorySet::Entry> rover;
+        for (const auto& e : carried)
+            if (e.path.startsWith (juce::String (set::oldFolder) + "/"))
+                rover.push_back ({ e.path.fromFirstOccurrenceOf ("/", false, false), e.data, e.size });
+
+        check (FactorySet::layOut (factory, "SomeRover", build, rover) == 6, "a rover lays the V4's six at the top");
+
+        const auto m = menu();
+        check (m.devices.joinIntoString (", ") == "IR-X, X88-IR" && m.old.size() == 7 && v4InOld (m.old),
+               "...and the menu still shows them in OLD alone: " + m.devices.joinIntoString (", ") + " | OLD / "
+                   + m.old.joinIntoString (", "));
+    }
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
     return failed == 0 ? 0 : 1;

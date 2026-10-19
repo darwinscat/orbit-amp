@@ -128,6 +128,18 @@ int main()
     ticks();
     check (! history.canUndo(), "...and none of that is an edit");
 
+    // THE SHELF'S `Other` IS ORBITAMP'S (device/FactoryShelf.h): the cockpit carries Darwin's Cat's own
+    // cabinets and not a byte of the third-party ones — their places in `cab_ir`'s order held empty — and a
+    // host that moves `cab_ir` to one of those places hears DARK MATTER, not a cabinet that is not there.
+    {
+        bool oursAlone = device::shelf::irs().size() == (size_t) params::cabIrNames.size();
+        for (const auto& ir : device::shelf::irs())
+            oursAlone = oursAlone && (ir.data != nullptr) == (juce::String (ir.folder) == device::shelf::ours);
+        check (oursAlone, "the cockpit carries the shelf's Orange PPC212V and nothing of Other, every number in its place");
+        check (AmpProcessor::cabIrBytes (0).data == AmpProcessor::cabIrBytes (params::cabIrDefault).data,
+               "...and a number of Other's plays DARK MATTER");
+    }
+
     // A host moves the parameter.
     asHost (2);
     check (channels.active() == 0, "CHANNEL moved by a host changes nothing until the engine's own tick");

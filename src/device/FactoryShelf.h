@@ -7,6 +7,16 @@
 
 #include <BinaryData.h>
 
+/** Whether this build carries the shelf's `Other` — OrbitAmp does; the faces do not. Said by the data that
+    holds those IRs (CMakeLists.txt: OrbitAmpShelfOther), which is linked only where it is said. */
+#ifndef SHELF_CARRIES_OTHER
+ #define SHELF_CARRIES_OTHER 0
+#endif
+
+#if SHELF_CARRIES_OTHER
+ #include <ShelfOtherData.h>
+#endif
+
 #include <vector>
 
 namespace orbitamp::device::shelf
@@ -14,18 +24,20 @@ namespace orbitamp::device::shelf
 
 /** THE FAMILY'S CABINET SHELF: every cabinet IR a Darwin's Cat amp carries — Darwin's Cat's own, shot
     off the Orange (resources/set/IRs.md says what they are), and the third-party ones OrbitAmp has always
-    played (resources/ir). Inside the binary of each, in the data every product links (OrbitAmpData), and
-    laid out with the product's set in the family's `Factory/IRs` (FactorySet.h), so that a cabinet is one
-    file on the machine however many of the family carry it.
+    played (resources/ir). Inside the binary — Darwin's Cat's own in the data every product links
+    (OrbitAmpData), the third-party ones in data OrbitAmp alone links (ShelfOtherData) — and laid out with
+    the product's set in the family's `Factory/IRs` (FactorySet.h), so that a cabinet is one file on the
+    machine however many of the family carry it.
 
     ON THE SHELF IN FOLDERS, one for each maker's cabinets — `Orange PPC212V` for Darwin's Cat's own and
     `Other` for the rest. OrbitAmp carries the whole shelf and lists it by them, a submenu each; the faces
-    carry Darwin's Cat's own folder alone (`carried (ours)`), one list. A cabinet joining the shelf joins
+    carry Darwin's Cat's own folder alone (`carried (ours)`), one list, and not a byte of `Other`: in a
+    face its places are held with nothing in them (SHELF_CARRIES_OTHER). A cabinet joining the shelf joins
     a folder, or brings a new one.
 
     IN THE ORDER OF THE `cab_ir` PARAMETER (params::cabIrNames): what an OrbitAmp session keeps of its
     cabinet is an index into this list, so a cabinet joins it at the end and nothing already here ever
-    moves — wherever its folder stands. */
+    moves — wherever its folder stands, and whether or not the build carries it. */
 
 /** Where the shelf lies in a factory folder. */
 inline constexpr const char* folderName = "IRs";
@@ -34,7 +46,8 @@ inline constexpr const char* folderName = "IRs";
 inline constexpr const char* ours  = "Orange PPC212V";
 inline constexpr const char* other = "Other";
 
-/** One IR of the shelf: the folder it lies in, its file's name as the tree has it, and its bytes. */
+/** One IR of the shelf: the folder it lies in, its file's name as the tree has it, and its bytes — no
+    bytes and no name for one the build does not carry. */
 struct Ir
 {
     const char*  folder = nullptr;
@@ -50,29 +63,36 @@ inline const std::vector<Ir>& irs()
     {
         struct Held { const char* folder; const char* data; int size; };
 
+        // `Other`'s IRs where the build carries them, and their places, empty, where it does not.
+       #if SHELF_CARRIES_OTHER
+        #define ORBITAMP_SHELF_OTHER(ir) { other, ShelfOtherData::ir, ShelfOtherData::ir##Size }
+       #else
+        #define ORBITAMP_SHELF_OTHER(ir) { other, nullptr, 0 }
+       #endif
+
         const Held held[] {
             // The Jesters Brutal Pack's fifteen, then the Jesters Emerald Pack's six.
-            { other, BinaryData::_01cookiemonster_wav,       BinaryData::_01cookiemonster_wavSize },
-            { other, BinaryData::_02darthgenocider_wav,      BinaryData::_02darthgenocider_wavSize },
-            { other, BinaryData::_03kittenslayer_wav,        BinaryData::_03kittenslayer_wavSize },
-            { other, BinaryData::_04kaijutamer_wav,          BinaryData::_04kaijutamer_wavSize },
-            { other, BinaryData::_05iceburnsuicide_wav,      BinaryData::_05iceburnsuicide_wavSize },
-            { other, BinaryData::_06verticallipstabber_wav,  BinaryData::_06verticallipstabber_wavSize },
-            { other, BinaryData::_07manslaughterjoe_wav,     BinaryData::_07manslaughterjoe_wavSize },
-            { other, BinaryData::_08bigbubba_wav,            BinaryData::_08bigbubba_wavSize },
-            { other, BinaryData::_09devilscunnilingus_wav,   BinaryData::_09devilscunnilingus_wavSize },
-            { other, BinaryData::_10october32th_wav,         BinaryData::_10october32th_wavSize },
-            { other, BinaryData::_11wumbo_wav,               BinaryData::_11wumbo_wavSize },
-            { other, BinaryData::_12worldcollider_wav,       BinaryData::_12worldcollider_wavSize },
-            { other, BinaryData::_13cannibalchoir_wav,       BinaryData::_13cannibalchoir_wavSize },
-            { other, BinaryData::_14cathoderayfleshburn_wav, BinaryData::_14cathoderayfleshburn_wavSize },
-            { other, BinaryData::_15impalerjim_wav,          BinaryData::_15impalerjim_wavSize },
-            { other, BinaryData::_16nachoguacamole_wav,      BinaryData::_16nachoguacamole_wavSize },
-            { other, BinaryData::_17picklepunisher_wav,      BinaryData::_17picklepunisher_wavSize },
-            { other, BinaryData::_18wasabiwarrior_wav,       BinaryData::_18wasabiwarrior_wavSize },
-            { other, BinaryData::_19pestopaladin_wav,        BinaryData::_19pestopaladin_wavSize },
-            { other, BinaryData::_20donspinacio_wav,         BinaryData::_20donspinacio_wavSize },
-            { other, BinaryData::_21killdill_wav,            BinaryData::_21killdill_wavSize },
+            ORBITAMP_SHELF_OTHER (_01cookiemonster_wav),
+            ORBITAMP_SHELF_OTHER (_02darthgenocider_wav),
+            ORBITAMP_SHELF_OTHER (_03kittenslayer_wav),
+            ORBITAMP_SHELF_OTHER (_04kaijutamer_wav),
+            ORBITAMP_SHELF_OTHER (_05iceburnsuicide_wav),
+            ORBITAMP_SHELF_OTHER (_06verticallipstabber_wav),
+            ORBITAMP_SHELF_OTHER (_07manslaughterjoe_wav),
+            ORBITAMP_SHELF_OTHER (_08bigbubba_wav),
+            ORBITAMP_SHELF_OTHER (_09devilscunnilingus_wav),
+            ORBITAMP_SHELF_OTHER (_10october32th_wav),
+            ORBITAMP_SHELF_OTHER (_11wumbo_wav),
+            ORBITAMP_SHELF_OTHER (_12worldcollider_wav),
+            ORBITAMP_SHELF_OTHER (_13cannibalchoir_wav),
+            ORBITAMP_SHELF_OTHER (_14cathoderayfleshburn_wav),
+            ORBITAMP_SHELF_OTHER (_15impalerjim_wav),
+            ORBITAMP_SHELF_OTHER (_16nachoguacamole_wav),
+            ORBITAMP_SHELF_OTHER (_17picklepunisher_wav),
+            ORBITAMP_SHELF_OTHER (_18wasabiwarrior_wav),
+            ORBITAMP_SHELF_OTHER (_19pestopaladin_wav),
+            ORBITAMP_SHELF_OTHER (_20donspinacio_wav),
+            ORBITAMP_SHELF_OTHER (_21killdill_wav),
 
             // Darwin's Cat's own, in the order of their files.
             { ours, BinaryData::_02darkmatter_wav,           BinaryData::_02darkmatter_wavSize },
@@ -86,22 +106,33 @@ inline const std::vector<Ir>& irs()
             { ours, BinaryData::_11redgiant_wav,             BinaryData::_11redgiant_wavSize },
             { ours, BinaryData::_12pulsarbeam_wav,           BinaryData::_12pulsarbeam_wavSize },
         };
+        #undef ORBITAMP_SHELF_OTHER
+
+        // The file's name is the one the binary keeps beside the bytes: said once, in the tree — in
+        // whichever of the two data holds them.
+        const auto fileOf = [] (const char* data)
+        {
+            for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+            {
+                int size = 0;
+                if (BinaryData::getNamedResource (BinaryData::namedResourceList[i], size) == data)
+                    return juce::String::fromUTF8 (BinaryData::originalFilenames[i]);
+            }
+           #if SHELF_CARRIES_OTHER
+            for (int i = 0; i < ShelfOtherData::namedResourceListSize; ++i)
+            {
+                int size = 0;
+                if (ShelfOtherData::getNamedResource (ShelfOtherData::namedResourceList[i], size) == data)
+                    return juce::String::fromUTF8 (ShelfOtherData::originalFilenames[i]);
+            }
+           #endif
+            return juce::String();
+        };
 
         std::vector<Ir> out;
 
         for (const auto& h : held)
-        {
-            // The file's name is the one the binary keeps beside the bytes: said once, in the tree.
-            juce::String file;
-            for (int i = 0; i < BinaryData::namedResourceListSize && file.isEmpty(); ++i)
-            {
-                int size = 0;
-                if (BinaryData::getNamedResource (BinaryData::namedResourceList[i], size) == h.data)
-                    file = juce::String::fromUTF8 (BinaryData::originalFilenames[i]);
-            }
-
-            out.push_back ({ h.folder, file, h.data, h.size });
-        }
+            out.push_back ({ h.folder, h.data != nullptr ? fileOf (h.data) : juce::String(), h.data, h.size });
 
         return out;
     }();
@@ -116,7 +147,7 @@ inline juce::String pathOf (const Ir& ir)
 }
 
 /** The shelf as a set's files, for a product to lay out with its own (FactorySet::layOut): the whole of
-    it, or the one folder named. */
+    what the build carries, or the one folder named. */
 inline std::vector<FactorySet::Entry> carried (const char* onlyFolder = nullptr)
 {
     std::vector<FactorySet::Entry> out;

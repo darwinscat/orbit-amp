@@ -11,6 +11,14 @@ cmake_minimum_required(VERSION 3.22)
 # release is fetched, so a clean clone still configures.
 # ----------------------------------------------------------------------------
 
+# THE OLDEST macOS THE BINARIES RUN ON. Left unsaid, the compiler marks every binary for the macOS of
+# the machine that built it — OrbitAmp 0.7.0 and CatpitAmp 0.2.0 went out marked for macOS 26, and a Mac
+# one release behind would not open them. 11.0, Big Sur, is the first macOS on Apple Silicon, so as far
+# back as the arm64 half of a universal binary can go — and both halves say the same. A cache default,
+# so a configure can still say otherwise (-DCMAKE_OSX_DEPLOYMENT_TARGET=…); and before project(),
+# because that is where CMake reads it. Elsewhere than the Mac nothing reads it at all.
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
+
 project(OrbitAmp VERSION 0.7.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -517,7 +525,8 @@ add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 # system — and laid out in the family's Factory folder when it starts (src/device/FactorySet.h says
 # why a bundle will not do). OrbitAmp is the player of the whole library: it carries EVERY pack in
 # resources/set/Devices, each under its own name — every folder there, zipped. A pack added there is
-# carried from the next build on, with nobody to remember to list it.
+# carried from the next build on, with nobody to remember to list it. Where in the folder each lies is
+# OrbitAmpSet.h's to say: the family's devices at its top, the V4's six put away in its OLD.
 list(LENGTH ORBITAMP_SET_PACKS ORBITAMP_SET_COUNT)
 message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the binary")
 juce_add_binary_data(OrbitAmpSetData
@@ -545,8 +554,31 @@ juce_add_binary_data(OrbitAmpData
 
         # THE FAMILY'S CABINET SHELF (src/device/FactoryShelf.h): every product links this data, plays
         # its cabinets from it and lays them out in the family's Factory/IRs, in the shelf's folders —
-        # these in `Other`. orbitcab's, referenced there like everything shared: one copy in the
-        # ecosystem.
+        # here Darwin's Cat's own ten, shot off the Orange, in `Orange PPC212V`: referenced in the
+        # set's folder rather than copied, one copy in the tree. resources/set/IRs.md says what they
+        # are and how they were shot. The rest of the shelf is OrbitAmp's alone (OrbitAmpShelfOther).
+        "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
+        "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
+        "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
+        "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
+        "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
+        "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
+        "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
+        "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
+        "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
+        "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav"
+)
+
+# ...and the shelf's `Other`: the 21 third-party IRs OrbitAmp has always played, orbitcab's, referenced
+# there like everything shared — one copy in the ecosystem. ORBITAMP'S ALONE. A face lays out and lists
+# Darwin's Cat's own folder of the shelf and nothing else, so in a face they were 2.8 MB that nothing
+# ever reached; they are data of their own now, which only what is OrbitAmp links — the plug-in, and the
+# gates that play OrbitAmp's shelf. What links them says so (SHELF_CARRIES_OTHER), and where they are not
+# linked the shelf holds their places empty: a number `cab_ir` keeps is the same cabinet in every product.
+juce_add_binary_data(OrbitAmpShelfOtherData
+    NAMESPACE   ShelfOtherData
+    HEADER_NAME ShelfOtherData.h
+    SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/01-cookie-monster.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/02-darth-genocider.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/03-kitten-slayer.wav"
@@ -567,22 +599,10 @@ juce_add_binary_data(OrbitAmpData
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/18-wasabi-warrior.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/19-pesto-paladin.wav"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/20-don-spinacio.wav"
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav"
-
-        # ...and Darwin's Cat's own ten, shot off the Orange, in `Orange PPC212V`: referenced in the
-        # set's folder rather than copied, one copy in the tree. resources/set/IRs.md says what they
-        # are and how they were shot.
-        "${ORBITAMP_SET_DIR}/IRs/02-dark-matter.wav"
-        "${ORBITAMP_SET_DIR}/IRs/03-ion-cavity.wav"
-        "${ORBITAMP_SET_DIR}/IRs/04-event-horizon.wav"
-        "${ORBITAMP_SET_DIR}/IRs/06-coronal-flare.wav"
-        "${ORBITAMP_SET_DIR}/IRs/07-brown-dwarf.wav"
-        "${ORBITAMP_SET_DIR}/IRs/08-accretion-gap.wav"
-        "${ORBITAMP_SET_DIR}/IRs/09-dust-cloud.wav"
-        "${ORBITAMP_SET_DIR}/IRs/10-blue-shift.wav"
-        "${ORBITAMP_SET_DIR}/IRs/11-red-giant.wav"
-        "${ORBITAMP_SET_DIR}/IRs/12-pulsar-beam.wav"
-)
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ir/21-kill-dill.wav")
+add_library(OrbitAmpShelfOther INTERFACE)
+target_link_libraries(OrbitAmpShelfOther INTERFACE OrbitAmpShelfOtherData)
+target_compile_definitions(OrbitAmpShelfOther INTERFACE SHELF_CARRIES_OTHER=1)
 
 # THE PRODUCT'S version, not the plugin wrapper's. `JucePlugin_VersionString` exists only inside a
 # target juce_add_plugin built, and the headless gates compile the very same UI sources without it —
@@ -602,6 +622,7 @@ add_dependencies(OrbitAmp OrbitAmpVersionGen)                            # ...re
 
 target_link_libraries(OrbitAmp PRIVATE
     OrbitAmpData                     # the mark, the notice, the demo loops — BinaryData::*
+    OrbitAmpShelfOther               # the cabinet shelf's `Other`, OrbitAmp's alone — ShelfOtherData::*
     OrbitAmpSetData                  # the factory packs, laid out at start — OrbitAmpSetData::*
     felitronics::analysis            # spectrum taps + panes behind the EQ curves
     felitronics::appkit              # shared app-side kit (header-only; JUCE comes from us)
@@ -1645,7 +1666,8 @@ if(APPLE)
     # what macOS keys its icon cache on. A bundle first built before it had an icon kept the blank
     # placeholder in the Dock and the app switcher for good, with the right icon sitting inside it.
     # So the bundle is touched after every build, and the system looks again.
-    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone RedPawAmp_Standalone FrostPawAmp_Standalone)
+    foreach(standalone OrbitAmp_Standalone CatpitAmp_Standalone RedPawAmp_Standalone FrostPawAmp_Standalone
+                       AmberPawAmp_Standalone)
         if(TARGET ${standalone})
             add_custom_command(TARGET ${standalone} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E touch_nocreate "$<TARGET_BUNDLE_DIR:${standalone}>"
@@ -1697,6 +1719,7 @@ target_compile_definitions(orbitamp_chain_test PRIVATE ORBITAMP_VERSION="${PROJE
                                                       JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE
     OrbitAmpData
+    OrbitAmpShelfOther               # OrbitAmp's whole shelf: the gate plays every number of it
     felitronics::analysis
     felitronics::appkit
     felitronics::appkit_webp         # the panel decodes a pack's photograph — same half the plugin links
@@ -1750,6 +1773,7 @@ target_compile_definitions(orbitamp_hum_test PRIVATE ORBITAMP_VERSION="${PROJECT
                                                     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_hum_test PRIVATE
     OrbitAmpData
+    OrbitAmpShelfOther               # OrbitAmp's processor, its whole shelf with it
     felitronics::analysis
     felitronics::appkit
     felitronics::appkit_webp
@@ -1825,7 +1849,8 @@ target_include_directories(orbitamp_set_test PRIVATE src)
 target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_set_test PRIVATE
     OrbitAmpSetData
-    OrbitAmpData                     # the family's cabinet shelf
+    OrbitAmpData                     # the family's cabinet shelf...
+    OrbitAmpShelfOther               # ...and its `Other`, which OrbitAmp alone carries
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events
     juce::juce_gui_basics

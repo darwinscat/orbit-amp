@@ -759,7 +759,8 @@ void CapturedBlockPanel::showDeviceMenu()
             add (menu, d);
     }
 
-    // ...and each folder of the player's as a submenu, as the disk has it — OLD ▸ preamps ▸ ….
+    // ...and each folder of the player's as a submenu, as the disk has it — OLD ▸ preamps ▸ … — the
+    // factory's OLD, where OrbitAmp puts away the V4, one with his (DeviceLibrary::Folder).
     std::function<bool (juce::PopupMenu&, const Library::Folder&)> addFolder;
     addFolder = [&] (juce::PopupMenu& into, const Library::Folder& f)
     {

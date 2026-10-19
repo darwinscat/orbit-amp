@@ -154,15 +154,17 @@ public:
         Bundled devices first, then whatever the user added at the top of their folder — packs and
         lone models alike, since a `.nam` someone dropped in is theirs exactly as much as an
         `.orbitrig` is — then what lies in the folders inside it. The player's folder is read to any
-        depth; the factory one only at its top, where the build lays its packs. The two folders are
-        the machine's unless a caller — a gate, in a folder of its own — names others. */
+        depth; the factory one at its top, where a build lays its packs, and one folder down, where a
+        build puts away what it still carries but no longer counts among the family's devices
+        (OrbitAmpSet.h: OLD). The two folders are the machine's unless a caller — a gate, in a folder
+        of its own — names others. */
     static juce::Array<Pack> scan (Slot wanted = Slot::any, bool onePerCapture = true,
                                    const juce::File& bundled = bundledDirectory(),
                                    const juce::File& own = directory())
     {
         juce::Array<Pack> packs;
 
-        scanFolder (bundled, true, packs, {}, 0);
+        scanFolder (bundled, true, packs, {}, factoryDepth);
         scanFolder (own, false, packs, {}, maxFolderDepth);
 
         // A pack that names a slot we do not have belongs in no list at all, whatever is being
@@ -206,7 +208,9 @@ public:
 
     /** A folder inside the player's Devices folder, as the disk has it: its packs one per line by
         file name — a folder is where a player keeps what they put away, and it is listed, not
-        grouped — and the folders inside it. Folders with no pack anywhere in them are not here. */
+        grouped — and the folders inside it. Folders with no pack anywhere in them are not here. A
+        folder the factory holds is one too, and is listed the same way; where the player has a folder
+        of the same name, the two are ONE folder, with what both hold — the factory's `OLD` and his. */
     struct Folder
     {
         juce::String        name;
@@ -214,8 +218,9 @@ public:
         std::vector<Folder> folders;
     };
 
-    /** WHAT THE AMP'S MENU LISTS: the family's devices from Factory, the devices at the top of the
-        player's own folder, and each folder in it, mirrored. Each part is in the order of its names. */
+    /** WHAT THE AMP'S MENU LISTS: the family's devices from the top of Factory, the devices at the top
+        of the player's own folder, and the folders — each in his, mirrored, and the one a build puts away
+        in, in Factory (`Folder`). Each part is in the order of its names. */
     struct Shelf
     {
         std::vector<Device> factory;
@@ -449,13 +454,18 @@ public:
         preamp are two ids, the same pack imported twice is one — so packs sharing an id are copies,
         and a list that showed both would offer the same sound twice under two names. The copy that
         stays: a bundled one over the player's (the build's layer is the floor everything else
-        stands on), then the newest file, then the name. Lone models and packs that state no id
+        stands on); of the builds' own, one a build has put away in a folder over one at the top —
+        a product that still plays a capture lays its copy where it always did, and that must not
+        bring back among the family's devices what another has put away (OrbitAmp's OLD, the V4 a
+        rover plays); then the newest file, then the name. Lone models and packs that state no id
         are never merged: without an identity, two files are two sounds. */
     static void keepOnePerCapture (juce::Array<Pack>& packs)
     {
         const auto better = [] (const Pack& a, const Pack& b)
         {
             if (a.bundled != b.bundled)   return a.bundled;
+            if (a.bundled && a.folder.isEmpty() != b.folder.isEmpty())
+                return ! a.folder.isEmpty();
             if (a.modified != b.modified) return a.modified > b.modified;
             return a.name < b.name;
         };
@@ -508,7 +518,7 @@ public:
 
         if (rigId.isNotEmpty())
         {
-            if (const auto shipped = installedWithRigId (bundled, rigId); ! shipped.isEmpty())
+            if (const auto shipped = installedWithRigId (bundled, rigId, factoryDepth); ! shipped.isEmpty())
             {
                 if (refused != nullptr)
                     *refused = shipped.getFirst().getFileName().upToFirstOccurrenceOf (".", false, false);
@@ -573,6 +583,9 @@ private:
     /** How deep into the player's folder the scanner goes. A folder linked into itself is a loop the
         disk can hold, and this is where it stops. */
     static constexpr int maxFolderDepth = 8;
+
+    /** ...and how deep into the factory's: its top, and the folders a build puts away in. */
+    static constexpr int factoryDepth = 1;
 
     /** The device a family's packs make — see `Device`. */
     static Device deviceFrom (const juce::Array<Pack>& packs, juce::Array<int> members)
@@ -646,8 +659,8 @@ private:
         }
     }
 
-    /** The packs directly in `dir` whose manifest names this `rig_id`. */
-    static juce::Array<juce::File> installedWithRigId (const juce::File& dir, const juce::String& rigId)
+    /** The packs in `dir` whose manifest names this `rig_id` — directly in it, and `depth` folders down. */
+    static juce::Array<juce::File> installedWithRigId (const juce::File& dir, const juce::String& rigId, int depth = 0)
     {
         juce::Array<juce::File> found;
 
@@ -659,6 +672,8 @@ private:
 
                 if (pack && rigIdOf (f) == rigId)
                     found.add (f);
+                else if (! pack && depth > 0 && f.isDirectory())
+                    found.addArray (installedWithRigId (f, rigId, depth - 1));
             }
 
         return found;

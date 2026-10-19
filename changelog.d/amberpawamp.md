@@ -11,9 +11,8 @@ or installers.
   as a needle on the gauge left of the centre, and the gear, channel and speed on the radio's screen. Out of
   the canopy, a low flight over Titan's methane sea under Saturn, the rotor's downwash on the liquid, TURBO a
   dash and PARK a hover, a wiper on each pane. Six
-  channels on the Victory V4's six packs, picked as three gears and TURBO — CLEAN the Copper, CRUNCH the
-  Sheriff, HI-GAIN the Kraken, TURBO the pedal's second channel over the gear's own GAIN, tone, reverb,
-  delay and cabinet, a gear pulled coming back with TURBO as it was left — and PARK at the lever's top
-  tick; the same keys, and MIDI Program Change
+  channels, picked as three gears and TURBO — CLEAN, CRUNCH and HI-GAIN, TURBO each gear's second sound
+  over the gear's own GAIN, tone, reverb, delay and cabinet, a gear pulled coming back with TURBO as it was
+  left — and PARK at the lever's top tick; the same keys, and MIDI Program Change
   1–6 for its six channels, 7 for PARK. Its own picture and renders and its own settings; FrostPawAmp's
   packs and the rovers' cabinets, laid out once for all of them.
