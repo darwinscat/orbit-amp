@@ -95,10 +95,13 @@ public:
     }
 
     /** What counts as an IR on disk. Vendors ship wav almost always, aiff sometimes; everything
-        else in a pack (readme, license, artwork) is not an IR and stays out of the tree. */
+        else in a pack (readme, license, artwork) is not an IR and stays out of the tree — and so is a
+        file hidden by its name, as every system but Windows hides it: the "._name.wav" the Finder leaves
+        beside each file on a shared drive is no IR on Windows either, where a walk that skips hidden
+        files still finds it. */
     static bool isAudioFile (const juce::File& f)
     {
-        return f.existsAsFile() && f.hasFileExtension ("wav;aif;aiff");
+        return f.existsAsFile() && f.hasFileExtension ("wav;aif;aiff") && ! f.getFileName().startsWithChar ('.');
     }
 
     /** What an import will take: an IR itself, a zip of them, or a folder holding some. */
