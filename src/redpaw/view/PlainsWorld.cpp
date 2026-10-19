@@ -357,6 +357,7 @@ void PlainsWorld::place (double x, double z, double heading, int g, bool t)
     s.storm = dustFor (gearWanted, turbo);
     yawRate = 0.0;
     s.camY = 0.0; s.pitch = 0.0;
+    play.reset();
     step (0.0);
 }
 
@@ -369,6 +370,7 @@ void PlainsWorld::settle() noexcept
 void PlainsWorld::step (double dt)
 {
     s.time += dt;
+    play.step (dt);
     const float target = speedFor (gearWanted, turbo);
     const float kS = (float) (1 - std::exp (-dt / speedSeconds));
     s.speed += (target - s.speed) * kS;

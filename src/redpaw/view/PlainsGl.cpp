@@ -22,6 +22,13 @@ namespace
     constexpr double vfovHalfTan = 0.23086819;  // tan 13 deg: vfov 26 deg, hfov follows from the aspect
     constexpr float shear = 0.2f;             // the horizon at NDC y = +0.2: 40 % from the top
     constexpr int dustCount = 1800;
+
+    // THE GUITAR (worlds/Play.h): the sun's halo in the dust swells with each attack and a little while the
+    // guitar sounds, and the beacons on the old machines' masts flash — nothing of it in silence, so a
+    // silent frame is the frame it always was.
+    constexpr float haloOfHit = 0.6f, haloOfGlow = 0.15f;
+    constexpr float beaconOfGlow = 0.3f;
+    constexpr float beaconLight[3] { 1.5f, 0.65f, 0.2f };  // orange, to yellow at a full flash
     constexpr double worldPeriod = PlainsWorld::worldPeriod;
 
     struct RockSet { double cell; int w; float prob, smin, smax; };
@@ -37,7 +44,7 @@ namespace
     // per uv unit, as 0.5 + 0.5 * g / gmax in RGBA8; uGS1 = (gmaxR, gmaxB), uGS2 = (gmaxG, gmaxA). The
     // relics (plains/relic.vert) are instanced, one draw per variant; aCell is the instance's unwrapped
     // 532 m cell. A vertex of kind 1 is a solar panel, of kind 2 a track behind the wheels: it follows
-    // the ground, and only some have one.
+    // the ground, and only some have one; of kind 3 a beacon, lit by the guitar.
     enum class Htex { none, vertex, fragment };
     std::string glsl (const char* path, Htex htex = Htex::none)
     {
@@ -169,6 +176,9 @@ namespace
             tri (A, B, C, n, col, kind);
         }
 
+        /** A beacon: a small dark cube, kind 3, that the guitar lights. */
+        void beacon (P3 c, double size) { box (c, { size, size, size }, dark, 3); }
+
         /** A low eight-sided mound: a slack airbag. */
         void mound (P3 c, double r, double h, P3 col)
         {
@@ -205,6 +215,7 @@ namespace
             m.box ({ 0, 1.34, 0 }, { 1.5, 0.04, 2.0 }, grey);
             m.bar ({ 0.45, 1.35, -0.8 }, { 0.45, 2.35, -0.8 }, 0.12, dark);
             m.box ({ 0.45, 2.42, -0.8 }, { 0.5, 0.3, 0.26 }, dark);
+            m.beacon ({ 0.45, 2.64, -0.8 }, 0.14);
             m.bar ({ 0, 1.3, 0.9 }, { 0, 1.8, 1.75 }, 0.42, dark);
             m.bar ({ -0.45, 1.36, 0.5 }, { -0.45, 1.62, 0.5 }, 0.08, dark);
             m.wheel ({ -0.45, 1.72, 0.5 }, 0.24, 0.03, white);
@@ -227,6 +238,7 @@ namespace
             m.box ({ 0, 0.31, 0 }, { 0.62, 0.02, 0.68 }, solar, 1);
             m.box ({ 0.12, 0.4, -0.3 }, { 0.12, 0.08, 0.08 }, dark);
             m.bar ({ -0.22, 0.32, 0.25 }, { -0.22, 0.75, 0.25 }, 0.02, dark);
+            m.beacon ({ -0.22, 0.78, 0.25 }, 0.06);
             for (double sx : { -1.0, 1.0 })
             {
                 for (double z : { -0.26, 0.0, 0.26 }) m.wheel ({ sx * 0.31, 0.035, z }, 0.065, 0.08, tyre);
@@ -252,6 +264,7 @@ namespace
             }
             m.bar ({ 0.25, 0.75, 0 }, { 0.25, 1.7, 0 }, 0.06, white);
             m.box ({ 0.25, 1.75, 0 }, { 0.3, 0.12, 0.14 }, dark);
+            m.beacon ({ 0.25, 1.88, 0 }, 0.14);
             m.bar ({ -0.3, 0.75, -0.2 }, { -0.3, 1.1, -0.2 }, 0.03, dark);
             out[2] = std::move (m.v);
         }
@@ -263,6 +276,7 @@ namespace
             m.box ({ 1.05, 0.81, 0.45 }, { 0.7, 0.03, 0.9 }, solar, 1);
             m.bar ({ 0.3, 0.85, -0.5 }, { 0.3, 1.6, -0.5 }, 0.08, dark);
             m.box ({ 0.3, 1.66, -0.5 }, { 0.38, 0.14, 0.16 }, dark);
+            m.beacon ({ 0.3, 1.80, -0.5 }, 0.14);
             m.bar ({ -0.35, 0.85, 0.3 }, { -0.35, 1.05, 0.3 }, 0.05, dark);
             m.wheel ({ -0.35, 1.15, 0.3 }, 0.14, 0.03, white);
             for (double sx : { -1.0, 1.0 })
@@ -617,7 +631,11 @@ void PlainsGl::drawScene (int rw, int rh)
     const auto mix3 = [] (std::array<float, 3> a, std::array<float, 3> b, float t) { return std::array<float, 3> { a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t }; };
     const auto horizon = mix3 ({ 0.87f, 0.64f, 0.44f }, { 0.76f, 0.58f, 0.40f }, storm);
     const auto zenith  = mix3 ({ 0.50f, 0.33f, 0.27f }, { 0.62f, 0.47f, 0.34f }, storm);
-    const auto sunGlow = mix3 ({ 0.55f, 0.40f, 0.22f }, { 0.36f, 0.28f, 0.17f }, storm);
+    const auto& play = world.playing();
+    const float halo = 1.0f + haloOfHit * play.hit() + haloOfGlow * play.glow();
+    auto sunGlow = mix3 ({ 0.55f, 0.40f, 0.22f }, { 0.36f, 0.28f, 0.17f }, storm);
+    for (auto& c : sunGlow) c *= halo;
+    const float beacons = std::max (play.hit(), beaconOfGlow * play.glow());
     const float hazeK = (1.0f / 6500.0f) * (1 + 4.0f * storm);
     const float sunInt = 1.4f - 1.0f * storm;
     const double sunAz = 32 * pi / 180, sunEl = 11 * pi / 180;
@@ -749,6 +767,7 @@ void PlainsGl::drawScene (int rw, int rh)
             setCommon (relic); setLight (relic);
             glUniformMatrix4fv (relic.uniform ("uViewProj"), 1, GL_FALSE, VP.data());
             glUniform3f (relic.uniform ("uCamRel"), camFrac[0], (float) s.camY, camFrac[1]);
+            glUniform3f (relic.uniform ("uBeacon"), beaconLight[0] * beacons, beaconLight[1] * beacons, beaconLight[2] * beacons);
             for (int v = 0; v < PlainsWorld::numRelics; ++v)
             {
                 if (relicCount[(size_t) v] == 0) continue;
