@@ -96,8 +96,10 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # letting FetchContent take the tag.
 #
 # v0.51.0 is the first release felitronics-guitar-core accepts: nam, rigplayer and poweramp left core
-# for that repository in it (see below). v0.60.0 is the freshest, and the first with felitronics::dehum,
-# the HumRemover the input's HUM stage is built on, so nothing older builds here. Between v0.31.0 and
+# for that repository in it (see below). v0.60.0 is the first with felitronics::dehum, the HumRemover
+# the input's HUM stage is built on. v0.61.0 is the freshest, and the first with felitronics::delay and
+# felitronics::reverb — the echo and the room, which were this repository's own stages until they moved
+# there, so nothing older builds here. Between v0.31.0 and
 # v0.53.0, nothing this plugin calls plays differently INSIDE a running stream —
 # the probe loops render bit-identically on both — and what moved is at a stream's edges: a re-prepared
 # capture no longer answers with the previous stream's tail, its warm-up is counted at the new rate, a
@@ -106,7 +108,18 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # v0.53.0 glides are in stages this plugin does not link. Past v0.53.0 two things reach this graph, and
 # neither plays here: WaveShaper gains four shapes while Asym — the only one the power amp's TubeStage
 # sets — keeps its expressions, and eq's Tilt at slope 6 turns first-order, a band no block here builds.
-set(ORBITAMP_FCORE_TAG "v0.60.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+#
+# v0.61.0 DOES play differently, in the two stages it brings, and it was measured before they replaced
+# ours: both renders side by side on the same program at 44.1, 48 and 96 kHz, in blocks of 64, 512 and a
+# ragged run. At knobs that stand still the echo is within 2.4e-7 of ours and the five plain rooms within
+# 3e-14; MODULATED is within 6.5e-5 at full mix on a hot program — its chorus reads its line at a position
+# kept in double where ours rounded it to float, so that distance is the tail's slope times a rounding and
+# halves with the level. With a knob moving, the echo's head now LANDS: ours parked short of a new time
+# for good, the repeats 28 samples early at 1.5 s and 112 at 6 s (48 kHz), and the old echo is the new
+# one read at that parked head to within 4e-8 — a time, not a level or a tone. A fresh room no longer
+# leaks the dry into its first 10 ms, and an Intel build plays the arm64 sound: the framework's Freeverb
+# under ours quantised its state on x86-64, up to 1e-6.
+set(ORBITAMP_FCORE_TAG "v0.61.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -595,6 +608,8 @@ target_link_libraries(OrbitAmp PRIVATE
     felitronics::appkit_webp         # juce::Image <- WebP, for the picture a pack ships
     felitronics::core                # core::BypassWire reads the resampler's delay geometry
     felitronics::dehum               # the hum off the input, ahead of the trim
+    felitronics::delay               # the echo (TapeDelay) and its knob law — sync, DARK, ranges
+    felitronics::reverb              # the room (AmpReverb), and the reverb face's picture of it
     felitronics::dynamics            # the noise gate (felitronics::dynamics::NoiseGate)
     felitronics::eq                  # matched biquads behind the tone stack (core::ToneStack)
     felitronics::lineareq            # the tone curve read off the player's grid (core::CapturedBlock)
@@ -721,6 +736,8 @@ set(CATPITAMP_LIBRARIES
     felitronics::appkit_webp
     felitronics::core
     felitronics::dehum
+    felitronics::delay
+    felitronics::reverb
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -1015,6 +1032,8 @@ set(ROVER_LIBRARIES
     felitronics::appkit_webp
     felitronics::core
     felitronics::dehum
+    felitronics::delay
+    felitronics::reverb
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -1401,6 +1420,7 @@ target_include_directories(orbitamp_pack_probe PRIVATE src)
 target_compile_definitions(orbitamp_pack_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_pack_probe PRIVATE
     felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
+    felitronics::delay felitronics::reverb   # Parameters.h names the delay's ladder and the room's characters from them
     juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
@@ -1410,6 +1430,7 @@ target_include_directories(orbitamp_render_probe PRIVATE src)
 target_compile_definitions(orbitamp_render_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_render_probe PRIVATE
     felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
+    felitronics::delay felitronics::reverb   # Parameters.h names the delay's ladder and the room's characters from them
     juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
@@ -1419,6 +1440,7 @@ target_include_directories(orbitamp_level_probe PRIVATE src)
 target_compile_definitions(orbitamp_level_probe PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_level_probe PRIVATE
     felitronics::lineareq felitronics::nam felitronics::rigplayer felitronics::limiter
+    felitronics::delay felitronics::reverb   # Parameters.h names the delay's ladder and the room's characters from them
     juce::juce_dsp juce::juce_events juce::juce_gui_basics juce::juce_audio_formats juce::juce_audio_processors
     juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
@@ -1447,17 +1469,16 @@ add_executable(orbitamp_gatelearn_test tests/GateLearnTests.cpp)
 target_include_directories(orbitamp_gatelearn_test PRIVATE src)
 target_compile_features(orbitamp_gatelearn_test PRIVATE cxx_std_20)
 
-# Same gate for the reverb. It links juce_audio_basics because that stage is JUCE-bound by
-# construction (Freeverb) — which is exactly why it is a SEPARATE target: the tone-stack gate above
-# stays JUCE-free, and the split makes the dependency visible instead of quietly universal.
+# Same gate for the reverb — felitronics::reverb's AmpReverb, the room this plugin plays. It needs no
+# JUCE any more (the room no longer stands on the framework's Freeverb); it stays a console app so its
+# binary lands where the release workflows look for every gate's.
 juce_add_console_app(orbitamp_reverb_test PRODUCT_NAME "OrbitAmpReverbTest")
 target_sources(orbitamp_reverb_test PRIVATE tests/ReverbStageTests.cpp)
 target_include_directories(orbitamp_reverb_test PRIVATE src)
 target_compile_definitions(orbitamp_reverb_test PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_reverb_test PRIVATE
-    felitronics::eq
-    juce::juce_audio_basics
+    felitronics::reverb
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
@@ -1609,6 +1630,8 @@ target_link_libraries(orbitamp_chain_test PRIVATE
     felitronics::appkit_webp         # the panel decodes a pack's photograph — same half the plugin links
     felitronics::core                # core::BypassWire reads the resampler's delay geometry
     felitronics::dehum
+    felitronics::delay
+    felitronics::reverb
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -1660,6 +1683,8 @@ target_link_libraries(orbitamp_hum_test PRIVATE
     felitronics::appkit_webp
     felitronics::core
     felitronics::dehum
+    felitronics::delay
+    felitronics::reverb
     felitronics::dynamics
     felitronics::eq
     felitronics::lineareq
@@ -1689,6 +1714,8 @@ target_link_libraries(orbitamp_captured_test PRIVATE
     felitronics::nam
     felitronics::rigplayer
     felitronics::limiter
+    felitronics::delay               # Parameters.h takes the delay's ladder and ranges from it...
+    felitronics::reverb              # ...and the room's characters
     juce::juce_audio_basics
     juce::juce_audio_processors
     juce::juce_dsp

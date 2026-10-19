@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include "../core/ReverbStage.h"
 #include "BlockFrame.h"
 #include "Knob.h"
 #include "VoicingSelector.h"
 #include "ZoneSwitch.h"
 
 #include <felitronics/analysis/SpectrumPane.h>
+#include <felitronics/reverb/AmpReverb.h>
 
 namespace orbitamp
 {
@@ -85,7 +85,7 @@ private:
     static constexpr double tailSeconds = 1.5;
     static constexpr int    tailBuckets = 240;
 
-    core::ReverbStage  display;   // drawing only; never sees the audio thread
+    felitronics::reverb::AmpReverb display;   // drawing only; never sees the audio thread
     std::vector<float> tailEnv;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment,

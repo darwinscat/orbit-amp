@@ -869,8 +869,10 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         }
     }
 
-    delay.prepare (sampleRate, block);
-    reverb.prepare (sampleRate, block);
+    // Over the channels the bus carries — one or two, by the layouts this plugin accepts. A prepare
+    // either refuses keeps that link out of the sound (see delayReady), the way the limiter's does.
+    delayReady  = delay.prepare (sampleRate, block, channels);
+    reverbReady = reverb.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
     demo.prepare (sampleRate);
     scopeDry.setSize (1, block);
@@ -942,7 +944,10 @@ void AmpProcessor::updateDelaySettings() noexcept
 
         const int div = juce::jlimit (0, params::delayDivisions.size() - 1,
                                       juce::roundToInt (delayDivParam->load()));
-        ms = (float) ((double) params::delayDivisionBeats[div] * 60000.0 / bpm);
+        // The delay's own ladder, at the conducting tempo however slow a host goes; a note longer
+        // than the line is cut to the line by the delay itself. Not divisionMs: that floors the
+        // tempo at the BPM field's 40, and a slower host's echo would leave its time.
+        ms = (float) ((double) felitronics::delay::kDivisionBeats[div] * 60000.0 / bpm);
     }
 
     delay.setTimeMs (ms);
@@ -950,9 +955,7 @@ void AmpProcessor::updateDelaySettings() noexcept
 
     // DARK is a percent of darkness; the corner it buys falls log-evenly from the bright
     // ceiling to the dark floor, so every degree of the knob darkens by the same ear-step.
-    delay.setDarkHz (params::delayDarkHiHz
-                     * std::pow (params::delayDarkLoHz / params::delayDarkHiHz,
-                                 delayDarkParam->load() * 0.01f));
+    delay.setDarkHz (felitronics::delay::darkHzForPercent (delayDarkParam->load()));
 
     delay.setOffsetMs (delayOffsetParam->load());
     delay.setMix (delayMixParam->load() * 0.01f);
@@ -963,7 +966,7 @@ void AmpProcessor::updateReverbSettings() noexcept
     const int index = juce::jlimit (0, params::reverbCharacters.size() - 1,
                                     juce::roundToInt (reverbTypeParam->load()));
 
-    reverb.setCharacter (static_cast<core::ReverbStage::Character> (index));
+    reverb.setCharacter (static_cast<felitronics::reverb::Character> (index));
     reverb.setMix (reverbMixParam->load() * 0.01f);   // the face reads percent
     reverb.setDecay (reverbDecayParam->load());
     reverb.setPredelayMs (reverbPredelayParam->load());
@@ -1581,7 +1584,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     {
         const bool inRig = linkInRig (params::rowDelay);
         const auto span  = blockFade[(size_t) params::rowDelay].advance (numSamples, inRig);
-        const bool run   = core::BypassFade::runs (span, inRig);
+        const bool run   = delayReady && core::BypassFade::runs (span, inRig);
         const bool fade  = span.moving && canFade (numSamples, nchBack);
 
         if (run)
@@ -1593,7 +1596,8 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                     juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
                                                        buffer.getReadPointer (ch), numSamples);
 
-            delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
+            // Prepared for every channel the bus carries, so it cannot refuse this block.
+            (void) delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
 
             if (fade)
                 core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
@@ -1613,7 +1617,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     const auto reverbSpan  = blockFade[(size_t) params::rowReverb].advance (numSamples, reverbInRig);
     const bool reverbFade  = reverbSpan.moving && canFade (numSamples, nchBack);
 
-    if (core::BypassFade::runs (reverbSpan, reverbInRig))
+    if (reverbReady && core::BypassFade::runs (reverbSpan, reverbInRig))
         { const auto a = PerfClock::now();
           const bool fed = linkWorks (params::rowReverb);
 
@@ -1631,7 +1635,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
             tin.publishIfDue (eqSpectrumOrder,
                               juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
 
-          reverb.process (channels, nchBack, numSamples, fed);
+          (void) reverb.process (channels, nchBack, numSamples, fed);   // as the delay: it cannot refuse
 
           { auto& tout = reverbSpectrumTap[1];
             const float* w = reverb.addedWet (0);

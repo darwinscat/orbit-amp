@@ -20,15 +20,15 @@
 #include "core/CabinetIr.h"
 #include "core/DoorLimiter.h"
 #include "core/LateWire.h"
-#include "core/DelayStage.h"
-#include "core/ReverbStage.h"
 #include "device/EmbeddedIrs.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/appkit/CompareHistory.h>
 #include <felitronics/appkit/UpdateChecker.h>
 #include <felitronics/dehum/HumRemover.h>
+#include <felitronics/delay/TapeDelay.h>
 #include <felitronics/dynamics/NoiseGate.h>
+#include <felitronics/reverb/AmpReverb.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <array>
@@ -863,13 +863,16 @@ private:
     float editorScale = preferredScale;
 
     std::array<core::EqLink, params::numEqLinks> eqLinks;
-    core::DelayStage  delay;
-    core::ReverbStage reverb;
+    felitronics::delay::TapeDelay  delay;
+    felitronics::reverb::AmpReverb reverb;
+    // A prepare either stage refuses (no channel to carry, more than two) leaves it out of the sound:
+    // the dry passes as if the link were out of the rig, rather than a stage nobody built being run.
+    bool delayReady = false, reverbReady = false;
 
 public:
     /** The delay's picture taps, read-only: the face draws its comb from the same numbers the
         heads are actually standing on. */
-    const core::DelayStage& delayTaps() const noexcept { return delay; }
+    const felitronics::delay::TapeDelay& delayTaps() const noexcept { return delay; }
 
     /** The tempo the host reported at the last block, or 0 when it reports none — the standalone,
         or a host that does not say. For the delay's face, which shows the number that conducts. */

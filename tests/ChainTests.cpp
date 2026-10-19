@@ -1365,18 +1365,24 @@ int main()
                 buf.clear();
                 d->processBlock (buf, midi);
 
-                const float now = d->delayTaps().shownTimeMs.load();
+                const float now = d->delayTaps().shownTimeMs();
                 if (std::abs (now - last) < 0.001f)
                     break;
                 last = now;
             }
         };
-        const auto timeMs = [&] { return d->delayTaps().shownTimeMs.load(); };
+        const auto timeMs = [&] { return d->delayTaps().shownTimeMs(); };
 
         head.bpm = 100.0;
         block();
         report ("a quarter note follows the host's 100 BPM",  std::abs (timeMs() - 600.0f) < 0.5f
                                                                 && std::abs (d->hostTempoBpm() - 100.0f) < 0.01f,
+                juce::String (timeMs(), 1) + " ms");
+
+        // ...and a host slower than the BPM field reaches: the field stops at 40, a session does not.
+        head.bpm = 30.0;
+        block();
+        report ("...and a host's 30 BPM, under the field's floor", std::abs (timeMs() - 2000.0f) < 0.5f,
                 juce::String (timeMs(), 1) + " ms");
 
         set (*d, orbitamp::params::delayHostTempo, 0.0f);
@@ -1394,6 +1400,34 @@ int main()
         d->setPlayHead (nullptr);
     }
 
+    // THE ECHO ARRIVES WHEN TIME SAYS. The head is a motor gliding to its target, and a float head
+    // stops moving once a step is smaller than half its own last digit: at 1.5 s it parked
+    // twenty-eight samples short and stayed there, every repeat that much early. Eight seconds of
+    // blocks is fifty of the motor's time constants — long past any glide that is going to land.
+    {
+        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        d->prepareToPlay (sampleRate, blockSize);
+        set (*d, orbitamp::params::delaySync, 0.0f);
+
+        juce::AudioBuffer<float> buf (2, blockSize);
+        juce::MidiBuffer midi;
+        const auto run = [&] (double seconds)
+        {
+            for (int i = 0; i < (int) (seconds * sampleRate / blockSize); ++i)
+            {
+                buf.clear();
+                d->processBlock (buf, midi);
+            }
+        };
+
+        run (0.1);
+        set (*d, orbitamp::params::delayTimeMs, 1500.0f);
+        run (8.0);
+        const float landed = d->delayTaps().shownTimeMs();
+        report ("delay: the echo lands on the time it was set to", std::abs (landed - 1500.0f) < 0.01f,
+                juce::String (landed, 3) + " ms");
+    }
+
     // ONE BAD SAMPLE MUST NOT SILENCE THE ECHO FOR EVER. The line is recursive: a NaN or an
     // infinity recorded into it used to go round for good, every sample after it not a number,
     // until the delay left the rig. Stage alone, host-sized blocks: a quiet tone, one poisoned
@@ -1402,8 +1436,8 @@ int main()
         for (const float poison : { std::numeric_limits<float>::quiet_NaN(),
                                     std::numeric_limits<float>::infinity() })
         {
-            orbitamp::core::DelayStage echo;
-            echo.prepare (sampleRate, blockSize);
+            felitronics::delay::TapeDelay echo;
+            (void) echo.prepare (sampleRate, blockSize, 2);
             echo.setTimeMs (120.0f);
             echo.setRepeats (0.6f);
             echo.setMix (0.5f);
@@ -1427,7 +1461,7 @@ int main()
                 if (b == 20)
                     buf.setSample (0, 100, poison), buf.setSample (1, 100, poison);
 
-                echo.process (buf.getArrayOfWritePointers(), 2, blockSize);
+                (void) echo.process (buf.getArrayOfWritePointers(), 2, blockSize);
 
                 for (int ch = 0; ch < 2; ++ch)
                     for (int i = 0; i < blockSize; ++i)
@@ -1456,10 +1490,10 @@ int main()
     {
         const auto twins = [] (float offsetMs, float offsetExact, float timeMs, float timeExact)
         {
-            orbitamp::core::DelayStage hair, exact;
+            felitronics::delay::TapeDelay hair, exact;
             for (auto* d : { &hair, &exact })
             {
-                d->prepare (sampleRate, blockSize);
+                (void) d->prepare (sampleRate, blockSize, 2);
                 d->setRepeats (0.0f);
                 d->setMix (1.0f);
             }
@@ -1479,8 +1513,8 @@ int main()
                     for (auto* buf : { &a, &b })
                         buf->setSample (0, i, s), buf->setSample (1, i, s);
                 }
-                hair.process (a.getArrayOfWritePointers(), 2, blockSize);
-                exact.process (b.getArrayOfWritePointers(), 2, blockSize);
+                (void) hair.process (a.getArrayOfWritePointers(), 2, blockSize);
+                (void) exact.process (b.getArrayOfWritePointers(), 2, blockSize);
                 for (int ch = 0; ch < 2; ++ch)
                     for (int i = 0; i < blockSize; ++i)
                         worst = std::max (worst, (double) std::abs (a.getSample (ch, i) - b.getSample (ch, i)));

@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <felitronics/delay/DelayLaw.h>
+#include <felitronics/reverb/AmpReverb.h>
+
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace orbitamp::params
@@ -351,27 +354,26 @@ inline constexpr const char* delayDark    = "delay_dark";
 inline constexpr const char* delayOffset  = "delay_offset";
 inline constexpr const char* delayMix     = "delay_mix";
 
-/** The sync ladder, longest first, dotted and triplet beside each plain value. The table is
-    the same fact in quarter notes: ms = beats x 60000 / BPM. */
-inline const juce::StringArray delayDivisions { "1/1", "1/2.", "1/2", "1/2T", "1/4.", "1/4",
-                                                "1/4T", "1/8.", "1/8", "1/8T", "1/16.", "1/16",
-                                                "1/16T" };
-inline constexpr float delayDivisionBeats[] = { 4.0f, 3.0f, 2.0f, 4.0f / 3.0f, 1.5f, 1.0f,
-                                                2.0f / 3.0f, 0.75f, 0.5f, 1.0f / 3.0f, 0.375f,
-                                                0.25f, 1.0f / 6.0f };
-inline constexpr int delayDivDefault = 5;   // 1/4
+/** The sync ladder, longest first, dotted and triplet beside each plain value — the delay's own
+    (felitronics::delay::kDivisionNames), so the choice a session stores is the step the engine
+    counts. Its length in quarter notes is the engine's too: felitronics::delay::divisionMs. */
+inline const juce::StringArray delayDivisions { felitronics::delay::kDivisionNames,
+                                                felitronics::delay::kNumDivisions };
+inline constexpr int delayDivDefault = felitronics::delay::kDivisionDefault;   // 1/4
 
 /** The BPM the sync runs on when no host is conducting — the standalone's field — or when the
     player has told the delay to keep its own (`delayHostTempo` off). */
-inline constexpr float delayBpmMin = 40.0f, delayBpmMax = 240.0f, delayBpmDefault = 120.0f;
+inline constexpr float delayBpmMin     = felitronics::delay::kBpmMin,       // 40
+                       delayBpmMax     = felitronics::delay::kBpmMax,       // 240
+                       delayBpmDefault = felitronics::delay::kBpmDefault;   // 120
 
-inline constexpr float delayTimeMinMs = 20.0f, delayTimeMaxMs = 2000.0f;
-inline constexpr float delayOffsetMaxMs = 30.0f;
+inline constexpr float delayTimeMinMs   = felitronics::delay::kTimeMinMs,   // 20
+                       delayTimeMaxMs   = felitronics::delay::kTimeMaxMs;   // 2000
+inline constexpr float delayOffsetMaxMs = felitronics::delay::kOffsetMaxMs; // 30
 /** DARK is a percent of darkness, so the knob's direction tells the truth: clockwise darkens.
     The engine maps it onto the loop's low pass corner, the bright ceiling falling log-evenly
-    to the dark floor. */
-inline constexpr float delayDarkLoHz = 800.0f, delayDarkHiHz = 16000.0f;
-inline constexpr float delayDarkDefaultPct = 45.0f;   // ~4 kHz — the tape-ish middle
+    to the dark floor (felitronics::delay::darkHzForPercent, 16 kHz down to 800 Hz). */
+inline constexpr float delayDarkDefaultPct = felitronics::delay::kDarkDefaultPct;   // ~4 kHz — the tape-ish middle
 
 inline constexpr const char* reverbType     = "reverb_type";
 inline constexpr const char* reverbMix      = "reverb_mix";
@@ -385,10 +387,12 @@ inline constexpr const char* reverbDecay    = "reverb_decay";
 inline constexpr const char* reverbPredelay = "reverb_predelay";
 inline constexpr const char* reverbHpfHz    = "reverb_hpf_hz";
 
-/** Reverb characters, in the order of the design's simple case. Size and damping follow from the
-    character rather than being loose knobs — the design calls for Mix only. */
-inline const juce::StringArray reverbCharacters { "Ambience", "Room", "Hall", "Plate", "Spring",
-                                                  "Modulated" };
+/** Reverb characters, in the order of the design's simple case — the room's own
+    (felitronics::reverb::kCharacterNames), so the index a session stores is the character the engine
+    plays. Size and damping follow from the character rather than being loose knobs — the design
+    calls for Mix only. */
+inline const juce::StringArray reverbCharacters { felitronics::reverb::kCharacterNames,
+                                                  felitronics::reverb::kNumCharacters };
 
 /** Tone range. The measured hardware spanned about -10..+8 per control and up to 20 dB of travel on
     presence; the survey's conclusion on the narrower first pass was that the ranges were too small.
