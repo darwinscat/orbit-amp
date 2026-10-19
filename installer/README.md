@@ -39,6 +39,8 @@ on by default); every release build passes `-DORBITAMP_DEV_FACTORY=OFF`.
   amp × format, and one for the data, `com.darwinscat.amps.factory`, into
   `/Library/Application Support/Darwin's Cat`. Customize shows the data first, ticked and greyed out,
   then each amp with VST3, Audio Unit, CLAP and Standalone under it.
+- **Compression:** every component `pkgbuild --compression latest --min-os-version 11.0` — the amps'
+  own oldest macOS.
 - **Signing:** only with `INSTALLER_IDENTITY` set (`productbuild --sign`); without it the package is
   unsigned, and `productsign` can sign it afterwards.
 

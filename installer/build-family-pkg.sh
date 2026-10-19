@@ -21,9 +21,14 @@
 #   e.g. installer/build-family-pkg.sh 0.8.0 build dist
 # <build-dir> is the CMake build dir: each amp's bundles are read from
 # <build-dir>/<Amp>_artefacts/Release/{VST3,AU,CLAP,Standalone}, and an amp missing one stops the
-# build; the data from <build-dir>/Shipped/Factory, which must hold every amp's list. The bundles are expected to be codesigned and stapled already (sign-family-macos.sh). The .pkg
-# is signed only when INSTALLER_IDENTITY names a Developer ID Installer identity; without it, it is built
-# unsigned, and productsign can sign it later.
+# build; the data from <build-dir>/Shipped/Factory, which must hold every amp's list. The bundles are
+# expected to be codesigned and stapled already (sign-family-macos.sh). The .pkg is signed only when
+# INSTALLER_IDENTITY names a Developer ID Installer identity; without it, it is built unsigned, and
+# productsign can sign it later.
+#
+# EVERY COMPONENT IS COMPRESSED THE NEWEST WAY Installer reads (`pkgbuild --compression latest`), which
+# needs macOS 11 to open it — the amps' own oldest (CMAKE_OSX_DEPLOYMENT_TARGET). productbuild keeps each
+# component as it was built.
 #
 # SIGNED BY productsign, NOT BY productbuild --sign. The package is built unsigned and productsign signs
 # it, as every release before did. On the signing runner, which has no one at its screen, productbuild's
@@ -42,6 +47,7 @@ if [ -z "$FAMILY" ] || [ -z "$AMPS" ]; then
   echo "build-family-pkg.sh: no name or no amps in $INI" >&2; exit 1
 fi
 FORMATS="vst3 au clap standalone"
+COMPRESS=(--compression latest --min-os-version 11.0)   # see above
 
 format() {   # format <f> — the artefact folder, bundle suffix, install folder and title of one format
   case "$1" in
@@ -97,7 +103,7 @@ outline=""; choices=""; refs=""
 fid="com.darwinscat.amps.factory"
 mkdir -p "$work/stage/$fid"
 ditto --norsrc --noextattr --noacl "$FACTORY" "$work/stage/$fid/Factory"
-pkgbuild --quiet \
+pkgbuild --quiet "${COMPRESS[@]}" \
   --root "$work/stage/$fid" \
   --install-location "/Library/Application Support/Darwin's Cat" \
   --identifier "$fid" \
@@ -138,7 +144,7 @@ for amp in $AMPS; do
       i=$((i + 1))
     done
 
-    pkgbuild --quiet \
+    pkgbuild --quiet "${COMPRESS[@]}" \
       --root "$stage" \
       --component-plist "$plist" \
       --install-location "$DEST" \
