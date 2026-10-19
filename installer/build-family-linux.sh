@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The family's Linux release: ONE .tar.gz, darwinscat-amps-<version>-linux-<arch>, with every amp of
+# The family's Linux release: ONE .tar.xz, darwinscat-amps-<version>-linux-<arch>, with every amp of
 # the release (installer/family.ini) as VST3, CLAP and the standalone app, and the install.sh and
 # uninstall.sh (installer/linux) that place them — for the player alone, or with --system for every
 # user. Inside:
@@ -68,5 +68,6 @@ cp "$HERE/linux/install.sh" "$HERE/linux/uninstall.sh" "$root/"
 chmod 755 "$root/install.sh" "$root/uninstall.sh"
 printf 'name=%s\nversion=%s\namps=%s\n' "$FAMILY" "$VERSION" "$AMPS" > "$root/release.ini"
 
-tar -C "$work" -czf "$OUT/$NAME.tar.gz" "$NAME"
-echo "built $OUT/$NAME.tar.gz"
+# xz, not gzip: the same tar, and a third smaller. Every tar a player has reads it (`tar -xf`).
+tar -C "$work" -cJf "$OUT/$NAME.tar.xz" "$NAME"
+echo "built $OUT/$NAME.tar.xz"

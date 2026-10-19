@@ -7,7 +7,7 @@ name: release
 #
 #   • macOS   → one signed + notarized .pkg and one .zip: every amp, VST3 + AU + CLAP + Standalone, universal  [self-hosted runner]
 #   • Windows → one Inno Setup .exe (x64), and a .zip for x64 and for arm64: every amp, VST3 + CLAP + Standalone
-#   • Linux   → one .tar.gz for x86_64 and for arm64: every amp, VST3 + CLAP + Standalone, with install.sh
+#   • Linux   → one .tar.xz for x86_64 and for arm64: every amp, VST3 + CLAP + Standalone, with install.sh
 #
 # Every system builds Family_All — every format of every amp of the family — and runs the one gate list
 # (tests/gates.txt, tools/run-gates.sh) before it packs anything. The notes are the family's book: the
@@ -209,7 +209,7 @@ jobs:
           cmake --build build --target Family_All Family_Gates
       - name: Gates
         run: tools/run-gates.sh build Release
-      - name: Package (.tar.gz)
+      - name: Package (.tar.xz)
         env:
           VER: ${{ needs.version.outputs.version }}
         run: installer/build-family-linux.sh "$VER" build dist "${{ matrix.arch }}"

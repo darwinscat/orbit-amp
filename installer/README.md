@@ -81,7 +81,7 @@ somewhere else on the disk.
 - **In:** the version; the CMake build dir (`<Amp>_artefacts/Release/{VST3,CLAP,Standalone}`); the out
   dir; the architecture that names the tarball (`uname -m` by default). The amps' icons come from
   `resources/icon/<Amp>-1024.png`.
-- **Out:** `dist/darwinscat-amps-<version>-linux-<arch>.tar.gz` — `VST3/`, `CLAP/`, `Standalone/`,
+- **Out:** `dist/darwinscat-amps-<version>-linux-<arch>.tar.xz` — `VST3/`, `CLAP/`, `Standalone/`,
   `icons/`, `Factory/` (the data), and `install.sh` / `uninstall.sh` (from `linux/`).
 
 The player runs `./install.sh`: it asks amp by amp and format by format, or takes `--yes`,
