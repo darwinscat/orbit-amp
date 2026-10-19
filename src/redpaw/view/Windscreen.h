@@ -11,6 +11,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_opengl/juce_opengl.h>
 
+#include <array>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -84,6 +85,12 @@ public:
         to a stand when parked. In the 1993 landscape its own drive, counted in the Plains' measure; in
         the still, what the gear asks for — nothing moves there to ease. Message thread. */
     float speedKmh() const noexcept;
+
+    /** THE 1993 DRIVE'S PACE: texels a second in each gear, the first first — a lever longer than the
+        table runs its top gears at the last — twice that with TURBO; eased to it with this time constant,
+        and to a stand with the Plains' park time. */
+    static constexpr std::array<float, 4> texelsPerSecond1993 { 2.0f, 5.0f, 10.0f, 16.0f };
+    static constexpr double speedSeconds1993 = 0.28;
 
     /** Held steering input from outside, -1..1; 0 lets go. Adds to the view's own drag and keys. */
     void steer (float amount) noexcept;

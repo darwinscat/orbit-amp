@@ -49,6 +49,7 @@ public:
 
     float speed() const noexcept override                        { return (float) world.state().speed; }
     float speedFor (int g, bool t) const noexcept override       { return (float) world.speedFor (g, t); }
+    Ease ease() const noexcept override                          { return { TitanWorld::speedSeconds, TitanWorld::parkSeconds }; }
     redpaw::Mars1993::Look look1993() const noexcept override    { return redpaw::Mars1993::Look::titan; }
 
     /** The buoys and the nitrogen fields out on the sea. */

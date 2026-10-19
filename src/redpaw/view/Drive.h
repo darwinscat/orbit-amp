@@ -61,6 +61,9 @@ public:
     virtual float speed() const noexcept = 0;
     /** The speed the gear and TURBO ask for, m/s. */
     virtual float speedFor (int gear, bool turbo) const noexcept = 0;
+    /** How the speed is eased to what is asked, a time constant in seconds: driving, and coming to a stand. */
+    struct Ease { double drive = 0.0, park = 0.0; };
+    virtual Ease ease() const noexcept = 0;
 
     /** The 1993 landscape's colours for this world. */
     virtual Mars1993::Look look1993() const noexcept = 0;

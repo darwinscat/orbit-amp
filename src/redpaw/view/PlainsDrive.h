@@ -46,6 +46,7 @@ public:
 
     float speed() const noexcept override                        { return world.state().speed; }
     float speedFor (int g, bool t) const noexcept override       { return world.speedFor (g, t); }
+    Ease ease() const noexcept override                          { return { PlainsWorld::speedSeconds, PlainsWorld::parkSeconds }; }
     Mars1993::Look look1993() const noexcept override            { return Mars1993::Look::mars; }
 
     std::string landmarks (double metres) const override

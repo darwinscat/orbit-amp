@@ -528,6 +528,34 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     auto* speeds = new juce::DynamicObject();
     speeds->setProperty ("kmh", kmh);
     speeds->setProperty ("turboKmh", turboKmh);
+
+    // ...and how the speed is eased to them, time constants in seconds: the nav reads the view it shows
+    // (Windscreen::speedKmh) — the GPU's world eases its own; the 1993 landscape its pace, read against the
+    // gear asked now; the still none, what is asked at once.
+    auto* ease = new juce::DynamicObject();
+    {
+        const auto e = view->drive().ease();
+        auto* gpu = new juce::DynamicObject();
+        gpu->setProperty ("tau", e.drive);
+        gpu->setProperty ("parkTau", e.park);
+        ease->setProperty ("gpu", juce::var (gpu));
+        auto* cpu = new juce::DynamicObject();
+        cpu->setProperty ("tau", Windscreen::speedSeconds1993);
+        cpu->setProperty ("parkTau", PlainsWorld::parkSeconds);
+        juce::Array<juce::var> pace;
+        const auto& table = Windscreen::texelsPerSecond1993;
+        for (int g = 1; g <= lever.numGears(); ++g)
+            pace.add (table[(size_t) juce::jmin (g, (int) table.size()) - 1]);
+        cpu->setProperty ("texelsPerSecond", pace);
+        cpu->setProperty ("turboFactor", PlainsWorld::turboFactor);
+        cpu->setProperty ("reading", "km/h = pace / texelsPerSecond[the gear asked now] * kmh[the gear asked now]");
+        ease->setProperty ("view1993", juce::var (cpu));
+        auto* still = new juce::DynamicObject();
+        still->setProperty ("tau", 0.0);
+        still->setProperty ("parkTau", 0.0);
+        ease->setProperty ("still", juce::var (still));
+    }
+    speeds->setProperty ("ease", juce::var (ease));
     world.setProperty ("speeds", juce::var (speeds));
 
     // THE NAV SCREEN: its boxes, how its top line is set (NavHeader::paint — sizes in the stage's units,

@@ -353,7 +353,7 @@ void PlainsWorld::step (double dt)
 {
     s.time += dt;
     const float target = parked ? 0.0f : speedFor (gearWanted, turbo);
-    const float kS = (float) (1 - std::exp (-dt / (parked ? parkSeconds : 0.45)));
+    const float kS = (float) (1 - std::exp (-dt / (parked ? parkSeconds : speedSeconds)));
     s.speed += (target - s.speed) * kS;
     s.storm += ((parked ? 0.0f : dustFor (gearWanted, turbo)) - s.storm) * (float) (1 - std::exp (-dt / dustEaseSeconds));
 

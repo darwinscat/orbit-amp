@@ -45,6 +45,7 @@ public:
     static constexpr std::array<float, maxGears> turboDust { 0.25f, 0.6f, 1.0f };
     static constexpr double dustEaseSeconds = 0.7;    // tau: about 2 s to arrive or clear, never a jump
     static constexpr double parkSeconds = 0.5;        // tau: parked, the rover is standing in about 1.5 s
+    static constexpr double speedSeconds = 0.45;      // tau: the gear's speed reached
     static constexpr float parkedYawDegrees = 8.0f;   // parked, the hand turns the view in place, slowly
 
     /** The relics: one per hashed cell where the hash and the ground allow. */
