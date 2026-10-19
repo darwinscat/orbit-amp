@@ -44,4 +44,16 @@ std::string_view file (std::string_view path) noexcept;
 /** A shader's source out of the file this binary carries at that path: assemble() over file(). */
 std::string source (std::string_view path, const std::vector<Written>& written = {});
 
+/** A vertex shader written in GLSL 1.10's words — `attribute`, `varying`, no #version — in the words of GLSL
+    1.50 and after, byte for byte as JUCE's OpenGLHelpers::translateVertexShaderToV3 puts it: `head` in front
+    — the #version line and its newline, and whatever more the context wants there (gpu::legacyHeader) — then
+    the text, every "attribute" made "in" and every "varying" "out", comments and all. An empty `head` is a
+    context that reads 1.10 as it is, and the text comes back as it went in. */
+std::string vertexToV3 (std::string_view code, std::string_view head);
+
+/** The same for a fragment shader, as translateFragmentShaderToV3 puts it: `head`, then the output the
+    fragment's colour goes to, declared as JUCE declares it on the desktop, then the text with every
+    "varying" made "in", "texture2D" "texture" and "gl_FragColor" "fragColor". */
+std::string fragmentToV3 (std::string_view code, std::string_view head);
+
 } // namespace orbitamp::shaders
