@@ -10,6 +10,7 @@
 #include <cmath>
 #include <limits>
 #include <cstdio>
+#include <string>
 #include <vector>
 
 using felitronics::reverb::AmpReverb;
