@@ -3,6 +3,9 @@
 
 #include "Renders.h"
 
+#include "../Product.h"
+#include "../device/FactorySet.h"
+
 #include <juce_core/juce_core.h>
 
 #include <webp/decode.h>
@@ -20,33 +23,46 @@ namespace
     }
 }
 
-juce::Image decode (const char* name, const Binary& binary, const char* folderVariable)
+juce::File folder()
+{
+    return device::FactorySet::location().getChildFile ("Faces").getChildFile (product::name);
+}
+
+juce::File fileOf (const char* name, const char* folderVariable)
+{
+    if (const auto dir = juce::SystemStats::getEnvironmentVariable (folderVariable, {}); dir.isNotEmpty())
+        if (const auto file = juce::File (dir).getChildFile (name); file.existsAsFile())
+            return file;
+
+    return folder().getChildFile (name);
+}
+
+bool has (const char* name, const char* folderVariable)
+{
+    return fileOf (name, folderVariable).existsAsFile();
+}
+
+juce::Image decode (const char* name, const char* folderVariable)
 {
     juce::Image img;
 
-    if (const auto dir = juce::SystemStats::getEnvironmentVariable (folderVariable, {}); dir.isNotEmpty())
-    {
-        const auto file = juce::File (dir).getChildFile (name);
-        if (juce::MemoryBlock bytes; file.existsAsFile() && file.loadFileAsData (bytes))
-            img = decodeBytes (name, bytes.getData(), bytes.getSize());
-    }
+    if (juce::MemoryBlock bytes; fileOf (name, folderVariable).loadFileAsData (bytes))
+        img = decodeBytes (name, bytes.getData(), bytes.getSize());
 
-    for (int i = 0; ! img.isValid() && i < binary.count; ++i)
-        if (juce::String (binary.originalName (binary.names[i])) == name)
-        {
-            int size = 0;
-            if (const auto* data = binary.data (binary.names[i], size))
-                img = decodeBytes (name, data, (size_t) size);
-        }
-
-    jassert (img.isValid());   // a name that is neither on disk nor in the binary is a typo
+    jassert (img.isValid() || ! folder().isDirectory());   // a name the face's own folder lacks is a typo
     return img;
 }
 
-juce::Image load (const char* name, const Binary& binary, const char* folderVariable)
+juce::Image load (const char* name, const char* folderVariable)
 {
-    const auto img = decode (name, binary, folderVariable);
+    const auto img = decode (name, folderVariable);
     return img.isValid() ? img.convertedToFormat (juce::Image::ARGB) : img;
+}
+
+juce::String text (const char* name, const char* folderVariable)
+{
+    const auto file = fileOf (name, folderVariable);
+    return file.existsAsFile() ? file.loadFileAsString() : juce::String();
 }
 
 juce::Image decodeWebp (const void* bytes, size_t size)

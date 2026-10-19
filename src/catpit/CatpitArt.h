@@ -10,10 +10,14 @@
 namespace orbitamp::catpit
 {
 
-/** The cockpit's renders, decoded once at startup from the copies built into the binary
-    (resources/catpit), as tools/bake-art made them: the panel corrected and its lamps cut out, the grip
-    rebuilt, each already at the size the window can need at its largest on a retina screen. A render
-    that fails to decode leaves its image null, and its control draws a stand-in. */
+/** The environment variable that names a folder to try new renders from (face/Renders.h). */
+inline constexpr const char* artFolderVariable = "CATPIT_ART_DIR";
+
+/** The cockpit's renders, decoded once at startup from its own folder in the family's factory folder
+    (Faces/CatpitAmp, laid out from resources/catpit), as tools/bake-art made them: the panel corrected
+    and its lamps cut out, the grip rebuilt, each already at the size the window can need at its largest
+    on a retina screen. A render that fails to decode leaves its image null, and its control draws a
+    stand-in. */
 struct Art
 {
     juce::Image bg;            // the cockpit, its windshield cut out to transparent

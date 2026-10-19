@@ -4,10 +4,6 @@
 #include "CatpitLineup.h"
 
 #include "../channels/Engine.h"
-#include "../channels/Set.h"
-#include "../device/FactorySet.h"
-
-#include <OrbitAmpVersion.h>
 
 namespace orbitamp::catpit
 {
@@ -47,16 +43,10 @@ std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor& p)
     return std::make_unique<channels::Engine> (p, catpit::lineup());
 }
 
-/** The cockpit's set is in its binary (channels/Set.h). Once in a process, however many of the amp it
-    holds: the first one built lays it out, and the folder is the same for all of them — as the build
-    this is, so that of two products carrying one file the newer build's stands. The cockpit's own
-    `Factory` of before is emptied with it, of what a build of before laid there, and the player's IRs
-    it kept in its own folder are gathered into the family's (gatherFormerIrs). */
-void layOutFactorySet()
+/** The cockpit's first start in a process: the player's IRs it kept in its own folder are gathered into
+    the family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the installer. */
+void firstStart()
 {
-    static const int laid = device::FactorySet::retire (device::DeviceLibrary::formerFactoryDirectory())
-                          + channels::set::layOut (device::DeviceLibrary::factoryDirectory(), version::kBuildNumber);
-    juce::ignoreUnused (laid);
     gatherFormerIrs();
 }
 

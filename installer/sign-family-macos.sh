@@ -9,7 +9,8 @@
 # Needs, in the environment: APP_IDENTITY (a Developer ID Application identity), INSTALLER_IDENTITY (a
 # Developer ID Installer identity) and NOTARY_PROFILE (a notarytool keychain profile) — and a keychain
 # they can be used from without a prompt (the workflow unlocks the runner's first).
-# Out: <out-dir>/darwinscat-amps-<version>-macos.zip and darwinscat-amps-<version>-macos.pkg.
+# Out: <out-dir>/darwinscat-amps-<version>-macos-arm64.zip and …-macos-x86_64.zip (one architecture each,
+# build-family-zip.sh), and darwinscat-amps-<version>-macos.pkg (universal).
 set -euo pipefail
 
 VER="${1:?usage: sign-family-macos.sh <version> <build-dir> <out-dir>}"
@@ -91,9 +92,10 @@ for b in "${BUNDLES[@]}"; do
   codesign --verify --deep --strict "$b"
 done
 
-# What ships: the zip of the stapled bundles, and the package — signed as productbuild makes it, then
-# notarized and stapled itself.
-"$HERE/build-family-zip.sh" "$VER" "$BUILD" "$OUT" macos
+# What ships: a zip of the stapled bundles for each architecture, thinned after they were notarized, and
+# the package, universal — signed as productbuild makes it, then notarized and stapled itself.
+"$HERE/build-family-zip.sh" "$VER" "$BUILD" "$OUT" macos-arm64
+"$HERE/build-family-zip.sh" "$VER" "$BUILD" "$OUT" macos-x86_64
 
 PKG="$OUT/darwinscat-amps-$VER-macos.pkg"
 INSTALLER_IDENTITY="$INSTALLER_IDENTITY" "$HERE/build-family-pkg.sh" "$VER" "$BUILD" "$OUT"

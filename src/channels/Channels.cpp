@@ -27,14 +27,14 @@ namespace
     const juce::Identifier playedId { "played" };
     const std::array<juce::Identifier, Channels::numTones> knobIds { "knob_bass", "knob_middle", "knob_treble" };
 
-    /** The family's folder beside the products': where the set a build carries is laid out
-        (Set.h), and where the device library looks for the packs the builds carry. */
+    /** The family's factory folder, which the installer lays out: where the product's set lies (Set.h),
+        and where the device library looks for the packs the product plays out of the box. */
     juce::File factory()
     {
         return device::DeviceLibrary::factoryDirectory();
     }
 
-    /** Where a build's own cabinets are: laid out with its packs, and named in the product's own list. */
+    /** Where a build's own cabinets are: in the factory folder with its packs, named in the product's own list. */
     juce::Array<juce::File> bundledCabinets()
     {
         return set::ownCabinets (factory());

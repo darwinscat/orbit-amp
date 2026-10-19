@@ -6,7 +6,7 @@
 #include "RedPawLineup.h"
 #include "view/PlainsDrive.h"
 
-#include <RedPawData.h>
+#include "../face/Renders.h"
 
 /** REDPAWAMP'S OWN (RedPawSkin.h): the Mars rover — its channels, its rusted dashboard, measured, its
     cyan, and the drive across Mars through the windscreen. */
@@ -34,13 +34,11 @@ const channels::Lineup& lineup()
 const Skin& skin()
 {
     static const Skin mars {
-        { RedPawData::namedResourceList, RedPawData::namedResourceListSize,
-          RedPawData::getNamedResourceOriginalFilename, RedPawData::getNamedResource },
         "REDPAW_ART_DIR",
         juce::Colour (0xff3fe6f2),      // the painted rings' light, a shade brighter
         face::Ink {},                   // the family's lilac on the dark rust...
         juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words, so they read off the dust
-        juce::String::fromUTF8 (RedPawData::midi_txt, RedPawData::midi_txtSize),
+        face::renders::text ("midi.txt", "REDPAW_ART_DIR"),
         [] { return std::make_unique<Windscreen> (std::make_unique<PlainsDrive> (numGears())); },     // the drive across Mars
         { "Plains (GPU)", "1993 (CPU)", "Still" },
     };

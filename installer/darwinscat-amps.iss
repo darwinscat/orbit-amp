@@ -7,8 +7,12 @@
 ;   Standalone  → Program Files\Darwin's Cat Amps\<Amp>.exe, with a Start-menu entry
 ;
 ; The amps come from installer\family.ini: taking one into the family is a line there, not here.
-; The installer only places files. Every amp carries its own data inside its binary and keeps its
-; identity, so a DAW session finds the same plug-in in the same place.
+; Every amp keeps its identity, so a DAW session finds the same plug-in in the same place.
+;
+; THE AMPS' DATA — the packs, the cabinets and the faces' pictures every amp plays, ONE copy of each —
+; goes to ProgramData\Darwin's Cat\Factory, a component that is always installed and cannot be unticked
+; (src\device\FactorySet.h): no amp carries any of it in its binary. It is the folder of the release's
+; amps alone, as the build put it together, BuildDir\Shipped\Factory (CMakeLists.txt: THE FACTORY FOLDER).
 ;
 ; UNSIGNED for now: SmartScreen will warn ("Windows protected your PC" -> More info ->
 ; Run anyway) until code signing is added.
@@ -57,7 +61,9 @@ DisableProgramGroupPage=yes
 DisableDirPage=yes
 OutputDir=output
 OutputBaseFilename=darwinscat-amps-{#AppVersion}-windows-x64-setup
-Compression=lzma2
+; The strongest LZMA2 Inno has, in a process of its own, so the compressor has the memory it asks for.
+Compression=lzma2/ultra64
+LZMAUseSeparateProcess=yes
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
@@ -77,6 +83,13 @@ Name: "custom"; Description: "Custom"; Flags: iscustom
 Type: files;      Name: "{autopf}\OrbitAmp\unins*.*"
 Type: files;      Name: "{autopf}\OrbitAmp\OrbitAmp.exe"; Components: orbitamp\standalone
 Type: dirifempty; Name: "{autopf}\OrbitAmp"
+
+[Components]
+Name: "factory"; Description: "The amps' data: packs, cabinets, pictures (always installed)"; Types: full custom; Flags: fixed
+
+[Files]
+Source: "{#BuildDir}\Shipped\Factory\*"; DestDir: "{commonappdata}\Darwin's Cat\Factory"; \
+    Flags: recursesubdirs createallsubdirs ignoreversion; Components: factory
 
 ; Every amp's part of the script, written once per amp of family.ini: the amp, its three formats
 ; and where each lands. Left holds the amps still to come, each followed by one space; the amp in

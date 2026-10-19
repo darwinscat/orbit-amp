@@ -9,6 +9,8 @@
 
 #include "../ui/Prefs.h"
 
+#include "../ui/FactoryMissing.h"
+
 #include <BinaryData.h>
 
 namespace orbitamp
@@ -16,6 +18,11 @@ namespace orbitamp
 
 juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
 {
+    // No dashboard to draw without its pictures, which lie in the factory folder: where that is missing,
+    // the window says so, and where it belongs (ui/FactoryMissing.h).
+    if (! face::renders::has ("dashboard.webp", redpaw::skin().rendersFolderVariable))
+        return new ui::FactoryMissingEditor (p);
+
     return new redpaw::RedPawEditor (p);
 }
 

@@ -7,7 +7,8 @@
 #include "../Parameters.h"
 #include "../ui/Prefs.h"
 
-#include <CatpitData.h>
+#include "../face/Renders.h"
+#include "../ui/FactoryMissing.h"
 
 #include <utility>
 
@@ -16,6 +17,11 @@ namespace orbitamp
 
 juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
 {
+    // No cockpit to draw without its pictures, which lie in the factory folder: where that is missing,
+    // the window says so, and where it belongs (ui/FactoryMissing.h).
+    if (! face::renders::has ("cockpit.webp", catpit::artFolderVariable))
+        return new ui::FactoryMissingEditor (p);
+
     return new catpit::CatpitEditor (p);
 }
 
@@ -122,8 +128,8 @@ namespace
         const auto& art = Art::get();
         return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.sliderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
-                 juce::String::fromUTF8 (CatpitData::mark_svg, CatpitData::mark_svgSize),
-                 juce::String::fromUTF8 (CatpitData::midi_txt, CatpitData::midi_txtSize) };
+                 face::renders::text ("mark.svg", artFolderVariable),
+                 face::renders::text ("midi.txt", artFolderVariable) };
     }
 
     /** Whether a point on the stage is glass: where the render is cut through to the sky (Art), which

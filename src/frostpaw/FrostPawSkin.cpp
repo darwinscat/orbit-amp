@@ -6,7 +6,7 @@
 #include "../redpaw/RedPawLineup.h"
 #include "view/IceDrive.h"
 
-#include <FrostPawData.h>
+#include "../face/Renders.h"
 
 /** FROSTPAWAMP'S OWN (redpaw/RedPawSkin.h): the rover on an ice moon — RedPawAmp's dashboard in frosted
     stainless steel, its lamps amber, its rings and light strips ice-blue. The face and the controls are
@@ -24,8 +24,6 @@ const channels::Lineup& lineup()
 const Skin& skin()
 {
     static const Skin ice {
-        { FrostPawData::namedResourceList, FrostPawData::namedResourceListSize,
-          FrostPawData::getNamedResourceOriginalFilename, FrostPawData::getNamedResource },
         "FROSTPAW_ART_DIR",
         juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
         // On the bright steel the words are written dark — a blue-black graphite, what they are set to
@@ -36,7 +34,7 @@ const Skin& skin()
                     juce::Colour (0x8cf0f6fc), 0.72f, juce::Colour (0x73000208), 0.7f },
         juce::Colour(),
         // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
-        juce::String::fromUTF8 (FrostPawData::midi_txt, FrostPawData::midi_txtSize),
+        face::renders::text ("midi.txt", "FROSTPAW_ART_DIR"),
         // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
         [] { return std::make_unique<Windscreen> (std::make_unique<frostpaw::IceDrive> (numGears())); },
         { "Ice (GPU)", "1993 (CPU)", "Still" },

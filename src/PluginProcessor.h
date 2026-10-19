@@ -187,10 +187,10 @@ public:
         `force` writes it now whatever has changed. Message thread only. */
     void refreshSavedState (bool force = false);
 
-    // BEFORE THE PARAMETERS, and so before everything: the list of devices a parameter offers is read
-    // off the disk when the parameters are made, and a product that carries its set in the binary has
-    // to have laid it out by then. A member, because the constructor's body would be too late.
-    struct FactorySet { FactorySet(); } factorySet;
+    // BEFORE THE PARAMETERS, and so before everything: what the product does once in a process before
+    // it reads anything off the disk (firstStart) — the list of devices a parameter offers is read when
+    // the parameters are made. A member, because the constructor's body would be too late.
+    struct FirstStart { FirstStart(); } firstStarted;
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -1350,17 +1350,19 @@ private:
     cockpit's from catpit/CatpitEditor.cpp, and each target compiles exactly one of them. */
 juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
 
-/** What a product keeps INSIDE ITS BINARY and plays from disk, put where it is played from. Defined
-    once per target, like the face: OrbitAmp's set in OrbitAmpSet.cpp, the cockpit's beside its lineup
-    (catpit/CatpitLineup.cpp, through channels/Set.h); both are laid out the one way device/FactorySet.h
-    says. The processor calls it before it builds anything of its own — see AmpProcessor::factorySet. */
-void layOutFactorySet();
+/** What a product does ONCE IN A PROCESS, before its first processor builds anything of its own — today,
+    gather the player's IRs of before (gatherFormerIrs). Defined once per target, like the face: OrbitAmp's
+    in OrbitAmpStart.cpp, the cockpit's and the rovers' beside their lineups; a gate that must not reach
+    the machine's real folders stands in one of its own that does nothing. What the amps play out of the
+    box is laid out by the family's installer, not by an amp (device/FactorySet.h). The processor calls it
+    before anything else — see AmpProcessor::firstStarted. */
+void firstStart();
 
 /** THE PLAYER'S IRS OF BEFORE, gathered into the family's folder: what the product kept in its own `IRs`
     is copied into `Darwin's Cat/IRs` (device::IrLibrary::gather) — once in a process, and once on this
     machine (prefs::irsGathered), tried again on the next start only where a file could not be copied.
-    Every product's layOutFactorySet calls it beside its set, so a gate that stands that in for nothing
-    never reaches the machine's real folders. */
+    Every product's firstStart calls it, so a gate that stands that in for nothing never reaches the
+    machine's real folders. */
 void gatherFormerIrs();
 
 /** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —

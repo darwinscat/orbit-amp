@@ -12,16 +12,12 @@ namespace orbitamp::redpaw
 namespace
 {
     /** A render of the product's own, by the rover's file name (RedPawSkin.h). */
-    juce::Image load (const char* name) { return face::renders::load (name, skin().renders, skin().rendersFolderVariable); }
+    juce::Image load (const char* name) { return face::renders::load (name, skin().rendersFolderVariable); }
 
     /** A render only some rovers carry: none is no image, not a typo. */
     juce::Image loadOwn (const juce::String& name)
     {
-        const auto& binary = skin().renders;
-        for (int i = 0; i < binary.count; ++i)
-            if (juce::String (binary.originalName (binary.names[i])) == name)
-                return load (name.toRawUTF8());
-        return {};
+        return face::renders::has (name.toRawUTF8(), skin().rendersFolderVariable) ? load (name.toRawUTF8()) : juce::Image();
     }
 }
 
@@ -60,15 +56,7 @@ juce::Image Art::still()
 
 juce::String Art::mark()
 {
-    const auto& binary = skin().renders;
-    for (int i = 0; i < binary.count; ++i)
-        if (juce::String (binary.originalName (binary.names[i])) == "mark.svg")
-        {
-            int size = 0;
-            if (const char* svg = binary.data (binary.names[i], size); svg != nullptr)
-                return juce::String::fromUTF8 (svg, size);
-        }
-    return {};
+    return face::renders::text ("mark.svg", skin().rendersFolderVariable);
 }
 
 } // namespace orbitamp::redpaw

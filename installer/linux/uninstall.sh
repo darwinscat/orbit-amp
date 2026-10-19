@@ -43,9 +43,13 @@ run() { if [ $dry = 0 ]; then "$@"; fi; }   # a dry run names what it would remo
 
 while IFS= read -r path; do
   case "$(basename "$path")" in ''|.|..) echo "skipped: $path"; continue ;; esac
-  case "$(dirname "$path")" in
-    "$VST3"|"$CLAP"|"$BIN"|"$APPS"|"$DATA/icons") ;;
-    *) echo "skipped (not a folder install.sh places into): $path"; continue ;;
+  case "$path" in
+    "$DATA/Factory") ;;                     # the amps' data, which install.sh always places
+    *)
+      case "$(dirname "$path")" in
+        "$VST3"|"$CLAP"|"$BIN"|"$APPS"|"$DATA/icons") ;;
+        *) echo "skipped (not a folder install.sh places into): $path"; continue ;;
+      esac ;;
   esac
   if [ -e "$path" ] || [ -L "$path" ]; then
     if [ $dry = 1 ]; then echo "would remove $path"; else echo "removing $path"; fi

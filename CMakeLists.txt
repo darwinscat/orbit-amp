@@ -375,14 +375,146 @@ add_custom_target(OrbitAmpVersionGen ALL
     VERBATIM)
 
 # ----------------------------------------------------------------------------
+# THE FACTORY FOLDER: every file of data a Darwin's Cat amp plays — the packs, the cabinet shelf, each
+# face's pictures — ONE copy of each on the machine. No amp carries any of it in its binary: three amps in
+# four formats and two architectures made the same 26 MB into a release of 369 MB. The family's installer
+# lays the folder out once, as a part of it the player cannot untick (installer/):
+#
+#   macOS    /Library/Application Support/Darwin's Cat/Factory
+#   Windows  C:\ProgramData\Darwin's Cat\Factory
+#   Linux    <share>/darwinscat-amps/Factory — ~/.local/share for the player alone, /usr/local/share for
+#            every user (installer/linux/install.sh)
+#
+# Inside it the packs lie at its top (<pack>.orbitrig.zip), the cabinet shelf in IRs/<folder>/<file> as
+# the cabinet catalog has it, and each face's pictures in Faces/<Name>/<file>. EACH AMP SEES ONLY WHAT ITS
+# OWN LIST NAMES, sets/<Name>.txt, one path to the line (src/device/FactorySet.h): the folder is the
+# family's, and what one amp plays is not every amp's.
+#
+# What an amp plays it says in its row of the table (add_amp: ART, SET, WHOLE_SHELF), and add_amp says it
+# here (factory_carries). After the table, family_factory() makes of it the folder of every amp in the
+# build tree, <build>/Factory — the target Family_Factory, which every amp and every gate that reads the
+# folder waits for — and the folder of the amps installer/family.ini names and nothing else,
+# <build>/Shipped/Factory (Family_ShippedFactory, part of Family_All), which every installer lays out.
+#
+# ORBITAMP_DEV_FACTORY: an amp built here reads <build>/Factory FIRST, where it is there, so it plays the
+# files built with it whatever is installed. A release passes it OFF (.github/workflows/release.yml,
+# installer/release.sh): its binaries leave the machine, and the macOS release is built on a working
+# laptop, where the build folder is there. A gate reads <build>/Factory alone, whatever this says, and
+# never the machine's (gate_reads_factory).
+# ----------------------------------------------------------------------------
+option(ORBITAMP_DEV_FACTORY "Amps read <build>/Factory first, where it is there (OFF for a release)" ON)
+set(ORBITAMP_FACTORY_DIR "${CMAKE_CURRENT_BINARY_DIR}/Factory")
+set(ORBITAMP_SHIPPED_FACTORY_DIR "${CMAKE_CURRENT_BINARY_DIR}/Shipped/Factory")
+
+# factory_carries(<Name> FILES <files...> AT <paths...>): <Name> plays each file, which lies in the folder
+# at the path beside it. One path is one file: two files said for one path stop the configure, since the
+# folder could hold only one of them. Paths have spaces in them, so each is kept under its hash.
+function(factory_carries name)
+    cmake_parse_arguments(PARSE_ARGV 1 FC "" "" "FILES;AT")
+    list(LENGTH FC_FILES files)
+    list(LENGTH FC_AT paths)
+    if(NOT files EQUAL paths)
+        message(FATAL_ERROR "factory_carries(${name}): ${files} files for ${paths} paths")
+    endif()
+    if(files EQUAL 0)
+        return()
+    endif()
+    math(EXPR last "${files} - 1")
+    foreach(i RANGE ${last})
+        list(GET FC_FILES ${i} file)
+        list(GET FC_AT ${i} at)
+        string(MD5 key "${at}")
+        get_property(from GLOBAL PROPERTY ORBITAMP_FACTORY_FROM_${key})
+        if("${from}" STREQUAL "")
+            set_property(GLOBAL PROPERTY ORBITAMP_FACTORY_FROM_${key} "${file}")
+            set_property(GLOBAL APPEND PROPERTY ORBITAMP_FACTORY_PATHS "${at}")
+        elseif(NOT "${from}" STREQUAL "${file}")
+            message(FATAL_ERROR "The factory's ${at} would be two files: ${from} and ${file} (${name})")
+        endif()
+        get_property(own GLOBAL PROPERTY ORBITAMP_FACTORY_LIST_${name})
+        if(NOT at IN_LIST own)
+            set_property(GLOBAL APPEND PROPERTY ORBITAMP_FACTORY_LIST_${name} "${at}")
+        endif()
+    endforeach()
+endfunction()
+
+# family_factory(): the folder of what every amp said, after the table — one copy of each file, each amp's
+# list beside them — and the release's, of the family's amps alone (FAMILY_AMPS, THE FAMILY'S RELEASE).
+function(family_factory)
+    set(shippedPaths "")
+    foreach(amp IN LISTS FAMILY_AMPS)
+        get_property(own GLOBAL PROPERTY ORBITAMP_FACTORY_LIST_${amp})
+        foreach(at IN LISTS own)
+            if(NOT at IN_LIST shippedPaths)
+                list(APPEND shippedPaths "${at}")
+            endif()
+        endforeach()
+    endforeach()
+
+    get_property(paths GLOBAL PROPERTY ORBITAMP_FACTORY_PATHS)
+    set(laid "")
+    set(shipped "")
+    foreach(at IN LISTS paths)
+        string(MD5 key "${at}")
+        get_property(from GLOBAL PROPERTY ORBITAMP_FACTORY_FROM_${key})
+        set(into "${ORBITAMP_FACTORY_DIR}/${at}")
+        list(APPEND laid "${into}")
+        if(at IN_LIST shippedPaths)
+            list(APPEND into "${ORBITAMP_SHIPPED_FACTORY_DIR}/${at}")
+            list(APPEND shipped "${ORBITAMP_SHIPPED_FACTORY_DIR}/${at}")
+        endif()
+        foreach(to IN LISTS into)
+            get_filename_component(folder "${to}" DIRECTORY)
+            add_custom_command(OUTPUT "${to}"
+                COMMAND "${CMAKE_COMMAND}" -E make_directory "${folder}"
+                COMMAND "${CMAKE_COMMAND}" -E copy "${from}" "${to}"
+                DEPENDS "${from}"
+                VERBATIM)
+        endforeach()
+    endforeach()
+
+    # The packs are zipped by the build (THE SET), by one target: these wait for it, rather than run the
+    # zips' rules themselves and race it.
+    add_custom_target(Family_Factory DEPENDS ${laid})
+    add_dependencies(Family_Factory OrbitAmpSetPacks)
+    add_custom_target(Family_ShippedFactory DEPENDS ${shipped})
+    add_dependencies(Family_ShippedFactory OrbitAmpSetPacks)
+    add_dependencies(Family_All Family_ShippedFactory)
+
+    foreach(amp IN LISTS AMPS)
+        get_property(own GLOBAL PROPERTY ORBITAMP_FACTORY_LIST_${amp})
+        list(JOIN own "\n" lines)
+        file(GENERATE OUTPUT "${ORBITAMP_FACTORY_DIR}/sets/${amp}.txt" CONTENT "${lines}\n")
+        if(amp IN_LIST FAMILY_AMPS)
+            file(GENERATE OUTPUT "${ORBITAMP_SHIPPED_FACTORY_DIR}/sets/${amp}.txt" CONTENT "${lines}\n")
+        endif()
+    endforeach()
+
+    list(LENGTH paths every)
+    list(LENGTH shippedPaths family)
+    message(STATUS "The factory folder: ${every} files in the build's, ${family} of them in the release's")
+endfunction()
+
+# A GATE READS THE BUILD'S FACTORY FOLDER ALONE, never the machine's — or, given one, a folder that is not
+# there (gate_reads_factory(<target> <folder>)), to play an amp with nothing installed.
+function(gate_reads_factory target)
+    set(folder "${ORBITAMP_FACTORY_DIR}")
+    if(ARGC GREATER 1)
+        set(folder "${ARGV1}")
+    endif()
+    target_compile_definitions(${target} PRIVATE ORBITAMP_GATE_FACTORY="${folder}")
+    add_dependencies(${target} Family_Factory)
+endfunction()
+
+# ----------------------------------------------------------------------------
 # THE FAMILY. Every Darwin's Cat amp this tree builds is one call of add_amp(), and the calls stand
 # together further down as one table (THE AMPS): what tells an amp from the others is said in its row,
 # and what they share is said once, here. Each amp is the same JUCE plug-in — VST3, AU and the
 # Standalone, and a CLAP through clap-juce-extensions — over the same processor; what differs is its
 # face, its name, its number and what it carries.
 #
-#   add_amp(<Name>  CODE <code>  [BY_NAME]  [LTO]
-#           SOURCES <files...>  LIBRARIES <targets...>  [ART <namespace> <files...>]  [SET [<packs...>]])
+#   add_amp(<Name>  CODE <code>  [BY_NAME]
+#           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
@@ -393,20 +525,29 @@ add_custom_target(OrbitAmpVersionGen ALL
 #               manufacturer code is the family's, Dcat (Darwin's Cat — >=1 uppercase, AU rule; same as
 #               OrbitCab).
 #   BY_NAME     not part of the default build (see below).
-#   LTO         JUCE's recommended link-time optimisation flags too, which OrbitAmp has always linked and
-#               the faces never have.
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
-#   ART         its renders, built into the binary as data of its own, <Name>Data, under the namespace
-#               its face reads them by.
-#   SET         the packs it carries INSIDE ITS BINARY, by their folders' names in the tree's set (THE
-#               SET), less `.orbitrig` — its <Name>Set. Said with no packs, the amp has a set that is empty.
+#   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
+#               face reads them (src/face/Renders.h).
+#   SET         the packs it plays, by their folders' names in the tree's set (THE SET), less `.orbitrig` —
+#               at the factory folder's top, zipped.
+#   WHOLE_SHELF the whole cabinet shelf, the folders the cabinet catalog gives OrbitAmp alone with Darwin's
+#               Cat's own; without it, Darwin's Cat's own alone.
+#
+# Whatever it plays is in the family's factory folder and in its own list there (THE FACTORY FOLDER), never
+# in its binary.
 #
 # Every amp's version is THE FAMILY'S, the project's (above): the amps are released together, so no row
 # says a number of its own. What an amp was given is kept on its target, where its gates read it
 # (amp_console): a gate is the amp compiled again, never a second copy of its lists.
 # ----------------------------------------------------------------------------
+
+# THE CODECS NO AMP READS: an amp opens WAV and AIFF — its demo loops, a player's IRs — and nothing else,
+# but registerBasicFormats() (src/core/DemoPlayer.h) pulls in every codec JUCE builds, so the ones it would
+# never be handed are not built: Ogg Vorbis, FLAC, and Windows Media. Said for every amp and its gates alike.
+set(AMP_UNREAD_CODECS JUCE_USE_OGGVORBIS=0 JUCE_USE_FLAC=0 JUCE_USE_WINDOWS_MEDIA_FORMAT=0)
+
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;LTO" "CODE" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
 
     # Its icon. macOS 26 sets any icon that is not its own rounded square on a grey plate — the family's
@@ -478,46 +619,47 @@ function(add_amp name)
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0   # JUCE 8 has no splash requirement on any tier, incl. AGPLv3
+        ${AMP_UNREAD_CODECS}           # ...nor a codec it never reads (above)
         $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>)   # the standalone offers ASIO beside WASAPI; JUCE carries the SDK
 
     target_include_directories(${name} PUBLIC "${ORBITAMP_GENERATED_DIR}")   # OrbitAmpVersion.h
     add_dependencies(${name} OrbitAmpVersionGen)                            # ...rebaked before every build
 
-    set(libraries ${AMP_LIBRARIES} juce::juce_recommended_config_flags)
-    if(AMP_LTO)
-        list(APPEND libraries juce::juce_recommended_lto_flags)
-    endif()
-    list(APPEND libraries juce::juce_recommended_warning_flags)
+    # EVERY AMP LINKS WITH LINK-TIME OPTIMISATION, JUCE's recommended flags — once OrbitAmp's alone: the
+    # code a face never calls goes, and a release binary is smaller for it. Its gates link without it
+    # (amp_console), in seconds rather than minutes.
+    set(libraries ${AMP_LIBRARIES}
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)
     target_link_libraries(${name} PRIVATE ${libraries})
 
-    if(AMP_ART)
-        list(POP_FRONT AMP_ART namespace)
-        juce_add_binary_data(${name}Data
-            NAMESPACE   ${namespace}
-            HEADER_NAME ${namespace}.h
-            SOURCES     ${AMP_ART})
-    endif()
-
-    # What reads the set says whether there is one: with none, there is no data to link and nothing to
-    # ask. Every amp's set data goes by the one name, ProductSetData, which channels/Set.cpp reads: a
-    # target links exactly one amp's.
-    if(DEFINED AMP_SET OR "SET" IN_LIST AMP_KEYWORDS_MISSING_VALUES)
-        add_library(${name}Set INTERFACE)
-        if(AMP_SET)
-            list(TRANSFORM AMP_SET PREPEND "${ORBITAMP_SET_ZIPPED}/")
-            list(TRANSFORM AMP_SET APPEND ".orbitrig.zip")
-            juce_add_binary_data(${name}SetData
-                NAMESPACE   ProductSetData
-                HEADER_NAME ProductSetData.h
-                SOURCES     ${AMP_SET})
-            add_dependencies(${name}SetData OrbitAmpSetPacks)   # the packs are zipped by the build (THE SET)
-            set_target_properties(${name}SetData PROPERTIES EXCLUDE_FROM_ALL TRUE)
-            target_link_libraries(${name}Set INTERFACE ${name}SetData)
-            target_compile_definitions(${name}Set INTERFACE PRODUCT_SET_EMBEDDED=1)
-        else()
-            target_compile_definitions(${name}Set INTERFACE PRODUCT_SET_EMBEDDED=0)
+    # WHAT IT PLAYS, in the family's factory folder (THE FACTORY FOLDER): its pictures, its packs and
+    # Darwin's Cat's own cabinets — and the shelf's other folders, where it plays the whole shelf.
+    set(files "")
+    set(at "")
+    foreach(render IN LISTS AMP_ART)
+        get_filename_component(base "${render}" NAME)
+        list(APPEND files "${render}")
+        list(APPEND at "Faces/${name}/${base}")
+    endforeach()
+    foreach(pack IN LISTS AMP_SET)
+        if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
+            message(FATAL_ERROR "${name} plays the pack ${pack}, which resources/set/Devices has not")
         endif()
-        target_link_libraries(${name} PRIVATE ${name}Set)
+        list(APPEND files "${ORBITAMP_SET_ZIPPED}/${pack}.orbitrig.zip")
+        list(APPEND at "${pack}.orbitrig.zip")
+    endforeach()
+    list(APPEND files ${ORBITAMP_CABINETS_EVERY_PRODUCT})
+    list(APPEND at ${ORBITAMP_CABINETS_EVERY_PRODUCT_AT})
+    if(AMP_WHOLE_SHELF)
+        list(APPEND files ${ORBITAMP_CABINETS_ORBITAMP})
+        list(APPEND at ${ORBITAMP_CABINETS_ORBITAMP_AT})
+    endif()
+    factory_carries(${name} FILES ${files} AT ${at})
+    add_dependencies(${name} Family_Factory)
+    if(ORBITAMP_DEV_FACTORY)
+        target_compile_definitions(${name} PRIVATE ORBITAMP_DEV_FACTORY="${ORBITAMP_FACTORY_DIR}")
     endif()
 
     # Every format the amp is built as on this platform — AU on the Mac alone.
@@ -528,16 +670,25 @@ function(add_amp name)
         endif()
     endforeach()
 
+    # A RELEASE BINARY CARRIES NO LOCAL SYMBOLS — tens of thousands of internal names, a fifth of a face's
+    # binary. Its exports stay, which is all a host looks up (GetPluginFactory, the AU's factory,
+    # clap_entry): `ld -x` on the Mac, `-s` on Linux, at the link of every format, the CLAP's too. A crash
+    # report from a released amp shows addresses, not the names of its own functions. MSVC writes its
+    # symbols to a .pdb beside the binary, which no installer packs, and is left as it is.
+    foreach(target IN LISTS formats)
+        if(APPLE)
+            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:LINKER:-x>)
+        elseif(UNIX)
+            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:-s>)
+        endif()
+    endforeach()
+
     # BY_NAME: not part of the default build. OrbitAmp's own build — a contributor's, a pull request's —
     # must never fail on a face. Whoever wants one asks for it by name: one format (`cmake --build build
     # --target CatpitAmp_Standalone`), or all of them — `--target CatpitAmp_All`; the family's release
     # asks for every amp it carries (Family_All).
     if(AMP_BY_NAME)
-        set(own ${name} ${formats})
-        if(TARGET ${name}Data)
-            list(APPEND own ${name}Data)
-        endif()
-        set_target_properties(${own} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+        set_target_properties(${name} ${formats} PROPERTIES EXCLUDE_FROM_ALL TRUE)
     endif()
 
     # <Name>_All is every format: the CLAP joins it here, since its wrapper does not add itself.
@@ -548,13 +699,15 @@ function(add_amp name)
     set(AMPS ${AMPS} ${name} PARENT_SCOPE)
 endfunction()
 
-# AN AMP'S GATES are the amp compiled again under a main() of its own — its sources, its libraries, its
-# set, the family's version and its name, as add_amp was given them — and are built only when asked for by name.
-# CHANNELS is how many channels the gate holds it to (GATE_CHANNELS), said apart from the amp's lineup.
+# AN AMP'S GATES are the amp compiled again under a main() of its own — its sources, its libraries, the
+# family's version and its name, as add_amp was given them, and the build's factory folder for what it
+# plays — and are built only when asked for by name. CHANNELS is how many channels the gate holds it to
+# (GATE_CHANNELS), said apart from the amp's lineup. NO_FACTORY plays it with no factory folder at all.
 function(amp_console target product amp main)
-    cmake_parse_arguments(PARSE_ARGV 4 GATE "" "CHANNELS" "")
+    cmake_parse_arguments(PARSE_ARGV 4 GATE "NO_FACTORY" "CHANNELS" "")
     get_target_property(sources ${amp} AMP_SOURCES)
     get_target_property(libraries ${amp} AMP_LIBRARIES)
+    list(REMOVE_ITEM libraries juce::juce_recommended_lto_flags)   # a gate links in seconds, not minutes
     juce_add_console_app(${target} PRODUCT_NAME "${product}")
     target_sources(${target} PRIVATE ${main} ${sources})
     target_include_directories(${target} PRIVATE src "${ORBITAMP_GENERATED_DIR}")
@@ -565,20 +718,24 @@ function(amp_console target product amp main)
     if(GATE_CHANNELS)
         target_compile_definitions(${target} PRIVATE GATE_CHANNELS=${GATE_CHANNELS})
     endif()
-    target_compile_definitions(${target} PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-    target_link_libraries(${target} PRIVATE ${amp}Set ${libraries})
+    target_compile_definitions(${target} PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
+    target_link_libraries(${target} PRIVATE ${libraries})
+    if(GATE_NO_FACTORY)
+        gate_reads_factory(${target} "${CMAKE_CURRENT_BINARY_DIR}/no-factory/Factory")
+    else()
+        gate_reads_factory(${target})
+    endif()
     set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
 
-# ...and its set as it leaves the binary, the set's own reading of it and nothing more, beside the
-# family's cabinet shelf. LIBRARIES is what else the gate's reading needs.
+# ...and its set as the build lays it out in the factory folder, the set's own reading of it and nothing
+# more, beside the family's cabinet shelf. LIBRARIES is what else the gate's reading needs.
 function(amp_set_test target product amp main)
     cmake_parse_arguments(PARSE_ARGV 4 GATE "" "CHANNELS" "LIBRARIES")
     juce_add_console_app(${target} PRODUCT_NAME "${product}")
     target_sources(${target} PRIVATE
         ${main}
-        src/channels/Set.cpp
-        src/device/FactorySet.cpp)
+        src/channels/Set.cpp)
     target_include_directories(${target} PRIVATE src)
     target_compile_definitions(${target} PRIVATE ORBITAMP_PRODUCT_NAME="${amp}")
     if(GATE_CHANNELS)
@@ -586,34 +743,34 @@ function(amp_set_test target product amp main)
     endif()
     target_compile_definitions(${target} PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(${target} PRIVATE
-        ${amp}Set
-        OrbitAmpData                     # the family's cabinet shelf
+        OrbitAmpCabinetCatalog           # the family's cabinet shelf, by the catalog's table
         ${GATE_LIBRARIES}
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
+    gate_reads_factory(${target})
     set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
 
 # ----------------------------------------------------------------------------
-# THE SET: every pack and every cabinet a Darwin's Cat amp carries in its binary, ONE copy of each in
-# the tree — resources/set/Devices for the packs, under their own names, and resources/set/IRs for the
-# cabinets (resources/set/IRs.md says what they are). Each product says which of them it carries, and
-# no product keeps a folder of its own.
+# THE SET: every pack and every cabinet a Darwin's Cat amp plays, ONE copy of each in the tree —
+# resources/set/Devices for the packs, under their own names, and resources/set/IRs for the cabinets
+# (resources/set/IRs.md says what they are). Each product says which of them it plays, and no product
+# keeps a folder of its own; the build lays them out in the factory folder (THE FACTORY FOLDER).
 # ----------------------------------------------------------------------------
 set(ORBITAMP_SET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/set")
 
 # A PACK IS KEPT AS A FOLDER and carried as a zip. In the tree each pack is a folder,
 # resources/set/Devices/<name>.orbitrig — its manifest, its models and its picture side by side, so a
 # change to a pack is a change to its rig.json that git can show, not a new blob. Every build zips each
-# folder into <name>.orbitrig.zip in the build tree — the file the products carry and lay out, under
-# the name it always had — and that is what the set data below takes in. .gitattributes keeps git's
+# folder into <name>.orbitrig.zip in the build tree — the file the factory folder holds, under the name it
+# always had. .gitattributes keeps git's
 # hands off the folders' line endings: what is zipped is the files byte for byte, on every system.
 #
 # The zip is made by a tool of our own (tools/PackZip.cpp, JUCE's zip writer), not by `cmake -E tar`:
 # CMake's zip writer puts into every entry the access and change times the file has on disk, its
 # owner, its permissions and a date in the machine's own time zone, whatever --mtime says — so the
-# same folder made other bytes on another checkout, another day or another machine, and a product
-# built later would lay its copy of an unchanged pack over the one another product had laid out. Ours
+# same folder made other bytes on another checkout, another day or another machine, and an unchanged
+# pack would be a changed file in every release and every installed folder. Ours
 # puts in the files' names and bytes and nothing else, in the order of their names, so the same folder
 # makes the same zip on every build and every system.
 #
@@ -621,8 +778,8 @@ set(ORBITAMP_SET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/set")
 # added to Devices, is zipped from the next build on; the list is also written out, and rewritten only
 # when it changes, so a file taken out of a pack makes the zip again too (as JUCE's binary data does).
 # A name with a leading dot is the Finder's (.DS_Store), not the pack's. Every zip is made by one
-# target, OrbitAmpSetPacks, which each product's set data waits for: a rule that several targets ran
-# would race itself in a parallel build.
+# target, OrbitAmpSetPacks, which the factory folder waits for: a rule that several targets ran would
+# race itself in a parallel build.
 juce_add_console_app(orbitamp_pack_zip PRODUCT_NAME "OrbitAmpPackZip")
 target_sources(orbitamp_pack_zip PRIVATE tools/PackZip.cpp)
 target_compile_definitions(orbitamp_pack_zip PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
@@ -634,11 +791,14 @@ target_link_libraries(orbitamp_pack_zip PRIVATE
 set(ORBITAMP_SET_ZIPPED "${CMAKE_CURRENT_BINARY_DIR}/set/Devices")
 file(GLOB ORBITAMP_SET_FOLDERS LIST_DIRECTORIES true CONFIGURE_DEPENDS "${ORBITAMP_SET_DIR}/Devices/*.orbitrig")
 set(ORBITAMP_SET_PACKS "")
+set(ORBITAMP_SET_NAMES "")       # each pack's name, its folder's less `.orbitrig`
 foreach(folder IN LISTS ORBITAMP_SET_FOLDERS)
     if(NOT IS_DIRECTORY "${folder}")
         continue()
     endif()
     get_filename_component(pack "${folder}" NAME)
+    string(REGEX REPLACE "\\.orbitrig$" "" name "${pack}")
+    list(APPEND ORBITAMP_SET_NAMES "${name}")
     file(GLOB files LIST_DIRECTORIES false CONFIGURE_DEPENDS "${folder}/*")
     list(FILTER files EXCLUDE REGEX "/\\.[^/]*$")
     list(SORT files)
@@ -662,19 +822,22 @@ foreach(folder IN LISTS ORBITAMP_SET_FOLDERS)
 endforeach()
 add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 
-# Factory devices: OrbitAmp's own set, INSIDE THE BINARY like the cockpit's — every format, every
-# system — and laid out in the family's Factory folder when it starts (src/device/FactorySet.h says
-# why a bundle will not do). OrbitAmp is the player of the whole library: it carries EVERY pack in
-# resources/set/Devices, each under its own name — every folder there, zipped. A pack added there is
-# carried from the next build on, with nobody to remember to list it. Where in the folder each lies is
-# OrbitAmpSet.h's to say: the family's devices at its top, the V4's six put away in its OLD.
-list(LENGTH ORBITAMP_SET_PACKS ORBITAMP_SET_COUNT)
-message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the binary")
-juce_add_binary_data(OrbitAmpSetData
-    NAMESPACE   OrbitAmpSetData
-    HEADER_NAME OrbitAmpSetData.h
-    SOURCES     ${ORBITAMP_SET_PACKS})
-add_dependencies(OrbitAmpSetData OrbitAmpSetPacks)
+# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — but the ones
+# put away. A pack added there is OrbitAmp's from the next build on, with nobody to remember to list it.
+#
+# PUT AWAY, the Victory V4's six: in the tree still, for the faces that play them in a build of this tree
+# (FrostPawAmp, AmberPawAmp), but no longer the family's devices — the family will play the V4 again from
+# new captures, with the power amp inside — and in no amp of the release, so in no installer.
+set(ORBITAMP_SET_PUT_AWAY "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
+foreach(pack IN LISTS ORBITAMP_SET_PUT_AWAY)
+    if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
+        message(FATAL_ERROR "ORBITAMP_SET_PUT_AWAY names ${pack}, which resources/set/Devices has not")
+    endif()
+endforeach()
+set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
+list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITAMP_SET_PUT_AWAY})
+list(LENGTH ORBITAMP_PLAYS ORBITAMP_SET_COUNT)
+message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the factory folder")
 
 # ----------------------------------------------------------------------------
 # Embedded assets. The display FACE is not among them: appkit carries Michroma itself, whole, as
@@ -687,7 +850,8 @@ add_dependencies(OrbitAmpSetData OrbitAmpSetPacks)
 
 # THE CABINET CATALOG (resources/cabinets.txt): every cabinet IR the family carries, each said once — its
 # number, its name, the folder of the shelf it lies in and its file. cmake/CabinetCatalog.cmake reads it
-# into the files the two data below carry, in the order of their numbers, and into the table the code
+# into the files the factory folder holds, in the order of their numbers — Darwin's Cat's own, which every
+# amp plays, and the folders OrbitAmp alone plays (add_amp: WHOLE_SHELF) — and into the table the code
 # plays them by, generated/CabinetCatalog.h: the `cab_ir` parameter's names and default (src/Parameters.h)
 # and the shelf's folders (src/device/FactoryShelf.h). A cabinet joining the shelf is a line there, and its
 # file; nothing here or in the code lists one. What compiles Parameters.h links OrbitAmpCabinetCatalog for
@@ -707,31 +871,9 @@ juce_add_binary_data(OrbitAmpData
         # the README carries word for word, and a file can be diffed against that one.
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/notice.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/disclaimer.txt"   # ...and its long form, with the list
-
-        # THE FAMILY'S CABINET SHELF (src/device/FactoryShelf.h): every product links this data, plays
-        # its cabinets from it and lays them out in the family's Factory/IRs, in the shelf's folders —
-        # here the folder every product carries, Darwin's Cat's own ten, shot off the Orange, in
-        # `Orange PPC212V`: referenced in the set's folder rather than copied, one copy in the tree.
-        # The cabinet catalog above says which files they are; resources/set/IRs.md says what they are
-        # and how they were shot. The rest of the shelf is OrbitAmp's alone (OrbitAmpShelfOther).
-        ${ORBITAMP_CABINETS_EVERY_PRODUCT}
 )
-target_link_libraries(OrbitAmpData INTERFACE OrbitAmpCabinetCatalog)   # ...and the table it is played by
-
-# ...and the shelf's `Other`: the 21 third-party IRs OrbitAmp has always played, orbitcab's, referenced
-# there like everything shared — one copy in the ecosystem. ORBITAMP'S ALONE — the catalog's folders that
-# OrbitAmp carries. A face lays out and lists Darwin's Cat's own folder of the shelf and nothing else, so
-# in a face they were 2.8 MB that nothing ever reached; they are data of their own now, which only what is
-# OrbitAmp links — the plug-in, and the gates that play OrbitAmp's shelf. What links them says so
-# (SHELF_CARRIES_OTHER), and where they are not linked the shelf holds their places empty: a number
-# `cab_ir` keeps is the same cabinet in every product.
-juce_add_binary_data(OrbitAmpShelfOtherData
-    NAMESPACE   ShelfOtherData
-    HEADER_NAME ShelfOtherData.h
-    SOURCES     ${ORBITAMP_CABINETS_ORBITAMP})
-add_library(OrbitAmpShelfOther INTERFACE)
-target_link_libraries(OrbitAmpShelfOther INTERFACE OrbitAmpShelfOtherData)
-target_compile_definitions(OrbitAmpShelfOther INTERFACE SHELF_CARRIES_OTHER=1)
+# ...and the table the cabinet shelf is played by: its IRs themselves lie in the factory folder.
+target_link_libraries(OrbitAmpData INTERFACE OrbitAmpCabinetCatalog)
 
 # ----------------------------------------------------------------------------
 # THE SHADERS: every GLSL program the faces draw with — the windscreens' worlds and the cockpit's sky —
@@ -814,12 +956,11 @@ set(AMP_ENGINE_LIBRARIES
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures)      # ValueTree behind the workspace / presets
 
-# OrbitAmp — the player: the processor, its face (src/ui), and the set it lays out (OrbitAmpSet.cpp).
+# OrbitAmp — the player: the processor, its face (src/ui), and its first start (OrbitAmpStart.cpp).
 set(ORBITAMP_SOURCES
     src/PluginProcessor.cpp
     src/PluginEditor.cpp
-    src/OrbitAmpSet.cpp
-    src/device/FactorySet.cpp
+    src/OrbitAmpStart.cpp
     src/Parameters.cpp
     src/ui/Theme.cpp
     src/ui/FaceplateView.cpp
@@ -834,10 +975,10 @@ set(ORBITAMP_SOURCES
     src/ui/SetupPanel.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp)
-# ...and the gates that play OrbitAmp's processor compile the same sources less its set: each stands in
-# a layOutFactorySet() of its own that lays out nothing (PluginProcessor.h).
+# ...and the gates that play OrbitAmp's processor compile the same sources less its first start: each
+# stands in a firstStart() of its own that does nothing (PluginProcessor.h).
 set(ORBITAMP_GATE_SOURCES ${ORBITAMP_SOURCES})
-list(REMOVE_ITEM ORBITAMP_GATE_SOURCES src/OrbitAmpSet.cpp src/device/FactorySet.cpp)
+list(REMOVE_ITEM ORBITAMP_GATE_SOURCES src/OrbitAmpStart.cpp)
 
 # A FACE is the family's console (src/face) over the family's channels (src/channels), on the same
 # processor: what the cockpit and every rover are compiled from before their own.
@@ -846,7 +987,6 @@ set(FACE_SOURCES
     src/Parameters.cpp
     src/ui/Theme.cpp
     src/core/ProcessMemory.cpp
-    src/device/FactorySet.cpp
     src/channels/Channels.cpp
     src/channels/Engine.cpp
     src/channels/Presets.cpp
@@ -863,9 +1003,9 @@ set(FACE_SOURCES
 
 # CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and two
 # faces, each target compiling exactly one `makeEditor`. Its renders are in resources/catpit, as
-# bake-art made them, and are built into the binary under a namespace of their own, beside OrbitAmp's
-# data. What the cockpit is made of is said once, for the plug-in and for its gates, which are the
-# cockpit compiled again under a main() of their own.
+# bake-art made them, and lie in its own folder of the factory, Faces/CatpitAmp. What the cockpit is made
+# of is said once, for the plug-in and for its gates, which are the cockpit compiled again under a main()
+# of their own.
 set(CATPITAMP_RENDERS
     cockpit.webp lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp midi.txt knob-drive.webp knob-tone.webp
     throttle-grip.webp guard-closed.webp guard-open.webp guard-on.webp fader-cap.webp sky-clean.jpg
@@ -994,29 +1134,26 @@ set(ROVER_LIBRARIES
 # version and tags of its own, catpit-vX.Y.Z; from 0.8.0 on every amp's update check reads the family's.
 # ----------------------------------------------------------------------------
 
-# OrbitAmp — the player of the whole library, and the default build. Its set is no SET of its own but
-# THE SET whole (OrbitAmpSetData, above).
+# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole but what is
+# put away (ORBITAMP_PLAYS, above), and the whole cabinet shelf.
 add_amp(OrbitAmp      CODE Oamp
     SOURCES   ${ORBITAMP_SOURCES}
     LIBRARIES
-        OrbitAmpData                 # the mark, the notice, the demo loops — BinaryData::*
-        OrbitAmpShelfOther           # the cabinet shelf's `Other`, OrbitAmp's alone — ShelfOtherData::*
-        OrbitAmpSetData              # the factory packs, laid out at start — OrbitAmpSetData::*
+        OrbitAmpData                 # the mark, the notice, the disclaimer — BinaryData::*
         ${AMP_ENGINE_LIBRARIES}
-    LTO)
+    SET       ${ORBITAMP_PLAYS}
+    WHOLE_SHELF)
 
-# CatpitAmp — the cockpit. THE COCKPIT'S OWN SET IS INSIDE ITS BINARY — every format's, on every system —
-# and the amp lays it out as files when it first starts (src/channels/Set.h says why). Out of the tree's
-# set, it carries what its four channels play: the X88-IR's four packs — a channel finds its own by the
-# capture it holds, not by the file's name. The cabinets CAB steps through are the family's shelf, which
-# every product carries in the data they all link (OrbitAmpData) and lays out with its packs. Without a
-# set, the cockpit would play only what the player puts in the Devices folder.
+# CatpitAmp — the cockpit. Out of the tree's set it plays what its four channels play: the X88-IR's four
+# packs — a channel finds its own by the capture it holds, not by the file's name. The cabinets CAB steps
+# through are Darwin's Cat's own of the family's shelf. All of it lies in the factory folder, under the
+# cockpit's own list there (src/channels/Set.h); without it, the cockpit would play only what the player
+# puts in the Devices folder.
 add_amp(CatpitAmp     CODE Ctpt    BY_NAME
-    ART       CatpitData ${CATPITAMP_RENDERS}
+    ART       ${CATPITAMP_RENDERS}
     SOURCES   ${CATPITAMP_SOURCES}
     LIBRARIES
         OrbitAmpData
-        CatpitAmpData
         OrbitAmpShaders              # the sky's shaders
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sky, on the GPU
@@ -1028,21 +1165,21 @@ add_amp(CatpitAmp     CODE Ctpt    BY_NAME
 # family's channels, its own renders in resources/redpaw, and its own set — the packs its channels play,
 # the IR-X's two, each found by the capture it holds.
 add_amp(RedPawAmp     CODE Rdpw    BY_NAME
-    ART       RedPawData ${REDPAWAMP_RENDERS}
+    ART       ${REDPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} src/redpaw/RedPawSkin.cpp
-    LIBRARIES RedPawAmpData ${ROVER_LIBRARIES}
+    LIBRARIES ${ROVER_LIBRARIES}
     SET       "IR-X Ch1 PowerAmp" "IR-X Ch2 PowerAmp")
 
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
 # over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
 # ice-blue rings. The same controls, TURBO and PARK: the rover's, shared, not copied — over channels of
-# its own, six on the V4's six packs in three gears, and the rovers' cabinets; its set laid out under its
-# own list in the family's folder (src/channels/Set.h), where a file another product carries too is one
-# file. Not in the family's release yet (installer/family.ini).
+# its own, six on the V4's six packs in three gears, and the rovers' cabinets; its set under its own list
+# in the family's folder (src/channels/Set.h), where a file another product plays too is one file. Not in
+# the family's release yet (installer/family.ini), so none of it is in the release's factory folder.
 add_amp(FrostPawAmp   CODE Frpw    BY_NAME
-    ART       FrostPawData ${FROSTPAWAMP_RENDERS}
+    ART       ${FROSTPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp
-    LIBRARIES FrostPawAmpData ${ROVER_LIBRARIES}
+    LIBRARIES ${ROVER_LIBRARIES}
     SET       "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
 
 # AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
@@ -1052,9 +1189,9 @@ add_amp(FrostPawAmp   CODE Frpw    BY_NAME
 # gears, its set for now FrostPawAmp's until it has captures of its own, and the rovers' cabinets. Not in
 # the family's release yet (installer/family.ini).
 add_amp(AmberPawAmp   CODE Ambp    BY_NAME
-    ART       AmberPawData ${AMBERPAWAMP_RENDERS}
+    ART       ${AMBERPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp
-    LIBRARIES AmberPawAmpData ${ROVER_LIBRARIES}
+    LIBRARIES ${ROVER_LIBRARIES}
     SET       "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
 
 # ----------------------------------------------------------------------------
@@ -1069,8 +1206,8 @@ amp_console(catpitamp_memory_probe  "CatpitAmpMemoryProbe"  CatpitAmp  tests/Mem
 # from another, the gates read in tests/AmpGate.h. Its channels with no window at all — as many as
 # CHANNELS says, each with its own memory and what it opens on, moved by CHANNEL the way a host moves
 # it; the rover's gears and the Boost each holds, PARK, the cockpit's DRIVE on its dial — and its set as
-# it leaves the binary, laid out whole, once, under its own list, in a folder of its own, and nothing
-# else in the folder touched; that one reads pack manifests (DeviceLibrary.h, through namz).
+# it — and its set as the build lays it out in the factory folder, under its own list, whole and nothing
+# else; that one reads pack manifests (DeviceLibrary.h, through namz).
 set(AMP_SET_GATE_LIBRARIES felitronics::nam juce::juce_core juce::juce_events juce::juce_gui_basics)
 amp_console(catpitamp_channel_test    "CatpitAmpChannelTest"    CatpitAmp    tests/AmpChannelTests.cpp  CHANNELS 4)
 amp_set_test(catpitamp_set_test       "CatpitAmpSetTest"        CatpitAmp    tests/AmpSetTests.cpp      CHANNELS 4
@@ -1084,6 +1221,13 @@ amp_set_test(frostpawamp_set_test     "FrostPawAmpSetTest"      FrostPawAmp  tes
 amp_console(amberpawamp_channel_test  "AmberPawAmpChannelTest"  AmberPawAmp  tests/AmpChannelTests.cpp  CHANNELS 6)
 amp_set_test(amberpawamp_set_test     "AmberPawAmpSetTest"      AmberPawAmp  tests/AmpSetTests.cpp      CHANNELS 6
     LIBRARIES ${AMP_SET_GATE_LIBRARIES})
+
+# AN AMP WITH NO FACTORY FOLDER — copied off a zip without it, or the folder deleted: it plays, and says
+# where the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the
+# cockpit and the rovers' dashboard, which FrostPawAmp and AmberPawAmp wear too.
+amp_console(orbitamp_no_factory_test  "OrbitAmpNoFactoryTest"   OrbitAmp     tests/NoFactoryTests.cpp   NO_FACTORY)
+amp_console(catpitamp_no_factory_test "CatpitAmpNoFactoryTest"  CatpitAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
+amp_console(redpawamp_no_factory_test "RedPawAmpNoFactoryTest"  RedPawAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
 
 # ----------------------------------------------------------------------------
 # THE FAMILY'S RELEASE: `--target Family_All` builds every format of every amp installer/family.ini
@@ -1109,6 +1253,9 @@ foreach(amp IN LISTS FAMILY_AMPS)
     add_dependencies(Family_All ${amp}_All)
 endforeach()
 message(STATUS "The family's release (Family_All): ${FAMILY_AMPS}")
+
+# ...and the factory folder of every amp, and of the family's alone (THE FACTORY FOLDER).
+family_factory()
 
 # ----------------------------------------------------------------------------
 # Headless acceptance gate for the EQ link. JUCE-free — it links only felitronics::eq, which is
@@ -1254,14 +1401,13 @@ target_include_directories(orbitamp_chain_test PRIVATE src)
 target_include_directories(orbitamp_chain_test PRIVATE "${ORBITAMP_GENERATED_DIR}")   # the same faces, the same stamp
 add_dependencies(orbitamp_chain_test OrbitAmpVersionGen)
 target_compile_definitions(orbitamp_chain_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
-                                                      ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}"   # the channels' gate plays the set in place
                                                       JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_chain_test PRIVATE
     OrbitAmpData
-    OrbitAmpShelfOther               # OrbitAmp's whole shelf: the gate plays every number of it
     ${AMP_ENGINE_LIBRARIES}
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
+gate_reads_factory(orbitamp_chain_test)   # OrbitAmp's whole shelf, and its packs: the gate plays every number of it
 
 # ----------------------------------------------------------------------------
 # Gate for the hum at the input, heard through the processor's own input path — the tuner's tap,
@@ -1278,10 +1424,10 @@ target_compile_definitions(orbitamp_hum_test PRIVATE ORBITAMP_VERSION="${PROJECT
                                                     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_hum_test PRIVATE
     OrbitAmpData
-    OrbitAmpShelfOther               # OrbitAmp's processor, its whole shelf with it
     ${AMP_ENGINE_LIBRARIES}
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
+gate_reads_factory(orbitamp_hum_test)     # OrbitAmp's processor, its whole shelf with it
 
 # ----------------------------------------------------------------------------
 # Gate for reading an .orbitrig pack and playing it through the block the plugin plays it with —
@@ -1326,41 +1472,39 @@ target_link_libraries(orbitamp_library_test PRIVATE
     juce::juce_recommended_warning_flags)
 
 # ----------------------------------------------------------------------------
-# Gate for OrbitAmp's set as it leaves the binary — every pack of the set laid out under a name the
-# device list tells apart, and the family's cabinet shelf in its folders, once, byte for byte. Runs entirely in a temp folder: the machine's real
-# Factory folder is never written.
+# Gate for OrbitAmp's set as the build lays it out in the factory folder — every pack OrbitAmp plays, under
+# a name the device list tells apart, none of what is put away, and the whole cabinet shelf in its folders;
+# the list it reads is the build's own, <build>/Factory/sets/OrbitAmp.txt.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
-target_sources(orbitamp_set_test PRIVATE
-    tests/OrbitAmpSetTests.cpp
-    src/device/FactorySet.cpp)
+target_sources(orbitamp_set_test PRIVATE tests/OrbitAmpSetTests.cpp)
 target_include_directories(orbitamp_set_test PRIVATE src)
 target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_set_test PRIVATE
-    OrbitAmpSetData
-    OrbitAmpData                     # the family's cabinet shelf...
-    OrbitAmpShelfOther               # ...and its `Other`, which OrbitAmp alone carries
+    OrbitAmpCabinetCatalog           # the family's cabinet shelf, by the catalog's table
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
     juce::juce_events
     juce::juce_gui_basics
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
+gate_reads_factory(orbitamp_set_test)
 
 # ----------------------------------------------------------------------------
-# Gate for the family's Factory folder with more than one product laying out in it — two products of
-# make-believe in one folder: what each keeps, what one leaves to the other when it drops a file, and
-# the folder a product kept before the family shared one, emptied of exactly what its list named.
-# Neither product's: built and run with OrbitAmp's gates, and the cockpit's release runs it too. Runs
-# entirely in a temp folder.
+# Gate for the family's factory folder with more than one product reading it — two products of
+# make-believe in one folder, each seeing what its own list names and nothing else: their packs, their
+# cabinets, with a file missing or empty held as an empty place. Neither product's: built and run with
+# OrbitAmp's gates. Runs entirely in a temp folder.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_factory_test PRODUCT_NAME "OrbitAmpFactoryTest")
-target_sources(orbitamp_factory_test PRIVATE
-    tests/FactorySetTests.cpp
-    src/device/FactorySet.cpp)
+target_sources(orbitamp_factory_test PRIVATE tests/FactorySetTests.cpp)
 target_include_directories(orbitamp_factory_test PRIVATE src)
-target_compile_definitions(orbitamp_factory_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(orbitamp_factory_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+                                                        ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}")   # the set's packs, copied out of the tree
 target_link_libraries(orbitamp_factory_test PRIVATE
-    juce::juce_core
+    OrbitAmpCabinetCatalog           # the shelf's table
+    felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
+    juce::juce_events
+    juce::juce_gui_basics
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 

@@ -41,7 +41,6 @@
 #include "AmpGate.h"
 #include "PluginProcessor.h"
 #include "Parameters.h"
-#include "device/FactorySet.h"
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
 #include "channels/Engine.h"
@@ -178,14 +177,15 @@ int main()
     ticks();
     check (! history.canUndo(), "...and none of that is an edit");
 
-    // THE SHELF'S `Other` IS ORBITAMP'S (device/FactoryShelf.h): the amp carries Darwin's Cat's own
-    // cabinets and not a byte of the third-party ones — their places in `cab_ir`'s order held empty — and a
-    // host that moves `cab_ir` to one of those places hears DARK MATTER, not a cabinet that is not there.
+    // THE SHELF'S `Other` IS ORBITAMP'S (device/FactoryShelf.h): the amp plays Darwin's Cat's own cabinets
+    // and not a byte of the third-party ones, whatever the factory folder holds — their places in
+    // `cab_ir`'s order held empty — and a host that moves `cab_ir` to one of those places hears DARK
+    // MATTER, not a cabinet that is not there.
     {
         bool oursAlone = device::shelf::irs().size() == (size_t) params::cabIrNames.size();
         for (const auto& ir : device::shelf::irs())
             oursAlone = oursAlone && (ir.data != nullptr) == (juce::String (ir.folder) == device::shelf::ours);
-        check (oursAlone, "the " + ours + " carries the shelf's Orange PPC212V and nothing of Other, every number in its place");
+        check (oursAlone, "the " + ours + " plays the shelf's Orange PPC212V and nothing of Other, every number in its place");
         check (AmpProcessor::cabIrBytes (0).data == AmpProcessor::cabIrBytes (params::cabIrDefault).data,
                "...and a number of Other's plays DARK MATTER");
     }
@@ -390,7 +390,8 @@ int main()
     }
 
     // A channel's pack is the capture it holds, not its file's name: the same packs under names that
-    // say nothing, in a folder of the gate's own, are the channels' packs still.
+    // say nothing, in a folder of the gate's own laid out as a factory — the product's list there naming
+    // them — are the channels' packs still.
     {
         const auto all = amp->preamp.packs;
         const auto renamed = juce::File::getSpecialLocation (juce::File::tempDirectory)
@@ -406,6 +407,12 @@ int main()
             copied = copied && channels.packFor (c) >= 0
                             && (renamed.getChildFile (nameOf (c)).existsAsFile()
                                 || all.getReference (channels.packFor (c)).location.copyFileTo (renamed.getChildFile (nameOf (c))));
+
+        juce::StringArray listed;
+        for (const auto& n : names)
+            listed.addIfNotAlreadyThere (n);
+        const auto list = renamed.getChildFile (device::FactorySet::listsName).getChildFile (juce::String (orbitamp::product::name) + ".txt");
+        copied = copied && list.getParentDirectory().createDirectory().wasOk() && list.replaceWithText (listed.joinIntoString ("\n") + "\n");
 
         amp->preamp.packs = device::DeviceLibrary::scan (device::DeviceLibrary::Slot::preamp, true,
                                                          renamed, renamed.getChildFile ("none"));
@@ -446,24 +453,9 @@ int main()
         const int before  = channels.cabinets().size();
         check (factory > 0, "the build's own cabinets are there");
 
-        // ANOTHER PRODUCT'S CABINET in the family's folder, beside the build's own, under a name that
-        // would stand first among them: it is not one of the amp's. It goes again with that
-        // product's own list.
-        {
-            const juce::String bytes ("another product's cabinet");
-            const auto family = device::DeviceLibrary::factoryDirectory();
-            device::FactorySet::layOut (family, "AnotherAmp", 1, { { "IRs/00-another.wav", bytes.toRawUTF8(), (size_t) bytes.length() } });
-            channels.readCabinets();
-
-            bool notOurs = family.getChildFile ("IRs/00-another.wav").existsAsFile() && channels.factoryCabinets() == factory
-                        && channels.cabinets().size() == before;
-            for (const auto& c : channels.cabinets())
-                notOurs = notOurs && c.getFileName() != "00-another.wav";
-            check (notOurs, "a cabinet another product lays out beside the build's own is not one of the " + ours + "'s");
-
-            device::FactorySet::layOut (family, "AnotherAmp", 1, {});
-            channels.readCabinets();
-        }
+        // Another product's cabinet in the family's folder, beside the build's own, is not one of the
+        // amp's: its set gate holds that (AmpSetTests), on a folder of its own — this one reads the
+        // build's, and writes nothing there.
 
         const auto run = juce::String::toHexString (juce::Random::getSystemRandom().nextInt());
         const auto scratch = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile (scratchName + "-channel-test-" + run);

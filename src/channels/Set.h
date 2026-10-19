@@ -5,13 +5,10 @@
 
 #include <juce_core/juce_core.h>
 
-/** A PRODUCT'S OWN SET — its channels' packs and the family's cabinets — IS INSIDE THE BINARY and is laid
-    out as files the first time the amp starts; device/FactorySet.h says why, and how. Which packs the
-    product carries is its build's to say (the set data its target links, ProductSetData); the cabinets
-    are the family's shelf, the same in every product (device/FactoryShelf.h). Where each file lies is
-    the same for all of them: the packs at the top of the family's `Factory` folder, under their own
-    names — a channel finds its pack by the capture it holds (Channels.h) — and the cabinets in the
-    shelf's folders in `IRs` inside it. */
+/** A PRODUCT'S OWN SET — its channels' packs and the family's cabinets — lies in the family's factory
+    folder, laid out there by the installer (device/FactorySet.h): the packs at its top, under their own
+    names — a channel finds its pack by the capture it holds (Channels.h) — and the cabinets in the shelf's
+    folders in `IRs` inside it. Which of them are the product's is what its own list there names. */
 namespace orbitamp::channels::set
 {
 /** Where the cabinets lie in a factory folder. */
@@ -22,8 +19,4 @@ juce::File cabinetsIn (const juce::File& factory);
     may lie beside them; CAB steps through the product's alone. */
 juce::Array<juce::File> ownCabinets (const juce::File& factory);
 
-/** Makes `factory` hold this build's set, whatever it held before — FactorySet::layOut over what the
-    product carries, under the product's own list and `build`, the build it is. Returns how many files it
-    wrote or removed, which on every start after the first is none. */
-int layOut (const juce::File& factory, juce::int64 build);
 } // namespace orbitamp::channels::set

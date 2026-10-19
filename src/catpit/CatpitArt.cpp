@@ -4,20 +4,15 @@
 #include "CatpitArt.h"
 #include "../face/Renders.h"
 
-#include <CatpitData.h>
-
 namespace orbitamp::catpit
 {
 
 namespace
 {
-    const face::renders::Binary binary { CatpitData::namedResourceList, CatpitData::namedResourceListSize,
-                                         CatpitData::getNamedResourceOriginalFilename, CatpitData::getNamedResource };
-
-    /** A render by its file name: the copy built into the binary — or, when CATPIT_ART_DIR names a
-        folder that has one, the file from there (face/Renders.h). */
-    juce::Image decode (const char* name) { return face::renders::decode (name, binary, "CATPIT_ART_DIR"); }
-    juce::Image load (const char* name)   { return face::renders::load (name, binary, "CATPIT_ART_DIR"); }
+    /** A render by its file name: the cockpit's own, in the factory folder — or, when CATPIT_ART_DIR
+        names a folder that has one, the file from there (face/Renders.h). */
+    juce::Image decode (const char* name) { return face::renders::decode (name, artFolderVariable); }
+    juce::Image load (const char* name)   { return face::renders::load (name, artFolderVariable); }
 }
 
 juce::Image stillSky (int channel)

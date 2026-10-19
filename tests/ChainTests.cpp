@@ -19,12 +19,11 @@
 #include "PluginProcessor.h"
 #include "core/BypassWire.h"
 
-#include <BinaryData.h>
-#include <ShelfOtherData.h>
+#include "device/FactoryShelf.h"
 
-// OrbitAmp's set (OrbitAmpSet.cpp) is NOT laid out from here: the processor would write it into the
-// machine's real Factory folder. Its own gate, OrbitAmpSetTests, lays it out in a folder of its own.
-void orbitamp::layOutFactorySet() {}
+// OrbitAmp's first start (OrbitAmpStart.cpp) is NOT made from here: it would gather IRs in the machine's
+// real folders.
+void orbitamp::firstStart() {}
 
 #include <felitronics/core/StreamResampler.h>
 
@@ -1121,29 +1120,20 @@ int main()
         report ("cabinet: every shelf IR stands in one cabinet, once", astray == 0 && once == names,
                 juce::String (once) + " of " + juce::String (names) + ", " + juce::String (astray) + " past the list");
 
-        // The name a file gives, the way the shelf was named: "08-big-bubba.wav" is BIG BUBBA — in
-        // whichever of OrbitAmp's two data it lies, Darwin's Cat's own or the shelf's `Other`.
-        const auto nameOfFile = [] (const char* file)
+        // The name a file gives, the way the shelf was named: "08-big-bubba.wav" is BIG BUBBA — of
+        // whichever of the shelf's folders in the factory it was read out of, Darwin's Cat's own or `Other`.
+        const auto nameOfFile = [] (const juce::String& file)
         {
-            return juce::String (file).upToLastOccurrenceOf (".", false, false)
-                                      .trimCharactersAtStart ("0123456789-")
-                                      .replaceCharacter ('-', ' ')
-                                      .toUpperCase();
+            return file.upToLastOccurrenceOf (".", false, false)
+                       .trimCharactersAtStart ("0123456789-")
+                       .replaceCharacter ('-', ' ')
+                       .toUpperCase();
         };
         const auto nameOfBytes = [&nameOfFile] (const char* data)
         {
-            for (int r = 0; r < BinaryData::namedResourceListSize; ++r)
-            {
-                int size = 0;
-                if (BinaryData::getNamedResource (BinaryData::namedResourceList[r], size) == data)
-                    return nameOfFile (BinaryData::originalFilenames[r]);
-            }
-            for (int r = 0; r < ShelfOtherData::namedResourceListSize; ++r)
-            {
-                int size = 0;
-                if (ShelfOtherData::getNamedResource (ShelfOtherData::namedResourceList[r], size) == data)
-                    return nameOfFile (ShelfOtherData::originalFilenames[r]);
-            }
+            for (const auto& ir : orbitamp::device::shelf::irs())
+                if (data != nullptr && ir.data == data)
+                    return nameOfFile (ir.file);
             return juce::String();
         };
 
@@ -2398,9 +2388,9 @@ int main()
         m->inlineLoads = true;
         m->prepareToPlay (sampleRate, blockSize);
 
-        const auto devices = juce::File (ORBITAMP_SET_DIR).getChildFile ("Devices");
+        // The packs as the build lays them out, in its factory folder, under OrbitAmp's own list.
         const auto nowhere = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("orbitamp-no-devices");
-        const auto library = Library::scan (Library::ampSlot, true, devices, nowhere);
+        const auto library = Library::scan (Library::ampSlot, true, Library::factoryDirectory(), nowhere);
 
         const auto indexOf = [&library] (const juce::String& name)
         {
