@@ -31,6 +31,15 @@ juce::Rectangle<float> GearLever::leverBox (float y, float x) const
     return { x - w * 0.5f, y + layout::collarSink - h, w, h };
 }
 
+juce::Rectangle<float> GearLever::standingBox() const
+{
+    // In a notch the collar stands in the notch; at PARK, the slot's top end, there is none.
+    const float p = pos.value;
+    const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f)
+                        * juce::jlimit (0.0f, 1.0f, p / 0.5f);
+    return leverBox (yOf (p), slotX + (notchX - slotX) * inNotch);
+}
+
 GearLever::GearLever (int g)
     : gears (juce::jlimit (1, (int) layout::notches.size(), g))
 {
@@ -97,13 +106,9 @@ void GearLever::timerCallback()
 
 void GearLever::paint (juce::Graphics& g)
 {
-    // The lever from above: its grip across the slot, the collar under it standing on the position. In
-    // a notch the collar stands in the notch; at PARK, the slot's top end, there is none.
+    // The lever from above: its grip across the slot, the collar under it standing on the position.
     const auto& art = Art::get().lever;
-    const float p = pos.value;
-    const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f)
-                        * juce::jlimit (0.0f, 1.0f, p / 0.5f);
-    const auto box = leverBox (yOf (p), slotX + (notchX - slotX) * inNotch);
+    const auto box = standingBox();
     const auto bar = box.withHeight (box.getHeight() * barBottom);
 
     // Its shadow on the plate, the light being from the upper left: the bar's, soft-edged.
@@ -137,17 +142,18 @@ void GearLever::mouseDown (const juce::MouseEvent& e)
 {
     held = true;
     stopTimer();
-    // Taken by the grip, it goes with the hand from where it was taken; anywhere else on the gate it
-    // goes where the hand is.
-    const float at = yOf (pos.value);
-    const float grip = leverBox (at, 0.0f).getCentreY();
-    grabOffset = std::abs (e.position.y - grip) < 32.0f ? at - e.position.y : 0.0f;
-    mouseDrag (e);
+    // Taken by the grip — the bar the hand sees, not the room round it, where the next position up
+    // already is — it goes with the hand from where it was taken; anywhere else on the gate it waits:
+    // dragged, it goes where the hand is, and let go where it was pressed, into the position nearest the
+    // press (mouseUp).
+    const auto box = standingBox();
+    const bool grip = box.withHeight (box.getHeight() * barBottom).contains (e.position);
+    grabOffset = grip ? yOf (pos.value) - e.position.y : 0.0f;
 }
 
 void GearLever::mouseDrag (const juce::MouseEvent& e)
 {
-    if (! held)
+    if (! held || ! e.mouseWasDraggedSinceMouseDown())
         return;
 
     // The notch: within reach of one the lever sits IN it, and the hand has to pull it out.
@@ -174,7 +180,9 @@ void GearLever::mouseUp (const juce::MouseEvent& e)
         lit.target = 0.0f;
         startTimerHz (60);
     }
-    setPosition (juce::roundToInt (pos.value), true);
+    // A press that did not travel: the position nearest it — on the grip, the one the lever stands in.
+    const float to = e.mouseWasDraggedSinceMouseDown() ? pos.value : positionAt (e.position.y + grabOffset);
+    setPosition (juce::roundToInt (to), true);
     if (onRelease)
         onRelease();
 }

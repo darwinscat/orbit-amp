@@ -15,9 +15,10 @@ namespace orbitamp::redpaw
 
 /** THE GEAR LEVER in the dashboard's straight slot: PARK at its top end, then the product's gears down
     the slot's notches — CLEAN, CRUNCH, HI-GAIN, the top ones of them as many as it has — the gear's name
-    is on the nav screen. It follows the hand up and down the slot while held, sits in a position within reach of
-    one, and springs into the nearest on release; a click anywhere on the gate puts it at the position
-    nearest the click, and so does the wheel, a position at a time. In a notch its stem stands in it.
+    is on the nav screen. Taken by its grip it follows the hand up and down the slot, sits in a position within
+    reach of one, and springs into the nearest on release; dragged from anywhere else on the gate it goes
+    where the hand is. A press that does not travel slides it into the position nearest the press — on the
+    grip, the one it stands in — and so does the wheel, a position at a time. In a notch its stem stands in it.
 
     Its box is the gate's plate and the room over it the grip stands up into: in the dashboard's space
     from layout::leverLeft, layout::leverTop. */
@@ -74,6 +75,7 @@ private:
     float yOf (float position) const noexcept;      // in the lever's own space
     float positionAt (float y) const noexcept;
     juce::Rectangle<float> leverBox (float y, float x) const;     // the render's box, its collar standing on (x, y)
+    juce::Rectangle<float> standingBox() const;                  // the render's box where the lever stands now
     void  timerCallback() override;
 };
 
