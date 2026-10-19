@@ -267,12 +267,26 @@ NavHeader::Fit NavHeader::fit (const juce::String& g, const juce::String& c, int
     if (const int lines = c.isEmpty() ? 2 : 3; f.wanted > area.getWidth() && area.getHeight() >= (float) lines * layout::px13)
         f.lines = lines;
 
-    juce::GlyphArrangement cut;
+    // What the cut line shows, read back off it. The ellipsis JUCE ends a cut with is a glyph of its own
+    // that reports, as its character, the first letter cut off — and, from a font of its own, it can share
+    // its number with a letter of this one: the line is read off the cut as far as its glyphs are the
+    // whole line's, the glyph and the font it stands in (its height over and under the line).
+    juce::GlyphArrangement whole, cut;
+    whole.addLineOfText (small, c, 0.0f, 0.0f);
     cut.addCurtailedLineOfText (small, c, 0.0f, 0.0f, f.room, true);
-    for (int i = 0; i < cut.getNumGlyphs(); ++i)
-        if (const auto ch = cut.getGlyph (i).getCharacter(); ch != 0)      // the ellipsis is a glyph of no character
+    const auto same = [] (const juce::PositionedGlyph& a, const juce::PositionedGlyph& b)
+    {
+        return a.getGlyphIndex() == b.getGlyphIndex()
+            && juce::approximatelyEqual (a.getBaselineY() - a.getTop(), b.getBaselineY() - b.getTop())
+            && juce::approximatelyEqual (a.getBottom() - a.getBaselineY(), b.getBottom() - b.getBaselineY());
+    };
+    int kept = 0;
+    while (kept < cut.getNumGlyphs() && kept < whole.getNumGlyphs() && same (cut.getGlyph (kept), whole.getGlyph (kept)))
+        ++kept;
+    for (int i = 0; i < kept; ++i)
+        if (const auto ch = cut.getGlyph (i).getCharacter(); ch != 0)
             f.shown << juce::String::charToString (ch);
-    if (f.shown != c)
+    if (kept < cut.getNumGlyphs() || f.shown != c)
         f.shown << juce::String::charToString ((juce::juce_wchar) 0x2026);
     return f;
 }
