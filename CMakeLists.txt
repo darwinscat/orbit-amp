@@ -11,6 +11,14 @@ cmake_minimum_required(VERSION 3.22)
 # release is fetched, so a clean clone still configures.
 # ----------------------------------------------------------------------------
 
+# THE OLDEST macOS THE BINARIES RUN ON. Left unsaid, the compiler marks every binary for the macOS of
+# the machine that built it — OrbitAmp 0.7.0 and CatpitAmp 0.2.0 went out marked for macOS 26, and a Mac
+# one release behind would not open them. 11.0, Big Sur, is the first macOS on Apple Silicon, so as far
+# back as the arm64 half of a universal binary can go — and both halves say the same. A cache default,
+# so a configure can still say otherwise (-DCMAKE_OSX_DEPLOYMENT_TARGET=…); and before project(),
+# because that is where CMake reads it. Elsewhere than the Mac nothing reads it at all.
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
+
 project(OrbitAmp VERSION 0.7.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
