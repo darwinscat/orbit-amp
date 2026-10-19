@@ -5,6 +5,7 @@
 
 #if defined (__EMSCRIPTEN__)
  #include <GLES3/gl3.h>
+ #include <GLES2/gl2ext.h>      // the extensions' names: anisotropic filtering's, as the desktop's GL has them
  #include <emscripten/html5.h>
  #include <cstdio>
 #else
