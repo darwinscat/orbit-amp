@@ -39,6 +39,10 @@ public:
         does (Helm). */
     void setSteer (float s) noexcept { steer.store (juce::jlimit (-1.0f, 1.0f, s)); }
 
+    /** THE GUITAR'S PEAK, as the sky hears it (Flight::hear): asked once a frame, on the GL thread, for the
+        input's peak since it was last asked. Set before the context renders; none is silence. */
+    void setHearing (std::function<float()> peakSinceAsked) { hearing = std::move (peakSinceAsked); }
+
     /** Where the glass is — all that is shaded — where the windshield is — what the picture is composed
         for: the stars fly out of its centre — and how big the whole surface is, in the editor's logical
         pixels. */
@@ -69,6 +73,7 @@ private:
     std::atomic<float> areaX { 0 }, areaY { 0 }, areaW { 0 }, areaH { 0 }, fullW { 0 }, fullH { 0 };
     std::atomic<float> viewX { 0 }, viewY { 0 }, viewW { 0 }, viewH { 0 };     // the windshield, inside the area
     std::atomic<bool>  broken { false };
+    std::function<float()> hearing;
 
     // GL thread only.
     Flight flight;

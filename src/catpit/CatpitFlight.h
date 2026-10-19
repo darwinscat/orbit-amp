@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CatpitHelm.h"
+#include "../worlds/Play.h"
 
 #include <algorithm>
 #include <array>
@@ -33,6 +34,11 @@ struct Flight
     static constexpr float slideCruise = 3.0f, slidePerSpeed = 3.0f;
     static constexpr float cloudSlide = 0.08f;
 
+    // THE GUITAR (worlds/Play.h): the stars brighten with each attack and the nebulae glow, a little while
+    // it sounds — nothing of it in silence, so a silent sky is the sky it always was.
+    static constexpr float starsOfHit = 0.8f, starsOfGlow = 0.2f;
+    static constexpr float cloudsOfHit = 0.6f, cloudsOfGlow = 0.25f;
+
     float speed = detentSpeed[0];
     double travel = 0.0;
     Helm helm;
@@ -41,6 +47,13 @@ struct Flight
     // distance — and how deep each stood at the last step, to tell when it has.
     std::array<float, 4> drift {}, depth {};
     std::array<float, 2> cloudDrift {}, cloudPhase {};
+    worlds::Play play;
+
+    /** The guitar: the amp's input's peak since the last step. */
+    void hear (float peak) noexcept { play.hear (peak); }
+    /** How much brighter the stars shine and the nebulae glow for it: 0 in silence. */
+    float starShine() const noexcept  { return starsOfHit * play.hit() + starsOfGlow * play.glow(); }
+    float cloudShine() const noexcept { return cloudsOfHit * play.hit() + cloudsOfGlow * play.glow(); }
 
     /** The speed the throttle asks for: 0 = CLEAN .. 1 = HI-GAIN, continuous, between the detents' own. */
     static float speedFor (float throttle) noexcept
@@ -57,6 +70,7 @@ struct Flight
         const float want = speedFor (throttle);
         speed += (want - speed) * (1.0f - std::exp (-dt / (want > speed ? 0.9f : 0.5f)));
         travel += (double) (speed * dt);
+        play.step (dt);
 
         // ...and the helm: the turn sweeps each layer and each cloud sideways, and what a layer or a cloud
         // was swept is forgotten when it comes up again out of the distance, where nothing of it shows —
