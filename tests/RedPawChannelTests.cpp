@@ -3,7 +3,7 @@
 
 // Gate for THE ROVER'S CHANNELS WITH NO WINDOW (channels/Engine.h, over redpaw/RedPawLineup.h): the
 // product's channels on its packs — the Friedman IR-X's two on Mars, the Victory V4's elsewhere — as
-// many as it plays: ROVER_CHANNELS, which the build says for each rover (CMakeLists.txt: rover_console). A plug-in's window is shut for most of its life, and what a
+// many as it plays: ROVER_CHANNELS, which the build says for each rover (CMakeLists.txt: amp_console). A plug-in's window is shut for most of its life, and what a
 // host can reach then is the processor's parameters: so a channel has to be something the processor
 // does by itself. No window is built here at all.
 //
@@ -30,7 +30,7 @@
 //
 // It reads the rover's packs from where the rover reads them, and lays the build's set out there
 // first, as the rover does. Every rover that wears the dashboard runs it as itself — RedPawAmp,
-// FrostPawAmp, AmberPawAmp (CMakeLists.txt: rover_console).
+// FrostPawAmp, AmberPawAmp (CMakeLists.txt: amp_console).
 
 #include "PluginProcessor.h"
 #include "Parameters.h"
