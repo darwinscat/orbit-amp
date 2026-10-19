@@ -156,6 +156,7 @@ protected:
     std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the file names exportForWeb gives them
     struct LookForWeb { ArtKnob::Pointer drive {}, tone {}; juce::Colour handLight; Ink ink; } lookForWeb;   // ...and the rest of it
     std::vector<std::pair<juce::String, juce::Rectangle<float>>> spritesWritten;     // writeSprite's, for spriteBounds
+    void poseNext (const juce::File& dir, int pose);
 
     juce::Component stage;
     std::unique_ptr<Picture> picture;
@@ -219,7 +220,21 @@ protected:
         `still` in `window` under the glass, at twice the stage's size (poster.png). What shows through the
         window live is `hidden` while it is taken, the still in its place. */
     void writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
-                      std::initializer_list<juce::Component*> hidden);
+                      const std::vector<juce::Component*>& hidden, const juce::String& file = "poster.png");
+
+    /** A POSTER FOR EACH PLACE OF THE LEVER, for a page that opens on another channel than the app does:
+        how many places there are, how the face is stood in one (no animation), the still under the glass
+        there, and the window and its live layers as for the poster. Set by webExtras; exportForWeb then
+        stands the face in each in turn and writes poster-<n>.png once it has settled, and done.txt last. */
+    struct WebPoses
+    {
+        int count = 0;
+        std::function<void (int)> standAt;
+        std::function<juce::Image (int)> still;
+        juce::Rectangle<float> window;
+        std::vector<juce::Component*> hidden;
+    };
+    WebPoses webPoses;
 
     /** To that channel, by a hand: one step of the history. False, and the face back on the channel
         that is playing, when its pack is not installed. */

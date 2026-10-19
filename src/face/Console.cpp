@@ -603,7 +603,7 @@ void writeForWeb (const juce::File& file, const juce::Image& img)
 }
 
 void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
-                           std::initializer_list<juce::Component*> hidden)
+                           const std::vector<juce::Component*>& hidden, const juce::String& file)
 {
     std::vector<std::pair<juce::Component*, bool>> was;
     for (auto* c : hidden)
@@ -625,7 +625,28 @@ void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window,
     }
     for (const auto& [c, visible] : was)
         c->setVisible (visible);
-    writeForWeb (dir.getChildFile ("poster.png"), poster);
+    writeForWeb (dir.getChildFile (file), poster);
+}
+
+void Console::poseNext (const juce::File& dir, int pose)
+{
+    if (pose >= webPoses.count)
+    {
+        dir.getChildFile ("done.txt").replaceWithText ("done");
+        return;
+    }
+    webPoses.standAt (pose);
+    // Long enough for what follows a switch to have settled before the picture is taken — a repaint, a
+    // lever or a hatch let run where a face animates it anyway, and a rover's speed eased to its gear's
+    // (or to a stand), as its nav screen reads it.
+    juce::Timer::callAfterDelay (2500, [safe = juce::Component::SafePointer<Console> (this), dir, pose]
+    {
+        if (safe == nullptr)
+            return;
+        safe->writePoster (dir, safe->webPoses.window, safe->webPoses.still (pose), safe->webPoses.hidden,
+                           "poster-" + juce::String (pose) + ".png");
+        safe->poseNext (dir, pose + 1);
+    });
 }
 
 void Console::writeSprite (const juce::File& dir, const juce::String& file, const juce::Image& img)
@@ -801,8 +822,17 @@ void Console::exportForWeb (const juce::File& dir)
     }
 
     auto* world = new juce::DynamicObject();
+    webPoses = {};
     webExtras (dir, *o, *world);
     o->setProperty ("world", juce::var (world));
+    juce::Array<juce::var> posters;
+    for (int i = 0; i < webPoses.count; ++i)
+    {
+        auto* poster = new juce::DynamicObject();
+        poster->setProperty ("poster", "poster-" + juce::String (i) + ".png");
+        posters.add (juce::var (poster));
+    }
+    o->setProperty ("posters", posters);
 
     auto* bounds = new juce::DynamicObject();
     for (const auto& [name, r] : spritesWritten)
@@ -810,6 +840,7 @@ void Console::exportForWeb (const juce::File& dir)
     o->setProperty ("spriteBounds", juce::var (bounds));
     juce::var json (o);
     dir.getChildFile ("places.json").replaceWithText (juce::JSON::toString (json));
+    poseNext (dir, 0);
 }
 
 Console::~Console()

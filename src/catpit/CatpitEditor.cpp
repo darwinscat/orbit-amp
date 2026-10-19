@@ -411,6 +411,13 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         stills.add ("sky-" + juce::String (c) + ".png");
     places.setProperty ("stills", stills);
     writePoster (dir, glass, stillSky (channels.active()), { &space, &still, &monitor });
+
+    // ...and one for each channel the throttle can stand in, the channel's own still sky in the glass.
+    webPoses.count = channels.count();
+    webPoses.standAt = [this] (int channel) { go (channel); this->lever.setDetent (channel, false, false); };
+    webPoses.still = [] (int channel) { return stillSky (channel); };
+    webPoses.window = glass;
+    webPoses.hidden = { &space, &still, &monitor };
 }
 
 CatpitEditor::CatpitEditor (AmpProcessor& p)

@@ -510,6 +510,21 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     stills.add ("still.jpg");
     places.setProperty ("stills", stills);
     writePoster (dir, windscreen, Art::still(), { view.get() });
+
+    // ...and one for each place of the lever, PARK first: the hatch shut there only, TURBO off.
+    webPoses.count = lever.numPositions();
+    webPoses.standAt = [this] (int at)
+    {
+        if (at == GearLever::park)
+            parkIt();
+        else
+            pullGear (at - GearLever::positionOf (0));
+        lever.setPosition (at, false, false);
+        hatch.setShut (at == GearLever::park, false);
+    };
+    webPoses.still = [] (int) { return Art::still(); };
+    webPoses.window = windscreen;
+    webPoses.hidden = { view.get() };
 }
 
 RedPawEditor::RedPawEditor (AmpProcessor& p)
