@@ -433,8 +433,10 @@ private:
     static constexpr int   padY         = 11;
     static constexpr int   titleWidth   = 62;   // enough for the longest block name at the label size
     static constexpr int   headerGap    = 12;
+protected:
     static constexpr int   borderInset  = 18;   // clear of the corner radius, for anything on the line
     static constexpr float legendGap    = 6.0f; // breathing room each side of anything on the line
+private:
     // Reading size, everywhere. These were the ZOOM's numbers back when a block could be magnified;
     // with the lens gone every block is read at this size all the time, and a name or a switch too
     // small to read at 1x is not a smaller version of a control, it is a missing one.

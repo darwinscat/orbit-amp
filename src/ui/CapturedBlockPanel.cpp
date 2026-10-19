@@ -1244,20 +1244,32 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
         // line named a silent neighbour's tag — or called a tagged model untagged. Between two
         // captures there are two tags in the sound and no single number is the answer, which is what
         // the "of two" says rather than picking one and keeping quiet about it.
-        const auto tag = block.loudness();
-        auto line = contentArea().toFloat().removeFromBottom (11.0f);
+        //
+        // At reading size, on the box's top line right of the device, fieldset-style as the name
+        // rides it on the left: the device's own word beside the device, and inside the box the tone
+        // knobs and the cut filters' corners leave no row for it. Where the line is too short for
+        // the "of two", it says what matters without it.
+        const auto tag  = block.loudness();
+        const auto font = theme::displayFont (13.0f);
+        const auto run  = borderSlotArea().toFloat();
+        const float room = run.getRight() - (float) borderSlotUsed.getRight() - 2.0f * legendGap;
+        auto text = tag.tagged ? juce::String (tag.db, 1) + (tag.blended ? " dB tagged, of two" : " dB tagged")
+                               : juce::String (tag.blended ? "no loudness tag on the louder of two - plays raw"
+                                                           : "no loudness tag - plays raw");
+        if (theme::trackedWidth (text, font, 0.09f) + 1.0f > room)
+            text = tag.tagged ? juce::String (tag.db, 1) + " dB tagged" : juce::String ("no loudness tag - plays raw");
+        const float w = theme::trackedWidth (text, font, 0.09f) + 1.0f;
+        const auto line = juce::Rectangle<float> (w, 18.0f).withCentre ({ run.getRight() - w * 0.5f, run.getCentreY() });
+        g.setColour (theme::capTop);
+        g.fillRect (line.expanded (legendGap, 0.0f).withHeight (theme::blockBorder + 2.0f).withCentre (line.getCentre()));
         g.setColour (tag.tagged ? theme::txFaint.withAlpha (0.55f) : theme::orange);
-        theme::drawTracked (g, tag.tagged ? juce::String (tag.db, 1) + (tag.blended ? " dB tagged, of two"
-                                                                                    : " dB tagged")
-                                          : juce::String (tag.blended ? "no loudness tag on the louder of two - plays raw"
-                                                                      : "no loudness tag - plays raw"),
-                            line, theme::displayFont (8.0f), 0.09f, juce::Justification::centredLeft);
+        theme::drawTracked (g, text, line, font, 0.09f, juce::Justification::centredRight);
     }
 
     if (caption.isEmpty())
     {
         g.setColour (theme::txFaint.withAlpha (0.5f));
-        theme::drawTracked (g, "No device loaded", contentArea().toFloat(), theme::displayFont (8.0f),
+        theme::drawTracked (g, "No device loaded", contentArea().toFloat(), theme::displayFont (13.0f),
                             0.1f, juce::Justification::centred);
     }
 
