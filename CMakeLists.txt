@@ -663,6 +663,19 @@ function(add_amp name)
         endif()
     endforeach()
 
+    # A RELEASE BINARY CARRIES NO LOCAL SYMBOLS — tens of thousands of internal names, a fifth of a face's
+    # binary. Its exports stay, which is all a host looks up (GetPluginFactory, the AU's factory,
+    # clap_entry): `ld -x` on the Mac, `-s` on Linux, at the link of every format, the CLAP's too. A crash
+    # report from a released amp shows addresses, not the names of its own functions. MSVC writes its
+    # symbols to a .pdb beside the binary, which no installer packs, and is left as it is.
+    foreach(target IN LISTS formats)
+        if(APPLE)
+            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:LINKER:-x>)
+        elseif(UNIX)
+            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:-s>)
+        endif()
+    endforeach()
+
     # BY_NAME: not part of the default build. OrbitAmp's own build — a contributor's, a pull request's —
     # must never fail on a face. Whoever wants one asks for it by name: one format (`cmake --build build
     # --target CatpitAmp_Standalone`), or all of them — `--target CatpitAmp_All`; the family's release
