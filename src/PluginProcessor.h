@@ -1155,8 +1155,18 @@ public:
         gate KEYS off, for the meter the thresholds are drawn on. Same writer, same readers. */
     std::atomic<float> gateKeyDb { -90.0f };
 
+    /** THE SAME PEAK FOR A WORLD TO HEAR (worlds/Play.h), linear: the largest since the face last took it,
+        so a frame sees the attack that came between two of them and not only the last block's. A frame
+        that came before any block since the last one gets that last block's. One taker: the face's view. */
+    float takePlayPeak() noexcept
+    {
+        const float p = playPeak.exchange (-1.0f, std::memory_order_relaxed);
+        return p >= 0.0f ? p : juce::Decibels::decibelsToGain (gateKeyDb.load (std::memory_order_relaxed), -90.0f);
+    }
+
 private:
     int demoLoopIndex = -1;     // which of params::demoLoops the audition player holds
+    std::atomic<float> playPeak { -1.0f };     // takePlayPeak's: -1 is nothing since it was last taken
 
     // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
     // thread should not be doing per block.

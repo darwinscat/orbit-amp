@@ -1536,6 +1536,8 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         for (int ch = 0; ch < nch; ++ch)
             peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, numSamples));
         gateKeyDb.store (juce::Decibels::gainToDecibels (peak, -90.0f));
+        for (float held = playPeak.load (std::memory_order_relaxed);
+             peak > held && ! playPeak.compare_exchange_weak (held, peak, std::memory_order_relaxed);) {}
 
         if (peak > 1.0f)
             inClip.store (true);   // latched; the IN rail's cap clears it

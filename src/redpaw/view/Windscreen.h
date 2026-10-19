@@ -75,6 +75,10 @@ public:
     /** ...and the searchlights (Drive::setLights). */
     void setLights (bool left, bool right) { lightsWanted.store ((left ? 1 : 0) | (right ? 2 : 0)); }
 
+    /** THE GUITAR'S PEAK, as the world hears it (Drive::hear): asked once a frame, on the thread that drives,
+        for the input's peak since it was last asked. Set before the first setMode; none is silence. */
+    void setHearing (std::function<float()> peakSinceAsked) { hearing = std::move (peakSinceAsked); }
+
     /** THE ROVER'S SPEED, km/h, as the view is driving it: eased toward what the gear and TURBO ask for.
         In the 1993 landscape its own drive, counted in the Plains' measure; in
         the still, what the gear asks for — nothing moves there to ease. Message thread. */
@@ -200,6 +204,7 @@ private:
     std::atomic<int> gearWanted { 1 };
     std::atomic<bool> turboWanted { false };
     std::atomic<int> wipersWanted { 1 }, lightsWanted { 0 };
+    std::function<float()> hearing;
     face::Steering steering;        // the drag, the keys, and steer() from outside, as one value
     std::atomic<float> scaleInUse { 1.0f };
     float scaleWanted = 1.0f;

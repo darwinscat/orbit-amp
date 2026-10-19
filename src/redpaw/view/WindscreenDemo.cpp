@@ -12,7 +12,9 @@
 // --clock=seconds,metres sets the world's clock, --drive=seconds runs the drive that long at 60 steps a
 // second with the steering held before the first frame, --still=out.png writes the STILL to a file once
 // it has arrived and quits, --stress=n draws the scene n times a frame for the timer (and holds the
-// quality ladder, as --fixed does alone), --quit=seconds ends the run. Built three times: as RedPaw's windscreen over the Plains, (ORBITAMP_VIEW_DEMO_ICE) as
+// quality ladder, as --fixed does alone), --quit=seconds ends the run. The guitar (worlds/Play.h): --play=peak picks a
+// note of that peak (linear) every second, ringing down, for watching the world answer; --hit=peak takes the STILL at the
+// instant such a note is picked. --lights throws both searchlights on, where the world has them. Built three times: as RedPaw's windscreen over the Plains, (ORBITAMP_VIEW_DEMO_ICE) as
 // FrostPaw's over the ice, and (ORBITAMP_VIEW_DEMO_TITAN) as the canopy over Titan's sea — each in its product's gears unless --gears says otherwise.
 
 #include "Windscreen.h"
@@ -47,6 +49,46 @@ namespace
     constexpr int productGears = 2;     // RedPawAmp
    #endif
 
+    /** A DRIVE THAT HAS JUST HEARD A NOTE PICKED, for --hit: settled as STILL settles it, then hearing the note
+        for an instant too short to move anything else. Everything else is the drive's own. */
+    class Picked final : public orbitamp::redpaw::Drive
+    {
+    public:
+        Picked (std::unique_ptr<orbitamp::redpaw::Drive> d, float p) : inner (std::move (d)), peak (p) {}
+
+        void settle (int g, bool t) override { inner->settle (g, t); inner->hear (peak); inner->step (1.0e-9); }
+
+        const char* name() const noexcept override                   { return inner->name(); }
+        int numGears() const noexcept override                        { return inner->numGears(); }
+        void setGear (int g) override                                 { inner->setGear (g); }
+        void setTurbo (bool on) override                              { inner->setTurbo (on); }
+        void setSteer (float amount) override                         { inner->setSteer (amount); }
+        void setWipers (int speed) override                           { inner->setWipers (speed); }
+        void setLights (bool l, bool r) override                      { inner->setLights (l, r); }
+        void hear (float p) override                                  { inner->hear (p); }
+        void step (double dt) override                                { inner->step (dt); }
+        void placeAt (double x, double z, double h) override          { inner->placeAt (x, z, h); }
+        void setClock (double seconds, double metres) override        { inner->setClock (seconds, metres); }
+        float speed() const noexcept override                         { return inner->speed(); }
+        float speedFor (int g, bool t) const noexcept override        { return inner->speedFor (g, t); }
+        Ease ease() const noexcept override                           { return inner->ease(); }
+        orbitamp::redpaw::Mars1993::Look look1993() const noexcept override { return inner->look1993(); }
+        std::string landmarks (double metres) const override         { return inner->landmarks (metres); }
+        bool create() override                                        { return inner->create(); }
+        std::string error() const override                           { return inner->error(); }
+        void destroy() override                                       { inner->destroy(); }
+        void render (int w, int h, float sc, uint32_t target, int x, int y) override { inner->render (w, h, sc, target, x, y); }
+        float gpuMillis() const noexcept override                     { return inner->gpuMillis(); }
+        bool readFrame (std::vector<uint8_t>& rgba, int& w, int& h) override { return inner->readFrame (rgba, w, h); }
+        int frameWidth() const noexcept override                      { return inner->frameWidth(); }
+        int frameHeight() const noexcept override                     { return inner->frameHeight(); }
+        void setRepeats (int times) override                          { inner->setRepeats (times); }
+
+    private:
+        std::unique_ptr<orbitamp::redpaw::Drive> inner;
+        float peak;
+    };
+
     struct Args
     {
         Mode mode = Mode::gpu;
@@ -54,6 +96,8 @@ namespace
         float scale = 1.0f, steer = 0.0f; int cap = 60, stress = 1;
         bool report = false, placed = false, clocked = false, fixed = false;
         double x = 0, z = 0, heading = 0, clockSeconds = 0, clockMetres = 0, driveSeconds = 0, quitSeconds = 0, findMetres = 0;
+        float play = 0.0f, hit = 0.0f;
+        bool lights = false;
         juce::String stillFile;
 
         explicit Args (const juce::StringArray& args)
@@ -78,6 +122,9 @@ namespace
                 else if (a.startsWith ("--quit="))   quitSeconds = value.getDoubleValue();
                 else if (a == "--fixed")             fixed = true;
                 else if (a.startsWith ("--find="))   findMetres = value.getDoubleValue();
+                else if (a.startsWith ("--play="))   play = value.getFloatValue();
+                else if (a.startsWith ("--hit="))    hit = value.getFloatValue();
+                else if (a == "--lights")            lights = true;
             }
             if (stress > 1)
                 fixed = true;
@@ -93,7 +140,7 @@ namespace
            #else
             std::unique_ptr<orbitamp::redpaw::Drive> d = std::make_unique<orbitamp::redpaw::PlainsDrive> (gears);
            #endif
-            d->setGear (gear); d->setTurbo (turbo);
+            d->setGear (gear); d->setTurbo (turbo); d->setLights (lights, lights);
             if (placed)
                 d->placeAt (x, z, heading);
             if (clocked)
@@ -113,6 +160,8 @@ namespace
                     d->placeAt (31500, 3000, 0);
                 std::cout << d->landmarks (findMetres);
             }
+            if (hit > 0.0f)
+                return std::make_unique<Picked> (std::move (d), hit);
             return d;
         }
     };
@@ -130,6 +179,13 @@ namespace
             view.setFrameRateCap (args.cap);
             view.steer (args.steer);
             view.setAdaptive (! args.fixed);
+            view.setLights (args.lights, args.lights);
+            if (args.play > 0.0f)
+                view.setHearing ([peak = args.play, began = juce::Time::getMillisecondCounterHiRes()]
+                {
+                    const double t = std::fmod ((juce::Time::getMillisecondCounterHiRes() - began) * 0.001, 1.0);
+                    return (float) (peak * std::exp (-t / 0.4));     // a note a second, ringing down
+                });
             view.setMode (args.mode);
             addAndMakeVisible (view);
             addAndMakeVisible (line);
