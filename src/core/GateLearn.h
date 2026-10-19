@@ -12,8 +12,9 @@ namespace orbitamp::core
 /** THE GATE'S LEARN, AS ARITHMETIC. Three seconds of the gate's key level, one reading a tick at 30 Hz;
     the half-second at each end thrown away — the click that started it, and the hand leaving the mouse,
     are not the noise floor; and the threshold the loudest of what is left asks for: that peak plus the
-    gate's hysteresis, kept between -80 and -10 dB. A peak under -75 is a muted input, and teaches
-    nothing.
+    gate's hysteresis, kept inside the span the threshold may stand in. A peak under -75 is a muted
+    input, and teaches nothing. The hysteresis and the span are the parameter's, handed in by whoever
+    holds it — this knows no parameters.
 
     No clock, no parameters, no pixels. Whoever holds it ticks it and decides where the answer goes
     (ui/GateLearner.h) — OrbitAmp's LEARN under its big overlay and every face's LEARN on its own glass
@@ -32,12 +33,13 @@ public:
     static constexpr int totalTicks = 90;   // 3 s at 30 Hz
     static constexpr int edgeTicks  = 15;   // half a second each end, thrown away
 
-    static constexpr float lowestDb  = -80.0f;      // where a learned threshold may land...
-    static constexpr float highestDb = -10.0f;      // ...at the most
     static constexpr float heardDb   = -75.0f;      // a peak under this is a muted input
     static constexpr float nothing   = -999.0f;     // the answer while there is none
 
-    explicit GateLearn (float hysteresisDb) noexcept : hysteresis (hysteresisDb) {}
+    /** The gate's hysteresis, and where a learned threshold may land: `lowestDb` at the least,
+        `highestDb` at the most. */
+    GateLearn (float hysteresisDb, float lowestDb, float highestDb) noexcept
+        : hysteresis (hysteresisDb), lowest (lowestDb), highest (highestDb) {}
 
     /** A fresh take: nothing heard, the trace empty. */
     void begin()
@@ -76,7 +78,7 @@ public:
     const std::vector<float>& heard() const noexcept { return trace; }
 
     /** The threshold a peak asks for. */
-    float thresholdFor (float peakDb) const noexcept { return std::clamp (peakDb + hysteresis, lowestDb, highestDb); }
+    float thresholdFor (float peakDb) const noexcept { return std::clamp (peakDb + hysteresis, lowest, highest); }
 
     /** The threshold the take would set if it ended now — the live dashed line. `nothing` while it is not
         running, or the trusted window has heard nothing yet. */
@@ -92,7 +94,7 @@ public:
     float resultDb() const noexcept { return peak >= heardDb ? thresholdFor (peak) : nothing; }
 
 private:
-    const float hysteresis;
+    const float hysteresis, lowest, highest;
     bool  running = false;
     int   ticks   = 0;
     float peak    = -120.0f;

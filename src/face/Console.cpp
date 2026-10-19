@@ -1200,7 +1200,7 @@ void Console::showGateMenu()
 
     juce::PopupMenu threshold;
     const int now = juce::roundToInt (getParam (params::gateThreshold));
-    for (int db = -80; db <= -10; db += 5)
+    for (int db = (int) params::gateThresholdMin; db <= (int) params::gateThresholdMax; db += 5)
         addChoice (threshold, juce::String (db) + " dB", std::abs (now - db) <= 2,
                    [db] (Console& e) { e.setParam (params::gateThreshold, (float) db); });
     menu.addSubMenu ("Threshold  " + juce::String (now) + " dB", threshold, on);

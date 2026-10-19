@@ -25,6 +25,7 @@ namespace
     int failures = 0;
 
     constexpr float hysteresisDb = 6.0f;   // params::gateHysteresisDb
+    constexpr float lowestDb = -80.0f, highestDb = -10.0f;   // params::gateThresholdMin, gateThresholdMax
 
     void check (const char* what, double got, double want, double tol = 0.0)
     {
@@ -108,7 +109,7 @@ namespace
     bool agree (const std::vector<float>& trace)
     {
         Before old;
-        GateLearn now (hysteresisDb);
+        GateLearn now (hysteresisDb, lowestDb, highestDb);
         old.start();
         now.begin();
 
@@ -135,7 +136,7 @@ namespace
     /** What a finished take sets for `trace`, or GateLearn::nothing. */
     float learned (const std::vector<float>& trace)
     {
-        GateLearn take (hysteresisDb);
+        GateLearn take (hysteresisDb, lowestDb, highestDb);
         take.begin();
         for (const float db : trace)
             if (take.hear (db))
@@ -202,7 +203,7 @@ int main()
     // The live dashed line: nothing until the window has heard something, then the threshold-to-be,
     // clamped at -80 below; nothing again once the take is over or stopped.
     {
-        GateLearn take (hysteresisDb);
+        GateLearn take (hysteresisDb, lowestDb, highestDb);
         checkTrue ("not running before begin", ! take.isRunning());
         take.begin();
         for (int i = 0; i < GateLearn::edgeTicks; ++i)
@@ -222,7 +223,7 @@ int main()
 
     // The quiet window, as a second measurement would ask for it.
     {
-        GateLearn take (hysteresisDb);
+        GateLearn take (hysteresisDb, lowestDb, highestDb);
         take.begin();
         int trusted = 0;
         while (! take.hear (-70.0f))
