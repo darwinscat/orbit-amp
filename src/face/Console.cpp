@@ -614,6 +614,7 @@ void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window,
         }
 
     const float k = 2.0f;
+    const auto shot = stage.createComponentSnapshot (stage.getLocalBounds(), true, k);
     juce::Image poster (juce::Image::ARGB, juce::roundToInt (stage::width * k), juce::roundToInt (stage::height * k), true);
     {
         juce::Graphics g (poster);
@@ -621,11 +622,17 @@ void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window,
         g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
         if (still.isValid())
             g.drawImage (still, window * k, juce::RectanglePlacement::stretchToFit);
-        g.drawImageAt (stage.createComponentSnapshot (stage.getLocalBounds(), true, k), 0, 0);
+        g.drawImageAt (shot, 0, 0);
     }
     for (const auto& [c, visible] : was)
         c->setVisible (visible);
     writeForWeb (dir.getChildFile (file), poster);
+
+    // ...and the same face with nothing under it: the window empty, for a picture of the site's own to go
+    // under it there — the live view's first frame, say.
+    juce::Image hole (juce::Image::ARGB, poster.getWidth(), poster.getHeight(), true);
+    juce::Graphics (hole).drawImageAt (shot, 0, 0);
+    writeForWeb (dir.getChildFile (file.upToLastOccurrenceOf (".", false, false) + "-hole.png"), hole);
 }
 
 void Console::webPatch (const juce::String& name, std::initializer_list<const juce::Component*> parts)
