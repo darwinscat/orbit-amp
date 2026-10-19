@@ -7,12 +7,13 @@
 #
 #     source ~/emsdk/emsdk_env.sh
 #     emcmake cmake -S tools/worlds-wasm -B build-wasm -G Ninja
-#     cmake --build build-wasm            # -> build-wasm/plains-wasm.mjs + .wasm, ice-wasm.*, titan-wasm.*
+#     cmake --build build-wasm            # -> build-wasm/plains-wasm.mjs + .wasm, ice-wasm.*, titan-wasm.*, sky-wasm.*
 #
 # Each world is an ES module the page imports — plains-wasm.mjs exports createPlainsView (plains-view.js),
-# ice-wasm.mjs createIceView (ice-view.js), titan-wasm.mjs createTitanView (titan-view.js), each behind the
-# one view of view.js — and the .wasm beside it is fetched by it. The renderers and the worlds are the app's
-# (src/redpaw/view, src/frostpaw/view, src/amberpaw/view) over WebGL 2 (src/shaders/Gpu.h); the shaders are
+# ice-wasm.mjs createIceView (ice-view.js), titan-wasm.mjs createTitanView (titan-view.js), sky-wasm.mjs
+# CatpitAmp's createCatpitSky (sky-view.js), each behind the one view of view.js — and the .wasm beside it is
+# fetched by it. The renderers and the worlds are the app's (src/redpaw/view, src/frostpaw/view,
+# src/amberpaw/view, src/catpit) over WebGL 2 (src/shaders/Gpu.h); the shaders are
 # resources/shaders, carried into the .wasm the way the app's build carries them (CMakeLists.txt, THE SHADERS)
 # and put together by the same src/shaders/Shaders.cpp.
 
@@ -165,3 +166,8 @@ orbitamp_world(ice createIceModule SOURCES
 orbitamp_world(titan createTitanModule SOURCES
     "${ORBITAMP_ROOT}/src/amberpaw/view/TitanGl.cpp" "${ORBITAMP_ROOT}/src/amberpaw/view/TitanWorld.cpp"
     EXTRA _view_wipers _view_lights)
+
+# THE SKY: CatpitAmp's space flight — with the lever's travel and the glass's place of its own.
+orbitamp_world(sky createSkyModule SOURCES
+    "${ORBITAMP_ROOT}/src/catpit/CatpitSkyGl.cpp"
+    EXTRA _view_throttle _view_place)

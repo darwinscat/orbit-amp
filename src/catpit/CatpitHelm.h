@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include <juce_core/juce_core.h>
-
 #include <cmath>
+#include <numbers>
 
 namespace orbitamp::catpit
 {
@@ -25,10 +24,11 @@ namespace orbitamp::catpit
       windshield's height — and sweeps the whole stream, stars and clouds, the other way: each sky at its
       own pace, quicker the faster the ship flies, the nearer stars quicker than the far ones.
 
-    One thread's: the sky that steps it. */
+    No JUCE: the site's sky, in WebAssembly, steps the same helm (CatpitFlight.h). One thread's: the sky
+    that steps it. */
 struct Helm
 {
-    static constexpr float maxRoll  = 11.0f * juce::MathConstants<float>::pi / 180.0f;
+    static constexpr float maxRoll  = 11.0f * std::numbers::pi_v<float> / 180.0f;
     static constexpr float maxFocus = 0.75f;
 
     float hand = 0.0f;           // the hand, smoothed

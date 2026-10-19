@@ -19,7 +19,9 @@
 //   view.stop(); view.start(); view.destroy();
 //
 // and a world with a canopy (Titan's) has view.setWipers (0..3) and view.setLights (left, right) too, options
-// { wipers, lights } setting them from the start.
+// { wipers, lights } setting them from the start. CatpitAmp's sky is one more such view (sky-view.js): its gears are
+// the channels, counted from 0, and it has view.setThrottle (0..1, { settled }) — the lever anywhere along its
+// travel — and an option `place`, where the glass and the windshield are, which the module is given once it is made.
 //
 // The canvas lies over the windscreen's box. It renders at the screen's pixels (at most twice the CSS size) and
 // comes down to 0.75 and 0.5 of that by itself when frames run late, climbing back when they have room; it stops
@@ -45,10 +47,11 @@ const viewAttributes = { antialias: false, alpha: false, depth: false, stencil: 
     wants it. What it has to say goes to `post`; what the page says comes to the function returned. */
 function worldDrawn (canvas, options, post, world)
 {
-    const { gears = 2, test = null } = options;
+    const { gears = 2, test = null, place = null } = options;
     let gear = options.gear ?? 1, turbo = !! options.turbo, parked = !! options.parked;
     let wipers = options.wipers ?? 0, lights = options.lights || [false, false];
     let cssW = options.cssW || 0, cssH = options.cssH || 0, dpr = options.dpr || 1;
+    let throttle = null;            // the sky's lever, once moved (sky-view.js)
     let M = null, failed = false, ready = false, drawn = false, active = !! options.on, steer = 0;
     let rung = 0, width = 0, height = 0, frame = 0, last = 0;
     const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : f => setTimeout (() => f (performance.now ()), 16);
@@ -107,6 +110,8 @@ function worldDrawn (canvas, options, post, world)
         catch (e) { fail ('the module did not load: ' + (e && e.message || e)); return; }
         if (failed) return;
         M._view_make (gears, gear, turbo ? 1 : 0, parked ? 1 : 0);
+        if (place && M._view_place) M._view_place (...place);
+        if (throttle !== null && M._view_throttle) M._view_throttle (throttle);
         canopy ();
         if (! M._view_context (test ? 1 : 0)) { fail ('no WebGL 2'); return; }
         canvas.addEventListener ('webglcontextlost', lost);
@@ -152,6 +157,7 @@ function worldDrawn (canvas, options, post, world)
             case 'gear':   gear = m.n; if (M && ! failed) { M._view_gear (gear); if (m.settled) M._view_settle (); } break;
             case 'turbo':  turbo = m.on; if (M && ! failed) M._view_turbo (turbo ? 1 : 0); break;
             case 'park':   parked = m.on; if (M && ! failed) { M._view_park (parked ? 1 : 0); if (m.settled) M._view_settle (); } break;
+            case 'throttle': throttle = m.t; if (M && ! failed && M._view_throttle) { M._view_throttle (throttle); if (m.settled) M._view_settle (); } break;
             case 'steer':  steer = m.v; break;
             case 'wipers': wipers = m.speed; canopy (); break;
             case 'lights': lights = [m.left, m.right]; canopy (); break;
@@ -204,7 +210,7 @@ function viewOffscreenWebGL2 ()
     the module's own, which a worker loads. */
 function createWorldView (canvas, world, url, { steer = false, onFallback = () => {}, onReady = () => {}, onFrame = () => {},
                                                 gears = 2, gear = 1, parked = false, turbo = false, wipers = 0, lights = [false, false],
-                                                test = null, worker = true } = {})
+                                                place = null, test = null, worker = true } = {})
 {
     let failed = false, quality = VIEW_RUNGS[0], settleReady = null, gone = () => {};
     const readyPromise = new Promise (r => { settleReady = r; });
@@ -218,7 +224,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
     }
 
     const measured = () => ({ cssW: canvas.clientWidth, cssH: canvas.clientHeight, dpr: Math.min (2, globalThis.devicePixelRatio || 1) });
-    const options = { gears, gear, parked, turbo,
+    const options = { gears, gear, parked, turbo, place: place && place.map (Number),
                       wipers: viewClamp (Math.round (+wipers) || 0, 0, 3), lights: [!! (lights && lights[0]), !! (lights && lights[1])],
                       test: test && { at: test.at || null, clock: test.clock || null, drive: +test.drive || 0, steer: +test.steer || 0, still: !! test.still },
                       on: ! document.hidden, ...measured () };
@@ -287,6 +293,11 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
             send ({ type: 'destroy' });
         },
     };
+    if (world.sky)
+    {
+        /** The lever anywhere along its travel, 0 CLEAN .. 1 HI-GAIN: the ship spools to its speed, or is at it at once. */
+        view.setThrottle = (t, { settled = false } = {}) => send ({ type: 'throttle', t: viewClamp (+t || 0, 0, 1), settled: !! settled });
+    }
     if (world.canopy)
     {
         /** The wipers' keys: 0 OFF, 1 INT, 2 LO, 3 HI. */
@@ -301,5 +312,6 @@ function worldInert (world)
 {
     const view = { setGear () {}, setTurbo () {}, setPark () {}, setSteer () {}, start () {}, stop () {}, get quality () { return 0; }, ready: Promise.resolve (false), destroy () {} };
     if (world.canopy) { view.setWipers = () => {}; view.setLights = () => {}; }
+    if (world.sky) view.setThrottle = () => {};
     return view;
 }

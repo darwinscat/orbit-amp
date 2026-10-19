@@ -40,6 +40,21 @@ inline std::string header()
                : "#version 150\n";
 }
 
+/** What goes in front of a shader written in GLSL 1.10's words — `attribute`, `varying`, `gl_FragColor`, no
+    #version — for the context current on this thread to read it (shaders::vertexToV3, fragmentToV3). In the app,
+    JUCE's answer, as its OpenGLHelpers::translate…ToV3 give it: nothing where the context is older than 3.2 and
+    reads 1.10 as it is — a Mac's legacy profile, what a JUCE context is unless it asks for 3.2 — else its
+    #version line. On the web, header(): WebGL 2 reads GLSL ES 3.00 only. */
+inline std::string legacyHeader()
+{
+   #if defined (__EMSCRIPTEN__)
+    return header();
+   #else
+    const auto version = juce::OpenGLHelpers::getGLSLVersionString();
+    return version == "#version 110" ? std::string() : (version + "\n").toStdString();
+   #endif
+}
+
 /** True when a context is current on this thread, as a renderer's create() needs one. */
 inline bool current() noexcept
 {
