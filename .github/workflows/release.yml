@@ -88,7 +88,9 @@ jobs:
             -DORBITAMP_JUCE_DIR= -DORBITAMP_FCORE_DIR= -DORBITAMP_GUITAR_DIR= -DORBITAMP_APPKIT_DIR= \
             -DORBITAMP_NAM_CORE_SRC= -DORBITAMP_NAMZ_SRC= \
             -DORBITAMP_COPY_PLUGIN=OFF
-          cmake --build build --config Release --parallel --target Family_All Family_Gates
+          # EIGHT JOBS, NOT ALL OF THEM. This runner is someone's working laptop: `--parallel` with no number
+          # is unlimited under Makefiles, and the universal build ran two hundred compilers at once.
+          cmake --build build --config Release --parallel 8 --target Family_All Family_Gates
       - name: Gates
         run: tools/run-gates.sh build Release
       # Sign (Developer ID) + notarize + staple, then the zip and the package. Signing identities + the
