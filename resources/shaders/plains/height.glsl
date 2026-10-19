@@ -19,7 +19,8 @@ float craters (vec2 p, float mask) {         // p = absolute world xz
   float d = length (p - ctr) / R;
   if (d > 1.6) return 0.0;
   float bowl = -(1.0 - d * d) * step (d, 1.0);
-  float rim = exp (-pow ((d - 1.0) / 0.22, 2.0));
+  float r = (d - 1.0) / 0.22;          // squared, not pow (): pow of a negative is undefined in GLSL, NaN on some GPUs
+  float rim = exp (-r * r);
   return mask * R * (0.24 * bowl + 0.065 * rim);
 }
 float terrainH (vec2 pr, out vec4 a, out vec4 b, out vec4 c) {   // pr = world xz relative to uCamCell, metres
