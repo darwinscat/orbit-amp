@@ -513,7 +513,7 @@ endfunction()
 # Standalone, and a CLAP through clap-juce-extensions — over the same processor; what differs is its
 # face, its name, its number and what it carries.
 #
-#   add_amp(<Name>  CODE <code>  [BY_NAME]  [LTO]
+#   add_amp(<Name>  CODE <code>  [BY_NAME]
 #           SOURCES <files...>  LIBRARIES <targets...>  [ART <files...>]  [SET <packs...>]  [WHOLE_SHELF])
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
@@ -525,8 +525,6 @@ endfunction()
 #               manufacturer code is the family's, Dcat (Darwin's Cat — >=1 uppercase, AU rule; same as
 #               OrbitCab).
 #   BY_NAME     not part of the default build (see below).
-#   LTO         JUCE's recommended link-time optimisation flags too, which OrbitAmp has always linked and
-#               the faces never have.
 #   SOURCES     what it is compiled from; LIBRARIES what it links, ahead of JUCE's recommended flags.
 #   ART         its renders, in the factory folder's Faces/<Name>, each under its own file's name, where its
 #               face reads them (src/face/Renders.h).
@@ -543,7 +541,7 @@ endfunction()
 # (amp_console): a gate is the amp compiled again, never a second copy of its lists.
 # ----------------------------------------------------------------------------
 function(add_amp name)
-    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;LTO;WHOLE_SHELF" "CODE" "SOURCES;LIBRARIES;ART;SET")
+    cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
 
     # Its icon. macOS 26 sets any icon that is not its own rounded square on a grey plate — the family's
@@ -620,11 +618,13 @@ function(add_amp name)
     target_include_directories(${name} PUBLIC "${ORBITAMP_GENERATED_DIR}")   # OrbitAmpVersion.h
     add_dependencies(${name} OrbitAmpVersionGen)                            # ...rebaked before every build
 
-    set(libraries ${AMP_LIBRARIES} juce::juce_recommended_config_flags)
-    if(AMP_LTO)
-        list(APPEND libraries juce::juce_recommended_lto_flags)
-    endif()
-    list(APPEND libraries juce::juce_recommended_warning_flags)
+    # EVERY AMP LINKS WITH LINK-TIME OPTIMISATION, JUCE's recommended flags — once OrbitAmp's alone: the
+    # code a face never calls goes, and a release binary is smaller for it. Its gates link without it
+    # (amp_console), in seconds rather than minutes.
+    set(libraries ${AMP_LIBRARIES}
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)
     target_link_libraries(${name} PRIVATE ${libraries})
 
     # WHAT IT PLAYS, in the family's factory folder (THE FACTORY FOLDER): its pictures, its packs and
@@ -1135,8 +1135,7 @@ add_amp(OrbitAmp      CODE Oamp
         OrbitAmpData                 # the mark, the notice, the disclaimer — BinaryData::*
         ${AMP_ENGINE_LIBRARIES}
     SET       ${ORBITAMP_PLAYS}
-    WHOLE_SHELF
-    LTO)
+    WHOLE_SHELF)
 
 # CatpitAmp — the cockpit. Out of the tree's set it plays what its four channels play: the X88-IR's four
 # packs — a channel finds its own by the capture it holds, not by the file's name. The cabinets CAB steps
