@@ -9,6 +9,7 @@
                 "made_in": "United States",
                 "url": "https://www.soldano.com/products/classic/amplifiers/x88-ir/" },
       "tone_type": "hi-gain", "circuit": "tube:5",
+      "input_db": -9.0,
       "controls": [
         { "name": "Gain", "role": "gain", "sweep": 300,
           "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] }
