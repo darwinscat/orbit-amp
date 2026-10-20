@@ -20,10 +20,22 @@ namespace
 
 constexpr const char* name = "FrostPawAmp";
 
-/** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's six packs, three gears of two (v4Lineup). */
+/** ITS CHANNELS (redpaw/RedPawLineup.h): the Two Notes ReVolt Guitar's three, a gear each — CLEAN, CRUNCH
+    and HI-GAIN its Clean, Crunch and Lead, captured through its power amp — and TURBO that channel's own
+    Boost: the same pack, the gear holding the switch off and its TURBO on (Lineup::Channel::held). What
+    each opens on, as the V4's gears did before them: a gear a little of its room and as much delay, its
+    TURBO twice as much of both — Clean in a hall, Crunch on a plate, Lead in an ambience with no delay at
+    all; Lead the hot one. */
 const channels::Lineup& iceLineup()
 {
-    static const channels::Lineup rover = v4Lineup();
+    static const channels::Lineup rover = roverLineup ({
+        { "Clean",          "revolt-clean-poweramp-bf62",  "Hall",     15.0f, 15.0f, false, { "Boost", "off" } },
+        { "Clean Turbo",    "revolt-clean-poweramp-bf62",  "Hall",     30.0f, 30.0f, false, { "Boost", "on"  } },
+        { "Crunch",         "revolt-crunch-poweramp-73a7", "Plate",    15.0f, 15.0f, false, { "Boost", "off" } },
+        { "Crunch Turbo",   "revolt-crunch-poweramp-73a7", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
+        { "Hi-Gain",        "revolt-lead-poweramp-f5dc",   "Ambience", 15.0f, 0.0f,  true,  { "Boost", "off" } },
+        { "Hi-Gain Turbo",  "revolt-lead-poweramp-f5dc",   "Ambience", 30.0f, 0.0f,  true,  { "Boost", "on"  } },
+    });
     return rover;
 }
 

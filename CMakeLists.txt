@@ -826,10 +826,12 @@ add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 # WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — but the ones
 # put away. A pack added there is OrbitAmp's from the next build on, with nobody to remember to list it.
 #
-# PUT AWAY, the Victory V4's six: in the tree still, for the faces that play them in a build of this tree
-# (FrostPawAmp, AmberPawAmp), but no longer the family's devices — the family will play the V4 again from
-# new captures, with the power amp inside — and in no amp of the release, so in no installer.
-set(ORBITAMP_SET_PUT_AWAY "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
+# PUT AWAY, the Victory V4's six: in the tree still, for the face that plays them in a build of this tree
+# (AmberPawAmp), but no longer the family's devices — the family will play the V4 again from new captures,
+# with the power amp inside — and in no amp of the release, so in no installer. And the ReVolt's three,
+# FrostPawAmp's own and none of OrbitAmp's.
+set(ORBITAMP_SET_PUT_AWAY "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2"
+    "ReVolt Clean PowerAmp" "ReVolt Crunch PowerAmp" "ReVolt Lead PowerAmp")
 foreach(pack IN LISTS ORBITAMP_SET_PUT_AWAY)
     if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
         message(FATAL_ERROR "ORBITAMP_SET_PUT_AWAY names ${pack}, which resources/set/Devices has not")
@@ -1172,20 +1174,21 @@ add_amp(RedPawAmp     CODE Rdpw    BY_NAME
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
 # over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
 # ice-blue rings. The same controls, TURBO and PARK: the rover's, shared, not copied — over channels of
-# its own, six on the V4's six packs in three gears, and the rovers' cabinets; its set under its own list
-# in the family's folder (src/channels/Set.h), where a file another product plays too is one file. Not in
-# the family's release yet (installer/family.ini), so none of it is in the release's factory folder.
+# its own, six on the ReVolt Guitar's three packs in three gears, and the rovers' cabinets; its set under
+# its own list in the family's folder (src/channels/Set.h), where a file another product plays too is one
+# file. Not in the family's release yet (installer/family.ini), so none of it is in the release's factory
+# folder.
 add_amp(FrostPawAmp   CODE Frpw    BY_NAME
     ART       ${FROSTPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
+    SET       "ReVolt Clean PowerAmp" "ReVolt Crunch PowerAmp" "ReVolt Lead PowerAmp")
 
 # AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
 # dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy
 # of three panes, its tuner a gauge, its meters dots — and out of its canopy, the flight over the sea.
 # The same controls, TURBO and PARK: the rovers', shared, not copied — over the V4's six channels in three
-# gears, its set for now FrostPawAmp's until it has captures of its own, and the rovers' cabinets. Not in
+# gears, the V4's six packs until it has captures of its own, and the rovers' cabinets. Not in
 # the family's release yet (installer/family.ini).
 add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     ART       ${AMBERPAWAMP_RENDERS}

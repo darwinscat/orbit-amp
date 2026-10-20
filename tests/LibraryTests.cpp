@@ -545,7 +545,7 @@ int main()
         const auto factory = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, set.getChildFile ("Devices"), none, everyPack);
         const auto shelf = DeviceLibrary::shelfOf (factory);
 
-        report ("the set's packs make five devices, by name",  names (shelf.factory) == "IR-X, V4 Copper, V4 Kraken, V4 Sheriff, X88-IR",
+        report ("the set's packs make six devices, by name",   names (shelf.factory) == "IR-X, ReVolt, V4 Copper, V4 Kraken, V4 Sheriff, X88-IR",
                 names (shelf.factory));
         report ("...a device is its packs' common words",      named (shelf.factory, "V4 Kraken") != nullptr
                                                                   && named (shelf.factory, "IR-X") != nullptr);

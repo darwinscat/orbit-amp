@@ -22,8 +22,8 @@ namespace
 
 constexpr const char* name = "AmberPawAmp";
 
-/** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's six packs, three gears of two, as FrostPawAmp
-    has them for now (v4Lineup), until it has captures of its own. */
+/** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's six packs, three gears of two (v4Lineup), until
+    it has captures of its own. */
 const channels::Lineup& titanLineup()
 {
     static const channels::Lineup heli = v4Lineup();

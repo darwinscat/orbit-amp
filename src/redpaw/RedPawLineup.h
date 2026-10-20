@@ -30,8 +30,8 @@ channels::Lineup roverLineup (std::vector<channels::Lineup::Channel>);
     Sheriff, HI-GAIN the Kraken — and TURBO each pedal's second channel, each found by the capture it
     plays. What each opens on: a pedal's first channel a little of its room and as much delay, its TURBO
     twice as much of both — the Copper in a hall, the Sheriff on a plate, the Kraken in an ambience with
-    no delay at all. The Kraken's two are the hot packs, the ones that would carry FAT. FrostPawAmp's
-    channels, and AmberPawAmp's until it has captures of its own. */
+    no delay at all. The Kraken's two are the hot packs, the ones that would carry FAT. AmberPawAmp's
+    channels, until it has captures of its own. */
 channels::Lineup v4Lineup();
 
 /** As many gears as the product has pairs of channels — at most as many as the lever's slot has

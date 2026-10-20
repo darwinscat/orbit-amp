@@ -144,7 +144,16 @@ inline const Product& product()
                    { "ir-x-ch2-poweramp-67e9", "Boost=on",  "Ambience", 15.0f, 0.0f  },
                },
                "each gear is one of the IR-X's channels, its TURBO the same with the Boost on"),
-        rover ("FrostPawAmp", v4, "each gear is a pedal's two channels, TURBO the second"),
+        rover ("FrostPawAmp",
+               {
+                   { "revolt-clean-poweramp-bf62",  "Boost=off", "Hall",     15.0f, 15.0f },
+                   { "revolt-clean-poweramp-bf62",  "Boost=on",  "Hall",     15.0f, 15.0f },
+                   { "revolt-crunch-poweramp-73a7", "Boost=off", "Plate",    15.0f, 15.0f },
+                   { "revolt-crunch-poweramp-73a7", "Boost=on",  "Plate",    15.0f, 15.0f },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=off", "Ambience", 15.0f, 0.0f  },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=on",  "Ambience", 15.0f, 0.0f  },
+               },
+               "each gear is one of the ReVolt's channels, its TURBO the same with the Boost on"),
         rover ("AmberPawAmp", v4, "each gear is a pedal's two channels, TURBO the second"),
     };
 
