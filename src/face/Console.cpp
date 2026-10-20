@@ -433,8 +433,9 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         juce::Path face;
         for (size_t i = 0; i < places.emblemFace.size(); ++i)
             i == 0 ? face.startNewSubPath (places.emblemFace[i]) : face.lineTo (places.emblemFace[i]);
-        emblem.setBounds (face.getBounds().getSmallestIntegerContainer());
+        emblem.setBounds (face.getBounds().expanded (Emblem::bloom + 1.0f).getSmallestIntegerContainer());     // room for the lamp's glow; the target is the plate alone
     }
+    emblem.setLamp (look.emblemLamp);
     emblem.onClick = [&product = amp.product()]
     {
         juce::URL ("https://darwinscat.com/felitronics/" + juce::String (product.name).toLowerCase() + "?" + campaign (product)).launchInDefaultBrowser();
@@ -774,6 +775,26 @@ void Console::exportForWeb (const juce::File& dir)
     o->setProperty ("lamps", listVar (p.lamps, rectVar));
     o->setProperty ("emblemFace", listVar (p.emblemFace, pointVar));
     o->setProperty ("emblemMark", rectVar (p.emblemMark));
+    // ...and the mark lit under the hand, where the face has a lamp for it (Emblem): the lit glass whole, at
+    // twice the stage, its box, the lamp, and the spring the light comes up and goes on — for the site to
+    // fade the picture in over the engraving at the light's share, as the face does.
+    if (const auto glass = emblem.litPicture (2.0f); glass.isValid())
+    {
+        auto* l = new juce::DynamicObject();
+        l->setProperty ("sprite", writeSprite (dir, "emblem-lit", glass));
+        l->setProperty ("box", rectVar (emblem.litBox()));
+        l->setProperty ("lamp", colourVar (emblem.lampColour()));
+        l->setProperty ("lights", "mark");      // the cat is the glass: its floor lit through
+        l->setProperty ("stiffness", emblem.lightStiffness());
+        l->setProperty ("damping", emblem.lightDamping());
+        l->setProperty ("riseSeconds", emblem.lightSeconds());
+        l->setProperty ("fallSeconds", emblem.lightSeconds());
+        l->setProperty ("how", "laid over the badge at the light's share, a spring with no overshoot toward 1 under the hand and 0 off it; "
+                               "the cat's floor lit through, its walls kept, a bloom past its edges");
+        o->setProperty ("emblemLit", juce::var (l));
+    }
+    else
+        o->setProperty ("emblemLit", juce::var());
     o->setProperty ("version", rectVar (p.version));
     o->setProperty ("load", rectVar (p.load));
     o->setProperty ("memory", rectVar (p.memory));

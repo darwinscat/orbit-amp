@@ -65,6 +65,7 @@ const Skin& mars()
         badge.plateTop = juce::Colour (0xff47413d);
         badge.plateBottom = juce::Colour (0xff2c2826);
         badge.ink = { juce::Colour (0xffebb48e), juce::Colour (0xffb4714b), 0.9f, 0.4f };
+        badge.lamp = juce::Colour (0xffee7a3c);       // ...and the lamp under its glass Mars's own
         s.badge = badge;
         return s;
     }();

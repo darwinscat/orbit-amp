@@ -99,10 +99,12 @@ const Skin& ice()
             { "Ice (GPU)", "1993 (CPU)", "Still" },
         };
         // The cockpit's badge over the picture's plate, the plate a little darker than the steel round it
-        // (#727a81), the cockpit's light cat cut into it.
+        // (#727a81), the cockpit's light cat cut into it, and the lamp under the cat's glass white, as the
+        // snow's light.
         face::BadgeLook badge;
         badge.plateTop = juce::Colour (0xff60676e);
         badge.plateBottom = juce::Colour (0xff4c5258);
+        badge.lamp = juce::Colour (0xfff2f6ff);
         s.badge = badge;
         return s;
     }();

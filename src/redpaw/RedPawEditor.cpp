@@ -180,7 +180,8 @@ namespace
                  Art::mark (skin).isNotEmpty() ? Art::mark (skin) : juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),   // the rover's own mark; the family's, where it has none
                  skin.midiCommands,
                  handLight,         // under the hand, the dashboard's orange
-                 skin.ink };
+                 skin.ink,
+                 skin.badge.has_value() ? skin.badge->lamp : juce::Colour() };     // the badge's lamp, where the rover wears the badge
     }
 
     /** A WORD WIDER THAN ITS ROOM is set condensed into it — as tall as ever, narrower — about `centre`:

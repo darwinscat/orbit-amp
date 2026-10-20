@@ -731,13 +731,86 @@ void Emblem::mouseUp (const juce::MouseEvent& e)
         onClick();
 }
 
+void Emblem::setLamp (juce::Colour c)
+{
+    lamp = c;
+    lit = {};
+    litScale = 0.0f;
+    repaint();
+}
+
+float Emblem::lightSeconds() const noexcept
+{
+    // The spring stepped as the timer steps it, from dark to full: the time to 95 % of the way. It is the
+    // same down: the spring is linear.
+    Glide g = light;
+    g.jump (0.0f);
+    g.target = 1.0f;
+    float t = 0.0f;
+    while (g.value < 0.95f && t < 5.0f)
+    {
+        g.step (frameDt);
+        t += frameDt;
+    }
+    return t;
+}
+
+juce::Image Emblem::litPicture (float scale) const
+{
+    if (lamp.isTransparent())
+        return {};
+    if (lit.isValid() && std::abs (scale - litScale) < 1.0e-3f)
+        return lit;
+
+    const auto& cut = MarkCut::at (scale, mark).cut;
+    if (! cut.isValid())
+        return {};
+
+    const int pad = juce::roundToInt (bloom * scale);
+    juce::Image made (juce::Image::ARGB, cut.getWidth() + 2 * pad, cut.getHeight() + 2 * pad, true);
+    {
+        juce::Graphics g (made);
+
+        // The bloom: the cut's own shape, blurred, in the lamp's colour — the glow the light throws past
+        // the glass's edges onto the plate.
+        juce::Image shape (juce::Image::ARGB, made.getWidth(), made.getHeight(), true);
+        {
+            juce::Graphics sg (shape);
+            sg.setColour (juce::Colours::white);
+            sg.drawImageAt (cut, pad, pad, true);
+        }
+        juce::DropShadow (lamp.withAlpha (0.55f), juce::jmax (1, juce::roundToInt (0.8f * bloom * scale)), {}).drawForImage (g, shape);
+
+        // The floor, lit through its frosting: the lamp's colour all over it, whiter and brighter at the
+        // middle where the lamp is, softer to its edges — the cut's walls, outside the floor, left as they are.
+        const auto box = juce::Rectangle<float> ((float) pad, (float) pad, (float) cut.getWidth(), (float) cut.getHeight());
+        g.setGradientFill (juce::ColourGradient (lamp.interpolatedWith (juce::Colours::white, 0.45f).withAlpha (0.92f), box.getCentre(),
+                                                 lamp.withAlpha (0.55f), { box.getCentreX(), box.getY() - 0.1f * box.getHeight() }, true));
+        g.drawImageAt (cut, pad, pad, true);
+    }
+    lit = made;
+    litScale = scale;
+    return lit;
+}
+
 void Emblem::paint (juce::Graphics& g)
 {
     const float l = juce::jlimit (0.0f, 1.0f, light.value);
     if (l < 0.004f)
         return;
 
-    const auto& cut = MarkCut::at (g.getInternalContext().getPhysicalPixelScaleFactor(), mark);
+    const float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    if (! lamp.isTransparent())
+    {
+        if (const auto glass = litPicture (scale); glass.isValid())
+        {
+            g.setOpacity (l);
+            g.drawImage (glass, litBox().translated (-(float) getX(), -(float) getY()), juce::RectanglePlacement::stretchToFit);
+        }
+        return;
+    }
+
+    const auto& cut = MarkCut::at (scale, mark);
     if (! cut.cut.isValid())
         return;
 

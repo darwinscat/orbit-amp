@@ -251,10 +251,11 @@ const Skin& titan()
             false,                          // parked, the large warning alone
         };
         // The cockpit's badge on the metal between the vents, the plate a little darker than the gunmetal round
-        // it (#2a292c), the cockpit's light cat.
+        // it (#2a292c), the cockpit's light cat, and the lamp under its glass amber, Titan's light.
         face::BadgeLook badge;
         badge.plateTop = juce::Colour (0xff27272b);
         badge.plateBottom = juce::Colour (0xff1b1b1e);
+        badge.lamp = juce::Colour (0xffffb340);
         s.badge = badge;
         return s;
     }();

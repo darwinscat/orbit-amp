@@ -156,7 +156,9 @@ namespace
         return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.sliderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
                  face::renders::text (products::catpitAmp().name, "mark.svg", artFolderVariable),
-                 face::renders::text (products::catpitAmp().name, "midi.txt", artFolderVariable) };
+                 face::renders::text (products::catpitAmp().name, "midi.txt", artFolderVariable),
+                 {}, {},
+                 face::BadgeLook {}.lamp };      // the badge's lamp: the cockpit's violet
 
     }
 
