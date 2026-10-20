@@ -20,9 +20,8 @@
 //   - a channel's pack is the capture it holds: renamed, the file is that channel's pack still;
 //   - a channel's tone knobs are its pack's tones, as many as it has, knob i its tone i — the Copper's
 //     five, the ReVolt Clean's two — each turning its pack's own;
-//   - where the channels go in pairs, the rover's gears: on the V4 a gear's pair is its pedal's two
-//     channels, on the IR-X and the ReVolt one channel of it with its Boost off and on — and TURBO is an
-//     option of the gear's, one memory;
+//   - where the channels go in pairs, the rover's gears: one channel of its pack with the Boost off and
+//     on, on the IR-X, the ReVolt and the V4 alike — and TURBO is an option of the gear's, one memory;
 //   - a switch a channel holds stands where the lineup puts it, whatever a host did to it; the pack's
 //     other switches are each channel's own, and a channel never pulled opens them where the pack does;
 //   - PARK, where the amp has it, takes the whole amp out of the sound: the guitar comes through dry,
@@ -164,10 +163,9 @@ int main()
     }
 
     // GEARS OF TWO, where the product's channels go in pairs, as far as it goes, TURBO the second of
-    // each, and the pair one memory (Lineup::pairs). On the V4, a pedal's two channels: CLEAN the Copper
-    // and the Copper TB, CRUNCH the Sheriff's two, HI-GAIN the Kraken's two. On the IR-X, one of its
-    // channels with the Boost held off, then on: CRUNCH Ch1, HI-GAIN Ch2 — and so on the ReVolt: CLEAN
-    // its Clean, CRUNCH its Crunch, HI-GAIN its Lead.
+    // each, and the pair one memory (Lineup::pairs): one channel of a pack with the Boost held off, then
+    // on — on Mars the IR-X's CRUNCH Ch1 and HI-GAIN Ch2; on the ice moon the ReVolt's CLEAN, CRUNCH and
+    // HI-GAIN its Clean, Crunch and Lead; over Titan the V4's, its Copper, Sheriff and Kraken.
     if (product.gears != nullptr)
     {
         bool paired = channels.lineup().pairs && gears * 2 == GATE_CHANNELS && gears * 2 <= (int) product.channels.size();

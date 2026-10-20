@@ -545,18 +545,18 @@ int main()
         const auto factory = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, set.getChildFile ("Devices"), none, everyPack);
         const auto shelf = DeviceLibrary::shelfOf (factory);
 
-        report ("the set's packs make six devices, by name",   names (shelf.factory) == "IR-X, ReVolt, V4 Copper, V4 Kraken, V4 Sheriff, X88-IR",
+        report ("the set's packs make four devices, by name",  names (shelf.factory) == "IR-X, ReVolt, V4, X88-IR",
                 names (shelf.factory));
-        report ("...a device is its packs' common words",      named (shelf.factory, "V4 Kraken") != nullptr
+        report ("...a device is its packs' common words",      named (shelf.factory, "V4") != nullptr
                                                                   && named (shelf.factory, "IR-X") != nullptr);
         report ("X88-IR: one alias, so the stems name them",   channels (named (shelf.factory, "X88-IR")) == "Normal, Altered, Crunch, Overdrive",
                 channels (named (shelf.factory, "X88-IR")));
         report ("IR-X: distinct aliases name the channels",    channels (named (shelf.factory, "IR-X")) == "Channel 1, Channel 2",
                 channels (named (shelf.factory, "IR-X")));
-        report ("V4 Copper: crunch before hi-gain",            channels (named (shelf.factory, "V4 Copper")) == "Ember Mantra, Ember Anthem",
-                channels (named (shelf.factory, "V4 Copper")));
-        report ("V4 Kraken: one tone, the file names decide",  channels (named (shelf.factory, "V4 Kraken")) == "Monster Roar, Monster Fang",
-                channels (named (shelf.factory, "V4 Kraken")));
+        report ("V4: distinct aliases, clean before crunch before hi-gain", channels (named (shelf.factory, "V4")) == "Ember Mantra, Patrol Growl, Monster Roar",
+                channels (named (shelf.factory, "V4")));
+        report ("ReVolt: one alias, so the stems name them",   channels (named (shelf.factory, "ReVolt")) == "Clean PowerAmp, Crunch PowerAmp, Lead PowerAmp",
+                channels (named (shelf.factory, "ReVolt")));
         report ("the list is in the menu's order",             inOrder (shelf, factory.size()));
 
         // The player's own folder: devices at its top, and folders inside it mirrored as they lie.
@@ -567,8 +567,8 @@ int main()
             auto manifest = set.getChildFile ("Devices/" + from + ".orbitrig/rig.json").loadFileAsString();
 
             if (slot.isNotEmpty())   // a booster of make-believe: a set pack's manifest, made a pedal of its own
-                manifest = manifest.replace ("\"slot\": \"preamp\"", "\"slot\": \"" + slot + "\"")
-                                   .replace ("\"family_id\": \"victory-v4-sheriff\"", "\"family_id\": \"" + family + "\"")
+                manifest = manifest.replace ("\"slot\": \"amp\"", "\"slot\": \"" + slot + "\"")
+                                   .replace ("\"family_id\": \"victory-v4\"", "\"family_id\": \"" + family + "\"")
                                    .replace ("\"rig_id\": \"", "\"rig_id\": \"" + family + "-");
 
             const auto folder = into.getChildFile ((as.isNotEmpty() ? as : from) + ".orbitrig");
@@ -578,9 +578,9 @@ int main()
 
         lay (own, "IR-X Ch2 PowerAmp");
         lay (own, "IR-X Ch1 PowerAmp");
-        lay (own.getChildFile ("OLD/preamps"), "V4 Kraken Ch2");
-        lay (own.getChildFile ("OLD/preamps"), "V4 Kraken Ch1");
-        lay (own.getChildFile ("OLD/boosters"), "V4 Sheriff Ch1", "TS Test", "pedal", "ts-test");
+        lay (own.getChildFile ("OLD/preamps"), "V4 Kraken (hi-gain)");
+        lay (own.getChildFile ("OLD/preamps"), "V4 Copper (clean)");
+        lay (own.getChildFile ("OLD/boosters"), "V4 Sheriff (crunch)", "TS Test", "pedal", "ts-test");
         own.getChildFile ("OLD/empty").createDirectory();
 
         const auto mine = DeviceLibrary::scan ("OrbitAmp", DeviceLibrary::ampSlot, true, none, own);
@@ -604,7 +604,7 @@ int main()
 
         const auto* preamps = old != nullptr && old->folders.size() == 2 ? &old->folders[1] : nullptr;
         const auto* boosters = old != nullptr && old->folders.size() == 2 ? &old->folders[0] : nullptr;
-        bool loose = preamps != nullptr && names (preamps->devices) == "V4 Kraken Ch1, V4 Kraken Ch2";
+        bool loose = preamps != nullptr && names (preamps->devices) == "V4 Copper (clean), V4 Kraken (hi-gain)";
         if (preamps != nullptr)
             for (const auto& d : preamps->devices)
                 loose = loose && d.channels.size() == 1;

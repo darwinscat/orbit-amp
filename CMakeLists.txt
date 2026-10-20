@@ -823,22 +823,11 @@ foreach(folder IN LISTS ORBITAMP_SET_FOLDERS)
 endforeach()
 add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 
-# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — but the ones
-# put away. A pack added there is OrbitAmp's from the next build on, with nobody to remember to list it.
-#
-# PUT AWAY, the Victory V4's six: in the tree still, for the face that plays them in a build of this tree
-# (AmberPawAmp), but no longer the family's devices — the family will play the V4 again from new captures,
-# with the power amp inside — and in no amp of the release, so in no installer. And the ReVolt's three,
-# FrostPawAmp's own and none of OrbitAmp's.
-set(ORBITAMP_SET_PUT_AWAY "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2"
-    "ReVolt Clean PowerAmp" "ReVolt Crunch PowerAmp" "ReVolt Lead PowerAmp")
-foreach(pack IN LISTS ORBITAMP_SET_PUT_AWAY)
-    if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
-        message(FATAL_ERROR "ORBITAMP_SET_PUT_AWAY names ${pack}, which resources/set/Devices has not")
-    endif()
-endforeach()
+# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — the X88-IR's,
+# the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
+# pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
+# tree keeps but OrbitAmp should not play has no place in resources/set/Devices.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
-list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITAMP_SET_PUT_AWAY})
 list(LENGTH ORBITAMP_PLAYS ORBITAMP_SET_COUNT)
 message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the factory folder")
 
@@ -1135,8 +1124,8 @@ set(ROVER_LIBRARIES
 # version and tags of its own, catpit-vX.Y.Z; from 0.8.0 on every amp's update check reads the family's.
 # ----------------------------------------------------------------------------
 
-# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole but what is
-# put away (ORBITAMP_PLAYS, above), and the whole cabinet shelf.
+# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole
+# (ORBITAMP_PLAYS, above), and the whole cabinet shelf.
 add_amp(OrbitAmp      CODE Oamp
     SOURCES   ${ORBITAMP_SOURCES}
     LIBRARIES
@@ -1194,7 +1183,7 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     ART       ${AMBERPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
+    SET       "V4 Copper (clean)" "V4 Sheriff (crunch)" "V4 Kraken (hi-gain)")
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — each a face's own, so built only by name (amp_console, amp_set_test).
@@ -1799,7 +1788,7 @@ target_link_libraries(orbitamp_library_test PRIVATE
 
 # ----------------------------------------------------------------------------
 # Gate for OrbitAmp's set as the build lays it out in the factory folder — every pack OrbitAmp plays, under
-# a name the device list tells apart, none of what is put away, and the whole cabinet shelf in its folders;
+# a name the device list tells apart, every pack of the tree's set, and the whole cabinet shelf in its folders;
 # the list it reads is the build's own, <build>/Factory/sets/OrbitAmp.txt.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")

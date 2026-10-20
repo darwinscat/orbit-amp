@@ -93,17 +93,6 @@ struct Product
 /** THE PRODUCTS, each as its gate knows it. */
 inline const Product& product()
 {
-    // The Victory V4's three pedals, a gear each and TURBO its second channel: CLEAN the Copper and the
-    // Copper TB in a hall, CRUNCH the Sheriff's two on a plate, HI-GAIN the Kraken's two in an ambience
-    // with no delay — as far as the product goes.
-    const std::vector<Channel> v4 {
-        { "v4-copper-4ae0",      "", "Hall",     15.0f, 15.0f },
-        { "v4-copper-tb-5841",   "", "Hall",     15.0f, 15.0f },
-        { "v4-sheriff-ch1-82ab", "", "Plate",    15.0f, 15.0f },
-        { "v4-sheriff-ch2-2f2f", "", "Plate",    15.0f, 15.0f },
-        { "v4-kraken-ch1-f7fc",  "", "Ambience", 15.0f, 0.0f  },
-        { "v4-kraken-ch2-5f71",  "", "Ambience", 15.0f, 0.0f  },
-    };
     const auto rover = [] (const char* name, std::vector<Channel> channels, const char* gears)
     {
         return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), true, gears, {},
@@ -154,7 +143,18 @@ inline const Product& product()
                    { "revolt-lead-poweramp-f5dc",   "Boost=on",  "Ambience", 15.0f, 0.0f  },
                },
                "each gear is one of the ReVolt's channels, its TURBO the same with the Boost on"),
-        rover ("AmberPawAmp", v4, "each gear is a pedal's two channels, TURBO the second"),
+        // Over Titan the Victory V4's three, a gear each: CLEAN the Copper in a hall, CRUNCH the Sheriff on a
+        // plate, HI-GAIN the Kraken in an ambience with no delay — its TURBO the same pack with the Boost on.
+        rover ("AmberPawAmp",
+               {
+                   { "v4-copper-4ae0",      "Boost=off", "Hall",     15.0f, 15.0f },
+                   { "v4-copper-4ae0",      "Boost=on",  "Hall",     15.0f, 15.0f },
+                   { "v4-sheriff-ch1-82ab", "Boost=off", "Plate",    15.0f, 15.0f },
+                   { "v4-sheriff-ch1-82ab", "Boost=on",  "Plate",    15.0f, 15.0f },
+                   { "v4-kraken-ch1-f7fc",  "Boost=off", "Ambience", 15.0f, 0.0f  },
+                   { "v4-kraken-ch1-f7fc",  "Boost=on",  "Ambience", 15.0f, 0.0f  },
+               },
+               "each gear is one of the V4's three, its TURBO the same with the Boost on"),
     };
 
     for (const auto& p : products)

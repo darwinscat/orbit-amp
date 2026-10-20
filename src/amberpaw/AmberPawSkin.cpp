@@ -22,11 +22,22 @@ namespace
 
 constexpr const char* name = "AmberPawAmp";
 
-/** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's six packs, three gears of two (v4Lineup), until
-    it has captures of its own. */
+/** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's three, a gear each — CLEAN the Copper, CRUNCH the
+    Sheriff, HI-GAIN the Kraken, each captured with its Boost off and on — and TURBO that channel's own
+    Boost: the same pack, the gear holding the switch off and its TURBO on (Lineup::Channel::held). What
+    each opens on, as the V4's gears always did: a gear a little of its room and as much delay, its TURBO
+    twice as much of both — the Copper in a hall, the Sheriff on a plate, the Kraken in an ambience with no
+    delay at all; the Kraken the hot one. */
 const channels::Lineup& titanLineup()
 {
-    static const channels::Lineup heli = v4Lineup();
+    static const channels::Lineup heli = roverLineup ({
+        { "Clean",          "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false, { "Boost", "off" } },
+        { "Clean Turbo",    "v4-copper-4ae0",      "Hall",     30.0f, 30.0f, false, { "Boost", "on"  } },
+        { "Crunch",         "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false, { "Boost", "off" } },
+        { "Crunch Turbo",   "v4-sheriff-ch1-82ab", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
+        { "Hi-Gain",        "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true,  { "Boost", "off" } },
+        { "Hi-Gain Turbo",  "v4-kraken-ch1-f7fc",  "Ambience", 30.0f, 0.0f,  true,  { "Boost", "on"  } },
+    });
     return heli;
 }
 
@@ -199,6 +210,7 @@ const layout::Plan plan {
     .socketSize = 118.0f,                    // its socket's render, 236 across at twice the stage
     .toneMinScale = 0.58f,                   // ...shrunk so far, five fit the row: the V4 Copper's
     .keyCapLeft = 6.5f, .keyCapRight = 6.5f, .keyFrameHeight = 72.0f,     // its frame, 2590..3075 x 1304..1448 as painted
+    .toneSignDrop = 12.0f, .toneSignHeight = 16.0f,                         // its signs nearer its knobs, at their full height
 };
 
 const Skin& titan()
