@@ -74,13 +74,17 @@ on by default); every release build passes `-DORBITAMP_DEV_FACTORY=OFF`.
 | Standalone | `/Applications/<Amp>.app`                                 | `com.darwinscat.<amp>.standalone`  |
 
 Each plug-in format's postinstall, once the family's bundle is in place, removes that format's
-`old_bundles` from the same folder (`OrbitAmp.vst3` … in `/Library/Audio/Plug-Ins/VST3`) and forgets the
-receipts that listed them: the 0.8.0 family's `com.darwinscat.<amp>.<format>` and the per-amp installers'
-single `com.darwinscat.<amp>` of up to 0.7.0. Every app's postinstall forgets that single receipt too
-(`pkgutil --forget` — the files stay; the new receipts list them). The folder is the one on the volume
-Installer installs on (its `$3`), so a postinstall can be tried on a folder that stands for one:
-`sh postinstall - - /tmp/fake-volume`. No bundle is relocatable: Installer places it where the table
-says, never over a same-id copy it found somewhere else on the disk.
+`old_bundles` from the same folder (`OrbitAmp.vst3` … in `/Library/Audio/Plug-Ins/VST3`) and from that
+folder in the `~/Library` of the player installing (`~/Library/Audio/Plug-Ins/VST3`: a development build
+or a bare zip puts them there, and a host reads both), and forgets the receipts that listed them: the
+0.8.0 family's `com.darwinscat.<amp>.<format>` and the per-amp installers' single `com.darwinscat.<amp>`
+of up to 0.7.0. The player is the one Installer names (`$USER`), the one `sudo installer` names
+(`$SUDO_USER`), or else whoever is at the screen. Every app's postinstall forgets that single receipt too
+(`pkgutil --forget` — the files stay; the new receipts list them). Both folders are the ones on the
+volume Installer installs on (its `$3`), so a postinstall can be tried on a folder that stands for one:
+`USER=<name> sh postinstall - - /tmp/fake-volume` touches `/tmp/fake-volume/Library/…` and
+`/tmp/fake-volume/Users/<name>/Library/…` alone. No bundle is relocatable: Installer places it where the
+table says, never over a same-id copy it found somewhere else on the disk.
 
 ## Windows — `darwinscat-amps.iss`
 

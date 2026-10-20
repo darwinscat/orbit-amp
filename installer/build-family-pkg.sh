@@ -22,10 +22,11 @@
 # THE PER-AMP PLUG-INS OF EARLIER RELEASES GO. Up to 0.8.0 every amp was a bundle of its own in every
 # format (OrbitAmp.vst3, CatpitAmp.component …, family.ini's `old_bundles=`), with the same ids the family's
 # bundle now carries: a host that found both would list every amp twice. So each plug-in format's
-# postinstall, once the family's bundle is in place, removes that format's old bundles from the one folder
-# those installers placed them in — by their exact names, never a pattern, never anywhere else (a copy in
-# ~/Library is the player's) — and forgets the receipts that listed them. A format left unticked leaves its
-# old bundles as they were.
+# postinstall, once the family's bundle is in place, removes that format's old bundles from the folder
+# those installers placed them in and from the same folder in the ~/Library of the player installing — a
+# development build or a bare zip puts them there, and a host reads both — by their exact names, never a
+# pattern, never anywhere else, and forgets the receipts that listed them. A format left unticked leaves
+# its old bundles as they were.
 #
 # Usage: build-family-pkg.sh <version> <build-dir> <out-dir>
 #   e.g. installer/build-family-pkg.sh 0.9.0 build dist
@@ -131,10 +132,13 @@ EOF
 }
 
 # One plug-in format's postinstall (format "$f" set): the old per-amp bundles of that format go from the
-# folder the family's bundle was just placed in, and the receipts that listed them — the 0.8.0 family's
-# com.darwinscat.<amp>.<format> and the old single com.darwinscat.<amp>. $3 is the volume Installer installs
-# on, "/" for the startup disk; the folder is that volume's, so the script can be tried on a folder that
-# stands for one (`postinstall - - /tmp/fake-volume`). Without a volume it does nothing.
+# folder the family's bundle was just placed in and from the same folder in the installing player's
+# ~/Library, and the receipts that listed them — the 0.8.0 family's com.darwinscat.<amp>.<format> and the
+# old single com.darwinscat.<amp>. The player is the one Installer names in $USER, the one `sudo installer`
+# names in $SUDO_USER, or else whoever is at the screen; their home is the directory's. $3 is the volume
+# Installer installs on, "/" for the startup disk; both folders are that volume's, so the script can be
+# tried on a folder that stands for one (`postinstall - - /tmp/fake-volume`). Without a volume it does
+# nothing.
 plugin_scripts() {   # plugin_scripts <format> — prints the folder holding its postinstall
   local d="$work/scripts/amps.$1" names="" receipts="" old low
   for old in $OLD; do
@@ -146,16 +150,32 @@ plugin_scripts() {   # plugin_scripts <format> — prints the folder holding its
   cat > "$d/postinstall" <<EOF
 #!/bin/sh
 # The family's $TITLE is in place, every amp in it. The per-amp $TITLE bundles of the family's
-# earlier releases go from its folder, by their exact names — a host that found both would list every
-# amp twice — and so do the receipts that listed them. Nothing else in the folder is touched.
+# earlier releases go from its folder and from the same folder in the installing player's ~/Library, by
+# their exact names — a host that found both would list every amp twice — and so do the receipts that
+# listed them. Nothing else in either folder is touched.
 # \$3 is the volume being installed on ("/" for the startup disk).
 [ -n "\${3:-}" ] || exit 0
-dir="\${3%/}$DEST"
-for old in$names; do
-  if [ -e "\$dir/\$old" ] || [ -L "\$dir/\$old" ]; then
-    /bin/rm -rf "\$dir/\$old" && echo "removed \$dir/\$old"
-  fi
-done
+retire() {   # retire <folder>
+  for old in$names; do
+    if [ -e "\$1/\$old" ] || [ -L "\$1/\$old" ]; then
+      /bin/rm -rf "\$1/\$old" && echo "removed \$1/\$old"
+    fi
+  done
+}
+retire "\${3%/}$DEST"
+
+# The player installing: Installer names them, \`sudo installer\` names them, or they are at the screen.
+player="\${USER:-}"
+[ -n "\$player" ] && [ "\$player" != root ] || player="\${SUDO_USER:-}"
+[ -n "\$player" ] && [ "\$player" != root ] || player="\$(/usr/bin/stat -f %Su /dev/console 2>/dev/null || true)"
+home=""
+case "\$player" in
+  ''|root|loginwindow|_*) ;;
+  *) home="\$(/usr/bin/dscl . -read "/Users/\$player" NFSHomeDirectory 2>/dev/null | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')" ;;
+esac
+case "\$home" in
+  /?*) retire "\${3%/}\$home$DEST" ;;
+esac
 for receipt in$receipts; do
   if /usr/sbin/pkgutil --volume "\$3" --pkg-info "com.darwinscat.\$receipt" >/dev/null 2>&1; then
     /usr/sbin/pkgutil --volume "\$3" --forget "com.darwinscat.\$receipt" >/dev/null 2>&1 || true
