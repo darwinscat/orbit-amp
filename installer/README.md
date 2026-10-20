@@ -151,7 +151,7 @@ it before anything is touched.
 - **One architecture a Mac zip:** `macos-arm64` and `macos-x86_64` keep that slice of every universal
   binary (`lipo -thin`, after notarization — each slice keeps its own signature and the stapled ticket
   names both, so the thinned bundles verify and pass Gatekeeper as they were); `macos` keeps them universal.
-  The release ships the two; the `.pkg` stays universal.
+  The release ships neither: the Mac release is the universal `.pkg` alone.
 - **No `._` entries:** the bundles are copied and archived without extended attributes or resource forks
   (`ditto --norsrc --noextattr`), which a bare `ditto -c -k` stores as AppleDouble `._` files — the zips
   released up to 0.7.0 carried one beside nearly every file. On Windows it archives with `7z`.
@@ -165,9 +165,8 @@ builds `--target Family_All Family_Gates` and runs `tools/run-gates.sh build Rel
 `tests/gates.txt` — before it packs:
 
 - **macOS** (the self-hosted signing runner, universal): `sign-family-macos.sh "$VER" build dist` — every
-  bundle signed, one notarization for all of them, a ticket stapled on each; then `build-family-zip.sh …
-  macos-arm64` and `… macos-x86_64`, and `INSTALLER_IDENTITY=… build-family-pkg.sh`, the package notarized
-  and stapled.
+  bundle signed, one notarization for all of them, a ticket stapled on each; then `INSTALLER_IDENTITY=… build-family-pkg.sh`, the package notarized and
+  stapled — the one Mac download, no zip.
 - **Windows x64:** `ISCC.exe /DAppVersion=$VER installer\darwinscat-amps.iss` (Inno Setup 6 or 7, looked
   for, not assumed), and `build-family-zip.sh … windows-x64`. **Windows arm64:** the zip only.
 - **Linux, x86_64 and arm64:** `build-family-linux.sh "$VER" build dist <arch>`.

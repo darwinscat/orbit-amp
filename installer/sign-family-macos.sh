@@ -2,16 +2,14 @@
 # THE FAMILY'S macOS RELEASE, from built bundles to what ships. The family's plug-ins — ONE bundle per
 # format, every amp of installer/family.ini inside it (family.ini's `bundle=`) — and every amp's standalone
 # app are signed (Developer ID, hardened runtime), all of them are notarized in ONE submission and each gets its
-# ticket stapled; then the zip (build-family-zip.sh) and the package (build-family-pkg.sh) are made from
-# the stapled bundles, and the package is signed, notarized and stapled. The release workflow's macOS job
+# ticket stapled; then the package (build-family-pkg.sh) is made from the stapled bundles, and it is signed, notarized and stapled. The release workflow's macOS job
 # runs this on the signing runner, and installer/release.sh runs it here: the same steps, said once.
 #
 # Usage: sign-family-macos.sh <version> <build-dir> <out-dir>
 # Needs, in the environment: APP_IDENTITY (a Developer ID Application identity), INSTALLER_IDENTITY (a
 # Developer ID Installer identity) and NOTARY_PROFILE (a notarytool keychain profile) — and a keychain
 # they can be used from without a prompt (the workflow unlocks the runner's first).
-# Out: <out-dir>/darwinscat-amps-<version>-macos-arm64.zip and …-macos-x86_64.zip (one architecture each,
-# build-family-zip.sh), and darwinscat-amps-<version>-macos.pkg (universal).
+# Out: <out-dir>/darwinscat-amps-<version>-macos.pkg (universal) — the Mac release is the package alone, no zip.
 set -euo pipefail
 
 VER="${1:?usage: sign-family-macos.sh <version> <build-dir> <out-dir>}"
@@ -102,10 +100,7 @@ for b in "${BUNDLES[@]}"; do
   codesign --verify --deep --strict "$b"
 done
 
-# What ships: a zip of the stapled bundles for each architecture, thinned after they were notarized, and
-# the package, universal — signed as productbuild makes it, then notarized and stapled itself.
-"$HERE/build-family-zip.sh" "$VER" "$BUILD" "$OUT" macos-arm64
-"$HERE/build-family-zip.sh" "$VER" "$BUILD" "$OUT" macos-x86_64
+# What ships: the package, universal — signed as productbuild makes it, then notarized and stapled itself.
 
 PKG="$OUT/darwinscat-amps-$VER-macos.pkg"
 INSTALLER_IDENTITY="$INSTALLER_IDENTITY" "$HERE/build-family-pkg.sh" "$VER" "$BUILD" "$OUT"

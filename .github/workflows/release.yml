@@ -5,7 +5,7 @@ name: release
 # A manual run (workflow_dispatch) builds the SAME artifacts but does NOT create a release unless
 # dry_run=false, so you can download + test installers from the run page without publishing.
 #
-#   • macOS   → one signed + notarized .pkg, universal, and a .zip for arm64 and for x86_64: VST3 + AU + CLAP + Standalone  [self-hosted runner]
+#   • macOS   → one signed + notarized .pkg, universal, and no zip: VST3 + AU + CLAP + Standalone  [self-hosted runner]
 #   • Windows → one Inno Setup .exe (x64), and a .zip for x64 and for arm64: VST3 + CLAP + Standalone
 #   • Linux   → one .tar.xz for x86_64 and for arm64: VST3 + CLAP + Standalone, with install.sh
 #
@@ -109,7 +109,7 @@ jobs:
           cmake --build build --config Release --parallel 8 --target Family_All Family_Gates
       - name: Gates
         run: tools/run-gates.sh build Release
-      # Sign (Developer ID) + notarize + staple, then the zip and the package. Signing identities + the
+      # Sign (Developer ID) + notarize + staple, then the package. Signing identities + the
       # notarytool keychain-profile name come from repo secrets/vars; the certs + profile live in the
       # runner's Keychain.
       - name: Sign, notarize, package
