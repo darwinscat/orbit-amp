@@ -1005,7 +1005,7 @@ set(FACE_SOURCES
 # of is said once, for the plug-in and for its gates, which are the cockpit compiled again under a main()
 # of their own.
 set(CATPITAMP_RENDERS
-    cockpit.webp lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp midi.txt knob-drive.webp knob-tone.webp
+    cockpit.webp lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp midi.txt knob-drive.webp knob-tone.webp socket.webp
     throttle-grip.webp guard-closed.webp guard-open.webp guard-on.webp fader-cap.webp sky-clean.jpg
     sky-edge.jpg sky-crunch.jpg sky-hi-gain.jpg mark.svg)
 list(TRANSFORM CATPITAMP_RENDERS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/")
@@ -1071,7 +1071,8 @@ target_compile_features(titan_world_test PRIVATE cxx_std_20)
 # sources, the libraries — and each product adds its own skin's file and its own renders. The lamps a
 # dashboard paints lit, cut out of it, are a rover's own too: there where its picture paints them.
 set(ROVER_RENDERS
-    dashboard.webp midi.txt mark.svg knob-drive.webp knob-tone.webp lever.webp lever-glow.webp
+    dashboard.webp midi.txt mark.svg knob-drive.webp knob-tone.webp socket.webp key-frame-left.webp
+    key-frame-cell.webp key-frame-right.webp lever.webp lever-glow.webp
     slider-cap.webp fader-cap.webp fader-cap-light.webp toggle-up.webp toggle-down.webp key-up.webp
     key-down.webp turbo-up.webp turbo-down.webp)
 set(ROVER_LAMPS lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp)
