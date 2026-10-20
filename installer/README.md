@@ -28,10 +28,12 @@ session finds the same plug-in.
 **The per-amp plug-ins of earlier releases go.** Up to 0.8.0 every amp was a bundle of its own in every
 format (`OrbitAmp.vst3`, `CatpitAmp.component`, `RedPawAmp.clap` …), carrying the same ids: a host that
 found them beside the family's bundle would list every amp twice. Every installer, placing a plug-in
-format, removes that format's old bundles — `old_bundles` by their exact names, from the one folder the
-earlier installers placed them in, never a pattern and never a folder of the player's — and nothing
-else. A format left unticked leaves its old bundles as they were. The zips' README tells a player who
-copied the old bundles by hand to delete them.
+format, removes that format's old bundles — `old_bundles` by their exact names, never a pattern — from
+the folder the earlier installers placed them in and from the same folder of the player installing
+(`~/Library/Audio/Plug-Ins`, `%LOCALAPPDATA%\Programs\Common`, `~/.vst3` and `~/.clap`), where a
+development build, a bare zip or an install for one user puts them and a host reads them too — and
+nothing else. A format left unticked leaves its old bundles as they were. The zips' README tells a
+player who copied the old bundles by hand to delete them.
 
 **The amps' data is laid out once, by the installer.** The packs, the cabinets and the faces' pictures
 every amp plays are in no binary: they lie in ONE folder the family shares, `Factory`, a part of every
@@ -130,8 +132,10 @@ Whatever is picked, it places the data, `Factory`, in `~/.local/share/darwinscat
 `/usr/local/share/darwinscat-amps`); an amp looks in the player's folder first, then in every user's.
 What it placed is listed in `~/.local/share/darwinscat-amps/installed` (or `/usr/local/share/…`),
 where it also leaves `uninstall.sh`, which removes exactly that. Placing a plug-in format removes that
-format's `old_bundles` which an earlier `install.sh` placed — only paths its list names, in the folder of
-the same mode — and takes them off the list; a bundle copied there by hand stays.
+format's `old_bundles` by their exact names from the folder it places into — whether an earlier
+`install.sh` or a copy by hand put them there — and, with `--system`, from `~/.vst3` and `~/.clap` of the
+player who ran it (sudo's `SUDO_USER`), and takes them off the list. A name that is not a plain word stops
+it before anything is touched.
 
 ## The zip — `build-family-zip.sh` (macOS, Windows)
 

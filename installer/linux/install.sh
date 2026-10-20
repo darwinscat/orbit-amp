@@ -28,8 +28,10 @@
 #
 # THE PER-AMP PLUG-INS OF EARLIER RELEASES — OrbitAmp.vst3, CatpitAmp.clap and the like, release.ini's
 # `old_bundles=` — hold the same amps under the same ids, so a host that found them beside the family's
-# would list every amp twice. Placing a plug-in format takes that format's old bundles away: the ones an
-# earlier install.sh placed, as its list names them, in the folder it placed them in — nothing else.
+# would list every amp twice. Placing a plug-in format takes that format's old bundles away, by their exact
+# names, from the folder it places into — an earlier install.sh or a copy by hand put them there — and,
+# with --system, from the same folders of the player who ran it, ~/.vst3 and ~/.clap, which hosts read
+# too. Nothing else.
 set -eu
 set -f   # no pathname expansion: release.ini's words are names, never patterns
 
@@ -46,6 +48,12 @@ usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' 
 die() { echo "install.sh: $*" >&2; exit 1; }
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 commas() { printf '%s' "$1" | tr ',' ' '; }
+
+# The names the old bundles are removed by are plain words, or nothing is touched: a slash, a dot or a
+# pattern character there would reach further than one bundle.
+for old in $OLD; do
+  case "$old" in ''|.*|*[!A-Za-z0-9_-]*) die "release.ini: old_bundles names '$old', which is not a plain name" ;; esac
+done
 
 # The options are read in a function, so the script's own arguments stay whole for sudo below.
 system=0; yes=0; dry=0; picked=0
@@ -95,6 +103,17 @@ else
   share="${XDG_DATA_HOME:-$HOME/.local/share}"
   VST3="$HOME/.vst3"; CLAP="$HOME/.clap"; BIN="$HOME/.local/bin"
   APPS="$share/applications"; DATA="$share/darwinscat-amps"
+fi
+
+# For every user, the home of the player who ran this: sudo names them, or a dry run is still theirs.
+own=""
+if [ $system = 1 ]; then
+  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    own="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+  elif [ "$(id -u)" != 0 ]; then
+    own="$HOME"
+  fi
+  case "$own" in /?*) ;; *) own="" ;; esac
 fi
 
 ask() {   # ask <question> — yes unless the answer starts with n
@@ -155,13 +174,12 @@ $2/$name"
 placed=""
 
 # An earlier release's per-amp plug-ins of a format, once the family's bundle of that format is in place
-# (see the top): only a path the earlier install's list names, in the folder this one placed into. They
-# leave the list too.
+# (see the top): by their exact names, in the folder this one placed into and, for every user, in the
+# same folder of the player who ran it. They leave the list too.
 retired=""
 retire() {   # retire <folder> <suffix>
   for old in $OLD; do
     p="$1/$old.$2"
-    [ -f "$DATA/installed" ] && grep -qxF "$p" "$DATA/installed" || continue
     if [ -e "$p" ] || [ -L "$p" ]; then
       echo "            removes $p (an earlier release's)"
       run rm -rf "$p"
@@ -177,8 +195,12 @@ place "$here/Factory" "$DATA"
 
 for pick in $chosen; do
   case $pick in
-    vst3) echo "VST3        $VST3/$BUNDLE.vst3";  place "$here/VST3/$BUNDLE.vst3" "$VST3"; retire "$VST3" vst3 ;;
-    clap) echo "CLAP        $CLAP/$BUNDLE.clap";  place "$here/CLAP/$BUNDLE.clap" "$CLAP"; retire "$CLAP" clap ;;
+    vst3)
+      echo "VST3        $VST3/$BUNDLE.vst3";  place "$here/VST3/$BUNDLE.vst3" "$VST3"; retire "$VST3" vst3
+      if [ -n "$own" ]; then retire "$own/.vst3" vst3; fi ;;
+    clap)
+      echo "CLAP        $CLAP/$BUNDLE.clap";  place "$here/CLAP/$BUNDLE.clap" "$CLAP"; retire "$CLAP" clap
+      if [ -n "$own" ]; then retire "$own/.clap" clap; fi ;;
     standalone:*)
       amp="${pick#standalone:}"
       echo "Standalone  $BIN/$amp"
