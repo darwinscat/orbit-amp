@@ -1587,6 +1587,13 @@ juce_add_plugin(${FAMILY_BUNDLE_TARGET}
     ICON_BIG                    "${family_icon}"
     COPY_PLUGIN_AFTER_BUILD     FALSE)
 
+# The code every format links, a library no one ships, named without the bundle's apostrophe. JUCE calls
+# it "<PRODUCT_NAME>_SharedCode", and the Visual Studio generator's MSBuild (VS 18's Microsoft.CppBuild
+# targets) quotes a format's whole list of link inputs in single quotes inside a condition — where the
+# apostrophe in "Darwin's Cat Amps" ends the string and stops the link of the VST3 and the CLAP
+# (MSB4100). Ninja never quotes it, which is why the pull request's Windows build did not see it.
+set_target_properties(${FAMILY_BUNDLE_TARGET} PROPERTIES OUTPUT_NAME "${FAMILY_BUNDLE_TARGET}_SharedCode")
+
 clap_juce_extensions_plugin(TARGET ${FAMILY_BUNDLE_TARGET}
     CLAP_ID       "com.darwinscat.amps"
     CLAP_FEATURES ${AMP_CLAP_FEATURES})
