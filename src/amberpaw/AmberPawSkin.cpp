@@ -225,7 +225,7 @@ const Skin& titan()
         juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words
         face::renders::text (name, "midi.txt", "AMBERPAW_ART_DIR"),
         // Titan's methane sea out of the canopy, flown low over (view/TitanDrive.h).
-        [] { return std::make_unique<Windscreen> (std::make_unique<amberpaw::TitanDrive> (numGears (titanLineup()))); },
+        [] { return std::make_unique<amberpaw::TitanDrive> (numGears (titanLineup())); },
         { "Titan (GPU)", "1993 (CPU)", "Still" },
         "GAIN",
         true,                           // the family's cat, cut into the plate between the vents

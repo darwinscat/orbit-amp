@@ -4,6 +4,7 @@
 #include "Console.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "Cabs.h"
 #include "Midi.h"
@@ -584,7 +585,7 @@ void writeForWeb (const juce::File& file, const juce::Image& img)
 }
 
 void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
-                           const std::vector<juce::Component*>& hidden, const juce::String& stem)
+                           const juce::Image& live, const std::vector<juce::Component*>& hidden, const juce::String& stem)
 {
     std::vector<std::pair<juce::Component*, bool>> was;
     for (auto* c : hidden)
@@ -596,35 +597,65 @@ void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window,
 
     const float k = 2.0f;
     const auto shot = stage.createComponentSnapshot (stage.getLocalBounds(), true, k);
-    juce::Image poster (juce::Image::ARGB, juce::roundToInt (stage::width * k), juce::roundToInt (stage::height * k), true);
-    {
-        juce::Graphics g (poster);
-        g.fillAll (juce::Colours::black);
-        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-        if (still.isValid())
-            g.drawImage (still, window * k, juce::RectanglePlacement::stretchToFit);
-        g.drawImageAt (shot, 0, 0);
-    }
     for (const auto& [c, visible] : was)
         c->setVisible (visible);
-    web::writeThreeSizes (dir, stem, poster, "poster");
+    const auto under = [&] (const juce::Image& view)
+    {
+        juce::Image poster (juce::Image::ARGB, juce::roundToInt (stage::width * k), juce::roundToInt (stage::height * k), true);
+        {
+            juce::Graphics g (poster);
+            g.fillAll (juce::Colours::black);
+            g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+            if (view.isValid())
+                g.drawImage (view, window * k, juce::RectanglePlacement::stretchToFit);
+            g.drawImageAt (shot, 0, 0);
+        }
+        return poster;
+    };
+    if (live.isValid())
+        web::writeThreeSizes (dir, stem, under (live), "poster");
+    web::writeThreeSizes (dir, stem + "-still", under (still), "poster");
 
     // ...and the same face with nothing under it: the window empty, for a picture of the site's own to go
-    // under it there — the live view's first frame, say.
-    juce::Image hole (juce::Image::ARGB, poster.getWidth(), poster.getHeight(), true);
+    // under it there.
+    juce::Image hole (juce::Image::ARGB, shot.getWidth(), shot.getHeight(), true);
     juce::Graphics (hole).drawImageAt (shot, 0, 0);
     web::writeThreeSizes (dir, stem + "-hole", hole, "poster");
-    postersWritten.addIfNotAlreadyThere (stem);
+    postersWritten[stem] = live.isValid();
 }
 
-juce::var Console::posterFiles (const juce::String& stem)
+juce::var Console::posterFiles (const juce::String& stem, bool live)
 {
-    // The poster IS the still under the glass here — a page that lays a live frame under the hole names its
-    // own — so the still's names are the poster's, and no file is written twice.
-    auto files = web::threeNames (stem, "poster");
-    files.getDynamicObject()->setProperty ("still", web::threeNames (stem, "poster"));
+    auto files = web::threeNames (live ? stem : stem + "-still", "poster");
+    files.getDynamicObject()->setProperty ("still", web::threeNames (stem + "-still", "poster"));
     files.getDynamicObject()->setProperty ("hole", web::threeNames (stem + "-hole", "poster"));
     return files;
+}
+
+void Console::shootPoster (const juce::File& dir, int place, const juce::String& stem, std::function<void()> then)
+{
+    const auto shoot = [safe = juce::Component::SafePointer<Console> (this), dir, place, stem, then] (const juce::Image& live)
+    {
+        if (safe == nullptr)
+            return;
+        safe->writePoster (dir, safe->webPoses.window, safe->webPoses.still (place), live, safe->webPoses.hidden, stem);
+        then();
+    };
+    if (webPoses.firstFrame == nullptr)
+    {
+        shoot ({});
+        return;
+    }
+    // The live view's first frame, from the GPU — or, where none has come in ten seconds, the still: taken
+    // once, whichever comes first.
+    const auto taken = std::make_shared<bool> (false);
+    const auto take = [taken, shoot] (const juce::Image& live)
+    {
+        if (! std::exchange (*taken, true))
+            shoot (live);
+    };
+    webPoses.firstFrame (place, take);
+    juce::Timer::callAfterDelay (10000, [take] { take ({}); });
 }
 
 void Console::webPatch (const juce::String& name, std::initializer_list<const juce::Component*> parts)
@@ -641,7 +672,7 @@ void Console::poseNext (const juce::File& dir, int pose)
 {
     if (pose >= webPoses.count)
     {
-        dir.getChildFile ("done.txt").replaceWithText ("done");
+        finishWeb (dir);
         return;
     }
     webPoses.standAt (pose);
@@ -650,12 +681,46 @@ void Console::poseNext (const juce::File& dir, int pose)
     // (or to a stand), as its nav screen reads it.
     juce::Timer::callAfterDelay (2500, [safe = juce::Component::SafePointer<Console> (this), dir, pose]
     {
-        if (safe == nullptr)
-            return;
-        safe->writePoster (dir, safe->webPoses.window, safe->webPoses.still (pose), safe->webPoses.hidden,
-                           "poster-" + juce::String (pose));
-        safe->poseNext (dir, pose + 1);
+        if (safe != nullptr)
+            safe->shootPoster (dir, pose, "poster-" + juce::String (pose), [safe, dir, pose]
+            {
+                if (safe != nullptr)
+                    safe->poseNext (dir, pose + 1);
+            });
     });
+}
+
+/** Every poster written: places.json names each one's files — a live frame's where one went under its glass,
+    the still's where none did — and says what its window shows; done.txt last. */
+void Console::finishWeb (const juce::File& dir)
+{
+    if (auto* o = webPlaces.getDynamicObject())
+    {
+        int live = 0;
+        for (const auto& [stem, withFrame] : postersWritten)
+            live += withFrame ? 1 : 0;
+        if (const auto top = postersWritten.find ("poster"); top != postersWritten.end())
+        {
+            const auto files = posterFiles ("poster", top->second);
+            for (const auto* size : { "poster", "poster1x", "posterHalf" })
+                o->setProperty (size, files[size]);
+            o->setProperty ("posterStill", files["still"]);
+            o->setProperty ("posterHole", files["hole"]);
+            const juce::String still = "still: the still the app ships, as its STILL mode shows it";
+            o->setProperty ("posterWindow", live == 0 ? still
+                                          : live == (int) postersWritten.size() ? "live: " + webPoses.live
+                                          : "live: " + webPoses.live + "; where a place's frame could not be had, the still (" + still.fromFirstOccurrenceOf (": ", false, false) + ")");
+        }
+        juce::Array<juce::var> posters;
+        for (int i = 0; i < webPoses.count; ++i)
+        {
+            const auto at = postersWritten.find ("poster-" + juce::String (i));
+            posters.add (posterFiles ("poster-" + juce::String (i), at != postersWritten.end() && at->second));
+        }
+        o->setProperty ("posters", posters);
+        dir.getChildFile ("places.json").replaceWithText (juce::JSON::toString (webPlaces));
+    }
+    dir.getChildFile ("done.txt").replaceWithText ("done");
 }
 
 juce::var Console::writeSprite (const juce::File& dir, const juce::String& stem, const juce::Image& img)
@@ -950,22 +1015,13 @@ void Console::exportForWeb (const juce::File& dir)
     webExtras (dir, *o, *world);
     o->setProperty ("world", juce::var (world));
 
-    // THE POSTER THE PAGE OPENS ON, where the product wrote one: its three sizes, and its still and its hole
-    // as kinds of their own...
-    if (postersWritten.contains ("poster"))
-    {
-        const auto top = posterFiles ("poster");
-        for (const auto* size : { "poster", "poster1x", "posterHalf" })
-            o->setProperty (size, top[size]);
-        o->setProperty ("posterStill", top["still"]);
-        o->setProperty ("posterHole", top["hole"]);
-        o->setProperty ("posterWindow", "still: the still the app ships, as its STILL mode shows it");
-    }
-    // ...and one for each place of the lever, written after this, as the face stands in each in turn.
-    juce::Array<juce::var> posters;
-    for (int i = 0; i < webPoses.count; ++i)
-        posters.add (posterFiles ("poster-" + juce::String (i)));
-    o->setProperty ("posters", posters);
+    // THE POSTER THE PAGE OPENS ON, where the face has a window — its three sizes, and its still and its
+    // hole as kinds of their own — and one for each place of the lever: their keys here, in their order,
+    // their files named once they are written (finishWeb).
+    if (! webPoses.window.isEmpty())
+        for (const auto* key : { "poster", "poster1x", "posterHalf", "posterStill", "posterHole", "posterWindow" })
+            o->setProperty (key, juce::var());
+    o->setProperty ("posters", juce::Array<juce::var>());
     juce::Array<juce::var> patches;
     for (const auto& [name, r] : webPatches)
     {
@@ -979,9 +1035,17 @@ void Console::exportForWeb (const juce::File& dir)
     for (const auto& [name, r] : spritesWritten)
         bounds->setProperty (name, rectVar (r));
     o->setProperty ("spriteBounds", juce::var (bounds));
-    juce::var json (o);
-    dir.getChildFile ("places.json").replaceWithText (juce::JSON::toString (json));
-    poseNext (dir, 0);
+    webPlaces = juce::var (o);
+
+    // The face as it opened first, at the place it opened at; then each place in turn.
+    if (webPoses.window.isEmpty())
+        poseNext (dir, 0);
+    else
+        shootPoster (dir, webPoses.opening, "poster", [safe = juce::Component::SafePointer<Console> (this), dir]
+        {
+            if (safe != nullptr)
+                safe->poseNext (dir, 0);
+        });
 }
 
 Console::~Console()

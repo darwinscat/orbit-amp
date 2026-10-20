@@ -32,6 +32,7 @@
 //   - an IR a player adds is a cabinet of their own: after the build's, whatever it is called;
 //   - a cabinet another product lays out in the family's folder is not one of the amp's;
 //   - a channel never pulled opens on its own reverb, its own share of it and of delay;
+//   - ...and each of its pack's tones where the pack starts it: a tone of positions on its reference one;
 //   - a cabinet bypassed stays out of the sound when a window opens, until INIT.
 //
 // It reads the amp's packs from where the amp reads them, and lays the build's set out there first, as
@@ -655,6 +656,51 @@ int main()
         presets.init();
         ticks();
         check (channels.cabinetOn(), "...until INIT, which plays it again");
+        ticks();
+    }
+
+    // EACH TONE WHERE ITS PACK STARTS IT (Channels::defaultOf, core::CapturedBlock::defaultNorm): after INIT
+    // every channel opens a sweep at its reference and a tone of positions on its reference position, as the
+    // block plays the knob's place (the position nearest it) — not on the parameter's middle, which on the
+    // V4 Sheriff's and Kraken's three-way Bright is the second position, "-1", a treble cut. The Copper's
+    // Bass cut, of two, opens Off.
+    {
+        orbitamp::channels::Presets presets (*amp, channels);
+        presets.init();
+        ticks();
+        int positional = 0;
+        juce::StringArray wrong;
+        for (int c = 0; c < channels.count(); ++c)
+        {
+            engine.go (c);
+            const auto tones = channels.tonesOf (c);
+            for (size_t t = 0; t < tones.size(); ++t)
+            {
+                auto* knob = amp->apvts.getParameter (params::preampMeasured ((int) t));
+                const auto& tone = tones[t];
+                const float v = knob != nullptr ? knob->convertFrom0to1 (knob->getValue()) : -1.0f;
+                juce::String at;
+                bool right = false;
+                if (! tone.positions.empty())
+                {
+                    ++positional;
+                    const int n = (int) tone.positions.size();
+                    const auto& heard = tone.positions[(size_t) juce::jlimit (0, n - 1, juce::roundToInt (v * (float) (n - 1)))].value;
+                    right = heard == felitronics::rigplayer::toneStart (tone);
+                    at = juce::String (heard);
+                }
+                else
+                {
+                    right = std::abs (v - (float) orbitamp::core::CapturedBlock::defaultNorm (tone)) < 1.0e-4f;
+                    at = juce::String (v, 3);
+                }
+                if (! right)
+                    wrong.add (juce::String (channels.lineup().channels[(size_t) c].name) + "'s " + juce::String (tone.name) + " on " + at);
+            }
+        }
+        check (wrong.isEmpty(), "after INIT every channel opens each of its pack's tones where the pack starts it, a tone of positions on its reference position"
+                                    + (positional > 0 ? " (" + juce::String (positional) + " such here)" : juce::String())
+                                    + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString (", ")));
         ticks();
     }
 

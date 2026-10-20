@@ -9,6 +9,7 @@
 #include <juce_opengl/juce_opengl.h>
 
 #include <atomic>
+#include <functional>
 
 namespace orbitamp::catpit
 {
@@ -42,6 +43,15 @@ public:
         for: the stars fly out of its centre — and how big the whole surface is, in the editor's logical
         pixels. */
     void setArea (juce::Rectangle<float> glass, juce::Rectangle<float> windshield, juce::Point<float> editorSize) noexcept;
+
+    /** THE SKY'S FIRST FRAME, for a poster of the site's: the flight from its start, settled at `throttleAt`
+        (Flight::settle — at that speed at once, nothing stepped), shaded by this sky's shader over the
+        glass at `scale` times the size of `glass`, composed for `windshield` (both in the same units) as the
+        live sky is, into a frame buffer of its own, and read back — what the site's sky, started there,
+        shows first. Handed to `done` on the message thread; invalid where the shader did not build or the
+        context is not attached. Message thread. */
+    void firstFrame (float throttleAt, juce::Rectangle<float> glass, juce::Rectangle<float> windshield, float scale,
+                     std::function<void (juce::Image)> done);
 
     /** False once the shader has failed to build — the editor falls back to the CPU sky then. */
     bool failed() const noexcept { return broken.load(); }

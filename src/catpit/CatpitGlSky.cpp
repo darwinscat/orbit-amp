@@ -3,6 +3,7 @@
 
 #include "CatpitGlSky.h"
 
+#include "../face/WebImages.h"
 #include "../shaders/Gpu.h"
 #include "../shaders/GpuLog.h"
 
@@ -64,6 +65,44 @@ void GlSky::renderOpenGL()
     sky.render (flight, x, y, w, h, (float) vx, (float) vy, (float) vw, (float) vh);
 
     glViewport (0, 0, fw, fh);   // the components are painted over the whole surface next
+}
+
+void GlSky::firstFrame (float throttleAt, juce::Rectangle<float> glass, juce::Rectangle<float> windshield, float scale,
+                        std::function<void (juce::Image)> done)
+{
+    const auto deliver = [done] (std::shared_ptr<std::vector<std::uint8_t>> rgba, int w, int h)
+    {
+        juce::MessageManager::callAsync ([done, rgba, w, h] { done (rgba != nullptr ? face::web::fromGlRows (*rgba, w, h) : juce::Image()); });
+    };
+    const int w = juce::roundToInt (glass.getWidth() * scale), h = juce::roundToInt (glass.getHeight() * scale);
+    if (broken.load() || ! context.isAttached() || w <= 0 || h <= 0)
+    {
+        deliver (nullptr, 0, 0);
+        return;
+    }
+    // The windshield in the frame's own pixels, rows from the bottom, as renderOpenGL measures it inside the
+    // glass (and the site's sky, tools/worlds-wasm/sky.cpp).
+    const float vx = (windshield.getX() - glass.getX()) * scale, vw = windshield.getWidth() * scale;
+    const float vh = windshield.getHeight() * scale;
+    const float vy = (float) h - ((windshield.getY() - glass.getY()) + windshield.getHeight()) * scale;
+    context.executeOnGLThread ([this, throttleAt, w, h, vx, vy, vw, vh, deliver] (juce::OpenGLContext& c)
+    {
+        std::shared_ptr<std::vector<std::uint8_t>> rgba;
+        int fw = 0, fh = 0;
+        juce::OpenGLFrameBuffer frame;
+        if (sky.ready() && frame.initialise (c, w, h) && frame.makeCurrentRenderingTarget())
+        {
+            Flight start {};            // the flight from its start...
+            start.settle (throttleAt);  // ...at the channel's speed at once
+            sky.render (start, 0, 0, w, h, vx, vy, vw, vh);
+            rgba = std::make_shared<std::vector<std::uint8_t>>();
+            if (! sky.readFrame (*rgba, fw, fh))
+                rgba.reset();
+            frame.releaseAsRenderingTarget();
+        }
+        frame.release();
+        deliver (rgba, fw, fh);
+    }, false);
 }
 
 void GlSky::openGLContextClosing()

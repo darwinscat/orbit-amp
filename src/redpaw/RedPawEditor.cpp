@@ -837,10 +837,21 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     juce::Array<juce::var> stills;
     stills.add ("still.webp");
     places.setProperty ("stills", stills);
-    writePoster (dir, skin.plan.windscreen, Art::still (skin), { view.get() });
 
-    // ...and one for each place of the lever, PARK first: the hatch shut there only, TURBO off.
+    // THE POSTERS: the rover as it opens, and one for each place of the lever, PARK first: the hatch shut
+    // there only, TURBO off — through the glass the windscreen's first frame there, a drive of the rover's
+    // made at its start and settled at the place (Windscreen::firstFrame), and the still it ships in the
+    // poster's -still kind.
     webPoses.count = lever.numPlaces();
+    webPoses.opening = lever.getPlace();
+    webPoses.firstFrame = [this] (int, std::function<void (juce::Image)> done)
+    {
+        const auto box = skin.plan.windscreen * 2.0f;
+        view->firstFrame (skin.makeDrive(), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()), std::move (done));
+    };
+    webPoses.live = juce::String ("the windscreen's first frame for the place: the ") + view->drive().name()
+                  + " drive on the GPU from its start, at the place's gear and PARK, settled, nothing stepped (t = 0), TURBO off, "
+                    "the wipers and the lights as the face opens; the top poster is the place the app opens at";
     webPoses.standAt = [this] (int at)
     {
         if (at == GearLever::park)
@@ -870,7 +881,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     : face::Console (p, std::make_unique<Dashboard> (skinOf (p.product())), dashboardPlaces (skinOf (p.product())),
                      dashboardLook (skinOf (p.product()))),
       skin (skinOf (p.product())),
-      view (skin.makeView()),
+      view (std::make_unique<Windscreen> (skin.makeDrive())),
       lever (skin, numGears (skin.lineup)),
       screen (p)
 {

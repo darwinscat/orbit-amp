@@ -146,6 +146,15 @@ public:
     /** The still as kept, when the mode is STILL and it has arrived; else invalid. Message thread. */
     juce::Image stillImage() const { return still; }
 
+    /** THE VIEW'S FIRST FRAME, for a poster of the site's: `fresh` — a drive of the same kind, made just now
+        and so at its start — standing where this view's gear, TURBO and PARK put it, settled there as STILL
+        settles a frame (its speed and air reached, nothing stepped), with the wipers and the lights as this
+        view has them and no hand on the helm, drawn on the GPU at `width` x `height` in the context this
+        view draws in, and read back. What a page's copy of the view, started there, shows first. Handed to
+        `done` on the message thread; invalid where the GPU will not draw here or no context is attached.
+        Message thread. */
+    void firstFrame (std::unique_ptr<Drive> fresh, int width, int height, std::function<void (juce::Image)> done);
+
     /** THE STILL AS SHIPPED: where the product brings a picture of its world, STILL shows that — asked
         for when STILL comes on, let go when it goes off — and renders nothing; else, or when it gives an
         invalid one, STILL renders a frame of its own. Message thread. */

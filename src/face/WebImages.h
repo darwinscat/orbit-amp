@@ -6,6 +6,9 @@
 #include <juce_core/juce_core.h>
 #include <juce_graphics/juce_graphics.h>
 
+#include <cstdint>
+#include <vector>
+
 /** THE PICTURES OF A FACE'S KIT FOR THE SITE (Console::exportForWeb): how every one of them is written —
     the cabin, the posters, the stills, every sprite — so that what the app writes is the kit the site
     reads, with no step between them.
@@ -64,5 +67,22 @@ juce::String spriteFile (const juce::String& stem);
     instead of a name, where there is no picture to write (a render the skin has not) or it could not be
     written: the site's reader fails on a file named that is not there. */
 juce::var writeSprite (const juce::File& dir, const juce::String& stem, const juce::Image&);
+
+/** A frame read back from the GPU — RGBA, its rows bottom-up as GL keeps them — as an opaque picture, the
+    right way up: what a live view's first frame goes under a poster's glass as. Invalid for no pixels. */
+inline juce::Image fromGlRows (const std::vector<std::uint8_t>& rgba, int width, int height)
+{
+    if (width <= 0 || height <= 0 || rgba.size() < (size_t) width * (size_t) height * 4u)
+        return {};
+    juce::Image img (juce::Image::RGB, width, height, false);
+    const juce::Image::BitmapData bd (img, juce::Image::BitmapData::writeOnly);
+    for (int y = 0; y < height; ++y)
+    {
+        const auto* row = rgba.data() + (size_t) (height - 1 - y) * (size_t) width * 4u;
+        for (int x = 0; x < width; ++x)
+            bd.setPixelColour (x, y, juce::Colour (row[x * 4], row[x * 4 + 1], row[x * 4 + 2]));
+    }
+    return img;
+}
 
 } // namespace orbitamp::face::web

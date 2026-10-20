@@ -93,7 +93,7 @@ const Skin& ice()
         // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
         face::renders::text (name, "midi.txt", "FROSTPAW_ART_DIR"),
         // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
-        [] { return std::make_unique<Windscreen> (std::make_unique<frostpaw::IceDrive> (numGears (iceLineup()))); },
+        [] { return std::make_unique<frostpaw::IceDrive> (numGears (iceLineup())); },
         { "Ice (GPU)", "1993 (CPU)", "Still" },
     };
     return ice;
