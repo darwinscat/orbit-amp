@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
-// THE FAMILY'S PLUG-IN ENTRY — in the family's one VST3 and one CLAP alone (CMakeLists.txt: THE FAMILY'S
+// THE FAMILY'S PLUG-IN ENTRY — in the family's one VST3, CLAP and AU alone (CMakeLists.txt: THE FAMILY'S
 // PLUG-INS), which hold every amp of the release. The wrappers list the amps of FamilyPluginList.h, each
 // under its own ids, and ask for a processor of the entry a host opened; FamilyProducts.h says which Product
 // each entry is. Both are written by the build, from installer/family.ini's `amps=` and each amp's row in

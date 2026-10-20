@@ -1294,21 +1294,21 @@ message(STATUS "The family's release (Family_All): ${FAMILY_BUNDLE} (${FAMILY_BU
 
 # ----------------------------------------------------------------------------
 # THE FAMILY'S PLUG-INS — ONE binary per format, "Darwin's Cat Amps" (family.ini's `bundle=`), built by the
-# target family.ini names (`bundle_target=`, DarwinsCatAmps): every amp of the release in one VST3 and one
-# CLAP, each under the ids its own bundle has always had — its VST3 classes made of the family's
-# manufacturer code, Dcat, and its own CODE, and its CLAP id, com.darwinscat.<name> — so a session saved
-# with an amp's own bundle opens it from the family's unchanged. The wrappers are patched to hold a list
-# (cmake/PatchedWrappers.cmake). The binary's own code, Dcam, and CLAP id, com.darwinscat.amps, name no
-# plug-in a host is shown: the list names those. The Mac's AU joins them once its wrapper holds a list
-# too; until then the family's plug-ins are a VST3 and a CLAP on every system.
+# target family.ini names (`bundle_target=`, DarwinsCatAmps): every amp of the release in one VST3, one CLAP
+# and, on the Mac, one AU, each under the ids its own bundle has always had — its VST3 classes made of the
+# family's manufacturer code, Dcat, and its own CODE, its Audio Unit aufx/<CODE>/Dcat, and its CLAP id,
+# com.darwinscat.<name> — so a session saved with an amp's own bundle opens it from the family's unchanged.
+# The wrappers are patched to hold a list (cmake/PatchedWrappers.cmake). The binary's own code, Dcam, and
+# CLAP id, com.darwinscat.amps, name no plug-in a host is shown: the list names those.
 #
 # THE LIST IS WRITTEN HERE, at configure time, into <build>/generated/family: FamilyPluginList.h, what the
 # wrappers read (JUCE_PLUGIN_LIST_HEADER) — each amp's name, its CODE, its CLAP id, and the categories and
-# features every amp has (AMP_VST3_CATEGORIES, AMP_CLAP_FEATURES), in family.ini's order — and
+# features every amp has (AMP_VST3_CATEGORIES, AMP_CLAP_FEATURES), in family.ini's order —
 # FamilyProducts.h, the Product each entry is made with, orbitamp::products::<name> with its first letter
-# small (src/Product.h). Both come from family.ini's `amps=` and each amp's row in THE AMPS, never from a
-# second list kept by hand; a name with no Product does not compile. The binary's entry,
-# createPluginFilter (const juce::PluginListEntry&), is src/FamilyPlugin.cpp.
+# small (src/Product.h), and the AU's Info.plist (THE AU'S COMPONENTS, below). All of them come from
+# family.ini's `amps=` and each amp's row in THE AMPS, never from a second list kept by hand; a name with no
+# Product does not compile. The binary's entry, createPluginFilter (const juce::PluginListEntry&), is
+# src/FamilyPlugin.cpp.
 #
 # IT IS EVERY AMP'S OWN PLUG-IN, COMPILED ONCE: the sources of every amp of the release, each once, and their
 # libraries — as the family's gate links them (EVERY AMP IN ONE BINARY) — built as add_amp builds an amp:
@@ -1356,7 +1356,7 @@ list(REMOVE_DUPLICATES family_plugin_libraries)
 
 file(CONFIGURE OUTPUT "${FAMILY_GENERATED_DIR}/FamilyPluginList.h" @ONLY CONTENT [=[
 // WRITTEN BY THE BUILD (CMakeLists.txt: THE FAMILY'S PLUG-INS) from installer/family.ini's `amps=` and each
-// amp's row in THE AMPS — never edited. The plug-ins the family's one VST3 and one CLAP hold, in the order
+// amp's row in THE AMPS — never edited. The plug-ins the family's one VST3, CLAP and AU hold, in the order
 // hosts show them, each under its own ids (juce_PluginList.h, which the patched JUCE carries). Plain data,
 // nothing of JUCE: the VST3 manifest helper compiles it too.
 #pragma once
@@ -1413,8 +1413,9 @@ juce_add_plugin(${FAMILY_BUNDLE_TARGET}
     BUNDLE_ID                   "com.darwinscat.amps"
     PLUGIN_MANUFACTURER_CODE    Dcat
     PLUGIN_CODE                 Dcam
-    FORMATS                     VST3
+    FORMATS                     VST3 AU               # AU on the Mac alone, as an amp's own (add_amp)
     VST3_CATEGORIES             ${AMP_VST3_CATEGORIES}
+    AU_MAIN_TYPE                "kAudioUnitType_Effect"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE
     NEEDS_MIDI_OUTPUT           FALSE
@@ -1434,6 +1435,83 @@ if(APPLE)
                 "$<TARGET_PROPERTY:${FAMILY_BUNDLE_TARGET},JUCE_ICON_FILE>"
                 "$<TARGET_BUNDLE_DIR:${FAMILY_BUNDLE_TARGET}_CLAP>/Contents/Resources/clap.icns"
         VERBATIM)
+endif()
+
+# THE AU'S COMPONENTS. A host finds an Audio Unit in its bundle's Info.plist, one AudioComponents entry per
+# plug-in, before it loads the binary — and JUCE writes one entry, the binary's own (PLUGIN_CODE, named as
+# the bundle). Here that entry is the pattern of one for every amp of the list, in family.ini's order: the
+# amp's name in it, "<company>: <Amp>", as an amp's own build names its AU, its description, <Amp>, and its
+# CODE as the subtype — and the rest as JUCE wrote it: the type, the manufacturer, the version, the resource
+# usage, and the one factory function the binary exports for them all. So each is the entry the amp's own
+# AU had, but for that function; the binary's own entry is gone, as its VST3 and CLAP name no plug-in of
+# their own either. The patched wrapper makes the amp whose CODE is the subtype of the component a host
+# opened. Written at configure time beside the list's headers, and the bundle's plist from then on.
+if(TARGET ${FAMILY_BUNDLE_TARGET}_AU)
+    get_target_property(family_au_juce_plist ${FAMILY_BUNDLE_TARGET}_AU MACOSX_BUNDLE_INFO_PLIST)
+    get_target_property(family_au_code ${FAMILY_BUNDLE_TARGET} JUCE_PLUGIN_CODE)
+    file(READ "${family_au_juce_plist}" family_au_plist)
+    set(family_au_space "[ \t\r\n]*")
+
+    # JUCE's AudioComponents: the key, the array's opening, its one entry and what closes it.
+    string(FIND "${family_au_plist}" "<key>AudioComponents</key>" family_au_at)
+    if(family_au_at LESS 0)
+        message(FATAL_ERROR "JUCE wrote no AudioComponents into ${family_au_juce_plist}")
+    endif()
+    string(SUBSTRING "${family_au_plist}" ${family_au_at} -1 family_au_rest)
+    string(FIND "${family_au_rest}" "</array>" family_au_length)
+    string(SUBSTRING "${family_au_rest}" 0 ${family_au_length} family_au_components)
+    string(CONCAT family_au_one "^(<key>AudioComponents</key>${family_au_space}<array>)"
+                                "(${family_au_space})(<dict>.*</dict>)(${family_au_space})$")
+    if(NOT family_au_components MATCHES "${family_au_one}")
+        message(FATAL_ERROR "The AudioComponents JUCE wrote are not one entry: ${family_au_components}")
+    endif()
+    set(family_au_open "${CMAKE_MATCH_1}")
+    set(family_au_indent "${CMAKE_MATCH_2}")
+    set(family_au_pattern "${CMAKE_MATCH_3}")
+    set(family_au_close "${CMAKE_MATCH_4}")
+
+    # The pattern is the binary's own entry, named "<company>: <bundle>", or this reads JUCE wrong.
+    set(family_au_name_at "(<key>name</key>${family_au_space}<string>)([^<]*)(</string>)")
+    set(family_au_description_at "(<key>description</key>${family_au_space}<string>)([^<]*)(</string>)")
+    set(family_au_subtype_at "(<key>subtype</key>${family_au_space}<string>)([^<]*)(</string>)")
+    string(REGEX MATCH "${family_au_name_at}" ignored "${family_au_pattern}")
+    set(family_au_name "${CMAKE_MATCH_2}")
+    string(REGEX MATCH "${family_au_description_at}" ignored "${family_au_pattern}")
+    set(family_au_description "${CMAKE_MATCH_2}")
+    string(REGEX MATCH "${family_au_subtype_at}" ignored "${family_au_pattern}")
+    set(family_au_subtype "${CMAKE_MATCH_2}")
+    string(LENGTH "${family_au_name}" family_au_name_length)
+    string(LENGTH "${FAMILY_BUNDLE}" family_au_bundle_length)
+    math(EXPR family_au_prefix_length "${family_au_name_length} - ${family_au_bundle_length}")
+    set(family_au_named "")
+    if(family_au_prefix_length GREATER 0)
+        string(SUBSTRING "${family_au_name}" 0 ${family_au_prefix_length} family_au_prefix)
+        string(SUBSTRING "${family_au_name}" ${family_au_prefix_length} -1 family_au_named)
+    endif()
+    if(NOT family_au_named STREQUAL FAMILY_BUNDLE OR NOT family_au_description STREQUAL FAMILY_BUNDLE
+       OR NOT family_au_subtype STREQUAL family_au_code)
+        message(FATAL_ERROR "JUCE's AudioComponents entry is not the binary's own: ${family_au_pattern}")
+    endif()
+
+    # One entry per amp, from the list's rows.
+    set(family_au_entries "")
+    foreach(amp IN LISTS FAMILY_AMPS)
+        get_target_property(code ${amp} AMP_CODE)
+        set(entry "${family_au_pattern}")
+        string(REGEX REPLACE "${family_au_name_at}" "\\1${family_au_prefix}${amp}\\3" entry "${entry}")
+        string(REGEX REPLACE "${family_au_description_at}" "\\1${amp}\\3" entry "${entry}")
+        string(REGEX REPLACE "${family_au_subtype_at}" "\\1${code}\\3" entry "${entry}")
+        string(APPEND family_au_entries "${family_au_indent}${entry}")
+    endforeach()
+
+    string(LENGTH "${family_au_components}" family_au_length)
+    math(EXPR family_au_after_at "${family_au_at} + ${family_au_length}")
+    string(SUBSTRING "${family_au_plist}" 0 ${family_au_at} family_au_before)
+    string(SUBSTRING "${family_au_plist}" ${family_au_after_at} -1 family_au_after)
+    set(family_au_info "${FAMILY_GENERATED_DIR}/AU/Info.plist")
+    file(WRITE "${family_au_info}"
+        "${family_au_before}${family_au_open}${family_au_entries}${family_au_close}${family_au_after}")
+    set_target_properties(${FAMILY_BUNDLE_TARGET}_AU PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${family_au_info}")
 endif()
 
 target_sources(${FAMILY_BUNDLE_TARGET} PRIVATE src/FamilyPlugin.cpp ${family_plugin_sources})
@@ -1457,12 +1535,15 @@ add_dependencies(${FAMILY_BUNDLE_TARGET} Family_Factory)
 if(ORBITAMP_DEV_FACTORY)
     target_compile_definitions(${FAMILY_BUNDLE_TARGET} PRIVATE ORBITAMP_DEV_FACTORY="${ORBITAMP_FACTORY_DIR}")
 endif()
-strip_release(${FAMILY_BUNDLE_TARGET}_VST3 ${FAMILY_BUNDLE_TARGET}_CLAP)
+set(family_formats ${FAMILY_BUNDLE_TARGET}_VST3 ${FAMILY_BUNDLE_TARGET}_CLAP)
+if(TARGET ${FAMILY_BUNDLE_TARGET}_AU)
+    list(APPEND family_formats ${FAMILY_BUNDLE_TARGET}_AU)
+endif()
+strip_release(${family_formats})
 
-# Faces are in it, so it is built by name, as they are: `--target DarwinsCatAmps_All` (VST3 and CLAP), or
-# with the rest of the release, Family_All.
-set_target_properties(${FAMILY_BUNDLE_TARGET} ${FAMILY_BUNDLE_TARGET}_VST3 ${FAMILY_BUNDLE_TARGET}_CLAP
-    PROPERTIES EXCLUDE_FROM_ALL TRUE)
+# Faces are in it, so it is built by name, as they are: `--target DarwinsCatAmps_All` (VST3, CLAP and the
+# Mac's AU), or with the rest of the release, Family_All.
+set_target_properties(${FAMILY_BUNDLE_TARGET} ${family_formats} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 add_dependencies(${FAMILY_BUNDLE_TARGET}_All ${FAMILY_BUNDLE_TARGET}_CLAP)
 add_dependencies(Family_All ${FAMILY_BUNDLE_TARGET}_All)
 
