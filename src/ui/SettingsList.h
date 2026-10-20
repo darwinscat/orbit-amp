@@ -41,7 +41,9 @@ public:
         bool hasDot = false;
 
         /** A CHOICE row instead of a switch: the values, which one stands, and a pick. When
-            `choices` is empty the row is a switch and these are not asked. */
+            `choices` is empty the row is a switch and these are not asked. Up to four are a row of
+            cells; more than a row holds are one cell showing the one that stands, which opens them
+            all as a menu, that one ticked (opensAsMenu). */
         juce::StringArray choices;
         std::function<int()> chosen;
         std::function<void (int)> choose;
@@ -85,7 +87,9 @@ public:
                 g.fillRoundedRectangle (cell.toFloat().reduced (2.0f, 1.0f), theme::radiusSm);
             }
 
-            if (choice)
+            if (choice && opensAsMenu (row))
+                paintMenuCell (g, choiceArea (cell), row);
+            else if (choice)
                 paintChoices (g, choiceArea (cell), row);
             else
                 paintSwitch (g, cell.withTrimmedLeft (cell.getWidth() - (switchW + 14))
@@ -129,7 +133,11 @@ public:
             const auto cell = getLocalBounds().withY (i * rowH).withHeight (rowH);
             const auto area = choiceArea (cell);
 
-            if (area.contains (e.getPosition()) && row.choose != nullptr)
+            if (area.contains (e.getPosition()) && row.choose != nullptr && opensAsMenu (row))
+            {
+                showChoiceMenu (i, area);
+            }
+            else if (area.contains (e.getPosition()) && row.choose != nullptr)
             {
                 row.choose (juce::jlimit (0, row.choices.size() - 1,
                                           (e.x - area.getX()) * row.choices.size() / area.getWidth()));
@@ -160,6 +168,9 @@ public:
     }
 
     void resized() override { setSize (getWidth(), (int) rows.size() * rowH); }
+
+    /** Whether a choice row's values open as a menu: more of them than a row of cells holds. */
+    static bool opensAsMenu (const Row& row) noexcept { return row.choices.size() > maxCells; }
 
     static constexpr int rowH = 40;   // two lines of 13 and air: the floor is what a player READS
 
@@ -291,6 +302,54 @@ private:
         g.drawRoundedRectangle (r.reduced (0.5f), rad, 1.0f);
     }
 
+    /** A choice row of more values than a row of cells holds: one cell, the switch's track, with the one
+        that stands in it and a small arrow for the rest. */
+    static void paintMenuCell (juce::Graphics& g, juce::Rectangle<int> area, const Row& row)
+    {
+        const int sel = row.chosen != nullptr ? row.chosen() : -1;
+        const auto r  = area.toFloat();
+        const float rad = r.getHeight() * 0.5f;
+
+        g.setColour (juce::Colour (0xff17171d));
+        g.fillRoundedRectangle (r, rad);
+        g.setColour (theme::hair2);
+        g.drawRoundedRectangle (r.reduced (0.5f), rad, 1.0f);
+
+        auto text = r.reduced (rad, 0.0f);
+        const auto arrow = text.removeFromRight (10.0f).withSizeKeepingCentre (8.0f, 5.0f);
+        juce::Path down;
+        down.addTriangle (arrow.getX(), arrow.getY(), arrow.getRight(), arrow.getY(), arrow.getCentreX(), arrow.getBottom());
+        g.setColour (theme::txDim);
+        g.fillPath (down);
+
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::FontOptions (13.0f));
+        g.drawText (sel >= 0 && sel < row.choices.size() ? row.choices[sel] : juce::String(), text, juce::Justification::centred);
+    }
+
+    /** The values of row `i` as a menu under its cell, the one that stands ticked. The row may be gone by
+        the time a pick comes back: it is looked up again. */
+    void showChoiceMenu (int i, juce::Rectangle<int> area)
+    {
+        const auto& row = rows[(size_t) i];
+        const int sel = row.chosen != nullptr ? row.chosen() : -1;
+
+        juce::PopupMenu menu;
+        for (int k = 0; k < row.choices.size(); ++k)
+            menu.addItem (k + 1, row.choices[k], true, k == sel);
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (localAreaToGlobal (area)),
+                            [safe = juce::Component::SafePointer<SettingsList> (this), i] (int picked)
+                            {
+                                if (safe == nullptr || picked <= 0 || i >= (int) safe->rows.size())
+                                    return;
+                                if (const auto& now = safe->rows[(size_t) i]; now.choose != nullptr && picked <= now.choices.size())
+                                    now.choose (picked - 1);
+                                safe->repaint();
+                            });
+    }
+
+    static constexpr int maxCells = 4;      // a row of cells holds four, each the width of a cell (paintChoices)
     static constexpr int switchW = 34, switchH = 18;
     static constexpr int choiceW = 42, choiceH = 22;
 
