@@ -21,6 +21,8 @@ class Cockpit final : public face::Picture
 {
 private:
     void paintStatic (juce::Graphics&, float scale) const override;
+    void paintStrips (juce::Graphics&, float scale) const override;
+    juce::Colour signInk() const override { return face::labelLilac.withAlpha (0.75f); }     // as quiet as the filter keys' signs at rest
     void paintLive (juce::Graphics&) const override;
     juce::Rectangle<int> historyArea() const override;
 

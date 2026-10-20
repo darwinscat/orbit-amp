@@ -21,12 +21,12 @@ void Picture::setHistory (bool undo, bool redo, int reg)
     repaint (historyArea());
 }
 
-void Picture::setKeys (const std::array<bool, 6>& live, const std::array<juce::String, 6>& names)
+void Picture::setStrips (const Strips& now)
 {
-    if (live == keysLive && names == keyNames)
+    if (now == strips)
         return;
-    keysLive = live;
-    keyNames = names;
+    strips = now;
+    layer = {};         // the sockets and the frame are in the layer
     repaint();
 }
 
@@ -55,6 +55,7 @@ void Picture::paint (juce::Graphics& g)
         lg.addTransform (juce::AffineTransform::scale (scale));
         lg.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
         paintStatic (lg, scale);
+        paintStrips (lg, scale);
     }
     g.drawImage (layer, juce::Rectangle<float> (0.0f, 0.0f, width, height));
     paintLive (g);

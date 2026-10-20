@@ -30,29 +30,50 @@ namespace
     /** Where the keys stand along their row. ONE pitch for all six — the widest pair of neighbouring
         names plus a little air, so no name touches the next — the filters centred under BASS, the four
         layers set against the right end of the row, clear of the divider that parts the two groups. */
-    std::array<float, 6> keyCentres()
+    /** The keys' pitch, as the six names the row was first set for need it — HPF, LPF and the four the
+        packs' layers were to have, FAT BRIGHT DEPTH PRES — at 11 px with room between. */
+    float keyPitch()
     {
         const auto font = labelFont (layout::px11).withExtraKerningFactor (keyTracking);
-        std::array<float, 6> w {}, x {};
-        for (size_t i = 0; i < w.size(); ++i)
-            w[i] = juce::GlyphArrangement::getStringWidth (font, switches[i].shortName);
-
+        const char* names[] { "HPF", "LPF", "FAT", "BRIGHT", "DEPTH", "PRES" };
         float pitch = 0.0f;
-        for (size_t i = 0; i + 1 < w.size(); ++i)
-            if (i != btLpf)     // the divider stands between LPF and FAT, not air
-                pitch = juce::jmax (pitch, (w[i] + w[i + 1]) * 0.5f + 7.5f);
+        for (size_t i = 0; i + 1 < std::size (names); ++i)
+            if (i != 1)     // the filters' group ends at LPF
+                pitch = juce::jmax (pitch, (juce::GlyphArrangement::getStringWidth (font, names[i])
+                                            + juce::GlyphArrangement::getStringWidth (font, names[i + 1])) * 0.5f + 7.5f);
+        return pitch;
+    }
 
-        x[btHpf] = layout::keyGroupX - pitch * 0.5f;
-        x[btLpf] = layout::keyGroupX + pitch * 0.5f;
-        for (size_t i = btFat; i <= btPresence; ++i)
-            x[i] = layout::keyRowRight - w[btPresence] * 0.5f - pitch * (float) (btPresence - i);
-        return x;
+    /** THE KEYS RIGHT OF THE FILTERS (face::Strip): where the four stood, the last's name ending at
+        keyRowRight — a key `pitch` wide each, as many as the pack has switches, shrunk to fit to 0.75. */
+    face::Strip keyStrip()
+    {
+        const float pitch = keyPitch();
+        const auto font = labelFont (layout::px11).withExtraKerningFactor (keyTracking);
+        const float right = layout::keyRowRight - 0.5f * juce::GlyphArrangement::getStringWidth (font, "PRES") + 0.5f * pitch;
+        return { { right - 4.0f * pitch, layout::keyRowY - 0.5f * layout::keySize, 4.0f * pitch, layout::keySize }, pitch, pitch, 0.75f };
     }
 
     // Measured off the original renders (the ones that still had their pointers): where the lit slot
     // starts and ends along the radius, and how wide it is, as fractions of the knob's opaque radius.
     constexpr ArtKnob::Pointer drivePointer { 0.32f, 0.76f, 0.068f };
     constexpr ArtKnob::Pointer tonePointer  { 0.335f, 0.70f, 0.076f };
+    /** HPF AND LPF ARE WIDE KEYS on the cockpit, spread across the row under the tones, which the sockets and
+        keys the picture lost left free: the kit's chrome key `filterKeyHeight` tall, made as long as half the
+        room less `filterKeyGap` by three slices (PushButton::drawWideChromeKey), the filter's sign in the
+        middle of each — near black, engraved into the light pill whatever its state — going down with the
+        cap. The X88-IR's packs have no switches, so nothing else stands in the row. */
+    constexpr float filterRowLeft = 1060.3f - 72.0f, filterRowRight = 1418.0f;    // the row's free room: BASS's socket's left edge to short of the corner screw
+    constexpr float filterKeyGap = 16.0f, filterKeyHeight = 66.0f;     // its bezel 56 of that, from the sockets' foot to the plate's
+    constexpr float filterKeyWidth = 0.5f * (filterRowRight - filterRowLeft - filterKeyGap);      // 206.85: the two fill the room, evenly
+    constexpr float filterKeyDrop = 10.0f;     // ...their middles this far under the key row's: between the sockets and the plate's edge
+    void filterKey (juce::Graphics& g, juce::Rectangle<float> box, bool down, float lit, bool highpass)
+    {
+        PushButton::drawWideChromeKey (g, box, down ? 1.0f : 0.0f, lit);
+        // The sign cut dark into the light pill, as an engraving — in every state: the pill's light says on.
+        face::drawFilterSign (g, box.withSizeKeepingCentre (box.getHeight(), box.getHeight()).translated (0.0f, down ? 0.7f : 0.0f),
+                              highpass, juce::Colour (0xff15121c).withAlpha (0.9f));
+    }
 
     /** How the stars fly, and what the windshield shows — settings of the machine's, in the cockpit's
         settings file. The stars are kept as a word, in the order of CatpitEditor::Stars. */
@@ -85,13 +106,19 @@ namespace
 
         face::Console::Places p;
         p.drive = around (drive.centre, drive.radius * 1.86f, drive.radius * 1.86f);
-        for (size_t i = 0; i < tones.size(); ++i)
-            p.tones[i] = around (tones[i].centre, tones[i].radius * 2.05f, tones[i].radius * 2.05f);
+        p.toneStrip  = toneStrip;
+        p.toneKnob   = toneKnob;
+        p.toneNameY  = toneNameY;
+        p.toneNameEm = px13;
 
-        const auto keyX = keyCentres();
-        for (size_t i = 0; i < p.keys.size(); ++i)
-            p.keys[i] = { keyX[i], keyRowY };
+        p.keys = { juce::Point<float> { filterRowLeft + 0.5f * filterKeyWidth, keyRowY + filterKeyDrop },
+                   juce::Point<float> { filterRowRight - 0.5f * filterKeyWidth, keyRowY + filterKeyDrop } };
         p.keySize = keySize;
+        p.filterKeyWidth = filterKeyWidth;
+        p.filterKeyHeight = filterKeyHeight;
+        p.keyStrip = keyStrip();
+        p.keyNameUnderY = keyNameY;
+        p.keyNameOverY = keyNameY;
         p.holes = holes;
         p.holeKeySize = 40.0f;
 
@@ -214,15 +241,33 @@ void Cockpit::paintLive (juce::Graphics& g) const
 }
 
 /** The keys' names, under them — a dimmed key's as dim as the key, and the playing pack's own where its
-    switches are on them. They stand where the six names of their own set them (keyCentres). */
+    switches are on them. They stand where the rows put them (face::Strips). */
 void Cockpit::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
 
-    const auto keyX = keyCentres();
-    for (size_t i = 0; i < keyNames.size(); ++i)
-        drawLabel (g, keyNames[i], juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
-                   px11, labelLilac.withAlpha (keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
+    for (const auto& k : strips.keys)
+        if (! k.onKey)      // HPF and LPF are on their keys (CatpitEditor)
+            drawLabel (g, k.name, juce::Rectangle<float> (120.0f, 20.0f).withCentre (k.label.getCentre()),
+                       px11, labelLilac.withAlpha (k.live ? 1.0f : PushButton::dimmed), keyTracking);
+}
+
+/** THE PLAYING CHANNEL'S TONE KNOBS on the panel (face::Strips): a socket under each, the size the row
+    gives it, and each knob's sign over it — the tone's own curve — in DRIVE's row; its name is the tag's,
+    under the hand. */
+void Cockpit::paintStrips (juce::Graphics& g, float) const
+{
+    using namespace layout;
+    const auto& art = Art::get();
+    for (const auto& t : strips.tones)
+    {
+        if (art.socket.isValid())
+        {
+            const float d = socketSize * strips.toneScale;
+            g.drawImage (art.socket, juce::Rectangle<float> (d, d).withCentre (t.knob.getCentre()));
+        }
+        drawToneSign (g, t.label, t.curve, signInk(), strips.toneSignHeight);     // its sign, in its name's place; the name is the tag's, under the hand
+    }
 }
 
 void Cockpit::paintOverhead (juce::Graphics& g) const
@@ -320,9 +365,7 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
     paintEmblem (g, scale);
 
     drawLabel (g, "DRIVE", juce::Rectangle<float> (220.0f, 30.0f).withCentre ({ drive.centre.x, 394.0f }), px15, labelLilac);
-    const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
-    for (size_t i = 0; i < tones.size(); ++i)
-        drawLabel (g, toneNames[i], juce::Rectangle<float> (150.0f, 28.0f).withCentre ({ tones[i].centre.x, 394.0f }), px13, labelLilac);
+    // ...the tone knobs' names are the playing pack's, with their sockets (paintStrips).
 
     // TURBO stands IN its frame's top line, in the gap the two brackets leave (96 wide; the word is 80).
     // The capitals sit a hair under the middle of the row they are drawn in — hence the 1.
@@ -348,6 +391,13 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     const auto& art = Art::get();
     writeSprite (dir, "lever-grip.png", art.leverGrip);
     writeSprite (dir, "guard-closed.png", art.guardClosed);
+    writeSprite (dir, "socket.png", art.socket);             // under each tone knob, socketSize across at the row's nominal size
+    {
+        auto* pieces = new juce::DynamicObject();
+        pieces->setProperty ("socket", "socket.png");
+        pieces->setProperty ("socketSize", layout::socketSize);
+        world.setProperty ("rows", juce::var (pieces));
+    }
     writeSprite (dir, "guard-open.png", art.guardOpen);
     writeSprite (dir, "guard-on.png", art.guardOn);
 
@@ -405,17 +455,44 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     turboKind->setProperty ("pushes", pushes);
     turboKind->setProperty ("param", params::blockIn (params::preampId));
     world.setProperty ("turbo", juce::var (turboKind));
-    world.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render
+    world.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render — but HPF and LPF, whole (filterKeys)
     world.setProperty ("knobRing", false);
     auto* keyNames = new juce::DynamicObject();      // under the keys, in one row (Cockpit::paintKeyNames)
     keyNames->setProperty ("onKeys", false);
     keyNames->setProperty ("y", keyNameY);
     keyNames->setProperty ("px", px11);
+    keyNames->setProperty ("filters", "signs");         // HPF and LPF wear no word: their signs (world.filterSigns)
     keyNames->setProperty ("tracking", face::keyTracking);
     keyNames->setProperty ("dimmed", face::PushButton::dimmed);
     keyNames->setProperty ("colour", juce::String::formatted ("#%02x%02x%02x%02x", face::labelLilac.getRed(), face::labelLilac.getGreen(),
                                                                 face::labelLilac.getBlue(), face::labelLilac.getAlpha()));
     world.setProperty ("keyNames", juce::var (keyNames));
+
+    // THE FILTER KEYS, WHOLE: each wide key with its sign, as the cockpit draws it, at twice the stage —
+    // off, up and quiet; on, down and lit — and the box it is laid at.
+    {
+        auto* filterKeys = new juce::DynamicObject();
+        for (const bool highpass : { true, false })
+        {
+            auto* k = new juce::DynamicObject();
+            const auto at = key (highpass ? face::btHpf : face::btLpf).getBoundsInParent().toFloat();
+            k->setProperty ("box", rect (at));
+            for (const bool on : { false, true })
+            {
+                juce::Image img (juce::Image::ARGB, juce::roundToInt (at.getWidth() * 2.0f), juce::roundToInt (at.getHeight() * 2.0f), true);
+                {
+                    juce::Graphics sg (img);
+                    sg.addTransform (juce::AffineTransform::scale (2.0f));
+                    filterKey (sg, { 0.0f, 0.0f, at.getWidth(), at.getHeight() }, on, on ? 1.0f : 0.0f, highpass);
+                }
+                const juce::String file = juce::String (highpass ? "hpf" : "lpf") + (on ? "-key-on.png" : "-key-off.png");
+                writeSprite (dir, file, img);
+                k->setProperty (on ? "on" : "off", file);
+            }
+            filterKeys->setProperty (highpass ? "hpf" : "lpf", juce::var (k));
+        }
+        world.setProperty ("filterKeys", juce::var (filterKeys));
+    }
     world.setProperty ("claimedKeys", juce::Array<juce::var>());
     juce::Array<juce::var> stills;
     for (int c = 0; c < channels.count(); ++c)
@@ -441,6 +518,13 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
+
+    // HPF AND LPF, wide (filterKey).
+    for (int f = face::btHpf; f <= face::btLpf; ++f)
+        key (f).drawKey = [f] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float lit)
+        {
+            filterKey (g, box, down, lit, f == face::btHpf);
+        };
 
     // The sky, under the cockpit's picture: what the windshield is cut through to.
     stage.addAndMakeVisible (space, 0);

@@ -26,12 +26,6 @@ namespace
         /** A point in the middle of the windshield, which the render paints pure black. */
         juce::Point<float> windshieldSeed;
 
-        /** The tone knobs stand with their top edges level with DRIVE's, `toneLift` higher than the render
-            painted their sockets: each socket where it stands now (CatpitLayout.h's tones) and its ring. */
-        float toneLift;
-        struct Socket { juce::Point<float> centre; float radius; };
-        std::array<Socket, 3> tones;
-
         /** The TURBO frame stands `turboLift` higher than the render painted it, so that its name, printed
             in its top line, is read beside DRIVE's and the tones'. */
         float turboLift;
@@ -50,12 +44,6 @@ namespace
 
     const Cockpit cockpit {
         { 836.0f, 164.0f },
-        24.5f,
-        {{
-            { { 1060.3f, 476.9f }, 62.2f },    // BASS
-            { { 1209.6f, 477.0f }, 62.4f },    // MIDDLE
-            { { 1358.7f, 476.9f }, 61.9f },    // TREBLE
-        }},
         14.0f,
         {{
             { 81.0f,   325.0f, 66.0f, 38.0f },    // the bar 93..134 x 334..340, and its glow on the seam below
@@ -125,69 +113,9 @@ namespace
         return img;
     }
 
-    /** THE TONE SOCKETS MOVE UP. The render painted the three rings lower than the cockpit wants them
-        now — their tops level with DRIVE's, a row of keys under them — and until the console is rendered
-        again the picture is corrected here: the bare plate from just under each ring is laid over it,
-        the ring is put back `toneLift` higher as a soft-edged disc, and the divider between MIDDLE and
-        TREBLE, which would run down through the keys, is cut short. */
-    juce::Image raiseTones (juce::Image img)
-    {
-        if (! img.isValid())
-            return img;
-
-        const float k = (float) img.getWidth() / width;
-        const auto original = img.createCopy();
-        const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
-        juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
-        const int w = img.getWidth(), h = img.getHeight();
-        const auto inside = [w, h] (int x, int y) { return x >= 0 && y >= 0 && x < w && y < h; };
-
-        const int lift = juce::roundToInt (cockpit.toneLift * k);
-        const int cleanRows = juce::jmax (2, juce::roundToInt (16.0f * k));
-        const float feather = 3.0f * k;
-
-        for (const auto& socket : cockpit.tones)
-        {
-            const float cx = socket.centre.x * k, cy = (socket.centre.y + cockpit.toneLift) * k;   // where it was painted
-            const float R = (socket.radius + 8.0f) * k;                                           // the ring and its glow
-            const int x0 = (int) std::floor (cx - R), x1 = (int) std::ceil (cx + R);
-            const int y0 = (int) std::floor (cy - R), y1 = (int) std::ceil (cy + R);
-            const int clean0 = y1 + 2;                                                            // bare plate from here down
-
-            for (int y = y0; y <= y1; ++y)
-                for (int x = x0; x <= x1; ++x)
-                    if (inside (x, y) && std::hypot ((float) x - cx, (float) y - cy) <= R)
-                    {
-                        // the strip under the ring, mirrored back and forth so no row meets a stranger
-                        const int m = (clean0 - 1 - y) % (2 * cleanRows);
-                        const int row = clean0 + (m < cleanRows ? m : 2 * cleanRows - 1 - m);
-                        if (inside (x, row))
-                            dst.setPixelColour (x, y, src.getPixelColour (x, row));
-                    }
-
-            for (int y = y0; y <= y1; ++y)
-                for (int x = x0; x <= x1; ++x)
-                {
-                    const float a = juce::jlimit (0.0f, 1.0f, (R - std::hypot ((float) x - cx, (float) y - cy)) / feather);
-                    if (a > 0.0f && inside (x, y) && inside (x, y - lift))
-                        dst.setPixelColour (x, y - lift, dst.getPixelColour (x, y - lift)
-                                                             .interpolatedWith (src.getPixelColour (x, y), a));
-                }
-        }
-
-        // The MIDDLE | TREBLE divider below the knobs: the plate beside it, copied over it.
-        const int dx0 = juce::roundToInt (1281.0f * k), dx1 = juce::roundToInt (1288.0f * k), from = juce::roundToInt (9.0f * k);
-        for (int y = juce::roundToInt (548.0f * k); y <= juce::roundToInt (584.0f * k); ++y)
-            for (int x = dx0; x <= dx1; ++x)
-                if (inside (x - from, y) && inside (x, y))
-                    dst.setPixelColour (x, y, dst.getPixelColour (x - from, y));
-
-        return img;
-    }
-
     /** THE TURBO FRAME MOVES UP, its name with it. The name stands in the frame's own top line, and
         that line was painted lower than the row the name is read in, beside DRIVE's and the tones'.
-        Until the console is rendered again the picture is corrected here, the way the tone sockets are:
+        Until the console is rendered again the picture is corrected here:
         the frame's box — the tab of its backplate, the brackets and their glow — is put back
         `turboLift` higher as a soft-edged rectangle, the bolt that stood in its way goes under bare
         plate, and so does the band the frame leaves at the bottom. The lift is as far as it can go:
@@ -355,7 +283,7 @@ Pictures bakeCockpit (const Sources& sources, float& gripAxis)
 {
     Pictures out;
 
-    auto bg = clearNamePlates (cutWindshield (raiseTurbo (raiseTones (sources.load ("cockpit.png")))));
+    auto bg = clearNamePlates (cutWindshield (raiseTurbo (sources.load ("cockpit.png"))));
     std::array<juce::Image, 4> lit;
     if (bg.isValid())
         for (size_t i = 0; i < lit.size(); ++i)
@@ -367,7 +295,7 @@ Pictures bakeCockpit (const Sources& sources, float& gripAxis)
     gripAxis = 0.5f;
     out.push_back ({ "throttle-grip.webp", capped (offCentreGrip (sources.load ("throttle-grip.png"), gripAxis), 480) });
 
-    for (const char* name : { "knob-drive", "knob-tone", "guard-closed", "guard-open", "guard-on", "fader-cap" })
+    for (const char* name : { "knob-drive", "knob-tone", "socket", "guard-closed", "guard-open", "guard-on", "fader-cap" })
         out.push_back ({ juce::String (name) + ".webp", sources.load (juce::String (name) + ".png") });
 
     return out;

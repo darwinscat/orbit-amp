@@ -857,20 +857,11 @@ foreach(folder IN LISTS ORBITAMP_SET_FOLDERS)
 endforeach()
 add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 
-# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — but the ones
-# put away. A pack added there is OrbitAmp's from the next build on, with nobody to remember to list it.
-#
-# PUT AWAY, the Victory V4's six: in the tree still, for the faces that play them in a build of this tree
-# (FrostPawAmp, AmberPawAmp), but no longer the family's devices — the family will play the V4 again from
-# new captures, with the power amp inside — and in no amp of the release, so in no installer.
-set(ORBITAMP_SET_PUT_AWAY "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
-foreach(pack IN LISTS ORBITAMP_SET_PUT_AWAY)
-    if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
-        message(FATAL_ERROR "ORBITAMP_SET_PUT_AWAY names ${pack}, which resources/set/Devices has not")
-    endif()
-endforeach()
+# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — the X88-IR's,
+# the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
+# pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
+# tree keeps but OrbitAmp should not play has no place in resources/set/Devices.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
-list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITAMP_SET_PUT_AWAY})
 list(LENGTH ORBITAMP_PLAYS ORBITAMP_SET_COUNT)
 message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the factory folder")
 
@@ -1039,7 +1030,7 @@ set(FACE_SOURCES
 # of is said once, for the plug-in and for its gates, which are the cockpit compiled again under a main()
 # of their own.
 set(CATPITAMP_RENDERS
-    cockpit.webp lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp midi.txt knob-drive.webp knob-tone.webp
+    cockpit.webp lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp midi.txt knob-drive.webp knob-tone.webp socket.webp
     throttle-grip.webp guard-closed.webp guard-open.webp guard-on.webp fader-cap.webp sky-clean.jpg
     sky-edge.jpg sky-crunch.jpg sky-hi-gain.jpg mark.svg)
 list(TRANSFORM CATPITAMP_RENDERS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/")
@@ -1119,7 +1110,8 @@ set_target_properties(orbitamp_gpu_log_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 # sources, the libraries — and each product adds its own skin's file and its own renders. The lamps a
 # dashboard paints lit, cut out of it, are a rover's own too: there where its picture paints them.
 set(ROVER_RENDERS
-    dashboard.webp midi.txt mark.svg knob-drive.webp knob-tone.webp lever.webp lever-glow.webp
+    dashboard.webp midi.txt mark.svg knob-drive.webp knob-tone.webp socket.webp key-frame-left.webp
+    key-frame-cell.webp key-frame-right.webp lever.webp lever-glow.webp
     slider-cap.webp fader-cap.webp fader-cap-light.webp toggle-up.webp toggle-down.webp key-up.webp
     key-down.webp turbo-up.webp turbo-down.webp)
 set(ROVER_LAMPS lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp)
@@ -1180,8 +1172,8 @@ set(ROVER_LIBRARIES
 # version and tags of its own, catpit-vX.Y.Z; from 0.8.0 on every amp's update check reads the family's.
 # ----------------------------------------------------------------------------
 
-# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole but what is
-# put away (ORBITAMP_PLAYS, above), and the whole cabinet shelf.
+# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole
+# (ORBITAMP_PLAYS, above), and the whole cabinet shelf.
 add_amp(OrbitAmp      CODE Oamp
     SOURCES   ${ORBITAMP_SOURCES}
     LIBRARIES
@@ -1219,26 +1211,27 @@ add_amp(RedPawAmp     CODE Rdpw    BY_NAME
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
 # over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
 # ice-blue rings. The same controls, TURBO and PARK: the rover's, shared, not copied — over channels of
-# its own, six on the V4's six packs in three gears, and the rovers' cabinets; its set under its own list
-# in the family's folder (src/channels/Set.h), where a file another product plays too is one file. Not in
-# the family's release yet (installer/family.ini), so none of it is in the release's factory folder.
+# its own, six on the ReVolt Guitar's three packs in three gears, and the rovers' cabinets; its set under
+# its own list in the family's folder (src/channels/Set.h), where a file another product plays too is one
+# file. Not in the family's release yet (installer/family.ini), so none of it is in the release's factory
+# folder.
 add_amp(FrostPawAmp   CODE Frpw    BY_NAME
     ART       ${FROSTPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
+    SET       "ReVolt Clean PowerAmp" "ReVolt Crunch PowerAmp" "ReVolt Lead PowerAmp")
 
 # AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
 # dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy
 # of three panes, its tuner a gauge, its meters dots — and out of its canopy, the flight over the sea.
 # The same controls, TURBO and PARK: the rovers', shared, not copied — over the V4's six channels in three
-# gears, its set for now FrostPawAmp's until it has captures of its own, and the rovers' cabinets. Not in
+# gears, the V4's six packs until it has captures of its own, and the rovers' cabinets. Not in
 # the family's release yet (installer/family.ini).
 add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     ART       ${AMBERPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
+    SET       "V4 Copper (clean)" "V4 Sheriff (crunch)" "V4 Kraken (hi-gain)")
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — each a face's own, so built only by name (amp_console, amp_set_test).
@@ -1858,7 +1851,7 @@ target_link_libraries(orbitamp_library_test PRIVATE
 
 # ----------------------------------------------------------------------------
 # Gate for OrbitAmp's set as the build lays it out in the factory folder — every pack OrbitAmp plays, under
-# a name the device list tells apart, none of what is put away, and the whole cabinet shelf in its folders;
+# a name the device list tells apart, every pack of the tree's set, and the whole cabinet shelf in its folders;
 # the list it reads is the build's own, <build>/Factory/sets/OrbitAmp.txt.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")

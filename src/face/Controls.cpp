@@ -38,6 +38,51 @@ void writeWords (juce::Graphics& g, const juce::String& text, const juce::Font& 
     g.strokePath (outline, juce::PathStrokeType (weight, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
+void drawSign (juce::Graphics& g, juce::Rectangle<float> box, const std::vector<float>& curve, float stroke, juce::Colour colour)
+{
+    if (curve.size() < 2)
+        return;
+    juce::Path p;
+    for (size_t i = 0; i < curve.size(); ++i)
+    {
+        const float x = box.getX() + box.getWidth() * (float) i / (float) (curve.size() - 1);
+        const float y = box.getBottom() - box.getHeight() * juce::jlimit (0.0f, 1.0f, curve[i]);
+        if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+    }
+    g.setColour (colour);
+    g.strokePath (p, juce::PathStrokeType (stroke, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+void drawFilterSign (juce::Graphics& g, juce::Rectangle<float> face, bool highpass, juce::Colour colour)
+{
+    // In a box 0.52 of the face wide and 0.25 tall: the slope over the outer 0.42 of it, rising (or,
+    // mirrored, falling) into the flat by a knee rounded over a tenth of the width.
+    const float side = juce::jmin (face.getWidth(), face.getHeight());
+    constexpr int n = 48;
+    std::vector<float> curve;
+    for (int i = 0; i < n; ++i)
+    {
+        constexpr float knee = 0.42f, r = 0.06f;                          // the knee, and half the width it is rounded over
+        const float x = (float) i / (float) (n - 1), u = highpass ? x : 1.0f - x;
+        if (u <= knee - r)       curve.push_back (u / knee);
+        else if (u >= knee + r)  curve.push_back (1.0f);
+        else
+        {
+            // The quadratic from the slope into the flat, its control point the corner: x runs on it
+            // evenly, so t is where u is across the knee.
+            const float t = (u - (knee - r)) / (2.0f * r), y0 = (knee - r) / knee;
+            curve.push_back ((1.0f - t) * (1.0f - t) * y0 + 2.0f * t * (1.0f - t) + t * t);
+        }
+    }
+    drawSign (g, juce::Rectangle<float> (side * 0.52f, side * 0.25f).withCentre (face.getCentre()), curve, signStroke, colour);
+}
+
+void drawToneSign (juce::Graphics& g, juce::Rectangle<float> place, const std::vector<float>& curve, juce::Colour colour, float height)
+{
+    const auto box = juce::Rectangle<float> (juce::jmin (toneSignSize.x, place.getWidth()), height).withCentre (place.getCentre());
+    drawSign (g, box, curve.size() >= 2 ? curve : std::vector<float> { 0.5f, 0.5f }, signStroke, colour);
+}
+
 void drawLabel (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> area, float em,
                 juce::Colour colour, float trackingEm, float weight)
 {
@@ -427,24 +472,13 @@ void PushButton::mouseUp (const juce::MouseEvent& e)
     aim();
 }
 
-void PushButton::paint (juce::Graphics& g)
+void PushButton::drawChromeKey (juce::Graphics& g, juce::Rectangle<float> box, float depth, float light)
 {
-    if (! isEnabled())
-        g.beginTransparencyLayer (dimmed);
-
-    if (drawKey)
-    {
-        drawKey (g, getLocalBounds().toFloat(), held || on, juce::jlimit (0.0f, 1.0f, light.value));
-        if (! isEnabled())
-            g.endTransparencyLayer();
-        return;
-    }
-
     // Drawn for a 40-px box — an overhead hole — and scaled to whatever box it is given.
-    const float u = (float) juce::jmin (getWidth(), getHeight()) / 40.0f;
-    const auto c = getLocalBounds().toFloat().getCentre();
-    const float d = juce::jlimit (0.0f, 1.2f, depth.value);
-    const float l = juce::jlimit (0.0f, 1.0f, light.value);
+    const float u = juce::jmin (box.getWidth(), box.getHeight()) / 40.0f;
+    const auto c = box.getCentre();
+    const float d = juce::jlimit (0.0f, 1.2f, depth);
+    const float l = juce::jlimit (0.0f, 1.0f, light);
 
     // The bezel: a chrome ring set into the hole, the light ring inside it.
     const auto bezel = juce::Rectangle<float> (34.0f * u, 34.0f * u).withCentre (c);
@@ -481,6 +515,45 @@ void PushButton::paint (juce::Graphics& g)
     }
     g.setColour (juce::Colour (0xff0b0a10));
     g.drawEllipse (cap, 1.0f);
+}
+
+void PushButton::drawWideChromeKey (juce::Graphics& g, juce::Rectangle<float> box, float depth, float light)
+{
+    const float h = box.getHeight();
+    if (box.getWidth() <= h)
+    {
+        drawChromeKey (g, box, depth, light);
+        return;
+    }
+    // The square key at the pixels it will be shown at, then its three slices.
+    const float scale = juce::jmax (1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+    const int px = juce::jmax (8, juce::roundToInt (h * scale)), half = px / 2;
+    juce::Image key (juce::Image::ARGB, px, px, true);
+    {
+        juce::Graphics kg (key);
+        drawChromeKey (kg, { 0.0f, 0.0f, (float) px, (float) px }, depth, light);
+    }
+    const float edge = 0.5f * h;
+    g.drawImage (key.getClippedImage ({ 0, 0, half, px }), { box.getX(), box.getY(), edge, h });
+    g.drawImage (key.getClippedImage ({ half, 0, 1, px }), { box.getX() + edge - 0.25f, box.getY(), box.getWidth() - 2.0f * edge + 0.5f, h });
+    g.drawImage (key.getClippedImage ({ half, 0, px - half, px }), { box.getRight() - edge, box.getY(), edge, h });
+}
+
+void PushButton::paint (juce::Graphics& g)
+{
+    if (! isEnabled())
+        g.beginTransparencyLayer (dimmed);
+
+    if (drawKey)
+    {
+        drawKey (g, getLocalBounds().toFloat(), held || on, juce::jlimit (0.0f, 1.0f, light.value));
+        if (! isEnabled())
+            g.endTransparencyLayer();
+        return;
+    }
+
+    drawChromeKey (g, getLocalBounds().toFloat(), juce::jlimit (0.0f, 1.2f, depth.value), juce::jlimit (0.0f, 1.0f, light.value));
+
 
     if (! isEnabled())
         g.endTransparencyLayer();

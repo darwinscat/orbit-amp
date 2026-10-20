@@ -37,6 +37,10 @@ const Art& Art::of (const Skin& skin)
             a.lampLit[i] = loadOwn ("lamp-" + juce::String ((int) i) + ".webp");
         a.knobDrive  = load ("knob-drive.webp");
         a.knobTone   = load ("knob-tone.webp");
+        a.socket     = load ("socket.webp");
+        a.keyFrameLeft  = load ("key-frame-left.webp");
+        a.keyFrameCell  = load ("key-frame-cell.webp");
+        a.keyFrameRight = load ("key-frame-right.webp");
         a.lever      = load ("lever.webp");
         a.leverGlow  = load ("lever-glow.webp");
         a.sliderCap  = load ("slider-cap.webp");

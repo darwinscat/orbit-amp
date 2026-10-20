@@ -390,7 +390,8 @@ Pictures bakeRover (const juce::String& face, const Sources& sources)
         if (lit[i].isValid())
             out.push_back ({ "lamp-" + juce::String ((int) i) + ".webp", lit[i] });
 
-    for (const char* name : { "knob-drive", "knob-tone", "lever", "slider-cap", "fader-cap",
+    for (const char* name : { "knob-drive", "knob-tone", "socket", "key-frame-left", "key-frame-cell", "key-frame-right",
+                              "lever", "slider-cap", "fader-cap",
                               "toggle-up", "toggle-down", "key-up", "key-down", "turbo-up", "turbo-down" })
         out.push_back ({ juce::String (name) + ".webp", sources.load (juce::String (name) + ".png") });
 

@@ -5,6 +5,7 @@
 
 #include "../face/Controls.h"
 #include "../face/Stage.h"
+#include "../face/Strip.h"
 
 #include <juce_graphics/juce_graphics.h>
 
@@ -241,6 +242,34 @@ struct Plan
         nought: none. */
     juce::Point<float> poweredBy {}, makerName {};  // no room beside the plate for the maker's words
     float makerRoom = 0.0f;
+
+    /** THE ROWS THE PICTURE NO LONGER PAINTS: the tone knobs' sockets and the frame round the keys right
+        of the filters are drawn by code, as many as the playing pack has (face::Console::layStrips), in
+        the room the three sockets and the four-key frame stood in — `tones` and the last four `keys`
+        measure it. The socket's render (socket.webp) is `socketSize` across at the nominal size, its
+        ring `tones`' ring; the frame is a left cap, a cell for each key, a right cap (key-frame-*.webp),
+        `keyFrameHeight` tall. Either row shrinks to fit, to `toneMinScale` and `keyMinScale` of it. */
+    float socketSize = 124.0f;
+    float toneMinScale = 0.6f;
+    float keyCapLeft = 5.5f, keyCapRight = 11.0f, keyFrameHeight = 70.0f;
+    float keyMinScale = 0.75f;
+    /** Each tone knob's sign (face::drawToneSign): this far under the names' row, nearer its knob, and
+        this tall. */
+    float toneSignDrop = 3.0f, toneSignHeight = 12.0f;
+
+    face::Strip toneStrip() const
+    {
+        const float pitch = 0.5f * (tones[2].centre.x - tones[0].centre.x);
+        const float left = tones[0].centre.x - 0.5f * socketSize, right = tones[2].centre.x + 0.5f * socketSize;
+        return { { left, tones[1].centre.y - 0.5f * socketSize, right - left, socketSize }, pitch, socketSize, toneMinScale };
+    }
+
+    face::Strip keyStrip() const
+    {
+        const float pitch = (keys[5].x - keys[2].x) / 3.0f;
+        const float left = keys[2].x - 0.5f * pitch - keyCapLeft, right = keys[5].x + 0.5f * pitch + keyCapRight;
+        return { { left, keys[2].y - 0.5f * keyFrameHeight, right - left, keyFrameHeight }, pitch, pitch + keyCapLeft + keyCapRight, keyMinScale };
+    }
 };
 
 /** The product's own plan is in its skin's file, and its face reads it there (Skin::plan): every rover's

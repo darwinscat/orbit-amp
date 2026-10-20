@@ -28,6 +28,8 @@ struct Art
 
     juce::Image bg;                    // the dashboard, its windscreen transparent, its lamps out
     juce::Image knobDrive, knobTone;
+    juce::Image socket;                // a tone knob's socket, its ring and its bolts: drawn as many times as the pack has tones
+    juce::Image keyFrameLeft, keyFrameCell, keyFrameRight;     // the right group's frame: a cap, a cell a key, a cap
     juce::Image lever;
     juce::Image leverGlow;             // a soft light the shape of the lever, white, `leverGlowPad` wider all round
     static constexpr int leverGlowPad = 26;    // in the lever render's own pixels, as bake-art made it

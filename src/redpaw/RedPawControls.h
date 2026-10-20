@@ -198,6 +198,10 @@ public:
 
     void paint (juce::Graphics&) override;
 
+    /** Put round its knob where the knob now stands, the ring this big: the rows are laid again with
+        the channel (face::Console::layStrips). */
+    void place (juce::Point<float> centre, float radius, float width);
+
     // What it is drawn with — said here so that the site's demo is drawn with it too (RedPawEditor::webExtras).
     static constexpr float from = -135.0f, sweep = 270.0f;      // a knob's travel, as ArtKnob turns it
     static constexpr juce::uint32 veil = 0xff05090b;             // the painted ring dimmed under it...
@@ -209,7 +213,7 @@ public:
 private:
     const Skin& skin;               // the rover's whose ring it is: its light
     const face::ArtKnob& knob;
-    const float radius, width;
+    float radius, width;
     float shown = -1.0f;            // the value last drawn
     face::Glide breath;             // 0 resting .. 1 under the hand
     double leftAt = 0.0;            // when the hand last left, on the millisecond counter

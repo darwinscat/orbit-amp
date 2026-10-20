@@ -3,6 +3,8 @@
 
 #include "Console.h"
 
+#include <algorithm>
+
 #include "Cabs.h"
 #include "Midi.h"
 #include "Standalone.h"
@@ -190,23 +192,42 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
 
     stage.addAndMakeVisible (drive);
     drive.setBounds (box (places.drive));
+    // The tone knobs and the right group's keys: as many as the console can show, each put where the
+    // playing channel's rows have it, and shown only while they have it (layStrips).
     for (size_t i = 0; i < tones.size(); ++i)
     {
         tones[i] = std::make_unique<ArtKnob> (look.toneKnob, look.tonePointer);
-        stage.addAndMakeVisible (*tones[i]);
-        tones[i]->setBounds (box (places.tones[i]));
+        stage.addChildComponent (*tones[i]);
+
+        // ITS NAME, which its sign stands for: in the tag over it while the hand is on the knob or on the sign.
+        toneSpots[i] = std::make_unique<HoverSpot>();
+        stage.addChildComponent (*toneSpots[i]);
+        const auto name = [this, i] (bool over)
+        {
+            const bool has = i < strips.tones.size();
+            nameTag.show (has ? strips.tones[i].label.getCentre().translated (0.0f, -26.0f) : juce::Point<float>(),
+                          over && has ? strips.tones[i].name : juce::String());
+        };
+        tones[i]->onHover = name;
+        toneSpots[i]->onHover = name;
     }
 
     for (size_t i = 0; i < buttons.size(); ++i)
     {
-        buttons[i] = std::make_unique<PushButton> (switches[i].name);
+        const bool filter = i < (size_t) btFirstRight;
+        buttons[i] = std::make_unique<PushButton> (filter ? switches[i].name : "");
         auto& b = *buttons[i];
-        stage.addAndMakeVisible (b);
-        const auto at = places.keys[i];
-        b.setBounds (around (at, places.keySize, places.keySize));
-        keyNames[i] = switches[i].name;
-        b.onHover = [this, at, &b, i] (bool over)     // a key that does not answer the hand says nothing either
+        stage.addChildComponent (b);
+        if (filter)
         {
+            b.setVisible (true);
+            b.setBounds (around (places.keys[i], places.filterKeyWidth > 0.0f ? places.filterKeyWidth : places.keySize,
+                                 places.filterKeyHeight > 0.0f ? places.filterKeyHeight : places.keySize));
+            keyNames[i] = switches[i].name;
+        }
+        b.onHover = [this, &b, i] (bool over)     // a key that does not answer the hand says nothing either
+        {
+            const auto at = b.getBounds().toFloat().getCentre();
             nameTag.show (at.translated (0.0f, -40.0f), over && b.isEnabled() ? keyNames[i] + "  " + b.stateText() : juce::String());
         };
     }
@@ -391,14 +412,12 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // the amp, centre detent where every capture was taken.
     bindTones();
 
-    // HPF and LPF switch the cabinet's own cut filters in and out. The four keys right of them are the
-    // playing pack's switches where it has any to throw (packKeys), and otherwise FAT, BRIGHT, DEPTH and
-    // PRESENCE: kept with the channel, waiting for the layers the packs will carry — each dimmed and
-    // deaf to the hand until its own arrives (Channels::layerPlayable). Which of the two they are is
-    // showKeys' to say, on every channel.
+    // HPF and LPF switch the cabinet's own cut filters in and out. The keys right of them are the playing
+    // pack's switches a hand may throw, as many as it has (rightKeysOf), and the face's own after them;
+    // a pack with none has none there. Which they are is showKeys' to say, on every channel.
     bindButton (*buttons[btHpf], params::cabHpfOn);
     bindButton (*buttons[btLpf], params::cabLpfOn);
-    for (int key = btFat; key <= btPresence; ++key)
+    for (int key = btFirstRight; key < numKeys; ++key)
         buttons[(size_t) key]->onChange = [this, key] (bool on) { keyThrown (key, on); };
 
     // A switch moved by anything — a key, an undo, a register, a host — lights the key it stands on.
@@ -652,13 +671,12 @@ void Console::exportForWeb (const juce::File& dir)
     const auto& p = places;
     auto* o = new juce::DynamicObject();
     o->setProperty ("format", "orbitamp-web-face");
-    o->setProperty ("schema", 3);       // 2: what is one world's own is under "world"; spriteBounds. 3: the world's whole map there
+    o->setProperty ("schema", 4);       // 2: what is one world's own is under "world"; spriteBounds. 3: the world's whole map there. 4: each channel's "face"
     o->setProperty ("stage", rectVar ({ 0.0f, 0.0f, stage::width, stage::height }));
     o->setProperty ("cabin", "cabin.png");
     o->setProperty ("cabinScale", 2.0f);
     o->setProperty ("drive", rectVar (p.drive));
-    o->setProperty ("tones", listVar (p.tones, rectVar));
-    o->setProperty ("keys", listVar (p.keys, pointVar));
+    o->setProperty ("keys", listVar (p.keys, pointVar));       // the two filters; the tone knobs and the right group are each channel's "face"
     o->setProperty ("keySize", p.keySize);
     o->setProperty ("holes", listVar (p.holes, pointVar));
     o->setProperty ("holeKeySize", p.holeKeySize);
@@ -736,14 +754,72 @@ void Console::exportForWeb (const juce::File& dir)
             x->setProperty ("delayMix", channels.defaultOf (c, params::delayMix));
             x->setProperty ("drive", ranged (params::preampGain, channels.defaultOf (c, params::preampGain)));
             juce::Array<juce::var> tones;
-            for (int t = 0; t < Channels::numTones; ++t)
+            const auto toneNames = channels.toneNamesOf (c);     // the pack's tones, knob i its tone i
+            for (int t = 0; t < toneNames.size(); ++t)
             {
                 const auto id = channels.toneOf (c, t);
                 auto v = ranged (id, channels.defaultOf (c, id));
-                v.getDynamicObject()->setProperty ("name", Channels::toneNames[(size_t) t]);
+                v.getDynamicObject()->setProperty ("name", toneNames[t]);
                 tones.add (v);
             }
             x->setProperty ("tones", tones);
+
+            // ITS FACE: the rows as the face lays them on this channel (stripsFor) — each tone knob's box,
+            // its name's box and word, the pack's tone it plays and the parameter that is; each key right
+            // of the filters, its box, its name's box and word, the switch it throws and how; and the
+            // frame round them, where the face draws one.
+            {
+                const auto laid = stripsFor (c);
+                const auto right = rightKeysOf (c);
+                auto* f = new juce::DynamicObject();
+                juce::Array<juce::var> knobs, keys;
+                for (const auto& t : laid.tones)
+                {
+                    // ...its sign, a sprite the size of its label's box (at twice the stage), drawn as the face draws it.
+                    const auto file = "tone-" + juce::String (c) + "-" + juce::String (t.tone) + ".png";
+                    {
+                        juce::Image img (juce::Image::ARGB, juce::roundToInt (t.label.getWidth() * 2.0f), juce::roundToInt (t.label.getHeight() * 2.0f), true);
+                        juce::Graphics sg (img);
+                        sg.addTransform (juce::AffineTransform::scale (2.0f));
+                        drawToneSign (sg, { 0.0f, 0.0f, t.label.getWidth(), t.label.getHeight() }, t.curve, picture->signInk(), laid.toneSignHeight);
+                        writeSprite (dir, file, img);
+                    }
+                    auto* k = new juce::DynamicObject();
+                    k->setProperty ("box", rectVar (t.knob));
+                    k->setProperty ("label", rectVar (t.label));
+                    k->setProperty ("icon", file);
+                    k->setProperty ("text", t.name);
+                    k->setProperty ("tone", t.tone);
+                    k->setProperty ("param", t.param);
+                    knobs.add (juce::var (k));
+                }
+                for (size_t i = (size_t) laid.firstRightKey; i < laid.keys.size(); ++i)
+                {
+                    const auto& key = laid.keys[i];
+                    const auto& r = right[i - (size_t) laid.firstRightKey];
+                    auto* k = new juce::DynamicObject();
+                    k->setProperty ("box", rectVar (key.box));
+                    k->setProperty ("label", rectVar (key.label));
+                    k->setProperty ("text", key.name);
+                    if (r.slot >= 0)
+                    {
+                        k->setProperty ("control", r.control);
+                        k->setProperty ("param", params::selectorId (params::preampId, r.slot));
+                        k->setProperty ("lit", r.position);         // the switch's value it is lit at, and puts it to
+                        if (r.off >= 0)
+                            k->setProperty ("off", r.off);          // ...an off/on key: where letting it up puts it
+                    }
+                    else
+                        k->setProperty ("own", true);               // the face's own key, not the pack's
+                    keys.add (juce::var (k));
+                }
+                f->setProperty ("tones", knobs);
+                f->setProperty ("toneScale", laid.toneScale);
+                f->setProperty ("keys", keys);
+                f->setProperty ("keyScale", laid.keyScale);
+                f->setProperty ("frame", laid.keyFrame.isEmpty() ? juce::var() : rectVar (laid.keyFrame));
+                x->setProperty ("face", juce::var (f));
+            }
             juce::Array<juce::var> switches;
             for (const auto& sw : channels.switchesOf (c))
             {
@@ -1380,8 +1456,10 @@ void Console::playMidi()
     if (driveTo >= 0)   along (params::preampGain, (float) driveTo / 127.0f);
 
     // A tone knob's middle is where the pack was captured, and 0..127 has no middle: 64 is given it, and
-    // each half of the controller's travel is spread over its own half of the knob's.
-    for (int t = 0; t < Channels::numTones; ++t)
+    // each half of the controller's travel is spread over its own half of the knob's. The three tone
+    // controllers are the first three knobs, whatever the pack calls its tones; a knob the pack has not
+    // names no parameter (Channels::toneOf), and its controller turns nothing.
+    for (int t = 0; t < (int) std::size (toneTo); ++t)
         if (const int v = toneTo[(size_t) t]; v >= 0)
             along (channels.toneId (t), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
 }
@@ -1454,7 +1532,7 @@ void Console::showChannel()
 {
     const int channel = channels.active();
     showSelector (channel);
-    bindTones();        // another channel's pack may keep its Bass, Middle and Treble in other places
+    bindTones();        // another channel's pack may have other tones, and another count of them
     showKeys();
 
     // CAB's cap, on the cabinet that is playing. (This is first called while the face is still being
@@ -1464,88 +1542,65 @@ void Console::showChannel()
     showCab();
 }
 
-/** The keys under the tones as the playing channel has them (packKeys): the pack's switches where it
-    has any to throw, laid on the four keys a switch at a time, whole or not at all — and the layers
-    otherwise. Reads only. */
-void Console::showKeys()
+std::vector<Console::RightKey> Console::rightKeysOf (int channel) const
 {
-    const int channel = channels.active();
-    const auto standsAt = [this] (int slot) { return juce::roundToInt (getParam (params::selectorId (params::preampId, slot).toRawUTF8())); };
     const auto isOff = [] (const juce::String& v)
     {
         const auto w = v.trim().toLowerCase();
         return w == "off" || w == "0" || w == "false" || w == "no";
     };
 
-    packKeys = {};
-    std::array<juce::String, 4> named;
+    // The keys the pack's switches may have: the right group's, but the ones the face has taken.
+    std::vector<int> free, own;
+    for (int b = btFirstRight; b < numKeys; ++b)
+        (claimed[(size_t) b] ? own : free).push_back (b);
+
+    std::vector<RightKey> out;
     size_t next = 0;
     for (const auto& s : channels.switchesOf (channel))
     {
         if (s.held)
             continue;
         const bool offOn = s.values.size() == 2 && isOff (s.values[0]) != isOff (s.values[1]);
-        if (next + (offOn ? 1 : (size_t) s.values.size()) > packKeys.size())
-            continue;
+        if (next + (offOn ? 1 : (size_t) s.values.size()) > free.size())
+            continue;       // a switch that would not fit whole is left off
         if (offOn)
         {
             const int off = isOff (s.values[0]) ? 0 : 1;
-            packKeys[next] = { s.slot, 1 - off, off };
-            named[next++] = s.name.toUpperCase();
+            out.push_back ({ free[next++], s.slot, 1 - off, off, s.name, s.name.toUpperCase() });
         }
         else
             for (int p = 0; p < s.values.size(); ++p)
-            {
-                packKeys[next] = { s.slot, p, -1 };
-                named[next++] = s.values[p].toUpperCase();
-            }
+                out.push_back ({ free[next++], s.slot, p, -1, s.name, s.values[p].toUpperCase() });
     }
-    packKeysUp = next > 0;
-
-    std::array<juce::String, 6> shortNames;
-    for (size_t i = 0; i < switches.size(); ++i)
-    {
-        if (! claimed[i])
-            keyNames[i] = switches[i].name;
-        shortNames[i] = claimed[i] ? keyNames[i] : juce::String (switches[i].shortName);
-    }
-
-    if (packKeysUp)
-    {
-        for (size_t k = 0; k < packKeys.size(); ++k)
-        {
-            if (claimed[btFat + k])
-                continue;
-            const auto& pk = packKeys[k];
-            auto& b = *buttons[btFat + k];
-            b.setEnabled (pk.slot >= 0);
-            b.setOn (pk.slot >= 0 && standsAt (pk.slot) == pk.position, false);
-            keyNames[btFat + k] = shortNames[btFat + k] = named[k];
-        }
-    }
-    else
-    {
-        // A layer the packs do not carry yet never shows as thrown — whatever the state says.
-        const auto playable = [] (Channels::Flag f) { return Channels::layerPlayable[(size_t) f]; };
-        const auto thrown = [this, playable] (Channels::Flag f) { return playable (f) && channels.flag (f); };
-        const bool hot = channels.lineup().channels[(size_t) channel].hot;     // FAT is a layer only the hottest packs carry
-        for (int key = btFat; key <= btPresence; ++key)
-            if (const auto f = (Channels::Flag) (Channels::fat + key - btFat); ! claimed[(size_t) key])
-            {
-                buttons[(size_t) key]->setEnabled ((key != btFat || hot) && playable (f));
-                buttons[(size_t) key]->setOn (thrown (f), false);
-            }
-    }
-
-    std::array<bool, 6> live {};
-    for (size_t i = 0; i < live.size(); ++i)
-        live[i] = buttons[i]->isEnabled();
-    picture->setKeys (live, shortNames);
+    for (const int b : own)
+        out.push_back ({ b, -1, -1, -1, {}, keyNames[(size_t) b] });
+    return out;
 }
 
-/** One of the four keys right of the filters, thrown by the hand: a layer, or the pack's switch moved to
-    the position the key is — its other position, for an off/on key let up. A position's key pressed
-    while lit stays lit: the switch leaves it only for another of its keys. */
+/** The keys under the tones as the playing channel has them (rightKeysOf): the pack's switches it may
+    throw, each lit where it stands, and the face's own; the rest of the right group's keys hidden. Then
+    the rows are laid again. Reads only. */
+void Console::showKeys()
+{
+    const auto standsAt = [this] (int slot) { return juce::roundToInt (getParam (params::selectorId (params::preampId, slot).toRawUTF8())); };
+
+    rightKeys = rightKeysOf (channels.active());
+    for (const auto& k : rightKeys)
+    {
+        if (k.slot < 0)
+            continue;       // the face's own: lit as the face says
+        auto& b = *buttons[(size_t) k.button];
+        b.setEnabled (true);
+        b.setOn (standsAt (k.slot) == k.position, false);
+        keyNames[(size_t) k.button] = k.name;
+    }
+    layStrips();
+}
+
+/** One of the keys right of the filters, thrown by the hand: the pack's switch moved to the position
+    the key is — its other position, for an off/on key let up. A position's key pressed while lit stays
+    lit: the switch leaves it only for another of its keys. */
 void Console::claimKey (int key, const juce::String& name)
 {
     const auto k = (size_t) key;
@@ -1558,20 +1613,15 @@ void Console::claimKey (int key, const juce::String& name)
 
 void Console::keyThrown (int key, bool on)
 {
-    const auto k = (size_t) (key - btFat);
-
-    if (! packKeysUp)
-    {
-        constexpr Channels::Flag layers[] { Channels::fat, Channels::bright, Channels::depth, Channels::presence };
-        channels.setFlag (layers[k], on);
+    const auto it = std::find_if (rightKeys.begin(), rightKeys.end(), [key] (const RightKey& k) { return k.button == key; });
+    if (it == rightKeys.end() || it->slot < 0)
         return;
-    }
 
-    const auto pk = packKeys[k];
+    const auto pk = *it;
     const int to = on ? pk.position : pk.off;
-    if (pk.slot < 0 || to < 0)
+    if (to < 0)
     {
-        buttons[(size_t) key]->setOn (pk.slot >= 0, false);
+        buttons[(size_t) key]->setOn (true, false);
         return;
     }
 
@@ -1581,6 +1631,156 @@ void Console::keyThrown (int key, bool on)
         p->setValueNotifyingHost (p->convertTo0to1 ((float) to));
         p->endChangeGesture();      // ...and the switch's follower lights the key it stands on now
     }
+}
+
+/** THE ROWS (Strip.h), for any channel: its pack's tones, as many as the face's row shows, each knob's
+    box and its name's; its right keys likewise, and the frame round them; and the filters, where they
+    always are. Nothing on the face moves here. */
+std::vector<float> Console::toneCurve (const namz::rig::Tone& tone)
+{
+    using namz::rig::SectionKind;
+    struct Band { SectionKind kind; double hz, q, db, pivot; };
+    std::vector<Band> bands;
+    std::vector<double> measured;       // ...or a position's own curve, on the pack's grid
+    if (! tone.sections.empty())
+        for (const auto& s : tone.sections)     // a knob: at the top of its travel
+            bands.push_back ({ s.kind, s.hz, s.q, std::abs (s.dbAtMax) > 1.0e-6 ? s.dbAtMax : s.dbAtMin, s.pivot });
+    else if (! tone.positions.empty())          // a switch: at its last position
+    {
+        const auto& last = tone.positions.back();
+        for (const auto& s : last.sections)
+            bands.push_back ({ s.kind, s.hz, s.q, s.gainDb, s.pivot });
+        measured = last.db;
+    }
+
+    // The cookbook's analogue shapes, |H| in dB at w = f / f0.
+    const auto bandDb = [] (const Band& b, double f)
+    {
+        if (b.hz <= 0.0 || b.q <= 0.0)
+            return 0.0;
+        const double w = f / b.hz, w2 = w * w, A = std::pow (10.0, b.db / 40.0), sA = std::sqrt (A);
+        const auto db = [] (double num, double den) { return den > 0.0 && num > 0.0 ? 10.0 * std::log10 (num / den) : 0.0; };
+        const double sh = juce::square (sA * w / b.q);
+        switch (b.kind)
+        {
+            case SectionKind::Bell:      return db (juce::square (1.0 - w2) + juce::square (w * A / b.q), juce::square (1.0 - w2) + juce::square (w / (A * b.q)));
+            case SectionKind::LowShelf:  return db (A * A * (juce::square (A - w2) + sh), juce::square (1.0 - A * w2) + sh);
+            case SectionKind::HighShelf: return db (A * A * (juce::square (1.0 - A * w2) + sh), juce::square (A - w2) + sh);
+            case SectionKind::Tilt:      return db (A * A * (juce::square (1.0 - A * w2) + sh), juce::square (A - w2) + sh) - b.pivot * b.db;
+        }
+        return 0.0;
+    };
+
+    constexpr int n = 40;
+    constexpr double fLo = 30.0, fHi = 16000.0;
+    std::vector<double> dB;
+    for (int i = 0; i < n; ++i)
+    {
+        const double f = fLo * std::pow (fHi / fLo, (double) i / (double) (n - 1));
+        double v = 0.0;
+        for (const auto& b : bands)
+            v += bandDb (b, f);
+        if (bands.empty() && measured.size() >= 2)      // the measured curve, read on its own log grid
+        {
+            const double g0 = tone.grid.fLo > 0.0 ? tone.grid.fLo : 20.0, g1 = tone.grid.fHi > g0 ? tone.grid.fHi : 20000.0;
+            const double at = juce::jlimit (0.0, 1.0, std::log (f / g0) / std::log (g1 / g0)) * (double) (measured.size() - 1);
+            const auto k = (size_t) juce::jmin ((int) at, (int) measured.size() - 2);
+            v = measured[k] + (measured[k + 1] - measured[k]) * (at - (double) k);
+        }
+        dB.push_back (v);
+    }
+
+    const auto [lo, hi] = std::minmax_element (dB.begin(), dB.end());
+    std::vector<float> curve;
+    for (const double v : dB)
+        curve.push_back (*hi - *lo < 0.1 ? 0.5f : (float) ((v - *lo) / (*hi - *lo)));
+    return curve;
+}
+
+Strips Console::stripsFor (int channel) const
+{
+    Strips out;
+    const auto& p = places;
+
+    const auto names = channels.toneNamesOf (channel);
+    const auto packTones = channels.tonesOf (channel);
+    const auto tonesLaid = lay (p.toneStrip, names.size());
+    out.toneScale = tonesLaid.scale;
+    out.toneSignHeight = p.toneSignHeight;
+    const float toneRoom = p.toneStrip.pitch * tonesLaid.scale - 8.0f;
+    for (size_t i = 0; i < tonesLaid.centres.size(); ++i)
+    {
+        const auto c = tonesLaid.centres[i];
+        const float k = p.toneKnob * tonesLaid.scale;
+        out.tones.push_back ({ juce::Rectangle<float> (k, k).withCentre (c),
+                               juce::Rectangle<float> (toneRoom, 28.0f).withCentre ({ c.x, p.toneNameY + p.toneSignDrop }),
+                               names[(int) i].toUpperCase(), (int) i, channels.toneOf (channel, (int) i),
+                               i < packTones.size() ? toneCurve (packTones[i]) : std::vector<float>() });
+    }
+
+    const auto keyAt = [&p] (juce::Point<float> c, float size, int index, const juce::String& name, bool live)
+    {
+        const bool over = p.keyNamesAlternate && index % 2 == 1;
+        const auto label = p.keyNamesOnKeys ? juce::Rectangle<float> (size, size).withCentre (c)
+                                            : juce::Rectangle<float> (p.keyNameRoom, 20.0f).withCentre ({ c.x, over ? p.keyNameOverY : p.keyNameUnderY });
+        return Strips::Key { juce::Rectangle<float> (size, size).withCentre (c), label, name, live, p.keyNamesOnKeys };
+    };
+    for (int f = btHpf; f < btFirstRight; ++f)      // the filters' names are on their keys, on every face
+    {
+        const auto box = juce::Rectangle<float> (p.filterKeyWidth > 0.0f ? p.filterKeyWidth : p.keySize,
+                                                 p.filterKeyHeight > 0.0f ? p.filterKeyHeight : p.keySize).withCentre (p.keys[(size_t) f]);
+        out.keys.push_back ({ box, box, switches[(size_t) f].shortName, true, true });
+    }
+    out.firstRightKey = (int) out.keys.size();
+
+    const auto right = channel == channels.active() ? rightKeys : rightKeysOf (channel);
+    const auto keysLaid = lay (p.keyStrip, (int) right.size());
+    out.keyScale = keysLaid.scale;
+    for (size_t i = 0; i < keysLaid.centres.size(); ++i)
+        out.keys.push_back (keyAt (keysLaid.centres[i], p.keySize * keysLaid.scale, (int) i, right[i].name, true));
+    if (! keysLaid.centres.empty() && p.keyFrameHeight > 0.0f)
+    {
+        const float s = keysLaid.scale, half = 0.5f * p.keyStrip.pitch * s;
+        const float left = keysLaid.centres.front().x - half - p.keyCapLeft * s;
+        const float frameRight = keysLaid.centres.back().x + half + p.keyCapRight * s;
+        out.keyFrame = { left, p.keyStrip.area.getCentreY() - 0.5f * p.keyFrameHeight * s, frameRight - left, p.keyFrameHeight * s };
+    }
+    return out;
+}
+
+/** The playing channel's rows laid, and everything that stands on them put there: the tone knobs, the
+    right group's keys — the ones past what the row shows, and the ones no switch has, hidden — the
+    picture's sockets, frame and names, and whatever the face draws round them. */
+void Console::layStrips()
+{
+    strips = stripsFor (channels.active());
+
+    for (size_t t = 0; t < tones.size(); ++t)
+    {
+        const bool shown = t < strips.tones.size();
+        if (shown)
+        {
+            tones[t]->setBounds (box (strips.tones[t].knob));
+            toneSpots[t]->setBounds (box (strips.tones[t].label));
+        }
+        tones[t]->setVisible (shown);
+        toneSpots[t]->setVisible (shown);
+    }
+
+    std::array<bool, numKeys> shown {};
+    for (int f = btHpf; f < btFirstRight; ++f)
+        shown[(size_t) f] = true;
+    for (size_t i = 0; i + (size_t) strips.firstRightKey < strips.keys.size() && i < rightKeys.size(); ++i)
+    {
+        const auto b = (size_t) rightKeys[i].button;
+        shown[b] = true;
+        buttons[b]->setBounds (box (strips.keys[(size_t) strips.firstRightKey + i].box));
+    }
+    for (size_t b = (size_t) btFirstRight; b < buttons.size(); ++b)
+        buttons[b]->setVisible (shown[b]);
+
+    picture->setStrips (strips);
+    stripsLaid (strips);
 }
 
 void Console::showRegisterMenu (int index)
@@ -2087,17 +2287,28 @@ std::unique_ptr<juce::ParameterAttachment> Console::attach (Control& control, co
     return att;
 }
 
-/** The tone knobs on the playing pack's own Bass, Middle and Treble — wherever its list has them, so
-    the knobs of a channel whose pack lists them otherwise turn other parameters (Channels::toneId). Only
-    a knob whose parameter is another now is bound again. */
+/** The tone knobs on the playing pack's tones, knob i on its tone i (Channels::toneOf), as many as it
+    has: only a knob whose parameter is another now is bound again, and a knob past the pack's list is
+    bound to nothing and hidden (layStrips). */
 void Console::bindTones()
 {
     for (size_t t = 0; t < tones.size(); ++t)
-        if (const auto id = channels.toneId ((int) t); tones[t] != nullptr && id != toneBound[t])
+    {
+        auto& knob = *tones[t];
+        if (const auto id = channels.toneId ((int) t); id.isEmpty())
         {
-            toneBindings[t] = attach (*tones[t], id);
+            knob.onGestureStart = nullptr;
+            knob.onChange       = nullptr;
+            knob.onGestureEnd   = nullptr;
+            toneBindings[t].reset();
+            toneBound[t] = {};
+        }
+        else if (id != toneBound[t])
+        {
+            toneBindings[t] = attach (knob, id);
             toneBound[t] = id;
         }
+    }
 }
 
 juce::ParameterAttachment* Console::follow (const char* paramId, std::function<void (float)> moved)

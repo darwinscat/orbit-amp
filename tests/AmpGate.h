@@ -93,22 +93,11 @@ struct Product
 /** THE PRODUCTS, each as its gate knows it. */
 inline const Product& product()
 {
-    // The Victory V4's three pedals, a gear each and TURBO its second channel: CLEAN the Copper and the
-    // Copper TB in a hall, CRUNCH the Sheriff's two on a plate, HI-GAIN the Kraken's two in an ambience
-    // with no delay — as far as the product goes.
-    const std::vector<Channel> v4 {
-        { "v4-copper-4ae0",      "", "Hall",     15.0f, 15.0f },
-        { "v4-copper-tb-5841",   "", "Hall",     15.0f, 15.0f },
-        { "v4-sheriff-ch1-82ab", "", "Plate",    15.0f, 15.0f },
-        { "v4-sheriff-ch2-2f2f", "", "Plate",    15.0f, 15.0f },
-        { "v4-kraken-ch1-f7fc",  "", "Ambience", 15.0f, 0.0f  },
-        { "v4-kraken-ch2-5f71",  "", "Ambience", 15.0f, 0.0f  },
-    };
     const auto rover = [] (const char* name, std::vector<Channel> channels, const char* gears)
     {
         return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), true, gears, {},
                          "all the product's channels' packs are installed",
-                         "every channel's BASS, MIDDLE and TREBLE are its pack's own, found by name wherever its list has them",
+                         "every channel's tone knobs are its pack's tones, as many as it lists, knob i its tone i",
                          "...and every one on the build's DARK MATTER" };
     };
 
@@ -131,7 +120,7 @@ inline const Product& product()
               { 0.0f, 9.0,  "...and the bottom plays the one shot at nine, fed softer" },
           },
           "all four channels' packs are installed",
-          "every channel's BASS, MIDDLE and TREBLE are its pack's first three tones, found by name",
+          "every channel's tone knobs are its pack's three tones, knob i its tone i",
           "...and all four on the build's DARK MATTER" },
 
         // On Mars the Friedman IR-X's two channels, each a gear: Ch1 the CRUNCH and Ch2 the HI-GAIN, its
@@ -144,8 +133,28 @@ inline const Product& product()
                    { "ir-x-ch2-poweramp-67e9", "Boost=on",  "Ambience", 15.0f, 0.0f  },
                },
                "each gear is one of the IR-X's channels, its TURBO the same with the Boost on"),
-        rover ("FrostPawAmp", v4, "each gear is a pedal's two channels, TURBO the second"),
-        rover ("AmberPawAmp", v4, "each gear is a pedal's two channels, TURBO the second"),
+        rover ("FrostPawAmp",
+               {
+                   { "revolt-clean-poweramp-bf62",  "Boost=off", "Hall",     15.0f, 15.0f },
+                   { "revolt-clean-poweramp-bf62",  "Boost=on",  "Hall",     15.0f, 15.0f },
+                   { "revolt-crunch-poweramp-73a7", "Boost=off", "Plate",    15.0f, 15.0f },
+                   { "revolt-crunch-poweramp-73a7", "Boost=on",  "Plate",    15.0f, 15.0f },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=off", "Ambience", 15.0f, 0.0f  },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=on",  "Ambience", 15.0f, 0.0f  },
+               },
+               "each gear is one of the ReVolt's channels, its TURBO the same with the Boost on"),
+        // Over Titan the Victory V4's three, a gear each: CLEAN the Copper in a hall, CRUNCH the Sheriff on a
+        // plate, HI-GAIN the Kraken in an ambience with no delay — its TURBO the same pack with the Boost on.
+        rover ("AmberPawAmp",
+               {
+                   { "v4-copper-4ae0",      "Boost=off", "Hall",     15.0f, 15.0f },
+                   { "v4-copper-4ae0",      "Boost=on",  "Hall",     15.0f, 15.0f },
+                   { "v4-sheriff-ch1-82ab", "Boost=off", "Plate",    15.0f, 15.0f },
+                   { "v4-sheriff-ch1-82ab", "Boost=on",  "Plate",    15.0f, 15.0f },
+                   { "v4-kraken-ch1-f7fc",  "Boost=off", "Ambience", 15.0f, 0.0f  },
+                   { "v4-kraken-ch1-f7fc",  "Boost=on",  "Ambience", 15.0f, 0.0f  },
+               },
+               "each gear is one of the V4's three, its TURBO the same with the Boost on"),
     };
 
     for (const auto& p : products)

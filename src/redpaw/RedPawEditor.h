@@ -28,6 +28,8 @@ private:
     const Skin& skin;
 
     void paintStatic (juce::Graphics&, float scale) const override;
+    void paintStrips (juce::Graphics&, float scale) const override;
+    juce::Colour signInk() const override;
     void paintLive (juce::Graphics&) const override;
     juce::Rectangle<int> historyArea() const override;
 
@@ -77,6 +79,7 @@ private:
     void openGLContextClosing() override;
 
     void webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world) override;
+    void stripsLaid (const face::Strips&) override;     // the rings go round the knobs where they stand now
 
     // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel — an option of
     // the gear's, as its tone is: thrown, only the pack changes, and a gear pulled comes back with
