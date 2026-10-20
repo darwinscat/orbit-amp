@@ -553,6 +553,12 @@ int main()
         presets.init();
         ticks();
 
+        // ...and the channel mode where INIT has always put it, whatever a fresh instance stands on: the
+        // engine's MONO, not the environment's (params::engineDefault).
+        const auto* mode = amp->apvts.getParameter (params::stereoMode);
+        check (mode != nullptr && juce::roundToInt (mode->convertFrom0to1 (mode->getValue())) == (int) params::StereoMode::mono,
+               "INIT puts the channel mode on MONO, as it always has");
+
         const int opening = channels.defaultCabinet();
         bool each = channels.active() == 0 && channels.count() <= (int) played.size(), onIt = true;
         for (int c = 0; each && c < channels.count(); ++c)

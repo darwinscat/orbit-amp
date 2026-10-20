@@ -85,6 +85,10 @@ public:
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout&) const override;
+    void processorLayoutsChanged() override;
+
+    /** Where the amp itself puts that parameter back, normalised — see params::engineDefault. */
+    float engineDefault (const juce::RangedAudioParameter& p) const { return params::engineDefault (p, enginePlace); }
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
 private:
@@ -1331,11 +1335,15 @@ private:
 
     /** The channel mode's default follows the ENVIRONMENT until somebody chooses: the standalone
         opens on STEREO SPACE (one guitar in, a wide room out), a plugin on a mono bus on MONO, on
-        a stereo bus on STEREO. `modeAutoValue` is what the environment last set — while the
-        parameter still reads that, nobody has chosen and the environment may set it again; one
-        hand-move or one restored session ends it. */
+        a stereo bus on STEREO. The layout declares it so, for the buses the processor is made with,
+        and a host that settles other buses moves it there (processorLayoutsChanged) — never a
+        prepare, which a host may hold the parameters still across. `modeAutoValue` is what the
+        environment last set — while the parameter still reads that, nobody has chosen and the
+        environment may set it again; one hand-move or one restored session ends it. */
+    params::StereoMode modeOfEnvironment() const;
+    int  enginePlace      = 0;      // where params::enginePack stood in the product's list as it was made
     bool stateWasRestored = false;
-    int  modeAutoValue    = (int) params::StereoMode::mono;   // the layout's own default
+    int  modeAutoValue    = (int) params::StereoMode::mono;   // the layout's own default, set as it is made
 
     //==========================================================================
     // The saved session — see refreshSavedState.

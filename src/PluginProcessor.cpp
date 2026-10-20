@@ -52,10 +52,16 @@ static_assert ((int) StageVerdict::Learned      == core::HumLearnLink::learned
 
 namespace
 {
-    /** The engine's parameters, and after them whatever the product adds of its own. */
-    juce::AudioProcessorValueTreeState::ParameterLayout layout (const Product& product)
+    /** The engine's parameters, and after them whatever the product adds of its own — each declaring,
+        as its default, where a fresh instance of the product stands in that environment (params::Opening). */
+    juce::AudioProcessorValueTreeState::ParameterLayout layout (const Product& product, params::StereoMode environment)
     {
-        auto all = params::createLayout (product.name);
+        params::Opening opening;
+        if (product.opening != nullptr)
+            product.opening (product, opening);
+        opening.stereoMode = environment;
+
+        auto all = params::createLayout (product.name, opening);
         if (product.addParameters != nullptr)
             product.addParameters (product, all);
         return all;
@@ -68,7 +74,7 @@ AmpProcessor::AmpProcessor (const Product& product)
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       ownProduct (product),
       firstStarted (product),
-      apvts (*this, nullptr, stateType, layout (product)),
+      apvts (*this, nullptr, stateType, layout (product, modeOfEnvironment())),
       // The history's opaque seam: it snapshots and restores the parameter tree without knowing what
       // is in it. replaceState takes a COPY so the parameter objects stay valid and every editor
       // attachment survives an undo.
@@ -122,6 +128,7 @@ AmpProcessor::AmpProcessor (const Product& product)
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
     tunerMuteParam     = apvts.getRawParameterValue (params::tunerMute);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
+    modeAutoValue      = (int) modeOfEnvironment();     // the layout's default, and so where the mode stands
     preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
     preampSmoothParam  = apvts.getRawParameterValue (params::blockSmooth (params::preampId));
     cabHpfOnParam      = apvts.getRawParameterValue (params::cabHpfOn);
@@ -163,14 +170,24 @@ AmpProcessor::AmpProcessor (const Product& product)
 
     packCompParam    = apvts.getRawParameterValue (params::packLevelComp);
 
+    preampGainParam = apvts.getRawParameterValue (params::preampGain);
+
+    rescanDevices();
+
+    // Where the engine's own pack stands in this product's list, as the layout found it a moment ago
+    // (engineDefault); its first place where the list has none, as the layout's default was then.
+    for (int i = 0; i < preamp.packs.size(); ++i)
+        if (preamp.packs.getReference (i).displayName() == params::enginePack)
+        {
+            enginePlace = i;
+            break;
+        }
+
     // Every parameter's audio-thread mirror and the value it falls back to — see sanitiseParameters.
     for (auto* p : getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
             if (auto* raw = apvts.getRawParameterValue (ranged->paramID))
-                parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (ranged->getDefaultValue()) });
-    preampGainParam = apvts.getRawParameterValue (params::preampGain);
-
-    rescanDevices();
+                parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (engineDefault (*ranged)) });
 
     // The product's own half, where it has one. HERE, before the history takes its baseline: what it
     // settles as it is built — the cockpit's chain, its channel, its pack — is how the amp starts,
@@ -903,21 +920,6 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         humDb.store ((float) HumStage::kSilentDb, std::memory_order_relaxed);
     }
 
-    // The mode's environment default — see modeAutoValue.
-    if (! stateWasRestored)
-    {
-        const auto want = wrapperType == wrapperType_Standalone ? params::StereoMode::stereoSpace
-                        : getTotalNumInputChannels() >= 2       ? params::StereoMode::stereo
-                                                                : params::StereoMode::mono;
-
-        if (juce::roundToInt (stereoModeParam->load()) == modeAutoValue && (int) want != modeAutoValue)
-        {
-            if (auto* p = apvts.getParameter (params::stereoMode))
-                p->setValueNotifyingHost (p->convertTo0to1 ((float) want));
-            modeAutoValue = (int) want;
-        }
-    }
-
     // Over the channels the bus carries — one or two, by the layouts this plugin accepts. A prepare
     // either refuses keeps that link out of the sound (see delayReady), the way the limiter's does.
     delayReady  = delay.prepare (sampleRate, block, channels);
@@ -1097,6 +1099,35 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
         return false;
 
     return layouts.getMainInputChannelSet() == out;
+}
+
+params::StereoMode AmpProcessor::modeOfEnvironment() const
+{
+    // Only what the AudioProcessor itself knows: the layout reads it while this processor's own
+    // members are still being made.
+    return wrapperType == wrapperType_Standalone ? params::StereoMode::stereoSpace
+         : getTotalNumInputChannels() >= 2       ? params::StereoMode::stereo
+                                                 : params::StereoMode::mono;
+}
+
+void AmpProcessor::processorLayoutsChanged()
+{
+    // The mode's environment default — see modeAutoValue. A host settles the buses before it activates
+    // the plug-in, and a CLAP host holds a plug-in's parameters still from there: prepared and playing,
+    // nobody's hand on them, they keep the values the host last read.
+    if (stateWasRestored)
+        return;
+
+    auto* p = apvts.getParameter (params::stereoMode);
+    if (p == nullptr)
+        return;
+
+    const int want = (int) modeOfEnvironment();
+    if (juce::roundToInt (p->convertFrom0to1 (p->getValue())) == modeAutoValue && want != modeAutoValue)
+    {
+        p->setValueNotifyingHost (p->convertTo0to1 ((float) want));
+        modeAutoValue = want;
+    }
 }
 
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)

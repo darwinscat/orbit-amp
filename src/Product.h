@@ -35,6 +35,7 @@ class AmpProcessor;
 struct ProductEngine;
 
 namespace redpaw { struct Skin; }
+namespace params { struct Opening; }
 
 struct Product
 {
@@ -67,6 +68,12 @@ struct Product
         lands (AmpProcessor::takeFormerTrims). None for OrbitAmp, whose trim was never anything but its
         fader. */
     const char* formerInputZeroId = nullptr;
+
+    /** WHERE A FRESH INSTANCE OF IT STANDS, where that is not where the engine's does: the cockpit and
+        the rovers open on their first channel — its pack, its room, its delay — and say so here, so that
+        each of those parameters declares that as its default (params::Opening). None for OrbitAmp, which
+        opens where the engine does. */
+    void (*opening) (const Product&, params::Opening&) = nullptr;
 };
 
 /** EVERY AMP OF THE FAMILY, each defined in its own file (above). A binary links the ones it plays. */

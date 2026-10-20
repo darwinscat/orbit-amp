@@ -63,6 +63,11 @@ public:
     /** CHANNEL, the host's handle on the selector, named by the lineup and its choices the channels'
         names. The product's own: OrbitAmp has no such parameter. */
     static void addParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Lineup&);
+
+    /** WHERE A FRESH INSTANCE STANDS (params::Opening): on the lineup's first channel, as this engine
+        opens one — its pack, its room, its share of the room where the channel says one, its delay — so
+        that the parameters declare what the engine is about to set them to. */
+    static void opening (const Lineup&, params::Opening&);
     const char* channelId() const noexcept { return channels.lineup().parameterId; }
 
     Channels channels;

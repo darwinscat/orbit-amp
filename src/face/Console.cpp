@@ -2081,7 +2081,7 @@ std::unique_ptr<juce::ParameterAttachment> Console::attach (Control& control, co
     control.onGestureStart = [a] { a->beginGesture(); };
     control.onChange       = [a, p] (float v) { a->setValueAsPartOfGesture (p->convertFrom0to1 (v)); };
     control.onGestureEnd   = [a] { a->endGesture(); };
-    control.defaultValue   = p->getDefaultValue();
+    control.defaultValue   = amp.engineDefault (*p);
 
     a->sendInitialUpdate();
     return att;

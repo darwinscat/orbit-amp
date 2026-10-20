@@ -236,7 +236,7 @@ void Chrome::showPresetMenu()
             {
                 auto child = tree.getChildWithProperty ("id", rp->paramID);
                 if (child.isValid())
-                    child.setProperty ("value", rp->convertFrom0to1 (rp->getDefaultValue()), nullptr);
+                    child.setProperty ("value", rp->convertFrom0to1 (amp.engineDefault (*rp)), nullptr);
             }
 
         amp.history.applyEdit (amp.history.active(), tree, "Reset to default");
