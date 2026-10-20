@@ -18,16 +18,25 @@
 //     saved by either opens in the other with every value it held;
 //   - the CLAP factory counts the same amps under their CLAP ids, com.darwinscat.<name>, the family's
 //     vendor and version; it makes them all at once, each with the parameters its VST3 has, and all of them
-//     play; an id it does not hold makes nothing.
+//     play; an id it does not hold makes nothing;
+//   - on the Mac, the AU beside the VST3 (<artefacts>/AU/<bundle>.component): its Info.plist lists every
+//     amp as the amp's own 0.8.0 AU did — aufx, its code, Dcat, "Darwin's Cat: <Amp>", described <Amp>, the
+//     same resource usage — but for the factory function, the one the binary exports, and the version, the
+//     build's; JUCE's AU host makes them all at once, each the amp it is named with its VST3's parameters,
+//     and all of them play; a component of the binary under a code the list does not hold makes nothing.
 //
-// The CLAP and every own bundle are opened in a process of their own (runSelf, which says why); what the
-// processes hand each other is left in the temporary folder, orbitamp-bundle-host.
+// The CLAP, the AU and every own bundle are opened in a process of their own (runSelf, which says why); what
+// the processes hand each other is left in the temporary folder, orbitamp-bundle-host.
 //
 // It prints what it found and what it expected, and exits 1 if anything was not as it must be. Not a gate:
 // it opens built bundles, which no gate waits for. An amp starting writes where a player's amp would, so
 // run it in a home of its own.
 
 #include <juce_audio_processors/juce_audio_processors.h>
+
+#if JUCE_MAC
+ #include <AudioToolbox/AudioToolbox.h>
+#endif
 
 JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnon-virtual-dtor", "-Wzero-as-null-pointer-constant", "-Wshadow")
 #include <juce_audio_processors_headless/format_types/VST3_SDK/pluginterfaces/base/ipluginbase.h>
@@ -44,19 +53,21 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 namespace
 {
 
-// What each amp's own 0.8.0 bundle registered: its component's and its controller's class ids.
+// What each amp's own 0.8.0 bundle registered: its VST3 component's and controller's class ids, and its
+// AU's subtype (read off those bundles' Info.plist: aufx, the subtype, Dcat).
 struct Shipped
 {
     const char* name;
     const char* component;
     const char* controller;
+    const char* auSubtype;
 };
 
 constexpr Shipped shipped[]
 {
-    { "OrbitAmp",  "ABCDEF019182FAEB446361744F616D70", "ABCDEF011234ABCD446361744F616D70" },
-    { "CatpitAmp", "ABCDEF019182FAEB4463617443747074", "ABCDEF011234ABCD4463617443747074" },
-    { "RedPawAmp", "ABCDEF019182FAEB4463617452647077", "ABCDEF011234ABCD4463617452647077" },
+    { "OrbitAmp",  "ABCDEF019182FAEB446361744F616D70", "ABCDEF011234ABCD446361744F616D70", "Oamp" },
+    { "CatpitAmp", "ABCDEF019182FAEB4463617443747074", "ABCDEF011234ABCD4463617443747074", "Ctpt" },
+    { "RedPawAmp", "ABCDEF019182FAEB4463617452647077", "ABCDEF011234ABCD4463617452647077", "Rdpw" },
 };
 
 const Shipped* shippedOf (const juce::String& name)
@@ -328,7 +339,7 @@ struct Live
     std::unique_ptr<juce::AudioPluginInstance> instance;
 };
 
-std::unique_ptr<juce::AudioPluginInstance> make (juce::VST3PluginFormat& format, const juce::PluginDescription& type)
+std::unique_ptr<juce::AudioPluginInstance> make (juce::AudioPluginFormat& format, const juce::PluginDescription& type)
 {
     juce::String error;
     auto instance = format.createInstanceFromDescription (type, sampleRate, blockSize, error);
@@ -517,6 +528,253 @@ juce::File handoverFolder()
     folder.createDirectory();
     return folder;
 }
+
+#if JUCE_MAC
+//==============================================================================
+// THE AU, as a Mac host finds it. A host finds an Audio Unit among the components the system registered from
+// the plug-in folders, by its bundle's Info.plist; this test installs nothing there. It registers the AU in
+// this process alone (AudioComponentRegister), each AudioComponents entry with the factory function it names,
+// and goes no further where the system has another component first under an amp's id — an amp's own AU
+// installed on this Mac — since JUCE's host would open that one.
+
+// Four characters as the OSType a component description holds, and back.
+OSType osTypeOf (const juce::String& code)
+{
+    return code.length() == 4 ? (OSType) juce::ByteOrder::bigEndianInt (code.toRawUTF8()) : 0;
+}
+
+// The version as an AU's Info.plist writes it: 0x00MMmmpp.
+int auVersionOf (const juce::String& version)
+{
+    const auto parts = juce::StringArray::fromTokens (version, ".", "");
+    return (parts[0].getIntValue() << 16) | (parts[1].getIntValue() << 8) | parts[2].getIntValue();
+}
+
+// One value of an Info.plist dictionary, as text: a string as it is, a number in decimal, a boolean as
+// true / false, a dictionary as its keys and values in order — what the 0.8.0 entries are held to.
+juce::String plistText (CFTypeRef value)
+{
+    if (value == nullptr)
+        return "(none)";
+
+    if (CFGetTypeID (value) == CFStringGetTypeID())
+        return juce::String::fromCFString ((CFStringRef) value);
+
+    if (CFGetTypeID (value) == CFBooleanGetTypeID())
+        return CFBooleanGetValue ((CFBooleanRef) value) ? "true" : "false";
+
+    if (CFGetTypeID (value) == CFNumberGetTypeID())
+    {
+        long long number = 0;
+        CFNumberGetValue ((CFNumberRef) value, kCFNumberLongLongType, &number);
+        return juce::String (number);
+    }
+
+    if (CFGetTypeID (value) == CFDictionaryGetTypeID())
+    {
+        const auto dictionary = (CFDictionaryRef) value;
+        const auto count = CFDictionaryGetCount (dictionary);
+        std::vector<const void*> keys ((size_t) count), values ((size_t) count);
+        CFDictionaryGetKeysAndValues (dictionary, keys.data(), values.data());
+
+        juce::StringArray entries;
+        for (size_t i = 0; i < keys.size(); ++i)
+            entries.add (plistText ((CFTypeRef) keys[i]) + "=" + plistText ((CFTypeRef) values[i]));
+
+        entries.sort (false);
+        return "{" + entries.joinIntoString (", ") + "}";
+    }
+
+    return "(something else)";
+}
+
+juce::String plistValue (CFDictionaryRef dictionary, const char* key)
+{
+    const auto cfKey = CFStringCreateWithCString (nullptr, key, kCFStringEncodingUTF8);
+    const auto text = plistText (CFDictionaryGetValue (dictionary, cfKey));
+    CFRelease (cfKey);
+    return text;
+}
+
+void checkAu (const juce::File& bundle, const juce::StringArray& amps, const std::map<juce::String, juce::StringArray>& vst3Names)
+{
+    std::cout << "AU of " << bundle.getFullPathName() << std::endl;
+
+    // The bundle and its binary, loaded for the rest of the process: what is registered below makes its
+    // instances with the binary's factory function.
+    const auto path = bundle.getFullPathName();
+    const auto url = CFURLCreateFromFileSystemRepresentation (nullptr, (const UInt8*) path.toRawUTF8(),
+                                                              (CFIndex) path.getNumBytesAsUTF8(), true);
+    const auto cfBundle = url != nullptr ? CFBundleCreate (nullptr, url) : nullptr;
+
+    if (url != nullptr)
+        CFRelease (url);
+
+    if (! check (cfBundle != nullptr && CFBundleLoadExecutable (cfBundle), "the bundle and its binary load"))
+        return;
+
+    const auto info = CFBundleGetInfoDictionary (cfBundle);
+    const auto components = info != nullptr ? (CFArrayRef) CFDictionaryGetValue (info, CFSTR ("AudioComponents")) : nullptr;
+    const auto count = components != nullptr && CFGetTypeID (components) == CFArrayGetTypeID() ? (int) CFArrayGetCount (components) : 0;
+
+    if (! check (count == amps.size(), "Info.plist: " + juce::String (count) + " AudioComponents, one per amp of family.ini ("
+                                           + juce::String (amps.size()) + ")"))
+        return;
+
+    // EVERY ENTRY THE AMP'S OWN 0.8.0 AU, but for the factory function and the version.
+    const juce::String keys0_8_0 ("description factoryFunction manufacturer name resourceUsage subtype type version");
+    const juce::String resourceUsage0_8_0 ("{network.client=true, temporary-exception.files.all.read-write=true}");
+    const auto version = auVersionOf (ORBITAMP_VERSION);
+    juce::StringArray factories;
+
+    for (int i = 0; i < count; ++i)
+    {
+        const auto& amp = amps[i];
+        const auto* own = shippedOf (amp);
+        const auto entry = (CFDictionaryRef) CFArrayGetValueAtIndex (components, i);
+
+        if (! check (own != nullptr && CFGetTypeID (entry) == CFDictionaryGetTypeID(), amp + ": an entry, and the id its own AU shipped with known here"))
+            return;
+
+        std::vector<const void*> keys ((size_t) CFDictionaryGetCount (entry));
+        CFDictionaryGetKeysAndValues (entry, keys.data(), nullptr);
+        juce::StringArray names;
+        for (auto* key : keys)
+            names.add (plistText ((CFTypeRef) key));
+        names.sort (false);
+
+        const auto said = plistValue (entry, "type") + " " + plistValue (entry, "subtype") + " " + plistValue (entry, "manufacturer")
+                          + ", \"" + plistValue (entry, "name") + "\", described \"" + plistValue (entry, "description")
+                          + "\", version " + plistValue (entry, "version") + ", resource usage " + plistValue (entry, "resourceUsage");
+
+        check (names.joinIntoString (" ") == keys0_8_0
+                   && plistValue (entry, "type") == "aufx" && plistValue (entry, "subtype") == own->auSubtype
+                   && plistValue (entry, "manufacturer") == "Dcat" && plistValue (entry, "name") == "Darwin's Cat: " + amp
+                   && plistValue (entry, "description") == amp && plistValue (entry, "version") == juce::String (version)
+                   && plistValue (entry, "resourceUsage") == resourceUsage0_8_0,
+               "entry " + juce::String (i + 1) + ", " + said + " — " + amp + "'s own 0.8.0 AU, but for the factory function"
+                   + (names.joinIntoString (" ") == keys0_8_0 ? juce::String() : " (keys: " + names.joinIntoString (" ") + ")"));
+
+        factories.addIfNotAlreadyThere (plistValue (entry, "factoryFunction"));
+    }
+
+    const auto factoryName = factories[0].toCFString();
+    const auto factory = (AudioComponentFactoryFunction) CFBundleGetFunctionPointerForName (cfBundle, factoryName);
+    CFRelease (factoryName);
+
+    if (! check (factories.size() == 1 && factory != nullptr,
+                 "every entry names one factory function, " + factories.joinIntoString (", ") + ", and the binary exports it"))
+        return;
+
+    // REGISTERED IN THIS PROCESS, and the first a host finds under each id.
+    for (int i = 0; i < count; ++i)
+    {
+        const auto& amp = amps[i];
+        const auto entry = (CFDictionaryRef) CFArrayGetValueAtIndex (components, i);
+        AudioComponentDescription description { osTypeOf (plistValue (entry, "type")), osTypeOf (plistValue (entry, "subtype")),
+                                                osTypeOf (plistValue (entry, "manufacturer")), 0, 0 };
+        const auto name = plistValue (entry, "name").toCFString();
+        const auto component = AudioComponentRegister (&description, name, (UInt32) version, factory);
+        CFRelease (name);
+
+        if (! check (component != nullptr && AudioComponentFindNext (nullptr, &description) == component,
+                     amp + ": registered in this process, and the first component under its id a host finds"))
+        {
+            note ("this Mac has another component under " + plistValue (entry, "type") + " " + plistValue (entry, "subtype")
+                  + " " + plistValue (entry, "manufacturer") + " ahead of it — not opened");
+            return;
+        }
+    }
+
+    // A component of the binary under a code its list does not hold makes nothing: the wrapper finds no
+    // entry for it and the host is told so, rather than given an amp under another one's id.
+    {
+        AudioComponentDescription stranger { kAudioUnitType_Effect, osTypeOf ("Dcam"), osTypeOf ("Dcat"), 0, 0 };
+        const auto component = AudioComponentRegister (&stranger, CFSTR ("Darwin's Cat: none"), (UInt32) version, factory);
+        AudioComponentInstance instance = nullptr;
+        const auto status = component != nullptr ? AudioComponentInstanceNew (component, &instance) : noErr;
+
+        check (component != nullptr && status != noErr,
+               "a component of the binary under a code the list does not hold, aufx Dcam Dcat, makes nothing (" + juce::String ((int) status) + ")");
+
+        if (status == noErr && instance != nullptr)
+            AudioComponentInstanceDispose (instance);
+    }
+
+    // THROUGH JUCE'S AU HOST: every amp found by its id, made, all of them alive at once.
+    juce::AudioUnitPluginFormat format;
+    std::vector<Live> family;
+
+    for (const auto& amp : amps)
+    {
+        const auto identifier = "AudioUnit:Effects/aufx," + juce::String (shippedOf (amp)->auSubtype) + ",Dcat";
+        juce::OwnedArray<juce::PluginDescription> types;
+        format.findAllTypesForFile (types, identifier);
+
+        if (! check (types.size() == 1 && types[0]->name == amp && types[0]->manufacturerName == "Darwin's Cat"
+                         && types[0]->version == ORBITAMP_VERSION && ! types[0]->isInstrument,
+                     identifier + ": " + (types.isEmpty() ? juce::String ("nothing") : types[0]->manufacturerName + ": " + types[0]->name
+                                                                                     + ", " + types[0]->version) + ", an effect"))
+            return;
+
+        auto instance = make (format, *types[0]);
+
+        if (! check (instance != nullptr && instance->getName() == amp,
+                     "made " + amp + ", " + juce::String ((int) family.size() + 1) + " of the family's alive"))
+            return;
+
+        family.push_back ({ amp, std::move (instance) });
+    }
+
+    // Each its own amp: its VST3's parameters, no two amps' alike. In the AU's own order, which is not the
+    // VST3's: JUCE's AU wrapper lists them by their AU ids (GetParameterList), an amp's own AU as the family's.
+    std::vector<std::vector<Param>> layouts;
+    for (auto& one : family)
+    {
+        layouts.push_back (layoutOf (*one.instance));
+        auto names = namesOf (layouts.back());
+        names.sort (false);
+
+        // JUCE's VST3 wrapper adds a Bypass where the processor has none; the AU wrapper does not.
+        auto vst3 = vst3Names.count (one.amp) != 0 ? vst3Names.at (one.amp) : juce::StringArray();
+        if (vst3.size() == names.size() + 1 && vst3[vst3.size() - 1] == "Bypass")
+            vst3.remove (vst3.size() - 1);
+        vst3.sort (false);
+
+        int parted = 0;
+        while (parted < names.size() && parted < vst3.size() && names[parted] == vst3[parted])
+            ++parted;
+
+        check (! names.isEmpty() && names == vst3,
+               one.amp + ": its " + juce::String (names.size()) + " AU parameters are its VST3's"
+                   + (names == vst3 ? juce::String()
+                                    : " (" + juce::String (vst3.size()) + " there; parameter " + juce::String (parted) + " '"
+                                          + names[parted] + "' against '" + vst3[parted] + "')") + ", "
+                   + juce::String (one.instance->getTotalNumInputChannels()) + " in / "
+                   + juce::String (one.instance->getTotalNumOutputChannels()) + " out, latency "
+                   + juce::String (one.instance->getLatencySamples()));
+    }
+
+    for (size_t a = 0; a < family.size(); ++a)
+        for (size_t b = a + 1; b < family.size(); ++b)
+            check (differenceOf (layouts[a], layouts[b]).isNotEmpty(),
+                   family[a].amp + " and " + family[b].amp + " have parameters of their own (" + differenceOf (layouts[a], layouts[b]) + ")");
+
+    bool finite = true;
+
+    for (int block = 0; block < 16; ++block)
+        for (auto& one : family)
+            finite = playsABlock (*one.instance, block) && finite;
+
+    check (finite, juce::String ((int) family.size()) + " amps alive at once, each played 16 blocks in turn, every sample a number");
+
+    for (auto& one : family)
+        one.instance->releaseResources();
+
+    family.clear();
+    pump (300);
+}
+#endif
 
 //==============================================================================
 // THROUGH A HOST: JUCE's VST3 host finds the amps, makes them all at once, plays them in turn, and holds each
@@ -862,6 +1120,22 @@ int main (int argc, char** argv)
         return allGood ? 0 : 1;
     }
 
+   #if JUCE_MAC
+    if (argc == 4 && juce::String (argv[1]) == "--au")
+    {
+        const juce::ScopedJuceInitialiser_GUI juceLibrary;
+        const auto handover = juce::File (juce::CharPointer_UTF8 (argv[3]));
+        const auto amps = juce::StringArray::fromTokens (ORBITAMP_FAMILY_AMPS, " ", "");
+        std::map<juce::String, juce::StringArray> names;
+
+        for (const auto& amp : amps)
+            names[amp] = juce::StringArray::fromLines (handover.getChildFile (amp + ".vst3-names.txt").loadFileAsString());
+
+        checkAu (juce::File (juce::CharPointer_UTF8 (argv[2])), amps, names);
+        return allGood ? 0 : 1;
+    }
+   #endif
+
     if (argc == 5 && juce::String (argv[1]) == "--own")
     {
         const juce::ScopedJuceInitialiser_GUI juceLibrary;
@@ -897,6 +1171,15 @@ int main (int argc, char** argv)
     const auto clapOk = runSelf ({ "--clap", clap.getFullPathName(), handover.getFullPathName() }, output);
     std::cout << output;
     check (clapOk, "the CLAP, in a process of its own, as it must be");
+
+   #if JUCE_MAC
+    // The AU, beside the VST3 where the build puts it, in a process of its own too, handed the same.
+    const auto au = vst3.getParentDirectory().getSiblingFile ("AU").getChildFile (vst3.getFileNameWithoutExtension() + ".component");
+    output.clear();
+    const auto auOk = au.isDirectory() && runSelf ({ "--au", au.getFullPathName(), handover.getFullPathName() }, output);
+    std::cout << output;
+    check (auOk, "the AU beside the VST3, " + au.getFullPathName() + ", in a process of its own, as it must be");
+   #endif
 
     std::cout << (allGood ? "ALL PASS" : "FAILED") << std::endl;
     return allGood ? 0 : 1;

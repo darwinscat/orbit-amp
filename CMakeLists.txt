@@ -1547,16 +1547,20 @@ set_target_properties(${FAMILY_BUNDLE_TARGET} ${family_formats} PROPERTIES EXCLU
 add_dependencies(${FAMILY_BUNDLE_TARGET}_All ${FAMILY_BUNDLE_TARGET}_CLAP)
 add_dependencies(Family_All ${FAMILY_BUNDLE_TARGET}_All)
 
-# THE FAMILY'S PLUG-INS AS A HOST OPENS THEM (tests/BundleHost.cpp): the VST3 and the CLAP held to the ids each
-# amp's own bundle shipped with, each amp its own in them, two and more alive at once — and, given a build
-# where the amps' own VST3s were built, each held to its own. Not a gate: it opens built bundles, which no
-# gate waits for; built by name, run by hand or by the CI after Family_All:
+# THE FAMILY'S PLUG-INS AS A HOST OPENS THEM (tests/BundleHost.cpp): the VST3, the CLAP and, on the Mac, the AU
+# beside the VST3 held to the ids each amp's own bundle shipped with, each amp its own in them, two and more
+# alive at once — and, given a build where the amps' own VST3s were built, each held to its own. Not a gate:
+# it opens built bundles, which no gate waits for; built by name, run by hand or by the CI after Family_All:
 #
 #   <build>/orbitamp_bundle_host_artefacts/Release/orbitamp_bundle_host \
 #       "<build>/DarwinsCatAmps_artefacts/Release/VST3/Darwin's Cat Amps.vst3" \
 #       "<build>/DarwinsCatAmps_artefacts/Release/CLAP/Darwin's Cat Amps.clap" [<build>]
 string(JOIN " " family_amps_line ${FAMILY_AMPS})
-juce_add_console_app(orbitamp_bundle_host PRODUCT_NAME "OrbitAmpBundleHost")
+set(bundle_host_au FALSE)
+if(APPLE)
+    set(bundle_host_au TRUE)   # JUCE's AU host, and the framework its views need
+endif()
+juce_add_console_app(orbitamp_bundle_host PRODUCT_NAME "OrbitAmpBundleHost" PLUGINHOST_AU ${bundle_host_au})
 target_sources(orbitamp_bundle_host PRIVATE tests/BundleHost.cpp)
 target_include_directories(orbitamp_bundle_host PRIVATE "${clap-juce-extensions_SOURCE_DIR}/clap-libs/clap/include")
 target_compile_definitions(orbitamp_bundle_host PRIVATE
