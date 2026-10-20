@@ -15,6 +15,8 @@
 #include <felitronics/appkit/VersionBadge.h>
 
 #include <array>
+#include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -176,8 +178,11 @@ protected:
     std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the names exportForWeb writes them under
     struct LookForWeb { ArtKnob::Pointer drive {}, tone {}; juce::Colour handLight; Ink ink; } lookForWeb;   // ...and the rest of it
     std::vector<std::pair<juce::String, juce::Rectangle<float>>> spritesWritten;     // writeSprite's, for spriteBounds
-    juce::StringArray postersWritten;     // writePoster's stems, for the poster places.json opens on
+    std::map<juce::String, bool> postersWritten;     // writePoster's stems, each with whether a live frame went under its glass
+    juce::var webPlaces;                             // places.json, written once every poster is
     void poseNext (const juce::File& dir, int pose);
+    void shootPoster (const juce::File& dir, int place, const juce::String& stem, std::function<void()> then);
+    void finishWeb (const juce::File& dir);
 
     juce::Component stage;
     std::unique_ptr<Picture> picture;
@@ -243,28 +248,41 @@ protected:
     /** ...and the name of one written already, for places.json: null where none was. */
     juce::var spriteRef (const juce::String& stem) const;
 
-    /** THE POSTER: the whole face as it opens — every control where it stands, the lamps out — with
-        `still` in `window` under the glass, at twice the stage's size and the two smaller ones
-        (poster.webp, poster@1x.webp, poster@half.webp); and the same face with its window empty
-        (poster-hole.webp and its two). What shows through the window live is `hidden` while it is taken,
-        the still in its place. */
+    /** THE POSTER: the whole face as it stands — every control where it stands, the lamps out — at twice
+        the stage's size and the two smaller ones, in three kinds: with `live`, the live view's first frame,
+        in `window` under the glass (<stem>.webp, <stem>@1x.webp, <stem>@half.webp), so that a page that
+        starts the view there does not jump; with `still` there instead (<stem>-still.webp and its two); and
+        with the window empty (<stem>-hole.webp and its two). With no live frame, the still's are the
+        poster's and nothing is written twice. What shows through the window live is `hidden` while it is
+        taken. */
     void writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
-                      const std::vector<juce::Component*>& hidden, const juce::String& stem = "poster");
+                      const juce::Image& live, const std::vector<juce::Component*>& hidden, const juce::String& stem);
 
     /** ...and how places.json names a poster's files: the three sizes of it, and the same three of its
-        kinds, "still" (the still under the glass — which the poster here is) and "hole" (its window empty). */
-    static juce::var posterFiles (const juce::String& stem);
+        kinds, "still" and "hole" — the poster's own being the still's where no live frame went in. */
+    static juce::var posterFiles (const juce::String& stem, bool live);
 
-    /** A POSTER FOR EACH PLACE OF THE LEVER, for a page that opens on another channel than the app does:
-        how many places there are, how the face is stood in one (no animation), the still under the glass
-        there, and the window and its live layers as for the poster. Set by webExtras; exportForWeb then
-        stands the face in each in turn and writes poster-<n>.webp (and its sizes and its hole) once it has
-        settled, and done.txt last. */
+    /** THE POSTERS: the one the page opens on — the face as it opened, at the place it opened at — and one
+        for each place of the lever, for a page that opens on another channel than the app does: how many
+        places there are, which one the face opens at, how the face is stood in one (no animation), the
+        still there, the live view's first frame there, and the window and its live layers. Set by
+        webExtras; exportForWeb then writes the face's poster (poster.webp), stands the face in each place
+        in turn and writes poster-<n>.webp once it has settled, then places.json, and done.txt last. */
     struct WebPoses
     {
         int count = 0;
+        int opening = 0;
         std::function<void (int)> standAt;
         std::function<juce::Image (int)> still;
+
+        /** THE LIVE VIEW'S FIRST FRAME at a place: what the view shows the moment it starts there, before
+            anything has moved — as a page that starts its own copy of the view there shows it first —
+            handed to `done` on the message thread, the window's size at twice the stage, or invalid where
+            the GPU could not give one (the still goes under the glass then). Asked for once the face stands
+            at the place. Unset, every poster has the still. */
+        std::function<void (int, std::function<void (juce::Image)>)> firstFrame;
+        juce::String live;      // ...what that frame is, for places.json's posterWindow: "live: <live>"
+
         juce::Rectangle<float> window;
         std::vector<juce::Component*> hidden;
     };

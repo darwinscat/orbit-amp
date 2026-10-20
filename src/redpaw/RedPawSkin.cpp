@@ -53,7 +53,7 @@ const Skin& mars()
         face::Ink {},                   // the family's lilac on the dark rust...
         juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words, so they read off the dust
         face::renders::text (name, "midi.txt", "REDPAW_ART_DIR"),
-        [] { return std::make_unique<Windscreen> (std::make_unique<PlainsDrive> (numGears (marsLineup()))); },     // the drive across Mars
+        [] { return std::make_unique<PlainsDrive> (numGears (marsLineup())); },     // the drive across Mars
         { "Plains (GPU)", "1993 (CPU)", "Still" },
     };
     return mars;

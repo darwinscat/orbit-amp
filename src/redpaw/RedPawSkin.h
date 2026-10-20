@@ -58,10 +58,11 @@ struct Skin
     /** What its MIDI window lists. */
     juce::String midiCommands;
 
-    /** THE WORLD OUT OF ITS WINDOW: the windscreen it drives (view/Windscreen.h), made once for each
-        editor, and what the three ways of showing it are called in the menu, in the order of
+    /** THE WORLD OUT OF ITS WINDOW: the drive its windscreen hosts (view/Drive.h), made at its start — once
+        for each editor's windscreen, and once more for each poster of the site's whose window shows the
+        view's first frame — and what the three ways of showing it are called in the menu, in the order of
         Windscreen::Mode. */
-    std::function<std::unique_ptr<Windscreen>()> makeView;
+    std::function<std::unique_ptr<Drive>()> makeDrive;
     juce::StringArray landscapeNames;
 
     /** WHAT ITS DRIVE KNOB IS CALLED, over it. */

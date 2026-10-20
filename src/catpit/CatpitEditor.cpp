@@ -500,12 +500,23 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     for (int c = 0; c < channels.count(); ++c)
         stills.add ("sky-" + juce::String (c) + ".webp");
     places.setProperty ("stills", stills);
-    writePoster (dir, glass, stillSky (channels.active()), { &space, &still, &monitor });
 
-    // ...and one for each channel the throttle can stand in, the channel's own still sky in the glass.
+    // THE POSTERS: the cockpit as it opens, and one for each channel the throttle can stand in — through the
+    // glass the sky's first frame there, as the live sky starts at that channel (GlSky::firstFrame), and
+    // the channel's own still sky in the poster's -still kind.
     webPoses.count = channels.count();
+    webPoses.opening = channels.active();
     webPoses.standAt = [this] (int channel) { go (channel); this->lever.setPlace (channel, false, false); };
     webPoses.still = [] (int channel) { return stillSky (channel); };
+    webPoses.firstFrame = [this] (int channel, std::function<void (juce::Image)> done)
+    {
+        if (glSky == nullptr)       // the sky on the CPU, or no sky: no GPU frame to be had
+            juce::MessageManager::callAsync ([done] { done ({}); });
+        else
+            glSky->firstFrame ((float) channel / (float) (Lever::numDetents - 1), glass, windshield, 2.0f, std::move (done));
+    };
+    webPoses.live = "the sky's first frame for the place's channel: the flight on the GPU from its start, settled at the "
+                    "channel's detent, nothing stepped (t = 0); the top poster is the channel the app opens on";
     webPoses.window = glass;
     webPoses.hidden = { &space, &still, &monitor };
     webPatch ("gateFader", { &threshold });

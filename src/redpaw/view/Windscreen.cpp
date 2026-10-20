@@ -3,6 +3,7 @@
 
 #include "Windscreen.h"
 
+#include "../../face/WebImages.h"
 #include "../../shaders/Gpu.h"
 #include "../../shaders/GpuLog.h"
 
@@ -289,6 +290,56 @@ void Windscreen::hostRender (juce::Rectangle<int> glass, int frameWidth, int fra
     glBindVertexArray (0);
     glUseProgram (0);
     glViewport (0, 0, frameWidth, frameHeight);
+}
+
+void Windscreen::firstFrame (std::unique_ptr<Drive> fresh, int width, int height, std::function<void (juce::Image)> done)
+{
+    // The pixels come back from the GL thread; the picture is made of them here, on the message thread.
+    const auto deliver = [done] (std::shared_ptr<std::vector<std::uint8_t>> rgba, int w, int h)
+    {
+        juce::MessageManager::callAsync ([done, rgba, w, h] { done (rgba != nullptr ? face::web::fromGlRows (*rgba, w, h) : juce::Image()); });
+    };
+    auto* context = host != nullptr ? host : &gl;
+    if (fresh == nullptr || gpuFailed.load() || ! context->isAttached() || width <= 0 || height <= 0)
+    {
+        deliver (nullptr, 0, 0);
+        return;
+    }
+    const std::shared_ptr<Drive> drive (std::move (fresh));
+    const int g = gearWanted.load(), lights = lightsWanted.load(), wipers = wipersWanted.load();
+    const bool turbo = turboWanted.load(), parked = parkedWanted.load();
+    context->executeOnGLThread ([drive, g, turbo, parked, wipers, lights, width, height, deliver] (juce::OpenGLContext& c)
+    {
+        // As renderFrame draws a still: made, told where it stands, settled, drawn once, read back.
+        std::shared_ptr<std::vector<std::uint8_t>> rgba;
+        int w = 0, h = 0;
+        if (drive->create())
+        {
+            drive->setGear (g);
+            drive->setTurbo (turbo);
+            drive->setParked (parked);
+            drive->setSteer (0.0f);
+            drive->setWipers (wipers);
+            drive->setLights ((lights & 1) != 0, (lights & 2) != 0);
+            drive->settle (g, turbo, parked);
+            drive->render (width, height, 1.0f, c.getFrameBufferID(), 0, 0);
+            rgba = std::make_shared<std::vector<std::uint8_t>>();
+            if (! drive->readFrame (*rgba, w, h))
+                rgba.reset();
+        }
+        drive->destroy();
+
+        // ...and what is painted next finds the context as hostRender leaves it.
+        using namespace juce::gl;
+        glBindFramebuffer (GL_FRAMEBUFFER, c.getFrameBufferID());
+        glDisable (GL_DEPTH_TEST);
+        glDisable (GL_CULL_FACE);
+        glDisable (GL_SCISSOR_TEST);
+        glDisable (GL_BLEND);
+        glBindVertexArray (0);
+        glUseProgram (0);
+        deliver (rgba, w, h);
+    }, false);
 }
 
 /** One frame, kept: the product's own picture where it brings one — else rendered, from the GPU where
