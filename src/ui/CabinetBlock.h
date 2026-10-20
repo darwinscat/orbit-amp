@@ -124,6 +124,8 @@ private:
     /** The same liquid analyser the consoles run — one pane for the IR's door, one for its exit. */
     std::array<felitronics::analysis::SpectrumPane, 2> panes;
 
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CabinetBlock)
 };
 

@@ -321,6 +321,8 @@ private:
     std::vector<float> shownDepth;
     std::vector<char>  shownDot;   // char, not bool: vector<bool> has no honest references
 
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LayoutStrip)
 };
 

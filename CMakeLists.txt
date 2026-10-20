@@ -1009,6 +1009,7 @@ set(ORBITAMP_SOURCES
     src/ui/DemoStrip.cpp
     src/ui/Footer.cpp
     src/ui/SetupPanel.cpp
+    src/ui/WebFaceplate.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp)
 
@@ -1274,6 +1275,10 @@ amp_set_test(amberpawamp_set_test     "AmberPawAmpSetTest"      AmberPawAmp  tes
 amp_console(orbitamp_no_factory_test  "OrbitAmpNoFactoryTest"   OrbitAmp     tests/NoFactoryTests.cpp   NO_FACTORY)
 amp_console(catpitamp_no_factory_test "CatpitAmpNoFactoryTest"  CatpitAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
 amp_console(redpawamp_no_factory_test "RedPawAmpNoFactoryTest"  RedPawAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
+
+# ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
+# builds the face back — its own format, every place on the stage, the hull the poster less its places.
+amp_console(orbitamp_webface_test     "OrbitAmpWebFaceTest"     OrbitAmp     tests/WebFaceTests.cpp)
 
 # EVERY AMP IN ONE BINARY: the sources of all of them, each once, and their libraries, under one main() —
 # what a plug-in of several amps will be. Its gate plays them side by side in one process, each a processor

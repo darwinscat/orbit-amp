@@ -6,6 +6,7 @@
 #include "ui/HumMenu.h"
 #include "ui/HumTuning.h"
 #include "ui/Prefs.h"
+#include "ui/WebFaceplate.h"
 
 namespace orbitamp
 {
@@ -320,6 +321,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // ticked the switch in the version popover: once a day at most, on the message thread, never in
     // a constructor a scanner runs. Not ticked, or checked already today — nothing happens at all.
     amp.updateChecker().checkIfDue();
+
+    // THE SITE'S KIT: OrbitAmp's own face written out for darwinscat.com, when the environment names a
+    // folder for it (WebFaceplate.h). A player never sets it, and without it nothing here happens.
+    if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_WEB_EXPORT", {}); folder.isNotEmpty())
+        WebFaceplate::exportAfterOpening (*this, juce::File (folder));
 }
 
 /** What the two switches of every row mean to the WINDOW, read in one place after any of them

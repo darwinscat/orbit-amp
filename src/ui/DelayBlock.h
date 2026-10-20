@@ -178,6 +178,8 @@ private:
                                                                           offsetAttachment;
     std::unique_ptr<juce::ParameterAttachment> syncAtt, divAtt, bpmAtt, timeAtt, hostTempoAtt;
 
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DelayBlock)
 };
 

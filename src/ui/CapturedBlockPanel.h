@@ -384,6 +384,13 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
     std::unique_ptr<juce::ParameterAttachment> deviceAttachment;
 
+    /** Whether the border carries the model's loudness tag. Always, but for the site's kit, which is
+        taken without it (WebFaceplate.h): the tag moves with the dial and the site has nothing to
+        write it from. */
+    bool showsLoudnessTag = true;
+
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CapturedBlockPanel)
 };
 
