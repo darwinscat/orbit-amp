@@ -335,6 +335,22 @@ struct MarkInk
 };
 void engraveMark (juce::Graphics&, juce::Rectangle<float> box, float scale, const MarkInk& = {});
 
+/** THE BADGE: a plate of the face's own laid over the picture's emblem — so the picture's own cat and bolts
+    are gone and the plate still reads as the same piece of hull: dark metal lit from above, lightly worn,
+    with a fine bevel, its screws, and the mark engraved light in it, crisp over the wear. The cockpit's first (Cockpit::paintEmblem); a
+    rover wears the same where its skin says so, in colours of its own. `plate` the plate's face and `mark`
+    the box the mark is cut in, both in the stage's space; `screws` the screws' centres, `screw` how wide
+    their heads are. */
+struct BadgeLook
+{
+    juce::Colour plateTop    { 0xff24222b };     // the plate, at its top...
+    juce::Colour plateBottom { 0xff111016 };     // ...and at its bottom
+    MarkInk ink { juce::Colour (0xffcdc8dc), juce::Colour (0xff8d899e), 0.9f, 0.4f };     // a pale floor, a deep shadow, a bright lip
+    float wear = 1.0f;                   // how worn the plate's face is: fine scratches and scuffs in its own tone; 0 none
+};
+void paintBadge (juce::Graphics&, const juce::Path& plate, const std::vector<juce::Point<float>>& screws, float screw,
+                 juce::Rectangle<float> mark, float scale, const BadgeLook& = {});
+
 /** THE MARK ANSWERS THE HAND. Engraved and dark until the pointer is over the plate; then the cut
     turns a dark violet — its colour changes, nothing glows — and a click on it goes home, to the
     maker's site. It paints only that light: the plate and the engraving belong to the face's picture.

@@ -145,7 +145,12 @@ namespace
             p.lamps[i] = skin.plan.lamps[i];
         p.lampDot = skin.plan.lampDot;
 
-        if (skin.mark)
+        if (skin.mark && skin.badge.has_value())        // the badge's plate is the emblem then
+        {
+            p.emblemFace = { skin.plan.badgeFace.begin(), skin.plan.badgeFace.end() };
+            p.emblemMark = skin.plan.badgeMark;
+        }
+        else if (skin.mark)
         {
             p.emblemFace = { skin.plan.emblemFace.begin(), skin.plan.emblemFace.end() };
             p.emblemMark = skin.plan.emblemMark;
@@ -349,9 +354,20 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     if (const auto& bg = Art::of (skin).bg; bg.isValid())
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
 
-    // The maker's mark: raised in the rover's metal where the skin brings a render of it — cut into bright
-    // steel it read as a stamp — and engraved where it does not; none where the skin has no place for one.
-    if (const auto& mark = Art::of (skin).emblem; skin.mark && mark.isValid())
+    // The maker's mark: on the family's badge where the skin wears it (face::paintBadge) — the cockpit's plate
+    // over the picture's, where the plan puts it, its screws, the cat engraved light; else raised in the
+    // rover's metal where the skin brings a render of it — cut into bright steel it read as a stamp — and
+    // engraved where it does not; none where the skin has no place for one.
+    if (skin.mark && skin.badge.has_value())
+    {
+        juce::Path plate;
+        for (size_t i = 0; i < skin.plan.badgeFace.size(); ++i)
+            i == 0 ? plate.startNewSubPath (skin.plan.badgeFace[i]) : plate.lineTo (skin.plan.badgeFace[i]);
+        plate.closeSubPath();
+        paintBadge (g, plate, { skin.plan.badgeScrews.begin(), skin.plan.badgeScrews.end() }, skin.plan.badgeScrew,
+                    skin.plan.badgeMark, scale, *skin.badge);
+    }
+    else if (const auto& mark = Art::of (skin).emblem; skin.mark && mark.isValid())
     {
         g.setOpacity (1.0f);
         g.drawImage (mark, skin.plan.emblemMark, juce::RectanglePlacement::centred);
@@ -432,7 +448,8 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         { "turbo-lid", &art.turboLid }, { "emblem", &art.emblem }, { "socket", &art.socket },
         { "key-frame-left", &art.keyFrameLeft }, { "key-frame-cell", &art.keyFrameCell }, { "key-frame-right", &art.keyFrameRight } };
     for (const auto& [name, img] : own)
-        writeSprite (dir, name, *img);
+        if (! (skin.badge.has_value() && juce::String (name) == "emblem"))     // a skin on the badge shows no render of the mark
+            writeSprite (dir, name, *img);
     writeForWeb (dir.getChildFile ("still.webp"), Art::still (skin));
 
     const auto rect = [] (juce::Rectangle<float> r)

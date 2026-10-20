@@ -77,25 +77,35 @@ const layout::Plan plan {
 
 const Skin& ice()
 {
-    static const Skin ice {
-        name,
-        iceLineup(),
-        plan,
-        "FROSTPAW_ART_DIR",
-        juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
-        // On the bright steel the words are written dark — a blue-black graphite, what they are set to
-        // darker still, a state a deeper orange — each cut deep into the metal: strokes heavier than the
-        // font's, the upper wall a shade over the word, the lower lip a light edge under it; and a dimmed
-        // word keeps most of its ink. Nothing else lies under the large words.
-        face::Ink { juce::Colour (0xff0b1018), juce::Colour (0xff030507), juce::Colour (0xff8f3507),
-                    juce::Colour (0x8cf0f6fc), 0.72f, juce::Colour (0x73000208), 0.7f },
-        juce::Colour(),
-        // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
-        face::renders::text (name, "midi.txt", "FROSTPAW_ART_DIR"),
-        // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
-        [] { return std::make_unique<frostpaw::IceDrive> (numGears (iceLineup())); },
-        { "Ice (GPU)", "1993 (CPU)", "Still" },
-    };
+    static const Skin ice = []
+    {
+        Skin s {
+            name,
+            iceLineup(),
+            plan,
+            "FROSTPAW_ART_DIR",
+            juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
+            // On the bright steel the words are written dark — a blue-black graphite, what they are set to
+            // darker still, a state a deeper orange — each cut deep into the metal: strokes heavier than the
+            // font's, the upper wall a shade over the word, the lower lip a light edge under it; and a dimmed
+            // word keeps most of its ink. Nothing else lies under the large words.
+            face::Ink { juce::Colour (0xff0b1018), juce::Colour (0xff030507), juce::Colour (0xff8f3507),
+                        juce::Colour (0x8cf0f6fc), 0.72f, juce::Colour (0x73000208), 0.7f },
+            juce::Colour(),
+            // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
+            face::renders::text (name, "midi.txt", "FROSTPAW_ART_DIR"),
+            // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
+            [] { return std::make_unique<frostpaw::IceDrive> (numGears (iceLineup())); },
+            { "Ice (GPU)", "1993 (CPU)", "Still" },
+        };
+        // The cockpit's badge over the picture's plate, the plate a little darker than the steel round it
+        // (#727a81), the cockpit's light cat cut into it.
+        face::BadgeLook badge;
+        badge.plateTop = juce::Colour (0xff60676e);
+        badge.plateBottom = juce::Colour (0xff4c5258);
+        s.badge = badge;
+        return s;
+    }();
     return ice;
 }
 

@@ -15,6 +15,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace orbitamp::redpaw
 {
@@ -83,6 +84,13 @@ struct Skin
     bool packOnScreen = false;
     face::Monitor::View firstScreen = face::Monitor::View::shape;      // the family's first picture: what the amp does to the sound
     bool parkSignOnTopLine = true;      // parked, the warning on the top line too, beside the large one
+
+    /** THE BADGE, where the skin wears one: the family's badge (face::paintBadge, the cockpit's) painted over
+        the picture's emblem plate, where the plan puts it (Plan::badgeFace, badgeScrews, badgeMark) — the
+        plate, its screws, the mark engraved light in it — in the skin's own colours. The plate is then the
+        face's emblem: the hand's target and the mark's box. None, and the picture's own plate shows, the
+        mark on it as `mark` and the render say. */
+    std::optional<face::BadgeLook> badge {};
 };
 
 /** The skin a rover's processor wears (Product::skin). */

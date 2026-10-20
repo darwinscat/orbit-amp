@@ -44,18 +44,30 @@ const layout::Plan plan {};
 
 const Skin& mars()
 {
-    static const Skin mars {
-        name,
-        marsLineup(),
-        plan,
-        "REDPAW_ART_DIR",
-        juce::Colour (0xff3fe6f2),      // the painted rings' light, a shade brighter
-        face::Ink {},                   // the family's lilac on the dark rust...
-        juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words, so they read off the dust
-        face::renders::text (name, "midi.txt", "REDPAW_ART_DIR"),
-        [] { return std::make_unique<PlainsDrive> (numGears (marsLineup())); },     // the drive across Mars
-        { "Plains (GPU)", "1993 (CPU)", "Still" },
-    };
+    static const Skin mars = []
+    {
+        Skin s {
+            name,
+            marsLineup(),
+            plan,
+            "REDPAW_ART_DIR",
+            juce::Colour (0xff3fe6f2),      // the painted rings' light, a shade brighter
+            face::Ink {},                   // the family's lilac on the dark rust...
+            juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words, so they read off the dust
+            face::renders::text (name, "midi.txt", "REDPAW_ART_DIR"),
+            [] { return std::make_unique<PlainsDrive> (numGears (marsLineup())); },     // the drive across Mars
+            { "Plains (GPU)", "1993 (CPU)", "Still" },
+        };
+        // The cockpit's badge over the picture's steel plate, the plate nearer the dashboard's own metal round it
+        // (#423c38) than the cockpit's near black, the cat on it ginger — leaning to the colour of the plains out
+        // of the window (#8f4b24 on the ground), light enough still to read on the plate.
+        face::BadgeLook badge;
+        badge.plateTop = juce::Colour (0xff47413d);
+        badge.plateBottom = juce::Colour (0xff2c2826);
+        badge.ink = { juce::Colour (0xffebb48e), juce::Colour (0xffb4714b), 0.9f, 0.4f };
+        s.badge = badge;
+        return s;
+    }();
     return mars;
 }
 

@@ -202,6 +202,20 @@ const layout::Plan plan {
     }},
     .emblemMark { 799.5f, 403.0f, 76.0f, 76.0f },
 
+    // ...and the family's badge over it (Skin::badge): the cockpit's plate scaled by 0.585 about x = 838, its top
+    // 3 under the rim of the step above (y 396) — as large as it goes, its widest, a quarter of the way down,
+    // 3 short of the vents' slanted frames, which narrow the metal all the way down; so its nose stands at
+    // 470, short of the seam over the little screens (489), and the maker's words beside it keep their room.
+    .badgeFace {{
+        { 800.8f, 399.0f }, { 875.2f, 399.0f }, { 893.0f, 416.0f }, { 874.9f, 466.3f }, { 838.0f, 469.8f },
+        { 801.1f, 466.3f }, { 783.0f, 416.0f },
+    }},
+    .badgeScrews {{
+        { 803.2f, 402.5f }, { 872.8f, 402.5f }, { 785.9f, 417.7f }, { 890.1f, 417.7f }, { 806.1f, 463.9f }, { 869.9f, 463.9f },
+    }},
+    .badgeScrew = 4.7f,
+    .badgeMark { 806.7f, 401.6f, 62.7f, 61.4f },
+
     // ...and the maker's words low beside it, on the strips under the vents, 461..490 down, close in to the
     // plate's edges at 792 and 888.
     .poweredBy { 735.0f, 476.0f },
@@ -215,25 +229,35 @@ const layout::Plan plan {
 
 const Skin& titan()
 {
-    static const Skin titan {
-        name,
-        titanLineup(),
-        plan,
-        "AMBERPAW_ART_DIR",
-        juce::Colour (0xfff2f6ff),      // the painted rings' white, a shade brighter
-        face::Ink {},                   // the family's lilac on the dark gunmetal...
-        juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words
-        face::renders::text (name, "midi.txt", "AMBERPAW_ART_DIR"),
-        // Titan's methane sea out of the canopy, flown low over (view/TitanDrive.h).
-        [] { return std::make_unique<amberpaw::TitanDrive> (numGears (titanLineup())); },
-        { "Titan (GPU)", "1993 (CPU)", "Still" },
-        "GAIN",
-        true,                           // the family's cat, cut into the plate between the vents
-        "IN", "OUT",                    // the edge columns, short as a cockpit labels them
-        false,                          // the radio's top line the gear and the speed alone...
-        face::Monitor::View::shape,     // ...over the shape the amp gives the sound
-        false,                          // parked, the large warning alone
-    };
+    static const Skin titan = []
+    {
+        Skin s {
+            name,
+            titanLineup(),
+            plan,
+            "AMBERPAW_ART_DIR",
+            juce::Colour (0xfff2f6ff),      // the painted rings' white, a shade brighter
+            face::Ink {},                   // the family's lilac on the dark gunmetal...
+            juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words
+            face::renders::text (name, "midi.txt", "AMBERPAW_ART_DIR"),
+            // Titan's methane sea out of the canopy, flown low over (view/TitanDrive.h).
+            [] { return std::make_unique<amberpaw::TitanDrive> (numGears (titanLineup())); },
+            { "Titan (GPU)", "1993 (CPU)", "Still" },
+            "GAIN",
+            true,                           // the family's cat, cut into the plate between the vents
+            "IN", "OUT",                    // the edge columns, short as a cockpit labels them
+            false,                          // the radio's top line the gear and the speed alone...
+            face::Monitor::View::shape,     // ...over the shape the amp gives the sound
+            false,                          // parked, the large warning alone
+        };
+        // The cockpit's badge on the metal between the vents, the plate a little darker than the gunmetal round
+        // it (#2a292c), the cockpit's light cat.
+        face::BadgeLook badge;
+        badge.plateTop = juce::Colour (0xff27272b);
+        badge.plateBottom = juce::Colour (0xff1b1b1e);
+        s.badge = badge;
+        return s;
+    }();
     return titan;
 }
 

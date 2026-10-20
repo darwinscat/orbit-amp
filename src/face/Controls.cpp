@@ -613,6 +613,79 @@ void engraveMark (juce::Graphics& g, juce::Rectangle<float> box, float scale, co
 
 namespace
 {
+    /** THE PLATE'S WEAR: fine scratches, most of them the way a cloth wipes the plate and a few across it, and
+        a scuff here and there where something rubbed it — each in the plate's own tone, a line lighter where
+        it catches the light or darker, faint enough to read as used metal and never as a drawing. The same
+        plate is worn the same way every time: its scratches are drawn from where it stands. */
+    void wear (juce::Graphics& g, const juce::Path& plate, const BadgeLook& look)
+    {
+        if (look.wear <= 0.0f)
+            return;
+        const auto box = plate.getBounds();
+        juce::Random rng ((juce::int64) (box.getX() * 131.0f + box.getY() * 7919.0f + box.getWidth() * 31.0f));
+        const juce::Graphics::ScopedSaveState keep (g);
+        g.reduceClipRegion (plate);
+        const auto light = look.plateTop.brighter (0.9f), dark = look.plateBottom.darker (0.6f);
+        const int count = juce::roundToInt (look.wear * box.getWidth() * box.getHeight() / 220.0f);
+        for (int i = 0; i < count; ++i)
+        {
+            const float angle = (rng.nextFloat() < 0.75f ? -0.35f : 1.1f) + (rng.nextFloat() - 0.5f) * 0.5f;
+            const float length = box.getWidth() * (0.04f + 0.18f * rng.nextFloat() * rng.nextFloat());
+            const juce::Point<float> from (box.getX() + rng.nextFloat() * box.getWidth(), box.getY() + rng.nextFloat() * box.getHeight());
+            const juce::Point<float> along (std::cos (angle), std::sin (angle)), across (-along.y, along.x);
+            const auto to = from + along * length;
+            juce::Path scratch;
+            scratch.startNewSubPath (from);
+            scratch.quadraticTo ((from + to) * 0.5f + across * (length * 0.06f * (rng.nextFloat() - 0.5f)), to);
+            const bool lit = rng.nextFloat() < 0.7f;
+            g.setColour ((lit ? light : dark).withAlpha (look.wear * (lit ? 0.09f + 0.11f * rng.nextFloat() : 0.12f + 0.12f * rng.nextFloat())));
+            g.strokePath (scratch, juce::PathStrokeType (0.3f + 0.4f * rng.nextFloat(), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        for (int i = 0; i < count / 8; ++i)
+        {
+            const juce::Point<float> at (box.getX() + rng.nextFloat() * box.getWidth(), box.getY() + rng.nextFloat() * box.getHeight());
+            const float angle = rng.nextFloat() * juce::MathConstants<float>::twoPi;
+            const juce::Point<float> along (std::cos (angle), std::sin (angle));
+            g.setColour (light.withAlpha (look.wear * 0.1f));
+            for (int k = 0, n = 4 + rng.nextInt (4); k < n; ++k)
+            {
+                const auto from = at + juce::Point<float> (rng.nextFloat() - 0.5f, rng.nextFloat() - 0.5f) * 3.0f;
+                g.drawLine (juce::Line<float> (from, from + along * (1.5f + 2.5f * rng.nextFloat())), 0.4f);
+            }
+        }
+    }
+}
+
+void paintBadge (juce::Graphics& g, const juce::Path& plate, const std::vector<juce::Point<float>>& screws, float screw,
+                 juce::Rectangle<float> mark, float scale, const BadgeLook& look)
+{
+    const auto box = plate.getBounds();
+    g.setGradientFill (juce::ColourGradient (look.plateTop, box.getCentreX(), box.getY(),
+                                             look.plateBottom, box.getCentreX(), box.getBottom(), false));
+    g.fillPath (plate);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.05f), box.getX(), box.getY(),
+                                             juce::Colours::transparentWhite, box.getCentreX(), box.getCentreY(), false));
+    g.fillPath (plate);
+    wear (g, plate, look);
+    g.setColour (juce::Colour (0xff4a4757).withAlpha (0.8f));
+    g.strokePath (plate, juce::PathStrokeType (1.2f));
+
+    for (const auto& c : screws)
+    {
+        const auto head = juce::Rectangle<float> (screw, screw).withCentre (c);
+        const float k = screw / 8.0f;      // the slot and the light, as on an 8-unit head
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff6d6a78), c.translated (-1.5f * k, -2.0f * k),
+                                                 juce::Colour (0xff141318), c.translated (2.5f * k, 3.0f * k), true));
+        g.fillEllipse (head);
+        g.setColour (juce::Colour (0xff09080c));
+        g.drawLine (c.x - 2.2f * k, c.y - 2.2f * k, c.x + 2.2f * k, c.y + 2.2f * k, 1.0f);
+    }
+
+    engraveMark (g, mark, scale, look.ink);
+}
+
+namespace
+{
     juce::Path polygon (const std::vector<juce::Point<float>>& corners)
     {
         juce::Path p;
