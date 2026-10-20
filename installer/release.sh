@@ -7,8 +7,9 @@
 #      happens to be checked out on this machine.
 #   2. Family_All (universal arm64 + x86_64) — every format of every amp installer/family.ini names — and
 #      the gates, the one list (tests/gates.txt), run by tools/run-gates.sh, each in a home of its own.
-#   3. installer/sign-family-macos.sh: codesign every bundle (Developer ID Application, hardened runtime,
-#      the standalones with the audio-input entitlement), notarize them in one submission and staple each;
+#   3. installer/sign-family-macos.sh: codesign every bundle — the family's plug-ins, one bundle per format,
+#      and every amp's standalone (Developer ID Application, hardened runtime, the standalones with the
+#      audio-input entitlement) — notarize them in one submission and staple each;
 #      the .zip; the .pkg — signed (Developer ID Installer), notarized, stapled, validated.
 #   4. SHA256SUMS over what ships.
 #
