@@ -1,13 +1,14 @@
 # ----------------------------------------------------------------------------
 # JUCE AND clap-juce-extensions, PATCHED SO THAT ONE BINARY HOLDS SEVERAL PLUG-INS.
 #
-# Both register exactly one plug-in per binary. The family ships one VST3 and one CLAP that hold every amp,
-# each under the ids its own bundle has always had, so a session saved with an amp's own bundle opens it
-# from the family's unchanged. The two several-plugins patches (cmake/patches, each explained at its head) add
-# that and nothing else: a target that defines JUCE_PLUGIN_LIST_HEADER — the name of a header on its include path — holds
-# the plug-ins that header lists (juce_PluginList.h, which the JUCE patch brings), and every other target
-# compiles the very text it compiled before, each added line sitting behind that macro. So the standalones
-# and a plug-in built alone build as they always did, from the patched trees. A third, small patch lets the
+# Both register exactly one plug-in per binary. The family ships one VST3, one CLAP and, on the Mac, one AU
+# that hold every amp, each under the ids its own bundle has always had, so a session saved with an amp's
+# own bundle opens it from the family's unchanged. The two several-plugins patches (cmake/patches, each
+# explained at its head) add that and nothing else: a target that defines JUCE_PLUGIN_LIST_HEADER — the
+# name of a header on its include path — holds the plug-ins that header lists (juce_PluginList.h, which the
+# JUCE patch brings), and every other target compiles the very text it compiled before, each added line
+# sitting behind that macro. So the standalones and a plug-in built alone build as they always did, from
+# the patched trees. A third, small patch lets the
 # family's VST3 carry its name at all: JUCE's VST3 post-build steps hand the bundle's path to the shell
 # unquoted, and the apostrophe in "Darwin's Cat Amps" breaks them wherever that shell is /bin/sh.
 #

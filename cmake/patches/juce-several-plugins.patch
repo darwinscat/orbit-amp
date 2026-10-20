@@ -1,11 +1,12 @@
-ONE BINARY, SEVERAL PLUG-INS — JUCE's VST3 wrapper. Applied by cmake/PatchedWrappers.cmake to the pinned
-JUCE (ORBITAMP_JUCE_TAG, 8.0.16-security) before it builds; git apply reads from the first "diff --git" line
-on, so this text is not part of the patch.
+ONE BINARY, SEVERAL PLUG-INS — JUCE's VST3 and AU wrappers. Applied by cmake/PatchedWrappers.cmake to the
+pinned JUCE (ORBITAMP_JUCE_TAG, 8.0.16-security) before it builds; git apply reads from the first "diff --git"
+line on, so this text is not part of the patch.
 
-JUCE registers one plug-in per binary: the factory lists one component and one controller, named and
-numbered from the target's JucePlugin_ macros. With this patch a target that defines JUCE_PLUGIN_LIST_HEADER
-(the name of a header on its include path) holds every plug-in that header lists in jucePluginList, and the
-binary defines createPluginFilter (const juce::PluginListEntry&) instead of createPluginFilter():
+JUCE registers one plug-in per binary: the VST3 factory lists one component and one controller, the AU one
+component, named and numbered from the target's JucePlugin_ macros. With this patch a target that defines
+JUCE_PLUGIN_LIST_HEADER (the name of a header on its include path) holds every plug-in that header lists in
+jucePluginList, and the binary defines createPluginFilter (const juce::PluginListEntry&) instead of
+createPluginFilter():
 
   juce_PluginList.h (new)       the entry: name, four-character code, CLAP id, VST3 categories, CLAP
                                 features. Plain data, no JUCE: the VST3 manifest helper compiles it.
@@ -14,12 +15,24 @@ binary defines createPluginFilter (const juce::PluginListEntry&) instead of crea
                                 and the entry's code), so moduleinfo.json lists them all too; VST2
                                 replacement, compatible classes, a hand-set component id and ARA are
                                 refused with an #error, being one plug-in's features.
-  detail/juce_CreatePluginFilter.h   makes one entry's processor, as the single case makes its one.
+  detail/juce_CreatePluginFilter.h   makes one entry's processor, as the single case makes its one; the
+                                single case is deleted, so a wrapper that makes the binary's one processor
+                                — a format of one plug-in: Standalone, AUv3, AAX, VST2, LV2, Unity — does
+                                not compile in a list.
   juce_audio_plugin_client_VST3.cpp  a component is made for an entry, makes that entry's processor and
                                 names that entry's controller.
+  juce_audio_plugin_client_AU_1.mm   an instance reads its component's description
+                                (AudioComponentInstanceGetComponent, AudioComponentGetDescription) and
+                                makes the processor of the entry whose code is its subtype; ARA is refused
+                                with an #error. The bundle's Info.plist must list one AudioComponents entry
+                                per entry of the list — JUCE writes the binary's one, and the project that
+                                defines the list writes the list's in its place (juce_PluginList.h says how).
+  juce_audio_plugin_client_AUv3.mm   refused with an #error: an app extension is one plug-in's.
 
-Without JUCE_PLUGIN_LIST_HEADER every added line is compiled out and each touched file preprocesses to its
-text before the patch.
+What the entries share is the binary's, in the AU as elsewhere: the factory function every component
+names, the Cocoa view's class and the name it describes itself with (JucePlugin_Name), the type, the
+channel configurations. Without JUCE_PLUGIN_LIST_HEADER every added line is compiled out and each touched
+file preprocesses to its text before the patch.
 
 diff --git a/modules/juce_audio_plugin_client/VST3/juce_VST3ModuleInfo.h b/modules/juce_audio_plugin_client/VST3/juce_VST3ModuleInfo.h
 index 231a9f4..5d6b0ef 100644
@@ -134,10 +147,10 @@ index 231a9f4..5d6b0ef 100644
  
      virtual Steinberg::FUnknown* createInstance (const ClassEntry& entry)
 diff --git a/modules/juce_audio_plugin_client/detail/juce_CreatePluginFilter.h b/modules/juce_audio_plugin_client/detail/juce_CreatePluginFilter.h
-index 82ca17a..e365051 100644
+index 82ca17a..39ed2de 100644
 --- a/modules/juce_audio_plugin_client/detail/juce_CreatePluginFilter.h
 +++ b/modules/juce_audio_plugin_client/detail/juce_CreatePluginFilter.h
-@@ -34,6 +34,10 @@
+@@ -34,9 +34,21 @@
  
  #pragma once
  
@@ -148,10 +161,23 @@ index 82ca17a..e365051 100644
  namespace juce
  {
  
-@@ -54,4 +58,23 @@ inline std::unique_ptr<AudioProcessor> createPluginFilterOfType (AudioProcessor:
++#ifdef JUCE_PLUGIN_LIST_HEADER
++/** Not in a binary that holds several plug-ins: a wrapper that makes the binary's one processor is a
++    format of one plug-in — a Standalone, an AUv3, AAX, VST2, LV2, Unity — and a list builds only the
++    wrappers that make an entry's (the overload below). A call of this one is such a format, refused
++    here, at compile time.
++*/
++std::unique_ptr<AudioProcessor> createPluginFilterOfType (AudioProcessor::WrapperType) = delete;
++#else
+ inline std::unique_ptr<AudioProcessor> createPluginFilterOfType (AudioProcessor::WrapperType type)
+ {
+     PluginHostType::jucePlugInClientCurrentWrapperType = type;
+@@ -53,5 +65,25 @@ inline std::unique_ptr<AudioProcessor> createPluginFilterOfType (AudioProcessor:
+ 
      return pluginInstance;
  }
- 
++#endif
++
 +#ifdef JUCE_PLUGIN_LIST_HEADER
 +/** The processor of one entry of the binary's plug-in list, made as createPluginFilterOfType makes
 +    the one plug-in of a binary that holds only one.
@@ -170,7 +196,7 @@ index 82ca17a..e365051 100644
 +    return pluginInstance;
 +}
 +#endif
-+
+ 
  } // namespace juce
 diff --git a/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.cpp b/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.cpp
 index 40d8a74..4444164 100644
@@ -251,10 +277,10 @@ index 40d8a74..4444164 100644
      RunLoop runLoop;
 diff --git a/modules/juce_audio_plugin_client/juce_PluginList.h b/modules/juce_audio_plugin_client/juce_PluginList.h
 new file mode 100644
-index 0000000..1537a69
+index 0000000..e29e7b2
 --- /dev/null
 +++ b/modules/juce_audio_plugin_client/juce_PluginList.h
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,81 @@
 +/*
 +  ==============================================================================
 +
@@ -281,8 +307,15 @@ index 0000000..1537a69
 +    JUCE_PLUGIN_LIST_HEADER — the name of a header on its include path — holds every plug-in that
 +    header lists instead, and the wrappers register each of them with the identity it would have as
 +    a binary of its own: its VST3 component and controller class ids are made from
-+    JucePlugin_ManufacturerCode and its code exactly as a single build makes them, and its CLAP id
-+    is its own. A session saved with the plug-in built alone opens it from the list unchanged.
++    JucePlugin_ManufacturerCode and its code exactly as a single build makes them, its Audio Unit
++    is the binary's type and manufacturer with its code as the subtype, and its CLAP id is its
++    own. A session saved with the plug-in built alone opens it from the list unchanged.
++
++    The AU wrapper makes the entry whose code is the subtype of the component the host opened,
++    and the binary's Info.plist has to list that component: one AudioComponents entry for each
++    plug-in of the list, as the build of that plug-in alone writes its one, every one of them
++    naming the binary's factory function. JUCE writes one, the binary's own, from PLUGIN_CODE: the
++    project that defines a list writes the list's in its place, from the same list.
 +
 +    The header the macro names includes this one and defines the list, in the order hosts show it:
 +
@@ -307,7 +340,7 @@ index 0000000..1537a69
 +struct PluginListEntry
 +{
 +    const char* name;                 // what hosts show: the VST3 class name, the CLAP name
-+    const char* code;                 // exactly four characters, as PLUGIN_CODE
++    const char* code;                 // exactly four characters, as PLUGIN_CODE (the AU subtype)
 +    const char* clapId;               // as CLAP_ID
 +    const char* vst3Categories;       // '|'-joined, as VST3_CATEGORIES makes JucePlugin_Vst3Category
 +    const char* const* clapFeatures;  // nullptr-terminated, as CLAP_FEATURES
@@ -329,3 +362,112 @@ index 0000000..1537a69
 +    processor learns which plug-in it is from its argument and never from anything global.
 +*/
 +juce::AudioProcessor* createPluginFilter (const juce::PluginListEntry&);
+diff --git a/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm b/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm
+index 68c8f3c..56f9b5a 100644
+--- a/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm
++++ b/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm
+@@ -77,6 +77,19 @@
+ #include <juce_audio_processors_headless/format_types/juce_AU_Shared.h>
+ #include <juce_gui_basics/detail/juce_ComponentPeerHelpers.h>
+ 
++#ifdef JUCE_PLUGIN_LIST_HEADER
++ // THE BINARY HOLDS SEVERAL PLUG-INS, the ones this header lists (juce_PluginList.h): its Info.plist has
++ // an AudioComponents entry for each — the binary's type and manufacturer, the entry's code as the
++ // subtype, one factory function for them all — and an instance makes the processor of the entry its
++ // component is (AudioProcessorHolder). ARA hands the host one factory for the whole binary, which
++ // belongs to one plug-in, so a list refuses it rather than give it to every entry at once.
++ #include JUCE_PLUGIN_LIST_HEADER
++
++ #if JucePlugin_Enable_ARA
++  #error "A plug-in list registers each plug-in's own Audio Unit and nothing else: leave out ARA"
++ #endif
++#endif
++
+ #if JucePlugin_Enable_ARA
+  #include <juce_audio_processors_headless/utilities/ARA/juce_AudioProcessor_ARAExtensions.h>
+  #include <ARA_API/ARAAudioUnit.h>
+@@ -114,6 +127,39 @@
+ 
+ template <> struct ContainerDeletePolicy<const __CFString>   { static void destroy (const __CFString* o) { if (o != nullptr) CFRelease (o); } };
+ 
++#ifdef JUCE_PLUGIN_LIST_HEADER
++// make sure the audio processor is initialized before the AUBase class — the processor of the entry of
++// the binary's plug-in list this instance is: the one whose code is its component's subtype.
++struct AudioProcessorHolder
++{
++    explicit AudioProcessorHolder (AudioComponentInstance instance)
++        : juceFilter (createPluginFilterOfType (AudioProcessor::wrapperType_AudioUnit, getPluginListEntry (instance)))
++    {
++        // audio units do not have a notion of enabled or un-enabled buses
++        juceFilter->enableAllBuses();
++    }
++
++    // The entry the host opened, read off the component this instance is of. Every AudioComponents
++    // entry of the binary's Info.plist is one entry of the list, so no subtype is without one; were one
++    // to be, the host is told the instance cannot be made (ComponentBase::AP_Open catches this) rather
++    // than given another plug-in under that one's id.
++    static const PluginListEntry& getPluginListEntry (AudioComponentInstance instance)
++    {
++        AudioComponentDescription description {};
++
++        if (AudioComponentGetDescription (AudioComponentInstanceGetComponent (instance), &description) == noErr)
++            for (const auto& entry : jucePluginList)
++                if (pluginListCode (entry.code) == description.componentSubType)
++                    return entry;
++
++        jassertfalse;
++        throw ausdk::AUException { kAudioUnitErr_FailedInitialization };
++    }
++
++    ScopedJuceInitialiser_GUI scopedInitialiser;
++    std::unique_ptr<AudioProcessor> juceFilter;
++};
++#else
+ // make sure the audio processor is initialized before the AUBase class
+ struct AudioProcessorHolder
+ {
+@@ -126,6 +172,7 @@
+     ScopedJuceInitialiser_GUI scopedInitialiser;
+     std::unique_ptr<AudioProcessor> juceFilter { createPluginFilterOfType (AudioProcessor::wrapperType_AudioUnit) };
+ };
++#endif
+ 
+ //==============================================================================
+ class JuceAU final : public AudioProcessorHolder,
+@@ -148,10 +195,19 @@
+     }
+ 
+ public:
++   #ifdef JUCE_PLUGIN_LIST_HEADER
++    // The holder makes the processor of the entry this component is, before the AUBase class.
++    explicit JuceAU (AudioUnit component)
++        : AudioProcessorHolder (component),
++          MusicDeviceBase (component,
++                           (UInt32) AudioUnitHelpers::getBusCountForWrapper (*juceFilter, true),
++                           (UInt32) AudioUnitHelpers::getBusCountForWrapper (*juceFilter, false))
++   #else
+     explicit JuceAU (AudioUnit component)
+         : MusicDeviceBase (component,
+                            (UInt32) AudioUnitHelpers::getBusCountForWrapper (*juceFilter, true),
+                            (UInt32) AudioUnitHelpers::getBusCountForWrapper (*juceFilter, false))
++   #endif
+     {
+         inParameterChangedCallback = false;
+ 
+diff --git a/modules/juce_audio_plugin_client/juce_audio_plugin_client_AUv3.mm b/modules/juce_audio_plugin_client/juce_audio_plugin_client_AUv3.mm
+index d8aa9a2..2fba728 100644
+--- a/modules/juce_audio_plugin_client/juce_audio_plugin_client_AUv3.mm
++++ b/modules/juce_audio_plugin_client/juce_audio_plugin_client_AUv3.mm
+@@ -37,6 +37,12 @@
+ 
+ #if JucePlugin_Build_AUv3
+ 
++#ifdef JUCE_PLUGIN_LIST_HEADER
++ // An AUv3 is one plug-in's app extension — its principal class, its one AudioComponents entry, the
++ // app it is embedded in — so a binary that holds several plug-ins (juce_PluginList.h) builds none.
++ #error "A plug-in list builds no AUv3, an app extension being one plug-in's: leave AUv3 out of FORMATS and build the AU"
++#endif
++
+ #ifndef __OBJC2__
+  #error AUv3 needs Objective-C 2 support (compile with 64-bit)
+ #endif
