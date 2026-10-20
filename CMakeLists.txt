@@ -38,6 +38,47 @@ if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS build archs" FORCE)
 endif()
 
+# A RELEASE KEEPS THE SYMBOLS OF WHAT IT SHIPPED — ORBITAMP_KEEP_SYMBOLS, on for the release workflow's
+# builds and installer/release.sh's, off for every other. A crash report from a player's host names
+# addresses in our binaries and nothing more, as a released binary carries no names of its own (A RELEASE
+# BINARY CARRIES NO LOCAL SYMBOLS, below); it can be read, months later, only with the symbols of the build
+# that made those very bytes. So a release compiles everything in its Release configuration with line tables
+# — the functions, their lines and what was inlined where, nothing of the variables: `-gline-tables-only`
+# (clang), `-g1` (gcc), `/Zi` (MSVC), none of which changes the code a compiler makes — and every format it
+# ships keeps its symbols in <build>/symbols/<target>/ (strip_release): a .dSYM on the Mac, a .pdb on
+# Windows, a .debug file on Linux, which the release uploads beside the run and never publishes. Said here,
+# before any dependency is fetched, so every library linked into a shipped binary is compiled the same way;
+# in each language's flags of the Release configuration, which reach the link line too (gcc writes the debug
+# information of an optimised-at-link binary there) and no resource compiler is handed. (The amps' .mm
+# sources are compiled as C++ here: no Objective-C language is enabled.)
+option(ORBITAMP_KEEP_SYMBOLS "Keep every shipped binary's symbols in <build>/symbols, then strip it (a release)" OFF)
+set(ORBITAMP_SYMBOLS_DIR "${CMAKE_BINARY_DIR}/symbols")
+if(ORBITAMP_KEEP_SYMBOLS)
+    if(MSVC)
+        set(_oa_line_tables /Zi)
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set(_oa_line_tables -g1)
+    else()
+        set(_oa_line_tables -gline-tables-only)
+    endif()
+    get_property(_oa_languages GLOBAL PROPERTY ENABLED_LANGUAGES)
+    foreach(lang IN ITEMS C CXX OBJC OBJCXX)
+        if(lang IN_LIST _oa_languages)
+            string(APPEND CMAKE_${lang}_FLAGS_RELEASE " ${_oa_line_tables}")
+        endif()
+    endforeach()
+    if(APPLE)
+        find_program(ORBITAMP_DSYMUTIL dsymutil REQUIRED)
+        find_program(ORBITAMP_DWARFDUMP dwarfdump REQUIRED)
+        # Where the link keeps its link-time-optimised object, one an architecture (strip_release).
+        set(ORBITAMP_LTO_OBJECTS_DIR "${CMAKE_BINARY_DIR}/lto-objects")
+        file(MAKE_DIRECTORY "${ORBITAMP_LTO_OBJECTS_DIR}")
+    elseif(UNIX AND NOT CMAKE_OBJCOPY)
+        message(FATAL_ERROR "ORBITAMP_KEEP_SYMBOLS: no objcopy found (CMAKE_OBJCOPY) to keep the symbols with")
+    endif()
+    message(STATUS "Symbols: every shipped binary keeps its symbols in ${ORBITAMP_SYMBOLS_DIR} (${_oa_line_tables})")
+endif()
+
 include(FetchContent)
 
 # ----------------------------------------------------------------------------
@@ -565,17 +606,55 @@ set(AMP_CLAP_FEATURES audio-effect guitar amplifier)
 # A RELEASE BINARY CARRIES NO LOCAL SYMBOLS — tens of thousands of internal names, a fifth of a face's
 # binary. Its exports stay, which is all a host looks up (GetPluginFactory, the AU's factory, clap_entry):
 # `ld -x` on the Mac, `-s` on Linux, at the link of every format, the CLAP's too. A crash report from a
-# released amp shows addresses, not the names of its own functions. MSVC writes its symbols to a .pdb beside
-# the binary, which no installer packs, and is left as it is. For every format of an amp (add_amp) and of
-# the family's plug-ins (THE FAMILY'S PLUG-INS).
+# released amp shows addresses, not the names of its own functions. A Release build of MSVC's makes no
+# symbols at all. For every format of an amp (add_amp) and of the family's plug-ins (THE FAMILY'S PLUG-INS).
+#
+# A RELEASE (ORBITAMP_KEEP_SYMBOLS, above) KEEPS THEM FIRST, from the very link that is shipped, into
+# <build>/symbols/<target>/, which nothing that packs a release reads. The Mac and Linux link it whole and
+# strip it after (cmake/KeepSymbols.cmake, a step after the build): the Mac's dsymutil makes the .dSYM of
+# every architecture from what the link left, and `strip -S -x` then takes out what `ld -x` did — the
+# debug map with it — and a bundle the strip unsealed is signed ad hoc again, as JUCE's own step signs it;
+# Linux's objcopy keeps a .debug file, `strip --strip-all` takes out what `-s` did, and the binary is given
+# a .gnu_debuglink naming its debug file. The link-time optimisation's object is where a Mac binary's lines
+# are, and the linker throws it away unless told where to keep it: -object_path_lto, one path an
+# architecture (`-Xarch_`), or the second architecture's link of a universal binary writes over the first's.
+# On Windows the link writes the .pdb itself (/DEBUG) into the symbols folder, never beside the binary or
+# inside a VST3's folder that the installer copies whole — and says /OPT:REF and /OPT:ICF, which /DEBUG
+# would otherwise turn off, so the code it links is the code it linked before.
 function(strip_release)
     foreach(target IN LISTS ARGN)
-        if(APPLE)
+        if(ORBITAMP_KEEP_SYMBOLS)
+            keep_symbols(${target})
+        elseif(APPLE)
             target_link_options(${target} PRIVATE $<$<CONFIG:Release>:LINKER:-x>)
         elseif(UNIX)
             target_link_options(${target} PRIVATE $<$<CONFIG:Release>:-s>)
         endif()
     endforeach()
+endfunction()
+
+function(keep_symbols target)
+    set(dir "${ORBITAMP_SYMBOLS_DIR}/${target}")
+    if(MSVC)
+        target_link_options(${target} PRIVATE "$<$<CONFIG:Release>:/DEBUG:FULL;/OPT:REF;/OPT:ICF;/INCREMENTAL:NO>")
+        set_target_properties(${target} PROPERTIES PDB_OUTPUT_DIRECTORY_RELEASE "${dir}")
+        return()
+    endif()
+    if(APPLE)
+        foreach(arch IN LISTS CMAKE_OSX_ARCHITECTURES)
+            target_link_options(${target} PRIVATE
+                "$<$<CONFIG:Release>:SHELL:-Xarch_${arch} -Wl,-object_path_lto,${ORBITAMP_LTO_OBJECTS_DIR}/${target}-${arch}.o>")
+        endforeach()
+        set(tools "-DSTRIP=${CMAKE_STRIP}" "-DDSYMUTIL=${ORBITAMP_DSYMUTIL}" "-DDWARFDUMP=${ORBITAMP_DWARFDUMP}"
+                  "-DBUNDLE=$<TARGET_BUNDLE_DIR:${target}>")
+    else()
+        set(tools "-DSTRIP=${CMAKE_STRIP}" "-DOBJCOPY=${CMAKE_OBJCOPY}" "-DREADELF=${CMAKE_READELF}")
+    endif()
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" "-DCONFIG=$<CONFIG>" "-DBINARY=$<TARGET_FILE:${target}>" "-DSYMBOLS=${dir}"
+                ${tools} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/KeepSymbols.cmake"
+        COMMENT "${target}: keeping its symbols, then stripping it"
+        VERBATIM)
 endfunction()
 
 # A PLUG-IN EXPORTS ITS ENTRY POINTS AND NOTHING ELSE — on Linux, where nothing else sees to it. A host that

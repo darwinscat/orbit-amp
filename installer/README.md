@@ -173,11 +173,66 @@ builds `--target Family_All Family_Gates` and runs `tools/run-gates.sh build Rel
 - **Linux, x86_64 and arm64:** `build-family-linux.sh "$VER" build dist <arch>`.
 
 The release `vX.Y.Z` is published as the repository's latest, with every file and a `SHA256SUMS`, and the
-release's section of `CHANGELOG.md` as its notes.
+release's section of `CHANGELOG.md` as its notes. Every build is configured `-DORBITAMP_KEEP_SYMBOLS=ON`,
+and each job uploads the symbols of what it shipped as an artifact of the run — never a release asset (below:
+Reading a crash report). The release job downloads the packages by name and refuses to publish any file that
+is not one, `darwinscat-amps-*`.
 
 ## Locally — `release.sh`
 
 `installer/release.sh` is the macOS job on this machine: a fresh `build-release/` with every sibling override
 off, the same targets, the same gates, `sign-family-macos.sh`, and `SHA256SUMS` — into `dist/`. It needs the
 Developer ID identities in the login keychain and a notarytool profile (`NOTARY_PROFILE`, default
-`loki-notary`).
+`loki-notary`). It keeps the symbols too, in `symbols/<version>-macos-<when>/` — out of `build-release/`,
+which the next release starts by deleting, and out of git (`.gitignore`).
+
+## Reading a crash report — the symbols
+
+A released binary carries no names of its own (`CMakeLists.txt`: A RELEASE BINARY CARRIES NO LOCAL
+SYMBOLS), so a host's crash report names our binary and addresses in it, nothing more. Every release keeps
+the symbols of the very link it shipped (A RELEASE KEEPS THE SYMBOLS OF WHAT IT SHIPPED): line tables — the
+function, its file and line, and what was inlined there — in `<build>/symbols/<target>/`, one folder a
+shipped format, made before the binary is stripped:
+
+| system  | kept                                   | matched to the shipped binary by                      |
+|---------|----------------------------------------|-------------------------------------------------------|
+| macOS   | `<bundle>.dSYM`, every architecture     | the UUID of each architecture (`dwarfdump --uuid`)     |
+| Windows | `<name>.pdb`                           | the GUID and age the `.vst3`/`.clap`/`.exe` names      |
+| Linux   | `<file>.debug`                         | the build ID (`readelf -n`); `.gnu_debuglink` names it |
+
+**Where they are.** Each job of the release workflow uploads its folder as an artifact of the run:
+`symbols-<version>-macos`, `-windows-x64`, `-windows-arm64`, `-linux-x86_64`, `-linux-arm64` — on the run's
+page under Artifacts, or `gh run download <run-id> --pattern 'symbols-*' --dir symbols-<version>`. Never a
+release asset and never in an installer or a zip: they name every function of ours. GitHub keeps them 90
+days, the longest a repository allows. **To keep them for good**, download them once the release is out and
+store them somewhere private — a private repository's release, a storage bucket, a backup disk, never this
+repository — one folder a version, as downloaded. A report from a release whose symbols are gone can only be
+read by its exports.
+
+**Match first.** Symbols read a report right only if they are of the very build that crashed; another
+build's give names that look plausible and are wrong.
+
+- macOS: the report's Binary Images line of our binary — `0x10a4c0000 - 0x10b3fffff <bundle id> (0.8.0)
+  <UUID> /Library/Audio/Plug-Ins/VST3/Darwin's Cat Amps.vst3/…` (an `.ips` report: `usedImages`, `base` and
+  `uuid`) — gives its load address and its UUID, and the report's Code Type its architecture;
+  `dwarfdump --uuid` of the dSYM must list that UUID for that architecture.
+- Windows: the dump names the module's PDB by GUID and age (WinDbg: `lmv m <module>`); `dumpbin /headers`
+  of the shipped `.vst3` shows the same in its debug directory (`RSDS`).
+- Linux: `readelf -n` of the shipped `.so` or app and of its `.debug` show the same Build ID.
+
+**Then read it.** macOS — `-l` the image's load address from the report, then the frames' addresses; `-i`
+names the inlined frames too. An app's dSYM is `<Amp>.app.dSYM`, the AU's and the CLAP's
+`<bundle>.component.dSYM` and `<bundle>.clap.dSYM`:
+
+    atos -arch arm64 -o "Darwin's Cat Amps.vst3.dSYM" -l 0x10a4c0000 -i 0x10a5d1f2c 0x10a5d2030
+
+Windows — with a dump, WinDbg: `.sympath+ <the folder of the .pdb>`, `.reload /f`, `!analyze -v`, `kn`. With
+only a module and an offset (`Darwin's Cat Amps.vst3+0x1a2b3c`):
+
+    llvm-symbolizer --obj="Darwin's Cat Amps.vst3" --pdb="Darwin's Cat Amps.pdb" --relative-address --inlines 0x1a2b3c
+
+Linux — the frame's address less the library's load address (`/proc/<pid>/maps`, or the report's module base)
+is its offset:
+
+    addr2line -f -i -C -e "Darwin's Cat Amps.so.debug" 0x<offset>
+    llvm-symbolizer --obj="Darwin's Cat Amps.so.debug" --inlines 0x<offset>
