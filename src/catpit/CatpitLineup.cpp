@@ -17,7 +17,7 @@ const channels::Lineup& lineup()
     // delay behind them; the two driven ones have each a room of their own, and no delay. FAT is a
     // layer only the two hottest packs carry.
     static const channels::Lineup cockpit {
-        "catpit", "catpit_channel", "catpit_input_zero", "dark-matter",
+        "catpit", "catpit_channel", "dark-matter",
         {
             { "Clean",   "x88-ir-normal-bae8",    "Hall",     {}, 15.0f, false },
             { "Edge",    "x88-ir-altered-c14c",   "Hall",     {}, 15.0f, false },
@@ -58,7 +58,9 @@ namespace
 /** CATPITAMP (Product.h): the cockpit — its face (CatpitEditor.h) over its four channels. */
 const Product& products::catpitAmp()
 {
-    static const Product cockpit { "CatpitAmp", catpit::makeEditor, firstStart, addParameters, makeEngine };
+    static const Product cockpit { .name = "CatpitAmp", .makeEditor = catpit::makeEditor, .firstStart = firstStart,
+                                   .addParameters = addParameters, .makeEngine = makeEngine,
+                                   .formerInputZeroId = "catpit_input_zero" };
     return cockpit;
 }
 

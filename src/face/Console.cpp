@@ -13,6 +13,7 @@
 #include "../device/IrLibrary.h"
 #include "../ui/AboutConfig.h"
 #include "../ui/HumMenu.h"
+#include "../ui/InputZeroMenu.h"
 #include "../ui/HumTuning.h"
 #include "../ui/LoadBreakdown.h"
 #include "../ui/Prefs.h"
@@ -24,31 +25,6 @@ namespace orbitamp::face
 
 namespace
 {
-    // The INPUT lever's zero — see Console.h. Kept with the machine's settings, under the key, from the
-    // default and in the steps every product's input zero has (prefs::inputZeroKey).
-    const juce::Identifier& leverZeroKey = prefs::inputZeroKey;
-    constexpr int leverZeroDefault = prefs::inputZeroDefault, leverZeroLowest = prefs::inputZeroLowest,
-                  leverZeroHighest = prefs::inputZeroHighest, leverZeroStep = prefs::inputZeroStep;
-
-    int snapLeverZero (int db) { return prefs::snapInputZero (db); }
-
-    /** The lever's travel against the engine's trim: the bottom of the travel is the trim's bottom, the
-        top its top, and the middle whatever `zero` says the lever's zero gives. */
-    float leverToDb (float travel, int zero)
-    {
-        const float z = (float) zero, range = params::inTrimRangeDb;
-        return travel <= 0.5f ? juce::jmap (travel * 2.0f, -range, z)
-                              : juce::jmap ((travel - 0.5f) * 2.0f, z, range);
-    }
-
-    float dbToLever (float db, int zero)
-    {
-        const float z = (float) zero, range = params::inTrimRangeDb;
-        if (db <= z)
-            return z > -range ? 0.5f * (db + range) / (z + range) : 0.5f;   // a zero at the very bottom has nothing under it
-        return 0.5f + 0.5f * (db - z) / (range - z);
-    }
-
     juce::String decibels (int db) { return (db > 0 ? "+" : "") + juce::String (db) + " dB"; }
 
     // The ceilings the OUTPUT column's menu offers the limiter, within what the engine takes
@@ -191,14 +167,13 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // undo on the panel it must not leave a step to press back through.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
-    leverZero = snapLeverZero ((int) prefs::store (amp.product()).get (leverZeroKey, leverZeroDefault));
     channels.setTurboDb ((float) channels::settings::turbo (amp.product()));
     driveSteps = (bool) prefs::store (amp.product()).get (driveStepsKey, false);
 
     channels.readCabinets();    // the player's folder may have gained or lost a file since the engine was built
     engine.setUpChain (channels.adopt());
     channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
-    settleOnSettings(); // ...and INPUT's lever may have another zero than the one the state was dialled against
+    settleOnSettings(); // ...and TURBO's push and DRIVE's way may not be the settings' now
 
     // THE STANDALONE PLAYS IN STEREO SPACE — one guitar in, a wide room out. The processor's own default
     // waits for a device to open, so a first run with none saved MONO for good; and the first players'
@@ -394,13 +369,9 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     bind (*sliders[1], params::delayMix);
     bind (outFader, params::outTrim);
 
-    // INPUT's lever does not read the trim's own scale: its middle is the lever's zero (Console.h).
-    inputTrim = follow (params::inTrim, [this] (float db) { inFader.setValue (dbToLever (db, leverZero), false); });
-    inFader.onGestureStart = [this] { inputTrim->beginGesture(); };
-    inFader.onChange       = [this] (float travel) { inputTrim->setValueAsPartOfGesture (leverToDb (travel, leverZero)); };
-    inFader.onGestureEnd   = [this] { inputTrim->endGesture(); };
-    inFader.defaultValue   = 0.5f;
-    inputTrim->sendInitialUpdate();
+    // INPUT's lever IS the trim, as OUTPUT's is: its middle is 0 dB over the input's zero, which the engine
+    // adds itself (Console.h, AmpProcessor::inputTrimDb).
+    bind (inFader, params::inTrim);
 
     inFader.onMenu = [this] { showInputMenu(); };
 
@@ -415,7 +386,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     follow (params::tunerMute, [this] (float) { showTunerState(); });
     showTunerState();
 
-    sayLever (inFader,  "INPUT",  [this] { return getParam (params::inTrim) - (float) leverZero; });
+    sayLever (inFader,  "INPUT",  [this] { return getParam (params::inTrim); });
     sayLever (outFader, "OUTPUT", [this] { return getParam (params::outTrim); });
 
     // The tone stack is the playing pack's own — its Bass, Middle and Treble as they were measured on
@@ -940,8 +911,7 @@ bool Console::go (int to)
     open — is made its own the way the constructor makes the first one: the fixed chain, the channel
     whose pack is playing, a cabinet CAB can reach. And one it HAS seen, whose cabinet is no longer
     the file of that name — a register kept from before the file was replaced — has it read again;
-    as one whose INPUT was dialled against another zero of the lever has it settled on this one, and
-    one kept under another TURBO or another way of DRIVE's is given the settings' own. */
+    and one kept under another TURBO or another way of DRIVE's is given the settings' own. */
 void Console::adoptState()
 {
     adoptionPending = false;
@@ -971,28 +941,16 @@ void Console::followEngine()
 
 bool Console::settingsDiffer() const
 {
-    const auto dialled = amp.apvts.state.getProperty (channels.leverZeroId());
     const float push = getParam (params::blockIn (params::preampId).toRawUTF8());
 
-    return dialled.isVoid() || (int) dialled != leverZero
-        || (push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
+    return (push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
         || (getParam (params::blockSmooth (params::preampId).toRawUTF8()) > 0.5f) == driveSteps;
 }
 
 void Console::settleOnSettings()
 {
-    // No note: the trim was dialled on the engine's own scale, whose middle is 0 dB.
-    const auto dialled = amp.apvts.state.getProperty (channels.leverZeroId());
-    const int was = dialled.isVoid() ? 0 : (int) dialled;
-
-    if (was != leverZero)
-        setParam (params::inTrim, leverToDb (dbToLever (getParam (params::inTrim), was), leverZero));
-    if (dialled.isVoid() || was != leverZero)
-        amp.apvts.state.setProperty (channels.leverZeroId(), leverZero, nullptr);
-
-    inFader.setValue (dbToLever (getParam (params::inTrim), leverZero), false);
-
-    // TURBO the same way: that it is on is the state's, how hard is the settings'.
+    // TURBO: that it is on is the state's, how hard is the settings'. (The input's zero is the engine's
+    // own: AmpProcessor::inputTrimDb.)
     const auto turboTrim = params::blockIn (params::preampId);
     if (const float push = getParam (turboTrim.toRawUTF8());
         push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
@@ -1004,15 +962,11 @@ void Console::settleOnSettings()
         setParam (smooth.toRawUTF8(), driveSteps ? 0.0f : 1.0f);
 }
 
-/** The machine's setting, not an edit of the sound: the lever stays, the trim follows, and there is
-    no step to undo. */
-void Console::chooseLeverZero (int db)
+/** The input's zero's items (ui/InputZeroMenu.h), as every menu here has them. */
+void Console::addInputZeroLines (juce::PopupMenu& menu)
 {
-    leverZero = snapLeverZero (db);
-    prefs::store (amp.product()).set (leverZeroKey, leverZero);
-
-    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
-    settleOnSettings();
+    for (const auto& line : prefs::inputZeroMenu (amp.product()))
+        addChoice (menu, line.text, line.ticked, [line] (Console& e) { prefs::inputZeroPick (e.amp.product(), line); });
 }
 
 void Console::flipHum()
@@ -1141,17 +1095,16 @@ void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool t
     menu.addItem (item);
 }
 
-/** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: what the lever gives in the
-    middle of its travel, and the hum the input carries — both the machine's, the four modes here as
-    flat items, AUTO's line naming what it decided once it has. */
+/** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: the input's zero, what the
+    lever gives in the middle of its travel, and the hum the input carries — both the machine's, the
+    four modes here as flat items, AUTO's line naming what it decided once it has. */
 void Console::showInputMenu()
 {
     endTapping();
 
     juce::PopupMenu menu;
-    menu.addSectionHeader ("LEVER'S ZERO");
-    for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
-        addChoice (menu, decibels (db), db == leverZero, [db] (Console& e) { e.chooseLeverZero (db); });
+    menu.addSectionHeader (prefs::inputZeroTitle);
+    addInputZeroLines (menu);
 
     menu.addSectionHeader ("HUM");
     addHumLines (menu);
@@ -1887,21 +1840,20 @@ void Console::showSettingsMenu()
     // What the product's window shows, and full screen.
     addWindowSections (menu);
 
-    // What the INPUT lever gives in the middle of its travel, how DRIVE goes between the pack's
+    // The input's zero — what the INPUT lever gives in the middle of its travel — how DRIVE goes between the pack's
     // captures, and the hum the input carries. How hard TURBO pushes, where it pushes, is TURBO's own
     // menu's (showTurboMenu).
     menu.addSectionHeader ("INPUT");
     juce::PopupMenu zero;
-    for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
-        addChoice (zero, decibels (db), db == leverZero, [db] (Console& e) { e.chooseLeverZero (db); });
-    menu.addSubMenu ("Lever's zero  " + decibels (leverZero), zero);
+    addInputZeroLines (zero);
+    menu.addSubMenu (prefs::inputZeroState (amp.product()), zero);
 
     juce::PopupMenu way;
     for (int i = 0; i < driveWays.size(); ++i)
         addChoice (way, driveWays[i], (i == 1) == driveSteps, [steps = i == 1] (Console& e) { e.chooseDriveSteps (steps); });
     menu.addSubMenu ("DRIVE turns  " + driveWays[driveSteps ? 1 : 0], way);
 
-    // The hum is the machine's, like the lever's zero (prefs::hum): every window of this product and
+    // The hum is the machine's, like the input's zero (prefs::hum): every window of this product and
     // every engine behind one follow the choice from their next look and their next block. The title
     // says where it stands — AUTO's state with it.
     juce::PopupMenu hum;

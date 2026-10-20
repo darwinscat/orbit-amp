@@ -119,6 +119,9 @@ AmpProcessor::AmpProcessor (const Product& product)
     }
 
     inTrimParam        = apvts.getRawParameterValue (params::inTrim);
+    // The machine's input zero the engine plays the trim over (inputTrimDb), read here on the constructing
+    // thread like the hum below — and before the product's engine is made, which already pumps.
+    inputZeroWanted    = &prefs::inputZeroCache (ownProduct);
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
     tunerMuteParam     = apvts.getRawParameterValue (params::tunerMute);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
@@ -204,9 +207,6 @@ AmpProcessor::AmpProcessor (const Product& product)
     humPlayWanted  = &prefs::humtune::playCache (ownProduct);
     humQuietWanted = &prefs::humtune::quietCache (ownProduct);
 
-    // ...and the input's zero, the same way, where the product's trim stands over it.
-    if (ownProduct.inputTrimOverZero)
-        inputZeroWanted = &prefs::inputZeroCache (ownProduct);
     humUpToWanted  = &prefs::humtune::upToCache (ownProduct);
 
     // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
@@ -346,6 +346,9 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         // history would otherwise keep megabytes in its baseline and compare them every tick.
         self.takeEmbeddedIrs (t);
 
+        // ...and a trim of 0.8.0's, absolute, becomes the hand's place over the zero it was dialled against.
+        self.takeFormerTrims (t);
+
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
         // the top of setStateInformation also means it is armed AFTER the tree has landed, which
         // is what lets it take the restored values as its baseline instead of the outgoing ones.
@@ -386,6 +389,29 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
             if (auto* self = weak.get())
                 land (*self, tree);
         });
+}
+
+void AmpProcessor::takeFormerTrims (juce::ValueTree& tree) const
+{
+    const auto* former = ownProduct.formerInputZeroId;
+    if (former == nullptr || ! tree.isValid())
+        return;
+
+    if (tree.hasType (stateType) && tree.hasProperty (former))
+    {
+        if (! tree.hasProperty (params::inTrimZero))
+        {
+            const int dialled = (int) tree.getProperty (former);
+            if (auto trim = tree.getChildWithProperty ("id", juce::String (params::inTrim)); trim.isValid())
+                trim.setProperty ("value", juce::jlimit (-params::inTrimRangeDb, params::inTrimRangeDb,
+                                                         (float) trim.getProperty ("value") - (float) dialled), nullptr);
+            tree.setProperty (params::inTrimZero, dialled, nullptr);
+        }
+        tree.removeProperty (former, nullptr);
+    }
+
+    for (auto child : tree)
+        takeFormerTrims (child);
 }
 
 juce::String AmpProcessor::loadedAs() const
@@ -741,12 +767,11 @@ void AmpProcessor::pumpDeviceWork()
     if (juce::MessageManager::existsAndIsCurrentThread())
         cab.flushPending();
 
-    // THE ZERO THE TRIM WAS DIALLED AGAINST, written beside it (params::inTrimZero), where the trim stands
-    // over the machine's input zero: a fresh state, one that has just landed — a session, a preset, a
-    // register, an undo — dialled against another zero or before there was one, and a zero just chosen,
-    // all take the zero in force. The trim itself does not move: it is the hand's, and the engine plays
-    // it over the zero in force (inputTrimDb). Not an edit, so no undo step — the rovers' own rule
-    // (face/Console.cpp: settleOnSettings). The tree is the message thread's.
+    // THE ZERO THE TRIM WAS DIALLED AGAINST, written beside it (params::inTrimZero), every amp's: a fresh
+    // state, one that has just landed — a session, a preset, a register, an undo — dialled against
+    // another zero or before there was one, and a zero just chosen, all take the zero in force. The trim
+    // itself does not move: it is the hand's, and the engine plays it over the zero in force
+    // (inputTrimDb). Not an edit, so no undo step. The tree is the message thread's.
     if (inputZeroWanted != nullptr && juce::MessageManager::existsAndIsCurrentThread())
     {
         const int zero = inputZeroWanted->load (std::memory_order_relaxed);

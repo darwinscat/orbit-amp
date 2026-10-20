@@ -36,7 +36,6 @@ struct Lineup
 
     const char* nodeType;       // the product's node in the state tree, where the channels' memory is kept
     const char* parameterId;    // CHANNEL, the host's handle on the selector
-    const char* leverZeroId;    // the note beside INPUT's trim: the zero of INPUT's lever it was dialled against
     const char* openingCabinet; // the cabinet a channel opens on, by the stem of its file's name
 
     std::vector<Channel> channels;

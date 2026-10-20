@@ -209,9 +209,10 @@ inline void setTunerReference (const Product& p, int hz)   { hz = snapTunerRefer
 /** THE INPUT'S ZERO — where the engine's input trim stands with the hand's control in the middle of its
     travel: -9 dB unless the player says otherwise, a guitar straight into an interface being hotter than
     what the captures were fed. About this interface and this guitar, not about a sound, so it lives on the
-    machine, each product its own: the cockpit and the rovers read it under their INPUT lever
-    (face/Console.h), OrbitAmp under its IN column's fader (Product::inputTrimOverZero). From +12 to -24 dB
-    in steps of 3; a stored one between them lands on the nearest. */
+    machine, each product its own. Every amp's engine plays its input trim over it (AmpProcessor::inputTrimDb)
+    — OrbitAmp's IN fader, the cockpit's and the rovers' INPUT lever — and every amp offers it in its settings
+    the same way (ui/InputZeroMenu.h). From +12 to -24 dB in steps of 3; a stored one between them lands on
+    the nearest. The key is the one the cockpit's lever has kept it under since it had one. */
 inline const juce::Identifier inputZeroKey { "input_zero_db" };
 
 inline constexpr int inputZeroDefault = -9, inputZeroLowest = -24, inputZeroHighest = 12, inputZeroStep = 3;
@@ -222,11 +223,10 @@ inline int snapInputZero (int db)
     return inputZeroLowest + inputZeroStep * juce::roundToInt ((float) (db - inputZeroLowest) / (float) inputZeroStep);
 }
 
-/** OrbitAmp's engine reads it every block, so it is cached like the tuner's floor, one for each product
-    in a process and shared by its processors: a zero chosen in one window is in force in every engine of
-    the product from its next block. A processor that reads it touches the cache in its constructor, so the
-    first read, which opens the file, is never the audio thread's. The cockpit and the rovers read the
-    setting itself, as their window opens (face/Console.cpp). */
+/** The engine reads it every block, so it is cached like the tuner's floor, one for each product in a
+    process and shared by its processors: a zero chosen in one window is in force in every engine of the
+    product from its next block. A processor touches the cache in its constructor, so the first read, which
+    opens the file, is never the audio thread's. */
 inline std::atomic<int>& inputZeroCache (const Product& p)
 {
     static PerProduct<std::atomic<int>> cached;

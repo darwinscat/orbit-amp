@@ -90,7 +90,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
                 std::make_unique<Bool> (juce::ParameterID { reverbOn, 1 }, "Reverb", true));
 
     // The input trim, ahead of everything. 0 dB by default: it exists to fix a rig, not to be part
-    // of a sound — and where it stands over the machine's input zero (OrbitAmp's), its 0 is that zero.
+    // of a sound — and its 0 is the machine's input zero, which the engine adds (inputTrimDb).
     layout.add (std::make_unique<Float> (juce::ParameterID { inTrim, 1 }, "Input Trim",
                                          juce::NormalisableRange<float> (-inTrimRangeDb, inTrimRangeDb, 0.1f),
                                          0.0f));

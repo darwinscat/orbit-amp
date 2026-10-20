@@ -233,9 +233,11 @@ int main()
                 }
 
                 // Past the first blocks, which the fades and the wires settle in.
+                // ...through IN, which goes on holding: at its 0 the machine's input zero (inputTrimDb).
+                const float through = juce::Decibels::decibelsToGain (amp->inputTrimDb());
                 float worst = 0.0f;
                 for (size_t n = (size_t) (block * 8); n < out.size(); ++n)
-                    worst = juce::jmax (worst, std::abs (out[n] - in[n - (size_t) late]));
+                    worst = juce::jmax (worst, std::abs (out[n] - through * in[n - (size_t) late]));
                 return worst;
             };
 
@@ -252,7 +254,8 @@ int main()
 
             const float worst = play();
             std::printf ("      parked: %d samples late, the worst sample %.2g off the input\n", late, (double) worst);
-            check (worst < 1.0e-3f, "parked, the input comes out as it went in, as late as the chain reports");
+            check (worst < 1.0e-3f, "parked, the input comes out as it went in, through IN at its 0 (the input's zero, "
+                                        + juce::String (amp->inputTrimDb(), 1) + " dB), as late as the chain reports");
 
             // ...through the player's own levels: a master turned down holds the dry guitar down too.
             if (auto* master = amp->apvts.getParameter (params::outTrim))
@@ -261,7 +264,7 @@ int main()
                 master->setValueNotifyingHost (master->convertTo0to1 (-12.0f));
                 play();                              // the master's ramp settles
                 play();
-                const float g = juce::Decibels::decibelsToGain (-12.0f);
+                const float g = juce::Decibels::decibelsToGain (-12.0f + amp->inputTrimDb());
                 float down = 0.0f;
                 for (size_t n = (size_t) (block * 8); n < out.size(); ++n)
                     down = juce::jmax (down, std::abs (out[n] - g * in[n - (size_t) late]));

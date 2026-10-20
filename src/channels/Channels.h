@@ -97,11 +97,6 @@ public:
         under every push on offer. */
     static constexpr float turboOnAbove = 1.5f;
 
-    /** A note on the state itself, beside INPUT's trim: the lever's zero that trim was dialled against
-        (the face's INPUT lever). It is INPUT's, and goes where INPUT goes: no preset holds either of
-        them. */
-    juce::Identifier leverZeroId() const { return line.leverZeroId; }
-
     /** Whether the state carries the product's node at all. One that does not is a state the product has
         never seen — a session saved before it existed, or a fresh instance. */
     bool adopted() const { return node().isValid(); }

@@ -12,7 +12,7 @@ namespace orbitamp::redpaw
 channels::Lineup roverLineup (std::vector<channels::Lineup::Channel> channels)
 {
     jassert (! channels.empty() && channels.size() % 2 == 0 && channels.size() <= (size_t) maxGears * 2);
-    return { "rover", "rover_channel", "rover_input_zero", "dark-matter",
+    return { "rover", "rover_channel", "dark-matter",
              std::move (channels),
              "rover_park",      // PARK: the lever's top end, the whole amp out of the sound
              true };            // a gear and its TURBO: one memory
@@ -59,7 +59,7 @@ namespace
 
 Product rover (const Skin& skin)
 {
-    return { skin.product, makeEditor, firstStart, addParameters, makeEngine, &skin };
+    return { skin.product, makeEditor, firstStart, addParameters, makeEngine, &skin, "rover_input_zero" };
 }
 
 } // namespace orbitamp::redpaw
