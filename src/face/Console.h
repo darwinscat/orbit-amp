@@ -10,6 +10,7 @@
 #include "LearnGlass.h"
 #include "Picture.h"
 #include "Sheet.h"
+#include "WebImages.h"
 
 #include <felitronics/appkit/VersionBadge.h>
 
@@ -54,7 +55,8 @@ enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
     (redo); back is its mirror (undo). */
 void drawTurnArrow (juce::Graphics&, juce::Point<float> centre, float radius, bool back, juce::Colour);
 
-/** A render written as a PNG for the site (Console::exportForWeb); nothing for an invalid one. */
+/** A picture written for the site (Console::exportForWeb), as every picture of its kit is (web::write):
+    a WebP, its alpha kept where it has a hole; nothing for an invalid one. */
 void writeForWeb (const juce::File&, const juce::Image&);
 
 //==============================================================================
@@ -171,9 +173,10 @@ protected:
     Channels& channels;     // ...and these are its
     Presets   presets;
     const Places places;
-    std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the file names exportForWeb gives them
+    std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the names exportForWeb writes them under
     struct LookForWeb { ArtKnob::Pointer drive {}, tone {}; juce::Colour handLight; Ink ink; } lookForWeb;   // ...and the rest of it
     std::vector<std::pair<juce::String, juce::Rectangle<float>>> spritesWritten;     // writeSprite's, for spriteBounds
+    juce::StringArray postersWritten;     // writePoster's stems, for the poster places.json opens on
     void poseNext (const juce::File& dir, int pose);
 
     juce::Component stage;
@@ -218,11 +221,13 @@ protected:
     /** The stage has been placed in the window again. */
     virtual void stagePlaced() {}
 
-    /** FOR THE SITE: what the web's demo of this face is built from, written into `dir` — the picture
-        that never changes at twice the stage's size, its window transparent (cabin.png); the renders its
-        controls are drawn with; where everything stands (places.json, in the stage's own 1672 x 941); and
-        what the product adds (webExtras). Done once, when the window first comes up with the environment
-        variable ORBITAMP_WEB_EXPORT naming the folder; a player never sees it. */
+    /** FOR THE SITE: what the web's demo of this face is built from, written into `dir` as the kit the site
+        reads, every picture a WebP (WebImages.h) — the picture that never changes at twice the stage's
+        size, its window transparent, at the three sizes (cabin.webp, cabin@1x.webp, cabin@half.webp); the
+        renders its controls are drawn with, in sprites/; where everything stands (places.json, in the
+        stage's own 1672 x 941); and what the product adds (webExtras). Done once, when the window first
+        comes up with the environment variable ORBITAMP_WEB_EXPORT naming the folder; a player never sees
+        it. */
     void exportForWeb (const juce::File& dir);
 
     /** The product's part of it: its own renders (writeSprite) and files; in `places` the two keys every
@@ -230,20 +235,31 @@ protected:
         lever's order; in `world` whatever is its own alone — and its poster (writePoster). */
     virtual void webExtras (const juce::File& /*dir*/, juce::DynamicObject& /*places*/, juce::DynamicObject& /*world*/) {}
 
-    /** A render of a control written for the site, its opaque box (opaqueBounds) kept for places.json's
-        spriteBounds under the file's stem. */
-    void writeSprite (const juce::File& dir, const juce::String& file, const juce::Image& img);
+    /** A render of a control written for the site — sprites/<stem>.webp (web::writeSprite), which it
+        returns for places.json to name it by, or null where there is no render to write — its opaque box
+        (opaqueBounds) kept for places.json's spriteBounds under `stem`. */
+    juce::var writeSprite (const juce::File& dir, const juce::String& stem, const juce::Image& img);
+
+    /** ...and the name of one written already, for places.json: null where none was. */
+    juce::var spriteRef (const juce::String& stem) const;
 
     /** THE POSTER: the whole face as it opens — every control where it stands, the lamps out — with
-        `still` in `window` under the glass, at twice the stage's size (poster.png). What shows through the
-        window live is `hidden` while it is taken, the still in its place. */
+        `still` in `window` under the glass, at twice the stage's size and the two smaller ones
+        (poster.webp, poster@1x.webp, poster@half.webp); and the same face with its window empty
+        (poster-hole.webp and its two). What shows through the window live is `hidden` while it is taken,
+        the still in its place. */
     void writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
-                      const std::vector<juce::Component*>& hidden, const juce::String& file = "poster.png");
+                      const std::vector<juce::Component*>& hidden, const juce::String& stem = "poster");
+
+    /** ...and how places.json names a poster's files: the three sizes of it, and the same three of its
+        kinds, "still" (the still under the glass — which the poster here is) and "hole" (its window empty). */
+    static juce::var posterFiles (const juce::String& stem);
 
     /** A POSTER FOR EACH PLACE OF THE LEVER, for a page that opens on another channel than the app does:
         how many places there are, how the face is stood in one (no animation), the still under the glass
         there, and the window and its live layers as for the poster. Set by webExtras; exportForWeb then
-        stands the face in each in turn and writes poster-<n>.png once it has settled, and done.txt last. */
+        stands the face in each in turn and writes poster-<n>.webp (and its sizes and its hole) once it has
+        settled, and done.txt last. */
     struct WebPoses
     {
         int count = 0;

@@ -1130,7 +1130,8 @@ set(FACE_SOURCES
     src/face/Picture.cpp
     src/face/Renders.cpp
     src/face/Sheet.cpp
-    src/face/Standalone.cpp)
+    src/face/Standalone.cpp
+    src/face/WebImages.cpp)
 
 # CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and a face
 # for each product, which the product names (src/Product.h). Its renders are in resources/catpit, as
@@ -1212,6 +1213,20 @@ target_link_libraries(orbitamp_gpu_log_test PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 set_target_properties(orbitamp_gpu_log_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# The pictures of a face's kit for the site, as the site reads them (src/face/WebImages.h): WebP, its alpha
+# kept only where a picture has a hole and then lossless, the three sizes and their names, sprites/. JUCE's
+# graphics and libwebp's encoder, nothing of a face.
+juce_add_console_app(orbitamp_web_images_test PRODUCT_NAME "OrbitAmpWebImagesTest")
+target_sources(orbitamp_web_images_test PRIVATE tests/WebImagesTests.cpp src/face/WebImages.cpp)
+target_include_directories(orbitamp_web_images_test PRIVATE src)
+target_compile_definitions(orbitamp_web_images_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_web_images_test PRIVATE
+    felitronics::appkit_webp
+    juce::juce_graphics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(orbitamp_web_images_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the

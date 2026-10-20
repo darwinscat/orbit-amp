@@ -426,22 +426,14 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     using namespace layout;
     const auto& art = Art::of (skin);
     const std::pair<const char*, const juce::Image*> own[] {
-        { "lever.png", &art.lever }, { "lever-glow.png", &art.leverGlow }, { "fader-cap-light.png", &art.faderCapLight },
-        { "toggle-up.png", &art.toggleUp }, { "toggle-down.png", &art.toggleDown }, { "key-up.png", &art.keyUp },
-        { "key-down.png", &art.keyDown }, { "turbo-up.png", &art.turboUp }, { "turbo-down.png", &art.turboDown },
-        { "turbo-lid.png", &art.turboLid }, { "emblem.png", &art.emblem }, { "socket.png", &art.socket },
-        { "key-frame-left.png", &art.keyFrameLeft }, { "key-frame-cell.png", &art.keyFrameCell }, { "key-frame-right.png", &art.keyFrameRight } };
+        { "lever", &art.lever }, { "lever-glow", &art.leverGlow }, { "fader-cap-light", &art.faderCapLight },
+        { "toggle-up", &art.toggleUp }, { "toggle-down", &art.toggleDown }, { "key-up", &art.keyUp },
+        { "key-down", &art.keyDown }, { "turbo-up", &art.turboUp }, { "turbo-down", &art.turboDown },
+        { "turbo-lid", &art.turboLid }, { "emblem", &art.emblem }, { "socket", &art.socket },
+        { "key-frame-left", &art.keyFrameLeft }, { "key-frame-cell", &art.keyFrameCell }, { "key-frame-right", &art.keyFrameRight } };
     for (const auto& [name, img] : own)
         writeSprite (dir, name, *img);
-    if (const auto still = Art::still (skin); still.isValid())
-    {
-        dir.getChildFile ("still.jpg").deleteFile();
-        juce::FileOutputStream out (dir.getChildFile ("still.jpg"));
-        juce::JPEGImageFormat jpeg;
-        jpeg.setQuality (0.9f);
-        if (out.openedOk())
-            jpeg.writeImageToStream (still, out);
-    }
+    writeForWeb (dir.getChildFile ("still.webp"), Art::still (skin));
 
     const auto rect = [] (juce::Rectangle<float> r)
     {
@@ -493,7 +485,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     // the hatch shut over it on its spring (TurboLid), open again when a gear is pulled.
     auto* atPark = new juce::DynamicObject();
     atPark->setProperty ("alpha", face::PushButton::dimmed);
-    atPark->setProperty ("lid", Art::of (skin).turboLid.isValid() ? juce::var ("turbo-lid.png") : juce::var());
+    atPark->setProperty ("lid", spriteRef ("turbo-lid"));     // null where the rover has no hatch's render
     auto* spring = new juce::DynamicObject();
     spring->setProperty ("stiffness", TurboLid::stiffness);
     spring->setProperty ("damping", TurboLid::damping);
@@ -514,10 +506,10 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     places.setProperty ("window", rect (skin.plan.windscreen));
 
     auto* keyRenders = new juce::DynamicObject();      // the keys and the roof's toggles are renders, up and down
-    keyRenders->setProperty ("up", "key-up.png");
-    keyRenders->setProperty ("down", "key-down.png");
-    keyRenders->setProperty ("toggleUp", "toggle-up.png");
-    keyRenders->setProperty ("toggleDown", "toggle-down.png");
+    keyRenders->setProperty ("up", spriteRef ("key-up"));
+    keyRenders->setProperty ("down", spriteRef ("key-down"));
+    keyRenders->setProperty ("toggleUp", spriteRef ("toggle-up"));
+    keyRenders->setProperty ("toggleDown", spriteRef ("toggle-down"));
     world.setProperty ("keys", juce::var (keyRenders));
     const auto colour = [] (juce::Colour c) { return juce::String::formatted ("#%02x%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue(), c.getAlpha()); };
 
@@ -539,11 +531,11 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     // and its right cap, `frameHeight` tall — each as wide as said here, times the row's keyScale.
     {
         auto* pieces = new juce::DynamicObject();
-        pieces->setProperty ("socket", "socket.png");
+        pieces->setProperty ("socket", spriteRef ("socket"));                 // each null where the skin has no render of it
         pieces->setProperty ("socketSize", skin.plan.socketSize);
-        pieces->setProperty ("frameLeft", "key-frame-left.png");
-        pieces->setProperty ("frameCell", "key-frame-cell.png");
-        pieces->setProperty ("frameRight", "key-frame-right.png");
+        pieces->setProperty ("frameLeft", spriteRef ("key-frame-left"));
+        pieces->setProperty ("frameCell", spriteRef ("key-frame-cell"));
+        pieces->setProperty ("frameRight", spriteRef ("key-frame-right"));
         pieces->setProperty ("capLeft", skin.plan.keyCapLeft);
         pieces->setProperty ("cell", skin.plan.keyStrip().pitch);
         pieces->setProperty ("capRight", skin.plan.keyCapRight);
@@ -608,8 +600,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
                     sg.addTransform (juce::AffineTransform::scale (2.0f));
                     filterSign (skin, sg, { 0.0f, 0.0f, skin.plan.keySize, skin.plan.keySize }, on, highpass);
                 }
-                const juce::String file = juce::String (highpass ? "hpf" : "lpf") + (on ? "-on.png" : "-off.png");
-                writeSprite (dir, file, img);
+                const auto file = writeSprite (dir, juce::String (highpass ? "hpf" : "lpf") + (on ? "-on" : "-off"), img);
                 states->setProperty (on ? "on" : "off", file);
             }
             signs->setProperty (highpass ? "hpf" : "lpf", juce::var (states));
@@ -723,12 +714,12 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         look->setProperty ("glow", juce::var (glow));
         nav->setProperty ("speedHudLook", juce::var (look));
     }
-    // THE SCREEN'S GROUND is no colour: what shows under its picture is the cabin's own glass, cabin.png's
+    // THE SCREEN'S GROUND is no colour: what shows under its picture is the cabin's own glass, cabin.webp's
     // pixels in the box, and the screen's glass (GlassFilm: murk, dust, scratches) is laid over everything it
-    // shows — nav-glass.png, at twice the stage's size, over its box.
-    writeForWeb (dir.getChildFile ("nav-glass.png"), glassFilm.picture (2.0f));
+    // shows — nav-glass.webp, at twice the stage's size, over its box.
+    writeForWeb (dir.getChildFile ("nav-glass.webp"), glassFilm.picture (2.0f));
     auto* glass = new juce::DynamicObject();
-    glass->setProperty ("sprite", "nav-glass.png");
+    glass->setProperty ("sprite", "nav-glass.webp");
     glass->setProperty ("box", rect (glassFilm.getBounds().toFloat()));
     glass->setProperty ("ground", "nothing filled: the cabin picture's pixels in the screen, the glass over all it shows");
     nav->setProperty ("glass", juce::var (glass));
@@ -844,7 +835,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     world.setProperty ("nav", juce::var (nav));
 
     juce::Array<juce::var> stills;
-    stills.add ("still.jpg");
+    stills.add ("still.webp");
     places.setProperty ("stills", stills);
     writePoster (dir, skin.plan.windscreen, Art::still (skin), { view.get() });
 

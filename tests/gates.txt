@@ -38,6 +38,9 @@ titan-world        titan_world_test
 # The GPU's refusals, written down: the line a world sent to the CPU leaves in the family's log, and its cap.
 gpu-log            orbitamp_gpu_log_test
 
+# The pictures of a face's kit for the site: WebP, alpha only where there is a hole, the three sizes, sprites/.
+web-images         orbitamp_web_images_test
+
 # The cockpit's own: its set as it leaves the binary, and its channels with no window, moved the way a
 # host moves them. The channel gate takes files into the player's IRs folder only when told the home is
 # its own — and here it always is.

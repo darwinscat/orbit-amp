@@ -386,23 +386,23 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 //==============================================================================
 /** The cockpit's own part of the site's demo (Console::webExtras): where the glass is and where the
     picture in it is composed for, the throttle's and TURBO's frames, their renders, the sky standing still
-    for each channel, the glass's whole rectangle at twice the stage's size (sky-<channel>.png) — and the
+    for each channel, the glass's whole rectangle at twice the stage's size (sky-<channel>.webp) — and the
     poster, the first channel's still sky through the glass. */
 void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world)
 {
     using namespace layout;
     const auto& art = Art::get();
-    writeSprite (dir, "lever-grip.png", art.leverGrip);
-    writeSprite (dir, "guard-closed.png", art.guardClosed);
-    writeSprite (dir, "socket.png", art.socket);             // under each tone knob, socketSize across at the row's nominal size
+    writeSprite (dir, "lever-grip", art.leverGrip);
+    writeSprite (dir, "guard-closed", art.guardClosed);
+    const auto socketFile = writeSprite (dir, "socket", art.socket);   // under each tone knob, socketSize across at the row's nominal size; null with no render
     {
         auto* pieces = new juce::DynamicObject();
-        pieces->setProperty ("socket", "socket.png");
+        pieces->setProperty ("socket", socketFile);
         pieces->setProperty ("socketSize", layout::socketSize);
         world.setProperty ("rows", juce::var (pieces));
     }
-    writeSprite (dir, "guard-open.png", art.guardOpen);
-    writeSprite (dir, "guard-on.png", art.guardOn);
+    writeSprite (dir, "guard-open", art.guardOpen);
+    writeSprite (dir, "guard-on", art.guardOn);
 
     // WHAT THE WINDSHIELD SHOWS OVER THE SKY as the cockpit opens — SHAPE, in its band, going out with the
     // sound (Monitor).
@@ -411,7 +411,7 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     window->setProperty ("shape", monitor.shapeForWeb());
     world.setProperty ("monitor", juce::var (window));
     for (int c = 0; c < channels.count(); ++c)
-        face::writeForWeb (dir.getChildFile ("sky-" + juce::String (c) + ".png"), stillSky (c));
+        face::writeForWeb (dir.getChildFile ("sky-" + juce::String (c) + ".webp"), stillSky (c));
 
     const auto rect = [] (juce::Rectangle<float> r)
     {
@@ -488,8 +488,7 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
                     sg.addTransform (juce::AffineTransform::scale (2.0f));
                     filterKey (sg, { 0.0f, 0.0f, at.getWidth(), at.getHeight() }, on, on ? 1.0f : 0.0f, highpass);
                 }
-                const juce::String file = juce::String (highpass ? "hpf" : "lpf") + (on ? "-key-on.png" : "-key-off.png");
-                writeSprite (dir, file, img);
+                const auto file = writeSprite (dir, juce::String (highpass ? "hpf" : "lpf") + (on ? "-key-on" : "-key-off"), img);
                 k->setProperty (on ? "on" : "off", file);
             }
             filterKeys->setProperty (highpass ? "hpf" : "lpf", juce::var (k));
@@ -499,7 +498,7 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     world.setProperty ("claimedKeys", juce::Array<juce::var>());
     juce::Array<juce::var> stills;
     for (int c = 0; c < channels.count(); ++c)
-        stills.add ("sky-" + juce::String (c) + ".png");
+        stills.add ("sky-" + juce::String (c) + ".webp");
     places.setProperty ("stills", stills);
     writePoster (dir, glass, stillSky (channels.active()), { &space, &still, &monitor });
 

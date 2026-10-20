@@ -521,11 +521,11 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
                      readingWidth * 2, juce::roundToInt ((float) readingWidth * 2.0f * height / width));
     setSize (readingWidth, juce::roundToInt ((float) readingWidth * height / width));
 
-    renders = { { "knob-drive.png", look.driveKnob }, { "knob-tone.png", look.toneKnob },
-                { "slider-cap.png", look.cap }, { "fader-cap.png", look.faderCap } };
+    renders = { { "knob-drive", look.driveKnob }, { "knob-tone", look.toneKnob },
+                { "slider-cap", look.cap }, { "fader-cap", look.faderCap } };
     for (size_t i = 0; i < look.lampsLit.size(); ++i)
         if (look.lampsLit[i] != nullptr)
-            renders.push_back ({ "lamp-" + juce::String ((int) i) + ".png", *look.lampsLit[i] });
+            renders.push_back ({ "lamp-" + juce::String ((int) i), *look.lampsLit[i] });
     lookForWeb = { look.drivePointer, look.tonePointer, look.handLight, look.ink };
 
     if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_WEB_EXPORT", {}); folder.isNotEmpty())
@@ -580,16 +580,11 @@ namespace
 
 void writeForWeb (const juce::File& file, const juce::Image& img)
 {
-    if (! img.isValid())
-        return;
-    file.deleteFile();
-    juce::FileOutputStream out (file);
-    if (out.openedOk())
-        juce::PNGImageFormat().writeImageToStream (img, out);
+    web::write (file, img);
 }
 
 void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
-                           const std::vector<juce::Component*>& hidden, const juce::String& file)
+                           const std::vector<juce::Component*>& hidden, const juce::String& stem)
 {
     std::vector<std::pair<juce::Component*, bool>> was;
     for (auto* c : hidden)
@@ -612,13 +607,24 @@ void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window,
     }
     for (const auto& [c, visible] : was)
         c->setVisible (visible);
-    writeForWeb (dir.getChildFile (file), poster);
+    web::writeThreeSizes (dir, stem, poster, "poster");
 
     // ...and the same face with nothing under it: the window empty, for a picture of the site's own to go
     // under it there — the live view's first frame, say.
     juce::Image hole (juce::Image::ARGB, poster.getWidth(), poster.getHeight(), true);
     juce::Graphics (hole).drawImageAt (shot, 0, 0);
-    writeForWeb (dir.getChildFile (file.upToLastOccurrenceOf (".", false, false) + "-hole.png"), hole);
+    web::writeThreeSizes (dir, stem + "-hole", hole, "poster");
+    postersWritten.addIfNotAlreadyThere (stem);
+}
+
+juce::var Console::posterFiles (const juce::String& stem)
+{
+    // The poster IS the still under the glass here — a page that lays a live frame under the hole names its
+    // own — so the still's names are the poster's, and no file is written twice.
+    auto files = web::threeNames (stem, "poster");
+    files.getDynamicObject()->setProperty ("still", web::threeNames (stem, "poster"));
+    files.getDynamicObject()->setProperty ("hole", web::threeNames (stem + "-hole", "poster"));
+    return files;
 }
 
 void Console::webPatch (const juce::String& name, std::initializer_list<const juce::Component*> parts)
@@ -647,24 +653,33 @@ void Console::poseNext (const juce::File& dir, int pose)
         if (safe == nullptr)
             return;
         safe->writePoster (dir, safe->webPoses.window, safe->webPoses.still (pose), safe->webPoses.hidden,
-                           "poster-" + juce::String (pose) + ".png");
+                           "poster-" + juce::String (pose));
         safe->poseNext (dir, pose + 1);
     });
 }
 
-void Console::writeSprite (const juce::File& dir, const juce::String& file, const juce::Image& img)
+juce::var Console::writeSprite (const juce::File& dir, const juce::String& stem, const juce::Image& img)
 {
-    if (! img.isValid())
-        return;
-    writeForWeb (dir.getChildFile (file), img);
-    spritesWritten.push_back ({ file.upToLastOccurrenceOf (".", false, false), opaqueBounds (img) });
+    auto file = web::writeSprite (dir, stem, img);
+    if (! file.isVoid())
+        spritesWritten.push_back ({ stem, opaqueBounds (img) });
+    return file;
+}
+
+juce::var Console::spriteRef (const juce::String& stem) const
+{
+    for (const auto& written : spritesWritten)
+        if (written.first == stem)
+            return web::spriteFile (stem);
+    return {};
 }
 
 void Console::exportForWeb (const juce::File& dir)
 {
     dir.createDirectory();
     spritesWritten.clear();
-    writeForWeb (dir.getChildFile ("cabin.png"), picture->staticImage (2.0f));
+    postersWritten.clear();
+    const auto cabin = web::writeThreeSizes (dir, "cabin", picture->staticImage (2.0f), "cabin", web::halfCabinQuality);
     for (const auto& [name, img] : renders)
         writeSprite (dir, name, img);
 
@@ -673,7 +688,8 @@ void Console::exportForWeb (const juce::File& dir)
     o->setProperty ("format", "orbitamp-web-face");
     o->setProperty ("schema", 4);       // 2: what is one world's own is under "world"; spriteBounds. 3: the world's whole map there. 4: each channel's "face"
     o->setProperty ("stage", rectVar ({ 0.0f, 0.0f, stage::width, stage::height }));
-    o->setProperty ("cabin", "cabin.png");
+    for (const auto& size : cabin.getDynamicObject()->getProperties())       // cabin, cabin1x, cabinHalf
+        o->setProperty (size.name, size.value);
     o->setProperty ("cabinScale", 2.0f);
     o->setProperty ("drive", rectVar (p.drive));
     o->setProperty ("keys", listVar (p.keys, pointVar));       // the two filters; the tone knobs and the right group are each channel's "face"
@@ -776,13 +792,13 @@ void Console::exportForWeb (const juce::File& dir)
                 for (const auto& t : laid.tones)
                 {
                     // ...its sign, a sprite the size of its label's box (at twice the stage), drawn as the face draws it.
-                    const auto file = "tone-" + juce::String (c) + "-" + juce::String (t.tone) + ".png";
+                    juce::var file;
                     {
                         juce::Image img (juce::Image::ARGB, juce::roundToInt (t.label.getWidth() * 2.0f), juce::roundToInt (t.label.getHeight() * 2.0f), true);
                         juce::Graphics sg (img);
                         sg.addTransform (juce::AffineTransform::scale (2.0f));
                         drawToneSign (sg, { 0.0f, 0.0f, t.label.getWidth(), t.label.getHeight() }, t.curve, picture->signInk(), laid.toneSignHeight);
-                        writeSprite (dir, file, img);
+                        file = writeSprite (dir, "tone-" + juce::String (c) + "-" + juce::String (t.tone), img);
                     }
                     auto* k = new juce::DynamicObject();
                     k->setProperty ("box", rectVar (t.knob));
@@ -933,13 +949,22 @@ void Console::exportForWeb (const juce::File& dir)
     webPatch ("memory", { &memory });
     webExtras (dir, *o, *world);
     o->setProperty ("world", juce::var (world));
+
+    // THE POSTER THE PAGE OPENS ON, where the product wrote one: its three sizes, and its still and its hole
+    // as kinds of their own...
+    if (postersWritten.contains ("poster"))
+    {
+        const auto top = posterFiles ("poster");
+        for (const auto* size : { "poster", "poster1x", "posterHalf" })
+            o->setProperty (size, top[size]);
+        o->setProperty ("posterStill", top["still"]);
+        o->setProperty ("posterHole", top["hole"]);
+        o->setProperty ("posterWindow", "still: the still the app ships, as its STILL mode shows it");
+    }
+    // ...and one for each place of the lever, written after this, as the face stands in each in turn.
     juce::Array<juce::var> posters;
     for (int i = 0; i < webPoses.count; ++i)
-    {
-        auto* poster = new juce::DynamicObject();
-        poster->setProperty ("poster", "poster-" + juce::String (i) + ".png");
-        posters.add (juce::var (poster));
-    }
+        posters.add (posterFiles ("poster-" + juce::String (i)));
     o->setProperty ("posters", posters);
     juce::Array<juce::var> patches;
     for (const auto& [name, r] : webPatches)
