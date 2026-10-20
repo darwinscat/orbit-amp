@@ -13,20 +13,26 @@
 //   - JUCE's VST3 host finds one plug-in for each amp and makes them all at once; each is the amp it is
 //     named — its own parameters, no two amps' alike — and all of them play, block after block in turn;
 //   - given a build directory where each amp's own VST3 was built too (`--target <Amp>_VST3`, the bundle
-//     every amp had before), each amp of the family is held to its own, opened in a process of its own: the
-//     same parameters — names, ids, labels, defaults, steps — the same channels and latency, and a session
-//     saved by either opens in the other with every value it held;
+//     every amp had before), each amp of the family is held to its own, opened beside the family's: the
+//     same parameters — names, ids, labels, defaults, steps — the same channels and latency, a session
+//     saved by either opens in the other with every value it held, and the two play side by side;
 //   - the CLAP factory counts the same amps under their CLAP ids, com.darwinscat.<name>, the family's
 //     vendor and version; it makes them all at once, each with the parameters its VST3 has, and all of them
-//     play; an id it does not hold makes nothing;
+//     play, the VST3's amps alive beside them and playing on after them; an id it does not hold makes nothing;
 //   - on the Mac, the AU beside the VST3 (<artefacts>/AU/<bundle>.component): its Info.plist lists every
 //     amp as the amp's own 0.8.0 AU did — aufx, its code, Dcat, "Darwin's Cat: <Amp>", described <Amp>, the
 //     same resource usage — but for the factory function, the one the binary exports, and the version, the
 //     build's; JUCE's AU host makes them all at once, each the amp it is named with its VST3's parameters,
 //     and all of them play; a component of the binary under a code the list does not hold makes nothing.
 //
-// The CLAP, the AU and every own bundle are opened in a process of their own (runSelf, which says why); what
-// the processes hand each other is left in the temporary folder, orbitamp-bundle-host.
+// TWO OF OUR BINARIES IN ONE PROCESS. The family's VST3, its CLAP and every own bundle are opened in this one
+// process, side by side, as a host opens a session that holds more than one of them: each binary carries its
+// own copy of everything an amp is made of — the engines, NAM's model registries, JUCE — and none may meet
+// another's. On Linux they did, until each plug-in binary exported its entry points alone (CMakeLists.txt:
+// A PLUG-IN EXPORTS ITS ENTRY POINTS AND NOTHING ELSE): the second binary to load stopped the process with
+// "Config parser already registered". This is the test of that, and it stops the same way if it comes back.
+// The AU alone is opened in a process of its own (runSelf, which says why); what the two processes hand each
+// other is left in the temporary folder, orbitamp-bundle-host.
 //
 // It prints what it found and what it expected, and exits 1 if anything was not as it must be. Not a gate:
 // it opens built bundles, which no gate waits for. An amp starting writes where a player's amp would, so
@@ -357,8 +363,8 @@ std::unique_ptr<juce::AudioPluginInstance> make (juce::AudioPluginFormat& format
     return instance;
 }
 
-// An amp to a host, as lines of text — its parameters, then its channels and latency — the way a process of
-// its own hands it over.
+// An amp to a host, as lines of text — its parameters, then its channels and latency — so that two of them
+// are compared line by line.
 juce::String layoutText (juce::AudioPluginInstance& instance)
 {
     juce::String text;
@@ -370,27 +376,6 @@ juce::String layoutText (juce::AudioPluginInstance& instance)
     text << "channels " << instance.getTotalNumInputChannels() << " in, " << instance.getTotalNumOutputChannels()
          << " out, latency " << instance.getLatencySamples() << '\n';
     return text;
-}
-
-juce::String valuesText (juce::AudioPluginInstance& instance)
-{
-    juce::String text;
-
-    for (auto value : valuesOf (instance))
-        text << juce::String (value, 6) << '\n';
-
-    return text;
-}
-
-std::vector<float> valuesFrom (const juce::String& text)
-{
-    std::vector<float> values;
-
-    for (const auto& line : juce::StringArray::fromLines (text))
-        if (line.isNotEmpty())
-            values.push_back (line.getFloatValue());
-
-    return values;
 }
 
 // The first line two texts part at, or empty where they are the same.
@@ -444,59 +429,13 @@ void loadState (juce::AudioPluginInstance& instance, const juce::MemoryBlock& st
     pump (300);
 }
 
-// THE OWN BUNDLE'S SIDE, in a process of its own (main: --own): its one amp made, what it is written down,
-// and a session saved — three values moved — or the family's session opened, its values written down.
-int ownSide (const juce::File& bundle, const juce::File& handover, bool load)
-{
-    juce::VST3PluginFormat format;
-    juce::OwnedArray<juce::PluginDescription> types;
-    format.findAllTypesForFile (types, bundle.getFullPathName());
-
-    if (types.size() != 1)
-    {
-        std::cout << bundle.getFullPathName() << " holds " << types.size() << " plug-ins, not one" << std::endl;
-        return 1;
-    }
-
-    auto instance = make (format, *types[0]);
-
-    if (instance == nullptr)
-        return 1;
-
-    const auto amp = types[0]->name;
-    handover.getChildFile (amp + ".ids.txt").replaceWithText (juce::String (types[0]->uniqueId) + "\t" + juce::String (types[0]->deprecatedUid));
-    handover.getChildFile (amp + ".layout.txt").replaceWithText (layoutText (*instance));
-
-    if (load)
-    {
-        juce::MemoryBlock state;
-        handover.getChildFile (amp + ".family-state.bin").loadFileAsData (state);
-        loadState (*instance, state);
-        handover.getChildFile (amp + ".own-values-after-load.txt").replaceWithText (valuesText (*instance));
-    }
-    else
-    {
-        moveValues (*instance, { 0.31f, 0.77f, 0.54f });
-        juce::MemoryBlock state;
-        instance->getStateInformation (state);
-        handover.getChildFile (amp + ".own-state.bin").replaceWithData (state.getData(), state.getSize());
-        loadState (*instance, state);   // its values as a session gives them back: a value on a grid, on the grid
-        handover.getChildFile (amp + ".own-values.txt").replaceWithText (valuesText (*instance));
-    }
-
-    bool finite = true;
-    for (int block = 0; block < 16; ++block)
-        finite = playsABlock (*instance, block) && finite;
-
-    instance->releaseResources();
-    return finite ? 0 : 1;
-}
-
-// THIS HOST AGAIN, IN A PROCESS OF ITS OWN: two binaries with an amp in them never share a process here.
-// On Linux their engines' registries are one for the whole process (the dynamic linker unifies them), and
-// the second binary to load finds its own already registered and stops the process: the family's VST3 and
-// its CLAP, or an amp's own bundle and the family's, are opened each in a process of its own, as a host that
-// is given one of them opens it. What the child says comes back as its output, and whether all was well.
+#if JUCE_MAC
+//==============================================================================
+// THIS HOST AGAIN, IN A PROCESS OF ITS OWN — for the AU, and nothing else. Every other binary is opened in
+// this process, beside the rest (TWO OF OUR BINARIES IN ONE PROCESS, at the head). What checkAu registers with
+// the system (AudioComponentRegister) stays registered, and the AU's binary loaded, until the process that
+// registered them ends: that process is a child of this one, which opens the AU and nothing else, and ends with
+// it. What the child says comes back as its output, and whether all was well.
 bool runSelf (juce::StringArray args, juce::String& output)
 {
     args.insert (0, juce::File::getSpecialLocation (juce::File::currentExecutableFile).getFullPathName());
@@ -510,18 +449,7 @@ bool runSelf (juce::StringArray args, juce::String& output)
     return child.waitForProcessToFinish (180000) && child.getExitCode() == 0;
 }
 
-bool runOwn (const juce::File& bundle, const juce::File& handover, const char* what)
-{
-    juce::String output;
-    const auto ok = runSelf ({ "--own", bundle.getFullPathName(), handover.getFullPathName(), what }, output);
-
-    if (! ok)
-        note ("the own bundle's process did not end well: " + output.trim());
-
-    return ok;
-}
-
-// Where the processes hand each other what they found: in the temporary folder, kept.
+// Where the two processes hand each other what they found: in the temporary folder, kept.
 juce::File handoverFolder()
 {
     auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("orbitamp-bundle-host");
@@ -529,7 +457,6 @@ juce::File handoverFolder()
     return folder;
 }
 
-#if JUCE_MAC
 //==============================================================================
 // THE AU, as a Mac host finds it. A host finds an Audio Unit among the components the system registered from
 // the plug-in folders, by its bundle's Info.plist; this test installs nothing there. It registers the AU in
@@ -778,9 +705,10 @@ void checkAu (const juce::File& bundle, const juce::StringArray& amps, const std
 
 //==============================================================================
 // THROUGH A HOST: JUCE's VST3 host finds the amps, makes them all at once, plays them in turn, and holds each
-// to its own bundle where there is one. Returns each amp's parameters, by name, for the CLAP to be held to.
+// to its own bundle where there is one. Returns each amp's parameters, by name, for the CLAP to be held to, and
+// leaves the amps it made alive in `family`, for the CLAP to be opened beside.
 std::map<juce::String, juce::StringArray> checkVst3Instances (const juce::File& bundle, const juce::StringArray& amps,
-                                                              const juce::File& build)
+                                                              const juce::File& build, std::vector<Live>& family)
 {
     std::cout << "VST3 plug-ins in " << bundle.getFullPathName() << std::endl;
     std::map<juce::String, juce::StringArray> names;
@@ -795,8 +723,6 @@ std::map<juce::String, juce::StringArray> checkVst3Instances (const juce::File& 
 
     if (! check (found == amps, "JUCE's host finds " + found.joinIntoString (", ") + "  (family.ini: " + amps.joinIntoString (", ") + ")"))
         return names;
-
-    std::vector<Live> family;
 
     for (auto* type : types)
     {
@@ -839,13 +765,12 @@ std::map<juce::String, juce::StringArray> checkVst3Instances (const juce::File& 
 
     check (finite, juce::String ((int) family.size()) + " amps alive at once, each played 16 blocks in turn, every sample a number");
 
-    // HELD TO ITS OWN BUNDLE — the build of the amp alone, every amp's plug-in before the family's — opened in a
-    // process of its own, as the session it saved was: two binaries with the same amp in them do not share a
-    // process here (on Linux their engines' registries collide at load), and need not.
+    // HELD TO ITS OWN BUNDLE — the build of the amp alone, every amp's plug-in before the family's — opened
+    // beside the family's, in this process, as a host opens a session that holds both: the amp made of each
+    // binary, the two alive at once with the rest of the family's, a session of each opened in the other, and
+    // all of them playing.
     if (build != juce::File())
     {
-        const auto handover = handoverFolder();
-
         for (size_t i = 0; i < family.size(); ++i)
         {
             const auto& amp = family[i].amp;
@@ -858,43 +783,64 @@ std::map<juce::String, juce::StringArray> checkVst3Instances (const juce::File& 
                 continue;
             }
 
-            if (! check (runOwn (ownBundle, handover, "save"), amp + "'s own bundle, in a process of its own, made it, moved three values and saved"))
+            juce::OwnedArray<juce::PluginDescription> ownTypes;
+            format.findAllTypesForFile (ownTypes, ownBundle.getFullPathName());
+
+            if (! check (ownTypes.size() == 1, amp + "'s own bundle holds " + juce::String (ownTypes.size()) + " plug-in(s), one"))
                 continue;
 
-            const auto said = [&] (const juce::String& what) { return handover.getChildFile (amp + what).loadFileAsString(); };
+            auto own = make (format, *ownTypes[0]);
 
-            check (said (".ids.txt") == juce::String (types[(int) i]->uniqueId) + "\t" + juce::String (types[(int) i]->deprecatedUid),
-                   amp + "'s own bundle holds it under the ids the family's holds it (" + said (".ids.txt").replaceCharacter ('\t', ' ') + ")");
+            if (! check (own != nullptr && own->getName() == amp,
+                         amp + "'s own bundle made it, beside the family's " + juce::String ((int) family.size()) + " amps"))
+                continue;
 
-            const auto difference = firstDifference (said (".layout.txt"), layoutText (theirs));
+            check (ownTypes[0]->uniqueId == types[(int) i]->uniqueId && ownTypes[0]->deprecatedUid == types[(int) i]->deprecatedUid,
+                   amp + "'s own bundle holds it under the ids the family's holds it (" + juce::String (ownTypes[0]->uniqueId)
+                       + " " + juce::String (ownTypes[0]->deprecatedUid) + ")");
+
+            const auto difference = firstDifference (layoutText (*own), layoutText (theirs));
             check (difference.isEmpty(), amp + ": its parameters, channels and latency are its own bundle's — names, ids, labels, defaults, steps"
                                              + (difference.isEmpty() ? juce::String() : " — " + difference));
 
+            // A session its own bundle saved, three values moved, opened in the family's...
+            moveValues (*own, { 0.31f, 0.77f, 0.54f });
             juce::MemoryBlock ownState;
-            handover.getChildFile (amp + ".own-state.bin").loadFileAsData (ownState);
+            own->getStateInformation (ownState);
+            loadState (*own, ownState);   // its values as a session gives them back: a value on a grid, on the grid
             loadState (theirs, ownState);
-            const auto opened = valuesDifference (valuesFrom (said (".own-values.txt")), valuesOf (theirs), theirs);
+            const auto opened = valuesDifference (valuesOf (*own), valuesOf (theirs), theirs);
             check (ownState.getSize() > 0 && opened.isEmpty(),
                    amp + ": a session its own bundle saved opens in the family's, every value as it was ("
                        + juce::String (theirs.getParameters().size()) + " compared)" + (opened.isEmpty() ? juce::String() : " — " + opened));
 
+            // ...and one the family's saved, three others moved, opened in its own.
             moveValues (theirs, { 0.62f, 0.18f, 0.93f });
             juce::MemoryBlock familyState;
             theirs.getStateInformation (familyState);
-            handover.getChildFile (amp + ".family-state.bin").replaceWithData (familyState.getData(), familyState.getSize());
-            loadState (theirs, familyState);   // as the own side does: the values a session gives back
+            loadState (theirs, familyState);   // as above: the values a session gives back
+            loadState (*own, familyState);
+            const auto back = valuesDifference (valuesOf (theirs), valuesOf (*own), theirs);
+            check (familyState.getSize() > 0 && back.isEmpty(),
+                   amp + ": a session the family's saved opens in its own bundle, every value as it was"
+                       + (back.isEmpty() ? juce::String() : " — " + back));
 
-            if (check (runOwn (ownBundle, handover, "load"), amp + "'s own bundle, in a process of its own, opened the family's session"))
+            // The two binaries' amps side by side, block after block in turn.
+            bool together = true;
+
+            for (int block = 0; block < 16; ++block)
             {
-                const auto back = valuesDifference (valuesOf (theirs), valuesFrom (said (".own-values-after-load.txt")), theirs);
-                check (back.isEmpty(), amp + ": a session the family's saved opens in its own bundle, every value as it was"
-                                           + (back.isEmpty() ? juce::String() : " — " + back));
+                together = playsABlock (*own, block) && together;
+
+                for (auto& one : family)
+                    together = playsABlock (*one.instance, block) && together;
             }
+
+            check (together, amp + "'s own and the family's " + juce::String ((int) family.size())
+                                 + " amps alive at once, each played 16 blocks in turn, every sample a number");
+            own->releaseResources();
         }
     }
-
-    for (auto& one : family)
-        one.instance->releaseResources();
 
     return names;
 }
@@ -1106,20 +1052,6 @@ void checkClap (const juce::File& file, const juce::StringArray& amps, const std
 
 int main (int argc, char** argv)
 {
-    if (argc == 4 && juce::String (argv[1]) == "--clap")
-    {
-        const juce::ScopedJuceInitialiser_GUI juceLibrary;
-        const auto handover = juce::File (juce::CharPointer_UTF8 (argv[3]));
-        const auto amps = juce::StringArray::fromTokens (ORBITAMP_FAMILY_AMPS, " ", "");
-        std::map<juce::String, juce::StringArray> names;
-
-        for (const auto& amp : amps)
-            names[amp] = juce::StringArray::fromLines (handover.getChildFile (amp + ".vst3-names.txt").loadFileAsString());
-
-        checkClap (juce::File (juce::CharPointer_UTF8 (argv[2])), amps, names);
-        return allGood ? 0 : 1;
-    }
-
    #if JUCE_MAC
     if (argc == 4 && juce::String (argv[1]) == "--au")
     {
@@ -1135,13 +1067,6 @@ int main (int argc, char** argv)
         return allGood ? 0 : 1;
     }
    #endif
-
-    if (argc == 5 && juce::String (argv[1]) == "--own")
-    {
-        const juce::ScopedJuceInitialiser_GUI juceLibrary;
-        return ownSide (juce::File (juce::CharPointer_UTF8 (argv[2])), juce::File (juce::CharPointer_UTF8 (argv[3])),
-                        juce::String (argv[4]) == "load");
-    }
 
     if (argc != 3 && argc != 4)
     {
@@ -1160,22 +1085,35 @@ int main (int argc, char** argv)
     std::cout << "The family's plug-ins, holding " << amps.joinIntoString (", ") << " (installer/family.ini)" << std::endl;
 
     checkVst3Factory (vst3, amps);
-    const auto names = checkVst3Instances (vst3, amps, build);
+    std::vector<Live> family;
+    const auto names = checkVst3Instances (vst3, amps, build, family);
 
-    // The CLAP in a process of its own (runSelf), handed each amp's VST3 parameters.
+    // The CLAP in this very process, the VST3's amps alive beside it...
+    checkClap (clap, amps, names);
+
+    // ...and the VST3's amps playing on once the CLAP's have played and gone: each binary's engines its own.
+    bool finite = ! family.empty();
+
+    for (int block = 0; block < 16; ++block)
+        for (auto& one : family)
+            finite = playsABlock (*one.instance, block) && finite;
+
+    check (finite, "the VST3's " + juce::String ((int) family.size()) + " amps play on after the CLAP's, 16 blocks each, every sample a number");
+
+    for (auto& one : family)
+        one.instance->releaseResources();
+
+    family.clear();
+
+   #if JUCE_MAC
+    // The AU, beside the VST3 where the build puts it, in a process of its own (runSelf), handed each amp's
+    // VST3 parameters.
     const auto handover = handoverFolder();
     for (const auto& [amp, parameters] : names)
         handover.getChildFile (amp + ".vst3-names.txt").replaceWithText (parameters.joinIntoString ("\n"));
 
-    juce::String output;
-    const auto clapOk = runSelf ({ "--clap", clap.getFullPathName(), handover.getFullPathName() }, output);
-    std::cout << output;
-    check (clapOk, "the CLAP, in a process of its own, as it must be");
-
-   #if JUCE_MAC
-    // The AU, beside the VST3 where the build puts it, in a process of its own too, handed the same.
     const auto au = vst3.getParentDirectory().getSiblingFile ("AU").getChildFile (vst3.getFileNameWithoutExtension() + ".component");
-    output.clear();
+    juce::String output;
     const auto auOk = au.isDirectory() && runSelf ({ "--au", au.getFullPathName(), handover.getFullPathName() }, output);
     std::cout << output;
     check (auOk, "the AU beside the VST3, " + au.getFullPathName() + ", in a process of its own, as it must be");
