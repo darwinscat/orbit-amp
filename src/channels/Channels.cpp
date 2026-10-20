@@ -686,6 +686,14 @@ float Channels::defaultOf (int channel, const juce::String& paramId) const
         if (paramId == params::selectorId (params::preampId, s.slot))
             return (float) s.opening;
 
+    // A tone of its pack where the pack starts it (core::CapturedBlock::defaultNorm, as OrbitAmp's panel
+    // opens it): a sweep at its reference, the middle of it on every pack here — and a tone of positions on
+    // its reference position, not on the parameter's middle, which on a three-way switch is the second.
+    const auto packTones = tonesOf (memoryOf (juce::jlimit (0, count() - 1, channel)));
+    for (size_t t = 0; t < packTones.size(); ++t)
+        if (paramId == params::preampMeasured ((int) t))
+            return (float) core::CapturedBlock::defaultNorm (packTones[t]);
+
     auto* p = amp.apvts.getParameter (paramId);
     return p != nullptr ? p->convertFrom0to1 (p->getDefaultValue()) : 0.0f;
 }

@@ -40,7 +40,8 @@ public:
     int count() const noexcept { return line.count(); }
 
     /** WHAT A CHANNEL OPENS ON, until the player sets it otherwise — a channel never pulled, and every
-        one of them after INIT: its own room and its own share of delay, as the lineup gives them.
+        one of them after INIT: its own room and its own share of delay, as the lineup gives them; its
+        pack's switches and tones where the pack starts them (a tone of positions on its reference one).
         Everything else a channel keeps opens on its parameter's own default. */
     float defaultOf (int channel, const juce::String& paramId) const;
 
