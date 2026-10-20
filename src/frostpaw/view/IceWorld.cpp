@@ -186,12 +186,23 @@ void IceWorld::build()
         {
             const int ch = chans[ci];
             std::vector<float> g (nn * 2);
+            // Each column's neighbours named outright, the seam's too. Written as `(x ± 1) & m` inside the
+            // index, the loop was vectorised as if the neighbours ran on unbroken across the seam: the wrong
+            // left neighbour at x = 1 of every row, and on the last row a read past the end of the texture,
+            // which stops the host where the page after it is not mapped.
             for (int y = 0; y < n; ++y)
+            {
+                const float* row   = height.data() + (size_t) y * (size_t) n * 4;
+                const float* below = height.data() + (size_t) ((y + 1) & m) * (size_t) n * 4;
+                const float* above = height.data() + (size_t) ((y - 1) & m) * (size_t) n * 4;
+                float* out = g.data() + (size_t) y * (size_t) n * 2;
                 for (int x = 0; x < n; ++x)
                 {
-                    g[(size_t) ((y * n + x) * 2)]     = (height[(size_t) ((y * n + ((x + 1) & m)) * 4 + ch)] - height[(size_t) ((y * n + ((x - 1) & m)) * 4 + ch)]) * 0.5f * (float) n;
-                    g[(size_t) ((y * n + x) * 2 + 1)] = (height[(size_t) ((((y + 1) & m) * n + x) * 4 + ch)] - height[(size_t) ((((y - 1) & m) * n + x) * 4 + ch)]) * 0.5f * (float) n;
+                    const int left = x == 0 ? m : x - 1, right = x == m ? 0 : x + 1;
+                    out[x * 2]     = (row[right * 4 + ch] - row[left * 4 + ch]) * 0.5f * (float) n;
+                    out[x * 2 + 1] = (below[x * 4 + ch] - above[x * 4 + ch]) * 0.5f * (float) n;
                 }
+            }
             std::vector<float> a;
             for (size_t k = 0; k < g.size(); k += 97) a.push_back (std::abs (g[k]));
             std::sort (a.begin(), a.end());
