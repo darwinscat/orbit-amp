@@ -58,14 +58,17 @@ namespace
     // starts and ends along the radius, and how wide it is, as fractions of the knob's opaque radius.
     constexpr ArtKnob::Pointer drivePointer { 0.32f, 0.76f, 0.068f };
     constexpr ArtKnob::Pointer tonePointer  { 0.335f, 0.70f, 0.076f };
-    /** HPF AND LPF ARE WIDE KEYS on the cockpit, spread across the row under the tones, which the sockets and
-        keys the picture lost left free: the kit's chrome key `filterKeyHeight` tall, made as long as half the
-        room less `filterKeyGap` by three slices (PushButton::drawWideChromeKey), the filter's sign in the
-        middle of each — near black, engraved into the light pill whatever its state — going down with the
-        cap. The X88-IR's packs have no switches, so nothing else stands in the row. */
+    /** HPF AND LPF ARE BROAD KEYS on the cockpit, in the row under the tones, which the sockets and keys the
+        picture lost left free: the kit's chrome key `filterKeyHeight` tall, made a little longer than tall —
+        `filterKeyAspect` — by three slices (PushButton::drawWideChromeKey), the filter's sign in the middle of
+        each — near black, engraved into the light pill whatever its state — going down with the cap. The two
+        stand evenly in the room, as much of it before the first as between them and after the second. The
+        X88-IR's packs have no switches, so nothing else stands in the row. */
     constexpr float filterRowLeft = 1060.3f - 72.0f, filterRowRight = 1418.0f;    // the row's free room: BASS's socket's left edge to short of the corner screw
-    constexpr float filterKeyGap = 16.0f, filterKeyHeight = 66.0f;     // its bezel 56 of that, from the sockets' foot to the plate's
-    constexpr float filterKeyWidth = 0.5f * (filterRowRight - filterRowLeft - filterKeyGap);      // 206.85: the two fill the room, evenly
+    constexpr float filterKeyHeight = 66.0f;     // its bezel 56 of that, from the sockets' foot to the plate's
+    constexpr float filterKeyAspect = 1.25f;     // near square: a key, not a pill stretched across the row
+    constexpr float filterKeyWidth = filterKeyAspect * filterKeyHeight;
+    constexpr float filterKeySpace = (filterRowRight - filterRowLeft - 2.0f * filterKeyWidth) / 3.0f;     // before, between and after them
     constexpr float filterKeyDrop = 10.0f;     // ...their middles this far under the key row's: between the sockets and the plate's edge
     void filterKey (juce::Graphics& g, juce::Rectangle<float> box, bool down, float lit, bool highpass)
     {
@@ -111,8 +114,8 @@ namespace
         p.toneNameY  = toneNameY;
         p.toneNameEm = px13;
 
-        p.keys = { juce::Point<float> { filterRowLeft + 0.5f * filterKeyWidth, keyRowY + filterKeyDrop },
-                   juce::Point<float> { filterRowRight - 0.5f * filterKeyWidth, keyRowY + filterKeyDrop } };
+        p.keys = { juce::Point<float> { filterRowLeft + filterKeySpace + 0.5f * filterKeyWidth, keyRowY + filterKeyDrop },
+                   juce::Point<float> { filterRowRight - filterKeySpace - 0.5f * filterKeyWidth, keyRowY + filterKeyDrop } };
         p.keySize = keySize;
         p.filterKeyWidth = filterKeyWidth;
         p.filterKeyHeight = filterKeyHeight;
@@ -519,7 +522,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
-    // HPF AND LPF, wide (filterKey).
+    // HPF AND LPF, broad (filterKey).
     for (int f = face::btHpf; f <= face::btLpf; ++f)
         key (f).drawKey = [f] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float lit)
         {
