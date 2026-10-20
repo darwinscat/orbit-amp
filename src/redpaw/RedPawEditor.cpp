@@ -181,7 +181,7 @@ namespace
                  skin.midiCommands,
                  handLight,         // under the hand, the dashboard's orange
                  skin.ink,
-                 skin.badge.has_value() ? skin.badge->lamp : juce::Colour() };     // the badge's lamp, where the rover wears the badge
+                 skin.badge.has_value() ? skin.badge->lamp : skin.markLamp };      // the lamp under the cat's glass: the badge's, or the bare mark's
     }
 
     /** A WORD WIDER THAN ITS ROOM is set condensed into it — as tall as ever, narrower — about `centre`:

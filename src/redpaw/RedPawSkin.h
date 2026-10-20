@@ -91,6 +91,11 @@ struct Skin
         face's emblem: the hand's target and the mark's box. None, and the picture's own plate shows, the
         mark on it as `mark` and the render say. */
     std::optional<face::BadgeLook> badge {};
+
+    /** THE LAMP UNDER THE MARK where the skin wears no badge: the cat, cut straight into the picture's metal,
+        lit under the hand all the same (Emblem) — a badge's lamp is its own (BadgeLook::lamp). None if
+        transparent. */
+    juce::Colour markLamp {};
 };
 
 /** The skin a rover's processor wears (Product::skin). */
