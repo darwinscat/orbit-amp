@@ -549,6 +549,39 @@ function(strip_release)
     endforeach()
 endfunction()
 
+# A PLUG-IN EXPORTS ITS ENTRY POINTS AND NOTHING ELSE — on Linux, where nothing else sees to it. A host that
+# opens two of our binaries in one process — the family's VST3 and its CLAP, an amp's own bundle beside the
+# family's, two amps' own bundles — holds two copies of everything an amp is made of, and each copy must stay
+# its binary's own. JUCE is compiled with hidden visibility; the static libraries an amp links are not — NAM's
+# code (felitronics-guitar-core's felitronics_nam), the core's, the codecs' — and gcc emits a static of theirs
+# that must be one in a program (a registry, a function's static local) as a GNU_UNIQUE symbol, which the
+# dynamic linker makes ONE for the whole process, RTLD_LOCAL or not. So the second binary to load registered
+# its NAM models in the first's registry and stopped the process: "Config parser already registered for:
+# SlimmableContainer". Every Linux binary of a plug-in is linked with a version script that names its format's
+# entry points and makes every other symbol local, whatever library it came from and however that library was
+# compiled: cmake/exports/vst3.ver (GetPluginFactory, ModuleEntry, ModuleExit — what a VST3 host looks up) and
+# cmake/exports/clap.ver (clap_entry). Nothing of ours is in the process's symbol table for another binary to
+# meet, and a binary with no GNU_UNIQUE symbol can be unloaded again, as on the other systems. The standalones
+# are executables, which export nothing a host could meet, and are left alone. The Mac (two-level namespace)
+# and Windows (a DLL exports what it names) keep each binary's symbols its own already and are left as they
+# are. For every format of an amp (add_amp) and of the family's plug-ins (THE FAMILY'S PLUG-INS).
+function(export_entry_points_only)
+    if(APPLE OR NOT UNIX)
+        return()
+    endif()
+    foreach(target IN LISTS ARGN)
+        if(target MATCHES "_VST3$")
+            set(script "${CMAKE_CURRENT_SOURCE_DIR}/cmake/exports/vst3.ver")
+        elseif(target MATCHES "_CLAP$")
+            set(script "${CMAKE_CURRENT_SOURCE_DIR}/cmake/exports/clap.ver")
+        else()
+            continue()
+        endif()
+        target_link_options(${target} PRIVATE "LINKER:--version-script=${script}")
+        set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${script}")   # an edited script relinks
+    endforeach()
+endfunction()
+
 function(add_amp name)
     cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
@@ -676,6 +709,7 @@ function(add_amp name)
     endforeach()
 
     strip_release(${formats})
+    export_entry_points_only(${formats})
 
     # BY_NAME: not part of the default build. OrbitAmp's own build — a contributor's, a pull request's —
     # must never fail on a face. Whoever wants one asks for it by name: one format (`cmake --build build
@@ -1540,6 +1574,7 @@ if(TARGET ${FAMILY_BUNDLE_TARGET}_AU)
     list(APPEND family_formats ${FAMILY_BUNDLE_TARGET}_AU)
 endif()
 strip_release(${family_formats})
+export_entry_points_only(${family_formats})
 
 # Faces are in it, so it is built by name, as they are: `--target DarwinsCatAmps_All` (VST3, CLAP and the
 # Mac's AU), or with the rest of the release, Family_All.

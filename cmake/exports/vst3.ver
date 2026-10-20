@@ -1,0 +1,11 @@
+/* What a VST3 of ours exports on Linux (CMakeLists.txt: A PLUG-IN EXPORTS ITS ENTRY POINTS AND NOTHING ELSE):
+   the three functions a VST3 host looks up — the factory, and the module's entry and exit, as JUCE's wrapper
+   defines them — and nothing else. Every other symbol of the binary, from whatever library, is local. */
+{
+    global:
+        GetPluginFactory;
+        ModuleEntry;
+        ModuleExit;
+    local:
+        *;
+};
