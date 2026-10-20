@@ -13,7 +13,7 @@ name: release
 # `bundle=`, built by the `bundle_target=` target, <build>/DarwinsCatAmps_artefacts); the standalones are
 # one per amp (<build>/<Amp>_artefacts). The packing scripts read both from family.ini.
 #
-# Every system builds Family_All — every format of every amp of the family — and runs the one gate list
+# Every system builds Family_All — the family's plug-ins and every amp's Standalone — and runs the one gate list
 # (tests/gates.txt, tools/run-gates.sh) before it packs anything. The notes are the family's book: the
 # release's own section of CHANGELOG.md (tools/changelog-collect.mjs --notes).
 #

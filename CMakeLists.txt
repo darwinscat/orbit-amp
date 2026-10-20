@@ -528,6 +528,27 @@ endfunction()
 # never be handed are not built: Ogg Vorbis, FLAC, and Windows Media. Said for every amp and its gates alike.
 set(AMP_UNREAD_CODECS JUCE_USE_OGGVORBIS=0 JUCE_USE_FLAC=0 JUCE_USE_WINDOWS_MEDIA_FORMAT=0)
 
+# WHAT KIND OF PLUG-IN AN AMP IS, to a host: its VST3 categories and its CLAP features. Said once, for an
+# amp's own plug-in and for its entry in the family's (THE FAMILY'S PLUG-INS) alike.
+set(AMP_VST3_CATEGORIES Fx Distortion)
+set(AMP_CLAP_FEATURES audio-effect guitar amplifier)
+
+# A RELEASE BINARY CARRIES NO LOCAL SYMBOLS — tens of thousands of internal names, a fifth of a face's
+# binary. Its exports stay, which is all a host looks up (GetPluginFactory, the AU's factory, clap_entry):
+# `ld -x` on the Mac, `-s` on Linux, at the link of every format, the CLAP's too. A crash report from a
+# released amp shows addresses, not the names of its own functions. MSVC writes its symbols to a .pdb beside
+# the binary, which no installer packs, and is left as it is. For every format of an amp (add_amp) and of
+# the family's plug-ins (THE FAMILY'S PLUG-INS).
+function(strip_release)
+    foreach(target IN LISTS ARGN)
+        if(APPLE)
+            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:LINKER:-x>)
+        elseif(UNIX)
+            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:-s>)
+        endif()
+    endforeach()
+endfunction()
+
 function(add_amp name)
     cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
@@ -550,7 +571,7 @@ function(add_amp name)
         PLUGIN_MANUFACTURER_CODE    Dcat
         PLUGIN_CODE                 ${AMP_CODE}
         FORMATS                     VST3 AU Standalone
-        VST3_CATEGORIES             "Fx" "Distortion"
+        VST3_CATEGORIES             ${AMP_VST3_CATEGORIES}
         AU_MAIN_TYPE                "kAudioUnitType_Effect"
         IS_SYNTH                    FALSE
         NEEDS_MIDI_INPUT            FALSE
@@ -575,7 +596,7 @@ function(add_amp name)
     # links its own headers into the plug-in, ahead of everything the amp links below.
     clap_juce_extensions_plugin(TARGET ${name}
         CLAP_ID       "com.darwinscat.${id}"
-        CLAP_FEATURES audio-effect "guitar" "amplifier")
+        CLAP_FEATURES ${AMP_CLAP_FEATURES})
 
     # The CLAP wrapper ships its own default clap.icns (the generic CLAP logo) and JUCE's ICON_BIG
     # does not reach it. Overwrite it in place with the AppIcon.icns juceaide already generated for
@@ -654,23 +675,12 @@ function(add_amp name)
         endif()
     endforeach()
 
-    # A RELEASE BINARY CARRIES NO LOCAL SYMBOLS — tens of thousands of internal names, a fifth of a face's
-    # binary. Its exports stay, which is all a host looks up (GetPluginFactory, the AU's factory,
-    # clap_entry): `ld -x` on the Mac, `-s` on Linux, at the link of every format, the CLAP's too. A crash
-    # report from a released amp shows addresses, not the names of its own functions. MSVC writes its
-    # symbols to a .pdb beside the binary, which no installer packs, and is left as it is.
-    foreach(target IN LISTS formats)
-        if(APPLE)
-            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:LINKER:-x>)
-        elseif(UNIX)
-            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:-s>)
-        endif()
-    endforeach()
+    strip_release(${formats})
 
     # BY_NAME: not part of the default build. OrbitAmp's own build — a contributor's, a pull request's —
     # must never fail on a face. Whoever wants one asks for it by name: one format (`cmake --build build
     # --target CatpitAmp_Standalone`), or all of them — `--target CatpitAmp_All`; the family's release
-    # asks for every amp it carries (Family_All).
+    # asks for the Standalone of every amp it carries, and holds their plug-ins in its own (Family_All).
     if(AMP_BY_NAME)
         set_target_properties(${name} ${formats} PROPERTIES EXCLUDE_FROM_ALL TRUE)
     endif()
@@ -680,6 +690,7 @@ function(add_amp name)
 
     set_property(TARGET ${name} PROPERTY AMP_SOURCES ${AMP_SOURCES})
     set_property(TARGET ${name} PROPERTY AMP_LIBRARIES ${libraries})
+    set_property(TARGET ${name} PROPERTY AMP_CODE ${AMP_CODE})
     set(AMPS ${AMPS} ${name} PARENT_SCOPE)
 endfunction()
 
@@ -1245,29 +1256,240 @@ set_target_properties(orbitamp_family_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 
 # ----------------------------------------------------------------------------
-# THE FAMILY'S RELEASE: `--target Family_All` builds every format of every amp installer/family.ini
-# names — the list each family installer packs (build-family-pkg.sh, darwinscat-amps.iss,
-# build-family-linux.sh) — so what is built for the release and what is packed are one list, said in one
-# place. The file is read the way those read it, by its `amps=` line, and is looked at again when it
-# changes; a name there that is no amp here stops the configure, since an installer would go looking for
-# bundles nothing builds.
+# THE FAMILY'S RELEASE: `--target Family_All` builds what the family's installers pack — the family's
+# plug-ins, ONE bundle per format that holds every amp installer/family.ini names (THE FAMILY'S PLUG-INS,
+# below), each of those amps' Standalone, and the release's factory folder — so what is built for the
+# release and what is packed are one list, said in one place (build-family-pkg.sh, darwinscat-amps.iss,
+# build-family-linux.sh, build-family-zip.sh read nothing else). The file is read the way those read it, by
+# its `amps=`, `bundle=` and `bundle_target=` lines, and is looked at again when it changes; a name there
+# that is no amp here stops the configure, since an installer would go looking for what nothing builds.
 # ----------------------------------------------------------------------------
 set(FAMILY_INI "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FAMILY_INI}")
-file(STRINGS "${FAMILY_INI}" FAMILY_AMPS REGEX "^amps=")
-string(REGEX REPLACE "^amps=" "" FAMILY_AMPS "${FAMILY_AMPS}")
+
+# One `key=value` line of family.ini, its value as the installers read it.
+function(family_ini key out)
+    file(STRINGS "${FAMILY_INI}" value REGEX "^${key}=")
+    string(REGEX REPLACE "^${key}=" "" value "${value}")
+    string(STRIP "${value}" value)
+    set(${out} "${value}" PARENT_SCOPE)
+endfunction()
+
+family_ini(amps FAMILY_AMPS)
 string(REGEX MATCHALL "[^ \t\r]+" FAMILY_AMPS "${FAMILY_AMPS}")
-if(NOT FAMILY_AMPS)
-    message(FATAL_ERROR "installer/family.ini names no amps")
+family_ini(bundle FAMILY_BUNDLE)
+family_ini(bundle_target FAMILY_BUNDLE_TARGET)
+if(NOT FAMILY_AMPS OR NOT FAMILY_BUNDLE OR NOT FAMILY_BUNDLE_TARGET)
+    message(FATAL_ERROR "installer/family.ini names no amps, no bundle or no bundle_target")
 endif()
 add_custom_target(Family_All)
 foreach(amp IN LISTS FAMILY_AMPS)
     if(NOT amp IN_LIST AMPS)
         message(FATAL_ERROR "installer/family.ini names ${amp}, which is no amp of this tree (${AMPS})")
     endif()
-    add_dependencies(Family_All ${amp}_All)
+    add_dependencies(Family_All ${amp}_Standalone)
 endforeach()
-message(STATUS "The family's release (Family_All): ${FAMILY_AMPS}")
+list(JOIN FAMILY_AMPS ", " family_amps_said)
+message(STATUS "The family's release (Family_All): ${FAMILY_BUNDLE} (${FAMILY_BUNDLE_TARGET}) holding ${family_amps_said}, and their standalones")
+
+# ----------------------------------------------------------------------------
+# THE FAMILY'S PLUG-INS — ONE binary per format, "Darwin's Cat Amps" (family.ini's `bundle=`), built by the
+# target family.ini names (`bundle_target=`, DarwinsCatAmps): every amp of the release in one VST3 and one
+# CLAP, each under the ids its own bundle has always had — its VST3 classes made of the family's
+# manufacturer code, Dcat, and its own CODE, and its CLAP id, com.darwinscat.<name> — so a session saved
+# with an amp's own bundle opens it from the family's unchanged. The wrappers are patched to hold a list
+# (cmake/PatchedWrappers.cmake). The binary's own code, Dcam, and CLAP id, com.darwinscat.amps, name no
+# plug-in a host is shown: the list names those. The Mac's AU joins them once its wrapper holds a list
+# too; until then the family's plug-ins are a VST3 and a CLAP on every system.
+#
+# THE LIST IS WRITTEN HERE, at configure time, into <build>/generated/family: FamilyPluginList.h, what the
+# wrappers read (JUCE_PLUGIN_LIST_HEADER) — each amp's name, its CODE, its CLAP id, and the categories and
+# features every amp has (AMP_VST3_CATEGORIES, AMP_CLAP_FEATURES), in family.ini's order — and
+# FamilyProducts.h, the Product each entry is made with, orbitamp::products::<name> with its first letter
+# small (src/Product.h). Both come from family.ini's `amps=` and each amp's row in THE AMPS, never from a
+# second list kept by hand; a name with no Product does not compile. The binary's entry,
+# createPluginFilter (const juce::PluginListEntry&), is src/FamilyPlugin.cpp.
+#
+# IT IS EVERY AMP'S OWN PLUG-IN, COMPILED ONCE: the sources of every amp of the release, each once, and their
+# libraries — as the family's gate links them (EVERY AMP IN ONE BINARY) — built as add_amp builds an amp:
+# the family's version, the same definitions, link-time optimisation, no codec an amp never reads, no local
+# symbols in a release, and the build's factory folder first (ORBITAMP_DEV_FACTORY). No amp's own entry is
+# compiled in (ORBITAMP_PLUGIN_ENTRY): the list's makes them all. Nor is ASIO: a plug-in opens no device.
+#
+# An amp's own VST3, AU and CLAP (add_amp) stay, for development — OrbitAmp's in the default build, every
+# other amp's by name — and the release never builds them: it ships these and each amp's Standalone
+# (Family_All), and a host that found an amp's own bundle beside the family's would see the amp twice, under
+# one id. For the same reason the family's bundles are never copied into the user's plug-in folders after a
+# build: ORBITAMP_COPY_PLUGIN copies an amp's own.
+# ----------------------------------------------------------------------------
+set(FAMILY_GENERATED_DIR "${ORBITAMP_GENERATED_DIR}/family")
+list(JOIN AMP_VST3_CATEGORIES "|" family_categories)
+set(family_features "")
+foreach(feature IN LISTS AMP_CLAP_FEATURES)
+    string(APPEND family_features "\"${feature}\", ")
+endforeach()
+set(family_entries "")
+set(family_products "")
+set(family_plugin_sources "")
+set(family_plugin_libraries "")
+foreach(amp IN LISTS FAMILY_AMPS)
+    get_target_property(code ${amp} AMP_CODE)
+    string(LENGTH "${code}" length)
+    if(NOT length EQUAL 4)
+        message(FATAL_ERROR "${amp}'s CODE, '${code}', is not four characters")
+    endif()
+    string(TOLOWER "${amp}" id)
+    string(SUBSTRING "${amp}" 0 1 first)
+    string(SUBSTRING "${amp}" 1 -1 rest)
+    string(TOLOWER "${first}" first)
+    string(APPEND family_entries
+        "    { \"${amp}\", \"${code}\", \"com.darwinscat.${id}\", \"${family_categories}\", familyClapFeatures },\n")
+    string(APPEND family_products "    { \"${code}\", &products::${first}${rest} },\n")
+
+    get_target_property(sources ${amp} AMP_SOURCES)
+    get_target_property(libraries ${amp} AMP_LIBRARIES)
+    list(APPEND family_plugin_sources ${sources})
+    list(APPEND family_plugin_libraries ${libraries})
+endforeach()
+list(REMOVE_DUPLICATES family_plugin_sources)
+list(REMOVE_DUPLICATES family_plugin_libraries)
+
+file(CONFIGURE OUTPUT "${FAMILY_GENERATED_DIR}/FamilyPluginList.h" @ONLY CONTENT [=[
+// WRITTEN BY THE BUILD (CMakeLists.txt: THE FAMILY'S PLUG-INS) from installer/family.ini's `amps=` and each
+// amp's row in THE AMPS — never edited. The plug-ins the family's one VST3 and one CLAP hold, in the order
+// hosts show them, each under its own ids (juce_PluginList.h, which the patched JUCE carries). Plain data,
+// nothing of JUCE: the VST3 manifest helper compiles it too.
+#pragma once
+
+#include <juce_audio_plugin_client/juce_PluginList.h>
+
+inline constexpr const char* familyClapFeatures[] { @family_features@nullptr };
+
+inline constexpr juce::PluginListEntry jucePluginList[]
+{
+@family_entries@};
+]=])
+
+file(CONFIGURE OUTPUT "${FAMILY_GENERATED_DIR}/FamilyProducts.h" @ONLY CONTENT [=[
+// WRITTEN BY THE BUILD (CMakeLists.txt: THE FAMILY'S PLUG-INS), beside FamilyPluginList.h and from the same
+// rows — never edited. The Product each plug-in of the family's list is made with, by its code
+// (src/FamilyPlugin.cpp); a name with no Product (src/Product.h) does not compile.
+#pragma once
+
+#include "Product.h"
+
+namespace orbitamp::family
+{
+struct Plugin
+{
+    const char* code;
+    const Product& (*product)();
+};
+
+inline constexpr Plugin plugins[]
+{
+@family_products@};
+} // namespace orbitamp::family
+]=])
+
+# Its icon: the family's own, resources/icon/<bundle_target>-*.png, where there is one — and until there is,
+# its first amp's, family.ini's first: what a bundle's own icon is shown as, and nothing a host lists.
+list(GET FAMILY_AMPS 0 family_first)
+foreach(stem IN ITEMS ${FAMILY_BUNDLE_TARGET} ${family_first})
+    if(APPLE)
+        set(family_icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${stem}-macOS-1024.png")
+    else()
+        set(family_icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${stem}-1024.png")
+    endif()
+    if(EXISTS "${family_icon}")
+        break()
+    endif()
+endforeach()
+
+juce_add_plugin(${FAMILY_BUNDLE_TARGET}
+    VERSION                     "${PROJECT_VERSION}"
+    PRODUCT_NAME                "${FAMILY_BUNDLE}"
+    COMPANY_NAME                "Darwin's Cat"
+    BUNDLE_ID                   "com.darwinscat.amps"
+    PLUGIN_MANUFACTURER_CODE    Dcat
+    PLUGIN_CODE                 Dcam
+    FORMATS                     VST3
+    VST3_CATEGORIES             ${AMP_VST3_CATEGORIES}
+    IS_SYNTH                    FALSE
+    NEEDS_MIDI_INPUT            FALSE
+    NEEDS_MIDI_OUTPUT           FALSE
+    IS_MIDI_EFFECT              FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    ICON_BIG                    "${family_icon}"
+    COPY_PLUGIN_AFTER_BUILD     FALSE)
+
+clap_juce_extensions_plugin(TARGET ${FAMILY_BUNDLE_TARGET}
+    CLAP_ID       "com.darwinscat.amps"
+    CLAP_FEATURES ${AMP_CLAP_FEATURES})
+
+# The CLAP's icon, as an amp's own (add_amp): the wrapper's generic clap.icns overwritten with the bundle's.
+if(APPLE)
+    add_custom_command(TARGET ${FAMILY_BUNDLE_TARGET}_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:${FAMILY_BUNDLE_TARGET},JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:${FAMILY_BUNDLE_TARGET}_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
+
+target_sources(${FAMILY_BUNDLE_TARGET} PRIVATE src/FamilyPlugin.cpp ${family_plugin_sources})
+
+# The list's header is the shared code's, PUBLIC like every definition here: the VST3 manifest helper is
+# compiled with the shared code's definitions and include path, and reads the list to write moduleinfo.json.
+# The products' header finds src/Product.h on the path too.
+target_include_directories(${FAMILY_BUNDLE_TARGET} PUBLIC "${ORBITAMP_GENERATED_DIR}" "${FAMILY_GENERATED_DIR}")
+target_include_directories(${FAMILY_BUNDLE_TARGET} PRIVATE src)
+add_dependencies(${FAMILY_BUNDLE_TARGET} OrbitAmpVersionGen)
+target_compile_definitions(${FAMILY_BUNDLE_TARGET} PUBLIC
+    JUCE_PLUGIN_LIST_HEADER="FamilyPluginList.h"
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    ${AMP_UNREAD_CODECS})
+target_link_libraries(${FAMILY_BUNDLE_TARGET} PRIVATE ${family_plugin_libraries})   # the LTO flags among them
+add_dependencies(${FAMILY_BUNDLE_TARGET} Family_Factory)
+if(ORBITAMP_DEV_FACTORY)
+    target_compile_definitions(${FAMILY_BUNDLE_TARGET} PRIVATE ORBITAMP_DEV_FACTORY="${ORBITAMP_FACTORY_DIR}")
+endif()
+strip_release(${FAMILY_BUNDLE_TARGET}_VST3 ${FAMILY_BUNDLE_TARGET}_CLAP)
+
+# Faces are in it, so it is built by name, as they are: `--target DarwinsCatAmps_All` (VST3 and CLAP), or
+# with the rest of the release, Family_All.
+set_target_properties(${FAMILY_BUNDLE_TARGET} ${FAMILY_BUNDLE_TARGET}_VST3 ${FAMILY_BUNDLE_TARGET}_CLAP
+    PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(${FAMILY_BUNDLE_TARGET}_All ${FAMILY_BUNDLE_TARGET}_CLAP)
+add_dependencies(Family_All ${FAMILY_BUNDLE_TARGET}_All)
+
+# THE FAMILY'S PLUG-INS AS A HOST OPENS THEM (tests/BundleHost.cpp): the VST3 and the CLAP held to the ids each
+# amp's own bundle shipped with, each amp its own in them, two and more alive at once — and, given a build
+# where the amps' own VST3s were built, each held to its own. Not a gate: it opens built bundles, which no
+# gate waits for; built by name, run by hand or by the CI after Family_All:
+#
+#   <build>/orbitamp_bundle_host_artefacts/Release/orbitamp_bundle_host \
+#       "<build>/DarwinsCatAmps_artefacts/Release/VST3/Darwin's Cat Amps.vst3" \
+#       "<build>/DarwinsCatAmps_artefacts/Release/CLAP/Darwin's Cat Amps.clap" [<build>]
+string(JOIN " " family_amps_line ${FAMILY_AMPS})
+juce_add_console_app(orbitamp_bundle_host PRODUCT_NAME "OrbitAmpBundleHost")
+target_sources(orbitamp_bundle_host PRIVATE tests/BundleHost.cpp)
+target_include_directories(orbitamp_bundle_host PRIVATE "${clap-juce-extensions_SOURCE_DIR}/clap-libs/clap/include")
+target_compile_definitions(orbitamp_bundle_host PRIVATE
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    ORBITAMP_FAMILY_AMPS="${family_amps_line}"
+    JUCE_PLUGINHOST_VST3=1
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0)
+target_link_libraries(orbitamp_bundle_host PRIVATE
+    juce::juce_audio_processors
+    juce::juce_recommended_config_flags)
+set_target_properties(orbitamp_bundle_host PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ...and the factory folder of every amp, and of the family's alone (THE FACTORY FOLDER).
 family_factory()
