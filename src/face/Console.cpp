@@ -13,7 +13,6 @@
 #include "../device/IrLibrary.h"
 #include "../ui/AboutConfig.h"
 #include "../ui/HumMenu.h"
-#include "../ui/InputZeroMenu.h"
 #include "../ui/HumTuning.h"
 #include "../ui/LoadBreakdown.h"
 #include "../ui/Prefs.h"
@@ -369,8 +368,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     bind (*sliders[1], params::delayMix);
     bind (outFader, params::outTrim);
 
-    // INPUT's lever IS the trim, as OUTPUT's is: its middle is 0 dB over the input's zero, which the engine
-    // adds itself (Console.h, AmpProcessor::inputTrimDb).
+    // INPUT's lever IS the trim, as OUTPUT's is: unity in its middle (Console.h).
     bind (inFader, params::inTrim);
 
     inFader.onMenu = [this] { showInputMenu(); };
@@ -949,8 +947,7 @@ bool Console::settingsDiffer() const
 
 void Console::settleOnSettings()
 {
-    // TURBO: that it is on is the state's, how hard is the settings'. (The input's zero is the engine's
-    // own: AmpProcessor::inputTrimDb.)
+    // TURBO: that it is on is the state's, how hard is the settings'.
     const auto turboTrim = params::blockIn (params::preampId);
     if (const float push = getParam (turboTrim.toRawUTF8());
         push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
@@ -960,13 +957,6 @@ void Console::settleOnSettings()
     const auto smooth = params::blockSmooth (params::preampId);
     if ((getParam (smooth.toRawUTF8()) > 0.5f) == driveSteps)
         setParam (smooth.toRawUTF8(), driveSteps ? 0.0f : 1.0f);
-}
-
-/** The input's zero's items (ui/InputZeroMenu.h), as every menu here has them. */
-void Console::addInputZeroLines (juce::PopupMenu& menu)
-{
-    for (const auto& line : prefs::inputZeroMenu (amp.product()))
-        addChoice (menu, line.text, line.ticked, [line] (Console& e) { prefs::inputZeroPick (e.amp.product(), line); });
 }
 
 void Console::flipHum()
@@ -1095,17 +1085,13 @@ void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool t
     menu.addItem (item);
 }
 
-/** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: the input's zero, what the
-    lever gives in the middle of its travel, and the hum the input carries — both the machine's, the
-    four modes here as flat items, AUTO's line naming what it decided once it has. */
+/** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: the hum the input carries — the
+    machine's, the four modes here as flat items, AUTO's line naming what it decided once it has. */
 void Console::showInputMenu()
 {
     endTapping();
 
     juce::PopupMenu menu;
-    menu.addSectionHeader (prefs::inputZeroTitle);
-    addInputZeroLines (menu);
-
     menu.addSectionHeader ("HUM");
     addHumLines (menu);
 
@@ -1448,7 +1434,7 @@ void Console::refreshHistory()
     showChannel();   // an undo, a redo or another register may have brought a different channel with it
 
     // ...or a state with no channels in it at all, or one whose cabinet is not the file of that name
-    // any more, or whose INPUT was dialled against another zero. Settling any of them writes, and this
+    // any more, or one kept under another TURBO or DRIVE's other way. Settling any of them writes, and this
     // is the history's own callback, so it is done on the way out.
     if ((! channels.adopted() || channels.cabinetIsStale() || settingsDiffer()) && ! adoptionPending)
     {
@@ -1840,20 +1826,16 @@ void Console::showSettingsMenu()
     // What the product's window shows, and full screen.
     addWindowSections (menu);
 
-    // The input's zero — what the INPUT lever gives in the middle of its travel — how DRIVE goes between the pack's
-    // captures, and the hum the input carries. How hard TURBO pushes, where it pushes, is TURBO's own
-    // menu's (showTurboMenu).
+    // How DRIVE goes between the pack's captures, and the hum the input carries. How hard TURBO pushes,
+    // where it pushes, is TURBO's own menu's (showTurboMenu).
     menu.addSectionHeader ("INPUT");
-    juce::PopupMenu zero;
-    addInputZeroLines (zero);
-    menu.addSubMenu (prefs::inputZeroState (amp.product()), zero);
 
     juce::PopupMenu way;
     for (int i = 0; i < driveWays.size(); ++i)
         addChoice (way, driveWays[i], (i == 1) == driveSteps, [steps = i == 1] (Console& e) { e.chooseDriveSteps (steps); });
     menu.addSubMenu ("DRIVE turns  " + driveWays[driveSteps ? 1 : 0], way);
 
-    // The hum is the machine's, like the input's zero (prefs::hum): every window of this product and
+    // The hum is the machine's (prefs::hum): every window of this product and
     // every engine behind one follow the choice from their next look and their next block. The title
     // says where it stands — AUTO's state with it.
     juce::PopupMenu hum;

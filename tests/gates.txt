@@ -57,5 +57,5 @@ amberpaw-channel   amberpawamp_channel_test   ROVER_GATE_OWNS_HOME=1
 # Every amp in one binary: all five side by side in one process, each its own product (src/Product.h).
 family             orbitamp_family_test
 
-# The input's zero: OrbitAmp's IN fader over the machine's zero, the cockpit's and the rovers' trim as it stands.
-input-zero         orbitamp_input_zero_test
+# The input's level: unity at every amp's input, the pack's own level feeding the model, 0.8.0's states as they played.
+input-level        orbitamp_input_level_test

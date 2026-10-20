@@ -66,8 +66,7 @@ juce::String Presets::sound() const
     setInTree (tree, params::inTrim, 0.0f);
     if (const auto* park = channels.lineup().parkId)
         setInTree (tree, park, 0.0f);                           // ...nor PARK
-    tree.removeProperty (params::inTrimZero, nullptr);          // ...nor the zero INPUT was dialled against,
-    if (const auto* former = amp.product().formerInputZeroId)   // under its name or the one it had before
+    if (const auto* former = amp.product().formerInputZeroId)   // ...nor the zero 0.8.0 noted beside INPUT
         tree.removeProperty (former, nullptr);
     setInTree (tree, params::blockSmooth (params::preampId), 1.0f);    // ...nor DRIVE's way: as every state had it before there was a choice
     setInTree (tree, params::blockIn (params::preampId), 0.0f);        // ...nor TURBO's push: Channels::whole says on or off
@@ -103,16 +102,11 @@ bool Presets::load (const juce::String& name)
         return false;
 
     amp.takeEmbeddedIrs (tree);     // a cabinet IR it carries goes to the store, not into the history
+    amp.takeFormerTrims (tree);     // a preset of 0.8.0's: its gate set where 0.8.0's key heard the guitar
 
-    // INPUT stays where the player has it — the trim, and the input's zero it was dialled against.
+    // INPUT stays where the player has it.
     if (auto* in = amp.apvts.getParameter (params::inTrim))
         setInTree (tree, params::inTrim, in->convertFrom0to1 (in->getValue()));
-    if (const auto zero = amp.apvts.state.getProperty (params::inTrimZero); ! zero.isVoid())
-        tree.setProperty (params::inTrimZero, zero, nullptr);
-    else
-        tree.removeProperty (params::inTrimZero, nullptr);
-    if (const auto* former = amp.product().formerInputZeroId)   // a preset of 0.8.0's: its trim is not the one played
-        tree.removeProperty (former, nullptr);
 
     // ...and the amp stays parked or playing as it is.
     if (const auto* park = channels.lineup().parkId)

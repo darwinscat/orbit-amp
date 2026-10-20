@@ -14,13 +14,11 @@ namespace orbitamp
 {
 
 class AmpProcessor;
-struct Product;
 
-/** SETUP — the one window, opened by the toolbar's gear. Its pages across the top:
+/** SETUP — the one window, opened by the toolbar's gear. Two pages across the top:
 
         LIBRARY   the packs and the IRs, one sub-tab per list
         VIEW      what this window shows — the eye's business, and only the eye's
-        INPUT     what the input is fed at: the input's zero, under the IN fader's 0
         TUNER     what the tuner listens for — how quiet this guitar and this room are
 
     The libraries used to BE this window, one tab each, and there was nowhere for a setting to
@@ -72,13 +70,6 @@ private:
     void selectLibrary (int index);
     void buildViewPage();
     void buildTunerPage();
-
-public:
-    /** The INPUT page's rows, for `product`: they read and write its machine settings and nothing else, so
-        a gate can hold them without a window. */
-    static std::vector<SettingsList::Row> inputRows (const Product& product);
-
-private:
     void layOutTabs (juce::Rectangle<int>& header, std::vector<Tab>& tabs, float height);
     void paintTabs (juce::Graphics&, const std::vector<Tab>&, int current, float height,
                     juce::Point<int> offset = {}) const;
@@ -101,9 +92,6 @@ private:
         cannot reach its own last row is a page with a hidden switch. */
     SettingsList   viewPage;
     juce::Viewport viewView;
-
-    /** INPUT: the machine's too — this interface and this guitar, not a sound. */
-    SettingsList   inputPage;
 
     /** TUNER: machine preferences like VIEW's — a room and a guitar, not a sound. */
     SettingsList   tunerPage;

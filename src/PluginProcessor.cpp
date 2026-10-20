@@ -119,9 +119,6 @@ AmpProcessor::AmpProcessor (const Product& product)
     }
 
     inTrimParam        = apvts.getRawParameterValue (params::inTrim);
-    // The machine's input zero the engine plays the trim over (inputTrimDb), read here on the constructing
-    // thread like the hum below — and before the product's engine is made, which already pumps.
-    inputZeroWanted    = &prefs::inputZeroCache (ownProduct);
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
     tunerMuteParam     = apvts.getRawParameterValue (params::tunerMute);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
@@ -206,7 +203,6 @@ AmpProcessor::AmpProcessor (const Product& product)
     humLastOn = &prefs::humLastOnCache (ownProduct);
     humPlayWanted  = &prefs::humtune::playCache (ownProduct);
     humQuietWanted = &prefs::humtune::quietCache (ownProduct);
-
     humUpToWanted  = &prefs::humtune::upToCache (ownProduct);
 
     // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
@@ -346,7 +342,7 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         // history would otherwise keep megabytes in its baseline and compare them every tick.
         self.takeEmbeddedIrs (t);
 
-        // ...and a trim of 0.8.0's, absolute, becomes the hand's place over the zero it was dialled against.
+        // ...and a state of 0.8.0's, its trim and its gate where they belong now.
         self.takeFormerTrims (t);
 
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
@@ -391,6 +387,13 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         });
 }
 
+void AmpProcessor::selectDemoLoop (int index)
+{
+    const int n = (int) std::size (params::demoLoopFiles);
+    demoLoopIndex = juce::jlimit (0, n - 1, index);
+    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[demoLoopIndex]), getSampleRate());
+}
+
 void AmpProcessor::takeFormerTrims (juce::ValueTree& tree) const
 {
     const auto* former = ownProduct.formerInputZeroId;
@@ -399,14 +402,14 @@ void AmpProcessor::takeFormerTrims (juce::ValueTree& tree) const
 
     if (tree.hasType (stateType) && tree.hasProperty (former))
     {
-        if (! tree.hasProperty (params::inTrimZero))
+        const float dialled = (float) (int) tree.getProperty (former);
+        const auto shift = [&tree] (const char* id, float by, float lowest, float highest)
         {
-            const int dialled = (int) tree.getProperty (former);
-            if (auto trim = tree.getChildWithProperty ("id", juce::String (params::inTrim)); trim.isValid())
-                trim.setProperty ("value", juce::jlimit (-params::inTrimRangeDb, params::inTrimRangeDb,
-                                                         (float) trim.getProperty ("value") - (float) dialled), nullptr);
-            tree.setProperty (params::inTrimZero, dialled, nullptr);
-        }
+            if (auto p = tree.getChildWithProperty ("id", juce::String (id)); p.isValid())
+                p.setProperty ("value", juce::jlimit (lowest, highest, (float) p.getProperty ("value") + by), nullptr);
+        };
+        shift (params::inTrim,        -dialled, -params::inTrimRangeDb,   params::inTrimRangeDb);
+        shift (params::gateThreshold, -dialled, params::gateThresholdMin, params::gateThresholdMax);
         tree.removeProperty (former, nullptr);
     }
 
@@ -430,13 +433,6 @@ juce::String AmpProcessor::loadedAs() const
 
     const auto program = juce::File (juce::PluginHostType::getHostPath()).getFileNameWithoutExtension();
     return program.isNotEmpty() ? said + " in " + program : said;
-}
-
-void AmpProcessor::selectDemoLoop (int index)
-{
-    const int n = (int) std::size (params::demoLoopFiles);
-    demoLoopIndex = juce::jlimit (0, n - 1, index);
-    demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[demoLoopIndex]), getSampleRate());
 }
 
 void AmpProcessor::rescanDevices()
@@ -766,21 +762,6 @@ void AmpProcessor::pumpDeviceWork()
     // An IR the convolver turned away mid-crossfade gets its next chance here.
     if (juce::MessageManager::existsAndIsCurrentThread())
         cab.flushPending();
-
-    // THE ZERO THE TRIM WAS DIALLED AGAINST, written beside it (params::inTrimZero), every amp's: a fresh
-    // state, one that has just landed — a session, a preset, a register, an undo — dialled against
-    // another zero or before there was one, and a zero just chosen, all take the zero in force. The trim
-    // itself does not move: it is the hand's, and the engine plays it over the zero in force
-    // (inputTrimDb). Not an edit, so no undo step. The tree is the message thread's.
-    if (inputZeroWanted != nullptr && juce::MessageManager::existsAndIsCurrentThread())
-    {
-        const int zero = inputZeroWanted->load (std::memory_order_relaxed);
-        if (const auto dialled = apvts.state.getProperty (params::inTrimZero); dialled.isVoid() || (int) dialled != zero)
-        {
-            const felitronics::appkit::CompareHistory::ScopedSuppress hush (history);
-            apvts.state.setProperty (params::inTrimZero, zero, nullptr);
-        }
-    }
 }
 
 void AmpProcessor::fitWire (int index, int lat)
@@ -873,7 +854,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // Seeded through the same question the chain asks, not from the parameter alone: a link that
     // arrives standing by must not apply its stored gain to the first block and then ramp out of
     // it — a bypassed +24 dB would open playback at nearly sixteen times.
-    lastTrimGain = linkWorks (params::rowIn)  ? juce::Decibels::decibelsToGain (inputTrimDb())        : 1.0f;
+    lastTrimGain = linkWorks (params::rowIn)  ? juce::Decibels::decibelsToGain (inTrimParam->load())  : 1.0f;
     lastOutGain  = linkWorks (params::rowOut) ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
     lastPreampInGain = juce::Decibels::decibelsToGain (preampInParam->load());
     {
@@ -1363,15 +1344,13 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
     // The input trim next, straight after the hum — ahead of the tuner's ear and the gate's key,
     // like the interface knob it stands in for: everything downstream, meters included, hears the trimmed level,
-    // which is what closes the gain-staging loop. Ramped per block against zipper noise. The trim
-    // the engine plays, the input's zero under it where it stands over one (inputTrimDb).
+    // which is what closes the gain-staging loop. Ramped per block against zipper noise.
     // A volume that is not working ramps to UNITY — it is never simply skipped. Skipping leaves
     // the last gain applied to the previous block and none to this one, which is a step in the
-    // waveform, which is a click. The same shape the captured blocks' trims already use. The zero
-    // is the IN column's, and stands by with it.
+    // waveform, which is a click. The same shape the captured blocks' trims already use.
     {
         const float target = linkWorks (params::rowIn)
-                                 ? juce::Decibels::decibelsToGain (inputTrimDb()) : 1.0f;
+                                 ? juce::Decibels::decibelsToGain (inTrimParam->load()) : 1.0f;
         buffer.applyGainRamp (0, buffer.getNumSamples(), lastTrimGain, target);
         lastTrimGain = target;
     }

@@ -4,7 +4,6 @@
 #include "SetupPanel.h"
 
 #include "../PluginProcessor.h"
-#include "InputZeroMenu.h"
 #include "Prefs.h"
 #include "Theme.h"
 
@@ -59,15 +58,11 @@ SetupPanel::SetupPanel (AmpProcessor& processor)
     viewView.setViewedComponent (&viewPage, false);
     addAndMakeVisible (viewView);
 
-    inputPage.setRows (inputRows (amp.product()));
-    addAndMakeVisible (inputPage);
-
     buildTunerPage();
     addAndMakeVisible (tunerPage);
 
     pages.push_back ({ "LIBRARY", &libraryPage, [this] { libraries[(size_t) currentLibrary].refresh(); }, {} });
     pages.push_back ({ "VIEW",    &viewView,    [this] { buildViewPage(); }, {} });
-    pages.push_back ({ "INPUT",   &inputPage,   [this] { inputPage.setRows (inputRows (amp.product())); }, {} });
     pages.push_back ({ "TUNER",   &tunerPage,   [this] { buildTunerPage(); }, {} });
 
     addAndMakeVisible (closeButton);
@@ -119,41 +114,6 @@ void SetupPanel::buildViewPage()
     add ("SHOW DEVICE GLYPHS", "the device-glyph review strip", prefs::showGlyphs, false);
 
     viewPage.setRows (std::move (rows));
-}
-
-std::vector<SettingsList::Row> SetupPanel::inputRows (const Product& product)
-{
-    std::vector<SettingsList::Row> rows;
-
-    // THE INPUT'S ZERO as every amp offers it (ui/InputZeroMenu.h), OrbitAmp's under its IN fader. Its
-    // thirteen values are more than a row of cells holds: the row opens them as a menu, the one in force
-    // ticked.
-    {
-        SettingsList::Row zero;
-        zero.name = prefs::inputZeroTitle;
-        zero.note = "the input trim at the IN fader's 0 - lower it for a hotter guitar";
-
-        const auto lines = prefs::inputZeroMenu (product);
-        for (const auto& line : lines)
-            zero.choices.add (line.text);
-
-        zero.chosen = [&product, lines]     // polled: the cached zero against the lines, nothing made
-        {
-            const int now = prefs::inputZero (product);
-            for (size_t k = 0; k < lines.size(); ++k)
-                if (lines[k].db == now)
-                    return (int) k;
-            return -1;
-        };
-        zero.choose = [&product, lines] (int k)
-        {
-            if (k >= 0 && k < (int) lines.size())
-                prefs::inputZeroPick (product, lines[(size_t) k]);
-        };
-        rows.push_back (std::move (zero));
-    }
-
-    return rows;
 }
 
 void SetupPanel::buildTunerPage()

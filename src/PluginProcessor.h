@@ -227,26 +227,6 @@ public:
     /** Which wrapper is actually running — VST3 / AU / CLAP / Standalone — the badge's second line. */
     juce::String pluginFormat() const { return juce::AudioProcessor::getWrapperTypeDescription (wrapperType); }
 
-    /** THE INPUT TRIM THE ENGINE PLAYS, dB, every amp's: the machine's input zero (prefs::inputZero) and
-        the parameter — the hand's control, OrbitAmp's IN fader, the cockpit's and the rovers' INPUT lever —
-        over it, so the hand's 0 is the zero, with a window open or none. A state dialled against another
-        zero, or before there was one, keeps the hand where it stood and plays it over the zero in force.
-        Any thread. */
-    float inputTrimDb() const noexcept
-    {
-        return (float) inputZeroWanted->load (std::memory_order_relaxed) + inTrimParam->load (std::memory_order_relaxed);
-    }
-
-    /** A STATE FROM WHEN THE TRIM WAS ABSOLUTE, made the hand's place over the zero it was dialled against.
-        Up to 0.8.0 the cockpit's and the rovers' face folded the zero into the trim and noted which zero
-        beside it (Product::formerInputZeroId); every tree of the state's type in `tree` — the live one,
-        each register — that carries that note has its trim made the trim less the noted zero, the note
-        given its present name (params::inTrimZero) and the old one taken away. So it plays exactly as it
-        did under that zero, and over another one as every state dialled against another does. One with
-        neither note was dialled against 0 dB and is left as it is, as 0.8.0's face read it. Nothing for a
-        product with no former note. Any thread — it touches nothing but `tree`. */
-    void takeFormerTrims (juce::ValueTree& tree) const;
-
     /** The editor's zoom, 50-400%. It lives here rather than in the editor so it survives closing
         and reopening the window; it is message-thread only and never read by the audio path.
         Persisting it across sessions comes with the state work. */
@@ -319,6 +299,20 @@ public:
     /** The other half: a tree read from disk gives its embedded IRs to the store and comes back a
         plain state, before anything applies it. Message thread only. */
     void takeEmbeddedIrs (juce::ValueTree& tree) { cabIrEmbeds.unpack (tree); }
+
+    /** A STATE OF 0.8.0'S, made what it means now. Up to 0.8.0 the cockpit's and the rovers' face folded
+        the lever's zero, a machine setting (-9 dB unless the player chose another), into the input trim,
+        and noted beside it which zero it had folded in (Product::formerInputZeroId). The trim is unity at
+        the lever's middle now and the level is the pack's own (`chain[].input_db`), so every tree of the
+        state's type in `tree` — the live one, each register, a preset — that carries that note N has
+          - its input trim made the trim less N, within the trim's range: what the lever adds to the
+            pack's level, so that with the pack's -9 dB the model is fed what it was fed then; and
+          - its gate's threshold raised by -N, within the gate's range: the gate's key hears the guitar
+            after the input trim and before the pack's level, where 0.8.0's heard it after the folded-in
+            zero, so it opens on the same guitar it opened on then;
+        and the note taken away. A state with no such note — OrbitAmp's, or one no 0.8.0 window ever
+        saw — is left as it is. Any thread: it touches nothing but `tree`. */
+    void takeFormerTrims (juce::ValueTree& tree) const;
 
     /** The state tree's type — a constant, so code off the message thread can recognise a state
         inside a saved envelope without touching the live tree. */
@@ -1191,7 +1185,6 @@ private:
     std::array<EqLinkParams, params::numEqLinks> eqParams;
 
     std::atomic<float>* inTrimParam        = nullptr;
-    const std::atomic<int>* inputZeroWanted = nullptr;  // the machine's input zero, under the trim (inputTrimDb)
     std::atomic<float>* outTrimParam       = nullptr;
     std::atomic<float>* tunerMuteParam     = nullptr;
     float lastMuteGain = 1.0f;   // the tuner mute's ramp, per block

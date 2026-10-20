@@ -206,36 +206,6 @@ inline std::atomic<int>& tunerReferenceCache (const Product& p)
 inline int  tunerReference (const Product& p)              { return tunerReferenceCache (p).load (std::memory_order_relaxed); }
 inline void setTunerReference (const Product& p, int hz)   { hz = snapTunerReference (hz); tunerReferenceCache (p).store (hz, std::memory_order_relaxed); store (p).set (tunerReferenceHz, hz); }
 
-/** THE INPUT'S ZERO — where the engine's input trim stands with the hand's control in the middle of its
-    travel: -9 dB unless the player says otherwise, a guitar straight into an interface being hotter than
-    what the captures were fed. About this interface and this guitar, not about a sound, so it lives on the
-    machine, each product its own. Every amp's engine plays its input trim over it (AmpProcessor::inputTrimDb)
-    — OrbitAmp's IN fader, the cockpit's and the rovers' INPUT lever — and every amp offers it in its settings
-    the same way (ui/InputZeroMenu.h). From +12 to -24 dB in steps of 3; a stored one between them lands on
-    the nearest. The key is the one the cockpit's lever has kept it under since it had one. */
-inline const juce::Identifier inputZeroKey { "input_zero_db" };
-
-inline constexpr int inputZeroDefault = -9, inputZeroLowest = -24, inputZeroHighest = 12, inputZeroStep = 3;
-
-inline int snapInputZero (int db)
-{
-    db = juce::jlimit (inputZeroLowest, inputZeroHighest, db);
-    return inputZeroLowest + inputZeroStep * juce::roundToInt ((float) (db - inputZeroLowest) / (float) inputZeroStep);
-}
-
-/** The engine reads it every block, so it is cached like the tuner's floor, one for each product in a
-    process and shared by its processors: a zero chosen in one window is in force in every engine of the
-    product from its next block. A processor touches the cache in its constructor, so the first read, which
-    opens the file, is never the audio thread's. */
-inline std::atomic<int>& inputZeroCache (const Product& p)
-{
-    static PerProduct<std::atomic<int>> cached;
-    return cached.of (p.name, [&p] { return snapInputZero ((int) store (p).get (inputZeroKey, inputZeroDefault)); });
-}
-
-inline int  inputZero (const Product& p)              { return inputZeroCache (p).load (std::memory_order_relaxed); }
-inline void setInputZero (const Product& p, int db)   { db = snapInputZero (db); inputZeroCache (p).store (db, std::memory_order_relaxed); store (p).set (inputZeroKey, db); }
-
 /** THE HUM AT THE INPUT — which mains the hum on this machine's input is made of: none to take off,
     50 Hz, 60 Hz, or AUTO, which listens and decides. It is about the wall socket, the cable and the
     pickups in this room, not about a sound, so it lives on the machine like the tuner's floor and a

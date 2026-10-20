@@ -1302,19 +1302,19 @@ target_link_libraries(orbitamp_family_test PRIVATE ${family_libraries})
 gate_reads_factory(orbitamp_family_test)
 set_target_properties(orbitamp_family_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
-# THE INPUT'S ZERO: every amp's engine plays its trim over the machine's zero, and a cockpit's or a rover's
-# state of 0.8.0's, absolute, opens playing what it did — every amp, so the family's sources
-# (tests/InputZeroTests.cpp), out of the build's factory folder: a rover changes channel only to a pack it has.
-juce_add_console_app(orbitamp_input_zero_test PRODUCT_NAME "OrbitAmpInputZeroTest")
-target_sources(orbitamp_input_zero_test PRIVATE tests/InputZeroTests.cpp ${family_sources})
-target_include_directories(orbitamp_input_zero_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
-add_dependencies(orbitamp_input_zero_test OrbitAmpVersionGen)
-target_compile_definitions(orbitamp_input_zero_test PRIVATE
+# THE INPUT'S LEVEL: unity at every amp's input control, the pack's own level feeding the model, and a
+# cockpit's or a rover's state of 0.8.0's, absolute, feeding it and gating as it did — every amp, so the
+# family's sources (tests/InputLevelTests.cpp), out of the build's factory folder.
+juce_add_console_app(orbitamp_input_level_test PRODUCT_NAME "OrbitAmpInputLevelTest")
+target_sources(orbitamp_input_level_test PRIVATE tests/InputLevelTests.cpp ${family_sources})
+target_include_directories(orbitamp_input_level_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_input_level_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_input_level_test PRIVATE
     ORBITAMP_VERSION="${PROJECT_VERSION}"
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
-target_link_libraries(orbitamp_input_zero_test PRIVATE ${family_libraries})
-gate_reads_factory(orbitamp_input_zero_test)
-set_target_properties(orbitamp_input_zero_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+target_link_libraries(orbitamp_input_level_test PRIVATE ${family_libraries})
+gate_reads_factory(orbitamp_input_level_test)
+set_target_properties(orbitamp_input_level_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 
 # ----------------------------------------------------------------------------

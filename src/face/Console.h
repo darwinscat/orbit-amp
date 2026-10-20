@@ -169,7 +169,7 @@ protected:
     void showOutputMenu();          // the OUTPUT column: the limiter, and where its ceiling is — and LIMITER's plate
 
     // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
-    // for INPUT count from the input's zero, so the middle of the travel reads 0.
+    // for INPUT are the trim's own, so the middle of the travel reads 0.
     void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);
 
     // THE PRODUCT'S OWN. Each is asked from the console's own code once the face is built.
@@ -264,8 +264,8 @@ protected:
 
     // TURBO'S PUSH is the machine's to say (Channels::turboDb), on a face whose TURBO pushes the capture:
     // the state says that TURBO is on, by the preamp's input trim standing above nothing, and the
-    // settings say how hard that is — +9 dB unless told otherwise, which with the input's zero at -9
-    // feeds the captures as they were taken.
+    // settings say how hard that is — +9 dB unless told otherwise, which over the pack's own -9 dB
+    // (chain[].input_db) feeds the captures as they were taken.
     void showTurboMenu();           // how hard it pushes
     void chooseTurbo (int db);
 
@@ -348,12 +348,11 @@ private:
     void tapTempo();
     ColumnFader inFader, outFader;
 
-    // THE INPUT'S ZERO is the machine's to say (the settings, prefs::inputZero — every amp's, each its own):
-    // what the engine's input trim stands at with the lever in the middle of its travel — -9 dB unless the
-    // player says otherwise, a guitar straight into an interface being hotter than what the captures were
-    // fed. The engine adds it (AmpProcessor::inputTrimDb), so it is in force with no window open; the
-    // lever is the trim itself, ±24 dB about that middle, and a zero chosen moves the sound and leaves
-    // the lever where it stood.
+    // INPUT'S LEVER IS THE TRIM ITSELF, as OUTPUT's is: unity in the middle of its travel, ±24 dB about it.
+    // How hard the capture is fed is the pack's to say, and it says it (`chain[].input_db`), so a lever
+    // left in the middle feeds every pack where its captures were taken. Up to 0.8.0 the lever's middle
+    // stood at a zero of the machine's instead, which a state of then carries folded into its trim
+    // (AmpProcessor::takeFormerTrims).
     //
     // HOW DRIVE GOES BETWEEN THE PACK'S CAPTURES is the machine's too. Smoothly, unless told otherwise:
     // between two captures the player mixes them by the knob's angle, and the sound goes with the hand.
@@ -363,10 +362,9 @@ private:
     bool driveSteps = false;
     bool settingsDiffer() const;
     void settleOnSettings();
-    void addInputZeroLines (juce::PopupMenu&);  // the input's zero's items, as every menu has them
     void chooseDriveSteps (bool steps);
 
-    void showInputMenu();           // the INPUT column: the input's zero, and the hum
+    void showInputMenu();           // the INPUT column: the hum
     void addHumLines (juce::PopupMenu&);    // the hum's switch and its modes, as every menu has them
 
     // THE HUM'S QUICK A/B: H flips it between OFF and the mode OFF bypasses (prefs::humFlip), and the

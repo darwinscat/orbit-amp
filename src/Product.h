@@ -59,12 +59,13 @@ struct Product
     /** The skin it wears, where it is a rover (redpaw/RedPawSkin.h): its channels, its picture, its world. */
     const redpaw::Skin* skin = nullptr;
 
-    /** THE NOTE ITS STATES CARRIED BESIDE THE INPUT TRIM WHILE THE TRIM WAS ABSOLUTE. Up to 0.8.0 the
-        cockpit's and the rovers' face folded the machine's input zero into the trim itself, and wrote down
-        under this name which zero it had (catpit_input_zero, rover_input_zero). Every amp's engine adds the
-        zero now (AmpProcessor::inputTrimDb), and a state that still carries this note is turned, as it
-        lands, into the hand's place over that zero (AmpProcessor::takeFormerTrims). None for OrbitAmp,
-        whose trim was always its fader. */
+    /** THE NOTE ITS STATES CARRIED BESIDE THE INPUT TRIM WHILE THE TRIM HELD THE PACK'S LEVEL. Up to 0.8.0
+        the cockpit's and the rovers' face folded a machine setting, the lever's zero, into the trim itself
+        (-9 dB unless the player chose another), and wrote down under this name which it had folded in
+        (catpit_input_zero, rover_input_zero). That level is the pack's own now (`chain[].input_db`) and the
+        trim is unity at the lever's middle, so a state that still carries this note is converted as it
+        lands (AmpProcessor::takeFormerTrims). None for OrbitAmp, whose trim was never anything but its
+        fader. */
     const char* formerInputZeroId = nullptr;
 };
 
