@@ -1,0 +1,74 @@
+A PRODUCT NAME WITH AN APOSTROPHE — JUCE's VST3 post-build steps. Applied by cmake/PatchedWrappers.cmake to
+the pinned JUCE (ORBITAMP_JUCE_TAG, 8.0.16-security) after juce-several-plugins.patch; git apply reads from
+the first "diff --git" line on, so this text is not part of the patch.
+
+Every VST3 target gets two post-build steps — the old moduleinfo.json removed, the new one written by the
+manifest helper through a shell redirect — and neither is VERBATIM, so CMake hands the bundle's path to the
+shell as it is. "Darwin's Cat Amps.vst3" opens a quote the shell never sees closed, and on Linux (and any
+system whose build runs commands through /bin/sh) the link of the family's VST3 fails with "Unterminated
+quoted string"; cmd on Windows does not mind. With this patch both steps are VERBATIM and the helper writes
+the file it is named rather than its standard output, so no redirect is needed. For any name without such a
+character the commands run are the same and moduleinfo.json is the same, byte for byte.
+
+diff --git a/extras/Build/CMake/JUCEUtils.cmake b/extras/Build/CMake/JUCEUtils.cmake
+index f7bb83f..2b3a650 100644
+--- a/extras/Build/CMake/JUCEUtils.cmake
++++ b/extras/Build/CMake/JUCEUtils.cmake
+@@ -1164,7 +1164,8 @@ function(juce_enable_vst3_manifest_step shared_code_target)
+     add_custom_command(TARGET ${target_name} POST_BUILD
+         COMMAND ${CMAKE_COMMAND} -E echo "creating ${output_path}"
+         COMMAND ${CMAKE_COMMAND} -E make_directory "${product}/Contents/Resources"
+-        COMMAND "${helper_path}" > "${output_path}")
++        COMMAND "${helper_path}" "${output_path}"
++        VERBATIM)
+ 
+     set_target_properties(${shared_code_target} PROPERTIES _JUCE_VST3_MANIFEST_STEP_ADDED TRUE)
+ endfunction()
+@@ -1282,7 +1283,8 @@ function(_juce_set_plugin_target_properties shared_code_target kind)
+             COMMAND ${CMAKE_COMMAND} -E echo "removing moduleinfo.json"
+             COMMAND ${CMAKE_COMMAND} -E remove -f
+                 "${output_path}/Contents/moduleinfo.json"
+-                "${output_path}/Contents/Resources/moduleinfo.json")
++                "${output_path}/Contents/Resources/moduleinfo.json"
++            VERBATIM)
+ 
+         if(vst3_auto_manifest)
+             juce_enable_vst3_manifest_step(${shared_code_target})
+diff --git a/modules/juce_audio_plugin_client/VST3/juce_VST3ManifestHelper.cpp b/modules/juce_audio_plugin_client/VST3/juce_VST3ManifestHelper.cpp
+index b90238c..0595a33 100644
+--- a/modules/juce_audio_plugin_client/VST3/juce_VST3ManifestHelper.cpp
++++ b/modules/juce_audio_plugin_client/VST3/juce_VST3ManifestHelper.cpp
+@@ -53,6 +53,7 @@
+ #include <cctype>
+ #include <cstddef>
+ #include <cstring>
++#include <fstream>
+ 
+ // There's a template specialisation to std::wstring_convert in
+ // wstring_convert.h that triggers a warning on Xcode 26.4.1 when used by the
+@@ -181,7 +182,7 @@ static std::optional<Steinberg::ModuleInfo::CompatibilityList> loadCompatibility
+ }
+ 
+ //==============================================================================
+-int main()
++int main (int argc, char** argv)
+ {
+     const JucePluginModule pluginModule;
+ 
+@@ -195,6 +196,16 @@ int main()
+ 
+     std::stringstream output;
+     Steinberg::ModuleInfoLib::outputJson (moduleInfo, output);
++
++    // Written to the file named, when one is: the build runs this without a shell redirect, so a
++    // bundle path the shell would misread (an apostrophe in the product name) reaches it intact.
++    if (argc > 1)
++    {
++        std::ofstream file (argv[1]);
++        file << output.str() << std::endl;
++        return file.good() ? 0 : 1;
++    }
++
+     std::cout << output.str() << std::endl;
+     return 0;
+ }
