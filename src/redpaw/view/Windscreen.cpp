@@ -3,6 +3,9 @@
 
 #include "Windscreen.h"
 
+#include "../../shaders/Gpu.h"
+#include "../../shaders/GpuLog.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -567,8 +570,15 @@ void Windscreen::focusLost (FocusChangeType)
 //==============================================================================
 void Windscreen::newOpenGLContextCreated()
 {
+    // A world that will not start on this GPU goes to the CPU on its own (apply, tick) — and says why in the
+    // family's log, which is all a player who sees the 1993 landscape has to send.
     if (! world->create())
+    {
         gpuFailed.store (true);
+        const auto why = world->error();
+        gpulog::refusal (logName, gpu::driver(),
+                         std::string (world->name()) + ": " + (why.empty() ? std::string ("its GPU view would not start") : why));
+    }
     glLast = juce::Time::getMillisecondCounterHiRes() * 0.001;
 }
 

@@ -391,6 +391,24 @@ void AmpProcessor::selectDemoLoop (int index)
     demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[demoLoopIndex]), getSampleRate());
 }
 
+juce::String AmpProcessor::loadedAs() const
+{
+    // JUCE names every wrapper of the family's but one: clap-juce-extensions makes its processor as no
+    // wrapper JUCE knows (CMakeLists.txt: clap_juce_extensions_plugin), so of the formats the family ships,
+    // the one JUCE does not name is the CLAP.
+    const auto format = wrapperType == wrapperType_Undefined ? juce::String ("CLAP") : pluginFormat();
+    const auto said = juce::String (ownProduct.name) + "  " + format;
+
+    if (wrapperType == wrapperType_Standalone)
+        return said;
+
+    if (const juce::PluginHostType host; host.type != juce::PluginHostType::UnknownHost)
+        return said + " in " + host.getHostDescription();
+
+    const auto program = juce::File (juce::PluginHostType::getHostPath()).getFileNameWithoutExtension();
+    return program.isNotEmpty() ? said + " in " + program : said;
+}
+
 void AmpProcessor::rescanDevices()
 {
     // Each block asks for its own kind. A preamp offered as a pedal is not a wrong sound, it is a

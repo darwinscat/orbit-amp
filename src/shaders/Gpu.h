@@ -66,6 +66,20 @@ inline bool current() noexcept
    #endif
 }
 
+/** The context current on this thread in its driver's own words — renderer / vendor / version — or nothing
+    when none is: what a line about this GPU names it by (src/shaders/GpuLog.h). */
+inline std::string driver()
+{
+    if (! current())
+        return {};
+    const auto said = [] (GLenum name)
+    {
+        const auto* text = reinterpret_cast<const char*> (glGetString (name));
+        return text != nullptr ? std::string (text) : std::string ("?");
+    };
+    return said (GL_RENDERER) + " / " + said (GL_VENDOR) + " / " + said (GL_VERSION);
+}
+
 /** A VERTEX ARRAY FOR DRAWS THAT TAKE NO ATTRIBUTES — full-screen passes, particles made from the vertex's index —
     but one: aZero, attribute 0, a zero for each of up to attributelessVertices vertices in `buffer`, which such a
     vertex shader adds to its position. Core GL wants a vertex array bound for any draw, and a browser on desktop GL

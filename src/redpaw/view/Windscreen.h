@@ -104,6 +104,11 @@ public:
     void setFrameRateCap (int fps);
     int frameRateCap() const noexcept { return cap; }
 
+    /** How a GPU that will not draw the world names this window in the family's log (shaders/GpuLog.h): the
+        product, the format it was loaded as, the host (AmpProcessor::loadedAs). Said before the first
+        setMode or setHost — the GL thread reads it as its context is made. */
+    void setLogName (juce::String name) { logName = std::move (name); }
+
     /** Whether the ladder may lower the quality on its own. On by default. */
     void setAdaptive (bool shouldAdapt) noexcept { adaptive = shouldAdapt; }
 
@@ -162,6 +167,7 @@ private:
     juce::OpenGLContext* host = nullptr;    // the window's, when the view is hosted (setHost)
     bool glAttached = false;                // the GPU's frames are being drawn: in the view's own context, or the host's
     std::atomic<bool> gpuFailed { false };
+    juce::String logName { "a windscreen of no amp" };    // setLogName
     std::atomic<float> gpuMsShared { -1.0f };
     std::atomic<float> speedShared { PlainsWorld::gearSpeed[0] };     // m/s, the GPU's drive, as last stepped
     std::atomic<int> gpuFrames { 0 };

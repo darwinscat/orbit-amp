@@ -1052,6 +1052,7 @@ set(CATPITAMP_SOURCES
     src/catpit/CatpitGlSky.cpp
     src/catpit/CatpitSkyGl.cpp
     src/catpit/CatpitEditor.cpp
+    src/shaders/GpuLog.cpp
     src/shaders/Shaders.cpp)
 
 # THE WORLDS a windscreen looks out on — views that take values and no processor, so they stand on their
@@ -1064,6 +1065,7 @@ set(REDPAW_VIEW_SOURCES
     src/redpaw/view/PlainsWorld.cpp
     src/redpaw/view/PlainsGl.cpp
     src/redpaw/view/Windscreen.cpp
+    src/shaders/GpuLog.cpp
     src/shaders/Shaders.cpp)
 set(FROSTPAW_VIEW_SOURCES
     src/frostpaw/view/IceWorld.cpp
@@ -1099,6 +1101,18 @@ view_demo(amberpaw_view_demo "AmberPawViewDemo" SOURCES ${REDPAW_VIEW_SOURCES} $
 add_executable(titan_world_test tests/TitanWorldTests.cpp src/amberpaw/view/TitanWorld.cpp)
 target_include_directories(titan_world_test PRIVATE src)
 target_compile_features(titan_world_test PRIVATE cxx_std_20)
+
+# The GPU's refusals, written down (src/shaders/GpuLog.h): a refusal leaves its line in the family's log, and
+# the log keeps its newest half past its cap. JUCE's core and the log, nothing else.
+juce_add_console_app(orbitamp_gpu_log_test PRODUCT_NAME "OrbitAmpGpuLogTest")
+target_sources(orbitamp_gpu_log_test PRIVATE tests/GpuLogTests.cpp src/shaders/GpuLog.cpp)
+target_include_directories(orbitamp_gpu_log_test PRIVATE src)
+target_compile_definitions(orbitamp_gpu_log_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_gpu_log_test PRIVATE
+    juce::juce_core
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(orbitamp_gpu_log_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the

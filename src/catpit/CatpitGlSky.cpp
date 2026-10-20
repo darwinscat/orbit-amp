@@ -3,6 +3,9 @@
 
 #include "CatpitGlSky.h"
 
+#include "../shaders/Gpu.h"
+#include "../shaders/GpuLog.h"
+
 namespace orbitamp::catpit
 {
 
@@ -19,10 +22,12 @@ void GlSky::setArea (juce::Rectangle<float> g, juce::Rectangle<float> w, juce::P
 
 void GlSky::newOpenGLContextCreated()
 {
-    // The shader and what it draws are SkyGl's (CatpitSkyGl.cpp), the site's too.
+    // The shader and what it draws are SkyGl's (CatpitSkyGl.cpp), the site's too. One that will not build
+    // here sends the sky to the CPU (CatpitEditor::applySky) — and says why in the family's log.
     if (! sky.create())
     {
         DBG ("catpit: the sky's shader did not build — " << juce::String (sky.error()));
+        gpulog::refusal (logName, gpu::driver(), "the sky: its shader did not build — " + sky.error());
         broken.store (true);
         return;
     }

@@ -73,8 +73,10 @@ public:
     virtual std::string landmarks (double /*metres*/) const { return {}; }
 
     //==========================================================================
-    /** The GPU's half — see PlainsGl. create() is false when a shader would not build here. */
+    /** The GPU's half — see PlainsGl. create() is false when a shader would not build here, or no
+        context was current; error() says which, a shader's in its driver's words. */
     virtual bool create() = 0;
+    virtual std::string error() const { return {}; }
     virtual void destroy() = 0;
     /** The scene at (w * scale) x (h * scale), blitted to `targetFrameBuffer` over (x, y, w, h) — GL's
         own pixels, from its bottom-left corner. */

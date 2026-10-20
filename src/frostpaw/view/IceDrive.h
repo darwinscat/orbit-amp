@@ -68,6 +68,7 @@ public:
     }
 
     bool create() override                                       { return gl.create(); }
+    std::string error() const override                           { return gl.error(); }
     void destroy() override                                      { gl.destroy(); }
     void render (int w, int h, float scale, uint32_t target, int x, int y) override { gl.render (w, h, scale, target, x, y); }
     float gpuMillis() const noexcept override                    { return gl.gpuMillis(); }

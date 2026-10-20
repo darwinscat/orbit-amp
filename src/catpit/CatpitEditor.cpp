@@ -714,7 +714,7 @@ void CatpitEditor::applySky()
 
     if (wantGpu && glSky == nullptr)
     {
-        glSky = std::make_unique<GlSky> (gl);
+        glSky = std::make_unique<GlSky> (gl, amp.loadedAs());
         glSky->setThrottle ((float) lever.getPlace() / (float) (Lever::numDetents - 1));
         glSky->setSteer (steering.value());
         gl.setRenderer (glSky.get());

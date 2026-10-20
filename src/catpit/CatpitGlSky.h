@@ -27,7 +27,9 @@ namespace orbitamp::catpit
 class GlSky final : public juce::OpenGLRenderer
 {
 public:
-    explicit GlSky (juce::OpenGLContext& c) : context (c) {}
+    /** `name` is how a GPU that will not draw the sky names this window in the family's log
+        (shaders/GpuLog.h): the product, the format it was loaded as, the host (AmpProcessor::loadedAs). */
+    GlSky (juce::OpenGLContext& c, juce::String name) : context (c), logName (std::move (name)) {}
 
     /** 0 = CLEAN .. 1 = HI-GAIN, continuous. */
     void setThrottle (float t) noexcept { throttle.store (juce::jlimit (0.0f, 1.0f, t)); }
@@ -50,6 +52,7 @@ public:
 
 private:
     juce::OpenGLContext& context;
+    const juce::String logName;
     SkyGl sky;
 
     std::atomic<float> throttle { 0.0f }, steer { 0.0f };

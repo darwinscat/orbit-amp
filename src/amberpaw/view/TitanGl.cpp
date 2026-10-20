@@ -242,7 +242,11 @@ bool TitanGl::create()
 {
     trouble.clear();
     if (! gpu::current())
+    {
+        trouble = "no GL context was current to build it in";
+        gpu::note ("titan: " + trouble);
         return false;
+    }
     world.build();
 
     if (! compile (profile, glsl ("titan/full.vert"), fsProfile(), "profile")

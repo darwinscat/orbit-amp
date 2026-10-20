@@ -111,6 +111,12 @@ public:
     /** WHICH AMP THIS IS (Product.h): what everything that is one amp's and not another's is read off —
         handed down from here, never looked up anywhere else. */
     const Product& product() const noexcept                  { return ownProduct; }
+
+    /** WHAT THIS IS, AND WHERE, for a line of the family's logs (shaders/GpuLog.h): the product, the format it
+        was loaded as — VST3, AU, CLAP or Standalone — and, a plug-in, its host: by JUCE's name for it where
+        JUCE knows it, by its program's file name where not. */
+    juce::String loadedAs() const;
+
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }

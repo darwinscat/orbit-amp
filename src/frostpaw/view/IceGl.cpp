@@ -272,7 +272,11 @@ bool IceGl::create()
 {
     trouble.clear();
     if (! gpu::current())
+    {
+        trouble = "no GL context was current to build it in";
+        gpu::note ("frostpaw: " + trouble);
         return false;
+    }
     world.build();
 
     if (! compile (terrain, glsl ("ice/terrain.vert", Htex::vertex), glsl ("ice/terrain.frag", Htex::fragment), "terrain")

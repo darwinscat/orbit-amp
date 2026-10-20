@@ -1009,7 +1009,9 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     showChannel();
 
     // What the windscreen shows: the machine's choice, the Plains unless it has said otherwise — drawn
-    // by this window's context, which paints the face over it.
+    // by this window's context, which paints the face over it. A GPU that will not draw it says so in the
+    // family's log, under this amp's name, format and host.
+    view->setLogName (amp.loadedAs());
     view->setHost (&gl);
     gl.setOpenGLVersionRequired (juce::OpenGLContext::openGL3_2);
     gl.setRenderer (this);
