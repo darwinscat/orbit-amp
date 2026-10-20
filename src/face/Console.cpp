@@ -24,15 +24,13 @@ namespace orbitamp::face
 
 namespace
 {
-    // The INPUT lever's zero — see Console.h. Kept with the machine's settings.
-    const juce::Identifier leverZeroKey { "input_zero_db" };
-    constexpr int leverZeroDefault = -9, leverZeroLowest = -24, leverZeroHighest = 12, leverZeroStep = 3;
+    // The INPUT lever's zero — see Console.h. Kept with the machine's settings, under the key, from the
+    // default and in the steps every product's input zero has (prefs::inputZeroKey).
+    const juce::Identifier& leverZeroKey = prefs::inputZeroKey;
+    constexpr int leverZeroDefault = prefs::inputZeroDefault, leverZeroLowest = prefs::inputZeroLowest,
+                  leverZeroHighest = prefs::inputZeroHighest, leverZeroStep = prefs::inputZeroStep;
 
-    int snapLeverZero (int db)
-    {
-        db = juce::jlimit (leverZeroLowest, leverZeroHighest, db);
-        return leverZeroLowest + leverZeroStep * juce::roundToInt ((float) (db - leverZeroLowest) / (float) leverZeroStep);
-    }
+    int snapLeverZero (int db) { return prefs::snapInputZero (db); }
 
     /** The lever's travel against the engine's trim: the bottom of the travel is the trim's bottom, the
         top its top, and the middle whatever `zero` says the lever's zero gives. */

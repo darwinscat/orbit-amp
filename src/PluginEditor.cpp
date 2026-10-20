@@ -574,17 +574,28 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
                      });
 }
 
-/** A RIGHT CLICK ON THE INPUT COLUMN: the hum the input carries, and what to take off it. It is the
-    machine's, not the sound's (prefs::hum) — a preset neither carries it nor moves it, undo steps over
-    it, and every window and engine of this product follow it from their next look and their next
-    block. AUTO's line says what it decided, once it has. */
+/** A RIGHT CLICK ON THE INPUT COLUMN: what the fader's 0 gives — the input's zero — and the hum the
+    input carries, and what to take off it. Both are the machine's, not the sound's (prefs::inputZero,
+    prefs::hum) — a preset neither carries them nor moves them, undo steps over them, and every window and
+    engine of this product follow them from their next look and their next block. AUTO's line says what
+    it decided, once it has. */
 void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 {
+    juce::PopupMenu m;
+
+    // THE INPUT'S ZERO: where the engine's trim stands with the fader at its 0, the one in force ticked.
+    // The fader stays where it is, and the trim goes with the zero (AmpProcessor::inputTrimDb). Its
+    // choices answer from zeroItems up, the highest first.
+    static constexpr int zeroItems = 10000;
+    const int zero = prefs::inputZero (amp.product());
+    m.addSectionHeader ("INPUT'S ZERO");
+    for (int db = prefs::inputZeroHighest, i = 0; db >= prefs::inputZeroLowest; db -= prefs::inputZeroStep, ++i)
+        m.addItem (zeroItems + i, ((db > 0 ? "+" : "") + juce::String (db) + " DB"), true, db == zero);
+
     // The switch, then the modes (ui/HumMenu.h), in this menu's capitals.
     const int  heard = amp.humHeard();
     const auto lines = prefs::humMenu (amp.product(), heard, humLearner.isLearning());
 
-    juce::PopupMenu m;
     m.addSectionHeader ("HUM  " + prefs::humState (amp.product(), heard).toUpperCase());
     for (size_t i = 0; i < lines.size(); ++i)
         m.addItem ((int) i + 1, lines[i].text.toUpperCase(), true, lines[i].ticked);
@@ -607,7 +618,9 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
                      [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs, &product = amp.product()] (int r)
                      {
-                         if (r > 0 && r <= (int) lines.size() && lines[(size_t) r - 1].isLearn)
+                         if (r >= zeroItems)
+                             prefs::setInputZero (product, prefs::inputZeroHighest - (r - zeroItems) * prefs::inputZeroStep);
+                         else if (r > 0 && r <= (int) lines.size() && lines[(size_t) r - 1].isLearn)
                          {
                              if (safe != nullptr)
                              {

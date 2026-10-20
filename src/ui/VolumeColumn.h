@@ -25,9 +25,13 @@ namespace orbitamp
         the level on the family rail, with its peak hold and its latched clip cap,
         and the trim riding the same scale as tabby's hollow sliding frame.
 
-    Drag the frame; double-click anywhere for unity; double-click the frame itself to type a
-    number. While it is in hand, the peak-hold's FUTURE walks the scale as a dashed line — where
-    the last phrase would land at the new gain, which is what puts a fader inside its own meter.
+    Drag the frame; double-click anywhere for its 0; double-click the frame itself to type a
+    number. The column reads its trim as the parameter has it: OrbitAmp's IN is the fader over the
+    machine's input zero (Product::inputTrimOverZero), so its 0 is that zero and its numbers the
+    decibels above and below it.
+
+    While it is in hand, the peak-hold's FUTURE walks the scale as a dashed line — where the last
+    phrase would land at the new gain, which is what puts a fader inside its own meter.
 
     A click on a red clip cap clears it. Nothing else here answers to a click, because there is
     nothing else here. */

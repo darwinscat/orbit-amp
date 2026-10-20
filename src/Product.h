@@ -58,6 +58,13 @@ struct Product
 
     /** The skin it wears, where it is a rover (redpaw/RedPawSkin.h): its channels, its picture, its world. */
     const redpaw::Skin* skin = nullptr;
+
+    /** WHETHER ITS INPUT TRIM STANDS OVER THE MACHINE'S INPUT ZERO (prefs::inputZero): the engine plays the
+        zero and the parameter added, the parameter being the hand's control — OrbitAmp's IN fader, whose 0
+        is that zero, and a host's Input Trim with it. Off where the face folds the zero into the trim
+        itself and the parameter IS what the engine plays: the cockpit's and the rovers' INPUT lever
+        (face/Console.h). */
+    bool inputTrimOverZero = false;
 };
 
 /** EVERY AMP OF THE FAMILY, each defined in its own file (above). A binary links the ones it plays. */

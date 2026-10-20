@@ -24,10 +24,12 @@ namespace
 }
 
 /** ORBITAMP (Product.h): the player of the whole library, in its own face (PluginEditor.h) — and the
-    engine as it stands: no parameter of its own, no half of its own. */
+    engine as it stands: no parameter of its own, no half of its own. Its IN fader stands over the
+    machine's input zero. */
 const Product& products::orbitAmp()
 {
-    static const Product orbitAmp { "OrbitAmp", makeEditor, firstStart };
+    static const Product orbitAmp { .name = "OrbitAmp", .makeEditor = makeEditor, .firstStart = firstStart,
+                                    .inputTrimOverZero = true };
     return orbitAmp;
 }
 

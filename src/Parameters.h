@@ -20,10 +20,16 @@ inline constexpr const char* reverbOn    = "reverb_on";
 
 /** The input trim — the interface knob the interface may not have: ±24 dB ahead of EVERYTHING,
     the tuner's ear and the gate's key included, so the IN meter closes the gain-staging loop:
-    drag the trim, watch the same column answer. */
+    drag the trim, watch the same column answer. Where the product's trim stands over the machine's
+    input zero (Product::inputTrimOverZero, OrbitAmp's), the engine plays that zero and this added. */
 inline constexpr const char* inTrim  = "in_trim";
 inline constexpr const char* outTrim = "out_trim";
 inline constexpr float inTrimRangeDb = 24.0f;   // one range for both trims
+
+/** A note on the state beside the input trim, where the trim stands over the machine's input zero: the
+    zero it was dialled against (Product::inputTrimOverZero) — as the cockpit's and the rovers' states keep
+    the zero of their lever (channels::Lineup::leverZeroId). */
+inline constexpr const char* inTrimZero = "input_zero";
 
 // The safety at the door: on by default — it exists to protect, and protection you must
 // remember to arm is not protection.

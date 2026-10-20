@@ -227,6 +227,17 @@ public:
     /** Which wrapper is actually running — VST3 / AU / CLAP / Standalone — the badge's second line. */
     juce::String pluginFormat() const { return juce::AudioProcessor::getWrapperTypeDescription (wrapperType); }
 
+    /** THE INPUT TRIM THE ENGINE PLAYS, dB: the parameter — and, where the product's trim stands over the
+        machine's input zero (Product::inputTrimOverZero), that zero under it, so the hand's 0 is the
+        zero. A state dialled against another zero, or before there was one, keeps the hand where it stood
+        and plays it over the zero in force, as the cockpit's and the rovers' lever does (face/Console.h).
+        Any thread. */
+    float inputTrimDb() const noexcept
+    {
+        return inTrimParam->load (std::memory_order_relaxed)
+             + (inputZeroWanted != nullptr ? (float) inputZeroWanted->load (std::memory_order_relaxed) : 0.0f);
+    }
+
     /** The editor's zoom, 50-400%. It lives here rather than in the editor so it survives closing
         and reopening the window; it is message-thread only and never read by the audio path.
         Persisting it across sessions comes with the state work. */
@@ -1171,6 +1182,7 @@ private:
     std::array<EqLinkParams, params::numEqLinks> eqParams;
 
     std::atomic<float>* inTrimParam        = nullptr;
+    const std::atomic<int>* inputZeroWanted = nullptr;  // the machine's input zero, where the trim stands over it (inputTrimDb)
     std::atomic<float>* outTrimParam       = nullptr;
     std::atomic<float>* tunerMuteParam     = nullptr;
     float lastMuteGain = 1.0f;   // the tuner mute's ramp, per block

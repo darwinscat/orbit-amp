@@ -24,13 +24,16 @@
 // OrbitAmp's first start (OrbitAmpStart.cpp) is NOT made from here: it would gather IRs in the machine's
 // real folders.
 // OrbitAmp as this gate plays it: its own product with no first start, so the gate never reaches the
-// machine's real folders (Product::firstStart).
+// machine's real folders (Product::firstStart) — and its IN fader standing over no input zero, so the
+// trim at 0 is unity and what is measured here is the chain from what it is fed. The zero has a gate of
+// its own (InputZeroTests.cpp).
 static const orbitamp::Product& gateAmp()
 {
     static const orbitamp::Product quiet = []
     {
         auto p = orbitamp::products::orbitAmp();
         p.firstStart = nullptr;
+        p.inputTrimOverZero = false;
         return p;
     }();
     return quiet;
