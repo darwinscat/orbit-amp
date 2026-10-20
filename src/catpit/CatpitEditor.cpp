@@ -351,7 +351,9 @@ void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
         g.drawLine (c.x - 2.2f, c.y - 2.2f, c.x + 2.2f, c.y + 2.2f, 1.0f);
     }
 
-    engraveMark (g, emblemMark, scale);
+    // The cockpit's cat, lighter than the rovers': a pale floor on the dark plate, the shadow deeper, the lip
+    // brighter, so the mark reads from across the room.
+    engraveMark (g, emblemMark, scale, { juce::Colour (0xffcdc8dc), juce::Colour (0xff8d899e), 0.9f, 0.4f });
 }
 
 void Cockpit::paintStatic (juce::Graphics& g, float scale) const

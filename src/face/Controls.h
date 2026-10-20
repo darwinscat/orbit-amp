@@ -324,8 +324,16 @@ struct MarkCut
 /** THE MARK, ENGRAVED in `box`, at `scale` physical pixels to the unit. Its light parts are cut into the
     plate: the cut's upper wall falls into shadow, its lower lip catches the light, and its floor is
     bare metal a shade brighter than the plate — so the mark reads as worked into the hull, not printed
-    on it. */
-void engraveMark (juce::Graphics&, juce::Rectangle<float> box, float scale);
+    on it. The ink says how: the floor's colour from the cut's top to its bottom, and how dark the shadow
+    and how bright the lip — a face whose plate wants the mark lighter says so with its own. */
+struct MarkInk
+{
+    juce::Colour floorTop    { 0xff8a8698 };
+    juce::Colour floorBottom { 0xff4b4858 };
+    float shadow = 0.8f;      // the upper wall's shadow, its alpha
+    float lip    = 0.28f;     // the lower lip's light, its alpha
+};
+void engraveMark (juce::Graphics&, juce::Rectangle<float> box, float scale, const MarkInk& = {});
 
 /** THE MARK ANSWERS THE HAND. Engraved and dark until the pointer is over the plate; then the cut
     turns a dark violet — its colour changes, nothing glows — and a click on it goes home, to the
