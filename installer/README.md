@@ -100,7 +100,9 @@ table says, never over a same-id copy it found somewhere else on the disk.
   `Program Files\Darwin's Cat Amps` with a Start-menu entry each. The uninstaller removes all of it.
 - **The old per-amp plug-ins:** `[InstallDelete]` removes `{autocf}\VST3\<old>.vst3` with `vst3` and
   `{autocf}\CLAP\<old>.clap` with `clap`, for every name of `old_bundles` — the folder the earlier
-  installers used, in either install mode. A name that is not a plain word stops the compile.
+  installers used, in either install mode — and the same from `{usercf}`, the per-user folders of whoever
+  runs Setup (`%LOCALAPPDATA%\Programs\Common\VST3` and `\CLAP`), where a zip or an install for the
+  current user alone puts them. A name that is not a plain word stops the compile.
 - **AppId** is OrbitAmp's own installer's, up to 0.7.0: an installed OrbitAmp is upgraded in place — one entry
   under Installed apps, now the family's — and its old folder and uninstaller are cleared.
 - **Silent:** `/VERYSILENT` installs everything; `/COMPONENTS="vst3,standalone\orbitamp"` picks

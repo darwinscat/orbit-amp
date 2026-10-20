@@ -14,9 +14,10 @@
 ; THE PER-AMP PLUG-INS OF EARLIER RELEASES GO. Up to 0.8.0 every amp was a VST3 and a CLAP of its own
 ; (OrbitAmp.vst3, CatpitAmp.clap …, family.ini's old_bundles), with the ids the family's bundle carries
 ; now: a host that found both would list every amp twice. Installing a plug-in format deletes that
-; format's old bundles ([InstallDelete]) — by their exact names, from the one folder those installers
-; placed them in, the same {autocf} this Setup uses — and nothing else. A format left unticked leaves
-; its old bundles as they were.
+; format's old bundles ([InstallDelete]) — by their exact names, from the folder those installers
+; placed them in, the same {autocf} this Setup uses, and from the per-user one of whoever runs Setup,
+; {usercf} (a zip or an install for the current user alone puts them there, and a host reads both) —
+; and nothing else. A format left unticked leaves its old bundles as they were.
 ;
 ; THE AMPS' DATA — the packs, the cabinets and the faces' pictures every amp plays, ONE copy of each —
 ; goes to ProgramData\Darwin's Cat\Factory, a component that is always installed and cannot be unticked
@@ -84,6 +85,8 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=commandline
+; The one per-user place this Setup names on purpose: the old per-amp plug-ins it deletes from {usercf}.
+UsedUserAreasWarning=no
 
 [Types]
 Name: "full";   Description: "Every plug-in format, every app"
@@ -151,6 +154,8 @@ Name: "{autoprograms}\{#Amp}"; Filename: "{app}\{#Amp}.exe"; Components: standal
 [InstallDelete]
 Type: filesandordirs; Name: "{autocf}\VST3\{#Old}.vst3"; Components: vst3
 Type: files;          Name: "{autocf}\CLAP\{#Old}.clap"; Components: clap
+Type: filesandordirs; Name: "{usercf}\VST3\{#Old}.vst3"; Components: vst3
+Type: files;          Name: "{usercf}\CLAP\{#Old}.clap"; Components: clap
   #endif
 #endsub
 
