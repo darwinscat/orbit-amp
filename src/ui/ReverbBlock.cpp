@@ -118,7 +118,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
                                  if (auto* p = safe->amp.apvts.getParameter (id))
                                  {
                                      p->beginChangeGesture();
-                                     p->setValueNotifyingHost (p->getDefaultValue());
+                                     p->setValueNotifyingHost (safe->amp.engineDefault (*p));
                                      p->endChangeGesture();
                                  }
                          });

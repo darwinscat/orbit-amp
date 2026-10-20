@@ -44,6 +44,22 @@ void Engine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout&
         layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { lineup.parkId, 1 }, "Park", false));
 }
 
+void Engine::opening (const Lineup& lineup, params::Opening& o)
+{
+    // A fresh instance opens on the first channel (Channels::adopt) and setUpChain gives it that
+    // channel's room and delay (Channels::defaultOf) — said here before there is an instance to say it to.
+    jassert (! lineup.channels.empty());
+    if (lineup.channels.empty())
+        return;
+
+    const auto& first = lineup.channels.front();
+    o.capture  = first.capture;
+    o.reverb   = first.reverb;
+    o.delayMix = first.delayMix;
+    if (first.reverbMix.has_value())
+        o.reverbMix = *first.reverbMix;
+}
+
 Engine& Engine::of (AmpProcessor& p)
 {
     jassert (dynamic_cast<Engine*> (p.productEngine.get()) != nullptr);

@@ -37,6 +37,11 @@ namespace
         return std::make_unique<channels::Engine> (p, skinOf (p.product()).lineup);
     }
 
+    void opening (const Product& p, params::Opening& o)
+    {
+        channels::Engine::opening (skinOf (p).lineup, o);
+    }
+
     /** The rover's first start in a process: the player's IRs it kept in its own folder are gathered into
         the family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the installer. */
     void firstStart (const Product& p)
@@ -47,7 +52,7 @@ namespace
 
 Product rover (const Skin& skin)
 {
-    return { skin.product, makeEditor, firstStart, addParameters, makeEngine, &skin, "rover_input_zero" };
+    return { skin.product, makeEditor, firstStart, addParameters, makeEngine, &skin, "rover_input_zero", opening };
 }
 
 } // namespace orbitamp::redpaw

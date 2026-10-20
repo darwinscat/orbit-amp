@@ -449,10 +449,12 @@ bool Channels::adopt()
     if (node().isValid())
         return false;
 
-    // A device still where its parameter starts is nobody's choice — a fresh instance, an INIT — and the
-    // product opens on its first channel then, whichever pack the engine starts on.
+    // A device still where the engine starts it is nobody's choice — an INIT, a state from before the
+    // product — and the product opens on its first channel then, whichever pack the engine starts on. A
+    // fresh instance already stands on its first channel's pack, and finds that channel by it.
+    auto* device = amp.apvts.getParameter (params::preampDevice);
     const int playing = juce::roundToInt (plain (params::preampDevice));
-    const bool chosen = playing != juce::roundToInt (defaultOf (0, params::preampDevice));
+    const bool chosen = device != nullptr && playing != juce::roundToInt (device->convertFrom0to1 (amp.engineDefault (*device)));
     int channel = -1;
     for (int c = 0; c < count() && channel < 0; ++c)       // two channels on one pack: the first of them
         if (chosen && packFor (c) >= 0 && packFor (c) == playing)

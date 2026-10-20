@@ -46,6 +46,11 @@ namespace
         return std::make_unique<channels::Engine> (p, catpit::lineup());
     }
 
+    void opening (const Product&, params::Opening& o)
+    {
+        channels::Engine::opening (catpit::lineup(), o);
+    }
+
     /** The cockpit's first start in a process: the player's IRs it kept in its own folder are gathered
         into the family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the
         installer. */
@@ -60,7 +65,7 @@ const Product& products::catpitAmp()
 {
     static const Product cockpit { .name = "CatpitAmp", .makeEditor = catpit::makeEditor, .firstStart = firstStart,
                                    .addParameters = addParameters, .makeEngine = makeEngine,
-                                   .formerInputZeroId = "catpit_input_zero" };
+                                   .formerInputZeroId = "catpit_input_zero", .opening = opening };
     return cockpit;
 }
 

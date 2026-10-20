@@ -169,7 +169,7 @@ void Presets::init()
     for (auto* p : amp.getParameters())
         if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
             if (rp->paramID != params::inTrim)
-                setInTree (tree, rp->paramID, rp->convertFrom0to1 (rp->getDefaultValue()));
+                setInTree (tree, rp->paramID, rp->convertFrom0to1 (amp.engineDefault (*rp)));
 
     // ...and every channel's memory, and whose preset this was. A state without the node is one the
     // product has not seen, and its engine adopts it the way it adopts the first: chain, channel, pack.

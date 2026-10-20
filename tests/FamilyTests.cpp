@@ -11,6 +11,9 @@
 //     folder names, and no other;
 //   - a product with channels opens on its own, each channel on the pack its lineup says, the first one
 //     playing; OrbitAmp has none;
+//   - a fresh instance of each holds every parameter at the default it declares, and being prepared and
+//     played moves none — what a CLAP host holds a new instance to (clap-validator's param-default-values
+//     and param-set-wrong-namespace) — the channel mode standing where the environment puts it;
 //   - each product reads the cabinet shelf it plays — OrbitAmp the whole of it, a face Darwin's Cat's own;
 //   - two products at once, and two processors of one: each keeps what it was made as;
 //   - each product keeps its settings and its update badge in a store of its own, in a folder of its own,
@@ -82,6 +85,40 @@ namespace
         return ownOnly && bundled > 0;
     }
 
+    /** The parameters whose value is not `against`'s for them — each "name: value, not expected", by
+        their normalised values, within the ten-thousandth of the range a CLAP host allows (clap-validator,
+        param_compare_approx); a stepped one only when it rounds elsewhere. Empty where all agree. */
+    juce::StringArray movedFrom (const AmpProcessor& amp, const std::vector<float>& against)
+    {
+        juce::StringArray moved;
+        const auto& all = amp.getParameters();
+        for (int i = 0; i < all.size(); ++i)
+        {
+            const float now = all[i]->getValue(), was = against[(size_t) i];
+            const bool same = all[i]->isBoolean() ? juce::roundToInt (now) == juce::roundToInt (was)
+                                                  : std::abs (now - was) <= 1.0e-4f;
+            if (! same)
+                moved.add (all[i]->getName (64) + ": " + juce::String (now, 4) + ", not " + juce::String (was, 4));
+        }
+        return moved;
+    }
+
+    std::vector<float> valuesOf (const AmpProcessor& amp)
+    {
+        std::vector<float> v;
+        for (const auto* p : amp.getParameters())
+            v.push_back (p->getValue());
+        return v;
+    }
+
+    std::vector<float> defaultsOf (const AmpProcessor& amp)
+    {
+        std::vector<float> v;
+        for (const auto* p : amp.getParameters())
+            v.push_back (p->getDefaultValue());
+        return v;
+    }
+
     /** The shelf's places a product has a cabinet in. */
     int cabinetsOn (const Product& p)
     {
@@ -145,6 +182,82 @@ int main()
         check (channels.active() == 0 && device != nullptr
                    && juce::roundToInt (device->convertFrom0to1 (device->getValue())) == channels.packFor (0),
                "...and it opens on the first, playing");
+    }
+
+    // WHAT A HOST IS TOLD OF A FRESH AMP. The default each parameter declares is what the host shows,
+    // resets to, and holds a new instance to (clap-validator's param-default-values): a fresh instance
+    // holds every one of them. And it holds them on: being prepared and playing its first blocks, with
+    // no host's hand on anything, moves none (param-set-wrong-namespace reads the values around one
+    // block of events the amp must not take).
+    for (const auto& [product, lineup] : family())
+    {
+        const juce::String name (product.name);
+        auto amp = std::make_unique<AmpProcessor> (product);
+        amp->inlineLoads = true;
+
+        const auto atDefaults = movedFrom (*amp, defaultsOf (*amp));
+        check (atDefaults.isEmpty(), name + ", made, holds every parameter at its declared default"
+                                         + (atDefaults.isEmpty() ? juce::String() : ": " + atDefaults.joinIntoString ("; ")));
+
+        const auto made = valuesOf (*amp);
+        constexpr double rate = 48000.0;
+        constexpr int block = 256;
+        amp->prepareToPlay (rate, block);
+        juce::MidiBuffer none;
+        juce::Random noise (7);
+        for (int b = 0; b < 8; ++b)
+        {
+            juce::AudioBuffer<float> buf (2, block);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int n = 0; n < block; ++n)
+                    buf.setSample (ch, n, 0.25f * (noise.nextFloat() * 2.0f - 1.0f));
+            amp->processBlock (buf, none);
+            amp->pumpDeviceWork();
+        }
+        amp->releaseResources();
+
+        const auto playing = movedFrom (*amp, made);
+        check (playing.isEmpty(), "...and prepared and playing, with no hand on it, moves none"
+                                      + (playing.isEmpty() ? juce::String() : ": " + playing.joinIntoString ("; ")));
+    }
+
+    // ...and the channel mode where the environment puts it: STEREO in a plug-in on its stereo bus (above),
+    // MONO once a host settles a mono one — before it prepares, so that preparing still moves nothing —
+    // and STEREO SPACE in the standalone, declared so.
+    {
+        const auto modeOf = [] (const AmpProcessor& amp, bool declared)
+        {
+            const auto* p = amp.apvts.getParameter (params::stereoMode);
+            return juce::roundToInt (p->convertFrom0to1 (declared ? p->getDefaultValue() : p->getValue()));
+        };
+
+        auto amp = std::make_unique<AmpProcessor> (products::orbitAmp());
+        amp->inlineLoads = true;
+        check (modeOf (*amp, false) == (int) params::StereoMode::stereo && modeOf (*amp, true) == (int) params::StereoMode::stereo,
+               "a plug-in on a stereo bus opens on STEREO, and declares it");
+
+        juce::AudioProcessor::BusesLayout mono;
+        mono.inputBuses.add (juce::AudioChannelSet::mono());
+        mono.outputBuses.add (juce::AudioChannelSet::mono());
+        check (amp->setBusesLayout (mono) && modeOf (*amp, false) == (int) params::StereoMode::mono,
+               "...on MONO once the host settles a mono bus");
+
+        const auto settled = valuesOf (*amp);
+        amp->prepareToPlay (48000.0, 256);
+        juce::AudioBuffer<float> buf (1, 256);
+        buf.clear();
+        juce::MidiBuffer none;
+        amp->processBlock (buf, none);
+        amp->releaseResources();
+        const auto moved = movedFrom (*amp, settled);
+        check (moved.isEmpty(), "...and preparing it on that bus moves nothing" + (moved.isEmpty() ? juce::String() : ": " + moved.joinIntoString ("; ")));
+
+        juce::AudioProcessor::setTypeOfNextNewPlugin (juce::AudioProcessor::wrapperType_Standalone);
+        auto standalone = std::make_unique<AmpProcessor> (products::orbitAmp());
+        juce::AudioProcessor::setTypeOfNextNewPlugin (juce::AudioProcessor::wrapperType_Undefined);
+        check (modeOf (*standalone, false) == (int) params::StereoMode::stereoSpace
+                   && modeOf (*standalone, true) == (int) params::StereoMode::stereoSpace,
+               "the standalone opens on STEREO SPACE, and declares it");
     }
 
     // THE SHELF: each product's own, read for it.
