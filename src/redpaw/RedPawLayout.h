@@ -253,6 +253,9 @@ struct Plan
     float toneMinScale = 0.6f;
     float keyCapLeft = 5.5f, keyCapRight = 11.0f, keyFrameHeight = 70.0f;
     float keyMinScale = 0.75f;
+    /** Each tone knob's sign (face::drawToneSign): this far under the names' row, nearer its knob, and
+        this tall. */
+    float toneSignDrop = 3.0f, toneSignHeight = 12.0f;
 
     face::Strip toneStrip() const
     {

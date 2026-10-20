@@ -88,6 +88,7 @@ struct Strips
         juce::String name;              // the pack's own word for it, as written on the face
         int tone = 0;                   // its place in the pack's list
         juce::String param;             // the parameter it turns
+        std::vector<float> curve;       // its sign: the tone's response, 0..1 foot to top, left to right (Console::toneCurve)
         bool operator== (const Tone&) const = default;
     };
     struct Key
@@ -101,6 +102,7 @@ struct Strips
 
     std::vector<Tone> tones;
     float toneScale = 1.0f;
+    float toneSignHeight = 16.0f;       // how tall each tone's sign is drawn (face::drawToneSign)
     std::vector<Key> keys;
     int firstRightKey = 2;              // the right group's first, in keys
     juce::Rectangle<float> keyFrame;    // round the right group; empty where there is none to draw

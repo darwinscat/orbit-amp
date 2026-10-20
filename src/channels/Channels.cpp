@@ -383,6 +383,21 @@ juce::StringArray Channels::toneNamesOf (int channel) const
     return names;
 }
 
+std::vector<namz::rig::Tone> Channels::tonesOf (int channel) const
+{
+    std::vector<namz::rig::Tone> out;
+    if (const int pack = packFor (channel); pack >= 0)
+        for (const auto& stage : amp.preamp.packs.getReference (pack).rig.chain)
+        {
+            if (stage.kind != namz::rig::StageKind::Nam)
+                continue;
+            for (size_t t = 0; t < stage.tone.size() && (int) t < maxTones; ++t)
+                out.push_back (stage.tone[t]);
+            break;
+        }
+    return out;
+}
+
 juce::String Channels::toneOf (int channel, int knob) const
 {
     // Knob i is the pack's tone i: there while its list goes that far.

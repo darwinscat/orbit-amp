@@ -10,6 +10,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
+#include <vector>
 #include <functional>
 #include <vector>
 
@@ -31,6 +32,29 @@ juce::Font labelFont (float px);
 /** Uppercase, tracked, centred in `area`; `weight` px heavier than the font draws it (0: the font as it is). */
 void drawLabel (juce::Graphics&, const juce::String&, juce::Rectangle<float> area, float em,
                 juce::Colour, float trackingEm = 0.08f, float weight = 0.0f);
+
+/** A FILTER'S SIGN, the filter keys' face on every face: its curve as two hockey sticks, mirror images —
+    HIGHPASS a slope rising from the left into a flat top (⟋‾‾), LOWPASS a flat top falling away on the
+    right (‾‾⟍) — one stroke with round ends and a round knee, `signStroke` wide, laid in the middle of
+    `face` (the key's face, which goes down with the key) in `colour`. */
+/** EVERY SIGN'S LINE (drawSign): as heavy as the stems of the 13-px words printed on the panels — GAIN,
+    TURBO — and the mark's line, never heavier: about 1.1 px at the window's reading size, legible, the
+    signs no bolder than anything else on the face. */
+inline constexpr float signStroke = 0.085f * stage::px13;
+void drawFilterSign (juce::Graphics&, juce::Rectangle<float> face, bool highpass, juce::Colour);
+
+/** THE FACES' SIGNS, ONE PAINTER: a curve — y from 0 at the foot of `box` to 1 at its top, at evenly
+    spaced points left to right — as one stroke `stroke` wide with round ends and joins, in `colour`.
+    The filter keys' hockey sticks are drawn with it, and the tone knobs' curves (drawToneSign). */
+void drawSign (juce::Graphics&, juce::Rectangle<float> box, const std::vector<float>& curve, float stroke, juce::Colour);
+
+/** A TONE KNOB'S SIGN, in its name's place over it: the tone's own frequency response (Console::toneCurve,
+    from the pack), its lowest point at the foot and its highest at the top of a box `toneSignSize` in the
+    middle of `place`, drawn as the filter keys' signs are and as heavy. A tone with no shape — none
+    stated — is a flat line through the middle. */
+inline const juce::Point<float> toneSignSize { 52.0f, 16.0f };
+void drawToneSign (juce::Graphics&, juce::Rectangle<float> place, const std::vector<float>& curve, juce::Colour,
+                   float height = toneSignSize.y);
 
 /** `text` centred in `box` in the Graphics' colour, as Graphics::drawText puts it there — and with
     `weight` > 0 each stroke that many px heavier, its outline traced round as well as filled. */
@@ -212,8 +236,11 @@ public:
     void mouseUp (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
-    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
-    void mouseExit (const juce::MouseEvent&) override  { repaint(); }
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); if (onHover) onHover (true); }
+    void mouseExit (const juce::MouseEvent&) override  { repaint(); if (onHover) onHover (false); }
+
+    /** The hand comes over it, or leaves: where its owner names it (the tone knobs, whose names are signs). */
+    std::function<void (bool)> onHover;
 
 private:
     const juce::Image& art;
@@ -252,6 +279,15 @@ public:
         its whole box, whether it is down (held, or latched on), and how lit it is, 0..1. A face whose
         keys are renders draws them here. */
     std::function<void (juce::Graphics&, juce::Rectangle<float>, bool down, float lit)> drawKey;
+
+    /** THE KIT'S CHROME KEY, as a key with no drawKey is drawn: a bezel and its light ring round a cap
+        that sinks `depth` (0..1.2) and carries `light` (0..1), for a square `box`. */
+    static void drawChromeKey (juce::Graphics&, juce::Rectangle<float> box, float depth, float light);
+
+    /** ...THE SAME KEY MADE WIDE: drawn square at the box's height, then laid as three slices — its left
+        half, its middle column stretched across, its right half — so a box wider than tall is the same key,
+        only longer. */
+    static void drawWideChromeKey (juce::Graphics&, juce::Rectangle<float> box, float depth, float light);
 
     std::function<void (bool)> onChange;
     std::function<void()>      onPress;          // a plain key's press

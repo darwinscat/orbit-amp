@@ -105,6 +105,8 @@ namespace
         p.toneKnob   = skin.plan.tones[0].knob;
         p.toneNameY  = skin.plan.knobNameY;
         p.toneNameEm = skin.plan.knobNameEm;
+        p.toneSignDrop = skin.plan.toneSignDrop;
+        p.toneSignHeight = skin.plan.toneSignHeight;
 
         p.keys = { skin.plan.keys[0], skin.plan.keys[1] };
         p.keySize = skin.plan.keySize;
@@ -203,6 +205,15 @@ namespace
                    lit ? ink.state : ink.at (ink.words, 0.75f), keyTracking);
     }
 
+    /** HPF AND LPF ON THEIR KEYS, on every rover: the filter's sign (face::drawFilterSign) on the key's
+        face — which goes down with the key — in the state's ink while the filter is in, else the words' at
+        0.75, as every word on a key is. */
+    void filterSign (const Skin& skin, juce::Graphics& g, juce::Rectangle<float> box, bool down, bool highpass)
+    {
+        const auto& img = down ? Art::of (skin).keyDown : Art::of (skin).keyUp;
+        face::drawFilterSign (g, fittedArea (img, box), highpass, down ? skin.ink.state : skin.ink.at (skin.ink.words, 0.75f));
+    }
+
     /** THE ROOF'S TOGGLE. The two renders are not drawn alike — up, the bat stands over its nut; down,
         it hangs under a nut drawn larger — so each is fitted by its own opaque part: both nuts as wide
         as `nut`, centred on the hole, the bat up or down from there. */
@@ -287,6 +298,10 @@ void Dashboard::paintKeyNames (juce::Graphics& g) const
     }
 }
 
+/** The tone signs in the words' ink as the keys' quiet words are, at 0.75: a line no brighter than the
+    panel's printed names beside it. */
+juce::Colour Dashboard::signInk() const { return skin.ink.at (skin.ink.words, 0.75f); }
+
 /** THE PLAYING CHANNEL'S ROWS on the panel (face::Strips): a socket under each tone knob, the size the
     row gives it; the frame round the keys right of the filters, a cell for each; and each knob's name
     over it, the pack's own word, set condensed into the room its pitch leaves. */
@@ -317,16 +332,13 @@ void Dashboard::paintStrips (juce::Graphics& g, float) const
         piece (art.keyFrameRight, skin.plan.keyCapRight * s);
     }
 
-    const auto& ink = skin.ink;
+    // Each knob's sign over it, in its name's place: the tone's own curve (face::drawToneSign), a shadow
+    // under it where the skin prints one. The name is the tag's, under the hand (Console).
     for (const auto& t : strips.tones)
     {
-        const auto at = t.label.getCentre();
-        const auto area = juce::Rectangle<float> (150.0f, 28.0f).withCentre (at);
-        const juce::Graphics::ScopedSaveState keep (g);
-        condenseInto (g, t.name, skin.plan.knobNameEm, 0.08f, t.label.getWidth(), at);
         if (! skin.printShadow.isTransparent())
-            drawLabel (g, t.name, area.translated (0.0f, 1.5f), skin.plan.knobNameEm, skin.printShadow);
-        ink.label (g, t.name, area, skin.plan.knobNameEm, ink.words);
+            drawToneSign (g, t.label.translated (0.0f, 1.5f), t.curve, skin.printShadow, strips.toneSignHeight);
+        drawToneSign (g, t.label, t.curve, signInk(), strips.toneSignHeight);
     }
 }
 
@@ -577,6 +589,33 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     keyNames->setProperty ("room", skin.plan.keyNameRoom);
     keyNames->setProperty ("px", px11);
     keyNames->setProperty ("capPx", capEm);
+    keyNames->setProperty ("filters", "signs");         // HPF and LPF wear no word: their signs (world.filterSigns)
+
+    // THE FILTER KEYS' SIGNS, as the keys are drawn with them: each the size of the key's box (keySize, at
+    // twice the stage), laid over the key's render at the same box — off, the key up and the sign quiet;
+    // on, the key down and the sign lit.
+    {
+        auto* signs = new juce::DynamicObject();
+        for (const bool highpass : { true, false })
+        {
+            auto* states = new juce::DynamicObject();
+            for (const bool on : { false, true })
+            {
+                const int px = juce::roundToInt (skin.plan.keySize * 2.0f);
+                juce::Image img (juce::Image::ARGB, px, px, true);
+                {
+                    juce::Graphics sg (img);
+                    sg.addTransform (juce::AffineTransform::scale (2.0f));
+                    filterSign (skin, sg, { 0.0f, 0.0f, skin.plan.keySize, skin.plan.keySize }, on, highpass);
+                }
+                const juce::String file = juce::String (highpass ? "hpf" : "lpf") + (on ? "-on.png" : "-off.png");
+                writeSprite (dir, file, img);
+                states->setProperty (on ? "on" : "off", file);
+            }
+            signs->setProperty (highpass ? "hpf" : "lpf", juce::var (states));
+        }
+        world.setProperty ("filterSigns", juce::var (signs));
+    }
     keyNames->setProperty ("capRoom", 0.62f);
     keyNames->setProperty ("tracking", face::keyTracking);
     keyNames->setProperty ("dimmed", face::PushButton::dimmed);
@@ -872,8 +911,10 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
             const auto& img = down ? Art::of (skin).keyDown : Art::of (skin).keyUp;
             drawRender (g, img, box);
             const bool lamp = skin.plan.lightKeys[0] == i || skin.plan.lightKeys[1] == i;
-            if (skin.plan.keyNamesOnKeys && ! lamp)
-                capWord (skin, g, i <= btLpf ? juce::String (switches[(size_t) i].shortName) : keyName (i), fittedArea (img, box), down);
+            if (i <= btLpf)
+                filterSign (skin, g, box, down, i == btHpf);
+            else if (skin.plan.keyNamesOnKeys && ! lamp)
+                capWord (skin, g, keyName (i), fittedArea (img, box), down);
             for (int lamp = 0; lamp < 2; ++lamp)
                 if (skin.plan.lightKeys[(size_t) lamp] == i)
                     drawLampSign (g, fittedArea (img, box), lamp == 0,

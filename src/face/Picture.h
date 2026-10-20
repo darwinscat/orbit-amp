@@ -44,6 +44,9 @@ public:
         it (paintStrips): they are the channel's, and the site draws them from the places it is told. */
     juce::Image staticImage (float scale) const;
 
+    /** The ink the tone knobs' signs are drawn in (face::drawToneSign) — the face's words'. */
+    virtual juce::Colour signInk() const { return juce::Colour (0xffc9b8f5); }
+
     /** Where the history's signs and lamps are drawn (historyArea), for whoever must know the place. */
     juce::Rectangle<int> historyBox() const { return historyArea(); }
 

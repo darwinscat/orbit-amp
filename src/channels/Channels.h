@@ -56,6 +56,7 @@ public:
         is playing. */
     static constexpr int maxTones = params::preampNumMeasured;
     juce::StringArray toneNamesOf (int channel) const;
+    std::vector<namz::rig::Tone> tonesOf (int channel) const;      // ...and the tones themselves, as the pack states them
     juce::String toneId (int knob) const { return toneOf (active(), knob); }
     juce::String toneOf (int channel, int knob) const;
 

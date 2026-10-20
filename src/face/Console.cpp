@@ -3,6 +3,8 @@
 
 #include "Console.h"
 
+#include <algorithm>
+
 #include "Cabs.h"
 #include "Midi.h"
 #include "Standalone.h"
@@ -224,6 +226,18 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     {
         tones[i] = std::make_unique<ArtKnob> (look.toneKnob, look.tonePointer);
         stage.addChildComponent (*tones[i]);
+
+        // ITS NAME, which its sign stands for: in the tag over it while the hand is on the knob or on the sign.
+        toneSpots[i] = std::make_unique<HoverSpot>();
+        stage.addChildComponent (*toneSpots[i]);
+        const auto name = [this, i] (bool over)
+        {
+            const bool has = i < strips.tones.size();
+            nameTag.show (has ? strips.tones[i].label.getCentre().translated (0.0f, -26.0f) : juce::Point<float>(),
+                          over && has ? strips.tones[i].name : juce::String());
+        };
+        tones[i]->onHover = name;
+        toneSpots[i]->onHover = name;
     }
 
     for (size_t i = 0; i < buttons.size(); ++i)
@@ -235,7 +249,8 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         if (filter)
         {
             b.setVisible (true);
-            b.setBounds (around (places.keys[i], places.keySize, places.keySize));
+            b.setBounds (around (places.keys[i], places.filterKeyWidth > 0.0f ? places.filterKeyWidth : places.keySize,
+                                 places.filterKeyHeight > 0.0f ? places.filterKeyHeight : places.keySize));
             keyNames[i] = switches[i].name;
         }
         b.onHover = [this, &b, i] (bool over)     // a key that does not answer the hand says nothing either
@@ -793,9 +808,19 @@ void Console::exportForWeb (const juce::File& dir)
                 juce::Array<juce::var> knobs, keys;
                 for (const auto& t : laid.tones)
                 {
+                    // ...its sign, a sprite the size of its label's box (at twice the stage), drawn as the face draws it.
+                    const auto file = "tone-" + juce::String (c) + "-" + juce::String (t.tone) + ".png";
+                    {
+                        juce::Image img (juce::Image::ARGB, juce::roundToInt (t.label.getWidth() * 2.0f), juce::roundToInt (t.label.getHeight() * 2.0f), true);
+                        juce::Graphics sg (img);
+                        sg.addTransform (juce::AffineTransform::scale (2.0f));
+                        drawToneSign (sg, { 0.0f, 0.0f, t.label.getWidth(), t.label.getHeight() }, t.curve, picture->signInk(), laid.toneSignHeight);
+                        writeSprite (dir, file, img);
+                    }
                     auto* k = new juce::DynamicObject();
                     k->setProperty ("box", rectVar (t.knob));
                     k->setProperty ("label", rectVar (t.label));
+                    k->setProperty ("icon", file);
                     k->setProperty ("text", t.name);
                     k->setProperty ("tone", t.tone);
                     k->setProperty ("param", t.param);
@@ -1674,22 +1699,86 @@ void Console::keyThrown (int key, bool on)
 /** THE ROWS (Strip.h), for any channel: its pack's tones, as many as the face's row shows, each knob's
     box and its name's; its right keys likewise, and the frame round them; and the filters, where they
     always are. Nothing on the face moves here. */
+std::vector<float> Console::toneCurve (const namz::rig::Tone& tone)
+{
+    using namz::rig::SectionKind;
+    struct Band { SectionKind kind; double hz, q, db, pivot; };
+    std::vector<Band> bands;
+    std::vector<double> measured;       // ...or a position's own curve, on the pack's grid
+    if (! tone.sections.empty())
+        for (const auto& s : tone.sections)     // a knob: at the top of its travel
+            bands.push_back ({ s.kind, s.hz, s.q, std::abs (s.dbAtMax) > 1.0e-6 ? s.dbAtMax : s.dbAtMin, s.pivot });
+    else if (! tone.positions.empty())          // a switch: at its last position
+    {
+        const auto& last = tone.positions.back();
+        for (const auto& s : last.sections)
+            bands.push_back ({ s.kind, s.hz, s.q, s.gainDb, s.pivot });
+        measured = last.db;
+    }
+
+    // The cookbook's analogue shapes, |H| in dB at w = f / f0.
+    const auto bandDb = [] (const Band& b, double f)
+    {
+        if (b.hz <= 0.0 || b.q <= 0.0)
+            return 0.0;
+        const double w = f / b.hz, w2 = w * w, A = std::pow (10.0, b.db / 40.0), sA = std::sqrt (A);
+        const auto db = [] (double num, double den) { return den > 0.0 && num > 0.0 ? 10.0 * std::log10 (num / den) : 0.0; };
+        const double sh = juce::square (sA * w / b.q);
+        switch (b.kind)
+        {
+            case SectionKind::Bell:      return db (juce::square (1.0 - w2) + juce::square (w * A / b.q), juce::square (1.0 - w2) + juce::square (w / (A * b.q)));
+            case SectionKind::LowShelf:  return db (A * A * (juce::square (A - w2) + sh), juce::square (1.0 - A * w2) + sh);
+            case SectionKind::HighShelf: return db (A * A * (juce::square (1.0 - A * w2) + sh), juce::square (A - w2) + sh);
+            case SectionKind::Tilt:      return db (A * A * (juce::square (1.0 - A * w2) + sh), juce::square (A - w2) + sh) - b.pivot * b.db;
+        }
+        return 0.0;
+    };
+
+    constexpr int n = 40;
+    constexpr double fLo = 30.0, fHi = 16000.0;
+    std::vector<double> dB;
+    for (int i = 0; i < n; ++i)
+    {
+        const double f = fLo * std::pow (fHi / fLo, (double) i / (double) (n - 1));
+        double v = 0.0;
+        for (const auto& b : bands)
+            v += bandDb (b, f);
+        if (bands.empty() && measured.size() >= 2)      // the measured curve, read on its own log grid
+        {
+            const double g0 = tone.grid.fLo > 0.0 ? tone.grid.fLo : 20.0, g1 = tone.grid.fHi > g0 ? tone.grid.fHi : 20000.0;
+            const double at = juce::jlimit (0.0, 1.0, std::log (f / g0) / std::log (g1 / g0)) * (double) (measured.size() - 1);
+            const auto k = (size_t) juce::jmin ((int) at, (int) measured.size() - 2);
+            v = measured[k] + (measured[k + 1] - measured[k]) * (at - (double) k);
+        }
+        dB.push_back (v);
+    }
+
+    const auto [lo, hi] = std::minmax_element (dB.begin(), dB.end());
+    std::vector<float> curve;
+    for (const double v : dB)
+        curve.push_back (*hi - *lo < 0.1 ? 0.5f : (float) ((v - *lo) / (*hi - *lo)));
+    return curve;
+}
+
 Strips Console::stripsFor (int channel) const
 {
     Strips out;
     const auto& p = places;
 
     const auto names = channels.toneNamesOf (channel);
+    const auto packTones = channels.tonesOf (channel);
     const auto tonesLaid = lay (p.toneStrip, names.size());
     out.toneScale = tonesLaid.scale;
+    out.toneSignHeight = p.toneSignHeight;
     const float toneRoom = p.toneStrip.pitch * tonesLaid.scale - 8.0f;
     for (size_t i = 0; i < tonesLaid.centres.size(); ++i)
     {
         const auto c = tonesLaid.centres[i];
         const float k = p.toneKnob * tonesLaid.scale;
         out.tones.push_back ({ juce::Rectangle<float> (k, k).withCentre (c),
-                               juce::Rectangle<float> (toneRoom, 28.0f).withCentre ({ c.x, p.toneNameY }),
-                               names[(int) i].toUpperCase(), (int) i, channels.toneOf (channel, (int) i) });
+                               juce::Rectangle<float> (toneRoom, 28.0f).withCentre ({ c.x, p.toneNameY + p.toneSignDrop }),
+                               names[(int) i].toUpperCase(), (int) i, channels.toneOf (channel, (int) i),
+                               i < packTones.size() ? toneCurve (packTones[i]) : std::vector<float>() });
     }
 
     const auto keyAt = [&p] (juce::Point<float> c, float size, int index, const juce::String& name, bool live)
@@ -1699,8 +1788,12 @@ Strips Console::stripsFor (int channel) const
                                             : juce::Rectangle<float> (p.keyNameRoom, 20.0f).withCentre ({ c.x, over ? p.keyNameOverY : p.keyNameUnderY });
         return Strips::Key { juce::Rectangle<float> (size, size).withCentre (c), label, name, live, p.keyNamesOnKeys };
     };
-    for (int f = btHpf; f < btFirstRight; ++f)
-        out.keys.push_back (keyAt (p.keys[(size_t) f], p.keySize, f, switches[(size_t) f].shortName, true));
+    for (int f = btHpf; f < btFirstRight; ++f)      // the filters' names are on their keys, on every face
+    {
+        const auto box = juce::Rectangle<float> (p.filterKeyWidth > 0.0f ? p.filterKeyWidth : p.keySize,
+                                                 p.filterKeyHeight > 0.0f ? p.filterKeyHeight : p.keySize).withCentre (p.keys[(size_t) f]);
+        out.keys.push_back ({ box, box, switches[(size_t) f].shortName, true, true });
+    }
     out.firstRightKey = (int) out.keys.size();
 
     const auto right = channel == channels.active() ? rightKeys : rightKeysOf (channel);
@@ -1729,8 +1822,12 @@ void Console::layStrips()
     {
         const bool shown = t < strips.tones.size();
         if (shown)
+        {
             tones[t]->setBounds (box (strips.tones[t].knob));
+            toneSpots[t]->setBounds (box (strips.tones[t].label));
+        }
         tones[t]->setVisible (shown);
+        toneSpots[t]->setVisible (shown);
     }
 
     std::array<bool, numKeys> shown {};

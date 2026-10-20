@@ -84,12 +84,16 @@ public:
         Strip toneStrip;
         float toneKnob = 0.0f;
         float toneNameY = 0.0f, toneNameEm = 13.0f;
+        float toneSignDrop = 5.0f;                          // each knob's sign this much under its name's row: nearer its knob
+        float toneSignHeight = toneSignSize.y;              // ...and this tall
         /** THE KEYS: the two filters' centres, painted where they are; and the right group's row (Strip.h)
             — each key `keySize` across at the row's nominal size, in a frame with these caps at its ends
             where the face draws one (a size of nought: none), its name over or under it (the first under,
             then by turns where `keyNamesAlternate`), or on its face where `keyNamesOnKeys`. */
         std::array<juce::Point<float>, 2> keys;             // HPF, LPF
         float keySize = 34.0f;
+        float filterKeyWidth = 0.0f;                        // ...HPF's and LPF's width, where wider than they are tall; else square
+        float filterKeyHeight = 0.0f;                       // ...and their height, where taller than the other keys; else keySize
         Strip keyStrip;
         float keyCapLeft = 0.0f, keyCapRight = 0.0f, keyFrameHeight = 0.0f;
         float keyNameOverY = 0.0f, keyNameUnderY = 0.0f, keyNameRoom = 120.0f;
@@ -312,6 +316,17 @@ private:
 
     ArtKnob drive;
     std::array<std::unique_ptr<ArtKnob>, Channels::maxTones> tones;
+
+    /** Where each tone's sign is painted (the picture takes no hand): the hand over it names the tone,
+        as over its knob. */
+    struct HoverSpot final : juce::Component
+    {
+        HoverSpot() { setRepaintsOnMouseActivity (false); }
+        std::function<void (bool)> onHover;
+        void mouseEnter (const juce::MouseEvent&) override { if (onHover) onHover (true); }
+        void mouseExit (const juce::MouseEvent&) override  { if (onHover) onHover (false); }
+    };
+    std::array<std::unique_ptr<HoverSpot>, Channels::maxTones> toneSpots;
     std::array<std::unique_ptr<PushButton>, numKeys> buttons;   // the keys under the tone knobs
     std::array<std::unique_ptr<PushButton>, 6> overhead;     // the keys in the roof's holes
 
@@ -526,6 +541,13 @@ protected:
     Strips stripsFor (int channel) const;
     Strips strips;
     void layStrips();
+
+    /** A TONE'S SIGN, from the pack (rig.json `chain[].tone[i]`): its frequency response from 30 Hz to
+        16 kHz — the sum of its bands (`sections`: low and high shelves, bells, tilts, by the cookbook's
+        shapes), a knob at the top of its travel, a switch at its last position; or the position's own
+        measured curve where it ships one — its lowest point 0 and its highest 1. Flat (all 0.5) where
+        it states no shape. Dumb: the tone in, the points out. */
+    static std::vector<float> toneCurve (const namz::rig::Tone&);
 
     /** The rows have been laid again — another channel, another count: what the face draws round its
         knobs and keys follows them (the rovers' rings). */
