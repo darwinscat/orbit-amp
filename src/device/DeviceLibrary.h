@@ -775,7 +775,11 @@ private:
                 stage.toneType = value ("tone_type");
                 stage.circuit  = value ("device");
                 stage.device.family = p.displayName().toStdString();
-                stage.device.files.push_back ({ f.getFileName().toStdString(), {}, 0.0, {} });
+                // The file by its name and nothing else: every other field of the entry at its own
+                // default, so a field namz adds to it (v4.4.0's epochs and esr) needs no line here.
+                namz::rig::FileEntry file;
+                file.id = f.getFileName().toStdString();
+                stage.device.files.push_back (std::move (file));
 
                 p.rig.name = p.displayName().toStdString();
                 p.rig.chain.push_back (std::move (stage));

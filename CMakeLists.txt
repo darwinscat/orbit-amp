@@ -139,7 +139,25 @@ set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the
 # second clone of trees this machine already has, and fall back to the pins when they are gone. From v0.1.1
 # it takes Eigen from Darwin's Cat's own mirror, github.com/darwinscat/eigen, instead of NeuralAmpModelerCore's
 # submodule on gitlab.com: a build now asks GitHub alone.
-set(ORBITAMP_GUITAR_TAG "v0.1.1" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
+#
+# v0.7.0 makes a LOAD cheap and leaves what plays alone: a .namz is built straight into NAM through
+# namz::decode instead of printed to JSON text and parsed back, a mono host gets one network per capture
+# instead of two (a recurrent one still gets two), and a load handed out by the player skips NAM's prewarm
+# of silence, since no slot is heard before live input has run through its receptive field. The seam this
+# tree calls — takeLoadJob / run / deliver (src/core/CapturedBlock.h) — is unchanged; LoadJob::channels is
+# new and takeLoadJob fills it in. It needs namz v4.4.0 (namz::decode, and the float16 .nam16z it widens),
+# pinned with it below: move the two together. One load of a real capture, measured on x86-64 (gcc,
+# Release): 25.5 ms on v0.1.1, 1.7 ms on v0.7.0 for a mono host and 3.3 ms for a stereo one; a copy held
+# for a mono host 6.2 MiB → 3.2 MiB.
+#
+# Past v0.1.1 ONE thing reaches what plays, and it came in v0.3.0: a capture's sound fades in only once
+# every capture the gain dial blends is ready, where it used to start rising while one of them was still
+# on its way and let the dry input through. Measured on 48 sessions through CapturedBlock — the twelve
+# packs of the set at 44.1, 48 and 96 kHz, mono and stereo, the dial turned SMOOTH and STEP and a switch
+# turned while playing, every load landing mid-session: v0.1.1 and v0.7.0 differ in the eight blocks of
+# the first fade-in alone — v0.7.0 silent through four blocks where v0.1.1 had begun to rise, then its own
+# fade, four blocks later — and in nothing after them; v0.6.0 and v0.7.0 are the same bit for bit in all 48.
+set(ORBITAMP_GUITAR_TAG "v0.7.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
 set(ORBITAMP_GUITAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-guitar-core"
     CACHE PATH "Local felitronics-guitar-core checkout (used if present); else the pinned release is fetched")
 
@@ -204,7 +222,18 @@ endif()
 # `serial_number`, `designed_in`, `made_in`), all of which were newer than the commit the NAM module
 # carried. Pinned HERE rather than waited for: a library release exists to move the library's own code,
 # and holding this behind one would leave the plugin unbuildable on CI for no reason of its own.
-set(ORBITAMP_NAMZ_TAG "v4.1.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+#
+# THE TWO PINS MOVE TOGETHER. The tag here is FORCEd over the NAM module's own, so guitar-core's pin
+# never reaches this build — and since guitar-core v0.7.0 a fetched namz is held to FELITRONICS_NAMZ_COMMIT,
+# the commit of the tag the NAM module pins (v4.4.0's, 215d164, by default). This tag is guitar-core
+# v0.7.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
+# to that release's namz pin in the same commit: a tag left behind stops the configure, naming both
+# commits. A namz bump made HERE alone, ahead of guitar-core, FORCEs FELITRONICS_NAMZ_COMMIT to the new
+# tag's commit beside it — a tag moved without its commit stops the configure the same way. The local
+# checkout (ORBITAMP_NAMZ_SRC) is not held to either, and is taken whenever it exists: on a namz older
+# than v4.3.0 the NAM module stops compiling (no namz::decode), and one older than v4.4.0 refuses every
+# float16 capture — keep it on v4.4.0 or later, or empty the override.
+set(ORBITAMP_NAMZ_TAG "v4.4.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
 set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_core)
