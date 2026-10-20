@@ -17,6 +17,13 @@ name: release
 # (tests/gates.txt, tools/run-gates.sh) before it packs anything. The notes are the family's book: the
 # release's own section of CHANGELOG.md (tools/changelog-collect.mjs --notes).
 #
+# THE SYMBOLS OF WHAT SHIPPED. Every build here is configured with ORBITAMP_KEEP_SYMBOLS=ON (CMakeLists.txt: A
+# RELEASE KEEPS THE SYMBOLS OF WHAT IT SHIPPED): each shipped binary keeps its .dSYM, .pdb or .debug file in
+# build/symbols before it is stripped, and each job uploads that folder as an artifact of this run,
+# symbols-<version>-<system>, kept 90 days — never as a release asset, never in an installer or a zip: they name
+# every function of ours. installer/README.md, "Reading a crash report", says how to read a report with them and
+# how to keep them longer than the run does.
+#
 # Required (signing only): secrets MACOS_APP_IDENTITY, MACOS_INSTALLER_IDENTITY, KCH_PWD; var
 # NOTARY_PROFILE. The GitHub Release is published with the built-in GITHUB_TOKEN.
 
@@ -92,7 +99,8 @@ jobs:
             -DORBITAMP_JUCE_DIR= -DORBITAMP_FCORE_DIR= -DORBITAMP_GUITAR_DIR= -DORBITAMP_APPKIT_DIR= \
             -DORBITAMP_NAM_CORE_SRC= -DORBITAMP_NAMZ_SRC= \
             -DORBITAMP_COPY_PLUGIN=OFF \
-            -DORBITAMP_DEV_FACTORY=OFF
+            -DORBITAMP_DEV_FACTORY=OFF \
+            -DORBITAMP_KEEP_SYMBOLS=ON
           # NO DEV FACTORY: a released amp reads the factory folder the installer lays out, never this
           # runner's build/Factory — which on this runner, a working laptop, is there (CMakeLists.txt:
           # THE FACTORY FOLDER). The gates read build/Factory whatever this says.
@@ -123,6 +131,13 @@ jobs:
         with:
           name: macos
           path: dist/*
+      # The .dSYM of every shipped bundle, universal (above: THE SYMBOLS OF WHAT SHIPPED).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: symbols-${{ needs.version.outputs.version }}-macos
+          path: build/symbols/
+          retention-days: 90
+          if-no-files-found: error
 
   windows:
     # Native x64 + arm64. windows-11-arm is a free hosted runner for public repos. x64 also gets the Inno
@@ -141,7 +156,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build
         run: |
-          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF
+          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF -DORBITAMP_KEEP_SYMBOLS=ON
           cmake --build build --config Release --parallel --target Family_All Family_Gates
       - name: Gates
         shell: bash
@@ -185,6 +200,13 @@ jobs:
         with:
           name: windows-${{ matrix.arch }}
           path: dist/*
+      # The .pdb of every shipped .vst3, .clap and .exe (above: THE SYMBOLS OF WHAT SHIPPED).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: symbols-${{ needs.version.outputs.version }}-windows-${{ matrix.arch }}
+          path: build/symbols/
+          retention-days: 90
+          if-no-files-found: error
 
   linux:
     # Native x86_64 + arm64 — both are free hosted runners for public repos.
@@ -209,7 +231,7 @@ jobs:
             libglu1-mesa-dev mesa-common-dev
       - name: Build
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF -DORBITAMP_KEEP_SYMBOLS=ON
           cmake --build build --target Family_All Family_Gates
       - name: Gates
         run: tools/run-gates.sh build Release
@@ -221,6 +243,13 @@ jobs:
         with:
           name: linux-${{ matrix.arch }}
           path: dist/*
+      # The .debug file of every shipped library and app (above: THE SYMBOLS OF WHAT SHIPPED).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: symbols-${{ needs.version.outputs.version }}-linux-${{ matrix.arch }}
+          path: build/symbols/
+          retention-days: 90
+          if-no-files-found: error
 
   release:
     needs: [ version, macos, windows, linux ]
@@ -231,8 +260,18 @@ jobs:
     steps:
       # For the book and the tool that reads it.
       - uses: actions/checkout@v7
+      # WHAT SHIPS, AND NOTHING ELSE: the systems' packages, by name — never the symbols-* artifacts beside them.
       - uses: actions/download-artifact@v8
         with:
+          name: macos
+          path: artifacts/macos
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: windows-*
+          path: artifacts
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: linux-*
           path: artifacts
       - name: Create GitHub Release
         env:
@@ -242,6 +281,14 @@ jobs:
           set -euo pipefail
           mkdir -p out
           find artifacts -type f -exec cp {} out/ \;
+          # Every file a release publishes is one of its packages, darwinscat-amps-*; anything else — a symbol
+          # file above all — stops it here, before anything is published.
+          stray="$(find out -type f ! -name 'darwinscat-amps-*')"
+          if [ -n "$stray" ]; then
+            echo "refusing to publish what is not a package of the release:" >&2
+            echo "$stray" >&2
+            exit 1
+          fi
           ( cd out && sha256sum darwinscat-amps-* > SHA256SUMS )
           node tools/changelog-collect.mjs --notes "$VER" > notes.md
 
