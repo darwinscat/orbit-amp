@@ -3,7 +3,8 @@
 
 // Gate for AN AMP'S CHANNELS WITH NO WINDOW (channels/Engine.h, over the product's lineup): the
 // product's channels on its packs — the X88-IR's four in the cockpit, the Friedman IR-X's two on Mars,
-// the Victory V4's on the other rovers — as many as it plays: GATE_CHANNELS, which the build says for
+// the ReVolt Guitar's three on the ice moon, the Victory V4's over Titan — as many as it plays:
+// GATE_CHANNELS, which the build says for
 // each (CMakeLists.txt: amp_console). A plug-in's window is shut for most of its life, and what a host
 // can reach then is the processor's parameters: so a channel has to be something the processor does
 // by itself. No window is built here at all.
@@ -17,11 +18,11 @@
 //     not a step of its own;
 //   - a channel whose pack is not installed is refused, and the parameter says where the sound stayed;
 //   - a channel's pack is the capture it holds: renamed, the file is that channel's pack still;
-//   - a channel's tone knobs are its pack's Bass, Middle and Treble, found by name — the Copper's
-//     pack lists them in an order of its own;
+//   - a channel's tone knobs are its pack's tones, as many as it has, knob i its tone i — the Copper's
+//     five, the ReVolt Clean's two — each turning its pack's own;
 //   - where the channels go in pairs, the rover's gears: on the V4 a gear's pair is its pedal's two
-//     channels, on the IR-X one channel of it with its Boost off and on — and TURBO is an option of the
-//     gear's, one memory;
+//     channels, on the IR-X and the ReVolt one channel of it with its Boost off and on — and TURBO is an
+//     option of the gear's, one memory;
 //   - a switch a channel holds stands where the lineup puts it, whatever a host did to it; the pack's
 //     other switches are each channel's own, and a channel never pulled opens them where the pack does;
 //   - PARK, where the amp has it, takes the whole amp out of the sound: the guitar comes through dry,
@@ -46,8 +47,10 @@
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 
+#include <array>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 namespace
 {
@@ -135,17 +138,27 @@ int main()
         std::printf ("      %d channels\n", channels.count());
     check (channels.count() == GATE_CHANNELS && channels.count() <= (int) product.channels.size() && installed, product.installed);
 
-    // BASS, MIDDLE and TREBLE are found in each pack by their names. The X88-IR's, the IR-X's, the
-    // Sheriff's and the Kraken's list them first, in that order; the Copper's two list Tone, Treble,
-    // Middle, Bass — so there BASS is the fourth place, MIDDLE the third and TREBLE the second.
+    // THE TONE KNOBS ARE THE PACK'S TONES, as many as it lists and in its order, knob i on place i
+    // (Channels::toneOf) — said here pack by pack, not read back off the packs: the X88-IR's and the
+    // IR-X's Bass, Middle, Treble; the Sheriff's and the Kraken's those and Bright; the Copper's two Tone,
+    // Treble, Middle, Bass, Bass cut; the ReVolt's Clean Bass and Treble, its Crunch and Lead Bass, Mid,
+    // Treble. A knob past the list names nothing.
     {
+        const auto listOf = [] (const juce::String& capture) -> juce::StringArray
+        {
+            if (capture.startsWith ("v4-copper"))                                    return { "Tone", "Treble", "Middle", "Bass", "Bass cut" };
+            if (capture.startsWith ("v4-sheriff") || capture.startsWith ("v4-kraken")) return { "Bass", "Middle", "Treble", "Bright" };
+            if (capture.startsWith ("revolt-clean"))                                 return { "Bass", "Treble" };
+            if (capture.startsWith ("revolt-"))                                      return { "Bass", "Mid", "Treble" };
+            return { "Bass", "Middle", "Treble" };
+        };
         bool found = true;
         for (int c = 0; c < channels.count(); ++c)
         {
-            const bool copper = juce::String (channels.lineup().channels[(size_t) c].capture).startsWith ("v4-copper");
-            const int places[] { copper ? 3 : 0, copper ? 2 : 1, copper ? 1 : 2 };
-            for (int t = 0; t < 3; ++t)
-                found = found && channels.toneOf (c, t) == params::preampMeasured (places[t]);
+            const auto want = listOf (channels.lineup().channels[(size_t) c].capture);
+            found = found && channels.toneNamesOf (c) == want;
+            for (int t = 0; t < channels::Channels::maxTones; ++t)
+                found = found && channels.toneOf (c, t) == (t < want.size() ? params::preampMeasured (t) : juce::String());
         }
         check (found, product.tones);
     }
@@ -153,7 +166,8 @@ int main()
     // GEARS OF TWO, where the product's channels go in pairs, as far as it goes, TURBO the second of
     // each, and the pair one memory (Lineup::pairs). On the V4, a pedal's two channels: CLEAN the Copper
     // and the Copper TB, CRUNCH the Sheriff's two, HI-GAIN the Kraken's two. On the IR-X, one of its
-    // channels with the Boost held off, then on: CRUNCH Ch1, HI-GAIN Ch2.
+    // channels with the Boost held off, then on: CRUNCH Ch1, HI-GAIN Ch2 — and so on the ReVolt: CLEAN
+    // its Clean, CRUNCH its Crunch, HI-GAIN its Lead.
     if (product.gears != nullptr)
     {
         bool paired = channels.lineup().pairs && gears * 2 == GATE_CHANNELS && gears * 2 <= (int) product.channels.size();
@@ -341,6 +355,58 @@ int main()
         engine.go (channelOf (1, false));
         check (channels.leftOn (plain) == plain, "...and a gear left without it, without it");
         ticks();
+    }
+
+    // ON THE REVOLT, where the build plays it: the Clean has two tone knobs, its Bass and its Treble, the
+    // Crunch three, Bass, Mid and Treble — and each knob turns its own pack's tone and nothing else.
+    {
+        int clean = -1, crunch = -1;
+        for (int c = 0; c < (int) played.size(); ++c)
+        {
+            const juce::String capture (played[(size_t) c].capture);
+            if (clean < 0 && capture.startsWith ("revolt-clean"))   clean = c;
+            if (crunch < 0 && capture.startsWith ("revolt-crunch")) crunch = c;
+        }
+
+        if (clean >= 0 && crunch >= 0)
+        {
+            const auto everything = [&amp]
+            {
+                std::vector<float> v;
+                for (auto* p : amp->getParameters())
+                    v.push_back (p->getValue());
+                return v;
+            };
+            // Each knob turned in turn: its pack's place moves to where it was turned, and nothing else does.
+            const auto eachTurnsItsOwn = [&] (int c)
+            {
+                engine.go (c);
+                ticks();
+                bool own = true;
+                const auto names = channels.toneNamesOf (c);
+                for (int t = 0; t < names.size(); ++t)
+                {
+                    auto* p = amp->apvts.getParameter (channels.toneId (t));
+                    if (p == nullptr || channels.toneId (t) != params::preampMeasured (t))
+                        return false;
+                    auto before = everything();
+                    const float to = p->getValue() < 0.5f ? 0.8f : 0.2f;
+                    p->setValueNotifyingHost (to);
+                    auto after = everything();
+                    const auto index = (size_t) amp->getParameters().indexOf (p);
+                    own = own && std::abs (after[index] - to) < 1.0e-3f;
+                    after[index] = before[index];
+                    own = own && after == before;
+                }
+                return own && channels.toneId (names.size()).isEmpty();
+            };
+
+            check (channels.toneNamesOf (clean) == juce::StringArray { "Bass", "Treble" } && eachTurnsItsOwn (clean),
+                   "the ReVolt's Clean has two tone knobs, BASS and TREBLE, each turning its own and nothing else");
+            check (channels.toneNamesOf (crunch) == juce::StringArray { "Bass", "Mid", "Treble" } && eachTurnsItsOwn (crunch),
+                   "...its Crunch three, BASS, MID and TREBLE, likewise");
+            ticks();
+        }
     }
 
     // A hand's switch: one step, and undone whole.
@@ -588,10 +654,12 @@ int main()
         ticks();
     }
 
-    // THE PACK'S SWITCHES (Channels::switchesOf), where a channel holds one — the IR-X's rover. Every
-    // channel's Boost stands where the lineup puts it, and a host that throws it is overruled the next
-    // time the channel is pulled; the pack's other switch is the gear's, its TURBO's too — one memory —
-    // and a gear never pulled since INIT opens it where the pack does.
+    // THE PACK'S SWITCHES (Channels::switchesOf), where a channel holds one — the IR-X's rover and the
+    // ReVolt's. Every channel's Boost stands where the lineup puts it, and a host that throws it is
+    // overruled the next time the channel is pulled; the pack's other switch, where it has one — the
+    // IR-X's; the ReVolt's packs have the Boost and the gain dial, DRIVE's, and nothing else — is the
+    // gear's, its TURBO's too — one memory — and a gear never pulled since INIT opens it where the pack
+    // does.
     bool holds = false;
     for (const auto& c : played)
         holds = holds || juce::String (c.held).isNotEmpty();
@@ -619,28 +687,52 @@ int main()
                 }
         }
         check (held, "every channel's Boost stands where the lineup puts it: off on a gear, on on its TURBO");
-        check (free && opens, "...and its pack's other switch opens where the pack does");
+        if (! free)
+        {
+            // The Boost the only switch: none of them the hand's, and a Boost a host throws under TURBO is
+            // the lineup's again the next time the gear and its TURBO are pulled.
+            int boost = -1, switches = 0;
+            for (int c = 0; c < channels.count(); ++c)
+                for (const auto& s : channels.switchesOf (c))
+                {
+                    ++switches;
+                    if (s.held && c == 0)
+                        boost = s.slot;
+                }
+            check (boost >= 0 && switches == channels.count(), "...and its packs have no other switch: the Boost is each channel's one, and held");
 
-        // Ch1's: the Boost held, the three-way Bright the hand's.
-        int boost = -1, bright = -1;
-        for (const auto& s : channels.switchesOf (0))
-            (s.held ? boost : bright) = s.slot;
-        check (boost >= 0 && bright >= 0 && channels.switchesOf (0)[(size_t) bright].values.size() == 3,
-               "Ch1 holds its Boost and leaves its three-way Bright to the hand");
+            engine.go (1);
+            put (boost, 0);                 // a host throws the TURBO's Boost off
+            engine.go (0);
+            const bool offOnGear = at (boost) == 0;
+            engine.go (1);
+            check (offOnGear && at (boost) == 1, "...a Boost a host threw off under TURBO is off on the gear, and on again under TURBO pulled again");
+        }
+        else
+        {
+            check (opens, "...and its pack's other switch opens where the pack does");
 
-        engine.go (0);
-        put (bright, 2);                // BRIGHT 2 on the gear
-        engine.go (1);
-        const bool sharedOnTurbo = at (bright) == 2 && at (boost) == 1;
-        put (bright, 1);                // CENTER under its TURBO...
-        put (boost, 0);                 // ...and a host throws the TURBO's Boost off
-        engine.go (0);
-        const bool backOnGear = at (bright) == 1 && at (boost) == 0;
-        engine.go (2);                  // another gear, and back
-        engine.go (0);
-        const bool keptOnGear = at (bright) == 1 && at (boost) == 0;
-        check (sharedOnTurbo, "a switch moved on a gear is its TURBO's too: one memory, the Boost held on");
-        check (backOnGear && keptOnGear, "...and moved under TURBO, the gear's, kept; the Boost a host threw stands where the lineup holds it again");
+            // Ch1's: the Boost held, the three-way Bright the hand's.
+            int boost = -1, bright = -1;
+            for (const auto& s : channels.switchesOf (0))
+                (s.held ? boost : bright) = s.slot;
+            check (boost >= 0 && bright >= 0 && channels.switchesOf (0)[(size_t) bright].values.size() == 3,
+                   "Ch1 holds its Boost and leaves its three-way Bright to the hand");
+
+            engine.go (0);
+            put (bright, 2);                // BRIGHT 2 on the gear
+            engine.go (1);
+            const bool sharedOnTurbo = at (bright) == 2 && at (boost) == 1;
+            put (bright, 1);                // CENTER under its TURBO...
+            put (boost, 0);                 // ...and a host throws the TURBO's Boost off
+            engine.go (0);
+            const bool backOnGear = at (bright) == 1 && at (boost) == 0;
+            engine.go (2);                  // another gear, and back
+            engine.go (0);
+            const bool keptOnGear = at (bright) == 1 && at (boost) == 0;
+            check (sharedOnTurbo, "a switch moved on a gear is its TURBO's too: one memory, the Boost held on");
+            check (backOnGear && keptOnGear, "...and moved under TURBO, the gear's, kept; the Boost a host threw stands where the lineup holds it again");
+        }
         ticks();
     }
 

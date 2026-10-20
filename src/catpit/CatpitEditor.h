@@ -21,6 +21,7 @@ class Cockpit final : public face::Picture
 {
 private:
     void paintStatic (juce::Graphics&, float scale) const override;
+    void paintStrips (juce::Graphics&, float scale) const override;
     void paintLive (juce::Graphics&) const override;
     juce::Rectangle<int> historyArea() const override;
 

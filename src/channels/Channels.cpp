@@ -25,7 +25,7 @@ namespace
     // A pair's record (Lineup::pairs) says which of the two it was left playing, and the tones by their
     // knobs: the two packs may keep them in different places.
     const juce::Identifier playedId { "played" };
-    const std::array<juce::Identifier, Channels::numTones> knobIds { "knob_bass", "knob_middle", "knob_treble" };
+    const std::array<juce::Identifier, Channels::maxTones> knobIds { "knob_1", "knob_2", "knob_3", "knob_4", "knob_5" };
 
     /** The family's factory folder, which the installer lays out: where the product's set lies (Set.h),
         and where the device library looks for the packs the product plays out of the box. */
@@ -88,9 +88,10 @@ Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
 {
     kept.add (params::preampGain);
     kept.add (params::blockIn (params::preampId));      // TURBO: how hard the capture is fed
-    for (int t = 0; t < numTones; ++t)                  // the tones each channel's knobs turn, its own place in its own pack
+    for (int t = 0; t < maxTones; ++t)                  // the tones each channel's knobs turn: its pack's places, as many as it has
         for (int c = 0; c < count(); ++c)
-            tones.addIfNotAlreadyThere (toneOf (c, t));
+            if (const auto id = toneOf (c, t); id.isNotEmpty())
+                tones.addIfNotAlreadyThere (id);
     kept.addArray (tones);
     for (int s = 0; s < params::numSelectors; ++s)      // where its pack's switches stand
         kept.add (params::selectorId (params::preampId, s));
@@ -367,21 +368,25 @@ int Channels::packFor (int channel) const
     return -1;
 }
 
-juce::String Channels::toneOf (int channel, int knob) const
+juce::StringArray Channels::toneNamesOf (int channel) const
 {
-    knob = juce::jlimit (0, numTones - 1, knob);
-
+    juce::StringArray names;
     if (const int pack = packFor (channel); pack >= 0)
         for (const auto& stage : amp.preamp.packs.getReference (pack).rig.chain)
         {
             if (stage.kind != namz::rig::StageKind::Nam)
                 continue;
-            for (int t = 0; t < (int) stage.tone.size() && t < params::preampNumMeasured; ++t)
-                if (juce::String (stage.tone[(size_t) t].name).trim().equalsIgnoreCase (toneNames[(size_t) knob]))
-                    return params::preampMeasured (t);
+            for (int t = 0; t < (int) stage.tone.size() && t < maxTones; ++t)
+                names.add (juce::String (stage.tone[(size_t) t].name).trim());
+            break;
         }
+    return names;
+}
 
-    return params::preampMeasured (knob);
+juce::String Channels::toneOf (int channel, int knob) const
+{
+    // Knob i is the pack's tone i: there while its list goes that far.
+    return knob >= 0 && knob < toneNamesOf (channel).size() ? params::preampMeasured (knob) : juce::String();
 }
 
 std::vector<Channels::PackSwitch> Channels::switchesOf (int channel) const
@@ -500,23 +505,31 @@ int Channels::leftOn (int channel) const
     return played >= 0 && played < count() && memoryOf (played) == memory ? played : memory;
 }
 
-std::array<float, Channels::numTones> Channels::knobs() const
+Channels::Knobs Channels::knobs() const
 {
-    std::array<float, numTones> k {};
-    for (int t = 0; t < numTones; ++t)
-        k[(size_t) t] = plain (toneOf (active(), t));
+    Knobs k {};
+    for (int t = 0; t < maxTones; ++t)
+        if (const auto id = toneOf (active(), t); id.isNotEmpty())     // a knob past the pack's list stands nowhere
+            k[(size_t) t] = plain (id);
     return k;
 }
 
-void Channels::turnKnobs (int channel, const std::array<float, numTones>& k)
+void Channels::turnKnobs (int channel, const Knobs& k)
 {
+    // A knob that stood nowhere — past the list of the pack it was on — has nothing to bring over: its
+    // tone on this pack opens where the channel opens it, as a place on no knob here does.
     for (const auto& id : tones)
-        set (id, knobAt (channel, id) >= 0 ? k[(size_t) knobAt (channel, id)] : defaultOf (channel, id));
+    {
+        const int knob = knobAt (channel, id);
+        set (id, knob >= 0 && k[(size_t) knob].has_value() ? *k[(size_t) knob] : defaultOf (channel, id));
+    }
 }
 
 int Channels::knobAt (int channel, const juce::String& paramId) const
 {
-    for (int t = 0; t < numTones; ++t)
+    if (paramId.isEmpty())
+        return -1;
+    for (int t = 0; t < maxTones; ++t)
         if (toneOf (channel, t) == paramId)
             return t;
     return -1;
@@ -594,8 +607,13 @@ void Channels::store (juce::ValueTree record) const
     if (line.pairs)
     {
         const auto k = knobs();
-        for (int t = 0; t < numTones; ++t)
-            record.setProperty (knobIds[(size_t) t], k[(size_t) t], nullptr);
+        for (int t = 0; t < maxTones; ++t)
+        {
+            if (k[(size_t) t].has_value())
+                record.setProperty (knobIds[(size_t) t], *k[(size_t) t], nullptr);
+            else
+                record.removeProperty (knobIds[(size_t) t], nullptr);      // past the list: nowhere to come back to
+        }
         record.setProperty (playedId, active(), nullptr);
     }
     for (int f = 0; f < numFlags; ++f)
@@ -613,9 +631,10 @@ void Channels::recall (int channel, const juce::ValueTree& record)
     // on their knobs, in this pack's.
     if (record.isValid() && record.hasProperty (playedId) && (int) record[playedId] != channel)
     {
-        std::array<float, numTones> k {};
-        for (int t = 0; t < numTones; ++t)
-            k[(size_t) t] = record.hasProperty (knobIds[(size_t) t]) ? (float) record[knobIds[(size_t) t]] : defaultOf (channel, toneOf (channel, t));
+        Knobs k {};
+        for (int t = 0; t < maxTones; ++t)
+            if (record.hasProperty (knobIds[(size_t) t]))      // ...a knob the record has none for opening where the channel does
+                k[(size_t) t] = (float) record[knobIds[(size_t) t]];
         turnKnobs (channel, k);
     }
     hold (channel);     // whatever the record says: a host may have moved it while the channel played

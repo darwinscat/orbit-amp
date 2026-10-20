@@ -33,6 +33,7 @@ const Art& Art::get()
             a.lampLit[i] = load (("lamp-" + juce::String ((int) i) + ".webp").toRawUTF8());
         a.knobDrive   = load ("knob-drive.webp");
         a.knobTone    = load ("knob-tone.webp");
+        a.socket      = load ("socket.webp");
         a.leverGrip   = load ("throttle-grip.webp");
         a.guardClosed = load ("guard-closed.webp");
         a.guardOpen   = load ("guard-open.webp");

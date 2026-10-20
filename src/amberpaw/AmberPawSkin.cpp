@@ -196,6 +196,9 @@ const layout::Plan plan {
     .poweredBy { 735.0f, 476.0f },
     .makerName { 947.0f, 476.0f },
     .makerRoom = 110.0f,
+    .socketSize = 118.0f,                    // its socket's render, 236 across at twice the stage
+    .toneMinScale = 0.58f,                   // ...shrunk so far, five fit the row: the V4 Copper's
+    .keyCapLeft = 6.5f, .keyCapRight = 6.5f, .keyFrameHeight = 72.0f,     // its frame, 2590..3075 x 1304..1448 as painted
 };
 
 const Skin& titan()

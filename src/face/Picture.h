@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Stage.h"
+#include "Strip.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -33,13 +34,14 @@ public:
         stands dim, and the register that is playing has its letter and its lamp lit. */
     void setHistory (bool canUndo, bool canRedo, int activeRegister);
 
-    /** Which of the six keys under the tone knobs answer the hand, and what each is called — the name
-        under one that does not is dimmed with it. The names are the playing pack's where its switches
-        are on the keys (Console::showChannel), so they change with the channel. */
-    void setKeys (const std::array<bool, 6>& live, const std::array<juce::String, 6>& names);
+    /** THE PLAYING CHANNEL'S ROWS (Strips): its tone knobs' sockets and names, its keys' names, and the
+        frame round the right group. They change with the channel — another pack, another count — and the
+        picture is painted again with them. */
+    void setStrips (const Strips&);
 
     /** THE PICTURE THAT NEVER CHANGES, on its own: the stage at `scale` pixels to its unit, what the
-        picture leaves bare — its cut-out window — transparent. */
+        picture leaves bare — its cut-out window — transparent. The rows of the playing channel are not in
+        it (paintStrips): they are the channel's, and the site draws them from the places it is told. */
     juce::Image staticImage (float scale) const;
 
     /** Where the history's signs and lamps are drawn (historyArea), for whoever must know the place. */
@@ -48,11 +50,14 @@ public:
 protected:
     bool canUndo = false, canRedo = false;
     int  activeRegister = 0;
-    std::array<bool, 6> keysLive { true, true, true, true, true, true };
-    std::array<juce::String, 6> keyNames;
+    Strips strips;
 
     /** The picture that never changes, at `scale` physical pixels to the stage's unit. */
     virtual void paintStatic (juce::Graphics&, float scale) const = 0;
+
+    /** The playing channel's rows over it — the sockets, the key frame, the tones' names: painted with it
+        into the layer, and again whenever the rows change. */
+    virtual void paintStrips (juce::Graphics&, float /*scale*/) const {}
 
     /** What changes, over it: drawn on every paint. */
     virtual void paintLive (juce::Graphics&) const {}

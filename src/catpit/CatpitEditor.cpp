@@ -30,23 +30,28 @@ namespace
     /** Where the keys stand along their row. ONE pitch for all six — the widest pair of neighbouring
         names plus a little air, so no name touches the next — the filters centred under BASS, the four
         layers set against the right end of the row, clear of the divider that parts the two groups. */
-    std::array<float, 6> keyCentres()
+    /** The keys' pitch, as the six names the row was first set for need it — HPF, LPF and the four the
+        packs' layers were to have, FAT BRIGHT DEPTH PRES — at 11 px with room between. */
+    float keyPitch()
     {
         const auto font = labelFont (layout::px11).withExtraKerningFactor (keyTracking);
-        std::array<float, 6> w {}, x {};
-        for (size_t i = 0; i < w.size(); ++i)
-            w[i] = juce::GlyphArrangement::getStringWidth (font, switches[i].shortName);
-
+        const char* names[] { "HPF", "LPF", "FAT", "BRIGHT", "DEPTH", "PRES" };
         float pitch = 0.0f;
-        for (size_t i = 0; i + 1 < w.size(); ++i)
-            if (i != btLpf)     // the divider stands between LPF and FAT, not air
-                pitch = juce::jmax (pitch, (w[i] + w[i + 1]) * 0.5f + 7.5f);
+        for (size_t i = 0; i + 1 < std::size (names); ++i)
+            if (i != 1)     // the filters' group ends at LPF
+                pitch = juce::jmax (pitch, (juce::GlyphArrangement::getStringWidth (font, names[i])
+                                            + juce::GlyphArrangement::getStringWidth (font, names[i + 1])) * 0.5f + 7.5f);
+        return pitch;
+    }
 
-        x[btHpf] = layout::keyGroupX - pitch * 0.5f;
-        x[btLpf] = layout::keyGroupX + pitch * 0.5f;
-        for (size_t i = btFat; i <= btPresence; ++i)
-            x[i] = layout::keyRowRight - w[btPresence] * 0.5f - pitch * (float) (btPresence - i);
-        return x;
+    /** THE KEYS RIGHT OF THE FILTERS (face::Strip): where the four stood, the last's name ending at
+        keyRowRight — a key `pitch` wide each, as many as the pack has switches, shrunk to fit to 0.75. */
+    face::Strip keyStrip()
+    {
+        const float pitch = keyPitch();
+        const auto font = labelFont (layout::px11).withExtraKerningFactor (keyTracking);
+        const float right = layout::keyRowRight - 0.5f * juce::GlyphArrangement::getStringWidth (font, "PRES") + 0.5f * pitch;
+        return { { right - 4.0f * pitch, layout::keyRowY - 0.5f * layout::keySize, 4.0f * pitch, layout::keySize }, pitch, pitch, 0.75f };
     }
 
     // Measured off the original renders (the ones that still had their pointers): where the lit slot
@@ -85,13 +90,17 @@ namespace
 
         face::Console::Places p;
         p.drive = around (drive.centre, drive.radius * 1.86f, drive.radius * 1.86f);
-        for (size_t i = 0; i < tones.size(); ++i)
-            p.tones[i] = around (tones[i].centre, tones[i].radius * 2.05f, tones[i].radius * 2.05f);
+        p.toneStrip  = toneStrip;
+        p.toneKnob   = toneKnob;
+        p.toneNameY  = toneNameY;
+        p.toneNameEm = px13;
 
-        const auto keyX = keyCentres();
-        for (size_t i = 0; i < p.keys.size(); ++i)
-            p.keys[i] = { keyX[i], keyRowY };
+        const float pitch = keyPitch();
+        p.keys = { juce::Point<float> { keyGroupX - pitch * 0.5f, keyRowY }, juce::Point<float> { keyGroupX + pitch * 0.5f, keyRowY } };
         p.keySize = keySize;
+        p.keyStrip = keyStrip();
+        p.keyNameUnderY = keyNameY;
+        p.keyNameOverY = keyNameY;
         p.holes = holes;
         p.holeKeySize = 40.0f;
 
@@ -214,15 +223,35 @@ void Cockpit::paintLive (juce::Graphics& g) const
 }
 
 /** The keys' names, under them — a dimmed key's as dim as the key, and the playing pack's own where its
-    switches are on them. They stand where the six names of their own set them (keyCentres). */
+    switches are on them. They stand where the rows put them (face::Strips). */
 void Cockpit::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
 
-    const auto keyX = keyCentres();
-    for (size_t i = 0; i < keyNames.size(); ++i)
-        drawLabel (g, keyNames[i], juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
-                   px11, labelLilac.withAlpha (keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
+    for (const auto& k : strips.keys)
+        drawLabel (g, k.name, juce::Rectangle<float> (120.0f, 20.0f).withCentre (k.label.getCentre()),
+                   px11, labelLilac.withAlpha (k.live ? 1.0f : PushButton::dimmed), keyTracking);
+}
+
+/** THE PLAYING CHANNEL'S TONE KNOBS on the panel (face::Strips): a socket under each, the size the row
+    gives it, and each knob's name over it — the pack's own word — in DRIVE's row. */
+void Cockpit::paintStrips (juce::Graphics& g, float) const
+{
+    using namespace layout;
+    const auto& art = Art::get();
+    for (const auto& t : strips.tones)
+    {
+        if (art.socket.isValid())
+        {
+            const float d = socketSize * strips.toneScale;
+            g.drawImage (art.socket, juce::Rectangle<float> (d, d).withCentre (t.knob.getCentre()));
+        }
+        const juce::Graphics::ScopedSaveState keep (g);
+        const auto at = t.label.getCentre();
+        if (const float wide = juce::GlyphArrangement::getStringWidth (labelFont (px13), t.name); wide > t.label.getWidth())
+            g.addTransform (juce::AffineTransform::scale (t.label.getWidth() / wide, 1.0f, at.x, at.y));    // a wider word condensed into its room
+        drawLabel (g, t.name, juce::Rectangle<float> (150.0f, 28.0f).withCentre (at), px13, labelLilac);
+    }
 }
 
 void Cockpit::paintOverhead (juce::Graphics& g) const
@@ -320,9 +349,7 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
     paintEmblem (g, scale);
 
     drawLabel (g, "DRIVE", juce::Rectangle<float> (220.0f, 30.0f).withCentre ({ drive.centre.x, 394.0f }), px15, labelLilac);
-    const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
-    for (size_t i = 0; i < tones.size(); ++i)
-        drawLabel (g, toneNames[i], juce::Rectangle<float> (150.0f, 28.0f).withCentre ({ tones[i].centre.x, 394.0f }), px13, labelLilac);
+    // ...the tone knobs' names are the playing pack's, with their sockets (paintStrips).
 
     // TURBO stands IN its frame's top line, in the gap the two brackets leave (96 wide; the word is 80).
     // The capitals sit a hair under the middle of the row they are drawn in — hence the 1.
@@ -348,6 +375,13 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     const auto& art = Art::get();
     writeSprite (dir, "lever-grip.png", art.leverGrip);
     writeSprite (dir, "guard-closed.png", art.guardClosed);
+    writeSprite (dir, "socket.png", art.socket);             // under each tone knob, socketSize across at the row's nominal size
+    {
+        auto* pieces = new juce::DynamicObject();
+        pieces->setProperty ("socket", "socket.png");
+        pieces->setProperty ("socketSize", layout::socketSize);
+        world.setProperty ("rows", juce::var (pieces));
+    }
     writeSprite (dir, "guard-open.png", art.guardOpen);
     writeSprite (dir, "guard-on.png", art.guardOn);
 

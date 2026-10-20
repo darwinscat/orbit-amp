@@ -101,11 +101,22 @@ namespace
 
         Console::Places p;
         p.drive = around (skin.plan.drive.centre, skin.plan.drive.knob, skin.plan.drive.knob);
-        for (size_t i = 0; i < skin.plan.tones.size(); ++i)
-            p.tones[i] = around (skin.plan.tones[i].centre, skin.plan.tones[i].knob, skin.plan.tones[i].knob);
+        p.toneStrip  = skin.plan.toneStrip();       // as many knobs as the pack has tones, where the three stood
+        p.toneKnob   = skin.plan.tones[0].knob;
+        p.toneNameY  = skin.plan.knobNameY;
+        p.toneNameEm = skin.plan.knobNameEm;
 
-        p.keys = skin.plan.keys;
+        p.keys = { skin.plan.keys[0], skin.plan.keys[1] };
         p.keySize = skin.plan.keySize;
+        p.keyStrip = skin.plan.keyStrip();          // ...and as many keys as it has switches, where the four stood
+        p.keyCapLeft = skin.plan.keyCapLeft;
+        p.keyCapRight = skin.plan.keyCapRight;
+        p.keyFrameHeight = skin.plan.keyFrameHeight;
+        p.keyNameOverY = skin.plan.keyNameOverY;
+        p.keyNameUnderY = skin.plan.keyNameUnderY;
+        p.keyNameRoom = skin.plan.keyNameRoom;
+        p.keyNamesAlternate = true;                 // the right group's under, over, under...
+        p.keyNamesOnKeys = skin.plan.keyNamesOnKeys;
         p.holes = skin.plan.holes;
         p.holeKeySize = 44.0f;      // the hole's pitch: a toggle up or down stands out of it
 
@@ -262,17 +273,60 @@ void Dashboard::paintRoof (juce::Graphics& g) const
 void Dashboard::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
-    if (skin.plan.keyNamesOnKeys)
-        return;
 
     const auto& ink = skin.ink;
-    for (size_t i = 0; i < keyNames.size(); ++i)
+    for (const auto& k : strips.keys)
     {
-        const juce::Point<float> at { skin.plan.keys[i].x, skin.plan.keyNameOver[i] ? skin.plan.keyNameOverY : skin.plan.keyNameUnderY };
+        if (k.onKey)
+            continue;       // on the key's own face (RedPawEditor's keys)
+        const auto at = k.label.getCentre();
         const juce::Graphics::ScopedSaveState keep (g);
-        condenseInto (g, keyNames[i], px11, keyTracking, skin.plan.keyNameRoom, at);
-        ink.label (g, keyNames[i], juce::Rectangle<float> (120.0f, 20.0f).withCentre (at),
-                   px11, ink.at (ink.words, keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
+        condenseInto (g, k.name, px11, keyTracking, skin.plan.keyNameRoom, at);
+        ink.label (g, k.name, juce::Rectangle<float> (120.0f, 20.0f).withCentre (at),
+                   px11, ink.at (ink.words, k.live ? 1.0f : PushButton::dimmed), keyTracking);
+    }
+}
+
+/** THE PLAYING CHANNEL'S ROWS on the panel (face::Strips): a socket under each tone knob, the size the
+    row gives it; the frame round the keys right of the filters, a cell for each; and each knob's name
+    over it, the pack's own word, set condensed into the room its pitch leaves. */
+void Dashboard::paintStrips (juce::Graphics& g, float) const
+{
+    using namespace layout;
+    const auto& art = Art::of (skin);
+
+    for (const auto& t : strips.tones)
+        if (art.socket.isValid())
+        {
+            const float d = skin.plan.socketSize * strips.toneScale;
+            g.drawImage (art.socket, juce::Rectangle<float> (d, d).withCentre (t.knob.getCentre()));
+        }
+
+    if (! strips.keyFrame.isEmpty() && art.keyFrameCell.isValid())
+    {
+        const float s = strips.keyScale, y = strips.keyFrame.getY(), h = strips.keyFrame.getHeight();
+        float x = strips.keyFrame.getX();
+        const auto piece = [&g, &x, y, h] (const juce::Image& img, float w)
+        {
+            g.drawImage (img, juce::Rectangle<float> (x, y, w + 0.5f, h));     // a hair over: no seam between pieces
+            x += w;
+        };
+        piece (art.keyFrameLeft, skin.plan.keyCapLeft * s);
+        for (size_t i = (size_t) strips.firstRightKey; i < strips.keys.size(); ++i)
+            piece (art.keyFrameCell, skin.plan.keyStrip().pitch * s);
+        piece (art.keyFrameRight, skin.plan.keyCapRight * s);
+    }
+
+    const auto& ink = skin.ink;
+    for (const auto& t : strips.tones)
+    {
+        const auto at = t.label.getCentre();
+        const auto area = juce::Rectangle<float> (150.0f, 28.0f).withCentre (at);
+        const juce::Graphics::ScopedSaveState keep (g);
+        condenseInto (g, t.name, skin.plan.knobNameEm, 0.08f, t.label.getWidth(), at);
+        if (! skin.printShadow.isTransparent())
+            drawLabel (g, t.name, area.translated (0.0f, 1.5f), skin.plan.knobNameEm, skin.printShadow);
+        ink.label (g, t.name, area, skin.plan.knobNameEm, ink.words);
     }
 }
 
@@ -312,9 +366,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     };
 
     print (skin.driveName, { skin.plan.drive.centre.x, skin.plan.driveNameY }, 200.0f, ink.words);
-    const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
-    for (size_t i = 0; i < skin.plan.tones.size(); ++i)
-        print (toneNames[i], { skin.plan.tones[i].centre.x, skin.plan.knobNameY }, 150.0f, ink.words, 0.0f, skin.plan.knobNameEm);
+    // ...the tone knobs' names are the playing pack's, with their sockets (paintStrips).
 
     print ("TURBO", skin.plan.turboName, 140.0f, ink.state);
     if (skin.plan.learnKeySize > 0.0f)
@@ -340,6 +392,23 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     drawn in and the corners of the glass in it — the lever's slot, its notches and its PARK end, the gears'
     names, TURBO and its hatch, the wipers' keys; the renders of all of them, the still it ships, and the
     poster, that still through the glass. */
+/** THE RINGS GO WITH THE KNOBS: each tone knob's round it where the rows put it, the size the row gives
+    it; a ring whose knob the pack has not, hidden with it. DRIVE's is the first and never moves. */
+void RedPawEditor::stripsLaid (const face::Strips& laid)
+{
+    for (size_t t = 0; t + 1 < rings.size(); ++t)
+    {
+        auto& ring = *rings[t + 1];
+        const bool shown = t < laid.tones.size();
+        if (shown)
+        {
+            const auto& nominal = skin.plan.tones[0];
+            ring.place (laid.tones[t].knob.getCentre(), nominal.ring * laid.toneScale, nominal.ringWidth * laid.toneScale);
+        }
+        ring.setVisible (shown);
+    }
+}
+
 void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world)
 {
     using namespace layout;
@@ -348,7 +417,8 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         { "lever.png", &art.lever }, { "lever-glow.png", &art.leverGlow }, { "fader-cap-light.png", &art.faderCapLight },
         { "toggle-up.png", &art.toggleUp }, { "toggle-down.png", &art.toggleDown }, { "key-up.png", &art.keyUp },
         { "key-down.png", &art.keyDown }, { "turbo-up.png", &art.turboUp }, { "turbo-down.png", &art.turboDown },
-        { "turbo-lid.png", &art.turboLid }, { "emblem.png", &art.emblem } };
+        { "turbo-lid.png", &art.turboLid }, { "emblem.png", &art.emblem }, { "socket.png", &art.socket },
+        { "key-frame-left.png", &art.keyFrameLeft }, { "key-frame-cell.png", &art.keyFrameCell }, { "key-frame-right.png", &art.keyFrameRight } };
     for (const auto& [name, img] : own)
         writeSprite (dir, name, *img);
     if (const auto still = Art::still (skin); still.isValid())
@@ -450,10 +520,24 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     };
     auto* ring = new juce::DynamicObject();
     ring->setProperty ("drive", socket (skin.plan.drive));
-    juce::Array<juce::var> toneRings;
-    for (const auto& t : skin.plan.tones)
-        toneRings.add (socket (t));
-    ring->setProperty ("tones", toneRings);
+    ring->setProperty ("tone", socket (skin.plan.tones[0]));        // a tone knob's at the nominal size: each channel's "face" scales it (toneScale)
+
+    // THE ROWS' PIECES (each channel's "face" says where): the socket under a tone knob, `socketSize`
+    // across at the nominal size; the frame round the right group, its left cap, a cell for each key
+    // and its right cap, `frameHeight` tall — each as wide as said here, times the row's keyScale.
+    {
+        auto* pieces = new juce::DynamicObject();
+        pieces->setProperty ("socket", "socket.png");
+        pieces->setProperty ("socketSize", skin.plan.socketSize);
+        pieces->setProperty ("frameLeft", "key-frame-left.png");
+        pieces->setProperty ("frameCell", "key-frame-cell.png");
+        pieces->setProperty ("frameRight", "key-frame-right.png");
+        pieces->setProperty ("capLeft", skin.plan.keyCapLeft);
+        pieces->setProperty ("cell", skin.plan.keyStrip().pitch);
+        pieces->setProperty ("capRight", skin.plan.keyCapRight);
+        pieces->setProperty ("frameHeight", skin.plan.keyFrameHeight);
+        world.setProperty ("rows", juce::var (pieces));
+    }
     ring->setProperty ("from", KnobRing::from);
     ring->setProperty ("sweep", KnobRing::sweep);
     ring->setProperty ("light", colour (skin.ringLight));
@@ -782,13 +866,14 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // ...the six square keys, and TURBO, are the dashboard's own buttons, up or pressed — each with the
     // hand's orange rim round its face while the hand is over it, like everything else that moves; the
     // filters' names on their faces where the layout puts the names there.
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < face::numKeys; ++i)
         key (i).drawKey = [this, &k = key (i), i] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
         {
             const auto& img = down ? Art::of (skin).keyDown : Art::of (skin).keyUp;
             drawRender (g, img, box);
-            if (skin.plan.keyNamesOnKeys && i <= btLpf)
-                capWord (skin, g, switches[(size_t) i].shortName, fittedArea (img, box), down);
+            const bool lamp = skin.plan.lightKeys[0] == i || skin.plan.lightKeys[1] == i;
+            if (skin.plan.keyNamesOnKeys && ! lamp)
+                capWord (skin, g, i <= btLpf ? juce::String (switches[(size_t) i].shortName) : keyName (i), fittedArea (img, box), down);
             for (int lamp = 0; lamp < 2; ++lamp)
                 if (skin.plan.lightKeys[(size_t) lamp] == i)
                     drawLampSign (g, fittedArea (img, box), lamp == 0,
@@ -804,10 +889,11 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // THE RINGS ROUND THE KNOBS say where each stands.
     const auto ringFor = [this] (const ArtKnob& knob, const layout::Socket& s) { return std::make_unique<KnobRing> (skin, knob, s.centre, s.ring, s.ringWidth); };
     rings.push_back (ringFor (driveKnob(), skin.plan.drive));
-    for (int t = 0; t < 3; ++t)
-        rings.push_back (ringFor (toneKnob (t), skin.plan.tones[(size_t) t]));
+    for (int t = 0; t < Channels::maxTones; ++t)        // as many as there are knobs: where they stand, the rows say (stripsLaid)
+        rings.push_back (ringFor (toneKnob (t), skin.plan.tones[0]));
     for (auto& ring : rings)
         addToStage (*ring);
+    stripsLaid (strips);        // the console laid the rows before there were rings to put round them
 
     // THE WINDSCREEN, under the dashboard: the picture's alpha is its frame.
     stage.addAndMakeVisible (*view, 0);

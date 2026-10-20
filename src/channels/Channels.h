@@ -44,13 +44,18 @@ public:
         Everything else a channel keeps opens on its parameter's own default. */
     float defaultOf (int channel, const juce::String& paramId) const;
 
-    /** BASS, MIDDLE, TREBLE are the playing pack's own tone controls, found in it by their NAMES: a
-        pack lists its tones in an order of its own — the X88-IR's Bass, Middle, Treble; the V4
-        Copper's Tone, Treble, Middle, Bass and Bass cut — and the engine plays each list's controls
-        by their places in it (params::preampMeasured). A pack with no tone of that name has the knob
-        on that place instead. toneId is the parameter a knob turns on the channel that is playing. */
-    static constexpr int numTones = 3;
-    static constexpr std::array<const char*, numTones> toneNames {{ "Bass", "Middle", "Treble" }};
+    /** THE TONE KNOBS ARE THE PACK'S TONES, as many as it has and in its order: knob i is the i-th tone
+        of the pack's list (rig.json's `chain[].tone[]`), under that tone's name — the X88-IR's Bass,
+        Middle, Treble; the V4 Copper's Tone, Treble, Middle, Bass, Bass cut; the ReVolt's Clean Bass and
+        Treble, its Crunch Bass, Mid, Treble — and the engine plays each list's controls by their places
+        in it (params::preampMeasured), so knob i turns place i. No knob is matched to a tone by its name:
+        a face shows as many knobs as the playing pack has tones, each labelled with its tone's name
+        (face::Console lays them out). At most maxTones, the places the engine has; a pack's tones past
+        them have no knob. toneOf is empty for a knob past the pack's list, and for every knob of a
+        channel whose pack is not installed; toneId is the parameter a knob turns on the channel that
+        is playing. */
+    static constexpr int maxTones = params::preampNumMeasured;
+    juce::StringArray toneNamesOf (int channel) const;
     juce::String toneId (int knob) const { return toneOf (active(), knob); }
     juce::String toneOf (int channel, int knob) const;
 
@@ -247,8 +252,9 @@ private:
     juce::ValueTree ensureNode();
     void  store (juce::ValueTree record) const;
     void  recall (int channel, const juce::ValueTree& record);
-    std::array<float, numTones> knobs() const;          // where BASS, MIDDLE, TREBLE stand on the pack playing
-    void  turnKnobs (int channel, const std::array<float, numTones>&);  // ...stood so on `channel`'s pack, its other places where it opens them
+    using Knobs = std::array<std::optional<float>, maxTones>;
+    Knobs knobs() const;                                // where the tone knobs stand on the pack playing; none for a knob past its list
+    void  turnKnobs (int channel, const Knobs&);        // ...stood so on `channel`'s pack, its other places — and a knob that stood nowhere — where it opens them
     int   knobAt (int channel, const juce::String& paramId) const;      // which knob a place is on `channel`'s pack; -1 for none
     float plain (const juce::String& paramId) const;
     void  set (const juce::String& paramId, float plainValue);

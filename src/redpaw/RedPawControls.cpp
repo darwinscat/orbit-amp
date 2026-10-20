@@ -458,9 +458,17 @@ KnobRing::KnobRing (const Skin& s, const face::ArtKnob& k, juce::Point<float> ce
     setInterceptsMouseClicks (false, false);
     breath.stiffness = 40.0f;       // soft: a lamp warming, not a spring
     breath.damping   = 13.0f;
+    place (centre, r, w);
+    startTimerHz (30);
+}
+
+void KnobRing::place (juce::Point<float> centre, float r, float w)
+{
+    radius = r;
+    width = w;
     setBounds (juce::Rectangle<float> ((radius + width + 8.0f) * 2.0f, (radius + width + 8.0f) * 2.0f)
                    .withCentre (centre).getSmallestIntegerContainer());
-    startTimerHz (30);
+    repaint();
 }
 
 void KnobRing::timerCallback()

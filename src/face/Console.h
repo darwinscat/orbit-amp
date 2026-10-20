@@ -24,18 +24,18 @@ using channels::Engine;
 using channels::Channels;
 using channels::Presets;
 
-/** The six keys under the tone knobs: the two filters, then the pack's own layers. A face has room for a
-    short name under each; the full one shows on hover. */
+/** The keys under the tone knobs: the two filters, painted on every face — a face has room for a short
+    name under each, the full one shows on hover — and right of them a group of as many as the playing
+    pack has switches a hand may throw (Console::rightKeysOf), laid by code (Strip.h): at most
+    maxRightKeys, and as many as the face's row shows of them. */
 struct Switch { const char* name; const char* shortName; };
-enum { btHpf, btLpf, btFat, btBright, btDepth, btPresence };
-inline constexpr std::array<Switch, 6> switches {{
-    { "HIGHPASS", "HPF"    },
-    { "LOWPASS",  "LPF"    },
-    { "FAT",      "FAT"    },
-    { "BRIGHT",   "BRIGHT" },
-    { "DEPTH",    "DEPTH"  },
-    { "PRESENCE", "PRES"   },
+enum { btHpf, btLpf, btFirstRight };
+inline constexpr std::array<Switch, 2> switches {{
+    { "HIGHPASS", "HPF" },
+    { "LOWPASS",  "LPF" },
 }};
+inline constexpr int maxRightKeys = 6;
+inline constexpr int numKeys = btFirstRight + maxRightKeys;
 inline constexpr float keyTracking = 0.04f;
 
 /** The lilac the words printed on a face are written in. */
@@ -77,9 +77,23 @@ public:
     struct Places
     {
         juce::Rectangle<float> drive;                       // the knob's box
-        std::array<juce::Rectangle<float>, 3> tones;        // BASS, MIDDLE, TREBLE
-        std::array<juce::Point<float>, 6> keys;             // the six keys' centres
+        /** THE TONE KNOBS' ROW (Strip.h): as many knobs as the playing pack has tones, each `toneKnob`
+            across at the row's nominal size, the socket under it the row's `size`; each knob's name over
+            it, in the row at `toneNameY`, written `toneNameEm` and set condensed into the room its pitch
+            leaves (layStrips). */
+        Strip toneStrip;
+        float toneKnob = 0.0f;
+        float toneNameY = 0.0f, toneNameEm = 13.0f;
+        /** THE KEYS: the two filters' centres, painted where they are; and the right group's row (Strip.h)
+            — each key `keySize` across at the row's nominal size, in a frame with these caps at its ends
+            where the face draws one (a size of nought: none), its name over or under it (the first under,
+            then by turns where `keyNamesAlternate`), or on its face where `keyNamesOnKeys`. */
+        std::array<juce::Point<float>, 2> keys;             // HPF, LPF
         float keySize = 34.0f;
+        Strip keyStrip;
+        float keyCapLeft = 0.0f, keyCapRight = 0.0f, keyFrameHeight = 0.0f;
+        float keyNameOverY = 0.0f, keyNameUnderY = 0.0f, keyNameRoom = 120.0f;
+        bool keyNamesAlternate = false, keyNamesOnKeys = false;
         std::array<juce::Point<float>, 6> holes;            // the roof keys' centres
         float holeKeySize = 40.0f;
         std::array<juce::Rectangle<float>, 3> sliders;      // REVERB, DELAY, CAB
@@ -297,8 +311,8 @@ private:
     const Ink ink;
 
     ArtKnob drive;
-    std::array<std::unique_ptr<ArtKnob>, 3> tones;
-    std::array<std::unique_ptr<PushButton>, 6> buttons;      // the keys under the tone knobs
+    std::array<std::unique_ptr<ArtKnob>, Channels::maxTones> tones;
+    std::array<std::unique_ptr<PushButton>, numKeys> buttons;   // the keys under the tone knobs
     std::array<std::unique_ptr<PushButton>, 6> overhead;     // the keys in the roof's holes
 
 protected:
@@ -307,6 +321,7 @@ protected:
     PushButton& roofKey (int index) { return *overhead[(size_t) index]; }
     ArtKnob& driveKnob()            { return drive; }
     ArtKnob& toneKnob (int index)   { return *tones[(size_t) index]; }
+    const juce::String& keyName (int index) const { return keyNames[(size_t) index]; }
 
 private:
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
@@ -476,30 +491,47 @@ private:
     template <typename Control>
     std::unique_ptr<juce::ParameterAttachment> attach (Control&, const juce::String& paramId);
 
-    std::array<std::unique_ptr<juce::ParameterAttachment>, 3> toneBindings;
-    std::array<juce::String, 3> toneBound;
+    std::array<std::unique_ptr<juce::ParameterAttachment>, Channels::maxTones> toneBindings;
+    std::array<juce::String, Channels::maxTones> toneBound;
     void bindTones();
     void bindButton (PushButton&, const char* paramId);
 
-    /** THE KEYS THAT ARE THE PACK'S. Where the playing pack has switches a hand may throw (Channels::
-        switchesOf, all but the one its channel holds), the four keys right of the filters are those, in
-        the pack's order and under its names: a key to each position of a switch, the one it stands at
-        lit — the IR-X Ch1's BRIGHT 1 · CENTER · BRIGHT 2, the Ch2's TIGHT · FAT — and a switch whose
-        two positions are off and on one key, under the switch's own name. A switch that would not fit
-        whole is left off them; a key no switch has stands dim and says nothing. A pack with none leaves
-        the four keys the layers' (Channels::Flag), as they always were. */
-    struct PackKey
+    /** THE RIGHT GROUP'S KEYS on a channel: the switches of its pack a hand may throw (Channels::
+        switchesOf, all but the one the channel holds), in the pack's order and under its names — a key to
+        each position of a switch, the one it stands at lit (the IR-X Ch1's BRIGHT 1 · CENTER · BRIGHT 2,
+        the Ch2's TIGHT · FAT), and a switch whose two positions are off and on one key under the switch's
+        own name — and after them the keys the face has taken for itself (claimKey), under the names it
+        gave them. As many as there are, at most the keys the console has for them. */
+    struct RightKey
     {
-        int slot = -1;          // the selector it throws; -1 = no switch on this key
+        int button = -1;        // which of `buttons`
+        int slot = -1;          // the selector it throws; -1 = the face's own key
         int position = -1;      // lit while the switch stands here, and where a press puts it
         int off = -1;           // an off/on key: where it puts the switch when let up; -1 for a position's key
+        juce::String control;   // the switch's name in the pack
+        juce::String name;      // what is written by it
     };
-    std::array<PackKey, 4> packKeys;
-    bool packKeysUp = false;                    // the playing pack's switches are on the keys
-    std::array<juce::String, 6> keyNames;       // each key's name for the tag over it, as showKeys last said
-    std::array<bool, 6> claimed {};             // ...and the keys the face has taken for itself
+    std::vector<RightKey> rightKeysOf (int channel) const;
+    std::vector<RightKey> rightKeys;            // the playing channel's, as showKeys last laid them
+    std::array<juce::String, numKeys> keyNames; // each key's name for the tag over it, as showKeys last said
+    std::array<bool, numKeys> claimed {};       // ...and the keys the face has taken for itself
     void keyThrown (int key, bool on);
     void showKeys();                            // the keys as the playing channel has them; reads only
+
+protected:
+    /** THE PLAYING CHANNEL'S ROWS (Strip.h), laid by one rule from the face's places, the channel's pack's
+        tones and its right keys: what the controls stand on, what the picture paints and what the site
+        is told (exportForWeb), each read off this. `stripsFor` lays any channel's without touching the
+        face; `strips` is the playing one's, as layStrips last put the controls on it. */
+    Strips stripsFor (int channel) const;
+    Strips strips;
+    void layStrips();
+
+    /** The rows have been laid again — another channel, another count: what the face draws round its
+        knobs and keys follows them (the rovers' rings). */
+    virtual void stripsLaid (const Strips&) {}
+
+private:
 
     void showReverbMenu();
     void showDelayMenu();

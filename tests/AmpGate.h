@@ -108,7 +108,7 @@ inline const Product& product()
     {
         return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), true, gears, {},
                          "all the product's channels' packs are installed",
-                         "every channel's BASS, MIDDLE and TREBLE are its pack's own, found by name wherever its list has them",
+                         "every channel's tone knobs are its pack's tones, as many as it lists, knob i its tone i",
                          "...and every one on the build's DARK MATTER" };
     };
 
@@ -131,7 +131,7 @@ inline const Product& product()
               { 0.0f, 9.0,  "...and the bottom plays the one shot at nine, fed softer" },
           },
           "all four channels' packs are installed",
-          "every channel's BASS, MIDDLE and TREBLE are its pack's first three tones, found by name",
+          "every channel's tone knobs are its pack's three tones, knob i its tone i",
           "...and all four on the build's DARK MATTER" },
 
         // On Mars the Friedman IR-X's two channels, each a gear: Ch1 the CRUNCH and Ch2 the HI-GAIN, its

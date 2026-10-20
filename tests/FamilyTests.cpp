@@ -28,6 +28,8 @@
 #include "device/FactorySet.h"
 #include "device/FactoryShelf.h"
 #include "redpaw/RedPawSkin.h"
+#include "catpit/CatpitLayout.h"
+#include "face/Strip.h"
 
 #include <cstdio>
 #include <memory>
@@ -203,6 +205,81 @@ int main()
         prefs::setTunerFloor (products::redPawAmp(), -50);
         check (prefs::tunerFloor (products::catpitAmp()) == -80 && prefs::tunerFloor (products::redPawAmp()) == -50,
                "a switch thrown in the cockpit stays the cockpit's");
+    }
+
+    // THE ROWS (face/Strip.h): every face's tone knobs, and the rovers' keys right of the filters, laid by
+    // one rule — as many as the pack has, centred in the room the painted ones stood in, `pitch` apart,
+    // shrinking alike where they would not fit, never under the row's smallest, and past that the first
+    // so many shown. For one to six items in each: centred, apart, never overlapping, at the nominal
+    // size while they fit and shrunk only when they do not, and inside the room.
+    {
+        struct Row { juce::String name; face::Strip strip; float item; };     // `item`: what must not overlap, at the nominal size
+        std::vector<Row> rows { { "CatpitAmp tones", catpit::layout::toneStrip, catpit::layout::toneKnob } };
+        for (const auto* product : { &products::redPawAmp(), &products::frostPawAmp(), &products::amberPawAmp() })
+        {
+            const auto& plan = redpaw::skinOf (*product).plan;
+            rows.push_back ({ juce::String (product->name) + " tones", plan.toneStrip(), plan.tones[0].knob });
+            rows.push_back ({ juce::String (product->name) + " keys", plan.keyStrip(), plan.keySize });
+        }
+
+        for (const auto& row : rows)
+        {
+            const auto& st = row.strip;
+            bool ruled = true;
+            juce::String counts;
+            for (int n = 1; n <= 6; ++n)
+            {
+                const auto laid = face::lay (st, n);
+                const int shown = (int) laid.centres.size();
+                const float span = laid.scale * ((float) (shown - 1) * st.pitch + st.size);
+                const bool fitsNominal = (float) (n - 1) * st.pitch + st.size <= st.area.getWidth() + 1.0e-3f;
+                ruled = ruled && shown >= 1 && shown <= n
+                     && (fitsNominal ? laid.scale == 1.0f && shown == n
+                                     : laid.scale < 1.0f && laid.scale >= st.minScale - 1.0e-6f)
+                     && (shown == n || (laid.scale == st.minScale && shown == st.fitsAtMost()))
+                     && span <= st.area.getWidth() + 1.0e-3f
+                     && std::abs (0.5f * (laid.centres.front().x + laid.centres.back().x) - st.area.getCentreX()) < 1.0e-3f;
+                for (int i = 1; i < shown; ++i)
+                    ruled = ruled && laid.centres[(size_t) i].x - laid.centres[(size_t) i - 1].x >= row.item * laid.scale - 1.0e-3f
+                                  && std::abs (laid.centres[(size_t) i].y - st.area.getCentreY()) < 1.0e-3f;
+                counts << (n > 1 ? " " : "") << shown << "@" << juce::String (laid.scale, 2);
+            }
+            std::printf ("      %s, one to six: %s\n", row.name.toRawUTF8(), counts.toRawUTF8());
+            check (ruled, row.name + ": centred, apart, never overlapping, shrunk only past the nominal fit, to its smallest and no further");
+        }
+    }
+
+    // ...AND WHAT THE CHANNELS SHOW ON THEM: FrostPawAmp's Clean two tone knobs, BASS and TREBLE, its Crunch
+    // three, BASS, MID and TREBLE; and on RedPawAmp's IR-X the keys right of the filters are the switches the
+    // hand may throw, as they were — Ch1's three-way Bright a key each position, Ch2's Tight/Fat two —
+    // all shown, at the row's nominal size.
+    {
+        auto frost = std::make_unique<AmpProcessor> (products::frostPawAmp());
+        const auto& fc = channels::Engine::of (*frost).channels;
+        const auto& fplan = redpaw::skinOf (products::frostPawAmp()).plan;
+        const auto shownOf = [&fc, &fplan] (int c) { return (int) face::lay (fplan.toneStrip(), fc.toneNamesOf (c).size()).centres.size(); };
+        check (fc.toneNamesOf (0) == juce::StringArray { "Bass", "Treble" } && shownOf (0) == 2,
+               "FrostPawAmp's Clean shows two tone knobs, BASS and TREBLE");
+        check (fc.toneNamesOf (2) == juce::StringArray { "Bass", "Mid", "Treble" } && shownOf (2) == 3,
+               "...its Crunch three, BASS, MID and TREBLE");
+
+        auto red = std::make_unique<AmpProcessor> (products::redPawAmp());
+        const auto& rc = channels::Engine::of (*red).channels;
+        const auto& rplan = redpaw::skinOf (products::redPawAmp()).plan;
+        const auto keysOf = [&rc] (int c)
+        {
+            juce::StringArray keys;
+            for (const auto& sw : rc.switchesOf (c))
+                if (! sw.held)
+                    for (const auto& v : sw.values)
+                        keys.add (sw.name + ":" + v);
+            return keys;
+        };
+        const auto ch1 = keysOf (0), ch2 = keysOf (2);
+        std::printf ("      RedPawAmp's keys: Ch1 %s; Ch2 %s\n", ch1.joinIntoString (" ").toRawUTF8(), ch2.joinIntoString (" ").toRawUTF8());
+        const auto allShown = [&rplan] (int n) { const auto l = face::lay (rplan.keyStrip(), n); return (int) l.centres.size() == n && l.scale == 1.0f; };
+        check (ch1.size() == 3 && ch2.size() == 2 && allShown (3) && allShown (2),
+               "RedPawAmp's IR-X shows its switches' keys as it did: Ch1's Bright three, Ch2's Tight/Fat two, at the row's own size");
     }
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");
