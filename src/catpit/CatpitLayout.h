@@ -155,16 +155,25 @@ inline const juce::Rectangle<float> loadPlate { 1246.0f, 908.0f, 126.0f, 26.0f }
 /** Its mirror under the left grille, down-right of PRESET: what the amp is holding in memory. */
 inline const juce::Rectangle<float> memoryPlate { 316.0f, 908.0f, 140.0f, 26.0f };
 
-/** The emblem plate's inner face, a flat hexagon under the windshield whose bottom edge falls to a shallow
-    point in the middle — over the bolt the render left peeking from under the plate — and its six screws.
-    The render's own cat is painted over by a new face here, and the family's mark goes on it. */
-inline const std::array<juce::Point<float>, 7> emblemFace {{
+/** The emblem plate's SEAT: the render's plate face, a flat hexagon under the windshield whose bottom edge
+    falls to a shallow point in the middle — over the bolt the render left peeking from under the plate. It is
+    painted over (the render's own cat and screws gone), and the plate lies in it: */
+inline const std::array<juce::Point<float>, 7> emblemSeat {{
     { 773.0f, 235.0f }, { 900.0f, 235.0f }, { 930.0f, 264.0f }, { 900.0f, 350.0f }, { 837.0f, 356.0f },
     { 774.0f, 350.0f }, { 742.0f, 264.0f },
 }};
-inline const std::array<juce::Point<float>, 6> emblemScrews {{
-    { 776.0f, 241.0f }, { 895.0f, 241.0f }, { 746.0f, 267.0f }, { 924.0f, 267.0f }, { 781.0f, 346.0f }, { 890.0f, 346.0f },
+
+/** ...THE PLATE, the seat's shape at 0.96 of it about its nose, so that the nose still covers the bolt and
+    the frame's lit edge over the seat shows a little at the top, as the rovers' steps show round theirs; its
+    six screws and the family's mark scaled with it, the mark the same share of the plate. */
+inline const std::array<juce::Point<float>, 7> emblemFace {{
+    { 775.56f, 239.84f }, { 897.48f, 239.84f }, { 926.28f, 267.68f }, { 897.48f, 350.24f }, { 837.00f, 356.00f },
+    { 776.52f, 350.24f }, { 745.80f, 267.68f },
 }};
-inline const juce::Rectangle<float> emblemMark { 785.0f, 242.0f, 102.0f, 100.0f };
+inline const std::array<juce::Point<float>, 6> emblemScrews {{
+    { 778.44f, 245.60f }, { 892.68f, 245.60f }, { 749.64f, 270.56f }, { 920.52f, 270.56f }, { 783.24f, 346.40f }, { 887.88f, 346.40f },
+}};
+inline constexpr float emblemScrew = 7.68f;      // their heads, across: 8 at the seat's size
+inline const juce::Rectangle<float> emblemMark { 787.08f, 246.56f, 97.92f, 96.00f };
 
 } // namespace orbitamp::catpit::layout

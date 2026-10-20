@@ -329,12 +329,23 @@ void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
     // a fine bevel — so the render's own cat is gone and the plate still reads as the same piece of hull —
     // its six screws, and the cat engraved light in it: a pale floor on the dark plate, the shadow deeper,
     // the lip brighter, so the mark reads from across the room.
-    juce::Path face;
-    face.startNewSubPath (emblemFace[0]);
-    for (size_t i = 1; i < emblemFace.size(); ++i)
-        face.lineTo (emblemFace[i]);
-    face.closeSubPath();
-    paintBadge (g, face, { emblemScrews.begin(), emblemScrews.end() }, 8.0f, emblemMark, scale);
+    const auto outline = [] (const auto& corners)
+    {
+        juce::Path p;
+        p.startNewSubPath (corners[0]);
+        for (size_t i = 1; i < corners.size(); ++i)
+            p.lineTo (corners[i]);
+        p.closeSubPath();
+        return p;
+    };
+
+    // The seat first, the recess the plate lies in, dark as the hull's shadows round it; then the plate in it.
+    const auto seat = outline (emblemSeat);
+    const auto box = seat.getBounds();
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff1a1720), box.getCentreX(), box.getY(),
+                                             juce::Colour (0xff0d0b10), box.getCentreX(), box.getBottom(), false));
+    g.fillPath (seat);
+    paintBadge (g, outline (emblemFace), { emblemScrews.begin(), emblemScrews.end() }, emblemScrew, emblemMark, scale);
 }
 
 void Cockpit::paintStatic (juce::Graphics& g, float scale) const
