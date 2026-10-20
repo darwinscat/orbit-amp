@@ -133,8 +133,8 @@ int main()
     Block preamp (orbitamp::device::DeviceLibrary::Slot::preamp);
     boost.prepare (sampleRate, blockSize, 1);
     preamp.prepare (sampleRate, blockSize, 1);
-    boost.rescan (0);
-    preamp.rescan (0);
+    boost.rescan ("OrbitAmp", 0);
+    preamp.rescan ("OrbitAmp", 0);
 
     if (boost.packs.isEmpty() && preamp.packs.isEmpty())
     {

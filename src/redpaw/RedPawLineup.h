@@ -18,10 +18,9 @@ namespace orbitamp::redpaw
     is what makes it the rover's.
 
     WHICH CHANNELS, AND SO HOW MANY GEARS, IS THE PRODUCT'S: each rover says its own in a file of its
-    own — RedPawAmp's listed in redpaw/RedPawSkin.cpp; FrostPawAmp's and AmberPawAmp's the V4's, listed
-    once here (v4Lineup) — and whatever counts gears counts its pairs: the lever's notches, the keys, the
-    programs, the nav screen's names, the window. */
-const channels::Lineup& lineup();
+    own, in its skin (RedPawSkin.h) — RedPawAmp's listed in redpaw/RedPawSkin.cpp; FrostPawAmp's and
+    AmberPawAmp's the V4's, listed once here (v4Lineup) — and whatever counts gears counts its pairs: the
+    lever's notches, the keys, the programs, the nav screen's names, the window. */
 
 /** A rover's lineup over the channels it plays: the names its memory is kept under, its CHANNEL, INPUT's
     zero, the cabinet a channel opens on and PARK, are every rover's. */
@@ -38,9 +37,10 @@ channels::Lineup v4Lineup();
 /** As many gears as the product has pairs of channels — at most as many as the lever's slot has
     notches. */
 inline constexpr int maxGears = 3;
-int numGears() noexcept;
+int numGears (const channels::Lineup&) noexcept;
 
-/** A channel's gear, 0..numGears() - 1, and whether it is TURBO's. */
+
+/** A channel's gear, 0..numGears (lineup) - 1, and whether it is TURBO's. */
 inline constexpr int  gearOf (int channel) noexcept  { return channel / 2; }
 inline constexpr bool turboOf (int channel) noexcept { return channel % 2 == 1; }
 

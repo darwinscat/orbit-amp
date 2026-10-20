@@ -169,7 +169,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
 
         const double fs = juce::jmax (8000.0, amp.currentSampleRate());
 
-        const bool spectraOn = prefs::spectraShown();   // the gear's one switch for every analyser
+        const bool spectraOn = prefs::spectraShown (amp.product());   // the gear's one switch for every analyser
 
         const auto draw = [&] (felitronics::analysis::SpectrumPane& pane, juce::Colour tint,
                                float fillTop, float fillBottom, float line)

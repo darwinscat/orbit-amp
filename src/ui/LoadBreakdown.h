@@ -94,7 +94,7 @@ struct LoadBreakdown final : public juce::Component,
     juce::String report() const
     {
         juce::String t;
-        t << product::name << " DSP report  |  " << juce::String (amp.currentSampleRate() / 1000.0, 1)
+        t << amp.product().name << " DSP report  |  " << juce::String (amp.currentSampleRate() / 1000.0, 1)
           << " kHz  |  block " << amp.getBlockSize()
           << "  |  " << params::stereoModes[juce::jlimit (0, params::stereoModes.size() - 1,
                                                           juce::roundToInt (amp.apvts.getRawParameterValue (params::stereoMode)->load()))].toUpperCase()

@@ -377,19 +377,19 @@ int main()
         into.createDirectory();
         const auto src = work.getChildFile ("dev-src");
 
-        report ("a model imports",                   DeviceLibrary::importDevice (src.getChildFile ("clean.nam"), into)
+        report ("a model imports",                   DeviceLibrary::importDevice ("OrbitAmp", src.getChildFile ("clean.nam"), into)
                                                        == into.getChildFile ("clean.nam"));
-        report ("its double lands as ' 2'",          DeviceLibrary::importDevice (src.getChildFile ("clean.nam"), into)
+        report ("its double lands as ' 2'",          DeviceLibrary::importDevice ("OrbitAmp", src.getChildFile ("clean.nam"), into)
                                                        == into.getChildFile ("clean 2.nam"));
 
-        DeviceLibrary::importDevice (src.getChildFile ("amp.orbitrig.zip"), into);
-        const auto second = DeviceLibrary::importDevice (src.getChildFile ("amp.orbitrig.zip"), into);
+        DeviceLibrary::importDevice ("OrbitAmp", src.getChildFile ("amp.orbitrig.zip"), into);
+        const auto second = DeviceLibrary::importDevice ("OrbitAmp", src.getChildFile ("amp.orbitrig.zip"), into);
         report ("a doubled pack zip stays a pack",   second.getFileName() == "amp 2.orbitrig.zip"
                                                        && second.getFileName().endsWithIgnoreCase (".orbitrig.zip"));
 
-        report ("a pack folder imports whole",       DeviceLibrary::importDevice (src.getChildFile ("MyAmp.orbitrig"), into)
+        report ("a pack folder imports whole",       DeviceLibrary::importDevice ("OrbitAmp", src.getChildFile ("MyAmp.orbitrig"), into)
                                                        .getChildFile ("rig.json").existsAsFile());
-        report ("a non-device is refused",           DeviceLibrary::importDevice (src.getChildFile ("random.zip"), into)
+        report ("a non-device is refused",           DeviceLibrary::importDevice ("OrbitAmp", src.getChildFile ("random.zip"), into)
                                                        == juce::File());
     }
 
@@ -413,23 +413,23 @@ int main()
         // The Trash is the player's machine's; here a retired copy is simply deleted.
         const auto retire = [] (const juce::File& f) { return f.deleteRecursively(); };
 
-        const auto first = DeviceLibrary::importDevice (pack (src, "TS", "ts-mini-86a1"), into, factory, retire);
+        const auto first = DeviceLibrary::importDevice ("OrbitAmp", pack (src, "TS", "ts-mini-86a1"), into, factory, retire);
         report ("a pack's rig_id is read",               DeviceLibrary::rigIdOf (first) == "ts-mini-86a1");
 
-        const auto again = DeviceLibrary::importDevice (pack (src.getChildFile ("v2"), "TS", "ts-mini-86a1"),
+        const auto again = DeviceLibrary::importDevice ("OrbitAmp", pack (src.getChildFile ("v2"), "TS", "ts-mini-86a1"),
                                                         into, factory, retire);
         report ("the same capture again: one install",   again == into.getChildFile ("TS.orbitrig")
                                                            && ! into.getChildFile ("TS 2.orbitrig").exists());
 
-        const auto renamed = DeviceLibrary::importDevice (pack (src, "Tube Screamer Mini", "ts-mini-86a1"),
+        const auto renamed = DeviceLibrary::importDevice ("OrbitAmp", pack (src, "Tube Screamer Mini", "ts-mini-86a1"),
                                                           into, factory, retire);
         report ("...under another name: still one",      renamed == into.getChildFile ("Tube Screamer Mini.orbitrig")
                                                            && ! into.getChildFile ("TS.orbitrig").exists());
 
         report ("re-importing the installed file is no-op",
-                DeviceLibrary::importDevice (renamed, into, factory, retire) == renamed && renamed.isDirectory());
+                DeviceLibrary::importDevice ("OrbitAmp", renamed, into, factory, retire) == renamed && renamed.isDirectory());
 
-        const auto other = DeviceLibrary::importDevice (pack (src.getChildFile ("ch2"), "Tube Screamer Mini", "ts-mini-ch2-1111"),
+        const auto other = DeviceLibrary::importDevice ("OrbitAmp", pack (src.getChildFile ("ch2"), "Tube Screamer Mini", "ts-mini-ch2-1111"),
                                                         into, factory, retire);
         report ("another capture with the same name: both", other == into.getChildFile ("Tube Screamer Mini 2.orbitrig")
                                                            && renamed.isDirectory());
@@ -437,9 +437,9 @@ int main()
         // What the build ships is what this product's list in the factory names (device/FactorySet.h).
         pack (factory, "RAT", "rat-2-3ab8");
         factory.getChildFile ("sets").createDirectory();
-        factory.getChildFile ("sets").getChildFile (juce::String (orbitamp::product::name) + ".txt").replaceWithText ("RAT.orbitrig\n");
+        factory.getChildFile ("sets").getChildFile (juce::String ("OrbitAmp") + ".txt").replaceWithText ("RAT.orbitrig\n");
         juce::String refused;
-        report ("a capture the build ships is refused",  DeviceLibrary::importDevice (pack (src, "Rodent", "rat-2-3ab8"),
+        report ("a capture the build ships is refused",  DeviceLibrary::importDevice ("OrbitAmp", pack (src, "Rodent", "rat-2-3ab8"),
                                                                                      into, factory, retire, &refused) == juce::File()
                                                            && ! into.getChildFile ("Rodent.orbitrig").exists());
         report ("...and says which pack it already is",  refused == "RAT", refused);
@@ -448,7 +448,7 @@ int main()
         // capture this one plays: it is the player's to install.
         pack (factory, "Big Muff", "big-muff-77c1");
         refused.clear();
-        report ("a capture only another product ships imports", DeviceLibrary::importDevice (pack (src, "Muff", "big-muff-77c1"),
+        report ("a capture only another product ships imports", DeviceLibrary::importDevice ("OrbitAmp", pack (src, "Muff", "big-muff-77c1"),
                                                                                             into, factory, retire, &refused) != juce::File()
                                                                   && into.getChildFile ("Muff.orbitrig").exists() && refused.isEmpty(),
                 refused);
@@ -583,7 +583,7 @@ int main()
         lay (own.getChildFile ("OLD/boosters"), "V4 Sheriff Ch1", "TS Test", "pedal", "ts-test");
         own.getChildFile ("OLD/empty").createDirectory();
 
-        const auto mine = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, none, own);
+        const auto mine = DeviceLibrary::scan ("OrbitAmp", DeviceLibrary::ampSlot, true, none, own);
         const auto ownShelf = DeviceLibrary::shelfOf (mine);
         const auto* old = ownShelf.folders.size() == 1 ? &ownShelf.folders.front() : nullptr;
 
@@ -663,8 +663,8 @@ int main()
         DeviceLibrary::Pack stranger;
         stranger.location = work.getChildFile ("devices/clean.nam");   // exists, but not in the library dir
 
-        report ("removing a bundled device refused", ! DeviceLibrary::removeDevice (bundled));
-        report ("removing outside the library refused", ! DeviceLibrary::removeDevice (stranger));
+        report ("removing a bundled device refused", ! DeviceLibrary::removeDevice ("OrbitAmp", bundled));
+        report ("removing outside the library refused", ! DeviceLibrary::removeDevice ("OrbitAmp", stranger));
     }
 
     work.deleteRecursively();

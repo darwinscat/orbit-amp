@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include "RedPawLayout.h"
+#include "RedPawLineup.h"
+#include "../Product.h"
 #include "../face/Controls.h"
 #include "../face/Monitor.h"
 #include "../face/Renders.h"
@@ -21,12 +24,22 @@ namespace orbitamp::redpaw
     (RedPawEditor.h) — each over a picture of its own, with its own renders, its own light, its own world
     out of the window, and its own channels and so its own number of gears (RedPawLineup.h).
 
-    What is a product's own is said in a file of its own — redpaw/RedPawSkin.cpp, frostpaw/FrostPawSkin.cpp
-    — with its channels and where its picture puts each thing (RedPawLayout.h), and a target compiles
-    exactly one, as it compiles exactly one makeEditor. How its picture was corrected to stand that way is
+    What is a product's own is said in a file of its own — redpaw/RedPawSkin.cpp, frostpaw/FrostPawSkin.cpp,
+    amberpaw/AmberPawSkin.cpp — with its channels and where its picture puts each thing (RedPawLayout.h),
+    and the product it makes (Product.h, rover) wears it: the face reads the skin of the processor it is
+    the face of, so every rover links into one binary. How its picture was corrected to stand that way is
     the bake's (tools/bake-art), done once. */
 struct Skin
 {
+    /** The product that wears it, by its name: its renders lie in its folder of the factory, Faces/<product>. */
+    const char* product;
+
+    /** ITS CHANNELS (RedPawLineup.h), and so its gears. */
+    const channels::Lineup& lineup;
+
+    /** ITS PICTURE, MEASURED (RedPawLayout.h): where everything sits on its dashboard. */
+    const layout::Plan& plan;
+
     /** The environment variable that names a folder to try new renders from (face/Renders.h). Its own
         renders lie in its folder of the factory, Faces/<product>, every one under the rover's file name
         (RedPawArt.h). */
@@ -71,7 +84,19 @@ struct Skin
     bool parkSignOnTopLine = true;      // parked, the warning on the top line too, beside the large one
 };
 
-/** The product's own. */
-const Skin& skin();
+/** The skin a rover's processor wears (Product::skin). */
+inline const Skin& skinOf (const Product& p)
+{
+    jassert (p.skin != nullptr);
+    return *p.skin;
+}
+
+/** A ROVER, as a product: its name and its skin, and what every rover is beside them — the dashboard
+    (RedPawEditor.h), the engine over the skin's channels (channels/Engine.h), and the first start. */
+Product rover (const Skin&);
+
+/** The rovers' face — or, with its pictures missing, the notice that says where they belong. */
+juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
+
 
 } // namespace orbitamp::redpaw

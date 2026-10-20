@@ -12,19 +12,25 @@ namespace orbitamp::redpaw
 namespace
 {
     /** A render of the product's own, by the rover's file name (RedPawSkin.h). */
-    juce::Image load (const char* name) { return face::renders::load (name, skin().rendersFolderVariable); }
+    juce::Image load (const Skin& skin, const char* name)
+    {
+        return face::renders::load (skin.product, name, skin.rendersFolderVariable);
+    }
 
     /** A render only some rovers carry: none is no image, not a typo. */
-    juce::Image loadOwn (const juce::String& name)
+    juce::Image loadOwn (const Skin& skin, const juce::String& name)
     {
-        return face::renders::has (name.toRawUTF8(), skin().rendersFolderVariable) ? load (name.toRawUTF8()) : juce::Image();
+        return face::renders::has (skin.product, name.toRawUTF8(), skin.rendersFolderVariable) ? load (skin, name.toRawUTF8()) : juce::Image();
     }
 }
 
-const Art& Art::get()
+const Art& Art::of (const Skin& skin)
 {
-    static const Art art = []
+    static PerProduct<const Art> each;
+    return each.of (skin.product, [&skin]
     {
+        const auto load    = [&skin] (const char* name) { return redpaw::load (skin, name); };
+        const auto loadOwn = [&skin] (const juce::String& name) { return redpaw::loadOwn (skin, name); };
         Art a;
         a.bg         = load ("dashboard.webp");
         for (size_t i = 0; i < a.lampLit.size(); ++i)
@@ -45,18 +51,17 @@ const Art& Art::get()
         a.turboLid   = loadOwn ("turbo-lid.webp");
         a.emblem     = loadOwn ("emblem.webp");
         return a;
-    }();
-    return art;
+    });
 }
 
-juce::Image Art::still()
+juce::Image Art::still (const Skin& skin)
 {
-    return loadOwn ("still.jpg");
+    return loadOwn (skin, "still.jpg");
 }
 
-juce::String Art::mark()
+juce::String Art::mark (const Skin& skin)
 {
-    return face::renders::text ("mark.svg", skin().rendersFolderVariable);
+    return face::renders::text (skin.product, "mark.svg", skin.rendersFolderVariable);
 }
 
 } // namespace orbitamp::redpaw

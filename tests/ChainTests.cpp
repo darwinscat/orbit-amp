@@ -23,7 +23,18 @@
 
 // OrbitAmp's first start (OrbitAmpStart.cpp) is NOT made from here: it would gather IRs in the machine's
 // real folders.
-void orbitamp::firstStart() {}
+// OrbitAmp as this gate plays it: its own product with no first start, so the gate never reaches the
+// machine's real folders (Product::firstStart).
+static const orbitamp::Product& gateAmp()
+{
+    static const orbitamp::Product quiet = []
+    {
+        auto p = orbitamp::products::orbitAmp();
+        p.firstStart = nullptr;
+        return p;
+    }();
+    return quiet;
+}
 
 #include <felitronics/core/StreamResampler.h>
 
@@ -268,7 +279,7 @@ int main()
     std::printf ("  sizeof(AmpProcessor) = %.2f MB\n",
                  (double) sizeof (orbitamp::AmpProcessor) / (1024.0 * 1024.0));
 
-    const auto ampOwned = std::make_unique<orbitamp::AmpProcessor>();
+    const auto ampOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
     auto& amp = *ampOwned;
     std::printf ("  processor constructed\n");
 
@@ -1131,7 +1142,7 @@ int main()
         };
         const auto nameOfBytes = [&nameOfFile] (const char* data)
         {
-            for (const auto& ir : orbitamp::device::shelf::irs())
+            for (const auto& ir : orbitamp::device::shelf::irs (gateAmp().name))
                 if (data != nullptr && ir.data == data)
                     return nameOfFile (ir.file);
             return juce::String();
@@ -1139,7 +1150,7 @@ int main()
 
         juce::StringArray wrong;
         for (int i = 0; i < names; ++i)
-            if (nameOfBytes (orbitamp::AmpProcessor::cabIrBytes (i).data) != orbitamp::params::cabIrNames[i])
+            if (nameOfBytes (orbitamp::AmpProcessor::cabIrBytes (gateAmp(), i).data) != orbitamp::params::cabIrNames[i])
                 wrong.add (orbitamp::params::cabIrNames[i]);
 
         report ("...and every one plays the file it is named after", wrong.isEmpty(), wrong.joinIntoString (", "));
@@ -1149,14 +1160,14 @@ int main()
         juce::StringArray split;
         for (const auto& shelf : orbitamp::params::cabShelves)
             for (int i = shelf.first; i < shelf.first + shelf.count; ++i)
-                if (juce::String (orbitamp::AmpProcessor::cabIrBytes (i).folder) != orbitamp::AmpProcessor::cabIrBytes (shelf.first).folder)
+                if (juce::String (orbitamp::AmpProcessor::cabIrBytes (gateAmp(), i).folder) != orbitamp::AmpProcessor::cabIrBytes (gateAmp(), shelf.first).folder)
                     split.addIfNotAlreadyThere (juce::String::fromUTF8 (shelf.about).upToFirstOccurrenceOf (" \xc2\xb7", false, false));
         report ("...every cabinet's IRs lie in one folder of the shelf", split.isEmpty(), split.joinIntoString (", "));
         report ("...and DARK MATTER in Darwin's Cat's own, the Orange's",
-                juce::String (orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault).folder) == "Orange PPC212V");
+                juce::String (orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault).folder) == "Orange PPC212V");
 
         // The default is a NUMBER, and a number names a cabinet only while the list stands still.
-        const auto fresh = std::make_unique<orbitamp::AmpProcessor>();
+        const auto fresh = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         const auto opens = fresh->cabChoice();
         report ("...and a fresh instance opens on DARK MATTER",
                 ! opens.isUser() && orbitamp::params::cabIrNames[opens.factory] == "DARK MATTER",
@@ -1211,7 +1222,7 @@ int main()
         const auto notAudio = work.getChildFile ("readme.wav");
         notAudio.replaceWithText ("not an impulse");
 
-        const auto a = std::make_unique<orbitamp::AmpProcessor>();
+        const auto a = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         a->inlineLoads = true;
         a->prepareToPlay (sampleRate, blockSize);
 
@@ -1235,7 +1246,7 @@ int main()
         a->getStateInformation (session);
         wavFile.deleteFile();
 
-        const auto b = std::make_unique<orbitamp::AmpProcessor>();
+        const auto b = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         b->inlineLoads = true;
         b->prepareToPlay (sampleRate, blockSize);
         b->setStateInformation (session.getData(), (int) session.getSize());
@@ -1287,7 +1298,7 @@ int main()
         // `cab_ir` lets the player's IR go; a session restored with the player's IR and a different
         // number underneath keeps playing the player's IR.
         {
-            const auto h = std::make_unique<orbitamp::AmpProcessor>();
+            const auto h = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             h->inlineLoads = true;
             h->prepareToPlay (sampleRate, blockSize);
             h->pumpDeviceWork();
@@ -1316,7 +1327,7 @@ int main()
             h->pumpDeviceWork();
             report ("a host moving cab_ir lets the player's IR go", ! h->cabChoice().isUser() && h->cabChoice().factory == 4);
 
-            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            const auto r = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             r->inlineLoads = true;
             r->prepareToPlay (sampleRate, blockSize);
             set (*r, orbitamp::params::cabIr, 2.0f);
@@ -1348,7 +1359,7 @@ int main()
             }
         } head;
 
-        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        const auto d = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         d->prepareToPlay (sampleRate, blockSize);
         d->setPlayHead (&head);
 
@@ -1407,7 +1418,7 @@ int main()
     // twenty-eight samples short and stayed there, every repeat that much early. Eight seconds of
     // blocks is fifty of the motor's time constants — long past any glide that is going to land.
     {
-        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        const auto d = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         d->prepareToPlay (sampleRate, blockSize);
         set (*d, orbitamp::params::delaySync, 0.0f);
 
@@ -1531,7 +1542,7 @@ int main()
         constexpr float hairMs = 4.47034836e-07f;
         const float knobZero = []
         {
-            const auto p = std::make_unique<orbitamp::AmpProcessor>();
+            const auto p = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             return p->apvts.getRawParameterValue (orbitamp::params::delayOffset)->load();
         }();
 
@@ -1550,7 +1561,7 @@ int main()
     {
         orbitamp::core::CabinetIr cabinet;
         cabinet.prepare (sampleRate, blockSize, 2);
-        const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+        const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault);
         cabinet.load (shelf.data, (size_t) shelf.size);
 
         juce::AudioBuffer<float> buf (2, blockSize);
@@ -1590,7 +1601,7 @@ int main()
 
     // THE CABINET'S CONVOLVER — felitronics-core's CabConvolver — kept as the cabinet it replaced.
     {
-        const auto& shelfIr = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+        const auto& shelfIr = orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault);
         constexpr int bs = 512;
 
         // Blocks of a signal through a cabinet; `on` false is the chain's out-of-the-path call.
@@ -1822,7 +1833,7 @@ int main()
     {
         const auto level = [&] (bool cut)
         {
-            const auto p = std::make_unique<orbitamp::AmpProcessor>();
+            const auto p = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             p->inlineLoads = true;
             set (*p, orbitamp::params::stereoMode, 0.0f);
             set (*p, orbitamp::params::cabOn, 1.0f);
@@ -1966,7 +1977,7 @@ int main()
 
         const auto chainRun = [&] (bool poisoned, int& badLate)
         {
-            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            const auto c = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             c->prepareToPlay (sampleRate, blockSize);
 
             set (*c, orbitamp::params::stereoMode, 0.0f);
@@ -2061,7 +2072,7 @@ int main()
     {
         const auto chained = [&] (bool oneBigBlock)
         {
-            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            const auto c = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             c->prepareToPlay (sampleRate, blockSize);
             set (*c, orbitamp::params::stereoMode, 0.0f);
             for (const auto* id : { orbitamp::params::delayOn, orbitamp::params::reverbOn, orbitamp::params::cabOn })
@@ -2131,7 +2142,7 @@ int main()
     {
         const auto tailWith = [&] (bool poisonDecay)
         {
-            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            const auto c = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             c->prepareToPlay (sampleRate, blockSize);
             set (*c, orbitamp::params::stereoMode, 0.0f);
             set (*c, orbitamp::params::reverbOn, 1.0f);
@@ -2185,7 +2196,7 @@ int main()
     // under the tolerance through BIG BUBBA, and over it through a cabinet 3.7 dB louder at 220 Hz.
     // Without them the two runs are the same number.
     {
-        const auto m = std::make_unique<orbitamp::AmpProcessor>();
+        const auto m = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         m->prepareToPlay (sampleRate, blockSize);
         set (*m, orbitamp::params::stereoMode, 0.0f);
         set (*m, orbitamp::params::preampPresent, 0.0f);
@@ -2266,14 +2277,14 @@ int main()
             }
         };
 
-        const auto c = std::make_unique<orbitamp::AmpProcessor>();
+        const auto c = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         set (*c, orbitamp::params::reverbMix, 37.0f);
         ticks (*c, 12);
 
         juce::MemoryBlock fromWorker;
         onWorker ([&] { c->getStateInformation (fromWorker); });
 
-        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        const auto d = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         d->setStateInformation (fromWorker.getData(), (int) fromWorker.getSize());
         report ("a worker's save carries what the pump wrote down", std::abs (readMix (*d) - 37.0f) < 0.01f,
                 "mix " + juce::String (readMix (*d), 2));
@@ -2289,7 +2300,7 @@ int main()
             ticks (*c, 12);
             onWorker ([&] { c->getStateInformation (after); });
 
-            const auto e = std::make_unique<orbitamp::AmpProcessor>();
+            const auto e = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             e->setStateInformation (after.getData(), (int) after.getSize());
             e->history.switchTo (2);
             report ("...a copy into a register reaches it",  std::abs (readMix (*e) - 11.0f) < 0.01f,
@@ -2299,7 +2310,7 @@ int main()
         // Restored from a worker — queued for a message thread that is busy — while the pump keeps
         // ticking over a live state that has just changed: the save must still be what came in.
         {
-            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            const auto r = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             set (*r, orbitamp::params::reverbMix, 90.0f);   // the live state the restore replaces, dirty
             onWorker ([&] { r->setStateInformation (fromWorker.getData(), (int) fromWorker.getSize()); });
             ticks (*r, 30);
@@ -2323,7 +2334,7 @@ int main()
             juce::MemoryBlock back;
             onWorker ([&] { c->getStateInformation (back); });
 
-            const auto f = std::make_unique<orbitamp::AmpProcessor>();
+            const auto f = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             f->setStateInformation (back.getData(), (int) back.getSize());
             report ("...an unloadable blob never becomes the saved session", std::abs (readMix (*f) - 37.0f) < 0.01f,
                     "mix " + juce::String (readMix (*f), 2));
@@ -2333,7 +2344,7 @@ int main()
             ticks (*c, 12);
             juce::MemoryBlock later;
             onWorker ([&] { c->getStateInformation (later); });
-            const auto g = std::make_unique<orbitamp::AmpProcessor>();
+            const auto g = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             g->setStateInformation (later.getData(), (int) later.getSize());
             report ("...nor freezes it",                    std::abs (readMix (*g) - 64.0f) < 0.01f,
                     "mix " + juce::String (readMix (*g), 2));
@@ -2365,7 +2376,7 @@ int main()
             w.signalThreadShouldExit();
             w.waitForThreadToExit (5000);
 
-            const auto f = std::make_unique<orbitamp::AmpProcessor>();
+            const auto f = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             f->setStateInformation (last.getData(), (int) last.getSize());
             const float mix = readMix (*f);
             report ("...and saving flat out beside a changing state never tears",
@@ -2384,13 +2395,13 @@ int main()
         namespace P = orbitamp::params;
         using Library = orbitamp::device::DeviceLibrary;
 
-        const auto m = std::make_unique<orbitamp::AmpProcessor>();
+        const auto m = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         m->inlineLoads = true;
         m->prepareToPlay (sampleRate, blockSize);
 
         // The packs as the build lays them out, in its factory folder, under OrbitAmp's own list.
         const auto nowhere = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("orbitamp-no-devices");
-        const auto library = Library::scan (Library::ampSlot, true, Library::factoryDirectory(), nowhere);
+        const auto library = Library::scan (gateAmp().name, Library::ampSlot, true, Library::factoryDirectory(), nowhere);
 
         const auto indexOf = [&library] (const juce::String& name)
         {
@@ -2475,7 +2486,7 @@ int main()
             juce::MemoryBlock saved;
             m->getStateInformation (saved);
 
-            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            const auto r = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             r->inlineLoads = true;
             r->prepareToPlay (sampleRate, blockSize);
             r->preamp.packs = library;
@@ -2705,7 +2716,7 @@ int main()
 
             // The heap, for the reason the one in main() is there: a megabyte and a half does not
             // fit a Windows stack, and this one is nested deeper still.
-            const auto soloOwned = std::make_unique<orbitamp::AmpProcessor>();
+            const auto soloOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             auto& solo = *soloOwned;
             solo.inlineLoads = true;
             solo.prepareToPlay (sampleRate, blockSize);
@@ -3141,7 +3152,7 @@ int main()
         //     prepares at that rate has to be longer than it — whatever the kernel decides that
         //     number is next.
         {
-            const auto hiOwned = std::make_unique<orbitamp::AmpProcessor>();
+            const auto hiOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             auto& hi = *hiOwned;
             hi.inlineLoads = true;
             hi.prepareToPlay (96000.0, blockSize);
@@ -3413,7 +3424,7 @@ int main()
             {
                 constexpr int tiny = 64;                    // below the 96 a 48 kHz pack asks for
 
-                const auto smallOwned = std::make_unique<orbitamp::AmpProcessor>();
+                const auto smallOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
                 auto& sm = *smallOwned;
                 sm.inlineLoads = true;
                 sm.prepareToPlay (96000.0, tiny);
@@ -3452,7 +3463,7 @@ int main()
             //    on the ordinary path where a player picks a device with the block still switched
             //    off. Fed instead, it has the signal that just went past and there is no hole.
             {
-                const auto lateOwned = std::make_unique<orbitamp::AmpProcessor>();
+                const auto lateOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
                 auto& late = *lateOwned;
                 // WHAT ACTUALLY HOLDS THE LOAD BACK, said plainly because the first version of this
                 // comment claimed the wrong mechanism: `inlineLoads = false` sends the request to
@@ -3554,7 +3565,7 @@ int main()
     // longer, and a rig with none of the ringing links in it rings for no time at all while the
     // host renders eight seconds of silence onto every bounce.
     {
-        const auto tailOwned = std::make_unique<orbitamp::AmpProcessor>();
+        const auto tailOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         auto& amp = *tailOwned;
         amp.prepareToPlay (sampleRate, blockSize);
 
@@ -3613,7 +3624,7 @@ int main()
         // as much as that cabinet goes on saying.
         const double impulse = []
         {
-            const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+            const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault);
             juce::AudioFormatManager formats;
             formats.registerFormat (new juce::WavAudioFormat(), true);
             const std::unique_ptr<juce::AudioFormatReader> reader (

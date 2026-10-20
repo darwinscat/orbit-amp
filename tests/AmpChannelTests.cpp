@@ -81,20 +81,20 @@ int main()
     // where the home is the gate's own (product.ownsHome), and as if this product had never gathered here.
     const bool ownsHome = juce::SystemStats::getEnvironmentVariable (product.ownsHome, {}).isNotEmpty();
     const auto seedRun  = juce::String::toHexString (juce::Random::getSystemRandom().nextInt());
-    const auto formerIr = device::IrLibrary::formerDirectory().getChildFile ("Old Pack").getChildFile ("gathered-" + seedRun + ".wav");
+    const auto formerIr = device::IrLibrary::formerDirectory (ORBITAMP_PRODUCT_NAME).getChildFile ("Old Pack").getChildFile ("gathered-" + seedRun + ".wav");
     if (ownsHome)
     {
         // An IR of its own: the shelf's DARK MATTER with its last sample nudged, like no other here.
-        const auto& shelf = device::shelf::irs()[(size_t) params::cabIrDefault];
+        const auto& shelf = device::shelf::irs (ORBITAMP_PRODUCT_NAME)[(size_t) params::cabIrDefault];
         juce::MemoryBlock bytes (shelf.data, (size_t) shelf.size);
         bytes[bytes.getSize() - 1] = (char) (bytes[bytes.getSize() - 1] ^ 4);
         markOfRun (bytes, seedRun);
         formerIr.getParentDirectory().createDirectory();
         formerIr.replaceWithData (bytes.getData(), bytes.getSize());
-        prefs::setBool (prefs::irsGathered, false);
+        prefs::setBool (ORBITAMP_GATE_PRODUCT(), prefs::irsGathered, false);
     }
 
-    auto amp = std::make_unique<AmpProcessor>();
+    auto amp = std::make_unique<AmpProcessor> (ORBITAMP_GATE_PRODUCT());
     amp->inlineLoads = true;            // no message loop here: a model lands inside the pump
 
     auto& engine   = channels::Engine::of (*amp);
@@ -182,11 +182,11 @@ int main()
     // `cab_ir`'s order held empty — and a host that moves `cab_ir` to one of those places hears DARK
     // MATTER, not a cabinet that is not there.
     {
-        bool oursAlone = device::shelf::irs().size() == (size_t) params::cabIrNames.size();
-        for (const auto& ir : device::shelf::irs())
+        bool oursAlone = device::shelf::irs (ORBITAMP_PRODUCT_NAME).size() == (size_t) params::cabIrNames.size();
+        for (const auto& ir : device::shelf::irs (ORBITAMP_PRODUCT_NAME))
             oursAlone = oursAlone && (ir.data != nullptr) == (juce::String (ir.folder) == device::shelf::ours);
         check (oursAlone, "the " + ours + " plays the shelf's Orange PPC212V and nothing of Other, every number in its place");
-        check (AmpProcessor::cabIrBytes (0).data == AmpProcessor::cabIrBytes (params::cabIrDefault).data,
+        check (AmpProcessor::cabIrBytes (ORBITAMP_GATE_PRODUCT(), 0).data == AmpProcessor::cabIrBytes (ORBITAMP_GATE_PRODUCT(), params::cabIrDefault).data,
                "...and a number of Other's plays DARK MATTER");
     }
 
@@ -411,10 +411,10 @@ int main()
         juce::StringArray listed;
         for (const auto& n : names)
             listed.addIfNotAlreadyThere (n);
-        const auto list = renamed.getChildFile (device::FactorySet::listsName).getChildFile (juce::String (orbitamp::product::name) + ".txt");
+        const auto list = renamed.getChildFile (device::FactorySet::listsName).getChildFile (juce::String (ORBITAMP_PRODUCT_NAME) + ".txt");
         copied = copied && list.getParentDirectory().createDirectory().wasOk() && list.replaceWithText (listed.joinIntoString ("\n") + "\n");
 
-        amp->preamp.packs = device::DeviceLibrary::scan (device::DeviceLibrary::Slot::preamp, true,
+        amp->preamp.packs = device::DeviceLibrary::scan (ORBITAMP_PRODUCT_NAME, device::DeviceLibrary::Slot::preamp, true,
                                                          renamed, renamed.getChildFile ("none"));
         bool found = copied;
         for (int c = 0; c < channels.count(); ++c)
@@ -498,7 +498,7 @@ int main()
         check (gathered.existsAsFile() && formerIr.existsAsFile() && gathered.hasIdenticalContentTo (formerIr),
                "the player's IRs of before are copied into the family's folder, folders and all, and left where they were");
         check (channels.cabinets().indexOf (gathered) >= factory, "...and are among the player's cabinets");
-        check (prefs::getBool (prefs::irsGathered, false), "...once: the product remembers it has gathered them");
+        check (prefs::getBool (ORBITAMP_GATE_PRODUCT(), prefs::irsGathered, false), "...once: the product remembers it has gathered them");
 
         channels.chooseCabinet (added.first);
         check (channels.cabinet() == added.first, "a cabinet taken in plays");

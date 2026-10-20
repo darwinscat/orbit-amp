@@ -12,21 +12,18 @@
 
 #include <utility>
 
-namespace orbitamp
+namespace orbitamp::catpit
 {
 
 juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
 {
     // No cockpit to draw without its pictures, which lie in the factory folder: where that is missing,
     // the window says so, and where it belongs (ui/FactoryMissing.h).
-    if (! face::renders::has ("cockpit.webp", catpit::artFolderVariable))
-        return new ui::FactoryMissingEditor (p);
+    if (! face::renders::has (p.product().name, "cockpit.webp", artFolderVariable))
+        return new ui::FactoryMissingEditor (p, p.product());
 
-    return new catpit::CatpitEditor (p);
+    return new CatpitEditor (p);
 }
-
-namespace catpit
-{
 
 namespace
 {
@@ -128,8 +125,9 @@ namespace
         const auto& art = Art::get();
         return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.sliderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
-                 face::renders::text ("mark.svg", artFolderVariable),
-                 face::renders::text ("midi.txt", artFolderVariable) };
+                 face::renders::text (products::catpitAmp().name, "mark.svg", artFolderVariable),
+                 face::renders::text (products::catpitAmp().name, "midi.txt", artFolderVariable) };
+
     }
 
     /** Whether a point on the stage is glass: where the render is cut through to the sky (Art), which
@@ -544,14 +542,14 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     {
         auto word = juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).toLowerCase();
         if (! starsWords.contains (word))
-            word = prefs::store().get (starsKey, starsWords[0]).toString();
+            word = prefs::store (amp.product()).get (starsKey, starsWords[0]).toString();
         stars = (Stars) juce::jmax (0, starsWords.indexOf (word));
     }
 
     // ...and so does what the windshield shows over it: nothing, or a picture of the amp at work — the
     // shape it gives the sound, as every face of the family opens on.
     monitor.show ((Monitor::View) juce::jlimit (0, (int) Monitor::View::numViews - 1,
-                                                (int) prefs::store().get (windowKey, (int) Monitor::View::shape)));
+                                                (int) prefs::store (amp.product()).get (windowKey, (int) Monitor::View::shape)));
     applySky();
 
     // LEARN from GATE's menu takes the tuner's glass while it runs.
@@ -704,7 +702,7 @@ void CatpitEditor::placeSky()
 void CatpitEditor::chooseStars (Stars chosen)
 {
     stars = chosen;
-    prefs::store().set (starsKey, starsWords[(int) chosen]);
+    prefs::store (amp.product()).set (starsKey, starsWords[(int) chosen]);
     applySky();
 }
 
@@ -760,9 +758,9 @@ void CatpitEditor::applySky()
 
 void CatpitEditor::showInWindow (Monitor::View view)
 {
-    prefs::store().set (windowKey, (int) view);
+    prefs::store (amp.product()).set (windowKey, (int) view);
     monitor.show (view);
 }
 
-} // namespace catpit
-} // namespace orbitamp
+} // namespace orbitamp::catpit
+

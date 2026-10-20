@@ -3,6 +3,7 @@
 
 #include "CatpitArt.h"
 #include "../face/Renders.h"
+#include "../Product.h"
 
 namespace orbitamp::catpit
 {
@@ -11,8 +12,9 @@ namespace
 {
     /** A render by its file name: the cockpit's own, in the factory folder — or, when CATPIT_ART_DIR
         names a folder that has one, the file from there (face/Renders.h). */
-    juce::Image decode (const char* name) { return face::renders::decode (name, artFolderVariable); }
-    juce::Image load (const char* name)   { return face::renders::load (name, artFolderVariable); }
+    juce::Image decode (const char* name) { return face::renders::decode (products::catpitAmp().name, name, artFolderVariable); }
+    juce::Image load (const char* name)   { return face::renders::load (products::catpitAmp().name, name, artFolderVariable); }
+
 }
 
 juce::Image stillSky (int channel)

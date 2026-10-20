@@ -35,8 +35,10 @@ namespace orbitamp
 class DisclaimerPanel final : public juce::Component
 {
 public:
-    DisclaimerPanel()
+    /** The notice of the product of that name, over the devices it plays. */
+    explicit DisclaimerPanel (const juce::String& product)
     {
+        table.product = product;
         setWantsKeyboardFocus (true);
 
         for (auto* v : { &textView, &listView })
@@ -189,7 +191,7 @@ private:
             shipped.clear();
             added.clear();
 
-            for (const auto& pack : device::DeviceLibrary::scan (device::DeviceLibrary::Slot::any))
+            for (const auto& pack : device::DeviceLibrary::scan (product, device::DeviceLibrary::Slot::any))
             {
                 Named n;
                 n.slot = slotName (pack.slot);
@@ -349,6 +351,9 @@ private:
 
         juce::Array<Named> shipped, added;
         int width = 640;
+
+    public:
+        juce::String product;       // whose devices: the product's name
     };
 
     juce::Rectangle<int> panel, seam;

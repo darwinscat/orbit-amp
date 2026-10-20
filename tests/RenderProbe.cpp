@@ -63,8 +63,8 @@ int main (int argc, char** argv)
         Block preamp (device::DeviceLibrary::Slot::preamp);
         boost.prepare (rate, n, 1);
         preamp.prepare (rate, n, 1);
-        boost.rescan (0);
-        preamp.rescan (0);
+        boost.rescan ("OrbitAmp", 0);
+        preamp.rescan ("OrbitAmp", 0);
 
         // Matches the display name OR the pack file's name — three ReVolts share a face and
         // only the file tells them apart.

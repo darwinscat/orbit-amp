@@ -89,13 +89,13 @@ int main()
     check (shown ("ThirdAmp").isEmpty(), "...and a product with no list there sees none of them: " + shown ("ThirdAmp"));
 
     // ...and the same through the device list's own reading, by THIS product's list (OrbitAmp's, here).
-    writeList (product::name, "IR-X Ch1 PowerAmp.orbitrig\n");
+    writeList ("OrbitAmp", "IR-X Ch1 PowerAmp.orbitrig\n");
     {
         juce::StringArray names;
-        for (const auto& p : DeviceLibrary::scan (DeviceLibrary::Slot::any, true, factory, own))
+        for (const auto& p : DeviceLibrary::scan ("OrbitAmp", DeviceLibrary::Slot::any, true, factory, own))
             if (p.bundled)
                 names.add (p.displayName());
-        check (names.joinIntoString (", ") == "IR-X Ch1 PowerAmp", juce::String (product::name) + "'s device list reads its own list: " + names.joinIntoString (", "));
+        check (names.joinIntoString (", ") == "IR-X Ch1 PowerAmp", juce::String ("OrbitAmp") + "'s device list reads its own list: " + names.joinIntoString (", "));
     }
 
     // THE CABINET SHELF each product holds: every place of the catalog, the ones its list names filled

@@ -13,21 +13,19 @@
 
 #include <BinaryData.h>
 
-namespace orbitamp
+namespace orbitamp::redpaw
 {
 
 juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
 {
     // No dashboard to draw without its pictures, which lie in the factory folder: where that is missing,
     // the window says so, and where it belongs (ui/FactoryMissing.h).
-    if (! face::renders::has ("dashboard.webp", redpaw::skin().rendersFolderVariable))
-        return new ui::FactoryMissingEditor (p);
+    const auto& skin = skinOf (p.product());
+    if (! face::renders::has (skin.product, "dashboard.webp", skin.rendersFolderVariable))
+        return new ui::FactoryMissingEditor (p, p.product());
 
-    return new redpaw::RedPawEditor (p);
+    return new RedPawEditor (p);
 }
-
-namespace redpaw
-{
 
 using namespace face;
 
@@ -89,82 +87,82 @@ namespace
     }
 
     /** A row of words over or under a well, as wide as the well. */
-    juce::Rectangle<float> wellRow (size_t well)
+    juce::Rectangle<float> wellRow (const Skin& skin, size_t well)
     {
-        const auto& w = layout::wells[well];
-        return { w.getX(), layout::wellNameY[well] - 15.0f, w.getWidth(), 30.0f };
+        const auto& w = skin.plan.wells[well];
+        return { w.getX(), skin.plan.wellNameY[well] - 15.0f, w.getWidth(), 30.0f };
     }
 
     /** WHERE THE CONSOLE'S CONTROLS STAND on the dashboard (RedPawLayout.h). Each knob is drawn smaller
         than its cyan ring, which stays in sight round it. */
-    Console::Places dashboardPlaces()
+    Console::Places dashboardPlaces (const Skin& skin)
     {
         using namespace layout;
 
         Console::Places p;
-        p.drive = around (drive.centre, drive.knob, drive.knob);
-        for (size_t i = 0; i < tones.size(); ++i)
-            p.tones[i] = around (tones[i].centre, tones[i].knob, tones[i].knob);
+        p.drive = around (skin.plan.drive.centre, skin.plan.drive.knob, skin.plan.drive.knob);
+        for (size_t i = 0; i < skin.plan.tones.size(); ++i)
+            p.tones[i] = around (skin.plan.tones[i].centre, skin.plan.tones[i].knob, skin.plan.tones[i].knob);
 
-        p.keys = keys;
-        p.keySize = keySize;
-        p.holes = holes;
+        p.keys = skin.plan.keys;
+        p.keySize = skin.plan.keySize;
+        p.holes = skin.plan.holes;
         p.holeKeySize = 44.0f;      // the hole's pitch: a toggle up or down stands out of it
 
         for (size_t i = 0; i < p.sliders.size(); ++i)
         {
-            const auto& w = wells[i];
-            p.sliders[i] = juce::Rectangle<float> (w.getWidth(), sliderHeight).withCentre (w.getCentre());
-            p.sliderNames[i] = wellRow (i);
+            const auto& w = skin.plan.wells[i];
+            p.sliders[i] = juce::Rectangle<float> (w.getWidth(), skin.plan.sliderHeight).withCentre (w.getCentre());
+            p.sliderNames[i] = wellRow (skin, i);
         }
         p.sliderCapAngle  = 0.0f;   // the caps' renders lie along their wells...
-        p.sliderCapLength = sliderCapLength;
-        p.faderCapLength  = faderCapLength;     // ...and across their slots
+        p.sliderCapLength = skin.plan.sliderCapLength;
+        p.faderCapLength  = skin.plan.faderCapLength;     // ...and across their slots
 
-        p.inMeter  = inMeter;
-        p.outMeter = outMeter;
-        p.meterDots = meterDots;
-        p.inFader  = inFader.withSizeKeepingCentre (faderWidth, inFader.getHeight());
-        p.outFader = outFader.withSizeKeepingCentre (faderWidth, outFader.getHeight());
-        p.tuner = tunerScreen;
+        p.inMeter  = skin.plan.inMeter;
+        p.outMeter = skin.plan.outMeter;
+        p.meterDots = skin.plan.meterDots;
+        p.inFader  = skin.plan.inFader.withSizeKeepingCentre (skin.plan.faderWidth, skin.plan.inFader.getHeight());
+        p.outFader = skin.plan.outFader.withSizeKeepingCentre (skin.plan.faderWidth, skin.plan.outFader.getHeight());
+        p.tuner = skin.plan.tunerScreen;
         p.tunerStrip = true;            // one low line along the screen's bottom...
-        p.tunerDial = tunerDial;        // ...unless the picture paints the tuner a dial of its own...
+        p.tunerDial = skin.plan.tunerDial;        // ...unless the picture paints the tuner a dial of its own...
         p.tunerMenuOnClick = true;      // ...whose settings a click on it opens
         for (size_t i = 0; i < p.lamps.size(); ++i)
-            p.lamps[i] = lamps[i];
-        p.lampDot = lampDot;
+            p.lamps[i] = skin.plan.lamps[i];
+        p.lampDot = skin.plan.lampDot;
 
-        if (skin().mark)
+        if (skin.mark)
         {
-            p.emblemFace = { emblemFace.begin(), emblemFace.end() };
-            p.emblemMark = emblemMark;
+            p.emblemFace = { skin.plan.emblemFace.begin(), skin.plan.emblemFace.end() };
+            p.emblemMark = skin.plan.emblemMark;
         }
 
         // The bottom plates: PRESET alone on the left, the version in the middle, MEM over CPU on the
         // right.
-        p.preset  = leftPlate;
-        p.version = centrePlate;
-        p.memory  = readings[0];
-        p.load    = readings[1];
+        p.preset  = skin.plan.leftPlate;
+        p.version = skin.plan.centrePlate;
+        p.memory  = skin.plan.readings[0];
+        p.load    = skin.plan.readings[1];
         p.readingsFit = true;           // on a small screen, condensed into it
 
-        p.gateDoor    = around (gateWord, 110.0f, 28.0f);
-        p.limiterDoor = around (limiterWord, 124.0f, 28.0f);
-        p.gateDoorAngle    = lampSlant;
-        p.limiterDoorAngle = -lampSlant;
+        p.gateDoor    = around (skin.plan.gateWord, 110.0f, 28.0f);
+        p.limiterDoor = around (skin.plan.limiterWord, 124.0f, 28.0f);
+        p.gateDoorAngle    = skin.plan.lampSlant;
+        p.limiterDoorAngle = -skin.plan.lampSlant;
         p.readingPx   = px13;
         return p;
     }
 
-    Console::Look dashboardLook()
+    Console::Look dashboardLook (const Skin& skin)
     {
-        const auto& art = Art::get();
+        const auto& art = Art::of (skin);
         return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.faderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
-                 Art::mark().isNotEmpty() ? Art::mark() : juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),   // the rover's own mark; the family's, where it has none
-                 skin().midiCommands,
+                 Art::mark (skin).isNotEmpty() ? Art::mark (skin) : juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),   // the rover's own mark; the family's, where it has none
+                 skin.midiCommands,
                  handLight,         // under the hand, the dashboard's orange
-                 skin().ink };
+                 skin.ink };
     }
 
     /** A WORD WIDER THAN ITS ROOM is set condensed into it — as tall as ever, narrower — about `centre`:
@@ -185,9 +183,9 @@ namespace
     /** A KEY'S OWN WORD, on its face (`key`, the render's opaque part): a size under the names beside the
         keys, condensed into the face where it is wider, the state's colour while the key is lit. */
     constexpr float capEm = 10.0f / layout::readingScale;
-    void capWord (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> key, bool lit)
+    void capWord (const Skin& skin, juce::Graphics& g, const juce::String& text, juce::Rectangle<float> key, bool lit)
     {
-        const auto& ink = skin().ink;
+        const auto& ink = skin.ink;
         const juce::Graphics::ScopedSaveState keep (g);
         condenseInto (g, text, capEm, keyTracking, key.getWidth() * 0.62f, key.getCentre());
         ink.label (g, text, juce::Rectangle<float> (80.0f, 20.0f).withCentre (key.getCentre()), capEm,
@@ -197,9 +195,9 @@ namespace
     /** THE ROOF'S TOGGLE. The two renders are not drawn alike — up, the bat stands over its nut; down,
         it hangs under a nut drawn larger — so each is fitted by its own opaque part: both nuts as wide
         as `nut`, centred on the hole, the bat up or down from there. */
-    void drawToggle (juce::Graphics& g, juce::Rectangle<float> keyBox, bool up)
+    void drawToggle (const Skin& skin, juce::Graphics& g, juce::Rectangle<float> keyBox, bool up)
     {
-        const auto& art = Art::get();
+        const auto& art = Art::of (skin);
         const auto& img = up ? art.toggleUp : art.toggleDown;
         if (! img.isValid())
             return;
@@ -218,8 +216,8 @@ namespace
 //==============================================================================
 juce::Rectangle<int> Dashboard::historyArea() const
 {
-    return juce::Rectangle<float> (layout::holes.front().x - 40.0f, 0.0f,
-                                   layout::holes.back().x - layout::holes.front().x + 60.0f, 47.0f).toNearestInt();
+    return juce::Rectangle<float> (skin.plan.holes.front().x - 40.0f, 0.0f,
+                                   skin.plan.holes.back().x - skin.plan.holes.front().x + 60.0f, 47.0f).toNearestInt();
 }
 
 void Dashboard::paintLive (juce::Graphics& g) const
@@ -234,13 +232,13 @@ void Dashboard::paintRoof (juce::Graphics& g) const
 {
     using namespace layout;
 
-    const auto& ink = skin().ink;
-    const auto signAt = [] (juce::Point<float> hole) { return juce::Point<float> (hole.x - signOffset, hole.y); };
+    const auto& ink = skin.ink;
+    const auto signAt = [this] (juce::Point<float> hole) { return juce::Point<float> (hole.x - skin.plan.signOffset, hole.y); };
 
     const bool can[] { canUndo, canRedo };
     for (int i = 0; i < 2; ++i)
     {
-        const auto at = signAt (holes[(size_t) (ovUndo + i)]);
+        const auto at = signAt (skin.plan.holes[(size_t) (ovUndo + i)]);
         const auto colour = ink.at (ink.words, can[i] ? 1.0f : 0.35f);
         if (! ink.edge.isTransparent())
             drawTurnArrow (g, at.translated (0.0f, Ink::edgeDrop), 6.0f, i == 0, ink.under (colour));
@@ -251,7 +249,7 @@ void Dashboard::paintRoof (juce::Graphics& g) const
     // condensed — as tall as ever, three quarters as wide.
     for (int i = 0; i < numRegisterKeys; ++i)
     {
-        const auto at = signAt (holes[(size_t) (ovFirstRegister + i)]);
+        const auto at = signAt (skin.plan.holes[(size_t) (ovFirstRegister + i)]);
         const juce::Graphics::ScopedSaveState keep (g);
         g.addTransform (juce::AffineTransform::scale (0.75f, 1.0f, at.x, at.y));
         ink.label (g, juce::String::charToString ((juce::juce_wchar) ('A' + i)), juce::Rectangle<float> (30.0f, 26.0f).withCentre (at),
@@ -264,15 +262,15 @@ void Dashboard::paintRoof (juce::Graphics& g) const
 void Dashboard::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
-    if (keyNamesOnKeys)
+    if (skin.plan.keyNamesOnKeys)
         return;
 
-    const auto& ink = skin().ink;
+    const auto& ink = skin.ink;
     for (size_t i = 0; i < keyNames.size(); ++i)
     {
-        const juce::Point<float> at { keys[i].x, keyNameOver[i] ? keyNameOverY : keyNameUnderY };
+        const juce::Point<float> at { skin.plan.keys[i].x, skin.plan.keyNameOver[i] ? skin.plan.keyNameOverY : skin.plan.keyNameUnderY };
         const juce::Graphics::ScopedSaveState keep (g);
-        condenseInto (g, keyNames[i], px11, keyTracking, keyNameRoom, at);
+        condenseInto (g, keyNames[i], px11, keyTracking, skin.plan.keyNameRoom, at);
         ink.label (g, keyNames[i], juce::Rectangle<float> (120.0f, 20.0f).withCentre (at),
                    px11, ink.at (ink.words, keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
     }
@@ -282,25 +280,25 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 {
     using namespace layout;
 
-    if (const auto& bg = Art::get().bg; bg.isValid())
+    if (const auto& bg = Art::of (skin).bg; bg.isValid())
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
 
     // The maker's mark: raised in the rover's metal where the skin brings a render of it — cut into bright
     // steel it read as a stamp — and engraved where it does not; none where the skin has no place for one.
-    if (const auto& mark = Art::get().emblem; skin().mark && mark.isValid())
+    if (const auto& mark = Art::of (skin).emblem; skin.mark && mark.isValid())
     {
         g.setOpacity (1.0f);
-        g.drawImage (mark, emblemMark, juce::RectanglePlacement::centred);
+        g.drawImage (mark, skin.plan.emblemMark, juce::RectanglePlacement::centred);
     }
-    else if (skin().mark)
+    else if (skin.mark)
     {
-        engraveMark (g, emblemMark, scale);
+        engraveMark (g, skin.plan.emblemMark, scale);
     }
 
     // A word on the dust: a shadow under it, so it reads off the rust as well as off the bare metal —
     // where the skin has one (RedPawSkin.h).
-    const auto& ink = skin().ink;
-    const auto shadow = skin().printShadow;
+    const auto& ink = skin.ink;
+    const auto shadow = skin.printShadow;
     const auto print = [&g, &ink, shadow] (const juce::String& text, juce::Point<float> at, float w, juce::Colour colour,
                                            float room = 0.0f, float em = px13)
     {
@@ -313,27 +311,27 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
         ink.label (g, text, area, em, colour);
     };
 
-    print (skin().driveName, { drive.centre.x, driveNameY }, 200.0f, ink.words);
+    print (skin.driveName, { skin.plan.drive.centre.x, skin.plan.driveNameY }, 200.0f, ink.words);
     const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
-    for (size_t i = 0; i < tones.size(); ++i)
-        print (toneNames[i], { tones[i].centre.x, knobNameY }, 150.0f, ink.words, 0.0f, knobNameEm);
+    for (size_t i = 0; i < skin.plan.tones.size(); ++i)
+        print (toneNames[i], { skin.plan.tones[i].centre.x, skin.plan.knobNameY }, 150.0f, ink.words, 0.0f, skin.plan.knobNameEm);
 
-    print ("TURBO", turboName, 140.0f, ink.state);
-    if (learnKeySize > 0.0f)
-        for (size_t k = 0; k < learnNames.size(); ++k)        // each key's LEARN over its name
+    print ("TURBO", skin.plan.turboName, 140.0f, ink.state);
+    if (skin.plan.learnKeySize > 0.0f)
+        for (size_t k = 0; k < skin.plan.learnNames.size(); ++k)        // each key's LEARN over its name
         {
             constexpr float em = 8.5f / readingScale;     // under the keys' own words
-            print ("LEARN", learnNames[k].translated (0.0f, -0.5f * learnLine), 90.0f, ink.words, 0.0f, em);
-            print (k == 0 ? "GATE" : "HUM", learnNames[k].translated (0.0f, 0.5f * learnLine), 90.0f, ink.words, 0.0f, em);
+            print ("LEARN", skin.plan.learnNames[k].translated (0.0f, -0.5f * skin.plan.learnLine), 90.0f, ink.words, 0.0f, em);
+            print (k == 0 ? "GATE" : "HUM", skin.plan.learnNames[k].translated (0.0f, 0.5f * skin.plan.learnLine), 90.0f, ink.words, 0.0f, em);
         }
-    print (skin().inputName, inputName, 170.0f, ink.words, columnNameRoom);
-    print (skin().outputName, outputName, 170.0f, ink.words, columnNameRoom);
+    print (skin.inputName, skin.plan.inputName, 170.0f, ink.words, skin.plan.columnNameRoom);
+    print (skin.outputName, skin.plan.outputName, 170.0f, ink.words, skin.plan.columnNameRoom);
 
     // The maker's words beside the mark, a size under the controls' names and a little quieter.
-    if (makerRoom > 0.0f)
+    if (skin.plan.makerRoom > 0.0f)
     {
-        print ("POWERED BY", poweredBy, 220.0f, ink.at (ink.words, 0.8f), makerRoom, px11);
-        print ("DARWIN'S CAT", makerName, 240.0f, ink.at (ink.words, 0.8f), makerRoom, px11);
+        print ("POWERED BY", skin.plan.poweredBy, 220.0f, ink.at (ink.words, 0.8f), skin.plan.makerRoom, px11);
+        print ("DARWIN'S CAT", skin.plan.makerName, 240.0f, ink.at (ink.words, 0.8f), skin.plan.makerRoom, px11);
     }
 }
 
@@ -345,7 +343,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world)
 {
     using namespace layout;
-    const auto& art = Art::get();
+    const auto& art = Art::of (skin);
     const std::pair<const char*, const juce::Image*> own[] {
         { "lever.png", &art.lever }, { "lever-glow.png", &art.leverGlow }, { "fader-cap-light.png", &art.faderCapLight },
         { "toggle-up.png", &art.toggleUp }, { "toggle-down.png", &art.toggleDown }, { "key-up.png", &art.keyUp },
@@ -353,7 +351,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         { "turbo-lid.png", &art.turboLid }, { "emblem.png", &art.emblem } };
     for (const auto& [name, img] : own)
         writeSprite (dir, name, *img);
-    if (const auto still = Art::still(); still.isValid())
+    if (const auto still = Art::still (skin); still.isValid())
     {
         dir.getChildFile ("still.jpg").deleteFile();
         juce::FileOutputStream out (dir.getChildFile ("still.jpg"));
@@ -377,43 +375,43 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         return juce::var (o);
     };
     auto* o = new juce::DynamicObject();
-    o->setProperty ("windscreen", rect (windscreen));
+    o->setProperty ("windscreen", rect (skin.plan.windscreen));
     juce::Array<juce::var> corners;
-    for (const auto& c : windscreenCorners)
+    for (const auto& c : skin.plan.windscreenCorners)
         corners.add (point (c));
     o->setProperty ("windscreenCorners", corners);
 
     auto* l = new juce::DynamicObject();
-    l->setProperty ("slot", rect (gateSlot));
-    l->setProperty ("slotX", slotX);
-    l->setProperty ("notchX", notchX);
-    l->setProperty ("parkY", slotTopY);
+    l->setProperty ("slot", rect (skin.plan.gateSlot));
+    l->setProperty ("slotX", skin.plan.slotX);
+    l->setProperty ("notchX", skin.plan.notchX);
+    l->setProperty ("parkY", skin.plan.slotTopY);
     juce::Array<juce::var> gearsAt, names;
     for (int g = 0; g < lever.numGears(); ++g)
-        gearsAt.add (stops[(size_t) g]);
+        gearsAt.add (skin.plan.stops[(size_t) g]);
     for (int at = 0; at <= lever.numGears(); ++at)
         names.add (GearLever::nameOf (at, lever.numGears()));
     l->setProperty ("notches", gearsAt);     // where the gears stand: the notches the face shows
     l->setProperty ("names", names);      // PARK first, then the gears from the top
-    l->setProperty ("leverWidth", leverWidth);
-    l->setProperty ("collarSink", collarSink);
+    l->setProperty ("leverWidth", skin.plan.leverWidth);
+    l->setProperty ("collarSink", skin.plan.collarSink);
     l->setProperty ("gripBar", GearLever::barBottom);       // the render's top part the hand takes it by
-    l->setProperty ("leverBox", point ({ leverLeft, leverTop }));
-    l->setProperty ("plate", rect (gearPlate));
+    l->setProperty ("leverBox", point ({ skin.plan.leverLeft, skin.plan.leverTop }));
+    l->setProperty ("plate", rect (skin.plan.gearPlate));
     l->setProperty ("glowPad", Art::leverGlowPad);
     o->setProperty ("lever", juce::var (l));
 
     auto* t = new juce::DynamicObject();
-    t->setProperty ("centre", point (layout::turbo));
-    t->setProperty ("size", turboSize);
-    t->setProperty ("name", point (turboName));
-    t->setProperty ("lid", rect (turboLid));
+    t->setProperty ("centre", point (skin.plan.turbo));
+    t->setProperty ("size", skin.plan.turboSize);
+    t->setProperty ("name", point (skin.plan.turboName));
+    t->setProperty ("lid", rect (skin.plan.turboLid));
     t->setProperty ("kind", "pair");      // TURBO walks to the gear's paired channel (channels::Lineup::pairs)
     // ...and parked: the button deaf, drawn at `alpha` at once; and where the rover has a hatch's render,
     // the hatch shut over it on its spring (TurboLid), open again when a gear is pulled.
     auto* atPark = new juce::DynamicObject();
     atPark->setProperty ("alpha", face::PushButton::dimmed);
-    atPark->setProperty ("lid", Art::get().turboLid.isValid() ? juce::var ("turbo-lid.png") : juce::var());
+    atPark->setProperty ("lid", Art::of (skin).turboLid.isValid() ? juce::var ("turbo-lid.png") : juce::var());
     auto* spring = new juce::DynamicObject();
     spring->setProperty ("stiffness", TurboLid::stiffness);
     spring->setProperty ("damping", TurboLid::damping);
@@ -422,16 +420,16 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     o->setProperty ("turbo", juce::var (t));
 
     juce::Array<juce::var> wipers;
-    for (const auto& k : wiperKeys)
+    for (const auto& k : skin.plan.wiperKeys)
         wipers.add (point (k));
-    o->setProperty ("wiperKeys", wiperKeySize > 0.0f ? juce::var (wipers) : juce::var());
-    o->setProperty ("wiperKeySize", wiperKeySize);
+    o->setProperty ("wiperKeys", skin.plan.wiperKeySize > 0.0f ? juce::var (wipers) : juce::var());
+    o->setProperty ("wiperKeySize", skin.plan.wiperKeySize);
     o->setProperty ("gears", lever.numGears());
     for (const auto& p : o->getProperties())       // all of it in places.json's "world", which is all the site reads...
         world.setProperty (p.name, p.value);
     dir.getChildFile ("rover.json").replaceWithText (juce::JSON::toString (juce::var (o)));     // ...and on its own (the var takes `o`)
 
-    places.setProperty ("window", rect (windscreen));
+    places.setProperty ("window", rect (skin.plan.windscreen));
 
     auto* keyRenders = new juce::DynamicObject();      // the keys and the roof's toggles are renders, up and down
     keyRenders->setProperty ("up", "key-up.png");
@@ -451,14 +449,14 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         return juce::var (x);
     };
     auto* ring = new juce::DynamicObject();
-    ring->setProperty ("drive", socket (layout::drive));
+    ring->setProperty ("drive", socket (skin.plan.drive));
     juce::Array<juce::var> toneRings;
-    for (const auto& t : layout::tones)
+    for (const auto& t : skin.plan.tones)
         toneRings.add (socket (t));
     ring->setProperty ("tones", toneRings);
     ring->setProperty ("from", KnobRing::from);
     ring->setProperty ("sweep", KnobRing::sweep);
-    ring->setProperty ("light", colour (skin().ringLight));
+    ring->setProperty ("light", colour (skin.ringLight));
     ring->setProperty ("veil", colour (juce::Colour (KnobRing::veil)));
     ring->setProperty ("veilAlpha", KnobRing::veilAlpha);
     ring->setProperty ("veilWider", KnobRing::veilWider);
@@ -474,25 +472,25 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
 
     // THE KNOBS' NAMES over their sockets, and what DRIVE is called on this face.
     auto* knobNames = new juce::DynamicObject();
-    knobNames->setProperty ("drive", skin().driveName);
-    knobNames->setProperty ("driveY", driveNameY);
-    knobNames->setProperty ("tonesY", knobNameY);
-    knobNames->setProperty ("px", knobNameEm);
-    knobNames->setProperty ("shadow", colour (skin().printShadow));
+    knobNames->setProperty ("drive", skin.driveName);
+    knobNames->setProperty ("driveY", skin.plan.driveNameY);
+    knobNames->setProperty ("tonesY", skin.plan.knobNameY);
+    knobNames->setProperty ("px", skin.plan.knobNameEm);
+    knobNames->setProperty ("shadow", colour (skin.printShadow));
     world.setProperty ("knobNames", juce::var (knobNames));
 
     // THE KEYS' NAMES: over or under each key by turns, condensed into `room` where wider — or, where the
     // picture leaves no room round them, the filters' on their caps (condensed into 0.62 of the cap, lit in
     // the state's ink, else the words' at 0.75) and the layers' none until the packs carry them.
     auto* keyNames = new juce::DynamicObject();
-    keyNames->setProperty ("onKeys", keyNamesOnKeys);
-    keyNames->setProperty ("overY", keyNameOverY);
-    keyNames->setProperty ("underY", keyNameUnderY);
+    keyNames->setProperty ("onKeys", skin.plan.keyNamesOnKeys);
+    keyNames->setProperty ("overY", skin.plan.keyNameOverY);
+    keyNames->setProperty ("underY", skin.plan.keyNameUnderY);
     juce::Array<juce::var> over;
-    for (const bool b : keyNameOver)
+    for (const bool b : skin.plan.keyNameOver)
         over.add (b);
     keyNames->setProperty ("over", over);
-    keyNames->setProperty ("room", keyNameRoom);
+    keyNames->setProperty ("room", skin.plan.keyNameRoom);
     keyNames->setProperty ("px", px11);
     keyNames->setProperty ("capPx", capEm);
     keyNames->setProperty ("capRoom", 0.62f);
@@ -504,11 +502,11 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     // key with a lamp's sign on its cap (drawLampSign: lit in the state's ink, else the words' at 0.75),
     // kept as the machine's choice and thrown to the view (Drive::setLights); and the wipers' keys.
     juce::Array<juce::var> claimed;
-    if (lightKeys[0] >= 0)
+    if (skin.plan.lightKeys[0] >= 0)
         for (int lamp = 0; lamp < 2; ++lamp)
         {
             auto* k = new juce::DynamicObject();
-            k->setProperty ("key", lightKeys[(size_t) lamp]);
+            k->setProperty ("key", skin.plan.lightKeys[(size_t) lamp]);
             k->setProperty ("name", lamp == 0 ? "SEARCHLIGHT LEFT" : "SEARCHLIGHT RIGHT");
             k->setProperty ("does", lamp == 0 ? "lights.left" : "lights.right");
             k->setProperty ("latching", true);
@@ -516,7 +514,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
             claimed.add (juce::var (k));
         }
     world.setProperty ("claimedKeys", claimed);
-    if (wiperKeySize > 0.0f)
+    if (skin.plan.wiperKeySize > 0.0f)
     {
         auto* w = new juce::DynamicObject();
         w->setProperty ("names", juce::StringArray { "OFF", "INT", "LO", "HI" });
@@ -571,11 +569,11 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     // the line shows at each place of the lever with each channel there — the channel cut with an
     // ellipsis where it is wider than its room.
     auto* nav = new juce::DynamicObject();
-    nav->setProperty ("screen", rect (navScreen));
-    nav->setProperty ("header", rect (navHeader));
-    nav->setProperty ("picture", rect (navPicture));
-    nav->setProperty ("speedHud", speedHud.isEmpty() ? juce::var() : rect (speedHud));
-    if (! speedHud.isEmpty())
+    nav->setProperty ("screen", rect (skin.plan.navScreen));
+    nav->setProperty ("header", rect (skin.plan.navHeader));
+    nav->setProperty ("picture", rect (skin.plan.navPicture));
+    nav->setProperty ("speedHud", skin.plan.speedHud.isEmpty() ? juce::var() : rect (skin.plan.speedHud));
+    if (! skin.plan.speedHud.isEmpty())
     {
         // ...and how the speed on the glass is drawn there (SpeedHud's constants): a share of the box's height
         // each size and place, the colours as #rrggbbaa.
@@ -611,10 +609,10 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     glass->setProperty ("box", rect (glassFilm.getBounds().toFloat()));
     glass->setProperty ("ground", "nothing filled: the cabin picture's pixels in the screen, the glass over all it shows");
     nav->setProperty ("glass", juce::var (glass));
-    nav->setProperty ("learn", rect (learnArea));
-    nav->setProperty ("packOnScreen", skin().packOnScreen);
-    nav->setProperty ("firstScreen", Monitor::names()[(int) skin().firstScreen]);
-    nav->setProperty ("parkSignOnTopLine", skin().parkSignOnTopLine);
+    nav->setProperty ("learn", rect (skin.plan.learnArea));
+    nav->setProperty ("packOnScreen", skin.packOnScreen);
+    nav->setProperty ("firstScreen", Monitor::names()[(int) skin.firstScreen]);
+    nav->setProperty ("parkSignOnTopLine", skin.parkSignOnTopLine);
 
     // SHAPE, the screen's first picture, as the screen draws it — edge to edge across `picture`, and not
     // fading in a pause.
@@ -687,7 +685,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     {
         const bool parked = at == GearLever::park;
         const auto gearName = GearLever::nameOf (at, lever.numGears());
-        const auto name = skin().packOnScreen ? juce::String (lineup().channels[(size_t) channel].name).toUpperCase() : juce::String();
+        const auto name = skin.packOnScreen ? juce::String (skin.lineup.channels[(size_t) channel].name).toUpperCase() : juce::String();
         const int speed = parked ? 0 : juce::roundToInt (view->drive().speedFor (gearOf (channel) + 1, turboOf (channel)) * 3.6f);
         const auto f = header.fit (gearName, name, speed, parked);
         auto* x = new juce::DynamicObject();
@@ -715,9 +713,9 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         x->setProperty ("shownByKmh", byKmh);
         lines.add (juce::var (x));
     };
-    for (int c = 0; c < (int) lineup().channels.size(); ++c)
+    for (int c = 0; c < (int) skin.lineup.channels.size(); ++c)
         line (GearLever::positionOf (gearOf (c)), c);
-    for (int c = 0; c < (int) lineup().channels.size(); ++c)
+    for (int c = 0; c < (int) skin.lineup.channels.size(); ++c)
         line (GearLever::park, c);
     nav->setProperty ("lines", lines);
     world.setProperty ("nav", juce::var (nav));
@@ -725,7 +723,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     juce::Array<juce::var> stills;
     stills.add ("still.jpg");
     places.setProperty ("stills", stills);
-    writePoster (dir, windscreen, Art::still(), { view.get() });
+    writePoster (dir, skin.plan.windscreen, Art::still (skin), { view.get() });
 
     // ...and one for each place of the lever, PARK first: the hatch shut there only, TURBO off.
     webPoses.count = lever.numPlaces();
@@ -738,8 +736,8 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         lever.setPlace (at, false, false);
         hatch.setShut (at == GearLever::park, false);
     };
-    webPoses.still = [] (int) { return Art::still(); };
-    webPoses.window = windscreen;
+    webPoses.still = [this] (int) { return Art::still (skin); };
+    webPoses.window = skin.plan.windscreen;
     webPoses.hidden = { view.get() };
     webPatch ("gateFader", { &threshold });
     webPatch ("limiterFader", { &ceiling });
@@ -755,9 +753,11 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
 }
 
 RedPawEditor::RedPawEditor (AmpProcessor& p)
-    : face::Console (p, std::make_unique<Dashboard>(), dashboardPlaces(), dashboardLook()),
-      view (skin().makeView()),
-      lever (numGears()),
+    : face::Console (p, std::make_unique<Dashboard> (skinOf (p.product())), dashboardPlaces (skinOf (p.product())),
+                     dashboardLook (skinOf (p.product()))),
+      skin (skinOf (p.product())),
+      view (skin.makeView()),
+      lever (skin, numGears (skin.lineup)),
       screen (p)
 {
     using namespace layout;
@@ -768,31 +768,31 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // THE ROOF'S KEYS ARE TOGGLES: thrown up while a history key is pressed, and up on the register
     // that is playing.
     for (int i = 0; i < 6; ++i)
-        roofKey (i).drawKey = [&k = roofKey (i)] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        roofKey (i).drawKey = [this, &k = roofKey (i)] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
         {
             if (k.isMouseOverOrDragging())
             {
                 juce::Path hole;
-                hole.addEllipse (juce::Rectangle<float> (layout::holeRadius * 2.0f, layout::holeRadius * 2.0f).withCentre (box.getCentre()));
+                hole.addEllipse (juce::Rectangle<float> (skin.plan.holeRadius * 2.0f, skin.plan.holeRadius * 2.0f).withCentre (box.getCentre()));
                 drawHandRim (g, hole, handLight);
             }
-            drawToggle (g, box, down);
+            drawToggle (skin, g, box, down);
         };
 
     // ...the six square keys, and TURBO, are the dashboard's own buttons, up or pressed — each with the
     // hand's orange rim round its face while the hand is over it, like everything else that moves; the
     // filters' names on their faces where the layout puts the names there.
     for (int i = 0; i < 6; ++i)
-        key (i).drawKey = [&k = key (i), i] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
+        key (i).drawKey = [this, &k = key (i), i] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
         {
-            const auto& img = down ? Art::get().keyDown : Art::get().keyUp;
+            const auto& img = down ? Art::of (skin).keyDown : Art::of (skin).keyUp;
             drawRender (g, img, box);
-            if (layout::keyNamesOnKeys && i <= btLpf)
-                capWord (g, switches[(size_t) i].shortName, fittedArea (img, box), down);
+            if (skin.plan.keyNamesOnKeys && i <= btLpf)
+                capWord (skin, g, switches[(size_t) i].shortName, fittedArea (img, box), down);
             for (int lamp = 0; lamp < 2; ++lamp)
-                if (layout::lightKeys[(size_t) lamp] == i)
+                if (skin.plan.lightKeys[(size_t) lamp] == i)
                     drawLampSign (g, fittedArea (img, box), lamp == 0,
-                                  down ? skin().ink.state : skin().ink.at (skin().ink.words, 0.75f));
+                                  down ? skin.ink.state : skin.ink.at (skin.ink.words, 0.75f));
             if (k.isMouseOverOrDragging() && k.isEnabled())
             {
                 juce::Path face;
@@ -802,24 +802,24 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         };
 
     // THE RINGS ROUND THE KNOBS say where each stands.
-    const auto ringFor = [] (const ArtKnob& knob, const layout::Socket& s) { return std::make_unique<KnobRing> (knob, s.centre, s.ring, s.ringWidth); };
-    rings.push_back (ringFor (driveKnob(), layout::drive));
+    const auto ringFor = [this] (const ArtKnob& knob, const layout::Socket& s) { return std::make_unique<KnobRing> (skin, knob, s.centre, s.ring, s.ringWidth); };
+    rings.push_back (ringFor (driveKnob(), skin.plan.drive));
     for (int t = 0; t < 3; ++t)
-        rings.push_back (ringFor (toneKnob (t), layout::tones[(size_t) t]));
+        rings.push_back (ringFor (toneKnob (t), skin.plan.tones[(size_t) t]));
     for (auto& ring : rings)
         addToStage (*ring);
 
     // THE WINDSCREEN, under the dashboard: the picture's alpha is its frame.
     stage.addAndMakeVisible (*view, 0);
-    view->setBounds (windscreen.toNearestInt());
+    view->setBounds (skin.plan.windscreen.toNearestInt());
     view->addMouseListener (&glassClicks, false);
     glassClicks.menu = [this] { showWindowMenu(); };
 
     // THE GEAR LEVER: the pedal, and everything its channel was left with. Its box is the gate's plate
     // and round it as far as the grip, its light and its shadow reach.
     addToStage (lever);
-    const float leverRight = juce::jmax (gearPlate.getRight(), notchX + leverWidth * 0.5f + 16.0f);
-    lever.setBounds (juce::Rectangle<float> (leverLeft, leverTop, leverRight - leverLeft, gearPlate.getBottom() - leverTop).toNearestInt());
+    const float leverRight = juce::jmax (skin.plan.gearPlate.getRight(), skin.plan.notchX + skin.plan.leverWidth * 0.5f + 16.0f);
+    lever.setBounds (juce::Rectangle<float> (skin.plan.leverLeft, skin.plan.leverTop, leverRight - skin.plan.leverLeft, skin.plan.gearPlate.getBottom() - skin.plan.leverTop).toNearestInt());
     lever.onPlace    = [this] (int at) { if (at == GearLever::park) parkIt(); else pullGear (at - GearLever::positionOf (0)); };
     lever.onRelease  = [this] { showChannel(); };  // held, it follows the hand; let go, it follows the state
 
@@ -830,7 +830,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     turbo.latching = false;
     turbo.drawKey = [this] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
     {
-        const auto& img = down ? Art::get().turboDown : Art::get().turboUp;
+        const auto& img = down ? Art::of (skin).turboDown : Art::of (skin).turboUp;
         drawRender (g, img, box);
         if (turbo.isMouseOverOrDragging() && turbo.isEnabled())
         {
@@ -841,9 +841,9 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     };
     turbo.onPress = [this] { throwTurbo (! turboOf (channels.active())); };
     addToStage (turbo);
-    turbo.setBounds (juce::Rectangle<float> (turboSize, turboSize).withCentre (layout::turbo).toNearestInt());
+    turbo.setBounds (juce::Rectangle<float> (skin.plan.turboSize, skin.plan.turboSize).withCentre (skin.plan.turbo).toNearestInt());
     addToStage (hatch);         // after the button, so over it
-    hatch.setBounds (layout::turboLid.getSmallestIntegerContainer());
+    hatch.setBounds (skin.plan.turboLid.getSmallestIntegerContainer());
 
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg, its
     // cap lighter than the columns' so a small one reads in its corner. A double click puts it back where
@@ -853,8 +853,8 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
                                     float low, float high, std::function<void()> menu, const juce::String& name)
     {
         const auto travelOf = [low, high] (float v) { return (v - low) / (high - low); };
-        fader.scale = slotScale;
-        fader.capLength = faderCapLength * slotScale;
+        fader.scale = skin.plan.slotScale;
+        fader.capLength = skin.plan.faderCapLength * skin.plan.slotScale;
         fader.handLight = handLight;
         fader.defaultValue = travelOf (amp.apvts.getParameter (paramId)->convertFrom0to1 (amp.apvts.getParameter (paramId)->getDefaultValue()));
         auto* attachment = follow (paramId, [&fader, travelOf] (float v) { fader.setValue (travelOf (v), false); });
@@ -867,64 +867,64 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         follow (onId, [&fader] (float on) { fader.setAlpha (on > 0.5f ? 1.0f : 0.6f); })->sendInitialUpdate();
         addToStage (fader);
         const bool across = slot.getWidth() > slot.getHeight();     // a slot lying across: the fader runs left to right
-        const auto run = slot.reduced (across ? slotRim : 0.0f, across ? 0.0f : slotRim);
-        const float breadth = faderWidth * slotScale;
+        const auto run = slot.reduced (across ? skin.plan.slotRim : 0.0f, across ? 0.0f : skin.plan.slotRim);
+        const float breadth = skin.plan.faderWidth * skin.plan.slotScale;
         fader.setAcross (across);
         fader.setBounds ((across ? run.withSizeKeepingCentre (run.getWidth(), breadth)
                                  : run.withSizeKeepingCentre (breadth, run.getHeight())).toNearestInt());
     };
     threshold.marks = 6;            // every 5 dB, the longer at -50
     threshold.longMark = 4;
-    plateFader (threshold, thresholdSlot, params::gateThreshold, params::gateOn, thresholdLowDb, thresholdHighDb,
+    plateFader (threshold, skin.plan.thresholdSlot, params::gateThreshold, params::gateOn, thresholdLowDb, thresholdHighDb,
                 [this] { showGateMenu(); }, "GATE");
     ceiling.marks = 6;              // every half a decibel or so, none longer
     ceiling.longMark = -1;
-    plateFader (ceiling, ceilingSlot, params::limiterCeiling, params::limiterOn, params::limiterCeilingMin, params::limiterCeilingMax,
+    plateFader (ceiling, skin.plan.ceilingSlot, params::limiterCeiling, params::limiterOn, params::limiterCeilingMin, params::limiterCeilingMax,
                 [this] { showOutputMenu(); }, "LIMITER");
 
     // THE NAV SCREEN: along its top the gear, the channel where the skin names it, and the speed the
     // windscreen is driving at; under them the picture of the amp at work the machine has chosen, the
     // skin's until then.
     header.speed = [this] { return view->speedKmh(); };
-    header.showsWarning = skin().parkSignOnTopLine;
+    header.showsWarning = skin.parkSignOnTopLine;
     addToStage (header);
-    header.setBounds (navHeader.toNearestInt());
-    if (! speedHud.isEmpty())       // ...or the speed on the glass, the screen's top line the gear alone
+    header.setBounds (skin.plan.navHeader.toNearestInt());
+    if (! skin.plan.speedHud.isEmpty())       // ...or the speed on the glass, the screen's top line the gear alone
     {
         hud.speed = header.speed;
         header.showsSpeed = false;
         addToStage (hud);
-        hud.setBounds (speedHud.toNearestInt());
+        hud.setBounds (skin.plan.speedHud.toNearestInt());
     }
     addToStage (screen);
-    screen.setBounds (navPicture.toNearestInt());
+    screen.setBounds (skin.plan.navPicture.toNearestInt());
     screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
-                                               (int) prefs::store().get (screenKey, (int) skin().firstScreen)));
+                                               (int) prefs::store (amp.product()).get (screenKey, (int) skin.firstScreen)));
 
     // LEARN, from the menus or a key of its own, takes the picture's place while it runs — the parked
     // warning's too, and the top line's where its place takes that in (RedPawLayout.h) — and lights its key.
     addToStage (learnGlass);
-    learnGlass.setBounds (learnArea.toNearestInt());
+    learnGlass.setBounds (skin.plan.learnArea.toNearestInt());
     learnGlass.inset = { 8.0f, 4.0f };      // the top line's words start where the header's do
     learnGlass.onShow = [this] (bool up)
     {
         screen.setAlpha (up ? 0.0f : 1.0f);
         parkSign.setAlpha (up ? 0.0f : 1.0f);
-        if (learnArea.intersects (navHeader))
+        if (skin.plan.learnArea.intersects (skin.plan.navHeader))
             header.setAlpha (up ? 0.0f : 1.0f);
         learnShowing = up ? (learnGlass.showsHum() ? 1 : 0) : -1;
         learnKey.repaint();
         humKey.repaint();
     };
 
-    if (learnKeySize > 0.0f)
+    if (skin.plan.learnKeySize > 0.0f)
         for (int k = 0; k < 2; ++k)
         {
             auto& key = k == 0 ? learnKey : humKey;
             key.latching = false;
             key.drawKey = [this, &key, k] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
             {
-                const auto& img = down || learnShowing == k ? Art::get().turboDown : Art::get().turboUp;
+                const auto& img = down || learnShowing == k ? Art::of (skin).turboDown : Art::of (skin).turboUp;
                 drawRender (g, img, box);
                 if (key.isMouseOverOrDragging() && key.isEnabled())
                 {
@@ -935,24 +935,24 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
             };
             key.onPress = [this, k] { k == 0 ? startGateLearn() : startHumLearn(); };
             addToStage (key);
-            key.setBounds (juce::Rectangle<float> (learnKeySize, learnKeySize).withCentre (learnKeys[(size_t) k]).toNearestInt());
+            key.setBounds (juce::Rectangle<float> (skin.plan.learnKeySize, skin.plan.learnKeySize).withCentre (skin.plan.learnKeys[(size_t) k]).toNearestInt());
         }
 
     // THE SEARCHLIGHTS on two of the six keys, where the layout gives them some: each key a lamp, lit
     // while it burns, kept as the machine's choice.
-    if (lightKeys[0] >= 0)
+    if (skin.plan.lightKeys[0] >= 0)
     {
-        const int kept = (int) prefs::store().get (lightsKey, 0);
+        const int kept = (int) prefs::store (amp.product()).get (lightsKey, 0);
         const auto throwLights = [this]
         {
-            const bool l = key (lightKeys[0]).isOn(), r = key (lightKeys[1]).isOn();
-            prefs::store().set (lightsKey, (l ? 1 : 0) | (r ? 2 : 0));
+            const bool l = key (skin.plan.lightKeys[0]).isOn(), r = key (skin.plan.lightKeys[1]).isOn();
+            prefs::store (amp.product()).set (lightsKey, (l ? 1 : 0) | (r ? 2 : 0));
             view->setLights (l, r);
         };
         for (int lamp = 0; lamp < 2; ++lamp)
         {
-            auto& k = key (lightKeys[(size_t) lamp]);
-            claimKey (lightKeys[(size_t) lamp], lamp == 0 ? "SEARCHLIGHT LEFT" : "SEARCHLIGHT RIGHT");
+            auto& k = key (skin.plan.lightKeys[(size_t) lamp]);
+            claimKey (skin.plan.lightKeys[(size_t) lamp], lamp == 0 ? "SEARCHLIGHT LEFT" : "SEARCHLIGHT RIGHT");
             k.latching = true;
             k.setOn ((kept & (1 << lamp)) != 0, false);
             k.onChange = [throwLights] (bool) { throwLights(); };
@@ -961,9 +961,9 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     }
 
     // THE WIPERS' SPEED, where the picture paints keys for it: OFF, INT, LO, HI, the speed set lit.
-    if (wiperKeySize > 0.0f)
+    if (skin.plan.wiperKeySize > 0.0f)
     {
-        wipers = juce::jlimit (0, 3, (int) prefs::store().get (wipersKey, 1));
+        wipers = juce::jlimit (0, 3, (int) prefs::store (amp.product()).get (wipersKey, 1));
         const char* words[] { "OFF", "INT", "LO", "HI" };
         for (int i = 0; i < 4; ++i)
         {
@@ -972,9 +972,9 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
             k.drawKey = [this, &k, i] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float)
             {
                 const bool lit = down || wipers == i;
-                const auto& img = lit ? Art::get().keyDown : Art::get().keyUp;
+                const auto& img = lit ? Art::of (skin).keyDown : Art::of (skin).keyUp;
                 drawRender (g, img, box);
-                capWord (g, k.name, fittedArea (img, box), lit);
+                capWord (skin, g, k.name, fittedArea (img, box), lit);
                 if (k.isMouseOverOrDragging())
                 {
                     juce::Path face;
@@ -984,7 +984,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
             };
             k.onPress = [this, i] { chooseWipers (i); };
             addToStage (k);
-            k.setBounds (juce::Rectangle<float> (wiperKeySize, wiperKeySize).withCentre (layout::wiperKeys[(size_t) i]).toNearestInt());
+            k.setBounds (juce::Rectangle<float> (skin.plan.wiperKeySize, skin.plan.wiperKeySize).withCentre (skin.plan.wiperKeys[(size_t) i]).toNearestInt());
         }
         view->setWipers (wipers);
     }
@@ -992,12 +992,12 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // Parked, the warning stands large in the middle of the screen, over the picture dimmed.
     addToStage (parkSign);
     parkSign.setVisible (false);      // showSelector says when
-    parkSign.setBounds (navPicture.toNearestInt());
+    parkSign.setBounds (skin.plan.navPicture.toNearestInt());
 
     // ...and its glass, over the lot: a little murky, dusty, lightly scratched — and the tuner's strip,
     // where the tuner is not a dial of its own.
     addToStage (glassFilm);
-    glassFilm.setBounds ((tunerDial.reach > 0.0f ? navHeader.getUnion (navPicture) : navHeader.getUnion (tunerScreen)).toNearestInt());
+    glassFilm.setBounds ((skin.plan.tunerDial.reach > 0.0f ? skin.plan.navHeader.getUnion (skin.plan.navPicture) : skin.plan.navHeader.getUnion (skin.plan.tunerScreen)).toNearestInt());
 
     // A prototype's hook for looking at the windscreen in a gear, with TURBO, or parked, without a hand
     // on anything: ROVER_CHANNEL names a channel, from 0 to the product's last, or "park".
@@ -1016,9 +1016,9 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     gl.setComponentPaintingEnabled (true);
     gl.setContinuousRepainting (false);     // the view asks for each frame, at its own pace
     gl.attachTo (*this);
-    view->setFrameRateCap ((int) prefs::store().get (frameRateKey, 60));
-    view->setPicture ([] { return Art::still(); });     // STILL is the rover's own picture, where it ships one
-    view->setMode ((Windscreen::Mode) juce::jmax (0, landscapeWords.indexOf (prefs::store().get (landscapeKey, landscapeWords[0]).toString())));
+    view->setFrameRateCap ((int) prefs::store (amp.product()).get (frameRateKey, 60));
+    view->setPicture ([this] { return Art::still (skin); });     // STILL is the rover's own picture, where it ships one
+    view->setMode ((Windscreen::Mode) juce::jmax (0, landscapeWords.indexOf (prefs::store (amp.product()).get (landscapeKey, landscapeWords[0]).toString())));
     placeView();
 }
 
@@ -1069,7 +1069,7 @@ void RedPawEditor::showSelector (int channel)
     hatch.setShut (parked, isShowing());
 
     header.set (GearLever::nameOf (at, lever.numGears()),
-                skin().packOnScreen ? juce::String (lineup().channels[(size_t) channel].name).toUpperCase() : juce::String(), parked);
+                skin.packOnScreen ? juce::String (skin.lineup.channels[(size_t) channel].name).toUpperCase() : juce::String(), parked);
 
     view->setGear (gear + 1);
     view->setTurbo (turboOn);
@@ -1143,7 +1143,7 @@ void RedPawEditor::addWindowSections (juce::PopupMenu& menu)
     // Where the GPU's landscape cannot be had the CPU's drives instead, and the tick says what runs.
     menu.addSectionHeader ("LANDSCAPE");
     const auto running = view->mode();
-    const auto& landscapeNames = skin().landscapeNames;
+    const auto& landscapeNames = skin.landscapeNames;
     for (int i = 0; i < landscapeNames.size(); ++i)
         addChoice (menu, landscapeNames[i], (int) running == i,
                    [self, i] (Console& e) { self (e).chooseLandscape ((Windscreen::Mode) i); },
@@ -1157,7 +1157,7 @@ void RedPawEditor::addWindowSections (juce::PopupMenu& menu)
     pictures; the tuner's strip under them has a menu of its own. */
 bool RedPawEditor::pictureRightClicked (juce::Point<int> at)
 {
-    if (! layout::navHeader.getUnion (layout::navPicture).contains (at.toFloat()))
+    if (! skin.plan.navHeader.getUnion (skin.plan.navPicture).contains (at.toFloat()))
         return false;
     showScreenMenu();
     return true;
@@ -1178,14 +1178,14 @@ void RedPawEditor::showScreenMenu()
 
 void RedPawEditor::chooseScreen (Monitor::View v)
 {
-    prefs::store().set (screenKey, (int) v);
+    prefs::store (amp.product()).set (screenKey, (int) v);
     screen.show (v);
 }
 
 void RedPawEditor::chooseWipers (int speed)
 {
     wipers = speed;
-    prefs::store().set (wipersKey, speed);
+    prefs::store (amp.product()).set (wipersKey, speed);
     view->setWipers (speed);
     for (auto& k : wiperButtons)
         k->repaint();
@@ -1202,20 +1202,20 @@ void RedPawEditor::showWindowMenu()
 
 void RedPawEditor::chooseLandscape (Windscreen::Mode mode)
 {
-    prefs::store().set (landscapeKey, landscapeWords[(int) mode]);
+    prefs::store (amp.product()).set (landscapeKey, landscapeWords[(int) mode]);
     view->setMode (mode);
 }
 
 void RedPawEditor::chooseFrameRate (int fps)
 {
-    prefs::store().set (frameRateKey, fps);
+    prefs::store (amp.product()).set (frameRateKey, fps);
     view->setFrameRateCap (fps);
 }
 
 /** Where the windscreen is in the editor's own pixels, for the GL thread: the stage's scale and place. */
 void RedPawEditor::placeView()
 {
-    const auto at = (layout::windscreen * stageScale() + stageOrigin()).toNearestInt();
+    const auto at = (skin.plan.windscreen * stageScale() + stageOrigin()).toNearestInt();
     glassX.store (at.getX());
     glassY.store (at.getY());
     glassW.store (at.getWidth());
@@ -1243,5 +1243,4 @@ void RedPawEditor::openGLContextClosing()
     view->hostContextClosing();
 }
 
-} // namespace redpaw
-} // namespace orbitamp
+} // namespace orbitamp::redpaw

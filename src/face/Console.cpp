@@ -71,8 +71,8 @@ namespace
     // WHAT A PRODUCT HANDS OUT SAYS WHERE IT CAME FROM: a capture and a cabinet saved from it are
     // offered a name that starts with the product's own and with what kind of file it is —
     // "CatpitAmp-NamA2-", "CatpitAmp-IR-".
-    const juce::String captureNamePrefix = juce::String (product::name) + "-NamA2-";
-    const juce::String cabNamePrefix     = juce::String (product::name) + "-IR-";
+    juce::String captureNamePrefix (const Product& p) { return juce::String (p.name) + "-NamA2-"; }
+    juce::String cabNamePrefix (const Product& p)     { return juce::String (p.name) + "-IR-"; }
 
     /** ...and a capture's name ends with where the gear's gain knob stood for it, as the hour it
         pointed at: "-1h", "-9h30". Nothing when the pack does not say. */
@@ -103,9 +103,9 @@ namespace
     }
 
     /** The product's own tag on a family link, for the site's analytics: "utm_source=catpitamp&...". */
-    juce::String campaign()
+    juce::String campaign (const Product& p)
     {
-        return "utm_source=" + juce::String (product::name).toLowerCase() + "&utm_medium=plugin";
+        return "utm_source=" + juce::String (p.name).toLowerCase() + "&utm_medium=plugin";
     }
 
     /** THE BUILD WINDOW, AS THE PRODUCT'S. What the build is and what it was built against is the same
@@ -113,9 +113,9 @@ namespace
         the cockpit's a small starship head-on, its fins a cat's ears — and its name where the notice
         says whose product this is. The window outlives the badge that opens it, so the mark is
         shared, not lent. */
-    felitronics::appkit::VersionBadge::Config aboutTheProduct (const juce::String& svg)
+    felitronics::appkit::VersionBadge::Config aboutTheProduct (const Product& p, const juce::String& svg)
     {
-        auto config = aboutConfig (product::name, "https://darwinscat.com", campaign().toRawUTF8());
+        auto config = aboutConfig (p.name, "https://darwinscat.com", campaign (p).toRawUTF8());
 
         std::shared_ptr<juce::Drawable> mark { juce::Drawable::createFromImageData (
             svg.toRawUTF8(), svg.getNumBytesAsUTF8()).release() };
@@ -125,7 +125,7 @@ namespace
             if (mark != nullptr)
                 mark->drawWithin (g, { cx - d * 0.5f, cy - d * 0.5f, d, d }, juce::RectanglePlacement::centred, 1.0f);
         };
-        config.notice = config.notice.replace ("OrbitAmp", product::name);
+        config.notice = config.notice.replace ("OrbitAmp", p.name);
         return config;
     }
 
@@ -182,7 +182,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
       tuner (p.tunerEar),
       emblem (where.emblemFace, where.emblemMark),
       version (stage::px13),
-      about (p.updateChecker(), aboutTheProduct (look.mark), p.pluginFormat()),
+      about (p.updateChecker(), aboutTheProduct (p.product(), look.mark), p.pluginFormat()),
       load (where.readingPx),
       memory (where.readingPx),
       presetDoor (stage::px13)
@@ -193,9 +193,9 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // undo on the panel it must not leave a step to press back through.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
-    leverZero = snapLeverZero ((int) prefs::store().get (leverZeroKey, leverZeroDefault));
-    channels.setTurboDb ((float) channels::settings::turbo());
-    driveSteps = (bool) prefs::store().get (driveStepsKey, false);
+    leverZero = snapLeverZero ((int) prefs::store (amp.product()).get (leverZeroKey, leverZeroDefault));
+    channels.setTurboDb ((float) channels::settings::turbo (amp.product()));
+    driveSteps = (bool) prefs::store (amp.product()).get (driveStepsKey, false);
 
     channels.readCabinets();    // the player's folder may have gained or lost a file since the engine was built
     engine.setUpChain (channels.adopt());
@@ -448,9 +448,9 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
             i == 0 ? face.startNewSubPath (places.emblemFace[i]) : face.lineTo (places.emblemFace[i]);
         emblem.setBounds (face.getBounds().getSmallestIntegerContainer());
     }
-    emblem.onClick = []
+    emblem.onClick = [&product = amp.product()]
     {
-        juce::URL ("https://darwinscat.com/felitronics/" + juce::String (product::name).toLowerCase() + "?" + campaign()).launchInDefaultBrowser();
+        juce::URL ("https://darwinscat.com/felitronics/" + juce::String (product.name).toLowerCase() + "?" + campaign (product)).launchInDefaultBrowser();
     };
 
     // The version, and behind it the window with everything else about the build. That window is
@@ -1011,7 +1011,7 @@ void Console::settleOnSettings()
 void Console::chooseLeverZero (int db)
 {
     leverZero = snapLeverZero (db);
-    prefs::store().set (leverZeroKey, leverZero);
+    prefs::store (amp.product()).set (leverZeroKey, leverZero);
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     settleOnSettings();
@@ -1020,10 +1020,10 @@ void Console::chooseLeverZero (int db)
 void Console::flipHum()
 {
     endTapping();
-    prefs::setHum (prefs::humFlip());
+    prefs::setHum (amp.product(), prefs::humFlip (amp.product()));
 
     const auto at = inFader.getBoundsInParent().toFloat();
-    sayForAMoment ({ at.getCentreX(), at.getY() - 24.0f }, prefs::humTag (prefs::hum(), amp.humHeard()));
+    sayForAMoment ({ at.getCentreX(), at.getY() - 24.0f }, prefs::humTag (prefs::hum (amp.product()), amp.humHeard()));
 }
 
 /** G: the gate's On, through the same hands as GATE's menu — and the tag over GATE says where it is. */
@@ -1069,7 +1069,7 @@ void Console::sayLever (ColumnFader& fader, const juce::String& name, std::funct
 void Console::chooseTurbo (int db)
 {
     db = snapTurbo (db);
-    prefs::store().set (turboKey, db);
+    prefs::store (amp.product()).set (turboKey, db);
     channels.setTurboDb ((float) db);
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
@@ -1079,7 +1079,7 @@ void Console::chooseTurbo (int db)
 void Console::chooseDriveSteps (bool steps)
 {
     driveSteps = steps;
-    prefs::store().set (driveStepsKey, steps);
+    prefs::store (amp.product()).set (driveStepsKey, steps);
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     settleOnSettings();
@@ -1104,7 +1104,7 @@ void Console::startHumLearn()
     on the tag, and the three modes. */
 void Console::addHumLines (juce::PopupMenu& menu)
 {
-    for (const auto& line : prefs::humMenu (amp.humHeard(), humLearner.isLearning()))
+    for (const auto& line : prefs::humMenu (amp.product(), amp.humHeard(), humLearner.isLearning()))
         addChoice (menu, line.text, line.ticked, [line] (Console& e)
         {
             if (line.isLearn)
@@ -1112,12 +1112,12 @@ void Console::addHumLines (juce::PopupMenu& menu)
             else if (line.isSwitch)
                 e.flipHum();
             else
-                prefs::humPick (line);
+                prefs::humPick (e.amp.product(), line);
         });
 
     // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
     // its title.
-    for (const auto& knob : prefs::humtune::knobs())
+    for (const auto& knob : prefs::humtune::knobs (amp.product()))
     {
         juce::PopupMenu values;
         for (int i = 0; i < knob.count; ++i)
@@ -1254,9 +1254,9 @@ void Console::showTunerMenu()
 
     // The pitch its A is tuned to: the machine's, not the sound's — it is about who the guitar plays with.
     juce::PopupMenu reference;
-    const int a4 = prefs::tunerReference();
+    const int a4 = prefs::tunerReference (amp.product());
     for (const int hz : prefs::tunerReferences)
-        addChoice (reference, juce::String (hz) + " Hz", hz == a4, [hz] (Console&) { prefs::setTunerReference (hz); });
+        addChoice (reference, juce::String (hz) + " Hz", hz == a4, [hz] (Console& c) { prefs::setTunerReference (c.amp.product(), hz); });
     menu.addSubMenu ("Reference  A = " + juce::String (a4) + " Hz", reference);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
@@ -1310,20 +1310,20 @@ void Console::saveCapture()
     if (capture.nam.isEmpty())
         return;
 
-    auto folder = juce::File (prefs::store().get (captureFolderKey, juce::String()).toString());
+    auto folder = juce::File (prefs::store (amp.product()).get (captureFolderKey, juce::String()).toString());
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
-    captureChooser = std::make_unique<juce::FileChooser> ("Save the capture", folder.getChildFile (captureNamePrefix + capture.name + hourTag (capture.hour) + ".nam"), "*.nam");
+    captureChooser = std::make_unique<juce::FileChooser> ("Save the capture", folder.getChildFile (captureNamePrefix (amp.product()) + capture.name + hourTag (capture.hour) + ".nam"), "*.nam");
     captureChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                                      | juce::FileBrowserComponent::warnAboutOverwriting,
-                                 [nam = std::move (capture.nam)] (const juce::FileChooser& picked)
+                                 [nam = std::move (capture.nam), &product = amp.product()] (const juce::FileChooser& picked)
                                  {
                                      const auto file = picked.getResult();
                                      if (file == juce::File())
                                          return;
 
-                                     prefs::store().set (captureFolderKey, file.getParentDirectory().getFullPathName());
+                                     prefs::store (product).set (captureFolderKey, file.getParentDirectory().getFullPathName());
                                      if (! file.replaceWithData (nam.getData(), nam.getSize()))
                                          sayNotSaved (file);
                                  });
@@ -1356,22 +1356,22 @@ void Console::saveCab()
         return;
     const auto cabinet = channels.cabinets()[playing];
 
-    auto folder = juce::File (prefs::store().get (cabFolderKey, juce::String()).toString());
+    auto folder = juce::File (prefs::store (amp.product()).get (cabFolderKey, juce::String()).toString());
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
     cabChooser = std::make_unique<juce::FileChooser> ("Save the cabinet",
-                                                      folder.getChildFile (cabNamePrefix + Channels::cabinetStem (cabinet) + cabinet.getFileExtension()),
+                                                      folder.getChildFile (cabNamePrefix (amp.product()) + Channels::cabinetStem (cabinet) + cabinet.getFileExtension()),
                                                       "*" + cabinet.getFileExtension());
     cabChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                                  | juce::FileBrowserComponent::warnAboutOverwriting,
-                             [cabinet] (const juce::FileChooser& picked)
+                             [cabinet, &product = amp.product()] (const juce::FileChooser& picked)
                              {
                                  const auto file = picked.getResult();
                                  if (file == juce::File())
                                      return;
 
-                                 prefs::store().set (cabFolderKey, file.getParentDirectory().getFullPathName());
+                                 prefs::store (product).set (cabFolderKey, file.getParentDirectory().getFullPathName());
                                  if (! cabinet.copyFileTo (file))
                                      sayNotSaved (file);
                              });
@@ -1463,7 +1463,7 @@ void Console::showLoad()
 /** THE MIDI WINDOW — which inputs the product listens to, and the list of what it does with what it hears. */
 void Console::showMidi()
 {
-    showSheet (std::make_unique<MidiPanel> (midiCommands));
+    showSheet (std::make_unique<MidiPanel> (amp.product().name, midiCommands));
 }
 
 void Console::showSheet (std::unique_ptr<juce::Component> content)
@@ -1908,7 +1908,7 @@ void Console::showSettingsMenu()
     // says where it stands — AUTO's state with it.
     juce::PopupMenu hum;
     addHumLines (hum);
-    menu.addSubMenu ("HUM  " + prefs::humState (amp.humHeard()), hum);
+    menu.addSubMenu ("HUM  " + prefs::humState (amp.product(), amp.humHeard()), hum);
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)
@@ -1980,7 +1980,7 @@ void Console::cabinetsChanged()
 /** ADD: the files a player points at, taken in the way dropped ones are. */
 void Console::chooseCabsToAdd()
 {
-    auto folder = juce::File (prefs::store().get (cabFolderKey, juce::String()).toString());
+    auto folder = juce::File (prefs::store (amp.product()).get (cabFolderKey, juce::String()).toString());
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
@@ -2290,9 +2290,9 @@ void Console::showPresetMenu()
 {
     enum : int { itemSave = 1, itemSaveAs, itemRename, itemDelete, itemInit, firstPreset = 100 };
 
-    const auto names   = Presets::names();
+    const auto names   = presets.names();
     const auto current = presets.current();
-    const bool onDisk  = Presets::exists (current);
+    const bool onDisk  = presets.exists (current);
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked = false, bool enabled = true)
     {

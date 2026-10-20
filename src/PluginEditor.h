@@ -148,7 +148,7 @@ private:
     DragRuler     outRuler;         // the OUT trim's, mirrored
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;   // constructed with the processor: its LIBRARY page reads the packs
-    DisclaimerPanel devices;        // DEVICES & TRADEMARKS: the long notice and the list it is about
+    DisclaimerPanel devices { amp.product().name };        // DEVICES & TRADEMARKS: the long notice and the list it is about
             // the Setup overlay — last member, so it sits on top
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpEditor)

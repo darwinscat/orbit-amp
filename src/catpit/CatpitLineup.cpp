@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "CatpitLineup.h"
+#include "CatpitEditor.h"
 
 #include "../channels/Engine.h"
 
@@ -32,22 +33,43 @@ const channels::Lineup& lineup()
 namespace orbitamp
 {
 
-// The cockpit's half of the two things a product gives the processor beside its face (PluginProcessor.h).
-void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+namespace
 {
-    channels::Engine::addParameters (layout, catpit::lineup());
+    // The cockpit's half of the two things a product gives the processor beside its face (Product.h).
+    void addParameters (const Product&, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+    {
+        channels::Engine::addParameters (layout, catpit::lineup());
+    }
+
+    std::unique_ptr<ProductEngine> makeEngine (AmpProcessor& p)
+    {
+        return std::make_unique<channels::Engine> (p, catpit::lineup());
+    }
+
+    /** The cockpit's first start in a process: the player's IRs it kept in its own folder are gathered
+        into the family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the
+        installer. */
+    void firstStart (const Product& cockpit)
+    {
+        gatherFormerIrs (cockpit);
+    }
 }
 
-std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor& p)
+/** CATPITAMP (Product.h): the cockpit — its face (CatpitEditor.h) over its four channels. */
+const Product& products::catpitAmp()
 {
-    return std::make_unique<channels::Engine> (p, catpit::lineup());
-}
-
-/** The cockpit's first start in a process: the player's IRs it kept in its own folder are gathered into
-    the family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the installer. */
-void firstStart()
-{
-    gatherFormerIrs();
+    static const Product cockpit { "CatpitAmp", catpit::makeEditor, firstStart, addParameters, makeEngine };
+    return cockpit;
 }
 
 } // namespace orbitamp
+
+// THE PLUG-IN'S ENTRY, in the cockpit's own plug-in alone (CMakeLists.txt: add_amp): a host that opens it
+// gets a processor of the cockpit. A gate, or a binary that plays several amps, makes its own.
+#if ORBITAMP_PLUGIN_ENTRY
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
+    return new orbitamp::AmpProcessor (orbitamp::products::catpitAmp());
+}
+#endif
+

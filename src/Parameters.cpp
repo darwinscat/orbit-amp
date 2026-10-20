@@ -24,10 +24,10 @@ namespace
         BlockDefaults() { meas.fill (0.5f); }
     };
 
-    BlockDefaults blockDefaults (device::DeviceLibrary::Slot slot, const juce::String& wantedName)
+    BlockDefaults blockDefaults (const juce::String& product, device::DeviceLibrary::Slot slot, const juce::String& wantedName)
     {
         BlockDefaults d;
-        const auto packs = device::DeviceLibrary::scan (slot);
+        const auto packs = device::DeviceLibrary::scan (product, slot);
 
         for (int i = 0; i < packs.size(); ++i)
         {
@@ -46,7 +46,7 @@ namespace
     }
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::String& product)
 {
     // A FRESH INSTANCE IS CATPITAMP'S CRUNCH CHANNEL — the first launch, a new instance in a host, and
     // INIT alike: the X88-IR Crunch through DARK MATTER, the input and output columns in the chain,
@@ -55,7 +55,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // setUpChain) and finds them already so.
     //
     // The device a fresh instance opens on, and everything its pack says about starting it.
-    const auto preampDef = blockDefaults (device::DeviceLibrary::ampSlot, "X88-IR Crunch");
+    const auto preampDef = blockDefaults (product, device::DeviceLibrary::ampSlot, "X88-IR Crunch");
+
     using Bool   = juce::AudioParameterBool;
     using Choice = juce::AudioParameterChoice;
     using Float  = juce::AudioParameterFloat;

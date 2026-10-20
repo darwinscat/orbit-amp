@@ -11,27 +11,28 @@
 namespace orbitamp
 {
 
-AmpProcessor::FirstStart::FirstStart()
+AmpProcessor::FirstStart::FirstStart (const Product& product)
 {
-    firstStart();
+    if (product.firstStart != nullptr)
+        product.firstStart (product);
 }
 
-void gatherFormerIrs()
+void gatherFormerIrs (const Product& product)
 {
-    static const bool once = []
+    static PerProduct<const bool> once;
+    once.of (product.name, [&product]
     {
-        if (prefs::getBool (prefs::irsGathered, false))
+        if (prefs::getBool (product, prefs::irsGathered, false))
             return true;
 
-        const auto gathered = device::IrLibrary::gather (device::IrLibrary::formerDirectory(),
-                                                         device::IrLibrary::directory(), product::name);
+        const auto gathered = device::IrLibrary::gather (device::IrLibrary::formerDirectory (product.name),
+                                                         device::IrLibrary::directory(), product.name);
 
         // A file that would not copy is tried again on the next start; what was copied is not copied twice.
         if (gathered.failed == 0)
-            prefs::setBool (prefs::irsGathered, true);
+            prefs::setBool (product, prefs::irsGathered, true);
         return true;
-    }();
-    juce::ignoreUnused (once);
+    });
 }
 
 // The machine's word for the hum and the stage's are one list in one order: the processor hands one
@@ -52,19 +53,22 @@ static_assert ((int) StageVerdict::Learned      == core::HumLearnLink::learned
 namespace
 {
     /** The engine's parameters, and after them whatever the product adds of its own. */
-    juce::AudioProcessorValueTreeState::ParameterLayout layout()
+    juce::AudioProcessorValueTreeState::ParameterLayout layout (const Product& product)
     {
-        auto all = params::createLayout();
-        addProductParameters (all);
+        auto all = params::createLayout (product.name);
+        if (product.addParameters != nullptr)
+            product.addParameters (product, all);
         return all;
     }
 }
 
-AmpProcessor::AmpProcessor()
+AmpProcessor::AmpProcessor (const Product& product)
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, stateType, layout()),
+      ownProduct (product),
+      firstStarted (product),
+      apvts (*this, nullptr, stateType, layout (product)),
       // The history's opaque seam: it snapshots and restores the parameter tree without knowing what
       // is in it. replaceState takes a COPY so the parameter objects stay valid and every editor
       // attachment survives an undo.
@@ -81,7 +85,7 @@ AmpProcessor::AmpProcessor()
       // together, under the family's plain vX.Y.Z, so every amp asks for that "latest release", as
       // OrbitAmp always has: no tag prefix (see Product.h).
       updater ({ .ownerRepo      = "darwinscat/orbit-amp",
-                 .productName    = product::name,
+                 .productName    = ownProduct.name,
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })
 {
@@ -171,8 +175,8 @@ AmpProcessor::AmpProcessor()
     // The product's own half, where it has one. HERE, before the history takes its baseline: what it
     // settles as it is built — the cockpit's chain, its channel, its pack — is how the amp starts,
     // and must not be an edit of it.
-    product = makeProductEngine (*this);
-    parked = product != nullptr ? product->parkSwitch() : nullptr;
+    productEngine = ownProduct.makeEngine != nullptr ? ownProduct.makeEngine (*this) : nullptr;
+    parked = productEngine != nullptr ? productEngine->parkSwitch() : nullptr;
 
     // The names go in BEFORE the history looks, so a plugin that has just opened already knows
     // which device it is playing — and knows it without that knowledge being an edit. Resetting
@@ -195,11 +199,11 @@ AmpProcessor::AmpProcessor()
 
     // The machine's hum setting, read here on the constructing thread: its first read opens the
     // settings file, and the audio thread must only ever meet the cached atomic.
-    humWanted = &prefs::humCache();
-    humLastOn = &prefs::humLastOnCache();
-    humPlayWanted  = &prefs::humtune::playCache();
-    humQuietWanted = &prefs::humtune::quietCache();
-    humUpToWanted  = &prefs::humtune::upToCache();
+    humWanted = &prefs::humCache (ownProduct);
+    humLastOn = &prefs::humLastOnCache (ownProduct);
+    humPlayWanted  = &prefs::humtune::playCache (ownProduct);
+    humQuietWanted = &prefs::humtune::quietCache (ownProduct);
+    humUpToWanted  = &prefs::humtune::upToCache (ownProduct);
 
     // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
     // burst commits about 0.4 s after you stop moving.
@@ -407,7 +411,7 @@ void AmpProcessor::rescanDevices()
         const auto* id = deviceIdOf (b);
         auto* p = apvts.getParameter (id);
         const int was = juce::roundToInt (apvts.getRawParameterValue (id)->load());
-        const int now = blockAt (b).rescan (was);
+        const int now = blockAt (b).rescan (ownProduct.name, was);
 
         // Out of the parameter's reach: a folder can hold more devices than this can address, and
         // writing a clamped number would land on the neighbour. Nothing good happens past here —
@@ -460,17 +464,18 @@ void AmpProcessor::rescanDevices()
     }
 }
 
-const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
+const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (const Product& product, int index)
 {
     // The family's shelf (device/FactoryShelf.h), in the parameter's order: OrbitAmp plays it from memory,
-    // read once out of the factory folder, by the index `cabIr` keeps.
-    static const auto shelf = []
+    // read once out of the factory folder for each product, by the index `cabIr` keeps.
+    static PerProduct<const std::vector<IrBytes>> shelves;
+    const auto& shelf = shelves.of (product.name, [&product]
     {
         std::vector<IrBytes> out;
-        for (const auto& ir : device::shelf::irs())
+        for (const auto& ir : device::shelf::irs (product.name))
             out.push_back ({ ir.data, ir.size, ir.folder });
         return out;
-    }();
+    });
 
     jassert (shelf.size() == (size_t) params::cabIrNames.size());
     const auto& ir = shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
@@ -693,7 +698,7 @@ void AmpProcessor::pumpDeviceWork()
 
             if (choice.isUser())
                 cab.load (choice.bytes->getData(), choice.bytes->getSize());
-            else if (const auto& bytes = cabIrBytes (choice.factory); bytes.data != nullptr)
+            else if (const auto& bytes = cabIrBytes (ownProduct, choice.factory); bytes.data != nullptr)
                 cab.load (bytes.data, (size_t) bytes.size);     // none, with the factory folder missing
         }
     }
@@ -705,7 +710,7 @@ void AmpProcessor::pumpDeviceWork()
         // bytes never move (the store keeps them for its whole life), and the tick re-checks.
         if (const auto* own = cabUserIr.load())
             cab.load (own->getData(), own->getSize());
-        else if (const auto& shelf = cabIrBytes (juce::roundToInt (apvts.getRawParameterValue (params::cabIr)->load()));
+        else if (const auto& shelf = cabIrBytes (ownProduct, juce::roundToInt (apvts.getRawParameterValue (params::cabIr)->load()));
                  shelf.data != nullptr)
             cab.load (shelf.data, (size_t) shelf.size);
     }
@@ -1856,12 +1861,8 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
 juce::AudioProcessorEditor* AmpProcessor::createEditor()
 {
-    return makeEditor (*this);
+    return ownProduct.makeEditor (*this);
 }
 
 } // namespace orbitamp
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
-    return new orbitamp::AmpProcessor();
-}

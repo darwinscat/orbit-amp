@@ -35,9 +35,9 @@ namespace
     }
 
     /** Where a build's own cabinets are: in the factory folder with its packs, named in the product's own list. */
-    juce::Array<juce::File> bundledCabinets()
+    juce::Array<juce::File> bundledCabinets (const juce::String& product)
     {
-        return set::ownCabinets (factory());
+        return set::ownCabinets (factory(), product);
     }
 
     /** The cabinets among `files`, in the order of their names — and, given the `shelf` they lie on,
@@ -110,7 +110,8 @@ void Channels::readCabinets()
     // The build's own stand first and the player's after them, each group in the order of its names:
     // what a player adds never lands among the factory ones. The build's own are the ones the product's
     // list names, not whatever another product laid out beside them.
-    irs = cabinetsAmong (bundledCabinets(), set::cabinetsIn (device::DeviceLibrary::factoryDirectory()));
+    irs = cabinetsAmong (bundledCabinets (amp.product().name), set::cabinetsIn (device::DeviceLibrary::factoryDirectory()));
+
     factory = irs.size();
     irs.addArray (cabinetsIn (device::IrLibrary::directory()));
     irKeys.clear();

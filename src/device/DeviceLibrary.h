@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "../Product.h"
 #include "FactorySet.h"
 
 #include <namz.h>
@@ -106,17 +105,17 @@ public:
         return dir.getChildFile ("Darwin's Cat");
     }
 
-    /** The PRODUCT's folder: two faces of one engine each keep the devices the PLAYER adds, and neither
-        reads the other's. The player's IRs are the family's (IrLibrary). For OrbitAmp this is the folder
-        it has always been. */
-    static juce::File appDataRoot()
+    /** The PRODUCT's folder, by its name: two faces of one engine each keep the devices the PLAYER adds,
+        and neither reads the other's. The player's IRs are the family's (IrLibrary). For OrbitAmp this is
+        the folder it has always been. */
+    static juce::File appDataRoot (const juce::String& product)
     {
-        return familyRoot().getChildFile (product::name);
+        return familyRoot().getChildFile (product);
     }
 
-    static juce::File directory()
+    static juce::File directory (const juce::String& product)
     {
-        auto dir = appDataRoot().getChildFile ("Devices");
+        auto dir = appDataRoot (product).getChildFile ("Devices");
 
         if (! dir.isDirectory())
             dir.createDirectory();
@@ -148,13 +147,17 @@ public:
         `.orbitrig` is — then what lies in the folders inside it. The player's folder is read to any
         depth; the factory one at its top, where the packs lie, and of those only the ones this product's
         own list there names (FactorySet.h): the folder is the family's, and another product's packs lie
-        beside this one's. The two folders are the machine's unless a caller — a gate, in a folder of its
-        own — names others. */
-    static juce::Array<Pack> scan (Slot wanted = Slot::any, bool onePerCapture = true,
-                                   const juce::File& bundled = bundledDirectory(),
-                                   const juce::File& own = directory())
+        beside this one's. `product` is the product's name. The two folders are the machine's unless a
+        caller — a gate, in a folder of its own — names others. */
+    static juce::Array<Pack> scan (const juce::String& product, Slot wanted = Slot::any, bool onePerCapture = true)
     {
-        return scan (wanted, onePerCapture, bundled, own, FactorySet::listOf (bundled, product::name));
+        return scan (product, wanted, onePerCapture, bundledDirectory(), directory (product));
+    }
+
+    static juce::Array<Pack> scan (const juce::String& product, Slot wanted, bool onePerCapture,
+                                   const juce::File& bundled, const juce::File& own)
+    {
+        return scan (wanted, onePerCapture, bundled, own, FactorySet::listOf (bundled, product));
     }
 
     /** ...and the same, with the factory's packs that count named by the caller rather than by the
@@ -501,8 +504,9 @@ public:
         update and nothing is lost — and the new one takes its place; a pack the build ships is not
         the player's to replace, and the import is refused — `refused`, when given, is then set to
         the name of the pack the build ships, so the player can be told why nothing arrived.
-        Re-importing the very file that is installed changes nothing. */
-    static juce::File importDevice (const juce::File& src, const juce::File& into = directory(),
+        Re-importing the very file that is installed changes nothing. `product` is the product's name:
+        what the build ships is what its own list names. */
+    static juce::File importDevice (const juce::String& product, const juce::File& src, const juce::File& into,
                                     const juce::File& bundled = bundledDirectory(),
                                     const std::function<bool (const juce::File&)>& retire
                                         = [] (const juce::File& f) { return f.moveToTrash(); },
@@ -516,7 +520,7 @@ public:
 
         if (rigId.isNotEmpty())
         {
-            if (const auto shipped = shippedWithRigId (bundled, rigId); ! shipped.isEmpty())
+            if (const auto shipped = shippedWithRigId (bundled, product, rigId); ! shipped.isEmpty())
             {
                 if (refused != nullptr)
                     *refused = shipped.getFirst().getFileName().upToFirstOccurrenceOf (".", false, false);
@@ -551,9 +555,9 @@ public:
 
     /** A user device out of the library, to the Trash — recoverable, unlike a delete. Bundled
         entries are the build's, not the user's: refused here, hidden as an option in the UI. */
-    static bool removeDevice (const Pack& p)
+    static bool removeDevice (const juce::String& product, const Pack& p)
     {
-        return ! p.bundled && p.location.isAChildOf (directory()) && p.location.moveToTrash();
+        return ! p.bundled && p.location.isAChildOf (directory (product)) && p.location.moveToTrash();
     }
 
     /** A landing name in `into` that collides with nothing. "Name 2" by hand rather than JUCE's
@@ -677,9 +681,11 @@ private:
 
     /** The packs of the factory that this product's list names, by `rig_id` (installedWithRigId): what
         the build ships is what the product plays out of the box, not what another product laid beside it. */
-    static juce::Array<juce::File> shippedWithRigId (const juce::File& factory, const juce::String& rigId)
+    static juce::Array<juce::File> shippedWithRigId (const juce::File& factory, const juce::String& product,
+                                                     const juce::String& rigId)
     {
-        const auto named = FactorySet::listOf (factory, product::name);
+        const auto named = FactorySet::listOf (factory, product);
+
         auto found = installedWithRigId (factory, rigId);
         found.removeIf ([&named] (const juce::File& f) { return ! named.contains (f.getFileName()); });
         return found;

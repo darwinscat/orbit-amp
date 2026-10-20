@@ -21,7 +21,7 @@
     once, here (Plan), as RedPawAmp's picture — the first, the one the others were painted to — measures
     it; each product's skin's file says only where its own picture measures otherwise:
     redpaw/RedPawSkin.cpp nowhere, frostpaw/FrostPawSkin.cpp in a few places, amberpaw/AmberPawSkin.cpp,
-    a cockpit of its own, nearly everywhere. A target compiles exactly one. */
+    a cockpit of its own, nearly everywhere. Each face reads its own skin's (Skin::plan). */
 namespace orbitamp::redpaw::layout
 {
 
@@ -243,87 +243,7 @@ struct Plan
     float makerRoom = 0.0f;
 };
 
-/** The product's own plan, in its skin's file. It is made as the program starts, in no set order with
-    what other files make then — a rectangle is not a constant to the compiler — so it is read in a
-    function, never in what another file makes at its start. */
-extern const Plan plan;
-
-// ...and each of its measures under its own name, as the face reads them.
-inline const auto& windscreenCorners = plan.windscreenCorners;
-inline const auto& windscreen        = plan.windscreen;
-inline const auto& holes             = plan.holes;
-inline const auto& holeRadius        = plan.holeRadius;
-inline const auto& signOffset        = plan.signOffset;
-inline const auto& drive             = plan.drive;
-inline const auto& tones             = plan.tones;
-inline const auto& knobNameY         = plan.knobNameY;
-inline const auto& knobNameEm        = plan.knobNameEm;
-inline const auto& driveNameY        = plan.driveNameY;
-inline const auto& keys              = plan.keys;
-inline const auto& keySize           = plan.keySize;
-inline const auto& keyNameOverY      = plan.keyNameOverY;
-inline const auto& keyNameUnderY     = plan.keyNameUnderY;
-inline const auto& keyNameOver       = plan.keyNameOver;
-inline const auto& keyNameRoom       = plan.keyNameRoom;
-inline const auto& keyNamesOnKeys    = plan.keyNamesOnKeys;
-inline const auto& lightKeys         = plan.lightKeys;
-inline const auto& navScreen         = plan.navScreen;
-inline const auto& navHeader         = plan.navHeader;
-inline const auto& navPicture        = plan.navPicture;
-inline const auto& speedHud          = plan.speedHud;
-inline const auto& tunerScreen       = plan.tunerScreen;
-inline const auto& tunerDial         = plan.tunerDial;
-inline const auto& learnArea         = plan.learnArea;
-inline const auto& learnKeys         = plan.learnKeys;
-inline const auto& learnKeySize      = plan.learnKeySize;
-inline const auto& learnNames        = plan.learnNames;
-inline const auto& learnLine         = plan.learnLine;
-inline const auto& wiperKeys         = plan.wiperKeys;
-inline const auto& wiperKeySize      = plan.wiperKeySize;
-inline const auto& gateSlot          = plan.gateSlot;
-inline const auto& slotX             = plan.slotX;
-inline const auto& notchX            = plan.notchX;
-inline const auto& slotTopY          = plan.slotTopY;
-inline const auto& stops             = plan.stops;
-inline const auto& leverWidth        = plan.leverWidth;
-inline const auto& collarSink        = plan.collarSink;
-inline const auto& gearPlate         = plan.gearPlate;
-inline const auto& leverLeft         = plan.leverLeft;
-inline const auto& leverTop          = plan.leverTop;
-inline const auto& turbo             = plan.turbo;
-inline const auto& turboSize         = plan.turboSize;
-inline const auto& turboName         = plan.turboName;
-inline const auto& turboLid          = plan.turboLid;
-inline const auto& wells             = plan.wells;
-inline const auto& wellNameY         = plan.wellNameY;
-inline const auto& sliderCapLength   = plan.sliderCapLength;
-inline const auto& sliderHeight      = plan.sliderHeight;
-inline const auto& inMeter           = plan.inMeter;
-inline const auto& inFader           = plan.inFader;
-inline const auto& outMeter          = plan.outMeter;
-inline const auto& outFader          = plan.outFader;
-inline const auto& faderWidth        = plan.faderWidth;
-inline const auto& faderCapLength    = plan.faderCapLength;
-inline const auto& meterDots         = plan.meterDots;
-inline const auto& thresholdSlot     = plan.thresholdSlot;
-inline const auto& ceilingSlot       = plan.ceilingSlot;
-inline const auto& slotScale         = plan.slotScale;
-inline const auto& slotRim           = plan.slotRim;
-inline const auto& lamps             = plan.lamps;
-inline const auto& lampDot           = plan.lampDot;
-inline const auto& inputName         = plan.inputName;
-inline const auto& outputName        = plan.outputName;
-inline const auto& columnNameRoom    = plan.columnNameRoom;
-inline const auto& gateWord          = plan.gateWord;
-inline const auto& limiterWord       = plan.limiterWord;
-inline const auto& lampSlant         = plan.lampSlant;
-inline const auto& leftPlate         = plan.leftPlate;
-inline const auto& readings          = plan.readings;
-inline const auto& centrePlate       = plan.centrePlate;
-inline const auto& emblemFace        = plan.emblemFace;
-inline const auto& emblemMark        = plan.emblemMark;
-inline const auto& poweredBy         = plan.poweredBy;
-inline const auto& makerName         = plan.makerName;
-inline const auto& makerRoom         = plan.makerRoom;
+/** The product's own plan is in its skin's file, and its face reads it there (Skin::plan): every rover's
+    sources link into one binary, so no plan is THE plan. */
 
 } // namespace orbitamp::redpaw::layout

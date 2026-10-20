@@ -84,6 +84,9 @@ public:
         return false;
     }
 
+    /** The product's switch for its analysers, as the tile's own scope has it. */
+    void showSpectraBy (const std::atomic<bool>& shown) { scope.showSpectraBy (shown); }
+
 private:
     DeviceScope scope;
     felitronics::analysis::RollingSpectrumTap* tap = nullptr;   // null unless this is the TONE page
@@ -110,6 +113,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     // The console's widgets become children of this block, which places them. The spectrum behind
     // its curve is the block's own output tap — the same one the TONE picture reads, because after
     // the chain rework they are the same point in the signal.
+    eq.spectraShown = &prefs::spectraCache (processor.product());
     eq.addTo (*this);
 
     addAndMakeVisible (device);
@@ -147,6 +151,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
             // console's own curve calls.
             b.scope, b.ribbon, [this] (double hz) { return eq.drawnDb (hz); });
         scopes[(size_t) i]->setMode ((DeviceScope::Mode) i);
+        scopes[(size_t) i]->showSpectraBy (prefs::spectraCache (amp.product()));
         scopes[(size_t) i]->setSampleRate (amp.currentSampleRate());
         if ((DeviceScope::Mode) i == DeviceScope::Mode::tone)
             scopes[(size_t) i]->setSpectrumTap (&toneTap, AmpProcessor::eqSpectrumOrder);
@@ -312,6 +317,7 @@ void CapturedBlockPanel::openTheater()
         &toneTap, AmpProcessor::eqSpectrumOrder,
         from.deviceSpec(), from.paper(), from.creditLines(), from.picture(),
         [this] { closeTheater(); });
+    theater->showSpectraBy (prefs::spectraCache (amp.product()));
 
     // The face's own copy stops while the theatre runs — the wave ribbon must have ONE
     // resolution-setting reader at a time.

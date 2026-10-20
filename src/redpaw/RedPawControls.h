@@ -13,6 +13,8 @@
 namespace orbitamp::redpaw
 {
 
+struct Skin;
+
 /** THE GEAR LEVER in the dashboard's straight slot: PARK at its top end, then the product's gears down
     the slot's notches — CLEAN, CRUNCH, HI-GAIN, the top ones of them as many as it has — the gear's name
     is on the nav screen. Taken by its grip it follows the hand up and down the slot, sits in a position within
@@ -47,7 +49,7 @@ public:
     }
 
     /** In the product's gears, as many as the slot's top notches; it stands in the first. */
-    explicit GearLever (int gears);
+    GearLever (const Skin&, int gears);
 
     int numGears() const noexcept { return numPlaces() - 1; }
 
@@ -59,6 +61,7 @@ public:
     void mouseExit (const juce::MouseEvent&) override  { if (! isHeld()) { lit.target = 0.0f; startTimerHz (60); } }
 
 private:
+    const Skin& skin;                   // the rover's whose lever it is: its slot, its notches, its light
     std::vector<float> heights;         // each position's height in the dashboard's space: PARK, then the gears' notches
     face::Glide lit;            // the light round the grip: 0 resting .. 1 under the hand
 
@@ -191,7 +194,7 @@ private:
 class KnobRing final : public juce::Component, private juce::Timer
 {
 public:
-    KnobRing (const face::ArtKnob&, juce::Point<float> centre, float radius, float width);
+    KnobRing (const Skin&, const face::ArtKnob&, juce::Point<float> centre, float radius, float width);
 
     void paint (juce::Graphics&) override;
 
@@ -204,6 +207,7 @@ public:
     static constexpr float rimOfKnob = 0.46f, rimAlpha = 0.8f;   // under the hand, an orange rim round the cap, of the knob's width
 
 private:
+    const Skin& skin;               // the rover's whose ring it is: its light
     const face::ArtKnob& knob;
     const float radius, width;
     float shown = -1.0f;            // the value last drawn
@@ -221,7 +225,7 @@ private:
 class TurboLid final : public juce::Component, private juce::Timer
 {
 public:
-    TurboLid();
+    explicit TurboLid (const Skin&);
 
     /** `animate` off puts it there at once — for a face just built. */
     void setShut (bool shut, bool animate);
@@ -232,7 +236,9 @@ public:
     static constexpr float stiffness = 60.0f, damping = 16.0f;
 
 private:
+    const Skin& skin;               // the rover's whose hatch it is: its render, where it lies
     face::Glide shown;              // 0 open .. 1 shut
+
     void timerCallback() override;
 };
 

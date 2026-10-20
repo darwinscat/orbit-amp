@@ -206,6 +206,10 @@ public:
         else it has on show — the device's tone slots — back where the pack starts them. */
     std::function<void()> onReset;
 
+    /** The product's switch for its analysers (prefs::spectraCache), read where the spectra are about to
+        be drawn. None: shown. */
+    const std::atomic<bool>* spectraShown = nullptr;
+
 private:
     void buildBands (std::vector<Band>);
 

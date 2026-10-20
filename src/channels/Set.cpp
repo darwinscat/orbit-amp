@@ -3,7 +3,6 @@
 
 #include "Set.h"
 
-#include "../Product.h"
 #include "../device/FactorySet.h"
 #include "../device/FactoryShelf.h"
 
@@ -14,11 +13,12 @@ juce::File cabinetsIn (const juce::File& factory)
     return factory.getChildFile (device::shelf::folderName);
 }
 
-juce::Array<juce::File> ownCabinets (const juce::File& factory)
+juce::Array<juce::File> ownCabinets (const juce::File& factory, const juce::String& product)
 {
     juce::Array<juce::File> own;
 
-    for (const auto& path : device::FactorySet::listOf (factory, product::name))
+    for (const auto& path : device::FactorySet::listOf (factory, product))
+
         if (path.startsWith (juce::String (device::shelf::folderName) + "/"))
             if (const auto file = factory.getChildFile (path); file.isAChildOf (cabinetsIn (factory)) && file.existsAsFile())
                 own.add (file);

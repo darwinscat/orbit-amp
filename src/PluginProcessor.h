@@ -62,7 +62,9 @@ class AmpProcessor final : public juce::AudioProcessor,
                            private juce::ValueTree::Listener
 {
 public:
-    AmpProcessor();
+    /** A processor of `product`, which it keeps: which amp it is (Product.h). The product outlives it —
+        every product is made once in a process and never goes. */
+    explicit AmpProcessor (const Product& product);
     /** Takes the saved session's listener off the tree, and nothing else — worth writing down WHY
         nothing else, because this looks like the place a weak reference has to be cleared and it
         is not.
@@ -104,7 +106,11 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override                          { return true; }
 
-    const juce::String getName() const override              { return product::name; }
+    const juce::String getName() const override              { return ownProduct.name; }
+
+    /** WHICH AMP THIS IS (Product.h): what everything that is one amp's and not another's is read off —
+        handed down from here, never looked up anywhere else. */
+    const Product& product() const noexcept                  { return ownProduct; }
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }
@@ -187,10 +193,13 @@ public:
         `force` writes it now whatever has changed. Message thread only. */
     void refreshSavedState (bool force = false);
 
+    // FIRST OF ALL, the product: everything after it is made for it.
+    const Product& ownProduct;
+
     // BEFORE THE PARAMETERS, and so before everything: what the product does once in a process before
-    // it reads anything off the disk (firstStart) — the list of devices a parameter offers is read when
-    // the parameters are made. A member, because the constructor's body would be too late.
-    struct FirstStart { FirstStart(); } firstStarted;
+    // it reads anything off the disk (Product::firstStart) — the list of devices a parameter offers is
+    // read when the parameters are made. A member, because the constructor's body would be too late.
+    struct FirstStart { explicit FirstStart (const Product&); } firstStarted;
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -318,7 +327,7 @@ private:
     float aimWroteSwitch[numCaptured][core::CapturedBlock::numMeasured] { };
 
     // MUST precede `updater`: the checker takes the store by reference and is destroyed before it.
-    juce::SharedResourcePointer<prefs::UpdateStore> updateStore;
+    std::shared_ptr<prefs::UpdateStore> updateStore = prefs::UpdateStore::of (ownProduct);   // the product's own, shared by its processors
     felitronics::appkit::UpdateChecker updater;   // built in the ctor: it needs the store above
 
     /** Pumps the history's settle timer — a burst of edits that has been quiet for a moment commits
@@ -326,8 +335,8 @@ private:
     void timerCallback() override
     {
         // The product's own half first — what it does it does as a hand would, between two ticks.
-        if (product != nullptr)
-            product->pump();
+        if (productEngine != nullptr)
+            productEngine->pump();
 
         history.tick();
 
@@ -707,8 +716,8 @@ private:
         switchAimFrames = aimWindowFrames;
         cabIrParamBaselineStale = true;   // a restored `cab_ir` is not a host moving it — see the pump
 
-        if (product != nullptr)
-            product->stateLanded();       // ...and the product's own half has parameters to read the same way
+        if (productEngine != nullptr)
+            productEngine->stateLanded();       // ...and the product's own half has parameters to read the same way
 
         // BOTH baselines are taken from what the tree has just become, and that is the whole of
         // how a hand wins. `aimWrote*` starting at "nothing written yet" meant theft could only be
@@ -754,8 +763,8 @@ private:
             sr > 0.0 && ! juce::approximatelyEqual (sr, tunerEar.preparedRate()))
             tunerEar.prepare (sr);
 
-        tunerEar.setLevelFloorDb ((double) prefs::tunerFloor());
-        tunerEar.setReferenceHz ((float) prefs::tunerReference());
+        tunerEar.setLevelFloorDb ((double) prefs::tunerFloor (ownProduct));
+        tunerEar.setReferenceHz ((float) prefs::tunerReference (ownProduct));
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 
@@ -954,7 +963,7 @@ public:
         folder of it each IR lies in. The face draws the same bytes the engine convolves. A number the
         build does not carry (a face, and the shelf's `Other`) is DARK MATTER's, the default's. */
     struct IrBytes { const char* data; int size; const char* folder; };
-    static const IrBytes& cabIrBytes (int index);
+    static const IrBytes& cabIrBytes (const Product&, int index);
 
     /** WHAT THE CABINET PLAYS, as the state says it: an IR of the player's own when the state names
         one the store holds, and the factory shelf's entry under `cabIr` otherwise — which is also
@@ -1338,7 +1347,8 @@ private:
 public:
     /** The product's own half of the engine, where it has one (ProductEngine) — null for OrbitAmp.
         Declared after everything it reaches into, so that it goes before any of it does. */
-    std::unique_ptr<ProductEngine> product;
+    std::unique_ptr<ProductEngine> productEngine;
+
     const std::atomic<float>* parked = nullptr;     // the product's park switch, if it has one
 
 private:
@@ -1346,28 +1356,11 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };
 
-/** The face a build opens. One processor, two faces: OrbitAmp's comes from PluginEditor.cpp, the
-    cockpit's from catpit/CatpitEditor.cpp, and each target compiles exactly one of them. */
-juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
-
-/** What a product does ONCE IN A PROCESS, before its first processor builds anything of its own — today,
-    gather the player's IRs of before (gatherFormerIrs). Defined once per target, like the face: OrbitAmp's
-    in OrbitAmpStart.cpp, the cockpit's and the rovers' beside their lineups; a gate that must not reach
-    the machine's real folders stands in one of its own that does nothing. What the amps play out of the
-    box is laid out by the family's installer, not by an amp (device/FactorySet.h). The processor calls it
-    before anything else — see AmpProcessor::firstStarted. */
-void firstStart();
-
 /** THE PLAYER'S IRS OF BEFORE, gathered into the family's folder: what the product kept in its own `IRs`
-    is copied into `Darwin's Cat/IRs` (device::IrLibrary::gather) — once in a process, and once on this
-    machine (prefs::irsGathered), tried again on the next start only where a file could not be copied.
-    Every product's firstStart calls it, so a gate that stands that in for nothing never reaches the
-    machine's real folders. */
-void gatherFormerIrs();
-
-/** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —
-    once per target again. OrbitAmp adds no parameter and has no such half: it answers null. */
-void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
-std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor&);
+    is copied into `Darwin's Cat/IRs` (device::IrLibrary::gather) — once in a process for each product,
+    and once on this machine (prefs::irsGathered), tried again on the next start only where a file could
+    not be copied. Every product's first start calls it (Product::firstStart), so a gate that plays a
+    product with none never reaches the machine's real folders. */
+void gatherFormerIrs (const Product&);
 
 } // namespace orbitamp

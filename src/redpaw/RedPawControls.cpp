@@ -14,34 +14,35 @@ using face::labelLilac;
 
 juce::Rectangle<float> GearLever::leverBox (float y, float x) const
 {
-    const auto& art = Art::get().lever;
-    const float w = layout::leverWidth;
+    const auto& art = Art::of (skin).lever;
+    const float w = skin.plan.leverWidth;
     const float h = art.isValid() ? w * (float) art.getHeight() / (float) art.getWidth() : w / 3.0f;
-    return { x - w * 0.5f, y + layout::collarSink - h, w, h };
+    return { x - w * 0.5f, y + skin.plan.collarSink - h, w, h };
 }
 
 juce::Rectangle<float> GearLever::standingBox() const
 {
     // In a notch the collar stands in the notch; at PARK, the slot's top end, there is none. The slot and
     // its notches in the lever's own space, read here and not as the program starts (RedPawLayout.h).
-    const float slotX  = layout::slotX - layout::leverLeft;
-    const float notchX = layout::notchX - layout::leverLeft;
+    const float slotX  = skin.plan.slotX - skin.plan.leverLeft;
+    const float notchX = skin.plan.notchX - skin.plan.leverLeft;
     const float p = travel();
     const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f)
                         * juce::jlimit (0.0f, 1.0f, p / 0.5f);
     return leverBox (yOf (p), slotX + (notchX - slotX) * inNotch);
 }
 
-GearLever::GearLever (int g)
-    : DetentLever (juce::jlimit (1, (int) layout::stops.size(), g) + 1, positionOf (0),
-                   260.0f, 22.0f)      // a heavy lever: it overshoots the notch a hair and comes back
+GearLever::GearLever (const Skin& s, int g)
+    : DetentLever (juce::jlimit (1, (int) s.plan.stops.size(), g) + 1, positionOf (0),
+                   260.0f, 22.0f),     // a heavy lever: it overshoots the notch a hair and comes back
+      skin (s)
 {
     // Each position's height in the dashboard's space: PARK at the slot's top end, the gears at their
     // stops from the top. A stop past the last gear is no position.
     jassert (numGears() == g);
-    heights.push_back (layout::slotTopY);
+    heights.push_back (skin.plan.slotTopY);
     for (int i = 0; i < numGears(); ++i)
-        heights.push_back (layout::stops[(size_t) i]);
+        heights.push_back (skin.plan.stops[(size_t) i]);
 
     lit.stiffness = 40.0f;      // soft, like the knobs' rings
     lit.damping   = 13.0f;
@@ -53,13 +54,13 @@ float GearLever::yOf (float at) const noexcept
     const int last = numPlaces() - 1;
     const float p = juce::jlimit (0.0f, (float) last, at);
     const int i = juce::jmin (last - 1, (int) p);
-    return juce::jmap (p - (float) i, heights[(size_t) i], heights[(size_t) i + 1]) - layout::leverTop;
+    return juce::jmap (p - (float) i, heights[(size_t) i], heights[(size_t) i + 1]) - skin.plan.leverTop;
 }
 
 float GearLever::travelAt (float y) const noexcept
 {
     const int last = numPlaces() - 1;
-    y += layout::leverTop;
+    y += skin.plan.leverTop;
     if (y <= heights.front()) return 0.0f;
     for (int i = 0; i < last; ++i)
         if (y <= heights[(size_t) i + 1])
@@ -79,7 +80,7 @@ void GearLever::timerCallback()
 void GearLever::paint (juce::Graphics& g)
 {
     // The lever from above: its grip across the slot, the collar under it standing on the position.
-    const auto& art = Art::get().lever;
+    const auto& art = Art::of (skin).lever;
     const auto box = standingBox();
     const auto bar = box.withHeight (box.getHeight() * barBottom);
 
@@ -92,11 +93,11 @@ void GearLever::paint (juce::Graphics& g)
 
     // A soft cyan light round it, the knobs' rings' own, keeps it in sight on the dark plate; under the
     // hand it turns the orange everything that moves wears there.
-    if (const auto& glow = Art::get().leverGlow; glow.isValid() && art.isValid())
+    if (const auto& glow = Art::of (skin).leverGlow; glow.isValid() && art.isValid())
     {
         const float k = box.getWidth() / (float) art.getWidth();
         const float hand = juce::jlimit (0.0f, 1.0f, lit.value);
-        g.setColour (skin().ringLight.interpolatedWith (orange, hand).withAlpha (0.6f + 0.4f * hand));
+        g.setColour (skin.ringLight.interpolatedWith (orange, hand).withAlpha (0.6f + 0.4f * hand));
         g.drawImage (glow, box.expanded ((float) Art::leverGlowPad * k), juce::RectanglePlacement::stretchToFit, true);
     }
 
@@ -451,8 +452,8 @@ namespace
     constexpr double breathHoldMs = 1000.0;
 }
 
-KnobRing::KnobRing (const face::ArtKnob& k, juce::Point<float> centre, float r, float w)
-    : knob (k), radius (r), width (w)
+KnobRing::KnobRing (const Skin& s, const face::ArtKnob& k, juce::Point<float> centre, float r, float w)
+    : skin (s), knob (k), radius (r), width (w)
 {
     setInterceptsMouseClicks (false, false);
     breath.stiffness = 40.0f;       // soft: a lamp warming, not a spring
@@ -507,15 +508,17 @@ void KnobRing::paint (juce::Graphics& g)
     juce::Path arc, band;
     arc.addCentredArc (c.x, c.y, radius, radius, 0.0f, juce::degreesToRadians (from), to, true);
     juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (band, arc);
-    const auto light = skin().ringLight;
+    const auto light = skin.ringLight;
     juce::DropShadow (light.withAlpha (glowAlpha + glowAlphaHand * b), juce::roundToInt (glowRadius + glowRadiusHand * b), {}).drawForPath (g, band);
     g.setColour (light.withAlpha (litAlpha + litAlphaHand * b));
     g.fillPath (band);
 }
 
 //==============================================================================
-TurboLid::TurboLid()
+TurboLid::TurboLid (const Skin& s)
+    : skin (s)
 {
+
     setInterceptsMouseClicks (false, false);
     shown.stiffness = stiffness;
     shown.damping   = damping;
@@ -536,11 +539,11 @@ void TurboLid::setShut (bool shut, bool animate)
 
 void TurboLid::paint (juce::Graphics& g)
 {
-    const auto& art = Art::get().turboLid;
+    const auto& art = Art::of (skin).turboLid;
     if (! art.isValid() || shown.value <= 0.0f)
         return;
     g.setOpacity (juce::jlimit (0.0f, 1.0f, shown.value));
-    g.drawImage (art, layout::turboLid.translated (-(float) getX(), -(float) getY()));
+    g.drawImage (art, skin.plan.turboLid.translated (-(float) getX(), -(float) getY()));
 }
 
 void TurboLid::timerCallback()

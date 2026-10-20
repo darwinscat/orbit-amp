@@ -524,6 +524,9 @@ inline constexpr int rowForStage (Stage s)
     return numChainRows;
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+/** The engine's parameters, for the product of that name: the devices a parameter offers are the ones
+    it plays. */
+juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::String& product);
+
 
 } // namespace orbitamp::params

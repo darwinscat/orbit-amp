@@ -30,7 +30,8 @@ class DeviceListView final : public juce::Component,
                              public juce::FileDragAndDropTarget
 {
 public:
-    explicit DeviceListView (device::DeviceLibrary::Slot wanted);
+    /** The devices of the product of that name in the `wanted` slot. */
+    DeviceListView (const juce::String& product, device::DeviceLibrary::Slot wanted);
     ~DeviceListView() override;
 
     /** Re-reads the library and re-renders. Called on open and after every change. */
@@ -60,6 +61,7 @@ private:
         std::function) still on the call stack. */
     void changedLater();
 
+    const juce::String product;
     const device::DeviceLibrary::Slot slot;
 
     juce::Viewport  viewport;

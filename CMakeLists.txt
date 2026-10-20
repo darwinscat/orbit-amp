@@ -518,8 +518,10 @@ endfunction()
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
-#               The name is the amp's own on the compiler's line too (src/Product.h): its settings, its
-#               presets and its update check go by it.
+#               It is the name of the amp's Product too (src/Product.h), which the amp's own file says —
+#               its settings, its presets and its update check go by it — and its plug-in's entry
+#               (createPluginFilter, beside the Product, compiled in under ORBITAMP_PLUGIN_ENTRY) makes
+#               a processor of that Product.
 #   CODE        its 4-char plug-in code, unique per plugin (OrbitCab holds `Orbt`). LOCK it before the
 #               first release: changing it afterwards makes hosts treat it as a different plugin. The
 #               manufacturer code is the family's, Dcat (Darwin's Cat — >=1 uppercase, AU rule; same as
@@ -610,10 +612,12 @@ function(add_amp name)
     # THE FAMILY'S version, not the plugin wrapper's. `JucePlugin_VersionString` exists only inside a
     # target juce_add_plugin built, and the headless gates compile the very same UI sources without it —
     # so a face that read it built as a plugin and failed as a test. This one is defined for everything
-    # that compiles a face, with the amp's name beside it.
+    # that compiles a face. Which amp it is, is not on the compiler's line: it is the Product the
+    # processor is made with (src/Product.h), and only the plug-in's own entry is compiled here, in the
+    # amp's own file — a gate, or a binary of several amps, makes its processors itself.
     target_compile_definitions(${name} PUBLIC
-        ORBITAMP_VERSION="${PROJECT_VERSION}"
-        ORBITAMP_PRODUCT_NAME="${name}")
+        ORBITAMP_VERSION="${PROJECT_VERSION}")
+    target_compile_definitions(${name} PRIVATE ORBITAMP_PLUGIN_ENTRY=1)
     target_compile_definitions(${name} PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
@@ -701,8 +705,10 @@ endfunction()
 
 # AN AMP'S GATES are the amp compiled again under a main() of its own — its sources, its libraries, the
 # family's version and its name, as add_amp was given them, and the build's factory folder for what it
-# plays — and are built only when asked for by name. CHANNELS is how many channels the gate holds it to
-# (GATE_CHANNELS), said apart from the amp's lineup. NO_FACTORY plays it with no factory folder at all.
+# plays — and are built only when asked for by name. The gate makes its processors of the amp's Product,
+# ORBITAMP_GATE_PRODUCT — orbitamp::products::<name> with its first letter small (src/Product.h).
+# CHANNELS is how many channels the gate holds it to (GATE_CHANNELS), said apart from the amp's lineup.
+# NO_FACTORY plays it with no factory folder at all.
 function(amp_console target product amp main)
     cmake_parse_arguments(PARSE_ARGV 4 GATE "NO_FACTORY" "CHANNELS" "")
     get_target_property(sources ${amp} AMP_SOURCES)
@@ -712,9 +718,13 @@ function(amp_console target product amp main)
     target_sources(${target} PRIVATE ${main} ${sources})
     target_include_directories(${target} PRIVATE src "${ORBITAMP_GENERATED_DIR}")
     add_dependencies(${target} OrbitAmpVersionGen)
+    string(SUBSTRING "${amp}" 0 1 first)
+    string(SUBSTRING "${amp}" 1 -1 rest)
+    string(TOLOWER "${first}" first)
     target_compile_definitions(${target} PRIVATE
         ORBITAMP_VERSION="${PROJECT_VERSION}"
-        ORBITAMP_PRODUCT_NAME="${amp}")
+        ORBITAMP_PRODUCT_NAME="${amp}"
+        ORBITAMP_GATE_PRODUCT=orbitamp::products::${first}${rest})
     if(GATE_CHANNELS)
         target_compile_definitions(${target} PRIVATE GATE_CHANNELS=${GATE_CHANNELS})
     endif()
@@ -956,7 +966,8 @@ set(AMP_ENGINE_LIBRARIES
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures)      # ValueTree behind the workspace / presets
 
-# OrbitAmp — the player: the processor, its face (src/ui), and its first start (OrbitAmpStart.cpp).
+# OrbitAmp — the player: the processor, its face (src/ui), and OrbitAmp itself — its Product, its first
+# start, its plug-in's entry (OrbitAmpStart.cpp).
 set(ORBITAMP_SOURCES
     src/PluginProcessor.cpp
     src/PluginEditor.cpp
@@ -975,10 +986,6 @@ set(ORBITAMP_SOURCES
     src/ui/SetupPanel.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp)
-# ...and the gates that play OrbitAmp's processor compile the same sources less its first start: each
-# stands in a firstStart() of its own that does nothing (PluginProcessor.h).
-set(ORBITAMP_GATE_SOURCES ${ORBITAMP_SOURCES})
-list(REMOVE_ITEM ORBITAMP_GATE_SOURCES src/OrbitAmpStart.cpp)
 
 # A FACE is the family's console (src/face) over the family's channels (src/channels), on the same
 # processor: what the cockpit and every rover are compiled from before their own.
@@ -1001,8 +1008,8 @@ set(FACE_SOURCES
     src/face/Sheet.cpp
     src/face/Standalone.cpp)
 
-# CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and two
-# faces, each target compiling exactly one `makeEditor`. Its renders are in resources/catpit, as
+# CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and a face
+# for each product, which the product names (src/Product.h). Its renders are in resources/catpit, as
 # bake-art made them, and lie in its own folder of the factory, Faces/CatpitAmp. What the cockpit is made
 # of is said once, for the plug-in and for its gates, which are the cockpit compiled again under a main()
 # of their own.
@@ -1396,7 +1403,7 @@ target_link_libraries(orbitamp_ribbon_test PRIVATE
 # sources rather than a stage of it, because what this checks is the wiring between them.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_chain_test PRODUCT_NAME "OrbitAmpChainTest")
-target_sources(orbitamp_chain_test PRIVATE tests/ChainTests.cpp ${ORBITAMP_GATE_SOURCES})
+target_sources(orbitamp_chain_test PRIVATE tests/ChainTests.cpp ${ORBITAMP_SOURCES})   # it plays OrbitAmp with no first start
 target_include_directories(orbitamp_chain_test PRIVATE src)
 target_include_directories(orbitamp_chain_test PRIVATE "${ORBITAMP_GENERATED_DIR}")   # the same faces, the same stamp
 add_dependencies(orbitamp_chain_test OrbitAmpVersionGen)
@@ -1416,7 +1423,7 @@ gate_reads_factory(orbitamp_chain_test)   # OrbitAmp's whole shelf, and its pack
 # demo loop with no hum in it passes untouched. Needs no pack: the input path is ahead of every block.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_hum_test PRODUCT_NAME "OrbitAmpHumTest")
-target_sources(orbitamp_hum_test PRIVATE tests/HumTests.cpp ${ORBITAMP_GATE_SOURCES})
+target_sources(orbitamp_hum_test PRIVATE tests/HumTests.cpp ${ORBITAMP_SOURCES})       # ...and so does this one
 target_include_directories(orbitamp_hum_test PRIVATE src)
 target_include_directories(orbitamp_hum_test PRIVATE "${ORBITAMP_GENERATED_DIR}")
 add_dependencies(orbitamp_hum_test OrbitAmpVersionGen)

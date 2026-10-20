@@ -35,7 +35,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
       outColumn (VolumeColumn::Side::out, p.outDb,     p.outClip,
                  *p.apvts.getParameter (params::outTrim)),
       gateConsole (p.apvts, p.gateKeyDb),
-      humLearner (p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
+      humLearner (p.product(), p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
@@ -54,14 +54,14 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (footer);
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
     // The demo needs its loops on disk — a machine without them has no player to show.
-    showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
-    showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+    showDemo   = params::demoLoopsPresent() && prefs::getBool (amp.product(), prefs::showDemo, false);
+    showGlyphs = prefs::getBool (amp.product(), prefs::showGlyphs, false);
 
     // Before the first layout: whether an emptied row hands its height to whoever is left, or
     // takes it out of the window. See prefs::growBlocks.
-    faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
-    dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
-    faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
+    faceplate.setFillsHeight (prefs::getBool (amp.product(), prefs::growBlocks, true));
+    dimRatherThanRemove = prefs::getBool (amp.product(), prefs::dimStandby, false);
+    faceplate.setEqRowOnTop (prefs::getBool (amp.product(), prefs::eqRowOnTop, false));
 
 
     addChildComponent (demoStrip);
@@ -415,7 +415,7 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
         const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
         if (letter == 'H' || letter == 0x0420)
         {
-            prefs::setHum (prefs::humFlip());
+            prefs::setHum (amp.product(), prefs::humFlip (amp.product()));
             return true;
         }
         if (letter == 'G' || letter == 0x041f)
@@ -439,11 +439,11 @@ static constexpr int itemGrowBlocks = 101, itemDimStandby = 102;
 
 void AmpEditor::applyViewPrefs()
 {
-    faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
-    faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
-    dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
-    showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
-    showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+    faceplate.setFillsHeight (prefs::getBool (amp.product(), prefs::growBlocks, true));
+    faceplate.setEqRowOnTop (prefs::getBool (amp.product(), prefs::eqRowOnTop, false));
+    dimRatherThanRemove = prefs::getBool (amp.product(), prefs::dimStandby, false);
+    showDemo   = params::demoLoopsPresent() && prefs::getBool (amp.product(), prefs::showDemo, false);
+    showGlyphs = prefs::getBool (amp.product(), prefs::showGlyphs, false);
     applyRowStates();
     repaint();
 }
@@ -468,8 +468,8 @@ void AmpEditor::showChainMenu (juce::Component& anchor)
     // What an emptied row does — the eye's business, this machine only, so these two write the
     // preferences rather than any parameter. They live HERE and nowhere else: they only mean
     // anything while a link is being taken out, which is the list above.
-    m.addItem (itemGrowBlocks, "KEEP WINDOW HEIGHT", true, prefs::getBool (prefs::growBlocks, true));
-    m.addItem (itemDimStandby, "STANDBY KEEPS ITS PLACE", true, prefs::getBool (prefs::dimStandby, false));
+    m.addItem (itemGrowBlocks, "KEEP WINDOW HEIGHT", true, prefs::getBool (amp.product(), prefs::growBlocks, true));
+    m.addItem (itemDimStandby, "STANDBY KEEPS ITS PLACE", true, prefs::getBool (amp.product(), prefs::dimStandby, false));
 
     // ATTACHED to the button, not hung at a point: a menu that does not know its launcher
     // dismisses synchronously and lets the click through to it, so a second press on the checklist
@@ -504,7 +504,7 @@ void AmpEditor::showChainMenu (juce::Component& anchor)
                              const auto& key = r == itemGrowBlocks ? prefs::growBlocks : prefs::dimStandby;
                              const bool fallback = r == itemGrowBlocks;
 
-                             prefs::setBool (key, ! prefs::getBool (key, fallback));
+                             prefs::setBool (safe->amp.product(), key, ! prefs::getBool (safe->amp.product(), key, fallback));
                              safe->applyViewPrefs();
                          }
 
@@ -582,16 +582,16 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 {
     // The switch, then the modes (ui/HumMenu.h), in this menu's capitals.
     const int  heard = amp.humHeard();
-    const auto lines = prefs::humMenu (heard, humLearner.isLearning());
+    const auto lines = prefs::humMenu (amp.product(), heard, humLearner.isLearning());
 
     juce::PopupMenu m;
-    m.addSectionHeader ("HUM  " + prefs::humState (heard).toUpperCase());
+    m.addSectionHeader ("HUM  " + prefs::humState (amp.product(), heard).toUpperCase());
     for (size_t i = 0; i < lines.size(); ++i)
         m.addItem ((int) i + 1, lines[i].text.toUpperCase(), true, lines[i].ticked);
 
     // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
     // its title; knob k's values answer as 100 (k + 1) + their index.
-    const auto knobs = prefs::humtune::knobs();
+    const auto knobs = prefs::humtune::knobs (amp.product());
     for (size_t k = 0; k < knobs.size(); ++k)
     {
         juce::PopupMenu values;
@@ -605,7 +605,7 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
     // closed under the open menu is left alone.
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs] (int r)
+                     [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs, &product = amp.product()] (int r)
                      {
                          if (r > 0 && r <= (int) lines.size() && lines[(size_t) r - 1].isLearn)
                          {
@@ -616,7 +616,7 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
                              }
                          }
                          else if (r > 0 && r <= (int) lines.size())
-                             prefs::humPick (lines[(size_t) r - 1]);
+                             prefs::humPick (product, lines[(size_t) r - 1]);
                          else if (const int k = r / 100 - 1, i = r % 100;
                                   k >= 0 && k < (int) knobs.size() && i < knobs[(size_t) k].count)
                              knobs[(size_t) k].choose (knobs[(size_t) k].values[i]);
@@ -737,15 +737,7 @@ void AmpEditor::resized()
 
 }
 
-juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
-{
-    return new AmpEditor (p);
-}
-
-// OrbitAmp's first start is OrbitAmpStart.cpp's, apart from the face.
-
-// ...and it is the engine as it stands: no parameter of its own, no half of its own.
-void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&) {}
-std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor&) { return nullptr; }
+// OrbitAmp itself — its name, this face, its first start — is said in OrbitAmpStart.cpp.
 
 } // namespace orbitamp
+

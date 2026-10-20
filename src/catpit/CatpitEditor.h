@@ -99,4 +99,9 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CatpitEditor)
 };
 
+/** The cockpit's face (Product::makeEditor) — or, with its pictures missing, the notice that says where
+    they belong. */
+juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
+
 } // namespace orbitamp::catpit
+

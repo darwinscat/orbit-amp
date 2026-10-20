@@ -27,7 +27,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     // what it made in the block's own colour over it.
     curve.paintSpectrum = [this] (juce::Graphics& g, juce::Rectangle<float> r)
     {
-        if (! prefs::spectraShown())
+        if (spectraShown != nullptr && ! spectraShown->load (std::memory_order_relaxed))
             return;
 
         felitronics::analysis::PlotMap pm;

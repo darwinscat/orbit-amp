@@ -25,9 +25,9 @@ int settings::snapTurbo (int db)
     return best;
 }
 
-int settings::turbo()
+int settings::turbo (const Product& product)
 {
-    return snapTurbo ((int) prefs::store().get (turboKey, turboDefault));
+    return snapTurbo ((int) prefs::store (product).get (turboKey, turboDefault));
 }
 
 //==============================================================================
@@ -46,8 +46,9 @@ void Engine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout&
 
 Engine& Engine::of (AmpProcessor& p)
 {
-    jassert (dynamic_cast<Engine*> (p.product.get()) != nullptr);
-    return static_cast<Engine&> (*p.product);
+    jassert (dynamic_cast<Engine*> (p.productEngine.get()) != nullptr);
+    return static_cast<Engine&> (*p.productEngine);
+
 }
 
 /** Built while the processor is still building itself, before its history has taken a baseline: what
@@ -58,7 +59,7 @@ Engine::Engine (AmpProcessor& p, const Lineup& lineup)
 {
     jassert (channel != nullptr);
 
-    channels.setTurboDb ((float) settings::turbo());
+    channels.setTurboDb ((float) settings::turbo (p.product()));
     makeOwn();
     channels.align();
     say (channels.active());

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "RedPawLineup.h"
+#include "RedPawSkin.h"
 
 #include "../channels/Engine.h"
 
@@ -29,32 +30,37 @@ channels::Lineup v4Lineup()
     });
 }
 
-int numGears() noexcept
+int numGears (const channels::Lineup& lineup) noexcept
 {
-    return lineup().count() / 2;
+    return lineup.count() / 2;
+}
+
+namespace
+{
+    // The rover's half of the two things a product gives the processor beside its face (Product.h): over
+    // its skin's channels.
+    void addParameters (const Product& p, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+    {
+        channels::Engine::addParameters (layout, skinOf (p).lineup);
+    }
+
+    std::unique_ptr<ProductEngine> makeEngine (AmpProcessor& p)
+    {
+        return std::make_unique<channels::Engine> (p, skinOf (p.product()).lineup);
+    }
+
+    /** The rover's first start in a process: the player's IRs it kept in its own folder are gathered into
+        the family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the installer. */
+    void firstStart (const Product& p)
+    {
+        gatherFormerIrs (p);
+    }
+}
+
+Product rover (const Skin& skin)
+{
+    return { skin.product, makeEditor, firstStart, addParameters, makeEngine, &skin };
 }
 
 } // namespace orbitamp::redpaw
 
-namespace orbitamp
-{
-
-// The rover's half of the two things a product gives the processor beside its face (PluginProcessor.h).
-void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
-{
-    channels::Engine::addParameters (layout, redpaw::lineup());
-}
-
-std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor& p)
-{
-    return std::make_unique<channels::Engine> (p, redpaw::lineup());
-}
-
-/** The rover's first start in a process: the player's IRs it kept in its own folder are gathered into the
-    family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the installer. */
-void firstStart()
-{
-    gatherFormerIrs();
-}
-
-} // namespace orbitamp

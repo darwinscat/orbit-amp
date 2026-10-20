@@ -21,8 +21,11 @@ namespace orbitamp::redpaw
     and its lit lamps cut out of it; every control is a render of its own, drawn at its place: the knobs
     without a pointer (the pointer is drawn), the lever's T grip seen from above with its collar, the
     slider and fader caps, the roof's toggle up and down, the square keys and TURBO each up and pressed. */
+struct Skin;
+
 struct Art
 {
+
     juce::Image bg;                    // the dashboard, its windscreen transparent, its lamps out
     juce::Image knobDrive, knobTone;
     juce::Image lever;
@@ -41,15 +44,17 @@ struct Art
         picture paints no lamp lit: the binary carries none. */
     std::array<juce::Image, layout::numLamps> lampLit;
 
-    static const Art& get();
+    /** A rover's, by its skin: decoded the first time that rover asks, and kept for each rover. */
+    static const Art& of (const Skin&);
 
     /** THE STILL the rover ships: one frame of its world, chosen and kept, that its windscreen shows in
         STILL instead of rendering one. Decoded when asked, never held here; invalid where it has none. */
-    static juce::Image still();
+    static juce::Image still (const Skin&);
 
     /** THE ROVER'S MARK, as SVG: its vehicle seen from the front, as its icon draws it — the build window
         wears it. Empty where the product has none. */
-    static juce::String mark();
+    static juce::String mark (const Skin&);
+
 };
 
 } // namespace orbitamp::redpaw

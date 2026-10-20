@@ -39,7 +39,7 @@ int main()
     own.createDirectory();
     std::printf ("reading %s\n", factory.getFullPathName().toRawUTF8());
 
-    const auto list = FactorySet::listOf (factory, product::name);
+    const auto list = FactorySet::listOf (factory, "OrbitAmp");
     check (list.size() > 0, "OrbitAmp has a list in the build's factory folder, " + juce::String (list.size()) + " files");
 
     // What OrbitAmp plays, by the names its list shows them by: a pack that went missing from the tree
@@ -92,10 +92,10 @@ int main()
         check (cabinets.size() == 31 && in ("Orange PPC212V") == 10 && in ("Other") == 21,
                "the whole shelf: ten in Orange PPC212V, twenty-one in Other (" + juce::String (cabinets.size()) + ")");
 
-        bool cataloged = true, whole = device::shelf::irs().size() == std::size (catalog::irs);
+        bool cataloged = true, whole = device::shelf::irs ("OrbitAmp").size() == std::size (catalog::irs);
         for (const auto& ir : catalog::irs)
             cataloged = cataloged && cabinets.contains (device::shelf::pathOf (ir.folder, juce::String::fromUTF8 (ir.file)));
-        for (const auto& ir : device::shelf::irs())
+        for (const auto& ir : device::shelf::irs ("OrbitAmp"))
             whole = whole && ir.data != nullptr && ir.size > 0;
         check (cataloged, "...each at the path the catalog gives it");
         check (whole, "...and OrbitAmp's shelf holds every place of the catalog, read from the folder");
@@ -116,7 +116,7 @@ int main()
     // What the preamp's list offers, read as the amp reads its own.
     {
         juce::StringArray listed;
-        for (const auto& p : DeviceLibrary::scan (DeviceLibrary::Slot::preamp, true, factory, own))
+        for (const auto& p : DeviceLibrary::scan ("OrbitAmp", DeviceLibrary::Slot::preamp, true, factory, own))
             if (p.bundled)
                 listed.add (p.displayName());
 
@@ -129,7 +129,7 @@ int main()
     // WHAT THE AMP'S MENU SHOWS (DeviceLibrary::shelfOf, which the menu is built from): the family's
     // devices, and no folder of the factory's — there is no OLD any more.
     {
-        const auto shelf = DeviceLibrary::shelfOf (DeviceLibrary::scan (DeviceLibrary::ampSlot, true, factory, own));
+        const auto shelf = DeviceLibrary::shelfOf (DeviceLibrary::scan ("OrbitAmp", DeviceLibrary::ampSlot, true, factory, own));
         juce::StringArray devices, folders;
         for (const auto& d : shelf.factory)
             devices.add (d.name);

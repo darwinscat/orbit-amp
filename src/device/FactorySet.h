@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "../Product.h"
 
 #include <juce_core/juce_core.h>
 
@@ -105,11 +104,12 @@ struct FactorySet
         return paths;
     }
 
-    /** ...and this product's own, in the folder this build reads. */
-    static juce::StringArray ownList()
+    /** ...and `product`'s own, in the folder this build reads. */
+    static juce::StringArray ownList (const juce::String& product)
     {
-        return listOf (location(), product::name);
+        return listOf (location(), product);
     }
+
 };
 
 } // namespace orbitamp::device

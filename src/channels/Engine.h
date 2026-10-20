@@ -23,8 +23,9 @@ inline constexpr std::array<int, 4> turboPushes { 3, 6, 9, 12 };
 /** The push on offer nearest to `db`. */
 int snapTurbo (int db);
 
-/** The push the settings hold now. */
-int turbo();
+/** The push the product's settings hold now. */
+int turbo (const Product&);
+
 } // namespace settings
 
 /** A PRODUCT'S HALF OF THE ENGINE: what makes the processor an amp of so many channels whether or not

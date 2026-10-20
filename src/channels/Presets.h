@@ -33,9 +33,9 @@ public:
     Presets (AmpProcessor&, Channels&);
 
     /** The product's folder and its files: `Darwin's Cat/<product>/Presets`, `.<product in lower case>`. */
-    static PresetStore store();
-    static juce::StringArray names();
-    static bool exists (const juce::String& name);
+    PresetStore store() const;
+    juce::StringArray names() const;
+    bool exists (const juce::String& name) const;
 
     /** The preset this sound was loaded from or last saved as; empty when it is nobody's. */
     juce::String current() const;

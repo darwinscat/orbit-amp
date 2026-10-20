@@ -71,11 +71,12 @@ public:
 
         Returns where the loaded device now stands, so the caller can put the parameter there; -1
         when nothing is loaded or the device that was playing has gone from the folder, in which
-        case the index it was handed stands as before. */
-    int rescan (int index)
+        case the index it was handed stands as before. `product` is the name of the product playing it. */
+    int rescan (const juce::String& product, int index)
     {
         const auto playing = loadedName;
-        packs = device::DeviceLibrary::scan (slot);
+        packs = device::DeviceLibrary::scan (product, slot);
+
 
         const int moved = playing.isNotEmpty() ? indexOfName (playing) : -1;
 

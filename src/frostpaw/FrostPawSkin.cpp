@@ -6,6 +6,7 @@
 #include "../redpaw/RedPawLineup.h"
 #include "view/IceDrive.h"
 
+#include "../PluginProcessor.h"
 #include "../face/Renders.h"
 
 /** FROSTPAWAMP'S OWN (redpaw/RedPawSkin.h): the rover on an ice moon — RedPawAmp's dashboard in frosted
@@ -14,32 +15,16 @@
 namespace orbitamp::redpaw
 {
 
+namespace
+{
+
+constexpr const char* name = "FrostPawAmp";
+
 /** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's six packs, three gears of two (v4Lineup). */
-const channels::Lineup& lineup()
+const channels::Lineup& iceLineup()
 {
     static const channels::Lineup rover = v4Lineup();
     return rover;
-}
-
-const Skin& skin()
-{
-    static const Skin ice {
-        "FROSTPAW_ART_DIR",
-        juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
-        // On the bright steel the words are written dark — a blue-black graphite, what they are set to
-        // darker still, a state a deeper orange — each cut deep into the metal: strokes heavier than the
-        // font's, the upper wall a shade over the word, the lower lip a light edge under it; and a dimmed
-        // word keeps most of its ink. Nothing else lies under the large words.
-        face::Ink { juce::Colour (0xff0b1018), juce::Colour (0xff030507), juce::Colour (0xff8f3507),
-                    juce::Colour (0x8cf0f6fc), 0.72f, juce::Colour (0x73000208), 0.7f },
-        juce::Colour(),
-        // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
-        face::renders::text ("midi.txt", "FROSTPAW_ART_DIR"),
-        // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
-        [] { return std::make_unique<Windscreen> (std::make_unique<frostpaw::IceDrive> (numGears())); },
-        { "Ice (GPU)", "1993 (CPU)", "Still" },
-    };
-    return ice;
 }
 
 //==============================================================================
@@ -50,10 +35,7 @@ const Skin& skin()
 // rounder at its corners and a pixel taller; the roof's holes, a hair right and up; the rings, the same
 // circles painted wider; the lever's notches, each a pixel or less higher; TURBO's hole half a pixel
 // right; and the nav screen's glass, ending two pixels sooner.
-namespace layout
-{
-
-const Plan plan {
+const layout::Plan plan {
     .windscreenCorners {{
         { 135.0f, 47.0f }, { 1539.5f, 47.0f }, { 1555.5f, 60.0f }, { 1453.0f, 317.0f }, { 227.0f, 317.0f }, { 115.5f, 60.0f },
     }},
@@ -81,6 +63,46 @@ const Plan plan {
     .turbo { 922.0f, 787.0f },
 };
 
-} // namespace layout
+const Skin& ice()
+{
+    static const Skin ice {
+        name,
+        iceLineup(),
+        plan,
+        "FROSTPAW_ART_DIR",
+        juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
+        // On the bright steel the words are written dark — a blue-black graphite, what they are set to
+        // darker still, a state a deeper orange — each cut deep into the metal: strokes heavier than the
+        // font's, the upper wall a shade over the word, the lower lip a light edge under it; and a dimmed
+        // word keeps most of its ink. Nothing else lies under the large words.
+        face::Ink { juce::Colour (0xff0b1018), juce::Colour (0xff030507), juce::Colour (0xff8f3507),
+                    juce::Colour (0x8cf0f6fc), 0.72f, juce::Colour (0x73000208), 0.7f },
+        juce::Colour(),
+        // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
+        face::renders::text (name, "midi.txt", "FROSTPAW_ART_DIR"),
+        // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
+        [] { return std::make_unique<Windscreen> (std::make_unique<frostpaw::IceDrive> (numGears (iceLineup()))); },
+        { "Ice (GPU)", "1993 (CPU)", "Still" },
+    };
+    return ice;
+}
+
+} // namespace
 
 } // namespace orbitamp::redpaw
+
+/** FROSTPAWAMP (Product.h): the rover (redpaw::rover) in the skin above. */
+const orbitamp::Product& orbitamp::products::frostPawAmp()
+{
+    static const Product rover = redpaw::rover (redpaw::ice());
+    return rover;
+}
+
+// THE PLUG-IN'S ENTRY, in FrostPawAmp's own plug-in alone (CMakeLists.txt: add_amp): a host that opens it
+// gets a processor of FrostPawAmp. A gate, or a binary that plays several amps, makes its own.
+#if ORBITAMP_PLUGIN_ENTRY
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
+    return new orbitamp::AmpProcessor (orbitamp::products::frostPawAmp());
+}
+#endif

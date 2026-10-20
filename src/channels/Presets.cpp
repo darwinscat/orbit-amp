@@ -4,7 +4,6 @@
 #include "Presets.h"
 
 #include "../Parameters.h"
-#include "../Product.h"
 
 namespace orbitamp::channels
 {
@@ -24,17 +23,18 @@ namespace
 
 Presets::Presets (AmpProcessor& p, Channels& c) : amp (p), channels (c) {}
 
-PresetStore Presets::store()
+PresetStore Presets::store() const
 {
-    return { product::name, "." + juce::String (product::name).toLowerCase() };
+    return { amp.product().name, "." + juce::String (amp.product().name).toLowerCase() };
+
 }
 
-juce::StringArray Presets::names()
+juce::StringArray Presets::names() const
 {
     return store().names();
 }
 
-bool Presets::exists (const juce::String& name)
+bool Presets::exists (const juce::String& name) const
 {
     return store().exists (name);
 }
