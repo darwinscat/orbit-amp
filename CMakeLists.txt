@@ -1236,6 +1236,34 @@ amp_console(orbitamp_no_factory_test  "OrbitAmpNoFactoryTest"   OrbitAmp     tes
 amp_console(catpitamp_no_factory_test "CatpitAmpNoFactoryTest"  CatpitAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
 amp_console(redpawamp_no_factory_test "RedPawAmpNoFactoryTest"  RedPawAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
 
+# EVERY AMP IN ONE BINARY: the sources of all of them, each once, and their libraries, under one main() —
+# what a plug-in of several amps will be. Its gate plays them side by side in one process, each a processor
+# of its own Product, two of them at once: each its own name, its own list in the build's factory folder,
+# its own channels and its own settings (tests/FamilyTests.cpp). An amp that defined something under a name
+# another defines too would not link here.
+set(family_sources "")
+set(family_libraries "")
+foreach(amp IN LISTS AMPS)
+    get_target_property(sources ${amp} AMP_SOURCES)
+    get_target_property(libraries ${amp} AMP_LIBRARIES)
+    list(APPEND family_sources ${sources})
+    list(APPEND family_libraries ${libraries})
+endforeach()
+list(REMOVE_DUPLICATES family_sources)
+list(REMOVE_DUPLICATES family_libraries)
+list(REMOVE_ITEM family_libraries juce::juce_recommended_lto_flags)    # a gate links in seconds, not minutes
+juce_add_console_app(orbitamp_family_test PRODUCT_NAME "OrbitAmpFamilyTest")
+target_sources(orbitamp_family_test PRIVATE tests/FamilyTests.cpp ${family_sources})
+target_include_directories(orbitamp_family_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_family_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_family_test PRIVATE
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
+target_link_libraries(orbitamp_family_test PRIVATE ${family_libraries})
+gate_reads_factory(orbitamp_family_test)
+set_target_properties(orbitamp_family_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+
 # ----------------------------------------------------------------------------
 # THE FAMILY'S RELEASE: `--target Family_All` builds every format of every amp installer/family.ini
 # names — the list each family installer packs (build-family-pkg.sh, darwinscat-amps.iss,

@@ -50,3 +50,6 @@ frostpaw-set       frostpawamp_set_test
 frostpaw-channel   frostpawamp_channel_test   ROVER_GATE_OWNS_HOME=1
 amberpaw-set       amberpawamp_set_test
 amberpaw-channel   amberpawamp_channel_test   ROVER_GATE_OWNS_HOME=1
+
+# Every amp in one binary: all five side by side in one process, each its own product (src/Product.h).
+family             orbitamp_family_test
