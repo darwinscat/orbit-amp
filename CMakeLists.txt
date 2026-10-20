@@ -46,43 +46,23 @@ include(FetchContent)
 # full clone — but only while that tree is the pinned version; any other tree is passed over and
 # the pin is fetched, so a local build never quietly runs on a JUCE the CI does not. Bump the tag
 # deliberately.
-# ----------------------------------------------------------------------------
-set(ORBITAMP_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
-set(ORBITAMP_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
-    CACHE PATH "Local JUCE source tree (used if it is the pinned version); else the pin is fetched")
-string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _orbitamp_juce_want "${ORBITAMP_JUCE_TAG}")
-set(_orbitamp_juce_have "")
-if(ORBITAMP_JUCE_DIR AND EXISTS "${ORBITAMP_JUCE_DIR}/CMakeLists.txt")
-    file(STRINGS "${ORBITAMP_JUCE_DIR}/CMakeLists.txt" _orbitamp_juce_have
-        REGEX "^project\\(JUCE VERSION [0-9.]+" LIMIT_COUNT 1)
-    string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" _orbitamp_juce_have "${_orbitamp_juce_have}")
-    if(NOT _orbitamp_juce_have STREQUAL _orbitamp_juce_want)
-        message(STATUS "JUCE: local tree is ${_orbitamp_juce_have}, the pin is ${_orbitamp_juce_want} — passed over")
-    endif()
-endif()
-if(_orbitamp_juce_have AND _orbitamp_juce_have STREQUAL _orbitamp_juce_want)
-    message(STATUS "JUCE: local source — ${ORBITAMP_JUCE_DIR}")
-    FetchContent_Declare(juce SOURCE_DIR "${ORBITAMP_JUCE_DIR}")
-else()
-    message(STATUS "JUCE: fetching ${ORBITAMP_JUCE_TAG} from GitHub")
-    FetchContent_Declare(juce
-        GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-        GIT_TAG        ${ORBITAMP_JUCE_TAG}
-        GIT_SHALLOW    TRUE)
-endif()
-FetchContent_MakeAvailable(juce)
-
-# ----------------------------------------------------------------------------
+#
 # CLAP format via the MIT clap-juce-extensions wrapper (native CLAP is slated for JUCE 9).
 # Pinned like JUCE — the same commit OrbitCab ships. Upstream stopped tagging in 2022, so a
 # commit hash is their de-facto release channel.
+#
+# BOTH ARE PATCHED, so that one binary holds several plug-ins: the family's VST3 and CLAP hold every
+# amp of the release, each under the ids its own bundle always had (THE FAMILY'S PLUG-INS, below).
+# cmake/PatchedWrappers.cmake declares the two from these pins and says what the patches change and
+# what they leave alone; every target that defines no plug-in list builds as it did. The escape hatch
+# still saves the clone: the local tree, when it is the pin, is COPIED into this build and the copy
+# patched — another project's tree is never written to.
 # ----------------------------------------------------------------------------
+set(ORBITAMP_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
+set(ORBITAMP_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
+    CACHE PATH "Local JUCE source tree (copied and patched if it is the pinned version); else the pin is fetched")
 set(ORBITAMP_CLAP_EXT_TAG "51a9359315298de632cf44e9d7524940868441e6" CACHE STRING "clap-juce-extensions git commit to build against")
-FetchContent_Declare(
-    clap-juce-extensions
-    GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
-    GIT_TAG        ${ORBITAMP_CLAP_EXT_TAG})
-FetchContent_MakeAvailable(clap-juce-extensions)
+include(cmake/PatchedWrappers.cmake)
 
 # ----------------------------------------------------------------------------
 # felitronics-core — shared, JUCE-free, header-only DSP core (eq / dynamics / saturation /
