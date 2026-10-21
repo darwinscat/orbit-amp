@@ -122,12 +122,10 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        // The ground: the panel's own colour and a hairline underneath — the strips' family.
-        g.setColour (theme::panel);
-        g.fillRect (getLocalBounds());
-        g.setColour (theme::hair2);
-        g.fillRect (getLocalBounds().removeFromBottom (1));
-
+        // No ground of its own and no line under it: the strip is the header's second line, and the
+        // arrows stand on the header's ground as the first line's controls do. The ground and the
+        // hairline were for a strip across the whole window between the toolbar and the blocks;
+        // beside the brand's marks they made it a box with a start and an end.
         for (size_t i = 0; i < rows.size(); ++i)
         {
             if (! rows[i].present)
