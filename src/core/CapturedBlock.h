@@ -13,11 +13,15 @@
 
 #include <juce_events/juce_events.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
 #include <memory>
 #include <functional>
+#include <map>
+#include <set>
+#include <string>
 #include <vector>
 
 namespace orbitamp::core
@@ -578,6 +582,42 @@ public:
                 }
 
         return out;
+    }
+
+    /** HOW MANY CAPTURES THE GAIN DIAL PLAYS — files, not detents. A dial can state eleven positions and
+        be recorded at nine, its bottom notches pointing at the capture above them (namz FileEntry: the
+        X88-IR's 0 and 30 play its 60). Counted for one setting of the pack's other switches, the most any
+        setting has: BOOST's two positions are two dials of nine, not one of eighteen. */
+    int gainCaptures() const
+    {
+        const auto* s = nam();
+        if (s == nullptr)
+            return 0;
+
+        std::string gain;
+        for (const auto& c : s->device.controls)
+            if (c.role == namz::rig::Role::Gain)
+            {
+                gain = c.name;
+                break;
+            }
+        if (gain.empty())
+            return 0;
+
+        std::map<std::string, std::set<std::string>> bySetting;   // the other switches' setting -> its files
+        for (const auto& f : s->device.files)
+        {
+            std::string others;
+            for (const auto& [name, value] : f.settings)
+                if (name != gain)
+                    others += name + "=" + value + ";";
+            bySetting[others].insert (f.id);
+        }
+
+        size_t most = 0;
+        for (const auto& [setting, files] : bySetting)
+            most = std::max (most, files.size());
+        return (int) most;
     }
 
     juce::String dialName() const { return juce::String (player.dialName()); }
