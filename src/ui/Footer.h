@@ -32,10 +32,10 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    /** Four taller than it was. The strip carries FACTS a player reads — the build, the rate, the
-        cost — and it was setting them at 12 px, under the house floor of 13. The floor won; the
-        strip grew to hold it. */
-    static constexpr int designHeight = 26;
+    /** The tuner's height: the facts stand in the right half of the tuner's row, in TWO lines —
+        the run (stereo, rate, load) over the pages (devices, the build stamp). One line of them at
+        the house floor of 13 is some five hundred units long, and the half has four hundred. */
+    static constexpr int designHeight = 44;
 
     /** The version window — the build stamp, the licence, the short trademark notice and the tip
         jar — opened by a click on the stamp itself. It used to have a second door in the gear's
@@ -57,13 +57,15 @@ private:
     // the same air around them. `rateWidth` and `loadWidth` are constants rather than literals
     // because paint() draws in them and resized() puts the click target over them — two places
     // that must never disagree, and did, as two bare numbers.
-    static constexpr int itemWidth   = 100;
-    static constexpr int stereoWidth = 134;   // room for the longest of the three modes, STEREO SPACE
-    static constexpr int gap       = 10;
-    static constexpr int stampWidth = 184;    // the version + format line at the far right
-    static constexpr int devicesWidth = 92;   // the DEVICES door, just left of the stamp
+    static constexpr int firstWidth = 120;    // the first column: the stereo mode over DEVICES
+    static constexpr int stampWidth = 184;    // the version + format line, under the rate and the load
     static constexpr int rateWidth = 104;     // the host's sample rate
     static constexpr int loadWidth = 108;     // "DSP 12%", and the door to the breakdown
+
+    /** Where every fact stands — one answer for paint() and resized(). The two lines are one block,
+        its columns left-aligned, the block against the row's right end. */
+    struct Places { juce::Rectangle<int> stereo, rate, load, devices, stamp; };
+    Places places() const;
 
     AmpProcessor& amp;
 
@@ -90,10 +92,9 @@ private:
 
     /** appkit's version badge, kept INVISIBLE and only for its window — the whole build stamp, the
         opt-in update check and the family's tip jar, one `showPopup()` away (public since appkit
-        v0.11.3). Its own face paints two lines, which is right for a toolbar corner and wrong for a
-        22 px strip: the second line would sit on the window's bottom edge. So this strip paints the
-        stamp itself, in its own voice and one line — and the badge stays as the popover's anchor,
-        sized to that text so the callout points at it.
+        v0.11.3). Its own face paints two lines, which is right for a toolbar corner and wrong for
+        one line of this block. So this strip paints the stamp itself, in its own voice — and the
+        badge stays as the popover's anchor, sized to that text so the callout points at it.
 
         The strip, not the toolbar, for the reason everything else on this line is here: it is a fact
         about the RUN, not about the sound — and the toolbar has no room to spare either. */

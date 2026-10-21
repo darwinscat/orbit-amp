@@ -64,6 +64,7 @@ Footer::Footer (AmpProcessor& processor)
         {
             stereo.setButtonText (params::stereoModes[juce::jlimit (0, params::stereoModes.size() - 1,
                                                                     juce::roundToInt (v))].toUpperCase());
+            resized();   // the item is as wide as its word, so the word starts where the column does
         });
 
     stereoAttachment->sendInitialUpdate();
@@ -122,67 +123,75 @@ void Footer::timerCallback()
     }
 }
 
+Footer::Places Footer::places() const
+{
+    const int blockW = firstWidth + juce::jmax (rateWidth + loadWidth, stampWidth);
+
+    auto r = getLocalBounds().reduced (0, 3);
+    r = r.withTrimmedLeft (juce::jmax (0, r.getWidth() - blockW));
+
+    auto line1 = r.removeFromTop (r.getHeight() / 2);
+    auto line2 = r;
+
+    Places p;
+    // The item centres its word, so it is the word's width plus the same air either side, shifted
+    // left by that air: the word itself starts on the column's edge, over DEVICES.
+    constexpr int air = 6;
+    p.stereo  = line1.removeFromLeft (firstWidth).withWidth (stereo.preferredWidth (2 * air)).translated (-air, 0);
+    p.rate    = line1.removeFromLeft (rateWidth);
+    p.load    = line1.removeFromLeft (loadWidth);
+    p.devices = line2.removeFromLeft (firstWidth);
+    p.stamp   = line2.removeFromLeft (stampWidth);
+    return p;
+}
+
 void Footer::paint (juce::Graphics& g)
 {
-    auto r = getLocalBounds().toFloat();
-
-    g.setColour (theme::hair);
-    g.fillRect (r.removeFromTop (1.0f));
-
-    // The build stamp, right-aligned at the far end. Its dot is the family's "needs a look": a
-    // release seen by an earlier, deliberate check is newer than what is running.
-    auto stamp = r.removeFromRight ((float) stampWidth).withTrimmedRight (8.0f);
-    const auto dot = stamp.removeFromRight (12.0f);
-
-    if (updateDot)
-    {
-        g.setColour (theme::orange);
-        g.fillEllipse (dot.getCentreX() - 3.0f, dot.getCentreY() - 3.0f, 6.0f, 6.0f);
-    }
-
-    g.setColour (stampBadge.isMouseOver() ? theme::tx : theme::txFaint);
-    theme::drawTracked (g, stampText, stamp, theme::displayFont (13.0f), 0.1f,
-                        juce::Justification::centredRight);
-
-    // The other page that is only read, beside the one that is: what is installed, and what
-    // this build is.
-    {
-        auto d = r.removeFromRight ((float) devicesWidth).withTrimmedRight (14.0f);
-        g.setColour (devicesBadge.isMouseOver() ? theme::tx : theme::txFaint);
-        theme::drawTracked (g, "DEVICES", d, theme::displayFont (13.0f), 0.1f,
-                            juce::Justification::centredRight);
-    }
-
-    auto right = r.withTrimmedLeft ((float) (stereoWidth + gap));
+    const auto p = places();
+    const auto font = theme::displayFont (13.0f);
 
     g.setColour (theme::txFaint);
-    theme::drawTracked (g, rateText, right.removeFromLeft ((float) rateWidth), theme::displayFont (13.0f), 0.1f,
-                        juce::Justification::centredLeft);
+    theme::drawTracked (g, rateText, p.rate.toFloat(), font, 0.1f, juce::Justification::centredLeft);
 
     // The load turns warm as it climbs — a number you only notice when it starts to matter.
     g.setColour (loadPercent > 80.0f ? theme::orange
                : loadPercent > 50.0f ? theme::lilac
                                      : theme::txFaint);
-    theme::drawTracked (g, "DSP " + loadText, right.removeFromLeft ((float) loadWidth), theme::displayFont (13.0f), 0.1f,
-                        juce::Justification::centredLeft);
+    theme::drawTracked (g, "DSP " + loadText, p.load.toFloat(), font, 0.1f, juce::Justification::centredLeft);
+
+    // The two pages that are only read: what is installed, and what this build is.
+    g.setColour (devicesBadge.isMouseOver() ? theme::tx : theme::txFaint);
+    theme::drawTracked (g, "DEVICES", p.devices.toFloat(), font, 0.1f, juce::Justification::centredLeft);
+
+    g.setColour (stampBadge.isMouseOver() ? theme::tx : theme::txFaint);
+    theme::drawTracked (g, stampText, p.stamp.toFloat(), font, 0.1f, juce::Justification::centredLeft);
+
+    // Its dot is the family's "needs a look": a release seen by an earlier, deliberate check is
+    // newer than what is running. Right after the words it is about.
+    if (updateDot)
+    {
+        const float x  = (float) p.stamp.getX() + theme::trackedWidth (stampText, font, 0.1f) + 9.0f;
+        const float cy = (float) p.stamp.getCentreY();
+        g.setColour (theme::orange);
+        g.fillEllipse (x - 3.0f, cy - 3.0f, 6.0f, 6.0f);
+    }
 }
 
 void Footer::resized()
 {
-    auto row = getLocalBounds().withTrimmedTop (1);
-    stereo.setBounds (row.removeFromLeft (stereoWidth));
+    const auto p = places();
+    stereo.setBounds (p.stereo);
 
     // The stamp's click target, and under it the badge that owns the popover — same rectangle, so
     // the callout's arrow points at the words that opened it.
-    const auto stamp = row.removeFromRight (stampWidth).withTrimmedRight (8);
-    stampBadge  .setBounds (stamp);
-    versionBadge.setBounds (stamp);
+    stampBadge  .setBounds (p.stamp);
+    versionBadge.setBounds (p.stamp);
 
-    devicesBadge.setBounds (row.removeFromRight (devicesWidth).withTrimmedRight (14));
+    devicesBadge.setBounds (p.devices.withWidth (juce::roundToInt (
+        theme::trackedWidth ("DEVICES", theme::displayFont (13.0f), 0.1f)) + 4));
 
     // The invisible click target over the painted DSP number.
-    row.removeFromLeft (gap + rateWidth);
-    loadBadge.setBounds (row.removeFromLeft (loadWidth));
+    loadBadge.setBounds (p.load);
 }
 
 void Footer::showLoadBreakdown()

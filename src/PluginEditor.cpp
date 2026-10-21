@@ -689,19 +689,17 @@ void AmpEditor::resized()
                          FaceplateView::designWidth - colL - colR, faceplateH);
     faceplate.setTransform (zoom);
 
-    // The always-on needle, full width, above the footer's facts — dropped a hair below its
-    // gap's centre, which reads better than the arithmetic middle; the footer keeps its place,
-    // so the window's height is untouched. The badges stand off the window's edge the way the
-    // rails above them do, and the tuner takes whatever the badges leave it.
-    const int tunerDrop  = 3;
+    // The bottom row: the always-on needle in the left half, the footer's facts in the right. Both
+    // stand off the window's edges the way the rails above them do; the row stays when the tuner
+    // does not, its half left empty, so the facts never move.
     const int badgeInset = edgeInset;
-    const int tunerY = faceplateY + faceplateH + chromeGap + tunerDrop;
+    const int rowY   = faceplateY + faceplateH + chromeGap;
+    const int rowW   = FaceplateView::designWidth - 2 * badgeInset;
+    const int tunerW = (rowW - chromeGap) / 2;
 
-    // The row is the tuner, whole: the guards' lights and menus live in the strip's arrows now.
     tunerStrip.setVisible (tunerStands);
-    tunerStrip.setBounds (margin + badgeInset, tunerY,
-                          FaceplateView::designWidth - 2 * badgeInset,
-                          TunerStrip::designHeight);
+    tunerStrip.setBounds (margin + badgeInset, rowY + (bottomRowH - TunerStrip::designHeight) / 2,
+                          tunerW, TunerStrip::designHeight);
     tunerStrip.setTransform (zoom);
 
     // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
@@ -716,16 +714,13 @@ void AmpEditor::resized()
                             FaceplateView::designWidth * 2 / 3, 330);
     learnOverlay.setTransform (zoom);
 
-    // The row is as gone as the tuner: hidden, the footer moves up whole.
-    const int footerY = tunerStands
-                            ? tunerY - tunerDrop + TunerStrip::designHeight + chromeGap
-                            : faceplateY + faceplateH + chromeGap;
-    footer.setBounds (margin, footerY, FaceplateView::designWidth, Footer::designHeight);
+    footer.setBounds (margin + badgeInset + tunerW + chromeGap, rowY + (bottomRowH - Footer::designHeight) / 2,
+                      rowW - tunerW - chromeGap, Footer::designHeight);
     footer.setTransform (zoom);
 
-    // TEMPORARY — the audition player and the glyph review strip, under the footer, each only
+    // TEMPORARY — the audition player and the glyph review strip, under the bottom row, each only
     // when this player switched it on; the window is as tall as what it shows.
-    int stripY = footerY + Footer::designHeight;
+    int stripY = rowY + bottomRowH + chromeGap;
 
     demoStrip.setVisible (showDemo);
     if (showDemo)

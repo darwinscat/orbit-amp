@@ -62,7 +62,7 @@ public:
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
     static constexpr int headerGap = 0;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
-    static constexpr int chromeGap = 10;   // faceplate to tuner to footer
+    static constexpr int chromeGap = 10;   // faceplate to the tuner's row, the tuner to the facts, the row to the edge
 
     /** Room for the host's or the standalone's own title bar, which the display's user area does not
         know about. Guessing slightly high costs nothing; guessing low costs a window that opens
@@ -73,9 +73,11 @@ private:
 
     /** Everything around the faceplate — the faceplate itself answers for its own height now,
         because a LAYOUT choice can collapse a whole row. */
+    /** The bottom row: the tuner in the left half, the footer's facts in the right — one row. */
+    static constexpr int bottomRowH = juce::jmax (TunerStrip::designHeight, Footer::designHeight);
+
     static constexpr int fixedHeight = Chrome::designHeight + headerGap
-                                     + chromeGap + TunerStrip::designHeight
-                                     + chromeGap + Footer::designHeight
+                                     + chromeGap + bottomRowH + chromeGap
                                      + margin * 2;
 
     /** The window is as tall as what it shows: the faceplate as its LAYOUT stands it, and the
@@ -84,9 +86,8 @@ private:
     bool showGlyphs = false;
     int  baseHeight() const noexcept
     {
-        // The tuner IS the row now: hidden, it collapses whole, gap included.
+        // The tuner's row stays when the tuner does not: the facts stand in it too.
         return fixedHeight + LayoutStrip::designHeight + faceplate.currentHeight()
-                           - (tunerStands ? 0 : TunerStrip::designHeight + chromeGap)
                            + (showDemo ? DemoStrip::designHeight : 0)
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }
