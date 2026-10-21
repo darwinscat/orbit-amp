@@ -85,9 +85,9 @@ Footer::Footer (AmpProcessor& processor)
     addChildComponent (versionBadge);   // never shown: the strip paints the line, the badge holds the popover
 
     // The line this strip draws for itself, in the strip's own voice — the version as the toolbar
-    // would say it, the running wrapper after it.
-    stampText = "V" + amp.updateChecker().currentVersion() + juce::String::fromUTF8 (" \xc2\xb7 ")
-                    + amp.pluginFormat().toUpperCase();
+    // would say it, and nothing after it: the running wrapper is said in the window the stamp
+    // opens, on its environment line, and the strip has no room for a word only that window needs.
+    stampText = "V" + amp.updateChecker().currentVersion();
 
     // The SAME window the gear opens: centred, opaque, on its own dimmed ground. A call-out here
     // hung a half-transparent card over the faceplate and read as a tooltip that would not go away.
