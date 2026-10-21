@@ -44,23 +44,42 @@ public:
     /** Hands the widgets to the block that will place them. */
     void addTo (juce::Component& parent);
 
-    /** Places everything inside the block's content area. */
-    void layOut (juce::Rectangle<int> content);
+    /** THE CONSOLE IS TWO PIECES NOW, placed apart. The row of hands is a strip of the block's own —
+        under the picture well, where the block's other controls have their strips — and the curve is
+        one of the pictures that well can show, with the button that says whose tone it wears in its
+        corner. So the block places each where its own layout puts it, rather than handing the console
+        one rectangle to split.
 
-    /** Which side of the curve the row of hands sits on. The block re-lays itself out after. */
+        `cornerReserve` is the width the block keeps free at the curve's top-right for its own glyph
+        (the one that throws the picture open): the mode button stands left of it. */
+    void layOutRow (juce::Rectangle<int> row);
+    void layOutCurve (juce::Rectangle<int> area, int cornerReserve);
+
+    /** Which side of the curve the row of hands sits on — a preference of the old layout, where the
+        row and the curve shared one box. In the strip they no longer share one, so it is kept only
+        so the editor's preference has somewhere to land; nothing is laid out by it. */
     void setRowOnTop (bool onTop) { rowOnTop = onTop; }
 
-    /** The spectrum only listens while the block is on screen. */
+    /** The spectrum only listens while the curve is on screen. */
     void setSpectrumRunning (bool shouldRun);
 
-    /** Steps the whole console aside — for when a picture is thrown open across the block's face
-        and everything else has to make room. */
-    void setWidgetsVisible (bool);
+    /** The row of hands, shown or stepped aside — for when a picture is thrown open across the
+        block's face and everything else has to make room. */
+    void setRowVisible (bool);
 
-    /** How much of the block's height the control row under the curve wants: a dial, its name above
-        it, and the slope combo that hangs a little below the dial's foot. Nothing more — the row
-        used to reserve a hundred and twelve and spend the last forty on air. */
-    static constexpr int rowH = 62;   // a name row of 14 and a dial of 48 — the cuts' stack fits the same height
+    /** The curve — and the mode button riding it — shown or not: it is one page of the block's
+        picture well, and up only while that page is. Its spectrum listens only while it is up, so
+        the TONE picture, which reads the same tap, never has a hidden twin stealing its frames. */
+    void setCurveVisible (bool);
+
+    /** How much of the block's height the control row wants: a dial, its name above it at reading
+        size, and the slope combo standing on the dial's bottom line. Nothing more — the row used to
+        reserve a hundred and twelve and spend the last forty on air. */
+    static constexpr int rowH = 64;   // a name row of 16 (13 px type) and a dial of 48 — the cuts' stack fits the same height
+
+    /** A cut's cell — its name, its switch, its slope combo: wide enough for "24 DB" and the
+        chevron at 13 px. */
+    static constexpr int cutW = 64;
 
     /** One cell of the control row between the two cuts: what it is called, what colour it wears,
         and the parameter its knob writes.
@@ -223,6 +242,7 @@ private:
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> bandAtts;
 
     ModeButton modeBtn;
+    static constexpr int modeBtnW = 150;   // DEVICE TONE and its chevron at 13 px
 
     void showModeMenu (juce::Point<int> screenPos);
     juce::StringArray modeNames;

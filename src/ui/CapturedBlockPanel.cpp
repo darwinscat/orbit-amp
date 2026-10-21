@@ -132,7 +132,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     gain.heat = true;
     gain.setArc (juce::MathConstants<float>::pi * 7.0f / 6.0f, juce::MathConstants<float>::pi * 17.0f / 6.0f);     // 0 at 7:00, 2 at 9:00, 8 at 3:00, 10 at 5:00
 
-    // Both walls stand up: IN at the block's left, OUT at its right.
+    // Both walls stand up, at the picture well's edges: IN at its left, OUT at its right.
     //
     // What each wall's two marks MEAN is set with the pack (deviceChanged) and, on IN, kept current
     // by this face's own tick (refreshMeterOffsets): the fill is the model's input, because the
@@ -163,23 +163,23 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         addChildComponent (*scopes[(size_t) i]);
     }
 
-    // What was up when the session was saved.
-    vizPick = juce::jlimit (0, numViz - 1,
-                            (int) amp.apvts.state.getProperty (vizProperty(), 0));
+    // What was up when the session was saved — and the EQ curve where nothing was: it is the page
+    // that has hands on it, and before it became a page it was always in view.
+    vizPick = juce::jlimit (0, numPages - 1,
+                            (int) amp.apvts.state.getProperty (vizProperty(), eqPage));
 
-    for (int i = 0; i < numViz; ++i)
+    expandTag.onClick = [this]
     {
-        expandTags[(size_t) i].onClick = [this, i]
-        {
-            expandedViz = expandedViz == i ? -1 : i;
-            for (int j = 0; j < numViz; ++j)
-                expandTags[(size_t) j].expanded = expandedViz == j;
-            applySpectrumResolution();
-            resized();
-            repaint();
-        };
-        addChildComponent (expandTags[(size_t) i]);
-    }
+        thrownOpen = ! thrownOpen;
+        expandTag.expanded = thrownOpen;
+        applySpectrumResolution();
+        resized();
+        repaint();
+    };
+    addChildComponent (expandTag);
+
+    pageTag.onClick = [this] (juce::Point<int> screenPos) { showVizMenu (screenPos); };
+    addChildComponent (pageTag);
 
     halfTag.onChange = [this]
     {
@@ -189,8 +189,6 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     startTimerHz (30);   // the hand's whereabouts, for the corner glyphs
 
-    screenTag.onClick = [this] { openTheater(); };
-    addChildComponent (screenTag);
     scopes[(size_t) DeviceScope::Mode::wave]->waveHalf = halfTag.half;   // half is the default
     addChildComponent (halfTag);
 
@@ -236,18 +234,24 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         });
 
     // The list is not flat: devices, and the player's folders as submenus. The combo shows the
-    // device; the channel row under the border shows which of its channels plays.
+    // device; the channel lever beside the dial shows which of its channels plays.
     device.onOpen = [this] { showDeviceMenu(); };
 
-    // A PICK, and only a pick, goes through the channels' memory: a restored session, an undo or a
-    // host automating the device index move the parameter too, and what they set is what they
-    // meant — the attachment above only follows them.
-    addChildComponent (channelRow);
-    channelRow.onPick = [this] (int k)
+    // BOOST: a press is the next position round — OFF to ON and back, for the two-way switch every
+    // pack so far has; the attachment the selector builds lights the key back (buildSelectors).
+    addChildComponent (boostKey);
+    boostKey.onPress = [this]
     {
-        if (const auto* d = shelf.deviceOf (AmpChannels (amp).playing()))
-            if (juce::isPositiveAndBelow (k, d->channels.size()))
-                playPack (d->channels[k]);
+        if (! juce::isPositiveAndBelow (boostIndex, params::numSelectors))
+            return;
+
+        auto& sel = selectors[(size_t) boostIndex];
+        if (sel.attachment == nullptr || sel.values.isEmpty())
+            return;
+
+        auto* p = amp.apvts.getParameter (params::selectorId (blk, boostIndex));
+        const int now = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
+        sel.attachment->setValueAsCompleteGesture ((float) ((now + 1) % sel.values.size()));
     };
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
@@ -286,12 +290,11 @@ CapturedBlockPanel::~CapturedBlockPanel()
 
 bool CapturedBlockPanel::foldPicture()
 {
-    if (expandedViz < 0)
+    if (! thrownOpen)
         return false;
 
-    expandedViz = -1;
-    for (auto& t : expandTags)
-        t.expanded = false;
+    thrownOpen = false;
+    expandTag.expanded = false;
 
     applySpectrumResolution();
     resized();
@@ -304,16 +307,15 @@ void CapturedBlockPanel::openTheater()
     if (theater != nullptr)
         return;
 
-    // Whatever is up — thrown across the face or sitting in its corner of the block. The theatre
-    // used to require the expanded state first, which made it the second half of a gesture nobody
-    // had a reason to start.
-    const int shown = expandedViz >= 0 ? expandedViz : vizPick;
+    // Whatever is up — thrown across the block or standing in its well. The EQ curve goes up as
+    // TONE: the same curve over the same spectrum, to be read on the monitor rather than handled.
+    const auto mode = modeOfPage (vizPick);
 
-    const auto& from = *scopes[(size_t) shown];
+    const auto& from = *scopes[(size_t) mode];
 
     theater = std::make_unique<ScopeTheater> (
         block, [this] (double hz) { return eq.drawnDb (hz); },
-        (DeviceScope::Mode) shown,
+        mode,
         halfTag.half, amp.currentSampleRate(),
         &toneTap, AmpProcessor::eqSpectrumOrder,
         from.deviceSpec(), from.paper(), from.creditLines(), from.picture(),
@@ -321,8 +323,8 @@ void CapturedBlockPanel::openTheater()
     theater->showSpectraBy (prefs::spectraCache (amp.product()));
 
     // The face's own copy stops while the theatre runs — the wave ribbon must have ONE
-    // resolution-setting reader at a time.
-    scopes[(size_t) shown]->setVisible (false);
+    // resolution-setting reader at a time, and the tone tap one reader of its frames.
+    setPictureShown (false);
 
     theater->setBounds (juce::Desktop::getInstance().getDisplays()
                             .getPrimaryDisplay()->totalArea);
@@ -349,9 +351,10 @@ void CapturedBlockPanel::closeTheater()
     starved reader, because a frame of the wrong size is discarded rather than resampled. */
 void CapturedBlockPanel::applySpectrumResolution()
 {
-    const int shown = expandedViz >= 0 ? expandedViz : vizPick;
-    const bool big  = (theater != nullptr || expandedViz >= 0)
-                       && shown == (int) DeviceScope::Mode::tone;
+    // On the monitor the EQ page is TONE and gets the long window too; thrown across the block it is
+    // still the curve, whose own pane reads the standing size.
+    const bool big = (theater != nullptr && modeOfPage (vizPick) == DeviceScope::Mode::tone)
+                  || (thrownOpen && vizPick == (int) DeviceScope::Mode::tone);
 
     const int order = big ? AmpProcessor::eqSpectrumOrderBig : AmpProcessor::eqSpectrumOrder;
 
@@ -452,11 +455,9 @@ void CapturedBlockPanel::deviceChanged()
         device.setSelection (0);
 
         if (dev != nullptr && dev->channels.size() > 1)
-            channelRow.setChannels (dev->channelNames, dev->channels.indexOf (playing));
+            showChannels (dev->channelNames, dev->channels.indexOf (playing));
         else
-            channelRow.setChannels ({}, -1);
-
-        channelRow.setVisible (channelRow.count() > 1 && expandedViz < 0);
+            showChannels ({}, -1);
     }
 
     caption = block.deviceName();
@@ -565,8 +566,7 @@ void CapturedBlockPanel::deviceChanged()
 
     // A device with no photograph must not leave the face staring at an empty page — the one the
     // last device filled. The paper is what every pack has, so that is where it steps back to.
-    if (! hasPicture() && (vizPick == (int) DeviceScope::Mode::photo
-                            || expandedViz == (int) DeviceScope::Mode::photo))
+    if (! hasPicture() && vizPick == (int) DeviceScope::Mode::photo)
         setViz ((int) DeviceScope::Mode::device);
 
     // The gain knob's detents ARE the captured positions. Twenty-one for SM7, whatever the next
@@ -732,6 +732,44 @@ void CapturedBlockPanel::playPack (int index)
         deviceChanged();
 }
 
+/** The lever for the device that plays: rebuilt only when the count of its channels changes — its
+    places are fixed for its life — and gone for a device of one.
+
+    A PICK, and only a pick, goes through the channels' memory: a restored session, an undo or a host
+    automating the device index move the parameter too, and what they set is what they meant — the
+    attachment only follows them, and the lever with it. A lever's own pick never rebuilds it: it
+    plays a channel of the device it already shows, so the count cannot change under its hand. */
+void CapturedBlockPanel::showChannels (const juce::StringArray& names, int lit)
+{
+    if (names.size() < 2)
+    {
+        if (lever != nullptr)
+        {
+            removeChildComponent (lever.get());
+            lever.reset();
+        }
+        return;
+    }
+
+    if (lever == nullptr || lever->numPlaces() != names.size())
+    {
+        if (lever != nullptr)
+            removeChildComponent (lever.get());
+
+        lever = std::make_unique<ChannelLever> (names.size());
+        lever->onPick = [this] (int k)
+        {
+            if (const auto* d = shelf.deviceOf (AmpChannels (amp).playing()))
+                if (juce::isPositiveAndBelow (k, d->channels.size()))
+                    playPack (d->channels[k]);
+        };
+        addChildComponent (*lever);
+    }
+
+    lever->setChannels (names, lit);
+    lever->setTooltip ("CHANNEL: " + names.joinIntoString (juce::String::fromUTF8 ("   \xc2\xb7   ")).toUpperCase());
+}
+
 void CapturedBlockPanel::showDeviceMenu()
 {
     using Library = device::DeviceLibrary;
@@ -809,12 +847,23 @@ void CapturedBlockPanel::buildSelectors()
 {
     const auto list = block.selectors();
 
+    // BOOST, by its name: the first selector a pack calls that is the key under the lever, and only
+    // the first — a second of the same name is a pick like any other.
+    boostIndex = -1;
+    for (int i = 0; i < params::numSelectors && i < list.size(); ++i)
+        if (list.getReference (i).name.trim().equalsIgnoreCase ("boost"))
+        {
+            boostIndex = i;
+            break;
+        }
+
     for (int i = 0; i < params::numSelectors; ++i)
     {
         auto& sel = selectors[(size_t) i];
 
         sel.attachment.reset();
         sel.steps.reset();
+        sel.row = {};
 
         if (i >= list.size())
             continue;
@@ -827,17 +876,30 @@ void CapturedBlockPanel::buildSelectors()
 
         sel.name   = def.name.toUpperCase();
         sel.values = labels;
+        sel.onOff  = labels.size() == 2 && labels[0] == "OFF" && labels[1] == "ON";
+
+        const auto hint = sel.name + ":   " + labels.joinIntoString (juce::String::fromUTF8 ("   \xc2\xb7   "));
+
+        if (i == boostIndex)
+        {
+            // The key, not a switch: lit while it stands anywhere but its first position.
+            boostKey.setTooltip (hint);
+            sel.attachment = std::make_unique<juce::ParameterAttachment> (
+                *amp.apvts.getParameter (params::selectorId (blk, i)),
+                [this] (float v) { boostKey.setLit (juce::roundToInt (v) > 0); });
+            sel.attachment->sendInitialUpdate();
+            continue;
+        }
 
         sel.steps = std::make_unique<VSwitch>();
         sel.steps->accent = theme::orange;
 
-        // Lying down under the GAIN dial, one line high: the slot and its lever alone — the name
-        // and the chosen position are written beside it by the panel, and the whole list is the
-        // hint. Names under the detents cost a second line, and the dial's diameter paid for it.
+        // Lying down in the dial's strip, one line high: the slot and its lever alone — the word
+        // beside it is written by the panel, and the whole list is the hint.
         sel.steps->setHorizontal (true);
         sel.steps->setNamesShown (false);
         sel.steps->setItems (labels, 0);
-        sel.steps->setTooltip (labels.joinIntoString (juce::String::fromUTF8 ("   \xc2\xb7   ")));
+        sel.steps->setTooltip (hint);
         addAndMakeVisible (*sel.steps);
 
         sel.attachment = std::make_unique<juce::ParameterAttachment> (
@@ -879,120 +941,120 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = device.getBounds();   // the frame opens the line under it
     }
 
-    // A thrown-open tile owns the WHOLE face: every control steps aside until the fold glyph
+    // A thrown-open picture owns the WHOLE face: every control steps aside until the corner glyph
     // brings the room back.
-    if (expandedViz >= 0)
+    if (thrownOpen)
     {
         setControlsVisible (false);
-        eq.setWidgetsVisible (false);
-
-        for (int i = 0; i < numViz; ++i)
-        {
-            scopes[(size_t) i]->setVisible (i == expandedViz);
-            expandTags[(size_t) i].setVisible (i == expandedViz);
-        }
-
-        // The whole face is the picture, so the whole face takes the click that walks the loop.
-        widgetArea = area;
-        scopes[(size_t) expandedViz]->setBounds (area);
-
-        auto corner = area.removeFromTop (24).removeFromRight (96);
-        expandTags[(size_t) expandedViz].setBounds (corner.removeFromRight (28).reduced (2, 4)
-                                                        .translated (-6, 4));
-
-        screenTag.setBounds (corner.removeFromRight (28).reduced (2, 4).translated (-6, 4));
-        screenTag.setVisible (true);
-        screenTag.toFront (false);
-
-        halfTag.setVisible (expandedViz == (int) DeviceScope::Mode::wave);
-        if (halfTag.isVisible())
-        {
-            halfTag.setBounds (corner.removeFromRight (30).reduced (1, 4).translated (-6, 4));
-            halfTag.toFront (false);
-        }
-
-        expandTags[(size_t) expandedViz].toFront (false);
+        eq.setRowVisible (false);
+        dividerX = { -1, -1 };
+        layPicture (area);
         return;
     }
 
     setControlsVisible (true);
-    eq.setWidgetsVisible (true);
+    eq.setRowVisible (true);
 
-    // ---- the IN meter runs the block's WHOLE height, at its left wall — beside the console
-    //      too: what the model is fed is the block's first fact, and now it reads at any
-    //      glance. The component is wider than its bar; the margin is where the dB appears
-    //      while the hand drags, click-through for the console beneath it otherwise. ----
+    // ---- THREE SECTIONS, each a tier over a strip. The two narrow ones are a FIXED width and the
+    //      well takes the rest, so the widest thing on the block is the picture. ----
+    auto s1 = area.removeFromLeft (section1W);
+    area.removeFromLeft (sectionGap);
+    auto s2 = area.removeFromLeft (section2W);
+    area.removeFromLeft (sectionGap);
+    auto s3 = area;
+
+    dividerX = { s1.getRight() + sectionGap / 2, s2.getRight() + sectionGap / 2 };
+
+    // One line across the block where the tiers end and the strips begin.
+    const auto strip = [] (juce::Rectangle<int>& s)
     {
-        auto meterCol = area.removeFromLeft (BlockMeter::designWidth);
-        area.removeFromLeft (6);
-        inMeter.setBounds (meterCol.withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
-        inMeter.toFront (false);   // over the console, so the dragged reading paints on top
+        auto r = s.removeFromBottom (stripH);
+        s.removeFromBottom (tierGap);
+        return r;
+    };
 
-        auto outCol = area.removeFromRight (BlockMeter::designWidth);
-        area.removeFromRight (6);
+    auto strip1 = strip (s1), strip2 = strip (s2), strip3 = strip (s3);
+
+    // ---- section 3: the picture well, the two meters at its edges, the console's row under it.
+    //
+    //      The meters stand where the signal enters and leaves the picture: IN at the well's left —
+    //      what the model is being fed, with the trim's hand on it — and OUT at its right. Each
+    //      component is wider than its bar; the margin, over the well, is where the dB appears while
+    //      the hand drags, and click-through for the picture otherwise. ----
+    {
+        auto tier = s3;
+
+        auto inCol = tier.removeFromLeft (BlockMeter::designWidth);
+        tier.removeFromLeft (6);
+        inMeter.setBounds (inCol.withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
+
+        auto outCol = tier.removeFromRight (BlockMeter::designWidth);
+        tier.removeFromRight (6);
         outMeter.valueOnLeft = true;
         outMeter.setBounds (outCol.withX (outCol.getX() - BlockMeter::standingValueW)
                                   .withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
-        outMeter.toFront (false);   // the mirrored reading paints over the console's right edge
+
+        // "Under the picture": the row's cells line up with the well, not with the meters.
+        eq.layOutRow (strip3.withX (tier.getX()).withWidth (tier.getWidth()));
+
+        layPicture (tier);
+
+        inMeter.toFront (false);    // over the well, so the dragged reading paints on top
+        outMeter.toFront (false);
     }
 
-    // ---- the top zone is CAPPED and the console gets the remainder, not the other way round.
-    //
-    //      A dial and a picture stop improving once they are big enough to aim at; a curve does
-    //      not — every unit of height it gets is another decibel you can tell apart. So the zone
-    //      that saturates is the one with the ceiling on it. ----
-    auto top = area.removeFromTop (juce::jmin (topZoneH, area.getHeight() - EqSection::rowH - 90));
-    area.removeFromTop (gap);
-    eq.layOut (area);
-
-    // ---- inside it: a column of FIXED width carrying the big GAIN, the device's own selectors in a
-    //      column of their own right of it, and one picture taking everything to their right.
-    //
-    //      The dial keeps its size whatever the device brings: Fur Coat's octave switch and a Big
-    //      Muff's nothing leave GAIN as it is, and the picture gives the switches their room. ----
-    auto column = top.removeFromLeft (columnW);
-    top.removeFromLeft (gap);
-
-    const auto picks = (int) std::count_if (selectors.begin(), selectors.end(), [] (const auto& s) { return s.steps != nullptr; });
-    auto pickColumn = picks > 0 ? top.removeFromLeft (columnW) : juce::Rectangle<int>();
-    if (picks > 0)
-        top.removeFromLeft (gap);
-    pickColumn = pickColumn.withSizeKeepingCentre (pickColumn.getWidth(), juce::jmin (pickColumn.getHeight(), picks * pickRowH + (picks - 1) * gap));
-
-    // The channel keys stand over the picture, at its top — a device of one channel has none, and
-    // the picture keeps the room.
-    if (channelRow.count() > 1)
+    // ---- section 1: the GAIN dial, as big as the tier lets it be, and under it SMOOTH and the
+    //      device's picks — one line each, stacked in the middle of the strip, left-aligned on one
+    //      edge so the switches stand in a column. ----
     {
-        channelRow.setBounds (top.removeFromTop (ChannelRow::rowH));
-        top.removeFromTop (6);
+        const int gainSide = juce::jmin (maxGainSide, juce::jmin (s1.getWidth(), s1.getHeight()));
+        gain.setBounds (s1.withSizeKeepingCentre (gainSide, gainSide));
+
+        std::vector<int> widths { SmoothTag::idealWidth() };
+        for (auto& sel : selectors)
+            if (sel.steps != nullptr)
+                widths.push_back (pickSwitchW + 8 + juce::roundToInt (pickWordWidth (sel)));
+
+        const int rows  = (int) widths.size();
+        const int rowGap = juce::jmax (2, juce::jmin (6, (strip1.getHeight() - rows * pickRowH) / juce::jmax (1, rows - 1)));
+        const int stackH = rows * pickRowH + (rows - 1) * rowGap;
+        const int stackW = juce::jmin (strip1.getWidth(), *std::max_element (widths.begin(), widths.end()));
+
+        auto stack = strip1.withSizeKeepingCentre (stackW, juce::jmin (strip1.getHeight(), stackH));
+
+        smoothTag.setBounds (stack.removeFromTop (pickRowH).withWidth (SmoothTag::idealWidth()));
+
+        for (auto& sel : selectors)
+        {
+            if (sel.steps == nullptr)
+                continue;
+
+            stack.removeFromTop (rowGap);
+            sel.row = stack.removeFromTop (pickRowH);
+            sel.steps->setBounds (sel.row.withWidth (pickSwitchW).reduced (0, 1));
+        }
     }
 
-    // Only the SELECTING controls stand there — the ones that pick a capture. A measured control is
-    // a band of the curve and belongs in the console's row, whatever shape its own control has.
-    // Each is ONE line — name, lever, chosen position — stacked down the middle of their column.
-    for (auto& sel : selectors)
+    // ---- section 2: the lever, as tall as the picture beside it, and BOOST under it — or nothing
+    //      there, for a pack that has no boost: the place stays, the sections do not close up. ----
+    if (lever != nullptr)
     {
-        if (sel.steps == nullptr)
-            continue;
-
-        sel.row = pickColumn.removeFromTop (pickRowH);
-        pickColumn.removeFromTop (gap);
-        sel.steps->setBounds (sel.row.withX (sel.row.getX() + pickNameW).withWidth (pickSwitchW));
+        const int w = juce::jmin (s2.getWidth(), juce::roundToInt (ChannelLever::idealWidth (lever->channelNames())) + 2);
+        lever->setBounds (s2.withSizeKeepingCentre (w, s2.getHeight()));
     }
 
-    const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
-    gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
+    boostKey.setVisible (boostIndex >= 0);
+    if (boostIndex >= 0)
+        boostKey.setBounds (strip2.withSizeKeepingCentre (juce::jmin (strip2.getWidth(), boostKey.idealWidth()),
+                                                         LatchKey::keyH));
+}
 
-    // The pill stands at the foot of the dial, just under the notches of its 0 and its 10 — the travel runs
-    // 7:00 to 5:00, so the gap at the bottom of the arc no longer has room for it — and reads as the dial's
-    // own caption; no lower than the gap under the top zone lets it.
-    const int notchFoot = juce::roundToInt (0.46f * (float) gainSide);     // Knob.h: the notches' outer end at 150°, 0.515 d out
-    smoothTag.setBounds (juce::Rectangle<int> (66, 14).withCentre ({ gain.getBounds().getCentreX(),
-                                                                     juce::jmin (gain.getBounds().getCentreY() + notchFoot + 8,
-                                                                                 column.getBottom() + gap - 7) }));
-    smoothTag.toFront (false);
-
-    layWidget (top);
+float CapturedBlockPanel::pickWordWidth (const PickSlot& sel)
+{
+    float w = 0.0f;
+    for (const auto& v : sel.onOff ? juce::StringArray (sel.name) : sel.values)
+        w = juce::jmax (w, theme::trackedWidth (v, theme::displayFont (pickFontH), pickTracking));
+    return w;
 }
 
 void CapturedBlockPanel::setControlsVisible (bool v)
@@ -1002,7 +1064,11 @@ void CapturedBlockPanel::setControlsVisible (bool v)
     inMeter.setVisible (v);
     outMeter.setVisible (v);
     device.setEnabled (v);
-    channelRow.setVisible (v && channelRow.count() > 1);
+
+    if (lever != nullptr)
+        lever->setVisible (v);
+
+    boostKey.setVisible (v && boostIndex >= 0);
 
     for (auto& slot : slots)
     {
@@ -1013,42 +1079,56 @@ void CapturedBlockPanel::setControlsVisible (bool v)
     for (auto& sel : selectors)
         if (sel.steps != nullptr)
             sel.steps->setVisible (v);
-
 }
 
-/** One picture, filling what is left of the top zone, wearing its own corner glyphs. */
-void CapturedBlockPanel::layWidget (juce::Rectangle<int> area)
+void CapturedBlockPanel::setPictureShown (bool shown)
 {
     for (int i = 0; i < numViz; ++i)
-        scopes[(size_t) i]->setVisible (i == vizPick);
+        scopes[(size_t) i]->setVisible (shown && i == vizPick);
 
+    eq.setCurveVisible (shown && vizPick == eqPage);
+}
+
+/** One page of the well, filling what it is handed, wearing its corner glyphs: the page's name at the
+    top left, the one way to throw it open at the top right — and on WAVE, its half-wave switch beside
+    that; on the EQ curve, whose tone it wears beside that. */
+void CapturedBlockPanel::layPicture (juce::Rectangle<int> area)
+{
     widgetArea = area;
-    scopes[(size_t) vizPick]->setBounds (area);
 
-    for (auto& t : expandTags)
-        t.setVisible (false);
+    // EVERY scope gets the room, not only the one standing in it: the questions asked of the room —
+    // does the pair fit as a card here — are asked of a scope, and the one up may be the curve.
+    for (auto& sc : scopes)
+        sc->setBounds (area);
 
-    // BOTH ways out, always. The whole-screen brackets used to appear only once a picture had
-    // already been thrown across the face — a door you can only find from inside the room.
-    int right = area.getRight() - 6;
+    setPictureShown (theater == nullptr);
 
-    expandTags[(size_t) vizPick].setBounds (right - 22, area.getY() + 4, 22, 16);
-    expandTags[(size_t) vizPick].setVisible (true);
-    expandTags[(size_t) vizPick].toFront (false);
-    right -= 26;
+    constexpr int glyphW = 22, glyphH = 16, inset = 6;
 
-    screenTag.setBounds (right - 22, area.getY() + 4, 22, 16);
-    screenTag.setVisible (true);
-    screenTag.toFront (false);
-    right -= 26;
+    expandTag.setBounds (area.getRight() - inset - glyphW, area.getY() + 4, glyphW, glyphH);
+    expandTag.setVisible (true);
+    expandTag.toFront (false);
+
+    int right = expandTag.getX() - 4;
+
+    if (vizPick == eqPage)
+        eq.layOutCurve (area, area.getRight() - right);
 
     const bool isWave = vizPick == (int) DeviceScope::Mode::wave;
     halfTag.setVisible (isWave);
     if (isWave)
     {
-        halfTag.setBounds (right - 28, area.getY() + 4, 28, 16);
+        halfTag.setBounds (right - 36, area.getY() + 4, 36, glyphH);
         halfTag.toFront (false);
     }
+
+    static const char* const names[numPages] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE",
+                                                "DEVICE", "PHOTO", "EQ" };
+    pageTag.text = names[vizPick];
+    pageTag.setBounds (area.getX() + inset, area.getY() + 4, pageTag.idealWidth(), 20);
+    pageTag.setVisible (true);
+    pageTag.toFront (false);
+    pageTag.repaint();
 }
 
 /** A right-click on the PICTURE picks which picture; anywhere else on the block it still means the
@@ -1056,9 +1136,9 @@ void CapturedBlockPanel::layWidget (juce::Rectangle<int> area)
 void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
 {
     // A selecting control's line answers on its whole length: the lever goes where it is clicked,
-    // and a click on the name or on the chosen position — the two words either side of it — steps
-    // to the next position round the loop, so a two-way switch is a click wherever the eye lands.
-    if (expandedViz < 0 && ! e.mods.isPopupMenu())
+    // and a click on the word beside it steps to the next position round the loop, so a two-way
+    // switch is a click wherever the eye lands.
+    if (! thrownOpen && ! e.mods.isPopupMenu())
         for (auto& sel : selectors)
             if (sel.steps != nullptr && sel.row.contains (e.getPosition())
                 && ! sel.steps->getBounds().contains (e.getPosition()))
@@ -1067,6 +1147,8 @@ void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
                 return;
             }
 
+    // The curve takes its own clicks — its nodes are dragged — so whatever reaches here on the well
+    // is a scope's.
     if (widgetArea.contains (e.getPosition()))
     {
         if (e.mods.isPopupMenu())
@@ -1096,20 +1178,13 @@ void CapturedBlockPanel::setCornerAlpha (float a)
 
     const bool lit = a > 0.01f;
 
-    for (auto& t : expandTags)
-        if (t.isVisible() || lit)
-            t.setAlpha (a);
-
-    screenTag.setAlpha (a);
-    halfTag.setAlpha (a);
-
     // Transparent is still clickable in JUCE, and a glyph nobody can see must not answer a click
     // meant for the picture underneath it.
-    for (auto& t : expandTags)
-        t.setInterceptsMouseClicks (lit, lit);
-
-    screenTag.setInterceptsMouseClicks (lit, lit);
-    halfTag.setInterceptsMouseClicks (lit, lit);
+    for (juce::Component* c : { (juce::Component*) &expandTag, (juce::Component*) &halfTag, (juce::Component*) &pageTag })
+    {
+        c->setAlpha (a);
+        c->setInterceptsMouseClicks (lit, lit);
+    }
 }
 
 void CapturedBlockPanel::timerCallback()
@@ -1136,12 +1211,11 @@ bool CapturedBlockPanel::hasPicture() const
     return sc != nullptr && sc->hasPicture();
 }
 
-/** Only the SHOWN scope is given bounds — the others keep whatever they had last — so the room is
-    asked of the one actually standing in it. They all answer the same when they are the same size,
-    which is the point: the question is about the room, not about which page is up. */
+/** Every scope is given the well's bounds, so any of them answers for the room — DEVICE is asked,
+    because the question is about it, and the page that is up may be the EQ curve. */
 bool CapturedBlockPanel::pairsAsCard() const
 {
-    const auto& sc = scopes[(size_t) (expandedViz >= 0 ? expandedViz : vizPick)];
+    const auto& sc = scopes[(size_t) DeviceScope::Mode::device];
     return sc != nullptr && sc->pairsAsCard();
 }
 
@@ -1154,9 +1228,9 @@ bool CapturedBlockPanel::pairsAsCard() const
     has paper, and only some have a photograph. */
 int CapturedBlockPanel::nextViz (int from) const
 {
-    for (int i = 1; i <= numViz; ++i)
+    for (int i = 1; i <= numPages; ++i)
     {
-        const int j = (from + i) % numViz;
+        const int j = (from + i) % numPages;
 
         if (j == (int) DeviceScope::Mode::photo && (! hasPicture() || pairsAsCard()))
             continue;
@@ -1170,16 +1244,8 @@ int CapturedBlockPanel::nextViz (int from) const
 /** Both ways of choosing land here, so the choice is remembered whichever was used. */
 void CapturedBlockPanel::setViz (int which)
 {
-    vizPick = juce::jlimit (0, numViz - 1, which);
-
-    // Thrown open, the loop walks the big picture rather than the small one behind it — otherwise
-    // clicking a full-face view changes something you cannot see.
-    if (expandedViz >= 0)
-    {
-        expandedViz = vizPick;
-        for (int j = 0; j < numViz; ++j)
-            expandTags[(size_t) j].expanded = expandedViz == j;
-    }
+    // Thrown open or standing in the well, it is the same page — the throw is a size, not a page.
+    vizPick = juce::jlimit (0, numPages - 1, which);
 
     // Kept with the session rather than as a parameter: it is which picture you are looking at,
     // not something a host should be automating.
@@ -1190,9 +1256,9 @@ void CapturedBlockPanel::setViz (int which)
     repaint();
 }
 
-/** Which of them is up. A menu rather than a row of checkboxes: the block carries a whole EQ
-    console now and has room for one picture, and choosing is the honest verb — you look at the
-    envelope INSTEAD of the transfer curve, not as well as.
+/** Which of them is up. A menu rather than a row of checkboxes: the well has room for one picture,
+    and choosing is the honest verb — you look at the envelope INSTEAD of the EQ curve, not as well
+    as. The EQ curve leads the list: it is the page with hands on it.
 
     Where the room seats the pair the list is one shorter, because DEVICE and PHOTO have become one
     card and offering them as two entries that draw the same thing is a choice with no difference in
@@ -1200,8 +1266,8 @@ void CapturedBlockPanel::setViz (int which)
     missing photograph is a fact you can see rather than a page you cannot find. */
 void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
 {
-    static const char* const names[numViz] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE",
-                                              "DEVICE", "PHOTO" };
+    static const char* const names[numPages] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE",
+                                                "DEVICE", "PHOTO", "EQ" };
 
     const int photoIdx  = (int) DeviceScope::Mode::photo;
     const int deviceIdx = (int) DeviceScope::Mode::device;
@@ -1212,10 +1278,12 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
     // The way to the whole screen, in words. It used to live only in the corner brackets, and the
     // corner brackets now come and go with the hand — a door that is only visible while you are
     // already reaching for it is a door somebody never finds.
-    m.addItem (numViz + 1, "WHOLE SCREEN");
+    m.addItem (numPages + 1, "WHOLE SCREEN");
     m.addSeparator();
 
     m.addSectionHeader ("PICTURE");
+    m.addItem (eqPage + 1, names[eqPage], true, vizPick == eqPage);
+
     for (int i = 0; i < numViz; ++i)
     {
         if (i == photoIdx && paired)
@@ -1234,7 +1302,7 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
                          if (r == 0 || safe == nullptr)
                              return;
 
-                         if (r == numViz + 1)
+                         if (r == numPages + 1)
                          {
                              safe->openTheater();
                              return;
@@ -1299,25 +1367,37 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
                             0.1f, juce::Justification::centred);
     }
 
-    // Each selecting control's line: its name to the left of the lever, the chosen position to
-    // the right of it — the lever between them is the switch itself.
-    if (expandedViz < 0)
-        for (const auto& sel : selectors)
-        {
-            if (sel.steps == nullptr || sel.row.isEmpty())
-                continue;
+    if (thrownOpen)
+        return;
 
-            auto row = sel.row.toFloat();
-            g.setColour (theme::txDim);
-            theme::drawTracked (g, sel.name, row.removeFromLeft ((float) pickNameW - 4.0f),
-                                theme::displayFont (10.0f), 0.08f, juce::Justification::centredLeft);
+    // The hairlines between the sections: three instruments on one plate, told apart by a line in
+    // the panel's own violet, never a box round each.
+    {
+        const auto content = contentArea();
+        g.setColour (theme::hair2);
+        for (const int x : dividerX)
+            if (x >= 0)
+                g.fillRect (juce::Rectangle<float> ((float) x - 0.5f, (float) content.getY() + 4.0f,
+                                                    1.0f, (float) content.getHeight() - 8.0f));
+    }
 
-            row.removeFromLeft ((float) pickSwitchW + 8.0f);
-            const int chosen = sel.steps->selectedIndex();
-            g.setColour (theme::orange);
-            theme::drawTracked (g, chosen < sel.values.size() ? sel.values[chosen] : juce::String(),
-                                row, theme::displayFont (10.0f), 0.08f, juce::Justification::centredLeft);
-        }
+    // Each selecting control's line: the switch, then its ONE word — the name of an OFF/ON, lit
+    // while on; the chosen position of anything else, in the hand's colour.
+    for (const auto& sel : selectors)
+    {
+        if (sel.steps == nullptr || sel.row.isEmpty())
+            continue;
+
+        auto row = sel.row.toFloat();
+        row.removeFromLeft ((float) pickSwitchW + 8.0f);
+        const int chosen = sel.steps->selectedIndex();
+
+        const auto word = sel.onOff ? sel.name
+                                    : (chosen < sel.values.size() ? sel.values[chosen] : juce::String());
+        g.setColour (sel.onOff && chosen == 0 ? theme::txDim : theme::orange);
+        theme::drawTracked (g, word, row, theme::displayFont (pickFontH), pickTracking,
+                            juce::Justification::centredLeft);
+    }
 }
 
 } // namespace orbitamp

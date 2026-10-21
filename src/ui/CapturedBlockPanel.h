@@ -11,7 +11,8 @@
 #include "scope/DeviceScope.h"
 #include "Knob.h"
 #include "VSwitch.h"
-#include "ChannelRow.h"
+#include "ChannelLever.h"
+#include "LatchKey.h"
 #include "VoicingSelector.h"
 
 #include <felitronics/appkit/DeviceGlyph.h>
@@ -28,6 +29,17 @@ class AmpProcessor;
     class, because the question is always the same: which device, which capture of it, and what its
     own controls do. Which BLOCK it is arrives as a reference and an id prefix, and nothing else in
     the file knows.
+
+    THREE SECTIONS, side by side, each a TIER on top and a STRIP under it, the strips one line across
+    the block:
+
+        [ GAIN dial      ] [ channel lever ] [ IN | the picture well | OUT ]
+        [ SMOOTH, picks  ] [ BOOST         ] [ HPF  BASS  MIDDLE  TREBLE  LPF ]
+
+    The dial is what the amp is set to, the lever which of its channels plays, the well what it does —
+    the EQ curve among the pictures it can show, so the console's row of hands is the third strip and
+    no longer a second storey of the block. The two narrow meters stand at the well's edges: what goes
+    in at its left, what comes out at its right.
 
     The pack says what this device HAS: how many positions its gain was captured at, which of its
     knobs were measured instead, whether one of them is a two-position switch, and what the circuit
@@ -51,7 +63,8 @@ public:
     /** Rebuilds the face from whatever pack is loaded. Called when the device changes. */
     void deviceChanged();
 
-    /** The EQ console's row of hands moved to the other side of its curve. */
+    /** The EQ console's row of hands moved to the other side of its curve — a preference of the old
+        layout, kept for the editor to land on (EqSection::setRowOnTop). */
     void setEqRowOnTop (bool onTop) { eq.setRowOnTop (onTop); resized(); }
 
     /** Puts a thrown-open picture back in its corner. Returns whether there was one — the editor
@@ -72,7 +85,7 @@ private:
         from before the move. */
     void refreshMeterOffsets();
 
-    /** A HAND'S PICK — a device out of the menu, a key of the channel row: the channel the amp
+    /** A HAND'S PICK — a device out of the menu, a place of the channel lever: the channel the amp
         leaves keeps what it was set to, and the one it plays comes back as it was left
         (AmpChannels.h). */
     void playPack (int index);
@@ -99,24 +112,31 @@ private:
     std::unique_ptr<juce::ParameterAttachment> eqModeAttachment;
 
     static constexpr int gap        = 10;
-    static constexpr int knobGap    = 10;
 
     // Zoom caps: a block across the whole panel gets a bigger picture, not balloon knobs.
     static constexpr int maxGainSide  = 200;
-    static constexpr int maxKnobSide  = 150;
 
-    /** The left column's width, FIXED. Whether the device brought selectors or not, and however
-        many, only the GAIN dial's diameter answers for it — so the picture beside the column never
-        moves when the pack changes. A face that reshuffles itself per device is a face you have to
-        re-learn per device. */
-    static constexpr int columnW = 140;
+    /** The two narrow sections' widths, FIXED. Whatever the device brings — a lever of two places or
+        four, a BOOST or none, a selector or two — the sections keep their width, so the picture well
+        beside them never moves when the pack changes. A face that reshuffles itself per device is a
+        face you have to re-learn per device. Wide enough for what they hold at 13 px: OVERDRIVE on
+        the lever, BRIGHT 2 beside its switch. */
+    static constexpr int section1W  = 150;   // GAIN, and SMOOTH with the picks under it
+    static constexpr int section2W  = 150;   // the channel lever, and BOOST under it
+    static constexpr int sectionGap = 16;    // a hairline down its middle
+    static constexpr int tierGap    = 6;     // between a section's tier and its strip
 
-    /** The ceiling on the dial-and-picture zone. Past this the dial is only bigger, not easier to
-        land on, and every unit above it is one the EQ curve could have used to separate two
-        decibels you would otherwise have to guess at. */
-    static constexpr int topZoneH = 118;
+    /** THE STRIPS' HEIGHT is the console's row, the tallest thing any of them holds: a dial of reading
+        size with its name over it. Every tier is what is left above — so the lever stands exactly as
+        tall as the picture beside it. */
+    static constexpr int stripH = EqSection::rowH;
 
     static constexpr int numViz = 7;
+
+    /** The picture well's pages: the seven scopes by their Mode, and the EQ curve after them — one
+        loop, PHOTO to EQ to SHAPE. */
+    static constexpr int eqPage   = numViz;
+    static constexpr int numPages = numViz + 1;
 
     AmpProcessor& amp;
     Block&        block;
@@ -130,8 +150,17 @@ private:
     /** The devices as the menu has them, read from the block's list each time the device changes. */
     device::DeviceLibrary::Shelf shelf;
 
-    /** The playing device's channels, one key each, over the picture. Hidden for a device of one. */
-    ChannelRow channelRow;
+    /** The playing device's channels, one place each down a lever. None for a device of one channel:
+        a lever with nowhere to go is furniture, and the section keeps the room. Rebuilt when a device
+        with another count of channels comes in — a lever's places are fixed for its life. */
+    std::unique_ptr<ChannelLever> lever;
+    void showChannels (const juce::StringArray& names, int lit);
+
+    /** BOOST — a pack's selector of that name — as its own key under the lever, apart from the
+        other picks: the switch a player reaches for mid-song. A pack without one leaves its place
+        empty, rather than closing the gap. */
+    LatchKey boostKey { "BOOST" };
+    int boostIndex = -1;   // which of the selectors it is, or -1
 
     /** The block's own EQ, after the capture. Not a link that happens to be drawn here — the
         block owns it, its switch darkens it, and the curve's spectrum is this block's output. */
@@ -141,16 +170,25 @@ private:
         name rides the hint. The row a label took is diameter now. */
     Knob gain { "", theme::orange, 0 };
 
-    /** SMOOTH or STEP — how the dial moves between the captured positions. A pill in the gap at
-        the bottom of the dial's arc, the one place inside the dial's square nothing else reaches:
-        a little lever and the word. Lit, the dial reaches every angle and the two neighbouring
-        captures play mixed; dark, it lands on the captures alone. What that costs is the hint's
-        to say. */
+    /** SMOOTH or STEP — how the dial moves between the captured positions. The first line of the
+        dial's strip: a little lever and the word, at reading size now that it has a line of its own
+        rather than the gap at the foot of the dial's arc. Lit, the dial reaches every angle and the
+        two neighbouring captures play mixed; dark, it lands on the captures alone. What that costs is
+        the hint's to say. */
     struct SmoothTag final : public juce::Component,
                              public juce::SettableTooltipClient
     {
         bool on = true;
         std::function<void()> onChange;
+
+        static constexpr float fontH = 13.0f;
+        static constexpr float leverW = 26.0f;
+
+        /** The lever, the word, and the pill's ends. */
+        static int idealWidth()
+        {
+            return juce::roundToInt (leverW + 6.0f + theme::trackedWidth ("SMOOTH", theme::displayFont (fontH), 0.06f) + 10.0f);
+        }
 
         void paint (juce::Graphics& g) override
         {
@@ -160,7 +198,7 @@ private:
             r.reduce (3.0f, 0.0f);
 
             // The lever: a pill most of the row's height, the knob at the lit end.
-            const auto sw = r.removeFromLeft (r.getHeight() * 1.3f).reduced (0.0f, 2.5f);
+            const auto sw = r.removeFromLeft (leverW).reduced (0.0f, 3.5f);
             g.setColour (on ? theme::orange.withAlpha (0.55f).overlaidWith (juce::Colour (0xff26262f))
                             : juce::Colour (0xff26262f));
             g.fillRoundedRectangle (sw, sw.getHeight() * 0.5f);
@@ -169,7 +207,7 @@ private:
             g.fillEllipse (on ? sw.getRight() - k - 1.5f : sw.getX() + 1.5f, sw.getCentreY() - k * 0.5f, k, k);
 
             g.setColour (on ? theme::orange : theme::txDim);
-            theme::drawTracked (g, "SMOOTH", r.withTrimmedLeft (3.0f), theme::displayFont (8.0f), 0.06f,
+            theme::drawTracked (g, "SMOOTH", r.withTrimmedLeft (6.0f), theme::displayFont (fontH), 0.06f,
                                 juce::Justification::centredLeft);
         }
 
@@ -204,37 +242,55 @@ private:
 
     /** A device's other selecting controls — the ones that pick a FILE rather than shape one. Fur
         Coat's octave is the first of them: two captures at every dial position, and without this
-        half the pack was unreachable. Drawn as a switch because that is what it is on the pedal. */
+        half the pack was unreachable. Drawn as a switch because that is what it is on the pedal —
+        all but BOOST, which is a key of its own (boostKey). */
     struct PickSlot
     {
         std::unique_ptr<VSwitch> steps;
         std::unique_ptr<juce::ParameterAttachment> attachment;
-        juce::String         name;     // the control, written left of the switch
-        juce::StringArray    values;   // its positions — the chosen one written right of it, all of them in the hint
-        juce::Rectangle<int> row;      // the one line the three share
+        juce::String         name;     // the control — written beside the switch when it is an off/on
+        juce::StringArray    values;   // its positions — the chosen one written beside the switch, all of them in the hint
+        juce::Rectangle<int> row;      // the one line the switch and its word share
+        bool                 onOff = false;   // two positions, OFF and ON: named by what it switches
     };
 
-    /** A selecting control is ONE LINE: its name, the slot with the lever, the chosen position's
-        name. The names under each detent took a second line out of the dial's diameter; the list
-        they made is the switch's hint now. */
-    static constexpr int pickRowH    = 20;
-    static constexpr int pickNameW   = 50;
-    static constexpr int pickSwitchW = 36;
+    /** A selecting control is ONE LINE of the dial's strip: the slot with the lever, then ONE word in
+        the hand's colour. Which word is the switch's own nature: a two-way OFF/ON is named by what it
+        switches — its NAME, lit when on — and anything else by where it stands, the chosen position's
+        name (BRIGHT 1, CENTER, FAT). The name and every position are the hint. One word, not the
+        three the old column wrote, because the strip is a section wide and 13 px is not negotiable. */
+    static constexpr int   pickRowH     = 20;
+    static constexpr int   pickSwitchW  = 30;
+    static constexpr float pickFontH    = 13.0f;
+    static constexpr float pickTracking = 0.08f;
+
+    /** The widest the word beside a pick's switch can be — its name, or its longest position. */
+    static float pickWordWidth (const PickSlot&);
 
     std::array<PickSlot, (size_t) params::numSelectors> selectors;
 
-    /** The visualizations: one scope per way of looking, and exactly ONE of them on screen. The
-        five used to tile the picture zone behind a column of checkboxes; a block that also carries
-        a whole EQ console has room for one picture, and five ways to look at a device is a thing
-        you CHOOSE between rather than a thing you watch at once. Right-click the picture to
-        change it — the choice rides the session, so a reopened window shows what was left up. */
+    /** The visualizations: one scope per way of looking, and exactly ONE page of the well on screen —
+        a scope, or the EQ curve, which is a page like the others now rather than a storey of its own.
+        Several ways to look at a device is a thing you CHOOSE between rather than a thing you watch
+        at once. The page's name in the well's corner opens the list; a click on a scope walks the
+        loop; the choice rides the session, so a reopened window shows what was left up. */
     std::array<std::unique_ptr<DeviceScope>, (size_t) numViz> scopes;
 
-    int  vizPick = 0;
+    int  vizPick = eqPage;
     juce::Rectangle<int> widgetArea;   // where the picture stands, so a right-click can find it
     void mouseDown (const juce::MouseEvent&) override;
     void showVizMenu (juce::Point<int> screenPos);
     void setViz (int which);
+
+    /** The scope that stands for the page on the whole monitor: the EQ curve's is TONE, the same
+        curve over the same spectrum, read rather than handled. */
+    DeviceScope::Mode modeOfPage (int page) const
+    {
+        return page == eqPage ? DeviceScope::Mode::tone : (DeviceScope::Mode) page;
+    }
+
+    /** Where the hairlines between the sections stand, for paintContent. */
+    std::array<int, 2> dividerX { -1, -1 };
 
     /** Whether the loaded pack ships a photograph of its box. Most do not — the field is newer than
         the packs — and a page with nothing behind it is the gap this face already refuses to have
@@ -262,7 +318,7 @@ private:
             g.setColour (theme::bezel.withAlpha (0.8f));
             g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
             g.setColour (half ? theme::orange : theme::txDim);
-            theme::drawTracked (g, "1/2", r, theme::displayFont (10.0f), 0.06f,
+            theme::drawTracked (g, "1/2", r, theme::displayFont (13.0f), 0.04f,
                                 juce::Justification::centred);
         }
 
@@ -277,7 +333,11 @@ private:
 
     HalfTag halfTag;
 
-    /** The corner glyph that throws a tile across the whole face — and brings it back. */
+    /** THE ONE GLYPH in the well's corner: it throws the picture across the whole block — and brings
+        it back. There used to be two, this and the whole monitor's brackets beside it, two doors to
+        two sizes of the same picture in one corner of a well two hundred units tall; the monitor is
+        the picture menu's first line now (WHOLE SCREEN), and the corner keeps one door. Drawn as the
+        four corners of a frame, outward to throw open, inward to fold. */
     struct ExpandTag final : public juce::Component
     {
         bool expanded = false;
@@ -289,19 +349,23 @@ private:
             g.setColour (theme::bezel.withAlpha (0.8f));
             g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
 
-            // Two diagonal arrows: outward to expand, inward to fold.
-            const auto c = r.getCentre();
+            const auto b = r.withSizeKeepingCentre (11.0f, 9.0f);
             g.setColour (theme::orange);
 
-            for (const float s : { -1.0f, 1.0f })
-            {
-                const juce::Point<float> tip  = expanded ? c + juce::Point<float> (2.0f * s, 2.0f * s)
-                                                         : c + juce::Point<float> (5.5f * s, 4.5f * s);
-                const juce::Point<float> tail = expanded ? c + juce::Point<float> (5.5f * s, 4.5f * s)
-                                                         : c + juce::Point<float> (2.0f * s, 2.0f * s);
-                g.drawLine ({ tail, tip }, 1.4f);
-                g.fillEllipse (tip.x - 1.6f, tip.y - 1.6f, 3.2f, 3.2f);
-            }
+            for (int cx = 0; cx < 2; ++cx)
+                for (int cy = 0; cy < 2; ++cy)
+                {
+                    // Folded, the brackets open outward from the frame's corners; thrown open, they
+                    // turn round and point in.
+                    const float x  = cx == 0 ? b.getX() : b.getRight();
+                    const float y  = cy == 0 ? b.getY() : b.getBottom();
+                    const float dx = (cx == 0 ? 3.5f : -3.5f) * (expanded ? -1.0f : 1.0f);
+                    const float dy = (cy == 0 ? 3.0f : -3.0f) * (expanded ? -1.0f : 1.0f);
+                    const float ox = expanded ? (cx == 0 ? 3.5f : -3.5f) : 0.0f;
+                    const float oy = expanded ? (cy == 0 ? 3.0f : -3.0f) : 0.0f;
+                    g.drawLine (x + ox, y + oy, x + ox + dx, y + oy, 1.3f);
+                    g.drawLine (x + ox, y + oy, x + ox, y + oy + dy, 1.3f);
+                }
         }
 
         void mouseDown (const juce::MouseEvent&) override
@@ -311,8 +375,52 @@ private:
         }
     };
 
-    std::array<ExpandTag, (size_t) numViz> expandTags;
-    int expandedViz = -1;
+    ExpandTag expandTag;
+    bool thrownOpen = false;   // the picture across the whole block
+
+    /** THE PAGE'S NAME, in the well's other corner — EQ, SHAPE, TONE… — and the list of pages under
+        it. On a scope a click on the picture walks the loop, but on the EQ curve a click is the
+        curve's own (its nodes are dragged), so the way to the other pages has to be a thing of its
+        own. It comes and goes with the hand, as the corner glyph does. */
+    struct PageTag final : public juce::Component
+    {
+        juce::String text;
+        std::function<void (juce::Point<int>)> onClick;
+
+        static constexpr float fontH = 13.0f;
+
+        int idealWidth() const
+        {
+            return juce::roundToInt (theme::trackedWidth (text, theme::displayFont (fontH), 0.12f) + 34.0f);
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (0.5f);
+            g.setColour (theme::panel.withAlpha (0.85f));
+            g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+            g.setColour (theme::hair2);
+            g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
+            g.setColour (theme::txDim);
+            theme::drawTracked (g, text, r.withTrimmedRight (14.0f), theme::displayFont (fontH), 0.12f,
+                                juce::Justification::centred);
+
+            juce::Path v;
+            const float cx = r.getRight() - 13.0f, cy = r.getCentreY() - 1.0f;
+            v.startNewSubPath (cx - 3.0f, cy);
+            v.lineTo (cx, cy + 3.0f);
+            v.lineTo (cx + 3.0f, cy);
+            g.strokePath (v, juce::PathStrokeType (1.2f));
+        }
+
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            if (onClick != nullptr)
+                onClick (localPointToGlobal (juce::Point<int> (0, getHeight())));
+        }
+    };
+
+    PageTag pageTag;
 
     /** The theatre: one scope on the WHOLE MONITOR — a kiosk window of its own, black to the
         edges, dismissed by a click anywhere or Escape. Its scope is a fresh instance reading
@@ -320,36 +428,6 @@ private:
         resolution-setting reader at a time. */
     class ScopeTheater;
     std::unique_ptr<ScopeTheater> theater;
-
-    struct ScreenTag final : public juce::Component
-    {
-        std::function<void()> onClick;
-
-        void paint (juce::Graphics& g) override
-        {
-            const auto r = getLocalBounds().toFloat();
-            g.setColour (theme::bezel.withAlpha (0.8f));
-            g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
-
-            // Four corner brackets: the whole screen.
-            const auto b = r.withSizeKeepingCentre (11.0f, 9.0f);
-            g.setColour (theme::orange);
-            for (int cx = 0; cx < 2; ++cx)
-                for (int cy = 0; cy < 2; ++cy)
-                {
-                    const float x = cx == 0 ? b.getX() : b.getRight();
-                    const float y = cy == 0 ? b.getY() : b.getBottom();
-                    const float dx = cx == 0 ? 3.5f : -3.5f;
-                    const float dy = cy == 0 ? 3.0f : -3.0f;
-                    g.drawLine (x, y, x + dx, y, 1.3f);
-                    g.drawLine (x, y, x, y + dy, 1.3f);
-                }
-        }
-
-        void mouseDown (const juce::MouseEvent&) override { if (onClick) onClick(); }
-    };
-
-    ScreenTag screenTag;
 
     /** THE GLYPHS COME WHEN THE HAND DOES. A photograph is the one thing on this face that is
         better with nothing on it, and three orange marks sitting permanently on a picture of a
@@ -377,7 +455,12 @@ private:
     void closeTheater();
 
     void setControlsVisible (bool);
-    void layWidget (juce::Rectangle<int>);
+
+    /** The page that is up, filling the well it is handed, its corner glyphs riding it. */
+    void layPicture (juce::Rectangle<int>);
+
+    /** The page that is up, shown or put away — the theatre puts it away while it runs. */
+    void setPictureShown (bool);
 
     juce::String caption;
 

@@ -101,11 +101,12 @@ public:
     // The faceplate's design size, at 100%. The editor scales from these and never re-lays out.
     static constexpr int designWidth  = 880;
 
-    // Row 1 carries a device combo, the in/out meters, the gain column with the picture beside it,
-    // and the whole EQ console under them. The console is the part that will not compress: knobs at
-    // reading size plus a curve big enough to aim at. Row 2 is a combo and a control or two.
-    static constexpr int row1H  = 378;   // the device combo left the box for its border (-46), the console's row shed a combo's
-                                         // height (-10) and the curve a sixth of its own (-26): 460 -> 378
+    // Row 1 is the AMP: three sections side by side — the GAIN dial, the channel lever, the picture
+    // well with the meters at its edges — each a tier over one shared strip of controls. The EQ curve
+    // became one of the well's pictures and its row of knobs the third strip, so the console is no
+    // longer a second storey under the rest. Row 2 is a combo and a control or two.
+    static constexpr int row1H  = 200;   // 460 -> 378 (the combo onto the border, the console's row and curve trimmed);
+                                         // 378 -> 200 when the EQ curve became a page of the picture well
     static constexpr int row2H  = 220;
     static constexpr int rowGap = 12;
     // Lane metrics. No horizontal inset: the lane's edges ARE the panel's edges, so nothing is

@@ -651,34 +651,40 @@ juce::var WebFaceplate::places()
             a->setProperty ("device", v);
             live.push_back (&pre.device);
         }
+        if (pre.lever != nullptr)
         {
-            auto row = rect (pre.channelRow);
+            // The channels are a LEVER now (ChannelLever.h): each place's name row is the key the site
+            // can press, and the whole lever is one live part. Still written as the row's keys, so the
+            // kit keeps its shape until the site learns the lever.
+            auto& lever = *pre.lever;
+            auto row = rect (lever);
             juce::Array<juce::var> keys;
             const auto* dev = pre.shelf.deviceOf (AmpChannels (amp).playing());
-            for (int i = 0; i < (int) pre.channelRow.keys.size(); ++i)
+            for (int i = 0; i < (int) lever.keys.size(); ++i)
             {
-                const auto box = (pre.channelRow.keys[(size_t) i].expanded (1.0f) * scale).getSmallestIntegerContainer().toFloat() / scale;
-                auto k = rect (pre.channelRow, box);
-                k.getDynamicObject()->setProperty ("key", pre.channelRow.names[i]);
+                const auto box = (lever.keys[(size_t) i].expanded (1.0f) * scale).getSmallestIntegerContainer().toFloat() / scale;
+                auto k = rect (lever, box);
+                k.getDynamicObject()->setProperty ("key", lever.names[i]);
                 if (dev != nullptr && juce::isPositiveAndBelow (i, dev->channels.size()))
                 {
                     const auto rig = AmpChannels::keyOf (pre.block.packs.getReference (dev->channels[i]));
                     k.getDynamicObject()->setProperty ("pack", rig);
                     k.getDynamicObject()->setProperty ("lit", "sprites/key-" + slug (rig) + "-lit.png");
                     k.getDynamicObject()->setProperty ("unlit", "sprites/key-" + slug (rig) + "-unlit.png");
-                    k.getDynamicObject()->setProperty ("opens", i == pre.channelRow.lit ? "lit" : "unlit");
+                    k.getDynamicObject()->setProperty ("opens", i == lever.lit ? "lit" : "unlit");
                 }
                 keys.add (k);
             }
             row.getDynamicObject()->setProperty ("keys", keys);
             row.getDynamicObject()->setProperty ("live", true);
             a->setProperty ("channelRow", row);
-            live.push_back (&pre.channelRow);
+            live.push_back (&lever);
         }
         a->setProperty ("gain", knobVar (pre.gain, params::preampGain, "gain"));
         a->setProperty ("gainKnob", a->getProperty ("gain")["knob"]);
         a->setProperty ("smooth", withParamId (rect (pre.smoothTag), params::blockSmooth (pre.blk)));
-        if (auto* scope = pre.scopes[(size_t) pre.vizPick].get())
+        // Every scope stands in the well (CapturedBlockPanel::layPicture), SHAPE among them.
+        if (auto* scope = pre.scopes[(size_t) DeviceScope::Mode::shape].get())
         {
             // The well stays on the cabin, empty: no sound was playing. The site draws SHAPE's traces
             // in the band (look.shape).
@@ -740,9 +746,8 @@ juce::var WebFaceplate::places()
         patch ("eqLpfLabel", pre.eq.lpfLabel);
         patch ("eqHpfSlope", pre.eq.hpfSlopeBox);
         patch ("eqLpfSlope", pre.eq.lpfSlopeBox);
-        for (size_t i = 0; i < pre.expandTags.size(); ++i)
-            patch ("pictureGlyph", pre.expandTags[i]);
-        patch ("pictureGlyph", pre.screenTag);
+        patch ("pictureGlyph", pre.expandTag);
+        patch ("pictureGlyph", pre.pageTag);
         patch ("pictureGlyph", pre.halfTag);
     }
 
@@ -981,6 +986,7 @@ juce::var WebFaceplate::posters()
         return list;
 
     const auto channels = dev->channels;            // copied: playing rebuilds the shelf
+    const auto channelNames = dev->channelNames;    // ...and so are their names
     const auto deviceBox = (pre.device.getBoundsInParent().toFloat().expanded (BlockFrame::legendGap, 0.0f) * scale)
                                .getSmallestIntegerContainer().toFloat() / scale;
     for (int k = 0; k < channels.size(); ++k)
@@ -989,7 +995,7 @@ juce::var WebFaceplate::posters()
         const auto rig = AmpChannels::keyOf (pre.block.packs.getReference (channels[k]));
         auto p = object();
         p->setProperty ("pack", rig);
-        p->setProperty ("key", pre.channelRow.names[k]);
+        p->setProperty ("key", channelNames[k]);
         writePng ("poster-" + slug (rig) + ".png", shootEditor (scale));
         writePng ("poster-" + slug (rig) + "@1x.png", shootEditor (1.0f));
         p->setProperty ("poster", "poster-" + slug (rig) + ".png");
@@ -997,12 +1003,13 @@ juce::var WebFaceplate::posters()
         list.add (juce::var (p.get()));
 
         sprite ("device-" + slug (rig) + ".png", shootStage (onStage (pre, deviceBox)));
-        for (int i = 0; i < (int) pre.channelRow.keys.size() && i < channels.size(); ++i)
-        {
-            const auto keyRig = AmpChannels::keyOf (pre.block.packs.getReference (channels[i]));
-            const auto box = (pre.channelRow.keys[(size_t) i].expanded (1.0f) * scale).getSmallestIntegerContainer().toFloat() / scale;
-            spriteOf ("key-" + slug (keyRig) + (i == k ? "-lit.png" : "-unlit.png"), pre.channelRow, box);
-        }
+        if (pre.lever != nullptr)
+            for (int i = 0; i < (int) pre.lever->keys.size() && i < channels.size(); ++i)
+            {
+                const auto keyRig = AmpChannels::keyOf (pre.block.packs.getReference (channels[i]));
+                const auto box = (pre.lever->keys[(size_t) i].expanded (1.0f) * scale).getSmallestIntegerContainer().toFloat() / scale;
+                spriteOf ("key-" + slug (keyRig) + (i == k ? "-lit.png" : "-unlit.png"), *pre.lever, box);
+            }
     }
     pre.playPack (opened);
     return list;
