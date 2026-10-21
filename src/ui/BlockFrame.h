@@ -7,24 +7,13 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
-#include <algorithm>
-#include <vector>
-
 namespace orbitamp
 {
 
-/** The chassis every faceplate module shares: a colour-coded, toggleable block under a title line.
-    Orange = captured (a neural profile of real hardware), violet = DSP (rebuilt by us) — that
+/** The chassis every faceplate module shares: a framed, colour-coded, toggleable box with a title
+    row. Orange = captured (a neural profile of real hardware), violet = DSP (rebuilt by us) — that
     distinction is the product's central honesty claim, so it is carried by the frame itself rather
     than left to each block.
-
-    THE FRAME IS ITS TOP LINE NOW. It used to be a box — a filled, rounded rectangle with the line all
-    the way round — and four boxes on one panel is a panel of fences: every block said where it
-    stopped four times over, and the wells inside said it again. What a block needs said about it is
-    its NAME, its menus and its colour, and the top line carries all three; where a block ends is
-    what its wells and its controls already show. So the sides, the bottom and the fill went, and the
-    line runs open over the panel's own ground, broken where something rides it (`boxed` brings the
-    box back).
 
     Blocks subclass this and fill `layOutContent` / `paintContent`; the frame owns nothing about
     what is inside. It holds no parameter and reaches nothing — the owner wires `onToggled`. */
@@ -145,88 +134,50 @@ public:
         if (dim)
             g.beginTransparencyLayer (theme::offAlpha);
 
-        const auto box      = boxArea().toFloat().reduced (theme::blockBorder * 0.5f);
-        const auto topFill  = kind == Kind::captured ? theme::capTop : theme::dspTop;
-        const auto titleBox = titleArea().toFloat();
-        const auto sw       = switchArea().toFloat();
+        const auto box     = boxArea().toFloat().reduced (theme::blockBorder * 0.5f);
+        const auto topFill = kind == Kind::captured ? theme::capTop : theme::dspTop;
 
-        if (boxed)
-        {
-            juce::ColourGradient fill (topFill, 0.0f, box.getY(),
-                                       kind == Kind::captured ? theme::capBot : theme::dspBot, 0.0f, box.getBottom(), false);
-            g.setGradientFill (fill);
-            g.fillRoundedRectangle (box, theme::radiusMd);
-        }
+        juce::ColourGradient fill (topFill, 0.0f, box.getY(),
+                                   kind == Kind::captured ? theme::capBot : theme::dspBot, 0.0f, box.getBottom(), false);
+        g.setGradientFill (fill);
+        g.fillRoundedRectangle (box, theme::radiusMd);
 
         // The frame is the block's colour code — orange for captured, violet for DSP — and it is
         // load-bearing: it is how the face states which stages are profiled hardware and which are
         // our own DSP. The spec mixes the accent into the hairline; the mixed result is the accent
         // at roughly half alpha, which keeps a switched-off block from reading as a hard outline.
-        //
-        // OPEN where something rides it — the name, whatever the block stood on its slot, whatever
-        // else the block says is there (borderGaps) — rather than masked: with no fill under it there
-        // is nothing to mask WITH, and a patch of the old fill would be a box's ghost on the ground.
-        // Done HERE, in the frame's own layer, and not by the controls: a switched-off block draws its
-        // children half-transparent, and a gap opened by one of them let the line show through.
-        {
-            std::vector<juce::Range<float>> gaps;
-            const auto gapOf = [&] (juce::Rectangle<float> r)
-            {
-                if (! r.isEmpty())
-                    gaps.push_back (juce::Range<float> (r.getX() - legendGap, r.getRight() + legendGap));
-            };
+        g.setColour (borderColour());
+        g.drawRoundedRectangle (box, theme::radiusMd, theme::blockBorder);
 
-            if (showTitle && titleInBorder)
-                gapOf (titleBox);
+        const auto titleBox = titleArea().toFloat();
+        const auto sw       = switchArea().toFloat();
 
-            gapOf (borderSlotUsed.toFloat());
-
-            if (hasSwitch && switchInBorder)
-                gaps.push_back (juce::Range<float> (sw.getX(), sw.getRight()));
-
-            std::vector<juce::Rectangle<float>> more;
-            borderGaps (more);
-            for (const auto& r : more)
-                gapOf (r);
-
-            g.setColour (borderColour());
-
-            if (boxed)
-            {
-                const juce::Graphics::ScopedSaveState ss (g);
-                for (const auto& gap : gaps)
-                    g.excludeClipRegion (juce::Rectangle<float> (gap.getStart(), box.getY() - 2.0f, gap.getLength(), 4.0f)
-                                             .getSmallestIntegerContainer());
-                g.drawRoundedRectangle (box, theme::radiusMd, theme::blockBorder);
-            }
-            else
-            {
-                std::sort (gaps.begin(), gaps.end(), [] (auto a, auto b) { return a.getStart() < b.getStart(); });
-
-                float x = box.getX();
-                const auto run = [&] (float to)
-                {
-                    if (to > x)
-                        g.fillRect (juce::Rectangle<float> (x, box.getY() - theme::blockBorder * 0.5f,
-                                                            to - x, theme::blockBorder));
-                };
-
-                for (const auto& gap : gaps)
-                {
-                    run (juce::jmin (gap.getStart(), box.getRight()));
-                    x = juce::jmax (x, gap.getEnd());
-                }
-
-                run (box.getRight());
-            }
-        }
-
+        // Sitting ON the border means masking the line behind it, fieldset-style. The mask is the
+        // gradient's top colour, which is exactly what the border is drawn over up there.
         // A block may keep its name off the border (the badge writes it inside instead).
         if (showTitle)
         {
+            if (titleInBorder)
+            {
+                g.setColour (topFill);
+                g.fillRect (titleBox.expanded (legendGap, 0.0f).withHeight (theme::blockBorder + 2.0f)
+                                    .withCentre ({ titleBox.getCentreX(), box.getY() }));
+            }
+
             g.setColour (kind == Kind::captured ? theme::orange : theme::lilac);
             theme::drawTracked (g, title.toUpperCase(), titleBox, theme::displayFont (titleHeight),
                                 0.15f, juce::Justification::centredLeft);
+        }
+
+        // The same gap under whatever the block stood on its border slot. Masked HERE, in the
+        // frame's own layer, and not by the control: a switched-off block draws its children
+        // half-transparent, and a mask painted by one of them let the line show through its name.
+        if (! borderSlotUsed.isEmpty())
+        {
+            g.setColour (topFill);
+            g.fillRect (borderSlotUsed.toFloat().expanded (legendGap, 0.0f)
+                            .withHeight (theme::blockBorder + 2.0f)
+                            .withCentre ({ borderSlotUsed.toFloat().getCentreX(), box.getY() }));
         }
 
         paintContent (g);
@@ -302,9 +253,6 @@ protected:
     static constexpr bool titleInBorder  = true;
     static constexpr bool switchInBorder = true;
 
-    /** The box: a fill and the line all the way round. Off, the frame is its top line alone. */
-    static constexpr bool boxed = false;
-
     /** Everything below the title row — where a block puts its knobs and selectors. */
     juce::Rectangle<int> contentArea() const
     {
@@ -330,11 +278,6 @@ protected:
     virtual void layOutHeader (juce::Rectangle<int>) {}
     virtual void layOutContent (juce::Rectangle<int>) {}
     virtual void paintContent (juce::Graphics&) {}
-
-    /** Anything else the block writes ON its top line — the line opens under each, the way it opens
-        under the name and the slot. Asked at every paint, so a word that changes its length as the
-        block plays (the AMP's loudness tag) is never crossed by the line. */
-    virtual void borderGaps (std::vector<juce::Rectangle<float>>&) const {}
 
     /** The power moved — every way it can: a click, the parameter's echo, a restored session. For a
         subclass whose furniture must go DARK with the block (a meter that would otherwise keep

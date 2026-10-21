@@ -1340,35 +1340,6 @@ void CapturedBlockPanel::showVizMenu (juce::Point<int> screenPos)
                      });
 }
 
-/** Where the loudness tag stands on the top line, and what it says there — one answer for the paint and
-    for the gap the line leaves under it. Where the line is too short for the "of two", it says what
-    matters without it. */
-juce::Rectangle<float> CapturedBlockPanel::loudnessTagArea (juce::String& text) const
-{
-    const auto tag  = block.loudness();
-    const auto font = theme::displayFont (13.0f);
-    const auto run  = borderSlotArea().toFloat();
-    const float room = run.getRight() - (float) borderSlotUsed.getRight() - 2.0f * legendGap;
-
-    text = tag.tagged ? juce::String (tag.db, 1) + (tag.blended ? " dB tagged, of two" : " dB tagged")
-                      : juce::String (tag.blended ? "no loudness tag on the louder of two - plays raw"
-                                                  : "no loudness tag - plays raw");
-    if (theme::trackedWidth (text, font, 0.09f) + 1.0f > room)
-        text = tag.tagged ? juce::String (tag.db, 1) + " dB tagged" : juce::String ("no loudness tag - plays raw");
-
-    const float w = theme::trackedWidth (text, font, 0.09f) + 1.0f;
-    return juce::Rectangle<float> (w, 18.0f).withCentre ({ run.getRight() - w * 0.5f, run.getCentreY() });
-}
-
-void CapturedBlockPanel::borderGaps (std::vector<juce::Rectangle<float>>& gaps) const
-{
-    if (block.isReady() && showsLoudnessTag)
-    {
-        juce::String text;
-        gaps.push_back (loudnessTagArea (text));
-    }
-}
-
 void CapturedBlockPanel::paintContent (juce::Graphics& g)
 {
     // THE MODEL'S LOUDNESS TAG, and the one case worth saying aloud. Every player normalizes by it —
@@ -1388,11 +1359,21 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
         // rides it on the left: the device's own word beside the device, and inside the box the tone
         // knobs and the cut filters' corners leave no row for it. Where the line is too short for
         // the "of two", it says what matters without it.
-        // The line opens under it (borderGaps), as it opens under the name.
-        juce::String text;
-        const auto line = loudnessTagArea (text);
-        g.setColour (block.loudness().tagged ? theme::txFaint.withAlpha (0.55f) : theme::orange);
-        theme::drawTracked (g, text, line, theme::displayFont (13.0f), 0.09f, juce::Justification::centredRight);
+        const auto tag  = block.loudness();
+        const auto font = theme::displayFont (13.0f);
+        const auto run  = borderSlotArea().toFloat();
+        const float room = run.getRight() - (float) borderSlotUsed.getRight() - 2.0f * legendGap;
+        auto text = tag.tagged ? juce::String (tag.db, 1) + (tag.blended ? " dB tagged, of two" : " dB tagged")
+                               : juce::String (tag.blended ? "no loudness tag on the louder of two - plays raw"
+                                                           : "no loudness tag - plays raw");
+        if (theme::trackedWidth (text, font, 0.09f) + 1.0f > room)
+            text = tag.tagged ? juce::String (tag.db, 1) + " dB tagged" : juce::String ("no loudness tag - plays raw");
+        const float w = theme::trackedWidth (text, font, 0.09f) + 1.0f;
+        const auto line = juce::Rectangle<float> (w, 18.0f).withCentre ({ run.getRight() - w * 0.5f, run.getCentreY() });
+        g.setColour (theme::capTop);
+        g.fillRect (line.expanded (legendGap, 0.0f).withHeight (theme::blockBorder + 2.0f).withCentre (line.getCentre()));
+        g.setColour (tag.tagged ? theme::txFaint.withAlpha (0.55f) : theme::orange);
+        theme::drawTracked (g, text, line, font, 0.09f, juce::Justification::centredRight);
     }
 
     if (caption.isEmpty())

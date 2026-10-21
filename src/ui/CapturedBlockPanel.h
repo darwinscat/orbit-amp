@@ -76,10 +76,6 @@ private:
     void paintContent (juce::Graphics&) override;
     void blockOnChanged (bool on) override;
     void childrenChanged() override;
-    void borderGaps (std::vector<juce::Rectangle<float>>&) const override;
-
-    /** The loudness tag's place on the top line, and its words. */
-    juce::Rectangle<float> loudnessTagArea (juce::String& text) const;
 
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
