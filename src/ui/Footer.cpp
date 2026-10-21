@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
+#include "../ProductPage.h"
 #include "Footer.h"
 
 #include "AboutConfig.h"
@@ -24,18 +25,17 @@ namespace
         plugin links have always carried. Everything that describes the BUILD is added by appkit:
         `from` (the product slug), `platform` (the machine) and `format` (the wrapper). None of it
         reaches the payment page — the hop logs the query and redirects clean. */
-    inline constexpr const char* campaign = "utm_source=orbitamp&utm_medium=plugin";
-
-    /** What is OrbitAmp's own in the version window; the rest of it is aboutConfig's. */
-    appkit::VersionBadge::Config badgeConfig()
+    /** What is OrbitAmp's own in the version window — its page (ProductPage.h), the family's tag on the
+        maker's page and the tip jar; the rest of it is aboutConfig's. */
+    appkit::VersionBadge::Config badgeConfig (bool standalone)
     {
-        return aboutConfig ("OrbitAmp", "https://darwinscat.com/orbitamp", campaign);
+        return aboutConfig ("OrbitAmp", productPageUrl ("OrbitAmp", standalone), familyLinkTag ("OrbitAmp"));
     }
 }
 
 Footer::Footer (AmpProcessor& processor)
     : amp (processor),
-      versionBadge (processor.updateChecker(), badgeConfig(), processor.pluginFormat())
+      versionBadge (processor.updateChecker(), badgeConfig (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone), processor.pluginFormat())
 {
     // MONO | STEREO | STEREO SPACE: the click walks the loop — parameter truth, no local state.
     stereo.theme = chrome::ChromeTheme { .fill       = theme::panel,

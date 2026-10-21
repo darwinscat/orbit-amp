@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
+#include "../ProductPage.h"
 #include "Chrome.h"
 
 #include <felitronics/appkit/BrandTextFace.h>
@@ -41,7 +42,7 @@ Chrome::Chrome (AmpProcessor& processor)
               .display    = felitronics::appkit::brand::textTypeface(),
               .tracking   = 0.06f },
       // The family's own kit: appkit carries the mark and the face, so nothing here embeds either.
-      brand ("OrbitAmp", "https://darwinscat.com/orbitamp?utm_source=orbitamp&utm_medium=plugin"),
+      brand ("OrbitAmp", productPageUrl ("OrbitAmp", processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)),     // ProductPage.h
       preset (theme)
 {
     auto& history = amp.history;

@@ -17,11 +17,12 @@ namespace orbitamp
     who we are, what this build is, and the palette it draws in. The version and the GitHub slug come
     from the checker, so they can never drift.
 
-    A face brings only what is its own: its name, its page, and `campaign` — the product's tag on a
-    family link, for the SITE's analytics (appkit adds what describes the build: the product slug, the
-    machine, the wrapper). One processor, one build, two faces: the rest is the same window. */
+    A face brings only what is its own: its name, its page — the whole link, its tag on it (ProductPage.h)
+    — and `campaign`, the tag the maker's page and the tip jar carry, for the SITE's analytics (appkit adds
+    what describes the build: the product slug, the machine, the wrapper). One processor, one build, two
+    faces: the rest is the same window. */
 inline felitronics::appkit::VersionBadge::Config aboutConfig (const juce::String& productName,
-                                                             const juce::String& productPage,
+                                                             const juce::String& productUrl,
                                                              const juce::String& campaign)
 {
     // JUCE names its own version at compile time — "JUCE v8.0.14"; the row wants the tag alone.
@@ -34,7 +35,7 @@ inline felitronics::appkit::VersionBadge::Config aboutConfig (const juce::String
         BinaryData::catlogo_svg, (size_t) BinaryData::catlogo_svgSize).release() };
 
     return { .productName  = productName,
-             .productUrl   = productPage + "?" + campaign,
+             .productUrl   = productUrl,
              .makerUrl     = juce::String ("https://darwinscat.com?") + campaign,
              .gitHash      = version::kGitHash,
              .buildNumber  = version::kBuildNumber,

@@ -33,6 +33,10 @@
 #include "redpaw/RedPawSkin.h"
 #include "catpit/CatpitLayout.h"
 #include "face/Strip.h"
+#include "ProductPage.h"
+#include "ui/AboutConfig.h"
+
+#include <felitronics/appkit/Brand.h>
 
 #include <cstdio>
 #include <memory>
@@ -393,6 +397,25 @@ int main()
         const auto allShown = [&rplan] (int n) { const auto l = face::lay (rplan.keyStrip(), n); return (int) l.centres.size() == n && l.scale == 1.0f; };
         check (ch1.size() == 3 && ch2.size() == 2 && allShown (3) && allShown (2),
                "RedPawAmp's IR-X shows its switches' keys as it did: Ch1's Bright three, Ch2's Tight/Fat two, at the row's own size");
+    }
+
+    // EACH PRODUCT'S PAGE ON THE SITE (ProductPage.h), as its badge, its version window and OrbitAmp's
+    // wordmark open it: https://darwinscat.com/felitronics/amps/<slug>, the slug its name in lower case, no
+    // language prefix, utm_source the slug and utm_medium plugin in a host, app standing alone — and the tip
+    // jar as it always was: its own hop, the family's tag on it, from=<slug> added by appkit.
+    for (const auto& [product, lineup] : family())
+    {
+        const auto slug = juce::String (product.name).toLowerCase();
+        const auto page = "https://darwinscat.com/felitronics/amps/" + slug + "?utm_source=" + slug;
+        check (productPageUrl (product.name, false) == page + "&utm_medium=plugin"
+                   && productPageUrl (product.name, true) == page + "&utm_medium=app",
+               juce::String (product.name) + "'s page: " + productPageUrl (product.name, false) + ", utm_medium=app standing alone");
+        const auto about = aboutConfig (product.name, productPageUrl (product.name, false), familyLinkTag (product.name));
+        const auto tip = felitronics::appkit::brand::feedTheCatLink (product.name, about.feedUrl).toString (true);
+        check (about.productUrl == page + "&utm_medium=plugin"
+                   && tip.startsWith ("https://darwinscat.com/feed-the-cat?utm_source=" + slug + "&utm_medium=plugin")
+                   && tip.contains ("from=" + slug),
+               "...its version window opens that page, and its tip jar stays " + tip.upToFirstOccurrenceOf ("&platform", false, false));
     }
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");

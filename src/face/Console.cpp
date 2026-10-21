@@ -12,6 +12,7 @@
 
 #include "../Parameters.h"
 #include "../Product.h"
+#include "../ProductPage.h"
 #include "../core/ProcessMemory.h"
 #include "../device/IrLibrary.h"
 #include "../ui/AboutConfig.h"
@@ -78,20 +79,15 @@ namespace
                                       nullptr);
     }
 
-    /** The product's own tag on a family link, for the site's analytics: "utm_source=catpitamp&...". */
-    juce::String campaign (const Product& p)
-    {
-        return "utm_source=" + juce::String (p.name).toLowerCase() + "&utm_medium=plugin";
-    }
 
     /** THE BUILD WINDOW, AS THE PRODUCT'S. What the build is and what it was built against is the same
         for every face of the processor (aboutConfig); what is the product's own is its name, its mark —
         the cockpit's a small starship head-on, its fins a cat's ears — and its name where the notice
         says whose product this is. The window outlives the badge that opens it, so the mark is
         shared, not lent. */
-    felitronics::appkit::VersionBadge::Config aboutTheProduct (const Product& p, const juce::String& svg)
+    felitronics::appkit::VersionBadge::Config aboutTheProduct (const Product& p, const juce::String& svg, bool standalone)
     {
-        auto config = aboutConfig (p.name, "https://darwinscat.com", campaign (p).toRawUTF8());
+        auto config = aboutConfig (p.name, productPageUrl (p.name, standalone), familyLinkTag (p.name));
 
         std::shared_ptr<juce::Drawable> mark { juce::Drawable::createFromImageData (
             svg.toRawUTF8(), svg.getNumBytesAsUTF8()).release() };
@@ -158,7 +154,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
       tuner (p.tunerEar),
       emblem (where.emblemFace, where.emblemMark),
       version (stage::px13),
-      about (p.updateChecker(), aboutTheProduct (p.product(), look.mark), p.pluginFormat()),
+      about (p.updateChecker(), aboutTheProduct (p.product(), look.mark, p.wrapperType == juce::AudioProcessor::wrapperType_Standalone), p.pluginFormat()),
       load (where.readingPx),
       memory (where.readingPx),
       presetDoor (stage::px13)
@@ -436,9 +432,9 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         emblem.setBounds (face.getBounds().expanded (Emblem::bloom + 1.0f).getSmallestIntegerContainer());     // room for the lamp's glow; the target is the plate alone
     }
     emblem.setLamp (look.emblemLamp);
-    emblem.onClick = [&product = amp.product()]
+    emblem.onClick = [page = productPageUrl (amp.product().name, amp.wrapperType == juce::AudioProcessor::wrapperType_Standalone)]
     {
-        juce::URL ("https://darwinscat.com/felitronics/" + juce::String (product.name).toLowerCase() + "?" + campaign (product)).launchInDefaultBrowser();
+        juce::URL (page).launchInDefaultBrowser();
     };
 
     // The version, and behind it the window with everything else about the build. That window is
