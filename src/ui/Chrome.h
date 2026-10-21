@@ -4,8 +4,8 @@
 #pragma once
 
 #include "Theme.h"
+#include "TwoLineBrand.h"
 
-#include <felitronics/appkit/BrandHeader.h>
 #include <felitronics/appkit/IconButton.h>
 #include <felitronics/appkit/chrome/CompareCell.h>   // RegisterButton — the A/B/C/D button
 #include <felitronics/appkit/chrome/PresetCell.h>
@@ -18,13 +18,15 @@ namespace orbitamp
 
 class AmpProcessor;
 
-/** The header, laid out as OrbitCab's:
+/** The header, in two lines beside the brand's two marks:
 
-        [cat + mark + OrbitAmp by Darwin's Cat]  undo redo ....  A B C D  [ preset name ]
+        [cat] [mark]  OrbitAmp by Darwin's Cat  undo redo  A B C D  [ preset name ]  ⛶ ⚙
+                      [ the chain strip — the editor's, standing on the second line ]
 
-    Brand hugging its content on the left, undo/redo in the gap after it, and a right cluster of
-    registers, the preset name, and the file actions. Every piece comes from felitronics-appkit —
-    OrbitCab's own copies stay in OrbitCab; what is shared here is the arrangement, not the widgets.
+    The cat and the orbit mark stand both lines' height; the words and every control are the first
+    line; the second line beside the marks is left to the editor, which stands the chain strip there
+    (`secondLineX`). The widgets come from felitronics-appkit; the two-line brand is this repo's own
+    (TwoLineBrand.h) until it settles.
 
     It is its own DragAndDropContainer so dragging one register onto another (copy A to C) never
     leaks out into the rest of the window. */
@@ -46,10 +48,13 @@ public:
 
     void resized() override;
 
-    // OrbitCab's header proportions: a 50-tall strip whose small controls live in a 44-tall band
-    // centred in it, so only the brand grows with the strip.
-    static constexpr int designHeight  = 60;   // the brand — cat, mark, wordmark, byline — grows with it
-    static constexpr int controlBand   = 44;
+    // Two lines: the first the words and the controls, the second the chain strip's own height.
+    static constexpr int firstLineH   = 34;
+    static constexpr int designHeight = firstLineH + 34;   // 34: LayoutStrip::designHeight
+    static constexpr int controlBand  = firstLineH;
+
+    /** Where the second line starts: right of the brand's two marks. */
+    int secondLineX() const { return juce::roundToInt (brand.marksRight()); }
 
 private:
     /** Pushes the engine's state onto the buttons. Called on every history change. */
@@ -63,7 +68,7 @@ private:
 
     felitronics::appkit::chrome::ChromeTheme theme;
 
-    felitronics::appkit::BrandHeader brand;
+    TwoLineBrand brand;
     felitronics::appkit::IconButton  undo   { felitronics::appkit::IconButton::Kind::undo };
     felitronics::appkit::IconButton  redo   { felitronics::appkit::IconButton::Kind::redo };
     felitronics::appkit::IconButton  gear   { felitronics::appkit::IconButton::Kind::settings };

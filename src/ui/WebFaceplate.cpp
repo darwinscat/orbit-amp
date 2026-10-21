@@ -920,10 +920,9 @@ juce::var WebFaceplate::places()
         live.push_back (&editor.tunerStrip);
     }
     {
-        // The cat, as BrandHeader::paint draws it: a square at the header's left, two units in.
+        // The cat, where the brand draws it.
         const auto& b = editor.chrome.brand;
-        const float h = (float) b.getHeight();
-        out->setProperty ("emblem", rect (b, { 4.0f, 2.0f, h - 4.0f, h - 4.0f }));
+        out->setProperty ("emblem", rect (b, b.catArea()));
     }
     out->setProperty ("chrome", rect (editor.chrome));
     out->setProperty ("layoutStrip", rect (*editor.layoutStrip));
@@ -933,8 +932,7 @@ juce::var WebFaceplate::places()
     auto& ch = editor.chrome;
     {
         const auto& b = ch.brand;
-        const float h = (float) b.getHeight();
-        patch ("brand", b, b.getLocalBounds().toFloat().withTrimmedLeft (h));   // the mark and the words; not the cat
+        patch ("brand", b, b.getLocalBounds().toFloat().withTrimmedLeft (b.catArea().getRight()));   // the mark and the words; not the cat
     }
     patch ("undo", ch.undo);
     patch ("redo", ch.redo);

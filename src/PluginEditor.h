@@ -86,8 +86,9 @@ private:
     bool showGlyphs = false;
     int  baseHeight() const noexcept
     {
-        // The tuner's row stays when the tuner does not: the facts stand in it too.
-        return fixedHeight + LayoutStrip::designHeight + faceplate.currentHeight()
+        // The tuner's row stays when the tuner does not: the facts stand in it too. The chain strip
+        // is the header's second line, inside Chrome::designHeight.
+        return fixedHeight + faceplate.currentHeight()
                            + (showDemo ? DemoStrip::designHeight : 0)
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }

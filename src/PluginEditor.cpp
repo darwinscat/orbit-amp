@@ -648,13 +648,16 @@ void AmpEditor::resized()
     chrome.setTransform (zoom);
 
     // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
-    int faceplateY = margin + Chrome::designHeight + headerGap;
+    const int faceplateY = margin + Chrome::designHeight + headerGap;
 
-    // The layout strip: the chain laid flat between the toolbar and the device, always there.
-    layoutStrip->setBounds (margin, faceplateY, FaceplateView::designWidth,
-                            LayoutStrip::designHeight);
-    layoutStrip->setTransform (zoom);
-    faceplateY += LayoutStrip::designHeight;
+    // The layout strip: the chain laid flat on the header's second line, beside the brand's marks,
+    // always there. In front of the header, whose component spans both lines.
+    {
+        const int x = chrome.secondLineX();
+        layoutStrip->setBounds (margin + x, margin + Chrome::firstLineH, FaceplateView::designWidth - x,
+                                LayoutStrip::designHeight);
+        layoutStrip->setTransform (zoom);
+    }
 
     // The faceplate is only as tall as its LAYOUT stands it — a collapsed row is not here.
     const int faceplateH = faceplate.currentHeight();

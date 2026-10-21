@@ -48,9 +48,10 @@ Chrome::Chrome (AmpProcessor& processor)
     auto& history = amp.history;
 
     addAndMakeVisible (brand);
-    // The wordmark speaks up without growing the cat or the mark.
-    brand.wordmarkScale = 0.50f;
-    brand.bylineScale   = 0.30f;
+    // The words on the first line, sized to it; the marks stand both lines.
+    brand.firstLineH = firstLineH;
+    brand.wordmarkH  = 26.0f;
+    brand.bylineH    = 16.0f;
 
     for (auto* b : { &undo, &redo, &gear })
     {
@@ -122,22 +123,21 @@ void Chrome::refreshModel()
 
 void Chrome::resized()
 {
-    auto header = getLocalBounds();
+    // ---- the brand on the left, both lines tall, as wide as its words on the first line: its
+    //      marks stand both lines, and it is click-through wherever it is not its link. ----
+    brand.setBounds (getLocalBounds());   // height first: contentRight() reads it
+    const int brandWidth = juce::jmin (getWidth() - 360, juce::roundToInt (brand.contentRight()));
+    brand.setBounds (getLocalBounds().withWidth (brandWidth));
 
-    // ---- brand on the left, sized to its content so the click area hugs the text.
-    //      ONE unit taller than the strip: the kit's header draws a hairline along its own bottom
-    //      edge, with no way to ask it not to, and that line was cutting under the logo for no
-    //      reason a block below could give — a unit past the strip's edge, the parent clips it. ----
-    brand.setBounds (header.withHeight (header.getHeight() + 1));   // height first: contentRight() reads it
-    const int brandWidth = juce::jmin (header.getWidth() - 360, juce::roundToInt (brand.contentRight()));
-    brand.setBounds (header.removeFromLeft (brandWidth).withHeight (header.getHeight() + 1));
-    brand.clickRight = brandWidth;
+    // ---- every control on the first line, after the words ----
+    auto header = getLocalBounds().removeFromTop (firstLineH).withTrimmedLeft (brandWidth);
 
     // ---- undo / redo right after the brand ----
     header.removeFromLeft (10);
     auto leftBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
-    undo.setBounds (leftBar.removeFromLeft (34).reduced (3, 6));
-    redo.setBounds (leftBar.removeFromLeft (34).reduced (3, 6));
+    // The insets keep every control the size it had in the 44-tall band of the one-line header.
+    undo.setBounds (leftBar.removeFromLeft (34).reduced (3, 3));
+    redo.setBounds (leftBar.removeFromLeft (34).reduced (3, 3));
     header.removeFromLeft (68 + 8);
 
     // ---- right cluster takes the REST: the two window controls at the very edge, the registers,
@@ -146,17 +146,17 @@ void Chrome::resized()
     //      language, and three file icons used to stand where those letters needed to be. ----
     auto rightBar = header.withSizeKeepingCentre (header.getWidth(), controlBand);
 
-    gear.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
-    fullScreen.setBounds (rightBar.removeFromRight (40).reduced (4, 7));
+    gear.setBounds (rightBar.removeFromRight (40).reduced (4, 2));
+    fullScreen.setBounds (rightBar.removeFromRight (40).reduced (4, 2));
     rightBar.removeFromRight (6);
-    auto snapArea = rightBar.removeFromLeft (124).reduced (6, 8);
+    auto snapArea = rightBar.removeFromLeft (124).reduced (6, 3);
     const int count = (int) registers.size();
     const int w     = count > 0 ? snapArea.getWidth() / count : 0;
 
     for (int i = 0; i < count; ++i)
         registers[(size_t) i]->setBounds ((i < count - 1 ? snapArea.removeFromLeft (w) : snapArea).reduced (2, 0));
 
-    preset.setBounds (rightBar.reduced (7));
+    preset.setBounds (rightBar.reduced (7, 2));
 }
 
 void Chrome::showRegisterMenu (int index)
