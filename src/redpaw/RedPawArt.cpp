@@ -87,7 +87,6 @@ const Art& Art::of (const Skin& skin)
         a.keyDown    = load ("key-down.webp");
         a.turboUp    = load ("turbo-up.webp");
         a.turboDown  = load ("turbo-down.webp");
-        a.turboLid   = loadOwn ("turbo-lid.webp");
         a.emblem     = loadOwn ("emblem.webp");
         return a;
     });

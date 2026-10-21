@@ -9,14 +9,12 @@
 //   view.setGear (2);          // 1 CRUNCH, 2 HI-GAIN: the rover eases to that gear's speed
 //   view.setGear (2, { settled: true })   // ...or is at it at once; createPlainsView (canvas, { gear: 2 }) starts so
 //   view.setTurbo (true);      // twice the speed, and the dust the gear raises: the top gear is the full storm
-//   view.setPark (true);       // the rover comes to a stand and the dust settles; steering only turns the view
-//   view.setPark (true, { settled: true })   // ...or stands at once, as setGear (n, { settled: true }) is at its gear
 //   view.setSteer (-1..1);     // the wheel, from outside; or { steer: true } lets a drag across the canvas steer
 //   view.stop(); view.start(); view.destroy();
 //
 // The canvas lies over the windscreen's box (1440.5 x 269.5 in the app). The rest — the quality ladder, the worker,
 // onReady, view.ready, onFallback, the bench's `test` and `worker: false` — is every world's, as view.js says. The
-// first frame is the same every time for the same gear, PARK and canvas aspect: the rover stands at the same place.
+// first frame is the same every time for the same gear and canvas aspect: the rover stands at the same place.
 // A bench's `test` is RedPawViewDemo's: { at: [x, z, headingDegrees], drive: seconds, steer: -1..1, still: bool }
 // (plains.cpp, view_test).
 

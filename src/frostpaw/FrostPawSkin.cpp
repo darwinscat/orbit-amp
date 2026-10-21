@@ -71,7 +71,7 @@ const layout::Plan plan {
     // pixel, and its three gears in its three notches.
     .stops { 732.8f, 775.5f, 816.8f },
 
-    // TURBO's hole half a pixel right; the hatch's box is RedPawAmp's, where a hatch of its own would go — none yet.
+    // TURBO's hole half a pixel right.
     .turbo { 922.0f, 787.0f },
 
     // No plate under the cat: it stands straight on the frame's raised step, as large as the badge's was.

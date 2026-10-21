@@ -24,8 +24,8 @@
 //     on, on the IR-X, the ReVolt and the V4 alike — and TURBO is an option of the gear's, one memory;
 //   - a switch a channel holds stands where the lineup puts it, whatever a host did to it; the pack's
 //     other switches are each channel's own, and a channel never pulled opens them where the pack does;
-//   - PARK, where the amp has it, takes the whole amp out of the sound: the guitar comes through dry,
-//     the channel waits;
+//   - no product has PARK: every place of the rover's lever is a gear, and nothing of the product's
+//     own takes the amp out of the sound;
 //   - DRIVE, where its packs are captures shot at several hours of the gear's knob, stands on the one
 //     its travel says;
 //
@@ -203,91 +203,14 @@ int main()
                "...and a number of Other's plays RED GIANT, the default");
     }
 
-    // PARK, where the product has it: the lever's top end, the whole amp out of the sound — a switch
-    // of the product's own. Parked, the guitar comes out as it went in, only as late as the chain always
-    // is; the channel waits.
+    // NO PARK, on any product: the rover's lever is its gears and nothing more, and no switch of the
+    // product's own takes the whole amp out of the sound.
     {
-        auto* park = engine.parkId() != nullptr ? amp->apvts.getParameter (engine.parkId()) : nullptr;
-        check ((park != nullptr) == product.park && ! amp->isParked(),
-               product.park ? "the " + ours + " has PARK, and a processor just built plays"
-                            : "the " + ours + " has no PARK, and a processor just built plays");
-
-        if (park != nullptr)
-        {
-            constexpr double rate = 44100.0;       // not the packs' own: the captures are resampled, and the chain is late
-            constexpr int block = 512, blocks = 24;
-            amp->prepareToPlay (rate, block);
-            for (int i = 0; i < 10; ++i)        // the captures land, resampled to the session's rate
-            {
-                amp->pumpDeviceWork();
-                juce::Thread::sleep (5);
-            }
-            int late = amp->getLatencySamples();
-
-            // No room and no echo, so that nothing rings on into the parked blocks.
-            for (const auto* id : { params::reverbMix, params::delayMix })
-                if (auto* p = amp->apvts.getParameter (id))
-                    p->setValueNotifyingHost (0.0f);
-
-            std::vector<float> in ((size_t) (block * blocks)), out (in.size());
-            for (size_t n = 0; n < in.size(); ++n)
-                in[n] = 0.25f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * (double) n / rate);
-
-            juce::MidiBuffer none;
-            const auto play = [&]
-            {
-                for (int b = 0; b < blocks; ++b)
-                {
-                    juce::AudioBuffer<float> buf (2, block);
-                    for (int ch = 0; ch < 2; ++ch)
-                        buf.copyFrom (ch, 0, in.data() + b * block, block);
-                    amp->processBlock (buf, none);
-                    std::copy (buf.getReadPointer (0), buf.getReadPointer (0) + block, out.begin() + b * block);
-                }
-
-                // Past the first blocks, which the fades and the wires settle in.
-                float worst = 0.0f;
-                for (size_t n = (size_t) (block * 8); n < out.size(); ++n)
-                    worst = juce::jmax (worst, std::abs (out[n] - in[n - (size_t) late]));
-                return worst;
-            };
-
-            const float playing = play();
-            check (playing > 0.01f, "playing, the amp is in the sound: what comes out is not what went in");
-            amp->pumpDeviceWork();
-            late = amp->getLatencySamples();       // the captures have landed by now, at the session's rate
-
-            const int was = channels.active();
-            park->setValueNotifyingHost (1.0f);
-            check (amp->isParked() && channels.active() == was, "PARK thrown, the processor is parked and the channel waits");
-            amp->pumpDeviceWork();
-            check (amp->getLatencySamples() == late, "...as late as it was playing");
-
-            const float worst = play();
-            std::printf ("      parked: %d samples late, the worst sample %.2g off the input\n", late, (double) worst);
-            check (worst < 1.0e-3f, "parked, the input comes out as it went in, as late as the chain reports");
-
-            // ...through the player's own levels: a master turned down holds the dry guitar down too.
-            if (auto* master = amp->apvts.getParameter (params::outTrim))
-            {
-                const float was = master->getValue();
-                master->setValueNotifyingHost (master->convertTo0to1 (-12.0f));
-                play();                              // the master's ramp settles
-                play();
-                const float g = juce::Decibels::decibelsToGain (-12.0f);
-                float down = 0.0f;
-                for (size_t n = (size_t) (block * 8); n < out.size(); ++n)
-                    down = juce::jmax (down, std::abs (out[n] - g * in[n - (size_t) late]));
-                std::printf ("      parked under OUT at -12 dB: the worst sample %.2g off the input 12 dB down\n", (double) down);
-                check (down < 1.0e-3f, "parked, OUT still holds the level: at -12 dB the dry input comes out 12 dB down");
-                master->setValueNotifyingHost (was);
-                play();
-            }
-
-            park->setValueNotifyingHost (0.0f);
-            check (! amp->isParked(), "...and the amp plays again when PARK is let go");
-            amp->releaseResources();
-        }
+        bool none = true;
+        for (auto* p : amp->getParameters())
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p); ranged != nullptr && ranged->getParameterID().containsIgnoreCase ("park"))
+                none = false;
+        check (none, "the " + ours + " has no PARK: no parameter of its own takes the amp out of the sound");
     }
     ticks();
 

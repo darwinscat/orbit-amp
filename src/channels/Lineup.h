@@ -40,10 +40,6 @@ struct Lineup
 
     std::vector<Channel> channels;
 
-    /** PARK, where the product has it: a switch of its own that takes the whole amp out of the sound
-        (ProductEngine::parkSwitch) — its parameter's id, or none. */
-    const char* parkId = nullptr;
-
     /** CHANNELS IN PAIRS OVER ONE MEMORY, where the product has them: each channel and the next play
         their two packs over one set of everything else — DRIVE, the tones by their knobs, the keys, the
         cabinet, the reverb, the delay — the rover's gear and its TURBO, which is an option of the gear's

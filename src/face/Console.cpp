@@ -954,13 +954,6 @@ void Console::exportForWeb (const juce::File& dir)
         delay->setProperty ("division", params::delayDivisions[juce::roundToInt (channels.defaultOf (0, params::delayDiv))]);
         delay->setProperty ("bpm", channels.defaultOf (0, params::delayBpm));
         l->setProperty ("delay", juce::var (delay));
-        if (line.parkId != nullptr)
-        {
-            auto* park = new juce::DynamicObject();
-            park->setProperty ("param", line.parkId);
-            park->setProperty ("does", "takes the whole amp out of the sound, INPUT and OUTPUT still holding the dry guitar's level; the channel waits, TURBO does nothing until a gear is pulled");
-            l->setProperty ("park", juce::var (park));
-        }
         o->setProperty ("lineup", juce::var (l));
     }
 

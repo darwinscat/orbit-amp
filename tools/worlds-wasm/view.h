@@ -4,7 +4,7 @@
 // What every world's module has the same: the WebGL 2 context it draws in, and the scene's frame read back for a
 // bench. A world's file (plains.cpp, ice.cpp, titan.cpp, sky.cpp) includes this once and exports the calls view.js makes,
 // under the same names in each: view_make, view_build, view_context, view_create, view_error, view_gear,
-// view_turbo, view_park, view_settle, view_frame, view_draw, view_test, view_read, view_read_width,
+// view_turbo, view_settle, view_frame, view_draw, view_test, view_read, view_read_width,
 // view_read_height, view_destroy — and whatever more its world has (titan.cpp: view_wipers, view_lights; sky.cpp:
 // view_throttle, view_place).
 

@@ -128,25 +128,23 @@ const layout::Plan plan {
     .wiperKeys {{ { 136.0f, 667.8f }, { 180.0f, 667.8f }, { 224.0f, 667.8f }, { 268.0f, 667.8f } }},
     .wiperKeySize = 42.0f,
 
-    // The slot is 882..907 across, 517..724 down, and straight: the stem stays in it. Its five ticks, to its
-    // right at 926..946.5, are PARK and four places below it — the grip lies along a tick, so the collar's
-    // foot is 24 past it — and a fourth gear's tick, past this product's three, is painted over.
+    // The slot is 882..907 across, 517..724 down, and straight: the stem stays in it. Its ticks, to its
+    // right at 926..946.5, are four places, the gears from the top — the grip lies along a tick, so the
+    // collar's foot is 24 past it — and a fourth gear's tick, past this product's three, is painted over.
+    // A tick over the first, painted at 548.9, stands for no place.
     .gateSlot { 882.0f, 517.0f, 25.0f, 207.0f },
     .slotX  = 894.5f,
     .notchX = 894.5f,
-    .slotTopY = 548.9f,
     .stops { 587.5f, 627.0f, 666.3f, 704.7f },
     .leverWidth = 136.0f,
     .collarSink = 24.0f,
     .gearPlate { 867.0f, 507.0f, 53.0f, 229.0f },
     .leverLeft = 812.0f, .leverTop = 510.0f,
 
-    // TURBO's round hole under the red cover, 992..1071 across; the cover is painted open, and has no render
-    // of its own shut.
+    // TURBO's round hole under the red cover, 992..1071 across; the cover is painted open.
     .turbo { 1031.5f, 643.3f },
     .turboSize = 62.0f,
     .turboName { 1031.5f, 723.0f },
-    .turboLid { 975.0f, 505.0f, 120.0f, 208.0f },
 
     // REVERB over DELAY on the left, CAB on the right; REVERB's words on the plate over the pair, DELAY's
     // between the two tracks, CAB's on the plate over its track.
@@ -237,7 +235,6 @@ const Skin& titan()
         "IN", "OUT",                    // the edge columns, short as a cockpit labels them
         false,                          // the radio's top line the gear and the speed alone...
         face::Monitor::View::shape,     // ...over the shape the amp gives the sound
-        false,                          // parked, the large warning alone
         std::nullopt,                   // no badge: the cat cut straight into the metal between the vents...
         juce::Colour (0xffd48a45),      // ...and lit under the hand a brownish amber, Titan's haze, as the others' are (Emblem)...
         face::MarkInk { juce::Colour (0xffa29fb0), juce::Colour (0xff5e5b6c), 0.8f, 0.28f },     // ...its floor a touch whiter than the family's

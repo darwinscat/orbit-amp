@@ -50,10 +50,6 @@ struct ProductEngine
     /** The state changed under the processor — a session opened, a register recalled, a step of the
         history taken. Said from inside the landing itself: it may look, and must not write. */
     virtual void stateLanded() = 0;
-
-    /** A SWITCH THAT PARKS THE WHOLE AMP, where the product has one: the raw value of its parameter,
-        read on the audio thread. Parked, no link of the chain works but the tuner — see linkWorks. */
-    virtual const std::atomic<float>* parkSwitch() const { return nullptr; }
 };
 
 /** The plugin shell. Deliberately thin: the chain (preamp -> EQ -> delay -> reverb -> cabinet) lands
@@ -825,14 +821,6 @@ private:
         keep, nothing to normalise, and no way to express "not in the rig but playing". */
     bool linkWorks (params::ChainRow row) const noexcept
     {
-        // PARKED, the amp is out of the sound: every link stands by — the captured blocks' fades and
-        // wires hand the dry signal through at the chain's own latency, the rooms and the delay are no
-        // longer fed and ring out, the blocks' trims go to unity — but the tuner goes on listening, and
-        // the player's own levels, IN and OUT, go on holding: the dry guitar comes out where they put
-        // the amp, not at full level past a master turned down.
-        if (row != params::rowTuner && row != params::rowIn && row != params::rowOut && isParked())
-            return false;
-
         const auto* on = rowOn[(size_t) row];
         const auto* in = rowPresent[(size_t) row];
 
@@ -940,10 +928,6 @@ public:
     /** Whether a host could conduct at all — false in the standalone, where the choice between the
         host's tempo and the block's own does not exist. */
     bool runsInHost() const noexcept { return wrapperType != wrapperType_Standalone; }
-
-    /** Whether the product has parked the whole amp (ProductEngine::parkSwitch): the dry signal
-        passes. Never, for a product with no such switch. */
-    bool isParked() const noexcept { return parked != nullptr && parked->load (std::memory_order_relaxed) > 0.5f; }
 
     /** A PROGRAM CHANGE THAT CAME IN, for a face that plays them. The engine has no programs of its
         own: it keeps the last one a MIDI input sent (0..127, on any channel) until a face that gives
@@ -1402,8 +1386,6 @@ public:
     /** The product's own half of the engine, where it has one (ProductEngine) — null for OrbitAmp.
         Declared after everything it reaches into, so that it goes before any of it does. */
     std::unique_ptr<ProductEngine> productEngine;
-
-    const std::atomic<float>* parked = nullptr;     // the product's park switch, if it has one
 
 private:
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)

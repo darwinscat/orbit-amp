@@ -44,9 +44,7 @@ public:
         so its top gear is always the storm. Without TURBO the air is clear on every gear. */
     static constexpr std::array<float, maxGears> turboDust { 0.25f, 0.6f, 1.0f };
     static constexpr double dustEaseSeconds = 0.7;    // tau: about 2 s to arrive or clear, never a jump
-    static constexpr double parkSeconds = 0.5;        // tau: parked, the rover is standing in about 1.5 s
     static constexpr double speedSeconds = 0.45;      // tau: the gear's speed reached
-    static constexpr float parkedYawDegrees = 8.0f;   // parked, the hand turns the view in place, slowly
 
     /** The relics: one per hashed cell where the hash and the ground allow. */
     static constexpr double relicCell = 532.0;        // metres; WORLD / relicCell = 1250
@@ -83,12 +81,9 @@ public:
     /** The drive, the inputs. */
     void setGear (int g) noexcept;                       // 1..numGears()
     void setTurbo (bool on) noexcept { turbo = on; }
-    /** PARK: the rover comes to a stand, the dust settles, the hand only turns the view in place. */
-    void setParked (bool on) noexcept { parked = on; }
     void setSteer (float s) noexcept;                    // -1..1, held input
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
-    bool isParked() const noexcept { return parked; }
     int numGears() const noexcept { return gears; }
 
     /** The speed the gear and TURBO ask for, before easing. */
@@ -99,9 +94,9 @@ public:
     /** One step of the drive. */
     void step (double dt);
 
-    /** The speed and the dust where the gear, TURBO and PARK are taking them, at once rather than eased to: the
-        rover standing, or at its gear's speed, wherever it is. The site's view starts so, and is put so when
-        asked for a gear or PARK "settled". */
+    /** The speed and the dust where the gear and TURBO are taking them, at once rather than eased to: the
+        rover at its gear's speed, wherever it is. The site's view starts so, and is put so when asked for a
+        gear "settled". */
     void settle() noexcept;
 
     /** Puts the rover somewhere with no history: speed and gear reached, camera and pitch evaluated
@@ -144,7 +139,7 @@ private:
     State s;
     const int gears;
     int gearWanted = 1;
-    bool turbo = false, parked = false;
+    bool turbo = false;
     float steer = 0.0f;
     double yawRate = 0.0, lastSteerTime = -10.0, meanderPhase = 0.0;
     std::vector<Relic> near;              // scratch for the step's two scans

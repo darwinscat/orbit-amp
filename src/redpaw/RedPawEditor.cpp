@@ -418,9 +418,9 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 
 //==============================================================================
 /** The rover's own part of the site's demo (Console::webExtras): the windscreen — the box its view is
-    drawn in and the corners of the glass in it — the lever's slot, its notches and its PARK end, the gears'
-    names, TURBO and its hatch, the wipers' keys; the renders of all of them, the still it ships, and the
-    poster, that still through the glass. */
+    drawn in and the corners of the glass in it — the lever's slot, its notches, the gears' names, TURBO,
+    the wipers' keys; the renders of all of them, the still it ships, and the poster, that still through
+    the glass. */
 /** THE RINGS GO WITH THE KNOBS: each tone knob's round it where the rows put it, the size the row gives
     it; a ring whose knob the pack has not, hidden with it. DRIVE's is the first and never moves. */
 void RedPawEditor::stripsLaid (const face::Strips& laid)
@@ -446,7 +446,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         { "lever", &art.lever }, { "lever-glow", &art.leverGlow }, { "fader-cap-light", &art.faderCapLight },
         { "toggle-up", &art.toggleUp }, { "toggle-down", &art.toggleDown }, { "key-up", &art.keyUp },
         { "key-down", &art.keyDown }, { "turbo-up", &art.turboUp }, { "turbo-down", &art.turboDown },
-        { "turbo-lid", &art.turboLid }, { "emblem", &art.emblem }, { "socket", &art.socket },
+        { "emblem", &art.emblem }, { "socket", &art.socket },
         { "key-frame-left", &art.keyFrameLeft }, { "key-frame-cell", &art.keyFrameCell }, { "key-frame-right", &art.keyFrameRight } };
     for (const auto& [name, img] : own)
         if (! ((skin.badge.has_value() || ! skin.markRender) && juce::String (name) == "emblem"))     // a skin on the badge, or drawing its mark, shows no render of it
@@ -477,14 +477,13 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     l->setProperty ("slot", rect (skin.plan.gateSlot));
     l->setProperty ("slotX", skin.plan.slotX);
     l->setProperty ("notchX", skin.plan.notchX);
-    l->setProperty ("parkY", skin.plan.slotTopY);
     juce::Array<juce::var> gearsAt, names;
     for (int g = 0; g < lever.numGears(); ++g)
         gearsAt.add (skin.plan.stops[(size_t) g]);
-    for (int at = 0; at <= lever.numGears(); ++at)
+    for (int at = 0; at < lever.numGears(); ++at)
         names.add (GearLever::nameOf (at, lever.numGears()));
     l->setProperty ("notches", gearsAt);     // where the gears stand: the notches the face shows
-    l->setProperty ("names", names);      // PARK first, then the gears from the top
+    l->setProperty ("names", names);      // the gears from the top, a name to a notch
     l->setProperty ("leverWidth", skin.plan.leverWidth);
     l->setProperty ("collarSink", skin.plan.collarSink);
     l->setProperty ("gripBar", GearLever::barBottom);       // the render's top part the hand takes it by
@@ -497,18 +496,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     t->setProperty ("centre", point (skin.plan.turbo));
     t->setProperty ("size", skin.plan.turboSize);
     t->setProperty ("name", point (skin.plan.turboName));
-    t->setProperty ("lid", rect (skin.plan.turboLid));
     t->setProperty ("kind", "pair");      // TURBO walks to the gear's paired channel (channels::Lineup::pairs)
-    // ...and parked: the button deaf, drawn at `alpha` at once; and where the rover has a hatch's render,
-    // the hatch shut over it on its spring (TurboLid), open again when a gear is pulled.
-    auto* atPark = new juce::DynamicObject();
-    atPark->setProperty ("alpha", face::PushButton::dimmed);
-    atPark->setProperty ("lid", spriteRef ("turbo-lid"));     // null where the rover has no hatch's render
-    auto* spring = new juce::DynamicObject();
-    spring->setProperty ("stiffness", TurboLid::stiffness);
-    spring->setProperty ("damping", TurboLid::damping);
-    atPark->setProperty ("lidSpring", juce::var (spring));
-    t->setProperty ("parked", juce::var (atPark));
     o->setProperty ("turbo", juce::var (t));
 
     juce::Array<juce::var> wipers;
@@ -656,7 +644,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     }
 
     // THE SPEEDS the gears drive at, km/h as the nav screen reads them once eased: each gear, then each
-    // with TURBO; parked, none.
+    // with TURBO.
     juce::Array<juce::var> kmh, turboKmh;
     for (int g = 1; g <= lever.numGears(); ++g)
     {
@@ -675,11 +663,9 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         const auto e = view->drive().ease();
         auto* gpu = new juce::DynamicObject();
         gpu->setProperty ("tau", e.drive);
-        gpu->setProperty ("parkTau", e.park);
         ease->setProperty ("gpu", juce::var (gpu));
         auto* cpu = new juce::DynamicObject();
         cpu->setProperty ("tau", Windscreen::speedSeconds1993);
-        cpu->setProperty ("parkTau", PlainsWorld::parkSeconds);
         juce::Array<juce::var> pace;
         const auto& table = Windscreen::texelsPerSecond1993;
         for (int g = 1; g <= lever.numGears(); ++g)
@@ -690,7 +676,6 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         ease->setProperty ("view1993", juce::var (cpu));
         auto* still = new juce::DynamicObject();
         still->setProperty ("tau", 0.0);
-        still->setProperty ("parkTau", 0.0);
         ease->setProperty ("still", juce::var (still));
     }
     speeds->setProperty ("ease", juce::var (ease));
@@ -744,53 +729,11 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     nav->setProperty ("learn", rect (skin.plan.learnArea));
     nav->setProperty ("packOnScreen", skin.packOnScreen);
     nav->setProperty ("firstScreen", Monitor::names()[(int) skin.firstScreen]);
-    nav->setProperty ("parkSignOnTopLine", skin.parkSignOnTopLine);
 
     // SHAPE, the screen's first picture, as the screen draws it — edge to edge across `picture`, and not
     // fading in a pause.
     nav->setProperty ("shape", screen.shapeForWeb());
 
-    // PARKED, the picture goes at once and the screen is the large warning's (ParkSign::paint): darkened,
-    // the red triangle in its middle.
-    auto* parkedScreen = new juce::DynamicObject();
-    parkedScreen->setProperty ("picture", "hidden at once, no fade");
-    parkedScreen->setProperty ("sign", "ParkSign::paint (src/redpaw/RedPawControls.cpp): the picture box darkened, the warning centred in it, glowing");
-    {
-        // ...and in numbers: the box H the picture's height; the triangle's height min (max (H - margin,
-        // atLeast x H), atMost), its width widthOfHeight x that; the mark in twentieths of the triangle's
-        // height, k = height / unit.
-        auto* data = new juce::DynamicObject();
-        auto* dim = new juce::DynamicObject();
-        dim->setProperty ("colour", colour (juce::Colour (ParkSign::dim)));
-        dim->setProperty ("alpha", ParkSign::dimAlpha);
-        data->setProperty ("dim", juce::var (dim));
-        auto* tri = new juce::DynamicObject();
-        tri->setProperty ("margin", ParkSign::margin);
-        tri->setProperty ("atLeast", ParkSign::atLeast);
-        tri->setProperty ("atMost", ParkSign::atMost);
-        tri->setProperty ("widthOfHeight", ParkSign::widthOfHeight);
-        tri->setProperty ("colour", colour (juce::Colour (Warning::red)));
-        tri->setProperty ("apex", "top centre; base along the bottom, corner to corner");
-        tri->setProperty ("cornerRadius", Warning::corner);           // in k
-        data->setProperty ("triangle", juce::var (tri));
-        auto* mark = new juce::DynamicObject();
-        mark->setProperty ("unit", Warning::unit);
-        mark->setProperty ("colour", colour (juce::Colour (Warning::cut)));
-        mark->setProperty ("barWidth", Warning::barWidth);
-        mark->setProperty ("barHeight", Warning::barHeight);
-        mark->setProperty ("barRadius", Warning::barRadius);
-        mark->setProperty ("barCentreOfHeight", Warning::barCentre);   // from the triangle's top
-        mark->setProperty ("dot", Warning::dot);
-        mark->setProperty ("dotUp", Warning::dotUp);                  // its middle over the base, in k
-        data->setProperty ("mark", juce::var (mark));
-        auto* glow = new juce::DynamicObject();
-        glow->setProperty ("colour", colour (juce::Colour (Warning::red)));
-        glow->setProperty ("alpha", ParkSign::glowAlpha);
-        glow->setProperty ("radius", ParkSign::glowRadius);
-        data->setProperty ("glow", juce::var (glow));
-        parkedScreen->setProperty ("signData", juce::var (data));
-    }
-    nav->setProperty ("parked", juce::var (parkedScreen));
     auto* type = new juce::DynamicObject();
     type->setProperty ("gearPx", px15);
     type->setProperty ("channelPx", px13);
@@ -799,8 +742,6 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     type->setProperty ("unit", "KM/H");
     type->setProperty ("kerning", 0.04f);
     type->setProperty ("insetX", 8.0f);
-    type->setProperty ("warning", rect ({ 0.0f, 0.0f, 23.0f, 20.0f }));
-    type->setProperty ("afterWarning", 8.0f);
     type->setProperty ("afterGear", 10.0f);
     type->setProperty ("beforeSpeed", 8.0f);
     type->setProperty ("beforeUnit", 6.0f);
@@ -815,11 +756,10 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         topKmh = juce::jmax (topKmh, juce::roundToInt (view->drive().speedFor (g, true) * 3.6f));
     const auto line = [&] (int at, int channel)
     {
-        const bool parked = at == GearLever::park;
         const auto gearName = GearLever::nameOf (at, lever.numGears());
         const auto name = skin.packOnScreen ? juce::String (skin.lineup.channels[(size_t) channel].name).toUpperCase() : juce::String();
-        const int speed = parked ? 0 : juce::roundToInt (view->drive().speedFor (gearOf (channel) + 1, turboOf (channel)) * 3.6f);
-        const auto f = header.fit (gearName, name, speed, parked);
+        const int speed = juce::roundToInt (view->drive().speedFor (gearOf (channel) + 1, turboOf (channel)) * 3.6f);
+        const auto f = header.fit (gearName, name, speed);
         auto* x = new juce::DynamicObject();
         x->setProperty ("place", at);
         x->setProperty ("channel", channel);
@@ -837,7 +777,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         juce::Array<juce::var> byKmh;
         juce::String was;
         for (int k = 0; k <= topKmh; ++k)
-            if (const auto s = header.fit (gearName, name, k, parked).shown; k == 0 || s != was)
+            if (const auto s = header.fit (gearName, name, k).shown; k == 0 || s != was)
             {
                 byKmh.add (juce::var (juce::Array<juce::var> { k, s }));
                 was = s;
@@ -846,9 +786,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         lines.add (juce::var (x));
     };
     for (int c = 0; c < (int) skin.lineup.channels.size(); ++c)
-        line (GearLever::positionOf (gearOf (c)), c);
-    for (int c = 0; c < (int) skin.lineup.channels.size(); ++c)
-        line (GearLever::park, c);
+        line (gearOf (c), c);
     nav->setProperty ("lines", lines);
     world.setProperty ("nav", juce::var (nav));
 
@@ -856,10 +794,9 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     stills.add ("still.webp");
     places.setProperty ("stills", stills);
 
-    // THE POSTERS: the rover as it opens, and one for each place of the lever, PARK first: the hatch shut
-    // there only, TURBO off — through the glass the windscreen's first frame there, a drive of the rover's
-    // made at its start and settled at the place (Windscreen::firstFrame), and the still it ships in the
-    // poster's -still kind.
+    // THE POSTERS: the rover as it opens, and one for each place of the lever, its first gear first, TURBO
+    // off — through the glass the windscreen's first frame there, a drive of the rover's made at its start
+    // and settled at the place (Windscreen::firstFrame), and the still it ships in the poster's -still kind.
     webPoses.count = lever.numPlaces();
     webPoses.opening = lever.getPlace();
     webPoses.firstFrame = [this] (int, std::function<void (juce::Image)> done)
@@ -868,23 +805,19 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         view->firstFrame (skin.makeDrive(), juce::roundToInt (box.getWidth()), juce::roundToInt (box.getHeight()), std::move (done));
     };
     webPoses.live = juce::String ("the windscreen's first frame for the place: the ") + view->drive().name()
-                  + " drive on the GPU from its start, at the place's gear and PARK, settled, nothing stepped (t = 0), TURBO off, "
+                  + " drive on the GPU from its start, at the place's gear, settled, nothing stepped (t = 0), TURBO off, "
                     "the wipers and the lights as the face opens; the top poster is the place the app opens at";
     webPoses.standAt = [this] (int at)
     {
-        if (at == GearLever::park)
-            parkIt();
-        else
-            pullGear (at - GearLever::positionOf (0));
+        pullGear (at);
         lever.setPlace (at, false, false);
-        hatch.setShut (at == GearLever::park, false);
     };
     webPoses.still = [this] (int) { return Art::still (skin); };
     webPoses.window = skin.plan.windscreen;
     webPoses.hidden = { view.get() };
     webPatch ("gateFader", { &threshold });
     webPatch ("limiterFader", { &ceiling });
-    webPatch ("nav", { &header, &screen, &parkSign, &glassFilm });
+    webPatch ("nav", { &header, &screen, &glassFilm });
     webPatch ("learn", { &learnKey, &humKey });
     std::vector<const juce::Component*> wiperKeys;
     juce::Rectangle<float> wipersBox;
@@ -967,11 +900,8 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     addToStage (lever);
     const float leverRight = juce::jmax (skin.plan.gearPlate.getRight(), skin.plan.notchX + skin.plan.leverWidth * 0.5f + 16.0f);
     lever.setBounds (juce::Rectangle<float> (skin.plan.leverLeft, skin.plan.leverTop, leverRight - skin.plan.leverLeft, skin.plan.gearPlate.getBottom() - skin.plan.leverTop).toNearestInt());
-    lever.onPlace    = [this] (int at) { if (at == GearLever::park) parkIt(); else pullGear (at - GearLever::positionOf (0)); };
+    lever.onPlace    = [this] (int at) { pullGear (at); };
     lever.onRelease  = [this] { showChannel(); };  // held, it follows the hand; let go, it follows the state
-
-    // PARK may move with no hand on the lever: a host's automation, an undo.
-    follow (engine.parkId(), [this] (float) { showChannel(); });
 
     // TURBO: the pedal's second channel, on or off — one switch for every gear.
     turbo.latching = false;
@@ -989,8 +919,6 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     turbo.onPress = [this] { throwTurbo (! turboOf (channels.active())); };
     addToStage (turbo);
     turbo.setBounds (juce::Rectangle<float> (skin.plan.turboSize, skin.plan.turboSize).withCentre (skin.plan.turbo).toNearestInt());
-    addToStage (hatch);         // after the button, so over it
-    hatch.setBounds (skin.plan.turboLid.getSmallestIntegerContainer());
 
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg, its
     // cap lighter than the columns' so a small one reads in its corner. A double click puts it back where
@@ -1033,7 +961,6 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // windscreen is driving at; under them the picture of the amp at work the machine has chosen, the
     // skin's until then.
     header.speed = [this] { return view->speedKmh(); };
-    header.showsWarning = skin.parkSignOnTopLine;
     addToStage (header);
     header.setBounds (skin.plan.navHeader.toNearestInt());
     if (! skin.plan.speedHud.isEmpty())       // ...or the speed on the glass, the screen's top line the gear alone
@@ -1048,15 +975,14 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     screen.show ((Monitor::View) juce::jlimit (1, (int) Monitor::View::numViews - 1,
                                                (int) prefs::store (amp.product()).get (screenKey, (int) skin.firstScreen)));
 
-    // LEARN, from the menus or a key of its own, takes the picture's place while it runs — the parked
-    // warning's too, and the top line's where its place takes that in (RedPawLayout.h) — and lights its key.
+    // LEARN, from the menus or a key of its own, takes the picture's place while it runs — and the top
+    // line's where its place takes that in (RedPawLayout.h) — and lights its key.
     addToStage (learnGlass);
     learnGlass.setBounds (skin.plan.learnArea.toNearestInt());
     learnGlass.inset = { 8.0f, 4.0f };      // the top line's words start where the header's do
     learnGlass.onShow = [this] (bool up)
     {
         screen.setAlpha (up ? 0.0f : 1.0f);
-        parkSign.setAlpha (up ? 0.0f : 1.0f);
         if (skin.plan.learnArea.intersects (skin.plan.navHeader))
             header.setAlpha (up ? 0.0f : 1.0f);
         learnShowing = up ? (learnGlass.showsHum() ? 1 : 0) : -1;
@@ -1136,21 +1062,14 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         view->setWipers (wipers);
     }
 
-    // Parked, the warning stands large in the middle of the screen, over the picture dimmed.
-    addToStage (parkSign);
-    parkSign.setVisible (false);      // showSelector says when
-    parkSign.setBounds (skin.plan.navPicture.toNearestInt());
-
-    // ...and its glass, over the lot: a little murky, dusty, lightly scratched — and the tuner's strip,
+    // The screen's glass, over the lot: a little murky, dusty, lightly scratched — and the tuner's strip,
     // where the tuner is not a dial of its own.
     addToStage (glassFilm);
     glassFilm.setBounds ((skin.plan.tunerDial.reach > 0.0f ? skin.plan.navHeader.getUnion (skin.plan.navPicture) : skin.plan.navHeader.getUnion (skin.plan.tunerScreen)).toNearestInt());
 
-    // A prototype's hook for looking at the windscreen in a gear, with TURBO, or parked, without a hand
-    // on anything: ROVER_CHANNEL names a channel, from 0 to the product's last, or "park".
-    if (const auto c = juce::SystemStats::getEnvironmentVariable ("ROVER_CHANNEL", {}); c.equalsIgnoreCase ("park"))
-        setParam (engine.parkId(), 1.0f);
-    else if (c.isNotEmpty())
+    // A prototype's hook for looking at the windscreen in a gear, or with TURBO, without a hand on
+    // anything: ROVER_CHANNEL names a channel, from 0 to the product's last.
+    if (const auto c = juce::SystemStats::getEnvironmentVariable ("ROVER_CHANNEL", {}); c.isNotEmpty())
         engine.go (c.getIntValue());
 
     showChannel();
@@ -1177,68 +1096,40 @@ RedPawEditor::~RedPawEditor()
     gl.detach();
 }
 
-bool RedPawEditor::isParked() const
-{
-    return getParam (engine.parkId()) > 0.5f;
-}
-
-/** A gear pulled: that pedal, TURBO as it stands — and out of PARK, in the same step of the history. */
+/** A gear pulled: that pedal, TURBO as it stands. */
 void RedPawEditor::pullGear (int gear)
 {
-    if (isParked())
-        setParam (engine.parkId(), 0.0f);
     go (channels.leftOn (channelOf (gear, false)));     // TURBO as the gear was left with it
 }
 
 void RedPawEditor::throwTurbo (bool on)
 {
-    if (! isParked())
-        go (channelOf (gearOf (channels.active()), on));
-}
-
-void RedPawEditor::parkIt()
-{
-    endTapping();
-    if (! isParked())
-        setParam (engine.parkId(), 1.0f);
-    showChannel();
+    go (channelOf (gearOf (channels.active()), on));
 }
 
 void RedPawEditor::showSelector (int channel)
 {
     const int gear = gearOf (channel);
     const bool turboOn = turboOf (channel);
-    const bool parked = isParked();
-    const int at = parked ? GearLever::park : GearLever::positionOf (gear);
 
-    if (! lever.isHeld() && lever.getPlace() != at)
-        lever.setPlace (at, true, false);
+    if (! lever.isHeld() && lever.getPlace() != gear)
+        lever.setPlace (gear, true, false);
     turbo.setOn (turboOn, false);
-    turbo.setEnabled (! parked);
-    hatch.setShut (parked, isShowing());
 
-    header.set (GearLever::nameOf (at, lever.numGears()),
-                skin.packOnScreen ? juce::String (skin.lineup.channels[(size_t) channel].name).toUpperCase() : juce::String(), parked);
+    header.set (GearLever::nameOf (gear, lever.numGears()),
+                skin.packOnScreen ? juce::String (skin.lineup.channels[(size_t) channel].name).toUpperCase() : juce::String());
 
     view->setGear (gear + 1);
     view->setTurbo (turboOn);
-    view->setParked (parked);
-    // Parked, the amp is out of the sound and its picture with it: the screen dark but for the large
-    // warning.
-    screen.setVisible (! parked);
-    parkSign.setVisible (parked);
 }
 
-/** 1, 2, ... as many as the gears: the lever goes to that gear, as if a hand had put it there; 0 or P to
-    PARK; T throws TURBO.
-    The keys are the same whatever the layout prints on them — under a Russian one T arrives as Е, and
-    P as З. */
+/** 1, 2, ... as many as the gears: the lever goes to that gear, as if a hand had put it there; T throws
+    TURBO.
+    The keys are the same whatever the layout prints on them — under a Russian one T arrives as Е. */
 bool RedPawEditor::channelKey (const juce::KeyPress& key)
 {
     const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
-    const int at = letter == '0' || letter == 'P' || letter == 0x0417 ? GearLever::park
-                 : letter >= '1' && letter < '1' + lever.numGears() ? GearLever::positionOf ((int) (letter - '1'))
-                 : -1;
+    const int at = letter >= '1' && letter < '1' + lever.numGears() ? (int) (letter - '1') : -1;
     if (at >= 0)
     {
         if (! lever.isHeld())
@@ -1254,22 +1145,14 @@ bool RedPawEditor::channelKey (const juce::KeyPress& key)
     return false;
 }
 
-/** Programs 1 to the number of channels are the channels, out of PARK; the one after them is PARK. */
+/** Programs 1 to the number of channels are the channels. */
 void RedPawEditor::programChange (int program)
 {
-    if (program == channels.count())
-    {
-        parkIt();
-    }
-    else if (program >= 0 && program < channels.count())
-    {
-        if (isParked())
-            setParam (engine.parkId(), 0.0f);
+    if (program >= 0 && program < channels.count())
         go (program);
-    }
 }
 
-/** TURBO's controller: the pedal's second channel, or its first — nothing, parked. */
+/** TURBO's controller: the pedal's second channel, or its first. */
 void RedPawEditor::turboChange (bool thrown)
 {
     if (thrown != turboOf (channels.active()))

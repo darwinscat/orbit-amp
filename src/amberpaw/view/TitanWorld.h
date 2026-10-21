@@ -37,8 +37,8 @@ public:
     static constexpr int maxGears = 4;
     static constexpr std::array<double, maxGears> gearSpeed { 2.4, 5.0, 8.6, 13.5 };   // m/s, the first gear first
     static constexpr double turboFactor = 2.0;
-    static constexpr double speedSeconds = 0.45, parkSeconds = 0.5, yawSeconds = 0.35, boostSeconds = 0.4;   // tau
-    static constexpr double steerYawDegrees = 25, parkedYawDegrees = 8;
+    static constexpr double speedSeconds = 0.45, yawSeconds = 0.35, boostSeconds = 0.4;   // tau
+    static constexpr double steerYawDegrees = 25;
     static constexpr double camHeight = 2.6;           // the eye over the sea, metres
     static constexpr double topSpeed = 13.5;           // the fastest gear: the nose dips this far, then harder on a dash
 
@@ -140,9 +140,6 @@ public:
     /** The drive, the inputs. */
     void setGear (int g) noexcept;                       // 1..numGears()
     void setTurbo (bool on) noexcept { turbo = on; }
-    /** PARK: a hover — the craft comes to a stand over the sea, the downwash rings out under it, the
-        hand only turns the view in place. */
-    void setParked (bool on) noexcept { parked = on; }
     void setSteer (float s) noexcept;                    // -1..1, held input
     /** THE WIPERS' SPEED, as the four keys under the radio set it: none of their own accord (a wipe
         running finishes), a wipe a minute, on and on with a rest between, on and on with a quicker
@@ -156,7 +153,6 @@ public:
     double light (int which) const noexcept { return lightLevel[(size_t) which]; }
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
-    bool isParked() const noexcept { return parked; }
     int numGears() const noexcept { return gears; }
 
     /** The speed the gear and TURBO ask for, before easing. */
@@ -167,11 +163,11 @@ public:
 
     /** Puts the craft somewhere with no history: speed and dash reached, the sea's events and the glass
         begun afresh from here, the flight evaluated directly. */
-    void place (double x, double z, double heading, int gear, bool turbo, bool parked);
+    void place (double x, double z, double heading, int gear, bool turbo);
     /** Where it stands, as the drive would be once settled — the speed and the dash the gear asks for
         reached, the flight evaluated directly — keeping what is on the glass and out on the sea. For a
         still. */
-    void settle (int gear, bool turbo, bool parked);
+    void settle (int gear, bool turbo);
     /** The clock: the craft placed again where it is at `time`, so the events and the wipers count from
         there; `travel` is the metres driven, for the status. */
     void setClock (double time, double travel);
@@ -219,7 +215,7 @@ public:
     const Stroke& strokeCurrent() const noexcept { return strokeCur; }
     const Stroke& strokePrevious() const noexcept { return strokePrev; }
     double glassSince() const noexcept { return glassT0; }
-    /** How far through its stroke every blade is, 0..1, at time t; false when parked. */
+    /** How far through its stroke every blade is, 0..1, at time t; false when the blades lie at rest. */
     bool wiperFraction (double t, double& f) const noexcept;
     /** A wipe now, unless one is running: at the speed set's stroke. */
     void startWipe() noexcept;
@@ -241,7 +237,7 @@ private:
     State s;
     const int gears;
     int gearWanted = 1;
-    bool turbo = false, parked = false;
+    bool turbo = false;
     float steer = 0.0f;
     double lastSteerTime = -10, meanderPhase = 0.7;
 

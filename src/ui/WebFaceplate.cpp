@@ -1175,7 +1175,6 @@ juce::var WebFaceplate::lineupVar() const
     cuts->setProperty ("lpfHz", plain (params::cabLpfHz));
     l->setProperty ("cuts", juce::var (cuts.get()));
     l->setProperty ("turbo", "none");
-    l->setProperty ("park", false);
     return juce::var (l.get());
 }
 

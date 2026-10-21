@@ -12,10 +12,8 @@ namespace orbitamp::redpaw
     is the pedal and TURBO is that pedal's second channel, so the channels go in pairs, gear by gear,
     TURBO off then on, and a Program Change counts them in that order. A pair is ONE memory: TURBO is an
     option of the gear's, as its tone is — thrown, only the pack changes, and a gear pulled comes back
-    with TURBO as it was left (Lineup::pairs). PARK, the
-    lever's top end, is no channel: it takes the whole amp out of the sound, and the channel waits for
-    the lever to come back. The engine they are kept by is the family's (channels/Engine.h); this file
-    is what makes it the rover's.
+    with TURBO as it was left (Lineup::pairs). The lever's places are the gears and nothing else. The
+    engine they are kept by is the family's (channels/Engine.h); this file is what makes it the rover's.
 
     WHICH CHANNELS, AND SO HOW MANY GEARS, IS THE PRODUCT'S: each rover says its own in a file of its
     own, in its skin (RedPawSkin.h) — RedPawAmp's the IR-X's in redpaw/RedPawSkin.cpp, FrostPawAmp's the
@@ -24,7 +22,7 @@ namespace orbitamp::redpaw
     lever's notches, the keys, the programs, the nav screen's names, the window. */
 
 /** A rover's lineup over the channels it plays: the names its memory is kept under, its CHANNEL, INPUT's
-    zero, the cabinet a channel opens on and PARK, are every rover's. */
+    zero and the cabinet a channel opens on, are every rover's. */
 channels::Lineup roverLineup (std::vector<channels::Lineup::Channel>);
 
 /** As many gears as the product has pairs of channels — at most as many as the lever's slot has

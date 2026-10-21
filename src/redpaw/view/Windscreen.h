@@ -25,8 +25,7 @@ namespace orbitamp::redpaw
     into an image and painted), or STILL — one frame, rendered once and kept, for a player who wants
     nothing moving. The gears set the speed — as many as the product has, CLEAN first — and TURBO doubles
     it, eased over about a second; TURBO also raises dust, graded by the gear, the top one's the head-on
-    storm. PARK brings the
-    rover to a stand and clears the air. Steering is held input: a drag left or right across the glass while the button is down, the
+    storm. Steering is held input: a drag left or right across the glass while the button is down, the
     arrow keys while the view has the focus (a host often keeps the keys, so the drag is the main way),
     or `steer()` from outside.
 
@@ -71,24 +70,18 @@ public:
     void setTurbo (bool on);
     bool isTurbo() const noexcept { return turboWanted.load(); }
 
-    /** PARK: the lever's top end. The rover stands in about 1.5 s, the dust settles, and the
-        hand only turns the view slowly in place. */
-    void setParked (bool on);
-    bool isParked() const noexcept { return parkedWanted.load(); }
-
     /** The wipers' speed (Drive::setWipers), where the face has keys for it. */
     void setWipers (int speed) { wipersWanted.store (speed); }
     /** ...and the searchlights (Drive::setLights). */
     void setLights (bool left, bool right) { lightsWanted.store ((left ? 1 : 0) | (right ? 2 : 0)); }
 
-    /** THE ROVER'S SPEED, km/h, as the view is driving it: eased toward what the gear and TURBO ask for,
-        to a stand when parked. In the 1993 landscape its own drive, counted in the Plains' measure; in
+    /** THE ROVER'S SPEED, km/h, as the view is driving it: eased toward what the gear and TURBO ask for.
+        In the 1993 landscape its own drive, counted in the Plains' measure; in
         the still, what the gear asks for — nothing moves there to ease. Message thread. */
     float speedKmh() const noexcept;
 
     /** THE 1993 DRIVE'S PACE: texels a second in each gear, the first first — a lever longer than the
-        table runs its top gears at the last — twice that with TURBO; eased to it with this time constant,
-        and to a stand with the Plains' park time. */
+        table runs its top gears at the last — twice that with TURBO; eased to it with this time constant. */
     static constexpr std::array<float, 4> texelsPerSecond1993 { 2.0f, 5.0f, 10.0f, 16.0f };
     static constexpr double speedSeconds1993 = 0.28;
 
@@ -147,7 +140,7 @@ public:
     juce::Image stillImage() const { return still; }
 
     /** THE VIEW'S FIRST FRAME, for a poster of the site's: `fresh` — a drive of the same kind, made just now
-        and so at its start — standing where this view's gear, TURBO and PARK put it, settled there as STILL
+        and so at its start — standing where this view's gear and TURBO put it, settled there as STILL
         settles a frame (its speed and air reached, nothing stepped), with the wipers and the lights as this
         view has them and no hand on the helm, drawn on the GPU at `width` x `height` in the context this
         view draws in, and read back. What a page's copy of the view, started there, shows first. Handed to
@@ -205,7 +198,7 @@ private:
 
     // The inputs, shared with the GL thread.
     std::atomic<int> gearWanted { 1 };
-    std::atomic<bool> turboWanted { false }, parkedWanted { false };
+    std::atomic<bool> turboWanted { false };
     std::atomic<int> wipersWanted { 1 }, lightsWanted { 0 };
     face::Steering steering;        // the drag, the keys, and steer() from outside, as one value
     std::atomic<float> scaleInUse { 1.0f };

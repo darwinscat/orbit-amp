@@ -87,12 +87,9 @@ private:
 
     // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel — an option of
     // the gear's, as its tone is: thrown, only the pack changes, and a gear pulled comes back with
-    // TURBO as it was left (channels::Lineup::pairs). PARK, the lever's top end, takes
-    // the whole amp out of the sound (ProductEngine::parkSwitch); the channel waits, and TURBO does
-    // nothing until a gear is pulled again.
+    // TURBO as it was left (channels::Lineup::pairs).
     GearLever lever;
     face::PushButton turbo { "TURBO" };
-    TurboLid hatch { skin };             // over it: TURBO's hatch, shut while parked
 
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg:
     // -70 dB to -40, and -3 dB to -0.1, foot to head. While its block is off a fader stands dim, and
@@ -105,7 +102,6 @@ private:
     // THE NAV SCREEN'S PICTURE of the amp at work (face/Monitor.h), the machine's choice; a right click
     // on the screen offers the five.
     face::Monitor screen;
-    ParkSign parkSign;              // parked: the warning, large, in the screen's middle
     GlassFilm glassFilm;            // the screen's glass, over all of it
 
     // LEARN's own keys, where the picture paints holes for them (RedPawLayout.h): GATE's learning and
@@ -123,8 +119,6 @@ private:
     void chooseScreen (face::Monitor::View);
     void pullGear (int gear);
     void throwTurbo (bool on);
-    void parkIt();
-    bool isParked() const;
 
     void showSelector (int channel) override;
     bool channelKey (const juce::KeyPress&) override;

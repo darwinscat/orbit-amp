@@ -83,7 +83,6 @@ struct Skin
         the picture it shows until the player picks another. */
     bool packOnScreen = false;
     face::Monitor::View firstScreen = face::Monitor::View::shape;      // the family's first picture: what the amp does to the sound
-    bool parkSignOnTopLine = true;      // parked, the warning on the top line too, beside the large one
 
     /** THE BADGE, where the skin wears one: the family's badge (face::paintBadge, the cockpit's) painted over
         the picture's emblem plate, where the plan puts it (Plan::badgeFace, badgeScrews, badgeMark) — the

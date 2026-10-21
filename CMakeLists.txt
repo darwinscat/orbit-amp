@@ -153,8 +153,7 @@ include(cmake/PatchedWrappers.cmake)
 # leaks the dry into its first 10 ms, and an Intel build plays the arm64 sound: the framework's Freeverb
 # under ours quantised its state on x86-64, up to 1e-6.
 #
-# v0.61.2 changes one thing here: the echo's and the room's `feed` — what PARK and the DELAY / REVERB switches
-# stop — fades over 5 ms where it switched at one sample, which the repeats played back as ticks. Fed, both
+# v0.61.2 changes one thing here: the echo's and the room's `feed` — what the DELAY / REVERB switches stop — fades over 5 ms where it switched at one sample, which the repeats played back as ticks. Fed, both
 # render bit for bit as on v0.61.0 (v0.61.1 touches only a wasm build of FlushToZero.h).
 set(ORBITAMP_FCORE_TAG "v0.61.2" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
@@ -1278,7 +1277,7 @@ set(ROVER_RENDERS
     key-down.webp turbo-up.webp turbo-down.webp)
 set(ROVER_LAMPS lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp)
 
-set(REDPAWAMP_RENDERS ${ROVER_RENDERS} ${ROVER_LAMPS} turbo-lid.webp)     # ...its lamps, and TURBO's hatch shut, its own
+set(REDPAWAMP_RENDERS ${ROVER_RENDERS} ${ROVER_LAMPS})     # ...and its lamps
 list(TRANSFORM REDPAWAMP_RENDERS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/")
 # ...and the STILL it ships, one frame of its world, where there is one: never another rover's.
 file(GLOB REDPAWAMP_STILL CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/still.jpg")
@@ -1287,9 +1286,8 @@ list(APPEND REDPAWAMP_RENDERS ${REDPAWAMP_STILL})
 # Every other rover's renders are in resources/<face>, under the rover's names; one that is not there
 # yet is RedPawAmp's. So a render of its own is a file dropped in there and nothing more: the folder is
 # looked at again on every build. ...and renders a rover may carry or not — the maker's mark raised in
-# its own metal, instead of engraved; TURBO's hatch shut, instead of open on PARK too: there when the
-# file is, and nothing in its place when it is not. Never RedPawAmp's: a rusted hatch on frosted steel
-# would be a patch.
+# its own metal, instead of engraved: there when the file is, and nothing in its place when it is not.
+# Never RedPawAmp's: its rust on frosted steel would be a patch.
 function(rover_renders out face)
     set(folder "${CMAKE_CURRENT_SOURCE_DIR}/resources/${face}")
     file(GLOB own CONFIGURE_DEPENDS "${folder}/*")
@@ -1301,7 +1299,7 @@ function(rover_renders out face)
             list(APPEND renders "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/${render}")
         endif()
     endforeach()
-    foreach(render IN ITEMS emblem.webp turbo-lid.webp still.jpg ${ROVER_LAMPS})
+    foreach(render IN ITEMS emblem.webp still.jpg ${ROVER_LAMPS})
         if("${folder}/${render}" IN_LIST own)
             list(APPEND renders "${folder}/${render}")
         endif()
@@ -1372,7 +1370,7 @@ add_amp(RedPawAmp     CODE Rdpw    BY_NAME
 
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
 # over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
-# ice-blue rings. The same controls, TURBO and PARK: the rover's, shared, not copied — over channels of
+# ice-blue rings. The same controls, the gears and TURBO: the rover's, shared, not copied — over channels of
 # its own, six on the ReVolt Guitar's three packs in three gears, and the rovers' cabinets; its set under
 # its own list in the family's folder (src/channels/Set.h), where a file another product plays too is one
 # file. Not in the family's release yet (installer/family.ini), so none of it is in the release's factory
@@ -1386,7 +1384,7 @@ add_amp(FrostPawAmp   CODE Frpw    BY_NAME
 # AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
 # dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy
 # of three panes, its tuner a gauge, its meters dots — and out of its canopy, the flight over the sea.
-# The same controls, TURBO and PARK: the rovers', shared, not copied — over the V4's six channels in three
+# The same controls, the gears and TURBO: the rovers', shared, not copied — over the V4's six channels in three
 # gears, the V4's six packs until it has captures of its own, and the rovers' cabinets. Not in
 # the family's release yet (installer/family.ini).
 add_amp(AmberPawAmp   CODE Ambp    BY_NAME
@@ -1406,7 +1404,7 @@ amp_console(catpitamp_memory_probe  "CatpitAmpMemoryProbe"  CatpitAmp  tests/Mem
 # AN AMP'S GATES, the same two for the cockpit and every rover, run as that amp — what tells one amp
 # from another, the gates read in tests/AmpGate.h. Its channels with no window at all — as many as
 # CHANNELS says, each with its own memory and what it opens on, moved by CHANNEL the way a host moves
-# it; the rover's gears and the Boost each holds, PARK, the cockpit's DRIVE on its dial — and its set as
+# it; the rover's gears and the Boost each holds, the cockpit's DRIVE on its dial — and its set as
 # it — and its set as the build lays it out in the factory folder, under its own list, whole and nothing
 # else; that one reads pack manifests (DeviceLibrary.h, through namz).
 set(AMP_SET_GATE_LIBRARIES felitronics::nam juce::juce_core juce::juce_events juce::juce_gui_basics)

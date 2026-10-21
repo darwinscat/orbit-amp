@@ -139,8 +139,8 @@ struct Plan
     std::array<juce::Point<float>, 4> wiperKeys {};     // no keys for the wipers
     float wiperKeySize = 0.0f;                      // the key's render, whose face fills the hole
 
-    /** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches on its right — the product's
-        gears, CLEAN, CRUNCH, HI-GAIN, stand at its `stops` from the top, as many as it has
+    /** THE GEAR LEVER'S SLOT: straight, and its notches on its right — the product's gears, CLEAN,
+        CRUNCH, HI-GAIN, stand at its `stops` from the top, as many as it has
         (RedPawLineup.h): in the notches the picture paints, or, where a product spreads fewer gears down a
         slot painted for more, at places of its own, the picture baked with its notches there and none
         where no gear stands (tools/bake-art). A position is where the lever's stem stands: seen from
@@ -151,11 +151,10 @@ struct Plan
     juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
     float slotX  = 798.3f;          // the stem in the slot
     float notchX = 814.0f;          // ...and in a notch
-    float slotTopY = 694.0f;        // PARK: the stem at the slot's top end
     // Where the gears stand, top to bottom. Two gears down a slot painted for three notches, 733.8, 776
-    // and 817.5, spread evenly: PARK, then a step of 61.75 to the middle and another to the third notch,
-    // so the slot is the lever's to its end — the picture baked with the first two filled in and the
-    // middle one the second, copied up (tools/bake-art).
+    // and 817.5, spread evenly from the slot's top end at 694: a step of 61.75 to the middle and another
+    // to the third notch, so the slot is the lever's to its end — the picture baked with the first two
+    // filled in and the middle one the second, copied up (tools/bake-art).
     std::vector<float> stops { 755.75f, 817.5f };
     float leverWidth = 124.0f;      // the lever's render, grip and collar, this wide: over the plate's edges
     float collarSink = 3.0f;        // how far the collar's foot goes past the position, into the slot
@@ -166,7 +165,6 @@ struct Plan
     juce::Point<float> turbo { 921.5f, 787.3f };
     float turboSize = 52.0f;        // the button's render
     juce::Point<float> turboName { 921.5f, 682.0f };
-    juce::Rectangle<float> turboLid { 873.5f, 689.0f, 101.0f, 168.0f };   // the hatch shut (Art::turboLid): from the open cover's top to the frame's foot
 
     /** THE THREE WELLS — REVERB over DELAY on the left, CAB on the right — and the row each one's words
         are written in: on REVERB's and DELAY's upper rims, which the picture is baked taller to carry them

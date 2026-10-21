@@ -103,8 +103,8 @@ namespace
     }
 
     const std::array<Rover, 3> rovers {{
-        // REDPAWAMP: two gears down a slot painted for three, spread evenly — PARK, then a step of 61.75 to
-        // the middle and another to the third notch. The first two notches are filled in, and the middle
+        // REDPAWAMP: two gears down a slot painted for three, spread evenly from the slot's top end at 694 —
+        // a step of 61.75 to the middle and another to the third notch. The first two notches are filled in, and the middle
         // one is the second, copied up. A notch is cut 805..829 down and out to 824, its bevels' corners
         // reaching 803.5 and 831.5 on the slot's lit edge, 809.5..811.5; the straight run over the third is
         // 789..803.5. The plate right of it is plain out to 850.
@@ -157,7 +157,7 @@ namespace
              { 69.0f,   824.0f, 62.0f, 63.0f },       // the slant 55..97 x 834..877 as painted, moved in with its plate
              { 1541.0f, 824.0f, 62.0f, 63.0f } }} },  // the slant 1575..1617 x 834..877 as painted, moved in with its plate
 
-        // AMBERPAWAMP: five ticks right of a straight slot, PARK and four places below it; a fourth gear's
+        // AMBERPAWAMP: five ticks right of a straight slot, the top one no place and four places below it; a fourth gear's
         // tick, past its three, is painted over — the spare tick's white bar is 926..946.5 x 702..708: over
         // it, the plain plate just above, mirrored down and back, faded in at the fill's top, bottom and
         // right. The wells' words have room as painted, and its corner slots are painted: nothing grows. No
@@ -399,10 +399,9 @@ Pictures bakeRover (const juce::String& face, const Sources& sources)
     out.push_back ({ "lever-glow.webp", glowOf (lever, leverGlowPad) });
     out.push_back ({ "fader-cap-light.webp", lifted (sources.load ("fader-cap.png"), faderCapLift) });
 
-    // ...and the renders only some rovers carry: never another rover's.
-    for (const char* name : { "turbo-lid", "emblem" })
-        if (sources.has (juce::String (name) + ".png"))
-            out.push_back ({ juce::String (name) + ".webp", juce::Image (sources.load (juce::String (name) + ".png")) });
+    // ...and the render only some rovers carry: never another rover's.
+    if (sources.has ("emblem.png"))
+        out.push_back ({ "emblem.webp", juce::Image (sources.load ("emblem.png")) });
 
     return out;
 }

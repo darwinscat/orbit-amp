@@ -9,7 +9,7 @@
     product, and run as it (CMakeLists.txt: amp_set_test, amp_console). What tells the products apart is
     said here, once, in the table below — apart from each product's lineup, so that a lineup that drifts
     is caught rather than read back: the captures its channels play and what each opens on, whether they
-    go in pairs, a gear and its TURBO, whether it has PARK, the marks on its DRIVE's dial, the variable that
+    go in pairs, a gear and its TURBO, the marks on its DRIVE's dial, the variable that
     tells its channel gate the home is its own (tests/gates.txt), and the words its gate says what it found
     in. How many of the channels the build plays, GATE_CHANNELS, the build says. */
 
@@ -80,7 +80,6 @@ struct Product
         first so many. */
     std::vector<Channel> channels;
 
-    bool park;                      // PARK: the lever's top end, the whole amp out of the sound
     const char* gears;              // where the channels go in pairs, a gear and its TURBO, what its gate says of them; none where they do not
     std::vector<DialMark> dial;     // none where DRIVE plays one capture
 
@@ -95,7 +94,7 @@ inline const Product& product()
 {
     const auto rover = [] (const char* name, std::vector<Channel> channels, const char* gears)
     {
-        return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), true, gears, {},
+        return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), gears, {},
                          "all the product's channels' packs are installed",
                          "every channel's tone knobs are its pack's tones, as many as it lists, knob i its tone i",
                          "...and every one on the build's RED GIANT" };
@@ -103,7 +102,7 @@ inline const Product& product()
 
     static const Product products[] {
         // The cockpit: the X88-IR's four channels, one to a detent of the throttle and each its own
-        // memory, no PARK. The two clean ones stand in a hall with a little delay behind them, the two
+        // memory. The two clean ones stand in a hall with a little delay behind them, the two
         // driven ones each in a room of its own and no delay, all four at the room's own default share.
         // Each pack is captures shot at several hours of the gear's own knob, and DRIVE stands on them.
         { "CatpitAmp", "cockpit", "CATPIT_GATE_OWNS_HOME",
@@ -113,7 +112,7 @@ inline const Product& product()
               { "x88-ir-crunch-2abb",    "", "Plate",    30.0f, 0.0f,  "the third opens on a plate, and no delay" },
               { "x88-ir-overdrive-0344", "", "Ambience", 30.0f, 0.0f,  "...the fourth on an ambience, and none either" },
           },
-          false, nullptr,
+          nullptr,
           {
               { 1.0f, 5.0,  "the capture at the top of DRIVE was shot at five o'clock" },
               { 0.5f, 12.0, "...the one in the middle at twelve" },

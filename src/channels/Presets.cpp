@@ -64,8 +64,6 @@ juce::String Presets::sound() const
     auto tree = amp.apvts.copyState();
 
     setInTree (tree, params::inTrim, 0.0f);
-    if (const auto* park = channels.lineup().parkId)
-        setInTree (tree, park, 0.0f);                           // ...nor PARK
     if (const auto* former = amp.product().formerInputZeroId)   // ...nor the zero 0.8.0 noted beside INPUT
         tree.removeProperty (former, nullptr);
     setInTree (tree, params::blockSmooth (params::preampId), 1.0f);    // ...nor DRIVE's way: as every state had it before there was a choice
@@ -108,11 +106,6 @@ bool Presets::load (const juce::String& name)
     // INPUT stays where the player has it.
     if (auto* in = amp.apvts.getParameter (params::inTrim))
         setInTree (tree, params::inTrim, in->convertFrom0to1 (in->getValue()));
-
-    // ...and the amp stays parked or playing as it is.
-    if (const auto* park = channels.lineup().parkId)
-        if (auto* p = amp.apvts.getParameter (park))
-            setInTree (tree, park, p->convertFrom0to1 (p->getValue()));
 
     // ...and DRIVE goes on turning the way the settings have it.
     const auto smooth = params::blockSmooth (params::preampId);
