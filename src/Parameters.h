@@ -232,7 +232,7 @@ inline constexpr const char* cabIr = "cab_ir";
 // the table read here. What a session keeps of `cabIr` is an INDEX into this list — the IR's number in
 // the catalog, which is for good: a new cabinet takes the next one, and nothing already here ever moves,
 // so a session saved on WUMBO opens on WUMBO. The menu does not show them in this order; it shows them by
-// the shelf's folders, and inside each by cabinet (cabShelves, below). The catalog's default, DARK MATTER,
+// the shelf's folders, and inside each by cabinet (cabShelves, below). The catalog's default, RED GIANT,
 // is the shipping default, the cabinet every face's channels open on too.
 inline const juce::StringArray cabIrNames = []
 {

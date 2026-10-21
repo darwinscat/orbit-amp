@@ -1163,15 +1163,48 @@ int main()
                 if (juce::String (orbitamp::AmpProcessor::cabIrBytes (gateAmp(), i).folder) != orbitamp::AmpProcessor::cabIrBytes (gateAmp(), shelf.first).folder)
                     split.addIfNotAlreadyThere (juce::String::fromUTF8 (shelf.about).upToFirstOccurrenceOf (" \xc2\xb7", false, false));
         report ("...every cabinet's IRs lie in one folder of the shelf", split.isEmpty(), split.joinIntoString (", "));
-        report ("...and DARK MATTER in Darwin's Cat's own, the Orange's",
+        report ("...and RED GIANT in Darwin's Cat's own, the Orange's",
                 juce::String (orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault).folder) == "Orange PPC212V");
 
         // The default is a NUMBER, and a number names a cabinet only while the list stands still.
         const auto fresh = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         const auto opens = fresh->cabChoice();
-        report ("...and a fresh instance opens on DARK MATTER",
-                ! opens.isUser() && orbitamp::params::cabIrNames[opens.factory] == "DARK MATTER",
+        report ("...and a fresh instance opens on RED GIANT",
+                ! opens.isUser() && orbitamp::params::cabIrNames[opens.factory] == "RED GIANT",
                 orbitamp::params::cabIrNames[opens.factory]);
+
+        // A SESSION OF BEFORE, when every amp opened on DARK MATTER (AmpProcessor::takeFormerCabinet):
+        // the same session as a build of then saved it — no note of its opening cabinet on any state —
+        // opens on RED GIANT; one on another cabinet keeps it; and one saved now on DARK MATTER, the
+        // player's pick by its note, keeps that.
+        const auto savedOn = [] (const char* cabinet, bool before)
+        {
+            const auto a = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
+            a->chooseCabFactory (orbitamp::params::cabIrNames.indexOf (cabinet));
+            juce::MemoryBlock session;
+            a->getStateInformation (session);
+            if (before)
+            {
+                auto tree = juce::ValueTree::fromXml (*juce::AudioProcessor::getXmlFromBinary (session.getData(), (int) session.getSize()));
+                std::function<void (juce::ValueTree)> unnote = [&unnote] (juce::ValueTree t)
+                {
+                    t.removeProperty (orbitamp::AmpProcessor::cabOpeningId, nullptr);
+                    for (auto child : t)
+                        unnote (child);
+                };
+                unnote (tree);
+                session.reset();
+                juce::AudioProcessor::copyXmlToBinary (*tree.createXml(), session);
+            }
+            const auto b = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
+            b->setStateInformation (session.getData(), (int) session.getSize());
+            const auto c = b->cabChoice();
+            return c.isUser() ? juce::String ("an IR of its own") : orbitamp::params::cabIrNames[c.factory];
+        };
+        const auto oldDark = savedOn ("DARK MATTER", true), oldOther = savedOn ("WUMBO", true), newDark = savedOn ("DARK MATTER", false);
+        report ("a session of before on DARK MATTER opens on RED GIANT", oldDark == "RED GIANT", oldDark);
+        report ("...one of before on another cabinet keeps it",        oldOther == "WUMBO", oldOther);
+        report ("...and one saved now on DARK MATTER keeps it",        newDark == "DARK MATTER", newDark);
     }
 
     // A CABINET IR OF THE PLAYER'S OWN travels with the state, whole. Picked from a file, saved with

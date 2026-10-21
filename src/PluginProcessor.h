@@ -319,6 +319,31 @@ public:
         saw — is left as it is. Any thread: it touches nothing but `tree`. */
     void takeFormerTrims (juce::ValueTree& tree) const;
 
+    /** A STATE SAVED UNDER ANOTHER OPENING CABINET, on the one every amp opens on now (params::cabIrDefault,
+        RED GIANT). Every state carries a note of the cabinet a fresh instance opened on when it was saved
+        (`cabOpeningId`, the catalog's number); one with no note was saved before the note, when that was
+        DARK MATTER. A state cannot say whether it plays its opening cabinet because the player chose it or
+        because nobody chose another, and the old one is taken as nobody's choice: in every tree of the
+        state's type in `tree` — the live one, each register, a preset — whose note names another cabinet
+          - `cabIr` on that cabinet's number is moved to the opening one's;
+          - where the product's channels play the build's cabinets as IRs of their own (a ProductEngine:
+            the cockpit and the rovers), the cabinet playing under the old one's file name is made the new
+            one — the new one's bytes into the IR store, their key, name and `from` on the state — and
+            every channel's memory that names the old one's file names the new one's;
+        and the note is made the opening cabinet's. Any other cabinet — another of the shelf's, an IR of
+        the player's, one the state carries — is kept, and so is the old opening cabinet in a state whose
+        note says it was the player's pick. Any thread: it touches `tree`, and the IR store, which takes
+        bytes from any. */
+    void takeFormerCabinet (juce::ValueTree& tree);
+
+    /** The note (takeFormerCabinet): on every state, from the first moment of the processor's (its
+        constructor) and of every state that lands. */
+    static constexpr const char* cabOpeningId = "cab_opening";
+
+    /** Where a channel's memory names its cabinet, by its file's name without the extension
+        (channels/Channels.cpp) — said here, for takeFormerCabinet to read it by. */
+    static constexpr const char* recordCabinetId = "cabinet";
+
     /** The state tree's type — a constant, so code off the message thread can recognise a state
         inside a saved envelope without touching the live tree. */
     static constexpr const char* stateType = "state";
@@ -986,7 +1011,7 @@ public:
 
     /** The cabinet shelf — the family's (device/FactoryShelf.h), in params::cabIrNames order, and the
         folder of it each IR lies in. The face draws the same bytes the engine convolves. A number the
-        build does not carry (a face, and the shelf's `Other`) is DARK MATTER's, the default's. */
+        build does not carry (a face, and the shelf's `Other`) is RED GIANT's, the default's. */
     struct IrBytes { const char* data; int size; const char* folder; };
     static const IrBytes& cabIrBytes (const Product&, int index);
 

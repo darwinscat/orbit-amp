@@ -20,7 +20,7 @@ namespace
     const juce::Identifier recordId { "channel" };
     const juce::Identifier activeId { "active" };
     const juce::Identifier indexId  { "i" };
-    const juce::Identifier cabinetId { "cabinet" };
+    const juce::Identifier cabinetId { AmpProcessor::recordCabinetId };    // ...which a state of before is converted by
 
     // A pair's record (Lineup::pairs) says which of the two it was left playing, and the tones by their
     // knobs: the two packs may keep them in different places.

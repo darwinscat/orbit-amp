@@ -191,6 +191,7 @@ void Chrome::showPresetMenu()
                 return;
 
             amp.takeEmbeddedIrs (tree);   // a cabinet IR it carries goes to the store, not the history
+            amp.takeFormerCabinet (tree); // one saved while every amp opened on DARK MATTER, on RED GIANT
 
             // Through the history, so loading a preset is one undoable step rather than a silent
             // replacement of everything behind undo's back.

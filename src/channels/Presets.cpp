@@ -103,6 +103,7 @@ bool Presets::load (const juce::String& name)
 
     amp.takeEmbeddedIrs (tree);     // a cabinet IR it carries goes to the store, not into the history
     amp.takeFormerTrims (tree);     // a preset of 0.8.0's: its gate set where 0.8.0's key heard the guitar
+    amp.takeFormerCabinet (tree);   // ...and one saved while every amp opened on DARK MATTER, on RED GIANT
 
     // INPUT stays where the player has it.
     if (auto* in = amp.apvts.getParameter (params::inTrim))

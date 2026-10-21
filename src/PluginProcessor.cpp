@@ -198,8 +198,11 @@ AmpProcessor::AmpProcessor (const Product& product)
     // The names go in BEFORE the history looks, so a plugin that has just opened already knows
     // which device it is playing — and knows it without that knowledge being an edit. Resetting
     // takes the baseline over the seeded tree; marking it saved undoes the dirty flag the reset
-    // raises, which is right: nothing has been changed, the state was merely completed.
+    // raises, which is right: nothing has been changed, the state was merely completed. The state says
+    // which cabinet a fresh one opens on, so that one it saves is never taken for one of before
+    // (takeFormerCabinet).
     seedSwitchNames();
+    apvts.state.setProperty (cabOpeningId, params::cabIrDefault, nullptr);
     history.reset();
     history.markSaved();
 
@@ -359,8 +362,10 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         // history would otherwise keep megabytes in its baseline and compare them every tick.
         self.takeEmbeddedIrs (t);
 
-        // ...and a state of 0.8.0's, its trim and its gate where they belong now.
+        // ...and a state of 0.8.0's, its trim and its gate where they belong now; one saved while DARK
+        // MATTER was the cabinet every amp opened on, on the one they open on now.
         self.takeFormerTrims (t);
+        self.takeFormerCabinet (t);
 
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
         // the top of setStateInformation also means it is armed AFTER the tree has landed, which
@@ -432,6 +437,62 @@ void AmpProcessor::takeFormerTrims (juce::ValueTree& tree) const
 
     for (auto child : tree)
         takeFormerTrims (child);
+}
+
+void AmpProcessor::takeFormerCabinet (juce::ValueTree& tree)
+{
+    if (! tree.isValid())
+        return;
+
+    if (tree.hasType (stateType))
+    {
+        // A state with no note is one of before the note, when every amp opened on DARK MATTER.
+        const int now    = params::cabIrDefault;
+        const int former = tree.hasProperty (cabOpeningId) ? (int) tree.getProperty (cabOpeningId)
+                                                           : params::cabIrNames.indexOf ("DARK MATTER");
+        if (former >= 0 && former < params::cabIrNames.size() && former != now)
+        {
+            if (auto p = tree.getChildWithProperty ("id", juce::String (params::cabIr));
+                p.isValid() && juce::roundToInt ((float) p.getProperty ("value")) == former)
+                p.setProperty ("value", (float) now, nullptr);
+
+            // A face plays the build's cabinets as IRs of its own, by their files' names, and a state
+            // lands on it with no window to settle it (channels::Channels::align): the one it played
+            // becomes the new one there and then — its bytes into the store, the state their key, and
+            // its name and `from` the new file's, which lies in the same folder of the shelf. With no
+            // bytes for it (no factory folder) it lets go instead, as a cabinet that is not there. The
+            // channels' memories name the new one's file where they named the old one's.
+            if (ownProduct.makeEngine != nullptr)
+            {
+                const auto file = [] (int n) { return juce::String::fromUTF8 (catalog::irs[n].file); };
+                const auto stem = [&file] (int n) { return file (n).upToLastOccurrenceOf (".", false, false); };
+                const auto was = stem (former), is = stem (now);
+                if (tree.getProperty (params::cabIrUserName).toString() == was)
+                {
+                    const auto& ir = cabIrBytes (ownProduct, now);
+                    const auto key = ir.data != nullptr ? cabIrEmbeds.add (juce::MemoryBlock (ir.data, (size_t) ir.size)) : juce::String();
+                    if (key.isNotEmpty())
+                    {
+                        tree.setProperty (params::cabIrUserKey, key, nullptr);
+                        tree.setProperty (params::cabIrUserName, is, nullptr);
+                        tree.setProperty (params::cabIrUserFrom, tree.getProperty (params::cabIrUserFrom).toString()
+                                                                     .replace (file (former), file (now)), nullptr);
+                    }
+                    else
+                        for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                            tree.removeProperty (id, nullptr);
+                }
+                for (auto node : tree)
+                    for (auto record : node)
+                        if (record.getProperty (recordCabinetId).toString() == was)
+                            record.setProperty (recordCabinetId, is, nullptr);
+            }
+        }
+        tree.setProperty (cabOpeningId, now, nullptr);
+    }
+
+    for (auto child : tree)
+        takeFormerCabinet (child);
 }
 
 juce::String AmpProcessor::loadedAs() const
@@ -541,7 +602,7 @@ const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (const Product& product, i
     jassert (shelf.size() == (size_t) params::cabIrNames.size());
     const auto& ir = shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
 
-    // A place the product holds empty — a face plays none of the shelf's `Other` — plays DARK MATTER, the
+    // A place the product holds empty — a face plays none of the shelf's `Other` — plays RED GIANT, the
     // cabinet every product opens on: a host that moves the number there hears a cabinet the product has.
     // With the factory folder missing that one is empty too, and no bytes is what the cabinet is given:
     // the cabinet loads nothing then: where it is loaded, an IR with no bytes is passed over.
@@ -894,6 +955,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // starts in it rather than ramping into it — the machine's, or under OFF the last one that was not,
     // OFF's crossfade starting where OFF says. A prepare it refuses (a layout with no input at all)
     // leaves it OFF, and the mode in force says OFF rather than the machine's AUTO.
+    // With HUM switched off in the build (Features.h) it is never prepared at all: it stays out of the
+    // sound and costs nothing, whatever the machine says or a session saved with HUM on — the way a
+    // refused prepare leaves it, OFF in force and no LEARN of its own.
     {
         const int wanted = humWanted->load (std::memory_order_relaxed);
         auto p = humStage.params();
@@ -955,9 +1019,6 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     {
         blockFade[(size_t) i].prepare (sampleRate);
         blockFade[(size_t) i].snapTo (linkWorks ((params::ChainRow) i));
-    // With HUM switched off in the build (Features.h) it is never prepared at all: it stays out of the
-    // sound and costs nothing, whatever the machine says or a session saved with HUM on — the way a
-    // refused prepare leaves it, OFF in force and no LEARN of its own.
     }
 
     pumpDeviceWork();
