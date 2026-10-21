@@ -140,7 +140,7 @@ private:
         silently missing. */
     struct Named
     {
-        juce::String      maker, model, slot, origin;
+        juce::String      maker, model, origin;
         juce::StringArray serials;
         juce::Array<int>  years;
         int               captures = 0;   // model files in the box's packs — one per captured setting
@@ -217,7 +217,6 @@ private:
             for (const auto& pack : device::DeviceLibrary::scan (product, device::DeviceLibrary::Slot::any))
             {
                 Named n;
-                n.slot = slotName (pack.slot);
 
                 for (const auto& stage : pack.rig.chain)
                     if (stage.kind == namz::rig::StageKind::Nam)
@@ -284,7 +283,7 @@ private:
             auto head = r.removeFromTop (headerH);
             g.setColour (theme::txFaint);
             const juce::Font hf = theme::displayFont (11.0f);
-            drawRow (g, head, hf, 0.08f, "MAKER", "MODEL", "SLOT", "CAPTURES", "YEAR", "SERIAL", "ORIGIN");
+            drawRow (g, head, hf, 0.08f, "MAKER", "MODEL", "CAPTURES", "YEAR", "SERIAL", "ORIGIN");
             g.setColour (theme::hair2);
             g.fillRect (r.removeFromTop (1));
 
@@ -324,7 +323,6 @@ private:
                 drawCell (g, row.removeFromLeft (makerW), f, d.maker.isNotEmpty() ? d.maker : juce::String ("-"));
                 drawCell (g, row.removeFromLeft (modelW), f, d.model);
                 g.setColour (theme::txFaint);
-                drawCell (g, row.removeFromLeft (slotW),     f, d.slot);
                 drawCell (g, row.removeFromLeft (capturesW), f, d.captures > 0 ? juce::String (d.captures) : juce::String());
                 drawCell (g, row.removeFromLeft (yearW),     f, d.yearsText());
                 drawCell (g, row.removeFromLeft (serialW), f, d.serials.joinIntoString (", "));
@@ -343,9 +341,8 @@ private:
         }
 
         static void drawRow (juce::Graphics& g, juce::Rectangle<int> row, const juce::Font& f, float tracking,
-                             const juce::String& a, const juce::String& b, const juce::String& c,
-                             const juce::String& d, const juce::String& e, const juce::String& h,
-                             const juce::String& i)
+                             const juce::String& a, const juce::String& b, const juce::String& d,
+                             const juce::String& e, const juce::String& h, const juce::String& i)
         {
             const auto cell = [&] (int w, const juce::String& t)
             {
@@ -353,34 +350,23 @@ private:
                                     juce::Justification::centredLeft);
             };
 
-            cell (makerW, a); cell (modelW, b); cell (slotW, c); cell (capturesW, d);
+            cell (makerW, a); cell (modelW, b); cell (capturesW, d);
             cell (yearW, e); cell (serialW, h);
             theme::drawTracked (g, i, row.withTrimmedRight (10).toFloat(), f, tracking,
                                 juce::Justification::centredLeft);
         }
 
-        static juce::String slotName (device::DeviceLibrary::Slot s)
-        {
-            using Slot = device::DeviceLibrary::Slot;
-            switch (s)
-            {
-                case Slot::pedal:    return "PEDAL";
-                case Slot::preamp:   return "AMP";
-                case Slot::any:
-                case Slot::none:     break;   // a slot this instrument does not have has no word
-            }
-            return {};
-        }
-
         static constexpr int rowH     = 20;
         static constexpr int headerH  = 18;
         static constexpr int sectionH = 18;
-        static constexpr int makerW    = 150;
-        static constexpr int modelW    = 190;
-        static constexpr int slotW     = 62;
-        static constexpr int capturesW = 70;
-        static constexpr int yearW     = 48;
-        static constexpr int serialW   = 100;
+        // No SLOT: every device the set ships is an amp, and a column that says so on every row says
+        // nothing (Oleh, 21.10). Its width went where the words were cut — CAPTURES' own head, the
+        // serials, ORIGIN.
+        static constexpr int makerW    = 120;
+        static constexpr int modelW    = 150;
+        static constexpr int capturesW = 96;
+        static constexpr int yearW     = 56;
+        static constexpr int serialW   = 170;
 
         juce::Array<Named> shipped, added;
         int width = 640;
