@@ -115,6 +115,8 @@ public:
     void mouseExit (const juce::MouseEvent&) override   { setHover (-1); }
 
 private:
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
+
     juce::StringArray names;
     int lit   = -1;
     int hover = -1;

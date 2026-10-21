@@ -239,6 +239,8 @@ private:
     std::unique_ptr<juce::ParameterAttachment> hpfSlopeAtt, lpfSlopeAtt, b3OnAtt, b3DbAtt;
     std::vector<std::unique_ptr<juce::ParameterAttachment>> refreshAtts;
 
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EqSection)
 };
 

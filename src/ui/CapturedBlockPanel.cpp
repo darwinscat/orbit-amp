@@ -1248,7 +1248,7 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
     // at whatever level the hardware happened to give it, some 8-10 dB away from every neighbour, and
     // nothing else on this face would report it. The number itself is indication; the missing one is
     // a warning, and it is written in the hand's own colour so it cannot be mistaken for furniture.
-    if (block.isReady())
+    if (block.isReady() && showsLoudnessTag)
     {
         // …OF THE MODEL THAT IS SOUNDING. The player used to answer for slot 0 whatever was audible,
         // and slots go by knot parity: on an odd capture the whole sound comes out of slot 1, so this

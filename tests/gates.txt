@@ -32,6 +32,7 @@ eqlink             orbitamp_eqlink_test
 tuner              orbitamp_tuner_test
 gatelearn          orbitamp_gatelearn_test
 nofactory          orbitamp_no_factory_test
+webface            orbitamp_webface_test
 
 # The sea's CPU half (AmberPawAmp's windscreen), against the prototype it was ported from.
 titan-world        titan_world_test
