@@ -107,8 +107,12 @@ public:
     // longer a second storey under the rest. Row 2 is a combo and a control or two.
     static constexpr int row1H  = 200;   // 460 -> 378 (the combo onto the border, the console's row and curve trimmed);
                                          // 378 -> 200 when the EQ curve became a page of the picture well
-    static constexpr int row2H  = 220;
-    static constexpr int rowGap = 12;
+    static constexpr int row2H  = 200;   // 220 -> 200 with the frames gone: every block the AMP's height
+    // Between the rows, NOTHING of the faceplate's own. With the frames' bottom lines gone, what parts
+    // the AMP's last controls from the next row's names is the AMP's own bottom padding and the room the
+    // lower blocks keep over their top lines for what rides them — twenty-odd units, which reads as a
+    // clear break; the twelve that stood here were a gap between two lines that are not there any more.
+    static constexpr int rowGap = 0;
     // Lane metrics. No horizontal inset: the lane's edges ARE the panel's edges, so nothing is
     // almost-aligned with anything.
     //
