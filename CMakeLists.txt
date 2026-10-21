@@ -970,6 +970,39 @@ add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 # pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
 # tree keeps but OrbitAmp should not play has no place in resources/set/Devices.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
+
+# WHAT EACH OTHER AMP PLAYS of the set, said once — its row in THE AMPS names it by these.
+set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
+set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
+set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
+set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
+
+# A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
+# installer/family.ini names; the packs only an amp it leaves out plays — today FrostPawAmp's ReVolt and
+# AmberPawAmp's V4 — are not OrbitAmp's there either, so they wait for their own amp. Built here, OrbitAmp
+# plays them all.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini" ORBITAMP_RELEASED REGEX "^amps=")
+string(REGEX REPLACE "^amps=" "" ORBITAMP_RELEASED "${ORBITAMP_RELEASED}")
+separate_arguments(ORBITAMP_RELEASED)
+set(ORBITAMP_SHIPS_EVERY_PACK ON)
+if(NOT ORBITAMP_DEV_FACTORY)
+    set(kept "")
+    set(left "")
+    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp)
+        string(TOUPPER "${amp}" key)
+        if(amp IN_LIST ORBITAMP_RELEASED)
+            list(APPEND kept ${${key}_SET})
+        else()
+            list(APPEND left ${${key}_SET})
+        endif()
+    endforeach()
+    foreach(pack IN LISTS left)
+        if(NOT pack IN_LIST kept)
+            list(REMOVE_ITEM ORBITAMP_PLAYS "${pack}")
+            set(ORBITAMP_SHIPS_EVERY_PACK OFF)
+        endif()
+    endforeach()
+endif()
 list(LENGTH ORBITAMP_PLAYS ORBITAMP_SET_COUNT)
 message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the factory folder")
 
@@ -1296,8 +1329,8 @@ set(ROVER_LIBRARIES
 # version and tags of its own, catpit-vX.Y.Z; from 0.8.0 on every amp's update check reads the family's.
 # ----------------------------------------------------------------------------
 
-# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole
-# (ORBITAMP_PLAYS, above), and the whole cabinet shelf.
+# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole — in a release
+# but the packs of an amp the release leaves out (ORBITAMP_PLAYS, above) — and the whole cabinet shelf.
 add_amp(OrbitAmp      CODE Oamp
     SOURCES   ${ORBITAMP_SOURCES}
     LIBRARIES
@@ -1319,7 +1352,7 @@ add_amp(CatpitAmp     CODE Ctpt    BY_NAME
         OrbitAmpShaders              # the sky's shaders
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sky, on the GPU
-    SET       "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
+    SET       ${CATPITAMP_SET})
 
 # RedPawAmp — the rover: a third face over the same processor (src/redpaw), the dashboard of a Mars rover
 # with the drive across Mars in its windscreen. Four channels — the Friedman IR-X's two, each with its
@@ -1330,7 +1363,7 @@ add_amp(RedPawAmp     CODE Rdpw    BY_NAME
     ART       ${REDPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} src/redpaw/RedPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
+    SET       ${REDPAWAMP_SET})
 
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
 # over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
@@ -1343,7 +1376,7 @@ add_amp(FrostPawAmp   CODE Frpw    BY_NAME
     ART       ${FROSTPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
+    SET       ${FROSTPAWAMP_SET})
 
 # AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
 # dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy
@@ -1355,7 +1388,7 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     ART       ${AMBERPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
+    SET       ${AMBERPAWAMP_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — each a face's own, so built only by name (amp_console, amp_set_test).
@@ -2018,7 +2051,8 @@ target_link_libraries(orbitamp_library_test PRIVATE
 juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
 target_sources(orbitamp_set_test PRIVATE tests/OrbitAmpSetTests.cpp)
 target_include_directories(orbitamp_set_test PRIVATE src)
-target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+    ORBITAMP_SHIPS_EVERY_PACK=$<BOOL:${ORBITAMP_SHIPS_EVERY_PACK}>)     # a release leaves the unreleased amps' packs out
 target_link_libraries(orbitamp_set_test PRIVATE
     OrbitAmpCabinetCatalog           # the family's cabinet shelf, by the catalog's table
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
