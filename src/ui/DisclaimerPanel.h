@@ -309,9 +309,17 @@ private:
             if (list.isEmpty())
                 return;
 
+            // The section's sum on its own head: how many NAM captures it holds, every row's together.
+            int total = 0;
+            for (const auto& d : list)
+                total += d.captures;
+            const auto head = total > 0 ? title + juce::String::fromUTF8 (" \xe2\x80\x94 ") + juce::String (total)
+                                                + (total == 1 ? " NAM CAPTURE" : " NAM CAPTURES")
+                                        : title;
+
             r.removeFromTop (6);
             g.setColour (theme::violet);
-            theme::drawTracked (g, title, r.removeFromTop (sectionH).toFloat(),
+            theme::drawTracked (g, head, r.removeFromTop (sectionH).toFloat(),
                                 theme::displayFont (11.0f), 0.10f, juce::Justification::centredLeft);
 
             const juce::Font f { juce::FontOptions (textH) };
