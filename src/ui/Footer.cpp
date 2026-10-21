@@ -58,13 +58,19 @@ Footer::Footer (AmpProcessor& processor)
     };
     addAndMakeVisible (stereo);
 
+    // Its place is as wide as its longest word, whichever is showing.
+    for (const auto& mode : params::stereoModes)
+    {
+        stereo.setButtonText (mode.toUpperCase());
+        stereoSlotW = juce::jmax (stereoSlotW, stereo.preferredWidth (0));
+    }
+
     stereoAttachment = std::make_unique<juce::ParameterAttachment> (
         *amp.apvts.getParameter (params::stereoMode),
         [this] (float v)
         {
             stereo.setButtonText (params::stereoModes[juce::jlimit (0, params::stereoModes.size() - 1,
                                                                     juce::roundToInt (v))].toUpperCase());
-            resized();   // the item is as wide as its word, so the word starts where the column does
         });
 
     stereoAttachment->sendInitialUpdate();
@@ -126,23 +132,33 @@ void Footer::timerCallback()
 
 Footer::Places Footer::places() const
 {
-    const int blockW = firstWidth + juce::jmax (rateWidth + loadWidth, stampWidth);
+    const auto font  = theme::displayFont (13.0f);
+    const auto width = [&font] (const juce::String& s)
+    {
+        return juce::roundToInt (std::ceil (theme::trackedWidth (s, font, 0.1f)));
+    };
 
-    auto r = getLocalBounds().reduced (0, 3);
-    r = r.withTrimmedLeft (juce::jmax (0, r.getWidth() - blockW));
+    constexpr int dotRoom = 14;   // the update dot rides after the stamp
 
-    auto line1 = r.removeFromTop (r.getHeight() / 2);
-    auto line2 = r;
+    // The longest each can read: a rate at 88.2 and a load at three figures.
+    const int w[] = { stereoSlotW, width ("88.2 KHZ"), width ("DSP 100%"), width ("DEVICES"),
+                      width (stampText) + dotRoom };
+
+    int total = 0;
+    for (const int x : w)
+        total += x;
+
+    auto r = getLocalBounds();
+    const int gap = juce::jmax (8, (r.getWidth() - total) / 4);
 
     Places p;
-    // The item centres its word, so it is the word's width plus the same air either side, shifted
-    // left by that air: the word itself starts on the column's edge, over DEVICES.
-    constexpr int air = 6;
-    p.stereo  = line1.removeFromLeft (firstWidth).withWidth (stereo.preferredWidth (2 * air)).translated (-air, 0);
-    p.rate    = line1.removeFromLeft (rateWidth);
-    p.load    = line1.removeFromLeft (loadWidth);
-    p.devices = line2.removeFromLeft (firstWidth);
-    p.stamp   = line2.removeFromLeft (stampWidth);
+    // The stereo item centres its word in its own place, and a place exactly the word's width
+    // drops the last letter — so the item is the place with a little air either side.
+    p.stereo  = r.removeFromLeft (w[0]).expanded (6, 0);  r.removeFromLeft (gap);
+    p.rate    = r.removeFromLeft (w[1]);  r.removeFromLeft (gap);
+    p.load    = r.removeFromLeft (w[2]);  r.removeFromLeft (gap);
+    p.devices = r.removeFromLeft (w[3]);  r.removeFromLeft (gap);
+    p.stamp   = r.removeFromLeft (w[4]);
     return p;
 }
 

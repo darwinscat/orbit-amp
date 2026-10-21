@@ -32,10 +32,9 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    /** The tuner's height: the facts stand in the right half of the tuner's row, in TWO lines —
-        the run (stereo, rate, load) over the pages (devices, the build stamp). One line of them at
-        the house floor of 13 is some five hundred units long, and the half has four hundred. */
-    static constexpr int designHeight = 44;
+    /** One line at the house floor of 13: the facts stand in the right half of the tuner's row,
+        which centres them on the tuner. */
+    static constexpr int designHeight = 26;
 
     /** The version window — the build stamp, the licence, the short trademark notice and the tip
         jar — opened by a click on the stamp itself. It used to have a second door in the gear's
@@ -53,19 +52,13 @@ private:
     void timerCallback() override;
     void showLoadBreakdown();
 
-    // Every width here is the 12 px one scaled by the 13/12 the type grew by: the same words,
-    // the same air around them. `rateWidth` and `loadWidth` are constants rather than literals
-    // because paint() draws in them and resized() puts the click target over them — two places
-    // that must never disagree, and did, as two bare numbers.
-    static constexpr int firstWidth = 120;    // the first column: the stereo mode over DEVICES
-    static constexpr int stampWidth = 184;    // the version + format line, under the rate and the load
-    static constexpr int rateWidth = 104;     // the host's sample rate
-    static constexpr int loadWidth = 108;     // "DSP 12%", and the door to the breakdown
-
-    /** Where every fact stands — one answer for paint() and resized(). The two lines are one block,
-        its columns left-aligned, the block against the row's right end. */
+    /** Where every fact stands — one answer for paint() and resized(), which must never disagree.
+        One line across the whole half: each fact as wide as its LONGEST reading (so a number that
+        moves never moves its neighbours), the room left over shared out evenly between them. */
     struct Places { juce::Rectangle<int> stereo, rate, load, devices, stamp; };
     Places places() const;
+
+    int stereoSlotW = 0;   // the stereo item's place: its longest word, MONO | STEREO | STEREO SPACE
 
     AmpProcessor& amp;
 
