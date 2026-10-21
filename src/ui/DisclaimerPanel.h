@@ -9,6 +9,8 @@
 
 #include <BinaryData.h>
 
+#include <set>
+
 namespace orbitamp
 {
 
@@ -138,7 +140,7 @@ private:
     {
         juce::String maker, model, slot, serial, origin;
         int          year = 0;
-        int          captures = 0;   // model files in the pack — one per captured setting
+        int          captures = 0;   // model files in the box's packs — one per captured setting
 
         bool operator< (const Named& o) const
         {
@@ -204,11 +206,15 @@ private:
                         n.serial = juce::String (stage.serialNumber).trim();
                         n.year   = stage.year;
 
-                        // How many times the box was actually recorded: one file per captured
-                        // setting. NOT the gain dial's declared points — a dial can state eleven
-                        // positions and be captured at nine, and this column is about the work done,
-                        // not about what the knob says.
-                        n.captures = (int) stage.device.files.size();
+                        // How many times the box was actually recorded: one FILE per captured
+                        // setting. Not the entries of `files` — a dial can state eleven positions and
+                        // be captured at nine, its bottom notches pointing at the capture above them
+                        // (namz FileEntry: the X88-IR's 0 and 30 play its 60) — and this column is
+                        // about the work done, not about what the knob says.
+                        std::set<std::string> recorded;
+                        for (const auto& f : stage.device.files)
+                            recorded.insert (f.id);
+                        n.captures = (int) recorded.size();
 
                         const auto designed = juce::String (stage.designedIn).trim();
                         const auto made     = juce::String (stage.madeIn).trim();
@@ -224,8 +230,12 @@ private:
                 if (n.model.isEmpty())
                     continue;
 
+                // One row a box: its channels are packs of their own (the X88-IR's four), and every
+                // one of them was recorded — their captures add up.
                 auto& into = pack.bundled ? shipped : added;
-                if (! into.contains (n))
+                if (const int at = into.indexOf (n); at >= 0)
+                    into.getReference (at).captures += n.captures;
+                else
                     into.add (n);
             }
 
