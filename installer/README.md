@@ -73,7 +73,11 @@ on by default); every release build passes `-DORBITAMP_DEV_FACTORY=OFF`.
 | VST3       | `/Library/Audio/Plug-Ins/VST3/<bundle>.vst3`              | `com.darwinscat.amps.vst3`         |
 | AU         | `/Library/Audio/Plug-Ins/Components/<bundle>.component`   | `com.darwinscat.amps.au`           |
 | CLAP       | `/Library/Audio/Plug-Ins/CLAP/<bundle>.clap`              | `com.darwinscat.amps.clap`         |
-| Standalone | `/Applications/<Amp>.app`                                 | `com.darwinscat.<amp>.standalone`  |
+| Standalone | `/Applications/Darwin's Cat/<Amp>.app`                    | `com.darwinscat.<amp>.standalone`  |
+
+The apps of earlier releases stood in `/Applications` itself. Each app's postinstall, once the app is in
+its folder, removes the one of the same name left in `/Applications` — only when its bundle id is this
+amp's (`com.darwinscat.<amp>`), so somebody else's app that carries the name stays.
 
 Each plug-in format's postinstall, once the family's bundle is in place, removes that format's
 `old_bundles` from the same folder (`OrbitAmp.vst3` … in `/Library/Audio/Plug-Ins/VST3`) and from that

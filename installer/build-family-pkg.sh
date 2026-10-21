@@ -8,7 +8,7 @@
 #   VST3        → /Library/Audio/Plug-Ins/VST3/<bundle>.vst3              com.darwinscat.amps.vst3
 #   AU          → /Library/Audio/Plug-Ins/Components/<bundle>.component   com.darwinscat.amps.au
 #   CLAP        → /Library/Audio/Plug-Ins/CLAP/<bundle>.clap              com.darwinscat.amps.clap
-#   Standalone  → /Applications/<Amp>.app                                 com.darwinscat.<amp>.standalone
+#   Standalone  → /Applications/Darwin's Cat/<Amp>.app                    com.darwinscat.<amp>.standalone
 #   the data    → /Library/Application Support/Darwin's Cat/Factory       com.darwinscat.amps.factory
 #
 # <bundle> is family.ini's `bundle=` (Darwin's Cat Amps), built by its `bundle_target=`.
@@ -85,7 +85,7 @@ format() {   # format <f> — the artefact folder, bundle suffix, install folder
     vst3)       DIR=VST3;       EXT=vst3;      DEST=/Library/Audio/Plug-Ins/VST3;       TITLE="VST3 plug-in" ;;
     au)         DIR=AU;         EXT=component; DEST=/Library/Audio/Plug-Ins/Components; TITLE="Audio Unit" ;;
     clap)       DIR=CLAP;       EXT=clap;      DEST=/Library/Audio/Plug-Ins/CLAP;       TITLE="CLAP plug-in" ;;
-    standalone) DIR=Standalone; EXT=app;       DEST=/Applications;                      TITLE="Standalone app" ;;
+    standalone) DIR=Standalone; EXT=app;       DEST="/Applications/Darwin's Cat";       TITLE="Standalone app" ;;
   esac
 }
 
@@ -115,15 +115,26 @@ mkdir -p "$work/components" "$OUT"
 # bundle id, com.darwinscat.<amp>. Installing any component of this package retires it: the files it
 # listed are this installer's, or are left as they were when the player unticked them. Forgetting a
 # receipt touches no file; an amp that never had one skips it.
-standalone_scripts() {   # standalone_scripts <legacy receipt id> — prints the folder holding its postinstall
+#
+# THE APPS OF EARLIER RELEASES STOOD IN /Applications ITSELF; the family's stand in its own folder there.
+# Once the app is in its folder, the one of the same name left in /Applications goes — only when it is
+# this amp's, by its bundle id, so an app of somebody else's that happens to carry the name stays.
+standalone_scripts() {   # standalone_scripts <legacy receipt id> <app> — prints the folder holding its postinstall
   local d="$work/scripts/$1"
   mkdir -p "$d"
   cat > "$d/postinstall" <<EOF
 #!/bin/sh
-# A family installer's app of this amp is in place: the amp's old single receipt is retired.
+# A family installer's app of this amp is in place: the amp's old single receipt is retired, and its app
+# of an earlier release, in /Applications itself, goes.
+# \$3 is the volume being installed on ("/" for the startup disk).
 legacy="$1"
 if /usr/sbin/pkgutil --volume "\$3" --pkg-info "\$legacy" >/dev/null 2>&1; then
   /usr/sbin/pkgutil --volume "\$3" --forget "\$legacy" >/dev/null 2>&1 || true
+fi
+[ -n "\${3:-}" ] || exit 0
+old="\${3%/}/Applications/$2.app"
+if [ -d "\$old" ] && [ "\$(/usr/bin/plutil -extract CFBundleIdentifier raw "\$old/Contents/Info.plist" 2>/dev/null)" = "\$legacy" ]; then
+  /bin/rm -rf "\$old" && echo "removed \$old"
 fi
 exit 0
 EOF
@@ -255,7 +266,7 @@ for amp in $AMPS; do
   app="$BUILD/${amp}_artefacts/Release/Standalone/$amp.app"
   ampver="$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist" 2>/dev/null || true)"
   id="com.darwinscat.$low.standalone"
-  component "$id" "$app" "$DEST" "$(standalone_scripts "com.darwinscat.$low")"
+  component "$id" "$app" "$DEST" "$(standalone_scripts "com.darwinscat.$low" "$amp")"
   outline+="            <line choice=\"$low.standalone\"/>"$'\n'
   choices+="    <choice id=\"$low.standalone\" title=\"$amp\" description=\"$amp${ampver:+ $ampver}, in $DEST/$amp.app.\" start_selected=\"true\">"$'\n'
   choices+="        <pkg-ref id=\"$id\"/>"$'\n'
