@@ -1,13 +1,13 @@
 {
   "format": "orbitrig", "schema": 4,
-  "rig_id": "revolt-lead-poweramp-f5dc", "family_id": "twonotes-revolt-guitar", "name": "ReVolt Guitar", "modeled_by": "Darwin's Cat",
+  "rig_id": "revolt-lead-poweramp-f5dc", "family_id": "twonotes-revolt-guitar", "name": "Lead", "modeled_by": "Darwin's Cat",
   "picture": "device.webp",
   "chain": [
     {
       "kind": "nam", "slot": "amp",
       "gear": { "make": "Two Notes", "model": "ReVolt Guitar", "type": "amp" },
       "tone_type": "hi-gain", "voicing": "od",
-      "input_db": -9.0,
+      "input_db": -4.0,
       "controls": [
         { "name": "Boost", "role": "generic", "values": ["off", "on"] },
         { "name": "Gain", "role": "gain", "sweep": 300,

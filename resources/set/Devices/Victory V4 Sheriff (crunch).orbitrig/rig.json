@@ -1,13 +1,13 @@
 {
   "format": "orbitrig", "schema": 4,
-  "rig_id": "v4-sheriff-ch1-82ab", "family_id": "victory-v4", "name": "Patrol Growl", "modeled_by": "Darwin's Cat",
+  "rig_id": "v4-sheriff-ch1-82ab", "family_id": "victory-v4", "name": "Crunch", "modeled_by": "Darwin's Cat",
   "picture": "device.webp",
   "chain": [
     {
       "kind": "nam", "slot": "amp",
       "gear": { "make": "Victory", "model": "V4", "type": "amp" },
       "tone_type": "crunch", "voicing": "od", "circuit": "tube:4",
-      "input_db": -12.0,
+      "input_db": -5.0,
       "controls": [
         { "name": "Gain", "role": "gain", "sweep": 300,
           "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] },

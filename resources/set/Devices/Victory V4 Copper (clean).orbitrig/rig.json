@@ -1,13 +1,13 @@
 {
   "format": "orbitrig", "schema": 4,
-  "rig_id": "v4-copper-4ae0", "family_id": "victory-v4", "name": "Ember Mantra", "modeled_by": "Darwin's Cat",
+  "rig_id": "v4-copper-4ae0", "family_id": "victory-v4", "name": "Clean", "modeled_by": "Darwin's Cat",
   "picture": "device.webp",
   "chain": [
     {
       "kind": "nam", "slot": "amp",
       "gear": { "make": "Victory", "model": "V4", "type": "amp" },
       "tone_type": "clean", "voicing": "od", "circuit": "tube:4",
-      "input_db": -9.0,
+      "input_db": -4.0,
       "controls": [
         { "name": "Gain", "role": "gain", "sweep": 300,
           "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] },

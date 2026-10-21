@@ -553,9 +553,9 @@ int main()
                 channels (named (shelf.factory, "Soldano X88-IR")));
         report ("IR-X: distinct aliases name the channels",    channels (named (shelf.factory, "Friedman IR-X")) == "Channel 1, Channel 2",
                 channels (named (shelf.factory, "Friedman IR-X")));
-        report ("V4: distinct aliases, clean before crunch before hi-gain", channels (named (shelf.factory, "Victory V4")) == "Ember Mantra, Patrol Growl, Monster Roar",
+        report ("V4: distinct aliases, clean before crunch before hi-gain", channels (named (shelf.factory, "Victory V4")) == "Clean, Crunch, Hi-Gain",
                 channels (named (shelf.factory, "Victory V4")));
-        report ("ReVolt: one alias, so the stems name them",   channels (named (shelf.factory, "Two Notes ReVolt")) == "Clean PowerAmp, Crunch PowerAmp, Lead PowerAmp",
+        report ("ReVolt: distinct aliases name the channels",  channels (named (shelf.factory, "Two Notes ReVolt")) == "Clean, Crunch, Lead",
                 channels (named (shelf.factory, "Two Notes ReVolt")));
         report ("the list is in the menu's order",             inOrder (shelf, factory.size()));
 

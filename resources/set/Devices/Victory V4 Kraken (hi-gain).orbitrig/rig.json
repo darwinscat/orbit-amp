@@ -1,13 +1,13 @@
 {
   "format": "orbitrig", "schema": 4,
-  "rig_id": "v4-kraken-ch1-f7fc", "family_id": "victory-v4", "name": "Monster Roar", "modeled_by": "Darwin's Cat",
+  "rig_id": "v4-kraken-ch1-f7fc", "family_id": "victory-v4", "name": "Hi-Gain", "modeled_by": "Darwin's Cat",
   "picture": "device.webp",
   "chain": [
     {
       "kind": "nam", "slot": "amp",
       "gear": { "make": "Victory", "model": "V4", "type": "amp" },
       "tone_type": "hi-gain", "voicing": "dist", "circuit": "tube:4",
-      "input_db": -12.0,
+      "input_db": -7.0,
       "output_db": 6.0,
       "controls": [
         { "name": "Gain", "role": "gain", "sweep": 300,
