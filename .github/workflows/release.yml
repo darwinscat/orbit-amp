@@ -21,8 +21,8 @@ name: release
 # RELEASE KEEPS THE SYMBOLS OF WHAT IT SHIPPED): each shipped binary keeps its .dSYM, .pdb or .debug file in
 # build/symbols before it is stripped, and each job uploads that folder as an artifact of this run,
 # symbols-<version>-<system>, kept 90 days — never as a release asset, never in an installer or a zip: they name
-# every function of ours. installer/README.md, "Reading a crash report", says how to read a report with them and
-# how to keep them longer than the run does.
+# every function of ours. A tagged release's go to the family's private archive as well (the `symbols` job, at the
+# end). installer/README.md, "Reading a crash report", says how to read a report with them.
 #
 # Required (signing only): secrets MACOS_APP_IDENTITY, MACOS_INSTALLER_IDENTITY, KCH_PWD; var
 # NOTARY_PROFILE. The GitHub Release is published with the built-in GITHUB_TOKEN.
@@ -301,3 +301,34 @@ jobs:
             --target "$GITHUB_SHA" \
             --notes-file notes.md \
             out/*
+
+  symbols:
+    # THE SYMBOLS OF A PUBLISHED RELEASE, KEPT FOR GOOD. The run's symbols-* artifacts live 90 days; a tagged
+    # release's go to the family's private archive as well, one folder a version — releases/vX.Y.Z/, each
+    # artifact a folder in it, as downloaded. Tagged releases only: a manual run, dry or not, keeps its
+    # artifacts and nothing more. The archive's sftp address is the repository variable SYMBOLS_SFTP (the
+    # archive takes sftp and nothing else); the signing runner holds the key it admits. A release whose
+    # archiving fails is still published — the artifacts stay on the run for 90 days, to upload by hand.
+    needs: [ version, release ]
+    if: ${{ github.event_name == 'push' }}
+    runs-on: [self-hosted, macOS, signing]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: symbols-*
+          path: symbols
+      - name: Archive the symbols
+        env:
+          VER: ${{ needs.version.outputs.version }}
+          DEST: ${{ vars.SYMBOLS_SFTP }}
+        run: |
+          set -euo pipefail
+          [ -n "$DEST" ] || { echo "the repository variable SYMBOLS_SFTP is not set" >&2; exit 1; }
+          ls -d symbols/symbols-* > /dev/null
+          {
+            echo "-mkdir releases/v$VER"
+            for d in symbols/symbols-*/; do echo "put -R ${d%/} releases/v$VER/"; done
+            echo "ls -l releases/v$VER"
+          } > symbols-batch.txt
+          sftp -b symbols-batch.txt -o BatchMode=yes "$DEST"

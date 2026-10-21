@@ -204,10 +204,12 @@ shipped format, made before the binary is stripped:
 `symbols-<version>-macos`, `-windows-x64`, `-windows-arm64`, `-linux-x86_64`, `-linux-arm64` — on the run's
 page under Artifacts, or `gh run download <run-id> --pattern 'symbols-*' --dir symbols-<version>`. Never a
 release asset and never in an installer or a zip: they name every function of ours. GitHub keeps them 90
-days, the longest a repository allows. **To keep them for good**, download them once the release is out and
-store them somewhere private — a private repository's release, a storage bucket, a backup disk, never this
-repository — one folder a version, as downloaded. A report from a release whose symbols are gone can only be
-read by its exports.
+days, the longest a repository allows. **A tagged release keeps them for good**: once it is published, the
+workflow's `symbols` job puts them in the family's private archive, `releases/v<version>/`, each artifact a
+folder in it, as downloaded — over sftp to the address in the repository variable `SYMBOLS_SFTP`, from the
+signing runner, which holds the key the archive admits. A manual run, dry or not, keeps its artifacts and
+nothing more; if the archiving fails, the release is still out and its artifacts can be put there by hand
+within the 90 days. A report from a release whose symbols are gone can only be read by its exports.
 
 **Match first.** Symbols read a report right only if they are of the very build that crashed; another
 build's give names that look plausible and are wrong.
