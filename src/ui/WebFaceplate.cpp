@@ -170,6 +170,11 @@ void WebFaceplate::playAndShoot (const juce::File& riffFile)
     // unset, the face's own.
     freeze();
 
+    // ORBITAMP_LIVE_SHOT_WIDTH: the faceplate's width in design units, as a corner drag would leave it —
+    // the height, and so the zoom, as the window opened.
+    if (const int w = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_WIDTH", {}).getIntValue(); w > 0)
+        editor.setSize (juce::roundToInt ((float) (w + AmpEditor::margin * 2) * editor.zoomNow), editor.getHeight());
+
     auto& pre = editor.faceplate.preamp;
     const auto wanted = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_PACK", {}).trim();
     int pick = -1;
