@@ -182,7 +182,8 @@ is not one, `darwinscat-amps-*`.
 `installer/release.sh` is the macOS job on this machine: a fresh `build-release/` with every sibling override
 off, the same targets, the same gates, `sign-family-macos.sh`, and `SHA256SUMS` — into `dist/`. It needs the
 Developer ID identities in the login keychain and a notarytool profile (`NOTARY_PROFILE`, default
-`loki-notary`). It keeps the symbols too, in `symbols/<version>-macos-<when>/` — out of `build-release/`,
+`loki-notary`) stored in the login keychain too: `xcrun notarytool store-credentials loki-notary --keychain
+~/Library/Keychains/login.keychain-db` (see `sign-family-macos.sh`). It keeps the symbols too, in `symbols/<version>-macos-<when>/` — out of `build-release/`,
 which the next release starts by deleting, and out of git (`.gitignore`).
 
 ## Reading a crash report — the symbols

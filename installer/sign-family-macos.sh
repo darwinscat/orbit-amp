@@ -28,9 +28,17 @@ if [ -z "$AMPS" ] || [ -z "$BUNDLE" ] || [ -z "$TARGET" ]; then
 fi
 mkdir -p "$OUT"
 
+# THE PROFILE IS READ FROM THE LOGIN KEYCHAIN, BY PATH. Left to itself notarytool keeps a profile in "Local
+# Items", which locks with the screen: the runner is a working laptop, and a release that ran while it was locked
+# signed everything and then failed at the notary with «No Keychain password item found for profile». The login
+# keychain is the one the workflow unlocks for codesign. So the profile lives there too — stored once with
+# `xcrun notarytool store-credentials <profile> --keychain ~/Library/Keychains/login.keychain-db` — and is asked
+# for there.
+NOTARY_KEYCHAIN="${NOTARY_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}"
+
 notarize() {   # notarize <file> — submit, wait, and refuse anything but Accepted
   local out
-  out="$(xcrun notarytool submit "$1" --keychain-profile "$NOTARY_PROFILE" --wait 2>&1 | tee /dev/stderr)"
+  out="$(xcrun notarytool submit "$1" --keychain-profile "$NOTARY_PROFILE" --keychain "$NOTARY_KEYCHAIN" --wait 2>&1 | tee /dev/stderr)"
   grep -q "status: Accepted" <<< "$out"
 }
 
