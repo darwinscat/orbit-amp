@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "Features.h"
 #include "Product.h"
 #include "Parameters.h"
 #include "ui/Prefs.h"

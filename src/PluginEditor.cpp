@@ -280,7 +280,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
 
     inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
-    inColumn.onMenu      = [this] (juce::Point<int> pos) { showInputMenu (pos); };
+    if constexpr (features::hum)   // the input column's menu is HUM's alone: with HUM off there is none (Features.h)
+        inColumn.onMenu  = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
@@ -409,11 +410,12 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     }
 
     // H: the hum, OFF and back (prefs::humFlip) — Р under a Russian layout, the same key. G: the
-    // gate's On, the sound's switch and so an undo step, as its menu sets it — П.
+    // gate's On, the sound's switch and so an undo step, as its menu sets it — П. H only while the build
+    // has HUM (Features.h); without it the key is not ours, and goes on to the host.
     if (! key.getModifiers().isAnyModifierKeyDown())
     {
         const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
-        if (letter == 'H' || letter == 0x0420)
+        if (features::hum && (letter == 'H' || letter == 0x0420))
         {
             prefs::setHum (amp.product(), prefs::humFlip (amp.product()));
             return true;

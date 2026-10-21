@@ -27,6 +27,7 @@ ribbon             orbitamp_ribbon_test
 set                orbitamp_set_test
 factory            orbitamp_factory_test
 hum                orbitamp_hum_test
+hum-off            orbitamp_hum_off_test
 eqlink             orbitamp_eqlink_test
 tuner              orbitamp_tuner_test
 gatelearn          orbitamp_gatelearn_test

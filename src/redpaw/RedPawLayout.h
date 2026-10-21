@@ -126,6 +126,14 @@ struct Plan
     std::array<juce::Point<float>, 2> learnNames {};    // the middle of each key's two lines
     float learnLine = 0.0f;                         // ...the two lines apart
 
+    /** ...AND HUM'S HOLE WHILE THE BUILD HAS NO HUM (Features.h): plate, laid over it once, as the picture
+        is loaded (Art::of) — a stretch of the same plate, `learnPlate`, with the same stretch upside down
+        under it, the two centred on HUM's key and cut to a round `learnHoleSize` across, its edge soft
+        for the last pixel or two. The plate reads on as if the key had never been there. Empty: nothing
+        to cover. */
+    juce::Rectangle<float> learnPlate {};
+    float learnHoleSize = 0.0f;
+
     /** THE WIPERS' SPEED: four keys where the picture paints a row of them — OFF, INT, LO, HI, each word
         on its key, the speed set lit. A size of nought: none, the wipers keep their own time. */
     std::array<juce::Point<float>, 4> wiperKeys {};     // no keys for the wipers

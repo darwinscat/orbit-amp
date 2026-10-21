@@ -901,7 +901,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         humTunedPlay = humTunedQuiet = humTunedUpTo = -1.0f;      // handed over whatever it was before
         tuneHum (p);
         humStage.setParams (p);
-        const bool ready = humStage.prepare (sampleRate, block, getTotalNumInputChannels());
+        const bool ready = features::hum && humStage.prepare (sampleRate, block, getTotalNumInputChannels());
         humApplied = (int) p.mains;
         humRuns.store (ready ? humApplied : -1, std::memory_order_relaxed);
         humShown   = wanted;
@@ -955,6 +955,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     {
         blockFade[(size_t) i].prepare (sampleRate);
         blockFade[(size_t) i].snapTo (linkWorks ((params::ChainRow) i));
+    // With HUM switched off in the build (Features.h) it is never prepared at all: it stays out of the
+    // sound and costs nothing, whatever the machine says or a session saved with HUM on — the way a
+    // refused prepare leaves it, OFF in force and no LEARN of its own.
     }
 
     pumpDeviceWork();
@@ -1222,8 +1225,9 @@ bool AmpProcessor::tuneHum (felitronics::dehum::HumRemoverParams& p) noexcept
 
 void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
 {
-    // Refused at prepare: nothing to run, and the mode in force already says OFF.
-    if (! humStage.isPrepared())
+    // Refused at prepare, or HUM switched off in the build (Features.h): nothing to run, and the mode
+    // in force already says OFF.
+    if (! features::hum || ! humStage.isPrepared())
         return;
 
     // The machine's mode, handed over here on the audio thread — the stage's threading contract —

@@ -382,7 +382,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 
     print ("TURBO", skin.plan.turboName, 140.0f, ink.state);
     if (skin.plan.learnKeySize > 0.0f)
-        for (size_t k = 0; k < skin.plan.learnNames.size(); ++k)        // each key's LEARN over its name
+        for (size_t k = 0; k < (size_t) learnKeysShown; ++k)        // each key's LEARN over its name
         {
             constexpr float em = 8.5f / readingScale;     // under the keys' own words
             print ("LEARN", skin.plan.learnNames[k].translated (0.0f, -0.5f * skin.plan.learnLine), 90.0f, ink.words, 0.0f, em);
@@ -1047,7 +1047,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     };
 
     if (skin.plan.learnKeySize > 0.0f)
-        for (int k = 0; k < 2; ++k)
+        for (int k = 0; k < learnKeysShown; ++k)
         {
             auto& key = k == 0 ? learnKey : humKey;
             key.latching = false;
