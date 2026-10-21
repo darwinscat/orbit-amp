@@ -163,15 +163,52 @@ void WebFaceplate::playAndShoot (const juce::File& riffFile)
 
     // The face as it ships (freeze), then played: the X88-IR's CRUNCH, DRIVE past its middle, the device's
     // tone moved off flat so its curve shows, the echo in, the loudness tag and the spectra on.
+    //
+    // Or another channel: ORBITAMP_LIVE_SHOT_PACK names it as the menu and the lever do — the device, then
+    // the channel ("Two Notes ReVolt Clean", "Friedman IR-X Channel 1") — or the device alone, for the
+    // channel it opens on. And ORBITAMP_LIVE_SHOT_PICTURE names the page the well shows (EQ, SHAPE, TONE…);
+    // unset, the face's own.
     freeze();
     auto& pre = editor.faceplate.preamp;
-    if (const auto* dev = pre.shelf.deviceOf (AmpChannels (amp).playing()))
+    const auto wanted = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_PACK", {}).trim();
+    int pick = -1;
+    if (wanted.isNotEmpty())
+    {
+        for (const int index : pre.shelf.order())
+            if (const auto* dev = pre.shelf.deviceOf (index))
+            {
+                const int k = dev->channels.indexOf (index);
+                if ((dev->name + " " + dev->channelNames[k]).equalsIgnoreCase (wanted))
+                    pick = index;
+                else if (pick < 0 && dev->name.equalsIgnoreCase (wanted))
+                    pick = AmpChannels (amp).openingOf (*dev);
+            }
+    }
+    else if (const auto* dev = pre.shelf.deviceOf (AmpChannels (amp).playing()))
+    {
         for (int k = 0; k < dev->channels.size(); ++k)
             if (dev->channelNames[k].equalsIgnoreCase ("Crunch"))
-            {
-                pre.playPack (dev->channels[k]);
-                break;
-            }
+                pick = dev->channels[k];
+    }
+    if (pick >= 0)
+        pre.playPack (pick);
+    else if (wanted.isNotEmpty())
+        dir.getChildFile ("no-pack.txt").replaceWithText ("no channel named " + wanted + "; played what was up");
+
+    // ORBITAMP_LIVE_SHOT_GLYPHS=1: the picture's corner glyphs up, as if the hand were on it.
+    pre.glyphsShownForStill = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_GLYPHS", {}) == "1";
+
+    // ORBITAMP_LIVE_SHOT_OPEN=1: the picture thrown across the block, as its corner glyph throws it.
+    if (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_OPEN", {}) == "1" && pre.expandTag.onClick != nullptr)
+        pre.expandTag.onClick();
+
+    if (const auto page = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_PICTURE", {}).trim(); page.isNotEmpty())
+    {
+        static const char* const pages[] = { "SHAPE", "ENVELOPE", "TRANSFER", "TONE", "WAVE", "DEVICE", "PHOTO", "EQ" };
+        for (int i = 0; i < (int) std::size (pages); ++i)
+            if (page.equalsIgnoreCase (pages[i]))
+                pre.setViz (i);
+    }
     standPlain (params::preampGain, 6.0f);
     const float tones[] = { 0.78f, 0.28f, 0.74f };
     for (size_t i = 0; i < pre.eq.bands.size() && i < std::size (tones); ++i)

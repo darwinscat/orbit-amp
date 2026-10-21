@@ -1214,7 +1214,7 @@ void CapturedBlockPanel::timerCallback()
 
     // The theatre owns the whole screen and its own way out; while it runs the face beneath is not
     // being pointed at, whatever the coordinates say.
-    const bool want = theater == nullptr && handIsOnThePicture();
+    const bool want = theater == nullptr && (handIsOnThePicture() || glyphsShownForStill);
     const float step = want ? 1.0f / (0.25f * 30.0f) : -1.0f / (0.5f * 30.0f);
     const float next = juce::jlimit (0.0f, 1.0f, cornerAlpha + step);
 

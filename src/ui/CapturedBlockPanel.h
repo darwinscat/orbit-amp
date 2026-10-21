@@ -443,6 +443,7 @@ private:
         The fade is short — a quarter of a second in, half out. Instant is a flicker when the hand
         crosses the tile on its way somewhere else; slow reads as lag. */
     float cornerAlpha = 0.0f;
+    bool  glyphsShownForStill = false;   // the live still's (WebFaceplate.h): as if the hand were on the picture
     void timerCallback() override;
     void setCornerAlpha (float);
     bool handIsOnThePicture() const;
