@@ -1147,7 +1147,8 @@ set(ORBITAMP_SOURCES
     src/ui/SetupPanel.cpp
     src/ui/WebFaceplate.cpp
     src/ui/library/DeviceListView.cpp
-    src/ui/library/IrTreeView.cpp)
+    src/ui/library/IrTreeView.cpp
+    src/face/Controls.cpp)           # the family's controls — the AMP's channel lever is a face::DetentLever
 
 # A FACE is the family's console (src/face) over the family's channels (src/channels), on the same
 # processor: what the cockpit and every rover are compiled from before their own.
