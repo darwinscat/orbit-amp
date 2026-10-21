@@ -22,6 +22,11 @@ DelayBlock::DelayBlock (AmpProcessor& processor)
     addAndMakeVisible (offset);
     addAndMakeVisible (field);
 
+    // TAP in the standalone alone: in a plug-in the host keeps the time.
+    addChildComponent (tap);
+    tap.setVisible (! amp.runsInHost());
+    tap.onTap = [this] { tapTempo(); };
+
     attachPower (*amp.apvts.getParameter (params::delayOn));
 
     // The TIME on the border, where the captured blocks stand their combo: the sync ladder, and
@@ -116,10 +121,54 @@ DelayBlock::DelayBlock (AmpProcessor& processor)
     applyTimeMode();
 }
 
-DelayBlock::~DelayBlock() = default;
+DelayBlock::~DelayBlock()
+{
+    closeTapCount();
+}
+
+/** A TAP ON THE BUTTON. The first tap of a count opens one undo step, every tap after it writes the
+    BPM the taps so far make, and the pause that ends the count closes the step (timerCallback) —
+    everything one count did is one undo. */
+void DelayBlock::tapTempo()
+{
+    if (! syncOn() || hostConducts())
+        return;   // a free time has no beat to tap, and a conducted one is not ours to give
+
+    const double now = juce::Time::getMillisecondCounterHiRes();
+
+    if (! tapCount.isCounting (now))
+    {
+        closeTapCount();
+        amp.history.beginGesture ("Tap tempo");
+        tapGestureOpen = true;
+    }
+
+    if (const double bpm = tapCount.tap (now); bpm > 0.0)
+        bpmAtt->setValueAsCompleteGesture (juce::jlimit (params::delayBpmMin, params::delayBpmMax,
+                                                         (float) std::round (bpm)));
+}
+
+void DelayBlock::closeTapCount()
+{
+    if (! tapGestureOpen)
+        return;
+
+    tapGestureOpen = false;
+    amp.history.endGesture();
+}
 
 void DelayBlock::timerCallback()
 {
+    // The tap's count closes on the pause, shown or not; its flash fades with the tick.
+    if (tapGestureOpen && tapCount.closedBy (juce::Time::getMillisecondCounterHiRes()))
+        closeTapCount();
+
+    if (tap.flash > 0.0f)
+    {
+        tap.flash = tap.flash < 0.05f ? 0.0f : tap.flash * 0.8f;
+        tap.repaint();
+    }
+
     if (! view.isShowing())
         return;
 
@@ -299,6 +348,11 @@ void DelayBlock::applyTimeMode()
                                    : params::delayDivisions.size());
     field.repaint();
 
+    tap.setEnabled (syncOn());
+    tap.setTooltip (syncOn() ? "TAP: the block's own BPM, from the last few taps"
+                             : "TAP counts a BPM, and the time is FREE");
+    tap.repaint();
+
     resized();   // the pill on the border is as wide as its word
 }
 
@@ -334,12 +388,20 @@ void DelayBlock::layOutContent (juce::Rectangle<int> area)
     minis.removeFromLeft (gap);
     offset.setBounds (minis.removeFromLeft (miniSide));
 
-    // ...and under them, one line: the conducting number.
+    // ...and under them, one line: the conducting number, and TAP where there is no host to keep time.
     band.removeFromTop (3);
-    field.setBounds (band.removeFromTop (22));
+    auto line = band.removeFromTop (22);
+
+    if (tap.isVisible())
+    {
+        tap.setBounds (line.removeFromRight (tap.idealWidth()));
+        line.removeFromRight (4);
+    }
+
+    field.setBounds (line);
 
     for (juce::Component* c : { (juce::Component*) &repeats, (juce::Component*) &dark, (juce::Component*) &offset,
-                                (juce::Component*) &field })
+                                (juce::Component*) &field, (juce::Component*) &tap })
         c->toFront (false);
 }
 

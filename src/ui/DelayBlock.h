@@ -5,6 +5,7 @@
 
 #include "BlockFrame.h"
 #include "Knob.h"
+#include "TapCount.h"
 #include "VoicingSelector.h"
 
 namespace orbitamp
@@ -24,7 +25,8 @@ class AmpProcessor;
     and OFFSET stand small at its left hand, each the size of the reverb's DECAY and PRE — how many,
     how dark, how wide, in the loop's own order. Under those three, one line: the one typed control
     on the face — the BPM field (which reads HOST and the host's tempo, and does not move, while the
-    host conducts), turning into the MS field when the time goes free.
+    host conducts), turning into the MS field when the time goes free — and, in the standalone,
+    TAP. A plug-in has a host to keep time; a standalone has only the player.
 
     The picture is the COMB: one tooth per repeat, standing where the repeats will land — the
     spacing is the glided time (turn the knob and the comb slides with the motor), the heights
@@ -60,6 +62,12 @@ private:
 
     float shownHostTempo = -1.0f;   // what the field last showed of the host's tempo, 0 for none
 
+    /** A TAP: the block's own BPM from the last few taps, counted as the family's consoles count
+        them (TapCount). One count is one undo step — opened by its first tap, closed by the pause. */
+    void tapTempo();
+    void closeTapCount();
+    TapCount tapCount;
+    bool     tapGestureOpen = false;
 
     /** The comb's surface: dumb, the block paints through it — the reverb picture's pattern. */
     struct CombView final : public juce::Component
@@ -156,6 +164,53 @@ private:
         static constexpr float fontH = 13.0f;   // the face's floor for anything read
     };
 
+    /** TAP, beside the field: the field's own pill, the word at 13 px, a flash of the block's lilac
+        at every tap. Dark while the time is FREE — a tap counts a BPM, and a free time has none. */
+    struct TapButton final : public juce::Component,
+                             public juce::SettableTooltipClient
+    {
+        std::function<void()> onTap;
+        float flash = 0.0f;   // 1 at a tap, fading on the block's tick
+
+        TapButton() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+
+        static constexpr float fontH = 13.0f;
+
+        int idealWidth() const
+        {
+            return juce::roundToInt (theme::trackedWidth ("TAP", theme::displayFont (fontH), 0.08f) + 20.0f);
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            const auto r = getLocalBounds().toFloat();
+            g.setColour (juce::Colour (0xff101016).interpolatedWith (theme::lilac, 0.25f * flash));
+            g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+            g.setColour (theme::hair2.interpolatedWith (theme::lilac, flash));
+            g.drawRoundedRectangle (r.reduced (0.5f), r.getHeight() * 0.5f, 1.0f);
+
+            const auto ink = ! isEnabled() ? theme::txFaint
+                           : (hover ? theme::tx : theme::txDim).interpolatedWith (theme::lilac, flash);
+            g.setColour (ink);
+            theme::drawTracked (g, "TAP", r, theme::displayFont (fontH), 0.08f, juce::Justification::centred);
+        }
+
+        void mouseEnter (const juce::MouseEvent&) override { hover = true;  repaint(); }
+        void mouseExit  (const juce::MouseEvent&) override { hover = false; repaint(); }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            if (e.mods.isPopupMenu() || ! isEnabled() || onTap == nullptr)
+                return;
+
+            onTap();
+            flash = 1.0f;
+            repaint();
+        }
+
+        bool hover = false;
+    };
+
     static constexpr int maxKnobSide = 96;   // the reverb's hero, to the unit (ReverbBlock::maxKnobSide)
     static constexpr int miniSide    = 42;   // the reverb's DECAY and PRE
 
@@ -169,6 +224,7 @@ private:
 
     CombView    view;
     NumberField field;
+    TapButton   tap;
 
     float dragStart = 0.0f;
 
