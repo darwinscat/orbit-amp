@@ -69,7 +69,55 @@ private:
         partly off the bottom of the screen. */
     static constexpr int titleBarAllowance = 60;
 
-    static constexpr int baseWidth   = FaceplateView::designWidth + margin * 2;
+    /** THE WIDTH IS THE WINDOW'S CHOICE. The height sets the zoom; what the corner gives beyond the
+        design's own width is laid out across — the pictures and the air widen, every knob keeps its
+        size. From the design's own width up to a window of `maxAspect`. */
+    static constexpr int    minDesignWidth = FaceplateView::designWidth;
+    static constexpr int    minBaseWidth   = minDesignWidth + margin * 2;
+    static constexpr double maxAspect      = 2.2;
+
+    int designW = minDesignWidth;   // the faceplate's width in design units, as the window stands it
+    int baseW() const noexcept { return designW + margin * 2; }
+    int maxDesignWidth() const noexcept
+    {
+        return juce::jmax (minDesignWidth, (int) (maxAspect * (double) baseHeight()) - margin * 2);
+    }
+
+    /** The corner may set any aspect between the design's own and `maxAspect`: a corner or a side
+        edge moves the width within that range, a top or bottom edge the height. The window's own
+        size limits come first, the range after them. */
+    struct AspectRange final : public juce::ComponentBoundsConstrainer
+    {
+        double lowAspect = 1.0, highAspect = 2.0;   // width / height
+
+        void checkBounds (juce::Rectangle<int>& b, const juce::Rectangle<int>& previous,
+                          const juce::Rectangle<int>& limits,
+                          bool top, bool left, bool bottom, bool right) override
+        {
+            juce::ComponentBoundsConstrainer::checkBounds (b, previous, limits, top, left, bottom, right);
+
+            const int h = juce::jmax (1, b.getHeight());
+            const int wLo = juce::roundToInt (lowAspect * h), wHi = juce::roundToInt (highAspect * h);
+
+            if ((top || bottom) && ! (left || right))
+            {
+                // A top or bottom edge: the height moves, the width stays — keep the height in range.
+                const int w  = b.getWidth();
+                const int nh = juce::jlimit (juce::roundToInt (w / highAspect), juce::roundToInt (w / lowAspect), h);
+                b = top ? b.withTop (b.getBottom() - nh) : b.withHeight (nh);
+            }
+            else
+            {
+                const int nw = juce::jlimit (wLo, juce::jmax (wLo, wHi), b.getWidth());
+                b = left ? b.withLeft (b.getRight() - nw) : b.withWidth (nw);
+            }
+        }
+    };
+
+    AspectRange aspect;
+
+    /** The range and the size limits, from the height the window's rows stand at now. */
+    void applySizeLimits();
 
     /** Everything around the faceplate — the faceplate itself answers for its own height now,
         because a LAYOUT choice can collapse a whole row. */
@@ -109,12 +157,16 @@ private:
         that gives it one; until then the panel does what it has always done. */
     bool dimRatherThanRemove = false;
 
-    /** The scale to come back to when the full-screen button is pressed the second time;
-        negative while nothing is remembered. */
-    float scaleBeforeFull = -1.0f;
+    /** The window's size to come back to when the full-screen button is pressed the second time;
+        empty while nothing is remembered. */
+    juce::Rectangle<int> sizeBeforeFull;
 
-    /** After a strip is switched: the aspect the corner drag keeps, the limits, and the window
-        itself, at the scale it already has. */
+    /** The zoom the window stands at, from its height — kept so a row that leaves or returns
+        resizes the window at the zoom and the width it already has. */
+    float zoomNow = AmpProcessor::preferredScale;
+
+    /** After a strip is switched: the range the corner keeps, the limits, and the window itself,
+        at the zoom and the width it already has. */
     void applyStripChoice();
 
     /** Hints. The face has started keeping its captions out of the way — a dial with no label, a

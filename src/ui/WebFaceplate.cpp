@@ -169,6 +169,7 @@ void WebFaceplate::playAndShoot (const juce::File& riffFile)
     // channel it opens on. And ORBITAMP_LIVE_SHOT_PICTURE names the page the well shows (EQ, SHAPE, TONE…);
     // unset, the face's own.
     freeze();
+
     auto& pre = editor.faceplate.preamp;
     const auto wanted = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_PACK", {}).trim();
     int pick = -1;
@@ -262,7 +263,7 @@ void WebFaceplate::write()
     auto o = object();
     o->setProperty ("format", "orbitamp-web-faceplate");
     o->setProperty ("schema", 1);
-    o->setProperty ("stage", rectVar ({ 0.0f, 0.0f, (float) AmpEditor::baseWidth, (float) editor.baseHeight() }));
+    o->setProperty ("stage", rectVar ({ 0.0f, 0.0f, (float) editor.baseW(), (float) editor.baseHeight() }));
     o->setProperty ("scale", scale);
     o->setProperty ("places", places());
     const auto refs = references();
@@ -483,9 +484,9 @@ void WebFaceplate::patch (const juce::String& name, const juce::Component& c, ju
 
 juce::Image WebFaceplate::shootEditor (float k) const
 {
-    const float zoom = (float) editor.getWidth() / (float) AmpEditor::baseWidth;
+    const float zoom = (float) editor.getHeight() / (float) editor.baseHeight();   // the height is the zoom
     const auto shot = editor.createComponentSnapshot (editor.getLocalBounds(), true, k / zoom);
-    juce::Image out (juce::Image::ARGB, juce::roundToInt ((float) AmpEditor::baseWidth * k),
+    juce::Image out (juce::Image::ARGB, juce::roundToInt ((float) editor.baseW() * k),
                      juce::roundToInt ((float) editor.baseHeight() * k), true);
     juce::Graphics (out).drawImageAt (shot, 0, 0);
     return out;

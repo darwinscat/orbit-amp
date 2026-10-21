@@ -93,23 +93,27 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         if (display == nullptr)
             return;
 
+        // The whole display: the zoom from its height (or from its width, on a display narrower than
+        // the design), the width then as much of the display as the range allows.
         const auto area = display->userArea;
         const float fit = juce::jlimit (AmpProcessor::minScale, AmpProcessor::maxScale,
-                                        juce::jmin ((float) area.getWidth() / (float) baseWidth,
+                                        juce::jmin ((float) area.getWidth() / (float) minBaseWidth,
                                                     (float) (area.getHeight() - titleBarAllowance)
                                                         / (float) baseHeight()));
-        const float cur = (float) getWidth() / (float) baseWidth;
+        const int fullH = juce::roundToInt ((float) baseHeight() * fit);
+        const int fullW = juce::jlimit (juce::roundToInt ((float) minBaseWidth * fit),
+                                        juce::roundToInt ((float) (maxDesignWidth() + margin * 2) * fit),
+                                        area.getWidth());
 
-        if (std::abs (cur - fit) < 0.01f && scaleBeforeFull > 0.0f)
+        if (! sizeBeforeFull.isEmpty() && std::abs (getHeight() - fullH) <= 1 && std::abs (getWidth() - fullW) <= 1)
         {
-            setSize (juce::roundToInt (baseWidth * scaleBeforeFull),
-                     juce::roundToInt (baseHeight() * scaleBeforeFull));
-            scaleBeforeFull = -1.0f;
+            setSize (sizeBeforeFull.getWidth(), sizeBeforeFull.getHeight());
+            sizeBeforeFull = {};
         }
         else
         {
-            scaleBeforeFull = cur;
-            setSize (juce::roundToInt (baseWidth * fit), juce::roundToInt (baseHeight() * fit));
+            sizeBeforeFull = getLocalBounds();
+            setSize (fullW, fullH);
         }
 
         if (auto* window = dynamic_cast<juce::ResizableWindow*> (tl))
@@ -293,13 +297,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         faceplate.deviceChanged();
     };
 
-    // Dragging the corner IS the zoom: the aspect is locked, so width alone determines the factor.
+    // The corner sets the zoom AND the width: the height decides the factor, and the aspect is free
+    // between the design's own and `maxAspect` (AspectRange), the width laid out across.
+    setConstrainer (&aspect);
     setResizable (true, true);
-    getConstrainer()->setFixedAspectRatio ((double) baseWidth / (double) baseHeight());
-    setResizeLimits (juce::roundToInt (baseWidth    * AmpProcessor::minScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::minScale),
-                     juce::roundToInt (baseWidth    * AmpProcessor::maxScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::maxScale));
+    applySizeLimits();
 
     // As large as the screen allows, up to the size the plugin WANTS to open at. Asking for 2x on a
     // display that cannot hold it does not give 2x — it gives whatever the window manager shrinks it
@@ -310,13 +312,15 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
     {
         const auto area = display->userArea;
-        const float fits = juce::jmin ((float) area.getWidth()  / (float) baseWidth,
+        const float fits = juce::jmin ((float) area.getWidth()  / (float) minBaseWidth,
                                        (float) (area.getHeight() - titleBarAllowance) / (float) baseHeight());
         s = juce::jlimit (AmpProcessor::minScale, s, fits);
         amp.setEditorScale (s);
     }
 
-    setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight() * s));
+    // It opens at the design's own width; the corner widens it from there.
+    zoomNow = s;
+    setSize (juce::roundToInt (minBaseWidth * s), juce::roundToInt (baseHeight() * s));
 
     // The one place this plugin may reach the network without a click, and only because a player
     // ticked the switch in the version popover: once a day at most, on the message thread, never in
@@ -386,14 +390,22 @@ void AmpEditor::applyRowStates()
 
 void AmpEditor::applyStripChoice()
 {
-    const float s = (float) getWidth() / (float) baseWidth;
+    // The zoom and the width the window already has; only the height follows the rows.
+    applySizeLimits();
+    designW = juce::jlimit (minDesignWidth, maxDesignWidth(), designW);
+    setSize (juce::roundToInt ((float) baseW() * zoomNow), juce::roundToInt ((float) baseHeight() * zoomNow));
+}
 
-    getConstrainer()->setFixedAspectRatio ((double) baseWidth / (double) baseHeight());
-    setResizeLimits (juce::roundToInt (baseWidth    * AmpProcessor::minScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::minScale),
-                     juce::roundToInt (baseWidth    * AmpProcessor::maxScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::maxScale));
-    setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight() * s));
+void AmpEditor::applySizeLimits()
+{
+    const int h = baseHeight();
+
+    aspect.lowAspect  = (double) minBaseWidth / (double) h;
+    aspect.highAspect = juce::jmax (aspect.lowAspect, (double) (maxDesignWidth() + margin * 2) / (double) h);
+    aspect.setSizeLimits (juce::roundToInt ((float) minBaseWidth * AmpProcessor::minScale),
+                          juce::roundToInt ((float) h * AmpProcessor::minScale),
+                          juce::roundToInt ((float) (maxDesignWidth() + margin * 2) * AmpProcessor::maxScale),
+                          juce::roundToInt ((float) h * AmpProcessor::maxScale));
 }
 
 void AmpEditor::paint (juce::Graphics& g)
@@ -638,13 +650,17 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 
 void AmpEditor::resized()
 {
-    const float s = (float) getWidth() / (float) baseWidth;
+    // The HEIGHT is the zoom; the width, in design units, is what is left to lay out across.
+    const float s = (float) getHeight() / (float) baseHeight();
     amp.setEditorScale (s);
+    zoomNow = s;
+    designW = juce::jlimit (minDesignWidth, maxDesignWidth(),
+                            juce::roundToInt ((float) getWidth() / s) - margin * 2);
 
     // Bounds stay in design units; the transform does all the scaling, margins included.
     const auto zoom = juce::AffineTransform::scale (s);
 
-    chrome.setBounds (margin, margin, FaceplateView::designWidth, Chrome::designHeight);
+    chrome.setBounds (margin, margin, designW, Chrome::designHeight);
     chrome.setTransform (zoom);
 
     // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
@@ -660,7 +676,7 @@ void AmpEditor::resized()
         const int x = chrome.secondLineX() - LayoutStrip::tailAir;
         layoutStrip->menuCentreX = chrome.gearBounds().getCentreX() - x;
         layoutStrip->arrowsEndX  = chrome.fullScreenGlyph().getRight() - x;
-        layoutStrip->setBounds (margin + x, margin + Chrome::firstLineH, FaceplateView::designWidth - x,
+        layoutStrip->setBounds (margin + x, margin + Chrome::firstLineH, designW - x,
                                 LayoutStrip::designHeight);
         layoutStrip->setTransform (zoom);
     }
@@ -690,12 +706,12 @@ void AmpEditor::resized()
     inColumn.setBounds (margin, gutterY, VolumeColumn::designWidth, gutterH);
     inColumn.setTransform (zoom);
 
-    outColumn.setBounds (margin + FaceplateView::designWidth - VolumeColumn::designWidth, gutterY,
+    outColumn.setBounds (margin + designW - VolumeColumn::designWidth, gutterY,
                         VolumeColumn::designWidth, gutterH);
     outColumn.setTransform (zoom);
 
     faceplate.setBounds (margin + colL, faceplateY,
-                         FaceplateView::designWidth - colL - colR, faceplateH);
+                         designW - colL - colR, faceplateH);
     faceplate.setTransform (zoom);
 
     // The bottom row: the always-on needle in the left half, the footer's facts in the right. Both
@@ -703,7 +719,7 @@ void AmpEditor::resized()
     // does not, its half left empty, so the facts never move.
     const int badgeInset = edgeInset;
     const int rowY   = faceplateY + faceplateH + chromeGap;
-    const int rowW   = FaceplateView::designWidth - 2 * badgeInset;
+    const int rowW   = designW - 2 * badgeInset;
     const int tunerW = (rowW - chromeGap) / 2;
 
     tunerStrip.setVisible (tunerStands);
@@ -714,13 +730,13 @@ void AmpEditor::resized()
     // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
     inRuler.setBounds (margin + colL - chromeGap + 2, gutterY, 56, gutterH);
     inRuler.setTransform (zoom);
-    outRuler.setBounds (margin + FaceplateView::designWidth - VolumeColumn::designWidth - 58, gutterY,
+    outRuler.setBounds (margin + designW - VolumeColumn::designWidth - 58, gutterY,
                         56, gutterH);
     outRuler.setTransform (zoom);
 
     // The learn sheet: half the plugin, centred over the faceplate.
-    learnOverlay.setBounds (margin + FaceplateView::designWidth / 6, faceplateY + 60,
-                            FaceplateView::designWidth * 2 / 3, 330);
+    learnOverlay.setBounds (margin + designW / 6, faceplateY + 60,
+                            designW * 2 / 3, 330);
     learnOverlay.setTransform (zoom);
 
     footer.setBounds (margin + badgeInset + tunerW + chromeGap, rowY + (bottomRowH - Footer::designHeight) / 2,
@@ -734,7 +750,7 @@ void AmpEditor::resized()
     demoStrip.setVisible (showDemo);
     if (showDemo)
     {
-        demoStrip.setBounds (margin, stripY, FaceplateView::designWidth, DemoStrip::designHeight);
+        demoStrip.setBounds (margin, stripY, designW, DemoStrip::designHeight);
         demoStrip.setTransform (zoom);
         stripY += DemoStrip::designHeight;
     }
@@ -742,14 +758,14 @@ void AmpEditor::resized()
     glyphs.setVisible (showGlyphs);
     if (showGlyphs)
     {
-        glyphs.setBounds (margin, stripY, FaceplateView::designWidth, GlyphPreview::designHeight);
+        glyphs.setBounds (margin, stripY, designW, GlyphPreview::designHeight);
         glyphs.setTransform (zoom);
     }
 
     // The overlay covers the whole editor, margins included, in the same design units.
-    setup.setBounds (0, 0, baseWidth, baseHeight());
+    setup.setBounds (0, 0, baseW(), baseHeight());
     setup.setTransform (zoom);
-    devices.setBounds (0, 0, baseWidth, baseHeight());
+    devices.setBounds (0, 0, baseW(), baseHeight());
     devices.setTransform (zoom);
 
 }
