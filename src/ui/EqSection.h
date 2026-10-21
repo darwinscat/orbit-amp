@@ -75,7 +75,9 @@ public:
     /** How much of the block's height the control row wants: a dial, its name above it at reading
         size, and the slope combo standing on the dial's bottom line. Nothing more — the row used to
         reserve a hundred and twelve and spend the last forty on air. */
-    static constexpr int rowH = 64;   // a name row of 16 (13 px type) and a dial of 48 — the cuts' stack fits the same height
+    static constexpr int labelRowH = 14;   // 13 px type, the floor, with a unit either side
+    static constexpr int rowH = labelRowH + Knob::smallSide;   // 64 -> 56: the dial 48 -> the face's small one, the name row 16 -> 14 —
+                                                               // the eight go to the curve; the cuts' stack fits the same height
 
     /** A cut's cell — its name, its switch, its slope combo: wide enough for "24 DB" and the
         chevron at 13 px. */

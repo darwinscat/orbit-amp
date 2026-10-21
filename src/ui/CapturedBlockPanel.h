@@ -125,7 +125,7 @@ private:
     static constexpr int section1W  = 160;   // GAIN, and SMOOTH with the picks under it — the dial's notches clear of the edges
     static constexpr int section2W  = 150;   // the channel lever, and BOOST under it
     static constexpr int sectionGap = 16;    // a hairline down its middle
-    static constexpr int tierGap    = 6;     // between a section's tier and its strip
+    static constexpr int tierGap    = 2;     // between a section's tier and its strip — 6 -> 2, the EQ's names closer under the curve
 
     /** THE STRIPS' HEIGHT is the console's row, the tallest thing any of them holds: a dial of reading
         size with its name over it. Every tier is what is left above — so the lever stands exactly as

@@ -77,6 +77,10 @@ public:
     float labelFontHeight = 8.0f;
     int   labelRowHeight  = labelHeight;
 
+    /** THE small dial: the EQ's bands, the reverb's DECAY and PRE, the delay's REPEATS, DARK and
+        OFFSET are one diameter, so a face's small hands read as one kind of control. */
+    static constexpr int smallSide = 42;
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds();

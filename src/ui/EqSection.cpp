@@ -163,7 +163,7 @@ void EqSection::buildBands (std::vector<Band> newBands)
 
         k->onValueChange   = [this] { refreshCurve(); };
         k->labelFontHeight = 13.0f;   // the face's floor for anything read
-        k->labelRowHeight  = 16;
+        k->labelRowHeight  = labelRowH;
 
         bandAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
             state, b.param, *k));
@@ -630,7 +630,7 @@ void EqSection::layOutRow (juce::Rectangle<int> row)
 
     // The cuts hang off the first knob's geometry, so an empty row still has to put them somewhere.
     const auto first = bandKnobs.empty() ? firstCell : bandKnobs.front()->getBounds();
-    const int labelH  = bandKnobs.empty() ? 16 : bandKnobs.front()->labelRowHeight;
+    const int labelH  = bandKnobs.empty() ? labelRowH : bandKnobs.front()->labelRowHeight;
 
     // A cut's cell is a stack — the name, the switch, the slope — standing on the SAME bottom
     // line as the dials: the slope combo's underside is the dials' underside, so the row is as
