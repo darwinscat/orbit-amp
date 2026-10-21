@@ -130,6 +130,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     // Its arc runs cold to hot, because that is what this one dial's position is.
     gain.labelRowHeight = 0;
     gain.heat = true;
+    gain.setArc (juce::MathConstants<float>::pi * 7.0f / 6.0f, juce::MathConstants<float>::pi * 17.0f / 6.0f);     // 0 at 7:00, 2 at 9:00, 8 at 3:00, 10 at 5:00
 
     // Both walls stand up: IN at the block's left, OUT at its right.
     //
@@ -952,13 +953,13 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     auto column = top.removeFromLeft (columnW);
     top.removeFromLeft (gap);
 
-    // The channel keys stand over the picture, at its top — a device of one channel has none, and
     const auto picks = (int) std::count_if (selectors.begin(), selectors.end(), [] (const auto& s) { return s.steps != nullptr; });
     auto pickColumn = picks > 0 ? top.removeFromLeft (columnW) : juce::Rectangle<int>();
     if (picks > 0)
         top.removeFromLeft (gap);
     pickColumn = pickColumn.withSizeKeepingCentre (pickColumn.getWidth(), juce::jmin (pickColumn.getHeight(), picks * pickRowH + (picks - 1) * gap));
 
+    // The channel keys stand over the picture, at its top — a device of one channel has none, and
     // the picture keeps the room.
     if (channelRow.count() > 1)
     {
