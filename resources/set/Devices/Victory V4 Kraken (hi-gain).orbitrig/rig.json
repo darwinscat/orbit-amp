@@ -5,7 +5,10 @@
   "chain": [
     {
       "kind": "nam", "slot": "amp",
-      "gear": { "make": "Victory", "model": "V4", "type": "amp" },
+      "gear": { "make": "Victory", "model": "V4", "type": "amp", "year": 2018,
+                "serial_number": "0166-1018", "designed_in": "Britain (UK)",
+                "made_in": "Britain (UK)",
+                "url": "https://www.victoryamps.com/product-category/amps/kraken/" },
       "tone_type": "hi-gain", "voicing": "dist", "circuit": "tube:4",
       "input_db": -7.0,
       "output_db": 6.0,
