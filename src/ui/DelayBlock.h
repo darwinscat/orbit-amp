@@ -17,10 +17,14 @@ class AmpProcessor;
     The TIME stands on the border where the captured blocks stand their device combo: the sync
     division as a pill (1/4, 1/8T…), with FREE at the bottom of its menu for the millisecond
     specialist, and — in a host — whose tempo the division counts in: the HOST's, the default, or
-    the block's OWN. Under it, in the corner, the one typed control on the face — the BPM field
-    (which reads HOST and the host's tempo, and does not move, while the host conducts), turning
-    into the MS field when the time goes free. Mix is the hero; REPEATS and DARK stand small at its left hand, OFFSET —
-    the block's stereo — small in the opposite corner.
+    the block's OWN.
+
+    LAID OUT AS THE REVERB IS, to the unit: the picture takes the whole box and the hands ride its
+    top. MIX is the hero, the reverb's MIX in the reverb's place at the reverb's size; REPEATS, DARK
+    and OFFSET stand small at its left hand, each the size of the reverb's DECAY and PRE — how many,
+    how dark, how wide, in the loop's own order. Under those three, one line: the one typed control
+    on the face — the BPM field (which reads HOST and the host's tempo, and does not move, while the
+    host conducts), turning into the MS field when the time goes free.
 
     The picture is the COMB: one tooth per repeat, standing where the repeats will land — the
     spacing is the glided time (turn the knob and the comb slides with the motor), the heights
@@ -56,6 +60,7 @@ private:
 
     float shownHostTempo = -1.0f;   // what the field last showed of the host's tempo, 0 for none
 
+
     /** The comb's surface: dumb, the block paints through it — the reverb picture's pattern. */
     struct CombView final : public juce::Component
     {
@@ -88,7 +93,7 @@ private:
             if (editor == nullptr && text != nullptr)
             {
                 g.setColour (hover ? theme::tx : theme::txDim);
-                theme::drawTracked (g, text(), r, theme::displayFont (11.0f), 0.08f,
+                theme::drawTracked (g, text(), r, theme::displayFont (fontH), 0.04f,
                                     juce::Justification::centred);
             }
         }
@@ -107,7 +112,7 @@ private:
         void beginEdit()
         {
             editor = std::make_unique<juce::TextEditor>();
-            editor->setFont (theme::displayFont (11.0f));
+            editor->setFont (theme::displayFont (fontH));
             editor->setJustification (juce::Justification::centred);
             editor->setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xff101016));
             editor->setColour (juce::TextEditor::textColourId, theme::tx);
@@ -147,9 +152,12 @@ private:
 
         std::unique_ptr<juce::TextEditor> editor;
         bool hover = false;
+
+        static constexpr float fontH = 13.0f;   // the face's floor for anything read
     };
 
-    static constexpr int maxKnobSide = 84;
+    static constexpr int maxKnobSide = 96;   // the reverb's hero, to the unit (ReverbBlock::maxKnobSide)
+    static constexpr int miniSide    = 42;   // the reverb's DECAY and PRE
 
     AmpProcessor& amp;
 
