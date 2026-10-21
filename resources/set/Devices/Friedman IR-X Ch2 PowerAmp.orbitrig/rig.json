@@ -9,7 +9,7 @@
                 "serial_number": "3902611016", "designed_in": "United States",
                 "made_in": "United States",
                 "url": "https://friedmanamplification.com/shop/pedals/friedman-ir-x/" },
-      "tone_type": "hi-gain", "voicing": "dist",
+      "tone_type": "hi-gain", "voicing": "dist", "circuit": "tube:2",
       "input_db": -4.0,
       "controls": [
         { "name": "Tight", "role": "generic", "values": ["Tight", "Fat"] },
