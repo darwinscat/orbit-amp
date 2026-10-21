@@ -73,6 +73,9 @@ const layout::Plan plan {
 
     // TURBO's hole half a pixel right; the hatch's box is RedPawAmp's, where a hatch of its own would go — none yet.
     .turbo { 922.0f, 787.0f },
+
+    // No plate under the cat: it stands straight on the frame's raised step, as large as the badge's was.
+    .emblemMark { 797.0f, 295.8f, 77.0f, 75.0f },
 };
 
 const Skin& ice()
@@ -98,14 +101,11 @@ const Skin& ice()
             [] { return std::make_unique<frostpaw::IceDrive> (numGears (iceLineup())); },
             { "Ice (GPU)", "1993 (CPU)", "Still" },
         };
-        // The cockpit's badge over the picture's plate, the plate a little darker than the steel round it
-        // (#727a81), the cockpit's light cat cut into it, and the lamp under the cat's glass white, as the
-        // snow's light.
-        face::BadgeLook badge;
-        badge.plateTop = juce::Colour (0xff60676e);
-        badge.plateBottom = juce::Colour (0xff4c5258);
-        badge.lamp = juce::Colour (0xfff2f6ff);
-        s.badge = badge;
+        // No badge: the badge's cat on the bare step, flat — neither raised nor cut, its white-grey alone, none
+        // of the cockpit's lilac — and the lamp under it white, as the snow's light.
+        s.markInk = { juce::Colour (0xffe0e0e0), juce::Colour (0xffa4a4a4), 0.0f, 0.0f, juce::Colour (0xffe6e6e6) };     // a neutral white, R = G = B
+        s.markLamp = juce::Colour (0xfff2f6ff);
+        s.markRender = false;
         return s;
     }();
     return ice;

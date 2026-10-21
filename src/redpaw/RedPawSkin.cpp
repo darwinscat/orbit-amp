@@ -40,7 +40,10 @@ const channels::Lineup& marsLineup()
 //==============================================================================
 // THE DASHBOARD, MEASURED (RedPawLayout.h): its picture is the one the rovers' plan is measured off, so
 // what it measures is the plan as it stands.
-const layout::Plan plan {};
+const layout::Plan plan {
+    // No plate under the cat: it is cut straight into the frame's raised step, as large as the badge's was.
+    .emblemMark { 797.0f, 295.8f, 77.0f, 75.0f },
+};
 
 const Skin& mars()
 {
@@ -58,15 +61,10 @@ const Skin& mars()
             [] { return std::make_unique<PlainsDrive> (numGears (marsLineup())); },     // the drive across Mars
             { "Plains (GPU)", "1993 (CPU)", "Still" },
         };
-        // The cockpit's badge over the picture's steel plate, the plate nearer the dashboard's own metal round it
-        // (#423c38) than the cockpit's near black, the cat on it ginger — leaning to the colour of the plains out
-        // of the window (#8f4b24 on the ground), light enough still to read on the plate.
-        face::BadgeLook badge;
-        badge.plateTop = juce::Colour (0xff47413d);
-        badge.plateBottom = juce::Colour (0xff2c2826);
-        badge.ink = { juce::Colour (0xffebb48e), juce::Colour (0xffb4714b), 0.9f, 0.4f };
-        badge.lamp = juce::Colour (0xffee7a3c);       // ...and the lamp under its glass Mars's own
-        s.badge = badge;
+        // No badge: the cat cut straight into the dashboard's metal, ginger — leaning to the colour of the plains
+        // out of the window (#8f4b24 on the ground), light enough still to read on the rust.
+        s.markInk = { juce::Colour (0xffc29576), juce::Colour (0xff955e3e), 0.9f, 0.4f };
+        s.markLamp = juce::Colour (0xffee7a3c);       // ...and the lamp under its glass Mars's own
         return s;
     }();
     return mars;

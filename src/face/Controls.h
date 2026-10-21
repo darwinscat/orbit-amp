@@ -332,6 +332,7 @@ struct MarkInk
     juce::Colour floorBottom { 0xff4b4858 };
     float shadow = 0.8f;      // the upper wall's shadow, its alpha
     float lip    = 0.28f;     // the lower lip's light, its alpha
+    juce::Colour lipLight { 0xffd8d2ee };     // ...and its colour: the family's lilac, or a face's own
 };
 void engraveMark (juce::Graphics&, juce::Rectangle<float> box, float scale, const MarkInk& = {});
 
@@ -345,7 +346,7 @@ struct BadgeLook
 {
     juce::Colour plateTop    { 0xff24222b };     // the plate, at its top...
     juce::Colour plateBottom { 0xff111016 };     // ...and at its bottom
-    MarkInk ink { juce::Colour (0xffcdc8dc), juce::Colour (0xff8d899e), 0.9f, 0.4f };     // a pale floor, a deep shadow, a bright lip
+    MarkInk ink { juce::Colour (0xff867c98), juce::Colour (0xff564e66), 0.9f, 0.4f };     // a dusky violet floor, a deep shadow, a bright lip
     juce::Colour lamp { 0xff9a7aff };    // the lamp under the cat's frosted glass when the hand is over it (Emblem): the cockpit's violet
     float wear = 1.0f;                   // how worn the plate's face is: fine scratches and scuffs in its own tone; 0 none
 };

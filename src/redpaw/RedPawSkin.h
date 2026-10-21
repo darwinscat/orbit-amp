@@ -96,6 +96,13 @@ struct Skin
         lit under the hand all the same (Emblem) — a badge's lamp is its own (BadgeLook::lamp). None if
         transparent. */
     juce::Colour markLamp {};
+
+    /** ...and the ink that bare mark is engraved in (face::MarkInk): the family's, unless the skin says. */
+    face::MarkInk markInk {};
+
+    /** ...and whether a render of the mark the skin ships stands there in its place; false, the mark is drawn in
+        markInk whatever the skin ships. */
+    bool markRender = true;
 };
 
 /** The skin a rover's processor wears (Product::skin). */

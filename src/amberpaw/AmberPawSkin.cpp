@@ -234,7 +234,8 @@ const Skin& titan()
         face::Monitor::View::shape,     // ...over the shape the amp gives the sound
         false,                          // parked, the large warning alone
         std::nullopt,                   // no badge: the cat cut straight into the metal between the vents...
-        juce::Colour (0xffffb340),      // ...and lit under the hand amber, Titan's light, as the others' are (Emblem)
+        juce::Colour (0xffd48a45),      // ...and lit under the hand a brownish amber, Titan's haze, as the others' are (Emblem)...
+        face::MarkInk { juce::Colour (0xffa29fb0), juce::Colour (0xff5e5b6c), 0.8f, 0.28f },     // ...its floor a touch whiter than the family's
     };
     return titan;
 }

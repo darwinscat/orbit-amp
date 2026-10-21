@@ -368,14 +368,14 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
         paintBadge (g, plate, { skin.plan.badgeScrews.begin(), skin.plan.badgeScrews.end() }, skin.plan.badgeScrew,
                     skin.plan.badgeMark, scale, *skin.badge);
     }
-    else if (const auto& mark = Art::of (skin).emblem; skin.mark && mark.isValid())
+    else if (const auto& mark = Art::of (skin).emblem; skin.mark && skin.markRender && mark.isValid())
     {
         g.setOpacity (1.0f);
         g.drawImage (mark, skin.plan.emblemMark, juce::RectanglePlacement::centred);
     }
     else if (skin.mark)
     {
-        engraveMark (g, skin.plan.emblemMark, scale);
+        engraveMark (g, skin.plan.emblemMark, scale, skin.markInk);
     }
 
     // A word on the dust: a shadow under it, so it reads off the rust as well as off the bare metal —
@@ -449,7 +449,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         { "turbo-lid", &art.turboLid }, { "emblem", &art.emblem }, { "socket", &art.socket },
         { "key-frame-left", &art.keyFrameLeft }, { "key-frame-cell", &art.keyFrameCell }, { "key-frame-right", &art.keyFrameRight } };
     for (const auto& [name, img] : own)
-        if (! (skin.badge.has_value() && juce::String (name) == "emblem"))     // a skin on the badge shows no render of the mark
+        if (! ((skin.badge.has_value() || ! skin.markRender) && juce::String (name) == "emblem"))     // a skin on the badge, or drawing its mark, shows no render of it
             writeSprite (dir, name, *img);
     writeForWeb (dir.getChildFile ("still.webp"), Art::still (skin));
 
