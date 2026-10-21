@@ -232,7 +232,7 @@ inline constexpr const char* cabIr = "cab_ir";
 // the table read here. What a session keeps of `cabIr` is an INDEX into this list — the IR's number in
 // the catalog, which is for good: a new cabinet takes the next one, and nothing already here ever moves,
 // so a session saved on WUMBO opens on WUMBO. The menu does not show them in this order; it shows them by
-// the shelf's folders, and inside each by cabinet (cabShelves, below). The catalog's default, DARK MATTER,
+// the shelf's folders, and inside each by cabinet (cabShelves, below). The catalog's default, RED GIANT,
 // is the shipping default, the cabinet every face's channels open on too.
 inline const juce::StringArray cabIrNames = []
 {
@@ -526,7 +526,7 @@ inline constexpr int rowForStage (Stage s)
 
 /** THE ENGINE'S OWN PACK, by its name in a product's list: the device a fresh OrbitAmp plays, and the one
     whose knobs and switches give every amp's their defaults (Parameters.cpp, blockDefaults). */
-inline constexpr const char* enginePack = "X88-IR Crunch";
+inline constexpr const char* enginePack = "Soldano X88-IR Crunch";
 
 /** WHERE A FRESH INSTANCE STANDS, wherever that is not where the engine stands: the defaults createLayout
     gives the few parameters a product, or the place it runs in, opens elsewhere. A parameter's default
@@ -538,7 +538,7 @@ inline constexpr const char* enginePack = "X88-IR Crunch";
     which is where the amp itself puts these parameters back (engineDefault). */
 struct Opening
 {
-    /** The pack it plays, by the `rig_id` its manifest carries, or none: the engine's, the X88-IR Crunch.
+    /** The pack it plays, by the `rig_id` its manifest carries, or none: the engine's, the Soldano X88-IR Crunch.
         Only the device — the knobs and switches keep the defaults the engine's pack gives them, which is
         where a channel the hand has never been on finds them (channels/Channels.cpp, defaultOf). */
     const char* capture = nullptr;

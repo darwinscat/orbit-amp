@@ -1,0 +1,87 @@
+{
+  "format": "orbitrig", "schema": 4,
+  "rig_id": "revolt-lead-poweramp-f5dc", "family_id": "twonotes-revolt-guitar", "name": "Lead", "modeled_by": "Darwin's Cat",
+  "picture": "device.webp",
+  "chain": [
+    {
+      "kind": "nam", "slot": "amp",
+      "gear": { "make": "Two Notes", "model": "ReVolt Guitar", "type": "amp" },
+      "tone_type": "hi-gain", "voicing": "od",
+      "input_db": -4.0,
+      "controls": [
+        { "name": "Boost", "role": "generic", "values": ["off", "on"] },
+        { "name": "Gain", "role": "gain", "sweep": 300,
+          "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] }
+      ],
+      "files": [
+        { "file": "ReVolt Lead PowerAmp-0001.namz", "settings": { "Boost": "off", "Gain": "60" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.01299012 },
+        { "file": "ReVolt Lead PowerAmp-0002.namz", "settings": { "Boost": "on", "Gain": "60" },
+          "lag_samples": -96, "epochs": 800, "esr": 0.02068203 },
+        { "file": "ReVolt Lead PowerAmp-0003.namz", "settings": { "Boost": "off", "Gain": "90" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.02027884 },
+        { "file": "ReVolt Lead PowerAmp-0004.namz", "settings": { "Boost": "on", "Gain": "90" },
+          "lag_samples": -96, "epochs": 800, "esr": 0.02887411 },
+        { "file": "ReVolt Lead PowerAmp-0005.namz", "settings": { "Boost": "off", "Gain": "120" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.02046581 },
+        { "file": "ReVolt Lead PowerAmp-0006.namz", "settings": { "Boost": "on", "Gain": "120" },
+          "lag_samples": -96, "epochs": 800, "esr": 0.03751383 },
+        { "file": "ReVolt Lead PowerAmp-0007.namz", "settings": { "Boost": "off", "Gain": "150" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.02405714 },
+        { "file": "ReVolt Lead PowerAmp-0008.namz", "settings": { "Boost": "on", "Gain": "150" },
+          "lag_samples": -96, "epochs": 800, "esr": 0.04058604 },
+        { "file": "ReVolt Lead PowerAmp-0009.namz", "settings": { "Boost": "off", "Gain": "180" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.02926823 },
+        { "file": "ReVolt Lead PowerAmp-0011.namz", "settings": { "Boost": "off", "Gain": "210" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.04256734 },
+        { "file": "ReVolt Lead PowerAmp-0012.namz", "settings": { "Boost": "on", "Gain": "210" },
+          "lag_samples": -95, "epochs": 800, "esr": 0.06227636 },
+        { "file": "ReVolt Lead PowerAmp-0013.namz", "settings": { "Boost": "off", "Gain": "240" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.04248492 },
+        { "file": "ReVolt Lead PowerAmp-0014.namz", "settings": { "Boost": "on", "Gain": "240" },
+          "lag_samples": -95, "epochs": 800, "esr": 0.06042277 },
+        { "file": "ReVolt Lead PowerAmp-0015.namz", "settings": { "Boost": "off", "Gain": "270" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.05193088 },
+        { "file": "ReVolt Lead PowerAmp-0016.namz", "settings": { "Boost": "on", "Gain": "180" },
+          "lag_samples": -96, "epochs": 800, "esr": 0.05219133 },
+        { "file": "ReVolt Lead PowerAmp-0017.namz", "settings": { "Boost": "on", "Gain": "270" },
+          "lag_samples": -96, "epochs": 800, "esr": 0.06567185 },
+        { "file": "ReVolt Lead PowerAmp-0018.namz", "settings": { "Boost": "off", "Gain": "300" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.05493449 },
+        { "file": "ReVolt Lead PowerAmp-0019.namz", "settings": { "Boost": "on", "Gain": "300" },
+          "lag_samples": -96, "epochs": 800, "esr": 0.06662951 },
+        { "file": "ReVolt Lead PowerAmp-0001.namz", "settings": { "Boost": "off", "Gain": "0" },
+          "input_db": -3.0, "lag_samples": 0, "epochs": 800, "esr": 0.01299012 },
+        { "file": "ReVolt Lead PowerAmp-0002.namz", "settings": { "Boost": "on", "Gain": "0" },
+          "input_db": -3.0, "lag_samples": -96, "epochs": 800, "esr": 0.02068203 },
+        { "file": "ReVolt Lead PowerAmp-0001.namz", "settings": { "Boost": "off", "Gain": "30" },
+          "input_db": -1.5, "lag_samples": 0, "epochs": 800, "esr": 0.01299012 },
+        { "file": "ReVolt Lead PowerAmp-0002.namz", "settings": { "Boost": "on", "Gain": "30" },
+          "input_db": -1.5, "lag_samples": -96, "epochs": 800, "esr": 0.02068203 }
+      ],
+      "tone": [
+        {
+          "name": "Bass", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "low_shelf", "hz": 176.0, "q": 0.62, "range_db": [-12.0, 9.0] }
+          ]
+        },
+        {
+          "name": "Mid", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "bell", "hz": 765.0, "q": 0.8, "range_db": [-12.0, 12.0] }
+          ]
+        },
+        {
+          "name": "Treble", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "high_shelf", "hz": 1234.0, "q": 0.69, "range_db": [-12.0, 9.0] }
+          ]
+        }
+      ]
+    }
+  ]
+}

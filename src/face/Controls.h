@@ -324,20 +324,66 @@ struct MarkCut
 /** THE MARK, ENGRAVED in `box`, at `scale` physical pixels to the unit. Its light parts are cut into the
     plate: the cut's upper wall falls into shadow, its lower lip catches the light, and its floor is
     bare metal a shade brighter than the plate — so the mark reads as worked into the hull, not printed
-    on it. */
-void engraveMark (juce::Graphics&, juce::Rectangle<float> box, float scale);
+    on it. The ink says how: the floor's colour from the cut's top to its bottom, and how dark the shadow
+    and how bright the lip — a face whose plate wants the mark lighter says so with its own. */
+struct MarkInk
+{
+    juce::Colour floorTop    { 0xff8a8698 };
+    juce::Colour floorBottom { 0xff4b4858 };
+    float shadow = 0.8f;      // the upper wall's shadow, its alpha
+    float lip    = 0.28f;     // the lower lip's light, its alpha
+    juce::Colour lipLight { 0xffd8d2ee };     // ...and its colour: the family's lilac, or a face's own
+};
+void engraveMark (juce::Graphics&, juce::Rectangle<float> box, float scale, const MarkInk& = {});
 
-/** THE MARK ANSWERS THE HAND. Engraved and dark until the pointer is over the plate; then the cut
-    turns a dark violet — its colour changes, nothing glows — and a click on it goes home, to the
-    maker's site. It paints only that light: the plate and the engraving belong to the face's picture.
-    `plate` is the plate's face, the hand's target; `mark` the box the mark is cut in — both in the
-    stage's space. */
+/** THE BADGE: a plate of the face's own laid over the picture's emblem — so the picture's own cat and bolts
+    are gone and the plate still reads as the same piece of hull: dark metal lit from above, lightly worn,
+    with a fine bevel, its screws, and the mark engraved light in it, crisp over the wear. The cockpit's first (Cockpit::paintEmblem); a
+    rover wears the same where its skin says so, in colours of its own. `plate` the plate's face and `mark`
+    the box the mark is cut in, both in the stage's space; `screws` the screws' centres, `screw` how wide
+    their heads are. */
+struct BadgeLook
+{
+    juce::Colour plateTop    { 0xff24222b };     // the plate, at its top...
+    juce::Colour plateBottom { 0xff111016 };     // ...and at its bottom
+    MarkInk ink { juce::Colour (0xff867c98), juce::Colour (0xff564e66), 0.9f, 0.4f };     // a dusky violet floor, a deep shadow, a bright lip
+    juce::Colour lamp { 0xff9a7aff };    // the lamp under the cat's frosted glass when the hand is over it (Emblem): the cockpit's violet
+    float wear = 1.0f;                   // how worn the plate's face is: fine scratches and scuffs in its own tone; 0 none
+};
+void paintBadge (juce::Graphics&, const juce::Path& plate, const std::vector<juce::Point<float>>& screws, float screw,
+                 juce::Rectangle<float> mark, float scale, const BadgeLook& = {});
+
+/** THE MARK ANSWERS THE HAND. Engraved until the pointer is over the plate; then, on a face that has a LAMP
+    for it (BadgeLook::lamp), the cut's floor is frosted glass with that lamp coming up under it — gently, on
+    a spring with no overshoot: the floor lit through, brighter at its middle, in the lamp's colour, the cut's
+    walls kept, and a soft bloom just past its edges. On a face with no lamp the cut turns a dark violet — its
+    colour changes, nothing glows. A click goes home, to the maker's site. It paints only that light: the
+    plate and the engraving belong to the face's picture. `plate` is the plate's face, the hand's target;
+    `mark` the box the mark is cut in — both in the stage's space. */
 class Emblem final : public juce::Component, private juce::Timer
 {
 public:
     Emblem (std::vector<juce::Point<float>> plate, juce::Rectangle<float> mark);
 
     std::function<void()> onClick;
+
+    /** The lamp under the glass; transparent, none (the violet cast). */
+    void setLamp (juce::Colour);
+    juce::Colour lampColour() const noexcept { return lamp; }
+
+    /** THE LIT GLASS, whole, as it stands with the lamp full up: the floor's light and the bloom, `scale`
+        physical pixels to the unit, over litBox — what the hover lays over the engraving at the light's
+        share. Invalid with no lamp. For the site, which fades it in the same way (Console::exportForWeb). */
+    juce::Image litPicture (float scale) const;
+    juce::Rectangle<float> litBox() const noexcept { return mark.expanded (bloom); }
+
+    /** How the light comes up and goes, as the site needs it to do the same: the spring (Glide) and how long
+        it takes to reach 95 % of the way, up and down. */
+    float lightStiffness() const noexcept { return light.stiffness; }
+    float lightDamping() const noexcept { return light.damping; }
+    float lightSeconds() const noexcept;
+
+    static constexpr float bloom = 5.0f;     // how far past the mark's edges the glow reaches, in the stage's units
 
     void paint (juce::Graphics&) override;
     bool hitTest (int x, int y) override;
@@ -349,6 +395,9 @@ private:
     const juce::Path plate;
     const juce::Rectangle<float> mark;
     Glide light;
+    juce::Colour lamp;
+    mutable juce::Image lit;          // litPicture, kept for the scale it was made at
+    mutable float litScale = 0.0f;
     void aim (float);
     void timerCallback() override;
 };

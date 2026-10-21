@@ -40,22 +40,33 @@ const channels::Lineup& marsLineup()
 //==============================================================================
 // THE DASHBOARD, MEASURED (RedPawLayout.h): its picture is the one the rovers' plan is measured off, so
 // what it measures is the plan as it stands.
-const layout::Plan plan {};
+const layout::Plan plan {
+    // No plate under the cat: it is cut straight into the frame's raised step, as large as the badge's was.
+    .emblemMark { 797.0f, 295.8f, 77.0f, 75.0f },
+};
 
 const Skin& mars()
 {
-    static const Skin mars {
-        name,
-        marsLineup(),
-        plan,
-        "REDPAW_ART_DIR",
-        juce::Colour (0xff3fe6f2),      // the painted rings' light, a shade brighter
-        face::Ink {},                   // the family's lilac on the dark rust...
-        juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words, so they read off the dust
-        face::renders::text (name, "midi.txt", "REDPAW_ART_DIR"),
-        [] { return std::make_unique<PlainsDrive> (numGears (marsLineup())); },     // the drive across Mars
-        { "Plains (GPU)", "1993 (CPU)", "Still" },
-    };
+    static const Skin mars = []
+    {
+        Skin s {
+            name,
+            marsLineup(),
+            plan,
+            "REDPAW_ART_DIR",
+            juce::Colour (0xff3fe6f2),      // the painted rings' light, a shade brighter
+            face::Ink {},                   // the family's lilac on the dark rust...
+            juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words, so they read off the dust
+            face::renders::text (name, "midi.txt", "REDPAW_ART_DIR"),
+            [] { return std::make_unique<PlainsDrive> (numGears (marsLineup())); },     // the drive across Mars
+            { "Plains (GPU)", "1993 (CPU)", "Still" },
+        };
+        // No badge: the cat cut straight into the dashboard's metal, ginger — leaning to the colour of the plains
+        // out of the window (#8f4b24 on the ground), light enough still to read on the rust.
+        s.markInk = { juce::Colour (0xffc29576), juce::Colour (0xff955e3e), 0.9f, 0.4f };
+        s.markLamp = juce::Colour (0xffee7a3c);       // ...and the lamp under its glass Mars's own
+        return s;
+    }();
     return mars;
 }
 

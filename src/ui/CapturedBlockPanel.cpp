@@ -130,6 +130,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     // Its arc runs cold to hot, because that is what this one dial's position is.
     gain.labelRowHeight = 0;
     gain.heat = true;
+    gain.setArc (juce::MathConstants<float>::pi * 7.0f / 6.0f, juce::MathConstants<float>::pi * 17.0f / 6.0f);     // 0 at 7:00, 2 at 9:00, 8 at 3:00, 10 at 5:00
 
     // Both walls stand up: IN at the block's left, OUT at its right.
     //
@@ -944,15 +945,19 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     area.removeFromTop (gap);
     eq.layOut (area);
 
-    // ---- inside it: a column of FIXED width carrying the big GAIN with the device's own
-    //      selectors under it, and one picture taking everything to its right.
+    // ---- inside it: a column of FIXED width carrying the big GAIN, the device's own selectors in a
+    //      column of their own right of it, and one picture taking everything to their right.
     //
-    //      Fixed, because the picture must not move when the device changes. Fur Coat brings an
-    //      octave switch and a Big Muff brings nothing, and if the column grew to fit them the
-    //      whole right-hand side would shuffle sideways every time the combo was touched. Only the
-    //      GAIN dial's diameter answers for what the switches take. ----
+    //      The dial keeps its size whatever the device brings: Fur Coat's octave switch and a Big
+    //      Muff's nothing leave GAIN as it is, and the picture gives the switches their room. ----
     auto column = top.removeFromLeft (columnW);
     top.removeFromLeft (gap);
+
+    const auto picks = (int) std::count_if (selectors.begin(), selectors.end(), [] (const auto& s) { return s.steps != nullptr; });
+    auto pickColumn = picks > 0 ? top.removeFromLeft (columnW) : juce::Rectangle<int>();
+    if (picks > 0)
+        top.removeFromLeft (gap);
+    pickColumn = pickColumn.withSizeKeepingCentre (pickColumn.getWidth(), juce::jmin (pickColumn.getHeight(), picks * pickRowH + (picks - 1) * gap));
 
     // The channel keys stand over the picture, at its top — a device of one channel has none, and
     // the picture keeps the room.
@@ -962,28 +967,29 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         top.removeFromTop (6);
     }
 
-    // Only the SELECTING controls stand here — the ones that pick a capture. A measured control is
+    // Only the SELECTING controls stand there — the ones that pick a capture. A measured control is
     // a band of the curve and belongs in the console's row, whatever shape its own control has.
-    // Each takes ONE line off the bottom — name, lever, chosen position — and GAIN gets the rest,
-    // so a device with nothing to switch simply wears a bigger dial, and nothing else on the face
-    // moves.
+    // Each is ONE line — name, lever, chosen position — stacked down the middle of their column.
     for (auto& sel : selectors)
     {
         if (sel.steps == nullptr)
             continue;
 
-        sel.row = column.removeFromBottom (pickRowH);
-        column.removeFromBottom (gap);
+        sel.row = pickColumn.removeFromTop (pickRowH);
+        pickColumn.removeFromTop (gap);
         sel.steps->setBounds (sel.row.withX (sel.row.getX() + pickNameW).withWidth (pickSwitchW));
     }
 
     const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
     gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
 
-    // The pill stands in the gap at the bottom of the dial's arc — the one place inside the dial's
-    // square that neither the ring nor a notch reaches — so it reads as the dial's own caption.
+    // The pill stands at the foot of the dial, just under the notches of its 0 and its 10 — the travel runs
+    // 7:00 to 5:00, so the gap at the bottom of the arc no longer has room for it — and reads as the dial's
+    // own caption; no lower than the gap under the top zone lets it.
+    const int notchFoot = juce::roundToInt (0.46f * (float) gainSide);     // Knob.h: the notches' outer end at 150°, 0.515 d out
     smoothTag.setBounds (juce::Rectangle<int> (66, 14).withCentre ({ gain.getBounds().getCentreX(),
-                                                                     gain.getBottom() - 6 }));
+                                                                     juce::jmin (gain.getBounds().getCentreY() + notchFoot + 8,
+                                                                                 column.getBottom() + gap - 7) }));
     smoothTag.toFront (false);
 
     layWidget (top);
@@ -1245,7 +1251,7 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
     // at whatever level the hardware happened to give it, some 8-10 dB away from every neighbour, and
     // nothing else on this face would report it. The number itself is indication; the missing one is
     // a warning, and it is written in the hand's own colour so it cannot be mistaken for furniture.
-    if (block.isReady())
+    if (block.isReady() && showsLoudnessTag)
     {
         // …OF THE MODEL THAT IS SOUNDING. The player used to answer for slot 0 whatever was audible,
         // and slots go by knot parity: on an odd capture the whole sound comes out of slot 1, so this

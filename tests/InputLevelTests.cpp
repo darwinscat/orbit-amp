@@ -195,8 +195,9 @@ int main()
         auto a = make (p);
         const float h = heard (*a);
         a->pumpDeviceWork();
-        check (near (trim (*a), 0.0f, 0.01f) && near (h, -6.0f) && near ((float) a->preamp.packInputDb(), -9.0f)
-                   && near (fed (*a), -9.0f) && ! a->apvts.state.hasProperty ("input_zero"),
+        const float stated = (float) a->preamp.packInputDb();      // the pack's own chain[].input_db
+        check (near (trim (*a), 0.0f, 0.01f) && near (h, -6.0f) && stated < 0.0f
+                   && near (fed (*a), stated) && ! a->apvts.state.hasProperty ("input_zero"),
                juce::String (p.name) + ", fresh: unity at its control's 0, a -6 dB peak heard at " + say (h)
                    + ", its pack fed at the level the pack states, " + say (fed (*a)));
     }
@@ -218,22 +219,23 @@ int main()
     auto b = make (redPawAmp());
     b->setStateInformation (old.getData(), (int) old.getSize());
     b->pumpDeviceWork();
-    check (near (trim (*b), 3.0f, 0.01f) && near (fed (*b), -6.0f),
-           "RedPawAmp's 0.8.0 session feeds its model " + say (fed (*b)) + " as it did: the lever +3, the pack's own -9 dB");
+    check (near (trim (*b), 3.0f, 0.01f) && near (fed (*b), 3.0f + (float) b->preamp.packInputDb()),
+           "RedPawAmp's 0.8.0 session keeps its lever at +3 and feeds its model " + say (fed (*b))
+               + ": the lever over the pack's own level, " + say ((float) b->preamp.packInputDb()));
     check (near (threshold (*b), -41.0f, 0.01f) && opensOn (*b, -43.0f) && ! opensOn (*b, -45.0f),
            "...its gate at " + say (threshold (*b)) + " opens on a guitar over -44 dB, as it did");
     check (! carriesFormer (b->apvts.state, redPawAmp()) && ! carriesFormer (treeOf (session (*b)), redPawAmp()),
            "...and the note of 0.8.0's zero is gone from what it plays and what it saves");
     b->history.switchTo (1);
     b->pumpDeviceWork();
-    check (near (trim (*b), -3.0f, 0.01f) && near (fed (*b), -12.0f) && near (threshold (*b), -51.0f, 0.01f)
+    check (near (trim (*b), -3.0f, 0.01f) && near (fed (*b), -3.0f + (float) b->preamp.packInputDb()) && near (threshold (*b), -51.0f, 0.01f)
                && opensOn (*b, -47.0f) && ! opensOn (*b, -49.0f),
-           "...its register B fed " + say (fed (*b)) + ", its gate opening on a guitar over -48 dB, as they did");
+           "...its register B, the lever at -3, fed " + say (fed (*b)) + ", its gate opening on a guitar over -48 dB, as it did");
 
     // THE COCKPIT, made under a zero the player had chosen, -12 dB: INPUT at -10 dB absolute, the gate at
-    // -50 dB. 0.8.0 fed its model -10 dB and opened the gate over a -40 dB guitar. The pack's level stands
-    // where 0.8.0's -9 dB did, so it is fed 3 dB harder now — the distance from that zero to -9 dB — and its
-    // gate still opens on the same guitar.
+    // -50 dB. 0.8.0 fed its model -10 dB and opened the gate over a -40 dB guitar. The lever keeps its place
+    // over the zero it had, +2, and the pack's own measured level stands under it now where 0.8.0's zero did;
+    // its gate still opens on the same guitar.
     {
         auto c = make (catpitAmp());
         auto state = c->apvts.copyState();
@@ -242,9 +244,9 @@ int main()
         auto d = make (catpitAmp());
         d->setStateInformation (bare.getData(), (int) bare.getSize());
         d->pumpDeviceWork();
-        check (near (trim (*d), 2.0f, 0.01f) && near (fed (*d), -7.0f),
+        check (near (trim (*d), 2.0f, 0.01f) && near (fed (*d), 2.0f + (float) d->preamp.packInputDb()),
                "CatpitAmp's 0.8.0 state under a chosen -12 dB: the lever +2, its model fed " + say (fed (*d))
-                   + ", 3 dB over 0.8.0's -10 dB");
+                   + ", the lever over the pack's own level");
         check (near (threshold (*d), -38.0f, 0.01f) && opensOn (*d, -39.0f) && ! opensOn (*d, -41.0f),
                "...its gate at " + say (threshold (*d)) + " opening on a guitar over -40 dB, as it did");
     }
@@ -258,7 +260,7 @@ int main()
         auto g = make (frostPawAmp());
         g->setStateInformation (never.getData(), (int) never.getSize());
         g->pumpDeviceWork();
-        check (near (trim (*g), 2.0f, 0.01f) && near (threshold (*g), -50.0f, 0.01f) && near (fed (*g), -7.0f),
+        check (near (trim (*g), 2.0f, 0.01f) && near (threshold (*g), -50.0f, 0.01f) && near (fed (*g), 2.0f + (float) g->preamp.packInputDb()),
                "a 0.8.0 state with no note keeps its trim and its gate as they were: fed " + say (fed (*g)));
     }
 
@@ -272,7 +274,7 @@ int main()
         auto q = make (orbitAmp());
         q->setStateInformation (bytes.getData(), (int) bytes.getSize());
         q->pumpDeviceWork();
-        check (near (trim (*q), 3.0f, 0.01f) && near (threshold (*q), -50.0f, 0.01f) && near (fed (*q), -6.0f),
+        check (near (trim (*q), 3.0f, 0.01f) && near (threshold (*q), -50.0f, 0.01f) && near (fed (*q), 3.0f + (float) q->preamp.packInputDb()),
                "an OrbitAmp state from before keeps its fader at +3 and its gate, and feeds its pack " + say (fed (*q)));
     }
 

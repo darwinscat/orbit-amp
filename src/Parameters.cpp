@@ -70,7 +70,7 @@ float engineDefault (const juce::RangedAudioParameter& p, int enginePlace)
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::String& product, const Opening& opening)
 {
     // A FRESH INSTANCE IS WHAT ITS DEFAULTS SAY — the first launch, a new instance in a host, and INIT
-    // alike: the X88-IR Crunch through DARK MATTER, the input and output columns in the chain, the delay
+    // alike: the Soldano X88-IR Crunch through RED GIANT, the input and output columns in the chain, the delay
     // on with nothing in its mix, and everything else where the cockpit leaves it, at its parameter's
     // own default — except where `opening` says otherwise: a product's first channel's pack, room and
     // delay, and the channel mode the environment chose. The cockpit and the rovers set their chain over

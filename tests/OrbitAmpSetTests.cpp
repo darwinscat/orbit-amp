@@ -4,7 +4,7 @@
 // Gate for ORBITAMP'S SET AS THE BUILD LAYS IT OUT in the factory folder (CMakeLists.txt: THE FACTORY
 // FOLDER), under OrbitAmp's own list there: that the list names every pack OrbitAmp plays — every pack of
 // the tree's set: the X88-IR's four channels, the Friedman IR-X's two, the ReVolt Guitar's three and the
-// Victory V4's three — and nothing else; that it names the whole cabinet shelf in its folders, and every
+// Victory V4's three, the last two only where the build is not a release — and nothing else; that it names the whole cabinet shelf in its folders, and every
 // file it names is there; that the shelf OrbitAmp plays holds every place of the catalog; that each pack
 // lies under the name of the capture it holds; that the preamp list shows each by a name of its own; and
 // that the AMP's menu shows the X88-IR, the IR-X, the ReVolt and the V4 as the family's devices and no OLD.
@@ -43,11 +43,14 @@ int main()
     check (list.size() > 0, "OrbitAmp has a list in the build's factory folder, " + juce::String (list.size()) + " files");
 
     // What OrbitAmp plays, by the names its list shows them by: a pack that went missing from the tree
-    // would otherwise go missing from the product without a word.
-    const juce::StringArray wanted { "X88-IR Normal", "X88-IR Altered", "X88-IR Crunch", "X88-IR Overdrive",
-                                     "IR-X Ch1 PowerAmp", "IR-X Ch2 PowerAmp",
-                                     "ReVolt Clean PowerAmp", "ReVolt Crunch PowerAmp", "ReVolt Lead PowerAmp",
-                                     "V4 Copper (clean)", "V4 Sheriff (crunch)", "V4 Kraken (hi-gain)" };
+    // would otherwise go missing from the product without a word. A release leaves out the packs of the
+    // amps it does not carry — the ReVolt's and the V4's (CMakeLists.txt: A RELEASE SHIPS NO PACK OF AN AMP
+    // IT LEAVES OUT); built here, OrbitAmp plays them all.
+    juce::StringArray wanted { "Soldano X88-IR Normal", "Soldano X88-IR Altered", "Soldano X88-IR Crunch", "Soldano X88-IR Overdrive",
+                               "Friedman IR-X Ch1 PowerAmp", "Friedman IR-X Ch2 PowerAmp" };
+    if (ORBITAMP_SHIPS_EVERY_PACK)
+        wanted.addArray ({ "Two Notes ReVolt Clean PowerAmp", "Two Notes ReVolt Crunch PowerAmp", "Two Notes ReVolt Lead PowerAmp",
+                           "Victory V4 Copper (clean)", "Victory V4 Sheriff (crunch)", "Victory V4 Kraken (hi-gain)" });
 
     juce::StringArray packs, cabinets, astray, missing;
     for (const auto& path : list)
@@ -66,7 +69,8 @@ int main()
     bool everyOne = packs.size() == wanted.size();
     for (const auto& w : wanted)
         everyOne = everyOne && packs.contains (w);
-    check (everyOne, "the list names every pack OrbitAmp plays, the X88-IR's four, the IR-X's two, the ReVolt's three and the V4's three: "
+    check (everyOne, juce::String ("the list names every pack OrbitAmp plays, the X88-IR's four and the IR-X's two")
+                         + (ORBITAMP_SHIPS_EVERY_PACK ? ", the ReVolt's three and the V4's three: " : ", and in a release no more: ")
                          + packs.joinIntoString (", "));
     check (astray.isEmpty(), "...and nothing but packs and cabinets — no face's pictures" + (astray.isEmpty() ? juce::String() : ": " + astray.joinIntoString (", ")));
     check (missing.isEmpty(), "every file it names is there, with something in it" + (missing.isEmpty() ? juce::String() : ": " + missing.joinIntoString (", ")));
@@ -93,15 +97,19 @@ int main()
         check (whole, "...and OrbitAmp's shelf holds every place of the catalog, read from the folder");
     }
 
-    // A name is a promise about the capture: "X88-IR Crunch" is the pack whose rig_id is x88-ir-crunch-…,
-    // "V4 Copper (clean)" the one whose rig_id is v4-copper-… — a word in brackets says its character.
+    // A name is a promise about the capture: its maker first, then the capture's own words — "Soldano X88-IR
+    // Crunch" is the pack whose rig_id is x88-ir-crunch-…, "Victory V4 Copper (clean)" the one whose rig_id is
+    // v4-copper-… — a word in brackets says its character.
     {
         juce::StringArray wrong;
         for (const auto& p : packs)
         {
             const auto rig = DeviceLibrary::rigIdOf (factory.getChildFile (p + ".orbitrig.zip"));
-            const auto promised = p.upToFirstOccurrenceOf (" (", false, false);
-            if (! rig.startsWith (promised.toLowerCase().replaceCharacter (' ', '-') + "-"))
+            const auto words = juce::StringArray::fromTokens (p.upToFirstOccurrenceOf (" (", false, false), " ", "");
+            bool kept = false;      // a maker of a word or more, and the rest the rig_id's start
+            for (int maker = 1; maker < words.size() && ! kept; ++maker)
+                kept = rig.startsWith (words.joinIntoString ("-", maker).toLowerCase() + "-");
+            if (! kept)
                 wrong.add (p + " holds " + (rig.isEmpty() ? juce::String ("no capture") : rig));
         }
         check (wrong.isEmpty(), "each lies under the name of the capture it holds" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString (", ")));
@@ -129,7 +137,9 @@ int main()
             devices.add (d.name);
         for (const auto& f : shelf.folders)
             folders.add (f.name);
-        check (devices.joinIntoString (", ") == "IR-X, ReVolt, V4, X88-IR", "the AMP's menu: the family's devices are the IR-X, the ReVolt, the V4 and the X88-IR: "
+        check (devices.joinIntoString (", ") == (ORBITAMP_SHIPS_EVERY_PACK ? "Friedman IR-X, Soldano X88-IR, Two Notes ReVolt, Victory V4"
+                                                                           : "Friedman IR-X, Soldano X88-IR"),
+               "the AMP's menu: the family's devices by maker and name — the Friedman IR-X, the Soldano X88-IR and, built here, the Two Notes ReVolt and the Victory V4: "
                                                                   + devices.joinIntoString (", "));
         check (folders.isEmpty(), "...and no folder of the factory's, OLD or any other: " + folders.joinIntoString (", "));
     }

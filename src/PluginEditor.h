@@ -151,6 +151,8 @@ private:
     DisclaimerPanel devices { amp.product().name };        // DEVICES & TRADEMARKS: the long notice and the list it is about
             // the Setup overlay — last member, so it sits on top
 
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpEditor)
 };
 

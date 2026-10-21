@@ -595,20 +595,93 @@ const MarkCut& MarkCut::at (float scale, juce::Rectangle<float> box)
     return made;
 }
 
-void engraveMark (juce::Graphics& g, juce::Rectangle<float> box, float scale)
+void engraveMark (juce::Graphics& g, juce::Rectangle<float> box, float scale, const MarkInk& ink)
 {
     const auto& cut = MarkCut::at (scale, box).cut;
     if (! cut.isValid())
         return;
 
     const float px = 1.0f / juce::jmax (1.0f, scale) * 1.6f;   // the wall's depth, about a pixel and a half
-    g.setColour (juce::Colours::black.withAlpha (0.8f));
+    g.setColour (juce::Colours::black.withAlpha (ink.shadow));
     g.drawImage (cut, box.translated (-0.5f * px, -px), juce::RectanglePlacement::stretchToFit, true);
-    g.setColour (juce::Colour (0xffd8d2ee).withAlpha (0.28f));
+    g.setColour (ink.lipLight.withAlpha (ink.lip));
     g.drawImage (cut, box.translated (0.4f * px, px), juce::RectanglePlacement::stretchToFit, true);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff8a8698), box.getCentreX(), box.getY(),
-                                             juce::Colour (0xff4b4858), box.getCentreX(), box.getBottom(), false));
+    g.setGradientFill (juce::ColourGradient (ink.floorTop, box.getCentreX(), box.getY(),
+                                             ink.floorBottom, box.getCentreX(), box.getBottom(), false));
     g.drawImage (cut, box, juce::RectanglePlacement::stretchToFit, true);
+}
+
+namespace
+{
+    /** THE PLATE'S WEAR: fine scratches, most of them the way a cloth wipes the plate and a few across it, and
+        a scuff here and there where something rubbed it — each in the plate's own tone, a line lighter where
+        it catches the light or darker, faint enough to read as used metal and never as a drawing. The same
+        plate is worn the same way every time: its scratches are drawn from where it stands. */
+    void wear (juce::Graphics& g, const juce::Path& plate, const BadgeLook& look)
+    {
+        if (look.wear <= 0.0f)
+            return;
+        const auto box = plate.getBounds();
+        juce::Random rng ((juce::int64) (box.getX() * 131.0f + box.getY() * 7919.0f + box.getWidth() * 31.0f));
+        const juce::Graphics::ScopedSaveState keep (g);
+        g.reduceClipRegion (plate);
+        const auto light = look.plateTop.brighter (0.9f), dark = look.plateBottom.darker (0.6f);
+        const int count = juce::roundToInt (look.wear * box.getWidth() * box.getHeight() / 220.0f);
+        for (int i = 0; i < count; ++i)
+        {
+            const float angle = (rng.nextFloat() < 0.75f ? -0.35f : 1.1f) + (rng.nextFloat() - 0.5f) * 0.5f;
+            const float length = box.getWidth() * (0.04f + 0.18f * rng.nextFloat() * rng.nextFloat());
+            const juce::Point<float> from (box.getX() + rng.nextFloat() * box.getWidth(), box.getY() + rng.nextFloat() * box.getHeight());
+            const juce::Point<float> along (std::cos (angle), std::sin (angle)), across (-along.y, along.x);
+            const auto to = from + along * length;
+            juce::Path scratch;
+            scratch.startNewSubPath (from);
+            scratch.quadraticTo ((from + to) * 0.5f + across * (length * 0.06f * (rng.nextFloat() - 0.5f)), to);
+            const bool lit = rng.nextFloat() < 0.7f;
+            g.setColour ((lit ? light : dark).withAlpha (look.wear * (lit ? 0.09f + 0.11f * rng.nextFloat() : 0.12f + 0.12f * rng.nextFloat())));
+            g.strokePath (scratch, juce::PathStrokeType (0.3f + 0.4f * rng.nextFloat(), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        for (int i = 0; i < count / 8; ++i)
+        {
+            const juce::Point<float> at (box.getX() + rng.nextFloat() * box.getWidth(), box.getY() + rng.nextFloat() * box.getHeight());
+            const float angle = rng.nextFloat() * juce::MathConstants<float>::twoPi;
+            const juce::Point<float> along (std::cos (angle), std::sin (angle));
+            g.setColour (light.withAlpha (look.wear * 0.1f));
+            for (int k = 0, n = 4 + rng.nextInt (4); k < n; ++k)
+            {
+                const auto from = at + juce::Point<float> (rng.nextFloat() - 0.5f, rng.nextFloat() - 0.5f) * 3.0f;
+                g.drawLine (juce::Line<float> (from, from + along * (1.5f + 2.5f * rng.nextFloat())), 0.4f);
+            }
+        }
+    }
+}
+
+void paintBadge (juce::Graphics& g, const juce::Path& plate, const std::vector<juce::Point<float>>& screws, float screw,
+                 juce::Rectangle<float> mark, float scale, const BadgeLook& look)
+{
+    const auto box = plate.getBounds();
+    g.setGradientFill (juce::ColourGradient (look.plateTop, box.getCentreX(), box.getY(),
+                                             look.plateBottom, box.getCentreX(), box.getBottom(), false));
+    g.fillPath (plate);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.05f), box.getX(), box.getY(),
+                                             juce::Colours::transparentWhite, box.getCentreX(), box.getCentreY(), false));
+    g.fillPath (plate);
+    wear (g, plate, look);
+    g.setColour (juce::Colour (0xff4a4757).withAlpha (0.8f));
+    g.strokePath (plate, juce::PathStrokeType (1.2f));
+
+    for (const auto& c : screws)
+    {
+        const auto head = juce::Rectangle<float> (screw, screw).withCentre (c);
+        const float k = screw / 8.0f;      // the slot and the light, as on an 8-unit head
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff6d6a78), c.translated (-1.5f * k, -2.0f * k),
+                                                 juce::Colour (0xff141318), c.translated (2.5f * k, 3.0f * k), true));
+        g.fillEllipse (head);
+        g.setColour (juce::Colour (0xff09080c));
+        g.drawLine (c.x - 2.2f * k, c.y - 2.2f * k, c.x + 2.2f * k, c.y + 2.2f * k, 1.0f);
+    }
+
+    engraveMark (g, mark, scale, look.ink);
 }
 
 namespace
@@ -658,13 +731,86 @@ void Emblem::mouseUp (const juce::MouseEvent& e)
         onClick();
 }
 
+void Emblem::setLamp (juce::Colour c)
+{
+    lamp = c;
+    lit = {};
+    litScale = 0.0f;
+    repaint();
+}
+
+float Emblem::lightSeconds() const noexcept
+{
+    // The spring stepped as the timer steps it, from dark to full: the time to 95 % of the way. It is the
+    // same down: the spring is linear.
+    Glide g = light;
+    g.jump (0.0f);
+    g.target = 1.0f;
+    float t = 0.0f;
+    while (g.value < 0.95f && t < 5.0f)
+    {
+        g.step (frameDt);
+        t += frameDt;
+    }
+    return t;
+}
+
+juce::Image Emblem::litPicture (float scale) const
+{
+    if (lamp.isTransparent())
+        return {};
+    if (lit.isValid() && std::abs (scale - litScale) < 1.0e-3f)
+        return lit;
+
+    const auto& cut = MarkCut::at (scale, mark).cut;
+    if (! cut.isValid())
+        return {};
+
+    const int pad = juce::roundToInt (bloom * scale);
+    juce::Image made (juce::Image::ARGB, cut.getWidth() + 2 * pad, cut.getHeight() + 2 * pad, true);
+    {
+        juce::Graphics g (made);
+
+        // The bloom: the cut's own shape, blurred, in the lamp's colour — the glow the light throws past
+        // the glass's edges onto the plate.
+        juce::Image shape (juce::Image::ARGB, made.getWidth(), made.getHeight(), true);
+        {
+            juce::Graphics sg (shape);
+            sg.setColour (juce::Colours::white);
+            sg.drawImageAt (cut, pad, pad, true);
+        }
+        juce::DropShadow (lamp.withAlpha (0.55f), juce::jmax (1, juce::roundToInt (0.8f * bloom * scale)), {}).drawForImage (g, shape);
+
+        // The floor, lit through its frosting: the lamp's colour all over it, whiter and brighter at the
+        // middle where the lamp is, softer to its edges — the cut's walls, outside the floor, left as they are.
+        const auto box = juce::Rectangle<float> ((float) pad, (float) pad, (float) cut.getWidth(), (float) cut.getHeight());
+        g.setGradientFill (juce::ColourGradient (lamp.interpolatedWith (juce::Colours::white, 0.45f).withAlpha (0.92f), box.getCentre(),
+                                                 lamp.withAlpha (0.55f), { box.getCentreX(), box.getY() - 0.1f * box.getHeight() }, true));
+        g.drawImageAt (cut, pad, pad, true);
+    }
+    lit = made;
+    litScale = scale;
+    return lit;
+}
+
 void Emblem::paint (juce::Graphics& g)
 {
     const float l = juce::jlimit (0.0f, 1.0f, light.value);
     if (l < 0.004f)
         return;
 
-    const auto& cut = MarkCut::at (g.getInternalContext().getPhysicalPixelScaleFactor(), mark);
+    const float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    if (! lamp.isTransparent())
+    {
+        if (const auto glass = litPicture (scale); glass.isValid())
+        {
+            g.setOpacity (l);
+            g.drawImage (glass, litBox().translated (-(float) getX(), -(float) getY()), juce::RectanglePlacement::stretchToFit);
+        }
+        return;
+    }
+
+    const auto& cut = MarkCut::at (scale, mark);
     if (! cut.cut.isValid())
         return;
 

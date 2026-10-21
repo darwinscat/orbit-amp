@@ -145,7 +145,12 @@ namespace
             p.lamps[i] = skin.plan.lamps[i];
         p.lampDot = skin.plan.lampDot;
 
-        if (skin.mark)
+        if (skin.mark && skin.badge.has_value())        // the badge's plate is the emblem then
+        {
+            p.emblemFace = { skin.plan.badgeFace.begin(), skin.plan.badgeFace.end() };
+            p.emblemMark = skin.plan.badgeMark;
+        }
+        else if (skin.mark)
         {
             p.emblemFace = { skin.plan.emblemFace.begin(), skin.plan.emblemFace.end() };
             p.emblemMark = skin.plan.emblemMark;
@@ -175,7 +180,8 @@ namespace
                  Art::mark (skin).isNotEmpty() ? Art::mark (skin) : juce::String::fromUTF8 (BinaryData::catlogo_svg, BinaryData::catlogo_svgSize),   // the rover's own mark; the family's, where it has none
                  skin.midiCommands,
                  handLight,         // under the hand, the dashboard's orange
-                 skin.ink };
+                 skin.ink,
+                 skin.badge.has_value() ? skin.badge->lamp : skin.markLamp };      // the lamp under the cat's glass: the badge's, or the bare mark's
     }
 
     /** A WORD WIDER THAN ITS ROOM is set condensed into it — as tall as ever, narrower — about `centre`:
@@ -349,16 +355,27 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
     if (const auto& bg = Art::of (skin).bg; bg.isValid())
         g.drawImage (bg, juce::Rectangle<float> (0.0f, 0.0f, width, height));
 
-    // The maker's mark: raised in the rover's metal where the skin brings a render of it — cut into bright
-    // steel it read as a stamp — and engraved where it does not; none where the skin has no place for one.
-    if (const auto& mark = Art::of (skin).emblem; skin.mark && mark.isValid())
+    // The maker's mark: on the family's badge where the skin wears it (face::paintBadge) — the cockpit's plate
+    // over the picture's, where the plan puts it, its screws, the cat engraved light; else raised in the
+    // rover's metal where the skin brings a render of it — cut into bright steel it read as a stamp — and
+    // engraved where it does not; none where the skin has no place for one.
+    if (skin.mark && skin.badge.has_value())
+    {
+        juce::Path plate;
+        for (size_t i = 0; i < skin.plan.badgeFace.size(); ++i)
+            i == 0 ? plate.startNewSubPath (skin.plan.badgeFace[i]) : plate.lineTo (skin.plan.badgeFace[i]);
+        plate.closeSubPath();
+        paintBadge (g, plate, { skin.plan.badgeScrews.begin(), skin.plan.badgeScrews.end() }, skin.plan.badgeScrew,
+                    skin.plan.badgeMark, scale, *skin.badge);
+    }
+    else if (const auto& mark = Art::of (skin).emblem; skin.mark && skin.markRender && mark.isValid())
     {
         g.setOpacity (1.0f);
         g.drawImage (mark, skin.plan.emblemMark, juce::RectanglePlacement::centred);
     }
     else if (skin.mark)
     {
-        engraveMark (g, skin.plan.emblemMark, scale);
+        engraveMark (g, skin.plan.emblemMark, scale, skin.markInk);
     }
 
     // A word on the dust: a shadow under it, so it reads off the rust as well as off the bare metal —
@@ -382,7 +399,7 @@ void Dashboard::paintStatic (juce::Graphics& g, float scale) const
 
     print ("TURBO", skin.plan.turboName, 140.0f, ink.state);
     if (skin.plan.learnKeySize > 0.0f)
-        for (size_t k = 0; k < skin.plan.learnNames.size(); ++k)        // each key's LEARN over its name
+        for (size_t k = 0; k < (size_t) learnKeysShown; ++k)        // each key's LEARN over its name
         {
             constexpr float em = 8.5f / readingScale;     // under the keys' own words
             print ("LEARN", skin.plan.learnNames[k].translated (0.0f, -0.5f * skin.plan.learnLine), 90.0f, ink.words, 0.0f, em);
@@ -432,7 +449,8 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
         { "turbo-lid", &art.turboLid }, { "emblem", &art.emblem }, { "socket", &art.socket },
         { "key-frame-left", &art.keyFrameLeft }, { "key-frame-cell", &art.keyFrameCell }, { "key-frame-right", &art.keyFrameRight } };
     for (const auto& [name, img] : own)
-        writeSprite (dir, name, *img);
+        if (! ((skin.badge.has_value() || ! skin.markRender) && juce::String (name) == "emblem"))     // a skin on the badge, or drawing its mark, shows no render of it
+            writeSprite (dir, name, *img);
     writeForWeb (dir.getChildFile ("still.webp"), Art::still (skin));
 
     const auto rect = [] (juce::Rectangle<float> r)
@@ -1047,7 +1065,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     };
 
     if (skin.plan.learnKeySize > 0.0f)
-        for (int k = 0; k < 2; ++k)
+        for (int k = 0; k < learnKeysShown; ++k)
         {
             auto& key = k == 0 ? learnKey : humKey;
             key.latching = false;

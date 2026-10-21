@@ -73,29 +73,41 @@ const layout::Plan plan {
 
     // TURBO's hole half a pixel right; the hatch's box is RedPawAmp's, where a hatch of its own would go — none yet.
     .turbo { 922.0f, 787.0f },
+
+    // No plate under the cat: it stands straight on the frame's raised step, as large as the badge's was.
+    .emblemMark { 797.0f, 295.8f, 77.0f, 75.0f },
 };
 
 const Skin& ice()
 {
-    static const Skin ice {
-        name,
-        iceLineup(),
-        plan,
-        "FROSTPAW_ART_DIR",
-        juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
-        // On the bright steel the words are written dark — a blue-black graphite, what they are set to
-        // darker still, a state a deeper orange — each cut deep into the metal: strokes heavier than the
-        // font's, the upper wall a shade over the word, the lower lip a light edge under it; and a dimmed
-        // word keeps most of its ink. Nothing else lies under the large words.
-        face::Ink { juce::Colour (0xff0b1018), juce::Colour (0xff030507), juce::Colour (0xff8f3507),
-                    juce::Colour (0x8cf0f6fc), 0.72f, juce::Colour (0x73000208), 0.7f },
-        juce::Colour(),
-        // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
-        face::renders::text (name, "midi.txt", "FROSTPAW_ART_DIR"),
-        // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
-        [] { return std::make_unique<frostpaw::IceDrive> (numGears (iceLineup())); },
-        { "Ice (GPU)", "1993 (CPU)", "Still" },
-    };
+    static const Skin ice = []
+    {
+        Skin s {
+            name,
+            iceLineup(),
+            plan,
+            "FROSTPAW_ART_DIR",
+            juce::Colour (0xff46e4ff),      // the painted rings' ice-blue (#46d9ed), a shade brighter, as RedPawAmp's
+            // On the bright steel the words are written dark — a blue-black graphite, what they are set to
+            // darker still, a state a deeper orange — each cut deep into the metal: strokes heavier than the
+            // font's, the upper wall a shade over the word, the lower lip a light edge under it; and a dimmed
+            // word keeps most of its ink. Nothing else lies under the large words.
+            face::Ink { juce::Colour (0xff0b1018), juce::Colour (0xff030507), juce::Colour (0xff8f3507),
+                        juce::Colour (0x8cf0f6fc), 0.72f, juce::Colour (0x73000208), 0.7f },
+            juce::Colour(),
+            // Its own MIDI sheet (resources/frostpaw/midi.txt): its channels are its own to list.
+            face::renders::text (name, "midi.txt", "FROSTPAW_ART_DIR"),
+            // The ice moon out of the window: its crust, its steel and Jupiter (view/IceDrive.h).
+            [] { return std::make_unique<frostpaw::IceDrive> (numGears (iceLineup())); },
+            { "Ice (GPU)", "1993 (CPU)", "Still" },
+        };
+        // No badge: the badge's cat on the bare step, flat — neither raised nor cut, its white-grey alone, none
+        // of the cockpit's lilac — and the lamp under it white, as the snow's light.
+        s.markInk = { juce::Colour (0xffe0e0e0), juce::Colour (0xffa4a4a4), 0.0f, 0.0f, juce::Colour (0xffe6e6e6) };     // a neutral white, R = G = B
+        s.markLamp = juce::Colour (0xfff2f6ff);
+        s.markRender = false;
+        return s;
+    }();
     return ice;
 }
 

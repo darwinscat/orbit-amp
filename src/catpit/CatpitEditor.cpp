@@ -156,7 +156,9 @@ namespace
         return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.sliderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
                  face::renders::text (products::catpitAmp().name, "mark.svg", artFolderVariable),
-                 face::renders::text (products::catpitAmp().name, "midi.txt", artFolderVariable) };
+                 face::renders::text (products::catpitAmp().name, "midi.txt", artFolderVariable),
+                 {}, {},
+                 face::BadgeLook {}.lamp };      // the badge's lamp: the cockpit's violet
 
     }
 
@@ -323,35 +325,27 @@ void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
 {
     using namespace layout;
 
-    // A fresh face over the render's: dark metal, lit from above, with a fine bevel — so the render's
-    // own cat is gone and the plate still reads as the same piece of hull.
-    juce::Path face;
-    face.startNewSubPath (emblemFace[0]);
-    for (size_t i = 1; i < emblemFace.size(); ++i)
-        face.lineTo (emblemFace[i]);
-    face.closeSubPath();
-
-    const auto box = face.getBounds();
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff24222b), box.getCentreX(), box.getY(),
-                                             juce::Colour (0xff111016), box.getCentreX(), box.getBottom(), false));
-    g.fillPath (face);
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.05f), box.getX(), box.getY(),
-                                             juce::Colours::transparentWhite, box.getCentreX(), box.getCentreY(), false));
-    g.fillPath (face);
-    g.setColour (juce::Colour (0xff4a4757).withAlpha (0.8f));
-    g.strokePath (face, juce::PathStrokeType (1.2f));
-
-    for (const auto& c : emblemScrews)
+    // A fresh face over the render's, the family's badge (face::paintBadge): dark metal, lit from above, with
+    // a fine bevel — so the render's own cat is gone and the plate still reads as the same piece of hull —
+    // its six screws, and the cat engraved light in it: a pale floor on the dark plate, the shadow deeper,
+    // the lip brighter, so the mark reads from across the room.
+    const auto outline = [] (const auto& corners)
     {
-        const auto head = juce::Rectangle<float> (8.0f, 8.0f).withCentre (c);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff6d6a78), c.translated (-1.5f, -2.0f),
-                                                 juce::Colour (0xff141318), c.translated (2.5f, 3.0f), true));
-        g.fillEllipse (head);
-        g.setColour (juce::Colour (0xff09080c));
-        g.drawLine (c.x - 2.2f, c.y - 2.2f, c.x + 2.2f, c.y + 2.2f, 1.0f);
-    }
+        juce::Path p;
+        p.startNewSubPath (corners[0]);
+        for (size_t i = 1; i < corners.size(); ++i)
+            p.lineTo (corners[i]);
+        p.closeSubPath();
+        return p;
+    };
 
-    engraveMark (g, emblemMark, scale);
+    // The seat first, the recess the plate lies in, dark as the hull's shadows round it; then the plate in it.
+    const auto seat = outline (emblemSeat);
+    const auto box = seat.getBounds();
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff1a1720), box.getCentreX(), box.getY(),
+                                             juce::Colour (0xff0d0b10), box.getCentreX(), box.getBottom(), false));
+    g.fillPath (seat);
+    paintBadge (g, outline (emblemFace), { emblemScrews.begin(), emblemScrews.end() }, emblemScrew, emblemMark, scale);
 }
 
 void Cockpit::paintStatic (juce::Graphics& g, float scale) const

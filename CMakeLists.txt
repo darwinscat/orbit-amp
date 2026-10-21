@@ -970,6 +970,39 @@ add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 # pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
 # tree keeps but OrbitAmp should not play has no place in resources/set/Devices.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
+
+# WHAT EACH OTHER AMP PLAYS of the set, said once — its row in THE AMPS names it by these.
+set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
+set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
+set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
+set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
+
+# A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
+# installer/family.ini names; the packs only an amp it leaves out plays — today FrostPawAmp's ReVolt and
+# AmberPawAmp's V4 — are not OrbitAmp's there either, so they wait for their own amp. Built here, OrbitAmp
+# plays them all.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini" ORBITAMP_RELEASED REGEX "^amps=")
+string(REGEX REPLACE "^amps=" "" ORBITAMP_RELEASED "${ORBITAMP_RELEASED}")
+separate_arguments(ORBITAMP_RELEASED)
+set(ORBITAMP_SHIPS_EVERY_PACK ON)
+if(NOT ORBITAMP_DEV_FACTORY)
+    set(kept "")
+    set(left "")
+    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp)
+        string(TOUPPER "${amp}" key)
+        if(amp IN_LIST ORBITAMP_RELEASED)
+            list(APPEND kept ${${key}_SET})
+        else()
+            list(APPEND left ${${key}_SET})
+        endif()
+    endforeach()
+    foreach(pack IN LISTS left)
+        if(NOT pack IN_LIST kept)
+            list(REMOVE_ITEM ORBITAMP_PLAYS "${pack}")
+            set(ORBITAMP_SHIPS_EVERY_PACK OFF)
+        endif()
+    endforeach()
+endif()
 list(LENGTH ORBITAMP_PLAYS ORBITAMP_SET_COUNT)
 message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the factory folder")
 
@@ -1108,6 +1141,7 @@ set(ORBITAMP_SOURCES
     src/ui/DemoStrip.cpp
     src/ui/Footer.cpp
     src/ui/SetupPanel.cpp
+    src/ui/WebFaceplate.cpp
     src/ui/library/DeviceListView.cpp
     src/ui/library/IrTreeView.cpp)
 
@@ -1295,8 +1329,8 @@ set(ROVER_LIBRARIES
 # version and tags of its own, catpit-vX.Y.Z; from 0.8.0 on every amp's update check reads the family's.
 # ----------------------------------------------------------------------------
 
-# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole
-# (ORBITAMP_PLAYS, above), and the whole cabinet shelf.
+# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole — in a release
+# but the packs of an amp the release leaves out (ORBITAMP_PLAYS, above) — and the whole cabinet shelf.
 add_amp(OrbitAmp      CODE Oamp
     SOURCES   ${ORBITAMP_SOURCES}
     LIBRARIES
@@ -1318,7 +1352,7 @@ add_amp(CatpitAmp     CODE Ctpt    BY_NAME
         OrbitAmpShaders              # the sky's shaders
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sky, on the GPU
-    SET       "X88-IR Normal" "X88-IR Altered" "X88-IR Crunch" "X88-IR Overdrive")
+    SET       ${CATPITAMP_SET})
 
 # RedPawAmp — the rover: a third face over the same processor (src/redpaw), the dashboard of a Mars rover
 # with the drive across Mars in its windscreen. Four channels — the Friedman IR-X's two, each with its
@@ -1329,7 +1363,7 @@ add_amp(RedPawAmp     CODE Rdpw    BY_NAME
     ART       ${REDPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} src/redpaw/RedPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "IR-X Ch1 PowerAmp" "IR-X Ch2 PowerAmp")
+    SET       ${REDPAWAMP_SET})
 
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
 # over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
@@ -1342,7 +1376,7 @@ add_amp(FrostPawAmp   CODE Frpw    BY_NAME
     ART       ${FROSTPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "ReVolt Clean PowerAmp" "ReVolt Crunch PowerAmp" "ReVolt Lead PowerAmp")
+    SET       ${FROSTPAWAMP_SET})
 
 # AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
 # dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy
@@ -1354,7 +1388,7 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     ART       ${AMBERPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "V4 Copper (clean)" "V4 Sheriff (crunch)" "V4 Kraken (hi-gain)")
+    SET       ${AMBERPAWAMP_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — each a face's own, so built only by name (amp_console, amp_set_test).
@@ -1390,6 +1424,10 @@ amp_set_test(amberpawamp_set_test     "AmberPawAmpSetTest"      AmberPawAmp  tes
 amp_console(orbitamp_no_factory_test  "OrbitAmpNoFactoryTest"   OrbitAmp     tests/NoFactoryTests.cpp   NO_FACTORY)
 amp_console(catpitamp_no_factory_test "CatpitAmpNoFactoryTest"  CatpitAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
 amp_console(redpawamp_no_factory_test "RedPawAmpNoFactoryTest"  RedPawAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
+
+# ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
+# builds the face back — its own format, every place on the stage, the hull the poster less its places.
+amp_console(orbitamp_webface_test     "OrbitAmpWebFaceTest"     OrbitAmp     tests/WebFaceTests.cpp)
 
 # EVERY AMP IN ONE BINARY: the sources of all of them, each once, and their libraries, under one main() —
 # what a plug-in of several amps will be. Its gate plays them side by side in one process, each a processor
@@ -1922,6 +1960,11 @@ gate_reads_factory(orbitamp_chain_test)   # OrbitAmp's whole shelf, and its pack
 # which listens after the trim: AUTO takes a mains hum off; an INPUT trim moved mid-stream does not
 # bring it back, because the stage sits ahead of the trim; OFF hands the input on bit for bit; and a
 # demo loop with no hum in it passes untouched. Needs no pack: the input path is ahead of every block.
+#
+# HUM is switched off in every amp for now (src/Features.h), so the gate is built twice from the one
+# file. This one throws the switch (ORBITAMP_FEATURE_HUM=1) and tests the stage, which has to stay ready
+# for the day HUM comes back; orbitamp_hum_off_test, below, is built as the products are and holds the
+# switch itself.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_hum_test PRODUCT_NAME "OrbitAmpHumTest")
 target_sources(orbitamp_hum_test PRIVATE tests/HumTests.cpp ${ORBITAMP_SOURCES})       # ...and so does this one
@@ -1929,6 +1972,7 @@ target_include_directories(orbitamp_hum_test PRIVATE src)
 target_include_directories(orbitamp_hum_test PRIVATE "${ORBITAMP_GENERATED_DIR}")
 add_dependencies(orbitamp_hum_test OrbitAmpVersionGen)
 target_compile_definitions(orbitamp_hum_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                    ORBITAMP_FEATURE_HUM=1
                                                     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_hum_test PRIVATE
     OrbitAmpData
@@ -1936,6 +1980,26 @@ target_link_libraries(orbitamp_hum_test PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 gate_reads_factory(orbitamp_hum_test)     # OrbitAmp's processor, its whole shelf with it
+
+# ----------------------------------------------------------------------------
+# Gate for HUM SWITCHED OFF (src/Features.h), the processor built as every amp ships it: with the
+# machine's settings on AUTO — as a machine that chose AUTO before keeps them — the stage is never
+# prepared and never runs, the mode in force is OFF with no LEARN, and a hummed input passes bit for
+# bit. The same file as the hum gate, which runs only this part of itself when the switch is off.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_hum_off_test PRODUCT_NAME "OrbitAmpHumOffTest")
+target_sources(orbitamp_hum_off_test PRIVATE tests/HumTests.cpp ${ORBITAMP_SOURCES})
+target_include_directories(orbitamp_hum_off_test PRIVATE src)
+target_include_directories(orbitamp_hum_off_test PRIVATE "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_hum_off_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_hum_off_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_hum_off_test PRIVATE
+    OrbitAmpData
+    ${AMP_ENGINE_LIBRARIES}
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+gate_reads_factory(orbitamp_hum_off_test)
 
 # ----------------------------------------------------------------------------
 # Gate for reading an .orbitrig pack and playing it through the block the plugin plays it with —
@@ -1987,7 +2051,8 @@ target_link_libraries(orbitamp_library_test PRIVATE
 juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
 target_sources(orbitamp_set_test PRIVATE tests/OrbitAmpSetTests.cpp)
 target_include_directories(orbitamp_set_test PRIVATE src)
-target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+    ORBITAMP_SHIPS_EVERY_PACK=$<BOOL:${ORBITAMP_SHIPS_EVERY_PACK}>)     # a release leaves the unreleased amps' packs out
 target_link_libraries(orbitamp_set_test PRIVATE
     OrbitAmpCabinetCatalog           # the family's cabinet shelf, by the catalog's table
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz

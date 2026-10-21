@@ -1,0 +1,70 @@
+{
+  "format": "orbitrig", "schema": 4,
+  "rig_id": "x88-ir-altered-c14c", "family_id": "X88-IR", "name": "Altered", "modeled_by": "Darwin's Cat",
+  "picture": "device.webp",
+  "chain": [
+    {
+      "kind": "nam", "slot": "amp",
+      "gear": { "make": "Soldano", "model": "X88-IR", "type": "amp", "year": 2026,
+                "serial_number": "20542606016", "designed_in": "United States",
+                "made_in": "United States",
+                "url": "https://www.soldano.com/products/classic/amplifiers/x88-ir/" },
+      "tone_type": "edge", "circuit": "tube:5",
+      "input_db": -4.0,
+      "controls": [
+        { "name": "Gain", "role": "gain", "sweep": 300,
+          "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] }
+      ],
+      "files": [
+        { "file": "X88-IR Altered-0001.namz", "settings": { "Gain": "60" }, "lag_samples": 0,
+          "epochs": 1000, "esr": 0.00345183 },
+        { "file": "X88-IR Altered-0002.namz", "settings": { "Gain": "90" }, "lag_samples": -1,
+          "epochs": 1000, "esr": 0.00403461 },
+        { "file": "X88-IR Altered-0003.namz", "settings": { "Gain": "120" }, "lag_samples": -1,
+          "epochs": 1000, "esr": 0.00492839 },
+        { "file": "X88-IR Altered-0004.namz", "settings": { "Gain": "150" }, "lag_samples": 0,
+          "epochs": 1000, "esr": 0.00553847 },
+        { "file": "X88-IR Altered-0005.namz", "settings": { "Gain": "180" }, "lag_samples": 0,
+          "epochs": 1000, "esr": 0.00657176 },
+        { "file": "X88-IR Altered-0006.namz", "settings": { "Gain": "210" }, "lag_samples": 1,
+          "epochs": 1000, "esr": 0.00970947 },
+        { "file": "X88-IR Altered-0007.namz", "settings": { "Gain": "240" }, "lag_samples": 0,
+          "epochs": 1200, "esr": 0.01069047 },
+        { "file": "X88-IR Altered-0008.namz", "settings": { "Gain": "270" }, "lag_samples": 1,
+          "epochs": 1200, "esr": 0.01021432 },
+        { "file": "X88-IR Altered-0009.namz", "settings": { "Gain": "300" }, "lag_samples": 0,
+          "epochs": 1200, "esr": 0.01133816 },
+        { "file": "X88-IR Altered-0001.namz", "settings": { "Gain": "0" }, "input_db": -6.0,
+          "lag_samples": 0, "epochs": 1000, "esr": 0.00345183 },
+        { "file": "X88-IR Altered-0001.namz", "settings": { "Gain": "30" }, "input_db": -3.0,
+          "lag_samples": 0, "epochs": 1000, "esr": 0.00345183 }
+      ],
+      "tone": [
+        {
+          "name": "Bass", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "low_shelf", "hz": 200.0, "q": 0.6900000000000001,
+              "range_db": [-7.6999999999999975, 1.6000000000000034] }
+          ]
+        },
+        {
+          "name": "Middle", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "bell", "hz": 1007.0, "q": 0.51,
+              "range_db": [-5.499999999999997, 2.2000000000000033] }
+          ]
+        },
+        {
+          "name": "Treble", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "tilt", "hz": 1106.0, "q": 0.68,
+              "range_db": [-7.099999999999997, 4.300000000000003], "pivot": 0.15 }
+          ]
+        }
+      ]
+    }
+  ]
+}

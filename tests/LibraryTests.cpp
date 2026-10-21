@@ -545,18 +545,18 @@ int main()
         const auto factory = DeviceLibrary::scan (DeviceLibrary::ampSlot, true, set.getChildFile ("Devices"), none, everyPack);
         const auto shelf = DeviceLibrary::shelfOf (factory);
 
-        report ("the set's packs make four devices, by name",  names (shelf.factory) == "IR-X, ReVolt, V4, X88-IR",
+        report ("the set's packs make four devices, by name",  names (shelf.factory) == "Friedman IR-X, Soldano X88-IR, Two Notes ReVolt, Victory V4",
                 names (shelf.factory));
-        report ("...a device is its packs' common words",      named (shelf.factory, "V4") != nullptr
-                                                                  && named (shelf.factory, "IR-X") != nullptr);
-        report ("X88-IR: one alias, so the stems name them",   channels (named (shelf.factory, "X88-IR")) == "Normal, Altered, Crunch, Overdrive",
-                channels (named (shelf.factory, "X88-IR")));
-        report ("IR-X: distinct aliases name the channels",    channels (named (shelf.factory, "IR-X")) == "Channel 1, Channel 2",
-                channels (named (shelf.factory, "IR-X")));
-        report ("V4: distinct aliases, clean before crunch before hi-gain", channels (named (shelf.factory, "V4")) == "Ember Mantra, Patrol Growl, Monster Roar",
-                channels (named (shelf.factory, "V4")));
-        report ("ReVolt: one alias, so the stems name them",   channels (named (shelf.factory, "ReVolt")) == "Clean PowerAmp, Crunch PowerAmp, Lead PowerAmp",
-                channels (named (shelf.factory, "ReVolt")));
+        report ("...a device is its packs' common words",      named (shelf.factory, "Victory V4") != nullptr
+                                                                  && named (shelf.factory, "Friedman IR-X") != nullptr);
+        report ("X88-IR: one alias, so the stems name them",   channels (named (shelf.factory, "Soldano X88-IR")) == "Normal, Altered, Crunch, Overdrive",
+                channels (named (shelf.factory, "Soldano X88-IR")));
+        report ("IR-X: distinct aliases name the channels",    channels (named (shelf.factory, "Friedman IR-X")) == "Channel 1, Channel 2",
+                channels (named (shelf.factory, "Friedman IR-X")));
+        report ("V4: distinct aliases, clean before crunch before hi-gain", channels (named (shelf.factory, "Victory V4")) == "Clean, Crunch, Hi-Gain",
+                channels (named (shelf.factory, "Victory V4")));
+        report ("ReVolt: distinct aliases name the channels",  channels (named (shelf.factory, "Two Notes ReVolt")) == "Clean, Crunch, Lead",
+                channels (named (shelf.factory, "Two Notes ReVolt")));
         report ("the list is in the menu's order",             inOrder (shelf, factory.size()));
 
         // The player's own folder: devices at its top, and folders inside it mirrored as they lie.
@@ -576,11 +576,11 @@ int main()
             folder.getChildFile ("rig.json").replaceWithText (manifest);
         };
 
-        lay (own, "IR-X Ch2 PowerAmp");
-        lay (own, "IR-X Ch1 PowerAmp");
-        lay (own.getChildFile ("OLD/preamps"), "V4 Kraken (hi-gain)");
-        lay (own.getChildFile ("OLD/preamps"), "V4 Copper (clean)");
-        lay (own.getChildFile ("OLD/boosters"), "V4 Sheriff (crunch)", "TS Test", "pedal", "ts-test");
+        lay (own, "Friedman IR-X Ch2 PowerAmp");
+        lay (own, "Friedman IR-X Ch1 PowerAmp");
+        lay (own.getChildFile ("OLD/preamps"), "Victory V4 Kraken (hi-gain)");
+        lay (own.getChildFile ("OLD/preamps"), "Victory V4 Copper (clean)");
+        lay (own.getChildFile ("OLD/boosters"), "Victory V4 Sheriff (crunch)", "TS Test", "pedal", "ts-test");
         own.getChildFile ("OLD/empty").createDirectory();
 
         const auto mine = DeviceLibrary::scan ("OrbitAmp", DeviceLibrary::ampSlot, true, none, own);
@@ -596,7 +596,7 @@ int main()
         };
 
         report ("the top of the player's folder is grouped too", ownShelf.own.size() == 1
-                                                                    && channels (named (ownShelf.own, "IR-X")) == "Channel 1, Channel 2",
+                                                                    && channels (named (ownShelf.own, "Friedman IR-X")) == "Channel 1, Channel 2",
                 names (ownShelf.own));
         report ("a folder in it is a submenu, as on disk",      old != nullptr && old->name == "OLD" && old->devices.empty()
                                                                     && folderNames (old->folders) == "boosters, preamps",
@@ -604,7 +604,7 @@ int main()
 
         const auto* preamps = old != nullptr && old->folders.size() == 2 ? &old->folders[1] : nullptr;
         const auto* boosters = old != nullptr && old->folders.size() == 2 ? &old->folders[0] : nullptr;
-        bool loose = preamps != nullptr && names (preamps->devices) == "V4 Copper (clean), V4 Kraken (hi-gain)";
+        bool loose = preamps != nullptr && names (preamps->devices) == "Victory V4 Copper (clean), Victory V4 Kraken (hi-gain)";
         if (preamps != nullptr)
             for (const auto& d : preamps->devices)
                 loose = loose && d.channels.size() == 1;

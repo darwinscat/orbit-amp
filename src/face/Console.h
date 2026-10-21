@@ -139,6 +139,7 @@ public:
         juce::String midiCommands;                          // what the MIDI window lists (Midi.h)
         juce::Colour handLight {};                          // a light round a slider's or a fader's cap under the hand; none if transparent
         Ink ink {};                                         // what the words on the panel are written in
+        juce::Colour emblemLamp {};                         // the lamp under the cat's glass under the hand (Emblem); none if transparent
     };
 
     Console (AmpProcessor&, std::unique_ptr<Picture>, const Places&, const Look&);

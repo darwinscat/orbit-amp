@@ -44,7 +44,7 @@ int main()
 
     // THE PACKS: three of the tree's set, each as a folder at the factory's top, the way a pack is read.
     const juce::File set (ORBITAMP_SET_DIR);
-    for (const auto* pack : { "IR-X Ch1 PowerAmp", "IR-X Ch2 PowerAmp", "X88-IR Crunch" })
+    for (const auto* pack : { "Friedman IR-X Ch1 PowerAmp", "Friedman IR-X Ch2 PowerAmp", "Soldano X88-IR Crunch" })
         set.getChildFile ("Devices").getChildFile (juce::String (pack) + ".orbitrig")
            .copyDirectoryTo (factory.getChildFile (juce::String (pack) + ".orbitrig"));
 
@@ -66,11 +66,11 @@ int main()
         list.create();
         list.replaceWithText (text);
     };
-    writeList ("FirstAmp",  "IR-X Ch1 PowerAmp.orbitrig\nX88-IR Crunch.orbitrig\n" + irs.joinIntoString ("\n") + "\n");
-    writeList ("SecondAmp", "#build 20261014120000\n\nIR-X Ch2 PowerAmp.orbitrig\nX88-IR Crunch.orbitrig\n" + irs[0] + "\n");
+    writeList ("FirstAmp",  "Friedman IR-X Ch1 PowerAmp.orbitrig\nSoldano X88-IR Crunch.orbitrig\n" + irs.joinIntoString ("\n") + "\n");
+    writeList ("SecondAmp", "#build 20261014120000\n\nFriedman IR-X Ch2 PowerAmp.orbitrig\nSoldano X88-IR Crunch.orbitrig\n" + irs[0] + "\n");
 
     check (FactorySet::listOf (factory, "FirstAmp").size() == 5, "the first product's list names its five files");
-    check (FactorySet::listOf (factory, "SecondAmp").joinIntoString ("|") == "IR-X Ch2 PowerAmp.orbitrig|X88-IR Crunch.orbitrig|" + irs[0],
+    check (FactorySet::listOf (factory, "SecondAmp").joinIntoString ("|") == "Friedman IR-X Ch2 PowerAmp.orbitrig|Soldano X88-IR Crunch.orbitrig|" + irs[0],
            "...the second's its three, a `#` line and an empty one passed over");
     check (FactorySet::listOf (factory, "ThirdAmp").isEmpty(), "...and a product with no list there names nothing");
 
@@ -84,18 +84,18 @@ int main()
         names.sort (false);
         return names.joinIntoString (", ");
     };
-    check (shown ("FirstAmp") == "IR-X Ch1 PowerAmp, X88-IR Crunch", "the first product sees what its list names: " + shown ("FirstAmp"));
-    check (shown ("SecondAmp") == "IR-X Ch2 PowerAmp, X88-IR Crunch", "...the second, its own, and the pack both name: " + shown ("SecondAmp"));
+    check (shown ("FirstAmp") == "Friedman IR-X Ch1 PowerAmp, Soldano X88-IR Crunch", "the first product sees what its list names: " + shown ("FirstAmp"));
+    check (shown ("SecondAmp") == "Friedman IR-X Ch2 PowerAmp, Soldano X88-IR Crunch", "...the second, its own, and the pack both name: " + shown ("SecondAmp"));
     check (shown ("ThirdAmp").isEmpty(), "...and a product with no list there sees none of them: " + shown ("ThirdAmp"));
 
     // ...and the same through the device list's own reading, by THIS product's list (OrbitAmp's, here).
-    writeList ("OrbitAmp", "IR-X Ch1 PowerAmp.orbitrig\n");
+    writeList ("OrbitAmp", "Friedman IR-X Ch1 PowerAmp.orbitrig\n");
     {
         juce::StringArray names;
         for (const auto& p : DeviceLibrary::scan ("OrbitAmp", DeviceLibrary::Slot::any, true, factory, own))
             if (p.bundled)
                 names.add (p.displayName());
-        check (names.joinIntoString (", ") == "IR-X Ch1 PowerAmp", juce::String ("OrbitAmp") + "'s device list reads its own list: " + names.joinIntoString (", "));
+        check (names.joinIntoString (", ") == "Friedman IR-X Ch1 PowerAmp", juce::String ("OrbitAmp") + "'s device list reads its own list: " + names.joinIntoString (", "));
     }
 
     // THE CABINET SHELF each product holds: every place of the catalog, the ones its list names filled

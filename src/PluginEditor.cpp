@@ -6,6 +6,7 @@
 #include "ui/HumMenu.h"
 #include "ui/HumTuning.h"
 #include "ui/Prefs.h"
+#include "ui/WebFaceplate.h"
 
 namespace orbitamp
 {
@@ -280,7 +281,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
 
     inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
-    inColumn.onMenu      = [this] (juce::Point<int> pos) { showInputMenu (pos); };
+    if constexpr (features::hum)   // the input column's menu is HUM's alone: with HUM off there is none (Features.h)
+        inColumn.onMenu  = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
@@ -320,6 +322,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // ticked the switch in the version popover: once a day at most, on the message thread, never in
     // a constructor a scanner runs. Not ticked, or checked already today — nothing happens at all.
     amp.updateChecker().checkIfDue();
+
+    // THE SITE'S KIT: OrbitAmp's own face written out for darwinscat.com, when the environment names a
+    // folder for it (WebFaceplate.h). A player never sets it, and without it nothing here happens.
+    if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_WEB_EXPORT", {}); folder.isNotEmpty())
+        WebFaceplate::exportAfterOpening (*this, juce::File (folder));
 }
 
 /** What the two switches of every row mean to the WINDOW, read in one place after any of them
@@ -409,11 +416,12 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     }
 
     // H: the hum, OFF and back (prefs::humFlip) — Р under a Russian layout, the same key. G: the
-    // gate's On, the sound's switch and so an undo step, as its menu sets it — П.
+    // gate's On, the sound's switch and so an undo step, as its menu sets it — П. H only while the build
+    // has HUM (Features.h); without it the key is not ours, and goes on to the host.
     if (! key.getModifiers().isAnyModifierKeyDown())
     {
         const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
-        if (letter == 'H' || letter == 0x0420)
+        if (features::hum && (letter == 'H' || letter == 0x0420))
         {
             prefs::setHum (amp.product(), prefs::humFlip (amp.product()));
             return true;

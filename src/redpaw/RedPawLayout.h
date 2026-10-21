@@ -126,6 +126,14 @@ struct Plan
     std::array<juce::Point<float>, 2> learnNames {};    // the middle of each key's two lines
     float learnLine = 0.0f;                         // ...the two lines apart
 
+    /** ...AND HUM'S HOLE WHILE THE BUILD HAS NO HUM (Features.h): plate, laid over it once, as the picture
+        is loaded (Art::of) — a stretch of the same plate, `learnPlate`, with the same stretch upside down
+        under it, the two centred on HUM's key and cut to a round `learnHoleSize` across, its edge soft
+        for the last pixel or two. The plate reads on as if the key had never been there. Empty: nothing
+        to cover. */
+    juce::Rectangle<float> learnPlate {};
+    float learnHoleSize = 0.0f;
+
     /** THE WIPERS' SPEED: four keys where the picture paints a row of them — OFF, INT, LO, HI, each word
         on its key, the speed set lit. A size of nought: none, the wipers keep their own time. */
     std::array<juce::Point<float>, 4> wiperKeys {};     // no keys for the wipers
@@ -236,6 +244,26 @@ struct Plan
         { 809.0f, 295.6f }, { 865.0f, 295.6f }, { 888.0f, 335.0f }, { 865.0f, 375.0f }, { 809.0f, 375.0f }, { 787.0f, 335.0f },
     }};
     juce::Rectangle<float> emblemMark { 813.0f, 310.0f, 50.0f, 50.0f };
+
+    /** THE BADGE'S PLACE, where the skin wears the family's badge (Skin::badge) over that plate: the
+        cockpit's plate (catpit/CatpitLayout.h: emblemFace) as it is — its wide flat top, its sides slanting out
+        and then in to the narrower bottom, the shallow nose its bottom edge falls to in the middle — scaled by
+        0.715 about x = 835.5. Bounded by the frame's raised step it sits on: its top 3.5 under the step's top
+        (y 289, x 789..881) and its upper sides as far in from the step's shoulders, so that the step's edge
+        shows all round the top; its nose on the rail under it (y 380), the bottom edge's two ends 5 above
+        the rail, a small gap at either side; and over the picture's hexagon and its groove (783..889 x
+        294..379) but for the groove's bottom line, which shows in those two gaps as their shadow. Its six
+        screws where the cockpit has its own, scaled the same; the mark a little larger than the cockpit's
+        share of its plate, as the wide top leaves its ears room. */
+    std::array<juce::Point<float>, 7> badgeFace {{
+        { 790.1f, 292.5f }, { 880.9f, 292.5f }, { 902.7f, 313.2f }, { 880.5f, 374.7f }, { 835.5f, 379.0f },
+        { 790.5f, 374.7f }, { 768.3f, 313.2f },
+    }};
+    std::array<juce::Point<float>, 6> badgeScrews {{
+        { 793.0f, 296.8f }, { 878.0f, 296.8f }, { 771.9f, 315.4f }, { 899.1f, 315.4f }, { 796.5f, 371.9f }, { 874.5f, 371.9f },
+    }};
+    float badgeScrew = 5.7f;    // the screws' heads, across: the cockpit's 8, scaled
+    juce::Rectangle<float> badgeMark { 797.0f, 295.8f, 77.0f, 75.0f };
 
     /** THE MAKER'S WORDS beside the mark, where the picture has room for them: POWERED BY low on its
         left, DARWIN'S CAT low on its right, each set condensed into its room where it is wider. A room of

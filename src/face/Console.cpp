@@ -12,6 +12,7 @@
 
 #include "../Parameters.h"
 #include "../Product.h"
+#include "../ProductPage.h"
 #include "../core/ProcessMemory.h"
 #include "../device/IrLibrary.h"
 #include "../ui/AboutConfig.h"
@@ -78,20 +79,15 @@ namespace
                                       nullptr);
     }
 
-    /** The product's own tag on a family link, for the site's analytics: "utm_source=catpitamp&...". */
-    juce::String campaign (const Product& p)
-    {
-        return "utm_source=" + juce::String (p.name).toLowerCase() + "&utm_medium=plugin";
-    }
 
     /** THE BUILD WINDOW, AS THE PRODUCT'S. What the build is and what it was built against is the same
         for every face of the processor (aboutConfig); what is the product's own is its name, its mark —
         the cockpit's a small starship head-on, its fins a cat's ears — and its name where the notice
         says whose product this is. The window outlives the badge that opens it, so the mark is
         shared, not lent. */
-    felitronics::appkit::VersionBadge::Config aboutTheProduct (const Product& p, const juce::String& svg)
+    felitronics::appkit::VersionBadge::Config aboutTheProduct (const Product& p, const juce::String& svg, bool standalone)
     {
-        auto config = aboutConfig (p.name, "https://darwinscat.com", campaign (p).toRawUTF8());
+        auto config = aboutConfig (p.name, productPageUrl (p.name, standalone), familyLinkTag (p.name));
 
         std::shared_ptr<juce::Drawable> mark { juce::Drawable::createFromImageData (
             svg.toRawUTF8(), svg.getNumBytesAsUTF8()).release() };
@@ -158,7 +154,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
       tuner (p.tunerEar),
       emblem (where.emblemFace, where.emblemMark),
       version (stage::px13),
-      about (p.updateChecker(), aboutTheProduct (p.product(), look.mark), p.pluginFormat()),
+      about (p.updateChecker(), aboutTheProduct (p.product(), look.mark, p.wrapperType == juce::AudioProcessor::wrapperType_Standalone), p.pluginFormat()),
       load (where.readingPx),
       memory (where.readingPx),
       presetDoor (stage::px13)
@@ -393,7 +389,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // INPUT's lever IS the trim, as OUTPUT's is: unity in its middle (Console.h).
     bind (inFader, params::inTrim);
 
-    inFader.onMenu = [this] { showInputMenu(); };
+    inFader.onMenu = [this] { showInputMenu(); };   // ...the face's own menu while HUM is off (showInputMenu)
 
     outFader.onMenu = [this] { showOutputMenu(); };
 
@@ -433,11 +429,12 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         juce::Path face;
         for (size_t i = 0; i < places.emblemFace.size(); ++i)
             i == 0 ? face.startNewSubPath (places.emblemFace[i]) : face.lineTo (places.emblemFace[i]);
-        emblem.setBounds (face.getBounds().getSmallestIntegerContainer());
+        emblem.setBounds (face.getBounds().expanded (Emblem::bloom + 1.0f).getSmallestIntegerContainer());     // room for the lamp's glow; the target is the plate alone
     }
-    emblem.onClick = [&product = amp.product()]
+    emblem.setLamp (look.emblemLamp);
+    emblem.onClick = [page = productPageUrl (amp.product().name, amp.wrapperType == juce::AudioProcessor::wrapperType_Standalone)]
     {
-        juce::URL ("https://darwinscat.com/felitronics/" + juce::String (product.name).toLowerCase() + "?" + campaign (product)).launchInDefaultBrowser();
+        juce::URL (page).launchInDefaultBrowser();
     };
 
     // The version, and behind it the window with everything else about the build. That window is
@@ -774,6 +771,26 @@ void Console::exportForWeb (const juce::File& dir)
     o->setProperty ("lamps", listVar (p.lamps, rectVar));
     o->setProperty ("emblemFace", listVar (p.emblemFace, pointVar));
     o->setProperty ("emblemMark", rectVar (p.emblemMark));
+    // ...and the mark lit under the hand, where the face has a lamp for it (Emblem): the lit glass whole, at
+    // twice the stage, its box, the lamp, and the spring the light comes up and goes on — for the site to
+    // fade the picture in over the engraving at the light's share, as the face does.
+    if (const auto glass = emblem.litPicture (2.0f); glass.isValid())
+    {
+        auto* l = new juce::DynamicObject();
+        l->setProperty ("sprite", writeSprite (dir, "emblem-lit", glass));
+        l->setProperty ("box", rectVar (emblem.litBox()));
+        l->setProperty ("lamp", colourVar (emblem.lampColour()));
+        l->setProperty ("lights", "mark");      // the cat is the glass: its floor lit through
+        l->setProperty ("stiffness", emblem.lightStiffness());
+        l->setProperty ("damping", emblem.lightDamping());
+        l->setProperty ("riseSeconds", emblem.lightSeconds());
+        l->setProperty ("fallSeconds", emblem.lightSeconds());
+        l->setProperty ("how", "laid over the badge at the light's share, a spring with no overshoot toward 1 under the hand and 0 off it; "
+                               "the cat's floor lit through, its walls kept, a bloom past its edges");
+        o->setProperty ("emblemLit", juce::var (l));
+    }
+    else
+        o->setProperty ("emblemLit", juce::var());
     o->setProperty ("version", rectVar (p.version));
     o->setProperty ("load", rectVar (p.load));
     o->setProperty ("memory", rectVar (p.memory));
@@ -1251,10 +1268,19 @@ void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool t
 }
 
 /** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: the hum the input carries — the
-    machine's, the four modes here as flat items, AUTO's line naming what it decided once it has. */
+    machine's, the four modes here as flat items, AUTO's line naming what it decided once it has. With HUM
+    off in the build (Features.h) the column has no menu of its own, and a right click on it is one on the
+    face, as anywhere else that has none: the face's menu — whose INPUT is DRIVE's — rather than a lever
+    that jumps. */
 void Console::showInputMenu()
 {
     endTapping();
+
+    if constexpr (! features::hum)
+    {
+        showSettingsMenu();
+        return;
+    }
 
     juce::PopupMenu menu;
     menu.addSectionHeader ("HUM");
@@ -1946,8 +1972,9 @@ bool Console::keyPressed (const juce::KeyPress& key)
                 return true;
             }
 
-        // H: the hum, OFF and back — Р under a Russian layout, the same key. G: the gate — П.
-        if (letter == 'H' || letter == 0x0420)
+        // H: the hum, OFF and back — Р under a Russian layout, the same key; only while the build has HUM
+        // (Features.h), and without it the key goes on to the host. G: the gate — П.
+        if (features::hum && (letter == 'H' || letter == 0x0420))
         {
             flipHum();
             return true;
@@ -2126,10 +2153,13 @@ void Console::showSettingsMenu()
 
     // The hum is the machine's (prefs::hum): every window of this product and
     // every engine behind one follow the choice from their next look and their next block. The title
-    // says where it stands — AUTO's state with it.
-    juce::PopupMenu hum;
-    addHumLines (hum);
-    menu.addSubMenu ("HUM  " + prefs::humState (amp.product(), amp.humHeard()), hum);
+    // says where it stands — AUTO's state with it. Only while the build has HUM (Features.h).
+    if constexpr (features::hum)
+    {
+        juce::PopupMenu hum;
+        addHumLines (hum);
+        menu.addSubMenu ("HUM  " + prefs::humState (amp.product(), amp.humHeard()), hum);
+    }
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)
