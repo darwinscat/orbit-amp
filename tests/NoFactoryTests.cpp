@@ -3,7 +3,7 @@
 
 // Gate for AN AMP WITH NO FACTORY FOLDER (ui/FactoryMissing.h) — copied off a zip without it, or the
 // folder deleted. The amp is compiled again to read a folder that is not there (CMakeLists.txt:
-// amp_console NO_FACTORY), and must: hold every place of its cabinet shelf empty, DARK MATTER's too; find
+// amp_console NO_FACTORY), and must: hold every place of its cabinet shelf empty, the default's (RED GIANT) too; find
 // no pack of its own; play a guitar through for as long as a few seconds of blocks, and through every
 // channel it has, without a crash and without a sample that is not a number; and open a window that says
 // the folder is missing and where it belongs — a face in place of its whole window, in type a player
@@ -44,7 +44,7 @@ int main()
         check (empty, "every place of the cabinet shelf is held empty");
         check (AmpProcessor::cabIrBytes (ORBITAMP_GATE_PRODUCT(), params::cabIrDefault).data == nullptr
                    && AmpProcessor::cabIrBytes (ORBITAMP_GATE_PRODUCT(), 0).data == nullptr,
-               "...DARK MATTER's too, and a number of Other's plays no bytes rather than a stray pointer");
+               "...RED GIANT's too, and a number of Other's plays no bytes rather than a stray pointer");
     }
 
     // THE PACKS: none of the factory's — whatever the player's own Devices folder holds is his.

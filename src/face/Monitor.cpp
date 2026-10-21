@@ -4,6 +4,7 @@
 #include "Monitor.h"
 
 #include "Controls.h"
+#include "../Features.h"
 
 #include <felitronics/analysis/PlotMap.h>
 
@@ -186,7 +187,8 @@ juce::var Monitor::shapeForWeb() const
     // one factor that brings the window's peak to `fill` of the half-height and each clamped there.
     auto* shape = new juce::DynamicObject();
     shape->setProperty ("dry", stroke (theme::lilac.withAlpha (scope::ShapeView::dryAlpha), scope::ShapeView::dryWidth,
-                                       "the amp's input: the captured block's own, after INPUT, the hum and the gate, before the model; channel 0"));
+                                       features::hum ? "the amp's input: the captured block's own, after INPUT, the hum and the gate, before the model; channel 0"
+                                                     : "the amp's input: the captured block's own, after INPUT and the gate, before the model; channel 0"));
     shape->setProperty ("wet", stroke (theme::orange, scope::ShapeView::wetWidth,
                                        "the amp's output: the model's, before the tone stack, the delay, the room and the cabinet; channel 0"));
     shape->setProperty ("tapSamples", core::ScopeTap::size);         // the last this many samples of both, at the session's rate

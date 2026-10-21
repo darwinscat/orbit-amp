@@ -1,6 +1,7 @@
 {
   "format": "orbitrig", "schema": 4,
   "rig_id": "x88-ir-altered-c14c", "family_id": "X88-IR", "name": "X88-IR", "modeled_by": "Darwin's Cat",
+  "picture": "device.webp",
   "chain": [
     {
       "kind": "nam", "slot": "preamp",
@@ -15,19 +16,28 @@
           "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] }
       ],
       "files": [
-        { "file": "X88-IR Altered-0001.namz", "settings": { "Gain": "60" }, "lag_samples": 0 },
-        { "file": "X88-IR Altered-0002.namz", "settings": { "Gain": "90" }, "lag_samples": -1 },
-        { "file": "X88-IR Altered-0003.namz", "settings": { "Gain": "120" }, "lag_samples": -1 },
-        { "file": "X88-IR Altered-0004.namz", "settings": { "Gain": "150" }, "lag_samples": 0 },
-        { "file": "X88-IR Altered-0005.namz", "settings": { "Gain": "180" }, "lag_samples": 0 },
-        { "file": "X88-IR Altered-0006.namz", "settings": { "Gain": "210" }, "lag_samples": 1 },
-        { "file": "X88-IR Altered-0007.namz", "settings": { "Gain": "240" }, "lag_samples": 0 },
-        { "file": "X88-IR Altered-0008.namz", "settings": { "Gain": "270" }, "lag_samples": 1 },
-        { "file": "X88-IR Altered-0009.namz", "settings": { "Gain": "300" }, "lag_samples": 0 },
+        { "file": "X88-IR Altered-0001.namz", "settings": { "Gain": "60" }, "lag_samples": 0,
+          "epochs": 1000, "esr": 0.00345183 },
+        { "file": "X88-IR Altered-0002.namz", "settings": { "Gain": "90" }, "lag_samples": -1,
+          "epochs": 1000, "esr": 0.00403461 },
+        { "file": "X88-IR Altered-0003.namz", "settings": { "Gain": "120" }, "lag_samples": -1,
+          "epochs": 1000, "esr": 0.00492839 },
+        { "file": "X88-IR Altered-0004.namz", "settings": { "Gain": "150" }, "lag_samples": 0,
+          "epochs": 1000, "esr": 0.00553847 },
+        { "file": "X88-IR Altered-0005.namz", "settings": { "Gain": "180" }, "lag_samples": 0,
+          "epochs": 1000, "esr": 0.00657176 },
+        { "file": "X88-IR Altered-0006.namz", "settings": { "Gain": "210" }, "lag_samples": 1,
+          "epochs": 1000, "esr": 0.00970947 },
+        { "file": "X88-IR Altered-0007.namz", "settings": { "Gain": "240" }, "lag_samples": 0,
+          "epochs": 1200, "esr": 0.01069047 },
+        { "file": "X88-IR Altered-0008.namz", "settings": { "Gain": "270" }, "lag_samples": 1,
+          "epochs": 1200, "esr": 0.01021432 },
+        { "file": "X88-IR Altered-0009.namz", "settings": { "Gain": "300" }, "lag_samples": 0,
+          "epochs": 1200, "esr": 0.01133816 },
         { "file": "X88-IR Altered-0001.namz", "settings": { "Gain": "0" }, "input_db": -6.0,
-          "lag_samples": 0 },
+          "lag_samples": 0, "epochs": 1000, "esr": 0.00345183 },
         { "file": "X88-IR Altered-0001.namz", "settings": { "Gain": "30" }, "input_db": -3.0,
-          "lag_samples": 0 }
+          "lag_samples": 0, "epochs": 1000, "esr": 0.00345183 }
       ],
       "tone": [
         {

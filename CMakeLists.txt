@@ -1602,6 +1602,13 @@ juce_add_plugin(${FAMILY_BUNDLE_TARGET}
     ICON_BIG                    "${family_icon}"
     COPY_PLUGIN_AFTER_BUILD     FALSE)
 
+# The code every format links, a library no one ships, named without the bundle's apostrophe. JUCE calls
+# it "<PRODUCT_NAME>_SharedCode", and the Visual Studio generator's MSBuild (VS 18's Microsoft.CppBuild
+# targets) quotes a format's whole list of link inputs in single quotes inside a condition — where the
+# apostrophe in "Darwin's Cat Amps" ends the string and stops the link of the VST3 and the CLAP
+# (MSB4100). Ninja never quotes it, which is why the pull request's Windows build did not see it.
+set_target_properties(${FAMILY_BUNDLE_TARGET} PROPERTIES OUTPUT_NAME "${FAMILY_BUNDLE_TARGET}_SharedCode")
+
 clap_juce_extensions_plugin(TARGET ${FAMILY_BUNDLE_TARGET}
     CLAP_ID       "com.darwinscat.amps"
     CLAP_FEATURES ${AMP_CLAP_FEATURES})
@@ -1915,6 +1922,11 @@ gate_reads_factory(orbitamp_chain_test)   # OrbitAmp's whole shelf, and its pack
 # which listens after the trim: AUTO takes a mains hum off; an INPUT trim moved mid-stream does not
 # bring it back, because the stage sits ahead of the trim; OFF hands the input on bit for bit; and a
 # demo loop with no hum in it passes untouched. Needs no pack: the input path is ahead of every block.
+#
+# HUM is switched off in every amp for now (src/Features.h), so the gate is built twice from the one
+# file. This one throws the switch (ORBITAMP_FEATURE_HUM=1) and tests the stage, which has to stay ready
+# for the day HUM comes back; orbitamp_hum_off_test, below, is built as the products are and holds the
+# switch itself.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_hum_test PRODUCT_NAME "OrbitAmpHumTest")
 target_sources(orbitamp_hum_test PRIVATE tests/HumTests.cpp ${ORBITAMP_SOURCES})       # ...and so does this one
@@ -1922,6 +1934,7 @@ target_include_directories(orbitamp_hum_test PRIVATE src)
 target_include_directories(orbitamp_hum_test PRIVATE "${ORBITAMP_GENERATED_DIR}")
 add_dependencies(orbitamp_hum_test OrbitAmpVersionGen)
 target_compile_definitions(orbitamp_hum_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                    ORBITAMP_FEATURE_HUM=1
                                                     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_hum_test PRIVATE
     OrbitAmpData
@@ -1929,6 +1942,26 @@ target_link_libraries(orbitamp_hum_test PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 gate_reads_factory(orbitamp_hum_test)     # OrbitAmp's processor, its whole shelf with it
+
+# ----------------------------------------------------------------------------
+# Gate for HUM SWITCHED OFF (src/Features.h), the processor built as every amp ships it: with the
+# machine's settings on AUTO — as a machine that chose AUTO before keeps them — the stage is never
+# prepared and never runs, the mode in force is OFF with no LEARN, and a hummed input passes bit for
+# bit. The same file as the hum gate, which runs only this part of itself when the switch is off.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_hum_off_test PRODUCT_NAME "OrbitAmpHumOffTest")
+target_sources(orbitamp_hum_off_test PRIVATE tests/HumTests.cpp ${ORBITAMP_SOURCES})
+target_include_directories(orbitamp_hum_off_test PRIVATE src)
+target_include_directories(orbitamp_hum_off_test PRIVATE "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_hum_off_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_hum_off_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_hum_off_test PRIVATE
+    OrbitAmpData
+    ${AMP_ENGINE_LIBRARIES}
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+gate_reads_factory(orbitamp_hum_off_test)
 
 # ----------------------------------------------------------------------------
 # Gate for reading an .orbitrig pack and playing it through the block the plugin plays it with —

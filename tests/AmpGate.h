@@ -98,7 +98,7 @@ inline const Product& product()
         return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), true, gears, {},
                          "all the product's channels' packs are installed",
                          "every channel's tone knobs are its pack's tones, as many as it lists, knob i its tone i",
-                         "...and every one on the build's DARK MATTER" };
+                         "...and every one on the build's RED GIANT" };
     };
 
     static const Product products[] {
@@ -121,7 +121,7 @@ inline const Product& product()
           },
           "all four channels' packs are installed",
           "every channel's tone knobs are its pack's three tones, knob i its tone i",
-          "...and all four on the build's DARK MATTER" },
+          "...and all four on the build's RED GIANT" },
 
         // On Mars the Friedman IR-X's two channels, each a gear: Ch1 the CRUNCH and Ch2 the HI-GAIN, its
         // TURBO the same pack with the Boost thrown. Ch1 on a plate, Ch2 in an ambience with no delay.

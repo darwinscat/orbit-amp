@@ -389,7 +389,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // INPUT's lever IS the trim, as OUTPUT's is: unity in its middle (Console.h).
     bind (inFader, params::inTrim);
 
-    inFader.onMenu = [this] { showInputMenu(); };
+    inFader.onMenu = [this] { showInputMenu(); };   // ...the face's own menu while HUM is off (showInputMenu)
 
     outFader.onMenu = [this] { showOutputMenu(); };
 
@@ -1268,10 +1268,19 @@ void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool t
 }
 
 /** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: the hum the input carries — the
-    machine's, the four modes here as flat items, AUTO's line naming what it decided once it has. */
+    machine's, the four modes here as flat items, AUTO's line naming what it decided once it has. With HUM
+    off in the build (Features.h) the column has no menu of its own, and a right click on it is one on the
+    face, as anywhere else that has none: the face's menu — whose INPUT is DRIVE's — rather than a lever
+    that jumps. */
 void Console::showInputMenu()
 {
     endTapping();
+
+    if constexpr (! features::hum)
+    {
+        showSettingsMenu();
+        return;
+    }
 
     juce::PopupMenu menu;
     menu.addSectionHeader ("HUM");
@@ -1963,8 +1972,9 @@ bool Console::keyPressed (const juce::KeyPress& key)
                 return true;
             }
 
-        // H: the hum, OFF and back — Р under a Russian layout, the same key. G: the gate — П.
-        if (letter == 'H' || letter == 0x0420)
+        // H: the hum, OFF and back — Р under a Russian layout, the same key; only while the build has HUM
+        // (Features.h), and without it the key goes on to the host. G: the gate — П.
+        if (features::hum && (letter == 'H' || letter == 0x0420))
         {
             flipHum();
             return true;
@@ -2143,10 +2153,13 @@ void Console::showSettingsMenu()
 
     // The hum is the machine's (prefs::hum): every window of this product and
     // every engine behind one follow the choice from their next look and their next block. The title
-    // says where it stands — AUTO's state with it.
-    juce::PopupMenu hum;
-    addHumLines (hum);
-    menu.addSubMenu ("HUM  " + prefs::humState (amp.product(), amp.humHeard()), hum);
+    // says where it stands — AUTO's state with it. Only while the build has HUM (Features.h).
+    if constexpr (features::hum)
+    {
+        juce::PopupMenu hum;
+        addHumLines (hum);
+        menu.addSubMenu ("HUM  " + prefs::humState (amp.product(), amp.humHeard()), hum);
+    }
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)

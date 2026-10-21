@@ -87,7 +87,7 @@ int main()
     const auto formerIr = device::IrLibrary::formerDirectory (ORBITAMP_PRODUCT_NAME).getChildFile ("Old Pack").getChildFile ("gathered-" + seedRun + ".wav");
     if (ownsHome)
     {
-        // An IR of its own: the shelf's DARK MATTER with its last sample nudged, like no other here.
+        // An IR of its own: the shelf's default, RED GIANT, with its last sample nudged, like no other here.
         const auto& shelf = device::shelf::irs (ORBITAMP_PRODUCT_NAME)[(size_t) params::cabIrDefault];
         juce::MemoryBlock bytes (shelf.data, (size_t) shelf.size);
         bytes[bytes.getSize() - 1] = (char) (bytes[bytes.getSize() - 1] ^ 4);
@@ -192,15 +192,15 @@ int main()
 
     // THE SHELF'S `Other` IS ORBITAMP'S (device/FactoryShelf.h): the amp plays Darwin's Cat's own cabinets
     // and not a byte of the third-party ones, whatever the factory folder holds — their places in
-    // `cab_ir`'s order held empty — and a host that moves `cab_ir` to one of those places hears DARK
-    // MATTER, not a cabinet that is not there.
+    // `cab_ir`'s order held empty — and a host that moves `cab_ir` to one of those places hears RED
+    // GIANT, the default, not a cabinet that is not there.
     {
         bool oursAlone = device::shelf::irs (ORBITAMP_PRODUCT_NAME).size() == (size_t) params::cabIrNames.size();
         for (const auto& ir : device::shelf::irs (ORBITAMP_PRODUCT_NAME))
             oursAlone = oursAlone && (ir.data != nullptr) == (juce::String (ir.folder) == device::shelf::ours);
         check (oursAlone, "the " + ours + " plays the shelf's Orange PPC212V and nothing of Other, every number in its place");
         check (AmpProcessor::cabIrBytes (ORBITAMP_GATE_PRODUCT(), 0).data == AmpProcessor::cabIrBytes (ORBITAMP_GATE_PRODUCT(), params::cabIrDefault).data,
-               "...and a number of Other's plays DARK MATTER");
+               "...and a number of Other's plays RED GIANT, the default");
     }
 
     // PARK, where the product has it: the lever's top end, the whole amp out of the sound — a switch
@@ -638,7 +638,7 @@ int main()
         }
         check (each, "after INIT each channel opens on its own room, its own share of it and of delay");
         check (opening >= 0 && opening < channels.factoryCabinets()
-                   && channels.cabinetStem (channels.cabinets()[opening]) == "dark-matter" && onIt,
+                   && channels.cabinets()[opening].getFileName() == juce::String (catalog::irs[params::cabIrDefault].file) && onIt,
                product.opening);
 
         delay->setValueNotifyingHost (delay->convertTo0to1 (40.0f));
@@ -656,6 +656,68 @@ int main()
         presets.init();
         ticks();
         check (channels.cabinetOn(), "...until INIT, which plays it again");
+        ticks();
+    }
+
+    // A SESSION OF BEFORE, when every channel opened on DARK MATTER (AmpProcessor::takeFormerCabinet): the
+    // session as a build of then saved it — no note of its opening cabinet on any state — playing DARK
+    // MATTER, with another memory's channel left on it too, opens on RED GIANT, and that channel comes back
+    // on RED GIANT; one of before on another of the build's cabinets keeps it; and one saved now on DARK
+    // MATTER, the player's pick by its note, keeps that.
+    {
+        const auto fileOf = [&channels] (const char* name)
+        {
+            const juce::String file (catalog::irs[params::cabIrNames.indexOf (name)].file);
+            for (int i = 0; i < channels.factoryCabinets(); ++i)
+                if (channels.cabinets()[i].getFileName() == file)
+                    return i;
+            return -1;
+        };
+        const int dark = fileOf ("DARK MATTER"), giant = fileOf ("RED GIANT"), pulsar = fileOf ("PULSAR BEAM");
+        int far = 1;
+        while (far < last && channels.memoryOf (far) == channels.memoryOf (0))
+            ++far;
+
+        const auto saved = [&] (int cabinet, bool before)
+        {
+            engine.go (far);
+            channels.chooseCabinet (cabinet);
+            ticks();
+            engine.go (0);
+            channels.chooseCabinet (cabinet);
+            ticks();
+            juce::MemoryBlock session;
+            amp->getStateInformation (session);
+            if (before)
+            {
+                auto tree = juce::ValueTree::fromXml (*juce::AudioProcessor::getXmlFromBinary (session.getData(), (int) session.getSize()));
+                std::function<void (juce::ValueTree)> unnote = [&unnote] (juce::ValueTree t)
+                {
+                    t.removeProperty (AmpProcessor::cabOpeningId, nullptr);
+                    for (auto child : t)
+                        unnote (child);
+                };
+                unnote (tree);
+                session.reset();
+                juce::AudioProcessor::copyXmlToBinary (*tree.createXml(), session);
+            }
+            channels.chooseCabinet (cabinet == pulsar ? dark : pulsar);    // elsewhere, for the session to take it back from
+            ticks();
+            amp->setStateInformation (session.getData(), (int) session.getSize());
+            ticks();
+            const int now = channels.cabinet();
+            engine.go (far);
+            const int there = channels.cabinet();
+            engine.go (0);
+            return std::pair { now, there };
+        };
+
+        check (dark >= 0 && giant >= 0 && pulsar >= 0 && far != 0, "the build carries DARK MATTER, RED GIANT and PULSAR BEAM");
+        const auto oldDark = saved (dark, true), oldPulsar = saved (pulsar, true), newDark = saved (dark, false);
+        check (oldDark.first == giant, "a session of before on DARK MATTER opens on RED GIANT");
+        check (oldDark.second == giant, "...and so does the channel it left on DARK MATTER");
+        check (oldPulsar.first == pulsar && oldPulsar.second == pulsar, "...one of before on another cabinet keeps it, every channel");
+        check (newDark.first == dark && newDark.second == dark, "...and one saved now on DARK MATTER keeps that, every channel");
         ticks();
     }
 

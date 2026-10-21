@@ -118,6 +118,11 @@ const layout::Plan plan {
     .learnKeySize = 42.0f,
     .learnNames {{ { 327.5f, 538.0f }, { 327.5f, 620.0f } }},
     .learnLine = 11.5f,
+    // With no HUM in the build, HUM's hole is plate: the bare plate between the two bezels, 603..636 down,
+    // 301.5..353.5 across — clear of the dot at its right edge — and that again upside down, over a round
+    // of 52 that takes the lower bezel, 49 tall, with a little to spare.
+    .learnPlate { 301.5f, 603.0f, 52.0f, 33.0f },
+    .learnHoleSize = 52.0f,
 
     // The wipers' four keys: the row of square holes under the radio's screen, each 35 x 39, 44 apart.
     .wiperKeys {{ { 136.0f, 667.8f }, { 180.0f, 667.8f }, { 224.0f, 667.8f }, { 268.0f, 667.8f } }},

@@ -44,6 +44,12 @@
 // settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
 // its own; where the store does not land there (a platform that does not take its settings from HOME),
 // they say so and skip rather than rewrite the choice of the machine they run on.
+//
+// HUM IS SWITCHED OFF in every amp for now (src/Features.h). The checks above are the stage's, and run
+// in the gate built with the switch thrown (orbitamp_hum_test). Built as the products are, with HUM off
+// (orbitamp_hum_off_test), the gate holds the switch instead, and nothing else: the machine set to AUTO
+// — as a machine that chose it before keeps it — and still the stage is never prepared and never runs,
+// the mode in force is OFF with no LEARN of its own, and the hummed input passes bit for bit.
 
 #include <juce_events/juce_events.h>
 
@@ -353,6 +359,29 @@ int main()
 
     Stream stream (amp);
     stream.prepare();
+
+    // HUM SWITCHED OFF (Features.h) — the products' build. The machine on AUTO, through the cached atomic
+    // the engine reads, and a restart, the way a host opens a session on a machine that chose it: no
+    // stage, OFF in force, no LEARN, and four seconds of a hummed input on the tap bit for bit.
+    if constexpr (! orbitamp::features::hum)
+    {
+        machine (Hum::automatic);
+        stream.prepare();
+        Heard heard;
+        stream.play (4.0, heard);
+        const long long d = firstDifference (heard.out, heard.in, 0, heard.size());
+        report ("HUM off in the build: AUTO on the machine runs no stage",
+                amp.humRuns.load() == -1 && inForce (amp) == Hum::off && ! amp.humLearn.on.load(),
+                juce::String ("runs: ") + juce::String (amp.humRuns.load()) + ", in force: " + name (inForce (amp)));
+        report ("...and the hummed input passes bit for bit", d < 0,
+                d < 0 ? juce::String ("4 s identical, from the first sample") : juce::String::formatted ("differs at %.3f s", (double) d / sampleRate));
+
+        if (failures == 0)
+            std::printf ("\nall hum-off checks passed\n");
+        else
+            std::printf ("\n%d hum-off check(s) FAILED\n", failures);
+        return failures == 0 ? 0 : 1;
+    }
 
     // 0 · OFF BY DEFAULT — on a machine that has never said otherwise, with AUTO the mode it bypasses.
     {

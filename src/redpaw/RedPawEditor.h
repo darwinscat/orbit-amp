@@ -15,6 +15,10 @@
 namespace orbitamp::redpaw
 {
 
+/** How many of LEARN's keys a face that has them shows, GATE's first: HUM's key and its name only while
+    the build has HUM (Features.h). Without it HUM's hole is plate (Art::of covers it), GATE's key alone. */
+inline constexpr int learnKeysShown = features::hum ? 2 : 1;
+
 /** The dashboard itself: the picture with its windscreen cut out, the family's mark cut into the emblem
     plate, and every printed word on it. Drawn over the windscreen, under the controls, and never takes
     a click. */
