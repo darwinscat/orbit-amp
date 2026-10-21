@@ -962,6 +962,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     // ---- THREE SECTIONS, each a tier over a strip. The two narrow ones are a FIXED width and the
     //      well takes the rest, so the widest thing on the block is the picture. ----
     auto s1 = area.removeFromLeft (section1W);
+    const auto column1 = s1;   // GAIN's whole column: its strip is its own, not the shared one
     area.removeFromLeft (sectionGap);
     auto s2 = area.removeFromLeft (section2W);
     area.removeFromLeft (sectionGap);
@@ -977,7 +978,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         return r;
     };
 
-    auto strip1 = strip (s1), strip2 = strip (s2), strip3 = strip (s3);
+    auto strip2 = strip (s2), strip3 = strip (s3);
 
     // ---- section 3: the picture well, the two meters at its edges, the console's row under it.
     //
@@ -1007,21 +1008,31 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         outMeter.toFront (false);
     }
 
-    // ---- section 1: the GAIN dial, as big as the tier lets it be, and under it SMOOTH and the
-    //      device's picks — one line each, stacked in the middle of the strip, left-aligned on one
-    //      edge so the switches stand in a column. ----
+    // ---- section 1: the GAIN dial, as BIG as the block lets it be. Its strip is not the shared one:
+    //      it is only as tall as SMOOTH and the picks need, and the dial grows down into the rest.
+    //
+    //      ROOM FOR ONE PICK, whatever the pack brings — SMOOTH and one line under it — so the dial is
+    //      the same size on every device of the set, the X88-IR that has no pick and the IR-X that has
+    //      BRIGHT: a dial that changed size with the device would be a face to re-learn per device. A
+    //      pack with two picks besides BOOST (none yet) takes its third line out of the dial. ----
     {
-        const int gainSide = juce::jmin (maxGainSide, juce::jmin (s1.getWidth(), s1.getHeight()));
-        gain.setBounds (s1.withSizeKeepingCentre (gainSide, gainSide));
-
         std::vector<int> widths { SmoothTag::idealWidth() };
         for (auto& sel : selectors)
             if (sel.steps != nullptr)
                 widths.push_back (pickSwitchW + 8 + juce::roundToInt (pickWordWidth (sel)));
 
-        const int rows  = (int) widths.size();
-        const int rowGap = juce::jmax (2, juce::jmin (6, (strip1.getHeight() - rows * pickRowH) / juce::jmax (1, rows - 1)));
-        const int stackH = rows * pickRowH + (rows - 1) * rowGap;
+        const int rows     = (int) widths.size();
+        const int reserved = juce::jmax (2, rows);
+        auto column = column1;
+        auto strip1 = column.removeFromBottom (reserved * pickRowH + (reserved - 1) * pickRowGap);
+        column.removeFromBottom (dialGap);
+
+        const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
+        gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
+
+        // The lines stacked in the middle of their strip, left-aligned on one edge so the switches stand
+        // in a column under the dial.
+        const int stackH = rows * pickRowH + (rows - 1) * pickRowGap;
         const int stackW = juce::jmin (strip1.getWidth(), *std::max_element (widths.begin(), widths.end()));
 
         auto stack = strip1.withSizeKeepingCentre (stackW, juce::jmin (strip1.getHeight(), stackH));
@@ -1033,7 +1044,7 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
             if (sel.steps == nullptr)
                 continue;
 
-            stack.removeFromTop (rowGap);
+            stack.removeFromTop (pickRowGap);
             sel.row = stack.removeFromTop (pickRowH);
             sel.steps->setBounds (sel.row.withWidth (pickSwitchW).reduced (0, 1));
         }

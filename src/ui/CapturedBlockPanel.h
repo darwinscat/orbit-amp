@@ -122,14 +122,15 @@ private:
         beside them never moves when the pack changes. A face that reshuffles itself per device is a
         face you have to re-learn per device. Wide enough for what they hold at 13 px: OVERDRIVE on
         the lever, BRIGHT 2 beside its switch. */
-    static constexpr int section1W  = 150;   // GAIN, and SMOOTH with the picks under it
+    static constexpr int section1W  = 160;   // GAIN, and SMOOTH with the picks under it — the dial's notches clear of the edges
     static constexpr int section2W  = 150;   // the channel lever, and BOOST under it
     static constexpr int sectionGap = 16;    // a hairline down its middle
     static constexpr int tierGap    = 6;     // between a section's tier and its strip
 
     /** THE STRIPS' HEIGHT is the console's row, the tallest thing any of them holds: a dial of reading
         size with its name over it. Every tier is what is left above — so the lever stands exactly as
-        tall as the picture beside it. */
+        tall as the picture beside it. All but GAIN's: its strip is only what SMOOTH and the picks
+        need, and the dial takes the rest (layOutContent). */
     static constexpr int stripH = EqSection::rowH;
 
     static constexpr int numViz = 7;
@@ -260,7 +261,9 @@ private:
         switches — its NAME, lit when on — and anything else by where it stands, the chosen position's
         name (BRIGHT 1, CENTER, FAT). The name and every position are the hint. One word, not the
         three the old column wrote, because the strip is a section wide and 13 px is not negotiable. */
-    static constexpr int   pickRowH     = 20;
+    static constexpr int   pickRowH     = 18;
+    static constexpr int   pickRowGap   = 3;
+    static constexpr int   dialGap      = 4;   // between the dial's square and its strip: the notches overhang it
     static constexpr int   pickSwitchW  = 30;
     static constexpr float pickFontH    = 13.0f;
     static constexpr float pickTracking = 0.08f;
