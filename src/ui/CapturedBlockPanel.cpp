@@ -940,6 +940,16 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     setControlsVisible (true);
     eq.setRowVisible (true);
 
+    // ---- the IN meter first, the block's whole height: what the model is fed comes before the dial
+    //      that decides what it does with it. The component is wider than its bar; the margin, over
+    //      GAIN's column, is where the dB appears while the hand drags, and click-through otherwise. ----
+    {
+        auto inCol = area.removeFromLeft (BlockMeter::designWidth);
+        area.removeFromLeft (6);
+        inMeter.setBounds (inCol.withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
+        inMeter.toFront (false);    // over GAIN's column, so the dragged reading paints on top
+    }
+
     // ---- THREE SECTIONS, each a tier over a strip. The two narrow ones are a FIXED width and the
     //      well takes the rest, so the widest thing on the block is the picture. ----
     auto s1 = area.removeFromLeft (section1W);
@@ -961,25 +971,9 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     auto strip2 = strip (s2), strip3 = strip (s3);
 
-    // ---- section 3: the picture well, the IN meter at its left edge, the console's row under it.
-    //
-    //      The meter stands where the signal enters the picture — what the model is being fed, with
-    //      the trim's hand on it. The component is wider than its bar; the margin, over the well, is
-    //      where the dB appears while the hand drags, and click-through for the picture otherwise. ----
-    {
-        auto tier = s3;
-
-        auto inCol = tier.removeFromLeft (BlockMeter::designWidth);
-        tier.removeFromLeft (6);
-        inMeter.setBounds (inCol.withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
-
-        // "Under the picture": the row's cells line up with the well, not with the meter.
-        eq.layOutRow (strip3.withX (tier.getX()).withWidth (tier.getWidth()));
-
-        layPicture (tier);
-
-        inMeter.toFront (false);    // over the well, so the dragged reading paints on top
-    }
+    // ---- section 3: the picture well, the console's row under it. ----
+    eq.layOutRow (strip3);
+    layPicture (s3);
 
     // ---- section 1: the GAIN dial, as BIG as the block lets it be. Its strip is not the shared one:
     //      it is only as tall as SMOOTH and the picks need, and the dial grows down into the rest.
