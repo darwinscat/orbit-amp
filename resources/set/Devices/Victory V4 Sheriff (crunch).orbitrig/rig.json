@@ -5,7 +5,10 @@
   "chain": [
     {
       "kind": "nam", "slot": "amp",
-      "gear": { "make": "Victory", "model": "V4", "type": "amp" },
+      "gear": { "make": "Victory", "model": "V4", "type": "amp", "year": 2026,
+                "serial_number": "1364-0226", "designed_in": "Britain (UK)",
+                "made_in": "Britain (UK)",
+                "url": "https://www.victoryamps.com/product-category/amps/Sheriff/" },
       "tone_type": "crunch", "voicing": "od", "circuit": "tube:4",
       "input_db": -5.0,
       "controls": [

@@ -5,7 +5,10 @@
   "chain": [
     {
       "kind": "nam", "slot": "amp",
-      "gear": { "make": "Victory", "model": "V4", "type": "amp" },
+      "gear": { "make": "Victory", "model": "V4", "type": "amp", "year": 2025,
+                "serial_number": "780-0525", "designed_in": "Britain (UK)",
+                "made_in": "Britain (UK)",
+                "url": "https://www.victoryamps.com/product-category/amps/copper/" },
       "tone_type": "clean", "voicing": "od", "circuit": "tube:4",
       "input_db": -4.0,
       "controls": [

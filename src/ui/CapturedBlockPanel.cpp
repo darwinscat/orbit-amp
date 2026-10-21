@@ -515,7 +515,7 @@ void CapturedBlockPanel::deviceChanged()
     if (const auto circuit = juce::String (block.circuit()).trim(); circuit.isNotEmpty())
         paper.add (circuit.toUpperCase().replace (",", juce::String::fromUTF8 (" \xc2\xb7 ")));
 
-    if (const int n = block.gainPositions().size(); n > 0)
+    if (const int n = block.gainCaptures(); n > 0)   // files, not the dial's detents (CapturedBlock::gainCaptures)
         paper.add (juce::String (n) + (n == 1 ? " CAPTURE" : " CAPTURES") + " ON THE DIAL");
 
     // ...and the BOX itself, when the pack ships one. `picture` is a file name in the pack root

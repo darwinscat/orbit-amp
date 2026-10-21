@@ -203,7 +203,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     for (auto& att : blockRowAtts)
         att->sendInitialUpdate();
 
-    // The guards' arrows ARE their consoles: any click opens the menu (OFF is its first item),
+    // The guards' arrows ARE their consoles: any click opens the menu (the gate's leads with LEARN),
     // and the look clears the latched dot, the way a look at the badge used to.
     layoutStrip->onRowMenu = [this] (int i, juce::Point<int> pos)
     {

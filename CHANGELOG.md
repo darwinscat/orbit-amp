@@ -111,6 +111,14 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 - **DRIVE keeps its size.** The switches a device brings stand in a column of their own right of the dial,
   not under it, so DRIVE no longer shrinks when a device has some. Its travel runs from 7 to 5 o'clock, so 2
   points straight left and 8 straight right.
+- **LEARN comes first in the GATE menu**, as it does on every face.
+- **The Devices window has one row a model**, with every serial it was recorded from when there is more than
+  one, and no SLOT column.
+
+#### Fixed
+- **The Devices window counts the captures that were made**: every file of every channel of a box — 36 for the
+  X88-IR, 86 for the IR-X — where it showed the gain dial's positions of one channel. The block's own note
+  says the same for its dial: 9 captures on the X88-IR's, not 11 — its bottom two positions play the one above.
 
 ### CatpitAmp
 
