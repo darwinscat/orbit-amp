@@ -233,7 +233,10 @@ void WebFaceplate::playAndShoot (const juce::File& riffFile)
     // Nine seconds into the riff: the captures warm, the echo and the room full, the meters moving.
     juce::Timer::callAfterDelay (9000, [this, player]
     {
-        const auto face = shootEditor (2.0f);
+        // ORBITAMP_LIVE_SHOT_SCALE: pixels per design unit, 2 unless asked (4 makes a 16:9 window 4K).
+        const float k = juce::jlimit (1.0f, 8.0f, juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_SCALE", "2")
+                                                      .getFloatValue());
+        const auto face = shootEditor (k);
         writePng ("live.png", face);
 
         // 16:9 around it, on the ground the device stands on: the face whole, never stretched.
