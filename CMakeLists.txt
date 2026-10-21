@@ -23,7 +23,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binari
 # Darwin's Cat Amps, under one tag, vX.Y.Z — and this is its number: every amp shows it, stamps its bundles
 # with it and compares the family's releases against it (add_amp). The release refuses a tag that says
 # another (installer/version.sh, which reads it from this line).
-project(OrbitAmp VERSION 0.8.0 LANGUAGES C CXX)
+project(OrbitAmp VERSION 0.9.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
