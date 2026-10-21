@@ -983,10 +983,13 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
     gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
 
-    // The pill stands in the gap at the bottom of the dial's arc — the one place inside the dial's
-    // square that neither the ring nor a notch reaches — so it reads as the dial's own caption.
+    // The pill stands at the foot of the dial, just under the notches of its 0 and its 10 — the travel runs
+    // 7:00 to 5:00, so the gap at the bottom of the arc no longer has room for it — and reads as the dial's
+    // own caption; no lower than the gap under the top zone lets it.
+    const int notchFoot = juce::roundToInt (0.46f * (float) gainSide);     // Knob.h: the notches' outer end at 150°, 0.515 d out
     smoothTag.setBounds (juce::Rectangle<int> (66, 14).withCentre ({ gain.getBounds().getCentreX(),
-                                                                     gain.getBottom() - 6 }));
+                                                                     juce::jmin (gain.getBounds().getCentreY() + notchFoot + 8,
+                                                                                 column.getBottom() + gap - 7) }));
     smoothTag.toFront (false);
 
     layWidget (top);
