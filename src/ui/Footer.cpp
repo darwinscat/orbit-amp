@@ -70,6 +70,7 @@ Footer::Footer (AmpProcessor& processor)
     stereoAttachment->sendInitialUpdate();
 
     loadBadge.onClick = [this] { showLoadBreakdown(); };
+    loadBadge.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     addAndMakeVisible (loadBadge);
 
     devicesBadge.onClick = [this] { if (onDevices) onDevices(); };
@@ -153,9 +154,11 @@ void Footer::paint (juce::Graphics& g)
     g.setColour (theme::txFaint);
     theme::drawTracked (g, rateText, p.rate.toFloat(), font, 0.1f, juce::Justification::centredLeft);
 
-    // The load turns warm as it climbs — a number you only notice when it starts to matter.
+    // The load turns warm as it climbs — a number you only notice when it starts to matter. Cool,
+    // it lifts under the mouse like the other doors on this strip.
     g.setColour (loadPercent > 80.0f ? theme::orange
                : loadPercent > 50.0f ? theme::lilac
+               : loadBadge.isMouseOver() ? theme::tx
                                      : theme::txFaint);
     theme::drawTracked (g, "DSP " + loadText, p.load.toFloat(), font, 0.1f, juce::Justification::centredLeft);
 
