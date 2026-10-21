@@ -199,7 +199,7 @@ void Footer::resized()
 
 void Footer::showLoadBreakdown()
 {
-    openLoadBreakdown (amp, loadBadge.getScreenBounds());
+    openLoadBreakdown (amp, loadBadge.getScreenBounds(), getTopLevelComponent()->getScreenBounds());
 }
 
 } // namespace orbitamp

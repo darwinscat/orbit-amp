@@ -244,10 +244,18 @@ struct LoadBreakdown final : public juce::Component,
 };
 
 /** Opens it as a callout pointing at `anchor`, which is in screen coordinates — the words that were
-    clicked. */
-inline void openLoadBreakdown (AmpProcessor& amp, juce::Rectangle<int> anchor)
+    clicked — and INSIDE `window`, the plugin's own window on the screen, when it fits there.
+
+    JUCE picks the callout's side from the whole display: whichever side puts it nearest the words.
+    With the DSP figure near the window's right edge that was the right, out over whatever stands
+    beside the plugin. Refitted into the window the sides with no room drop out, and the box opens
+    over the faceplate, its arrow on the words. A window too small to hold it keeps JUCE's choice. */
+inline void openLoadBreakdown (AmpProcessor& amp, juce::Rectangle<int> anchor, juce::Rectangle<int> window)
 {
-    juce::CallOutBox::launchAsynchronously (std::make_unique<LoadBreakdown> (amp), anchor, nullptr);
+    auto& box = juce::CallOutBox::launchAsynchronously (std::make_unique<LoadBreakdown> (amp), anchor, nullptr);
+
+    if (box.getWidth() < window.getWidth() && box.getHeight() < window.getHeight())
+        box.updatePosition (anchor, window);
 }
 
 } // namespace orbitamp
