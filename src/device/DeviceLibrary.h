@@ -192,14 +192,15 @@ public:
         IR-X's two. A pack that names no family, a lone model, and every pack inside a folder of the
         player's are devices of one channel each.
 
-        Its NAME is what the file names of its packs share, word by word from the front: "IR-X Ch1
-        PowerAmp" and "IR-X Ch2 PowerAmp" are the IR-X, "V4 Kraken Ch1" and "Ch2" the V4 Kraken, and a
+        Its NAME is what the file names of its packs share, word by word from the front — so a pack's file
+        is named maker first: "Friedman IR-X Ch1 PowerAmp" and "... Ch2 PowerAmp" are the Friedman IR-X,
+        "Victory V4 Copper (clean)" and its two the Victory V4, and a
         device of one pack is called what its file is. Files that share no first word fall back to the
         family's id.
 
         A CHANNEL is called by its pack's alias, the manifest's `name` — "Channel 1", "Ember Mantra" —
         where the aliases tell the channels apart. Where they do not (all four X88-IR packs say
-        "X88-IR") it is called by its file's name with the device's cut off: "X88-IR Crunch" is the
+        "X88-IR") it is called by its file's name with the device's cut off: "Soldano X88-IR Crunch" is the
         X88-IR's CRUNCH. The channels stand clean to hi-gain, as their packs' tone types say, and
         file names settle ties. */
     struct Device

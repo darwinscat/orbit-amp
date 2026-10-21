@@ -44,10 +44,10 @@ int main()
 
     // What OrbitAmp plays, by the names its list shows them by: a pack that went missing from the tree
     // would otherwise go missing from the product without a word.
-    const juce::StringArray wanted { "X88-IR Normal", "X88-IR Altered", "X88-IR Crunch", "X88-IR Overdrive",
-                                     "IR-X Ch1 PowerAmp", "IR-X Ch2 PowerAmp",
-                                     "ReVolt Clean PowerAmp", "ReVolt Crunch PowerAmp", "ReVolt Lead PowerAmp",
-                                     "V4 Copper (clean)", "V4 Sheriff (crunch)", "V4 Kraken (hi-gain)" };
+    const juce::StringArray wanted { "Soldano X88-IR Normal", "Soldano X88-IR Altered", "Soldano X88-IR Crunch", "Soldano X88-IR Overdrive",
+                                     "Friedman IR-X Ch1 PowerAmp", "Friedman IR-X Ch2 PowerAmp",
+                                     "Two Notes ReVolt Clean PowerAmp", "Two Notes ReVolt Crunch PowerAmp", "Two Notes ReVolt Lead PowerAmp",
+                                     "Victory V4 Copper (clean)", "Victory V4 Sheriff (crunch)", "Victory V4 Kraken (hi-gain)" };
 
     juce::StringArray packs, cabinets, astray, missing;
     for (const auto& path : list)
@@ -93,15 +93,19 @@ int main()
         check (whole, "...and OrbitAmp's shelf holds every place of the catalog, read from the folder");
     }
 
-    // A name is a promise about the capture: "X88-IR Crunch" is the pack whose rig_id is x88-ir-crunch-…,
-    // "V4 Copper (clean)" the one whose rig_id is v4-copper-… — a word in brackets says its character.
+    // A name is a promise about the capture: its maker first, then the capture's own words — "Soldano X88-IR
+    // Crunch" is the pack whose rig_id is x88-ir-crunch-…, "Victory V4 Copper (clean)" the one whose rig_id is
+    // v4-copper-… — a word in brackets says its character.
     {
         juce::StringArray wrong;
         for (const auto& p : packs)
         {
             const auto rig = DeviceLibrary::rigIdOf (factory.getChildFile (p + ".orbitrig.zip"));
-            const auto promised = p.upToFirstOccurrenceOf (" (", false, false);
-            if (! rig.startsWith (promised.toLowerCase().replaceCharacter (' ', '-') + "-"))
+            const auto words = juce::StringArray::fromTokens (p.upToFirstOccurrenceOf (" (", false, false), " ", "");
+            bool kept = false;      // a maker of a word or more, and the rest the rig_id's start
+            for (int maker = 1; maker < words.size() && ! kept; ++maker)
+                kept = rig.startsWith (words.joinIntoString ("-", maker).toLowerCase() + "-");
+            if (! kept)
                 wrong.add (p + " holds " + (rig.isEmpty() ? juce::String ("no capture") : rig));
         }
         check (wrong.isEmpty(), "each lies under the name of the capture it holds" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString (", ")));
@@ -129,7 +133,8 @@ int main()
             devices.add (d.name);
         for (const auto& f : shelf.folders)
             folders.add (f.name);
-        check (devices.joinIntoString (", ") == "IR-X, ReVolt, V4, X88-IR", "the AMP's menu: the family's devices are the IR-X, the ReVolt, the V4 and the X88-IR: "
+        check (devices.joinIntoString (", ") == "Friedman IR-X, Soldano X88-IR, Two Notes ReVolt, Victory V4",
+               "the AMP's menu: the family's devices by maker and name — the Friedman IR-X, the Soldano X88-IR, the Two Notes ReVolt, the Victory V4: "
                                                                   + devices.joinIntoString (", "));
         check (folders.isEmpty(), "...and no folder of the factory's, OLD or any other: " + folders.joinIntoString (", "));
     }

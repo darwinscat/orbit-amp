@@ -2444,7 +2444,7 @@ int main()
             return -1;
         };
 
-        const int ch1 = indexOf ("IR-X Ch1 PowerAmp"), ch2 = indexOf ("IR-X Ch2 PowerAmp"), x88 = indexOf ("X88-IR Crunch");
+        const int ch1 = indexOf ("Friedman IR-X Ch1 PowerAmp"), ch2 = indexOf ("Friedman IR-X Ch2 PowerAmp"), x88 = indexOf ("Soldano X88-IR Crunch");
 
         const auto value = [] (orbitamp::AmpProcessor& p, const juce::String& id)
         {
@@ -2484,7 +2484,7 @@ int main()
             set (*m, P::eqLevel (0), -3.0f);
 
             report ("a hand's switch plays the other channel",   channels.play (ch2) && channels.playing() == ch2
-                                                                    && m->preamp.selectedName() == "IR-X Ch2 PowerAmp",
+                                                                    && m->preamp.selectedName() == "Friedman IR-X Ch2 PowerAmp",
                     m->preamp.selectedName());
 
             const auto opening = orbitamp::device::PackOpening::of (library.getReference (ch2));
@@ -2546,7 +2546,7 @@ int main()
             m->history.undo();
             ticks (*m);
             report ("...and undo brings back the device and its knobs", channels.playing() == x88
-                                                                           && m->preamp.selectedName() == "X88-IR Crunch"
+                                                                           && m->preamp.selectedName() == "Soldano X88-IR Crunch"
                                                                            && near (value (*m, P::preampGain), driveBefore),
                     m->preamp.selectedName() + " at " + juce::String (channels.playing()) + ", DRIVE "
                         + juce::String (value (*m, P::preampGain)));
@@ -2583,17 +2583,17 @@ int main()
         const auto& packs = amp.preamp.packs;
         int crunch = -1;
         for (int i = 0; i < packs.size(); ++i)
-            if (packs.getReference (i).displayName() == "X88-IR Crunch")
+            if (packs.getReference (i).displayName() == "Soldano X88-IR Crunch")
                 crunch = i;
 
         const auto* device = amp.apvts.getParameter (orbitamp::params::preampDevice);
         const int opens = juce::roundToInt (device->convertFrom0to1 (device->getDefaultValue()));
 
         if (crunch >= 0)
-            report ("the preamp ships on the X88-IR Crunch", opens == crunch,
+            report ("the preamp ships on the Soldano X88-IR Crunch", opens == crunch,
                     juce::isPositiveAndBelow (opens, packs.size()) ? packs.getReference (opens).displayName() : juce::String (opens));
         else
-            std::printf ("no X88-IR Crunch installed — the preamp's starting device is not checked\n");
+            std::printf ("no Soldano X88-IR Crunch installed — the preamp's starting device is not checked\n");
     }
 
     std::printf ("device: %s\n\n", amp.preamp.selectedName().toRawUTF8());

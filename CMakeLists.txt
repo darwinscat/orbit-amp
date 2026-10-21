@@ -1318,7 +1318,7 @@ add_amp(CatpitAmp     CODE Ctpt    BY_NAME
         OrbitAmpShaders              # the sky's shaders
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sky, on the GPU
-    SET       "X88-IR Normal" "X88-IR Altered" "X88-IR Crunch" "X88-IR Overdrive")
+    SET       "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
 
 # RedPawAmp — the rover: a third face over the same processor (src/redpaw), the dashboard of a Mars rover
 # with the drive across Mars in its windscreen. Four channels — the Friedman IR-X's two, each with its
@@ -1329,7 +1329,7 @@ add_amp(RedPawAmp     CODE Rdpw    BY_NAME
     ART       ${REDPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} src/redpaw/RedPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "IR-X Ch1 PowerAmp" "IR-X Ch2 PowerAmp")
+    SET       "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
 
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
 # over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
@@ -1342,7 +1342,7 @@ add_amp(FrostPawAmp   CODE Frpw    BY_NAME
     ART       ${FROSTPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "ReVolt Clean PowerAmp" "ReVolt Crunch PowerAmp" "ReVolt Lead PowerAmp")
+    SET       "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
 
 # AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
 # dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy
@@ -1354,7 +1354,7 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     ART       ${AMBERPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "V4 Copper (clean)" "V4 Sheriff (crunch)" "V4 Kraken (hi-gain)")
+    SET       "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — each a face's own, so built only by name (amp_console, amp_set_test).
