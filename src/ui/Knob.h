@@ -187,8 +187,10 @@ private:
     static juce::Colour heatAt (float t) { return theme::heatColour (t); }
 
     static constexpr int   labelHeight = 11;
-    float startAngle = juce::MathConstants<float>::pi * 1.25f;
-    float endAngle   = juce::MathConstants<float>::pi * 2.75f;
+    static constexpr float defaultStart = juce::MathConstants<float>::pi * 1.25f;     // the family's travel, 7:30...
+    static constexpr float defaultEnd   = juce::MathConstants<float>::pi * 2.75f;     // ...to 4:30
+    float startAngle = defaultStart;
+    float endAngle   = defaultEnd;
 
     juce::String label;
     juce::Colour accent;

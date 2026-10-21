@@ -181,7 +181,7 @@ void WebFaceplate::freeze()
     standPlain (params::delayBpm, 120.0f);
     standPlain (params::delayMix, 0.0f);
     standPlain (params::delayRepeats, 35.0f);
-    standPlain (params::cabIr, 21.0f);
+    standPlain (params::cabIr, (float) params::cabIrDefault);      // the cabinet every amp opens on (resources/cabinets.txt)
     standParam (params::cabHpfOn, 0.0f);
     standParam (params::cabLpfOn, 0.0f);
     standPlain (params::cabHpfHz, 80.0f);
@@ -440,6 +440,8 @@ juce::var WebFaceplate::knobVar (Knob& k, const juce::String& param, const juce:
     o->setProperty ("labelPx", k.labelFontHeight);
     o->setProperty ("accent", colourVar (k.accent));
     o->setProperty ("notches", k.notches);
+    o->setProperty ("startAngle", k.startAngle);     // its travel, radians clockwise from twelve: DRIVE's 7:00 to 5:00, the rest the look's
+    o->setProperty ("endAngle", k.endAngle);
     o->setProperty ("heat", k.heat);
     o->setProperty ("min", k.getMinimum());
     o->setProperty ("max", k.getMaximum());
@@ -1034,8 +1036,8 @@ juce::var WebFaceplate::lookVar() const
 
     // Knob.h's paint, as fractions of the dial's side d.
     auto knob = object();
-    knob->setProperty ("startAngle", Knob::startAngle);   // radians, clockwise from twelve o'clock
-    knob->setProperty ("endAngle", Knob::endAngle);
+    knob->setProperty ("startAngle", Knob::defaultStart);   // radians, clockwise from twelve o'clock — a knob's own, where it has one, on it
+    knob->setProperty ("endAngle", Knob::defaultEnd);
     knob->setProperty ("ring", 0.42f);
     knob->setProperty ("ringStroke", 0.055f);
     knob->setProperty ("track", colourVar (theme::hair2));
