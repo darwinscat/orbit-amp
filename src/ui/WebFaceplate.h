@@ -46,10 +46,17 @@ public:
     /** The same, now — for a gate, which has no message loop to wait on. */
     static void writeKit (AmpEditor&, const juce::File& folder);
 
+    /** A LIVE STILL for a product page, once the window has settled: the face as it ships, a DI riff
+        played through the real processor, pictured mid-riff — live.png, and live-16x9.png on the
+        panel's ground — and then the app quits. A dev tool: ORBITAMP_LIVE_SHOT names the folder,
+        ORBITAMP_LIVE_SHOT_DI the riff (a WAV). Run it in a copy with no audio device of its own. */
+    static void liveShotAfterOpening (AmpEditor&, const juce::File& folder, const juce::File& riff);
+
 private:
     WebFaceplate (AmpEditor&, const juce::File& folder);
 
     void write();
+    void playAndShoot (const juce::File& riff);
     void freeze();
     void thaw();
 

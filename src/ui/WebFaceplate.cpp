@@ -90,6 +90,127 @@ void WebFaceplate::writeKit (AmpEditor& editor, const juce::File& folder)
 WebFaceplate::WebFaceplate (AmpEditor& e, const juce::File& folder) : editor (e), amp (e.amp), dir (folder) {}
 
 //==============================================================================
+// THE LIVE STILL
+
+namespace
+{
+    /** An audio device's part, played by a thread: the riff, looped, through the processor in blocks at
+        the clock's pace — so the scope, the meters, the echo and the room all hear someone playing. */
+    class RiffPlayer final : public juce::Thread
+    {
+    public:
+        RiffPlayer (juce::AudioProcessor& p, juce::AudioBuffer<float> r, double rate)
+            : juce::Thread ("live still riff"), amp (p), riff (std::move (r)), fs (rate) {}
+
+        void run() override
+        {
+            constexpr int block = 256;
+            const int ins = amp.getTotalNumInputChannels();
+            juce::AudioBuffer<float> buf (juce::jmax (1, ins, amp.getTotalNumOutputChannels()), block);
+            juce::MidiBuffer midi;
+            int pos = 0;
+            auto due = juce::Time::getMillisecondCounterHiRes();
+            while (! threadShouldExit())
+            {
+                buf.clear();
+                for (int i = 0; i < block; ++i, pos = (pos + 1) % riff.getNumSamples())
+                    for (int c = 0; c < ins; ++c)
+                        buf.setSample (c, i, riff.getSample (0, pos));
+                {
+                    const juce::ScopedLock sl (amp.getCallbackLock());
+                    amp.processBlock (buf, midi);
+                }
+                due += 1000.0 * block / fs;
+                if (const auto ms = due - juce::Time::getMillisecondCounterHiRes(); ms > 1.0)
+                    wait ((int) ms);
+            }
+        }
+
+    private:
+        juce::AudioProcessor& amp;
+        juce::AudioBuffer<float> riff;
+        double fs;
+    };
+}
+
+void WebFaceplate::liveShotAfterOpening (AmpEditor& ed, const juce::File& folder, const juce::File& riff)
+{
+    juce::Timer::callAfterDelay (3000, [safe = juce::Component::SafePointer<AmpEditor> (&ed), folder, riff]
+    {
+        if (safe != nullptr)
+            (new WebFaceplate (*safe, folder))->playAndShoot (riff);   // lives until the app quits, below
+    });
+}
+
+void WebFaceplate::playAndShoot (const juce::File& riffFile)
+{
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (riffFile));
+    if (reader == nullptr || reader->lengthInSamples < 1)
+    {
+        dir.createDirectory();
+        dir.getChildFile ("done.txt").replaceWithText ("no riff: " + riffFile.getFullPathName());
+        juce::JUCEApplicationBase::quit();
+        return;
+    }
+    const double fs = reader->sampleRate;
+    juce::AudioBuffer<float> riff (1, (int) reader->lengthInSamples);
+    reader->read (&riff, 0, riff.getNumSamples(), 0, true, false);
+
+    dir.createDirectory();
+    dir.getChildFile ("done.txt").deleteFile();
+
+    // The face as it ships (freeze), then played: the X88-IR's CRUNCH, DRIVE past its middle, the device's
+    // tone moved off flat so its curve shows, the echo in, the loudness tag and the spectra on.
+    freeze();
+    auto& pre = editor.faceplate.preamp;
+    if (const auto* dev = pre.shelf.deviceOf (AmpChannels (amp).playing()))
+        for (int k = 0; k < dev->channels.size(); ++k)
+            if (dev->channelNames[k].equalsIgnoreCase ("Crunch"))
+            {
+                pre.playPack (dev->channels[k]);
+                break;
+            }
+    standPlain (params::preampGain, 6.0f);
+    const float tones[] = { 0.78f, 0.28f, 0.74f };
+    for (size_t i = 0; i < pre.eq.bands.size() && i < std::size (tones); ++i)
+        standParam (pre.eq.bands[i].param, tones[i]);
+    standPlain (params::delayMix, 22.0f);
+    pre.showsLoudnessTag = true;
+    prefs::spectraCache (amp.product()).store (true);
+    editor.applyRowStates();
+
+    juce::AudioProcessor& processor = amp;
+    processor.setRateAndBufferSizeDetails (fs, 256);
+    processor.prepareToPlay (fs, 256);
+    auto* player = new RiffPlayer (processor, std::move (riff), fs);
+    player->startThread (juce::Thread::Priority::highest);
+
+    // Nine seconds into the riff: the captures warm, the echo and the room full, the meters moving.
+    juce::Timer::callAfterDelay (9000, [this, player]
+    {
+        const auto face = shootEditor (2.0f);
+        writePng ("live.png", face);
+
+        // 16:9 around it, on the ground the device stands on: the face whole, never stretched.
+        const int h = face.getHeight() + 2 * 98;
+        const int w = juce::roundToInt (h * 16.0 / 9.0);
+        juce::Image wide (juce::Image::RGB, w, h, false);
+        {
+            juce::Graphics g (wide);
+            g.fillAll (theme::ground);
+            g.drawImageAt (face, (w - face.getWidth()) / 2, (h - face.getHeight()) / 2);
+        }
+        writePng ("live-16x9.png", wide);
+
+        player->stopThread (2000);
+        dir.getChildFile ("done.txt").replaceWithText ("done");
+        juce::JUCEApplicationBase::quit();
+    });
+}
+
+//==============================================================================
 
 void WebFaceplate::write()
 {

@@ -327,6 +327,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // folder for it (WebFaceplate.h). A player never sets it, and without it nothing here happens.
     if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_WEB_EXPORT", {}); folder.isNotEmpty())
         WebFaceplate::exportAfterOpening (*this, juce::File (folder));
+
+    // A live still of the face for a product page (WebFaceplate.h) — a dev tool, like the kit above.
+    if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT", {}); folder.isNotEmpty())
+        WebFaceplate::liveShotAfterOpening (*this, juce::File (folder),
+                                            juce::File (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_DI", {})));
 }
 
 /** What the two switches of every row mean to the WINDOW, read in one place after any of them
