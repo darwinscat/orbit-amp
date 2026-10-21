@@ -75,6 +75,7 @@ private:
     void layOutContent (juce::Rectangle<int>) override;
     void paintContent (juce::Graphics&) override;
     void blockOnChanged (bool on) override;
+    void childrenChanged() override;
 
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();

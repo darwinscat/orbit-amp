@@ -189,6 +189,9 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     startTimerHz (30);   // the hand's whereabouts, for the corner glyphs
 
+    // ...and they start OUT (see childrenChanged).
+    setCornerAlpha (0.0f);
+
     scopes[(size_t) DeviceScope::Mode::wave]->waveHalf = halfTag.half;   // half is the default
     addChildComponent (halfTag);
 
@@ -923,6 +926,7 @@ void CapturedBlockPanel::buildSelectors()
 
 void CapturedBlockPanel::blockOnChanged (bool on)
 {
+    setCornerAlpha (cornerAlpha);   // the frame has just dimmed — or lit — every child, the glyphs too
     inMeter.live = on;
     inMeter.repaint();
     outMeter.live = on;
@@ -1172,17 +1176,30 @@ bool CapturedBlockPanel::handIsOnThePicture() const
     return widgetArea.contains (getMouseXYRelative());
 }
 
+/** THE FRAME DIMS EVERY CHILD — to one when the block is on (BlockFrame::dimChildren) — and the
+    corner glyphs are children. So every child that arrived, a lever for a new device among them, used
+    to light the glyphs at full strength over the picture, and the tick never put them out again: it
+    only moves the fade when the fade has somewhere to go. Which is why they were always standing in
+    the corner, whatever the hand was doing — and the page's name now stands on the curve's own
+    decibel labels. The fade is put back over whatever the frame did. */
+void CapturedBlockPanel::childrenChanged()
+{
+    BlockFrame::childrenChanged();
+    setCornerAlpha (cornerAlpha);
+}
+
 void CapturedBlockPanel::setCornerAlpha (float a)
 {
     cornerAlpha = a;
 
     const bool lit = a > 0.01f;
+    const float dim = isBlockOn() ? 1.0f : theme::offAlpha;   // a dark block's glyphs are as dark as it is
 
     // Transparent is still clickable in JUCE, and a glyph nobody can see must not answer a click
     // meant for the picture underneath it.
     for (juce::Component* c : { (juce::Component*) &expandTag, (juce::Component*) &halfTag, (juce::Component*) &pageTag })
     {
-        c->setAlpha (a);
+        c->setAlpha (a * dim);
         c->setInterceptsMouseClicks (lit, lit);
     }
 }
