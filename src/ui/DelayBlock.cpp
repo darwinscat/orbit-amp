@@ -377,8 +377,9 @@ void DelayBlock::layOutContent (juce::Rectangle<int> area)
 
     // The three refinements at the hero's left hand, the reverb's two minis' size and line — pressed
     // to the TOP edge — in the loop's own order: how many, how dark, how wide. Three of them want
-    // more of a quarter-width block than the reverb's two, so the gaps between them give first.
-    const int gap = juce::jlimit (0, 6, (row.getWidth() - 3 * miniSide) / 2);
+    // more of a quarter-width block than the reverb's two, so the gaps between them give first —
+    // and the reverb's two keep the same air (Knob::smallGap).
+    const int gap = Knob::smallGap (row.getWidth());
     auto band = row.removeFromRight (3 * miniSide + 2 * gap).translated (0, 2);
     auto minis = band.removeFromTop (miniSide + 11);
 

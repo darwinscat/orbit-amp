@@ -211,7 +211,7 @@ private:
         bool hover = false;
     };
 
-    static constexpr int maxKnobSide = 96;   // the reverb's hero, to the unit (ReverbBlock::maxKnobSide)
+    static constexpr int maxKnobSide = Knob::heroSide;   // the reverb's hero, to the unit
     static constexpr int miniSide    = Knob::smallSide;   // the reverb's DECAY and PRE, the EQ's bands
 
     AmpProcessor& amp;

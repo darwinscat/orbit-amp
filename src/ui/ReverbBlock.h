@@ -62,7 +62,7 @@ private:
         bool dragging = false;
     };
 
-    static constexpr int maxKnobSide = 96;   // the hero got louder — побольше, by request
+    static constexpr int maxKnobSide = Knob::heroSide;   // MIX, the delay's the same
 
     AmpProcessor& amp;
 

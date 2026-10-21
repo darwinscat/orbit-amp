@@ -81,6 +81,13 @@ public:
         OFFSET are one diameter, so a face's small hands read as one kind of control. */
     static constexpr int smallSide = 42;
 
+    /** The reverb's and the delay's MIX: 96 -> 88, a little smaller, so its small hands get room. */
+    static constexpr int heroSide = 88;
+
+    /** The air between two small hands, the delay's three and the reverb's two alike: as much as three
+        of them leave in a row this wide, up to twelve. */
+    static int smallGap (int rowWidth) { return juce::jlimit (0, 12, (rowWidth - 3 * smallSide) / 2); }
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds();
