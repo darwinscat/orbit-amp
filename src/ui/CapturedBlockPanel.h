@@ -225,11 +225,9 @@ private:
     SmoothTag smoothTag;
     std::unique_ptr<juce::ParameterAttachment> smoothAttachment;
 
-    /** The block's two walls: IN at the left — what the model is being fed, with the trim's
-        hand on it (see `params::blockIn`) — and OUT at the right, a meter alone: what leaves,
-        EQ and level included, with no hand because a block deliberately has no output volume. */
+    /** The block's wall: what the model is being fed, with the trim's hand on it (see
+        `params::blockIn`). One wall: loudness is the panel's OUT (see the constructor). */
     BlockMeter inMeter;
-    BlockMeter outMeter;
 
     struct Slot
     {

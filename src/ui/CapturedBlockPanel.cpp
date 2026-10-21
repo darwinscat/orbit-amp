@@ -103,12 +103,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
       eq (processor.apvts, eqLink, toneSpectrumTap, toneInSpectrumTap,
           [&processor] { return processor.currentSampleRate(); }),
       inMeter ("IN", processor.blockInDb[(size_t) eqLink],
-               *processor.apvts.getParameter (params::blockIn (blockId)), true),
-      // The OUT wall's hand IS the console's LEVEL fader — one parameter, two doors: the fader
-      // in the console's row and the grip on the wall move together, the attachment's echo
-      // keeping them honest.
-      outMeter ("OUT", processor.blockOutDb[(size_t) eqLink],
-                *processor.apvts.getParameter (params::eqLevel (eqLink)), false)
+               *processor.apvts.getParameter (params::blockIn (blockId)), true)
 {
     // The console's widgets become children of this block, which places them. The spectrum behind
     // its curve is the block's own output tap — the same one the TONE picture reads, because after
@@ -119,7 +114,6 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
     addAndMakeVisible (inMeter);
-    addAndMakeVisible (outMeter);
 
     device.fontHeight = 16.0f;   // the device's NAME, set exactly like the block's own beside it
     device.tracking   = 0.15f;
@@ -132,13 +126,17 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     gain.heat = true;
     gain.setArc (juce::MathConstants<float>::pi * 7.0f / 6.0f, juce::MathConstants<float>::pi * 17.0f / 6.0f);     // 0 at 7:00, 2 at 9:00, 8 at 3:00, 10 at 5:00
 
-    // Both walls stand up, at the picture well's edges: IN at its left, OUT at its right.
+    // The wall stands up, at the picture well's left edge.
     //
-    // What each wall's two marks MEAN is set with the pack (deviceChanged) and, on IN, kept current
-    // by this face's own tick (refreshMeterOffsets): the fill is the model's input, because the
-    // green zone describes that door and nothing else, and the line is what enters the block.
-    inMeter.vertical  = true;
-    outMeter.vertical = true;
+    // What its two marks MEAN is set with the pack (deviceChanged) and kept current by this face's
+    // own tick (refreshMeterOffsets): the fill is the model's input, because the green zone
+    // describes that door and nothing else, and the line is what enters the block.
+    //
+    // No OUT wall. Its hand was the block's LEVEL, and LEVEL and the panel's OUT are two volumes
+    // before the limiter with nothing between them that a level breaks — the delay's repeats press
+    // softly, the room and the cabinet are linear — so the panel's OUT is the one hand for loudness.
+    // LEVEL stays in the engine, at what the preset says.
+    inMeter.vertical = true;
 
     // Five ways of showing the same device, one at a time. The tone curve comes from the block
     // itself — the same data its filters were designed from, resolved on the processor's pump.
@@ -418,23 +416,8 @@ void CapturedBlockPanel::refreshMeterOffsets()
 
 void CapturedBlockPanel::deviceChanged()
 {
-    // A new pack, new levels — and the meters have to say them, because the player applies them
-    // where neither meter stands.
-    //
-    // THE OUT WALL IS ARITHMETIC AND NOTHING ELSE. Its tap is taken after the block's own console,
-    // and the pack's output level is applied before it — but a console is a LINEAR filter and a
-    // scalar walks straight through one, so peak(EQ(g·y)) is exactly g·peak(EQ(y)) and the line at
-    // `measured − output_db` is the block's output as it would be if the pack stated no output
-    // level. Which is what the line is CALLED now: the earlier wording named the stage's own output,
-    // a point in the signal the line does not describe, since the console stands in between.
-    outMeter.fillOffsetDb  = 0.0f;
-    outMeter.ghostOffsetDb = -(float) block.packOutputDb();
-    outMeter.offsetNote    = juce::approximatelyEqual (block.packOutputDb(), 0.0)
-        ? juce::String ("The bar is what leaves the block, this block's EQ and level included. "
-                        "This pack states no output level, so there is nothing else to show.")
-        : "The bar is what leaves the block, this block's EQ and level included. The line is the "
-          "same output without the pack's own output level (" + signed1 (block.packOutputDb()) + " dB).";
-
+    // A new pack, new levels — and the IN wall has to say them, because the player applies them
+    // where the wall does not stand.
     refreshMeterOffsets();
 
     for (auto& sc : scopes)
@@ -929,8 +912,6 @@ void CapturedBlockPanel::blockOnChanged (bool on)
     setCornerAlpha (cornerAlpha);   // the frame has just dimmed — or lit — every child, the glyphs too
     inMeter.live = on;
     inMeter.repaint();
-    outMeter.live = on;
-    outMeter.repaint();
 }
 
 void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
@@ -980,12 +961,11 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     auto strip2 = strip (s2), strip3 = strip (s3);
 
-    // ---- section 3: the picture well, the two meters at its edges, the console's row under it.
+    // ---- section 3: the picture well, the IN meter at its left edge, the console's row under it.
     //
-    //      The meters stand where the signal enters and leaves the picture: IN at the well's left —
-    //      what the model is being fed, with the trim's hand on it — and OUT at its right. Each
-    //      component is wider than its bar; the margin, over the well, is where the dB appears while
-    //      the hand drags, and click-through for the picture otherwise. ----
+    //      The meter stands where the signal enters the picture — what the model is being fed, with
+    //      the trim's hand on it. The component is wider than its bar; the margin, over the well, is
+    //      where the dB appears while the hand drags, and click-through for the picture otherwise. ----
     {
         auto tier = s3;
 
@@ -993,19 +973,12 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         tier.removeFromLeft (6);
         inMeter.setBounds (inCol.withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
 
-        auto outCol = tier.removeFromRight (BlockMeter::designWidth);
-        tier.removeFromRight (6);
-        outMeter.valueOnLeft = true;
-        outMeter.setBounds (outCol.withX (outCol.getX() - BlockMeter::standingValueW)
-                                  .withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
-
-        // "Under the picture": the row's cells line up with the well, not with the meters.
+        // "Under the picture": the row's cells line up with the well, not with the meter.
         eq.layOutRow (strip3.withX (tier.getX()).withWidth (tier.getWidth()));
 
         layPicture (tier);
 
         inMeter.toFront (false);    // over the well, so the dragged reading paints on top
-        outMeter.toFront (false);
     }
 
     // ---- section 1: the GAIN dial, as BIG as the block lets it be. Its strip is not the shared one:
@@ -1077,7 +1050,6 @@ void CapturedBlockPanel::setControlsVisible (bool v)
     gain.setVisible (v);
     smoothTag.setVisible (v);
     inMeter.setVisible (v);
-    outMeter.setVisible (v);
     device.setEnabled (v);
 
     if (lever != nullptr)

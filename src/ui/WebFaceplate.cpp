@@ -764,7 +764,6 @@ juce::var WebFaceplate::places()
             a->setProperty ("eqMode", v);
         }
         a->setProperty ("inWall", rect (pre.inMeter));
-        a->setProperty ("outWall", rect (pre.outMeter));
         {
             // Where the tag is written: the run of the border right of the device, right-aligned.
             const auto run = pre.borderSlotArea().toFloat();
@@ -775,7 +774,6 @@ juce::var WebFaceplate::places()
 
         patch ("smooth", pre.smoothTag);
         patch ("inWall", pre.inMeter);
-        patch ("outWall", pre.outMeter);
         patch ("eqMode", pre.eq.modeBtn);
         patch ("eqHpf", pre.eq.hpfSw);
         patch ("eqLpf", pre.eq.lpfSw);

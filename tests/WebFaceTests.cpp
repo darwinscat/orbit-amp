@@ -178,7 +178,7 @@ int main()
         };
         for (const auto* p : { "amp.block", "amp.device", "amp.channelRow", "amp.gain", "amp.gainKnob", "amp.smooth",
                                "amp.picture", "amp.shapeBand", "amp.tones", "amp.eqCurve", "amp.eqMode", "amp.inWall",
-                               "amp.outWall", "amp.loudnessTag", "delay.block", "delay.time", "delay.field", "delay.mix",
+                               "amp.loudnessTag", "delay.block", "delay.time", "delay.field", "delay.mix",
                                "delay.repeats", "delay.dark", "delay.offset", "delay.comb", "reverb.block",
                                "reverb.character", "reverb.mix", "reverb.decay", "reverb.pre", "reverb.picture",
                                "cab.block", "cab.ir", "cab.hpf", "cab.lpf", "cab.trim", "cab.picture", "inColumn",
