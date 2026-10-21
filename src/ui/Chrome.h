@@ -56,6 +56,15 @@ public:
     /** Where the second line starts: right of the brand's two marks. */
     int secondLineX() const { return juce::roundToInt (brand.marksRight()); }
 
+    /** The first line's last two buttons, in this header's own x — the second line ends under them:
+        the gear's button, and the corners FULL SCREEN draws (narrower than its button). */
+    juce::Rectangle<int> gearBounds() const { return gear.getBounds(); }
+    juce::Rectangle<int> fullScreenGlyph() const
+    {
+        return fullScreen.getBounds().toFloat()
+                   .withSizeKeepingCentre (FullScreenIcon::glyphW, FullScreenIcon::glyphH).toNearestInt();
+    }
+
 private:
     /** Pushes the engine's state onto the buttons. Called on every history change. */
     void refreshModel();
@@ -84,9 +93,11 @@ private:
 
         juce::Colour colour;
 
+        static constexpr float glyphW = 15.0f, glyphH = 13.0f;   // the four corners' box, centred
+
         void paintButton (juce::Graphics& g, bool over, bool down) override
         {
-            const auto r = getLocalBounds().toFloat().withSizeKeepingCentre (15.0f, 13.0f);
+            const auto r = getLocalBounds().toFloat().withSizeKeepingCentre (glyphW, glyphH);
             g.setColour (colour.withAlpha (down ? 1.0f : over ? 0.95f : 0.7f));
 
             const float arm = 4.5f, t = 1.4f;

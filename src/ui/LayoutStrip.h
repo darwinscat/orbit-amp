@@ -63,6 +63,16 @@ public:
     /** The strip's height, in design units — the window budgets for it like for any strip. */
     static constexpr int designHeight = 34;
 
+    /** How far in from the strip's left edge the lane starts. The owner sets 0 when it lines the first
+        arrow's tail up with something beside the strip: the tail then stands `tailAir` in. */
+    int leftPad = 14;
+    static constexpr int tailAir = 2;
+
+    /** Where the owner lines the right end up with what stands above it, in this strip's own x:
+        the checklist's centre, and where the last arrow's point ends. -1 keeps the strip's own. */
+    int menuCentreX = -1;
+    int arrowsEndX  = -1;
+
     explicit LayoutStrip (std::vector<Row> blockRows) : rows (std::move (blockRows))
     {
         shownDepth.assign (rows.size(), 0.0f);
@@ -169,8 +179,13 @@ public:
 
     void resized() override
     {
-        auto lane = getLocalBounds().reduced (padX, 0);
-        menuButton.setBounds (lane.removeFromRight (menuW).withSizeKeepingCentre (menuW, menuW));
+        auto lane = getLocalBounds().withTrimmedLeft (leftPad).withTrimmedRight (padX);
+        auto cell = lane.removeFromRight (menuW);
+
+        if (menuCentreX >= 0)
+            cell.setX (menuCentreX - menuW / 2);
+
+        menuButton.setBounds (cell.withSizeKeepingCentre (menuW, menuW));
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -244,7 +259,7 @@ private:
     static constexpr int   padX   = 14;
     static constexpr int   tileH  = 22;
     static constexpr int   tipW   = 8;      // the arrow's point, and the notch it nests into
-    static constexpr float airX   = 2.0f;   // breathing room in the nest, each side
+    static constexpr float airX   = (float) tailAir;   // breathing room in the nest, each side
     static constexpr int   menuW  = 20;     // the checklist's square, at the right end of the lane
     static constexpr int   menuGap = 8;     // and the air the last arrow's point keeps from it
 
@@ -307,12 +322,21 @@ private:
         if (n <= 0 || ! rows[(size_t) index].present)
             return {};
 
-        const auto lane = getLocalBounds().reduced (padX, 0)
-                              .withTrimmedRight (menuW + menuGap);
-        const int  step = (lane.getWidth() - tipW) / n;
+        auto lane = getLocalBounds().withTrimmedLeft (leftPad).withTrimmedRight (padX)
+                        .withTrimmedRight (menuW + menuGap);
 
-        return juce::Rectangle<int> (lane.getX() + placeOf (index) * step,
-                                     lane.getCentreY() - tileH / 2, step, tileH);
+        // The last point ends `airX` short of the lane's right, so the lane ends that much past it.
+        if (arrowsEndX >= 0)
+            lane = lane.withRight (arrowsEndX + tailAir);
+
+        // Each cell from its own share of the run, so the units a whole-number step would drop are
+        // spread over the cells and the last point lands exactly on the lane's end.
+        const int span = lane.getWidth() - tipW;
+        const int p    = placeOf (index);
+        const int x0   = lane.getX() + p * span / n;
+        const int x1   = lane.getX() + (p + 1) * span / n;
+
+        return juce::Rectangle<int> (x0, lane.getCentreY() - tileH / 2, x1 - x0, tileH);
     }
 
     ChecklistButton  menuButton;

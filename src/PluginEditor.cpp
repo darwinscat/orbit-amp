@@ -651,9 +651,15 @@ void AmpEditor::resized()
     const int faceplateY = margin + Chrome::designHeight + headerGap;
 
     // The layout strip: the chain laid flat on the header's second line, beside the brand's marks,
-    // always there. In front of the header, whose component spans both lines.
+    // always there. In front of the header, whose component spans both lines. Its first arrow's
+    // tail stands under the wordmark's first letter: no lane inset, the strip that tail's air left.
+    // Its right end lines up with the first line's last two buttons: the checklist under the gear,
+    // the last arrow's point ending where FULL SCREEN does.
     {
-        const int x = chrome.secondLineX();
+        layoutStrip->leftPad = 0;
+        const int x = chrome.secondLineX() - LayoutStrip::tailAir;
+        layoutStrip->menuCentreX = chrome.gearBounds().getCentreX() - x;
+        layoutStrip->arrowsEndX  = chrome.fullScreenGlyph().getRight() - x;
         layoutStrip->setBounds (margin + x, margin + Chrome::firstLineH, FaceplateView::designWidth - x,
                                 LayoutStrip::designHeight);
         layoutStrip->setTransform (zoom);
