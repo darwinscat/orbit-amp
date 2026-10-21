@@ -132,15 +132,18 @@ private:
     static constexpr int   panelH = 620;
     static constexpr float textH  = 13.0f;   // the floor for anything read at 1x — see CLAUDE.md
 
-    /** One device, as the pack states it. `make` / `model` are namz's own fields — the same pair the
-        block's paper prints — and the rest is what tells one physical box from another wearing the
-        same name. A pack that names no model falls back to the file's own name, so a model somebody
-        dropped in is listed rather than silently missing. */
+    /** One device, as the packs state it. `make` / `model` are namz's own fields — the same pair the
+        block's paper prints — and they make the row: ONE row a name. The physical boxes behind it are
+        its serials, listed in the order the packs met them — more than one when that model was
+        recorded from more than one box — and the years they were recorded in. A pack that names no
+        model falls back to the file's own name, so a model somebody dropped in is listed rather than
+        silently missing. */
     struct Named
     {
-        juce::String maker, model, slot, serial, origin;
-        int          year = 0;
-        int          captures = 0;   // model files in the box's packs — one per captured setting
+        juce::String      maker, model, slot, origin;
+        juce::StringArray serials;
+        juce::Array<int>  years;
+        int               captures = 0;   // model files in the box's packs — one per captured setting
 
         bool operator< (const Named& o) const
         {
@@ -150,7 +153,25 @@ private:
 
         bool operator== (const Named& o) const
         {
-            return maker == o.maker && model == o.model && year == o.year && serial == o.serial;
+            return maker == o.maker && model == o.model;
+        }
+
+        void merge (const Named& o)
+        {
+            captures += o.captures;
+            for (const auto& s : o.serials)
+                serials.addIfNotAlreadyThere (s);
+            for (const int y : o.years)
+                years.addIfNotAlreadyThere (y);
+            years.sort();
+        }
+
+        juce::String yearsText() const
+        {
+            juce::StringArray t;
+            for (const int y : years)
+                t.add (juce::String (y));
+            return t.joinIntoString (", ");
         }
     };
 
@@ -203,8 +224,10 @@ private:
                     {
                         n.maker  = juce::String (stage.make).trim();
                         n.model  = juce::String (stage.model).trim();
-                        n.serial = juce::String (stage.serialNumber).trim();
-                        n.year   = stage.year;
+                        if (const auto serial = juce::String (stage.serialNumber).trim(); serial.isNotEmpty())
+                            n.serials.add (serial);
+                        if (stage.year > 0)
+                            n.years.add (stage.year);
 
                         // How many times the box was actually recorded: one FILE per captured
                         // setting. Not the entries of `files` — a dial can state eleven positions and
@@ -230,11 +253,11 @@ private:
                 if (n.model.isEmpty())
                     continue;
 
-                // One row a box: its channels are packs of their own (the X88-IR's four), and every
-                // one of them was recorded — their captures add up.
+                // One row a name: its channels are packs of their own (the X88-IR's four), and every
+                // one of them was recorded — their captures add up, their boxes are listed.
                 auto& into = pack.bundled ? shipped : added;
                 if (const int at = into.indexOf (n); at >= 0)
-                    into.getReference (at).captures += n.captures;
+                    into.getReference (at).merge (n);
                 else
                     into.add (n);
             }
@@ -303,8 +326,8 @@ private:
                 g.setColour (theme::txFaint);
                 drawCell (g, row.removeFromLeft (slotW),     f, d.slot);
                 drawCell (g, row.removeFromLeft (capturesW), f, d.captures > 0 ? juce::String (d.captures) : juce::String());
-                drawCell (g, row.removeFromLeft (yearW),     f, d.year > 0 ? juce::String (d.year) : juce::String());
-                drawCell (g, row.removeFromLeft (serialW), f, d.serial);
+                drawCell (g, row.removeFromLeft (yearW),     f, d.yearsText());
+                drawCell (g, row.removeFromLeft (serialW), f, d.serials.joinIntoString (", "));
                 drawCell (g, row,                          f, d.origin);
             }
         }
