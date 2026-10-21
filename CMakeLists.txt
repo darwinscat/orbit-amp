@@ -130,7 +130,7 @@ include(cmake/PatchedWrappers.cmake)
 #
 # v0.51.0 is the first release felitronics-guitar-core accepts: nam, rigplayer and poweramp left core
 # for that repository in it (see below). v0.60.0 is the first with felitronics::dehum, the HumRemover
-# the input's HUM stage is built on. v0.61.0 is the freshest, and the first with felitronics::delay and
+# the input's HUM stage is built on. v0.61.0 is the first with felitronics::delay and
 # felitronics::reverb — the echo and the room, which were this repository's own stages until they moved
 # there, so nothing older builds here. Between v0.31.0 and
 # v0.53.0, nothing this plugin calls plays differently INSIDE a running stream —
@@ -152,7 +152,11 @@ include(cmake/PatchedWrappers.cmake)
 # one read at that parked head to within 4e-8 — a time, not a level or a tone. A fresh room no longer
 # leaks the dry into its first 10 ms, and an Intel build plays the arm64 sound: the framework's Freeverb
 # under ours quantised its state on x86-64, up to 1e-6.
-set(ORBITAMP_FCORE_TAG "v0.61.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+#
+# v0.61.2 changes one thing here: the echo's and the room's `feed` — what PARK and the DELAY / REVERB switches
+# stop — fades over 5 ms where it switched at one sample, which the repeats played back as ticks. Fed, both
+# render bit for bit as on v0.61.0 (v0.61.1 touches only a wasm build of FlushToZero.h).
+set(ORBITAMP_FCORE_TAG "v0.61.2" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")

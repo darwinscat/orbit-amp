@@ -86,6 +86,10 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 - **The badge and the version window open the amp's own page again.** They pointed at addresses the site
   no longer has (three of them showed "page not found"); each now opens its amp's page on darwinscat.com.
   The tip jar's link is unchanged.
+- **PARK, and the DELAY or REVERB switch, no longer click in the echo.** Stopping what enters the delay and the
+  room was a switch at one sample: on a loud note the delay played that step back as a tick at every repeat, and
+  the room carried it as a click. What enters now fades out, and back in, over 5 ms; what is already ringing is
+  left to ring. With the delay and the room fed, they play as before, sample for sample.
 
 #### Dependencies
 - **felitronics-guitar-core v0.1.1**: Eigen, which the capture player computes with, comes from Darwin's Cat's own
@@ -96,6 +100,7 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
   a mono input gets one network instead of two, and the silence it was warmed on before is gone, since the playing
   warms it before it is heard. A turn of the gain dial waits less for the capture it lands on, and a capture held for
   a mono input takes half the memory.
+- **felitronics-core v0.61.2**: the delay's and the room's input fades over 5 ms when it stops or starts (above).
 
 ### OrbitAmp
 
