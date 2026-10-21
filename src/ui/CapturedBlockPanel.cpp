@@ -944,17 +944,21 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     area.removeFromTop (gap);
     eq.layOut (area);
 
-    // ---- inside it: a column of FIXED width carrying the big GAIN with the device's own
-    //      selectors under it, and one picture taking everything to its right.
+    // ---- inside it: a column of FIXED width carrying the big GAIN, the device's own selectors in a
+    //      column of their own right of it, and one picture taking everything to their right.
     //
-    //      Fixed, because the picture must not move when the device changes. Fur Coat brings an
-    //      octave switch and a Big Muff brings nothing, and if the column grew to fit them the
-    //      whole right-hand side would shuffle sideways every time the combo was touched. Only the
-    //      GAIN dial's diameter answers for what the switches take. ----
+    //      The dial keeps its size whatever the device brings: Fur Coat's octave switch and a Big
+    //      Muff's nothing leave GAIN as it is, and the picture gives the switches their room. ----
     auto column = top.removeFromLeft (columnW);
     top.removeFromLeft (gap);
 
     // The channel keys stand over the picture, at its top — a device of one channel has none, and
+    const auto picks = (int) std::count_if (selectors.begin(), selectors.end(), [] (const auto& s) { return s.steps != nullptr; });
+    auto pickColumn = picks > 0 ? top.removeFromLeft (columnW) : juce::Rectangle<int>();
+    if (picks > 0)
+        top.removeFromLeft (gap);
+    pickColumn = pickColumn.withSizeKeepingCentre (pickColumn.getWidth(), juce::jmin (pickColumn.getHeight(), picks * pickRowH + (picks - 1) * gap));
+
     // the picture keeps the room.
     if (channelRow.count() > 1)
     {
@@ -962,18 +966,16 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         top.removeFromTop (6);
     }
 
-    // Only the SELECTING controls stand here — the ones that pick a capture. A measured control is
+    // Only the SELECTING controls stand there — the ones that pick a capture. A measured control is
     // a band of the curve and belongs in the console's row, whatever shape its own control has.
-    // Each takes ONE line off the bottom — name, lever, chosen position — and GAIN gets the rest,
-    // so a device with nothing to switch simply wears a bigger dial, and nothing else on the face
-    // moves.
+    // Each is ONE line — name, lever, chosen position — stacked down the middle of their column.
     for (auto& sel : selectors)
     {
         if (sel.steps == nullptr)
             continue;
 
-        sel.row = column.removeFromBottom (pickRowH);
-        column.removeFromBottom (gap);
+        sel.row = pickColumn.removeFromTop (pickRowH);
+        pickColumn.removeFromTop (gap);
         sel.steps->setBounds (sel.row.withX (sel.row.getX() + pickNameW).withWidth (pickSwitchW));
     }
 
