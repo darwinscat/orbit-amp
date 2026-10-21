@@ -111,11 +111,13 @@ public:
         // this, nothing anywhere to say what it is.
         m.addSectionHeader (isOn ? "GATE  " + juce::String (juce::roundToInt (th)) + " DB"
                                  : juce::String ("GATE  OFF"));
+        // LEARN first, as on every face: three seconds of quiet set the threshold and switch the gate
+        // on — so with the gate off it is offered too, and it is the one a player came for.
+        m.addItem (5, "LEARN",       true, learner.isLearning());
         m.addItem (1, "OFF",         true, ! isOn);
         m.addItem (2, "SOFT   -60",  true, matches (-60.0f, false));
         m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
         m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
-        m.addItem (5, "LEARN",       true, learner.isLearning());
 
         juce::PopupMenu decay;
         decay.addItem (10, "NORMAL", true, ! metal);
