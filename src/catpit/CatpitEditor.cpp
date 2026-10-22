@@ -255,6 +255,8 @@ void Cockpit::paintKeyNames (juce::Graphics& g) const
         if (! k.onKey)      // HPF and LPF are on their keys (CatpitEditor)
             drawLabel (g, k.name, juce::Rectangle<float> (120.0f, 20.0f).withCentre (k.label.getCentre()),
                        px11, labelLilac.withAlpha (k.live ? 1.0f : PushButton::dimmed), keyTracking);
+    for (const auto& t : strips.keyTitles)      // a switch's name once over its keys (BRIGHT)
+        drawLabel (g, t.name, t.label, px11, labelLilac, keyTracking);
 }
 
 /** THE PLAYING CHANNEL'S TONE KNOBS on the panel (face::Strips): a socket under each, the size the row

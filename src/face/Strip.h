@@ -104,6 +104,16 @@ struct Strips
     float toneScale = 1.0f;
     float toneSignHeight = 16.0f;       // how tall each tone's sign is drawn (face::drawToneSign)
     std::vector<Key> keys;
+    /** A switch's name written once over its keys, where its positions are bare (BRIGHT over OFF · 1 · 2):
+        the box it is written in, centred over the keys, and the word. Painted with the picture, as the keys'
+        names are; the site has it from the poster's pixels. */
+    struct Title
+    {
+        juce::Rectangle<float> label;
+        juce::String name;
+        bool operator== (const Title&) const = default;
+    };
+    std::vector<Title> keyTitles;
     int firstRightKey = 2;              // the right group's first, in keys
     juce::Rectangle<float> keyFrame;    // round the right group; empty where there is none to draw
     float keyScale = 1.0f;

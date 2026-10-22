@@ -1676,14 +1676,21 @@ std::vector<Console::RightKey> Console::rightKeysOf (int channel) const
         if (offOn)
         {
             const int off = isOff (s.values[0]) ? 0 : 1;
-            out.push_back ({ free[next++], s.slot, 1 - off, off, s.name, s.name.toUpperCase() });
+            out.push_back ({ free[next++], s.slot, 1 - off, off, s.name, s.name.toUpperCase(), {} });
         }
         else
+        {
+            // A switch whose every position is bare (the IR-X Ch1's Bright: off, 1, 2) has its name written
+            // once over its keys, and each key its position alone: BRIGHT over OFF · 1 · 2.
+            const bool titled = std::all_of (s.values.begin(), s.values.end(), [] (const juce::String& v) { return device::isBarePosition (v); });
             for (int p = 0; p < s.values.size(); ++p)
-                out.push_back ({ free[next++], s.slot, p, -1, s.name, device::positionWords (s.name, s.values[p]) });
+                out.push_back ({ free[next++], s.slot, p, -1, s.name,
+                                 titled ? s.values[p].trim().toUpperCase() : device::positionWords (s.name, s.values[p]),
+                                 titled ? s.name.trim().toUpperCase() : juce::String() });
+        }
     }
     for (const int b : own)
-        out.push_back ({ b, -1, -1, -1, {}, keyNames[(size_t) b] });
+        out.push_back ({ b, -1, -1, -1, {}, keyNames[(size_t) b], {} });
     return out;
 }
 
@@ -1702,7 +1709,7 @@ void Console::showKeys()
         auto& b = *buttons[(size_t) k.button];
         b.setEnabled (true);
         b.setOn (standsAt (k.slot) == k.position, false);
-        keyNames[(size_t) k.button] = k.name;
+        keyNames[(size_t) k.button] = k.title.isEmpty() ? k.name : k.title + " " + k.name;     // the tag says it whole
     }
     layStrips();
 }
@@ -1827,9 +1834,9 @@ Strips Console::stripsFor (int channel) const
                                i < packTones.size() ? toneCurve (packTones[i]) : std::vector<float>() });
     }
 
-    const auto keyAt = [&p] (juce::Point<float> c, float size, int index, const juce::String& name, bool live)
+    const auto keyAt = [&p] (juce::Point<float> c, float size, int index, const juce::String& name, bool live, bool under)
     {
-        const bool over = p.keyNamesAlternate && index % 2 == 1;
+        const bool over = p.keyNamesAlternate && index % 2 == 1 && ! under;
         const auto label = p.keyNamesOnKeys ? juce::Rectangle<float> (size, size).withCentre (c)
                                             : juce::Rectangle<float> (p.keyNameRoom, 20.0f).withCentre ({ c.x, over ? p.keyNameOverY : p.keyNameUnderY });
         return Strips::Key { juce::Rectangle<float> (size, size).withCentre (c), label, name, live, p.keyNamesOnKeys };
@@ -1846,7 +1853,29 @@ Strips Console::stripsFor (int channel) const
     const auto keysLaid = lay (p.keyStrip, (int) right.size());
     out.keyScale = keysLaid.scale;
     for (size_t i = 0; i < keysLaid.centres.size(); ++i)
-        out.keys.push_back (keyAt (keysLaid.centres[i], p.keySize * keysLaid.scale, (int) i, right[i].name, true));
+        out.keys.push_back (keyAt (keysLaid.centres[i], p.keySize * keysLaid.scale, (int) i, right[i].name, true,
+                                   right[i].title.isNotEmpty()));
+
+    // A titled switch's name, once over its keys: its positions' names are all under them (keyAt), so the
+    // row over them is the title's alone. Where the names are on the keys' faces, or the face has no row
+    // over its keys, it stands just over the keys.
+    for (size_t i = 0; i < keysLaid.centres.size();)
+    {
+        size_t end = i + 1;
+        while (end < keysLaid.centres.size() && right[end].slot == right[i].slot && right[end].title == right[i].title)
+            ++end;
+        if (right[i].title.isNotEmpty())
+        {
+            const float size = p.keySize * keysLaid.scale;
+            const float x0 = keysLaid.centres[i].x, x1 = keysLaid.centres[end - 1].x;
+            const float y = p.keyNamesOnKeys || p.keyNameOverY <= 0.0f ? keysLaid.centres[i].y - 0.5f * size - 12.0f
+                                                                       : p.keyNameOverY;
+            out.keyTitles.push_back ({ juce::Rectangle<float> (x1 - x0 + p.keyStrip.pitch * keysLaid.scale, 20.0f)
+                                           .withCentre ({ 0.5f * (x0 + x1), y }),
+                                       right[i].title });
+        }
+        i = end;
+    }
     if (! keysLaid.centres.empty() && p.keyFrameHeight > 0.0f)
     {
         const float s = keysLaid.scale, half = 0.5f * p.keyStrip.pitch * s;

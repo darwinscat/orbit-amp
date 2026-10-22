@@ -1,7 +1,8 @@
-Amps: OrbitAmp, CatpitAmp, RedPawAmp, FrostPawAmp, AmberPawAmp
+Amps: OrbitAmp, RedPawAmp
 
 ### Changed
 
-- A switch's position that is only a number, or off or on, is written with the switch's name before it:
-  BRIGHT OFF · BRIGHT 1 · BRIGHT 2 by the rovers' keys, BRIGHT 1 by the AMP's switch — a bare 1 said nothing
-  of what it switched. A position with a word of its own is written as it was: TIGHT · FAT.
+- A switch whose positions are only numbers, or off or on, says what it switches. By the rovers' keys its
+  name stands once over them and each key's position under it: BRIGHT over OFF · 1 · 2. The AMP's switch
+  writes the name before the position it is at: BRIGHT 1. A position with a word of its own is written as it
+  was: TIGHT · FAT.

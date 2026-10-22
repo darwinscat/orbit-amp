@@ -302,6 +302,8 @@ void Dashboard::paintKeyNames (juce::Graphics& g) const
         ink.label (g, k.name, juce::Rectangle<float> (120.0f, 20.0f).withCentre (at),
                    px11, ink.at (ink.words, k.live ? 1.0f : PushButton::dimmed), keyTracking);
     }
+    for (const auto& t : strips.keyTitles)      // a switch's name once over its keys (BRIGHT)
+        ink.label (g, t.name, t.label, px11, ink.at (ink.words, 1.0f), keyTracking);
 }
 
 /** The tone signs in the words' ink as the keys' quiet words are, at 0.75: a line no brighter than the

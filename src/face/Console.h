@@ -542,8 +542,9 @@ private:
 
     /** THE RIGHT GROUP'S KEYS on a channel: the switches of its pack a hand may throw (Channels::
         switchesOf, all but the one the channel holds), in the pack's order and under its names — a key to
-        each position of a switch, the one it stands at lit (the IR-X Ch1's BRIGHT OFF · BRIGHT 1 · BRIGHT 2,
-        the Ch2's TIGHT · FAT: device::positionWords), and a switch whose two positions are off and on one key under the switch's
+        each position of a switch, the one it stands at lit (the Ch2's TIGHT · FAT; a switch whose every
+        position is bare, the IR-X Ch1's Bright, its name once over its keys and each position alone by its
+        key: BRIGHT over OFF · 1 · 2), and a switch whose two positions are off and on one key under the switch's
         own name — and after them the keys the face has taken for itself (claimKey), under the names it
         gave them. As many as there are, at most the keys the console has for them. */
     struct RightKey
@@ -554,6 +555,7 @@ private:
         int off = -1;           // an off/on key: where it puts the switch when let up; -1 for a position's key
         juce::String control;   // the switch's name in the pack
         juce::String name;      // what is written by it
+        juce::String title;     // the switch's name written once over its keys (BRIGHT); empty for most
     };
     std::vector<RightKey> rightKeysOf (int channel) const;
     std::vector<RightKey> rightKeys;            // the playing channel's, as showKeys last laid them
