@@ -9,7 +9,7 @@
                 "serial_number": "20542606016", "designed_in": "United States",
                 "made_in": "United States",
                 "url": "https://www.soldano.com/products/classic/amplifiers/x88-ir/" },
-      "tone_type": "edge", "circuit": "tube:5",
+      "tone_type": "edge", "circuit": "tube:5,dsp",
       "input_db": -4.0,
       "controls": [
         { "name": "Gain", "role": "gain", "sweep": 300,

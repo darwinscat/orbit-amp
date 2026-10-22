@@ -1,6 +1,7 @@
 {
   "format": "orbitrig", "schema": 4,
   "rig_id": "x88-ir-normal-bae8", "family_id": "X88-IR", "name": "Normal", "modeled_by": "Darwin's Cat",
+  "picture": "device.webp",
   "chain": [
     {
       "kind": "nam", "slot": "amp",
@@ -8,7 +9,7 @@
                 "serial_number": "20542606016", "designed_in": "United States",
                 "made_in": "United States",
                 "url": "https://www.soldano.com/products/classic/amplifiers/x88-ir/" },
-      "tone_type": "clean", "circuit": "tube:5",
+      "tone_type": "clean", "circuit": "tube:5,dsp",
       "input_db": -4.0,
       "controls": [
         { "name": "Gain", "role": "gain", "sweep": 300,
