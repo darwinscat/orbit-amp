@@ -542,8 +542,8 @@ private:
 
     /** THE RIGHT GROUP'S KEYS on a channel: the switches of its pack a hand may throw (Channels::
         switchesOf, all but the one the channel holds), in the pack's order and under its names — a key to
-        each position of a switch, the one it stands at lit (the IR-X Ch1's BRIGHT 1 · CENTER · BRIGHT 2,
-        the Ch2's TIGHT · FAT), and a switch whose two positions are off and on one key under the switch's
+        each position of a switch, the one it stands at lit (the IR-X Ch1's BRIGHT OFF · BRIGHT 1 · BRIGHT 2,
+        the Ch2's TIGHT · FAT: device::positionWords), and a switch whose two positions are off and on one key under the switch's
         own name — and after them the keys the face has taken for itself (claimKey), under the names it
         gave them. As many as there are, at most the keys the console has for them. */
     struct RightKey

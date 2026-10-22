@@ -5,6 +5,7 @@
 
 #include "../AmpChannels.h"
 #include "../PluginProcessor.h"
+#include "../device/SwitchWords.h"
 #include "FactoryMissing.h"
 
 #include <felitronics/appkit/WebpImage.h>
@@ -1375,8 +1376,9 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
                                                     1.0f, (float) content.getHeight() - 8.0f));
     }
 
-    // Each selecting control's line: the switch, then its ONE word — the name of an OFF/ON, lit
-    // while on; the chosen position of anything else, in the hand's colour.
+    // Each selecting control's line: the switch, then its words — the name of an OFF/ON, lit
+    // while on; the chosen position of anything else, in the hand's colour, the switch's name before
+    // it where the position is bare (BRIGHT 1: device::positionWords).
     for (const auto& sel : selectors)
     {
         if (sel.steps == nullptr || sel.row.isEmpty())
@@ -1387,7 +1389,8 @@ void CapturedBlockPanel::paintContent (juce::Graphics& g)
         const int chosen = sel.steps->selectedIndex();
 
         const auto word = sel.onOff ? sel.name
-                                    : (chosen < sel.values.size() ? sel.values[chosen] : juce::String());
+                                    : (chosen < sel.values.size() ? device::positionWords (sel.name, sel.values[chosen])
+                                                                  : juce::String());
         g.setColour (sel.onOff && chosen == 0 ? theme::txDim : theme::orange);
         theme::drawTracked (g, word, row, theme::displayFont (pickFontH), pickTracking,
                             juce::Justification::centredLeft);

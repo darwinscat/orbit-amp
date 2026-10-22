@@ -15,6 +15,7 @@
 #include "../ProductPage.h"
 #include "../core/ProcessMemory.h"
 #include "../device/IrLibrary.h"
+#include "../device/SwitchWords.h"
 #include "../ui/AboutConfig.h"
 #include "../ui/HumMenu.h"
 #include "../ui/HumTuning.h"
@@ -1679,7 +1680,7 @@ std::vector<Console::RightKey> Console::rightKeysOf (int channel) const
         }
         else
             for (int p = 0; p < s.values.size(); ++p)
-                out.push_back ({ free[next++], s.slot, p, -1, s.name, s.values[p].toUpperCase() });
+                out.push_back ({ free[next++], s.slot, p, -1, s.name, device::positionWords (s.name, s.values[p]) });
     }
     for (const int b : own)
         out.push_back ({ b, -1, -1, -1, {}, keyNames[(size_t) b] });
