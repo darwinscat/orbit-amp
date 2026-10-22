@@ -23,14 +23,14 @@ constexpr const char* name = "RedPawAmp";
     Ch2 (the lever names them from the top) — and TURBO that channel's own Boost: the same pack, the
     gear holding the switch off and its TURBO on (Lineup::Channel::held). The pack's other switches are
     the hand's, on the keys: Ch1's three-way Bright, Ch2's Tight and Fat. A channel's pack is the capture
-    it plays, known by the `rig_id` its manifest carries. What each opens on: a gear a little of its room
-    and as much delay, its TURBO twice as much of both — both on a plate, Ch2 with no delay at all. */
+    it plays, known by the `rig_id` its manifest carries. What each opens on: both on a plate, Ch1 with 15 %
+    of it and as much delay, Ch2 drier, 10 % and no delay at all. */
 const channels::Lineup& marsLineup()
 {
     static const channels::Lineup rover = roverLineup ({
         { "Crunch",         "ir-x-ch1-poweramp-3e66", "Plate",    15.0f, 15.0f, false, { "Boost", "off" } },
         { "Crunch Turbo",   "ir-x-ch1-poweramp-3e66", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
-        { "Hi-Gain",        "ir-x-ch2-poweramp-67e9", "Plate",    15.0f, 0.0f,  true,  { "Boost", "off" } },
+        { "Hi-Gain",        "ir-x-ch2-poweramp-67e9", "Plate",    10.0f, 0.0f,  true,  { "Boost", "off" } },
         { "Hi-Gain Turbo",  "ir-x-ch2-poweramp-67e9", "Plate",    30.0f, 0.0f,  true,  { "Boost", "on"  } },
     });
     return rover;

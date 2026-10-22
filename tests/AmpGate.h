@@ -102,15 +102,15 @@ inline const Product& product()
 
     static const Product products[] {
         // The cockpit: the X88-IR's four channels, one to a detent of the throttle and each its own
-        // memory. All four on a plate, Clean with a little delay behind it and Edge with about half as
-        // much, the two driven ones with none, all four at the room's own default share.
+        // memory. All four on a plate, the cleaner the wetter, Clean with a little delay behind it and
+        // Edge with about half as much, the two driven ones with none.
         // Each pack is captures shot at several hours of the gear's own knob, and DRIVE stands on them.
         { "CatpitAmp", "cockpit", "CATPIT_GATE_OWNS_HOME",
           {
-              { "x88-ir-normal-bae8",    "", "Plate",    30.0f, 15.0f, "after INIT the first channel stands on a plate, with a little delay" },
-              { "x88-ir-altered-c14c",   "", "Plate",    30.0f, 8.0f,  "...and so does the second, with half the delay" },
-              { "x88-ir-crunch-2abb",    "", "Plate",    30.0f, 0.0f,  "...the third on a plate too, and no delay" },
-              { "x88-ir-overdrive-0344", "", "Plate",    30.0f, 0.0f,  "...the fourth the same, and none either" },
+              { "x88-ir-normal-bae8",    "", "Plate",    20.0f, 15.0f, "after INIT the first channel stands on a plate, with a little delay" },
+              { "x88-ir-altered-c14c",   "", "Plate",    15.0f, 8.0f,  "...and so does the second, with half the delay" },
+              { "x88-ir-crunch-2abb",    "", "Plate",    12.0f, 0.0f,  "...the third on a plate too, and no delay" },
+              { "x88-ir-overdrive-0344", "", "Plate",    10.0f, 0.0f,  "...the fourth the same, and none either" },
           },
           nullptr,
           {
@@ -128,30 +128,30 @@ inline const Product& product()
                {
                    { "ir-x-ch1-poweramp-3e66", "Boost=off", "Plate",    15.0f, 15.0f },
                    { "ir-x-ch1-poweramp-3e66", "Boost=on",  "Plate",    15.0f, 15.0f },
-                   { "ir-x-ch2-poweramp-67e9", "Boost=off", "Plate",    15.0f, 0.0f  },
-                   { "ir-x-ch2-poweramp-67e9", "Boost=on",  "Plate",    15.0f, 0.0f  },
+                   { "ir-x-ch2-poweramp-67e9", "Boost=off", "Plate",    10.0f, 0.0f  },
+                   { "ir-x-ch2-poweramp-67e9", "Boost=on",  "Plate",    10.0f, 0.0f  },
                },
                "each gear is one of the IR-X's channels, its TURBO the same with the Boost on"),
         rover ("FrostPawAmp",
                {
-                   { "revolt-clean-poweramp-bf62",  "Boost=off", "Plate",    15.0f, 15.0f },
-                   { "revolt-clean-poweramp-bf62",  "Boost=on",  "Plate",    15.0f, 15.0f },
+                   { "revolt-clean-poweramp-bf62",  "Boost=off", "Plate",    20.0f, 15.0f },
+                   { "revolt-clean-poweramp-bf62",  "Boost=on",  "Plate",    20.0f, 15.0f },
                    { "revolt-crunch-poweramp-73a7", "Boost=off", "Plate",    15.0f, 8.0f  },
                    { "revolt-crunch-poweramp-73a7", "Boost=on",  "Plate",    15.0f, 8.0f  },
-                   { "revolt-lead-poweramp-f5dc",   "Boost=off", "Plate",    15.0f, 0.0f  },
-                   { "revolt-lead-poweramp-f5dc",   "Boost=on",  "Plate",    15.0f, 0.0f  },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=off", "Plate",    10.0f, 0.0f  },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=on",  "Plate",    10.0f, 0.0f  },
                },
                "each gear is one of the ReVolt's channels, its TURBO the same with the Boost on"),
         // Over Titan the Victory V4's three, a gear each, all on a plate: CLEAN the Copper, CRUNCH the Sheriff,
         // HI-GAIN the Kraken with no delay — its TURBO the same pack with the Boost on.
         rover ("AmberPawAmp",
                {
-                   { "v4-copper-4ae0",      "Boost=off", "Plate",    15.0f, 15.0f },
-                   { "v4-copper-4ae0",      "Boost=on",  "Plate",    15.0f, 15.0f },
+                   { "v4-copper-4ae0",      "Boost=off", "Plate",    20.0f, 15.0f },
+                   { "v4-copper-4ae0",      "Boost=on",  "Plate",    20.0f, 15.0f },
                    { "v4-sheriff-ch1-82ab", "Boost=off", "Plate",    15.0f, 8.0f  },
                    { "v4-sheriff-ch1-82ab", "Boost=on",  "Plate",    15.0f, 8.0f  },
-                   { "v4-kraken-ch1-f7fc",  "Boost=off", "Plate",    15.0f, 0.0f  },
-                   { "v4-kraken-ch1-f7fc",  "Boost=on",  "Plate",    15.0f, 0.0f  },
+                   { "v4-kraken-ch1-f7fc",  "Boost=off", "Plate",    10.0f, 0.0f  },
+                   { "v4-kraken-ch1-f7fc",  "Boost=on",  "Plate",    10.0f, 0.0f  },
                },
                "each gear is one of the V4's three, its TURBO the same with the Boost on"),
     };

@@ -25,17 +25,17 @@ constexpr const char* name = "AmberPawAmp";
 /** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's three, a gear each — CLEAN the Copper, CRUNCH the
     Sheriff, HI-GAIN the Kraken, each captured with its Boost off and on — and TURBO that channel's own
     Boost: the same pack, the gear holding the switch off and its TURBO on (Lineup::Channel::held). What
-    each opens on, as the V4's gears always did: a gear a little of its room and as much delay, its TURBO
-    twice as much of both — all three on a plate, the Sheriff with about half the delay, the Kraken with
-    no delay at all; the Kraken the hot one. */
+    each opens on: all three on a plate, the cleaner the wetter — the Copper 20 % of it, the Sheriff 15,
+    the Kraken 10 — and the Copper with 15 % of delay, the Sheriff with about half as much, the Kraken with
+    none; the Kraken the hot one. */
 const channels::Lineup& titanLineup()
 {
     static const channels::Lineup heli = roverLineup ({
-        { "Clean",          "v4-copper-4ae0",      "Plate",    15.0f, 15.0f, false, { "Boost", "off" } },
+        { "Clean",          "v4-copper-4ae0",      "Plate",    20.0f, 15.0f, false, { "Boost", "off" } },
         { "Clean Turbo",    "v4-copper-4ae0",      "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
         { "Crunch",         "v4-sheriff-ch1-82ab", "Plate",    15.0f, 8.0f,  false, { "Boost", "off" } },
         { "Crunch Turbo",   "v4-sheriff-ch1-82ab", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
-        { "Hi-Gain",        "v4-kraken-ch1-f7fc",  "Plate",    15.0f, 0.0f,  true,  { "Boost", "off" } },
+        { "Hi-Gain",        "v4-kraken-ch1-f7fc",  "Plate",    10.0f, 0.0f,  true,  { "Boost", "off" } },
         { "Hi-Gain Turbo",  "v4-kraken-ch1-f7fc",  "Plate",    30.0f, 0.0f,  true,  { "Boost", "on"  } },
     });
     return heli;

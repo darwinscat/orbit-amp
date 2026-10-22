@@ -23,17 +23,16 @@ constexpr const char* name = "FrostPawAmp";
 /** ITS CHANNELS (redpaw/RedPawLineup.h): the Two Notes ReVolt Guitar's three, a gear each — CLEAN, CRUNCH
     and HI-GAIN its Clean, Crunch and Lead, captured through its power amp — and TURBO that channel's own
     Boost: the same pack, the gear holding the switch off and its TURBO on (Lineup::Channel::held). What
-    each opens on, as the V4's gears did before them: a gear a little of its room and as much delay, its
-    TURBO twice as much of both — all three on a plate, Crunch with about half the delay, Lead with no
-    delay at all; Lead the hot one. */
+    each opens on: all three on a plate, the cleaner the wetter — Clean 20 % of it, Crunch 15, Lead 10 —
+    and Clean with 15 % of delay, Crunch with about half as much, Lead with none; Lead the hot one. */
 const channels::Lineup& iceLineup()
 {
     static const channels::Lineup rover = roverLineup ({
-        { "Clean",          "revolt-clean-poweramp-bf62",  "Plate",    15.0f, 15.0f, false, { "Boost", "off" } },
+        { "Clean",          "revolt-clean-poweramp-bf62",  "Plate",    20.0f, 15.0f, false, { "Boost", "off" } },
         { "Clean Turbo",    "revolt-clean-poweramp-bf62",  "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
         { "Crunch",         "revolt-crunch-poweramp-73a7", "Plate",    15.0f, 8.0f,  false, { "Boost", "off" } },
         { "Crunch Turbo",   "revolt-crunch-poweramp-73a7", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
-        { "Hi-Gain",        "revolt-lead-poweramp-f5dc",   "Plate",    15.0f, 0.0f,  true,  { "Boost", "off" } },
+        { "Hi-Gain",        "revolt-lead-poweramp-f5dc",   "Plate",    10.0f, 0.0f,  true,  { "Boost", "off" } },
         { "Hi-Gain Turbo",  "revolt-lead-poweramp-f5dc",   "Plate",    30.0f, 0.0f,  true,  { "Boost", "on"  } },
     });
     return rover;
