@@ -102,15 +102,15 @@ inline const Product& product()
 
     static const Product products[] {
         // The cockpit: the X88-IR's four channels, one to a detent of the throttle and each its own
-        // memory. The two clean ones stand in a hall with a little delay behind them, the two
-        // driven ones each in a room of its own and no delay, all four at the room's own default share.
+        // memory. All four on a plate, the two clean ones with a little delay behind them, the two
+        // driven ones with none, all four at the room's own default share.
         // Each pack is captures shot at several hours of the gear's own knob, and DRIVE stands on them.
         { "CatpitAmp", "cockpit", "CATPIT_GATE_OWNS_HOME",
           {
-              { "x88-ir-normal-bae8",    "", "Hall",     30.0f, 15.0f, "after INIT the first channel stands in a hall, with a little delay" },
-              { "x88-ir-altered-c14c",   "", "Hall",     30.0f, 15.0f, "...and so does the second" },
-              { "x88-ir-crunch-2abb",    "", "Plate",    30.0f, 0.0f,  "the third opens on a plate, and no delay" },
-              { "x88-ir-overdrive-0344", "", "Ambience", 30.0f, 0.0f,  "...the fourth on an ambience, and none either" },
+              { "x88-ir-normal-bae8",    "", "Plate",    30.0f, 15.0f, "after INIT the first channel stands on a plate, with a little delay" },
+              { "x88-ir-altered-c14c",   "", "Plate",    30.0f, 15.0f, "...and so does the second" },
+              { "x88-ir-crunch-2abb",    "", "Plate",    30.0f, 0.0f,  "...the third on a plate too, and no delay" },
+              { "x88-ir-overdrive-0344", "", "Plate",    30.0f, 0.0f,  "...the fourth the same, and none either" },
           },
           nullptr,
           {
@@ -123,35 +123,35 @@ inline const Product& product()
           "...and all four on the build's RED GIANT" },
 
         // On Mars the Friedman IR-X's two channels, each a gear: Ch1 the CRUNCH and Ch2 the HI-GAIN, its
-        // TURBO the same pack with the Boost thrown. Ch1 on a plate, Ch2 in an ambience with no delay.
+        // TURBO the same pack with the Boost thrown. Both on a plate, Ch2 with no delay.
         rover ("RedPawAmp",
                {
                    { "ir-x-ch1-poweramp-3e66", "Boost=off", "Plate",    15.0f, 15.0f },
                    { "ir-x-ch1-poweramp-3e66", "Boost=on",  "Plate",    15.0f, 15.0f },
-                   { "ir-x-ch2-poweramp-67e9", "Boost=off", "Ambience", 15.0f, 0.0f  },
-                   { "ir-x-ch2-poweramp-67e9", "Boost=on",  "Ambience", 15.0f, 0.0f  },
+                   { "ir-x-ch2-poweramp-67e9", "Boost=off", "Plate",    15.0f, 0.0f  },
+                   { "ir-x-ch2-poweramp-67e9", "Boost=on",  "Plate",    15.0f, 0.0f  },
                },
                "each gear is one of the IR-X's channels, its TURBO the same with the Boost on"),
         rover ("FrostPawAmp",
                {
-                   { "revolt-clean-poweramp-bf62",  "Boost=off", "Hall",     15.0f, 15.0f },
-                   { "revolt-clean-poweramp-bf62",  "Boost=on",  "Hall",     15.0f, 15.0f },
+                   { "revolt-clean-poweramp-bf62",  "Boost=off", "Plate",    15.0f, 15.0f },
+                   { "revolt-clean-poweramp-bf62",  "Boost=on",  "Plate",    15.0f, 15.0f },
                    { "revolt-crunch-poweramp-73a7", "Boost=off", "Plate",    15.0f, 15.0f },
                    { "revolt-crunch-poweramp-73a7", "Boost=on",  "Plate",    15.0f, 15.0f },
-                   { "revolt-lead-poweramp-f5dc",   "Boost=off", "Ambience", 15.0f, 0.0f  },
-                   { "revolt-lead-poweramp-f5dc",   "Boost=on",  "Ambience", 15.0f, 0.0f  },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=off", "Plate",    15.0f, 0.0f  },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=on",  "Plate",    15.0f, 0.0f  },
                },
                "each gear is one of the ReVolt's channels, its TURBO the same with the Boost on"),
-        // Over Titan the Victory V4's three, a gear each: CLEAN the Copper in a hall, CRUNCH the Sheriff on a
-        // plate, HI-GAIN the Kraken in an ambience with no delay — its TURBO the same pack with the Boost on.
+        // Over Titan the Victory V4's three, a gear each, all on a plate: CLEAN the Copper, CRUNCH the Sheriff,
+        // HI-GAIN the Kraken with no delay — its TURBO the same pack with the Boost on.
         rover ("AmberPawAmp",
                {
-                   { "v4-copper-4ae0",      "Boost=off", "Hall",     15.0f, 15.0f },
-                   { "v4-copper-4ae0",      "Boost=on",  "Hall",     15.0f, 15.0f },
+                   { "v4-copper-4ae0",      "Boost=off", "Plate",    15.0f, 15.0f },
+                   { "v4-copper-4ae0",      "Boost=on",  "Plate",    15.0f, 15.0f },
                    { "v4-sheriff-ch1-82ab", "Boost=off", "Plate",    15.0f, 15.0f },
                    { "v4-sheriff-ch1-82ab", "Boost=on",  "Plate",    15.0f, 15.0f },
-                   { "v4-kraken-ch1-f7fc",  "Boost=off", "Ambience", 15.0f, 0.0f  },
-                   { "v4-kraken-ch1-f7fc",  "Boost=on",  "Ambience", 15.0f, 0.0f  },
+                   { "v4-kraken-ch1-f7fc",  "Boost=off", "Plate",    15.0f, 0.0f  },
+                   { "v4-kraken-ch1-f7fc",  "Boost=on",  "Plate",    15.0f, 0.0f  },
                },
                "each gear is one of the V4's three, its TURBO the same with the Boost on"),
     };

@@ -26,17 +26,17 @@ constexpr const char* name = "AmberPawAmp";
     Sheriff, HI-GAIN the Kraken, each captured with its Boost off and on — and TURBO that channel's own
     Boost: the same pack, the gear holding the switch off and its TURBO on (Lineup::Channel::held). What
     each opens on, as the V4's gears always did: a gear a little of its room and as much delay, its TURBO
-    twice as much of both — the Copper in a hall, the Sheriff on a plate, the Kraken in an ambience with no
-    delay at all; the Kraken the hot one. */
+    twice as much of both — all three on a plate, the Kraken with no delay at all; the Kraken the hot
+    one. */
 const channels::Lineup& titanLineup()
 {
     static const channels::Lineup heli = roverLineup ({
-        { "Clean",          "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false, { "Boost", "off" } },
-        { "Clean Turbo",    "v4-copper-4ae0",      "Hall",     30.0f, 30.0f, false, { "Boost", "on"  } },
+        { "Clean",          "v4-copper-4ae0",      "Plate",    15.0f, 15.0f, false, { "Boost", "off" } },
+        { "Clean Turbo",    "v4-copper-4ae0",      "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
         { "Crunch",         "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false, { "Boost", "off" } },
         { "Crunch Turbo",   "v4-sheriff-ch1-82ab", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
-        { "Hi-Gain",        "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true,  { "Boost", "off" } },
-        { "Hi-Gain Turbo",  "v4-kraken-ch1-f7fc",  "Ambience", 30.0f, 0.0f,  true,  { "Boost", "on"  } },
+        { "Hi-Gain",        "v4-kraken-ch1-f7fc",  "Plate",    15.0f, 0.0f,  true,  { "Boost", "off" } },
+        { "Hi-Gain Turbo",  "v4-kraken-ch1-f7fc",  "Plate",    30.0f, 0.0f,  true,  { "Boost", "on"  } },
     });
     return heli;
 }

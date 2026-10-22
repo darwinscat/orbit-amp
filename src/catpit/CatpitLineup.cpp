@@ -13,16 +13,15 @@ const channels::Lineup& lineup()
 {
     // A channel's pack is the capture it plays, known by the `rig_id` its manifest carries: the X88-IR's
     // own four channels — Normal for Clean, Altered for Edge, Crunch for Crunch, Overdrive for Hi-Gain.
-    // In the channels' order, what each opens on: the two clean ones stand in a hall with a little
-    // delay behind them; the two driven ones have each a room of their own, and no delay. FAT is a
-    // layer only the two hottest packs carry.
+    // In the channels' order, what each opens on: all four on a plate, the two clean ones with a little
+    // delay behind them, the two driven ones with none. FAT is a layer only the two hottest packs carry.
     static const channels::Lineup cockpit {
         "catpit", "catpit_channel", "red-giant",
         {
-            { "Clean",   "x88-ir-normal-bae8",    "Hall",     {}, 15.0f, false },
-            { "Edge",    "x88-ir-altered-c14c",   "Hall",     {}, 15.0f, false },
+            { "Clean",   "x88-ir-normal-bae8",    "Plate",    {}, 15.0f, false },
+            { "Edge",    "x88-ir-altered-c14c",   "Plate",    {}, 15.0f, false },
             { "Crunch",  "x88-ir-crunch-2abb",    "Plate",    {}, 0.0f,  true  },
-            { "Hi-Gain", "x88-ir-overdrive-0344", "Ambience", {}, 0.0f,  true  },
+            { "Hi-Gain", "x88-ir-overdrive-0344", "Plate",    {}, 0.0f,  true  },
         }
     };
     return cockpit;
