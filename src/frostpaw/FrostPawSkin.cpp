@@ -66,8 +66,10 @@ const layout::Plan plan {
 
     .navScreen { 563.5f, 424.0f, 436.5f, 191.5f },
 
-    // The slot is 786..810 across, its top end at 681.5, its notches out to 823: RedPawAmp's within a
-    // pixel, and its three gears in its three notches.
+    // The slot is 786..810 across, its notches out to 823: RedPawAmp's within a pixel, and its three
+    // gears in its three notches. Painted with its top end at 681.5, it is baked cut short to 694.5, as
+    // far over the first gear as it runs under the last (tools/bake-art).
+    .gateSlot { 785.5f, 694.5f, 37.5f, 160.5f },
     .stops { 732.8f, 775.5f, 816.8f },
 
     // TURBO's hole half a pixel right.

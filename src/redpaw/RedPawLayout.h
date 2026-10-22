@@ -147,14 +147,15 @@ struct Plan
         above, as the whole dashboard is, the lever is its T grip lying across the slot, the stem's collar
         under the grip's middle standing on the position — in a notch, in the notch.
 
-        The slot is 785.5..811 across, its top end at 681, its notches out to 823. */
-    juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
+        The slot is 785.5..811 across, its notches out to 823; painted with its top end at 681, it is
+        baked cut short to 718, as far over the first gear as it runs under the last (tools/bake-art). */
+    juce::Rectangle<float> gateSlot { 785.5f, 718.0f, 37.5f, 137.0f };
     float slotX  = 798.3f;          // the stem in the slot
     float notchX = 814.0f;          // ...and in a notch
     // Where the gears stand, top to bottom. Two gears down a slot painted for three notches, 733.8, 776
-    // and 817.5, spread evenly from the slot's top end at 694: a step of 61.75 to the middle and another
-    // to the third notch, so the slot is the lever's to its end — the picture baked with the first two
-    // filled in and the middle one the second, copied up (tools/bake-art).
+    // and 817.5, spread evenly from 694 under the slot's top end as painted: a step of 61.75 to the middle
+    // and another to the third notch — the picture baked with the first two filled in, the middle one the
+    // second, copied up, and the slot cut short over the first (tools/bake-art).
     std::vector<float> stops { 755.75f, 817.5f };
     float leverWidth = 124.0f;      // the lever's render, grip and collar, this wide: over the plate's edges
     float collarSink = 3.0f;        // how far the collar's foot goes past the position, into the slot

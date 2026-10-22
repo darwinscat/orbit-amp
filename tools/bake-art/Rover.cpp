@@ -30,6 +30,15 @@ namespace
         the seam. */
     struct NotchFill { float above, below, left, seam, right, run, plateShift, feather; };
 
+    /** A SLOT PAINTED WITH ROOM OVER ITS FIRST NOTCH IS CUT SHORT (`shortenSlot`), so it ends as far over
+        the first gear as it runs under the last and nothing over the gears reads as a place. Its top end
+        — the plate just over it, the rim and the round corners, from `top` down `end` rows, `left` to
+        `right` — moves `drop` down; the rows it leaves are the plate `plateShift` to the left, from
+        `plateTop` down, where it is plain; the whole faded into the picture over `feather` at its top and
+        its sides, and the plate into the moved end across their seam. Under the moved end the slot runs
+        on as painted. A `drop` of nought: the slot as painted. */
+    struct SlotEnd { float left, right, top, end, drop, plateShift, plateTop, feather; };
+
     /** REVERB's or DELAY's frame, as the picture painted it: the plate's top (its shadow), where the rim's
         lit edge ends and its face begins, where the well opens under it, and how far down the end caps'
         top screws reach. */
@@ -53,10 +62,12 @@ namespace
         const char* face;
 
         /** The lever: its gears (the product's pairs of channels, RedPawLineup.h), the notches its picture
-            paints, the stops the gears stand at (the skin's layout::stops), and how a notch is filled. */
+            paints, the stops the gears stand at (the skin's layout::stops), how a notch is filled, and how
+            the slot is cut short over the first gear. */
         int gears;
         std::vector<float> notches, stops;
         NotchFill notchFill;
+        SlotEnd slotEnd;
 
         /** REVERB's and DELAY's upper rims, each made `rimLift` taller, upward, so that the words over each
             well stand ON its frame; none where the picture has room for the words as painted. */
@@ -103,13 +114,17 @@ namespace
     }
 
     const std::array<Rover, 3> rovers {{
-        // REDPAWAMP: two gears down a slot painted for three, spread evenly from the slot's top end at 694 —
-        // a step of 61.75 to the middle and another to the third notch. The first two notches are filled in, and the middle
+        // REDPAWAMP: two gears down a slot painted for three, spread evenly from 694 under the slot's top
+        // end — a step of 61.75 to the middle and another to the third notch. The first two notches are filled in, and the middle
         // one is the second, copied up. A notch is cut 805..829 down and out to 824, its bevels' corners
         // reaching 803.5 and 831.5 on the slot's lit edge, 809.5..811.5; the straight run over the third is
         // 789..803.5. The plate right of it is plain out to 850.
+        // The slot's dark is 786..810 across, 681.25..855.25 down, its rim 783.5..812.25 and its top 679.75;
+        // the last gear stands 37.75 over its bottom end, so its top end goes to 37.75 over the first gear,
+        // 718 — 36.75 down. The plate left of it, 747..781, is plain from 697 down, under the plate's screw.
         { "redpaw", 2, { 733.8f, 776.0f, 817.5f }, { 755.75f, 817.5f },
           { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 2.0f },
+          { 781.0f, 815.0f, 676.0f, 15.0f, 36.75f, 34.0f, 697.0f, 2.0f },
           {{ { 276.0f, 681.0f, 683.0f, 691.0f, 699.5f, 703.0f, 316.0f, 637.0f },      // REVERB
              { 276.0f, 681.0f, 755.5f, 763.0f, 772.5f, 777.0f, 316.0f, 637.0f } }},   // DELAY
           10.0f,
@@ -134,8 +149,11 @@ namespace
         // FROSTPAWAMP: three gears in its three notches, so nothing is filled; its third notch cut 804..830
         // down, its slot's lit edge 810..812, the straight run over it 789..803, the plate plain out to 848:
         // filled as RedPawAmp's would be, were it to have fewer gears. Rims and corner plates as RedPawAmp's.
+        // The slot's dark is 681.5..855.25 down; the last gear stands 38.45 over its bottom end, so its top
+        // end goes to 38.45 over the first gear, 694.35 — 12.85 down — cut short as RedPawAmp's is.
         { "frostpaw", 3, { 732.8f, 775.5f, 816.8f }, { 732.8f, 775.5f, 816.8f },
           { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 2.0f },
+          { 781.0f, 815.0f, 676.0f, 15.0f, 12.85f, 34.0f, 697.0f, 2.0f },
           {{ { 276.0f, 681.0f, 683.0f, 691.0f, 699.5f, 703.0f, 316.0f, 637.0f },      // REVERB
              { 276.0f, 681.0f, 755.5f, 763.0f, 772.5f, 777.0f, 316.0f, 637.0f } }},   // DELAY
           10.0f,
@@ -157,13 +175,15 @@ namespace
              { 69.0f,   824.0f, 62.0f, 63.0f },       // the slant 55..97 x 834..877 as painted, moved in with its plate
              { 1541.0f, 824.0f, 62.0f, 63.0f } }} },  // the slant 1575..1617 x 834..877 as painted, moved in with its plate
 
-        // AMBERPAWAMP: five ticks right of a straight slot, the top one no place and four places below it; a fourth gear's
-        // tick, past its three, is painted over — the spare tick's white bar is 926..946.5 x 702..708: over
-        // it, the plain plate just above, mirrored down and back, faded in at the fill's top, bottom and
-        // right. The wells' words have room as painted, and its corner slots are painted: nothing grows. No
-        // lamp is painted lit.
-        { "amberpaw", 3, { 587.5f, 627.0f, 666.3f, 704.7f }, { 587.5f, 627.0f, 666.3f, 704.7f },
+        // AMBERPAWAMP: five ticks right of a straight slot, four places and one over them that is none; the
+        // top tick, and a fourth gear's tick past its three, are painted over — the spare tick's white bar is
+        // 926..946.5 x 702..708: over it, the plain plate just above, mirrored down and back, faded in at the
+        // fill's top, bottom and right. Its slot stands as painted: with both end ticks gone it runs about as
+        // far over the first gear as under the last. The wells' words have room as painted, and its corner
+        // slots are painted: nothing grows. No lamp is painted lit.
+        { "amberpaw", 3, { 548.9f, 587.5f, 627.0f, 666.3f, 704.7f }, { 587.5f, 627.0f, 666.3f, 704.7f },
           { 9.0f, 9.0f, 921.0f, 960.0f, 953.0f, 9.0f, 0.0f, 2.0f },
+          {},
           {}, 0.0f,
           0.0f, {}, {},
           { 20.0f, 492.0f, 27.0f, 221.0f }, 13.0f, 21.0f / 27.0f,
@@ -269,6 +289,39 @@ namespace
                     const float amount = juce::jlimit (0.0f, 1.0f, juce::jmin (down, (float) (right - x) / feather));
                     dst.setPixelColour (x, y, dst.getPixelColour (x, y).interpolatedWith (src.getPixelColour (x, y + rows), amount));
                 }
+            }
+        }
+        return img;
+    }
+
+    /** THE SLOT CUT SHORT OVER THE FIRST GEAR (SlotEnd): its top end moves down, the rows it leaves are
+        plain plate from beside the slot, and the two meet across a seam as soft as the fill's edges. */
+    juce::Image shortenSlot (juce::Image img, const Rover& rover)
+    {
+        const auto& s = rover.slotEnd;
+        if (! img.isValid() || s.drop <= 0.0f)
+            return img;
+
+        const float k = (float) img.getWidth() / width;
+        const auto at = [k] (float v) { return juce::roundToInt (v * k); };
+        const auto original = img.createCopy();
+        const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
+
+        const int left = at (s.left), right = at (s.right), top = at (s.top), drop = at (s.drop);
+        const int bottom = top + drop + at (s.end), shift = at (s.plateShift), plateTop = at (s.plateTop);
+        const float feather = (float) juce::jmax (1, at (s.feather));
+
+        for (int y = top; y < bottom; ++y)
+        {
+            const float down = juce::jmin (1.0f, (float) (y - top + 1) / feather);     // under the moved end the slot is as painted
+            const float seam = juce::jlimit (0.0f, 1.0f, (float) (y - top - drop) / feather + 0.5f);     // plate to end
+
+            for (int x = left; x < right; ++x)
+            {
+                const auto fill = src.getPixelColour (x - shift, plateTop + y - top).interpolatedWith (src.getPixelColour (x, y - drop), seam);
+                const float amount = juce::jlimit (0.0f, 1.0f, juce::jmin (down, (float) (x - left + 1) / feather, (float) (right - x) / feather));
+                dst.setPixelColour (x, y, src.getPixelColour (x, y).interpolatedWith (fill, amount));
             }
         }
         return img;
@@ -380,7 +433,7 @@ Pictures bakeRover (const juce::String& face, const Sources& sources)
     const auto& rover = *std::find_if (rovers.begin(), rovers.end(), [&face] (const Rover& r) { return face == r.face; });
     Pictures out;
 
-    auto dashboard = widenLampPlates (widenRims (fitNotches (sources.load ("dashboard.png"), rover), rover), rover);
+    auto dashboard = widenLampPlates (widenRims (shortenSlot (fitNotches (sources.load ("dashboard.png"), rover), rover), rover), rover);
     std::array<juce::Image, 4> lit;
     if (rover.lampness != nullptr && dashboard.isValid())
         for (size_t i = 0; i < lit.size(); ++i)

@@ -131,7 +131,7 @@ const layout::Plan plan {
     // The slot is 882..907 across, 517..724 down, and straight: the stem stays in it. Its ticks, to its
     // right at 926..946.5, are four places, the gears from the top — the grip lies along a tick, so the
     // collar's foot is 24 past it — and a fourth gear's tick, past this product's three, is painted over.
-    // A tick over the first, painted at 548.9, stands for no place.
+    // A tick over the first, painted at 548.9, is no place, and painted over too (tools/bake-art).
     .gateSlot { 882.0f, 517.0f, 25.0f, 207.0f },
     .slotX  = 894.5f,
     .notchX = 894.5f,
