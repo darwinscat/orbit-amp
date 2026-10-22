@@ -102,13 +102,13 @@ inline const Product& product()
 
     static const Product products[] {
         // The cockpit: the X88-IR's four channels, one to a detent of the throttle and each its own
-        // memory. All four on a plate, the two clean ones with a little delay behind them, the two
-        // driven ones with none, all four at the room's own default share.
+        // memory. All four on a plate, Clean with a little delay behind it and Edge with about half as
+        // much, the two driven ones with none, all four at the room's own default share.
         // Each pack is captures shot at several hours of the gear's own knob, and DRIVE stands on them.
         { "CatpitAmp", "cockpit", "CATPIT_GATE_OWNS_HOME",
           {
               { "x88-ir-normal-bae8",    "", "Plate",    30.0f, 15.0f, "after INIT the first channel stands on a plate, with a little delay" },
-              { "x88-ir-altered-c14c",   "", "Plate",    30.0f, 15.0f, "...and so does the second" },
+              { "x88-ir-altered-c14c",   "", "Plate",    30.0f, 8.0f,  "...and so does the second, with half the delay" },
               { "x88-ir-crunch-2abb",    "", "Plate",    30.0f, 0.0f,  "...the third on a plate too, and no delay" },
               { "x88-ir-overdrive-0344", "", "Plate",    30.0f, 0.0f,  "...the fourth the same, and none either" },
           },
@@ -136,8 +136,8 @@ inline const Product& product()
                {
                    { "revolt-clean-poweramp-bf62",  "Boost=off", "Plate",    15.0f, 15.0f },
                    { "revolt-clean-poweramp-bf62",  "Boost=on",  "Plate",    15.0f, 15.0f },
-                   { "revolt-crunch-poweramp-73a7", "Boost=off", "Plate",    15.0f, 15.0f },
-                   { "revolt-crunch-poweramp-73a7", "Boost=on",  "Plate",    15.0f, 15.0f },
+                   { "revolt-crunch-poweramp-73a7", "Boost=off", "Plate",    15.0f, 8.0f  },
+                   { "revolt-crunch-poweramp-73a7", "Boost=on",  "Plate",    15.0f, 8.0f  },
                    { "revolt-lead-poweramp-f5dc",   "Boost=off", "Plate",    15.0f, 0.0f  },
                    { "revolt-lead-poweramp-f5dc",   "Boost=on",  "Plate",    15.0f, 0.0f  },
                },
@@ -148,8 +148,8 @@ inline const Product& product()
                {
                    { "v4-copper-4ae0",      "Boost=off", "Plate",    15.0f, 15.0f },
                    { "v4-copper-4ae0",      "Boost=on",  "Plate",    15.0f, 15.0f },
-                   { "v4-sheriff-ch1-82ab", "Boost=off", "Plate",    15.0f, 15.0f },
-                   { "v4-sheriff-ch1-82ab", "Boost=on",  "Plate",    15.0f, 15.0f },
+                   { "v4-sheriff-ch1-82ab", "Boost=off", "Plate",    15.0f, 8.0f  },
+                   { "v4-sheriff-ch1-82ab", "Boost=on",  "Plate",    15.0f, 8.0f  },
                    { "v4-kraken-ch1-f7fc",  "Boost=off", "Plate",    15.0f, 0.0f  },
                    { "v4-kraken-ch1-f7fc",  "Boost=on",  "Plate",    15.0f, 0.0f  },
                },
