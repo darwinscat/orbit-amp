@@ -987,7 +987,6 @@ set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "V
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini" ORBITAMP_RELEASED REGEX "^amps=")
 string(REGEX REPLACE "^amps=" "" ORBITAMP_RELEASED "${ORBITAMP_RELEASED}")
 separate_arguments(ORBITAMP_RELEASED)
-set(ORBITAMP_SHIPS_EVERY_PACK ON)
 if(NOT ORBITAMP_DEV_FACTORY)
     set(kept "")
     set(left "")
@@ -1002,12 +1001,21 @@ if(NOT ORBITAMP_DEV_FACTORY)
     foreach(pack IN LISTS left)
         if(NOT pack IN_LIST kept)
             list(REMOVE_ITEM ORBITAMP_PLAYS "${pack}")
-            set(ORBITAMP_SHIPS_EVERY_PACK OFF)
         endif()
     endforeach()
 endif()
 list(LENGTH ORBITAMP_PLAYS ORBITAMP_SET_COUNT)
 message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the factory folder")
+# Which of the rovers' devices OrbitAmp plays here, for its set gate: the ReVolt with FrostPawAmp, the V4 with
+# AmberPawAmp — each in a release only when its amp is.
+foreach(amp FROSTPAWAMP AMBERPAWAMP)
+    list(GET ${amp}_SET 0 first)
+    if(first IN_LIST ORBITAMP_PLAYS)
+        set(${amp}_PACKS_IN_ORBITAMP 1)
+    else()
+        set(${amp}_PACKS_IN_ORBITAMP 0)
+    endif()
+endforeach()
 
 # ----------------------------------------------------------------------------
 # Embedded assets. The display FACE is not among them: appkit carries Michroma itself, whole, as
@@ -2054,7 +2062,8 @@ juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
 target_sources(orbitamp_set_test PRIVATE tests/OrbitAmpSetTests.cpp)
 target_include_directories(orbitamp_set_test PRIVATE src)
 target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-    ORBITAMP_SHIPS_EVERY_PACK=$<BOOL:${ORBITAMP_SHIPS_EVERY_PACK}>)     # a release leaves the unreleased amps' packs out
+    ORBITAMP_PLAYS_REVOLT=${FROSTPAWAMP_PACKS_IN_ORBITAMP}      # a release leaves the unreleased amps' packs out
+    ORBITAMP_PLAYS_V4=${AMBERPAWAMP_PACKS_IN_ORBITAMP})
 target_link_libraries(orbitamp_set_test PRIVATE
     OrbitAmpCabinetCatalog           # the family's cabinet shelf, by the catalog's table
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz

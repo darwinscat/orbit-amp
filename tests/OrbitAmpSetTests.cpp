@@ -44,13 +44,14 @@ int main()
 
     // What OrbitAmp plays, by the names its list shows them by: a pack that went missing from the tree
     // would otherwise go missing from the product without a word. A release leaves out the packs of the
-    // amps it does not carry — the ReVolt's and the V4's (CMakeLists.txt: A RELEASE SHIPS NO PACK OF AN AMP
-    // IT LEAVES OUT); built here, OrbitAmp plays them all.
+    // amps it does not carry — the ReVolt's without FrostPawAmp, the V4's without AmberPawAmp (CMakeLists.txt:
+    // A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT); built here, OrbitAmp plays them all.
     juce::StringArray wanted { "Soldano X88-IR Normal", "Soldano X88-IR Altered", "Soldano X88-IR Crunch", "Soldano X88-IR Overdrive",
                                "Friedman IR-X Ch1 PowerAmp", "Friedman IR-X Ch2 PowerAmp" };
-    if (ORBITAMP_SHIPS_EVERY_PACK)
-        wanted.addArray ({ "Two Notes ReVolt Clean PowerAmp", "Two Notes ReVolt Crunch PowerAmp", "Two Notes ReVolt Lead PowerAmp",
-                           "Victory V4 Copper (clean)", "Victory V4 Sheriff (crunch)", "Victory V4 Kraken (hi-gain)" });
+    if (ORBITAMP_PLAYS_REVOLT)
+        wanted.addArray ({ "Two Notes ReVolt Clean PowerAmp", "Two Notes ReVolt Crunch PowerAmp", "Two Notes ReVolt Lead PowerAmp" });
+    if (ORBITAMP_PLAYS_V4)
+        wanted.addArray ({ "Victory V4 Copper (clean)", "Victory V4 Sheriff (crunch)", "Victory V4 Kraken (hi-gain)" });
 
     juce::StringArray packs, cabinets, astray, missing;
     for (const auto& path : list)
@@ -70,8 +71,9 @@ int main()
     for (const auto& w : wanted)
         everyOne = everyOne && packs.contains (w);
     check (everyOne, juce::String ("the list names every pack OrbitAmp plays, the X88-IR's four and the IR-X's two")
-                         + (ORBITAMP_SHIPS_EVERY_PACK ? ", the ReVolt's three and the V4's three: " : ", and in a release no more: ")
-                         + packs.joinIntoString (", "));
+                         + (ORBITAMP_PLAYS_REVOLT ? ", the ReVolt's three" : "")
+                         + (ORBITAMP_PLAYS_V4 ? ", the V4's three" : "")
+                         + ", and no more: " + packs.joinIntoString (", "));
     check (astray.isEmpty(), "...and nothing but packs and cabinets — no face's pictures" + (astray.isEmpty() ? juce::String() : ": " + astray.joinIntoString (", ")));
     check (missing.isEmpty(), "every file it names is there, with something in it" + (missing.isEmpty() ? juce::String() : ": " + missing.joinIntoString (", ")));
 
@@ -137,10 +139,10 @@ int main()
             devices.add (d.name);
         for (const auto& f : shelf.folders)
             folders.add (f.name);
-        check (devices.joinIntoString (", ") == (ORBITAMP_SHIPS_EVERY_PACK ? "Friedman IR-X, Soldano X88-IR, Two Notes ReVolt, Victory V4"
-                                                                           : "Friedman IR-X, Soldano X88-IR"),
-               "the AMP's menu: the family's devices by maker and name — the Friedman IR-X, the Soldano X88-IR and, built here, the Two Notes ReVolt and the Victory V4: "
-                                                                  + devices.joinIntoString (", "));
+        const auto menu = juce::String ("Friedman IR-X, Soldano X88-IR") + (ORBITAMP_PLAYS_REVOLT ? ", Two Notes ReVolt" : "")
+                                                                         + (ORBITAMP_PLAYS_V4 ? ", Victory V4" : "");
+        check (devices.joinIntoString (", ") == menu,
+               "the AMP's menu: the family's devices by maker and name — " + menu + ": " + devices.joinIntoString (", "));
         check (folders.isEmpty(), "...and no folder of the factory's, OLD or any other: " + folders.joinIntoString (", "));
     }
 
