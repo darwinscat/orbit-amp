@@ -26,6 +26,9 @@ namespace
         const double v = std::abs (db) < 0.05 ? 0.0 : db;
         return (v > 0.0 ? "+" : "") + juce::String (v, 1);
     }
+
+    /** One of params::boostLevels as BOOST's key shows it: whole decibels, with the sign. */
+    juce::String boostLevelName (int db) { return (db > 0 ? "+" : "") + juce::String (db); }
 }
 
 /** The whole monitor, one picture: a kiosk component of its own with a fresh DeviceScope inside,
@@ -261,6 +264,20 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         sel.attachment->setValueAsCompleteGesture ((float) ((now + 1) % sel.values.size()));
     };
     boostKey.onMenu = [this] { showBoostMenu(); };   // ...and a right click, how much louder it is
+
+    // ...which the key's right part shows, and opens on a press: BOOST | +3.
+    {
+        juce::StringArray levels;
+        for (const int db : params::boostLevels)
+            levels.add (boostLevelName (db));
+        boostKey.setValueRoom (levels);
+    }
+    boostKey.setValueTooltip ("BOOST OUTPUT:   how much louder the amp leaves while BOOST is on");
+    boostKey.onValue = [this] { showBoostMenu(); };
+    boostLevelAttachment = std::make_unique<juce::ParameterAttachment> (
+        *amp.apvts.getParameter (params::boostLevel),
+        [this] (float v) { boostKey.setValue (boostLevelName (juce::roundToInt (v))); });
+    boostLevelAttachment->sendInitialUpdate();
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::blockGain (blk), gain);

@@ -170,8 +170,13 @@ private:
     std::unique_ptr<juce::ParameterAttachment> boostAttachment;
     bool boostShown = false;
 
-    /** A RIGHT CLICK ON BOOST: how much louder the amp leaves while it is on (params::boostLevel), the
-        current one ticked. One level for the whole amp, so every device's BOOST plays at it. */
+    /** BOOST'S LEVEL, the key's right part — "BOOST | +3 ▾": params::boostLevel, lit with the key and
+        dim while BOOST is out, so the level can be set before the boost is thrown. A press on it, or a
+        right click anywhere on the key, is the menu below. */
+    std::unique_ptr<juce::ParameterAttachment> boostLevelAttachment;
+
+    /** How much louder the amp leaves while BOOST is on (params::boostLevel), the current one ticked.
+        One level for the whole amp, so every device's BOOST plays at it. */
     void showBoostMenu();
 
     /** The block's own EQ, after the capture. Not a link that happens to be drawn here — the
