@@ -11,6 +11,7 @@
                 "url": "https://friedmanamplification.com/shop/pedals/friedman-ir-x/" },
       "tone_type": "hi-gain", "voicing": "dist", "circuit": "tube:2,dsp",
       "input_db": -4.0,
+      "output_db": -4.0,
       "controls": [
         { "name": "Tight", "role": "generic", "values": ["Tight", "Fat"] },
         { "name": "Boost", "role": "generic", "values": ["off", "on"] },
