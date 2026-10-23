@@ -105,8 +105,8 @@ public:
 
         // THE SLOT: a cut in the panel, in the bezel's black, the hairline round it — the wells' own
         // grammar, so it reads as part of the same instrument as the picture beside it.
-        const auto slot = juce::Rectangle<float> (slotX - slotW * 0.5f, yOf (0.0f) - slotOver,
-                                                  slotW, yOf ((float) (n - 1)) - yOf (0.0f) + 2.0f * slotOver);
+        const auto slot = juce::Rectangle<float> (slotX - slotW * 0.5f, slotEnd,
+                                                  slotW, juce::jmax (0.0f, (float) getHeight() - 2.0f * slotEnd));
         g.setColour (theme::bezel);
         g.fillRoundedRectangle (slot, slotW * 0.5f);
         g.setColour (theme::violet.withAlpha (0.45f));   // a lip a shade brighter than a hairline: a cut, not a mark
@@ -201,7 +201,6 @@ private:
     static constexpr float gripW    = 34.0f;
     static constexpr float gripH    = 12.0f;
     static constexpr float slotW    = 12.0f;
-    static constexpr float slotOver = 8.0f;     // how far the slot runs past its first and last place
     static constexpr float tickW    = 22.0f;
     static constexpr float slotX    = gripW * 0.5f + 1.0f;
     static constexpr float lampD    = 6.0f;
@@ -210,23 +209,18 @@ private:
     static constexpr float fontH    = 13.0f;
     static constexpr float tracking = 0.1f;
     static constexpr float keyH     = 24.0f;
-    static constexpr float edge     = slotOver + 2.0f;   // the first and last place, in from the ends
+    static constexpr float slotEnd  = 2.0f;     // the slot runs the room's whole height, this far in
 
-    float step() const noexcept
-    {
-        return numPlaces() > 1 ? ((float) getHeight() - 2.0f * edge) / (float) (numPlaces() - 1) : 0.0f;
-    }
+    // The room cut into one part more than there are places, the places on the cuts: two channels at a
+    // third and two thirds, four at the fifths — an empty run of slot above the first and below the
+    // last, as long as the step between two. One place stands in the middle.
+    float step() const noexcept { return (float) getHeight() / (float) (numPlaces() + 1); }
 
-    // The places run evenly from the top to the bottom of the room it was given — as tall as the
-    // picture beside it, however many channels the device has. One place stands in the middle.
-    float yOf (float t) const noexcept override
-    {
-        return numPlaces() > 1 ? edge + step() * t : (float) getHeight() * 0.5f;
-    }
+    float yOf (float t) const noexcept override { return step() * (t + 1.0f); }
 
     float travelAt (float y) const noexcept override
     {
-        return numPlaces() > 1 ? juce::jlimit (0.0f, (float) (numPlaces() - 1), (y - edge) / step()) : 0.0f;
+        return numPlaces() > 1 ? juce::jlimit (0.0f, (float) (numPlaces() - 1), y / step() - 1.0f) : 0.0f;
     }
 
     /** The grip: a dark bar across the slot, lit from above like a knob's cap, with the hand's orange
