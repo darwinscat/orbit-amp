@@ -164,6 +164,10 @@ private:
     LatchKey boostKey { "BOOST" };
     int boostIndex = -1;   // which of the selectors it is, or -1
 
+    /** A RIGHT CLICK ON BOOST: how much louder the amp leaves while it is on (params::boostLevel), the
+        current one ticked. One level for the whole amp, so every device's BOOST plays at it. */
+    void showBoostMenu();
+
     /** The block's own EQ, after the capture. Not a link that happens to be drawn here — the
         block owns it, its switch darkens it, and the curve's spectrum is this block's output. */
     EqSection eq;

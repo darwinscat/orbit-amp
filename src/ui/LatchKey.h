@@ -16,8 +16,8 @@ namespace orbitamp
     a LINE — an orange rim, orange type and a lamp that burns solid — never a wash; out, the panel's
     hairline, the dimmed type and a ring of the faint ink. 13 px, the face's floor for anything read.
 
-    Dumb view: a word in, lit or not, a press out through `onPress`. Which parameter it moves, and what
-    a press does to it, is the owner's business. */
+    Dumb view: a word in, lit or not, a press out through `onPress` and a right click through `onMenu`.
+    Which parameter it moves, what a press does to it and what the menu offers is the owner's business. */
 class LatchKey final : public juce::Component,
                        public juce::SettableTooltipClient
 {
@@ -40,6 +40,7 @@ public:
     bool isLit() const noexcept { return lit; }
 
     std::function<void()> onPress;
+    std::function<void()> onMenu;     // a right click, when set — and then it is not a press
 
     static constexpr int keyH = 24;
 
@@ -80,8 +81,15 @@ public:
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        if (! e.mods.isPopupMenu() && onPress != nullptr)
+        if (e.mods.isPopupMenu())
+        {
+            if (onMenu != nullptr)
+                onMenu();
+        }
+        else if (onPress != nullptr)
+        {
             onPress();
+        }
     }
 
 private:

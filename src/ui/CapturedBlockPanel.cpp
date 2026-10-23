@@ -255,6 +255,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
         const int now = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
         sel.attachment->setValueAsCompleteGesture ((float) ((now + 1) % sel.values.size()));
     };
+    boostKey.onMenu = [this] { showBoostMenu(); };   // ...and a right click, how much louder it is
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::blockGain (blk), gain);
@@ -1249,6 +1250,39 @@ void CapturedBlockPanel::setViz (int which)
     applySpectrumResolution();
     resized();
     repaint();
+}
+
+/** The five places, as decibels with their sign. The sound's, like everything on this panel: a session and
+    a preset keep it, and undo steps over it. */
+void CapturedBlockPanel::showBoostMenu()
+{
+    auto* level = amp.apvts.getParameter (params::boostLevel);
+    if (level == nullptr)
+        return;
+
+    const int now = juce::roundToInt (level->convertFrom0to1 (level->getValue()));
+
+    juce::PopupMenu m;
+    m.addSectionHeader ("BOOST OUTPUT");
+    for (int i = 0; i < (int) std::size (params::boostLevels); ++i)
+    {
+        const int db = params::boostLevels[i];
+        m.addItem (i + 1, (db > 0 ? "+" : "") + juce::String (db) + " dB", true, db == now);
+    }
+
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&boostKey),
+                     [safe = juce::Component::SafePointer<CapturedBlockPanel> (this)] (int r)
+                     {
+                         if (r <= 0 || safe == nullptr)
+                             return;
+
+                         if (auto* p = safe->amp.apvts.getParameter (params::boostLevel))
+                         {
+                             p->beginChangeGesture();
+                             p->setValueNotifyingHost (p->convertTo0to1 ((float) params::boostLevels[r - 1]));
+                             p->endChangeGesture();
+                         }
+                     });
 }
 
 /** Which of them is up. A menu rather than a row of checkboxes: the well has room for one picture,
