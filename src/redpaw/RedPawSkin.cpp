@@ -42,6 +42,13 @@ const channels::Lineup& marsLineup()
 const layout::Plan plan {
     // No plate under the cat: it is cut straight into the frame's raised step, as large as the badge's was.
     .emblemMark { 797.0f, 295.8f, 77.0f, 75.0f },
+
+    // ...and the maker's words either side of it, low on that step, their foot a little over a capital above
+    // its bottom edge (379), each in the middle of its half between the cat (797..874) and the step's slanted
+    // end (602, 1072).
+    .poweredBy { 699.0f, 365.0f },
+    .makerName { 972.0f, 365.0f },
+    .makerRoom = 110.0f,
 };
 
 const Skin& mars()

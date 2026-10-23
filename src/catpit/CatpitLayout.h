@@ -176,4 +176,11 @@ inline const std::array<juce::Point<float>, 6> emblemScrews {{
 inline constexpr float emblemScrew = 7.68f;      // their heads, across: 8 at the seat's size
 inline const juce::Rectangle<float> emblemMark { 787.08f, 246.56f, 97.92f, 96.00f };
 
+/** THE MAKER'S WORDS: the strip of plates right of the emblem and under it, over the tone knobs (358..383
+    down) — POWERED BY on the first plate (948..1142 across), DARWIN'S CAT on the next (1142..1302 inside its
+    slanted ends, the word ~160 wide). The box each is drawn in is wider than either word, so neither is cut. */
+inline const juce::Point<float> poweredByPlate { 1045.0f, 370.5f };
+inline const juce::Point<float> makerNamePlate { 1222.0f, 370.5f };
+inline constexpr float makerBox = 200.0f;
+
 } // namespace orbitamp::catpit::layout

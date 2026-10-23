@@ -77,6 +77,11 @@ const layout::Plan plan {
 
     // No plate under the cat: it stands straight on the frame's raised step, as large as the badge's was.
     .emblemMark { 797.0f, 295.8f, 77.0f, 75.0f },
+
+    // ...and the maker's words either side of it, where RedPawAmp has them: the step is the same.
+    .poweredBy { 699.0f, 365.0f },
+    .makerName { 972.0f, 365.0f },
+    .makerRoom = 110.0f,
 };
 
 const Skin& ice()

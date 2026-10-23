@@ -377,6 +377,11 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 
     // The tuner's name; its screen is the live TunerFace.
     drawLabel (g, "TUNER", juce::Rectangle<float> (200.0f, 26.0f).withCentre ({ tunerScreen.getCentreX(), 781.0f }), px13, labelLilac);
+
+    // The maker's words, on the plates right of the emblem: a size under the controls' names and a little
+    // quieter, as the rovers have them beside their mark.
+    drawLabel (g, "POWERED BY",   juce::Rectangle<float> (makerBox, 26.0f).withCentre (poweredByPlate), px11, labelLilac.withAlpha (0.8f));
+    drawLabel (g, "DARWIN'S CAT", juce::Rectangle<float> (makerBox, 26.0f).withCentre (makerNamePlate), px11, labelLilac.withAlpha (0.8f));
 }
 
 //==============================================================================
