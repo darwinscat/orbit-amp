@@ -322,6 +322,12 @@ protected:
     void showTurboMenu();           // how hard it pushes
     void chooseTurbo (int db);
 
+    // THE BOOST'S LEVEL (params::boostLevel) on TURBO's own menu: how much louder the amp leaves while
+    // TURBO is on. The sound's, unlike the push — a session and a preset keep it, undo steps over it. Under
+    // the push on the cockpit's menu; alone on a face whose TURBO is its pack's Boost held on (showBoostMenu).
+    void addBoostLevels (juce::PopupMenu&);
+    void showBoostMenu();
+
     // Tapping — see tapTempo. Anything that moves the state ends a count left open.
     void endTapping();
 

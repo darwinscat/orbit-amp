@@ -1343,7 +1343,8 @@ void Console::showGateMenu()
 }
 
 /** A RIGHT CLICK ON TURBO: how hard it pushes into the capture — here only, the settings menu leaves it to
-    TURBO. The machine's to say: every channel that has TURBO on comes back at the push in force. */
+    TURBO. The machine's to say: every channel that has TURBO on comes back at the push in force. And under
+    it, how much louder the amp leaves while TURBO is on. */
 void Console::showTurboMenu()
 {
     endTapping();
@@ -1355,6 +1356,26 @@ void Console::showTurboMenu()
     for (const int db : turboPushes)
         addChoice (menu, decibels (db), db == now, [db] (Console& e) { e.chooseTurbo (db); });
 
+    addBoostLevels (menu);
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+void Console::addBoostLevels (juce::PopupMenu& menu)
+{
+    const int now = juce::roundToInt (getParam (params::boostLevel));
+
+    menu.addSectionHeader ("TURBO OUTPUT");
+    for (const int db : params::boostLevels)
+        addChoice (menu, decibels (db), db == now, [db] (Console& e) { e.setParam (params::boostLevel, (float) db); });
+}
+
+/** A RIGHT CLICK ON TURBO, where TURBO is a channel: how much louder the amp leaves while it is on. */
+void Console::showBoostMenu()
+{
+    endTapping();
+
+    juce::PopupMenu menu;
+    addBoostLevels (menu);
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
 

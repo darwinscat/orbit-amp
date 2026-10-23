@@ -919,6 +919,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
         }
     };
     turbo.onPress = [this] { throwTurbo (! turboOf (channels.active())); };
+    turbo.onMenu  = [this] { showBoostMenu(); };   // a right click: how much louder the amp leaves while it is on
     addToStage (turbo);
     turbo.setBounds (juce::Rectangle<float> (skin.plan.turboSize, skin.plan.turboSize).withCentre (skin.plan.turbo).toNearestInt());
 
