@@ -7,7 +7,7 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [0.9.0] — 2026-10-21 — one plug-in per format, the packs at their measured levels, every amp on RED GIANT
+## [0.9.0] — 2026-10-23 — OrbitAmp's new face, FrostPawAmp joins, one plug-in per format, the packs at their measured levels
 
 ### Every amp
 
@@ -105,6 +105,20 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 ### OrbitAmp
 
 #### Changed
+- **A new face.** The AMP block is three sections now, where it was the device's keys and a scope over a
+  full-width EQ: GAIN, with SMOOTH and the pack's switches under it, one line each; the channels as a lever as
+  tall as the picture, with BOOST under it as a key of its own; and the picture well, the widest, with the
+  console's row under it — HPF, BASS, MIDDLE, TREBLE, LPF. The EQ curve is one of the well's pictures. The
+  block's IN meter stands first, at its left edge and its whole height, before GAIN.
+- Every block is 200 high, the AMP too, and each keeps its frame. DELAY is laid out as the reverb is: MIX in
+  the reverb's place, REPEATS, DARK and OFFSET small beside it, the picture the whole box; in the standalone a
+  TAP beside the BPM sets the delay's time from your last few taps.
+- The header is two lines beside the brand's two marks: OrbitAmp, undo and redo, the registers and the preset
+  on the first, the chain on the second. The tuner takes the left half of the bottom row, MUTE beside the
+  cents; the right half says what the amp runs at — stereo, rate, load — over DEVICES and the version.
+- **The window's width is free**, from its own (about 1.64 : 1) to 2.2 : 1: the height sets the size and the
+  width is laid out across — every knob keeps its size, the pictures and the EQ's spread widen. It opens at its
+  own width.
 - **The AMP menu names each device with its maker** — the Soldano X88-IR and the Friedman IR-X.
 - **The OLD group is gone**, and the old V4 captures in it with it: the V4 comes back with its new captures
   and an amp of its own.
@@ -114,6 +128,14 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 - **LEARN comes first in the GATE menu**, as it does on every face.
 - **The Devices window has one row a model**, with every serial it was recorded from when there is more than
   one, and no SLOT column.
+- **The Friedman IR-X Ch1's Bright** is named as the box has it: off in the middle of the toggle, and two
+  levels on, 1 and 2 — OFF, 1, 2, in that order, where it was BRIGHT 1, CENTER, BRIGHT 2. A channel on the
+  Ch1 that the hand has not been on opens with Bright off, as the box's first position; RedPawAmp's CRUNCH
+  among them. Oleh's export of 22.10.
+- A switch whose positions are only numbers, or off or on, says what it switches. By the rovers' keys its
+  name stands once over them and each key's position under it: BRIGHT over OFF · 1 · 2. The AMP's switch
+  writes the name before the position it is at: BRIGHT 1. A position with a word of its own is written as it
+  was: TIGHT · FAT.
 
 #### Fixed
 - **The Devices window counts the captures that were made**: every file of every channel of a box — 36 for the
@@ -143,6 +165,22 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 - **The keys right of HPF and LPF are the capture's switches** — one for each switch the channel lets the
   hand throw, as many as there are, in a frame of their own. The dimmed FAT, BRIGHT, DEPTH and PRESENCE,
   which waited for layers no capture carries, are gone.
+- Every channel opens on the PLATE reverb, the clean ones and the driven ones alike, where they opened on a
+  hall, a plate or an ambience each. Each channel still keeps its own room and its own share of it: pick
+  another on one channel and the others stay where they are.
+- The second channel with a delay behind it opens with about half as much — 8 % where it was 15 %: the
+  cockpit's EDGE, FrostPawAmp's and AmberPawAmp's CRUNCH. The first keeps 15 %, the driven ones none.
+- The cleaner a channel, the more reverb it opens with, and the more driven, the less — a driven sound
+  sustains and keeps the room full. The cockpit's CLEAN 20 %, EDGE 15, CRUNCH 12 and HI-GAIN 10, where all
+  four had 30; the rovers' CLEAN 20, CRUNCH 15 and HI-GAIN 10, where all had 15. A channel still keeps the
+  share it is turned to.
+
+#### Fixed
+- **A window that crashed on a computer with no graphics driver.** In a virtual machine, a Remote Desktop
+  session or on a build server, Windows hands a window the system's own OpenGL, which runs no shaders; the
+  cockpit's sky and the rovers' and the helicopter's view called it all the same, and the plug-in crashed as
+  its window opened. There they now take the CPU's picture, as they do where a shader will not build, and say
+  so in the family's log.
 
 ### RedPawAmp
 
@@ -166,12 +204,87 @@ Up to 0.7.0 this book was OrbitAmp's alone. The format follows
 - **The keys right of HPF and LPF are the capture's switches** — one for each switch the channel lets the
   hand throw, as many as there are, in a frame of their own. The dimmed FAT, BRIGHT, DEPTH and PRESENCE,
   which waited for layers no capture carries, are gone.
+- Every channel opens on the PLATE reverb, the clean ones and the driven ones alike, where they opened on a
+  hall, a plate or an ambience each. Each channel still keeps its own room and its own share of it: pick
+  another on one channel and the others stay where they are.
+- **The Friedman IR-X Ch1's Bright** is named as the box has it: off in the middle of the toggle, and two
+  levels on, 1 and 2 — OFF, 1, 2, in that order, where it was BRIGHT 1, CENTER, BRIGHT 2. A channel on the
+  Ch1 that the hand has not been on opens with Bright off, as the box's first position; RedPawAmp's CRUNCH
+  among them. Oleh's export of 22.10.
+- The gear lever's slot ends at the first gear: with PARK gone, RedPawAmp's and FrostPawAmp's slots are cut
+  short at the top, as far over the first gear as they run under the last, and AmberPawAmp's tick over its
+  first gear, where PARK stood, is painted over.
+- A switch whose positions are only numbers, or off or on, says what it switches. By the rovers' keys its
+  name stands once over them and each key's position under it: BRIGHT over OFF · 1 · 2. The AMP's switch
+  writes the name before the position it is at: BRIGHT 1. A position with a word of its own is written as it
+  was: TIGHT · FAT.
+- The cleaner a channel, the more reverb it opens with, and the more driven, the less — a driven sound
+  sustains and keeps the room full. The cockpit's CLEAN 20 %, EDGE 15, CRUNCH 12 and HI-GAIN 10, where all
+  four had 30; the rovers' CLEAN 20, CRUNCH 15 and HI-GAIN 10, where all had 15. A channel still keeps the
+  share it is turned to.
+
+#### Removed
+- **PARK.** The gear lever's places are its gears and nothing more: CRUNCH at the top, where a fresh
+  RedPawAmp stands, and HI-GAIN under it. Nothing on the dashboard takes the amp out of the sound any more —
+  no top end of the lever, no warning on the nav screen, no hatch shut over TURBO, no 0 or P key, no Program
+  Change 5 and no PARK parameter in a host. A session saved parked opens playing, on the channel it was
+  waiting on.
 
 #### Fixed
 - **Opening the window no longer stops the host now and then.** Building the landscape's slopes as the window
   opened read a little past the end of its height texture, and where nothing lay after it the host stopped
   (Cubase, switching between plug-ins). The slopes at one column of the texture were wrong too; they are right
   now.
+- **A window that crashed on a computer with no graphics driver.** In a virtual machine, a Remote Desktop
+  session or on a build server, Windows hands a window the system's own OpenGL, which runs no shaders; the
+  cockpit's sky and the rovers' and the helicopter's view called it all the same, and the plug-in crashed as
+  its window opened. There they now take the CPU's picture, as they do where a shader will not build, and say
+  so in the family's log.
+
+### FrostPawAmp
+
+This tree now builds a fourth product beside OrbitAmp, CatpitAmp and RedPawAmp: FrostPawAmp, a rover on an
+ice moon — RedPawAmp's dashboard in frosted stainless steel, over the same engine. It comes
+in the family's release beside them.
+
+#### Added
+- **The ReVolt Guitar on the ice moon** — FrostPawAmp's three gears are the ReVolt Guitar's three
+  channels, captured through its power amp: CLEAN its Clean, CRUNCH its Crunch, HI-GAIN its Lead, and
+  TURBO the same channel with its Boost on. CLEAN has two tone knobs, BASS and TREBLE, as the Clean
+  channel has; CRUNCH and HI-GAIN three, BASS, MID and TREBLE.
+- **FrostPawAmp** — the same dashboard as RedPawAmp, control for control, over six channels, picked as
+  three gears and TURBO — CLEAN, CRUNCH and HI-GAIN, TURBO each gear's second sound over the gear's own
+  DRIVE, tone, reverb, delay and cabinet, and a gear pulled coming back with TURBO as it was left; DRIVE and
+  the three tone knobs with their rings, the six
+  keys, the roof's history and registers, REVERB, DELAY and CAB, the INPUT and OUTPUT columns, GATE's
+  threshold and LIMITER's ceiling on their corner faders, the tuner and the nav screen; the same keys,
+  and MIDI Program Change 1–6 for its six channels. Its own picture and renders — frosted
+  steel, amber lamps, ice-blue rings — its own settings, and RedPawAmp's packs and cabinets among its
+  own, laid out once for both.
+- **OrbitAmp plays this amp's packs too** — the Two Notes ReVolt Guitar's Clean, Crunch and Lead and the
+  Victory V4's Copper, Sheriff and Kraken are in OrbitAmp's AMP menu from the release that carries this amp.
+
+#### Changed
+- Every channel opens on the PLATE reverb, the clean ones and the driven ones alike, where they opened on a
+  hall, a plate or an ambience each. Each channel still keeps its own room and its own share of it: pick
+  another on one channel and the others stay where they are.
+- **The cat stands straight on the dashboard**, flat, in a neutral white, where the painted hexagon plate was.
+- The gear lever's slot ends at the first gear: with PARK gone, RedPawAmp's and FrostPawAmp's slots are cut
+  short at the top, as far over the first gear as they run under the last, and AmberPawAmp's tick over its
+  first gear, where PARK stood, is painted over.
+- The second channel with a delay behind it opens with about half as much — 8 % where it was 15 %: the
+  cockpit's EDGE, FrostPawAmp's and AmberPawAmp's CRUNCH. The first keeps 15 %, the driven ones none.
+- The cleaner a channel, the more reverb it opens with, and the more driven, the less — a driven sound
+  sustains and keeps the room full. The cockpit's CLEAN 20 %, EDGE 15, CRUNCH 12 and HI-GAIN 10, where all
+  four had 30; the rovers' CLEAN 20, CRUNCH 15 and HI-GAIN 10, where all had 15. A channel still keeps the
+  share it is turned to.
+
+#### Fixed
+- **A window that crashed on a computer with no graphics driver.** In a virtual machine, a Remote Desktop
+  session or on a build server, Windows hands a window the system's own OpenGL, which runs no shaders; the
+  cockpit's sky and the rovers' and the helicopter's view called it all the same, and the plug-in crashed as
+  its window opened. There they now take the CPU's picture, as they do where a shader will not build, and say
+  so in the family's log.
 
 ## [0.8.0] — 2026-10-19 — Darwin's Cat Amps: OrbitAmp, CatpitAmp and RedPawAmp in one installer
 
