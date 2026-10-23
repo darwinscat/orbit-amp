@@ -15,6 +15,7 @@
 #include "ui/LearnOverlay.h"
 #include "ui/DragRuler.h"
 #include "ui/TunerStrip.h"
+#include "ui/GuardRail.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 #include "ui/LayoutStrip.h"
 #include "ui/SetupPanel.h"
@@ -163,13 +164,17 @@ private:
         the ONE place blocks are stood by and brought back. Built in the constructor because its
         rows come from a table the header cannot see. */
     std::unique_ptr<LayoutStrip> layoutStrip;
-    /** The gate, with no face of its own — its door is the strip's arrow. DECLARED BEFORE the
+    /** The gate's console — its menu and LEARN; its face is the rail and the lamp at IN. DECLARED BEFORE the
         overlay on purpose: the overlay draws LEARN's trace from a pointer into this object, and
         members die in reverse order, so the reader has to go first. */
     GateConsole   gateConsole;
     HumLearner    humLearner;       // the hum's own LEARN, from the IN column's menu — never with the gate's
     VolumeColumn  inColumn;         // the input's level and its hand, left of the faceplate
     VolumeColumn  outColumn;        // the output's, mirrored, right of it
+    GuardRail     gateRail;         // the gate's threshold, on IN's inner side
+    GuardRail     limitRail;        // the limiter's ceiling, on OUT's
+    GuardLamp     gateLamp;         // the gate's light, under IN
+    GuardLamp     limitLamp;        // the limiter's, under OUT
     TunerStrip    tunerStrip;       // the always-on needle, between the guards
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player

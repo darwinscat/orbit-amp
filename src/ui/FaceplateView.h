@@ -140,7 +140,7 @@ private:
 
     /** Who stands on the panel, indexed by Block. The core three out of the box; the delay is
         reached for, not found already on. */
-    std::array<bool, 4> shownFlags { true, false, true, true };
+    std::array<bool, 4> shownFlags { true, true, true, true };
 
     bool fillsHeight = true;   // see setFillsHeight
 

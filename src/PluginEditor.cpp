@@ -17,6 +17,17 @@ AmpEditor::AmpEditor (AmpProcessor& p)
                  *p.apvts.getParameter (params::inTrim)),
       outColumn (VolumeColumn::Side::out, p.outDb,     p.outClip,
                  *p.apvts.getParameter (params::outTrim)),
+      gateRail  (*p.apvts.getParameter (params::gateThreshold), *p.apvts.getParameter (params::gateOn),
+                 -80.0f, 0.0f, true, -50.0f),
+      limitRail (*p.apvts.getParameter (params::limiterCeiling), *p.apvts.getParameter (params::limiterOn),
+                 params::limiterCeilingMin, params::limiterCeilingMax, false, -1.0f),
+      // Silence is not work: with nothing at the key (the -90 floor) the gate has nothing to press, and
+      // a light that burns all night means nothing by morning.
+      gateLamp  ("GATE", *p.apvts.getParameter (params::gateOn),
+                 [&p] { return p.gateKeyDb.load() <= -89.5f ? 0.0f : -p.gateMeterDb.load() / 40.0f; },
+                 p.gateWorked),
+      limitLamp ("LIMIT", *p.apvts.getParameter (params::limiterOn),
+                 [&p] { return -p.limiterGrDb.load() / 6.0f; }, p.limiterWorked),
       gateConsole (p.apvts, p.gateKeyDb),
       humLearner (p.product(), p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
@@ -32,6 +43,25 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     tooltips.setColour (juce::TooltipWindow::outlineColourId, theme::hair2);
     addAndMakeVisible (inColumn);
     addAndMakeVisible (outColumn);
+    addAndMakeVisible (gateRail);
+    addAndMakeVisible (limitRail);
+    addAndMakeVisible (gateLamp);
+    addAndMakeVisible (limitLamp);
+
+    // THE GUARDS LIVE AT THE ENDS: the gate at the way in, the limiter at the way out. Their menus
+    // open from their rails, their lamps and — the gate's — the IN column itself; a look at the lamp
+    // clears its dot.
+    const auto gateMenu  = [this] (juce::Point<int> pos) { amp.gateWorked.store (false);    gateConsole.showMenu (pos); };
+    const auto limitMenu = [this] (juce::Point<int> pos) { amp.limiterWorked.store (false); showLimiterMenu (pos); };
+    gateRail.onMenu   = gateMenu;
+    gateLamp.onClick  = gateMenu;
+    limitRail.onMenu  = limitMenu;
+    limitLamp.onClick = limitMenu;
+    outColumn.onMenu  = limitMenu;
+    if constexpr (features::hum)   // the input column's menu is HUM's in the build that has it (Features.h)
+        inColumn.onMenu = [this] (juce::Point<int> pos) { showInputMenu (pos); };
+    else
+        inColumn.onMenu = gateMenu;
     addAndMakeVisible (tunerStrip);
     tunerStrip.mute.attach (*p.apvts.getParameter (params::tunerMute));
     addAndMakeVisible (footer);
@@ -209,8 +239,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
 
     inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
-    if constexpr (features::hum)   // the input column's menu is HUM's alone: with HUM off there is none (Features.h)
-        inColumn.onMenu  = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
@@ -486,17 +514,30 @@ void AmpEditor::resized()
     const int gutterH = juce::jmax (0, faceplateH - FaceplateView::contentTop
                                                   - FaceplateView::contentBottom);
 
-    // The side columns always stand: the way in and the way out.
+    // The side columns always stand: the way in and the way out, each with its guard's rail on the
+    // inner side and its guard's lamp under both — the lamp's foot on the blocks' foot.
     const int edgeInset = 12;
-    const int colL = VolumeColumn::designWidth + chromeGap;
-    const int colR = VolumeColumn::designWidth + chromeGap;
+    const int sideW = VolumeColumn::designWidth + GuardRail::designWidth;
+    const int colL  = sideW + chromeGap;
+    const int colR  = sideW + chromeGap;
+    const int lampGap = 6;
+    const int railH = juce::jmax (0, gutterH - GuardLamp::designHeight - lampGap);
+    const int lampY = gutterY + gutterH - GuardLamp::designHeight;
 
-    inColumn.setBounds (margin, gutterY, VolumeColumn::designWidth, gutterH);
+    inColumn.setBounds (margin, gutterY, VolumeColumn::designWidth, railH);
     inColumn.setTransform (zoom);
+    gateRail.setBounds (margin + VolumeColumn::designWidth, gutterY, GuardRail::designWidth, railH);
+    gateRail.setTransform (zoom);
+    gateLamp.setBounds (margin, lampY, sideW, GuardLamp::designHeight);
+    gateLamp.setTransform (zoom);
 
     outColumn.setBounds (margin + designW - VolumeColumn::designWidth, gutterY,
-                        VolumeColumn::designWidth, gutterH);
+                        VolumeColumn::designWidth, railH);
     outColumn.setTransform (zoom);
+    limitRail.setBounds (margin + designW - sideW, gutterY, GuardRail::designWidth, railH);
+    limitRail.setTransform (zoom);
+    limitLamp.setBounds (margin + designW - sideW, lampY, sideW, GuardLamp::designHeight);
+    limitLamp.setTransform (zoom);
 
     faceplate.setBounds (margin + colL, faceplateY,
                          designW - colL - colR, faceplateH);
@@ -514,10 +555,9 @@ void AmpEditor::resized()
     tunerStrip.setTransform (zoom);
 
     // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
-    inRuler.setBounds (margin + colL - chromeGap + 2, gutterY, 56, gutterH);
+    inRuler.setBounds (margin + colL - chromeGap + 2, gutterY, 56, railH);
     inRuler.setTransform (zoom);
-    outRuler.setBounds (margin + designW - VolumeColumn::designWidth - 58, gutterY,
-                        56, gutterH);
+    outRuler.setBounds (margin + designW - sideW - 58, gutterY, 56, railH);
     outRuler.setTransform (zoom);
 
     // The learn sheet: half the plugin, centred over the faceplate.
