@@ -181,7 +181,7 @@ private:
     const Skin& skin;               // the rover's whose ring it is: its light
     const face::ArtKnob& knob;
     float radius, width;
-    float shown = -1.0f;            // the value last drawn
+    float shown = -1.0f;            // the value the whole ring is drawn at, taken with its repaint (timerCallback)
     face::Glide breath;             // 0 resting .. 1 under the hand
     double leftAt = 0.0;            // when the hand last left, on the millisecond counter
     bool touched = false;

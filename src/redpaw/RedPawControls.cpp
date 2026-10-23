@@ -430,15 +430,24 @@ void KnobRing::timerCallback()
     touched = now;
     breath.target = now || ms - leftAt < breathHoldMs ? 1.0f : 0.0f;
 
+    // WHERE THE ARC ENDS IS TAKEN HERE, with the repaint of the whole ring, and never in paint. Paint also
+    // runs for a corner of the ring alone — the knob's own repaint, its square over the ring's diagonals,
+    // every time the hand turns it — and an arc that took the value there drew its new end in that corner
+    // while the rest of the ring kept the old one, and then counted itself drawn: the ring stood torn,
+    // in steps and pieces, until the glow eased away a second later and drew it all.
     const bool easing = breath.step (1.0f / 30.0f);
-    const bool moved = std::abs (knob.getValue() - shown) > 1.0e-4f;
-    if (easing || moved)
+    const float value = knob.getValue();
+    if (easing || std::abs (value - shown) > 1.0e-4f)
+    {
+        shown = value;
         repaint();
+    }
 }
 
 void KnobRing::paint (juce::Graphics& g)
 {
-    shown = knob.getValue();
+    if (shown < 0.0f)               // before the first tick: where the knob stands
+        shown = knob.getValue();
     const auto c = getLocalBounds().toFloat().getCentre();
     const float b = juce::jlimit (0.0f, 1.0f, breath.value);
 
