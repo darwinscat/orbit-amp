@@ -137,17 +137,20 @@ public:
 
             for (int i = 0; i < params::numSelectors; ++i)
                 set (params::selectorId (params::preampId, i), (float) opening.sel[(size_t) i]);
+
+            set (params::preampBoost, 0.0f);     // BOOST off, as a pack's own Boost switch opens
         }
 
         amp.settleDeviceNames();
         return true;
     }
 
-    /** What a channel keeps: DRIVE and SMOOTH, the tone knobs, the pack's switches, and the block's
-        whole EQ — its mode, its bands, its level — every parameter the console's id prefix names. */
+    /** What a channel keeps: DRIVE and SMOOTH, the tone knobs, the pack's switches and BOOST where it
+        has none, and the block's whole EQ — its mode, its bands, its level — every parameter the
+        console's id prefix names. */
     juce::StringArray kept() const
     {
-        juce::StringArray ids { params::preampGain, params::blockSmooth (params::preampId) };
+        juce::StringArray ids { params::preampGain, params::blockSmooth (params::preampId), params::preampBoost };
 
         for (int i = 0; i < params::preampNumMeasured; ++i)
             ids.add (params::preampMeasured (i));

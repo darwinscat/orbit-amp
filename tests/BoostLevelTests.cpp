@@ -27,6 +27,7 @@
 
 #include <juce_events/juce_events.h>
 
+#include "AmpChannels.h"
 #include "PluginProcessor.h"
 #include "channels/Engine.h"
 #include "channels/Presets.h"
@@ -226,7 +227,7 @@ namespace
 
     /** OrbitAmp's first pack that has a Boost switch, and the selector slot it is in; and its first pack
         that has no switch at all — the X88-IR's. Leaves it on the latter. */
-    struct OrbitPacks { int boost = -1, slot = -1, plain = -1; };
+    struct OrbitPacks { int boost = -1, slot = -1, plain = -1, plain2 = -1; };
 
     OrbitPacks findPacks (AmpProcessor& amp)
     {
@@ -235,6 +236,8 @@ namespace
         {
             setParam (amp, params::preampDevice, (float) i);
             const auto sel = amp.preamp.selectors();
+            if (sel.isEmpty() && o.plain >= 0 && o.plain2 < 0)
+                o.plain2 = i;
             if (sel.isEmpty() && o.plain < 0)
                 o.plain = i;
             for (int s = 0; s < sel.size() && o.boost < 0; ++s)
@@ -530,6 +533,22 @@ int main()
         const float at16 = twins (9.0f, 10.0f, 3.0f), at17 = twins (10.0f, 10.0f, 6.0f);
         check (at16 < 1.0e-6f, "...BOOST at 16:00 plays what 17:00 fed 3 dB harder plays, " + juce::String (at16) + " apart at most");
         check (at17 < 1.0e-6f, "...BOOST at 17:00 plays what 17:00 fed 6 dB harder plays, " + juce::String (at17) + " apart at most");
+
+        // A CHANNEL KEEPS ITS BOOST, as it keeps a pack's own switch: left on, it is on when the hand comes
+        // back; one never visited opens with it off.
+        {
+            auto c = make (orbitAmp());
+            setParam (*c, params::preampDevice, (float) packs.plain);
+            setParam (*c, params::preampBoost, 1.0f);
+            AmpChannels channels (*c);
+            const bool went = channels.play (packs.plain2);
+            c->pumpDeviceWork();
+            const bool offThere = param (*c, params::preampBoost) < 0.5f;
+            const bool back = channels.play (packs.plain);
+            c->pumpDeviceWork();
+            check (packs.plain2 >= 0 && went && offThere && back && param (*c, params::preampBoost) > 0.5f,
+                   "...BOOST on, another channel never visited opens with it off, and coming back finds it on");
+        }
 
         // THROWN WHILE PLAYING, at 16:00: the capture goes a step up the dial the way a hand takes it
         // there, crossfaded by the player, and the push ramps in over 20 ms rather than a block.

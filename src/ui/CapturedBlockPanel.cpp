@@ -240,12 +240,17 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     device.onOpen = [this] { showDeviceMenu(); };
 
     // BOOST: a press is the next position round — OFF to ON and back, for the two-way switch every
-    // pack so far has; the attachment the selector builds lights the key back (buildSelectors).
+    // pack so far has; the attachment the selector builds lights the key back (buildSelectors). On a
+    // pack without one, a press throws preamp_boost.
     addChildComponent (boostKey);
     boostKey.onPress = [this]
     {
         if (! juce::isPositiveAndBelow (boostIndex, params::numSelectors))
+        {
+            if (boostAttachment != nullptr)
+                boostAttachment->setValueAsCompleteGesture (boostKey.isLit() ? 0.0f : 1.0f);
             return;
+        }
 
         auto& sel = selectors[(size_t) boostIndex];
         if (sel.attachment == nullptr || sel.values.isEmpty())
@@ -845,6 +850,18 @@ void CapturedBlockPanel::buildSelectors()
             break;
         }
 
+    // ...and none: the key throws preamp_boost instead, on any pack that plays.
+    boostAttachment.reset();
+    boostShown = boostIndex >= 0 || block.selectedName().isNotEmpty();
+    if (boostIndex < 0 && boostShown)
+    {
+        boostKey.setTooltip (juce::String ("BOOST:   two captures up the GAIN dial, past its top 3 dB harder a step"));
+        boostAttachment = std::make_unique<juce::ParameterAttachment> (
+            *amp.apvts.getParameter (params::preampBoost),
+            [this] (float v) { boostKey.setLit (v > 0.5f); });
+        boostAttachment->sendInitialUpdate();
+    }
+
     for (int i = 0; i < params::numSelectors; ++i)
     {
         auto& sel = selectors[(size_t) i];
@@ -1020,15 +1037,15 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
     }
 
     // ---- section 2: the lever, as tall as the picture beside it, and BOOST under it — or nothing
-    //      there, for a pack that has no boost: the place stays, the sections do not close up. ----
+    //      there, for an empty block: the place stays, the sections do not close up. ----
     if (lever != nullptr)
     {
         const int w = juce::jmin (s2.getWidth(), juce::roundToInt (ChannelLever::idealWidth (lever->channelNames())) + 2);
         lever->setBounds (s2.withSizeKeepingCentre (w, s2.getHeight()));
     }
 
-    boostKey.setVisible (boostIndex >= 0);
-    if (boostIndex >= 0)
+    boostKey.setVisible (boostShown);
+    if (boostShown)
         boostKey.setBounds (strip2.withSizeKeepingCentre (juce::jmin (strip2.getWidth(), boostKey.idealWidth()),
                                                          LatchKey::keyH));
 }
@@ -1051,7 +1068,7 @@ void CapturedBlockPanel::setControlsVisible (bool v)
     if (lever != nullptr)
         lever->setVisible (v);
 
-    boostKey.setVisible (v && boostIndex >= 0);
+    boostKey.setVisible (v && boostShown);
 
     for (auto& slot : slots)
     {

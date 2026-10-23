@@ -164,6 +164,12 @@ private:
     LatchKey boostKey { "BOOST" };
     int boostIndex = -1;   // which of the selectors it is, or -1
 
+    /** ...and on a pack with no Boost switch — the X88-IR's — the key is still BOOST, thrown on
+        params::preampBoost: the capture played two positions up the dial, the knob where it stands.
+        Any pack that plays has the key; only an empty block has none. */
+    std::unique_ptr<juce::ParameterAttachment> boostAttachment;
+    bool boostShown = false;
+
     /** A RIGHT CLICK ON BOOST: how much louder the amp leaves while it is on (params::boostLevel), the
         current one ticked. One level for the whole amp, so every device's BOOST plays at it. */
     void showBoostMenu();
