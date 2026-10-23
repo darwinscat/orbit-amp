@@ -334,14 +334,19 @@ inline const juce::StringArray stereoModes { "Mono", "Stereo", "Stereo Space" };
 enum class StereoMode { mono, stereo, stereoSpace };
 
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first.
+    The site's demo loops, the same takes under the same names and in its order.
 
     The audio is NOT shipped: it is read at run time from the dev machine's private folder, and
     when that folder is absent the player and its menu entry are absent with it. The binary is the
     same either way — presence of the folder is the whole switch. */
-inline const juce::StringArray demoLoops { "GGG", "Eleven Light Years", "Cats Hard Day",
-                                           "Deep Space Is My Home", "Fifth Dimension" };
-inline constexpr const char* demoLoopFiles[] = { "ggg.wav", "eleven-light-years.wav",
-                                                 "cats-hard-day.wav", "deep-space-is-my-home.wav",
+inline const juce::StringArray demoLoops { "Eleven Light Years 1", "Eleven Light Years 2", "Eleven Light Years 3",
+                                           "Eleven Light Years 4", "Deep Space Is My Home 1",
+                                           "Deep Space Is My Home 2", "Cat's Hard Day", "I Am Projection",
+                                           "Fifth Dimension" };
+inline constexpr const char* demoLoopFiles[] = { "eleven-light-years-1.wav", "eleven-light-years-2.wav",
+                                                 "eleven-light-years-3.wav", "eleven-light-years-4.wav",
+                                                 "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav",
+                                                 "cats-hard-day.wav", "i-am-projection.wav",
                                                  "fifth-dimension.wav" };
 
 inline juce::File demoLoopsDir()
