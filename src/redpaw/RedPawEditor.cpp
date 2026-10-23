@@ -553,9 +553,7 @@ void RedPawEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     ring->setProperty ("from", KnobRing::from);
     ring->setProperty ("sweep", KnobRing::sweep);
     ring->setProperty ("light", colour (skin.ringLight));
-    ring->setProperty ("veil", colour (juce::Colour (KnobRing::veil)));
-    ring->setProperty ("veilAlpha", KnobRing::veilAlpha);
-    ring->setProperty ("veilWider", KnobRing::veilWider);
+    ring->setProperty ("rest", colour (KnobRing::restOf (skin.ringLight)));     // the whole ring, under the lit arc: the pictures paint none
     ring->setProperty ("litAlpha", KnobRing::litAlpha);
     ring->setProperty ("litAlphaHand", KnobRing::litAlphaHand);
     ring->setProperty ("glowAlpha", KnobRing::glowAlpha);

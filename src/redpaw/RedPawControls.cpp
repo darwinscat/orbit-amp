@@ -452,11 +452,12 @@ void KnobRing::paint (juce::Graphics& g)
         face::drawHandRim (g, rim, orange.withAlpha (rimAlpha * b));
     }
 
-    // The rest of the ring dimmed: the painted cyan under a dark veil.
+    // The rest of the ring, dim: a band of the ring's width, all the way round, in its light taken down
+    // toward the dark — one closed band, so that no seam shows where a circle's ends would meet.
     juce::Path whole;
-    whole.addCentredArc (c.x, c.y, radius, radius, 0.0f, 0.0f, juce::MathConstants<float>::twoPi, true);
-    g.setColour (juce::Colour (veil).withAlpha (veilAlpha));
-    g.strokePath (whole, juce::PathStrokeType (width + veilWider));
+    whole.addEllipse (juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (c));
+    g.setColour (restOf (skin.ringLight));
+    g.strokePath (whole, juce::PathStrokeType (width));
 
     // From the start of the travel to the pointer, lit: the arc made a band of the ring's own width
     // first, so that the glow and the light are that band and nothing else — a shadow drawn for the

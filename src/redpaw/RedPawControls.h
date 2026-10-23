@@ -147,13 +147,16 @@ private:
 };
 
 //==============================================================================
-/** THE RING ROUND A KNOB: the cyan ring the dashboard paints round each knob's socket, made to say where
-    the knob stands — lit from the start of its travel to where its pointer is, the rest dimmed. It
-    breathes only when it matters: under the hand, or while the knob turns, it brightens softly, and
-    about a second after the hand has gone it eases back. Nothing moves on it otherwise.
+/** THE RING ROUND A KNOB: the ring round each knob's socket, made to say where the knob stands — lit
+    from the start of its travel to where its pointer is, the rest dim. It breathes only when it matters:
+    under the hand, or while the knob turns, it brightens softly, and about a second after the hand has
+    gone it eases back. Nothing moves on it otherwise.
 
-    It watches its knob (a dumb view watching another) and lies over the picture round it, `radius`
-    from the socket's middle and `width` wide, as the ring was painted; it never takes a click. */
+    It is the whole ring: the pictures had one painted in the groove round each socket, and tools/bake-art
+    takes it out of them, for a painted ring is no true circle — it wandered out from under a true one in
+    slivers, and in under it in steps at the lit band's edge. It watches its knob (a dumb view watching
+    another) and lies in that groove, `radius` from the socket's middle and `width` wide, where the ring
+    was painted; it never takes a click. */
 class KnobRing final : public juce::Component, private juce::Timer
 {
 public:
@@ -167,8 +170,9 @@ public:
 
     // What it is drawn with — said here so that the site's demo is drawn with it too (RedPawEditor::webExtras).
     static constexpr float from = -135.0f, sweep = 270.0f;      // a knob's travel, as ArtKnob turns it
-    static constexpr juce::uint32 veil = 0xff05090b;             // the painted ring dimmed under it...
-    static constexpr float veilAlpha = 0.62f, veilWider = 1.5f;  // ...this much, and this much wider than the ring
+    static constexpr juce::uint32 restDark = 0xff05090b;         // the rest of the ring: its light taken toward this dark...
+    static constexpr float restDim = 0.62f;                      // ...this far, as the painted ring looked under the veil that dimmed it
+    static juce::Colour restOf (juce::Colour light) { return light.interpolatedWith (juce::Colour (restDark), restDim); }
     static constexpr float litAlpha = 0.7f, litAlphaHand = 0.3f;         // the lit arc, and how much more under the hand
     static constexpr float glowAlpha = 0.35f, glowAlphaHand = 0.4f, glowRadius = 3.0f, glowRadiusHand = 4.0f;
     static constexpr float rimOfKnob = 0.46f, rimAlpha = 0.8f;   // under the hand, an orange rim round the cap, of the knob's width
