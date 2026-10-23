@@ -509,6 +509,11 @@ inline constexpr int rowForStage (Stage s)
     whose knobs and switches give every amp's their defaults (Parameters.cpp, blockDefaults). */
 inline constexpr const char* enginePack = "Soldano X88-IR Crunch";
 
+/** THE CHANNEL A DEVICE OPENS ON where it is not its first — the first time the hand picks the device,
+    before it was ever left on one (AmpChannels::openingOf) — by the pack's `rig_id`. The Friedman IR-X
+    opens on its Channel 2 (Oleh, 24.10). */
+inline constexpr const char* openingChannels[] = { "ir-x-ch2-poweramp-67e9" };
+
 /** WHERE A FRESH INSTANCE STANDS, wherever that is not where the engine stands: the defaults createLayout
     gives the few parameters a product, or the place it runs in, opens elsewhere. A parameter's default
     is what a fresh instance IS — what a host shows as its default, resets it to, and holds a new instance

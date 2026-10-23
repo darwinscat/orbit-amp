@@ -59,13 +59,19 @@ public:
         return juce::isPositiveAndBelow (i, packs.size()) ? i : 0;
     }
 
-    /** The channel a device opens on when the hand picks it: the one it was last left on, its first
-        otherwise. */
+    /** The channel a device opens on when the hand picks it: the one it was last left on, otherwise
+        the one params::openingChannels names for it, otherwise its first. */
     int openingOf (const Library::Device& d) const
     {
         const auto n = node();
         int best = d.channels.isEmpty() ? -1 : d.channels.getFirst();
         int bestTurn = 0;
+
+        for (const int c : d.channels)
+            if (juce::isPositiveAndBelow (c, amp.preamp.packs.size()))
+                for (const auto* id : params::openingChannels)
+                    if (amp.preamp.packs.getReference (c).rigId == id)
+                        best = c;
 
         for (const int c : d.channels)
         {
