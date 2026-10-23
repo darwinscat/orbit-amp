@@ -62,6 +62,8 @@ public:
         player.prepare (sampleRate, maxBlock, numChannels);
         ribbon.prepare (sampleRate);
         curDrive = drive.load();
+        pushGain.reset (sampleRate, pushRampSeconds);
+        pushGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (push.load (std::memory_order_relaxed)));
         lastGain = -1.0f;
         lastTone.fill (-1.0f);
     }
@@ -229,8 +231,17 @@ public:
         anywhere and the player mixes the two neighbouring captures by angle; STEP lands it on the
         nearest captured position, so one capture plays at a time and the knob reads like a
         selector. A device with no captured axis has nothing to select, so there the knob DRIVES:
-        5 is unity, the middle of the dial is the capture as it was taken. Message thread. */
-    void setGain (float gain, bool smooth)
+        5 is unity, the middle of the dial is the capture as it was taken.
+
+        `turbo` is THE BOOST OF A PACK THAT HAS NONE OF ITS OWN (params::preampBoost): the capture
+        turboSteps captured positions up the dial from where the knob stands — 7:00 plays 9:00, 9:00
+        plays 11:00 — the knob itself staying where the hand left it. A step the dial does not have
+        above its top capture is fed into the top capture instead, turboDbPerStep a step: 16:00 plays
+        17:00 3 dB hotter, 17:00 plays it 6 dB hotter. SMOOTH goes the same way between the captures,
+        so 16:30 plays 17:00 4.5 dB hotter; STEP, from the position it has landed on. The step is the
+        player's own move along the dial, crossfaded as a hand's would be; the push ramps in `process`.
+        A device with no captured axis has no step at all, and is fed both. Message thread. */
+    void setGain (float gain, bool smooth, bool turbo = false)
     {
         if (smooth != lastSmooth)
         {
@@ -240,29 +251,49 @@ public:
         }
 
         if (! player.loaded())
+        {
+            push.store (0.0f, std::memory_order_relaxed);
             return;
+        }
 
         const auto& dial = player.dialName();
 
         if (dial.empty())
         {
             drive.store (juce::Decibels::decibelsToGain ((gain - 5.0f) * driveDbPerStep));
+            push.store (turbo ? (float) turboSteps * turboDbPerStep : 0.0f, std::memory_order_relaxed);
             return;
         }
 
         drive.store (1.0f);
 
-        if (juce::approximatelyEqual (gain, lastGain))
+        if (juce::approximatelyEqual (gain, lastGain) && turbo == lastTurbo)
             return;
 
-        lastGain = gain;
+        lastGain  = gain;
+        lastTurbo = turbo;
 
         double deg = juce::jlimit (0.0, 1.0, (double) gain / 10.0) * (double) player.dialSweep();
         if (! smooth)
             deg = nearestKnot (deg);
 
-        player.setDial (dial, deg);
+        const auto up = turbo ? stepsUp (deg, (double) turboSteps) : Shift { deg, 0.0 };
+        push.store ((float) (up.missing * (double) turboDbPerStep), std::memory_order_relaxed);
+        dialAt.store (up.deg, std::memory_order_relaxed);
+        player.setDial (dial, up.deg);
     }
+
+    /** TURBO's two numbers, as the engine plays them (setGain). */
+    static constexpr int   turboSteps     = 2;
+    static constexpr float turboDbPerStep = 3.0f;
+
+    /** Where the dial was last set, in its degrees — under TURBO, the position it plays, not the
+        knob's — and how many decibels TURBO feeds the capture on top of it. Any thread. */
+    double dialDegrees() const noexcept { return dialAt.load (std::memory_order_relaxed); }
+    float  turboPushDb() const noexcept { return push.load (std::memory_order_relaxed); }
+
+    /** ...and the push as far as the ramp has carried it by the end of the last block, as a gain. */
+    float  turboPushApplied() const noexcept { return pushNow.load (std::memory_order_relaxed); }
 
     /** WHERE THE GAIN DIAL LANDS IN STEP, as a fraction of its travel: the captured position nearest to
         `travel` — what `setGain` plays there with SMOOTH off, so a face can stand its knob on it. The
@@ -296,7 +327,7 @@ public:
         The IN meter taps right after the block's trim and before `process` below, and the green zone
         beside it describes the NETWORK's door — so between the two stands a stack of gains the meter
         has to be told about, of which `packInputDb` above is only the first. In order from the tap:
-        the DRIVE of a device with no captured axis (applied in `process` below), the pack's
+        the DRIVE of a device with no captured axis and TURBO's push (both applied in `process` below), the pack's
         `chain[].input_db`, the pre-model tone, the chain's `extendDb` past the ends of the captured
         range, and — under Pack Level Comp — the sounding capture's own `files[].input_db`, which on a
         linked bottom rung is commonly 6 dB.
@@ -325,6 +356,7 @@ public:
             return {};
 
         const double base = (double) juce::Decibels::gainToDecibels (drive.load(), -120.0f)
+                          + (double) push.load (std::memory_order_relaxed)
                           + player.stageInputDb()
                           + player.selection().extendDb;
 
@@ -555,6 +587,26 @@ public:
             buffer.applyGainRamp (0, numSamples, curDrive, target);
             curDrive = target;
         }
+
+        // TURBO's push past the top capture (setGain) — into the model too, and ramped over a fixed
+        // time rather than a block, so a host's short block does not make a step of it. At nothing it
+        // touches nothing.
+        pushGain.setTargetValue (juce::Decibels::decibelsToGain (push.load (std::memory_order_relaxed)));
+        if (pushGain.isSmoothing())
+        {
+            auto* const* d = buffer.getArrayOfWritePointers();
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float g = pushGain.getNextValue();
+                for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                    d[ch][i] *= g;
+            }
+        }
+        else if (const float g = pushGain.getCurrentValue(); ! juce::exactlyEqual (g, 1.0f))
+        {
+            buffer.applyGain (0, numSamples, g);
+        }
+        pushNow.store (pushGain.getCurrentValue(), std::memory_order_relaxed);
 
         player.process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), numSamples);
 
@@ -846,6 +898,47 @@ private:
 
     /** The captured position nearest to `deg`, among the files along the dial at the panel's other
         settings. With nothing along it, the angle itself. */
+    /** TURBO'S MOVE ALONG THE DIAL: from `deg`, `steps` captured positions up — counted between the
+        captures, so a hand between two goes as far between the two it lands among. As far as the top
+        capture and no further; what is left over is `missing`, in steps. Below the first capture the
+        first gap is the step, so a hand the player feeds softer there comes up by the same measure. */
+    struct Shift
+    {
+        double deg     = 0.0;
+        double missing = 0.0;
+    };
+
+    Shift stepsUp (double deg, double steps) const
+    {
+        const auto& knots = player.selection().knots;
+        const int last = (int) knots.size() - 1;
+        if (last < 1)
+            return { last == 0 ? knots.front().deg : deg, steps };     // one capture, or none: no step to take
+
+        const auto at = [&] (int i) { return knots[(size_t) i].deg; };
+
+        // Where the hand stands, as a place among the captures: 3.5 halfway between the fourth and fifth.
+        double place = (double) last;
+        if (deg < at (1))
+            place = (deg - at (0)) / (at (1) - at (0));
+        else
+            for (int i = 1; i < last; ++i)
+                if (deg < at (i + 1))
+                {
+                    place = (double) i + (deg - at (i)) / (at (i + 1) - at (i));
+                    break;
+                }
+
+        const double to = place + steps;
+        if (to >= (double) last)
+            return { at (last), to - (double) last };
+        if (to < 0.0)
+            return { at (0) + to * (at (1) - at (0)), 0.0 };
+
+        const int i = (int) std::floor (to);
+        return { at (i) + (to - (double) i) * (at (i + 1) - at (i)), 0.0 };
+    }
+
     double nearestKnot (double deg) const
     {
         const auto& knots = player.selection().knots;
@@ -882,6 +975,13 @@ private:
 
     std::atomic<float> drive { 1.0f };
     float curDrive = 1.0f;
+
+    std::atomic<float>  push { 0.0f };          // TURBO's push, dB — setGain's, for `process`
+    std::atomic<double> dialAt { 0.0 };         // the degrees last handed to the player's dial
+    std::atomic<float>  pushNow { 1.0f };       // the push the last block ended on, a gain — `process`'s, for a reader
+    juce::LinearSmoothedValue<float> pushGain { 1.0f };
+    static constexpr double pushRampSeconds = 0.02;
+    bool lastTurbo = false;
 
     // LAST, so it dies first: a load coming back finds the token gone before anything else here is.
     std::shared_ptr<int> alive = std::make_shared<int> (0);

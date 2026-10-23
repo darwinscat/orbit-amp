@@ -192,6 +192,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
     layout.add (std::make_unique<Float> (juce::ParameterID { preampGain, 1 }, "Gain",
                                          juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f));
 
+    // The boost of a pack that has no Boost switch of its own — see Parameters.h. Off out of the box.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { preampBoost, 1 }, juce::String (preampName) + " Boost", false));
+
     // Frequencies are skewed so the useful end of each sweep gets the middle of the travel.
     auto hz = [] (float lo, float hi, float centre)
     {

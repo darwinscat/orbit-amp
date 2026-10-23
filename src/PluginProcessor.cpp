@@ -4,7 +4,6 @@
 #include "PluginProcessor.h"
 #include "Product.h"
 #include "Parameters.h"
-#include "channels/Channels.h"
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
 
@@ -143,6 +142,7 @@ AmpProcessor::AmpProcessor (const Product& product)
     cabPhaseParam      = apvts.getRawParameterValue (params::cabPhase);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
     boostLevelParam    = apvts.getRawParameterValue (params::boostLevel);
+    preampBoostParam   = apvts.getRawParameterValue (params::preampBoost);
     for (int i = 0; i < params::numSelectors; ++i)
         preampSelectorParams[(size_t) i] = apvts.getRawParameterValue (params::selectorId (params::preampId, i));
     for (int i = 0; i < params::numChainRows; ++i)
@@ -723,6 +723,20 @@ void AmpProcessor::pumpDeviceWork()
         block.selectIfMoved (juce::roundToInt (
             apvts.getRawParameterValue (params::blockDevice (blk))->load()));
 
+        // WHERE THE PLAYING PACK'S BOOST IS: the first of its switches called that — as the AMP's BOOST
+        // key finds it — among the slots its switches are played from. The audio thread reads that
+        // slot's parameter for boostOn(); the pack itself it cannot read. A pack with none is boosted
+        // up its dial instead (params::preampBoost), which the gain dial below is told.
+        int slot = -1;
+        {
+            const auto list = block.selectors();
+            for (int i = 0; i < list.size() && i < params::numSelectors && slot < 0; ++i)
+                if (list.getReference (i).name.trim().equalsIgnoreCase ("boost"))
+                    slot = i;
+            boostSlot.store (slot, std::memory_order_relaxed);
+        }
+        const bool turbo = slot < 0 && preampBoostParam->load() > 0.5f;
+
         // Selectors next: they and the gain dial pick a file together, and a stale one would send
         // resolve looking for a combination the player is not on any more.
         std::array<int, (size_t) params::numSelectors> selectors {};
@@ -738,7 +752,7 @@ void AmpProcessor::pumpDeviceWork()
 
         block.setRaw (mode == params::EqMode::ours);
         block.applySelectors (selectors);
-        block.setGain (gainParam->load(), smoothParam->load() > 0.5f);
+        block.setGain (gainParam->load(), smoothParam->load() > 0.5f, turbo);
 
         std::array<float, (size_t) core::CapturedBlock::numMeasured> values {};
         for (int i = 0; i < (int) values.size(); ++i)
@@ -752,18 +766,6 @@ void AmpProcessor::pumpDeviceWork()
     };
 
     pump (preamp,   preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
-
-    // WHERE THE PLAYING PACK'S BOOST IS: the first of its switches called that — as the AMP's BOOST key
-    // finds it — among the slots its switches are played from. The audio thread reads that slot's
-    // parameter for boostOn(); the pack itself it cannot read.
-    {
-        int slot = -1;
-        const auto list = preamp.selectors();
-        for (int i = 0; i < list.size() && i < params::numSelectors && slot < 0; ++i)
-            if (list.getReference (i).name.trim().equalsIgnoreCase ("boost"))
-                slot = i;
-        boostSlot.store (slot, std::memory_order_relaxed);
-    }
 
     // A model that landed may carry rate-matching the host has to know about.
     reportLatency();
@@ -1061,8 +1063,8 @@ bool AmpProcessor::boostOn() const noexcept
     if (const int slot = boostSlot.load (std::memory_order_relaxed); juce::isPositiveAndBelow (slot, params::numSelectors))
         return juce::roundToInt (preampSelectorParams[(size_t) slot]->load()) > 0;
 
-    // ...or the cockpit's TURBO, which is the capture pushed, read as its face reads it.
-    return ownProduct.boostIsPush && preampInParam->load() > channels::Channels::turboOnAbove;
+    // ...or, on a pack that has none, the capture played up its dial.
+    return preampBoostParam->load() > 0.5f;
 }
 
 float AmpProcessor::boostTarget() const noexcept

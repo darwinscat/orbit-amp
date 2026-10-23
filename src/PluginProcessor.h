@@ -919,9 +919,9 @@ private:
 public:
     /** WHETHER THE AMP'S BOOST IS ON, the one its level (params::boostLevel) is heard with: the playing
         pack's own Boost switch past its first position — OrbitAmp's BOOST key, the rovers' TURBO, which
-        holds it there — or, on an amp whose boost is a push into the capture (Product::boostIsPush), the
-        preamp's input trim standing over channels::Channels::turboOnAbove. Never while the AMP is out of
-        the chain or switched off: the boost is the amp's. Any thread — the audio thread asks it every
+        holds it there — or, on a pack with no such switch, params::preampBoost — OrbitAmp's BOOST key and
+        the cockpit's TURBO there. Never while the AMP is out of the chain or switched off: the boost is
+        the amp's. Any thread — the audio thread asks it every
         block; which slot the pack's Boost is in is found by the pump, where the pack is. */
     bool boostOn() const noexcept;
 
@@ -1222,6 +1222,7 @@ private:
     // block of 32 samples would step in under a millisecond. Seeded at prepare, so a session saved with
     // its boost on opens at its level instead of rising into it.
     std::atomic<float>* boostLevelParam = nullptr;
+    std::atomic<float>* preampBoostParam = nullptr;
     std::array<std::atomic<float>*, (size_t) params::numSelectors> preampSelectorParams {};
     std::atomic<int> boostSlot { -1 };          // the playing pack's Boost among the preamp's selector slots; -1 for none
     juce::LinearSmoothedValue<float> boostGain { 1.0f };

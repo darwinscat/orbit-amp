@@ -37,13 +37,13 @@ inline constexpr float limiterCeilingMax = -0.1f;
     other capture — so the lift is given back here, at the end of the chain: after the cabinet, the
     reverb and the delay, ahead of the master's hand and of the limiter, which keeps the last word.
 
-    The boost is whatever the amp calls one: the playing pack's own switch of that name — OrbitAmp's
-    BOOST key, and the rovers' TURBO, which holds it on — or the cockpit's TURBO, a push into the capture
-    (Product::boostIsPush). An amp on a pack with no Boost, or with its AMP out of the chain, has no
-    boost, and the level is not heard.
+    The boost is OrbitAmp's BOOST key and TURBO on the cockpit and the rovers, whatever it does to the
+    capture: the playing pack's own switch of that name where it has one — the rovers' TURBO holds it
+    on — and preampBoost, the capture played higher up its dial, where it has none. With the AMP out of
+    the chain there is no boost, and the level is not heard.
 
     ONE FOR THE WHOLE AMP, like the master's hand and the limiter beside it, not one per channel: the
-    rovers' TURBO is one key for every gear, the cockpit's push is one for every channel, and a boost
+    rovers' TURBO is one key for every gear, and a boost
     that is louder on one channel than on the next is a level nobody can find again. It is the sound's,
     not the machine's: a session and a preset keep it, and undo steps over it. Picked on the boost's own
     right-click menu, out of boostLevels; +3 out of the box. Whole decibels, so the five places on the
@@ -120,6 +120,14 @@ inline juce::String selectorId (const char* blk, int i)
 {
     return juce::String (blk) + "_sel" + juce::String (i + 1);
 }
+
+/** THE BOOST OF A PACK THAT HAS NO BOOST SWITCH — the X88-IR's four, and any pack like them: OrbitAmp's
+    BOOST key and the cockpit's TURBO on such a pack. On, the capture plays two captured positions up its
+    gain dial from where DRIVE stands, the knob staying where it is, and a step the dial has not got above
+    its top capture feeds the top capture 3 dB harder instead (core::CapturedBlock::setGain says the
+    rule). A pack WITH a Boost switch is boosted by its switch, as it always was, and this is not read.
+    The sound's: a session, a preset and the channel's memory keep it, and undo steps over it. */
+inline constexpr const char* preampBoost = "preamp_boost";
 
 inline constexpr const char* preampId = "preamp";
 

@@ -66,8 +66,7 @@ const Product& products::catpitAmp()
 {
     static const Product cockpit { .name = "CatpitAmp", .makeEditor = catpit::makeEditor, .firstStart = firstStart,
                                    .addParameters = addParameters, .makeEngine = makeEngine,
-                                   .formerInputZeroId = "catpit_input_zero", .opening = opening,
-                                   .boostIsPush = true };
+                                   .formerInputZeroId = "catpit_input_zero", .opening = opening };
     return cockpit;
 }
 

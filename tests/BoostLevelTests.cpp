@@ -13,7 +13,13 @@
 //   - throwing the boost, or picking another level, ramps there in a straight line over 10 to 20 ms, never
 //     a step;
 //   - the limiter after it still holds its ceiling at +9;
-//   - a session keeps the level, and so does a rover's preset.
+//   - a session keeps the level, and so does a rover's preset;
+//   - ON A PACK WITH NO BOOST SWITCH — the X88-IR's, in OrbitAmp and the cockpit — the boost is the capture
+//     two captured positions up the dial from DRIVE, the knob where it stands, and a step the dial has not
+//     got above its top capture fed into it 3 dB harder: every hour of the dial, exactly, in STEP, and the
+//     same measure between them in SMOOTH; it plays what DRIVE two hours up plays (fed that much harder
+//     through the input); thrown while playing, its push ramps in rather than stepping; off, it is not
+//     there at all.
 //
 // Every comparison plays two processors side by side, fed the same and moved the same, one of them at 0 dB
 // — whatever the boost does to the capture itself is in both, and only the level is between them. Out of
@@ -276,13 +282,18 @@ int main()
         }
         const auto boostSwitch = params::selectorId (params::preampId, packs.slot);
 
-        // ON A PACK WITH NO BOOST there is none to hear — the switches' slots thrown, the AMP's input
-        // pushed: neither is a boost on OrbitAmp.
+        // ON A PACK WITH NO BOOST SWITCH the switches' slots thrown and the AMP's input pushed are no
+        // boost; its BOOST is preamp_boost. On a pack with one, preamp_boost is not read.
         setParam (*probe, params::selectorId (params::preampId, 0), 1.0f);
         setParam (*probe, params::selectorId (params::preampId, 1), 1.0f);
         setParam (*probe, params::blockIn (params::preampId), 9.0f);
         check (! probe->boostOn(), "OrbitAmp on " + probe->preamp.selectedName()
-                                       + ", which has no Boost: no boost, its slots thrown and its input pushed +9 dB");
+                                       + ", which has no Boost switch: no boost, its slots thrown and its input pushed +9 dB");
+        setParam (*probe, params::preampBoost, 1.0f);
+        check (probe->boostOn(), "...its BOOST, preamp_boost, on: the boost is on");
+        setParam (*probe, params::preampDevice, (float) packs.boost);
+        setParam (*probe, params::selectorId (params::preampId, packs.slot), 0.0f);
+        check (! probe->boostOn(), "...on " + probe->preamp.selectedName() + ", its Boost switch off: no boost, preamp_boost on or not");
 
         Pair pair (orbitAmp());
         pair.both ([&] (AmpProcessor& a) { setParam (a, params::preampDevice, (float) packs.boost);
@@ -419,7 +430,7 @@ int main()
                "a RedPawAmp preset keeps the boost's level, +9");
     }
 
-    // THE COCKPIT: its TURBO is a push into the capture — the X88-IR's packs have no Boost of their own.
+    // THE COCKPIT: the X88-IR's packs have no Boost switch, and its TURBO is preamp_boost.
     {
         Pair pair (catpitAmp());
         pair.both ([] (AmpProcessor& a) { setParam (a, params::limiterOn, 0.0f); });
@@ -430,13 +441,119 @@ int main()
             check (same (a, b), "...TURBO off, the level at +3 plays what 0 dB plays, bit for bit");
         }
 
-        pair.both ([] (AmpProcessor& a) { setParam (a, params::blockIn (params::preampId), 9.0f); });
-        check (pair.level->boostOn(), "...TURBO on, its push of +9 dB into the capture: the boost is on");
+        pair.both ([] (AmpProcessor& a) { setParam (a, params::preampBoost, 1.0f); });
+        check (pair.level->boostOn(), "...TURBO on: the boost is on");
         {
             const auto [a, b] = pair.play (40);
             const auto r = rampOf (a, b, 1.0f, gainOf (3.0f));
             check (rampFits (r) && scaled (a, b, gainOf (3.0f), r.end),
                    "...to +3 dB in " + sayRamp (r) + ", then exactly +3 dB");
+        }
+    }
+
+    // TURBO ON A PACK WITH NO BOOST SWITCH: OrbitAmp on the X88-IR's first.
+    {
+        auto a = make (orbitAmp());
+        const auto packs = findPacks (*a);      // leaves it on the pack with no switch
+        juce::StringArray clock;
+        for (int deg = 0; deg <= 300; deg += 30)
+            clock.add (juce::String (deg));
+        check (a->preamp.selectors().isEmpty() && a->preamp.gainPositions() == clock,
+               "OrbitAmp on " + a->preamp.selectedName() + ": no switch, its Gain captured at 0, 30 ... 300 degrees, 7:00 to 17:00");
+
+        // STEP, every hour of the dial: where it plays, and how much harder.
+        setParam (*a, params::blockSmooth (params::preampId), 0.0f);
+        bool off = true, table = true;
+        juce::String rows;
+        for (int hour = 7; hour <= 17; ++hour)
+        {
+            setParam (*a, params::preampGain, (float) (hour - 7));
+            setParam (*a, params::preampBoost, 0.0f);
+            off = off && juce::exactlyEqual (a->preamp.dialDegrees(), (hour - 7) * 30.0)
+                      && juce::exactlyEqual (a->preamp.turboPushDb(), 0.0f);
+
+            setParam (*a, params::preampBoost, 1.0f);
+            const int plays = juce::jmin (hour + 2, 17);
+            const float push = 3.0f * (float) juce::jmax (0, hour + 2 - 17);
+            table = table && juce::exactlyEqual (a->preamp.dialDegrees(), (plays - 7) * 30.0)
+                          && juce::exactlyEqual (a->preamp.turboPushDb(), push)
+                          && juce::exactlyEqual (param (*a, params::preampGain), (float) (hour - 7));
+            if (hour <= 9 || hour >= 16)
+                rows << hour << ":00 plays " << plays << ":00" << (push > 0.0f ? " +" + juce::String ((int) push) + " dB" : juce::String())
+                     << (hour == 9 ? " ... " : hour < 17 ? ", " : "");
+        }
+        check (off, "...BOOST off: every hour plays where DRIVE stands, nothing pushed");
+        check (table, "...BOOST on, STEP, DRIVE left where it stands: " + rows);
+
+        // SMOOTH: the same measure between the captures.
+        setParam (*a, params::blockSmooth (params::preampId), 1.0f);
+        struct Between { float gain; double deg; float push; const char* says; };
+        for (const auto& c : { Between { 9.5f,  300.0, 4.5f, "16:30 plays 17:00 +4.5 dB" },
+                               Between { 8.5f,  300.0, 1.5f, "15:30 plays 17:00 +1.5 dB" },
+                               Between { 3.25f, 157.5, 0.0f, "10:15 plays 12:15" } })
+        {
+            setParam (*a, params::preampGain, c.gain);
+            check (std::abs (a->preamp.dialDegrees() - c.deg) < 1.0e-3 && std::abs (a->preamp.turboPushDb() - c.push) < 1.0e-4f,
+                   "...BOOST on, SMOOTH: " + juce::String (c.says));
+        }
+
+        // WHAT IT PLAYS: the boost at an hour is DRIVE two hours up, fed as much harder as the dial is
+        // short of — bit for bit where nothing is fed harder; where it is, against the same push through
+        // the input trim, which nothing between it and the AMP touches, and which as a parameter stands a
+        // few millionths of a decibel off the whole number — so its output lands within a millionth, not
+        // on the bit. Each pair moved along the dial alike, then prepared again, so both start their first
+        // note where they stand.
+        const auto twins = [&] (float drive, float twoUp, float harderDb) -> float     // how far apart, at most
+        {
+            auto t = make (orbitAmp()), q = make (orbitAmp());
+            for (auto* x : { t.get(), q.get() })
+            {
+                setParam (*x, params::preampDevice, (float) packs.plain);
+                setParam (*x, params::limiterOn, 0.0f);
+                setParam (*x, params::boostLevel, 0.0f);
+                setParam (*x, params::blockSmooth (params::preampId), 0.0f);
+                setParam (*x, params::preampGain, drive);
+            }
+            setParam (*t, params::preampBoost, 1.0f);
+            setParam (*q, params::preampGain, twoUp);
+            setParam (*q, params::inTrim, harderDb);     // a whole decibel there is exact; the AMP's own input is a tenth off
+            t->prepareToPlay (sampleRate, blockSize);
+            q->prepareToPlay (sampleRate, blockSize);
+            Feed ft, fq;
+            const auto vt = ft.play (*t, 30), vq = fq.play (*q, 30);
+            float apart = 0.0f;
+            for (size_t i = 0; i < vt.size(); ++i)
+                apart = juce::jmax (apart, std::abs (vt[i] - vq[i]));
+            return apart;
+        };
+        check (juce::exactlyEqual (twins (0.0f, 2.0f, 0.0f), 0.0f), "...BOOST at 7:00 plays what 9:00 plays, bit for bit");
+        const float at16 = twins (9.0f, 10.0f, 3.0f), at17 = twins (10.0f, 10.0f, 6.0f);
+        check (at16 < 1.0e-6f, "...BOOST at 16:00 plays what 17:00 fed 3 dB harder plays, " + juce::String (at16) + " apart at most");
+        check (at17 < 1.0e-6f, "...BOOST at 17:00 plays what 17:00 fed 6 dB harder plays, " + juce::String (at17) + " apart at most");
+
+        // THROWN WHILE PLAYING, at 16:00: the capture goes a step up the dial the way a hand takes it
+        // there, crossfaded by the player, and the push ramps in over 20 ms rather than a block.
+        {
+            auto b = make (orbitAmp());
+            setParam (*b, params::preampDevice, (float) packs.plain);
+            setParam (*b, params::blockSmooth (params::preampId), 0.0f);
+            setParam (*b, params::preampGain, 9.0f);
+            Feed f;
+            (void) f.play (*b, 20);
+            setParam (*b, params::preampBoost, 1.0f);
+            std::vector<float> ramp { b->preamp.turboPushApplied() };
+            for (int k = 0; k < 6; ++k)
+            {
+                (void) f.play (*b, 1);
+                ramp.push_back (b->preamp.turboPushApplied());
+            }
+
+            const float g3 = gainOf (3.0f);
+            check (juce::exactlyEqual (ramp[0], 1.0f) && ramp[1] > 1.0f && ramp[1] < g3
+                       && juce::exactlyEqual (ramp[2], g3) && juce::exactlyEqual (ramp.back(), g3),
+                   "...thrown at 16:00, the push ramps in over 20 ms: "
+                       + juce::String (juce::Decibels::gainToDecibels (ramp[1]), 2) + " dB after the first block of "
+                       + juce::String (blockSize) + ", 3 dB after the second");
         }
     }
 
