@@ -13,8 +13,10 @@
 namespace orbitamp::redpaw
 {
 
-/** THE GEAR LEVER in the dashboard's straight slot: PARK at its top end, then the product's gears down
-    the slot's notches — CLEAN, CRUNCH, HI-GAIN, the top ones of them as many as it has — the gear's name
+struct Skin;
+
+/** THE GEAR LEVER in the dashboard's straight slot: the product's gears down the slot's notches, the
+    first at the top — CLEAN, CRUNCH, HI-GAIN, the top ones of them as many as it has — the gear's name
     is on the nav screen. Taken by its grip it follows the hand up and down the slot, sits in a position within
     reach of one, and springs into the nearest on release; dragged from anywhere else on the gate it goes
     where the hand is. A press that does not travel slides it into the position nearest the press — on the
@@ -27,10 +29,8 @@ namespace orbitamp::redpaw
 class GearLever final : public face::DetentLever
 {
 public:
-    /** Its positions — its places — top to bottom: PARK, then the gears. */
-    static constexpr int park = 0;
-    inline static const juce::StringArray names { "PARK", "CLEAN", "CRUNCH", "HI-GAIN" };
-    static int positionOf (int gear) noexcept { return gear + 1; }
+    /** Its positions — its places — top to bottom: the gears, each place its gear's number from 0. */
+    inline static const juce::StringArray names { "CLEAN", "CRUNCH", "HI-GAIN" };
 
     /** Where the grip's bar ends and its collar begins on the lever's render, down from its top — a
         fraction of the render's height. The bar is what the hand takes. */
@@ -41,15 +41,13 @@ public:
         is always HI-GAIN — a rover of two drives CRUNCH and HI-GAIN. */
     static juce::String nameOf (int position, int gears)
     {
-        if (position <= park)
-            return names[park];
-        return names[juce::jlimit (1, names.size() - 1, position + names.size() - 1 - gears)];
+        return names[juce::jlimit (0, names.size() - 1, position + names.size() - gears)];
     }
 
     /** In the product's gears, as many as the slot's top notches; it stands in the first. */
-    explicit GearLever (int gears);
+    GearLever (const Skin&, int gears);
 
-    int numGears() const noexcept { return numPlaces() - 1; }
+    int numGears() const noexcept { return numPlaces(); }
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -59,7 +57,8 @@ public:
     void mouseExit (const juce::MouseEvent&) override  { if (! isHeld()) { lit.target = 0.0f; startTimerHz (60); } }
 
 private:
-    std::vector<float> heights;         // each position's height in the dashboard's space: PARK, then the gears' notches
+    const Skin& skin;                   // the rover's whose lever it is: its slot, its notches, its light
+    std::vector<float> heights;         // each position's height in the dashboard's space: the gears' notches
     face::Glide lit;            // the light round the grip: 0 resting .. 1 under the hand
 
     float yOf (float position) const noexcept override;      // in the lever's own space
@@ -72,9 +71,8 @@ private:
 //==============================================================================
 /** THE NAV SCREEN'S TOP LINE: the gear in orange and the channel that is playing beside it, and on the
     right the rover's speed in km/h — read from the windscreen's own drive, so it climbs and falls as
-    the gears change, and stands at nothing when parked. Parked, a red warning triangle stands before
-    PARK: the amp is out of the sound. On a screen too narrow for the three, and tall enough, they stand
-    one under another. */
+    the gears change. On a screen too narrow for the three, and tall enough, they stand one under
+    another. */
 class NavHeader final : public juce::Component, private juce::Timer
 {
 public:
@@ -82,20 +80,18 @@ public:
 
     std::function<float()> speed;       // km/h
     bool showsSpeed = true;             // ...none where the glass shows it (SpeedHud)
-    bool showsWarning = true;           // parked, the warning beside the gear
 
-    void set (const juce::String& gear, const juce::String& channel, bool parked);
+    void set (const juce::String& gear, const juce::String& channel);
     void paint (juce::Graphics&) override;
 
     /** WHAT THE TOP LINE MAKES of a gear, a channel and a speed at this width: the width the three want on
         one line, how many lines they stand on, and the channel as one line shows it, cut with an ellipsis
         where it is wider than the room left beside the gear and the speed. */
     struct Fit { float wanted = 0.0f, room = 0.0f; int lines = 1; juce::String shown; };
-    Fit fit (const juce::String& gear, const juce::String& channel, int kmh, bool parked) const;
+    Fit fit (const juce::String& gear, const juce::String& channel, int kmh) const;
 
 private:
     juce::String gear, channel;
-    bool parked = false;
     int  shownKmh = -1;
     void timerCallback() override;
 };
@@ -131,36 +127,6 @@ private:
 };
 
 //==============================================================================
-/** THE WARNING, wherever it stands — the top line's, small, and the parked screen's, large: a red triangle,
-    its corners rounded, an exclamation mark cut dark into it. Its measures in twentieths of its height. */
-struct Warning
-{
-    static constexpr juce::uint32 red = 0xffe8463a, cut = 0xff160606;
-    static constexpr float unit = 20.0f;                  // the triangle's height in these
-    static constexpr float corner = 2.5f;                 // the corners' rounding
-    static constexpr float barWidth = 2.6f, barHeight = 8.0f, barRadius = 1.3f;
-    static constexpr float barCentre = 0.52f;             // ...its middle this far down the triangle
-    static constexpr float dot = 2.8f, dotUp = 3.6f;      // the dot's size, its middle this far over the base
-};
-
-/** PARKED, IN THE MIDDLE OF THE NAV SCREEN: the warning triangle the top line carries, large, over the
-    picture dimmed — the amp is out of the sound. Shown only while parked; it never takes a click. */
-class ParkSign final : public juce::Component
-{
-public:
-    /** How it is drawn: the screen darkened under it, the triangle as tall as the screen less a margin —
-        no less than a share of it, no more than a cap — and a little wider, and its red glow. */
-    static constexpr juce::uint32 dim = 0xff050304;
-    static constexpr float dimAlpha = 0.72f;
-    static constexpr float margin = 24.0f, atLeast = 0.8f, atMost = 96.0f, widthOfHeight = 1.15f;
-    static constexpr float glowAlpha = 0.55f;
-    static constexpr int   glowRadius = 16;
-
-    ParkSign() { setInterceptsMouseClicks (false, false); }
-    void paint (juce::Graphics&) override;
-};
-
-//==============================================================================
 /** THE NAV SCREEN'S GLASS: a little murky, fine dust on it, a few light scratches — laid over everything
     the screen shows, and faint enough that every number and line under it reads. It never changes: it is
     made once, from a fixed seed, at the screen's own pixel size, and every paint is a copy of it. It
@@ -191,9 +157,13 @@ private:
 class KnobRing final : public juce::Component, private juce::Timer
 {
 public:
-    KnobRing (const face::ArtKnob&, juce::Point<float> centre, float radius, float width);
+    KnobRing (const Skin&, const face::ArtKnob&, juce::Point<float> centre, float radius, float width);
 
     void paint (juce::Graphics&) override;
+
+    /** Put round its knob where the knob now stands, the ring this big: the rows are laid again with
+        the channel (face::Console::layStrips). */
+    void place (juce::Point<float> centre, float radius, float width);
 
     // What it is drawn with — said here so that the site's demo is drawn with it too (RedPawEditor::webExtras).
     static constexpr float from = -135.0f, sweep = 270.0f;      // a knob's travel, as ArtKnob turns it
@@ -204,35 +174,13 @@ public:
     static constexpr float rimOfKnob = 0.46f, rimAlpha = 0.8f;   // under the hand, an orange rim round the cap, of the knob's width
 
 private:
+    const Skin& skin;               // the rover's whose ring it is: its light
     const face::ArtKnob& knob;
-    const float radius, width;
+    float radius, width;
     float shown = -1.0f;            // the value last drawn
     face::Glide breath;             // 0 resting .. 1 under the hand
     double leftAt = 0.0;            // when the hand last left, on the millisecond counter
     bool touched = false;
-    void timerCallback() override;
-};
-
-//==============================================================================
-/** TURBO'S HATCH, SHUT ON PARK. The picture shows the hatch open over TURBO's hole; parked, the render of it
-    shut (Art::turboLid) comes up over the open one and the button in about half a second, and goes again
-    the same way when a gear is pulled — a parked TURBO is deaf anyway. A rover whose skin has no such
-    render keeps the hatch open always. It lies over layout::turboLid and never takes a click. */
-class TurboLid final : public juce::Component, private juce::Timer
-{
-public:
-    TurboLid();
-
-    /** `animate` off puts it there at once — for a face just built. */
-    void setShut (bool shut, bool animate);
-
-    void paint (juce::Graphics&) override;
-
-    /** Its spring: a hatch, not a key — about half a second, with no bounce. */
-    static constexpr float stiffness = 60.0f, damping = 16.0f;
-
-private:
-    face::Glide shown;              // 0 open .. 1 shut
     void timerCallback() override;
 };
 

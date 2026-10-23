@@ -95,6 +95,9 @@ public:
 
     Mode getMode() const noexcept { return mode; }
 
+    /** The product's switch for its analysers (prefs::spectraCache), which the TONE page answers to. */
+    void showSpectraBy (const std::atomic<bool>& shown) { toneView.spectraShown = &shown; }
+
     /** The rate the tap is being filled at, so a partial lands on the frequency it actually has. */
     void setSampleRate (double newRate)
     {

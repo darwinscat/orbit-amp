@@ -15,13 +15,25 @@
 namespace orbitamp::redpaw
 {
 
+/** How many of LEARN's keys a face that has them shows, GATE's first: HUM's key and its name only while
+    the build has HUM (Features.h). Without it HUM's hole is plate (Art::of covers it), GATE's key alone. */
+inline constexpr int learnKeysShown = features::hum ? 2 : 1;
+
 /** The dashboard itself: the picture with its windscreen cut out, the family's mark cut into the emblem
     plate, and every printed word on it. Drawn over the windscreen, under the controls, and never takes
     a click. */
 class Dashboard final : public face::Picture
 {
+public:
+    /** The dashboard of the rover that wears `skin`. */
+    explicit Dashboard (const Skin& s) : skin (s) {}
+
 private:
+    const Skin& skin;
+
     void paintStatic (juce::Graphics&, float scale) const override;
+    void paintStrips (juce::Graphics&, float scale) const override;
+    juce::Colour signInk() const override;
     void paintLive (juce::Graphics&) const override;
     juce::Rectangle<int> historyArea() const override;
 
@@ -43,6 +55,8 @@ public:
     ~RedPawEditor() override;
 
 private:
+    const Skin& skin;               // the rover's own (Product::skin): what everything below is drawn after
+
     // THE WINDSCREEN: the product's world (RedPawSkin.h) — RedPawAmp's the drive across Mars
     // (view/Windscreen.h) — under the dashboard. Its GPU frame is drawn by this window's own context,
     // which paints the face over it — a GL surface of the view's own would lie over the picture on the
@@ -69,20 +83,18 @@ private:
     void openGLContextClosing() override;
 
     void webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world) override;
+    void stripsLaid (const face::Strips&) override;     // the rings go round the knobs where they stand now
 
     // THE GEAR AND TURBO PICK THE CHANNEL: the gear the pedal, TURBO its second channel — an option of
     // the gear's, as its tone is: thrown, only the pack changes, and a gear pulled comes back with
-    // TURBO as it was left (channels::Lineup::pairs). PARK, the lever's top end, takes
-    // the whole amp out of the sound (ProductEngine::parkSwitch); the channel waits, and TURBO does
-    // nothing until a gear is pulled again.
+    // TURBO as it was left (channels::Lineup::pairs).
     GearLever lever;
     face::PushButton turbo { "TURBO" };
-    TurboLid hatch;             // over it: TURBO's hatch, shut while parked
 
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader down its lamp plate's outer leg:
     // -70 dB to -40, and -3 dB to -0.1, foot to head. While its block is off a fader stands dim, and
     // still moves — the block keeps what it was set to.
-    face::ColumnFader threshold { Art::get().faderCapLight }, ceiling { Art::get().faderCapLight };
+    face::ColumnFader threshold { Art::of (skin).faderCapLight }, ceiling { Art::of (skin).faderCapLight };
     std::vector<std::unique_ptr<KnobRing>> rings;   // DRIVE's and the tones': where each knob stands
     NavHeader header;               // on the nav screen: the gear, the pack that is playing, the speed
     SpeedHud hud;                   // ...or the speed on the glass, where the layout puts it there
@@ -90,7 +102,6 @@ private:
     // THE NAV SCREEN'S PICTURE of the amp at work (face/Monitor.h), the machine's choice; a right click
     // on the screen offers the five.
     face::Monitor screen;
-    ParkSign parkSign;              // parked: the warning, large, in the screen's middle
     GlassFilm glassFilm;            // the screen's glass, over all of it
 
     // LEARN's own keys, where the picture paints holes for them (RedPawLayout.h): GATE's learning and
@@ -108,8 +119,6 @@ private:
     void chooseScreen (face::Monitor::View);
     void pullGear (int gear);
     void throwTurbo (bool on);
-    void parkIt();
-    bool isParked() const;
 
     void showSelector (int channel) override;
     bool channelKey (const juce::KeyPress&) override;

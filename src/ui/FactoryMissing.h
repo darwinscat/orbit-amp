@@ -28,9 +28,9 @@ inline juce::String factoryPlaces()
 }
 
 /** What the window says, in full. */
-inline juce::String factoryMissingText()
+inline juce::String factoryMissingText (const Product& product)
 {
-    return juce::String (product::name) + " cannot find its data folder.\n\n"
+    return juce::String (product.name) + " cannot find its data folder.\n\n"
          + "The packs, the cabinets and the pictures the Darwin's Cat amps play are installed once, in a "
            "folder they share, and it is not there. It belongs here:\n\n"
          + factoryPlaces() + "\n\n"
@@ -51,13 +51,14 @@ public:
     static constexpr float headingPx = 22.0f;
     static constexpr float textPx    = 16.0f;
 
-    explicit FactoryMissingEditor (juce::AudioProcessor& p) : juce::AudioProcessorEditor (p)
+    /** The window of `product`'s processor `p`. */
+    FactoryMissingEditor (juce::AudioProcessor& p, const Product& product) : juce::AudioProcessorEditor (p), ownProduct (product)
     {
         setSize (720, 420);
     }
 
     /** The notice, as it reads. */
-    static juce::String text() { return factoryMissingText(); }
+    juce::String text() const { return factoryMissingText (ownProduct); }
 
     void paint (juce::Graphics& g) override
     {
@@ -78,6 +79,8 @@ public:
     }
 
 private:
+    const Product& ownProduct;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FactoryMissingEditor)
 };
 

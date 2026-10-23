@@ -10,7 +10,8 @@
 namespace orbitamp
 {
 
-SetupPanel::SetupPanel (AmpProcessor& processor) : amp (processor)
+SetupPanel::SetupPanel (AmpProcessor& processor)
+    : amp (processor), preampDevices (processor.product().name, device::DeviceLibrary::ampSlot)
 {
     setWantsKeyboardFocus (true);
 
@@ -85,14 +86,14 @@ void SetupPanel::buildViewPage()
     // second, and the stale one is a checkbox, not a sound.
     const auto add = [&] (juce::String name, juce::String note, juce::Identifier key, bool fallback)
     {
-        auto held = std::make_shared<bool> (prefs::getBool (key, fallback));
+        auto held = std::make_shared<bool> (prefs::getBool (amp.product(), key, fallback));
 
         rows.push_back ({ std::move (name), std::move (note),
                           [held] { return *held; },
                           [this, key, held] (bool on)
                           {
                               *held = on;
-                              prefs::setBool (key, on);
+                              prefs::setBool (amp.product(), key, on);
                               if (onViewChanged)
                                   onViewChanged();
                           },
@@ -100,8 +101,8 @@ void SetupPanel::buildViewPage()
     };
 
     rows.push_back ({ "SHOW SPECTRA", "the analyser behind every curve and picture",
-                      [] { return prefs::spectraShown(); },
-                      [this] (bool on) { prefs::setSpectraShown (on); if (onViewChanged) onViewChanged(); },
+                      [this] { return prefs::spectraShown (amp.product()); },
+                      [this] (bool on) { prefs::setSpectraShown (amp.product(), on); if (onViewChanged) onViewChanged(); },
                       {}, false, {}, {}, {} });
 
     if (params::demoLoopsPresent())   // no loops on disk: no player, and no offer of one
@@ -127,14 +128,14 @@ void SetupPanel::buildTunerPage()
         for (const int db : prefs::tunerFloors)
             floor.choices.add (juce::String (db));
 
-        floor.chosen = []
+        floor.chosen = [this]
         {
             for (int k = 0; k < (int) std::size (prefs::tunerFloors); ++k)
-                if (prefs::tunerFloors[k] == prefs::tunerFloor())
+                if (prefs::tunerFloors[k] == prefs::tunerFloor (amp.product()))
                     return k;
             return -1;
         };
-        floor.choose = [] (int k) { prefs::setTunerFloor (prefs::tunerFloors[k]); };
+        floor.choose = [this] (int k) { prefs::setTunerFloor (amp.product(), prefs::tunerFloors[k]); };
         rows.push_back (std::move (floor));
     }
 

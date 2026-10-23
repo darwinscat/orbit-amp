@@ -59,6 +59,16 @@ public:
         colour that ties it to its point on the curve and must stay one colour. */
     bool heat = false;
 
+    /** WHERE ITS TRAVEL RUNS, in radians clockwise from twelve: the family's 7:30 to 4:30 unless a knob says
+        otherwise — the drive's runs 7:00 to 5:00, so that 2 points straight left and 8 straight right. */
+    void setArc (float start, float end)
+    {
+        startAngle = start;
+        endAngle = end;
+        setRotaryParameters (startAngle, endAngle, true);
+        repaint();
+    }
+
     /** How the number on the face is written. Defaults to one decimal — the 0-10 amp scale. */
     std::function<juce::String (double)> textForValue = [] (double v) { return juce::String (v, 1); };
 
@@ -66,6 +76,17 @@ public:
         a zoomed block's one big decision reads at reading size, not at panel size. */
     float labelFontHeight = 8.0f;
     int   labelRowHeight  = labelHeight;
+
+    /** THE small dial: the EQ's bands, the reverb's DECAY and PRE, the delay's REPEATS, DARK and
+        OFFSET are one diameter, so a face's small hands read as one kind of control. */
+    static constexpr int smallSide = 42;
+
+    /** The reverb's and the delay's MIX: 96 -> 88, a little smaller, so its small hands get room. */
+    static constexpr int heroSide = 88;
+
+    /** The air between two small hands, the delay's three and the reverb's two alike: as much as three
+        of them leave in a row this wide, up to twelve. */
+    static int smallGap (int rowWidth) { return juce::jlimit (0, 12, (rowWidth - 3 * smallSide) / 2); }
 
     void paint (juce::Graphics& g) override
     {
@@ -177,12 +198,16 @@ private:
     static juce::Colour heatAt (float t) { return theme::heatColour (t); }
 
     static constexpr int   labelHeight = 11;
-    static constexpr float startAngle  = juce::MathConstants<float>::pi * 1.25f;
-    static constexpr float endAngle    = juce::MathConstants<float>::pi * 2.75f;
+    static constexpr float defaultStart = juce::MathConstants<float>::pi * 1.25f;     // the family's travel, 7:30...
+    static constexpr float defaultEnd   = juce::MathConstants<float>::pi * 2.75f;     // ...to 4:30
+    float startAngle = defaultStart;
+    float endAngle   = defaultEnd;
 
     juce::String label;
     juce::Colour accent;
     int notches;
+
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Knob)
 };

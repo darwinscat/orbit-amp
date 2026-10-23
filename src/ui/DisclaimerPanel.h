@@ -9,6 +9,8 @@
 
 #include <BinaryData.h>
 
+#include <set>
+
 namespace orbitamp
 {
 
@@ -35,8 +37,10 @@ namespace orbitamp
 class DisclaimerPanel final : public juce::Component
 {
 public:
-    DisclaimerPanel()
+    /** The notice of the product of that name, over the devices it plays. */
+    explicit DisclaimerPanel (const juce::String& product)
     {
+        table.product = product;
         setWantsKeyboardFocus (true);
 
         for (auto* v : { &textView, &listView })
@@ -128,15 +132,18 @@ private:
     static constexpr int   panelH = 620;
     static constexpr float textH  = 13.0f;   // the floor for anything read at 1x — see CLAUDE.md
 
-    /** One device, as the pack states it. `make` / `model` are namz's own fields — the same pair the
-        block's paper prints — and the rest is what tells one physical box from another wearing the
-        same name. A pack that names no model falls back to the file's own name, so a model somebody
-        dropped in is listed rather than silently missing. */
+    /** One device, as the packs state it. `make` / `model` are namz's own fields — the same pair the
+        block's paper prints — and they make the row: ONE row a name. The physical boxes behind it are
+        its serials, listed in the order the packs met them — more than one when that model was
+        recorded from more than one box — and the years they were recorded in. A pack that names no
+        model falls back to the file's own name, so a model somebody dropped in is listed rather than
+        silently missing. */
     struct Named
     {
-        juce::String maker, model, slot, serial, origin;
-        int          year = 0;
-        int          captures = 0;   // model files in the pack — one per captured setting
+        juce::String      maker, model, origin;
+        juce::StringArray serials;
+        juce::Array<int>  years;
+        int               captures = 0;   // model files in the box's packs — one per captured setting
 
         bool operator< (const Named& o) const
         {
@@ -146,7 +153,25 @@ private:
 
         bool operator== (const Named& o) const
         {
-            return maker == o.maker && model == o.model && year == o.year && serial == o.serial;
+            return maker == o.maker && model == o.model;
+        }
+
+        void merge (const Named& o)
+        {
+            captures += o.captures;
+            for (const auto& s : o.serials)
+                serials.addIfNotAlreadyThere (s);
+            for (const int y : o.years)
+                years.addIfNotAlreadyThere (y);
+            years.sort();
+        }
+
+        juce::String yearsText() const
+        {
+            juce::StringArray t;
+            for (const int y : years)
+                t.add (juce::String (y));
+            return t.joinIntoString (", ");
         }
     };
 
@@ -189,24 +214,29 @@ private:
             shipped.clear();
             added.clear();
 
-            for (const auto& pack : device::DeviceLibrary::scan (device::DeviceLibrary::Slot::any))
+            for (const auto& pack : device::DeviceLibrary::scan (product, device::DeviceLibrary::Slot::any))
             {
                 Named n;
-                n.slot = slotName (pack.slot);
 
                 for (const auto& stage : pack.rig.chain)
                     if (stage.kind == namz::rig::StageKind::Nam)
                     {
                         n.maker  = juce::String (stage.make).trim();
                         n.model  = juce::String (stage.model).trim();
-                        n.serial = juce::String (stage.serialNumber).trim();
-                        n.year   = stage.year;
+                        if (const auto serial = juce::String (stage.serialNumber).trim(); serial.isNotEmpty())
+                            n.serials.add (serial);
+                        if (stage.year > 0)
+                            n.years.add (stage.year);
 
-                        // How many times the box was actually recorded: one file per captured
-                        // setting. NOT the gain dial's declared points — a dial can state eleven
-                        // positions and be captured at nine, and this column is about the work done,
-                        // not about what the knob says.
-                        n.captures = (int) stage.device.files.size();
+                        // How many times the box was actually recorded: one FILE per captured
+                        // setting. Not the entries of `files` — a dial can state eleven positions and
+                        // be captured at nine, its bottom notches pointing at the capture above them
+                        // (namz FileEntry: the X88-IR's 0 and 30 play its 60) — and this column is
+                        // about the work done, not about what the knob says.
+                        std::set<std::string> recorded;
+                        for (const auto& f : stage.device.files)
+                            recorded.insert (f.id);
+                        n.captures = (int) recorded.size();
 
                         const auto designed = juce::String (stage.designedIn).trim();
                         const auto made     = juce::String (stage.madeIn).trim();
@@ -222,8 +252,12 @@ private:
                 if (n.model.isEmpty())
                     continue;
 
+                // One row a name: its channels are packs of their own (the X88-IR's four), and every
+                // one of them was recorded — their captures add up, their boxes are listed.
                 auto& into = pack.bundled ? shipped : added;
-                if (! into.contains (n))
+                if (const int at = into.indexOf (n); at >= 0)
+                    into.getReference (at).merge (n);
+                else
                     into.add (n);
             }
 
@@ -249,7 +283,7 @@ private:
             auto head = r.removeFromTop (headerH);
             g.setColour (theme::txFaint);
             const juce::Font hf = theme::displayFont (11.0f);
-            drawRow (g, head, hf, 0.08f, "MAKER", "MODEL", "SLOT", "CAPTURES", "YEAR", "SERIAL", "ORIGIN");
+            drawRow (g, head, hf, 0.08f, "MAKER", "MODEL", "CAPTURES", "YEAR", "SERIAL", "ORIGIN");
             g.setColour (theme::hair2);
             g.fillRect (r.removeFromTop (1));
 
@@ -275,9 +309,17 @@ private:
             if (list.isEmpty())
                 return;
 
+            // The section's sum on its own head: how many NAM captures it holds, every row's together.
+            int total = 0;
+            for (const auto& d : list)
+                total += d.captures;
+            const auto head = total > 0 ? title + juce::String::fromUTF8 (" \xe2\x80\x94 ") + juce::String (total)
+                                                + (total == 1 ? " NAM CAPTURE" : " NAM CAPTURES")
+                                        : title;
+
             r.removeFromTop (6);
             g.setColour (theme::violet);
-            theme::drawTracked (g, title, r.removeFromTop (sectionH).toFloat(),
+            theme::drawTracked (g, head, r.removeFromTop (sectionH).toFloat(),
                                 theme::displayFont (11.0f), 0.10f, juce::Justification::centredLeft);
 
             const juce::Font f { juce::FontOptions (textH) };
@@ -289,10 +331,9 @@ private:
                 drawCell (g, row.removeFromLeft (makerW), f, d.maker.isNotEmpty() ? d.maker : juce::String ("-"));
                 drawCell (g, row.removeFromLeft (modelW), f, d.model);
                 g.setColour (theme::txFaint);
-                drawCell (g, row.removeFromLeft (slotW),     f, d.slot);
                 drawCell (g, row.removeFromLeft (capturesW), f, d.captures > 0 ? juce::String (d.captures) : juce::String());
-                drawCell (g, row.removeFromLeft (yearW),     f, d.year > 0 ? juce::String (d.year) : juce::String());
-                drawCell (g, row.removeFromLeft (serialW), f, d.serial);
+                drawCell (g, row.removeFromLeft (yearW),     f, d.yearsText());
+                drawCell (g, row.removeFromLeft (serialW), f, d.serials.joinIntoString (", "));
                 drawCell (g, row,                          f, d.origin);
             }
         }
@@ -308,9 +349,8 @@ private:
         }
 
         static void drawRow (juce::Graphics& g, juce::Rectangle<int> row, const juce::Font& f, float tracking,
-                             const juce::String& a, const juce::String& b, const juce::String& c,
-                             const juce::String& d, const juce::String& e, const juce::String& h,
-                             const juce::String& i)
+                             const juce::String& a, const juce::String& b, const juce::String& d,
+                             const juce::String& e, const juce::String& h, const juce::String& i)
         {
             const auto cell = [&] (int w, const juce::String& t)
             {
@@ -318,37 +358,29 @@ private:
                                     juce::Justification::centredLeft);
             };
 
-            cell (makerW, a); cell (modelW, b); cell (slotW, c); cell (capturesW, d);
+            cell (makerW, a); cell (modelW, b); cell (capturesW, d);
             cell (yearW, e); cell (serialW, h);
             theme::drawTracked (g, i, row.withTrimmedRight (10).toFloat(), f, tracking,
                                 juce::Justification::centredLeft);
         }
 
-        static juce::String slotName (device::DeviceLibrary::Slot s)
-        {
-            using Slot = device::DeviceLibrary::Slot;
-            switch (s)
-            {
-                case Slot::pedal:    return "PEDAL";
-                case Slot::preamp:   return "AMP";
-                case Slot::any:
-                case Slot::none:     break;   // a slot this instrument does not have has no word
-            }
-            return {};
-        }
-
         static constexpr int rowH     = 20;
         static constexpr int headerH  = 18;
         static constexpr int sectionH = 18;
-        static constexpr int makerW    = 150;
-        static constexpr int modelW    = 190;
-        static constexpr int slotW     = 62;
-        static constexpr int capturesW = 70;
-        static constexpr int yearW     = 48;
-        static constexpr int serialW   = 100;
+        // No SLOT: every device the set ships is an amp, and a column that says so on every row says
+        // nothing (Oleh, 21.10). Its width went where the words were cut — CAPTURES' own head, the
+        // serials, ORIGIN.
+        static constexpr int makerW    = 120;
+        static constexpr int modelW    = 150;
+        static constexpr int capturesW = 96;
+        static constexpr int yearW     = 56;
+        static constexpr int serialW   = 170;
 
         juce::Array<Named> shipped, added;
         int width = 640;
+
+    public:
+        juce::String product;       // whose devices: the product's name
     };
 
     juce::Rectangle<int> panel, seam;

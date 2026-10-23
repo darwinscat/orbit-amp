@@ -9,7 +9,7 @@
     product, and run as it (CMakeLists.txt: amp_set_test, amp_console). What tells the products apart is
     said here, once, in the table below — apart from each product's lineup, so that a lineup that drifts
     is caught rather than read back: the captures its channels play and what each opens on, whether they
-    go in pairs, a gear and its TURBO, whether it has PARK, the marks on its DRIVE's dial, the variable that
+    go in pairs, a gear and its TURBO, the marks on its DRIVE's dial, the variable that
     tells its channel gate the home is its own (tests/gates.txt), and the words its gate says what it found
     in. How many of the channels the build plays, GATE_CHANNELS, the build says. */
 
@@ -80,7 +80,6 @@ struct Product
         first so many. */
     std::vector<Channel> channels;
 
-    bool park;                      // PARK: the lever's top end, the whole amp out of the sound
     const char* gears;              // where the channels go in pairs, a gear and its TURBO, what its gate says of them; none where they do not
     std::vector<DialMark> dial;     // none where DRIVE plays one capture
 
@@ -93,59 +92,68 @@ struct Product
 /** THE PRODUCTS, each as its gate knows it. */
 inline const Product& product()
 {
-    // The Victory V4's three pedals, a gear each and TURBO its second channel: CLEAN the Copper and the
-    // Copper TB in a hall, CRUNCH the Sheriff's two on a plate, HI-GAIN the Kraken's two in an ambience
-    // with no delay — as far as the product goes.
-    const std::vector<Channel> v4 {
-        { "v4-copper-4ae0",      "", "Hall",     15.0f, 15.0f },
-        { "v4-copper-tb-5841",   "", "Hall",     15.0f, 15.0f },
-        { "v4-sheriff-ch1-82ab", "", "Plate",    15.0f, 15.0f },
-        { "v4-sheriff-ch2-2f2f", "", "Plate",    15.0f, 15.0f },
-        { "v4-kraken-ch1-f7fc",  "", "Ambience", 15.0f, 0.0f  },
-        { "v4-kraken-ch2-5f71",  "", "Ambience", 15.0f, 0.0f  },
-    };
     const auto rover = [] (const char* name, std::vector<Channel> channels, const char* gears)
     {
-        return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), true, gears, {},
+        return Product { name, "rover", "ROVER_GATE_OWNS_HOME", std::move (channels), gears, {},
                          "all the product's channels' packs are installed",
-                         "every channel's BASS, MIDDLE and TREBLE are its pack's own, found by name wherever its list has them",
-                         "...and every one on the build's DARK MATTER" };
+                         "every channel's tone knobs are its pack's tones, as many as it lists, knob i its tone i",
+                         "...and every one on the build's RED GIANT" };
     };
 
     static const Product products[] {
         // The cockpit: the X88-IR's four channels, one to a detent of the throttle and each its own
-        // memory, no PARK. The two clean ones stand in a hall with a little delay behind them, the two
-        // driven ones each in a room of its own and no delay, all four at the room's own default share.
+        // memory. All four on a plate, the cleaner the wetter, Clean with a little delay behind it and
+        // Edge with about half as much, the two driven ones with none.
         // Each pack is captures shot at several hours of the gear's own knob, and DRIVE stands on them.
         { "CatpitAmp", "cockpit", "CATPIT_GATE_OWNS_HOME",
           {
-              { "x88-ir-normal-bae8",    "", "Hall",     30.0f, 15.0f, "after INIT the first channel stands in a hall, with a little delay" },
-              { "x88-ir-altered-c14c",   "", "Hall",     30.0f, 15.0f, "...and so does the second" },
-              { "x88-ir-crunch-2abb",    "", "Plate",    30.0f, 0.0f,  "the third opens on a plate, and no delay" },
-              { "x88-ir-overdrive-0344", "", "Ambience", 30.0f, 0.0f,  "...the fourth on an ambience, and none either" },
+              { "x88-ir-normal-bae8",    "", "Plate",    20.0f, 15.0f, "after INIT the first channel stands on a plate, with a little delay" },
+              { "x88-ir-altered-c14c",   "", "Plate",    15.0f, 8.0f,  "...and so does the second, with half the delay" },
+              { "x88-ir-crunch-2abb",    "", "Plate",    12.0f, 0.0f,  "...the third on a plate too, and no delay" },
+              { "x88-ir-overdrive-0344", "", "Plate",    10.0f, 0.0f,  "...the fourth the same, and none either" },
           },
-          false, nullptr,
+          nullptr,
           {
               { 1.0f, 5.0,  "the capture at the top of DRIVE was shot at five o'clock" },
               { 0.5f, 12.0, "...the one in the middle at twelve" },
               { 0.0f, 9.0,  "...and the bottom plays the one shot at nine, fed softer" },
           },
           "all four channels' packs are installed",
-          "every channel's BASS, MIDDLE and TREBLE are its pack's first three tones, found by name",
-          "...and all four on the build's DARK MATTER" },
+          "every channel's tone knobs are its pack's three tones, knob i its tone i",
+          "...and all four on the build's RED GIANT" },
 
         // On Mars the Friedman IR-X's two channels, each a gear: Ch1 the CRUNCH and Ch2 the HI-GAIN, its
-        // TURBO the same pack with the Boost thrown. Ch1 on a plate, Ch2 in an ambience with no delay.
+        // TURBO the same pack with the Boost thrown. Both on a plate, Ch2 with no delay.
         rover ("RedPawAmp",
                {
                    { "ir-x-ch1-poweramp-3e66", "Boost=off", "Plate",    15.0f, 15.0f },
                    { "ir-x-ch1-poweramp-3e66", "Boost=on",  "Plate",    15.0f, 15.0f },
-                   { "ir-x-ch2-poweramp-67e9", "Boost=off", "Ambience", 15.0f, 0.0f  },
-                   { "ir-x-ch2-poweramp-67e9", "Boost=on",  "Ambience", 15.0f, 0.0f  },
+                   { "ir-x-ch2-poweramp-67e9", "Boost=off", "Plate",    10.0f, 0.0f  },
+                   { "ir-x-ch2-poweramp-67e9", "Boost=on",  "Plate",    10.0f, 0.0f  },
                },
                "each gear is one of the IR-X's channels, its TURBO the same with the Boost on"),
-        rover ("FrostPawAmp", v4, "each gear is a pedal's two channels, TURBO the second"),
-        rover ("AmberPawAmp", v4, "each gear is a pedal's two channels, TURBO the second"),
+        rover ("FrostPawAmp",
+               {
+                   { "revolt-clean-poweramp-bf62",  "Boost=off", "Plate",    20.0f, 15.0f },
+                   { "revolt-clean-poweramp-bf62",  "Boost=on",  "Plate",    20.0f, 15.0f },
+                   { "revolt-crunch-poweramp-73a7", "Boost=off", "Plate",    15.0f, 8.0f  },
+                   { "revolt-crunch-poweramp-73a7", "Boost=on",  "Plate",    15.0f, 8.0f  },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=off", "Plate",    10.0f, 0.0f  },
+                   { "revolt-lead-poweramp-f5dc",   "Boost=on",  "Plate",    10.0f, 0.0f  },
+               },
+               "each gear is one of the ReVolt's channels, its TURBO the same with the Boost on"),
+        // Over Titan the Victory V4's three, a gear each, all on a plate: CLEAN the Copper, CRUNCH the Sheriff,
+        // HI-GAIN the Kraken with no delay — its TURBO the same pack with the Boost on.
+        rover ("AmberPawAmp",
+               {
+                   { "v4-copper-4ae0",      "Boost=off", "Plate",    20.0f, 15.0f },
+                   { "v4-copper-4ae0",      "Boost=on",  "Plate",    20.0f, 15.0f },
+                   { "v4-sheriff-ch1-82ab", "Boost=off", "Plate",    15.0f, 8.0f  },
+                   { "v4-sheriff-ch1-82ab", "Boost=on",  "Plate",    15.0f, 8.0f  },
+                   { "v4-kraken-ch1-f7fc",  "Boost=off", "Plate",    10.0f, 0.0f  },
+                   { "v4-kraken-ch1-f7fc",  "Boost=on",  "Plate",    10.0f, 0.0f  },
+               },
+               "each gear is one of the V4's three, its TURBO the same with the Boost on"),
     };
 
     for (const auto& p : products)

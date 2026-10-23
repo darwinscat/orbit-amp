@@ -232,7 +232,7 @@ inline constexpr const char* cabIr = "cab_ir";
 // the table read here. What a session keeps of `cabIr` is an INDEX into this list — the IR's number in
 // the catalog, which is for good: a new cabinet takes the next one, and nothing already here ever moves,
 // so a session saved on WUMBO opens on WUMBO. The menu does not show them in this order; it shows them by
-// the shelf's folders, and inside each by cabinet (cabShelves, below). The catalog's default, DARK MATTER,
+// the shelf's folders, and inside each by cabinet (cabShelves, below). The catalog's default, RED GIANT,
 // is the shipping default, the cabinet every face's channels open on too.
 inline const juce::StringArray cabIrNames = []
 {
@@ -524,6 +524,41 @@ inline constexpr int rowForStage (Stage s)
     return numChainRows;
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+/** THE ENGINE'S OWN PACK, by its name in a product's list: the device a fresh OrbitAmp plays, and the one
+    whose knobs and switches give every amp's their defaults (Parameters.cpp, blockDefaults). */
+inline constexpr const char* enginePack = "Soldano X88-IR Crunch";
+
+/** WHERE A FRESH INSTANCE STANDS, wherever that is not where the engine stands: the defaults createLayout
+    gives the few parameters a product, or the place it runs in, opens elsewhere. A parameter's default
+    is what a fresh instance IS — what a host shows as its default, resets it to, and holds a new instance
+    to (CLAP's params; clap-validator's param-default-values) — so a product that opens on a channel of
+    its own declares that channel's pack, room and delay (channels::Engine::opening), and the channel
+    mode is declared where the environment puts it (AmpProcessor::modeOfEnvironment). Default-made it
+    is the engine's own: OrbitAmp's, in a plug-in on a mono bus — and the one place its values are said,
+    which is where the amp itself puts these parameters back (engineDefault). */
+struct Opening
+{
+    /** The pack it plays, by the `rig_id` its manifest carries, or none: the engine's, the Soldano X88-IR Crunch.
+        Only the device — the knobs and switches keep the defaults the engine's pack gives them, which is
+        where a channel the hand has never been on finds them (channels/Channels.cpp, defaultOf). */
+    const char* capture = nullptr;
+    const char* reverb  = "Plate";      // the room, one of reverbCharacters
+    float reverbMix     = 30.0f;        // its share, percent
+    float delayMix      = 0.0f;         // the delay's, percent
+    StereoMode stereoMode = StereoMode::mono;
+};
+
+/** The engine's parameters, for the product of that name: the devices a parameter offers are the ones
+    it plays, and a fresh instance stands where `opening` says. */
+juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::String& product, const Opening& opening = {});
+
+/** WHERE THE AMP ITSELF PUTS A PARAMETER BACK — INIT, the face's "Reset to default", a double-click on a
+    control, a value healed from NaN — as normalised for `p`. The parameters an Opening moves go back
+    where the engine's own opening has them (a default-made Opening; the device to `enginePlace`, where
+    enginePack stood in the product's list as the processor was made), as they always have; every other
+    parameter to its declared default, which is the same thing. A host's own reset follows the declared
+    default — that is the format's contract, and where a fresh instance stands. */
+float engineDefault (const juce::RangedAudioParameter& p, int enginePlace);
+
 
 } // namespace orbitamp::params

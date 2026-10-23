@@ -6,6 +6,7 @@
 #include "ui/HumMenu.h"
 #include "ui/HumTuning.h"
 #include "ui/Prefs.h"
+#include "ui/WebFaceplate.h"
 
 namespace orbitamp
 {
@@ -35,7 +36,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
       outColumn (VolumeColumn::Side::out, p.outDb,     p.outClip,
                  *p.apvts.getParameter (params::outTrim)),
       gateConsole (p.apvts, p.gateKeyDb),
-      humLearner (p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
+      humLearner (p.product(), p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
@@ -54,14 +55,14 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addAndMakeVisible (footer);
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
     // The demo needs its loops on disk — a machine without them has no player to show.
-    showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
-    showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+    showDemo   = params::demoLoopsPresent() && prefs::getBool (amp.product(), prefs::showDemo, false);
+    showGlyphs = prefs::getBool (amp.product(), prefs::showGlyphs, false);
 
     // Before the first layout: whether an emptied row hands its height to whoever is left, or
     // takes it out of the window. See prefs::growBlocks.
-    faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
-    dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
-    faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
+    faceplate.setFillsHeight (prefs::getBool (amp.product(), prefs::growBlocks, true));
+    dimRatherThanRemove = prefs::getBool (amp.product(), prefs::dimStandby, false);
+    faceplate.setEqRowOnTop (prefs::getBool (amp.product(), prefs::eqRowOnTop, false));
 
 
     addChildComponent (demoStrip);
@@ -92,23 +93,27 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         if (display == nullptr)
             return;
 
+        // The whole display: the zoom from its height (or from its width, on a display narrower than
+        // the design), the width then as much of the display as the range allows.
         const auto area = display->userArea;
         const float fit = juce::jlimit (AmpProcessor::minScale, AmpProcessor::maxScale,
-                                        juce::jmin ((float) area.getWidth() / (float) baseWidth,
+                                        juce::jmin ((float) area.getWidth() / (float) minBaseWidth,
                                                     (float) (area.getHeight() - titleBarAllowance)
                                                         / (float) baseHeight()));
-        const float cur = (float) getWidth() / (float) baseWidth;
+        const int fullH = juce::roundToInt ((float) baseHeight() * fit);
+        const int fullW = juce::jlimit (juce::roundToInt ((float) minBaseWidth * fit),
+                                        juce::roundToInt ((float) (maxDesignWidth() + margin * 2) * fit),
+                                        area.getWidth());
 
-        if (std::abs (cur - fit) < 0.01f && scaleBeforeFull > 0.0f)
+        if (! sizeBeforeFull.isEmpty() && std::abs (getHeight() - fullH) <= 1 && std::abs (getWidth() - fullW) <= 1)
         {
-            setSize (juce::roundToInt (baseWidth * scaleBeforeFull),
-                     juce::roundToInt (baseHeight() * scaleBeforeFull));
-            scaleBeforeFull = -1.0f;
+            setSize (sizeBeforeFull.getWidth(), sizeBeforeFull.getHeight());
+            sizeBeforeFull = {};
         }
         else
         {
-            scaleBeforeFull = cur;
-            setSize (juce::roundToInt (baseWidth * fit), juce::roundToInt (baseHeight() * fit));
+            sizeBeforeFull = getLocalBounds();
+            setSize (fullW, fullH);
         }
 
         if (auto* window = dynamic_cast<juce::ResizableWindow*> (tl))
@@ -198,7 +203,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     for (auto& att : blockRowAtts)
         att->sendInitialUpdate();
 
-    // The guards' arrows ARE their consoles: any click opens the menu (OFF is its first item),
+    // The guards' arrows ARE their consoles: any click opens the menu (the gate's leads with LEARN),
     // and the look clears the latched dot, the way a look at the badge used to.
     layoutStrip->onRowMenu = [this] (int i, juce::Point<int> pos)
     {
@@ -280,7 +285,8 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
 
     inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
-    inColumn.onMenu      = [this] (juce::Point<int> pos) { showInputMenu (pos); };
+    if constexpr (features::hum)   // the input column's menu is HUM's alone: with HUM off there is none (Features.h)
+        inColumn.onMenu  = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
@@ -291,13 +297,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         faceplate.deviceChanged();
     };
 
-    // Dragging the corner IS the zoom: the aspect is locked, so width alone determines the factor.
+    // The corner sets the zoom AND the width: the height decides the factor, and the aspect is free
+    // between the design's own and `maxAspect` (AspectRange), the width laid out across.
+    setConstrainer (&aspect);
     setResizable (true, true);
-    getConstrainer()->setFixedAspectRatio ((double) baseWidth / (double) baseHeight());
-    setResizeLimits (juce::roundToInt (baseWidth    * AmpProcessor::minScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::minScale),
-                     juce::roundToInt (baseWidth    * AmpProcessor::maxScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::maxScale));
+    applySizeLimits();
 
     // As large as the screen allows, up to the size the plugin WANTS to open at. Asking for 2x on a
     // display that cannot hold it does not give 2x — it gives whatever the window manager shrinks it
@@ -308,18 +312,30 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
     {
         const auto area = display->userArea;
-        const float fits = juce::jmin ((float) area.getWidth()  / (float) baseWidth,
+        const float fits = juce::jmin ((float) area.getWidth()  / (float) minBaseWidth,
                                        (float) (area.getHeight() - titleBarAllowance) / (float) baseHeight());
         s = juce::jlimit (AmpProcessor::minScale, s, fits);
         amp.setEditorScale (s);
     }
 
-    setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight() * s));
+    // It opens at the design's own width; the corner widens it from there.
+    zoomNow = s;
+    setSize (juce::roundToInt (minBaseWidth * s), juce::roundToInt (baseHeight() * s));
 
     // The one place this plugin may reach the network without a click, and only because a player
     // ticked the switch in the version popover: once a day at most, on the message thread, never in
     // a constructor a scanner runs. Not ticked, or checked already today — nothing happens at all.
     amp.updateChecker().checkIfDue();
+
+    // THE SITE'S KIT: OrbitAmp's own face written out for darwinscat.com, when the environment names a
+    // folder for it (WebFaceplate.h). A player never sets it, and without it nothing here happens.
+    if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_WEB_EXPORT", {}); folder.isNotEmpty())
+        WebFaceplate::exportAfterOpening (*this, juce::File (folder));
+
+    // A live still of the face for a product page (WebFaceplate.h) — a dev tool, like the kit above.
+    if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT", {}); folder.isNotEmpty())
+        WebFaceplate::liveShotAfterOpening (*this, juce::File (folder),
+                                            juce::File (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_DI", {})));
 }
 
 /** What the two switches of every row mean to the WINDOW, read in one place after any of them
@@ -374,14 +390,22 @@ void AmpEditor::applyRowStates()
 
 void AmpEditor::applyStripChoice()
 {
-    const float s = (float) getWidth() / (float) baseWidth;
+    // The zoom and the width the window already has; only the height follows the rows.
+    applySizeLimits();
+    designW = juce::jlimit (minDesignWidth, maxDesignWidth(), designW);
+    setSize (juce::roundToInt ((float) baseW() * zoomNow), juce::roundToInt ((float) baseHeight() * zoomNow));
+}
 
-    getConstrainer()->setFixedAspectRatio ((double) baseWidth / (double) baseHeight());
-    setResizeLimits (juce::roundToInt (baseWidth    * AmpProcessor::minScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::minScale),
-                     juce::roundToInt (baseWidth    * AmpProcessor::maxScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::maxScale));
-    setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight() * s));
+void AmpEditor::applySizeLimits()
+{
+    const int h = baseHeight();
+
+    aspect.lowAspect  = (double) minBaseWidth / (double) h;
+    aspect.highAspect = juce::jmax (aspect.lowAspect, (double) (maxDesignWidth() + margin * 2) / (double) h);
+    aspect.setSizeLimits (juce::roundToInt ((float) minBaseWidth * AmpProcessor::minScale),
+                          juce::roundToInt ((float) h * AmpProcessor::minScale),
+                          juce::roundToInt ((float) (maxDesignWidth() + margin * 2) * AmpProcessor::maxScale),
+                          juce::roundToInt ((float) h * AmpProcessor::maxScale));
 }
 
 void AmpEditor::paint (juce::Graphics& g)
@@ -409,13 +433,14 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     }
 
     // H: the hum, OFF and back (prefs::humFlip) — Р under a Russian layout, the same key. G: the
-    // gate's On, the sound's switch and so an undo step, as its menu sets it — П.
+    // gate's On, the sound's switch and so an undo step, as its menu sets it — П. H only while the build
+    // has HUM (Features.h); without it the key is not ours, and goes on to the host.
     if (! key.getModifiers().isAnyModifierKeyDown())
     {
         const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
-        if (letter == 'H' || letter == 0x0420)
+        if (features::hum && (letter == 'H' || letter == 0x0420))
         {
-            prefs::setHum (prefs::humFlip());
+            prefs::setHum (amp.product(), prefs::humFlip (amp.product()));
             return true;
         }
         if (letter == 'G' || letter == 0x041f)
@@ -439,11 +464,11 @@ static constexpr int itemGrowBlocks = 101, itemDimStandby = 102;
 
 void AmpEditor::applyViewPrefs()
 {
-    faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
-    faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
-    dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
-    showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
-    showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+    faceplate.setFillsHeight (prefs::getBool (amp.product(), prefs::growBlocks, true));
+    faceplate.setEqRowOnTop (prefs::getBool (amp.product(), prefs::eqRowOnTop, false));
+    dimRatherThanRemove = prefs::getBool (amp.product(), prefs::dimStandby, false);
+    showDemo   = params::demoLoopsPresent() && prefs::getBool (amp.product(), prefs::showDemo, false);
+    showGlyphs = prefs::getBool (amp.product(), prefs::showGlyphs, false);
     applyRowStates();
     repaint();
 }
@@ -468,8 +493,8 @@ void AmpEditor::showChainMenu (juce::Component& anchor)
     // What an emptied row does — the eye's business, this machine only, so these two write the
     // preferences rather than any parameter. They live HERE and nowhere else: they only mean
     // anything while a link is being taken out, which is the list above.
-    m.addItem (itemGrowBlocks, "KEEP WINDOW HEIGHT", true, prefs::getBool (prefs::growBlocks, true));
-    m.addItem (itemDimStandby, "STANDBY KEEPS ITS PLACE", true, prefs::getBool (prefs::dimStandby, false));
+    m.addItem (itemGrowBlocks, "KEEP WINDOW HEIGHT", true, prefs::getBool (amp.product(), prefs::growBlocks, true));
+    m.addItem (itemDimStandby, "STANDBY KEEPS ITS PLACE", true, prefs::getBool (amp.product(), prefs::dimStandby, false));
 
     // ATTACHED to the button, not hung at a point: a menu that does not know its launcher
     // dismisses synchronously and lets the click through to it, so a second press on the checklist
@@ -504,7 +529,7 @@ void AmpEditor::showChainMenu (juce::Component& anchor)
                              const auto& key = r == itemGrowBlocks ? prefs::growBlocks : prefs::dimStandby;
                              const bool fallback = r == itemGrowBlocks;
 
-                             prefs::setBool (key, ! prefs::getBool (key, fallback));
+                             prefs::setBool (safe->amp.product(), key, ! prefs::getBool (safe->amp.product(), key, fallback));
                              safe->applyViewPrefs();
                          }
 
@@ -582,16 +607,16 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 {
     // The switch, then the modes (ui/HumMenu.h), in this menu's capitals.
     const int  heard = amp.humHeard();
-    const auto lines = prefs::humMenu (heard, humLearner.isLearning());
+    const auto lines = prefs::humMenu (amp.product(), heard, humLearner.isLearning());
 
     juce::PopupMenu m;
-    m.addSectionHeader ("HUM  " + prefs::humState (heard).toUpperCase());
+    m.addSectionHeader ("HUM  " + prefs::humState (amp.product(), heard).toUpperCase());
     for (size_t i = 0; i < lines.size(); ++i)
         m.addItem ((int) i + 1, lines[i].text.toUpperCase(), true, lines[i].ticked);
 
     // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
     // its title; knob k's values answer as 100 (k + 1) + their index.
-    const auto knobs = prefs::humtune::knobs();
+    const auto knobs = prefs::humtune::knobs (amp.product());
     for (size_t k = 0; k < knobs.size(); ++k)
     {
         juce::PopupMenu values;
@@ -605,7 +630,7 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
     // closed under the open menu is left alone.
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs] (int r)
+                     [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs, &product = amp.product()] (int r)
                      {
                          if (r > 0 && r <= (int) lines.size() && lines[(size_t) r - 1].isLearn)
                          {
@@ -616,7 +641,7 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
                              }
                          }
                          else if (r > 0 && r <= (int) lines.size())
-                             prefs::humPick (lines[(size_t) r - 1]);
+                             prefs::humPick (product, lines[(size_t) r - 1]);
                          else if (const int k = r / 100 - 1, i = r % 100;
                                   k >= 0 && k < (int) knobs.size() && i < knobs[(size_t) k].count)
                              knobs[(size_t) k].choose (knobs[(size_t) k].values[i]);
@@ -625,23 +650,36 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 
 void AmpEditor::resized()
 {
-    const float s = (float) getWidth() / (float) baseWidth;
+    // The HEIGHT is the zoom; the width, in design units, is what is left to lay out across.
+    const float s = (float) getHeight() / (float) baseHeight();
     amp.setEditorScale (s);
+    zoomNow = s;
+    designW = juce::jlimit (minDesignWidth, maxDesignWidth(),
+                            juce::roundToInt ((float) getWidth() / s) - margin * 2);
 
     // Bounds stay in design units; the transform does all the scaling, margins included.
     const auto zoom = juce::AffineTransform::scale (s);
 
-    chrome.setBounds (margin, margin, FaceplateView::designWidth, Chrome::designHeight);
+    chrome.setBounds (margin, margin, designW, Chrome::designHeight);
     chrome.setTransform (zoom);
 
     // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
-    int faceplateY = margin + Chrome::designHeight + headerGap;
+    const int faceplateY = margin + Chrome::designHeight + headerGap;
 
-    // The layout strip: the chain laid flat between the toolbar and the device, always there.
-    layoutStrip->setBounds (margin, faceplateY, FaceplateView::designWidth,
-                            LayoutStrip::designHeight);
-    layoutStrip->setTransform (zoom);
-    faceplateY += LayoutStrip::designHeight;
+    // The layout strip: the chain laid flat on the header's second line, beside the brand's marks,
+    // always there. In front of the header, whose component spans both lines. Its first arrow's
+    // tail stands under the wordmark's first letter: no lane inset, the strip that tail's air left.
+    // Its right end lines up with the first line's last two buttons: the checklist under the gear,
+    // the last arrow's point ending where FULL SCREEN does.
+    {
+        layoutStrip->leftPad = 0;
+        const int x = chrome.secondLineX() - LayoutStrip::tailAir;
+        layoutStrip->menuCentreX = chrome.gearBounds().getCentreX() - x;
+        layoutStrip->arrowsEndX  = chrome.fullScreenGlyph().getRight() - x;
+        layoutStrip->setBounds (margin + x, margin + Chrome::firstLineH, designW - x,
+                                LayoutStrip::designHeight);
+        layoutStrip->setTransform (zoom);
+    }
 
     // The faceplate is only as tall as its LAYOUT stands it — a collapsed row is not here.
     const int faceplateH = faceplate.currentHeight();
@@ -668,56 +706,51 @@ void AmpEditor::resized()
     inColumn.setBounds (margin, gutterY, VolumeColumn::designWidth, gutterH);
     inColumn.setTransform (zoom);
 
-    outColumn.setBounds (margin + FaceplateView::designWidth - VolumeColumn::designWidth, gutterY,
+    outColumn.setBounds (margin + designW - VolumeColumn::designWidth, gutterY,
                         VolumeColumn::designWidth, gutterH);
     outColumn.setTransform (zoom);
 
     faceplate.setBounds (margin + colL, faceplateY,
-                         FaceplateView::designWidth - colL - colR, faceplateH);
+                         designW - colL - colR, faceplateH);
     faceplate.setTransform (zoom);
 
-    // The always-on needle, full width, above the footer's facts — dropped a hair below its
-    // gap's centre, which reads better than the arithmetic middle; the footer keeps its place,
-    // so the window's height is untouched. The badges stand off the window's edge the way the
-    // rails above them do, and the tuner takes whatever the badges leave it.
-    const int tunerDrop  = 3;
+    // The bottom row: the always-on needle in the left half, the footer's facts in the right. Both
+    // stand off the window's edges the way the rails above them do; the row stays when the tuner
+    // does not, its half left empty, so the facts never move.
     const int badgeInset = edgeInset;
-    const int tunerY = faceplateY + faceplateH + chromeGap + tunerDrop;
+    const int rowY   = faceplateY + faceplateH + chromeGap;
+    const int rowW   = designW - 2 * badgeInset;
+    const int tunerW = (rowW - chromeGap) / 2;
 
-    // The row is the tuner, whole: the guards' lights and menus live in the strip's arrows now.
     tunerStrip.setVisible (tunerStands);
-    tunerStrip.setBounds (margin + badgeInset, tunerY,
-                          FaceplateView::designWidth - 2 * badgeInset,
-                          TunerStrip::designHeight);
+    tunerStrip.setBounds (margin + badgeInset, rowY + (bottomRowH - TunerStrip::designHeight) / 2,
+                          tunerW, TunerStrip::designHeight);
     tunerStrip.setTransform (zoom);
 
     // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
     inRuler.setBounds (margin + colL - chromeGap + 2, gutterY, 56, gutterH);
     inRuler.setTransform (zoom);
-    outRuler.setBounds (margin + FaceplateView::designWidth - VolumeColumn::designWidth - 58, gutterY,
+    outRuler.setBounds (margin + designW - VolumeColumn::designWidth - 58, gutterY,
                         56, gutterH);
     outRuler.setTransform (zoom);
 
     // The learn sheet: half the plugin, centred over the faceplate.
-    learnOverlay.setBounds (margin + FaceplateView::designWidth / 6, faceplateY + 60,
-                            FaceplateView::designWidth * 2 / 3, 330);
+    learnOverlay.setBounds (margin + designW / 6, faceplateY + 60,
+                            designW * 2 / 3, 330);
     learnOverlay.setTransform (zoom);
 
-    // The row is as gone as the tuner: hidden, the footer moves up whole.
-    const int footerY = tunerStands
-                            ? tunerY - tunerDrop + TunerStrip::designHeight + chromeGap
-                            : faceplateY + faceplateH + chromeGap;
-    footer.setBounds (margin, footerY, FaceplateView::designWidth, Footer::designHeight);
+    footer.setBounds (margin + badgeInset + tunerW + chromeGap, rowY + (bottomRowH - Footer::designHeight) / 2,
+                      rowW - tunerW - chromeGap, Footer::designHeight);
     footer.setTransform (zoom);
 
-    // TEMPORARY — the audition player and the glyph review strip, under the footer, each only
+    // TEMPORARY — the audition player and the glyph review strip, under the bottom row, each only
     // when this player switched it on; the window is as tall as what it shows.
-    int stripY = footerY + Footer::designHeight;
+    int stripY = rowY + bottomRowH + chromeGap;
 
     demoStrip.setVisible (showDemo);
     if (showDemo)
     {
-        demoStrip.setBounds (margin, stripY, FaceplateView::designWidth, DemoStrip::designHeight);
+        demoStrip.setBounds (margin, stripY, designW, DemoStrip::designHeight);
         demoStrip.setTransform (zoom);
         stripY += DemoStrip::designHeight;
     }
@@ -725,27 +758,19 @@ void AmpEditor::resized()
     glyphs.setVisible (showGlyphs);
     if (showGlyphs)
     {
-        glyphs.setBounds (margin, stripY, FaceplateView::designWidth, GlyphPreview::designHeight);
+        glyphs.setBounds (margin, stripY, designW, GlyphPreview::designHeight);
         glyphs.setTransform (zoom);
     }
 
     // The overlay covers the whole editor, margins included, in the same design units.
-    setup.setBounds (0, 0, baseWidth, baseHeight());
+    setup.setBounds (0, 0, baseW(), baseHeight());
     setup.setTransform (zoom);
-    devices.setBounds (0, 0, baseWidth, baseHeight());
+    devices.setBounds (0, 0, baseW(), baseHeight());
     devices.setTransform (zoom);
 
 }
 
-juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
-{
-    return new AmpEditor (p);
-}
-
-// OrbitAmp's first start is OrbitAmpStart.cpp's, apart from the face.
-
-// ...and it is the engine as it stands: no parameter of its own, no half of its own.
-void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&) {}
-std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor&) { return nullptr; }
+// OrbitAmp itself — its name, this face, its first start — is said in OrbitAmpStart.cpp.
 
 } // namespace orbitamp
+

@@ -118,7 +118,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
                                  if (auto* p = safe->amp.apvts.getParameter (id))
                                  {
                                      p->beginChangeGesture();
-                                     p->setValueNotifyingHost (p->getDefaultValue());
+                                     p->setValueNotifyingHost (safe->amp.engineDefault (*p));
                                      p->endChangeGesture();
                                  }
                          });
@@ -169,7 +169,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
 
         const double fs = juce::jmax (8000.0, amp.currentSampleRate());
 
-        const bool spectraOn = prefs::spectraShown();   // the gear's one switch for every analyser
+        const bool spectraOn = prefs::spectraShown (amp.product());   // the gear's one switch for every analyser
 
         const auto draw = [&] (felitronics::analysis::SpectrumPane& pane, juce::Colour tint,
                                float fillTop, float fillBottom, float line)
@@ -373,10 +373,11 @@ void ReverbBlock::layOutContent (juce::Rectangle<int> area)
 
     // The two refinements back at the hero's left hand — small, and pressed to the TOP edge
     // rather than riding the hero's centre line.
-    const int mini = 42;
-    auto miniRow = row.removeFromRight (mini * 2 + 6).withHeight (mini + 11).translated (0, 2);
+    const int mini = Knob::smallSide;   // the face's small dial: the EQ's bands, the delay's three
+    const int gap  = Knob::smallGap (row.getWidth());   // the delay's air between its three, in a block as wide
+    auto miniRow = row.removeFromRight (mini * 2 + gap).withHeight (mini + 11).translated (0, 2);
     decay.setBounds (miniRow.removeFromLeft (mini));
-    miniRow.removeFromLeft (6);
+    miniRow.removeFromLeft (gap);
     pre.setBounds (miniRow);
     decay.toFront (false);
     pre.toFront (false);

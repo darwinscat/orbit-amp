@@ -27,7 +27,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
     // what it made in the block's own colour over it.
     curve.paintSpectrum = [this] (juce::Graphics& g, juce::Rectangle<float> r)
     {
-        if (! prefs::spectraShown())
+        if (spectraShown != nullptr && ! spectraShown->load (std::memory_order_relaxed))
             return;
 
         felitronics::analysis::PlotMap pm;
@@ -101,7 +101,7 @@ EqSection::EqSection (juce::AudioProcessorValueTreeState& s, int eqLink,
 
     for (auto* l : { &hpfLabel, &lpfLabel })
     {
-        l->setFont (theme::displayFont (12.0f));
+        l->setFont (theme::displayFont (13.0f));
         l->setColour (juce::Label::textColourId, theme::txDim);
         l->setJustificationType (juce::Justification::centred);
         l->setInterceptsMouseClicks (false, false);
@@ -162,8 +162,8 @@ void EqSection::buildBands (std::vector<Band> newBands)
         else           k->textForValue = [] (double)   { return juce::String(); };
 
         k->onValueChange   = [this] { refreshCurve(); };
-        k->labelFontHeight = 11.0f;
-        k->labelRowHeight  = 14;
+        k->labelFontHeight = 13.0f;   // the face's floor for anything read
+        k->labelRowHeight  = labelRowH;
 
         bandAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
             state, b.param, *k));
@@ -298,7 +298,7 @@ void EqSection::ModeButton::paint (juce::Graphics& g)
     g.setColour (theme::hair2);
     g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
     g.setColour (theme::txDim);
-    theme::drawTracked (g, text, r.withTrimmedRight (14.0f), theme::displayFont (12.0f), 0.14f,
+    theme::drawTracked (g, text, r.withTrimmedRight (14.0f), theme::displayFont (13.0f), 0.14f,
                         juce::Justification::centred);
 
     juce::Path v;
@@ -359,18 +359,24 @@ void EqSection::addTo (juce::Component& parent)
         parent.addAndMakeVisible (*k);
 }
 
-void EqSection::setWidgetsVisible (bool v)
+void EqSection::setCurveVisible (bool v)
 {
-    // The console's clock rides its visibility, and this is the ONLY place that starts it now.
+    // The console's clock rides the CURVE's visibility, and this is the ONLY place that starts it.
     //
     // It used to be started by the block that drew the EQ back when the EQ had a block of its own;
     // that block is gone, nothing took the job over, and the spectrum behind the curve quietly
     // stopped existing. The curve kept redrawing on every parameter move, which is exactly why it
-    // took a while to notice — a live line over a dead ground.
+    // took a while to notice — a live line over a dead ground. Now that the curve is one page of the
+    // picture well, the clock stops with the page: the TONE picture reads the same tap, and two
+    // readers on one mailbox starve each other.
     setSpectrumRunning (v);
 
     curve.setVisible (v);
     modeBtn.setVisible (v && nativeOffered);   // ...and only when there is a choice to make
+}
+
+void EqSection::setRowVisible (bool v)
+{
     hpfSw.setVisible (v);
     lpfSw.setVisible (v);
     hpfLabel.setVisible (v);
@@ -409,7 +415,7 @@ void EqSection::SlopeCombo::paint (juce::Graphics& g)
                           + juce::String (" DB");
 
     g.setColour (theme::txDim);
-    theme::drawTracked (g, text, r.withTrimmedRight (11.0f), theme::displayFont (12.0f), 0.04f,
+    theme::drawTracked (g, text, r.withTrimmedRight (11.0f), theme::displayFont (13.0f), 0.04f,
                         juce::Justification::centred);
 
     // The chevron that says "this opens".
@@ -579,26 +585,16 @@ void EqSection::handleDoubleClicked (int index)
         b3OnAtt->setValueAsCompleteGesture (0.0f);
 }
 
-void EqSection::layOut (juce::Rectangle<int> content)
+void EqSection::layOutRow (juce::Rectangle<int> row)
 {
-    // The control row across the bottom: [HPF sw][LO][B1][B2][HI][LPF sw], gain knobs only, and
-    // under each switch its slope combo.
+    // The control row: [HPF sw][LO][B1][B2][HI][LPF sw], gain knobs only, and under each switch its
+    // slope combo.
     //
-    // The frequencies used to be written out under every cell and are not any more. Half a block is
-    // not half a panel: keeping the numbers meant either shrinking the type below what can be read
-    // at 1x or taking the room from the curve, and the curve IS the readout — a node's frequency is
-    // where the node is standing. Dragging it sideways was always the way to set one.
-    // Under the curve or over it — the player's choice, and the ONLY thing it changes. The row's
-    // own arrangement does not mirror: names along its top edge, the cuts' stacks standing on the
-    // dials' bottom line, both ways round. A row that rearranged itself with the preference would
-    // have to be re-learnt every time the switch moved.
-    auto row = rowOnTop ? content.removeFromTop (rowH) : content.removeFromBottom (rowH);
-
-    if (rowOnTop)
-        content.removeFromTop (4);
-    else
-        content.removeFromBottom (4);
-
+    // The frequencies used to be written out under every cell and are not any more. Keeping the
+    // numbers meant either shrinking the type below what can be read at 1x or taking the room from
+    // the curve, and the curve IS the readout — a node's frequency is where the node is standing.
+    // Dragging it sideways was always the way to set one.
+    //
     // ONE LINE OF NAMES. HPF, LO, L MID, H MID, HI, LPF all begin at the row's top edge, because
     // six labels at three different heights read as three groups rather than one row of controls.
     // A knob draws its own name in the first `labelRowHeight` of its bounds, so the knobs are set
@@ -611,7 +607,6 @@ void EqSection::layOut (juce::Rectangle<int> content)
     // The cut cells are a fixed width and the bands share what is left, however many there are: a
     // device that measured one Tone control gets one big centred dial rather than one dial and
     // three holes where our other three used to be.
-    const int cutW  = 50;
     const int n     = juce::jmax (1, (int) bandKnobs.size());
     const int knobW = (row.getWidth() - 2 * cutW) / n;
 
@@ -625,16 +620,17 @@ void EqSection::layOut (juce::Rectangle<int> content)
         if (i == 0)
             firstCell = cell;
 
-        const int side = juce::jmin (cell.getWidth(), cell.getHeight());
-        bandKnobs[i]->setBounds (cell.withWidth (side).withHeight (side)
-                                     .withX (cell.getCentreX() - side / 2));
+        // The whole cell, not a square of it: the name over the dial is 13 px now, and MIDDLE at that
+        // size is wider than the dial under it. The knob draws its dial at the smaller of the two
+        // sides that are left, centred, so the dial is the size it was.
+        bandKnobs[i]->setBounds (cell);
     }
 
     const auto lpfCell = row.removeFromRight (cutW);
 
     // The cuts hang off the first knob's geometry, so an empty row still has to put them somewhere.
     const auto first = bandKnobs.empty() ? firstCell : bandKnobs.front()->getBounds();
-    const int labelH  = bandKnobs.empty() ? 14 : bandKnobs.front()->labelRowHeight;
+    const int labelH  = bandKnobs.empty() ? labelRowH : bandKnobs.front()->labelRowHeight;
 
     // A cut's cell is a stack — the name, the switch, the slope — standing on the SAME bottom
     // line as the dials: the slope combo's underside is the dials' underside, so the row is as
@@ -651,12 +647,15 @@ void EqSection::layOut (juce::Rectangle<int> content)
 
     switchCell (hpfCell, hpfSw, hpfLabel, hpfSlopeBox);
     switchCell (lpfCell, lpfSw, lpfLabel, lpfSlopeBox);
+}
 
-    // The curve gets everything else; the two overlays share its top-right corner — whose bands,
-    // then which stamp, reading left to right in the order the questions are asked.
-    curve.setBounds (content);
+void EqSection::layOutCurve (juce::Rectangle<int> area, int cornerReserve)
+{
+    // The curve is the whole well it was given; whose tone it wears rides its top-right corner, left
+    // of whatever the block keeps there for itself.
+    curve.setBounds (area);
 
-    modeBtn.setBounds (content.getRight() - 150, content.getY() + 6, 140, 22);
+    modeBtn.setBounds (area.getRight() - cornerReserve - 6 - modeBtnW, area.getY() + 4, modeBtnW, 22);
     modeBtn.toFront (false);
 }
 

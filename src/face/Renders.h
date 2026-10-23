@@ -21,27 +21,28 @@
 namespace orbitamp::face::renders
 {
 
-/** The product's own pictures: `Faces/<product>` in the factory folder this build reads. */
-juce::File folder();
+/** A product's own pictures, by its name: `Faces/<product>` in the factory folder this build reads. Every
+    function here takes the product whose pictures it reads, by its name, first. */
+juce::File folder (const juce::String& product);
 
 /** The file a render is read from: the one in the folder `folderVariable` names, where that has it, and
     the product's own in the factory otherwise — which is not there when the factory is not. */
-juce::File fileOf (const char* name, const char* folderVariable);
+juce::File fileOf (const juce::String& product, const char* name, const char* folderVariable);
 
 /** Whether there is a render of that name to read: a picture only some products carry, or none at all
     with the factory folder missing. */
-bool has (const char* name, const char* folderVariable);
+bool has (const juce::String& product, const char* name, const char* folderVariable);
 
 /** A render by its file name, as it was made — a WebP by decodeWebp, any other format as JUCE decodes
     it. Invalid when it is not there. */
-juce::Image decode (const char* name, const char* folderVariable);
+juce::Image decode (const juce::String& product, const char* name, const char* folderVariable);
 
 /** ...and the same, as ARGB, ready to be drawn from. */
-juce::Image load (const char* name, const char* folderVariable);
+juce::Image load (const juce::String& product, const char* name, const char* folderVariable);
 
 /** ...and a file of text the face reads among its pictures — its MIDI sheet, its mark — as UTF-8; empty
     when it is not there. */
-juce::String text (const char* name, const char* folderVariable);
+juce::String text (const juce::String& product, const char* name, const char* folderVariable);
 
 /** HOW A STRAIGHT COLOUR IS PREMULTIPLIED HERE: times its alpha over 255, rounded to the nearest — so that
     every premultiplied value up to its alpha is some straight value's, and a picture tools/bake-art took

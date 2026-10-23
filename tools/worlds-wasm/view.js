@@ -7,14 +7,12 @@
 // titan-view.js — which names the world and exports its view: createPlainsView, createIceView, createTitanView,
 // each the call below with its module. The page imports the module; its .wasm comes beside it. No dependencies.
 //
-// Every world's module answers the same calls (view.h): made in the product's gears at the gear, TURBO and PARK
+// Every world's module answers the same calls (view.h): made in the product's gears at the gear and TURBO
 // asked for, built, given a context, its renderer created, then a frame at a time. So every view works the same:
 //
 //   view.setGear (n);          // the gear: the drive eases to its speed and its weather
 //   view.setGear (n, { settled: true })   // ...or is at it at once; create...View (canvas, { gear: n }) starts so
 //   view.setTurbo (on);        // TURBO
-//   view.setPark (on);         // PARK: the drive comes to a stand; steering only turns the view
-//   view.setPark (on, { settled: true })  // ...or stands at once
 //   view.setSteer (-1..1);     // the wheel, from outside; or { steer: true } lets a drag across the canvas steer
 //   view.stop(); view.start(); view.destroy();
 //
@@ -30,7 +28,7 @@
 // elsewhere it is all on the page's thread, the world made in one go. Either way `onReady ()` is called once the
 // first frame is on the canvas (`view.ready` is the same as a promise: true, or false when the view fell back or
 // was destroyed first). Until then the canvas is blank — keep the poster over it. The first frame is the same every
-// time for the same gear, PARK and canvas aspect. When WebGL 2 or a shader is not to be had, `onFallback (reason)`
+// time for the same gear and canvas aspect. When WebGL 2 or a shader is not to be had, `onFallback (reason)`
 // is called with the driver's log and nothing is drawn — show a still in its place.
 //
 // `hold: true` keeps the first frame: the view draws it, settled, says it is ready and stands there — no time goes
@@ -52,7 +50,7 @@ const viewAttributes = { antialias: false, alpha: false, depth: false, stencil: 
 function worldDrawn (canvas, options, post, world)
 {
     const { gears = 2, test = null, place = null, hold = false } = options;
-    let gear = options.gear ?? 1, turbo = !! options.turbo, parked = !! options.parked;
+    let gear = options.gear ?? 1, turbo = !! options.turbo;
     let wipers = options.wipers ?? 0, lights = options.lights || [false, false];
     let cssW = options.cssW || 0, cssH = options.cssH || 0, dpr = options.dpr || 1;
     let throttle = null;            // the sky's lever, once moved (sky-view.js)
@@ -113,7 +111,7 @@ function worldDrawn (canvas, options, post, world)
         try { M = await world.module ({ viewCanvas: canvas, print: () => {}, printErr: t => console.warn (world.name + '-wasm:', t) }); }
         catch (e) { fail ('the module did not load: ' + (e && e.message || e)); return; }
         if (failed) return;
-        M._view_make (gears, gear, turbo ? 1 : 0, parked ? 1 : 0);
+        M._view_make (gears, gear, turbo ? 1 : 0);
         if (place && M._view_place) M._view_place (...place);
         if (throttle !== null && M._view_throttle) M._view_throttle (throttle);
         canopy ();
@@ -130,7 +128,7 @@ function worldDrawn (canvas, options, post, world)
                           clock ? 1 : 0, clock ? +clock[0] || 0 : 0, clock ? +clock[1] || 0 : 0,
                           +test.drive || 0, +test.steer || 0, test.still ? 1 : 0);
         }
-        else M._view_settle ();     // ...at the gear and PARK asked for, whatever was asked for meanwhile
+        else M._view_settle ();     // ...at the gear asked for, whatever was asked for meanwhile
         if (! M._view_create ())
         {
             fail (M.UTF8ToString (M._view_error ()) || 'the renderer did not start');
@@ -168,7 +166,6 @@ function worldDrawn (canvas, options, post, world)
             case 'size':   cssW = m.cssW; cssH = m.cssH; dpr = m.dpr; break;
             case 'gear':   gear = m.n; if (M && ! failed) { M._view_gear (gear); if (m.settled) M._view_settle (); } break;
             case 'turbo':  turbo = m.on; if (M && ! failed) M._view_turbo (turbo ? 1 : 0); break;
-            case 'park':   parked = m.on; if (M && ! failed) { M._view_park (parked ? 1 : 0); if (m.settled) M._view_settle (); } break;
             case 'throttle': throttle = m.t; if (M && ! failed && M._view_throttle) { M._view_throttle (throttle); if (m.settled) M._view_settle (); } break;
             case 'steer':  steer = m.v; break;
             case 'wipers': wipers = m.speed; canopy (); break;
@@ -221,7 +218,7 @@ function viewOffscreenWebGL2 ()
 /** The view of `world` ({ name, module, canopy }) on `canvas`: the API the head of this file describes. `url` is
     the module's own, which a worker loads. */
 function createWorldView (canvas, world, url, { steer = false, onFallback = () => {}, onReady = () => {}, onFrame = () => {},
-                                                gears = 2, gear = 1, parked = false, turbo = false, wipers = 0, lights = [false, false],
+                                                gears = 2, gear = 1, turbo = false, wipers = 0, lights = [false, false],
                                                 place = null, test = null, worker = true, hold = false } = {})
 {
     let failed = false, quality = VIEW_RUNGS[0], settleReady = null, gone = () => {};
@@ -236,7 +233,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
     }
 
     const measured = () => ({ cssW: canvas.clientWidth, cssH: canvas.clientHeight, dpr: Math.min (2, globalThis.devicePixelRatio || 1) });
-    const options = { gears, gear, parked, turbo, place: place && place.map (Number),
+    const options = { gears, gear, turbo, place: place && place.map (Number),
                       wipers: viewClamp (Math.round (+wipers) || 0, 0, 3), lights: [!! (lights && lights[0]), !! (lights && lights[1])],
                       test: test && { at: test.at || null, clock: test.clock || null, drive: +test.drive || 0, steer: +test.steer || 0, still: !! test.still },
                       hold: !! hold, on: ! document.hidden && ! hold, ...measured () };
@@ -271,7 +268,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
 
     // The steering: the hand's drag and the wheel from outside, summed, as the app's Steering is. A drag across
     // the glass steers, as in the app: a quarter of its width either way is full lock; letting go straightens
-    // the drive. Parked, it only turns the view in place.
+    // the drive.
     let outside = 0, hand = 0, downX = null;
     const steered = () => send ({ type: 'steer', v: viewClamp (outside + hand, -1, 1) });
     const onDown = e => { downX = e.clientX; canvas.setPointerCapture (e.pointerId); };
@@ -289,7 +286,6 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
     const view = {
         setGear (n, { settled = false } = {}) { send ({ type: 'gear', n, settled }); },
         setTurbo (on) { send ({ type: 'turbo', on: !! on }); },
-        setPark (on, { settled = false } = {}) { send ({ type: 'park', on: !! on, settled }); },
         setSteer (v) { outside = viewClamp (+v || 0, -1, 1); steered (); },
         start () { wanted = true; run (); },
         stop () { wanted = false; run (); },
@@ -322,7 +318,7 @@ function createWorldView (canvas, world, url, { steer = false, onFallback = () =
 
 function worldInert (world)
 {
-    const view = { setGear () {}, setTurbo () {}, setPark () {}, setSteer () {}, start () {}, stop () {}, get quality () { return 0; }, ready: Promise.resolve (false), destroy () {} };
+    const view = { setGear () {}, setTurbo () {}, setSteer () {}, start () {}, stop () {}, get quality () { return 0; }, ready: Promise.resolve (false), destroy () {} };
     if (world.canopy) { view.setWipers = () => {}; view.setLights = () => {}; }
     if (world.sky) view.setThrottle = () => {};
     return view;

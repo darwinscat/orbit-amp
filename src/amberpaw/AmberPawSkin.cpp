@@ -6,6 +6,7 @@
 #include "../redpaw/RedPawLineup.h"
 #include "view/TitanDrive.h"
 
+#include "../PluginProcessor.h"
 #include "../face/Renders.h"
 
 /** AMBERPAWAMP'S OWN (redpaw/RedPawSkin.h): a helicopter's cockpit over Titan's methane sea — dark
@@ -16,33 +17,28 @@
 namespace orbitamp::redpaw
 {
 
-/** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's six packs, three gears of two, as FrostPawAmp
-    has them for now (v4Lineup), until it has captures of its own. */
-const channels::Lineup& lineup()
+namespace
 {
-    static const channels::Lineup heli = v4Lineup();
-    return heli;
-}
 
-const Skin& skin()
+constexpr const char* name = "AmberPawAmp";
+
+/** ITS CHANNELS (redpaw/RedPawLineup.h): the Victory V4's three, a gear each — CLEAN the Copper, CRUNCH the
+    Sheriff, HI-GAIN the Kraken, each captured with its Boost off and on — and TURBO that channel's own
+    Boost: the same pack, the gear holding the switch off and its TURBO on (Lineup::Channel::held). What
+    each opens on: all three on a plate, the cleaner the wetter — the Copper 20 % of it, the Sheriff 15,
+    the Kraken 10 — and the Copper with 15 % of delay, the Sheriff with about half as much, the Kraken with
+    none; the Kraken the hot one. */
+const channels::Lineup& titanLineup()
 {
-    static const Skin titan {
-        "AMBERPAW_ART_DIR",
-        juce::Colour (0xfff2f6ff),      // the painted rings' white, a shade brighter
-        face::Ink {},                   // the family's lilac on the dark gunmetal...
-        juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words
-        face::renders::text ("midi.txt", "AMBERPAW_ART_DIR"),
-        // Titan's methane sea out of the canopy, flown low over (view/TitanDrive.h).
-        [] { return std::make_unique<Windscreen> (std::make_unique<amberpaw::TitanDrive> (numGears())); },
-        { "Titan (GPU)", "1993 (CPU)", "Still" },
-        "GAIN",
-        true,                           // the family's cat, cut into the plate between the vents
-        "IN", "OUT",                    // the edge columns, short as a cockpit labels them
-        false,                          // the radio's top line the gear and the speed alone...
-        face::Monitor::View::shape,     // ...over the shape the amp gives the sound
-        false,                          // parked, the large warning alone
-    };
-    return titan;
+    static const channels::Lineup heli = roverLineup ({
+        { "Clean",          "v4-copper-4ae0",      "Plate",    20.0f, 15.0f, false, { "Boost", "off" } },
+        { "Clean Turbo",    "v4-copper-4ae0",      "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
+        { "Crunch",         "v4-sheriff-ch1-82ab", "Plate",    15.0f, 8.0f,  false, { "Boost", "off" } },
+        { "Crunch Turbo",   "v4-sheriff-ch1-82ab", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
+        { "Hi-Gain",        "v4-kraken-ch1-f7fc",  "Plate",    10.0f, 0.0f,  true,  { "Boost", "off" } },
+        { "Hi-Gain Turbo",  "v4-kraken-ch1-f7fc",  "Plate",    30.0f, 0.0f,  true,  { "Boost", "on"  } },
+    });
+    return heli;
 }
 
 //==============================================================================
@@ -52,14 +48,12 @@ const Skin& skin()
 // the canopy is the whole top; the lever's slot is straight, its five ticks to its right; the tuner is
 // a gauge; the meters are dots; the corner slots lie across and are painted, so the plates grow nothing;
 // the wells' words have room as painted, so no rim is lifted.
-namespace layout
-{
-
 // The radio's screen's top line and the picture under it, named here so that LEARN can lie over both.
 const juce::Rectangle<float> radioTopLine { 123.0f, 531.0f, 154.0f, 22.0f };
 const juce::Rectangle<float> radioPicture { 123.0f, 555.0f, 154.0f, 67.0f };
 
-const Plan plan {
+const layout::Plan plan {
+
     // No trapezoid: the canopy's three panes and the struts between them fill the whole top, down to 417 at
     // its sides, and the picture's alpha is the frame.
     .windscreenCorners {{
@@ -85,7 +79,7 @@ const Plan plan {
     // in the picture, which leaves room over them — at 531.5: their words stand between, a size down. GAIN's
     // on the console's own plate, between its top edge at 497 and its housing.
     .knobNameY  = 522.0f,
-    .knobNameEm = 12.0f / readingScale,
+    .knobNameEm = 12.0f / layout::readingScale,
     .driveNameY = 508.5f,
 
     // The six square holes, 42 x 43, two and four. The panel leaves no room round them for a word: the
@@ -124,30 +118,33 @@ const Plan plan {
     .learnKeySize = 42.0f,
     .learnNames {{ { 327.5f, 538.0f }, { 327.5f, 620.0f } }},
     .learnLine = 11.5f,
+    // With no HUM in the build, HUM's hole is plate: the bare plate between the two bezels, 603..636 down,
+    // 301.5..353.5 across — clear of the dot at its right edge — and that again upside down, over a round
+    // of 52 that takes the lower bezel, 49 tall, with a little to spare.
+    .learnPlate { 301.5f, 603.0f, 52.0f, 33.0f },
+    .learnHoleSize = 52.0f,
 
     // The wipers' four keys: the row of square holes under the radio's screen, each 35 x 39, 44 apart.
     .wiperKeys {{ { 136.0f, 667.8f }, { 180.0f, 667.8f }, { 224.0f, 667.8f }, { 268.0f, 667.8f } }},
     .wiperKeySize = 42.0f,
 
-    // The slot is 882..907 across, 517..724 down, and straight: the stem stays in it. Its five ticks, to its
-    // right at 926..946.5, are PARK and four places below it — the grip lies along a tick, so the collar's
-    // foot is 24 past it — and a fourth gear's tick, past this product's three, is painted over.
+    // The slot is 882..907 across, 517..724 down, and straight: the stem stays in it. Its ticks, to its
+    // right at 926..946.5, are four places, the gears from the top — the grip lies along a tick, so the
+    // collar's foot is 24 past it — and a fourth gear's tick, past this product's three, is painted over.
+    // A tick over the first, painted at 548.9, is no place, and painted over too (tools/bake-art).
     .gateSlot { 882.0f, 517.0f, 25.0f, 207.0f },
     .slotX  = 894.5f,
     .notchX = 894.5f,
-    .slotTopY = 548.9f,
     .stops { 587.5f, 627.0f, 666.3f, 704.7f },
     .leverWidth = 136.0f,
     .collarSink = 24.0f,
     .gearPlate { 867.0f, 507.0f, 53.0f, 229.0f },
     .leverLeft = 812.0f, .leverTop = 510.0f,
 
-    // TURBO's round hole under the red cover, 992..1071 across; the cover is painted open, and has no render
-    // of its own shut.
+    // TURBO's round hole under the red cover, 992..1071 across; the cover is painted open.
     .turbo { 1031.5f, 643.3f },
     .turboSize = 62.0f,
     .turboName { 1031.5f, 723.0f },
-    .turboLid { 975.0f, 505.0f, 120.0f, 208.0f },
 
     // REVERB over DELAY on the left, CAB on the right; REVERB's words on the plate over the pair, DELAY's
     // between the two tracks, CAB's on the plate over its track.
@@ -213,8 +210,54 @@ const Plan plan {
     .poweredBy { 735.0f, 476.0f },
     .makerName { 947.0f, 476.0f },
     .makerRoom = 110.0f,
+    .socketSize = 118.0f,                    // its socket's render, 236 across at twice the stage
+    .toneMinScale = 0.58f,                   // ...shrunk so far, five fit the row: the V4 Copper's
+    .keyCapLeft = 6.5f, .keyCapRight = 6.5f, .keyFrameHeight = 72.0f,     // its frame, 2590..3075 x 1304..1448 as painted
+    .toneSignDrop = 12.0f, .toneSignHeight = 16.0f,                         // its signs nearer its knobs, at their full height
 };
 
-} // namespace layout
+const Skin& titan()
+{
+    static const Skin titan {
+        name,
+        titanLineup(),
+        plan,
+        "AMBERPAW_ART_DIR",
+        juce::Colour (0xfff2f6ff),      // the painted rings' white, a shade brighter
+        face::Ink {},                   // the family's lilac on the dark gunmetal...
+        juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words
+        face::renders::text (name, "midi.txt", "AMBERPAW_ART_DIR"),
+        // Titan's methane sea out of the canopy, flown low over (view/TitanDrive.h).
+        [] { return std::make_unique<amberpaw::TitanDrive> (numGears (titanLineup())); },
+        { "Titan (GPU)", "1993 (CPU)", "Still" },
+        "GAIN",
+        true,                           // the family's cat, cut into the plate between the vents
+        "IN", "OUT",                    // the edge columns, short as a cockpit labels them
+        false,                          // the radio's top line the gear and the speed alone...
+        face::Monitor::View::shape,     // ...over the shape the amp gives the sound
+        std::nullopt,                   // no badge: the cat cut straight into the metal between the vents...
+        juce::Colour (0xffd48a45),      // ...and lit under the hand a brownish amber, Titan's haze, as the others' are (Emblem)...
+        face::MarkInk { juce::Colour (0xffa29fb0), juce::Colour (0xff5e5b6c), 0.8f, 0.28f },     // ...its floor a touch whiter than the family's
+    };
+    return titan;
+}
+
+} // namespace
 
 } // namespace orbitamp::redpaw
+
+/** AMBERPAWAMP (Product.h): the rover (redpaw::rover) in the skin above. */
+const orbitamp::Product& orbitamp::products::amberPawAmp()
+{
+    static const Product rover = redpaw::rover (redpaw::titan());
+    return rover;
+}
+
+// THE PLUG-IN'S ENTRY, in AmberPawAmp's own plug-in alone (CMakeLists.txt: add_amp): a host that opens it
+// gets a processor of AmberPawAmp. A gate, or a binary that plays several amps, makes its own.
+#if ORBITAMP_PLUGIN_ENTRY
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
+    return new orbitamp::AmpProcessor (orbitamp::products::amberPawAmp());
+}
+#endif

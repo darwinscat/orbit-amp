@@ -3,6 +3,10 @@
 
 #include "Windscreen.h"
 
+#include "../../face/WebImages.h"
+#include "../../shaders/Gpu.h"
+#include "../../shaders/GpuLog.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -99,11 +103,6 @@ void Windscreen::setTurbo (bool on)
     turboWanted.store (on);
 }
 
-void Windscreen::setParked (bool on)
-{
-    parkedWanted.store (on);
-}
-
 void Windscreen::steer (float amount) noexcept
 {
     steering.setOutside (amount);
@@ -142,7 +141,7 @@ float Windscreen::speedKmh() const noexcept
         case Mode::cpu:   return (float) marsSpeed / marsTexels (g) * world->speedFor (g, false) * kmh;
         case Mode::still: break;
     }
-    return parkedWanted.load() ? 0.0f : world->speedFor (g, turboWanted.load()) * kmh;
+    return world->speedFor (g, turboWanted.load()) * kmh;
 }
 
 //==============================================================================
@@ -187,7 +186,7 @@ juce::String Windscreen::statusLine() const
     s << "   " << st.frameWidth << "x" << st.frameHeight;
     if (st.mode == Mode::gpu)
         s << "   scale " << juce::String (st.scale, 2);
-    s << "   gear " << gearWanted.load() << (turboWanted.load() ? " TURBO" : "") << (parkedWanted.load() ? " PARK" : "");
+    s << "   gear " << gearWanted.load() << (turboWanted.load() ? " TURBO" : "");
     if (st.gpuBroken)
         s << "   (no GPU: the shaders did not build)";
     if (st.note.isNotEmpty())
@@ -269,7 +268,9 @@ void Windscreen::hostContextClosing()
 
 void Windscreen::hostRender (juce::Rectangle<int> glass, int frameWidth, int frameHeight)
 {
-    if (host == nullptr || ! glAttached)
+    // A world that did not start drew nothing and left nothing on — and a GL that runs no shaders has none of
+    // the calls below.
+    if (host == nullptr || ! glAttached || gpuFailed.load())
         return;
 
     const auto target = host->getFrameBufferID();
@@ -286,6 +287,55 @@ void Windscreen::hostRender (juce::Rectangle<int> glass, int frameWidth, int fra
     glBindVertexArray (0);
     glUseProgram (0);
     glViewport (0, 0, frameWidth, frameHeight);
+}
+
+void Windscreen::firstFrame (std::unique_ptr<Drive> fresh, int width, int height, std::function<void (juce::Image)> done)
+{
+    // The pixels come back from the GL thread; the picture is made of them here, on the message thread.
+    const auto deliver = [done] (std::shared_ptr<std::vector<std::uint8_t>> rgba, int w, int h)
+    {
+        juce::MessageManager::callAsync ([done, rgba, w, h] { done (rgba != nullptr ? face::web::fromGlRows (*rgba, w, h) : juce::Image()); });
+    };
+    auto* context = host != nullptr ? host : &gl;
+    if (fresh == nullptr || gpuFailed.load() || ! context->isAttached() || width <= 0 || height <= 0)
+    {
+        deliver (nullptr, 0, 0);
+        return;
+    }
+    const std::shared_ptr<Drive> drive (std::move (fresh));
+    const int g = gearWanted.load(), lights = lightsWanted.load(), wipers = wipersWanted.load();
+    const bool turbo = turboWanted.load();
+    context->executeOnGLThread ([drive, g, turbo, wipers, lights, width, height, deliver] (juce::OpenGLContext& c)
+    {
+        // As renderFrame draws a still: made, told where it stands, settled, drawn once, read back.
+        std::shared_ptr<std::vector<std::uint8_t>> rgba;
+        int w = 0, h = 0;
+        if (drive->create())
+        {
+            drive->setGear (g);
+            drive->setTurbo (turbo);
+            drive->setSteer (0.0f);
+            drive->setWipers (wipers);
+            drive->setLights ((lights & 1) != 0, (lights & 2) != 0);
+            drive->settle (g, turbo);
+            drive->render (width, height, 1.0f, c.getFrameBufferID(), 0, 0);
+            rgba = std::make_shared<std::vector<std::uint8_t>>();
+            if (! drive->readFrame (*rgba, w, h))
+                rgba.reset();
+        }
+        drive->destroy();
+
+        // ...and what is painted next finds the context as hostRender leaves it.
+        using namespace juce::gl;
+        glBindFramebuffer (GL_FRAMEBUFFER, c.getFrameBufferID());
+        glDisable (GL_DEPTH_TEST);
+        glDisable (GL_CULL_FACE);
+        glDisable (GL_SCISSOR_TEST);
+        glDisable (GL_BLEND);
+        glBindVertexArray (0);
+        glUseProgram (0);
+        deliver (rgba, w, h);
+    }, false);
 }
 
 /** One frame, kept: the product's own picture where it brings one — else rendered, from the GPU where
@@ -483,12 +533,10 @@ void Windscreen::drawCpuFrame (bool advance)
     const double dt = advance ? juce::jlimit (0.0, 0.1, now - cpuLast) : 0.0;
     cpuLast = now;
     const int g = gearWanted.load();
-    const bool parked = parkedWanted.load();
-    const double want = parked ? 0.0 : marsTexels (g) * (turboWanted.load() ? PlainsWorld::turboFactor : 1.0f);
-    marsSpeed += (want - marsSpeed) * (1 - std::exp (-dt / (parked ? PlainsWorld::parkSeconds : speedSeconds1993)));
+    const double want = marsTexels (g) * (turboWanted.load() ? PlainsWorld::turboFactor : 1.0f);
+    marsSpeed += (want - marsSpeed) * (1 - std::exp (-dt / speedSeconds1993));
     marsPos += marsSpeed * 16 * dt;
-    if (! parked)
-        marsX += steering.value() * marsStrafePerSecond * 16 * dt;
+    marsX += steering.value() * marsStrafePerSecond * 16 * dt;
     marsPos = std::fmod (marsPos + 65536.0, 65536.0);
     marsX = std::fmod (marsX + 65536.0, 65536.0);
 
@@ -567,8 +615,17 @@ void Windscreen::focusLost (FocusChangeType)
 //==============================================================================
 void Windscreen::newOpenGLContextCreated()
 {
-    if (! world->create())
+    // A world that will not start on this GPU goes to the CPU on its own (apply, tick) — and says why in the
+    // family's log, which is all a player who sees the 1993 landscape has to send. A GL that runs no shaders
+    // is not asked to start it: the world's first call would have no entry point.
+    const bool runs = gpu::runsShaders();
+    if (! runs || ! world->create())
+    {
         gpuFailed.store (true);
+        const auto why = runs ? world->error() : std::string ("this GL runs no shaders");
+        gpulog::refusal (logName, gpu::driver(),
+                         std::string (world->name()) + ": " + (why.empty() ? std::string ("its GPU view would not start") : why));
+    }
     glLast = juce::Time::getMillisecondCounterHiRes() * 0.001;
 }
 
@@ -590,13 +647,12 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     glLast = now;
     world->setGear (gearWanted.load());
     world->setTurbo (turboWanted.load());
-    world->setParked (parkedWanted.load());
     world->setSteer (steering.value());
     world->setWipers (wipersWanted.load());
     world->setLights ((lightsWanted.load() & 1) != 0, (lightsWanted.load() & 2) != 0);
     const bool wantStill = stillWanted.load();
     if (wantStill)
-        world->settle (gearWanted.load(), turboWanted.load(), parkedWanted.load());   // where it stands, as the drive would be once settled
+        world->settle (gearWanted.load(), turboWanted.load());   // where it stands, as the drive would be once settled
     else
         world->step (dt);
     speedShared.store (world->speed());

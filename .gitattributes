@@ -5,3 +5,8 @@ resources/set/Devices/** -text
 # The shaders are built into the binary as their files are, too (CMakeLists.txt, THE SHADERS), and were
 # string literals before, which have no CR on any system: LF everywhere, so every system compiles one text.
 resources/shaders/** text eol=lf
+
+# The patches onto JUCE and clap-juce-extensions are applied as their bytes are (cmake/ApplyPatch.cmake), and
+# JUCE's sources end their lines in CRLF on every system, so the JUCE patch's lines do too: a checkout that
+# turned LF into CRLF, or back, would hand git apply a patch that no longer matches.
+cmake/patches/*.patch -text

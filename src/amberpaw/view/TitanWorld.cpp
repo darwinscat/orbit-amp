@@ -206,7 +206,7 @@ void TitanWorld::build()
     built = true;
     findStart();
     if (! placed)
-        place (startXZ[0], startXZ[1], 0, gearWanted, turbo, parked);
+        place (startXZ[0], startXZ[1], 0, gearWanted, turbo);
 }
 
 // Bilinear on the 8-bit noise exactly as the GPU's base level: the autopilot and the start search read the shore.
@@ -287,35 +287,35 @@ double TitanWorld::speedFor (int g, bool t) const noexcept
     return gearSpeed[(size_t) std::clamp (g, 1, gears) - 1] * (t ? turboFactor : 1.0);
 }
 
-void TitanWorld::place (double x, double z, double heading, int g, bool t, bool p)
+void TitanWorld::place (double x, double z, double heading, int g, bool t)
 {
     placed = true;
     gearWanted = std::clamp (g, 1, gears);
-    turbo = t; parked = p;
+    turbo = t;
     s.x = x; s.z = z; s.heading = heading;
-    s.speed = parked ? 0.0 : speedFor (gearWanted, turbo);
-    s.boost = turbo && ! parked ? 1 : 0;
+    s.speed = speedFor (gearWanted, turbo);
+    s.boost = turbo ? 1 : 0;
     s.yawRate = 0; lastSteerTime = s.time; s.foam = 0; s.rotorPhase = s.time * 0.9;
     resetEvents();
     resetGlass();
     step (0);
 }
 
-void TitanWorld::settle (int g, bool t, bool p)
+void TitanWorld::settle (int g, bool t)
 {
     gearWanted = std::clamp (g, 1, gears);
-    turbo = t; parked = p;
-    s.speed = parked ? 0.0 : speedFor (gearWanted, turbo);
+    turbo = t;
+    s.speed = speedFor (gearWanted, turbo);
     for (size_t k = 0; k < 2; ++k)
         lightLevel[k] = lightWanted[k] ? 1.0 : 0.0;
-    s.boost = turbo && ! parked ? 1 : 0;
+    s.boost = turbo ? 1 : 0;
     step (0);
 }
 
 void TitanWorld::setClock (double time, double travel)
 {
     s.time = time;
-    place (s.x, s.z, s.heading, gearWanted, turbo, parked);
+    place (s.x, s.z, s.heading, gearWanted, turbo);
     s.travel = travel;
 }
 
@@ -383,7 +383,7 @@ void TitanWorld::addGate (double ahead)
 void TitanWorld::stepEvents (double dt)
 {
     const double fx = std::sin (s.heading), fz = -std::cos (s.heading), rx = std::cos (s.heading), rz = std::sin (s.heading);
-    const bool moving = s.speed > 0.4 && ! parked;
+    const bool moving = s.speed > 0.4;
     if (moving && s.time >= nextFieldT && fieldList.size() < 2)
     {
         const double lat = (eventRng.next() - 0.5) * 14;
@@ -483,7 +483,7 @@ void TitanWorld::stepGlass (double dt)
     const double rDrizzle = 0.5 + 0.09 * sp, rSpray = 1.6 * s.down + 85 * s.foam + 8 * s.boost * clamp (sp / 15, 0, 1);
     dropAcc += (rDrizzle + rSpray) * dt;
     while (dropAcc >= 1) { dropAcc -= 1; spawnDrop (glassRng.next() * (rDrizzle + rSpray) < rSpray ? 1 : 0); }
-    // The airflow: up the glass and outward, faster with speed and with size; small drops stay pinned; still on PARK.
+    // The airflow: up the glass and outward, faster with speed and with size; small drops stay pinned.
     for (auto& d : dropList)
     {
         d.age += dt;
@@ -552,18 +552,17 @@ void TitanWorld::stepGlass (double dt)
 void TitanWorld::step (double dt)
 {
     s.time += dt;
-    const double target = parked ? 0.0 : speedFor (gearWanted, turbo);
-    const double kS = 1 - std::exp (-dt / (parked ? parkSeconds : speedSeconds));
+    const double target = speedFor (gearWanted, turbo);
+    const double kS = 1 - std::exp (-dt / speedSeconds);
     s.speed += (target - s.speed) * kS;
-    s.boost += ((turbo && ! parked ? 1 : 0) - s.boost) * (1 - std::exp (-dt / boostSeconds));
+    s.boost += ((turbo ? 1 : 0) - s.boost) * (1 - std::exp (-dt / boostSeconds));
     for (size_t k = 0; k < 2; ++k)
         lightLevel[k] += ((lightWanted[k] ? 1.0 : 0.0) - lightLevel[k]) * (1 - std::exp (-dt / 0.12));
 
     // Yaw: the hand wins; after 1.5 s without it a gentle meander resumes, plus the lean away from the
-    // shore. Parked, the hand turns the view in place and nothing meanders.
+    // shore.
     double yawTarget;
-    if (parked) { yawTarget = steer * parkedYawDegrees * deg; lastSteerTime = s.time; }
-    else if (std::abs (steer) > 0.001f) { yawTarget = steer * steerYawDegrees * deg; lastSteerTime = s.time; }
+    if (std::abs (steer) > 0.001f) { yawTarget = steer * steerYawDegrees * deg; lastSteerTime = s.time; }
     else
     {
         const double fade = smoothstep (1.5, 4.5, s.time - lastSteerTime);

@@ -34,14 +34,13 @@ namespace
 
 extern "C"
 {
-    /** A world in the product's gears, at the gear, TURBO and PARK given; settled at them once it is built. */
-    EMSCRIPTEN_KEEPALIVE void view_make (int gears, int gear, int turbo, int parked)
+    /** A world in the product's gears, at the gear and TURBO given; settled at them once it is built. */
+    EMSCRIPTEN_KEEPALIVE void view_make (int gears, int gear, int turbo)
     {
         view.reset();
         world = std::make_unique<TitanWorld> (gears);
         world->setGear (gear);
         world->setTurbo (turbo != 0);
-        world->setParked (parked != 0);
     }
 
     /** The sea and the search for the start: the long part. Puts the craft at the start, at the clock's zero. */
@@ -61,7 +60,6 @@ extern "C"
 
     EMSCRIPTEN_KEEPALIVE void view_gear (int g)     { world->setGear (g); }
     EMSCRIPTEN_KEEPALIVE void view_turbo (int on)   { world->setTurbo (on != 0); }
-    EMSCRIPTEN_KEEPALIVE void view_park (int on)    { world->setParked (on != 0); }
 
     /** Where it stands, at once as the drive would be once settled (TitanWorld::settle): the speed and the dash the
         gear asks for, the lights as they are switched. Only once the sea is built. */
@@ -70,7 +68,7 @@ extern "C"
         if (! world->isBuilt())
             return;
         handOver();
-        world->settle (world->gear(), world->isTurbo(), world->isParked());
+        world->settle (world->gear(), world->isTurbo());
     }
 
     /** The wipers' keys: 0 OFF, 1 INT, 2 LO, 3 HI. */
@@ -102,13 +100,13 @@ extern "C"
         constexpr double pi = 3.14159265358979323846;
         world->build();
         if (placed)
-            world->place (x, z, headingDegrees * pi / 180, world->gear(), world->isTurbo(), world->isParked());
+            world->place (x, z, headingDegrees * pi / 180, world->gear(), world->isTurbo());
         if (clocked)
             world->setClock (seconds, metres);
         if (drive > 0)
         {
             if (! placed)
-                world->place (31500, 3000, 0, world->gear(), world->isTurbo(), world->isParked());
+                world->place (31500, 3000, 0, world->gear(), world->isTurbo());
             world->setSteer (steer);
             for (int i = 0, n = (int) std::lrint (drive * 60); i < n; ++i)
                 world->step (1.0 / 60);
@@ -116,7 +114,7 @@ extern "C"
         world->setSteer (steer);
         handOver();
         if (still)
-            world->settle (world->gear(), world->isTurbo(), world->isParked());
+            world->settle (world->gear(), world->isTurbo());
     }
 
     /** The scene's last frame as RGBA, rows bottom-up as GL has them: what the app's STILL is made of. */

@@ -438,27 +438,67 @@ private:
         // The numbers on the scales: an instrument, not a sketch.
         g.setColour (theme::txFaint);
 
-        const auto hzLabel = [&] (double hz, const char* text)
+        // THE FREQUENCIES, each centred on its line — but the two ends stand INSIDE the well, against
+        // its walls: centred on their own lines they were half outside the component and cut, 20 read
+        // "0" and 20K "2". The ends are placed first and the rest in order, and a number that would
+        // touch one already standing is left out — in a narrow well 10K would sit on 20K.
         {
-            theme::drawTracked (g, text,
-                                { hzToX (r, hz) - 24.0f, r.getBottom() - 18.0f, 48.0f, 13.0f },
-                                theme::displayFont (12.0f), 0.08f, juce::Justification::centred);
-        };
-        hzLabel (20.0, "20");
-        hzLabel (50.0, "50");
-        hzLabel (100.0, "100");
-        hzLabel (200.0, "200");
-        hzLabel (500.0, "500");
-        hzLabel (1000.0, "1K");
-        hzLabel (2000.0, "2K");
-        hzLabel (5000.0, "5K");
-        hzLabel (10000.0, "10K");
-        hzLabel (20000.0, "20K");
+            const auto font = theme::displayFont (12.0f);
+            std::vector<juce::Rectangle<float>> placed;
 
-        for (float db : { -12.0f, -6.0f, 6.0f, 12.0f })
-            theme::drawTracked (g, (db > 0 ? "+" : "") + juce::String ((int) db),
-                                { r.getX() + 6.0f, dbToY (r, db) - 15.0f, 40.0f, 13.0f },
-                                theme::displayFont (12.0f), 0.08f, juce::Justification::centredLeft);
+            const auto hzLabel = [&] (double hz, const char* text)
+            {
+                const float w = theme::trackedWidth (text, font, 0.08f) + 2.0f;
+                const float y = r.getBottom() - 18.0f;
+                const auto box = hz <= minHz ? juce::Rectangle<float> (r.getX() + 6.0f, y, w, 13.0f)
+                               : hz >= maxHz ? juce::Rectangle<float> (r.getRight() - 6.0f - w, y, w, 13.0f)
+                                             : juce::Rectangle<float> (hzToX (r, hz) - w * 0.5f, y, w, 13.0f);
+
+                for (const auto& other : placed)
+                    if (box.expanded (5.0f, 0.0f).intersects (other))
+                        return;
+
+                placed.push_back (box);
+                theme::drawTracked (g, text, box, font, 0.08f, juce::Justification::centred);
+            };
+
+            hzLabel (20.0, "20");
+            hzLabel (20000.0, "20K");
+            hzLabel (50.0, "50");
+            hzLabel (100.0, "100");
+            hzLabel (200.0, "200");
+            hzLabel (500.0, "500");
+            hzLabel (1000.0, "1K");
+            hzLabel (2000.0, "2K");
+            hzLabel (5000.0, "5K");
+            hzLabel (10000.0, "10K");
+        }
+
+        // THE DECIBELS, at the size they always had, but only where they READ. Each hangs on the side
+        // of its line toward 0 dB — the positive ones under theirs, the negative over — so the well's
+        // edges stay clear: the top for the pills that ride the corners (the page's name, DEVICE TONE),
+        // the bottom for the frequencies. A number with no room between the two is left out rather
+        // than printed on top of something — and a pair goes together, so the scale never reads
+        // lopsided. In the AMP's well, ninety-odd units tall, and thrown open across the block, that
+        // is ±6; a curve some two hundred tall would read ±12 as well.
+        const float topClear    = r.getY() + 26.0f;
+        const float bottomClear = r.getBottom() - 20.0f;
+
+        const auto boxOf = [&] (float db)
+        {
+            const float y = dbToY (r, db);
+            return juce::Rectangle<float> (r.getX() + 6.0f, db > 0.0f ? y + 2.0f : y - 15.0f, 40.0f, 13.0f);
+        };
+
+        for (float db : { 6.0f, 12.0f })
+        {
+            if (boxOf (db).getY() < topClear || boxOf (-db).getBottom() > bottomClear)
+                continue;
+
+            for (const float v : { db, -db })
+                theme::drawTracked (g, (v > 0 ? "+" : "") + juce::String ((int) v), boxOf (v),
+                                    theme::displayFont (12.0f), 0.08f, juce::Justification::centredLeft);
+        }
     }
 
     std::function<double (double)> magnitudeDb;
@@ -468,6 +508,8 @@ private:
     int hovered  = -1;
     int dragging = -1;
     float stepAnchor = 0.0f;
+
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EqCurve)
 };

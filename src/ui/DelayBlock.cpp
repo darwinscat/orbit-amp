@@ -22,6 +22,11 @@ DelayBlock::DelayBlock (AmpProcessor& processor)
     addAndMakeVisible (offset);
     addAndMakeVisible (field);
 
+    // TAP in the standalone alone: in a plug-in the host keeps the time.
+    addChildComponent (tap);
+    tap.setVisible (! amp.runsInHost());
+    tap.onTap = [this] { tapTempo(); };
+
     attachPower (*amp.apvts.getParameter (params::delayOn));
 
     // The TIME on the border, where the captured blocks stand their combo: the sync ladder, and
@@ -116,10 +121,54 @@ DelayBlock::DelayBlock (AmpProcessor& processor)
     applyTimeMode();
 }
 
-DelayBlock::~DelayBlock() = default;
+DelayBlock::~DelayBlock()
+{
+    closeTapCount();
+}
+
+/** A TAP ON THE BUTTON. The first tap of a count opens one undo step, every tap after it writes the
+    BPM the taps so far make, and the pause that ends the count closes the step (timerCallback) —
+    everything one count did is one undo. */
+void DelayBlock::tapTempo()
+{
+    if (! syncOn() || hostConducts())
+        return;   // a free time has no beat to tap, and a conducted one is not ours to give
+
+    const double now = juce::Time::getMillisecondCounterHiRes();
+
+    if (! tapCount.isCounting (now))
+    {
+        closeTapCount();
+        amp.history.beginGesture ("Tap tempo");
+        tapGestureOpen = true;
+    }
+
+    if (const double bpm = tapCount.tap (now); bpm > 0.0)
+        bpmAtt->setValueAsCompleteGesture (juce::jlimit (params::delayBpmMin, params::delayBpmMax,
+                                                         (float) std::round (bpm)));
+}
+
+void DelayBlock::closeTapCount()
+{
+    if (! tapGestureOpen)
+        return;
+
+    tapGestureOpen = false;
+    amp.history.endGesture();
+}
 
 void DelayBlock::timerCallback()
 {
+    // The tap's count closes on the pause, shown or not; its flash fades with the tick.
+    if (tapGestureOpen && tapCount.closedBy (juce::Time::getMillisecondCounterHiRes()))
+        closeTapCount();
+
+    if (tap.flash > 0.0f)
+    {
+        tap.flash = tap.flash < 0.05f ? 0.0f : tap.flash * 0.8f;
+        tap.repaint();
+    }
+
     if (! view.isShowing())
         return;
 
@@ -298,6 +347,12 @@ void DelayBlock::applyTimeMode()
                                                    juce::roundToInt (plain (params::delayDiv)))
                                    : params::delayDivisions.size());
     field.repaint();
+
+    tap.setEnabled (syncOn());
+    tap.setTooltip (syncOn() ? "TAP: the block's own BPM, from the last few taps"
+                             : "TAP counts a BPM, and the time is FREE");
+    tap.repaint();
+
     resized();   // the pill on the border is as wide as its word
 }
 
@@ -310,28 +365,45 @@ void DelayBlock::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = timeSel.getBounds();
     }
 
-    // The console's grammar: the picture above, the hands on a shelf below it.
-    const int mini = 42;
-    auto shelf = area.removeFromBottom (mini + 11);
-
+    // THE REVERB'S ARRANGEMENT, to the unit (ReverbBlock::layOutContent): the picture takes the whole
+    // box and the hands ride its top. The shelf of knobs that stood under the picture is gone, and the
+    // picture has its room.
     view.setBounds (area);
 
-    // The hero stays ON the picture, top-right — the reverb's arrangement.
-    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 14));
-    mix.setBounds (area.removeFromTop (side).removeFromRight (side).translated (-2, 2));
+    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 24));
+    auto row = area.removeFromTop (side);
+    mix.setBounds (row.removeFromRight (side).translated (-2, 2));
     mix.toFront (false);
 
-    // The three refinements in even thirds across the shelf, reading in the loop's own order:
-    // how many, how dark, how wide.
-    const int cell = shelf.getWidth() / 3;
-    repeats.setBounds (shelf.removeFromLeft (cell).withSizeKeepingCentre (mini, mini + 11));
-    dark.setBounds    (shelf.removeFromLeft (cell).withSizeKeepingCentre (mini, mini + 11));
-    offset.setBounds  (shelf.withSizeKeepingCentre (mini, mini + 11));
+    // The three refinements at the hero's left hand, the reverb's two minis' size and line — pressed
+    // to the TOP edge — in the loop's own order: how many, how dark, how wide. Three of them want
+    // more of a quarter-width block than the reverb's two, so the gaps between them give first —
+    // and the reverb's two keep the same air (Knob::smallGap).
+    const int gap = Knob::smallGap (row.getWidth());
+    auto band = row.removeFromRight (3 * miniSide + 2 * gap).translated (0, 2);
+    auto minis = band.removeFromTop (miniSide + 11);
 
-    // The conducting number at the picture's top-left — the hero's opposite corner.
-    field.setBounds (view.getBounds().withTrimmedLeft (6).withTrimmedTop (6)
-                         .removeFromTop (20).removeFromLeft (78));
-    field.toFront (false);
+    repeats.setBounds (minis.removeFromLeft (miniSide));
+    minis.removeFromLeft (gap);
+    dark.setBounds (minis.removeFromLeft (miniSide));
+    minis.removeFromLeft (gap);
+    offset.setBounds (minis.removeFromLeft (miniSide));
+
+    // ...and under them, one line: the conducting number, and TAP where there is no host to keep time.
+    band.removeFromTop (3);
+    auto line = band.removeFromTop (22);
+
+    if (tap.isVisible())
+    {
+        tap.setBounds (line.removeFromRight (tap.idealWidth()));
+        line.removeFromRight (4);
+    }
+
+    field.setBounds (line);
+
+    for (juce::Component* c : { (juce::Component*) &repeats, (juce::Component*) &dark, (juce::Component*) &offset,
+                                (juce::Component*) &field, (juce::Component*) &tap })
+        c->toFront (false);
 }
 
 } // namespace orbitamp

@@ -25,9 +25,9 @@ int settings::snapTurbo (int db)
     return best;
 }
 
-int settings::turbo()
+int settings::turbo (const Product& product)
 {
-    return snapTurbo ((int) prefs::store().get (turboKey, turboDefault));
+    return snapTurbo ((int) prefs::store (product).get (turboKey, turboDefault));
 }
 
 //==============================================================================
@@ -38,27 +38,39 @@ void Engine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout&
     for (const auto& c : lineup.channels)
         names.add (c.name);
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { lineup.parameterId, 1 }, "Channel", names, 0));
+}
 
-    // ...and PARK, where the product has it: off, the amp plays.
-    if (lineup.parkId != nullptr)
-        layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { lineup.parkId, 1 }, "Park", false));
+void Engine::opening (const Lineup& lineup, params::Opening& o)
+{
+    // A fresh instance opens on the first channel (Channels::adopt) and setUpChain gives it that
+    // channel's room and delay (Channels::defaultOf) — said here before there is an instance to say it to.
+    jassert (! lineup.channels.empty());
+    if (lineup.channels.empty())
+        return;
+
+    const auto& first = lineup.channels.front();
+    o.capture  = first.capture;
+    o.reverb   = first.reverb;
+    o.delayMix = first.delayMix;
+    if (first.reverbMix.has_value())
+        o.reverbMix = *first.reverbMix;
 }
 
 Engine& Engine::of (AmpProcessor& p)
 {
-    jassert (dynamic_cast<Engine*> (p.product.get()) != nullptr);
-    return static_cast<Engine&> (*p.product);
+    jassert (dynamic_cast<Engine*> (p.productEngine.get()) != nullptr);
+    return static_cast<Engine&> (*p.productEngine);
+
 }
 
 /** Built while the processor is still building itself, before its history has taken a baseline: what
     is settled here is how the amp starts, not an edit of it. */
 Engine::Engine (AmpProcessor& p, const Lineup& lineup)
-    : channels (p, lineup), amp (p), channel (p.apvts.getParameter (lineup.parameterId)),
-      park (lineup.parkId != nullptr ? p.apvts.getRawParameterValue (lineup.parkId) : nullptr)
+    : channels (p, lineup), amp (p), channel (p.apvts.getParameter (lineup.parameterId))
 {
     jassert (channel != nullptr);
 
-    channels.setTurboDb ((float) settings::turbo());
+    channels.setTurboDb ((float) settings::turbo (p.product()));
     makeOwn();
     channels.align();
     say (channels.active());

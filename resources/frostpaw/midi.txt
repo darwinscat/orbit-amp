@@ -9,9 +9,8 @@ Program Change
 4	CRUNCH TURBO
 5	HI-GAIN
 6	HI-GAIN TURBO
-7	PARK
 
-PARK takes the whole amp out of the sound. A controller that numbers its programs from 0 sends 0 to 6 for these.
+A controller that numbers its programs from 0 sends 0 to 5 for these.
 
 Control Change
 20	TURBO

@@ -13,6 +13,7 @@ on:
     paths: &code
       - 'src/**'
       - 'CMakeLists.txt'
+      - 'cmake/**'
       - 'resources/**'
       - 'tests/**'
       - 'tools/run-gates.sh'
@@ -35,7 +36,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 90          # safety cap for a hung build; a build from an empty cache takes about 65
+    timeout-minutes: 150         # safety cap for a hung build; five amps and their gates from a cold cache ran past 90
     env:
       SCCACHE_GHA_ENABLED: "true"
     steps:
@@ -56,7 +57,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: build/_deps
-          key: deps-windows-ninja-${{ hashFiles('CMakeLists.txt') }}
+          key: deps-windows-ninja-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}
 
       - name: Configure
         run: >
@@ -66,16 +67,15 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      # The cockpit is not part of the default build, so that OrbitAmp's build can never fail on it. It
-      # is built here by name, every format of it: this is the only place a pull request meets MSVC with it.
-      - name: Build CatpitAmp
-        run: cmake --build build --target CatpitAmp_All
+      # THE FAMILY'S RELEASE, as the release builds it: the family's plug-ins — one VST3 and one CLAP holding
+      # every amp installer/family.ini names (CMakeLists.txt: THE FAMILY'S PLUG-INS) — and each of those
+      # amps' Standalone. The faces are not part of the default build, so that OrbitAmp's build can never
+      # fail on them: this is the only place a pull request meets MSVC with the cockpit and the rover.
+      - name: Build the family (Family_All)
+        run: cmake --build build --target Family_All
 
-      # The rover likewise: not in the default build, built here by name.
-      - name: Build RedPawAmp
-        run: cmake --build build --target RedPawAmp_All
-
-      # ...and the ice moon's rover, the same dashboard in a skin of its own.
+      # The faces not in the family's release yet, by name, every format of each: the ice moon's rover,
+      # the same dashboard in a skin of its own...
       - name: Build FrostPawAmp
         run: cmake --build build --target FrostPawAmp_All
 
@@ -97,20 +97,31 @@ jobs:
         shell: bash
         run: tools/run-gates.sh build Release
 
+      # The family's plug-ins as a host opens them (tests/BundleHost.cpp): every amp under the ids its own
+      # bundle shipped with, each its own amp, all of them alive and playing at once, in the VST3 and the CLAP.
+      - name: The family's plug-ins in a host
+        shell: bash
+        run: |
+          cmake --build build --target orbitamp_bundle_host
+          build/orbitamp_bundle_host_artefacts/Release/orbitamp_bundle_host.exe \
+            "build/DarwinsCatAmps_artefacts/Release/VST3/Darwin's Cat Amps.vst3" \
+            "build/DarwinsCatAmps_artefacts/Release/CLAP/Darwin's Cat Amps.clap"
+
+      # pluginval validates every plug-in the bundle holds, one after another.
       - name: Validate (pluginval, VST3)
         shell: bash
         run: |
           curl -L -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_Windows.zip
           7z x -y pluginval.zip >/dev/null
-          ./pluginval.exe --strictness-level 10 --validate "build/OrbitAmp_artefacts/Release/VST3/OrbitAmp.vst3"
+          ./pluginval.exe --strictness-level 10 --validate "build/DarwinsCatAmps_artefacts/Release/VST3/Darwin's Cat Amps.vst3"
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: OrbitAmp-Windows
+          name: DarwinsCatAmps-Windows
           if-no-files-found: ignore
           path: |
-            build/OrbitAmp_artefacts/Release/VST3/OrbitAmp.vst3
-            build/OrbitAmp_artefacts/Release/CLAP/OrbitAmp.clap
-            build/OrbitAmp_artefacts/Release/Standalone
+            build/DarwinsCatAmps_artefacts/Release/VST3
+            build/DarwinsCatAmps_artefacts/Release/CLAP
+            build/*_artefacts/Release/Standalone

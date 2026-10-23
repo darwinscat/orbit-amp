@@ -28,12 +28,11 @@ public:
 
     void setGear (int g) override            { world.setGear (g); }
     void setTurbo (bool on) override         { world.setTurbo (on); }
-    void setParked (bool on) override        { world.setParked (on); }
     void setSteer (float amount) override    { world.setSteer (amount); }
     void step (double dt) override           { world.step (dt); }
 
-    /** A still is clear air, as the drive would be once settled: the Plains' place takes no PARK. */
-    void settle (int g, bool t, bool) override
+    /** A still is clear air, as the drive would be once settled. */
+    void settle (int g, bool t) override
     {
         world.place (world.state().x, world.state().z, world.state().heading, g, t);
     }
@@ -46,7 +45,7 @@ public:
 
     float speed() const noexcept override                        { return world.state().speed; }
     float speedFor (int g, bool t) const noexcept override       { return world.speedFor (g, t); }
-    Ease ease() const noexcept override                          { return { PlainsWorld::speedSeconds, PlainsWorld::parkSeconds }; }
+    Ease ease() const noexcept override                          { return { PlainsWorld::speedSeconds }; }
     Mars1993::Look look1993() const noexcept override            { return Mars1993::Look::mars; }
 
     std::string landmarks (double metres) const override
@@ -65,6 +64,7 @@ public:
     }
 
     bool create() override                                       { return gl.create(); }
+    std::string error() const override                           { return gl.error(); }
     void destroy() override                                      { gl.destroy(); }
     void render (int w, int h, float scale, uint32_t target, int x, int y) override { gl.render (w, h, scale, target, x, y); }
     float gpuMillis() const noexcept override                    { return gl.gpuMillis(); }

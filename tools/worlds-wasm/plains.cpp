@@ -24,14 +24,13 @@ namespace
 
 extern "C"
 {
-    /** A world in the product's gears, started at the gear, TURBO and PARK given — already at them, not easing. */
-    EMSCRIPTEN_KEEPALIVE void view_make (int gears, int gear, int turbo, int parked)
+    /** A world in the product's gears, started at the gear and TURBO given — already at them, not easing. */
+    EMSCRIPTEN_KEEPALIVE void view_make (int gears, int gear, int turbo)
     {
         view.reset();
         world = std::make_unique<PlainsWorld> (gears);
         world->setGear (gear);
         world->setTurbo (turbo != 0);
-        world->setParked (parked != 0);
         world->settle();
     }
 
@@ -52,7 +51,6 @@ extern "C"
 
     EMSCRIPTEN_KEEPALIVE void view_gear (int g)     { world->setGear (g); }
     EMSCRIPTEN_KEEPALIVE void view_turbo (int on)   { world->setTurbo (on != 0); }
-    EMSCRIPTEN_KEEPALIVE void view_park (int on)    { world->setParked (on != 0); }
     EMSCRIPTEN_KEEPALIVE void view_settle()         { world->settle(); }
 
     /** One frame: the drive stepped by dt seconds with the wheel at `steer`, drawn at w x h into the canvas. */

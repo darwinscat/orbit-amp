@@ -30,26 +30,25 @@ public:
 
     void setGear (int g) override            { world.setGear (g); }
     void setTurbo (bool on) override         { world.setTurbo (on); }
-    void setParked (bool on) override        { world.setParked (on); }
     void setSteer (float amount) override    { world.setSteer (amount); }
     void setWipers (int speed) override      { world.setWipers (speed); }
     void setLights (bool l, bool r) override { world.setLights (l, r); }
     void step (double dt) override           { world.step (dt); }
 
     /** A still keeps what is on the glass and out on the sea; the flight is evaluated where it stands. */
-    void settle (int g, bool t, bool p) override { world.build(); world.settle (g, t, p); }
+    void settle (int g, bool t) override { world.build(); world.settle (g, t); }
 
     void placeAt (double x, double z, double heading) override
     {
         world.build();
-        world.place (x, z, heading, world.gear(), world.isTurbo(), world.isParked());
+        world.place (x, z, heading, world.gear(), world.isTurbo());
     }
 
     void setClock (double seconds, double metresDriven) override { world.build(); world.setClock (seconds, metresDriven); }
 
     float speed() const noexcept override                        { return (float) world.state().speed; }
     float speedFor (int g, bool t) const noexcept override       { return (float) world.speedFor (g, t); }
-    Ease ease() const noexcept override                          { return { TitanWorld::speedSeconds, TitanWorld::parkSeconds }; }
+    Ease ease() const noexcept override                          { return { TitanWorld::speedSeconds }; }
     redpaw::Mars1993::Look look1993() const noexcept override    { return redpaw::Mars1993::Look::titan; }
 
     /** The buoys and the nitrogen fields out on the sea. */
@@ -70,6 +69,7 @@ public:
     }
 
     bool create() override                                       { return gl.create(); }
+    std::string error() const override                           { return gl.error(); }
     void destroy() override                                      { gl.destroy(); }
     void render (int w, int h, float scale, uint32_t target, int x, int y) override { gl.render (w, h, scale, target, x, y); }
     float gpuMillis() const noexcept override                    { return gl.gpuMillis(); }

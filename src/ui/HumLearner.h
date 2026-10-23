@@ -28,8 +28,10 @@ namespace orbitamp
 class HumLearner final : private juce::Timer
 {
 public:
-    HumLearner (core::HumLearnLink& link, const std::atomic<float>& keyDbSource, const std::atomic<float>& quietWidthHz)
-        : take (link), keyDb (keyDbSource), quietHz (quietWidthHz) {}
+    /** `product`'s: the mode it learns for is the product's (prefs::hum). */
+    HumLearner (const Product& product, core::HumLearnLink& link, const std::atomic<float>& keyDbSource,
+                const std::atomic<float>& quietWidthHz)
+        : ownProduct (product), take (link), keyDb (keyDbSource), quietHz (quietWidthHz) {}
 
     ~HumLearner() override { stopTimer(); }
 
@@ -50,8 +52,8 @@ public:
     {
         if (take.isRunning())
             take.stop();
-        if (prefs::hum() == prefs::Hum::off)
-            prefs::setHum (prefs::humFlip());
+        if (prefs::hum (ownProduct) == prefs::Hum::off)
+            prefs::setHum (ownProduct, prefs::humFlip (ownProduct));
 
         take.begin (quietHz.load (std::memory_order_relaxed));
         startTimerHz (core::HumLearnTake::ticksPerSecond);
@@ -99,6 +101,7 @@ public:
     }
 
 private:
+    const Product& ownProduct;
     void timerCallback() override
     {
         if (! take.hear (keyDb.load (std::memory_order_relaxed)))
@@ -106,7 +109,7 @@ private:
 
         stopTimer();
         Take done { Outcome::done, take.answer(),
-                    prefs::hum() == prefs::Hum::hz50 ? 50 : prefs::hum() == prefs::Hum::hz60 ? 60 : 0 };
+                    prefs::hum (ownProduct) == prefs::Hum::hz50 ? 50 : prefs::hum (ownProduct) == prefs::Hum::hz60 ? 60 : 0 };
         if (done.hum.verdict == core::HumLearnLink::unanswered)
             done.outcome = Outcome::cancelled;
         if (onDone != nullptr)

@@ -37,11 +37,13 @@ public:
         return dir;
     }
 
-    /** Where a product kept the player's IRs before the family shared one folder: its own `IRs`, beside
-        its Devices. Not read any more — only gathered from, once; never made, and never written. */
-    static juce::File formerDirectory()
+    /** Where a product, by its name, kept the player's IRs before the family shared one folder: its own
+        `IRs`, beside its Devices. Not read any more — only gathered from, once; never made, and never
+        written. */
+    static juce::File formerDirectory (const juce::String& product)
     {
-        return DeviceLibrary::appDataRoot().getChildFile ("IRs");
+        return DeviceLibrary::appDataRoot (product).getChildFile ("IRs");
+
     }
 
     /** What a gathering did: how many files it copied, and how many it could not. */

@@ -5,13 +5,24 @@ name: release
 # A manual run (workflow_dispatch) builds the SAME artifacts but does NOT create a release unless
 # dry_run=false, so you can download + test installers from the run page without publishing.
 #
-#   • macOS   → one signed + notarized .pkg, universal, and a .zip for arm64 and for x86_64: every amp, VST3 + AU + CLAP + Standalone  [self-hosted runner]
-#   • Windows → one Inno Setup .exe (x64), and a .zip for x64 and for arm64: every amp, VST3 + CLAP + Standalone
-#   • Linux   → one .tar.xz for x86_64 and for arm64: every amp, VST3 + CLAP + Standalone, with install.sh
+#   • macOS   → one signed + notarized .pkg, universal, and no zip: VST3 + AU + CLAP + Standalone  [self-hosted runner]
+#   • Windows → one Inno Setup .exe (x64), and a .zip for x64 and for arm64: VST3 + CLAP + Standalone
+#   • Linux   → one .tar.xz for x86_64 and for arm64: VST3 + CLAP + Standalone, with install.sh
 #
-# Every system builds Family_All — every format of every amp of the family — and runs the one gate list
+# Every plug-in format is ONE bundle with every amp in it, "Darwin's Cat Amps" (installer/family.ini:
+# `bundle=`, built by the `bundle_target=` target, <build>/DarwinsCatAmps_artefacts); the standalones are
+# one per amp (<build>/<Amp>_artefacts). The packing scripts read both from family.ini.
+#
+# Every system builds Family_All — the family's plug-ins and every amp's Standalone — and runs the one gate list
 # (tests/gates.txt, tools/run-gates.sh) before it packs anything. The notes are the family's book: the
 # release's own section of CHANGELOG.md (tools/changelog-collect.mjs --notes).
+#
+# THE SYMBOLS OF WHAT SHIPPED. Every build here is configured with ORBITAMP_KEEP_SYMBOLS=ON (CMakeLists.txt: A
+# RELEASE KEEPS THE SYMBOLS OF WHAT IT SHIPPED): each shipped binary keeps its .dSYM, .pdb or .debug file in
+# build/symbols before it is stripped, and each job uploads that folder as an artifact of this run,
+# symbols-<version>-<system>, kept 90 days — never as a release asset, never in an installer or a zip: they name
+# every function of ours. A tagged release's go to the family's private archive as well (the `symbols` job, at the
+# end). installer/README.md, "Reading a crash report", says how to read a report with them.
 #
 # Required (signing only): secrets MACOS_APP_IDENTITY, MACOS_INSTALLER_IDENTITY, KCH_PWD; var
 # NOTARY_PROFILE. The GitHub Release is published with the built-in GITHUB_TOKEN.
@@ -88,7 +99,8 @@ jobs:
             -DORBITAMP_JUCE_DIR= -DORBITAMP_FCORE_DIR= -DORBITAMP_GUITAR_DIR= -DORBITAMP_APPKIT_DIR= \
             -DORBITAMP_NAM_CORE_SRC= -DORBITAMP_NAMZ_SRC= \
             -DORBITAMP_COPY_PLUGIN=OFF \
-            -DORBITAMP_DEV_FACTORY=OFF
+            -DORBITAMP_DEV_FACTORY=OFF \
+            -DORBITAMP_KEEP_SYMBOLS=ON
           # NO DEV FACTORY: a released amp reads the factory folder the installer lays out, never this
           # runner's build/Factory — which on this runner, a working laptop, is there (CMakeLists.txt:
           # THE FACTORY FOLDER). The gates read build/Factory whatever this says.
@@ -97,7 +109,7 @@ jobs:
           cmake --build build --config Release --parallel 8 --target Family_All Family_Gates
       - name: Gates
         run: tools/run-gates.sh build Release
-      # Sign (Developer ID) + notarize + staple, then the zip and the package. Signing identities + the
+      # Sign (Developer ID) + notarize + staple, then the package. Signing identities + the
       # notarytool keychain-profile name come from repo secrets/vars; the certs + profile live in the
       # runner's Keychain.
       - name: Sign, notarize, package
@@ -119,6 +131,13 @@ jobs:
         with:
           name: macos
           path: dist/*
+      # The .dSYM of every shipped bundle, universal (above: THE SYMBOLS OF WHAT SHIPPED).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: symbols-${{ needs.version.outputs.version }}-macos
+          path: build/symbols/
+          retention-days: 90
+          if-no-files-found: error
 
   windows:
     # Native x64 + arm64. windows-11-arm is a free hosted runner for public repos. x64 also gets the Inno
@@ -137,7 +156,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build
         run: |
-          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF
+          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF -DORBITAMP_KEEP_SYMBOLS=ON
           cmake --build build --config Release --parallel --target Family_All Family_Gates
       - name: Gates
         shell: bash
@@ -181,6 +200,13 @@ jobs:
         with:
           name: windows-${{ matrix.arch }}
           path: dist/*
+      # The .pdb of every shipped .vst3, .clap and .exe (above: THE SYMBOLS OF WHAT SHIPPED).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: symbols-${{ needs.version.outputs.version }}-windows-${{ matrix.arch }}
+          path: build/symbols/
+          retention-days: 90
+          if-no-files-found: error
 
   linux:
     # Native x86_64 + arm64 — both are free hosted runners for public repos.
@@ -205,7 +231,7 @@ jobs:
             libglu1-mesa-dev mesa-common-dev
       - name: Build
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DORBITAMP_DEV_FACTORY=OFF -DORBITAMP_KEEP_SYMBOLS=ON
           cmake --build build --target Family_All Family_Gates
       - name: Gates
         run: tools/run-gates.sh build Release
@@ -217,6 +243,13 @@ jobs:
         with:
           name: linux-${{ matrix.arch }}
           path: dist/*
+      # The .debug file of every shipped library and app (above: THE SYMBOLS OF WHAT SHIPPED).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: symbols-${{ needs.version.outputs.version }}-linux-${{ matrix.arch }}
+          path: build/symbols/
+          retention-days: 90
+          if-no-files-found: error
 
   release:
     needs: [ version, macos, windows, linux ]
@@ -227,8 +260,18 @@ jobs:
     steps:
       # For the book and the tool that reads it.
       - uses: actions/checkout@v7
+      # WHAT SHIPS, AND NOTHING ELSE: the systems' packages, by name — never the symbols-* artifacts beside them.
       - uses: actions/download-artifact@v8
         with:
+          name: macos
+          path: artifacts/macos
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: windows-*
+          path: artifacts
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: linux-*
           path: artifacts
       - name: Create GitHub Release
         env:
@@ -238,6 +281,14 @@ jobs:
           set -euo pipefail
           mkdir -p out
           find artifacts -type f -exec cp {} out/ \;
+          # Every file a release publishes is one of its packages, darwinscat-amps-*; anything else — a symbol
+          # file above all — stops it here, before anything is published.
+          stray="$(find out -type f ! -name 'darwinscat-amps-*')"
+          if [ -n "$stray" ]; then
+            echo "refusing to publish what is not a package of the release:" >&2
+            echo "$stray" >&2
+            exit 1
+          fi
           ( cd out && sha256sum darwinscat-amps-* > SHA256SUMS )
           node tools/changelog-collect.mjs --notes "$VER" > notes.md
 
@@ -250,3 +301,34 @@ jobs:
             --target "$GITHUB_SHA" \
             --notes-file notes.md \
             out/*
+
+  symbols:
+    # THE SYMBOLS OF A PUBLISHED RELEASE, KEPT FOR GOOD. The run's symbols-* artifacts live 90 days; a tagged
+    # release's go to the family's private archive as well, one folder a version — releases/vX.Y.Z/, each
+    # artifact a folder in it, as downloaded. Tagged releases only: a manual run, dry or not, keeps its
+    # artifacts and nothing more. The archive's sftp address is the repository variable SYMBOLS_SFTP (the
+    # archive takes sftp and nothing else); the signing runner holds the key it admits. A release whose
+    # archiving fails is still published — the artifacts stay on the run for 90 days, to upload by hand.
+    needs: [ version, release ]
+    if: ${{ github.event_name == 'push' }}
+    runs-on: [self-hosted, macOS, signing]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: symbols-*
+          path: symbols
+      - name: Archive the symbols
+        env:
+          VER: ${{ needs.version.outputs.version }}
+          DEST: ${{ vars.SYMBOLS_SFTP }}
+        run: |
+          set -euo pipefail
+          [ -n "$DEST" ] || { echo "the repository variable SYMBOLS_SFTP is not set" >&2; exit 1; }
+          ls -d symbols/symbols-* > /dev/null
+          {
+            echo "-mkdir releases/v$VER"
+            for d in symbols/symbols-*/; do echo "put -R ${d%/} releases/v$VER/"; done
+            echo "ls -l releases/v$VER"
+          } > symbols-batch.txt
+          sftp -b symbols-batch.txt -o BatchMode=yes "$DEST"

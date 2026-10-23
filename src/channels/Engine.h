@@ -23,8 +23,9 @@ inline constexpr std::array<int, 4> turboPushes { 3, 6, 9, 12 };
 /** The push on offer nearest to `db`. */
 int snapTurbo (int db);
 
-/** The push the settings hold now. */
-int turbo();
+/** The push the product's settings hold now. */
+int turbo (const Product&);
+
 } // namespace settings
 
 /** A PRODUCT'S HALF OF THE ENGINE: what makes the processor an amp of so many channels whether or not
@@ -62,6 +63,11 @@ public:
     /** CHANNEL, the host's handle on the selector, named by the lineup and its choices the channels'
         names. The product's own: OrbitAmp has no such parameter. */
     static void addParameters (juce::AudioProcessorValueTreeState::ParameterLayout&, const Lineup&);
+
+    /** WHERE A FRESH INSTANCE STANDS (params::Opening): on the lineup's first channel, as this engine
+        opens one — its pack, its room, its share of the room where the channel says one, its delay — so
+        that the parameters declare what the engine is about to set them to. */
+    static void opening (const Lineup&, params::Opening&);
     const char* channelId() const noexcept { return channels.lineup().parameterId; }
 
     Channels channels;
@@ -82,10 +88,6 @@ public:
 
     void pump() override;
     void stateLanded() override;
-    const std::atomic<float>* parkSwitch() const override { return park; }
-
-    /** PARK's parameter, where the lineup has one: the whole amp out of the sound. */
-    const char* parkId() const noexcept { return channels.lineup().parkId; }
 
     /** The face, when it is open: the engine has moved a channel or taken a state as its own, and
         what the window shows may be behind. */
@@ -94,7 +96,6 @@ public:
 private:
     AmpProcessor& amp;
     juce::RangedAudioParameter* const channel;
-    const std::atomic<float>* const park;
     int lastAsked = 0;      // where the parameter stood when it was last looked at
 
     int  asked() const;

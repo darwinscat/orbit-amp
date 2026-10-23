@@ -23,14 +23,13 @@ namespace
 
 extern "C"
 {
-    /** A world in the product's gears, started at the gear, TURBO and PARK given — already at them, not easing. */
-    EMSCRIPTEN_KEEPALIVE void view_make (int gears, int gear, int turbo, int parked)
+    /** A world in the product's gears, started at the gear and TURBO given — already at them, not easing. */
+    EMSCRIPTEN_KEEPALIVE void view_make (int gears, int gear, int turbo)
     {
         view.reset();
         world = std::make_unique<IceWorld> (gears);
         world->setGear (gear);
         world->setTurbo (turbo != 0);
-        world->setParked (parked != 0);
         world->settle();
     }
 
@@ -51,7 +50,6 @@ extern "C"
 
     EMSCRIPTEN_KEEPALIVE void view_gear (int g)     { world->setGear (g); }
     EMSCRIPTEN_KEEPALIVE void view_turbo (int on)   { world->setTurbo (on != 0); }
-    EMSCRIPTEN_KEEPALIVE void view_park (int on)    { world->setParked (on != 0); }
     EMSCRIPTEN_KEEPALIVE void view_settle()         { world->settle(); }
 
     /** One frame: the drive stepped by dt seconds with the wheel at `steer`, drawn at w x h into the canvas. */
@@ -80,18 +78,18 @@ extern "C"
         {
             world->setClock (seconds, metres);
             const auto& s = world->state();
-            world->place (s.x, s.z, s.heading, world->gear(), world->isTurbo(), world->isParked());
+            world->place (s.x, s.z, s.heading, world->gear(), world->isTurbo());
         }
         if (placed)
         {
-            world->place (x, z, headingDegrees * pi / 180, world->gear(), world->isTurbo(), world->isParked());
+            world->place (x, z, headingDegrees * pi / 180, world->gear(), world->isTurbo());
             if (clocked)
                 world->setClock (seconds, metres);
         }
         if (drive > 0)
         {
             if (! placed)
-                world->place (31500, 3000, 0, world->gear(), world->isTurbo(), world->isParked());
+                world->place (31500, 3000, 0, world->gear(), world->isTurbo());
             world->setSteer (steer);
             for (int i = 0, n = (int) std::lrint (drive * 60); i < n; ++i)
                 world->step (1.0 / 60);
@@ -100,7 +98,7 @@ extern "C"
         if (still)
         {
             const auto& s = world->state();
-            world->place (s.x, s.z, s.heading, world->gear(), world->isTurbo(), world->isParked());
+            world->place (s.x, s.z, s.heading, world->gear(), world->isTurbo());
         }
     }
 

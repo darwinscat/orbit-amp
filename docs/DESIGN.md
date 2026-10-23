@@ -91,7 +91,7 @@ Two consequences worth stating out loud, because both are the model working rath
 IN → tuner → gate → preamp (voicing) → EQ → delay → reverb → cabinet → limiter → OUT
 ```
 
-A fresh instance — and INIT — is CatpitAmp's Crunch channel: the X88-IR Crunch through DARK MATTER,
+A fresh instance — and INIT — is CatpitAmp's Crunch channel: the X88-IR Crunch through RED GIANT,
 IN and OUT in the chain at unity, the delay on with nothing in its mix, and everything else at its
 parameter's own default.
 

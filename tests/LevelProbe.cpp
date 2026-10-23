@@ -39,8 +39,8 @@ int main (int argc, char** argv)
 
     boost.prepare (rate, n, 1);
     preamp.prepare (rate, n, 1);
-    boost.rescan (0);
-    preamp.rescan (0);
+    boost.rescan ("OrbitAmp", 0);
+    preamp.rescan ("OrbitAmp", 0);
 
     // Find the two suspects by name.
     const auto pick = [] (Block& b, const juce::String& name)

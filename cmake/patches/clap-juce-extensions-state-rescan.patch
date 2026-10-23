@@ -1,0 +1,30 @@
+A SESSION'S KNOB POSITIONS, SHOWN AS IT OPENS — the CLAP wrapper of clap-juce-extensions. Applied by
+cmake/PatchedWrappers.cmake to the pinned commit (ORBITAMP_CLAP_EXT_TAG, 51a9359) to every CLAP this tree
+builds, an amp's own and the family's alike; git apply reads from the first "diff --git" line on, so this
+text is not part of the patch.
+
+The wrapper's state load hands the stream to setStateInformation and returns, and never tells the host the
+parameters' values have changed. Through the processor's parameter listeners each new value does reach the
+host, but as an output event on its next process or flush — which a host may take for automation — and a
+host that looks right after the load still sees the values of before: clap-validator's three
+state-reproducibility tests fail with "After reloading the state, these parameter values changed without a
+rescan request". CLAP asks a plug-in that loads a state to call clap_host_params.rescan with
+CLAP_PARAM_RESCAN_VALUES (params.h, "Loading a preset"), and both calls are main-thread; so the load does,
+where the host has the params extension. Not in the pinned commit nor upstream after it: the same change is
+proposed there as free-audio/clap-juce-extensions#193, open.
+
+diff --git a/src/wrapper/clap-juce-wrapper.cpp b/src/wrapper/clap-juce-wrapper.cpp
+index 0b60b73..0edbcda 100644
+--- a/src/wrapper/clap-juce-wrapper.cpp
++++ b/src/wrapper/clap-juce-wrapper.cpp
+@@ -2443,6 +2443,10 @@ class ClapJuceWrapper : public clap::helpers::Plugin<
+         // So we just have to assume it works.
+         processor->setStateInformation(chunkMemory.getData(), (int)chunkMemory.getSize());
+         chunkMemory.reset();
++        // A load reaches the host only as output events on its next flush; CLAP asks for a values
++        // rescan instead (params.h, "Loading a preset"). load and rescan are both main-thread.
++        if (_host.canUseParams())
++            _host.paramsRescan(CLAP_PARAM_RESCAN_VALUES);
+         return true;
+     }
+ 

@@ -14,12 +14,13 @@ namespace orbitamp::prefs
 
 /** The app-wide switches — what the WINDOW shows, never what the sound is. A preset carries none of
     these and the compare registers do not flip them: they are about this machine and this player,
-    so they live in the family's settings store — one small JSON beside the Devices folder, shared
-    by every instance, locked against two of them writing at once. */
-inline const felitronics::appkit::SettingsStore& store()
+    so they live in the product's settings store — one small JSON beside its Devices folder, shared
+    by every instance of the product, locked against two of them writing at once. One for each product
+    in a process (PerProduct): two amps in one host each keep their own. */
+inline const felitronics::appkit::SettingsStore& store (const Product& p)
 {
-    static const felitronics::appkit::SettingsStore s ("Darwin's Cat", product::name);
-    return s;
+    static PerProduct<const felitronics::appkit::SettingsStore> stores;
+    return stores.of (p.name, [&p] { return felitronics::appkit::SettingsStore ("Darwin's Cat", p.name); });
 }
 
 /** The update badge's own store — `update.settings`, beside the settings.json above.
@@ -30,25 +31,28 @@ inline const felitronics::appkit::SettingsStore& store()
     second copy of anything. (The family fix is teaching UpdateChecker the SettingsStore; until a
     second product wants it, this is one file.)
 
-    Ownership follows OrbitCab's: the PROCESSOR holds it through a juce::SharedResourcePointer, so
-    every instance in a host process shares one object — no two racing on a save, and a badge stored
-    by one instance is visible to the rest at once. The InterProcessLock serialises writes between
-    host processes. Never a function-local static: that would outlive the MessageManager and be
-    destroyed on library unload, which is not a place to be touching timers and files.
+    Ownership follows OrbitCab's: the PROCESSOR holds it shared (of), so every instance of the product
+    in a host process shares one object — no two racing on a save, and a badge stored by one instance
+    is visible to the rest at once — made by the first and gone with the last, as a
+    juce::SharedResourcePointer would be, but one for each product: two amps in one process each keep
+    their own. The InterProcessLock serialises writes between host processes. Never a function-local
+    static: that would outlive the MessageManager and be destroyed on library unload, which is not a
+    place to be touching timers and files.
 
     Message thread only — a PropertiesFile is not thread-safe, and the checker touches it nowhere
     else (see UpdateChecker::Config::settings). */
 class UpdateStore
 {
 public:
-    UpdateStore()
+    explicit UpdateStore (const Product& p)
+        : ipLock (juce::String (p.name) + ".update.settings")
     {
         juce::PropertiesFile::Options o;
         // The PRODUCT's folder, not the family's shared one: two faces of one processor are released
         // apart, and a newer OrbitAmp is no news for a cockpit. For OrbitAmp this is the folder it
         // has always been.
         o.applicationName     = "update";
-        o.folderName          = "Darwin's Cat" + juce::String (juce::File::getSeparatorString()) + product::name;
+        o.folderName          = "Darwin's Cat" + juce::String (juce::File::getSeparatorString()) + p.name;
         o.filenameSuffix      = "settings";
         o.osxLibrarySubFolder = "Application Support";
         o.processLock         = &ipLock;
@@ -57,19 +61,37 @@ public:
 
     juce::PropertiesFile* file() { return props.getUserSettings(); }
 
+    /** The product's own, shared with every other processor of it that is there: the first makes it,
+        the last to let go of it takes it away. */
+    static std::shared_ptr<UpdateStore> of (const Product& p)
+    {
+        static std::mutex mutex;
+        static std::map<std::string, std::weak_ptr<UpdateStore>> stores;
+
+        const std::scoped_lock lock (mutex);
+        auto& held = stores[p.name];
+        auto store = held.lock();
+        if (store == nullptr)
+        {
+            store = std::make_shared<UpdateStore> (p);
+            held = store;
+        }
+        return store;
+    }
+
 private:
-    juce::InterProcessLock    ipLock { juce::String (product::name) + ".update.settings" };
+    juce::InterProcessLock    ipLock;
     juce::ApplicationProperties props;
 };
 
-inline bool getBool (const juce::Identifier& key, bool fallback)
+inline bool getBool (const Product& p, const juce::Identifier& key, bool fallback)
 {
-    return (bool) store().get (key, fallback);
+    return (bool) store (p).get (key, fallback);
 }
 
-inline void setBool (const juce::Identifier& key, bool value)
+inline void setBool (const Product& p, const juce::Identifier& key, bool value)
 {
-    store().set (key, value);
+    store (p).set (key, value);
 }
 
 /** The two TEMPORARY strips under the footer — the audition player and the glyph review — off
@@ -113,17 +135,17 @@ inline const juce::Identifier growBlocks { "grow_blocks" };
 
 /** The analysers — the consoles' ground, the cabinet's pair, the TONE tile's columns. One switch
     for all of them, read where a spectrum is about to be drawn: cached after the first look,
-    because a paint routine must not open a file. */
+    because a paint routine must not open a file. Each cache here is the product's own (PerProduct). */
 inline const juce::Identifier showSpectra { "show_spectra" };
 
-inline std::atomic<bool>& spectraCache()
+inline std::atomic<bool>& spectraCache (const Product& p)
 {
-    static std::atomic<bool> cached { getBool (showSpectra, true) };
-    return cached;
+    static PerProduct<std::atomic<bool>> cached;
+    return cached.of (p.name, [&p] { return getBool (p, showSpectra, true); });
 }
 
-inline bool spectraShown()               { return spectraCache().load (std::memory_order_relaxed); }
-inline void setSpectraShown (bool shown) { spectraCache().store (shown, std::memory_order_relaxed); setBool (showSpectra, shown); }
+inline bool spectraShown (const Product& p)               { return spectraCache (p).load (std::memory_order_relaxed); }
+inline void setSpectraShown (const Product& p, bool shown) { spectraCache (p).store (shown, std::memory_order_relaxed); setBool (p, showSpectra, shown); }
 
 /** The TUNER's LEVEL FLOOR — about this room and this guitar, not about a sound, so it lives on the
     machine like the switches above and a preset does not carry it. Read by the tuner thirty times a
@@ -148,14 +170,14 @@ inline int snapTunerFloor (int db)
     return best;
 }
 
-inline std::atomic<int>& tunerFloorCache()
+inline std::atomic<int>& tunerFloorCache (const Product& p)
 {
-    static std::atomic<int> cached { snapTunerFloor ((int) store().get (tunerFloorDb, tunerFloorDefault)) };
-    return cached;
+    static PerProduct<std::atomic<int>> cached;
+    return cached.of (p.name, [&p] { return snapTunerFloor ((int) store (p).get (tunerFloorDb, tunerFloorDefault)); });
 }
 
-inline int  tunerFloor()                { return tunerFloorCache().load (std::memory_order_relaxed); }
-inline void setTunerFloor (int db)      { db = snapTunerFloor (db); tunerFloorCache().store (db, std::memory_order_relaxed); store().set (tunerFloorDb, db); }
+inline int  tunerFloor (const Product& p)              { return tunerFloorCache (p).load (std::memory_order_relaxed); }
+inline void setTunerFloor (const Product& p, int db)   { db = snapTunerFloor (db); tunerFloorCache (p).store (db, std::memory_order_relaxed); store (p).set (tunerFloorDb, db); }
 
 /** The TUNER's REFERENCE — the pitch A4 is tuned to, in Hz. 440 wherever a guitar plays alone; a piano
     or an orchestra that will not retune, and a record that has drifted, are why a tuner lets it move.
@@ -175,14 +197,14 @@ inline int snapTunerReference (int hz)
     return best;
 }
 
-inline std::atomic<int>& tunerReferenceCache()
+inline std::atomic<int>& tunerReferenceCache (const Product& p)
 {
-    static std::atomic<int> cached { snapTunerReference ((int) store().get (tunerReferenceHz, tunerReferenceDefault)) };
-    return cached;
+    static PerProduct<std::atomic<int>> cached;
+    return cached.of (p.name, [&p] { return snapTunerReference ((int) store (p).get (tunerReferenceHz, tunerReferenceDefault)); });
 }
 
-inline int  tunerReference()            { return tunerReferenceCache().load (std::memory_order_relaxed); }
-inline void setTunerReference (int hz)  { hz = snapTunerReference (hz); tunerReferenceCache().store (hz, std::memory_order_relaxed); store().set (tunerReferenceHz, hz); }
+inline int  tunerReference (const Product& p)              { return tunerReferenceCache (p).load (std::memory_order_relaxed); }
+inline void setTunerReference (const Product& p, int hz)   { hz = snapTunerReference (hz); tunerReferenceCache (p).store (hz, std::memory_order_relaxed); store (p).set (tunerReferenceHz, hz); }
 
 /** THE HUM AT THE INPUT — which mains the hum on this machine's input is made of: none to take off,
     50 Hz, 60 Hz, or AUTO, which listens and decides. It is about the wall socket, the cable and the
@@ -220,10 +242,10 @@ inline Hum humFromWord (const juce::String& word)
     return humDefault;
 }
 
-inline std::atomic<int>& humCache()
+inline std::atomic<int>& humCache (const Product& p)
 {
-    static std::atomic<int> cached { (int) humFromWord (store().get (humMains, humWord (humDefault)).toString()) };
-    return cached;
+    static PerProduct<std::atomic<int>> cached;
+    return cached.of (p.name, [&p] { return (int) humFromWord (store (p).get (humMains, humWord (humDefault)).toString()); });
 }
 
 /** THE LAST MODE THAT WAS NOT OFF — what OFF bypasses. OFF does not stop the stage: it goes on
@@ -232,25 +254,25 @@ inline std::atomic<int>& humCache()
     beside the mode; AUTO when OFF is all this machine has ever chosen. */
 inline const juce::Identifier humLastOnKey { "hum_last_on" };
 
-inline std::atomic<int>& humLastOnCache()
+inline std::atomic<int>& humLastOnCache (const Product& p)
 {
-    static std::atomic<int> cached { [] {
-        const auto h = humFromWord (store().get (humLastOnKey, humWord (humFirstOn)).toString());
+    static PerProduct<std::atomic<int>> cached;
+    return cached.of (p.name, [&p] {
+        const auto h = humFromWord (store (p).get (humLastOnKey, humWord (humFirstOn)).toString());
         return (int) (h == Hum::off ? humFirstOn : h);
-    }() };
-    return cached;
+    });
 }
 
-inline Hum  hum()            { return (Hum) humCache().load (std::memory_order_relaxed); }
-inline Hum  humLastOn()      { return (Hum) humLastOnCache().load (std::memory_order_relaxed); }
-inline void setHum (Hum h)
+inline Hum  hum (const Product& p)          { return (Hum) humCache (p).load (std::memory_order_relaxed); }
+inline Hum  humLastOn (const Product& p)    { return (Hum) humLastOnCache (p).load (std::memory_order_relaxed); }
+inline void setHum (const Product& p, Hum h)
 {
-    humCache().store ((int) h, std::memory_order_relaxed);
-    store().set (humMains, humWord (h));
+    humCache (p).store ((int) h, std::memory_order_relaxed);
+    store (p).set (humMains, humWord (h));
     if (h != Hum::off)
     {
-        humLastOnCache().store ((int) h, std::memory_order_relaxed);
-        store().set (humLastOnKey, humWord (h));
+        humLastOnCache (p).store ((int) h, std::memory_order_relaxed);
+        store (p).set (humLastOnKey, humWord (h));
     }
 }
 
@@ -276,7 +298,8 @@ inline juce::String humLabel (Hum h, int heard)
 }
 
 /** THE QUICK A/B: OFF from any mode, and from OFF the mode it bypasses (humLastOn). */
-inline Hum humFlip() { return hum() == Hum::off ? humLastOn() : Hum::off; }
+inline Hum humFlip (const Product& p) { return hum (p) == Hum::off ? humLastOn (p) : Hum::off; }
+
 
 /** What a face says for a moment after the flip — AUTO's state with it (`heard` as for humLabel). */
 inline juce::String humTag (Hum h, int heard)

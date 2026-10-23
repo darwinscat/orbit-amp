@@ -41,7 +41,8 @@ class MidiPanel final : public juce::Component,
                         private juce::Timer
 {
 public:
-    explicit MidiPanel (juce::String commands);
+    /** `product`'s, by its name: a file of them is offered under it. */
+    MidiPanel (juce::String product, juce::String commands);
 
     /** Whether there are inputs to choose at all: only where the product stands alone. */
     static bool available();
@@ -65,6 +66,7 @@ private:
     void refresh();
 
     // The commands: the file, and the file laid out.
+    const juce::String product;
     const juce::String commands;
     struct Line
     {

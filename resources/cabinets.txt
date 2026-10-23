@@ -75,4 +75,4 @@ ir      | 18 | PESTO PALADIN         | ir/19-pesto-paladin.wav
 ir      | 19 | DON SPINACIO          | ir/20-don-spinacio.wav
 ir      | 20 | KILL DILL             | ir/21-kill-dill.wav
 
-default | DARK MATTER
+default | RED GIANT

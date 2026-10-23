@@ -21,6 +21,8 @@ class Cockpit final : public face::Picture
 {
 private:
     void paintStatic (juce::Graphics&, float scale) const override;
+    void paintStrips (juce::Graphics&, float scale) const override;
+    juce::Colour signInk() const override { return face::labelLilac.withAlpha (0.75f); }     // as quiet as the filter keys' signs at rest
     void paintLive (juce::Graphics&) const override;
     juce::Rectangle<int> historyArea() const override;
 
@@ -99,4 +101,9 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CatpitEditor)
 };
 
+/** The cockpit's face (Product::makeEditor) — or, with its pictures missing, the notice that says where
+    they belong. */
+juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
+
 } // namespace orbitamp::catpit
+

@@ -1,0 +1,82 @@
+{
+  "format": "orbitrig", "schema": 4,
+  "rig_id": "revolt-clean-poweramp-bf62", "family_id": "twonotes-revolt-guitar", "name": "Clean", "modeled_by": "Darwin's Cat",
+  "picture": "device.webp",
+  "chain": [
+    {
+      "kind": "nam", "slot": "amp",
+      "gear": { "make": "Two Notes", "model": "ReVolt Guitar", "type": "amp", "year": 2025,
+                "serial_number": "1497B9C1", "designed_in": "France", "made_in": "China",
+                "url": "https://www.two-notes.com/en/revolt-guitar/" },
+      "tone_type": "clean", "circuit": "tube:1",
+      "input_db": -4.0,
+      "controls": [
+        { "name": "Boost", "role": "generic", "values": ["off", "on"] },
+        { "name": "Gain", "role": "gain", "sweep": 300,
+          "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] }
+      ],
+      "files": [
+        { "file": "ReVolt Clean PowerAmp-0001.namz", "settings": { "Boost": "off", "Gain": "60" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.00111551 },
+        { "file": "ReVolt Clean PowerAmp-0002.namz", "settings": { "Boost": "on", "Gain": "60" },
+          "lag_samples": 1, "epochs": 800, "esr": 0.00998997 },
+        { "file": "ReVolt Clean PowerAmp-0003.namz", "settings": { "Boost": "off", "Gain": "90" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.00081059 },
+        { "file": "ReVolt Clean PowerAmp-0004.namz", "settings": { "Boost": "on", "Gain": "90" },
+          "lag_samples": 2, "epochs": 800, "esr": 0.00475252 },
+        { "file": "ReVolt Clean PowerAmp-0005.namz", "settings": { "Boost": "off", "Gain": "120" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.00111543 },
+        { "file": "ReVolt Clean PowerAmp-0006.namz", "settings": { "Boost": "on", "Gain": "120" },
+          "lag_samples": 2, "epochs": 800, "esr": 0.00682958 },
+        { "file": "ReVolt Clean PowerAmp-0008.namz", "settings": { "Boost": "off", "Gain": "150" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.00126199 },
+        { "file": "ReVolt Clean PowerAmp-0009.namz", "settings": { "Boost": "on", "Gain": "150" },
+          "lag_samples": 2, "epochs": 800, "esr": 0.01216088 },
+        { "file": "ReVolt Clean PowerAmp-0010.namz", "settings": { "Boost": "off", "Gain": "180" },
+          "lag_samples": 0, "epochs": 800, "esr": 0.00169182 },
+        { "file": "ReVolt Clean PowerAmp-0011.namz", "settings": { "Boost": "on", "Gain": "180" },
+          "lag_samples": 2, "epochs": 800, "esr": 0.00734777 },
+        { "file": "ReVolt Clean PowerAmp-0012.namz", "settings": { "Boost": "off", "Gain": "210" },
+          "lag_samples": 1, "epochs": 800, "esr": 0.00215629 },
+        { "file": "ReVolt Clean PowerAmp-0013.namz", "settings": { "Boost": "on", "Gain": "210" },
+          "lag_samples": 2, "epochs": 800, "esr": 0.01427437 },
+        { "file": "ReVolt Clean PowerAmp-0014.namz", "settings": { "Boost": "off", "Gain": "240" },
+          "lag_samples": 1, "epochs": 800, "esr": 0.00230501 },
+        { "file": "ReVolt Clean PowerAmp-0015.namz", "settings": { "Boost": "on", "Gain": "240" },
+          "lag_samples": 2, "epochs": 800, "esr": 0.01756335 },
+        { "file": "ReVolt Clean PowerAmp-0016.namz", "settings": { "Boost": "off", "Gain": "270" },
+          "lag_samples": 1, "epochs": 800, "esr": 0.00245382 },
+        { "file": "ReVolt Clean PowerAmp-0017.namz", "settings": { "Boost": "on", "Gain": "270" },
+          "lag_samples": 2, "epochs": 800, "esr": 0.01396666 },
+        { "file": "ReVolt Clean PowerAmp-0018.namz", "settings": { "Boost": "off", "Gain": "300" },
+          "lag_samples": 1, "epochs": 800, "esr": 0.00226775 },
+        { "file": "ReVolt Clean PowerAmp-0019.namz", "settings": { "Boost": "on", "Gain": "300" },
+          "lag_samples": 1, "epochs": 800, "esr": 0.00983716 },
+        { "file": "ReVolt Clean PowerAmp-0001.namz", "settings": { "Boost": "off", "Gain": "0" },
+          "input_db": -3.0, "lag_samples": 0, "epochs": 800, "esr": 0.00111551 },
+        { "file": "ReVolt Clean PowerAmp-0002.namz", "settings": { "Boost": "on", "Gain": "0" },
+          "input_db": -3.0, "lag_samples": 1, "epochs": 800, "esr": 0.00998997 },
+        { "file": "ReVolt Clean PowerAmp-0001.namz", "settings": { "Boost": "off", "Gain": "30" },
+          "input_db": -1.5, "lag_samples": 0, "epochs": 800, "esr": 0.00111551 },
+        { "file": "ReVolt Clean PowerAmp-0002.namz", "settings": { "Boost": "on", "Gain": "30" },
+          "input_db": -1.5, "lag_samples": 1, "epochs": 800, "esr": 0.00998997 }
+      ],
+      "tone": [
+        {
+          "name": "Bass", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "low_shelf", "hz": 221.0, "q": 0.9, "range_db": [-18.0, 3.0] }
+          ]
+        },
+        {
+          "name": "Treble", "sweep": 300, "placement": "post",
+          "reference": "150", "default": "150",
+          "sections": [
+            { "type": "high_shelf", "hz": 1000.0, "q": 0.7, "range_db": [-12.0, 6.0] }
+          ]
+        }
+      ]
+    }
+  ]
+}

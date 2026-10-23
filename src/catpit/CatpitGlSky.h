@@ -9,6 +9,7 @@
 #include <juce_opengl/juce_opengl.h>
 
 #include <atomic>
+#include <functional>
 
 namespace orbitamp::catpit
 {
@@ -27,7 +28,9 @@ namespace orbitamp::catpit
 class GlSky final : public juce::OpenGLRenderer
 {
 public:
-    explicit GlSky (juce::OpenGLContext& c) : context (c) {}
+    /** `name` is how a GPU that will not draw the sky names this window in the family's log
+        (shaders/GpuLog.h): the product, the format it was loaded as, the host (AmpProcessor::loadedAs). */
+    GlSky (juce::OpenGLContext& c, juce::String name) : context (c), logName (std::move (name)) {}
 
     /** 0 = CLEAN .. 1 = HI-GAIN, continuous. */
     void setThrottle (float t) noexcept { throttle.store (juce::jlimit (0.0f, 1.0f, t)); }
@@ -41,6 +44,15 @@ public:
         pixels. */
     void setArea (juce::Rectangle<float> glass, juce::Rectangle<float> windshield, juce::Point<float> editorSize) noexcept;
 
+    /** THE SKY'S FIRST FRAME, for a poster of the site's: the flight from its start, settled at `throttleAt`
+        (Flight::settle — at that speed at once, nothing stepped), shaded by this sky's shader over the
+        glass at `scale` times the size of `glass`, composed for `windshield` (both in the same units) as the
+        live sky is, into a frame buffer of its own, and read back — what the site's sky, started there,
+        shows first. Handed to `done` on the message thread; invalid where the shader did not build or the
+        context is not attached. Message thread. */
+    void firstFrame (float throttleAt, juce::Rectangle<float> glass, juce::Rectangle<float> windshield, float scale,
+                     std::function<void (juce::Image)> done);
+
     /** False once the shader has failed to build — the editor falls back to the CPU sky then. */
     bool failed() const noexcept { return broken.load(); }
 
@@ -50,6 +62,7 @@ public:
 
 private:
     juce::OpenGLContext& context;
+    const juce::String logName;
     SkyGl sky;
 
     std::atomic<float> throttle { 0.0f }, steer { 0.0f };

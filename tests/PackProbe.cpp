@@ -20,7 +20,7 @@ int main()
     {
         core::CapturedBlock block (slotKind);
         block.prepare (48000.0, 512, 2);   // as the plugin does: a stereo bus, of which MONO mode feeds one plane
-        block.rescan (0);
+        block.rescan ("OrbitAmp", 0);
 
         std::printf ("=== slot %s: %d packs ===\n",
                      slotKind == device::DeviceLibrary::Slot::pedal ? "pedal" : "preamp",

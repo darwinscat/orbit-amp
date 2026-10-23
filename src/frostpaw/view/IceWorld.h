@@ -24,7 +24,7 @@ namespace orbitamp::frostpaw
     precision, eases the gear, steers, meanders when let go, leans away from broken ice, is pushed
     around any structure ahead and never passes through one, and low-passes the camera's height and
     pitch. The snow is the drive's weather: none in first gear, a light fall and more up the gears,
-    TURBO up to the blizzard, a drift of flakes when parked.
+    TURBO up to the blizzard.
 
     The height function here and the one in the shaders must agree, or the camera sinks into the
     slopes: the constants are the same numbers, written twice. The shaders' height also falls away
@@ -43,14 +43,11 @@ public:
     static constexpr float turboFactor = 2.0f;        // TURBO doubles the gear's speed
     /** The snow each gear drives through, 0..1 — on three gears clear air, a light fall, more; and with
         TURBO, up to the blizzard. Graded down from the top: a product of fewer gears has the top ones,
-        so its top gear with TURBO is always the blizzard. Parked, a light drift of flakes. */
+        so its top gear with TURBO is always the blizzard. */
     static constexpr std::array<float, maxGears> gearSnow { 0.0f, 0.25f, 0.45f };
     static constexpr std::array<float, maxGears> turboSnow { 0.45f, 0.72f, 1.0f };
-    static constexpr float parkedSnow = 0.12f;
     static constexpr double snowEaseSeconds = 0.7;    // tau: about 2 s to thicken or clear, never a jump
-    static constexpr double parkSeconds = 0.5;        // tau: parked, the rover is standing in about 1.5 s
     static constexpr double speedSeconds = 0.45;      // tau: the gear's speed reached
-    static constexpr float parkedYawDegrees = 8.0f;   // parked, the hand turns the view in place, slowly
     static constexpr float steerYawDegrees = 25.0f;   // the hand's full lock, degrees a second
 
     /** The steel: one structure per hashed cell, a 280 m super-cell deciding a group or sparse ground. */
@@ -91,29 +88,26 @@ public:
     /** The drive, the inputs. */
     void setGear (int g) noexcept;                       // 1..numGears()
     void setTurbo (bool on) noexcept { turbo = on; }
-    /** PARK: the rover comes to a stand, the snow thins to a drift, the hand only turns the view in place. */
-    void setParked (bool on) noexcept { parked = on; }
     void setSteer (float s) noexcept;                    // -1..1, held input
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
-    bool isParked() const noexcept { return parked; }
     int numGears() const noexcept { return gears; }
 
     /** The speed the gear and TURBO ask for, before easing. */
     float speedFor (int gear, bool turbo) const noexcept;
-    /** The snow the gear, TURBO and PARK ask for, before easing. */
-    float snowFor (int gear, bool turbo, bool parked) const noexcept;
+    /** The snow the gear and TURBO ask for, before easing. */
+    float snowFor (int gear, bool turbo) const noexcept;
 
     /** One step of the drive. */
     void step (double dt);
 
     /** Puts the rover somewhere with no history: speed, snow and gear reached, camera and pitch
         evaluated directly. For a still, and for the start. */
-    void place (double x, double z, double heading, int gear, bool turbo, bool parked = false);
+    void place (double x, double z, double heading, int gear, bool turbo);
 
-    /** The speed and the snow where the gear, TURBO and PARK are taking them, at once rather than eased to: the
-        rover standing, or at its gear's speed, wherever it is. The site's view starts so, and is put so when
-        asked for a gear or PARK "settled". */
+    /** The speed and the snow where the gear and TURBO are taking them, at once rather than eased to: the
+        rover at its gear's speed, wherever it is. The site's view starts so, and is put so when asked for a
+        gear "settled". */
     void settle() noexcept;
 
     /** The clock, for a still: `time` turns Jupiter and moves Io, `travel` sets the flakes' phase. */
@@ -158,7 +152,7 @@ private:
     State s;
     const int gears;
     int gearWanted = 1;
-    bool turbo = false, parked = false;
+    bool turbo = false;
     float steer = 0.0f;
     double yawRate = 0.0, lastSteerTime = -10.0, meanderPhase = 0.0;
     std::vector<Structure> near;          // scratch for the step's two scans

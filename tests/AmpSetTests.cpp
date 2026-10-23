@@ -13,7 +13,6 @@
 // product beside it, a folder of its own under the system's temporary folder, which it leaves behind.
 
 #include "AmpGate.h"
-#include "Product.h"
 #include "channels/Set.h"
 #include "device/DeviceLibrary.h"
 #include "device/FactorySet.h"
@@ -28,7 +27,7 @@ int main()
 
     const auto& product = gate::product();
     const juce::String amp (product.amp);
-    const juce::String name (orbitamp::product::name);
+    const juce::String name (ORBITAMP_PRODUCT_NAME);
     gate::Checks check;
 
     const auto factory = FactorySet::location();
@@ -82,7 +81,7 @@ int main()
         check (orange == 10 && other == 0, "the cabinets are the Orange's ten, none in Other: " + juce::String (orange) + " + " + juce::String (other));
         check (cabinets.contains ("IRs/Orange PPC212V/02-dark-matter.wav"), "...DARK MATTER among them");
 
-        const auto ownCabinets = set::ownCabinets (factory);
+        const auto ownCabinets = set::ownCabinets (factory, name);
         bool mine = ownCabinets.size() == cabinets.size();
         for (const auto& c : cabinets)
             mine = mine && ownCabinets.contains (factory.getChildFile (c));
@@ -123,7 +122,7 @@ int main()
         const auto players = beside.getChildFile ("IRs/mine.wav");
         lay ("IRs/mine.wav", "the player's own");
 
-        const auto ownCabinets = set::ownCabinets (beside);
+        const auto ownCabinets = set::ownCabinets (beside, name);
         check (ownCabinets.size() == cabinets.size(), "beside another product's, the " + amp + "'s cabinets are still its "
                                                           + juce::String (cabinets.size()) + ": " + juce::String (ownCabinets.size()));
         check (! ownCabinets.contains (beside.getChildFile ("IRs/Orange PPC212V/00-another.wav")), "...and not the other product's");
