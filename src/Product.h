@@ -74,6 +74,13 @@ struct Product
         each of those parameters declares that as its default (params::Opening). None for OrbitAmp, which
         opens where the engine does. */
     void (*opening) (const Product&, params::Opening&) = nullptr;
+
+    /** WHAT ITS BOOST IS, where it is not a switch of the pack it plays. The cockpit's TURBO pushes the
+        capture — the preamp's input trim, at the push the settings give (channels::Channels::turboDb) —
+        and the X88-IR's packs have no Boost of their own: true there, so the boost's level
+        (params::boostLevel) is heard while TURBO is on. Everywhere else the boost is the playing pack's
+        own switch of that name, and OrbitAmp's input trim pushed is only a trim. */
+    bool boostIsPush = false;
 };
 
 /** EVERY AMP OF THE FAMILY, each defined in its own file (above). A binary links the ones it plays. */

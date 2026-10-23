@@ -917,6 +917,14 @@ private:
     bool delayReady = false, reverbReady = false;
 
 public:
+    /** WHETHER THE AMP'S BOOST IS ON, the one its level (params::boostLevel) is heard with: the playing
+        pack's own Boost switch past its first position — OrbitAmp's BOOST key, the rovers' TURBO, which
+        holds it there — or, on an amp whose boost is a push into the capture (Product::boostIsPush), the
+        preamp's input trim standing over channels::Channels::turboOnAbove. Never while the AMP is out of
+        the chain or switched off: the boost is the amp's. Any thread — the audio thread asks it every
+        block; which slot the pack's Boost is in is found by the pump, where the pack is. */
+    bool boostOn() const noexcept;
+
     /** The delay's picture taps, read-only: the face draws its comb from the same numbers the
         heads are actually standing on. */
     const felitronics::delay::TapeDelay& delayTaps() const noexcept { return delay; }
@@ -1207,6 +1215,18 @@ private:
     int   histSamples = 0;
     std::atomic<float>* limiterCeilParam   = nullptr;
     float lastOutGain = 1.0f;
+
+    // THE BOOST'S LEVEL (params::boostLevel), ahead of the master's hand: unity while the boost is off,
+    // its level while it is on, and between the two a straight ramp of boostRampSeconds — not the
+    // block-long ramp of the trims, whose length is whatever the host's block is: a boost thrown on a
+    // block of 32 samples would step in under a millisecond. Seeded at prepare, so a session saved with
+    // its boost on opens at its level instead of rising into it.
+    std::atomic<float>* boostLevelParam = nullptr;
+    std::array<std::atomic<float>*, (size_t) params::numSelectors> preampSelectorParams {};
+    std::atomic<int> boostSlot { -1 };          // the playing pack's Boost among the preamp's selector slots; -1 for none
+    juce::LinearSmoothedValue<float> boostGain { 1.0f };
+    static constexpr double boostRampSeconds = 0.015;
+    float boostTarget() const noexcept;         // what boostGain heads for: the level, or unity
     // THE SAFETY AT THE DOOR (core/DoorLimiter.h): a true-peak limiter that sees each peak a
     // millisecond before it arrives. It always runs, so its state is warm when it is switched in; while
     // it is out, `limiterLate` hands on the input exactly as late as the limiter would have, so the

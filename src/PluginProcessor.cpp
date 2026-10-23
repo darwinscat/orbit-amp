@@ -4,6 +4,7 @@
 #include "PluginProcessor.h"
 #include "Product.h"
 #include "Parameters.h"
+#include "channels/Channels.h"
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
 
@@ -141,6 +142,9 @@ AmpProcessor::AmpProcessor (const Product& product)
     cabTrimParam       = apvts.getRawParameterValue (params::cabTrim);
     cabPhaseParam      = apvts.getRawParameterValue (params::cabPhase);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
+    boostLevelParam    = apvts.getRawParameterValue (params::boostLevel);
+    for (int i = 0; i < params::numSelectors; ++i)
+        preampSelectorParams[(size_t) i] = apvts.getRawParameterValue (params::selectorId (params::preampId, i));
     for (int i = 0; i < params::numChainRows; ++i)
     {
         const auto& link = params::chainLinks[(size_t) i];
@@ -749,6 +753,18 @@ void AmpProcessor::pumpDeviceWork()
 
     pump (preamp,   preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
 
+    // WHERE THE PLAYING PACK'S BOOST IS: the first of its switches called that — as the AMP's BOOST key
+    // finds it — among the slots its switches are played from. The audio thread reads that slot's
+    // parameter for boostOn(); the pack itself it cannot read.
+    {
+        int slot = -1;
+        const auto list = preamp.selectors();
+        for (int i = 0; i < list.size() && i < params::numSelectors && slot < 0; ++i)
+            if (list.getReference (i).name.trim().equalsIgnoreCase ("boost"))
+                slot = i;
+        boostSlot.store (slot, std::memory_order_relaxed);
+    }
+
     // A model that landed may carry rate-matching the host has to know about.
     reportLatency();
 
@@ -1022,6 +1038,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     pumpDeviceWork();
 
+    // The boost's level where the state has it — after the pump, which has found the pack's Boost.
+    boostGain.reset (sampleRate, boostRampSeconds);
+    boostGain.setCurrentAndTargetValue (boostTarget());
 
     // Reported ALWAYS, whether a block is switched on or not: a bypass path carries the same
     // delay, so a toggle never shifts the timing of everything downstream. A latency that changes
@@ -1031,6 +1050,24 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     updateEqSettings();
     updateDelaySettings();
     updateReverbSettings();
+}
+
+bool AmpProcessor::boostOn() const noexcept
+{
+    if (! linkWorks (params::rowPreamp))
+        return false;
+
+    // The pack's own Boost, past its first position — the BOOST key lights the same way.
+    if (const int slot = boostSlot.load (std::memory_order_relaxed); juce::isPositiveAndBelow (slot, params::numSelectors))
+        return juce::roundToInt (preampSelectorParams[(size_t) slot]->load()) > 0;
+
+    // ...or the cockpit's TURBO, which is the capture pushed, read as its face reads it.
+    return ownProduct.boostIsPush && preampInParam->load() > channels::Channels::turboOnAbove;
+}
+
+float AmpProcessor::boostTarget() const noexcept
+{
+    return boostOn() ? juce::Decibels::decibelsToGain (boostLevelParam->load()) : 1.0f;
 }
 
 void AmpProcessor::updateDelaySettings() noexcept
@@ -1845,6 +1882,28 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
       cabOutDb.store (juce::Decibels::gainToDecibels (
           buffer.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stCab] = elapsedNs (a); }
+
+    // THE BOOST'S LEVEL (params::boostLevel): the lift of a boost that is on, after everything that
+    // makes the sound and before the master's hand and the limiter, so the ceiling still holds at +9.
+    // Thrown, picked or taken out of the chain, it ramps in a straight line; standing at unity it
+    // touches nothing — a boost off, or on at 0 dB, plays exactly what it played before it had a level.
+    {
+        boostGain.setTargetValue (boostTarget());
+
+        if (boostGain.isSmoothing())
+        {
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float g = boostGain.getNextValue();
+                for (int ch = 0; ch < numChannels; ++ch)
+                    channels[ch][i] *= g;
+            }
+        }
+        else if (const float g = boostGain.getCurrentValue(); ! juce::exactlyEqual (g, 1.0f))
+        {
+            buffer.applyGain (0, numSamples, g);
+        }
+    }
 
     const auto tOut = PerfClock::now();
 

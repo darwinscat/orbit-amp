@@ -70,3 +70,6 @@ family             orbitamp_family_test
 
 # The input's level: unity at every amp's input, the pack's own level feeding the model, 0.8.0's states as they played.
 input-level        orbitamp_input_level_test
+
+# The boost's level: louder by it while each amp's boost is on, ramped and exact, ahead of the limiter; off, bit for bit.
+boost-level        orbitamp_boost_level_test

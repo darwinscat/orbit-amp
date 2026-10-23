@@ -32,6 +32,31 @@ inline constexpr const char* limiterCeiling = "limiter_ceiling";
 inline constexpr float limiterCeilingMin = -3.0f;
 inline constexpr float limiterCeilingMax = -0.1f;
 
+/** THE BOOST'S LEVEL: how much louder the amp leaves while its boost is on. A boost a player stamps on
+    for a solo is meant to stand out of the band, and a capture of an amp's boost is levelled like any
+    other capture — so the lift is given back here, at the end of the chain: after the cabinet, the
+    reverb and the delay, ahead of the master's hand and of the limiter, which keeps the last word.
+
+    The boost is whatever the amp calls one: the playing pack's own switch of that name — OrbitAmp's
+    BOOST key, and the rovers' TURBO, which holds it on — or the cockpit's TURBO, a push into the capture
+    (Product::boostIsPush). An amp on a pack with no Boost, or with its AMP out of the chain, has no
+    boost, and the level is not heard.
+
+    ONE FOR THE WHOLE AMP, like the master's hand and the limiter beside it, not one per channel: the
+    rovers' TURBO is one key for every gear, the cockpit's push is one for every channel, and a boost
+    that is louder on one channel than on the next is a level nobody can find again. It is the sound's,
+    not the machine's: a session and a preset keep it, and undo steps over it. Picked on the boost's own
+    right-click menu, out of boostLevels; +3 out of the box. Whole decibels, so the five places on the
+    menu are exactly the numbers the engine plays.
+
+    Its id is the output's, `out_boost`, beside `out_trim`: `boost_` is the prefix of the boost BLOCK that
+    once stood ahead of the amp, and no parameter of the engine's carries it any more. */
+inline constexpr const char* boostLevel = "out_boost";
+inline constexpr float boostLevelMin     = -3.0f;
+inline constexpr float boostLevelMax     =  9.0f;
+inline constexpr float boostLevelDefault =  3.0f;
+inline constexpr int   boostLevels[] { -3, 0, 3, 6, 9 };
+
 /** The noise gate — the second service link, right after the tuner: it keys off the raw guitar,
     and kills the hum before any dirt can multiply it. The threshold is the OPEN level in dBFS
     against that raw input; feel (attack, hold, hysteresis, floor) is fixed in the engine. */

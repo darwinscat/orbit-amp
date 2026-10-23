@@ -1480,6 +1480,21 @@ target_link_libraries(orbitamp_input_level_test PRIVATE ${family_libraries})
 gate_reads_factory(orbitamp_input_level_test)
 set_target_properties(orbitamp_input_level_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
+# THE BOOST'S LEVEL: while an amp's boost is on — OrbitAmp's BOOST key, the rovers' TURBO, the cockpit's
+# TURBO push — the amp leaves that much louder, ramped, exactly, ahead of the limiter; with it off not at
+# all, bit for bit — every amp, so the family's sources (tests/BoostLevelTests.cpp), out of the build's
+# factory folder.
+juce_add_console_app(orbitamp_boost_level_test PRODUCT_NAME "OrbitAmpBoostLevelTest")
+target_sources(orbitamp_boost_level_test PRIVATE tests/BoostLevelTests.cpp ${family_sources})
+target_include_directories(orbitamp_boost_level_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_boost_level_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_boost_level_test PRIVATE
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
+target_link_libraries(orbitamp_boost_level_test PRIVATE ${family_libraries})
+gate_reads_factory(orbitamp_boost_level_test)
+set_target_properties(orbitamp_boost_level_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
 
 # ----------------------------------------------------------------------------
 # THE FAMILY'S RELEASE: `--target Family_All` builds what the family's installers pack — the family's
