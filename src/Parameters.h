@@ -29,8 +29,9 @@ inline constexpr float inTrimRangeDb = 24.0f;   // one range for both trims
 // remember to arm is not protection.
 inline constexpr const char* limiterOn      = "limiter_on";
 inline constexpr const char* limiterCeiling = "limiter_ceiling";
-inline constexpr float limiterCeilingMin = -3.0f;
+inline constexpr float limiterCeilingMin = -6.0f;   // OrbitAmp's rail beside OUT reaches it (Oleh, 24.10)
 inline constexpr float limiterCeilingMax = -0.1f;
+inline constexpr float limiterFaderMin   = -3.0f;   // the rovers' and the cockpit's faders keep their -3 floor
 
 /** THE BOOST'S LEVEL: how much louder the amp leaves while its boost is on. A boost a player stamps on
     for a solo is meant to stand out of the band, and a capture of an amp's boost is levelled like any
