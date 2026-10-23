@@ -268,7 +268,9 @@ void Windscreen::hostContextClosing()
 
 void Windscreen::hostRender (juce::Rectangle<int> glass, int frameWidth, int frameHeight)
 {
-    if (host == nullptr || ! glAttached)
+    // A world that did not start drew nothing and left nothing on — and a GL that runs no shaders has none of
+    // the calls below.
+    if (host == nullptr || ! glAttached || gpuFailed.load())
         return;
 
     const auto target = host->getFrameBufferID();
