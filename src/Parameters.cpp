@@ -146,16 +146,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
                 std::make_unique<Choice> (juce::ParameterID { gateDecay, 1 }, "Gate Decay",
                                           gateDecayModes, 0));
 
-    // The raw switch and the selector slots, one set per captured block — and the block's one trim.
-    // IN is how hard the capture is fed, and it rides its own meter rather than being a knob among
-    // knobs, because it is the question you ask first about a captured device.
+    // The raw switch and the selector slots, one set per captured block. No trim of its own: how
+    // hard the capture is fed is the pack's stated level and the IN column's hand.
     for (const char* blk : { preampId })
     {
-        const juce::NormalisableRange<float> trim (blockTrimMinDb, blockTrimMaxDb, 0.1f);
         const juce::String label = blk == preampId ? preampName : blk;   // the block's name, as a host shows it
-
-        layout.add (std::make_unique<Float> (juce::ParameterID { blockIn (blk), 1 },
-                                             label + " In", trim, 0.0f));
 
         // The DEVICE's own tone by default: a captured pedal arrives wearing its own knobs, and
         // the console is the scalpel you reach for past them.

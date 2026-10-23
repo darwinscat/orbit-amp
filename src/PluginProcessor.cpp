@@ -128,7 +128,6 @@ AmpProcessor::AmpProcessor (const Product& product)
     tunerMuteParam     = apvts.getRawParameterValue (params::tunerMute);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
     modeAutoValue      = (int) modeOfEnvironment();     // the layout's default, and so where the mode stands
-    preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
     preampSmoothParam  = apvts.getRawParameterValue (params::blockSmooth (params::preampId));
     cabHpfOnParam      = apvts.getRawParameterValue (params::cabHpfOn);
     cabHpfHzParam      = apvts.getRawParameterValue (params::cabHpfHz);
@@ -950,7 +949,6 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // it — a bypassed +24 dB would open playback at nearly sixteen times.
     lastTrimGain = linkWorks (params::rowIn)  ? juce::Decibels::decibelsToGain (inTrimParam->load())  : 1.0f;
     lastOutGain  = linkWorks (params::rowOut) ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
-    lastPreampInGain = juce::Decibels::decibelsToGain (preampInParam->load());
     {
         limiterReady = limiter.prepare (sampleRate, block, juce::jmax (2, channels), core::door::config());
         limiterLatency.store (limiterReady ? limiter.latencySamples() : 0);
@@ -1562,7 +1560,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
     nsStage[stGate] = elapsedNs (tGate);
 
-    // A captured block, whole: the capture, then its own EQ, then its own volume.
+    // A captured block, whole: the capture, then its own EQ.
     //
     // The EQ sits AFTER the nonlinearity because that is what it is for here — colouring what the
     // device made, not deciding what the device eats. The preamp's stands after the last
@@ -1571,11 +1569,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // It also goes dark with the block. The EQ is part of the block now, not a link that happens to
     // be drawn inside one, and a switch that leaves half of what it names still cutting is a switch
     // nobody can trust.
-    //
-    // LEVEL comes last for the same reason: it is the block's output volume, and the OUT meter
-    // beside it has to be metering everything the block did — the EQ included.
     const auto captured = [&] (auto& blk, int l, params::ChainRow row,
-                               std::atomic<float>* inParam, float& lastInGain,
                                std::atomic<float>& outDbOf, int stBlock, int stEq)
     {
         // A link that REPLACES the signal has no tail of its own to ride out, so dropping it out
@@ -1599,10 +1593,6 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         // that is a comb — sixty-one samples at 44.1 kHz puts the first notch near 362 Hz, in the
         // body of the guitar. Swept over fifteen milliseconds it reads as a tick rather than a
         // filter, but it is a tick that need not exist.
-        //
-        // Taken BEFORE this block's own IN trim: the dry end has to be the signal as it arrived.
-        // Copied after the trim, the two ends of the fade differed by the trim as well as by the
-        // block, and at -24 dB that is not a click, it is a bark.
         const int lat = blk.latencySamples();
 
         if (fade)
@@ -1645,51 +1635,6 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
             // positive between two blocks, and the block after that has to be able to look back.
             wire[(size_t) l].advance (chainView.getArrayOfReadPointers(), nch, numSamples);
         }
-
-        // IN: how hard the capture is fed. Metered immediately after, at the model's own door, so
-        // the grip on the meter and the fill under it answer about one point.
-        //
-        // It applies only while the block is being HEARD — which includes the whole fade, so the
-        // trim stays where the player put it for as long as any of the model is in the sum. Once
-        // the fade is over the block is not run at all and this buffer IS the through-path: a
-        // trim on it would be a trim on the bypass, which is not what a bypass is.
-        //
-        // The `lastInGain` reset is the whole point and cost me a click to learn. Ramping to unity
-        // on the first fully-bypassed block ramps the DRY signal from the trim down to 1.0 — at
-        // +12 dB that is a four-times burst decaying over one block, which is exactly the kind of
-        // step this crossfade exists to remove. There is nothing to ramp: the previous block's
-        // trim was applied to what fed the model, and the blend has already weighed that away.
-        // So the gain simply IS unity here, with no ramp and no memory of the trim.
-        if (on)
-        {
-            const float inTarget = juce::Decibels::decibelsToGain (inParam->load());
-
-            // ARRIVING, not sliding. Coming back from a bypass the trim would otherwise ramp from
-            // unity to what the player set across ONE block — and a block can be longer than the
-            // fade. At 2048 samples the crossfade is over by sample 720, so the model spends the
-            // rest of the block fully audible and still climbing toward the trim: a drive swell,
-            // which is the same family of artefact as the burst this replaced. There is nothing to
-            // ramp INTO: the blend weighs this path at nothing for the first sample, so the trim
-            // simply starts where it belongs.
-            if (! blockWasOn[(size_t) l])
-                lastInGain = inTarget;
-
-            chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
-            lastInGain = inTarget;
-        }
-        else
-        {
-            lastInGain = 1.0f;   // a bypassed block is a wire, and a wire has no trim to ramp from
-        }
-
-        blockWasOn[(size_t) l] = on;
-
-        // A block that is not working meters nothing: two full passes over the buffer for a needle
-        // nobody reads, and a needle still moving on a dark face is the exception this whole rework
-        // set out to delete.
-        blockInDb[(size_t) l].store (on ? juce::Decibels::gainToDecibels (
-                                              chainView.getMagnitude (0, 0, numSamples), -90.0f)
-                                        : -90.0f);
 
         { const auto a = PerfClock::now();
           if (on)
@@ -1738,7 +1683,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         }
     };
 
-    captured (preamp, 0, params::rowPreamp, preampInParam, lastPreampInGain, blockOutDb[0], stPreamp, stPreampEq);
+    captured (preamp, 0, params::rowPreamp, blockOutDb[0], stPreamp, stPreampEq);
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
     // (the preamp's hiss) dies here too, and the reverb tail past it rings out.

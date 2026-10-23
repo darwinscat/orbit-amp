@@ -1093,11 +1093,6 @@ public:
         captured block's output, indexed like blockSpectrumTap — 0 is the preamp. */
     std::array<std::atomic<float>, numCaptured> blockOutDb { -90.0f };
 
-    /** What each captured block is FEEDING ITS MODEL, after its own input trim. Measured at the
-        model's door rather than the block's, because that is the level the question is about: a
-        capture answers to what goes in, and the meter has to be reading the same point the trim
-        beside it moves. Indexed like blockSpectrumTap — 0 is the preamp. */
-    std::array<std::atomic<float>, numCaptured> blockInDb { -90.0f };
     std::atomic<float> cabOutDb    { -90.0f };
     std::atomic<bool>  inClip  { false };
     std::atomic<bool>  outClip { false };
@@ -1269,13 +1264,8 @@ private:
         one, and each register's. */
     void embedCabIrs (juce::ValueTree& tree) const;
 
-    std::atomic<float>* preampInParam = nullptr;
     std::atomic<float>* preampSmoothParam = nullptr;
-    float lastPreampInGain = 1.0f;
 
-    /** Whether each captured block was in the path last block — so the trim can ARRIVE at what
-        the player set instead of sliding up to it while the block is already audible. */
-    bool blockWasOn[numCaptured] { true };
     float lastTrimGain = 1.0f;
 
     /** The two switches of every link, straight off `params::chainLinks` — plus the two ends,

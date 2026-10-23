@@ -772,7 +772,6 @@ juce::var WebFaceplate::places()
             v.getDynamicObject()->setProperty ("over", juce::var (over.get()));
             a->setProperty ("eqMode", v);
         }
-        a->setProperty ("inWall", rect (pre.inMeter));
         {
             // Where the tag is written: the run of the border right of the device, right-aligned.
             const auto run = pre.borderSlotArea().toFloat();
@@ -782,7 +781,6 @@ juce::var WebFaceplate::places()
         out->setProperty ("amp", juce::var (a.get()));
 
         patch ("smooth", pre.smoothTag);
-        patch ("inWall", pre.inMeter);
         patch ("eqMode", pre.eq.modeBtn);
         patch ("eqHpf", pre.eq.hpfSw);
         patch ("eqLpf", pre.eq.lpfSw);

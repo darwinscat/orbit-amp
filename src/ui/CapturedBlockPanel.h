@@ -6,7 +6,6 @@
 #include "../Parameters.h"
 #include "../core/CapturedBlock.h"
 #include "BlockFrame.h"
-#include "BlockMeter.h"
 #include "EqSection.h"
 #include "scope/DeviceScope.h"
 #include "Knob.h"
@@ -80,12 +79,6 @@ private:
     /** Builds a switch for each selecting control the device has beyond its gain dial. */
     void buildSelectors();
 
-    /** The IN wall's two marks, from the player's own read-outs: what the MODEL is being fed, and
-        what enters the block. On this face's own tick, because the gains it adds up are recomputed
-        by the PROCESSOR's pump — a callback fired by the dial's own write would read the selection
-        from before the move. */
-    void refreshMeterOffsets();
-
     /** A HAND'S PICK — a device out of the menu, a place of the channel lever: the channel the amp
         leaves keeps what it was set to, and the one it plays comes back as it was left
         (AmpChannels.h). */
@@ -93,9 +86,6 @@ private:
 
     /** The AMP's menu: the devices, then the folders of the player's own, mirrored. */
     void showDeviceMenu();
-
-    Block::Feed lastFeed;           // the marks as the hint last put them into words…
-    bool        saidFeed = false;   // …and whether it has put them into any yet
 
     /** The tone slots alone back to the pack's defaults — the console's RESET, when the block
         wears the device's own knobs. */
@@ -239,10 +229,6 @@ private:
 
     SmoothTag smoothTag;
     std::unique_ptr<juce::ParameterAttachment> smoothAttachment;
-
-    /** The block's wall: what the model is being fed, with the trim's hand on it (see
-        `params::blockIn`). One wall: loudness is the panel's OUT (see the constructor). */
-    BlockMeter inMeter;
 
     struct Slot
     {

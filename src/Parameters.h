@@ -146,33 +146,6 @@ inline juce::String blockGain     (const char* blk) { return juce::String (blk) 
     play together, mixed by angle — a continuous dial, at the price of two models running. STEP:
     the dial lands only on the captured positions and one capture plays at a time. */
 inline juce::String blockSmooth   (const char* blk) { return juce::String (blk) + "_smooth"; }
-/** The block's INPUT trim — how hard the capture is fed, applied immediately before the model and
-    metered right there. ONE per block, and there is deliberately no output volume beside it.
-
-    A block's output and the next block's input are two multipliers in series with nothing between
-    them: the same decibel written twice, and two places for it to hide from you. Of the two names
-    for that one number, INPUT is the useful one — the meter beside it then reads what the capture
-    is being fed, which is the question the green zone answers.
-
-    The price, and it is the hardware's rather than ours: on a captured device this is a DRIVE
-    control, so every loudness fix made HERE is also a tone change. Between a real pedal and a real
-    amp there is exactly one knob and turning it up is both louder and dirtier. The last block's
-    output is caught by the master volume, and what the next block is fed by its own DRIVE.
-
-    …which is why the loudness fix stopped living here. A pack now states its own output level
-    (`chain[].output_db`, namz schema 4) and the player applies it after everything: that is the
-    number that makes a hot pack stop cooking whatever comes after it, and it changes volume and
-    nothing else. This hand is for drive; that one is for balance. */
-inline juce::String blockIn (const char* blk) { return juce::String (blk) + "_in"; }
-
-/** Asymmetric on purpose. Forty-eight down and twelve up: cutting is what gain staging mostly
-    asks for — a hot interface, a hot pack — and now that the hand
-    rides a full-height wall there is room for a real cut; twelve decibels of boost is already
-    more than a capture wants before it stops being the device that was captured. The SAME
-    reach on both walls: the IN trim and the console's LEVEL move over one ladder. */
-inline constexpr float blockTrimMinDb = -48.0f;
-inline constexpr float blockTrimMaxDb =  12.0f;
-
 /** Where a captured device likes to be fed, in dBFS peak — the green zone on the IN meter.
     Still a CONVENTION: it is the window a guitar DI normally peaks in, not a level anyone measured.
 

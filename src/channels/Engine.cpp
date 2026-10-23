@@ -167,13 +167,9 @@ void Engine::setUpChain (bool firstTime)
     if (firstTime)                            // after that, whether the cabinet plays is the player's to say
         setParam (params::cabOn,     1.0f);
 
-    // A state the product has never seen starts with TURBO off, and the preamp's own input trim — which
-    // no control of these faces reaches — at nothing, wherever either was left.
+    // A state the product has never seen starts with TURBO off, wherever it was left.
     if (firstTime)
-    {
         setParam (params::preampBoost, 0.0f);
-        setParam (params::blockIn (params::preampId), 0.0f);
-    }
 
     // ...and with as much delay as its channel opens on, not as much as the engine does — and its pack's
     // switches where the pack opens them, the one the channel holds where it holds it.

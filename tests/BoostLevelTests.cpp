@@ -285,13 +285,12 @@ int main()
         }
         const auto boostSwitch = params::selectorId (params::preampId, packs.slot);
 
-        // ON A PACK WITH NO BOOST SWITCH the switches' slots thrown and the AMP's input pushed are no
-        // boost; its BOOST is preamp_boost. On a pack with one, preamp_boost is not read.
+        // ON A PACK WITH NO BOOST SWITCH the switches' slots thrown are no boost; its BOOST is
+        // preamp_boost. On a pack with one, preamp_boost is not read.
         setParam (*probe, params::selectorId (params::preampId, 0), 1.0f);
         setParam (*probe, params::selectorId (params::preampId, 1), 1.0f);
-        setParam (*probe, params::blockIn (params::preampId), 9.0f);
         check (! probe->boostOn(), "OrbitAmp on " + probe->preamp.selectedName()
-                                       + ", which has no Boost switch: no boost, its slots thrown and its input pushed +9 dB");
+                                       + ", which has no Boost switch: no boost, its slots thrown");
         setParam (*probe, params::preampBoost, 1.0f);
         check (probe->boostOn(), "...its BOOST, preamp_boost, on: the boost is on");
         setParam (*probe, params::preampDevice, (float) packs.boost);

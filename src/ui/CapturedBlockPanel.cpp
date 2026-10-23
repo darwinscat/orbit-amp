@@ -17,16 +17,6 @@ namespace orbitamp
 
 namespace
 {
-    /** A decibel written the way a DIFFERENCE has to be written: with its sign. "6 dB below" and
-        "6 dB" are not the same sentence, and the meters' hints are nothing but differences. A
-        number that rounds to nothing loses the sign with the rest of it — a direction printed on a
-        zero is a direction that is not there. */
-    juce::String signed1 (double db)
-    {
-        const double v = std::abs (db) < 0.05 ? 0.0 : db;
-        return (v > 0.0 ? "+" : "") + juce::String (v, 1);
-    }
-
     /** One of params::boostLevels as BOOST's key shows it: whole decibels, with the sign. */
     juce::String boostLevelName (int db) { return (db > 0 ? "+" : "") + juce::String (db); }
 }
@@ -105,9 +95,7 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     : BlockFrame (title, BlockFrame::Kind::captured), amp (processor), block (b), blk (blockId),
       link (eqLink), toneTap (toneSpectrumTap),
       eq (processor.apvts, eqLink, toneSpectrumTap, toneInSpectrumTap,
-          [&processor] { return processor.currentSampleRate(); }),
-      inMeter ("IN", processor.blockInDb[(size_t) eqLink],
-               *processor.apvts.getParameter (params::blockIn (blockId)), true)
+          [&processor] { return processor.currentSampleRate(); })
 {
     // The console's widgets become children of this block, which places them. The spectrum behind
     // its curve is the block's own output tap — the same one the TONE picture reads, because after
@@ -117,7 +105,6 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
 
     addAndMakeVisible (device);
     addAndMakeVisible (gain);
-    addAndMakeVisible (inMeter);
 
     device.fontHeight = 16.0f;   // the device's NAME, set exactly like the block's own beside it
     device.tracking   = 0.15f;
@@ -129,18 +116,6 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     gain.labelRowHeight = 0;
     gain.heat = true;
     gain.setArc (juce::MathConstants<float>::pi * 7.0f / 6.0f, juce::MathConstants<float>::pi * 17.0f / 6.0f);     // 0 at 7:00, 2 at 9:00, 8 at 3:00, 10 at 5:00
-
-    // The wall stands up, at the picture well's left edge.
-    //
-    // What its two marks MEAN is set with the pack (deviceChanged) and kept current by this face's
-    // own tick (refreshMeterOffsets): the fill is the model's input, because the green zone
-    // describes that door and nothing else, and the line is what enters the block.
-    //
-    // No OUT wall. Its hand was the block's LEVEL, and LEVEL and the panel's OUT are two volumes
-    // before the limiter with nothing between them that a level breaks — the delay's repeats press
-    // softly, the room and the cabinet are linear — so the panel's OUT is the one hand for loudness.
-    // LEVEL stays in the engine, at what the preset says.
-    inMeter.vertical = true;
 
     // Five ways of showing the same device, one at a time. The tone curve comes from the block
     // itself — the same data its filters were designed from, resolved on the processor's pump.
@@ -390,60 +365,8 @@ void CapturedBlockPanel::applySpectrumResolution()
         theater->setSpectrumOrder (order);
 }
 
-/** THE IN WALL'S TWO MARKS, from the player's own read-outs.
-
-    The green zone describes the level at the MODEL'S DOOR, and between the meter's tap and that
-    door stands a whole stack of gains — the pack's stated input level, the chain's trim past the
-    ends of the captured range, the alias trim of the capture that is sounding, the drive of a
-    device that has no captured axis. The wall used to be told only the first of them, so on a
-    linked bottom rung the zone was being read against a number six decibels out.
-
-    ON THE FACE'S OWN TICK rather than on a parameter callback, and that is deliberate: `selection()`
-    and `plan()` are recomputed inside the PROCESSOR's pump, so a callback fired by the dial's own
-    write would read the selection from before the move and the mark would sit one dial position
-    behind the hand for as long as the hand stayed still. Thirty times a second buys a handful of
-    atomic loads and two struct fields read, and it is right whatever moved — the dial, the Pack
-    Level Comp switch, a selector, or a pack that has only just finished loading. */
-void CapturedBlockPanel::refreshMeterOffsets()
-{
-    const auto fed = block.modelFeed();
-
-    inMeter.fillOffsetDb  = (float) fed.db;
-    inMeter.ghostOffsetDb = fed.single ? 0.0f : (float) fed.otherDb;
-
-    // The WORDS, though, are rebuilt only when the numbers move — this runs for as long as the
-    // window is open.
-    if (saidFeed && fed.single == lastFeed.single
-        && std::abs (fed.db - lastFeed.db) < 0.05
-        && std::abs (fed.otherDb - lastFeed.otherDb) < 0.05)
-        return;
-
-    lastFeed = fed;
-    saidFeed = true;
-
-    // NO AVERAGE, EVER. Two models fed at two different levels are two numbers, and the one number
-    // between them would be true of neither — so the marks become one model each and the hint says
-    // which. The pre-model tone is missing from both on purpose: it is a filter, it has no decibel,
-    // and a level that quietly included a spectrum would be the same lie in a longer coat.
-    inMeter.offsetNote = ! fed.single
-        ? "Two models are sounding, fed " + signed1 (fed.db) + " and " + signed1 (fed.otherDb)
-          + " dB from what enters the block — the bar is one of them, the line the other. No single "
-            "number is true of both."
-        : std::abs (fed.db) < 0.05                       // …and the same nothing `signed1` prints
-            ? juce::String ("The bar is what the model eats, and nothing stands between it and what "
-                            "enters the block. Level only: whatever pre-model tone this "
-                            "pack has is a filter, and a filter has no decibel to add.")
-            : "The bar is what the model eats: " + signed1 (fed.db) + " dB from what enters the "
-              "block, which is the line. Level only: whatever pre-model tone this pack has is a "
-              "filter, and a filter has no decibel to add.";
-}
-
 void CapturedBlockPanel::deviceChanged()
 {
-    // A new pack, new levels — and the IN wall has to say them, because the player applies them
-    // where the wall does not stand.
-    refreshMeterOffsets();
-
     for (auto& sc : scopes)
         sc->setSampleRate (amp.currentSampleRate());
 
@@ -943,11 +866,9 @@ void CapturedBlockPanel::buildSelectors()
     }
 }
 
-void CapturedBlockPanel::blockOnChanged (bool on)
+void CapturedBlockPanel::blockOnChanged (bool)
 {
     setCornerAlpha (cornerAlpha);   // the frame has just dimmed — or lit — every child, the glyphs too
-    inMeter.live = on;
-    inMeter.repaint();
 }
 
 void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
@@ -975,16 +896,6 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     setControlsVisible (true);
     eq.setRowVisible (true);
-
-    // ---- the IN meter first, the block's whole height: what the model is fed comes before the dial
-    //      that decides what it does with it. The component is wider than its bar; the margin, over
-    //      GAIN's column, is where the dB appears while the hand drags, and click-through otherwise. ----
-    {
-        auto inCol = area.removeFromLeft (BlockMeter::designWidth);
-        area.removeFromLeft (6);
-        inMeter.setBounds (inCol.withWidth (BlockMeter::designWidth + BlockMeter::standingValueW));
-        inMeter.toFront (false);    // over GAIN's column, so the dragged reading paints on top
-    }
 
     // ---- THREE SECTIONS, each a tier over a strip. The two narrow ones are a FIXED width and the
     //      well takes the rest, so the widest thing on the block is the picture. ----
@@ -1079,7 +990,6 @@ void CapturedBlockPanel::setControlsVisible (bool v)
 {
     gain.setVisible (v);
     smoothTag.setVisible (v);
-    inMeter.setVisible (v);
     device.setEnabled (v);
 
     if (lever != nullptr)
@@ -1219,12 +1129,6 @@ void CapturedBlockPanel::setCornerAlpha (float a)
 
 void CapturedBlockPanel::timerCallback()
 {
-    // What the model is being fed moves with the dial, with the Pack Level Comp switch, with a
-    // selector and with a pack that has only just landed — none of which is one event to hang a
-    // callback on, and the one that looks like it (the dial's own parameter) fires BEFORE the pump
-    // that recomputes the answer. So it is read here, every tick.
-    refreshMeterOffsets();
-
     // The theatre owns the whole screen and its own way out; while it runs the face beneath is not
     // being pointed at, whatever the coordinates say.
     const bool want = theater == nullptr && (handIsOnThePicture() || glyphsShownForStill);
