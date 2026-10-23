@@ -5,20 +5,10 @@
 
 #include "Channels.h"
 
-#include <array>
 #include <functional>
 
 namespace orbitamp::channels
 {
-
-/** WHAT THE SITE'S KIT OF THE COCKPIT STILL SAYS TURBO IS (CatpitEditor's web export): the push into
-    the capture it was until TURBO became the AMP's boost (params::preampBoost). Nothing the amp plays
-    reads these; they wait for the kit to learn the boost. */
-namespace settings
-{
-inline constexpr int turboDefault = 9;
-inline constexpr std::array<int, 4> turboPushes { 3, 6, 9, 12 };
-} // namespace settings
 
 /** A PRODUCT'S HALF OF THE ENGINE: what makes the processor an amp of so many channels whether or not
     its window is open. A plug-in's window is open for minutes and shut for hours, and what a host can

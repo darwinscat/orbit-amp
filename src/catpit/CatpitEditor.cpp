@@ -449,15 +449,15 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
 
     places.setProperty ("window", rect (glass));
 
-    // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
+    // TURBO is the amp's boost on a pack with no Boost switch (params::preampBoost): the capture `steps`
+    // positions up the dial from where DRIVE stands, the knob where it is, and each position the dial has
+    // not above it `dbPerMissingStep` into the capture instead (core::CapturedBlock::setGain). How much
+    // louder the amp leaves meanwhile is places.json's boostLevel (Console::exportForWeb).
     auto* turboKind = new juce::DynamicObject();
-    turboKind->setProperty ("kind", "push");
-    turboKind->setProperty ("db", channels::settings::turboDefault);
-    juce::Array<juce::var> pushes;
-    for (const int db : channels::settings::turboPushes)
-        pushes.add (db);
-    turboKind->setProperty ("pushes", pushes);
-    turboKind->setProperty ("param", params::blockIn (params::preampId));
+    turboKind->setProperty ("kind", "dial");
+    turboKind->setProperty ("steps", core::CapturedBlock::turboSteps);
+    turboKind->setProperty ("dbPerMissingStep", core::CapturedBlock::turboDbPerStep);
+    turboKind->setProperty ("param", params::preampBoost);
     world.setProperty ("turbo", juce::var (turboKind));
     world.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render — but HPF and LPF, whole (filterKeys)
     world.setProperty ("knobRing", false);

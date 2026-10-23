@@ -953,6 +953,19 @@ void Console::exportForWeb (const juce::File& dir)
         o->setProperty ("lineup", juce::var (l));
     }
 
+    // BOOST'S LEVEL (params::boostLevel): how much louder the amp leaves while TURBO is on — one for the
+    // whole amp, chosen from these, on the right click on TURBO.
+    {
+        auto* b = new juce::DynamicObject();
+        b->setProperty ("param", params::boostLevel);
+        juce::Array<juce::var> levels;
+        for (const int db : params::boostLevels)
+            levels.add (db);
+        b->setProperty ("levels", levels);
+        b->setProperty ("default", params::boostLevelDefault);
+        o->setProperty ("boostLevel", juce::var (b));
+    }
+
     // HOW THIS FACE DRAWS THE FAMILY'S CONTROLS — what is its own; what every face shares is in
     // face/Controls.cpp's constants.
     {
