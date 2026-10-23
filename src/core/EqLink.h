@@ -6,7 +6,6 @@
 #include <felitronics/eq/MatchedBiquad.h>
 
 #include <algorithm>
-#include <cmath>
 
 namespace orbitamp::core
 {
@@ -14,11 +13,12 @@ namespace orbitamp::core
 /** One EQ link of the chain — the console grammar, spoken in matched biquads.
 
     HPF and LPF with a real slope choice (6/12/18/24/48 dB/oct, Butterworth cascades), two
-    shelves with free corners, two tone bells, a third NARROW bell that switches in — the
-    surgical slot search→treat will land in — and an output LEVEL, ramped so it never zippers.
-    No presence: with free shelf corners a second fixed high shelf is a duplicate. No linear
-    phase either: it buys latency and pre-ring for a benefit a serial chain into a nonlinearity
-    cannot hear — analog EQs are minimum-phase, and so is this.
+    shelves with free corners, two tone bells, and a third NARROW bell that switches in — the
+    surgical slot search→treat will land in. No output level: the block's level used to ride
+    here, and with no hand on any face left to reach it, it went on playing whatever an old
+    session had left in it. No presence: with free shelf corners a second fixed high shelf is a
+    duplicate. No linear phase either: it buys latency and pre-ring for a benefit a serial chain
+    into a nonlinearity cannot hear — analog EQs are minimum-phase, and so is this.
 
     JUCE-free, allocation-free after prepare; magnitudeDb reads the same coefficients process
     runs, so the drawing can never drift from the sound. filterMagnitudeDb answers for the cut
@@ -48,8 +48,6 @@ public:
         double lpfHz    = 10000.0;
         int    lpfSlope = 12;
 
-        double levelDb = 0.0;
-
         bool operator== (const Settings&) const = default;
     };
 
@@ -58,7 +56,6 @@ public:
         fs = sampleRate > 0.0 ? sampleRate : 48000.0;
         ch = std::clamp (numChannels, 1, maxChannels);
         design (current, true);
-        levelGain = std::pow (10.0, current.levelDb / 20.0);
         reset();
     }
 
@@ -97,46 +94,9 @@ public:
                 biquad.flushDenormals();
             }
         }
-
-        // The LEVEL: a fader, not a step — ramped over five milliseconds, however long the block.
-        // Ramping across a whole block sounds identical at host sizes and lies at test sizes.
-        const double target = std::pow (10.0, current.levelDb / 20.0);
-
-        if (numSamples > 0 && std::abs (target - levelGain) > 1.0e-9)
-        {
-            const int    rampLen = std::min (numSamples, std::max (1, (int) (fs * 0.005)));
-            const double step    = (target - levelGain) / (double) rampLen;
-
-            for (int c = 0; c < n; ++c)
-            {
-                auto* data = channels[c];
-                double gain = levelGain;
-
-                for (int i = 0; i < rampLen; ++i)
-                {
-                    gain += step;
-                    data[i] = (float) ((double) data[i] * gain);
-                }
-
-                for (int i = rampLen; i < numSamples; ++i)
-                    data[i] = (float) ((double) data[i] * target);
-            }
-
-            levelGain = target;
-        }
-        else if (numSamples > 0 && std::abs (target - 1.0) > 1.0e-9)
-        {
-            for (int c = 0; c < n; ++c)
-            {
-                auto* data = channels[c];
-                for (int i = 0; i < numSamples; ++i)
-                    data[i] = (float) ((double) data[i] * target);
-            }
-        }
     }
 
-    /** The full response in dB at a frequency — filters, shelves and bells, WITHOUT the level:
-        the level lives on its own meter, and a curve that slid with a fader would say nothing. */
+    /** The full response in dB at a frequency — filters, shelves and bells. */
     double magnitudeDb (double freqHz) const noexcept
     {
         return sumDb (freqHz, 0, numSections);
@@ -249,7 +209,6 @@ private:
     Settings current;
     double   fs = 48000.0;
     int      ch = 2;
-    double   levelGain = 1.0;
 };
 
 } // namespace orbitamp::core

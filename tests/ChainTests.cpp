@@ -2481,7 +2481,7 @@ int main()
             set (*m, P::selectorId (P::preampId, 0), 1.0f);
             set (*m, P::blockSmooth (P::preampId), 0.0f);
             set (*m, P::eqLoDb (0), 4.0f);
-            set (*m, P::eqLevel (0), -3.0f);
+            set (*m, P::eqHiDb (0), -3.0f);
 
             report ("a hand's switch plays the other channel",   channels.play (ch2) && channels.playing() == ch2
                                                                     && m->preamp.selectedName() == "Friedman IR-X Ch2 PowerAmp",
@@ -2502,7 +2502,7 @@ int main()
                     near (value (*m, P::preampGain), 7.5f) && near (value (*m, P::preampMeasured (0)), 0.2f)
                         && near (value (*m, P::selectorId (P::preampId, 0)), 1.0f)
                         && near (value (*m, P::blockSmooth (P::preampId)), 0.0f)
-                        && near (value (*m, P::eqLoDb (0)), 4.0f) && near (value (*m, P::eqLevel (0)), -3.0f),
+                        && near (value (*m, P::eqLoDb (0)), 4.0f) && near (value (*m, P::eqHiDb (0)), -3.0f),
                     "DRIVE " + juce::String (value (*m, P::preampGain)) + ", LO " + juce::String (value (*m, P::eqLoDb (0))));
 
             channels.play (ch2);

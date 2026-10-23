@@ -1197,7 +1197,6 @@ private:
         std::atomic<float>* lpfOn    = nullptr;
         std::atomic<float>* lpfHz    = nullptr;
         std::atomic<float>* lpfSlope = nullptr;
-        std::atomic<float>* level    = nullptr;
         std::atomic<float>* b3On     = nullptr;
         std::atomic<float>* bellDb[3] {};
         std::atomic<float>* bellHz[3] {};

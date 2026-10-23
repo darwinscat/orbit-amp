@@ -243,7 +243,6 @@ inline juce::String eqHiHz     (int l) { return eqId (l, "hi_hz"); }
 inline juce::String eqLpfOn    (int l) { return eqId (l, "lpf_on"); }
 inline juce::String eqLpfHz    (int l) { return eqId (l, "lpf_hz"); }
 inline juce::String eqLpfSlope (int l) { return eqId (l, "lpf_slope"); }
-inline juce::String eqLevel    (int l) { return eqId (l, "level"); }
 
 inline juce::String eqBellDb (int l, int b) { return eqId (l, "b") + juce::String (b + 1) + "_db"; }
 inline juce::String eqBellHz (int l, int b) { return eqId (l, "b") + juce::String (b + 1) + "_hz"; }
@@ -255,7 +254,6 @@ inline const juce::StringArray eqSlopes { "6", "12", "18", "24", "48" };
 inline constexpr int eqSlopeValues[] = { 6, 12, 18, 24, 48 };
 inline constexpr int eqSlopeDefault  = 1;
 
-inline constexpr float eqLevelMinDb = -48.0f, eqLevelMaxDb = 12.0f;   // the walls' shared ladder
 
 inline constexpr const char* cabOn = "cab_on";
 inline constexpr const char* cabIr = "cab_ir";

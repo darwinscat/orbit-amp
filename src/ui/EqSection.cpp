@@ -321,7 +321,6 @@ juce::StringArray EqSection::linkParamIds() const
         params::eqBellDb (link, 2), params::eqBellHz (link, 2), params::eqBellQ (link, 2),
         params::eqHiDb (link),   params::eqHiHz (link),
         params::eqLpfOn (link),  params::eqLpfHz (link),  params::eqLpfSlope (link),
-        params::eqLevel (link),
     };
 }
 

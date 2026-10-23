@@ -113,7 +113,6 @@ AmpProcessor::AmpProcessor (const Product& product)
         p.lpfOn    = apvts.getRawParameterValue (params::eqLpfOn (l));
         p.lpfHz    = apvts.getRawParameterValue (params::eqLpfHz (l));
         p.lpfSlope = apvts.getRawParameterValue (params::eqLpfSlope (l));
-        p.level    = apvts.getRawParameterValue (params::eqLevel (l));
         p.b3On     = apvts.getRawParameterValue (params::eqB3On (l));
 
         for (int b = 0; b < 3; ++b)
@@ -1158,7 +1157,6 @@ void AmpProcessor::updateEqSettings() noexcept
         s.lpfOn    = p.lpfOn->load() > 0.5f;
         s.lpfHz    = (double) p.lpfHz->load();
         s.lpfSlope = slope (p.lpfSlope->load());
-        s.levelDb  = (double) p.level->load();
 
         // WHOSE TONE STACK IS IN THE SIGNAL. The two are alternatives, and until now only half of
         // that was true: `setRaw` parked the device's curves when ours was chosen, but ours went on
@@ -1166,9 +1164,8 @@ void AmpProcessor::updateEqSettings() noexcept
         // console had swapped its row for the device's knobs. A shape somebody dialled in and left
         // behind kept playing where nothing could reach it.
         //
-        // Only the TONE sections step aside. The cut filters and the level belong to the BLOCK
-        // whichever tone is playing: the walls are utility, and the level is the block's output —
-        // the grip on the OUT meter writes it, and it would go dead here.
+        // Only the TONE sections step aside. The cut filters belong to the BLOCK whichever tone is
+        // playing: the walls are utility.
         //
         // Asked of the block, not of the parameter alone: a device that measured nothing has no
         // native stack to hand over, its face collapses the choice to ours, and the DSP has to

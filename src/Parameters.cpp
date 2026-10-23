@@ -247,12 +247,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::St
                     std::make_unique<Float> (juce::ParameterID { eqBellHz (l, 2), 1 }, name + "B3 Freq",
                                              hz (100.0f, 12000.0f, 3000.0f), 3000.0f),
                     std::make_unique<Float> (juce::ParameterID { eqBellQ (l, 2),  1 }, name + "B3 Q", qN, 8.0f));
-
-        // The output level — a fader on the link: the block's own volume, metered by the OUT
-        // beside it, and shape deserves a say separate from push.
-        layout.add (std::make_unique<Float> (juce::ParameterID { eqLevel (l), 1 }, name + "Level",
-                                             juce::NormalisableRange<float> (eqLevelMinDb, eqLevelMaxDb, 0.1f),
-                                             0.0f));
     }
 
     // The cabinet. Position and distance are the two halves of one gesture on the grid; distance is

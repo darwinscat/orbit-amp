@@ -113,11 +113,6 @@ int main()
     check ("lpf 48 dB/oct @2k: 8 kHz",       eq.magnitudeDb (8000.0), -96.3, 4.0);
     check ("lpf 48 dB/oct @2k: 500 Hz",      eq.magnitudeDb (500.0),     0.0, 0.3);
 
-    // The LEVEL arrives as itself, and the curve deliberately does NOT move with it.
-    s = {}; s.levelDb = -6.0; eq.setSettings (s);
-    check ("level -6: the sound drops 6",    processedDb (eq, 1000.0),  -6.0, 0.3);
-    check ("level -6: the curve stays flat", eq.magnitudeDb (1000.0),    0.0, 1.0e-9);
-
     // The invariant: what the curve promises is what the sound does.
     s = {};
     s.loDb = 6.0; s.loHz = 150.0;
