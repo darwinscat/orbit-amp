@@ -38,10 +38,6 @@ namespace
     // How much heavier than the ink's weight GATE and LIMITER are cut, on their busy corner plates.
     constexpr float cornerWeight = 1.6f;
 
-    // TURBO's push — see Console.h. Kept with the machine's settings, where the engine reads it too
-    // (channels/Engine.h).
-    using channels::settings::turboKey, channels::settings::turboPushes, channels::settings::snapTurbo;
-
     // How DRIVE goes between the pack's captures — see Console.h. Kept with the machine's settings.
     const juce::Identifier driveStepsKey { "drive_steps" };
     const juce::StringArray driveWays { "Smoothly", "In steps" };
@@ -166,13 +162,12 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // undo on the panel it must not leave a step to press back through.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
-    channels.setTurboDb ((float) channels::settings::turbo (amp.product()));
     driveSteps = (bool) prefs::store (amp.product()).get (driveStepsKey, false);
 
     channels.readCabinets();    // the player's folder may have gained or lost a file since the engine was built
     engine.setUpChain (channels.adopt());
     channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
-    settleOnSettings(); // ...and TURBO's push and DRIVE's way may not be the settings' now
+    settleOnSettings(); // ...and DRIVE's way may not be the settings' now
 
     // THE STANDALONE PLAYS IN STEREO SPACE — one guitar in, a wide room out. The processor's own default
     // waits for a device to open, so a first run with none saved MONO for good; and the first players'
@@ -1085,7 +1080,7 @@ bool Console::go (int to)
     open — is made its own the way the constructor makes the first one: the fixed chain, the channel
     whose pack is playing, a cabinet CAB can reach. And one it HAS seen, whose cabinet is no longer
     the file of that name — a register kept from before the file was replaced — has it read again;
-    and one kept under another TURBO or another way of DRIVE's is given the settings' own. */
+    and one kept under another way of DRIVE's is given the settings' own. */
 void Console::adoptState()
 {
     adoptionPending = false;
@@ -1115,21 +1110,12 @@ void Console::followEngine()
 
 bool Console::settingsDiffer() const
 {
-    const float push = getParam (params::blockIn (params::preampId).toRawUTF8());
-
-    return (push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
-        || (getParam (params::blockSmooth (params::preampId).toRawUTF8()) > 0.5f) == driveSteps;
+    return (getParam (params::blockSmooth (params::preampId).toRawUTF8()) > 0.5f) == driveSteps;
 }
 
 void Console::settleOnSettings()
 {
-    // TURBO: that it is on is the state's, how hard is the settings'.
-    const auto turboTrim = params::blockIn (params::preampId);
-    if (const float push = getParam (turboTrim.toRawUTF8());
-        push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
-        setParam (turboTrim.toRawUTF8(), channels.turboDb());
-
-    // ...and so is how DRIVE goes between the captures: mixing the two it stands between, or in steps.
+    // How DRIVE goes between the captures is the settings': mixing the two it stands between, or in steps.
     const auto smooth = params::blockSmooth (params::preampId);
     if ((getParam (smooth.toRawUTF8()) > 0.5f) == driveSteps)
         setParam (smooth.toRawUTF8(), driveSteps ? 0.0f : 1.0f);
@@ -1182,16 +1168,6 @@ void Console::sayLever (ColumnFader& fader, const juce::String& name, std::funct
     fader.onGestureStart = [say, before = fader.onGestureStart] { if (before) before(); say(); };
     fader.onChange       = [say, before = fader.onChange] (float travel) { if (before) before (travel); say(); };
     fader.onGestureEnd   = [this, before = fader.onGestureEnd] { if (before) before(); nameTag.show ({}, {}); };
-}
-
-void Console::chooseTurbo (int db)
-{
-    db = snapTurbo (db);
-    prefs::store (amp.product()).set (turboKey, db);
-    channels.setTurboDb ((float) db);
-
-    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
-    settleOnSettings();
 }
 
 void Console::chooseDriveSteps (bool steps)
@@ -1342,24 +1318,6 @@ void Console::showGateMenu()
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
 
-/** A RIGHT CLICK ON TURBO: how hard it pushes into the capture — here only, the settings menu leaves it to
-    TURBO. The machine's to say: every channel that has TURBO on comes back at the push in force. And under
-    it, how much louder the amp leaves while TURBO is on. */
-void Console::showTurboMenu()
-{
-    endTapping();
-
-    const int now = juce::roundToInt (channels.turboDb());
-
-    juce::PopupMenu menu;
-    menu.addSectionHeader ("TURBO ADDS");
-    for (const int db : turboPushes)
-        addChoice (menu, decibels (db), db == now, [db] (Console& e) { e.chooseTurbo (db); });
-
-    addBoostLevels (menu);
-    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
-}
-
 void Console::addBoostLevels (juce::PopupMenu& menu)
 {
     const int now = juce::roundToInt (getParam (params::boostLevel));
@@ -1369,7 +1327,7 @@ void Console::addBoostLevels (juce::PopupMenu& menu)
         addChoice (menu, decibels (db), db == now, [db] (Console& e) { e.setParam (params::boostLevel, (float) db); });
 }
 
-/** A RIGHT CLICK ON TURBO, where TURBO is a channel: how much louder the amp leaves while it is on. */
+/** A RIGHT CLICK ON TURBO: how much louder the amp leaves while it is on. */
 void Console::showBoostMenu()
 {
     endTapping();
@@ -1642,7 +1600,7 @@ void Console::refreshHistory()
     showChannel();   // an undo, a redo or another register may have brought a different channel with it
 
     // ...or a state with no channels in it at all, or one whose cabinet is not the file of that name
-    // any more, or one kept under another TURBO or DRIVE's other way. Settling any of them writes, and this
+    // any more, or one kept under DRIVE's other way. Settling any of them writes, and this
     // is the history's own callback, so it is done on the way out.
     if ((! channels.adopted() || channels.cabinetIsStale() || settingsDiffer()) && ! adoptionPending)
     {
@@ -2186,8 +2144,8 @@ void Console::showSettingsMenu()
     // What the product's window shows, and full screen.
     addWindowSections (menu);
 
-    // How DRIVE goes between the pack's captures, and the hum the input carries. How hard TURBO pushes,
-    // where it pushes, is TURBO's own menu's (showTurboMenu).
+    // How DRIVE goes between the pack's captures, and the hum the input carries. How much louder TURBO
+    // is, is TURBO's own menu's (showBoostMenu).
     menu.addSectionHeader ("INPUT");
 
     juce::PopupMenu way;

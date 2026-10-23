@@ -4,7 +4,6 @@
 #include "Engine.h"
 
 #include "../Parameters.h"
-#include "../ui/Prefs.h"
 
 namespace orbitamp::channels
 {
@@ -14,20 +13,6 @@ namespace
     constexpr int preampConsole = 0;        // the preamp's universal console: kept flat, the tones are the pack's
 
     using Suppress = felitronics::appkit::CompareHistory::ScopedSuppress;
-}
-
-int settings::snapTurbo (int db)
-{
-    int best = turboPushes.front();
-    for (const int push : turboPushes)
-        if (std::abs (push - db) < std::abs (best - db))
-            best = push;
-    return best;
-}
-
-int settings::turbo (const Product& product)
-{
-    return snapTurbo ((int) prefs::store (product).get (turboKey, turboDefault));
 }
 
 //==============================================================================
@@ -70,7 +55,6 @@ Engine::Engine (AmpProcessor& p, const Lineup& lineup)
 {
     jassert (channel != nullptr);
 
-    channels.setTurboDb ((float) settings::turbo (p.product()));
     makeOwn();
     channels.align();
     say (channels.active());
@@ -183,10 +167,13 @@ void Engine::setUpChain (bool firstTime)
     if (firstTime)                            // after that, whether the cabinet plays is the player's to say
         setParam (params::cabOn,     1.0f);
 
-    // TURBO is the preamp's input trim, at its push or at nothing: a state the product has never seen
-    // starts with it off, wherever that trim was left.
+    // A state the product has never seen starts with TURBO off, and the preamp's own input trim — which
+    // no control of these faces reaches — at nothing, wherever either was left.
     if (firstTime)
+    {
+        setParam (params::preampBoost, 0.0f);
         setParam (params::blockIn (params::preampId), 0.0f);
+    }
 
     // ...and with as much delay as its channel opens on, not as much as the engine does — and its pack's
     // switches where the pack opens them, the one the channel holds where it holds it.

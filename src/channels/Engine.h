@@ -11,21 +11,13 @@
 namespace orbitamp::channels
 {
 
-/** TURBO's push, on a face whose TURBO pushes the capture, is the machine's to say (catpit/CatpitEditor.h)
-    — and the engine's to know before any window has opened, since a channel comes back at the push in
-    force. */
+/** WHAT THE SITE'S KIT OF THE COCKPIT STILL SAYS TURBO IS (CatpitEditor's web export): the push into
+    the capture it was until TURBO became the AMP's boost (params::preampBoost). Nothing the amp plays
+    reads these; they wait for the kit to learn the boost. */
 namespace settings
 {
-inline const juce::Identifier turboKey { "turbo_db" };
 inline constexpr int turboDefault = 9;
 inline constexpr std::array<int, 4> turboPushes { 3, 6, 9, 12 };
-
-/** The push on offer nearest to `db`. */
-int snapTurbo (int db);
-
-/** The push the product's settings hold now. */
-int turbo (const Product&);
-
 } // namespace settings
 
 /** A PRODUCT'S HALF OF THE ENGINE: what makes the processor an amp of so many channels whether or not

@@ -87,7 +87,7 @@ namespace
 Channels::Channels (AmpProcessor& p, const Lineup& l) : amp (p), line (l)
 {
     kept.add (params::preampGain);
-    kept.add (params::blockIn (params::preampId));      // TURBO: how hard the capture is fed
+    kept.add (params::preampBoost);                     // TURBO, on a pack with no Boost switch of its own
     for (int t = 0; t < maxTones; ++t)                  // the tones each channel's knobs turn: its pack's places, as many as it has
         for (int c = 0; c < count(); ++c)
             if (const auto id = toneOf (c, t); id.isNotEmpty())
@@ -598,9 +598,7 @@ juce::ValueTree Channels::whole() const
         {
             const float value = live ? plain (id)
                                      : record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (c, id);
-
-            // TURBO as on or off: how hard it pushes is the settings' to say, not the channel's.
-            full.setProperty (id, id == params::blockIn (params::preampId) ? (value > turboOnAbove ? 1.0f : 0.0f) : value, nullptr);
+            full.setProperty (id, value, nullptr);
         }
         for (int f = 0; f < numFlags; ++f)
             full.setProperty (flagIds[(size_t) f], live ? flag ((Flag) f)
@@ -642,7 +640,7 @@ void Channels::recall (int channel, const juce::ValueTree& record)
 {
     // No record is a channel never visited: every control at what that channel opens on, every layer off.
     for (const auto& id : kept)
-        set (id, settled (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (channel, id)));
+        set (id, record.isValid() && record.hasProperty (id) ? (float) record[id] : defaultOf (channel, id));
 
     // A pair's record left on the other of the two has its tones in that pack's places: they come back
     // on their knobs, in this pack's.
@@ -658,11 +656,6 @@ void Channels::recall (int channel, const juce::ValueTree& record)
     for (int f = 0; f < numFlags; ++f)
         setFlag ((Flag) f, record.isValid() && (bool) record.getProperty (flagIds[(size_t) f], false));
     chooseCabinetNamed (record.getProperty (cabinetId).toString());
-}
-
-float Channels::settled (const juce::String& paramId, float value) const
-{
-    return paramId == params::blockIn (params::preampId) && value > turboOnAbove ? turboPush : value;
 }
 
 float Channels::plain (const juce::String& paramId) const

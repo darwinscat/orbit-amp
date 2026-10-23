@@ -452,6 +452,26 @@ int main()
             check (rampFits (r) && scaled (a, b, gainOf (3.0f), r.end),
                    "...to +3 dB in " + sayRamp (r) + ", then exactly +3 dB");
         }
+
+        // ...its capture two positions up the dial, the throttle's DRIVE where it stands.
+        auto& c = *pair.level;
+        setParam (c, params::blockSmooth (params::preampId), 0.0f);
+        setParam (c, params::preampGain, 3.0f);
+        check (juce::exactlyEqual (c.preamp.dialDegrees(), 150.0) && juce::exactlyEqual (c.preamp.turboPushDb(), 0.0f),
+               "...TURBO at 10:00 plays 12:00");
+        setParam (c, params::preampGain, 10.0f);
+        check (juce::exactlyEqual (c.preamp.dialDegrees(), 300.0) && juce::exactlyEqual (c.preamp.turboPushDb(), 6.0f),
+               "...TURBO at 17:00 plays 17:00 6 dB harder");
+
+        // ...and a channel keeps it: on, the next channel opens with it off, and coming back finds it on.
+        auto& engine = channels::Engine::of (c);
+        const bool went = engine.go (1);
+        c.pumpDeviceWork();
+        const bool offThere = param (c, params::preampBoost) < 0.5f && ! c.boostOn();
+        const bool back = engine.go (0);
+        c.pumpDeviceWork();
+        check (went && offThere && back && param (c, params::preampBoost) > 0.5f && c.boostOn(),
+               "...TURBO on, the next channel opens with it off, and coming back finds it on");
     }
 
     // TURBO ON A PACK WITH NO BOOST SWITCH: OrbitAmp on the X88-IR's first.

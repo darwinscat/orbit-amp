@@ -575,16 +575,16 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
             glSky->setSteer (s);
     };
 
-    // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
-    // The trim is a parameter and a host may leave it anywhere, so anything well above nothing reads as on.
+    // TURBO is the AMP's boost (params::preampBoost): the X88-IR has no Boost switch of its own, so the
+    // capture plays two positions up its dial from THROTTLE's DRIVE, and past the top capture it is fed
+    // harder instead. A right click is how much louder the amp leaves with it.
     addToStage (turbo);
     turbo.setBounds (turboFrame.toNearestInt());
-    turbo.onMenu = [this] { showTurboMenu(); };
+    turbo.onMenu = [this] { showBoostMenu(); };
     {
-        auto* push = follow (params::blockIn (params::preampId).toRawUTF8(),
-                             [this] (float db) { turbo.setOn (db > Channels::turboOnAbove, false); });
-        turbo.onChange = [this, push] (bool on) { push->setValueAsCompleteGesture (on ? channels.turboDb() : 0.0f); };
-        push->sendInitialUpdate();
+        auto* boost = follow (params::preampBoost, [this] (float on) { turbo.setOn (on > 0.5f, false); });
+        turbo.onChange = [boost] (bool on) { boost->setValueAsCompleteGesture (on ? 1.0f : 0.0f); };
+        boost->sendInitialUpdate();
     }
 
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader in the slot cut into its corner, the
@@ -684,10 +684,10 @@ void CatpitEditor::programChange (int program)
         lever.setPlace (program, true);
 }
 
-/** TURBO's controller: the push, or none. */
+/** TURBO's controller: the boost, on or off. */
 void CatpitEditor::turboChange (bool thrown)
 {
-    setParam (params::blockIn (params::preampId).toRawUTF8(), thrown ? channels.turboDb() : 0.0f);
+    setParam (params::preampBoost, thrown ? 1.0f : 0.0f);
 }
 
 /** What the windshield shows over the sky — nothing, or one of the pictures of the amp at work — and

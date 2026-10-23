@@ -92,18 +92,6 @@ public:
         false,      // PRESENCE
     }};
 
-    /** TURBO IS A PUSH INTO THE CAPTURE: the preamp's own input trim (params::blockIn), at its push or
-        at none — a clean boost in front of the amp, the way a pedal is one. It is a parameter, so a
-        channel keeps it with everything else it remembers. How HARD the push is, though, is the
-        machine's to say (the settings): a channel remembers that TURBO is on, and comes back at the
-        push in force. */
-    void  setTurboDb (float db) noexcept { turboPush = db; }
-    float turboDb() const noexcept { return turboPush; }
-
-    /** The trim is a parameter and a host may leave it anywhere: past this it reads as TURBO on. It is
-        under every push on offer. */
-    static constexpr float turboOnAbove = 1.5f;
-
     /** Whether the state carries the product's node at all. One that does not is a state the product has
         never seen — a session saved before it existed, or a fresh instance. */
     bool adopted() const { return node().isValid(); }
@@ -224,8 +212,7 @@ public:
         controls, the others from their records, a channel never visited from its defaults — a pair as
         one, with which of the two it plays or was left on. Two states
         that would sound the same on every detent give the same tree — which the node itself does not,
-        since the playing channel's record there is stale and an unvisited one is missing. TURBO is in
-        as on or off: a channel kept under one push is the same channel under another. */
+        since the playing channel's record there is stale and an unvisited one is missing. */
     juce::ValueTree whole() const;
 
 private:
@@ -235,8 +222,6 @@ private:
     juce::StringArray tones;     // ...of them, the places every channel's pack has its tones in
     juce::Array<juce::File> irs; // the product's cabinets, in order
     int factory = 0;             // how many of them, from the front, are the build's own
-    float turboPush = 9.0f;      // TURBO's push, dB
-    float settled (const juce::String& paramId, float value) const;    // a remembered TURBO, at the push in force
     void  hold (int channel);                                           // its held switch where the lineup puts it
     mutable std::vector<std::optional<juce::String>> irKeys;    // each file's content key, read when first asked for; empty if it would not read
     juce::String keyOfFile (int index) const;

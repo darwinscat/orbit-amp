@@ -315,16 +315,9 @@ protected:
     void addChoice (juce::PopupMenu&, const juce::String& text, bool ticked,
                     std::function<void (Console&)> picked, bool enabled = true);
 
-    // TURBO'S PUSH is the machine's to say (Channels::turboDb), on a face whose TURBO pushes the capture:
-    // the state says that TURBO is on, by the preamp's input trim standing above nothing, and the
-    // settings say how hard that is — +9 dB unless told otherwise, which over the pack's own -9 dB
-    // (chain[].input_db) feeds the captures as they were taken.
-    void showTurboMenu();           // how hard it pushes
-    void chooseTurbo (int db);
-
     // THE BOOST'S LEVEL (params::boostLevel) on TURBO's own menu: how much louder the amp leaves while
-    // TURBO is on. The sound's, unlike the push — a session and a preset keep it, undo steps over it. Under
-    // the push on the cockpit's menu; alone on a face whose TURBO is its pack's Boost held on (showBoostMenu).
+    // TURBO is on. The sound's — a session and a preset keep it, undo steps over it. How TURBO itself
+    // drives the capture is the pack's and the engine's, and no menu's.
     void addBoostLevels (juce::PopupMenu&);
     void showBoostMenu();
 
