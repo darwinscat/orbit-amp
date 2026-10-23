@@ -614,11 +614,13 @@ void Windscreen::focusLost (FocusChangeType)
 void Windscreen::newOpenGLContextCreated()
 {
     // A world that will not start on this GPU goes to the CPU on its own (apply, tick) — and says why in the
-    // family's log, which is all a player who sees the 1993 landscape has to send.
-    if (! world->create())
+    // family's log, which is all a player who sees the 1993 landscape has to send. A GL that runs no shaders
+    // is not asked to start it: the world's first call would have no entry point.
+    const bool runs = gpu::runsShaders();
+    if (! runs || ! world->create())
     {
         gpuFailed.store (true);
-        const auto why = world->error();
+        const auto why = runs ? world->error() : std::string ("this GL runs no shaders");
         gpulog::refusal (logName, gpu::driver(),
                          std::string (world->name()) + ": " + (why.empty() ? std::string ("its GPU view would not start") : why));
     }

@@ -24,7 +24,14 @@ void GlSky::setArea (juce::Rectangle<float> g, juce::Rectangle<float> w, juce::P
 void GlSky::newOpenGLContextCreated()
 {
     // The shader and what it draws are SkyGl's (CatpitSkyGl.cpp), the site's too. One that will not build
-    // here sends the sky to the CPU (CatpitEditor::applySky) — and says why in the family's log.
+    // here sends the sky to the CPU (CatpitEditor::applySky) — and says why in the family's log. So does a GL
+    // that runs no shaders at all, before a call it has no entry point for.
+    if (! gpu::runsShaders())
+    {
+        gpulog::refusal (logName, gpu::driver(), "the sky: this GL runs no shaders");
+        broken.store (true);
+        return;
+    }
     if (! sky.create())
     {
         DBG ("catpit: the sky's shader did not build — " << juce::String (sky.error()));

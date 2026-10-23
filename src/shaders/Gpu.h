@@ -66,6 +66,21 @@ inline bool current() noexcept
    #endif
 }
 
+/** True when the context current on this thread runs shaders, as every renderer here needs before its first
+    call. A machine with no GPU driver — a virtual machine, a Remote Desktop session, a build server — hands JUCE
+    the system's own OpenGL 1.1: no shaders, and the entry points a renderer calls are never loaded, so the first
+    of them crashes. JUCE has asked by the time a renderer's newOpenGLContextCreated runs. */
+inline bool runsShaders() noexcept
+{
+   #if defined (__EMSCRIPTEN__)
+    return current();
+   #else
+    const auto* context = juce::OpenGLContext::getCurrentContext();
+    return context != nullptr && context->areShadersAvailable()
+        && glCreateProgram != nullptr && glGenVertexArrays != nullptr;
+   #endif
+}
+
 /** The context current on this thread in its driver's own words — renderer / vendor / version — or nothing
     when none is: what a line about this GPU names it by (src/shaders/GpuLog.h). */
 inline std::string driver()
