@@ -412,45 +412,17 @@ inline const juce::StringArray typeNames { "Clean", "Edge", "Crunch", "High-gain
 inline constexpr int maxVoicesPerType = 8;
 
 
-/** THE TWO SWITCHES EVERY LINK HAS.
-
-    `*_present` — is this link in the rig at all. Set in the strip's checklist; a link that is not
-    in the rig has no arrow in the strip, no face on the panel, no entry in the cost breakdown,
-    and is not processed.
-
-    `*_on` — STANDBY or ON. Set by the link's arrow in the strip; a link in STANDBY keeps its
-    place but its action is IGNORED — a volume is not applied, a mute is not applied, a block is
-    not processed.
-
-    Both are ordinary automatable parameters, so both ride in the preset, the host's session, the
-    A/B/C/D registers and undo without a line of code about storage. Two rather than one
-    three-position control on purpose: bypassing a link is something players automate and removing
-    it from the rig is not, and two actions of such different weight must not share one lane, where
-    aiming at the middle of three and landing on the end takes a block out of the rig instead of
-    stepping it aside.
-
-    The fourth combination — not in the rig, switch up — is not a contradiction: it is the link
-    remembering whether it was playing while it sits out.
-
-    IN, OUT and TUNER get their own `*_on` here because they never had one: hiding a column used
-    to be a machine preference that also wrote its trim to zero. Now STANDBY simply does not apply
-    the volume, and the value the player set stays where they left it. */
-inline constexpr const char* inPresent     = "in_present";
-inline constexpr const char* inOn          = "in_on";
-inline constexpr const char* tunerPresent  = "tuner_present";
+/** EVERY LINK STANDS IN THE CHAIN FOR GOOD. There used to be a second switch beside each one's ON
+    — in the rig or out of it, with a checklist that took a block off the panel and the panel
+    re-splitting under the hands. Gone: a link's one switch is ON or STANDBY, set by its arrow in the
+    strip, and a link in STANDBY keeps its place on the panel, dimmed, its action IGNORED — a block
+    is not fed, a guard does not press. The two ends, IN and OUT, have no switch at all: their
+    volumes always apply. */
 inline constexpr const char* tunerOn       = "tuner_on";
 /** The tuner's MUTE: silence at the jack while the tuner works, so a string can be tuned without
     the room hearing it. The tuner keeps listening — it reads the input before anything — and a
     tuner standing by does not mute, like any link's action in STANDBY. */
 inline constexpr const char* tunerMute     = "tuner_mute";
-inline constexpr const char* gatePresent   = "gate_present";
-inline constexpr const char* preampPresent = "preamp_present";
-inline constexpr const char* delayPresent  = "delay_present";
-inline constexpr const char* reverbPresent = "reverb_present";
-inline constexpr const char* cabPresent    = "cab_present";
-inline constexpr const char* limitPresent  = "limit_present";
-inline constexpr const char* outPresent    = "out_present";
-inline constexpr const char* outOn         = "out_on";
 
 //==============================================================================
 // THE CHAIN, AS ONE LIST.
@@ -503,22 +475,21 @@ struct ChainLink
     const char* name;       // what its arrow says
     bool        captured;   // wears the captured accent rather than ours
     bool        hasTile;    // a face on the panel; a link without one answers with its menu
-    const char* onParam;      // STANDBY/ON — the switch its arrow writes
-    const char* presentParam; // in the rig or not — the switch the strip's checklist writes
+    const char* onParam;      // STANDBY/ON — the switch its arrow writes; none for the two ends
     Stage       stage;        // the cost entry it owns
     Stage       eqStage;    // a captured block's console; `numStages` for everyone else
 };
 
 inline constexpr ChainLink chainLinks[numChainRows] = {
-    /* IN     */ { "IN",     false, true,  inOn,      inPresent,     numStages, numStages },
-    /* TUNER  */ { "TUNER",  false, true,  tunerOn,   tunerPresent,  stTuner,  numStages },
-    /* GATE   */ { "GATE",   false, false, gateOn,    gatePresent,   stGate,   numStages },
-    /* AMP    */ { "AMP",    true,  true,  preampOn,  preampPresent, stPreamp, stPreampEq },
-    /* DELAY  */ { "DELAY",  false, true,  delayOn,   delayPresent,  stDelay,  numStages },
-    /* REVERB */ { "REVERB", false, true,  reverbOn,  reverbPresent, stReverb, numStages },
-    /* CAB IR */ { "CAB IR", true,  true,  cabOn,     cabPresent,    stCab,    numStages },
-    /* LIMIT  */ { "LIMIT",  false, false, limiterOn, limitPresent,  stLimit,  numStages },
-    /* OUT    */ { "OUT",    false, true,  outOn,     outPresent,    stOut,    numStages },
+    /* IN     */ { "IN",     false, true,  nullptr,   numStages, numStages },
+    /* TUNER  */ { "TUNER",  false, true,  tunerOn,   stTuner,  numStages },
+    /* GATE   */ { "GATE",   false, false, gateOn,    stGate,   numStages },
+    /* AMP    */ { "AMP",    true,  true,  preampOn,  stPreamp, stPreampEq },
+    /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages },
+    /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages },
+    /* CAB IR */ { "CAB IR", true,  true,  cabOn,     stCab,    numStages },
+    /* LIMIT  */ { "LIMIT",  false, false, limiterOn, stLimit,  numStages },
+    /* OUT    */ { "OUT",    false, true,  nullptr,   stOut,    numStages },
 };
 
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL

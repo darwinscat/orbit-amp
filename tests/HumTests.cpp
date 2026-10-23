@@ -349,12 +349,8 @@ int main()
     const auto ampOwned = std::make_unique<AmpProcessor> (gateAmp());
     auto& amp = *ampOwned;
 
-    // The input path the tap hears: the INPUT row working (its trim applies) and the tuner listening.
-    for (const auto row : { params::rowIn, params::rowTuner })
-    {
-        set (amp, params::chainLinks[row].onParam, 1.0f);
-        set (amp, params::chainLinks[row].presentParam, 1.0f);
-    }
+    // The input path the tap hears: the tuner listening (the INPUT's trim always applies).
+    set (amp, params::tunerOn, 1.0f);
     set (amp, params::inTrim, 0.0f);
 
     Stream stream (amp);

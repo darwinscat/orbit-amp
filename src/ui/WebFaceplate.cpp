@@ -222,7 +222,8 @@ void WebFaceplate::playAndShoot (const juce::File& riffFile)
     standPlain (params::delayMix, 22.0f);
     pre.showsLoudnessTag = true;
     prefs::spectraCache (amp.product()).store (true);
-    editor.applyRowStates();
+    editor.applyStripChoice();
+    editor.resized();
 
     juce::AudioProcessor& processor = amp;
     processor.setRateAndBufferSizeDetails (fs, 256);
@@ -323,10 +324,8 @@ void WebFaceplate::freeze()
     channelsMemory = amp.apvts.state.getChildWithName (AmpChannels::nodeType()).createCopy();
 
     for (const auto& link : params::chainLinks)
-    {
-        standParam (link.presentParam, 1.0f);
-        standParam (link.onParam, juce::String (link.onParam) == params::gateOn ? 0.0f : 1.0f);
-    }
+        if (link.onParam != nullptr)
+            standParam (link.onParam, juce::String (link.onParam) == params::gateOn ? 0.0f : 1.0f);
     standParam (params::tunerMute, 0.0f);
 
     // The captured block: SMOOTH lit, the device's own tone set, the console flat with its cuts off.
@@ -370,9 +369,9 @@ void WebFaceplate::freeze()
         keep ([&face, was] { face.setEqRowOnTop (was); });
     }
     {
-        const bool dim = editor.dimRatherThanRemove, demo = editor.showDemo, glyphs = editor.showGlyphs;
-        editor.dimRatherThanRemove = editor.showDemo = editor.showGlyphs = false;
-        keep ([this, dim, demo, glyphs] { editor.dimRatherThanRemove = dim; editor.showDemo = demo; editor.showGlyphs = glyphs; });
+        const bool demo = editor.showDemo, glyphs = editor.showGlyphs;
+        editor.showDemo = editor.showGlyphs = false;
+        keep ([this, demo, glyphs] { editor.showDemo = demo; editor.showGlyphs = glyphs; });
     }
     {
         auto& spectra = prefs::spectraCache (amp.product());
@@ -401,7 +400,8 @@ void WebFaceplate::freeze()
         pre.showsLoudnessTag = false;
         keep ([&pre] { pre.showsLoudnessTag = true; pre.repaint(); });
     }
-    editor.applyRowStates();
+    editor.applyStripChoice();
+    editor.resized();
 }
 
 void WebFaceplate::thaw()
@@ -417,7 +417,8 @@ void WebFaceplate::thaw()
     if (channelsMemory.isValid())
         state.appendChild (channelsMemory, nullptr);
 
-    editor.applyRowStates();
+    editor.applyStripChoice();
+    editor.resized();
 }
 
 void WebFaceplate::standParam (const juce::String& id, float normalised)

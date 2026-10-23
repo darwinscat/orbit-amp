@@ -147,14 +147,9 @@ public:
     {
         double tail = 0.1;   // every ramp in here, and the models' handful of milliseconds
 
-        if (linkInRig (params::rowDelay))
-            tail += (double) delay.tailSeconds();
-
-        if (linkInRig (params::rowReverb))
-            tail += (double) reverb.tailSeconds();
-
-        if (linkInRig (params::rowCab))
-            tail += (double) cab.tailSeconds();
+        tail += (double) delay.tailSeconds();
+        tail += (double) reverb.tailSeconds();
+        tail += (double) cab.tailSeconds();
 
         // A FLOOR, BECAUSE NOTHING CAN TELL A HOST THIS NUMBER MOVED. There is no such message in
         // any of the three wrappers — JUCE's change notifications carry latency, programs, state
@@ -164,14 +159,12 @@ public:
         // reaches it, and one host at least stops calling a plugin at all after `tail` seconds of
         // silence: that would cut a tail while PLAYING, not only in a bounce.
         //
-        // So while either link that can be set to ring long is in the rig, the answer is never
-        // below the flat eight this used to be. Both of the wins survive it — a rig with neither
-        // of them asks for its cabinet and a tenth instead of eight, and a hall breathing at double
-        // is no longer cut at eight — and the one case that stays wrong in a caching host is one
-        // where the old constant was exactly as wrong. Lifting the floor is a thing to do after
-        // watching a real session in Cubase and Logic, not before.
-        if (linkInRig (params::rowDelay) || linkInRig (params::rowReverb))
-            tail = juce::jmax (tail, 8.0);
+        // So the answer is never below the flat eight this used to be: the echo and the room are
+        // always in the chain, and either can be set to ring long. A hall breathing at double is
+        // no longer cut at eight, and the one case that stays wrong in a caching host is one where
+        // the old constant was exactly as wrong. Lifting the floor is a thing to do after watching
+        // a real session in Cubase and Logic, not before.
+        tail = juce::jmax (tail, 8.0);
 
         return juce::jmin (tail, 30.0);
     }
@@ -814,26 +807,13 @@ private:
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 
-    /** IS THIS LINK WORKING — the one question the chain asks, and the only shape of it.
-
-        In the rig AND on. Out of the rig is nothing at all; STANDBY is here but not taking new
-        signal. Both are ordinary parameters, so this reads like any other switch — no mirror to
-        keep, nothing to normalise, and no way to express "not in the rig but playing". */
+    /** IS THIS LINK WORKING — the one question the chain asks, and the only shape of it. Every
+        link stands in the chain for good; a switch says only whether it is ON or in STANDBY, and a
+        link with no switch — the two ends — always works. */
     bool linkWorks (params::ChainRow row) const noexcept
     {
         const auto* on = rowOn[(size_t) row];
-        const auto* in = rowPresent[(size_t) row];
-
-        return (on == nullptr || on->load() > 0.5f) && (in == nullptr || in->load() > 0.5f);
-    }
-
-    /** IN THE RIG, on its own — for the links that keep running while they stand by. An additive
-        block out of the rig is unplugged: cleared, and costing nothing. In the rig it runs whether
-        it is on or not, and `linkWorks` decides only whether it is being FED. */
-    bool linkInRig (params::ChainRow row) const noexcept
-    {
-        const auto* in = rowPresent[(size_t) row];
-        return in == nullptr || in->load() > 0.5f;
+        return on == nullptr || on->load() > 0.5f;
     }
 
 
@@ -1268,11 +1248,9 @@ private:
 
     float lastTrimGain = 1.0f;
 
-    /** The two switches of every link, straight off `params::chainLinks` — plus the two ends,
-        which are not rows in the strip yet but have had their switches since they were declared.
+    /** Every link's switch, straight off `params::chainLinks`; null for a link that has none.
         Filled once in prepare; read on the audio thread like every other parameter. */
-    std::atomic<float>* rowOn[params::numChainRows]      { };
-    std::atomic<float>* rowPresent[params::numChainRows] { };
+    std::atomic<float>* rowOn[params::numChainRows] { };
 
     std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* gatePosParam       = nullptr;

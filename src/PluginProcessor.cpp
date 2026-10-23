@@ -146,9 +146,10 @@ AmpProcessor::AmpProcessor (const Product& product)
     for (int i = 0; i < params::numChainRows; ++i)
     {
         const auto& link = params::chainLinks[(size_t) i];
-        rowOn[(size_t) i]      = link.onParam      != nullptr ? apvts.getRawParameterValue (link.onParam)      : nullptr;
-        rowPresent[(size_t) i] = link.presentParam != nullptr ? apvts.getRawParameterValue (link.presentParam) : nullptr;
+        rowOn[(size_t) i] = link.onParam != nullptr ? apvts.getRawParameterValue (link.onParam) : nullptr;
     }
+    if (! ownProduct.tunerSwitch)
+        rowOn[(size_t) params::rowTuner] = nullptr;   // it listens always (Product::tunerSwitch)
 
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
@@ -1700,56 +1701,26 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // First of the wide stages — the OFFSET is the block's stereo, so it works the back half's
     // channels.
     // STANDBY is the insert's bypass: the block keeps running, it just stops being fed, and the
-    // repeats already in the line ring out into the dry. Only leaving the RIG clears it — that is
-    // unplugging, not standing by. Which is also why a bypassed block still costs: so does a
-    // bypassed insert, in every DAW there is.
-    // STANDBY is unfed-and-ringing (see the engine). Leaving the RIG is the other thing: the line
-    // is cleared, and a ringing tail cut in one sample is a click. So the whole contribution is
-    // crossfaded out first, and only then cleared.
+    // repeats already in the line ring out into the dry. Which is also why a bypassed block still
+    // costs: so does a bypassed insert, in every DAW there is.
+    if (delayReady)
     {
-        const bool inRig = linkInRig (params::rowDelay);
-        const auto span  = blockFade[(size_t) params::rowDelay].advance (numSamples, inRig);
-        const bool run   = delayReady && core::BypassFade::runs (span, inRig);
-        const bool fade  = span.moving && canFade (numSamples, nchBack);
+        const auto a = PerfClock::now();
 
-        if (run)
-        {
-            const auto a = PerfClock::now();
+        // Prepared for every channel the bus carries, so it cannot refuse this block.
+        (void) delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
 
-            if (fade)
-                for (int ch = 0; ch < nchBack; ++ch)
-                    juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
-                                                       buffer.getReadPointer (ch), numSamples);
-
-            // Prepared for every channel the bus carries, so it cannot refuse this block.
-            (void) delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
-
-            if (fade)
-                core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
-                                         nchBack, numSamples, span);
-
-            nsStage[stDelay] = elapsedNs (a);
-        }
-        else
-        {
-            delay.reset();
-        }
+        nsStage[stDelay] = elapsedNs (a);
+    }
+    else
+    {
+        delay.reset();
     }
 
-    // The room stands by the same way the echo does: unfed, still ringing out — and leaves the rig
-    // the same way too, faded rather than cut. See the delay above.
-    const bool reverbInRig = linkInRig (params::rowReverb);
-    const auto reverbSpan  = blockFade[(size_t) params::rowReverb].advance (numSamples, reverbInRig);
-    const bool reverbFade  = reverbSpan.moving && canFade (numSamples, nchBack);
-
-    if (reverbReady && core::BypassFade::runs (reverbSpan, reverbInRig))
+    // The room stands by the same way the echo does: unfed, still ringing out. See the delay above.
+    if (reverbReady)
         { const auto a = PerfClock::now();
           const bool fed = linkWorks (params::rowReverb);
-
-          if (reverbFade)
-              for (int ch = 0; ch < nchBack; ++ch)
-                  juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
-                                                     buffer.getReadPointer (ch), numSamples);
 
           // The pair for the block's picture: the door before the room, the ADDED wet after it.
           // A room nobody is feeding hears silence at its door, and the picture says so.
@@ -1770,10 +1741,6 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                 tout.push (w[i]);
             tout.publishIfDue (eqSpectrumOrder,
                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
-
-          if (reverbFade)
-              core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
-                                       nchBack, numSamples, reverbSpan);
 
           nsStage[stReverb] = elapsedNs (a); }
     else

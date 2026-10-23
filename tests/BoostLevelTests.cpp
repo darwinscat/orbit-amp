@@ -349,11 +349,8 @@ int main()
                    "...its Boost off again: back in " + sayRamp (r) + ", then bit for bit what 0 dB plays");
         }
 
-        // THE AMP OUT OF THE CHAIN takes its boost with it.
+        // THE AMP SWITCHED OFF takes its boost with it.
         pair.both ([&] (AmpProcessor& a) { setParam (a, boostSwitch, 1.0f); });
-        setParam (*pair.level, params::preampPresent, 0.0f);
-        check (! pair.level->boostOn(), "...the AMP out of the chain, its Boost on: no boost");
-        setParam (*pair.level, params::preampPresent, 1.0f);
         setParam (*pair.level, params::preampOn, 0.0f);
         check (! pair.level->boostOn(), "...the AMP switched off, its Boost on: no boost");
 

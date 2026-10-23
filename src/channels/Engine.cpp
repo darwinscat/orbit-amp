@@ -141,21 +141,12 @@ void Engine::setParam (const juce::String& paramId, float value)
 
 void Engine::setUpChain (bool firstTime)
 {
-    setParam (params::tunerPresent,  1.0f);   // the tuner bay is always there...
-    if (firstTime)                            // ...and listening, until the player switches it off
+    if (firstTime)                            // the tuner listens until the player switches it off
         setParam (params::tunerOn,   1.0f);
-    setParam (params::gatePresent,   1.0f);   // the gate stands in the chain; whether it works is the settings' ON
-    setParam (params::inPresent,     1.0f);   // the INPUT and OUTPUT faders are these links' trims
-    setParam (params::inOn,          1.0f);
-    setParam (params::outPresent,    1.0f);
-    setParam (params::outOn,         1.0f);
-    setParam (params::preampPresent, 1.0f);
     setParam (params::preampOn,      1.0f);
-    setParam (params::delayPresent,  1.0f);
     setParam (params::delayOn,       1.0f);
     setParam (params::delaySync,      1.0f);  // the delay keeps time, always: the host's when there is one...
     setParam (params::delayHostTempo, 1.0f);  // ...and its own BPM when there is not
-    setParam (params::reverbPresent, 1.0f);
     setParam (params::reverbOn,      1.0f);
     if (firstTime)                            // after that the reverb is the player's to choose
     {
@@ -163,7 +154,6 @@ void Engine::setUpChain (bool firstTime)
         if (channels.lineup().channels[(size_t) channels.active()].reverbMix.has_value())
             setParam (params::reverbMix, channels.defaultOf (channels.active(), params::reverbMix));
     }
-    setParam (params::cabPresent,    1.0f);
     if (firstTime)                            // after that, whether the cabinet plays is the player's to say
         setParam (params::cabOn,     1.0f);
 

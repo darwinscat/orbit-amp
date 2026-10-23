@@ -114,25 +114,6 @@ inline const juce::Identifier showGlyphs { "show_device_glyphs" };
     BETTER is a thing about eyes, so it is a switch. */
 inline const juce::Identifier eqRowOnTop { "eq_row_on_top" };
 
-/** How a link STANDING BY is shown: off (the default), its tile leaves the panel and the rest
-    re-split, the way it always has; on, the tile keeps its place and goes dark.
-
-    Purely the eye's business — the sound is the same either way, and the preset does not carry
-    an opinion about it any more than it carries a colour. Removing gives the room to whoever is
-    left; dimming keeps the panel still, so nothing under your hands moves while you A/B a block
-    in and out. Neither is right, which is why it is a switch. */
-inline const juce::Identifier dimStandby { "dim_standby" };
-
-/** What an emptied row does to the WINDOW. On (the default): the window holds its height and
-    whoever is left grows into the space — nothing on screen moves except the block that got
-    taller. Off: the old way, the row collapses and the window shrinks with it.
-
-    It matters more than it looks. A link's place in the rig is an automatable parameter, so with
-    the window following the layout a host automation lane RESIZES THE PLUGIN WINDOW while you
-    play. Holding the height takes that away entirely — but a lone block stretched over both rows
-    may read as empty, which is why this is a switch and not a decision. */
-inline const juce::Identifier growBlocks { "grow_blocks" };
-
 /** The analysers — the consoles' ground, the cabinet's pair, the TONE tile's columns. One switch
     for all of them, read where a spectrum is about to be drawn: cached after the first look,
     because a paint routine must not open a file. Each cache here is the product's own (PerProduct). */

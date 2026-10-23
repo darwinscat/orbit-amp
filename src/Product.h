@@ -74,6 +74,11 @@ struct Product
         each of those parameters declares that as its default (params::Opening). None for OrbitAmp, which
         opens where the engine does. */
     void (*opening) (const Product&, params::Opening&) = nullptr;
+
+    /** WHETHER ITS TUNER HAS AN ON OF ITS OWN (`params::tunerOn`). The rovers' and the cockpit's do, in
+        their menus. OrbitAmp's listens always: its face has no switch for it, and a tuner left off in
+        an old session would be off with nothing anywhere to turn it back on. */
+    bool tunerSwitch = true;
 };
 
 /** EVERY AMP OF THE FAMILY, each defined in its own file (above). A binary links the ones it plays. */

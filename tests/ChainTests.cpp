@@ -36,6 +36,19 @@ static const orbitamp::Product& gateAmp()
     return quiet;
 }
 
+// The same, with a tuner that has an ON of its own — as the rovers' and the cockpit's have
+// (Product::tunerSwitch). OrbitAmp's listens always.
+static const orbitamp::Product& switchedTunerAmp()
+{
+    static const orbitamp::Product switched = []
+    {
+        auto p = gateAmp();
+        p.tunerSwitch = true;
+        return p;
+    }();
+    return switched;
+}
+
 #include <felitronics/core/StreamResampler.h>
 
 #include <algorithm>
@@ -1318,7 +1331,7 @@ int main()
 
         set (*b, orbitamp::params::stereoMode, 0.0f);
         set (*b, orbitamp::params::cabOn, 1.0f);
-        set (*b, orbitamp::params::preampPresent, 0.0f);
+        set (*b, orbitamp::params::preampOn, 0.0f);
         settleCabinet (*b);
         const auto own = run (*b);
         b->chooseCabFactory (0);
@@ -1870,8 +1883,8 @@ int main()
             p->inlineLoads = true;
             set (*p, orbitamp::params::stereoMode, 0.0f);
             set (*p, orbitamp::params::cabOn, 1.0f);
-            set (*p, orbitamp::params::preampPresent, 0.0f);
-            set (*p, orbitamp::params::delayPresent,  0.0f);
+            set (*p, orbitamp::params::preampOn, 0.0f);
+            set (*p, orbitamp::params::delayOn,  0.0f);
             set (*p, orbitamp::params::cabLpfOn, cut ? 1.0f : 0.0f);
             set (*p, orbitamp::params::cabLpfHz, 1200.0f);
 
@@ -2015,11 +2028,9 @@ int main()
 
             set (*c, orbitamp::params::stereoMode, 0.0f);
             for (const auto* id : { orbitamp::params::gateOn, orbitamp::params::delayOn, orbitamp::params::reverbOn,
-                                    orbitamp::params::cabOn, orbitamp::params::limiterOn,
-                                    orbitamp::params::gatePresent, orbitamp::params::delayPresent,
-                                    orbitamp::params::reverbPresent, orbitamp::params::cabPresent })
+                                    orbitamp::params::cabOn, orbitamp::params::limiterOn })
                 set (*c, id, 1.0f);
-            set (*c, orbitamp::params::preampPresent, 0.0f);
+            set (*c, orbitamp::params::preampOn, 0.0f);
             set (*c, orbitamp::params::gateThreshold, -70.0f);   // the tone stays open
 
             juce::AudioBuffer<float> buf (2, blockSize);
@@ -2110,7 +2121,7 @@ int main()
             set (*c, orbitamp::params::stereoMode, 0.0f);
             for (const auto* id : { orbitamp::params::delayOn, orbitamp::params::reverbOn, orbitamp::params::cabOn })
                 set (*c, id, 1.0f);
-            set (*c, orbitamp::params::preampPresent, 0.0f);
+            set (*c, orbitamp::params::preampOn, 0.0f);
 
             juce::MidiBuffer midi;
             std::vector<float> out;
@@ -2180,9 +2191,9 @@ int main()
             set (*c, orbitamp::params::stereoMode, 0.0f);
             set (*c, orbitamp::params::reverbOn, 1.0f);
             set (*c, orbitamp::params::reverbMix, 100.0f);
-            set (*c, orbitamp::params::preampPresent, 0.0f);
-            set (*c, orbitamp::params::cabPresent,    0.0f);
-            set (*c, orbitamp::params::delayPresent,  0.0f);
+            set (*c, orbitamp::params::preampOn, 0.0f);
+            set (*c, orbitamp::params::cabOn,    0.0f);
+            set (*c, orbitamp::params::delayOn,  0.0f);
 
             if (poisonDecay)
                 c->apvts.getParameter (orbitamp::params::reverbDecay)
@@ -2221,20 +2232,22 @@ int main()
     }
 
     // THE TUNER'S MUTE: silence at the jack while the tuner works, and not a sample of it while the
-    // tuner stands by — a link's action in STANDBY is ignored. A quiet tone through a chain with
-    // nothing that needs a pack; the last block of each run is what the jack puts out.
+    // tuner stands by — a link's action in STANDBY is ignored. OrbitAmp's tuner has no standby: a
+    // tuner_on left off in an old session must not switch its mute away. A quiet tone through a
+    // chain with nothing that needs a pack; the last block of each run is what the jack puts out.
     //
     // Nothing that rings, either: the echo and the room grow louder with every run the tone goes
     // on, so a third run came out a few per cent over the first with no mute anywhere near it —
     // under the tolerance through BIG BUBBA, and over it through a cabinet 3.7 dB louder at 220 Hz.
     // Without them the two runs are the same number.
+    for (const bool switched : { false, true })
     {
-        const auto m = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
+        const auto m = std::make_unique<orbitamp::AmpProcessor> (switched ? switchedTunerAmp() : gateAmp());
         m->prepareToPlay (sampleRate, blockSize);
         set (*m, orbitamp::params::stereoMode, 0.0f);
-        set (*m, orbitamp::params::preampPresent, 0.0f);
-        set (*m, orbitamp::params::delayPresent,  0.0f);
-        set (*m, orbitamp::params::reverbPresent, 0.0f);
+        set (*m, orbitamp::params::preampOn, 0.0f);
+        set (*m, orbitamp::params::delayOn,  0.0f);
+        set (*m, orbitamp::params::reverbOn, 0.0f);
 
         juce::AudioBuffer<float> buf (2, blockSize);
         juce::MidiBuffer midi;
@@ -2264,10 +2277,15 @@ int main()
         set (*m, orbitamp::params::tunerOn, 0.0f);
         const float standby = lastBlockPeak();
 
-        report ("tuner mute: the jack goes silent",            open > 0.01f && muted == 0.0f,
-                juce::String (open, 3) + " -> " + juce::String (muted, 5));
-        report ("...and a tuner standing by does not mute",   std::abs (standby - open) < 0.01f,
-                juce::String (standby, 3));
+        report (switched ? "tuner mute, a tuner with a switch: the jack goes silent"
+                         : "tuner mute: the jack goes silent",
+                open > 0.01f && muted == 0.0f, juce::String (open, 3) + " -> " + juce::String (muted, 5));
+        if (switched)
+            report ("...and a tuner standing by does not mute", std::abs (standby - open) < 0.01f,
+                    juce::String (standby, 3));
+        else
+            report ("...OrbitAmp's tuner has no standby: a tuner_on left off still mutes", standby == 0.0f,
+                    juce::String (standby, 5));
     }
 
     // A SAVE FROM A HOST'S WORKER THREAD hands out the session the message thread wrote down, and
@@ -2834,14 +2852,7 @@ int main()
 
     // The input trim, through the whole plugin: a linear gain ahead of everything, so on a bare
     // wire it must arrive as exactly itself.
-    //
-    // IN has to be put in the RIG first. It is not there out of the box any more — the volumes
-    // that matter are the captured blocks' own, and a global input fader is a thing a player
-    // reaches for when a rig needs fixing. A trim that is not in the rig is not applied, which is
-    // the whole point of the switch, so a test that did not ask for it was testing the default
-    // rather than the trim.
     {
-        set (amp, orbitamp::params::inPresent, 1.0f);
         set (amp, orbitamp::params::inTrim, 0.0f);
         const auto unity = run (amp);
 
@@ -2908,19 +2919,22 @@ int main()
     }
 
     // The three channel modes. MONO: one chain, the copy after everything — the channels are
-    // identical. STEREO SPACE: mono up to the reverb, stereo from it — with the reverb in the rig
-    // the two channels differ (the space is wide), with it OUT of the rig they are identical (the
-    // copy at the seam feeds the cabinet the same signal). Measured on the plugin's own output,
-    // both channels kept.
+    // identical. STEREO SPACE: mono up to the reverb, stereo from it — with the reverb sounding
+    // the two channels differ (the space is wide), with it silent they are identical (the copy at
+    // the seam feeds the cabinet the same signal). Measured on the plugin's own output, both
+    // channels kept.
     //
-    // Out of the RIG, not merely standing by: standing by is the insert's bypass, and a bypassed
+    // Silent at MIX 0, not merely standing by: standing by is the insert's bypass, and a bypassed
     // room rings out instead of being cut, so its tail would still be spreading the channels for
     // as long as it takes to decay. That is the next check's job, not this one's.
     {
+        auto* mixP = amp.apvts.getParameter (orbitamp::params::reverbMix);
+        const float mixWas = mixP->getValue();
+
         const auto runBoth = [&] (float mode, bool reverbIn)
         {
             set (amp, orbitamp::params::stereoMode, mode);
-            set (amp, orbitamp::params::reverbPresent, reverbIn ? 1.0f : 0.0f);
+            mixP->setValueNotifyingHost (reverbIn ? mixWas : 0.0f);
             set (amp, orbitamp::params::reverbOn, 1.0f);
             set (amp, orbitamp::params::limiterOn, 0.0f);
 
@@ -2966,9 +2980,10 @@ int main()
                 differencePercent (spaceWet.first, spaceWet.second) > 1.0
                     && rms (spaceWet.second) > 1.0e-4,
                 juce::String (differencePercent (spaceWet.first, spaceWet.second), 2) + "% apart");
-        report ("...and with the reverb out of the rig they are one signal again",
+        report ("...and with the reverb silent they are one signal again",
                 differencePercent (spaceDry.first, spaceDry.second) < 0.01);
 
+        mixP->setValueNotifyingHost (mixWas);
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
     }
 
@@ -2981,7 +2996,6 @@ int main()
     // that says which of the two the plugin is.
     {
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::stereoSpace);
-        set (amp, orbitamp::params::reverbPresent, 1.0f);
         set (amp, orbitamp::params::reverbOn, 1.0f);
         set (amp, orbitamp::params::limiterOn, 0.0f);
 
@@ -3049,7 +3063,6 @@ int main()
     // of the signal, which is an order of magnitude more and is what a click IS.
     {
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
-        set (amp, orbitamp::params::cabPresent, 1.0f);
         set (amp, orbitamp::params::cabOn, 1.0f);
         set (amp, orbitamp::params::limiterOn, 0.0f);
 
@@ -3100,7 +3113,6 @@ int main()
     // click. Driven hard enough to be gripping, then switched off mid-note.
     {
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
-        set (amp, orbitamp::params::limitPresent, 1.0f);
         set (amp, orbitamp::params::limiterOn, 1.0f);
         set (amp, orbitamp::params::limiterCeiling, -6.0f);
 
@@ -3277,9 +3289,7 @@ int main()
                 for (const char* off : { orbitamp::params::preampOn,
                                          orbitamp::params::gateOn,    orbitamp::params::delayOn,
                                          orbitamp::params::reverbOn,  orbitamp::params::cabOn,
-                                         orbitamp::params::limiterOn, orbitamp::params::delayPresent,
-                                         orbitamp::params::reverbPresent, orbitamp::params::cabPresent,
-                                         orbitamp::params::gatePresent })
+                                         orbitamp::params::limiterOn })
                     set (hi, off, 0.0f);
             };
 
@@ -3512,9 +3522,7 @@ int main()
                 for (const char* off : { orbitamp::params::preampOn,
                                          orbitamp::params::gateOn,    orbitamp::params::delayOn,
                                          orbitamp::params::reverbOn,  orbitamp::params::cabOn,
-                                         orbitamp::params::limiterOn, orbitamp::params::delayPresent,
-                                         orbitamp::params::reverbPresent, orbitamp::params::cabPresent,
-                                         orbitamp::params::gatePresent })
+                                         orbitamp::params::limiterOn })
                     set (late, off, 0.0f);
 
                 juce::AudioBuffer<float> b (2, blockSize);
@@ -3594,93 +3602,59 @@ int main()
         }
 
     // WHAT THE PLUGIN TELLS A HOST ABOUT ITS OWN TAIL. It used to be a flat eight seconds, which
-    // is wrong in both directions: a big room rings longer than that, a long echo very much
-    // longer, and a rig with none of the ringing links in it rings for no time at all while the
-    // host renders eight seconds of silence onto every bounce.
+    // is wrong one way: a big room rings longer than that, a long echo very much longer. The echo,
+    // the room and the speaker always stand in the chain now, so the answer is their sum — floored
+    // at the old eight, capped at thirty.
     {
         const auto tailOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         auto& amp = *tailOwned;
         amp.prepareToPlay (sampleRate, blockSize);
 
-        const auto tailWith = [&amp] (bool delayIn, bool reverbIn, bool cabIn)
+        // The stages take their settings from the pump, not from the parameter write.
+        const auto settle = [&amp]
         {
-            set (amp, orbitamp::params::delayPresent,  delayIn  ? 1.0f : 0.0f);
-            set (amp, orbitamp::params::reverbPresent, reverbIn ? 1.0f : 0.0f);
-            set (amp, orbitamp::params::cabPresent,    cabIn    ? 1.0f : 0.0f);
+            for (int i = 0; i < 8; ++i)
+            {
+                juce::AudioBuffer<float> b (2, blockSize);
+                juce::MidiBuffer m;
+                b.clear();
+                amp.processBlock (b, m);
+            }
             return amp.getTailLengthSeconds();
         };
 
-        // A HALL breathing at double: room 0.98, 0.974 per pass round a 37.2 ms comb.
-        set (amp, orbitamp::params::reverbType, 2.0f);   // Hall
-        set (amp, orbitamp::params::reverbDecay, 2.0f);
+        // A short room and a short echo: well under eight.
+        set (amp, orbitamp::params::reverbType, 0.0f);
+        set (amp, orbitamp::params::reverbDecay, 0.5f);
         set (amp, orbitamp::params::reverbPredelay, 0.0f);
-
-        // Two seconds of echo, and NO repeats: one echo, so the delay's own tail is exactly its
-        // time — the number that makes the serial sum easy to read.
         set (amp, orbitamp::params::delaySync, 0.0f);
-        set (amp, orbitamp::params::delayTimeMs, 2000.0f);
+        set (amp, orbitamp::params::delayTimeMs, 20.0f);
         set (amp, orbitamp::params::delayRepeats, 0.0f);
         set (amp, orbitamp::params::delayOffset, 0.0f);
+        const double shortRig = settle();
 
-        // The stages take their settings from the pump, not from the parameter write.
-        for (int i = 0; i < 8; ++i)
-        {
-            juce::AudioBuffer<float> b (2, blockSize);
-            juce::MidiBuffer m;
-            b.clear();
-            amp.processBlock (b, m);
-        }
-
-        const double bare  = tailWith (false, false, false);
-        const double spkr  = tailWith (false, false, true);
-        const double room  = tailWith (false, true,  false);
-        const double echo  = tailWith (true,  false, false);
-        const double two   = tailWith (true,  true,  false);
+        // A HALL breathing at double: room 0.98, 0.974 per pass round a 37.2 ms comb — and two
+        // seconds of echo with NO repeats, one echo, so the delay's own tail is exactly its time.
+        set (amp, orbitamp::params::reverbType, 2.0f);   // Hall
+        set (amp, orbitamp::params::reverbDecay, 2.0f);
+        set (amp, orbitamp::params::delayTimeMs, 2000.0f);
+        const double two = settle();
 
         set (amp, orbitamp::params::delayRepeats, 95.0f);
-        for (int i = 0; i < 4; ++i)
-        {
-            juce::AudioBuffer<float> b (2, blockSize);
-            juce::MidiBuffer m;
-            b.clear();
-            amp.processBlock (b, m);
-        }
-        const double runaway = tailWith (true, true, true);
+        const double runaway = settle();
 
-        std::printf ("\ntail: nothing %.2f | speaker %.2f | room %.2f | echo %.2f | echo+room %.2f"
-                     " | 95%% repeats %.2f  (seconds)\n", bare, spkr, room, echo, two, runaway);
+        std::printf ("\ntail: short %.2f | echo+hall %.2f | 95%% repeats %.2f  (seconds)\n",
+                     shortRig, two, runaway);
 
-        report ("nothing that rings asks the host for nothing", bare < 0.5,
-                juce::String (bare, 2) + " s");
-        // ...exactly as long as the shipping cabinet's file is. Over half a second, this used to say:
-        // true of BIG BUBBA's second and a quarter, and not of DARK MATTER's 4096 samples, which is
-        // as much as that cabinet goes on saying.
-        const double impulse = []
-        {
-            const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault);
-            juce::AudioFormatManager formats;
-            formats.registerFormat (new juce::WavAudioFormat(), true);
-            const std::unique_ptr<juce::AudioFormatReader> reader (
-                formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (shelf.data, (size_t) shelf.size, false)));
-            return reader != nullptr ? (double) reader->lengthInSamples / reader->sampleRate : 0.0;
-        }();
-
-        report ("the speaker alone asks for its own impulse", impulse > 0.0 && std::abs (spkr - (bare + impulse)) < 1.0e-3,
-                juce::String (spkr, 3) + " s, the impulse " + juce::String (impulse, 3) + " s of it");
-        report ("a hall at double decay outlives the old eight", room > 9.0 && room < 12.0,
-                juce::String (room, 2) + " s");
-        // Nothing can tell a host this number moved, so while a link that CAN be set to ring long
-        // is in the rig the answer never drops below the flat eight that shipped before it. A
-        // single two-second echo is really 2.1; a host that asked once and cached it would be
-        // told 8, which is what it used to be told anyway.
-        report ("a link that can ring long never asks below the old eight",
-                echo >= 8.0 && echo < 8.01, juce::String (echo, 2) + " s");
+        // Nothing can tell a host this number moved, so the answer never drops below the flat eight
+        // that shipped before it.
+        report ("a short rig never asks below the old eight", shortRig >= 8.0 && shortRig < 8.01,
+                juce::String (shortRig, 2) + " s");
 
         // The links are in SERIES: the echo is what the room rings ABOUT, so the two add rather
-        // than compete. Taking the longest of them would report the room's number and cut the
-        // echo's own two seconds off the end of every bounce.
-        report ("an echo into a room asks for both, not the longer", two > room + 1.5,
-                juce::String (two, 2) + " s vs " + juce::String (room, 2));
+        // than compete. A hall at double alone is over nine; with the echo it is past eleven.
+        report ("an echo into a hall asks for both, not the longer", two > 11.0 && two < 30.0,
+                juce::String (two, 2) + " s");
         report ("and never more than the cap, however long it rings", runaway <= 30.0 + 1.0e-6,
                 juce::String (runaway, 2) + " s");
     }

@@ -43,21 +43,8 @@ struct LoadBreakdown final : public juce::Component,
         startTimerHz (15);
     }
 
-    /** THE LIST IS THE RIG. A link out of the rig has no cost entry, because it has no cost:
-        it is not in the chain at all. A link STANDING BY keeps its row and keeps its real
-        number — a bypassed insert costs what it costs in any DAW — but reads faint, which is
-        the useful truth: the bypass bought you nothing, and taking it out of the rig will. */
-    bool stageInRig (int stage) const
-    {
-        const int row = params::rowForStage ((params::Stage) stage);
-
-        if (row >= params::numChainRows)
-            return true;                     // TOTAL belongs to nobody and is always there
-
-        const auto* p = amp.apvts.getParameter (params::chainLinks[(size_t) row].presentParam);
-        return p == nullptr || p->getValue() > 0.5f;
-    }
-
+    /** A link STANDING BY keeps its row and its real number — a bypassed insert costs what it
+        costs in any DAW — but reads faint: the bypass bought you nothing. */
     bool stageWorking (int stage) const
     {
         const int row = params::rowForStage ((params::Stage) stage);
@@ -103,9 +90,6 @@ struct LoadBreakdown final : public juce::Component,
 
         for (int i = 0; i < AmpProcessor::numStages; ++i)
         {
-            if (! stageInRig (i))
-                continue;
-
             t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", stageName (i, true).toRawUTF8(),
                                           amp.stageLoad[i].load(), amp.stageWorst[i].load());
         }
@@ -163,9 +147,6 @@ struct LoadBreakdown final : public juce::Component,
 
         for (int i = 0; i < AmpProcessor::numStages; ++i)
         {
-            if (! stageInRig (i))
-                continue;
-
             auto row = r.removeFromTop (rowH);
             const float v = amp.stageLoad[i].load();
             const bool total   = i == AmpProcessor::stTotal;

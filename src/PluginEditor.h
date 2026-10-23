@@ -39,25 +39,12 @@ public:
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    /** The limiter's whole console, opened from its arrow. The OUT trim's RESET used to ride
-        along when this opened from the COLUMN; the column has no menu of its own any more, and
-        the trim's reset is its own double-click. */
+    /** The limiter's whole console. */
     void showLimiterMenu (juce::Point<int> screenPos);
     void showInputMenu (juce::Point<int> screenPos);
 
-    /** The strip's checklist: which links are in the rig at all, and — after the separator — the
-        two switches that decide what an emptied row does to the window. */
-    void showChainMenu (juce::Component& anchor);
-
-    /** Re-read the window preferences and lay the editor out to match. Setup's VIEW page and the
-        strip's checklist both write the same prefs, so they both come through here — the panel
-        must not have two opinions about what a pref means. */
+    /** Re-read the window preferences (Setup's VIEW page) and lay the editor out to match. */
     void applyViewPrefs();
-
-
-    /** What the two switches of every row mean to the WINDOW — the tiles, the two columns and
-        the tuner's row — read in one place after any of them moves. */
-    void applyRowStates();
 
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
@@ -141,28 +128,17 @@ private:
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }
 
-    /** One attachment per chain link that HAS a switch, guards included — built in one loop off
-        `params::chainLinks`. Wherever a switch moves — the strip, an undo, a preset, a register,
-        automation — the arrow and, for a link with a face, the panel follow. */
+    /** One attachment per arrow in the strip — built in one loop off `params::chainLinks`.
+        Wherever a switch moves — the strip, an undo, a preset, a register, automation — the arrow
+        follows. */
     std::vector<std::unique_ptr<juce::ParameterAttachment>> blockRowAtts;
-
-    /** Whether the two columns and the tuner's row stand on the panel. Not preferences any more:
-        `applyRowStates` reads them off the same two switches every other link answers to. */
-    bool inColStands  = true;
-    bool outColStands = true;
-    bool tunerStands  = true;
-
-    /** How a link standing by is SHOWN: removed from the panel, or left in place and dimmed. The
-        eye's business, not the sound's — a machine preference. Wired to its switch in the step
-        that gives it one; until then the panel does what it has always done. */
-    bool dimRatherThanRemove = false;
 
     /** The window's size to come back to when the full-screen button is pressed the second time;
         empty while nothing is remembered. */
     juce::Rectangle<int> sizeBeforeFull;
 
-    /** The zoom the window stands at, from its height — kept so a row that leaves or returns
-        resizes the window at the zoom and the width it already has. */
+    /** The zoom the window stands at, from its height — kept so a strip shown or hidden under the
+        footer resizes the window at the zoom and the width it already has. */
     float zoomNow = AmpProcessor::preferredScale;
 
     /** After a strip is switched: the range the corner keeps, the limits, and the window itself,
@@ -184,8 +160,8 @@ private:
     FaceplateView faceplate;        // the whole chain, five blocks in two rows
 
     /** The layout strip — the chain laid flat between the toolbar and the device, always there:
-        the ONE place blocks are stood down and brought back. Built in the constructor because
-        its rows come from a table the header cannot see. */
+        the ONE place blocks are stood by and brought back. Built in the constructor because its
+        rows come from a table the header cannot see. */
     std::unique_ptr<LayoutStrip> layoutStrip;
     /** The gate, with no face of its own — its door is the strip's arrow. DECLARED BEFORE the
         overlay on purpose: the overlay draws LEARN's trace from a pointer into this object, and
