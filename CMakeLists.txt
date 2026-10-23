@@ -981,8 +981,8 @@ set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch P
 set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
 
 # A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
-# installer/family.ini names; the packs only an amp it leaves out plays — today FrostPawAmp's ReVolt and
-# AmberPawAmp's V4 — are not OrbitAmp's there either, so they wait for their own amp. Built here, OrbitAmp
+# installer/family.ini names; the packs only an amp it leaves out plays — today AmberPawAmp's V4 — are not
+# OrbitAmp's there either, so they wait for their own amp. Built here, OrbitAmp
 # plays them all.
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini" ORBITAMP_RELEASED REGEX "^amps=")
 string(REGEX REPLACE "^amps=" "" ORBITAMP_RELEASED "${ORBITAMP_RELEASED}")
@@ -1373,8 +1373,7 @@ add_amp(RedPawAmp     CODE Rdpw    BY_NAME
 # ice-blue rings. The same controls, the gears and TURBO: the rover's, shared, not copied — over channels of
 # its own, six on the ReVolt Guitar's three packs in three gears, and the rovers' cabinets; its set under
 # its own list in the family's folder (src/channels/Set.h), where a file another product plays too is one
-# file. Not in the family's release yet (installer/family.ini), so none of it is in the release's factory
-# folder.
+# file. In the family's release from 0.9.0 (installer/family.ini).
 add_amp(FrostPawAmp   CODE Frpw    BY_NAME
     ART       ${FROSTPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp
