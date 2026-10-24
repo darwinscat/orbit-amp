@@ -973,16 +973,21 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
 
     // ---- section 2: the lever, as tall as the picture beside it, and BOOST under it — or nothing
     //      there, for an empty block: the place stays, the sections do not close up. ----
+    //      The lever reaches down to just over BOOST's place, not only as far as the picture: the
+    //      console's row grew its numbers and the picture got shorter (Oleh, 24.10). ----
+    const auto boostBox = strip2.withSizeKeepingCentre (juce::jmin (strip2.getWidth(), boostKey.idealWidth()),
+                                                        LatchKey::keyH);
+
     if (lever != nullptr)
     {
         const int w = juce::jmin (s2.getWidth(), juce::roundToInt (ChannelLever::idealWidth (lever->channelNames())) + 2);
-        lever->setBounds (s2.withSizeKeepingCentre (w, s2.getHeight()));
+        const auto reach = s2.withBottom (boostBox.getY() - leverGap);
+        lever->setBounds (reach.withSizeKeepingCentre (w, reach.getHeight()));
     }
 
     boostKey.setVisible (boostShown);
     if (boostShown)
-        boostKey.setBounds (strip2.withSizeKeepingCentre (juce::jmin (strip2.getWidth(), boostKey.idealWidth()),
-                                                         LatchKey::keyH));
+        boostKey.setBounds (boostBox);
 }
 
 float CapturedBlockPanel::pickWordWidth (const PickSlot& sel)
