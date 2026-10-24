@@ -213,6 +213,9 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     addChildComponent (inRuler);    // went missing with the ceiling's ruler: a ladder with no
     addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
 
+    inColumn.showGuard  (*p.apvts.getParameter (params::gateThreshold),  *p.apvts.getParameter (params::gateOn));
+    outColumn.showGuard (*p.apvts.getParameter (params::limiterCeiling), *p.apvts.getParameter (params::limiterOn));
+
     inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
     outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
