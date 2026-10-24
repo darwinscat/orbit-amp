@@ -22,8 +22,8 @@ namespace orbitamp
     As narrow as its name on the border allows: the name and the gap the line keeps either side of
     it, between the frame's rounded corners.
 
-    The gate's block stays in reach while off: its rail's OFF stop is one of its ways off, and a
-    rail dragged out of it is the way back on. */
+    A guard's block stays in reach while off: its rail dragged is a way back on — the gate's out of
+    its OFF stop, the limiter's anywhere. */
 class GuardBlock final : public BlockFrame
 {
 public:
@@ -36,7 +36,7 @@ public:
           lamp ({}, onParam, std::move (pressDepth), workedLatch)
     {
         showTitle      = false;       // written centred on the border here, not at the frame's left
-        shieldsWhenOff = ! footIsOff;
+        shieldsWhenOff = false;       // dark, and still in reach: a drag switches it back on
 
         addAndMakeVisible (rail);
         addAndMakeVisible (lamp);

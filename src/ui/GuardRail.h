@@ -20,9 +20,8 @@ namespace orbitamp
     The value runs linearly from `lo` at the rail's foot to `hi` at its head, over the rail less the
     columns' own inset.
 
-    `offAtFoot`: the foot of the rail is OFF — the gate's way out. Dragged into it, the guard's
-    switch goes off; dragged out of it, on. Without it the switch only dims the rail (the limiter's
-    is its arrow in the strip).
+    A drag switches the guard on: the hand moved is the guard wanted (Oleh, 24.10). `offAtFoot`: the
+    foot of the rail is OFF — the gate's way out — and dragged into it, the guard goes off.
 
     While it is dragged, the guard's own ruler is summoned beside it (onDrag), the way the columns
     summon theirs.
@@ -168,8 +167,7 @@ private:
         const float v    = lo + (s.getBottom() - y) / juce::jmax (1.0f, s.getHeight()) * (hi - lo);
 
         valueAtt->setValueAsPartOfGesture (juce::jlimit (range.start, range.end, v));
-        if (offAtFoot)
-            onAtt->setValueAsPartOfGesture (1.0f);
+        onAtt->setValueAsPartOfGesture (1.0f);
     }
 
     juce::RangedAudioParameter& valueP;

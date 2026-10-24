@@ -470,8 +470,8 @@ protected:
         its CONTENT (word, flood) do the talking. */
     float borderAlpha = 1.0f;
 
-    /** Off: a dark block stays in reach. For the one block whose own hand is its way back on — the
-        gate's rail, dragged out of its OFF stop (GuardBlock.h). */
+    /** Off: a dark block stays in reach. For the blocks whose own hand is their way back on — the
+        guards', whose rails switch them on when dragged (GuardBlock.h). */
     bool shieldsWhenOff = true;
 
 private:
