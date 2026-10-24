@@ -15,8 +15,8 @@ namespace orbitamp
 
     Inside, the guard's small rail — the threshold, the ceiling — at the block's edge toward the
     window's, its fixed scale beside it toward the centre (the gate's rail left, the limiter's right:
-    `railOnLeft`), and its lamp under the rail, a square flooding while the guard presses, the orange
-    dot when it worked unseen. Its name rides the
+    `railOnLeft`), and its lamp under both, a plate as wide as the block flooding while the guard
+    presses, the orange dot when it worked unseen. Its name rides the
     border, centred, the way the wide blocks carry theirs. A click anywhere on it, either button, is
     the guard's menu; only a drag on the rail moves its hand (Oleh, 24.10). Its arrow in the strip
     switches it, and a guard switched off dims in place like every block.
@@ -74,10 +74,12 @@ protected:
         nameBox        = juce::Rectangle<int> (w, (int) titleHeight + 6).withCentre ({ box.getCentreX(), box.getY() });
         borderSlotUsed = nameBox;
 
-        // The rail, and its lamp under it as wide as it is, at the outer edge; the scale beside them.
+        // The lamp across the block's whole width at its foot (Oleh, 24.10); above it the rail at the
+        // outer edge, the scale beside it.
+        lamp.setBounds (r.removeFromBottom (GuardRail::designWidth));
+        r.removeFromBottom (lampGap);
+
         auto col = railOnLeft ? r.removeFromLeft (GuardRail::designWidth) : r.removeFromRight (GuardRail::designWidth);
-        lamp.setBounds (col.removeFromBottom (GuardRail::designWidth));
-        col.removeFromBottom (lampGap);
         rail.setBounds (col);
         scaleBox = r.withTop (col.getY()).withBottom (col.getBottom());
     }
