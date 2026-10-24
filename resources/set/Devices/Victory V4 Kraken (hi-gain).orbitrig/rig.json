@@ -11,7 +11,7 @@
                 "url": "https://www.victoryamps.com/product-category/amps/kraken/" },
       "tone_type": "hi-gain", "voicing": "dist", "circuit": "tube:4",
       "input_db": -7.0,
-      "output_db": 4.0,
+      "output_db": 6.0,
       "controls": [
         { "name": "Gain", "role": "gain", "sweep": 300,
           "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] },
