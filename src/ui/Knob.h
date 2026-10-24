@@ -56,6 +56,12 @@ public:
 
     static constexpr int valueRowH = 16;   // 13 px type, the floor, with air above and below
 
+    /** How far the number's line rides up into the dial's square — under the cap, between the ends of
+        the arc, where the square is empty anyway — so the number stands nearer its knob (Oleh, 24.10).
+        A block lays out valueRowH - valueLift under such a dial, not the whole line. */
+    int valueLift = 0;
+    static int snugLift (int dialSide) { return juce::roundToInt ((float) dialSide * 0.16f); }
+
     /** What a typed text means: by default the first number in it, so "35%" is 35. */
     std::function<double (const juce::String&)> valueForText = [] (const juce::String& t)
     {
@@ -126,6 +132,7 @@ public:
     /** The label row's type, overridable for a hero control whose NAME is part of the face —
         a zoomed block's one big decision reads at reading size, not at panel size. */
     float labelFontHeight = 8.0f;
+    float labelTracking   = 0.15f;
     int   labelRowHeight  = labelHeight;
 
     /** THE small dial: the EQ's bands. */
@@ -135,15 +142,21 @@ public:
         get room. */
     static constexpr int heroSide = 80;
 
-    /** The reverb's DECAY and PRE, the delay's REPEATS, DARK and OFFSET: one dial a little under the
+    /** The reverb's DECAY and PRE, the delay's REPS, DARK and OFFSET: one dial a little under the
         EQ's, so the delay's three fit beside its MIX in a quarter of the row (Oleh, 24.10). Each stands
-        in a slot as wide as its longest name, REPEATS, the dial centred in it. */
+        in a slot as wide as its longest name, OFFSET, the dial centred in it. */
     static constexpr int fxSide = 36;
     static constexpr int fxSlot = 40;
 
-    /** From one of those hands to the next, the delay's three and the reverb's two alike: as far as
-        three of them leave in a row this wide, the dials up to twelve apart. In a narrow block the
-        slots overlap at their empty edges before a name is cut. */
+    /** The names over the delay's and the reverb's hands: as big as OFFSET lets them be in its slot,
+        set a little tighter than the face's labels to get there (Oleh, 24.10: 7 and 8 px read too small). */
+    static constexpr float fxLabelH        = 10.0f;
+    static constexpr float fxLabelTracking = 0.06f;
+    static constexpr int   fxLabelRowH     = 13;
+
+    /** From one of the delay's three hands to the next: as far as three of them leave in a row this
+        wide, the dials up to twelve apart. In a narrow block the slots overlap at their empty edges
+        before a name is cut. */
     static int fxStep (int rowWidth) { return juce::jlimit (fxSide, fxSide + 12, (rowWidth - fxSlot) / 2); }
 
     void paint (juce::Graphics& g) override
@@ -152,10 +165,10 @@ public:
 
         g.setColour (theme::txDim);
         theme::drawTracked (g, label.toUpperCase(), r.removeFromTop (labelRowHeight).toFloat(),
-                            theme::displayFont (labelFontHeight), 0.15f, juce::Justification::centred);
+                            theme::displayFont (labelFontHeight), labelTracking, juce::Justification::centred);
 
         if (valueRow)
-            r.removeFromBottom (valueRowH);   // the number's own line: its field draws it
+            r.removeFromBottom (valueRowH - valueLift);   // the number's own line: its field draws it
 
         const float d = (float) juce::jmin (r.getWidth(), r.getHeight());
         const juce::Point<float> c { (float) r.getCentreX(), (float) r.getCentreY() };

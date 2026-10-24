@@ -21,8 +21,8 @@ class AmpProcessor;
     the block's OWN.
 
     LAID OUT AS THE REVERB IS, to the unit: the picture takes the whole box and the hands ride its
-    top. MIX is the hero, the reverb's MIX in the reverb's place at the reverb's size; REPEATS, DARK
-    and OFFSET stand small at its left hand, each the size of the reverb's DECAY and PRE — how many,
+    top. MIX is the hero, the reverb's MIX in the reverb's place at the reverb's size; REPS (the
+    repeats), DARK and OFFSET stand small at its left hand, each the size of the reverb's DECAY and PRE — how many,
     how dark, how wide, in the loop's own order. Under those three, one line: the one typed control
     on the face — the BPM field (which reads HOST and the host's tempo, and does not move, while the
     host conducts), turning into the MS field when the time goes free — and, in the standalone,
@@ -218,7 +218,7 @@ private:
 
     VoicingSelector timeSel;
     Knob mix     { "Mix",     theme::violet, 0 };
-    Knob repeats { "Repeats", theme::violet, 0 };
+    Knob repeats { "Reps",    theme::violet, 0 };   // REPEATS, short enough for a bigger name (Oleh, 24.10)
     Knob dark    { "Dark",    theme::violet, 0 };
     Knob offset  { "Offset",  theme::violet, 0 };
 
