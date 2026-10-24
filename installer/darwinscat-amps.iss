@@ -5,7 +5,7 @@
 ;
 ;   VST3        → Common Files\VST3\<bundle>.vst3
 ;   CLAP        → Common Files\CLAP\<bundle>.clap
-;   Standalone  → Program Files\Darwin's Cat Amps\<Amp>.exe, with a Start-menu entry
+;   Standalone  → Program Files\Darwin's Cat Amps\<Amp>.exe, with a Start-menu entry in Darwin's Cat\
 ;
 ; The amps, the plug-ins' name (<bundle>, "Darwin's Cat Amps") and the target that builds them come from
 ; installer\family.ini: taking an amp into the family is a line there, not here. Every amp keeps its
@@ -136,8 +136,13 @@ Name: "standalone\{#Low}"; Description: "{#Amp}"; Types: full
 [Files]
 Source: "{#Rel}\Standalone\{#Amp}.exe"; DestDir: "{app}"; Flags: ignoreversion; Components: standalone\{#Low}
 
+; The Start menu holds the family in a folder of its own, as /Applications does on the Mac (Darwin's Cat\
+; <Amp>); the shortcut of the same name an earlier installer left in Programs itself goes.
+[InstallDelete]
+Type: files; Name: "{autoprograms}\{#Amp}.lnk"; Components: standalone\{#Low}
+
 [Icons]
-Name: "{autoprograms}\{#Amp}"; Filename: "{app}\{#Amp}.exe"; Components: standalone\{#Low}
+Name: "{autoprograms}\{#AppPublisher}\{#Amp}"; Filename: "{app}\{#Amp}.exe"; Components: standalone\{#Low}
 #endsub
 
 #for {Left = Amps + " "; Left != ""; Left = AfterAmp(Left)} AmpEntries
