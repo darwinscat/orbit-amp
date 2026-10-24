@@ -153,14 +153,26 @@ void FaceplateView::resized()
         row1.removeFromLeft (colGap);
     }
 
+    lay (row1, { Block::preamp });
+
+    // Row two in thirds — the delay's, the reverb's, and the last shared by the cabinet and the
+    // limiter, the limiter's width taken from the cabinet's (Oleh, 24.10).
     if (! row2.isEmpty())
     {
+        const int third = (row2.getWidth() - 2 * colGap) / 3;
+
+        for (auto* b : { (BlockFrame*) &delay, (BlockFrame*) &reverb })
+        {
+            b->setVisible (true);
+            b->setBounds (row2.removeFromLeft (third));
+            row2.removeFromLeft (colGap);
+        }
+
         limit.setBounds (row2.removeFromRight (GuardBlock::designWidth));
         row2.removeFromRight (colGap);
+        cabinet.setVisible (true);
+        cabinet.setBounds (row2);
     }
-
-    lay (row1, { Block::preamp });
-    lay (row2, { Block::delay, Block::reverb, Block::cabinet });
 
     // Their ladders stand beside their rails, toward the blocks they guard, the rails' own height.
     const auto railOf = [] (GuardBlock& b) { return b.slider().getBounds() + b.getPosition(); };
