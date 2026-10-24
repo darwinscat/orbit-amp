@@ -10,6 +10,7 @@ namespace orbitamp
 
 /** A faceplate knob. The value is drawn ON the face — no separate readout box — because the number
     is the amp-panel setting, not a parameter dump: the knob answers "where is it set" at a glance.
+    On the face's own knobs it stands UNDER the dial instead, and is typed there (setValueRowShown).
 
     A juce::Slider underneath, so host automation, keyboard, and APVTS attachments come for free;
     only the drawing is ours. Double-click returns to the parameter's default. */
@@ -23,6 +24,56 @@ public:
         setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
         setRotaryParameters (startAngle, endAngle, true);
         setVelocityBasedMode (false);
+
+        addChildComponent (valueField);
+        valueField.onTextChange = [this]
+        {
+            // The field keeps no text of its own: the knob's value is the text, so the same number
+            // typed twice in a row is still a number typed.
+            const auto typed = valueField.getText();
+            valueField.setText ({}, juce::dontSendNotification);
+
+            if (typed.containsAnyOf ("0123456789"))
+                setValue (valueForText (typed), juce::sendNotificationSync);   // the range clamps it
+
+            repaint();
+        };
+    }
+
+    /** THE VALUE UNDER THE DIAL (Oleh, 24.10): the knob's number written under it at reading size, and
+        typed there — a click on it opens a field, Enter writes, Esc leaves the knob as it was. The
+        number then leaves the dial, unless `valueInDial` keeps it there too: GAIN's, the amp's
+        setting at a glance. */
+    void setValueRowShown (bool shown)
+    {
+        valueRow = shown;
+        valueField.setVisible (shown);
+        resized();
+        repaint();
+    }
+
+    bool valueInDial = true;
+
+    static constexpr int valueRowH = 16;   // 13 px type, the floor, with air above and below
+
+    /** What a typed text means: by default the first number in it, so "35%" is 35. */
+    std::function<double (const juce::String&)> valueForText = [] (const juce::String& t)
+    {
+        return t.retainCharacters ("+-.0123456789").getDoubleValue();
+    };
+
+    /** The hint while the mouse rests on the knob — its name and what it does — on the dial and on
+        its number alike. */
+    void setHint (const juce::String& text)
+    {
+        setTooltip (text);
+        valueField.setTooltip (text);
+    }
+
+    void resized() override
+    {
+        juce::Slider::resized();
+        valueField.setBounds (getLocalBounds().removeFromBottom (valueRowH));
     }
 
     /** How many detents to mark. The pack decides for a captured control — twenty-one for one pedal,
@@ -102,6 +153,9 @@ public:
         g.setColour (theme::txDim);
         theme::drawTracked (g, label.toUpperCase(), r.removeFromTop (labelRowHeight).toFloat(),
                             theme::displayFont (labelFontHeight), 0.15f, juce::Justification::centred);
+
+        if (valueRow)
+            r.removeFromBottom (valueRowH);   // the number's own line: its field draws it
 
         const float d = (float) juce::jmin (r.getWidth(), r.getHeight());
         const juce::Point<float> c { (float) r.getCentreX(), (float) r.getCentreY() };
@@ -193,6 +247,9 @@ public:
         g.setColour (heat ? heatAt (upto).brighter (0.15f) : accent.brighter (0.3f));
         g.drawLine ({ pa, pb }, d * 0.035f);
 
+        if (valueRow && ! valueInDial)
+            return;
+
         g.setColour (juce::Colour (0xfff6f4fd));
         const auto valueFont = theme::displayFont (d * 0.19f);
         const auto text = textForValue (getValue());
@@ -213,6 +270,47 @@ private:
     juce::String label;
     juce::Colour accent;
     int notches;
+
+    /** The number under the dial: written in the face's own tracked type, a field only while typed in. */
+    struct ValueField final : public juce::Label
+    {
+        explicit ValueField (Knob& k) : owner (k)
+        {
+            setEditable (true, false, false);
+            setJustificationType (juce::Justification::centred);
+            setFont (theme::displayFont (fontH));
+            setMouseCursor (juce::MouseCursor::IBeamCursor);
+            setRepaintsOnMouseActivity (true);
+
+            setColour (textWhenEditingColourId,       theme::tx);
+            setColour (backgroundWhenEditingColourId, theme::bezel);
+            setColour (outlineWhenEditingColourId,    owner.accent);
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            if (isBeingEdited())
+                return;
+
+            g.setColour (isMouseOver() ? theme::tx : theme::txDim);
+            theme::drawTracked (g, owner.textForValue (owner.getValue()), getLocalBounds().toFloat(),
+                                theme::displayFont (fontH), 0.04f, juce::Justification::centred);
+        }
+
+        void editorShown (juce::TextEditor* ed) override
+        {
+            ed->setJustification (juce::Justification::centred);
+            ed->setColour (juce::TextEditor::highlightColourId, owner.accent.withAlpha (0.4f));
+            ed->setText (owner.textForValue (owner.getValue()), false);
+            ed->selectAll();
+        }
+
+        static constexpr float fontH = 13.0f;
+        Knob& owner;
+    };
+
+    bool valueRow = false;
+    ValueField valueField { *this };
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 

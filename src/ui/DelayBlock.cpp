@@ -55,6 +55,17 @@ DelayBlock::DelayBlock (AmpProcessor& processor)
     dark.labelFontHeight    = 7.0f;
     offset.labelFontHeight  = 7.0f;
 
+    mix.setHint     ("MIX:   how loud the echoes ride over the dry, which stays untouched");
+    repeats.setHint ("REPEATS:   how many times the echo comes back");
+    dark.setHint    ("DARK:   how much darker every repeat comes back");
+    offset.setHint  ("OFFSET:   one side's repeats held back against the other's, in ms: the delay's stereo");
+
+    for (auto* k : { &mix, &repeats, &dark, &offset })
+    {
+        k->valueInDial = false;
+        k->setValueRowShown (true);
+    }
+
     mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::delayMix, mix);
     repeatsAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
@@ -371,17 +382,20 @@ void DelayBlock::layOutContent (juce::Rectangle<int> area)
     view.setBounds (area);
 
     const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 24));
+    // Each hand with its number under it (Knob::setValueRowShown): the dial keeps its size and the
+    // number's line comes on top of it.
     auto row = area.removeFromTop (side);
-    mix.setBounds (row.removeFromRight (side).translated (-2, 2));
+    mix.setBounds (row.removeFromRight (side).withHeight (side + Knob::valueRowH).translated (-2, 2));
     mix.toFront (false);
 
     // The three refinements at the hero's left hand, the reverb's two minis' size and line — pressed
     // to the TOP edge — in the loop's own order: how many, how dark, how wide. Three of them want
     // more of a quarter-width block than the reverb's two, so the gaps between them give first —
     // and the reverb's two keep the same step (Knob::fxStep).
-    const int step = Knob::fxStep (row.getWidth());
-    auto band = row.removeFromRight (Knob::fxSlot + 2 * step).translated (0, 2);
-    const auto minis = band.removeFromTop (miniSide + 11);
+    const int step  = Knob::fxStep (row.getWidth());
+    const int miniH = miniSide + 11 + Knob::valueRowH;
+    auto band = row.removeFromRight (Knob::fxSlot + 2 * step).withHeight (miniH + 3 + 22).translated (0, 2);
+    const auto minis = band.removeFromTop (miniH);
 
     repeats.setBounds (minis.withWidth (Knob::fxSlot));
     dark.setBounds    (minis.withWidth (Knob::fxSlot).translated (step, 0));

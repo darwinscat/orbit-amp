@@ -158,8 +158,23 @@ void EqSection::buildBands (std::vector<Band> newBands)
     {
         auto k = std::make_unique<Knob> (b.label, b.colour, b.notches);
 
-        if (b.showsDb) k->textForValue = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
-        else           k->textForValue = [] (double)   { return juce::String(); };
+        // Every band's number under its dial, typed there too (Oleh, 24.10): ours in decibels, a
+        // device's on the amp-panel's 0-10, the scale its GAIN reads in — its parameter is a
+        // normalised place on the device's dial.
+        if (b.showsDb)
+        {
+            k->textForValue = [] (double v) { return (v > 0.0 ? "+" : "") + juce::String (v, 1); };
+            k->setHint (b.label + ":   the band's gain, in dB");
+        }
+        else
+        {
+            k->textForValue = [] (double v) { return juce::String (v * 10.0, 1); };
+            k->valueForText = [] (const juce::String& t) { return t.retainCharacters ("+-.0123456789").getDoubleValue() / 10.0; };
+            k->setHint (b.label + ":   the device's own control, as captured, 0 to 10");
+        }
+
+        k->valueInDial = false;
+        k->setValueRowShown (true);
 
         k->onValueChange   = [this] { refreshCurve(); };
         k->labelFontHeight = 13.0f;   // the face's floor for anything read

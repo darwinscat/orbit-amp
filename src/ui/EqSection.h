@@ -76,8 +76,9 @@ public:
         size, and the slope combo standing on the dial's bottom line. Nothing more — the row used to
         reserve a hundred and twelve and spend the last forty on air. */
     static constexpr int labelRowH = 14;   // 13 px type, the floor, with a unit either side
-    static constexpr int rowH = labelRowH + Knob::smallSide;   // 64 -> 56: the dial 48 -> the face's small one, the name row 16 -> 14 —
-                                                               // the eight go to the curve; the cuts' stack fits the same height
+    static constexpr int rowH = labelRowH + Knob::smallSide    // 64 -> 56: the dial 48 -> the face's small one, the name row 16 -> 14 —
+                              + Knob::valueRowH;               // the eight go to the curve; the cuts' stack fits the same height.
+                                                               // 56 -> 72: each band's number under its dial (Oleh, 24.10)
 
     /** A cut's cell — its name, its switch, its slope combo: wide enough for "24 DB" and the
         chevron at 13 px. */

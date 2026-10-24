@@ -257,6 +257,10 @@ CapturedBlockPanel::CapturedBlockPanel (AmpProcessor& processor, Block& b,
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::blockGain (blk), gain);
 
+    // GAIN's number under the dial, typed there like every knob's — and still in it: the amp's
+    // setting at a glance (Oleh, 24.10).
+    gain.setValueRowShown (true);
+
     // SMOOTH lit: the dial goes anywhere and the player mixes the neighbours by angle. Dark — STEP:
     // the dial itself refuses to stop between two captured positions, so what the hand feels is
     // what the player does.
@@ -507,7 +511,7 @@ void CapturedBlockPanel::deviceChanged()
     // not — but always THERE: a knob with nothing to select drives instead, and a device without a
     // gain knob is not a device. Its name is the device's own for that dial.
     gain.setNotches (juce::jmax (0, positions.size()));
-    gain.setTooltip (block.dialName().isNotEmpty() ? block.dialName().toUpperCase() : juce::String ("GAIN"));
+    gain.setHint (block.dialName().isNotEmpty() ? block.dialName().toUpperCase() : juce::String ("GAIN"));
 
     for (int i = 0; i < Block::numMeasured; ++i)
     {
@@ -941,8 +945,8 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         auto strip1 = column.removeFromBottom (reserved * pickRowH + (reserved - 1) * pickRowGap);
         column.removeFromBottom (dialGap);
 
-        const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight()));
-        gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide));
+        const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight() - Knob::valueRowH));
+        gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide + Knob::valueRowH));
 
         // The lines stacked in the middle of their strip, left-aligned on one edge so the switches stand
         // in a column under the dial.

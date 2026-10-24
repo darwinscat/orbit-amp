@@ -62,6 +62,16 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     decay.labelFontHeight = 7.0f;
     pre.labelFontHeight   = 7.0f;
 
+    mix.setHint   ("MIX:   how much of the room rides over the dry");
+    decay.setHint ("DECAY:   how long the tail rings, times the character's own");
+    pre.setHint   ("PRE:   the tail held back so the attack stays dry, in ms");
+
+    for (auto* k : { &mix, &decay, &pre })
+    {
+        k->valueInDial = false;
+        k->setValueRowShown (true);
+    }
+
     mix.onValueChange   = [this] { refreshTail(); };
     decay.onValueChange = [this] { refreshTail(); };
     pre.onValueChange   = [this] { refreshTail(); };
@@ -368,13 +378,14 @@ void ReverbBlock::layOutContent (juce::Rectangle<int> area)
 
     const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 24));
     auto row = area.removeFromTop (side);
-    mix.setBounds (row.removeFromRight (side).translated (-2, 2));
+    mix.setBounds (row.removeFromRight (side).withHeight (side + Knob::valueRowH).translated (-2, 2));
     mix.toFront (false);
 
     // The two refinements back at the hero's left hand — small, and pressed to the TOP edge
-    // rather than riding the hero's centre line.
+    // rather than riding the hero's centre line. Each with its number under it, as the delay's.
     const int step = Knob::fxStep (row.getWidth());   // the delay's step between its three, in a block as wide
-    const auto miniRow = row.removeFromRight (Knob::fxSlot + step).withHeight (Knob::fxSide + 11).translated (0, 2);
+    const auto miniRow = row.removeFromRight (Knob::fxSlot + step)
+                            .withHeight (Knob::fxSide + 11 + Knob::valueRowH).translated (0, 2);
     decay.setBounds (miniRow.withWidth (Knob::fxSlot));
     pre.setBounds   (miniRow.withWidth (Knob::fxSlot).translated (step, 0));
     decay.toFront (false);
