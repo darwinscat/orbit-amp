@@ -375,7 +375,6 @@ private:
 
             setColour (textWhenEditingColourId,       theme::tx);
             setColour (backgroundWhenEditingColourId, theme::bezel);
-            setColour (outlineWhenEditingColourId,    owner.accent);
         }
 
         void paint (juce::Graphics& g) override
@@ -390,10 +389,35 @@ private:
 
         void editorShown (juce::TextEditor* ed) override
         {
+            // No indents and no border: the editor's own sat the number a few pixels low of where
+            // the face writes it (Oleh, 24.10). Centred, it stands on the same line.
+            ed->setBorder ({});
+            ed->setIndents (0, 0);
             ed->setJustification (juce::Justification::centred);
+
+            // Its frame is ours, drawn over it: a thin dashed line (paintOverChildren).
+            ed->setColour (juce::TextEditor::outlineColourId,        juce::Colours::transparentBlack);
+            ed->setColour (juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
             ed->setColour (juce::TextEditor::highlightColourId, owner.accent.withAlpha (0.4f));
+
             ed->setText (owner.textForValue (owner.getValue()), false);
             ed->selectAll();
+        }
+
+        void paintOverChildren (juce::Graphics& g) override
+        {
+            if (! isBeingEdited())
+                return;
+
+            const auto r = getLocalBounds().toFloat().reduced (0.5f);
+            const float dash[] = { 3.0f, 2.0f };
+            g.setColour (owner.accent);
+
+            for (const auto& side : { juce::Line<float> (r.getTopLeft(),     r.getTopRight()),
+                                      juce::Line<float> (r.getTopRight(),    r.getBottomRight()),
+                                      juce::Line<float> (r.getBottomRight(), r.getBottomLeft()),
+                                      juce::Line<float> (r.getBottomLeft(),  r.getTopLeft()) })
+                g.drawDashedLine (side, dash, 2, 1.0f);
         }
 
         static constexpr float fontH = 13.0f;
