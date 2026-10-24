@@ -27,15 +27,13 @@ namespace orbitamp
     While it is dragged, the guard's own ruler is summoned beside it (onDrag), the way the columns
     summon theirs.
 
-    Drag to move — a click alone moves nothing — double-click for the guard's home, right click for
-    its menu. */
+    Drag to move; a click without a drag, either button, is the guard's menu (Oleh, 24.10). */
 class GuardRail final : public juce::Component
 {
 public:
     GuardRail (juce::RangedAudioParameter& valueParam, juce::RangedAudioParameter& onParam,
-               float footValue, float headValue, bool footIsOff, float homeValue)
-        : valueP (valueParam), onP (onParam), lo (footValue), hi (headValue),
-          offAtFoot (footIsOff), home (homeValue)
+               float footValue, float headValue, bool footIsOff)
+        : valueP (valueParam), onP (onParam), lo (footValue), hi (headValue), offAtFoot (footIsOff)
     {
         valueAtt = std::make_unique<juce::ParameterAttachment> (valueP, [this] (float) { repaint(); });
         onAtt    = std::make_unique<juce::ParameterAttachment> (onP,    [this] (float) { repaint(); });
@@ -115,7 +113,7 @@ public:
             moveTo (e.position.y);
     }
 
-    void mouseUp (const juce::MouseEvent&) override
+    void mouseUp (const juce::MouseEvent& e) override
     {
         if (swallow)
         {
@@ -123,9 +121,13 @@ public:
             return;
         }
 
-        // A plain click moves nothing, as on the columns: only a drag does (Oleh, 24.10).
+        // A click moves nothing, as on the columns: it is the guard's menu. Only a drag moves.
         if (! dragging)
+        {
+            if (onMenu != nullptr)
+                onMenu (e.getScreenPosition());
             return;
+        }
 
         valueAtt->endGesture();
         onAtt->endGesture();
@@ -135,14 +137,6 @@ public:
 
         dragging = false;
         repaint();
-    }
-
-    void mouseDoubleClick (const juce::MouseEvent&) override
-    {
-        swallow = true;
-        valueAtt->setValueAsCompleteGesture (home);
-        if (offAtFoot)
-            onAtt->setValueAsCompleteGesture (1.0f);
     }
 
 private:
@@ -182,7 +176,6 @@ private:
     juce::RangedAudioParameter& onP;
     const float lo, hi;
     const bool  offAtFoot;
-    const float home;
     std::unique_ptr<juce::ParameterAttachment> valueAtt, onAtt;
 
     bool dragging = false;

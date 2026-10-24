@@ -14,11 +14,11 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
               processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
       delay (processor), reverb (processor), cabinet (processor),
       gate ("GATE", *processor.apvts.getParameter (params::gateThreshold), *processor.apvts.getParameter (params::gateOn),
-            -80.0f, 0.0f, true, -50.0f,
+            -80.0f, 0.0f, true,
             [&processor] { return processor.gateKeyDb.load() <= -89.5f ? 0.0f : -processor.gateMeterDb.load() / 40.0f; },
             processor.gateWorked),
       limit ("LIMIT", *processor.apvts.getParameter (params::limiterCeiling), *processor.apvts.getParameter (params::limiterOn),
-             params::limiterCeilingMin, params::limiterCeilingMax, false, -1.0f,
+             params::limiterCeilingMin, params::limiterCeilingMax, false,
              [&processor] { return -processor.limiterGrDb.load() / 6.0f; },
              processor.limiterWorked)
 {
