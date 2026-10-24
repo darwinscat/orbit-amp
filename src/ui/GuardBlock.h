@@ -13,8 +13,10 @@ namespace orbitamp
     first row, before the AMP, the limiter's at the end of the second, after the cabinet, so the
     panel reads in the strip's own order (Oleh, 24.10). Our own DSP, so violet.
 
-    Inside, the guard's small rail — the threshold, the ceiling — and its lamp under it, a square
-    flooding while the guard presses, the orange dot when it worked unseen. Its name rides the
+    Inside, the guard's small rail — the threshold, the ceiling — at the block's edge toward the
+    window's, its fixed scale beside it toward the centre (the gate's rail left, the limiter's right:
+    `railOnLeft`), and its lamp under the rail, a square flooding while the guard presses, the orange
+    dot when it worked unseen. Its name rides the
     border, centred, the way the wide blocks carry theirs. A click anywhere on it, either button, is
     the guard's menu; only a drag on the rail moves its hand (Oleh, 24.10). Its arrow in the strip
     switches it, and a guard switched off dims in place like every block.
@@ -53,8 +55,13 @@ public:
     /** The guard's menu, at the mouse. */
     std::function<void (juce::Point<int> screenPos)> onMenu;
 
-    /** The rail, for the ruler its owner summons beside it. */
-    GuardRail& slider() noexcept { return rail; }
+    /** The scale's marks, the labelled ones numbered — unsigned, the way the columns write theirs. */
+    struct Mark { float value; bool labelled; };
+    std::vector<Mark> marks;
+    int  labelDecimals = 0;
+
+    /** The rail at the block's left edge, the scale to its right — or mirrored. */
+    bool railOnLeft = true;
 
     void mouseDown (const juce::MouseEvent& e) override { openMenu (e.getScreenPosition()); }
 
@@ -67,11 +74,12 @@ protected:
         nameBox        = juce::Rectangle<int> (w, (int) titleHeight + 6).withCentre ({ box.getCentreX(), box.getY() });
         borderSlotUsed = nameBox;
 
-        // The rail, and its lamp under it as wide as it is: one column, centred.
-        auto col = r.withSizeKeepingCentre (GuardRail::designWidth, r.getHeight());
+        // The rail, and its lamp under it as wide as it is, at the outer edge; the scale beside them.
+        auto col = railOnLeft ? r.removeFromLeft (GuardRail::designWidth) : r.removeFromRight (GuardRail::designWidth);
         lamp.setBounds (col.removeFromBottom (GuardRail::designWidth));
         col.removeFromBottom (lampGap);
         rail.setBounds (col);
+        scaleBox = r.withTop (col.getY()).withBottom (col.getBottom());
     }
 
     void paintContent (juce::Graphics& g) override
@@ -79,6 +87,31 @@ protected:
         g.setColour (theme::lilac);
         theme::drawTracked (g, name, nameBox.toFloat(), theme::displayFont (titleHeight), 0.15f,
                             juce::Justification::centred);
+
+        // THE SCALE, fixed: a tick against the rail at every mark, the number beyond it.
+        const auto s    = scaleBox.toFloat();
+        const auto font = theme::displayFont (9.5f);
+
+        for (const auto& m : marks)
+        {
+            const float y   = (float) rail.getY() + rail.yOfValue (m.value);
+            const float len = m.labelled ? 5.0f : 3.0f;
+
+            g.setColour (juce::Colours::white.withAlpha (m.labelled ? 0.45f : 0.28f));
+            g.fillRect (railOnLeft ? s.getX() + 1.0f : s.getRight() - 1.0f - len, y - 0.5f, len, 1.0f);
+
+            if (! m.labelled)
+                continue;
+
+            const auto text = labelDecimals == 0 ? juce::String (std::abs (juce::roundToInt (m.value)))
+                                                 : juce::String (std::abs (m.value), labelDecimals);
+            const auto box  = juce::Rectangle<float> (s.getX(), y - 6.0f, s.getWidth(), 12.0f);
+
+            g.setColour (juce::Colours::white.withAlpha (0.5f));
+            theme::drawTracked (g, text, railOnLeft ? box.withTrimmedLeft (8.0f) : box.withTrimmedRight (8.0f),
+                                font, 0.02f, railOnLeft ? juce::Justification::centredLeft
+                                                        : juce::Justification::centredRight);
+        }
     }
 
 private:
@@ -93,7 +126,7 @@ private:
     const juce::String name;
     GuardRail rail;
     GuardLamp lamp;
-    juce::Rectangle<int> nameBox;
+    juce::Rectangle<int> nameBox, scaleBox;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 

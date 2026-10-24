@@ -17,14 +17,13 @@ namespace orbitamp
     hand on it: the gate's threshold, the limiter's ceiling. Lilac, the thresholds' colour, so it is
     never taken for a column's orange trim.
 
-    The value runs linearly from `lo` at the rail's foot to `hi` at its head, over the rail less the
-    columns' own inset.
+    The value runs linearly from `lo` to `hi` over the span the hand fits in WHOLE: half a hand in
+    from each end, and above the OFF stop where there is one — so the hand never stands half off the
+    rail, and the lowest value sits right over OFF instead of the hand stopping there while the value
+    went on falling (Oleh, 24.10). The block's fixed scale reads the same span (yOfValue).
 
     A drag switches the guard on: the hand moved is the guard wanted (Oleh, 24.10). `offAtFoot`: the
     foot of the rail is OFF — the gate's way out — and dragged into it, the guard goes off.
-
-    While it is dragged, the guard's own ruler is summoned beside it (onDrag), the way the columns
-    summon theirs.
 
     Drag to move; a click without a drag, either button, is the guard's menu (Oleh, 24.10). */
 class GuardRail final : public juce::Component
@@ -44,8 +43,12 @@ public:
 
     std::function<void (juce::Point<int> screenPos)> onMenu;
 
-    /** Held and let go: the editor shows the guard's ruler while it is dragged. */
-    std::function<void (bool)> onDrag;
+    /** Where a value stands, in the rail's own coordinates: the hand's centre at it. */
+    float yOfValue (float v) const
+    {
+        const auto s = valueSpan();
+        return s.getBottom() - s.getHeight() * (juce::jlimit (lo, hi, v) - lo) / (hi - lo);
+    }
 
     void paint (juce::Graphics& g) override
     {
@@ -73,7 +76,7 @@ public:
 
         const bool  atFoot = offAtFoot && ! on;
         const float v      = valueP.convertFrom0to1 (valueP.getValue());
-        const float y      = atFoot ? s.getBottom() - offH * 0.5f : yOf (v);
+        const float y      = atFoot ? s.getBottom() - offH * 0.5f : yOfValue (v);
 
         meterrail::paintGrip (g, r, y, atFoot ? juce::String ("OFF") : meterrail::trimText (v),
                               theme::lilac.withMultipliedAlpha (alpha), dragging);
@@ -103,9 +106,6 @@ public:
             dragging = true;
             valueAtt->beginGesture();
             onAtt->beginGesture();
-
-            if (onDrag != nullptr)
-                onDrag (true);
         }
 
         if (dragging)
@@ -131,26 +131,23 @@ public:
         valueAtt->endGesture();
         onAtt->endGesture();
 
-        if (onDrag != nullptr)
-            onDrag (false);
-
         dragging = false;
         repaint();
     }
 
 private:
-    static constexpr float offH = 20.0f;   // the OFF stop at the foot, where there is one
+    static constexpr float offH = meterrail::gripH;   // the OFF stop at the foot: one hand tall
 
-    /** The columns' own inset — and the ruler's, so a value here and on the ruler share a height. */
     juce::Rectangle<float> scaleArea() const { return getLocalBounds().toFloat().reduced (2.0f); }
 
-    float yOf (float v) const
+    /** The span the hand's centre travels: half a hand in from the head, and from the foot — or
+        from the top of the OFF stop. */
+    juce::Rectangle<float> valueSpan() const
     {
-        const auto s = scaleArea();
-        const float y = s.getBottom() - s.getHeight() * (juce::jlimit (lo, hi, v) - lo) / (hi - lo);
-
-        // Above the OFF stop, always: a threshold low enough to sit in it would read as OFF.
-        return offAtFoot ? juce::jmin (y, s.getBottom() - offH - meterrail::gripH * 0.5f) : y;
+        auto s = scaleArea();
+        s.removeFromTop (meterrail::gripH * 0.5f);
+        s.removeFromBottom ((offAtFoot ? offH : 0.0f) + meterrail::gripH * 0.5f);
+        return s;
     }
 
     void moveTo (float y)
@@ -163,8 +160,9 @@ private:
             return;
         }
 
+        const auto span  = valueSpan();
         const auto range = valueP.getNormalisableRange();
-        const float v    = lo + (s.getBottom() - y) / juce::jmax (1.0f, s.getHeight()) * (hi - lo);
+        const float v    = lo + (span.getBottom() - y) / juce::jmax (1.0f, span.getHeight()) * (hi - lo);
 
         valueAtt->setValueAsPartOfGesture (juce::jlimit (range.start, range.end, v));
         onAtt->setValueAsPartOfGesture (1.0f);

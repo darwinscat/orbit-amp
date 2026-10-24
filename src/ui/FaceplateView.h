@@ -7,7 +7,6 @@
 #include "CabinetBlock.h"
 #include "CapturedBlockPanel.h"
 #include "DelayBlock.h"
-#include "DragRuler.h"
 #include "GuardBlock.h"
 #include "ReverbBlock.h"
 
@@ -143,7 +142,6 @@ private:
     ReverbBlock        reverb;
     CabinetBlock       cabinet;
     GuardBlock         gate, limit;
-    DragRuler          gateRuler, limitRuler;   // the guards' ladders, summoned by their rails
 
     /** Who stands on the panel, indexed by Block. The core three out of the box; the delay is
         reached for, not found already on. */
