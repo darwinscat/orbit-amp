@@ -160,11 +160,13 @@ private:
             return;
         }
 
+        // Held to the RAIL's ends, not only the parameter's: the gate's rail stops at -30 while its
+        // threshold could go on to -10, and the number ran on past a hand that had stopped (Oleh, 24.10).
         const auto span  = valueSpan();
         const auto range = valueP.getNormalisableRange();
         const float v    = lo + (span.getBottom() - y) / juce::jmax (1.0f, span.getHeight()) * (hi - lo);
 
-        valueAtt->setValueAsPartOfGesture (juce::jlimit (range.start, range.end, v));
+        valueAtt->setValueAsPartOfGesture (juce::jlimit (juce::jmax (range.start, lo), juce::jmin (range.end, hi), v));
         onAtt->setValueAsPartOfGesture (1.0f);
     }
 
