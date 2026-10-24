@@ -111,10 +111,17 @@ public:
         // this, nothing anywhere to say what it is.
         m.addSectionHeader (isOn ? "GATE  " + juce::String (juce::roundToInt (th)) + " DB"
                                  : juce::String ("GATE  OFF"));
-        // LEARN first, as on every face: three seconds of quiet set the threshold and switch the gate
-        // on — so with the gate off it is offered too, and it is the one a player came for.
+        // OFF on top, ruled off, and only while there is something to switch off. No ON: a gate is
+        // switched on by LEARN — three seconds of quiet set the threshold and arm it — or by one of
+        // the three positions, each of which arms it too (Oleh, 24.10).
+        if (isOn)
+        {
+            m.addItem (1, "OFF");
+            m.addSeparator();
+        }
+
         m.addItem (5, "LEARN",       true, learner.isLearning());
-        m.addItem (1, "OFF",         true, ! isOn);
+        m.addSeparator();
         m.addItem (2, "SOFT   -60",  true, matches (-60.0f, false));
         m.addItem (3, "MEDIUM -50",  true, matches (-50.0f, false));
         m.addItem (4, "HARD   -40",  true, matches (-40.0f, true));
@@ -151,11 +158,10 @@ private:
         if (choice == 0)
             return;
 
-        // OFF is a TOGGLE, not a one-way door: picking it on a silent gate turns the gate on —
-        // the item must be un-pickable or the menu can only ever kill.
+        // OFF is offered only to a gate that is on: the way back on is LEARN or a position.
         if (choice == 1)
         {
-            onAtt->setValueAsCompleteGesture (onP.getValue() > 0.5f ? 0.0f : 1.0f);
+            onAtt->setValueAsCompleteGesture (0.0f);
             return;
         }
 
