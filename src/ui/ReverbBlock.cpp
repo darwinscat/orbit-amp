@@ -264,9 +264,11 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
             g.setColour (theme::violet.withAlpha (0.60f));
             g.strokePath (line, juce::PathStrokeType (1.2f));
 
+            // In the top corner: the bottom one is where the frequencies are written, and the
+            // seconds sat on the 10K (Oleh, 24.10).
             g.setColour (theme::txFaint);
             theme::drawTracked (g, juce::String (tailSeconds, 1) + " S", r.reduced (8.0f, 5.0f),
-                                theme::displayFont (7.5f), 0.1f, juce::Justification::bottomRight);
+                                theme::displayFont (7.5f), 0.1f, juce::Justification::topRight);
         }
 
         // The tail's HPF, always in: the second-order curve and its dashed vertical — the
