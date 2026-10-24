@@ -948,12 +948,15 @@ void CapturedBlockPanel::layOutContent (juce::Rectangle<int> area)
         const int gainSide = juce::jmin (maxGainSide, juce::jmin (column.getWidth(), column.getHeight() - Knob::valueRowH));
         gain.setBounds (column.withSizeKeepingCentre (gainSide, gainSide + Knob::valueRowH));
 
-        // The lines stacked in the middle of their strip, left-aligned on one edge so the switches stand
+        // The lines stacked centred across their strip, left-aligned on one edge so the switches stand
         // in a column under the dial.
         const int stackH = rows * pickRowH + (rows - 1) * pickRowGap;
         const int stackW = juce::jmin (strip1.getWidth(), *std::max_element (widths.begin(), widths.end()));
 
-        auto stack = strip1.withSizeKeepingCentre (stackW, juce::jmin (strip1.getHeight(), stackH));
+        // Pressed to the TOP of the strip, right under GAIN's number, not floating in its middle: the
+        // room a pick would take is left empty below (Oleh, 24.10).
+        auto stack = strip1.withSizeKeepingCentre (stackW, strip1.getHeight())
+                           .withHeight (juce::jmin (strip1.getHeight(), stackH));
 
         smoothTag.setBounds (stack.removeFromTop (pickRowH).withWidth (SmoothTag::idealWidth()));
 
