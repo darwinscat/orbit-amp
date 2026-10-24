@@ -20,7 +20,8 @@ class AmpProcessor;
 
     The character is the title on the border. MIX is a fader the box's whole height at its left,
     its number under it; at the right DECAY and PRE share a row, and the picture fills what is left
-    under them — the delay's arrangement to the unit (Oleh, 24.10). The picture is the PAIR, the cab grammar on the frequency axis: what walks
+    under them — the delay's arrangement to the unit (Oleh, 24.10). LOW CUT beside them is the tail's
+    HPF, the same parameter as the dashed line on the picture. The picture is the PAIR, the cab grammar on the frequency axis: what walks
     into the room as the quiet grey ground, what the room ADDS in the block's violet over it —
     and the decay is simply how long the violet keeps glowing after the note. The tail's HPF
     lives ON the picture: a switch in the corner, and when it is on, its curve and a dashed
@@ -69,6 +70,7 @@ private:
     Knob mix   { "Mix",   theme::violet, 0 };
     Knob decay { "Decay", theme::violet, 0 };
     Knob pre   { "Pre",   theme::violet, 0 };
+    Knob lowCut { "Low cut", theme::violet, 0 };   // the tail's HPF: the dashed line's twin, with its number (Oleh, 24.10)
 
     SpectraView view;
 
@@ -89,7 +91,8 @@ private:
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment,
                                                                           decayAttachment,
-                                                                          preAttachment;
+                                                                          preAttachment,
+                                                                          lowCutAttachment;
     std::unique_ptr<juce::ParameterAttachment> characterAttachment, hpfHzAtt;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)

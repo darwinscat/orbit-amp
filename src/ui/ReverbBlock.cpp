@@ -39,6 +39,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     addAndMakeVisible (mix);
     addAndMakeVisible (decay);
     addAndMakeVisible (pre);
+    addAndMakeVisible (lowCut);
     attachPower (*amp.apvts.getParameter (params::reverbOn));
 
     // The character IS the block's name: PLATE or HALL on the border where REVERB stood, set like
@@ -59,13 +60,15 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     mix.textForValue   = [] (double v) { return juce::String (juce::roundToInt (v)) + "%"; };
     decay.textForValue = [] (double v) { return juce::String (v, 1) + "x"; };
     pre.textForValue   = [] (double v) { return juce::String (juce::roundToInt (v)); };
-    mix.setHint   ("MIX:   how much of the room rides over the dry");
-    decay.setHint ("DECAY:   how long the tail rings, times the character's own");
-    pre.setHint   ("PRE:   the tail held back so the attack stays dry, in ms");
+    lowCut.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)); };
+    mix.setHint    ("MIX:   how much of the room rides over the dry");
+    decay.setHint  ("DECAY:   how long the tail rings, times the character's own");
+    pre.setHint    ("PRE:   the tail held back so the attack stays dry, in ms");
+    lowCut.setHint ("LOW CUT:   the tail's lows cut away so the room never booms, in Hz: the dashed line on the picture");
 
     mix.setFader (true);
 
-    for (auto* k : { &mix, &decay, &pre })
+    for (auto* k : { &mix, &decay, &pre, &lowCut })
     {
         k->labelFontHeight = Knob::fxLabelH;   // the delay's names, the delay's size
         k->labelTracking   = Knob::fxLabelTracking;
@@ -95,6 +98,8 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
         amp.apvts, params::reverbDecay, decay);
     preAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::reverbPredelay, pre);
+    lowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        amp.apvts, params::reverbHpfHz, lowCut);
 
     // The tail's HPF: the consoles' cut, at home in the reverb and ALWAYS in — the dashed
     // vertical is the handle, the curve is what it does, and there is nothing to switch.
@@ -375,18 +380,22 @@ void ReverbBlock::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = character.getBounds();
     }
 
-    // MIX a fader the box's whole height at the left, its number under it; at the right DECAY and PRE
-    // in even shares of a row, each number tucked up under its cap; the picture under them — the
+    // MIX a fader the box's whole height at the left, its number under it; at the right DECAY, PRE and
+    // LOW CUT in even shares of a row, each number tucked up under its cap; the picture under them — the
     // delay's arrangement to the unit (DelayBlock::layOutContent; Oleh, 24.10).
     mix.setBounds (area.removeFromLeft (Knob::faderW));
     area.removeFromLeft (Knob::faderGap);
 
     const int lift = Knob::snugLift (Knob::fxSide);
     auto miniRow = area.removeFromTop (Knob::fxLabelRowH + Knob::fxSide + Knob::valueRowH - lift);
-    decay.valueLift = lift;
-    pre.valueLift   = lift;
-    decay.setBounds (miniRow.removeFromLeft (miniRow.getWidth() / 2));
-    pre.setBounds   (miniRow);
+    const int cell = miniRow.getWidth() / 3;
+
+    for (auto* k : { &decay, &pre, &lowCut })
+        k->valueLift = lift;
+
+    decay.setBounds  (miniRow.removeFromLeft (cell));
+    pre.setBounds    (miniRow.removeFromLeft (cell));
+    lowCut.setBounds (miniRow);
 
     area.removeFromTop (6);
     view.setBounds (area);
