@@ -10,6 +10,7 @@
                 "url": "https://www.two-notes.com/en/revolt-guitar/" },
       "tone_type": "clean", "circuit": "tube:1",
       "input_db": -4.0,
+      "output_db": 5.0,
       "controls": [
         { "name": "Boost", "role": "generic", "values": ["off", "on"] },
         { "name": "Gain", "role": "gain", "sweep": 300,
