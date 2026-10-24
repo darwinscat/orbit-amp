@@ -20,10 +20,10 @@ class AmpProcessor;
     specialist, and — in a host — whose tempo the division counts in: the HOST's, the default, or
     the block's OWN.
 
-    LAID OUT AS THE REVERB IS, to the unit: the picture takes the whole box and the hands ride its
-    top. MIX is the hero, the reverb's MIX in the reverb's place at the reverb's size; REPS (the
-    repeats), DARK and OFFSET stand small at its left hand, each the size of the reverb's DECAY and PRE — how many,
-    how dark, how wide, in the loop's own order. Under those three, one line: the one typed control
+    LAID OUT AS THE REVERB IS, to the unit (Oleh, 24.10): MIX a fader the box's whole height at its
+    left, its number under it; at the right REPS (the repeats), DARK and OFFSET share a row, each the
+    size of the reverb's DECAY and PRE — how many, how dark, how wide, in the loop's own order — and
+    the picture fills what is left under them. Between the three and the picture, one line: the one typed control
     on the face — the BPM field (which reads HOST and the host's tempo, and does not move, while the
     host conducts), turning into the MS field when the time goes free — and, in the standalone,
     TAP. A plug-in has a host to keep time; a standalone has only the player.
@@ -211,7 +211,6 @@ private:
         bool hover = false;
     };
 
-    static constexpr int maxKnobSide = Knob::heroSide;   // the reverb's hero, to the unit
     static constexpr int miniSide    = Knob::fxSide;      // the reverb's DECAY and PRE
 
     AmpProcessor& amp;

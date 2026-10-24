@@ -58,6 +58,8 @@ DelayBlock::DelayBlock (AmpProcessor& processor)
     dark.setHint    ("DARK:   how much darker every repeat comes back, in percent");
     offset.setHint  ("OFFSET:   one side's repeats held back against the other's, in ms: the delay's stereo");
 
+    mix.setFader (true);
+
     for (auto* k : { &mix, &repeats, &dark, &offset })
     {
         k->labelFontHeight = Knob::fxLabelH;
@@ -377,42 +379,27 @@ void DelayBlock::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = timeSel.getBounds();
     }
 
-    // THE REVERB'S ARRANGEMENT, to the unit (ReverbBlock::layOutContent): the picture takes the whole
-    // box and the hands ride its top. The shelf of knobs that stood under the picture is gone, and the
-    // picture has its room.
-    view.setBounds (area);
+    // THE REVERB'S ARRANGEMENT, to the unit (ReverbBlock::layOutContent; Oleh, 24.10): MIX a fader the
+    // box's whole height at the left, its number under it; at the right the three refinements in even
+    // shares of a row, in the loop's own order — how many, how dark, how wide — each number tucked up
+    // under its cap (Knob::valueLift); under them the conducting line, and under that the picture.
+    mix.setBounds (area.removeFromLeft (Knob::faderW));
+    area.removeFromLeft (Knob::faderGap);
 
-    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 24));
-
-    // Each hand with its number under it (Knob::setValueRowShown), the number tucked up under the cap
-    // (Knob::valueLift): the dial keeps its size, and the name's taller row and what is left of the
-    // number's line come on top of it.
-    const int mixDial = side - 11;
-    auto row = area.removeFromTop (side);
-    mix.valueLift = Knob::snugLift (mixDial);
-    mix.setBounds (row.removeFromRight (side)
-                      .withHeight (Knob::fxLabelRowH + mixDial + Knob::valueRowH - mix.valueLift).translated (-2, 2));
-    mix.toFront (false);
-
-    // The three refinements at the hero's left hand, pressed to the TOP edge, in the loop's own order:
-    // how many, how dark, how wide. Three of them want more of a quarter-width block than the
-    // reverb's two, so the gaps between them give first (Knob::fxStep).
-    const int step  = Knob::fxStep (row.getWidth());
-    const int lift  = Knob::snugLift (miniSide);
-    const int miniH = Knob::fxLabelRowH + miniSide + Knob::valueRowH - lift;
-    auto band = row.removeFromRight (Knob::fxSlot + 2 * step).withHeight (miniH + 3 + 22).translated (0, 2);
-    const auto minis = band.removeFromTop (miniH);
+    const int lift = Knob::snugLift (miniSide);
+    auto minis = area.removeFromTop (Knob::fxLabelRowH + miniSide + Knob::valueRowH - lift);
+    const int cell = minis.getWidth() / 3;
 
     for (auto* k : { &repeats, &dark, &offset })
         k->valueLift = lift;
 
-    repeats.setBounds (minis.withWidth (Knob::fxSlot));
-    dark.setBounds    (minis.withWidth (Knob::fxSlot).translated (step, 0));
-    offset.setBounds  (minis.withWidth (Knob::fxSlot).translated (2 * step, 0));
+    repeats.setBounds (minis.removeFromLeft (cell));
+    dark.setBounds    (minis.removeFromLeft (cell));
+    offset.setBounds  (minis);
 
-    // ...and under them, one line: the conducting number, and TAP where there is no host to keep time.
-    band.removeFromTop (3);
-    auto line = band.removeFromTop (22);
+    // ...one line: the conducting number, and TAP where there is no host to keep time.
+    area.removeFromTop (3);
+    auto line = area.removeFromTop (22);
 
     if (tap.isVisible())
     {
@@ -421,6 +408,10 @@ void DelayBlock::layOutContent (juce::Rectangle<int> area)
     }
 
     field.setBounds (line);
+
+    // ...and the picture, the rest.
+    area.removeFromTop (6);
+    view.setBounds (area);
 
     for (juce::Component* c : { (juce::Component*) &repeats, (juce::Component*) &dark, (juce::Component*) &offset,
                                 (juce::Component*) &field, (juce::Component*) &tap })

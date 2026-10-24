@@ -63,6 +63,8 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     decay.setHint ("DECAY:   how long the tail rings, times the character's own");
     pre.setHint   ("PRE:   the tail held back so the attack stays dry, in ms");
 
+    mix.setFader (true);
+
     for (auto* k : { &mix, &decay, &pre })
     {
         k->labelFontHeight = Knob::fxLabelH;   // the delay's names, the delay's size
@@ -373,28 +375,21 @@ void ReverbBlock::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = character.getBounds();
     }
 
-    // The picture takes the whole box; everything else overlays it.
-    view.setBounds (area);
+    // MIX a fader the box's whole height at the left, its number under it; at the right DECAY and PRE
+    // in even shares of a row, each number tucked up under its cap; the picture under them — the
+    // delay's arrangement to the unit (DelayBlock::layOutContent; Oleh, 24.10).
+    mix.setBounds (area.removeFromLeft (Knob::faderW));
+    area.removeFromLeft (Knob::faderGap);
 
-    // Each hand with its number tucked up under its cap, as the delay's (DelayBlock::layOutContent).
-    const int side    = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 24));
-    const int mixDial = side - 11;
-    auto row = area.removeFromTop (side);
-    mix.valueLift = Knob::snugLift (mixDial);
-    mix.setBounds (row.removeFromRight (side)
-                      .withHeight (Knob::fxLabelRowH + mixDial + Knob::valueRowH - mix.valueLift).translated (-2, 2));
-    mix.toFront (false);
-
-    // The two refinements at the hero's left hand, pressed to the TOP edge, spread over the room the
-    // hero leaves — each in the middle of its half (Oleh, 24.10).
     const int lift = Knob::snugLift (Knob::fxSide);
-    auto miniRow = row.withHeight (Knob::fxLabelRowH + Knob::fxSide + Knob::valueRowH - lift).translated (0, 2);
+    auto miniRow = area.removeFromTop (Knob::fxLabelRowH + Knob::fxSide + Knob::valueRowH - lift);
     decay.valueLift = lift;
     pre.valueLift   = lift;
     decay.setBounds (miniRow.removeFromLeft (miniRow.getWidth() / 2));
     pre.setBounds   (miniRow);
-    decay.toFront (false);
-    pre.toFront (false);
+
+    area.removeFromTop (6);
+    view.setBounds (area);
 }
 
 } // namespace orbitamp

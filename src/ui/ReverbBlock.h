@@ -18,8 +18,9 @@ class AmpProcessor;
 
 /** The reverb — our own tail on top of the captured voice.
 
-    Mix is the hero, the character is the title on the border, DECAY and PRE stand small at the
-    hero's left hand. The picture is the PAIR, the cab grammar on the frequency axis: what walks
+    The character is the title on the border. MIX is a fader the box's whole height at its left,
+    its number under it; at the right DECAY and PRE share a row, and the picture fills what is left
+    under them — the delay's arrangement to the unit (Oleh, 24.10). The picture is the PAIR, the cab grammar on the frequency axis: what walks
     into the room as the quiet grey ground, what the room ADDS in the block's violet over it —
     and the decay is simply how long the violet keeps glowing after the note. The tail's HPF
     lives ON the picture: a switch in the corner, and when it is on, its curve and a dashed
@@ -61,8 +62,6 @@ private:
 
         bool dragging = false;
     };
-
-    static constexpr int maxKnobSide = Knob::heroSide;   // MIX, the delay's the same
 
     AmpProcessor& amp;
 
