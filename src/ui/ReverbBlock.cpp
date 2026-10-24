@@ -59,16 +59,16 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     mix.textForValue   = [] (double v) { return juce::String (juce::roundToInt (v)) + "%"; };
     decay.textForValue = [] (double v) { return juce::String (v, 1) + "x"; };
     pre.textForValue   = [] (double v) { return juce::String (juce::roundToInt (v)); };
-    decay.labelFontHeight = 7.0f;
-    pre.labelFontHeight   = 7.0f;
-
     mix.setHint   ("MIX:   how much of the room rides over the dry");
     decay.setHint ("DECAY:   how long the tail rings, times the character's own");
     pre.setHint   ("PRE:   the tail held back so the attack stays dry, in ms");
 
     for (auto* k : { &mix, &decay, &pre })
     {
-        k->valueInDial = false;
+        k->labelFontHeight = Knob::fxLabelH;   // the delay's names, the delay's size
+        k->labelTracking   = Knob::fxLabelTracking;
+        k->labelRowHeight  = Knob::fxLabelRowH;
+        k->valueInDial     = false;
         k->setValueRowShown (true);
     }
 
@@ -376,18 +376,23 @@ void ReverbBlock::layOutContent (juce::Rectangle<int> area)
     // The picture takes the whole box; everything else overlays it.
     view.setBounds (area);
 
-    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 24));
+    // Each hand with its number tucked up under its cap, as the delay's (DelayBlock::layOutContent).
+    const int side    = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 24));
+    const int mixDial = side - 11;
     auto row = area.removeFromTop (side);
-    mix.setBounds (row.removeFromRight (side).withHeight (side + Knob::valueRowH).translated (-2, 2));
+    mix.valueLift = Knob::snugLift (mixDial);
+    mix.setBounds (row.removeFromRight (side)
+                      .withHeight (Knob::fxLabelRowH + mixDial + Knob::valueRowH - mix.valueLift).translated (-2, 2));
     mix.toFront (false);
 
-    // The two refinements back at the hero's left hand — small, and pressed to the TOP edge
-    // rather than riding the hero's centre line. Each with its number under it, as the delay's.
-    const int step = Knob::fxStep (row.getWidth());   // the delay's step between its three, in a block as wide
-    const auto miniRow = row.removeFromRight (Knob::fxSlot + step)
-                            .withHeight (Knob::fxSide + 11 + Knob::valueRowH).translated (0, 2);
-    decay.setBounds (miniRow.withWidth (Knob::fxSlot));
-    pre.setBounds   (miniRow.withWidth (Knob::fxSlot).translated (step, 0));
+    // The two refinements at the hero's left hand, pressed to the TOP edge, spread over the room the
+    // hero leaves — each in the middle of its half (Oleh, 24.10).
+    const int lift = Knob::snugLift (Knob::fxSide);
+    auto miniRow = row.withHeight (Knob::fxLabelRowH + Knob::fxSide + Knob::valueRowH - lift).translated (0, 2);
+    decay.valueLift = lift;
+    pre.valueLift   = lift;
+    decay.setBounds (miniRow.removeFromLeft (miniRow.getWidth() / 2));
+    pre.setBounds   (miniRow);
     decay.toFront (false);
     pre.toFront (false);
 }
