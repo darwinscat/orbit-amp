@@ -31,7 +31,8 @@ namespace orbitamp
     (Oleh, 24.10). While it is dragged, the guard's own ruler is summoned beside it (onDrag), the
     way the columns summon theirs.
 
-    Drag to move, double-click for the guard's home, right click for its menu. */
+    Drag to move — a click alone moves nothing — double-click for the guard's home, right click for
+    its menu. */
 class GuardRail final : public juce::Component
 {
 public:
@@ -122,7 +123,7 @@ public:
             moveTo (e.position.y);
     }
 
-    void mouseUp (const juce::MouseEvent& e) override
+    void mouseUp (const juce::MouseEvent&) override
     {
         if (swallow)
         {
@@ -130,18 +131,14 @@ public:
             return;
         }
 
+        // A plain click moves nothing, as on the columns: only a drag does (Oleh, 24.10).
         if (! dragging)
-        {
-            // A plain click puts the hand where it landed, as one step of the history.
-            valueAtt->beginGesture();
-            onAtt->beginGesture();
-            moveTo (e.position.y);
-        }
+            return;
 
         valueAtt->endGesture();
         onAtt->endGesture();
 
-        if (dragging && onDrag != nullptr)
+        if (onDrag != nullptr)
             onDrag (false);
 
         dragging = false;
