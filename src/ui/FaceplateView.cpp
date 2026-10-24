@@ -14,7 +14,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
               processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
       delay (processor), reverb (processor), cabinet (processor),
       gate ("GATE", *processor.apvts.getParameter (params::gateThreshold), *processor.apvts.getParameter (params::gateOn),
-            -80.0f, 0.0f, true,
+            -80.0f, -30.0f, true,
             [&processor] { return processor.gateKeyDb.load() <= -89.5f ? 0.0f : -processor.gateMeterDb.load() / 40.0f; },
             processor.gateWorked),
       limit ("LIMIT", *processor.apvts.getParameter (params::limiterCeiling), *processor.apvts.getParameter (params::limiterOn),
@@ -39,11 +39,12 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     gate.setSwitchShown (false);
     limit.setSwitchShown (false);
 
-    // The guards' fixed scales: the gate's threshold over -80..0, a tick every 10 dB and a number every
-    // 20; the limiter's ceiling over -3..-0.1, a numbered tick every half decibel. The gate's rail
-    // stands at the window's left, the limiter's at its right, the scales toward the centre.
-    for (int db = -80; db <= 0; db += 10)
-        gate.marks.push_back ({ (float) db, db % 20 == 0 });
+    // The guards' fixed scales: the gate's threshold over -80..-30 — above that a gate cuts the
+    // playing, not the hum, so the rail does not offer it (Oleh, 24.10) — a tick every 5 dB and a
+    // number every 10; the limiter's ceiling over -3..-0.1, a numbered tick every half decibel. The
+    // gate's rail stands at the window's left, the limiter's at its right, the scales toward the centre.
+    for (int db = -80; db <= -30; db += 5)
+        gate.marks.push_back ({ (float) db, db % 10 == 0 });
 
     for (int half = -6; half <= -1; ++half)
         limit.marks.push_back ({ half * 0.5f, true });
