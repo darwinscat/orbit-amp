@@ -235,7 +235,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
                                   return p->convertFrom0to1 (p->getValue()); };
 
     // The guards' own ladders, on their rails' scales: the gate's threshold over the IN column's
-    // -80..0, a mark every 6 dB and a number every 12; the limiter's ceiling over its -6..-0.1, a mark
+    // -80..0, a mark every 6 dB and a number every 12; the limiter's ceiling over its -3..-0.1, a mark
     // every half decibel and a number every one, with -0.5 at the top.
     const auto linearYOf = [] (float lo, float hi)
     {
@@ -253,7 +253,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     for (int db = -72; db <= 0; db += 6)
         gateRuler.marks.push_back ({ (float) db, db % 12 == 0 });
 
-    for (int half = -12; half <= -1; ++half)
+    for (int half = -6; half <= -1; ++half)
         limitRuler.marks.push_back ({ half * 0.5f, half % 2 == 0 || half == -1 });
 
     limitRuler.labelDecimals = 1;

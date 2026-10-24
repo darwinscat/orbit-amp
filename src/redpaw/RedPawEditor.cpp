@@ -955,7 +955,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
                 [this] { showGateMenu(); }, "GATE");
     ceiling.marks = 6;              // every half a decibel or so, none longer
     ceiling.longMark = -1;
-    plateFader (ceiling, skin.plan.ceilingSlot, params::limiterCeiling, params::limiterOn, params::limiterFaderMin, params::limiterCeilingMax,
+    plateFader (ceiling, skin.plan.ceilingSlot, params::limiterCeiling, params::limiterOn, params::limiterCeilingMin, params::limiterCeilingMax,
                 [this] { showOutputMenu(); }, "LIMITER");
 
     // THE NAV SCREEN: along its top the gear, the channel where the skin names it, and the speed the

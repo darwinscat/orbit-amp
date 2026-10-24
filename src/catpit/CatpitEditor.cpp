@@ -629,7 +629,7 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
                  [this] { showGateMenu(); }, "GATE");
     ceiling.marks = 6;              // every half a decibel or so, none longer
     ceiling.longMark = -1;
-    cornerFader (ceiling, limiterSlot, params::limiterCeiling, params::limiterOn, params::limiterFaderMin, params::limiterCeilingMax,
+    cornerFader (ceiling, limiterSlot, params::limiterCeiling, params::limiterOn, params::limiterCeilingMin, params::limiterCeilingMax,
                  [this] { showOutputMenu(); }, "LIMITER");
 
     showChannel();
