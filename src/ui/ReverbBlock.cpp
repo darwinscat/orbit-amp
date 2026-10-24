@@ -373,12 +373,10 @@ void ReverbBlock::layOutContent (juce::Rectangle<int> area)
 
     // The two refinements back at the hero's left hand — small, and pressed to the TOP edge
     // rather than riding the hero's centre line.
-    const int mini = Knob::smallSide;   // the face's small dial: the EQ's bands, the delay's three
-    const int gap  = Knob::smallGap (row.getWidth());   // the delay's air between its three, in a block as wide
-    auto miniRow = row.removeFromRight (mini * 2 + gap).withHeight (mini + 11).translated (0, 2);
-    decay.setBounds (miniRow.removeFromLeft (mini));
-    miniRow.removeFromLeft (gap);
-    pre.setBounds (miniRow);
+    const int step = Knob::fxStep (row.getWidth());   // the delay's step between its three, in a block as wide
+    const auto miniRow = row.removeFromRight (Knob::fxSlot + step).withHeight (Knob::fxSide + 11).translated (0, 2);
+    decay.setBounds (miniRow.withWidth (Knob::fxSlot));
+    pre.setBounds   (miniRow.withWidth (Knob::fxSlot).translated (step, 0));
     decay.toFront (false);
     pre.toFront (false);
 }

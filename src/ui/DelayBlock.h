@@ -212,7 +212,7 @@ private:
     };
 
     static constexpr int maxKnobSide = Knob::heroSide;   // the reverb's hero, to the unit
-    static constexpr int miniSide    = Knob::smallSide;   // the reverb's DECAY and PRE, the EQ's bands
+    static constexpr int miniSide    = Knob::fxSide;      // the reverb's DECAY and PRE
 
     AmpProcessor& amp;
 

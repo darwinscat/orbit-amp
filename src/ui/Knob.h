@@ -77,16 +77,23 @@ public:
     float labelFontHeight = 8.0f;
     int   labelRowHeight  = labelHeight;
 
-    /** THE small dial: the EQ's bands, the reverb's DECAY and PRE, the delay's REPEATS, DARK and
-        OFFSET are one diameter, so a face's small hands read as one kind of control. */
+    /** THE small dial: the EQ's bands. */
     static constexpr int smallSide = 42;
 
-    /** The reverb's and the delay's MIX: 96 -> 88, a little smaller, so its small hands get room. */
-    static constexpr int heroSide = 88;
+    /** The reverb's and the delay's MIX: 96 -> 88 -> 80, a little smaller each time, so its small hands
+        get room. */
+    static constexpr int heroSide = 80;
 
-    /** The air between two small hands, the delay's three and the reverb's two alike: as much as three
-        of them leave in a row this wide, up to twelve. */
-    static int smallGap (int rowWidth) { return juce::jlimit (0, 12, (rowWidth - 3 * smallSide) / 2); }
+    /** The reverb's DECAY and PRE, the delay's REPEATS, DARK and OFFSET: one dial a little under the
+        EQ's, so the delay's three fit beside its MIX in a quarter of the row (Oleh, 24.10). Each stands
+        in a slot as wide as its longest name, REPEATS, the dial centred in it. */
+    static constexpr int fxSide = 36;
+    static constexpr int fxSlot = 40;
+
+    /** From one of those hands to the next, the delay's three and the reverb's two alike: as far as
+        three of them leave in a row this wide, the dials up to twelve apart. In a narrow block the
+        slots overlap at their empty edges before a name is cut. */
+    static int fxStep (int rowWidth) { return juce::jlimit (fxSide, fxSide + 12, (rowWidth - fxSlot) / 2); }
 
     void paint (juce::Graphics& g) override
     {
