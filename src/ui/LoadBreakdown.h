@@ -52,7 +52,13 @@ struct LoadBreakdown final : public juce::Component,
         if (row >= params::numChainRows)
             return true;
 
-        const auto* p = amp.apvts.getParameter (params::chainLinks[(size_t) row].onParam);
+        // The two ends have no switch: OUT always works. Looking a parameter up by a null name read
+        // address zero and took the app down the moment this callout painted.
+        const char* id = params::chainLinks[(size_t) row].onParam;
+        if (id == nullptr)
+            return true;
+
+        const auto* p = amp.apvts.getParameter (id);
         return p == nullptr || p->getValue() > 0.5f;
     }
 
