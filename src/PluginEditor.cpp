@@ -43,6 +43,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     tooltips.setColour (juce::TooltipWindow::outlineColourId, theme::hair2);
     addAndMakeVisible (inColumn);
     addAndMakeVisible (outColumn);
+    limitRail.inwardRight = false;   // its centre is to its left
     addAndMakeVisible (gateRail);
     addAndMakeVisible (limitRail);
     addAndMakeVisible (gateLamp);
@@ -233,13 +234,50 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     outRuler.currentDb = [this] { auto* p = amp.apvts.getParameter (params::outTrim);
                                   return p->convertFrom0to1 (p->getValue()); };
 
-    // The ceiling's own ladder: -0.1 at the top of the rail's top third, halves down to -3.
+    // The guards' own ladders, on their rails' scales: the gate's threshold over the IN column's
+    // -80..0, a mark every 6 dB and a number every 12; the limiter's ceiling over its -6..-0.1, a mark
+    // every half decibel and a number every one, with -0.5 at the top.
+    const auto linearYOf = [] (float lo, float hi)
+    {
+        return [lo, hi] (juce::Rectangle<float> r, float db)
+        {
+            return r.getBottom() - r.getHeight() * (juce::jlimit (lo, hi, db) - lo) / (hi - lo);
+        };
+    };
+
+    gateRuler.ticksOnLeft  = true;
+    limitRuler.ticksOnLeft = false;
+    gateRuler.accent  = theme::lilac;
+    limitRuler.accent = theme::lilac;
+
+    for (int db = -72; db <= 0; db += 6)
+        gateRuler.marks.push_back ({ (float) db, db % 12 == 0 });
+
+    for (int half = -12; half <= -1; ++half)
+        limitRuler.marks.push_back ({ half * 0.5f, half % 2 == 0 || half == -1 });
+
+    limitRuler.labelDecimals = 1;
+    gateRuler.yOfDb  = linearYOf (-80.0f, 0.0f);
+    limitRuler.yOfDb = linearYOf (params::limiterCeilingMin, params::limiterCeilingMax);
+    gateRuler.currentDb  = [this] { auto* p = amp.apvts.getParameter (params::gateThreshold);
+                                    return p->convertFrom0to1 (p->getValue()); };
+    limitRuler.currentDb = [this] { auto* p = amp.apvts.getParameter (params::limiterCeiling);
+                                    return p->convertFrom0to1 (p->getValue()); };
 
     addChildComponent (inRuler);    // went missing with the ceiling's ruler: a ladder with no
     addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
+    addChildComponent (gateRuler);
+    addChildComponent (limitRuler);
 
-    inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
-    outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
+    const auto summon = [] (DragRuler& ruler)
+    {
+        return [&ruler] (bool a) { ruler.setVisible (a); if (a) ruler.toFront (false); };
+    };
+
+    inColumn.onTrimDrag  = summon (inRuler);
+    outColumn.onTrimDrag = summon (outRuler);
+    gateRail.onDrag      = summon (gateRuler);
+    limitRail.onDrag     = summon (limitRuler);
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
     // captured blocks rebuild their selectors from the lists that changed under them.
@@ -526,7 +564,7 @@ void AmpEditor::resized()
 
     inColumn.setBounds (margin, gutterY, VolumeColumn::designWidth, railH);
     inColumn.setTransform (zoom);
-    gateRail.setBounds (margin + VolumeColumn::designWidth, gutterY, GuardRail::designWidth, railH);
+    gateRail.setBounds (margin + VolumeColumn::designWidth, gutterY, GuardRail::designWidth + GuardRail::reach, railH);
     gateRail.setTransform (zoom);
     gateLamp.setBounds (margin, lampY, sideW, GuardLamp::designHeight);
     gateLamp.setTransform (zoom);
@@ -534,7 +572,8 @@ void AmpEditor::resized()
     outColumn.setBounds (margin + designW - VolumeColumn::designWidth, gutterY,
                         VolumeColumn::designWidth, railH);
     outColumn.setTransform (zoom);
-    limitRail.setBounds (margin + designW - sideW, gutterY, GuardRail::designWidth, railH);
+    limitRail.setBounds (margin + designW - sideW - GuardRail::reach, gutterY,
+                         GuardRail::designWidth + GuardRail::reach, railH);
     limitRail.setTransform (zoom);
     limitLamp.setBounds (margin + designW - sideW, lampY, sideW, GuardLamp::designHeight);
     limitLamp.setTransform (zoom);
@@ -554,11 +593,19 @@ void AmpEditor::resized()
                           tunerW, TunerStrip::designHeight);
     tunerStrip.setTransform (zoom);
 
-    // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
-    inRuler.setBounds (margin + colL - chromeGap + 2, gutterY, 56, railH);
-    inRuler.setTransform (zoom);
-    outRuler.setBounds (margin + designW - sideW - 58, gutterY, 56, railH);
-    outRuler.setTransform (zoom);
+    // The summoned rulers: the same vertical extent as their columns, standing toward the centre,
+    // clear of the guards' grips that reach that way.
+    for (auto* ruler : { &inRuler, &gateRuler })
+    {
+        ruler->setBounds (margin + sideW + GuardRail::reach + 2, gutterY, 56, railH);
+        ruler->setTransform (zoom);
+    }
+
+    for (auto* ruler : { &outRuler, &limitRuler })
+    {
+        ruler->setBounds (margin + designW - sideW - GuardRail::reach - 58, gutterY, 56, railH);
+        ruler->setTransform (zoom);
+    }
 
     // The learn sheet: half the plugin, centred over the faceplate.
     learnOverlay.setBounds (margin + designW / 6, faceplateY + 60,

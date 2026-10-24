@@ -181,6 +181,8 @@ private:
     LearnOverlay  learnOverlay;     // the LEARN measurement, projected large over the faceplate
     DragRuler     inRuler;          // the IN trim's own ladder, summoned by the hand
     DragRuler     outRuler;         // the OUT trim's, mirrored
+    DragRuler     gateRuler;        // the gate's threshold, -80..0 like the IN column, beside its rail
+    DragRuler     limitRuler;       // the limiter's ceiling, -6..-0.1, beside its rail
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;   // constructed with the processor: its LIBRARY page reads the packs
     DisclaimerPanel devices { amp.product().name };        // DEVICES & TRADEMARKS: the long notice and the list it is about

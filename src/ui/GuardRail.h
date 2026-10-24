@@ -25,6 +25,12 @@ namespace orbitamp
     switch goes off; dragged out of it, on. Without it the switch only dims the rail (the limiter's
     is its arrow in the strip).
 
+    THE HAND STANDS TOWARD THE CENTRE: the slot keeps to the rail beside the column, and the grip
+    sits off it, on the inner side, reaching `reach` past the rail into the gap before the blocks —
+    so the column's orange grip and this one, at one height, stand apart instead of on each other
+    (Oleh, 24.10). While it is dragged, the guard's own ruler is summoned beside it (onDrag), the
+    way the columns summon theirs.
+
     Drag to move, double-click for the guard's home, right click for its menu. */
 class GuardRail final : public juce::Component
 {
@@ -40,13 +46,20 @@ public:
         setRepaintsOnMouseActivity (true);   // the hand comes up under the mouse
     }
 
-    static constexpr int designWidth = 30;
+    static constexpr int designWidth = 30;   // the rail itself, as the layout counts it
+    static constexpr int reach       = 4;    // how far the grip reaches past it, toward the centre
+
+    /** Which way the centre lies: right for the gate's rail beside IN, left for the limiter's. */
+    bool inwardRight = true;
 
     std::function<void (juce::Point<int> screenPos)> onMenu;
 
+    /** Held and let go: the editor shows the guard's ruler while it is dragged. */
+    std::function<void (bool)> onDrag;
+
     void paint (juce::Graphics& g) override
     {
-        const auto r = getLocalBounds().toFloat();
+        const auto r = railArea();
 
         g.setColour (theme::bezel);
         g.fillRoundedRectangle (r, theme::radiusSm);
@@ -72,7 +85,7 @@ public:
         const float v      = valueP.convertFrom0to1 (valueP.getValue());
         const float y      = atFoot ? s.getBottom() - offH * 0.5f : yOf (v);
 
-        meterrail::paintGrip (g, r, y, atFoot ? juce::String ("OFF") : meterrail::trimText (v),
+        meterrail::paintGrip (g, gripArea(), y, atFoot ? juce::String ("OFF") : meterrail::trimText (v),
                               theme::lilac.withMultipliedAlpha (alpha), dragging);
     }
 
@@ -100,6 +113,9 @@ public:
             dragging = true;
             valueAtt->beginGesture();
             onAtt->beginGesture();
+
+            if (onDrag != nullptr)
+                onDrag (true);
         }
 
         if (dragging)
@@ -124,6 +140,10 @@ public:
 
         valueAtt->endGesture();
         onAtt->endGesture();
+
+        if (dragging && onDrag != nullptr)
+            onDrag (false);
+
         dragging = false;
         repaint();
     }
@@ -139,8 +159,24 @@ public:
 private:
     static constexpr float offH = 20.0f;   // the OFF stop at the foot, where there is one
 
+    static constexpr float gripW = 28.0f;   // room for -3.1 and OFF between the sights
+
+    /** The rail itself — the component less the grip's reach, on the column's side. */
+    juce::Rectangle<float> railArea() const
+    {
+        auto r = getLocalBounds().toFloat();
+        return inwardRight ? r.withTrimmedRight ((float) reach) : r.withTrimmedLeft ((float) reach);
+    }
+
+    /** The grip's span: flush with the inner edge, the slot off its centre toward the column. */
+    juce::Rectangle<float> gripArea() const
+    {
+        auto r = getLocalBounds().toFloat();
+        return inwardRight ? r.removeFromRight (gripW) : r.removeFromLeft (gripW);
+    }
+
     /** The column's own inset, so a value here and the same value on the column share a height. */
-    juce::Rectangle<float> scaleArea() const { return getLocalBounds().toFloat().reduced (2.0f); }
+    juce::Rectangle<float> scaleArea() const { return railArea().reduced (2.0f); }
 
     float yOf (float v) const
     {
