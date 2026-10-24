@@ -270,14 +270,17 @@ public:
 private:
     void timerCallback() override
     {
-        // Only a WORKING guard lights: one standing by presses on nothing.
-        const float d   = onP.getValue() > 0.5f ? juce::jlimit (0.0f, 1.0f, depth()) : 0.0f;
+        // Only a WORKING guard lights: one standing by presses on nothing. The switch is watched too —
+        // a guard switched off while it pressed on nothing changes no depth, and must still go dark.
+        const bool  on  = onP.getValue() > 0.5f;
+        const float d   = on ? juce::jlimit (0.0f, 1.0f, depth()) : 0.0f;
         const bool  dot = worked.load();
 
-        if (std::abs (d - shownDepth) > 0.02f || dot != shownDot)
+        if (std::abs (d - shownDepth) > 0.02f || dot != shownDot || on != shownOn)
         {
             shownDepth = d;
             shownDot   = dot;
+            shownOn    = on;
             repaint();
         }
     }
@@ -289,6 +292,7 @@ private:
 
     float shownDepth = 0.0f;
     bool  shownDot   = false;
+    bool  shownOn    = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GuardLamp)
 };
