@@ -424,7 +424,13 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
     // can sit between them with no item ticked and nothing anywhere to say what it is.
     m.addSectionHeader (isOn ? "LIMITER  " + juce::String (c, 1) + " DB"
                              : juce::String ("LIMITER  OFF"));
-    m.addItem (1, "OFF",           true, ! isOn);
+    // OFF on top, ruled off, and only while it is on; a ceiling picked below switches it on (Oleh, 24.10).
+    if (isOn)
+    {
+        m.addItem (1, "OFF");
+        m.addSeparator();
+    }
+
     m.addItem (2, "SAFETY  -0.3",  true, matches (-0.3f));
     m.addItem (3, "NORMAL  -1.0",  true, matches (-1.0f));
     m.addItem (4, "TIGHT   -3.0",  true, matches (-3.0f));
@@ -447,10 +453,10 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
                              p->endChangeGesture();
                          };
 
-                         // OFF is a toggle here too — a menu that can only kill is no menu.
+                         // OFF is offered only to a limiter that is on; a ceiling is the way back on.
                          if (r == 1)
                          {
-                             set (on, on->getValue() > 0.5f ? 0.0f : 1.0f);
+                             set (on, 0.0f);
                              return;
                          }
 
