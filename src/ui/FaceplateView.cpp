@@ -123,24 +123,15 @@ void FaceplateView::resized()
 
     lay (row1, { Block::preamp });
 
-    // Row two in thirds — the delay's, the reverb's, and the last shared by the cabinet and the
-    // limiter, the limiter's width taken from the cabinet's (Oleh, 24.10).
+    // Row two: the limiter's narrow block at its end, and the rest in even shares among the delay,
+    // the reverb and the cabinet — the limiter's width taken from all three alike (Oleh, 24.10).
     if (! row2.isEmpty())
     {
-        const int third = (row2.getWidth() - 2 * colGap) / 3;
-
-        for (auto* b : { (BlockFrame*) &delay, (BlockFrame*) &reverb })
-        {
-            b->setVisible (true);
-            b->setBounds (row2.removeFromLeft (third));
-            row2.removeFromLeft (colGap);
-        }
-
         limit.setBounds (row2.removeFromRight (GuardBlock::designWidth));
         row2.removeFromRight (colGap);
-        cabinet.setVisible (true);
-        cabinet.setBounds (row2);
     }
+
+    lay (row2, { Block::delay, Block::reverb, Block::cabinet });
 }
 
 } // namespace orbitamp

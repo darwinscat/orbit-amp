@@ -24,8 +24,7 @@ class AmpProcessor;
 
     Row one is what makes the sound — the gate's narrow block, then the captured preamp across the
     rest of the row. Row two is what happens to it afterwards, in chain order: delay, reverb,
-    cabinet, then the limiter's narrow block — in thirds, the limiter's width taken from the
-    cabinet's third. */
+    cabinet in even shares, then the limiter's narrow block. */
 class FaceplateView : public juce::Component
 {
 public:
