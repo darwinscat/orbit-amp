@@ -211,16 +211,16 @@ private:
     static constexpr float keyH     = 24.0f;
     static constexpr float slotEnd  = 2.0f;     // the slot runs the room's whole height, this far in
 
-    // The room cut into one part more than there are places, the places on the cuts: two channels at a
-    // third and two thirds, four at the fifths — an empty run of slot above the first and below the
-    // last, as long as the step between two. One place stands in the middle.
-    float step() const noexcept { return (float) getHeight() / (float) (numPlaces() + 1); }
+    // The room cut into as many parts as there are places, each place in the middle of its part: two
+    // channels at a quarter and three quarters, four at the eighths — an empty run of slot above the
+    // first and below the last half the step between two (Oleh, 24.10). One place stands in the middle.
+    float step() const noexcept { return (float) getHeight() / (float) numPlaces(); }
 
-    float yOf (float t) const noexcept override { return step() * (t + 1.0f); }
+    float yOf (float t) const noexcept override { return step() * (t + 0.5f); }
 
     float travelAt (float y) const noexcept override
     {
-        return numPlaces() > 1 ? juce::jlimit (0.0f, (float) (numPlaces() - 1), y / step() - 1.0f) : 0.0f;
+        return numPlaces() > 1 ? juce::jlimit (0.0f, (float) (numPlaces() - 1), y / step() - 0.5f) : 0.0f;
     }
 
     /** The grip: a dark bar across the slot, lit from above like a knob's cap, with the hand's orange
