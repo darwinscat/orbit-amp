@@ -11,6 +11,7 @@
                 "url": "https://www.victoryamps.com/product-category/amps/Sheriff/" },
       "tone_type": "crunch", "voicing": "od", "circuit": "tube:4",
       "input_db": -5.0,
+      "output_db": -3.0,
       "controls": [
         { "name": "Gain", "role": "gain", "sweep": 300,
           "values": ["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300"] },
