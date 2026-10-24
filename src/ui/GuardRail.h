@@ -13,23 +13,19 @@
 namespace orbitamp
 {
 
-/** A GUARD'S RAIL — the narrow slot on a volume column's inner side, with the guard's one hand on
-    it: the gate's threshold beside IN, the limiter's ceiling beside OUT. Lilac, the thresholds'
-    colour, so it is never taken for the column's orange trim.
+/** A GUARD'S RAIL — the small slider in a guard's narrow block (GuardBlock.h), with the guard's one
+    hand on it: the gate's threshold, the limiter's ceiling. Lilac, the thresholds' colour, so it is
+    never taken for a column's orange trim.
 
-    The value runs linearly from `lo` at the rail's foot to `hi` at its head, over the same inset the
-    column's scale takes — so the gate's rail, given the IN column's -80..0, puts its threshold at
-    the very height on the meter where the guitar crosses it.
+    The value runs linearly from `lo` at the rail's foot to `hi` at its head, over the rail less the
+    columns' own inset.
 
     `offAtFoot`: the foot of the rail is OFF — the gate's way out. Dragged into it, the guard's
     switch goes off; dragged out of it, on. Without it the switch only dims the rail (the limiter's
     is its arrow in the strip).
 
-    THE HAND STANDS TOWARD THE CENTRE: the slot keeps to the rail beside the column, and the grip
-    sits off it, on the inner side, reaching `reach` past the rail into the gap before the blocks —
-    so the column's orange grip and this one, at one height, stand apart instead of on each other
-    (Oleh, 24.10). While it is dragged, the guard's own ruler is summoned beside it (onDrag), the
-    way the columns summon theirs.
+    While it is dragged, the guard's own ruler is summoned beside it (onDrag), the way the columns
+    summon theirs.
 
     Drag to move — a click alone moves nothing — double-click for the guard's home, right click for
     its menu. */
@@ -47,11 +43,7 @@ public:
         setRepaintsOnMouseActivity (true);   // the hand comes up under the mouse
     }
 
-    static constexpr int designWidth = 30;   // the rail itself, as the layout counts it
-    static constexpr int reach       = 4;    // how far the grip reaches past it, toward the centre
-
-    /** Which way the centre lies: right for the gate's rail beside IN, left for the limiter's. */
-    bool inwardRight = true;
+    static constexpr int designWidth = 30;
 
     std::function<void (juce::Point<int> screenPos)> onMenu;
 
@@ -60,7 +52,7 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        const auto r = railArea();
+        const auto r = getLocalBounds().toFloat();
 
         g.setColour (theme::bezel);
         g.fillRoundedRectangle (r, theme::radiusSm);
@@ -86,7 +78,7 @@ public:
         const float v      = valueP.convertFrom0to1 (valueP.getValue());
         const float y      = atFoot ? s.getBottom() - offH * 0.5f : yOf (v);
 
-        meterrail::paintGrip (g, gripArea(), y, atFoot ? juce::String ("OFF") : meterrail::trimText (v),
+        meterrail::paintGrip (g, r, y, atFoot ? juce::String ("OFF") : meterrail::trimText (v),
                               theme::lilac.withMultipliedAlpha (alpha), dragging);
     }
 
@@ -156,24 +148,8 @@ public:
 private:
     static constexpr float offH = 20.0f;   // the OFF stop at the foot, where there is one
 
-    static constexpr float gripW = 28.0f;   // room for -3.1 and OFF between the sights
-
-    /** The rail itself — the component less the grip's reach, on the column's side. */
-    juce::Rectangle<float> railArea() const
-    {
-        auto r = getLocalBounds().toFloat();
-        return inwardRight ? r.withTrimmedRight ((float) reach) : r.withTrimmedLeft ((float) reach);
-    }
-
-    /** The grip's span: flush with the inner edge, the slot off its centre toward the column. */
-    juce::Rectangle<float> gripArea() const
-    {
-        auto r = getLocalBounds().toFloat();
-        return inwardRight ? r.removeFromRight (gripW) : r.removeFromLeft (gripW);
-    }
-
-    /** The column's own inset, so a value here and the same value on the column share a height. */
-    juce::Rectangle<float> scaleArea() const { return railArea().reduced (2.0f); }
+    /** The columns' own inset — and the ruler's, so a value here and on the ruler share a height. */
+    juce::Rectangle<float> scaleArea() const { return getLocalBounds().toFloat().reduced (2.0f); }
 
     float yOf (float v) const
     {
@@ -217,10 +193,11 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GuardRail)
 };
 
-/** A GUARD'S LAMP — the plate under a column that lights while its guard presses: the gate under
-    IN, the limiter under OUT. It floods solid toward the violet with the press (orange is a line,
-    never a wash), and keeps the orange "worked while you were away" dot until it is looked at.
-    A guard switched off is dark. A click is a look: the dot clears and the guard's menu opens. */
+/** A GUARD'S LAMP — the plate beside its rail in a guard's block that lights while the guard
+    presses. It floods solid toward the violet with the press (orange is a line, never a wash), and
+    keeps the orange "worked while you were away" dot until it is looked at. A guard switched off is
+    dark. A click is a look: the dot clears and the guard's menu opens. With no name it is a plain
+    plate — the block over it says whose it is. */
 class GuardLamp final : public juce::Component,
                         private juce::Timer
 {
@@ -249,14 +226,19 @@ public:
         g.setColour (theme::violet.withAlpha (0.8f * a));
         g.drawRoundedRectangle (r, 3.0f, 1.5f);
 
-        g.setColour ((on ? theme::tx : theme::txDim).interpolatedWith (juce::Colours::white, shownDepth)
-                         .withAlpha (a));
-        theme::drawTracked (g, name, r, theme::displayFont (10.0f), 0.12f, juce::Justification::centred);
+        if (name.isNotEmpty())
+        {
+            g.setColour ((on ? theme::tx : theme::txDim).interpolatedWith (juce::Colours::white, shownDepth)
+                             .withAlpha (a));
+            theme::drawTracked (g, name, r, theme::displayFont (10.0f), 0.12f, juce::Justification::centred);
+        }
 
         if (shownDot)
         {
+            // In the corner of a plate; at the head of a narrow one, centred.
+            const float x = r.getWidth() < 30.0f ? r.getCentreX() - 2.25f : r.getRight() - 8.0f;
             g.setColour (theme::orange);
-            g.fillEllipse (r.getRight() - 8.0f, r.getY() + 3.0f, 4.5f, 4.5f);
+            g.fillEllipse (x, r.getY() + 3.0f, 4.5f, 4.5f);
         }
     }
 

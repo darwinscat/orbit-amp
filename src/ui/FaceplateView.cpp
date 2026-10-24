@@ -12,7 +12,15 @@ namespace orbitamp
 FaceplateView::FaceplateView (AmpProcessor& processor)
     : preamp (processor, processor.preamp, params::preampName, params::preampId, 0,
               processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
-      delay (processor), reverb (processor), cabinet (processor)
+      delay (processor), reverb (processor), cabinet (processor),
+      gate ("GATE", *processor.apvts.getParameter (params::gateThreshold), *processor.apvts.getParameter (params::gateOn),
+            -80.0f, 0.0f, true, -50.0f,
+            [&processor] { return processor.gateKeyDb.load() <= -89.5f ? 0.0f : -processor.gateMeterDb.load() / 40.0f; },
+            processor.gateWorked),
+      limit ("LIMIT", *processor.apvts.getParameter (params::limiterCeiling), *processor.apvts.getParameter (params::limiterOn),
+             params::limiterCeilingMin, params::limiterCeilingMax, false, -1.0f,
+             [&processor] { return -processor.limiterGrDb.load() / 6.0f; },
+             processor.limiterWorked)
 {
     for (auto* b : { (BlockFrame*) &preamp, (BlockFrame*) &delay, (BlockFrame*) &reverb,
                      (BlockFrame*) &cabinet })
@@ -25,6 +33,55 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     }
 
     // Every block still binds its power parameter — the frames follow it for their own state.
+
+    addAndMakeVisible (gate);
+    addAndMakeVisible (limit);
+    gate.setSwitchShown (false);
+    limit.setSwitchShown (false);
+
+    // The guards' own ladders, on their rails' scales: the gate's threshold over -80..0, a mark every
+    // 6 dB and a number every 12; the limiter's ceiling over -3..-0.1, a mark every half decibel and
+    // a number every one, with -0.5 at the top. Lilac, the thresholds' colour.
+    const auto linearYOf = [] (float lo, float hi)
+    {
+        return [lo, hi] (juce::Rectangle<float> r, float db)
+        {
+            return r.getBottom() - r.getHeight() * (juce::jlimit (lo, hi, db) - lo) / (hi - lo);
+        };
+    };
+
+    const auto valueOf = [&processor] (const char* id)
+    {
+        return [p = processor.apvts.getParameter (id)] { return p->convertFrom0to1 (p->getValue()); };
+    };
+
+    gateRuler.ticksOnLeft  = true;
+    limitRuler.ticksOnLeft = false;
+    gateRuler.accent  = theme::lilac;
+    limitRuler.accent = theme::lilac;
+
+    for (int db = -72; db <= 0; db += 6)
+        gateRuler.marks.push_back ({ (float) db, db % 12 == 0 });
+
+    for (int half = -6; half <= -1; ++half)
+        limitRuler.marks.push_back ({ half * 0.5f, half % 2 == 0 || half == -1 });
+
+    limitRuler.labelDecimals = 1;
+    gateRuler.yOfDb      = linearYOf (-80.0f, 0.0f);
+    limitRuler.yOfDb     = linearYOf (params::limiterCeilingMin, params::limiterCeilingMax);
+    gateRuler.currentDb  = valueOf (params::gateThreshold);
+    limitRuler.currentDb = valueOf (params::limiterCeiling);
+
+    addChildComponent (gateRuler);
+    addChildComponent (limitRuler);
+
+    const auto summon = [] (DragRuler& ruler)
+    {
+        return [&ruler] (bool a) { ruler.setVisible (a); if (a) ruler.toFront (false); };
+    };
+
+    gate.slider().onDrag  = summon (gateRuler);
+    limit.slider().onDrag = summon (limitRuler);
 }
 
 BlockFrame& FaceplateView::frame (Block b)
@@ -86,8 +143,30 @@ void FaceplateView::resized()
         }
     };
 
+    // The guards first: the gate at the head of row one, the limiter at the end of row two.
+    gate.setVisible (! row1.isEmpty());
+    limit.setVisible (! row2.isEmpty());
+
+    if (! row1.isEmpty())
+    {
+        gate.setBounds (row1.removeFromLeft (GuardBlock::designWidth));
+        row1.removeFromLeft (colGap);
+    }
+
+    if (! row2.isEmpty())
+    {
+        limit.setBounds (row2.removeFromRight (GuardBlock::designWidth));
+        row2.removeFromRight (colGap);
+    }
+
     lay (row1, { Block::preamp });
     lay (row2, { Block::delay, Block::reverb, Block::cabinet });
+
+    // Their ladders stand beside their rails, toward the blocks they guard, the rails' own height.
+    const auto railOf = [] (GuardBlock& b) { return b.slider().getBounds() + b.getPosition(); };
+    const auto g = railOf (gate), l = railOf (limit);
+    gateRuler.setBounds (gate.getRight() + 2, g.getY(), 56, g.getHeight());
+    limitRuler.setBounds (limit.getX() - 58, l.getY(), 56, l.getHeight());
 }
 
 } // namespace orbitamp

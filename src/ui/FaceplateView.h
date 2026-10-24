@@ -7,6 +7,8 @@
 #include "CabinetBlock.h"
 #include "CapturedBlockPanel.h"
 #include "DelayBlock.h"
+#include "DragRuler.h"
+#include "GuardBlock.h"
 #include "ReverbBlock.h"
 
 namespace orbitamp
@@ -21,11 +23,10 @@ class AmpProcessor;
     a map is only worth its room while something is hidden. Nothing is hidden here: the row is the
     order, and what a block is set to is written on its face.
 
-    Row one is what makes the sound — the captured preamp, across the whole row. Row two is what
-    happens to it afterwards, in chain order: delay, reverb, cabinet. ONE law for both rows: the
-    width splits evenly among the blocks that STAND in the row — the whole of row one, quarters up to
-    the whole of row two — because which blocks a player keeps on the panel is the player's own
-    business, chosen in the LAYOUT popup. */
+    Row one is what makes the sound — the gate's narrow block, then the captured preamp across the
+    rest of the row. Row two is what happens to it afterwards, in chain order: delay, reverb,
+    cabinet, then the limiter's narrow block. The guards keep their own width (GuardBlock); the rest
+    of a row splits evenly among the blocks that stand in it. */
 class FaceplateView : public juce::Component
 {
 public:
@@ -52,6 +53,10 @@ public:
         resized();
         repaint();
     }
+
+    /** The guards' blocks, for the menus their owner opens from them. */
+    GuardBlock& gateBlock()  noexcept { return gate; }
+    GuardBlock& limitBlock() noexcept { return limit; }
 
     /** Escape's errand: put a thrown-open picture back. One Escape folds one picture. */
     bool foldPicture() { return preamp.foldPicture(); }
@@ -137,6 +142,8 @@ private:
     DelayBlock         delay;
     ReverbBlock        reverb;
     CabinetBlock       cabinet;
+    GuardBlock         gate, limit;
+    DragRuler          gateRuler, limitRuler;   // the guards' ladders, summoned by their rails
 
     /** Who stands on the panel, indexed by Block. The core three out of the box; the delay is
         reached for, not found already on. */

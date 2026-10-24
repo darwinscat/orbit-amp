@@ -15,7 +15,6 @@
 #include "ui/LearnOverlay.h"
 #include "ui/DragRuler.h"
 #include "ui/TunerStrip.h"
-#include "ui/GuardRail.h"
 #include "ui/GlyphPreview.h"   // TEMPORARY — device-glyph review strip; remove with the member below
 #include "ui/LayoutStrip.h"
 #include "ui/SetupPanel.h"
@@ -171,18 +170,12 @@ private:
     HumLearner    humLearner;       // the hum's own LEARN, from the IN column's menu — never with the gate's
     VolumeColumn  inColumn;         // the input's level and its hand, left of the faceplate
     VolumeColumn  outColumn;        // the output's, mirrored, right of it
-    GuardRail     gateRail;         // the gate's threshold, on IN's inner side
-    GuardRail     limitRail;        // the limiter's ceiling, on OUT's
-    GuardLamp     gateLamp;         // the gate's light, under IN
-    GuardLamp     limitLamp;        // the limiter's, under OUT
     TunerStrip    tunerStrip;       // the always-on needle, between the guards
     Footer        footer;
     DemoStrip     demoStrip;       // TEMPORARY — audition player
     LearnOverlay  learnOverlay;     // the LEARN measurement, projected large over the faceplate
     DragRuler     inRuler;          // the IN trim's own ladder, summoned by the hand
     DragRuler     outRuler;         // the OUT trim's, mirrored
-    DragRuler     gateRuler;        // the gate's threshold, -80..0 like the IN column, beside its rail
-    DragRuler     limitRuler;       // the limiter's ceiling, -3..-0.1, beside its rail
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;   // constructed with the processor: its LIBRARY page reads the packs
     DisclaimerPanel devices { amp.product().name };        // DEVICES & TRADEMARKS: the long notice and the list it is about
