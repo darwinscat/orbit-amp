@@ -49,9 +49,13 @@ jobs:
           arch: x64
 
       # Compiler cache. MUST precede Configure: JUCE builds juceaide at configure time and
-      # passes the compiler launcher through to that sub-build.
+      # passes the compiler launcher through to that sub-build. sccache itself is pinned: the action
+      # takes the newest release otherwise, and a new release keys every file anew — 24.10, v0.19.0,
+      # not one hit on the cache 0.18.0 had filled, a run of 2 h 16 min.
       - name: sccache
         uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696   # v0.0.10
+        with:
+          version: v0.19.0
 
       - name: Cache FetchContent sources
         uses: actions/cache@v6
@@ -70,18 +74,9 @@ jobs:
       # THE FAMILY'S RELEASE, as the release builds it: the family's plug-ins — one VST3 and one CLAP holding
       # every amp installer/family.ini names (CMakeLists.txt: THE FAMILY'S PLUG-INS) — and each of those
       # amps' Standalone. The faces are not part of the default build, so that OrbitAmp's build can never
-      # fail on them: this is the only place a pull request meets MSVC with the cockpit and the rover.
+      # fail on them: this is the only place a pull request meets MSVC with the cockpit and the rovers.
       - name: Build the family (Family_All)
         run: cmake --build build --target Family_All
-
-      # The faces not in the family's release yet, by name, every format of each: the ice moon's rover,
-      # the same dashboard in a skin of its own...
-      - name: Build FrostPawAmp
-        run: cmake --build build --target FrostPawAmp_All
-
-      # ...and the helicopter over Titan, the same dashboard in a cockpit of its own.
-      - name: Build AmberPawAmp
-        run: cmake --build build --target AmberPawAmp_All
 
       # Every gate of the one list (tests/gates.txt) — the faces' are built only when asked for.
       - name: Build the gates
