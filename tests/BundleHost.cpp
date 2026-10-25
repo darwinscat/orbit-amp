@@ -11,7 +11,8 @@
 //     shipped with in 0.8.0 (below, read off those bundles' moduleinfo.json) — what a saved session looks
 //     the amp up by;
 //   - JUCE's VST3 host finds one plug-in for each amp and makes them all at once; each is the amp it is
-//     named — its own parameters, no two amps' alike — and all of them play, block after block in turn;
+//     named — its own parameters, or where two faces of one dashboard share them its own sound, no two
+//     amps' alike — and all of them play, block after block in turn;
 //   - given a build directory where each amp's own VST3 was built too (`--target <Amp>_VST3`, the bundle
 //     every amp had before), each amp of the family is held to its own, opened beside the family's: the
 //     same parameters — names, ids, labels, defaults, steps — the same channels and latency, a session
@@ -317,8 +318,8 @@ juce::String valuesDifference (const std::vector<float>& a, const std::vector<fl
     return {};
 }
 
-// A block of a quiet sine through it: does every sample come out a number?
-bool playsABlock (juce::AudioPluginInstance& instance, int block)
+// A block of a quiet sine through it, as it comes out.
+juce::AudioBuffer<float> playedBlock (juce::AudioPluginInstance& instance, int block)
 {
     const auto channels = juce::jmax (instance.getTotalNumInputChannels(), instance.getTotalNumOutputChannels(), 1);
     juce::AudioBuffer<float> buffer (channels, blockSize);
@@ -330,6 +331,14 @@ bool playsABlock (juce::AudioPluginInstance& instance, int block)
                                                      * (float) (block * blockSize + i) / (float) sampleRate));
 
     instance.processBlock (buffer, midi);
+    return buffer;
+}
+
+// A block of a quiet sine through it: does every sample come out a number?
+bool playsABlock (juce::AudioPluginInstance& instance, int block)
+{
+    const auto buffer = playedBlock (instance, block);
+    const auto channels = buffer.getNumChannels();
 
     for (int c = 0; c < channels; ++c)
         for (int i = 0; i < blockSize; ++i)
@@ -361,6 +370,70 @@ std::unique_ptr<juce::AudioPluginInstance> make (juce::AudioPluginFormat& format
     }
 
     return instance;
+}
+
+// Where two amps' sound parts: the same sine through both for a second, after both have had a second to
+// load what they play, its second half compared — or empty where they play the same.
+juce::String soundDifference (juce::AudioPluginInstance& a, juce::AudioPluginInstance& b)
+{
+    pump (1000);
+
+    const int blocks = (int) (sampleRate / blockSize);
+    double x2 = 0.0, y2 = 0.0, apart2 = 0.0;
+    std::size_t n = 0;
+
+    for (int block = 0; block < blocks; ++block)
+    {
+        const auto x = playedBlock (a, block);
+        const auto y = playedBlock (b, block);
+        pump (2);
+
+        if (block < blocks / 2)
+            continue;
+
+        for (int c = 0; c < juce::jmin (x.getNumChannels(), y.getNumChannels()); ++c)
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const double p = x.getSample (c, i), q = y.getSample (c, i);
+                x2 += p * p;
+                y2 += q * q;
+                apart2 += (p - q) * (p - q);
+                ++n;
+            }
+    }
+
+    if (n == 0)
+        return {};
+
+    const auto rms = [n] (double sum) { return juce::Decibels::gainToDecibels ((float) std::sqrt (sum / (double) n), -200.0f); };
+
+    if (apart2 / (double) n < 1.0e-12)
+        return {};
+
+    return juce::String (rms (x2), 1) + " dB against " + juce::String (rms (y2), 1) + " dB, apart by "
+           + juce::String (rms (apart2), 1) + " dB";
+}
+
+// Each its own amp: no two alike. Most part in their parameters. Two faces of one dashboard — FrostPawAmp
+// and AmberPawAmp, the rover's six channels both — show a host the same ones, and part in what they play.
+void checkOwnAmps (std::vector<Live>& family, const std::vector<std::vector<Param>>& layouts)
+{
+    for (size_t a = 0; a < family.size(); ++a)
+        for (size_t b = a + 1; b < family.size(); ++b)
+        {
+            const auto difference = differenceOf (layouts[a], layouts[b]);
+            const auto pair = family[a].amp + " and " + family[b].amp;
+
+            if (difference.isNotEmpty())
+            {
+                check (true, pair + " have parameters of their own (" + difference + ")");
+                continue;
+            }
+
+            const auto played = soundDifference (*family[a].instance, *family[b].instance);
+            check (played.isNotEmpty(), pair + " have the same parameters, and a sound of their own ("
+                                            + (played.isNotEmpty() ? played : juce::String ("the same samples")) + ")");
+        }
 }
 
 // An amp to a host, as lines of text — its parameters, then its channels and latency — so that two of them
@@ -682,10 +755,7 @@ void checkAu (const juce::File& bundle, const juce::StringArray& amps, const std
                    + juce::String (one.instance->getLatencySamples()));
     }
 
-    for (size_t a = 0; a < family.size(); ++a)
-        for (size_t b = a + 1; b < family.size(); ++b)
-            check (differenceOf (layouts[a], layouts[b]).isNotEmpty(),
-                   family[a].amp + " and " + family[b].amp + " have parameters of their own (" + differenceOf (layouts[a], layouts[b]) + ")");
+    checkOwnAmps (family, layouts);
 
     bool finite = true;
 
@@ -751,10 +821,7 @@ std::map<juce::String, juce::StringArray> checkVst3Instances (const juce::File& 
         check (! layouts.back().empty(), one.amp + " has parameters");
     }
 
-    for (size_t a = 0; a < family.size(); ++a)
-        for (size_t b = a + 1; b < family.size(); ++b)
-            check (differenceOf (layouts[a], layouts[b]).isNotEmpty(),
-                   family[a].amp + " and " + family[b].amp + " have parameters of their own (" + differenceOf (layouts[a], layouts[b]) + ")");
+    checkOwnAmps (family, layouts);
 
     // Every one alive at once, playing in turn.
     bool finite = true;
