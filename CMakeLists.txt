@@ -456,6 +456,12 @@ add_custom_target(OrbitAmpVersionGen ALL
 # never the machine's (gate_reads_factory).
 # ----------------------------------------------------------------------------
 option(ORBITAMP_DEV_FACTORY "Amps read <build>/Factory first, where it is there (OFF for a release)" ON)
+
+# ORBITAMP_LTO: the amps link with link-time optimisation, JUCE's recommended flags. A release passes it ON
+# (.github/workflows/release.yml, installer/release.sh): its binaries are about 30 % smaller for it. Every
+# other build leaves it OFF — it plays no faster for it (measured 25.10.2026 on the Mac, the family's VST3:
+# DSP the same to the noise, the output bit for bit), and an amp relinks in seconds instead of a minute.
+option(ORBITAMP_LTO "Amps link with link-time optimisation (ON for a release)" OFF)
 set(ORBITAMP_FACTORY_DIR "${CMAKE_CURRENT_BINARY_DIR}/Factory")
 set(ORBITAMP_SHIPPED_FACTORY_DIR "${CMAKE_CURRENT_BINARY_DIR}/Shipped/Factory")
 
@@ -774,13 +780,15 @@ function(add_amp name)
     target_include_directories(${name} PUBLIC "${ORBITAMP_GENERATED_DIR}")   # OrbitAmpVersion.h
     add_dependencies(${name} OrbitAmpVersionGen)                            # ...rebaked before every build
 
-    # EVERY AMP LINKS WITH LINK-TIME OPTIMISATION, JUCE's recommended flags — once OrbitAmp's alone: the
-    # code a face never calls goes, and a release binary is smaller for it. Its gates link without it
-    # (amp_console), in seconds rather than minutes.
+    # A RELEASE'S AMPS LINK WITH LINK-TIME OPTIMISATION (ORBITAMP_LTO), JUCE's recommended flags: the code a
+    # face never calls goes, and the binary is smaller for it. Its gates link without it (amp_console), in
+    # seconds rather than minutes, whatever this says.
     set(libraries ${AMP_LIBRARIES}
         juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+    if(ORBITAMP_LTO)
+        list(APPEND libraries juce::juce_recommended_lto_flags)
+    endif()
     target_link_libraries(${name} PRIVATE ${libraries})
 
     # WHAT IT PLAYS, in the family's factory folder (THE FACTORY FOLDER): its pictures, its packs and
