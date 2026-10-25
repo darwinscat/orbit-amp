@@ -1497,10 +1497,11 @@ gate_in_binary(webface           tests/WebFaceTests.cpp     PRODUCT OrbitAmp)
 # (orbitamp_hum_test, below), which runs only this part of itself when the switch is off.
 gate_in_binary(hum-off           tests/HumTests.cpp)
 
-# Reading an .orbitrig pack and playing it through the block the plug-in plays it with — every installed pack
-# sounds, the dial mixes without a step, a linked position is fed softer, a tone knob of either form reaches
-# the audio, and OURS parks the device's own.
-gate_in_binary(captured          tests/CapturedBlockTests.cpp  MACHINE_FACTORY)
+# Reading an .orbitrig pack and playing it through the block the plug-in plays it with — every pack the build
+# lays out sounds, the dial mixes without a step, a linked position is fed softer, a tone knob of either form
+# reaches the audio, and OURS parks the device's own. The build's packs, not the machine's: a CI runner has
+# none installed, and there this gate checked nothing at all.
+gate_in_binary(captured          tests/CapturedBlockTests.cpp)
 # The library manager's FILE WORK — imports, zip unpacking, renames, and the guards that keep every destructive
 # operation inside the library — in a temp folder, the set's manifests read in place.
 gate_in_binary(library           tests/LibraryTests.cpp     MACHINE_FACTORY  DEFINES "ORBITAMP_SET_DIR=\"${ORBITAMP_SET_DIR}\"")
