@@ -815,7 +815,7 @@ void CatpitEditor::applySky()
         glSky = std::make_unique<GlSky> (gl, amp.loadedAs());
         glSky->setThrottle ((float) lever.getPlace() / (float) (Lever::numDetents - 1));
         glSky->setSteer (steering.value());
-        glSky->setHearing ([&a = amp] { return a.takePlayPeak(); });   // the sky shines with the guitar (worlds/Play.h)
+        glSky->setHearing ([&a = amp] { return a.takePlay(); });   // the sky shines with the guitar (worlds/Play.h)
         gl.setRenderer (glSky.get());
         gl.setComponentPaintingEnabled (true);
        #if JUCE_LINUX || JUCE_BSD

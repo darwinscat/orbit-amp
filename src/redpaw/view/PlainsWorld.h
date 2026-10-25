@@ -84,8 +84,8 @@ public:
     void setGear (int g) noexcept;                       // 1..numGears()
     void setTurbo (bool on) noexcept { turbo = on; }
     void setSteer (float s) noexcept;                    // -1..1, held input
-    /** The guitar: the amp's input's peak since the last step (worlds/Play.h). */
-    void hear (float peak) noexcept { play.hear (peak); }
+    /** The guitar: what an Ear heard since the last step — the peak and the pick (worlds/Ear.h, worlds/Play.h). */
+    void hear (float peak, float pick) noexcept { play.hear (peak, pick); }
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
     int numGears() const noexcept { return gears; }

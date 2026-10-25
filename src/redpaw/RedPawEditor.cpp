@@ -1080,7 +1080,7 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // family's log, under this amp's name, format and host.
     view->setLogName (amp.loadedAs());
     view->setHost (&gl);
-    view->setHearing ([&a = amp] { return a.takePlayPeak(); });   // the world lights by the guitar (worlds/Play.h)
+    view->setHearing ([&a = amp] { return a.takePlay(); });   // the world lights by the guitar (worlds/Play.h)
     gl.setOpenGLVersionRequired (juce::OpenGLContext::openGL3_2);
     gl.setRenderer (this);
     gl.setComponentPaintingEnabled (true);

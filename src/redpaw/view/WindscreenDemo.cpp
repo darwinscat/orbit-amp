@@ -56,7 +56,7 @@ namespace
     public:
         Picked (std::unique_ptr<orbitamp::redpaw::Drive> d, float p) : inner (std::move (d)), peak (p) {}
 
-        void settle (int g, bool t) override { inner->settle (g, t); inner->hear (peak); inner->step (1.0e-9); }
+        void settle (int g, bool t) override { inner->settle (g, t); inner->hear (peak, 10.0f); inner->step (1.0e-9); }
 
         const char* name() const noexcept override                   { return inner->name(); }
         int numGears() const noexcept override                        { return inner->numGears(); }
@@ -65,7 +65,7 @@ namespace
         void setSteer (float amount) override                         { inner->setSteer (amount); }
         void setWipers (int speed) override                           { inner->setWipers (speed); }
         void setLights (bool l, bool r) override                      { inner->setLights (l, r); }
-        void hear (float p) override                                  { inner->hear (p); }
+        void hear (float p, float k) override                         { inner->hear (p, k); }
         void step (double dt) override                                { inner->step (dt); }
         void placeAt (double x, double z, double h) override          { inner->placeAt (x, z, h); }
         void setClock (double seconds, double metres) override        { inner->setClock (seconds, metres); }
@@ -181,10 +181,13 @@ namespace
             view.setAdaptive (! args.fixed);
             view.setLights (args.lights, args.lights);
             if (args.play > 0.0f)
-                view.setHearing ([peak = args.play, began = juce::Time::getMillisecondCounterHiRes()]
+                view.setHearing ([peak = args.play, began = juce::Time::getMillisecondCounterHiRes(), last = -1.0] () mutable
                 {
-                    const double t = std::fmod ((juce::Time::getMillisecondCounterHiRes() - began) * 0.001, 1.0);
-                    return (float) (peak * std::exp (-t / 0.4));     // a note a second, ringing down
+                    // A note a second, ringing down, its stroke the frame it is struck.
+                    const double t = (juce::Time::getMillisecondCounterHiRes() - began) * 0.001;
+                    const bool struck = std::floor (t) != std::floor (last);
+                    last = t;
+                    return orbitamp::worlds::Ear::Heard { (float) (peak * std::exp (-std::fmod (t, 1.0) / 0.4)), struck ? 10.0f : 1.0f };
                 });
             view.setMode (args.mode);
             addAndMakeVisible (view);

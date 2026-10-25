@@ -153,10 +153,10 @@ public:
         out in a moment. */
     void setLights (bool left, bool right) noexcept { lightWanted[0] = left; lightWanted[1] = right; }
     double light (int which) const noexcept { return lightLevel[(size_t) which]; }
-    /** THE GUITAR: the amp's input's peak since the last step (worlds/Play.h). What it does, stepped with the
+    /** THE GUITAR: what an Ear heard since the last step (worlds/Ear.h, worlds/Play.h). What it does, stepped with the
         flight — the searchlights and the buoys' lamps flare with it, and a hard attack (strikeRise) strikes
         a bolt in the storm, no sooner than strikeGap after the last; silence after place() and settle(). */
-    void hear (float peak) noexcept { play.hear (peak); }
+    void hear (float peak, float pick) noexcept { play.hear (peak, pick); }
     const worlds::Play& playing() const noexcept { return play; }
     static constexpr float strikeRise = 0.6f;
     static constexpr double strikeGap = 1.2;

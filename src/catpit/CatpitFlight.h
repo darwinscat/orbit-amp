@@ -49,8 +49,8 @@ struct Flight
     std::array<float, 2> cloudDrift {}, cloudPhase {};
     worlds::Play play;
 
-    /** The guitar: the amp's input's peak since the last step. */
-    void hear (float peak) noexcept { play.hear (peak); }
+    /** The guitar: what an Ear heard since the last step — the peak and the pick (worlds/Ear.h). */
+    void hear (float peak, float pick) noexcept { play.hear (peak, pick); }
     /** How much brighter the stars shine and the nebulae glow for it: 0 in silence. */
     float starShine() const noexcept  { return starsOfHit * play.hit() + starsOfGlow * play.glow(); }
     float cloudShine() const noexcept { return cloudsOfHit * play.hit() + cloudsOfGlow * play.glow(); }

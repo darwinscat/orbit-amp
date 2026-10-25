@@ -57,7 +57,10 @@ void GlSky::renderOpenGL()
     const float dt = (float) juce::jlimit (0.0, 0.05, now - last);
     last = now;
     if (hearing)
-        flight.hear (hearing());
+    {
+        const auto heard = hearing();
+        flight.hear (heard.peak, heard.pick);
+    }
     flight.step (throttle.load(), steer.load(), dt);
 
     // Only the glass's rectangle is shaded. GL counts rows from the bottom.
