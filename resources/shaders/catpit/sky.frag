@@ -9,6 +9,8 @@ uniform float uRoll;
 uniform float uSlide;
 uniform vec4  uDrift;
 uniform vec2  uCloudDrift;
+uniform float uShine;        // how much brighter the guitar makes the stars, 0 in silence
+uniform float uCloudShine;   // ...and the nebulae
 
 float hash (vec2 p)
 {
@@ -58,7 +60,7 @@ void main()
         vec3 c = mix (vec3 (0.16, 0.07, 0.38), vec3 (0.42, 0.17, 0.72), smoothstep (0.45, 0.72, d));
         c = mix (c, vec3 (0.69, 0.29, 0.66), smoothstep (0.68, 0.9, d));
         c += vec3 (1.0, 0.54, 0.24) * smoothstep (0.80, 0.95, fbm (p * 2.6 + 9.0)) * 0.45;
-        col += c * smoothstep (0.42, 0.80, d) * sin (ph * 3.14159) * 0.8;
+        col += c * smoothstep (0.42, 0.80, d) * sin (ph * 3.14159) * 0.8 * (1.0 + uCloudShine);
     }
 
     // At speed the light ahead gathers into a glow.
@@ -98,7 +100,7 @@ void main()
             float star = smoothstep (size, 0.0, d) * fade * (0.55 + 0.45 * fract (h * 13.0));
             vec3 tint = fract (h * 7.0) < 0.12 ? vec3 (0.72, 0.61, 1.0)
                       : fract (h * 7.0) < 0.18 ? vec3 (1.0, 0.78, 0.6) : vec3 (0.91, 0.93, 1.0);
-            col += tint * star * 1.4;
+            col += tint * star * 1.4 * (1.0 + uShine);
         }
     }
 

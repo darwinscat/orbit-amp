@@ -650,6 +650,13 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     world->setSteer (steering.value());
     world->setWipers (wipersWanted.load());
     world->setLights ((lightsWanted.load() & 1) != 0, (lightsWanted.load() & 2) != 0);
+    const bool litNow = lit && lit();
+    world->setLit (litNow);
+    if (litNow && hearing)
+    {
+        const auto heard = hearing();
+        world->hear (heard.peak, heard.pick);
+    }
     const bool wantStill = stillWanted.load();
     if (wantStill)
         world->settle (gearWanted.load(), turboWanted.load());   // where it stands, as the drive would be once settled

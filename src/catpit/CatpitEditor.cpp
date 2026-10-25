@@ -715,6 +715,10 @@ void CatpitEditor::addWindowSections (juce::PopupMenu& menu)
                flying == Stars::gpu, [self] (face::Console& e) { self (e).chooseStars (Stars::gpu); }, ! gpuBroken);
     addChoice (menu, "CPU", flying == Stars::cpu, [self] (face::Console& e) { self (e).chooseStars (Stars::cpu); });
     addChoice (menu, "Off", flying == Stars::off, [self] (face::Console& e) { self (e).chooseStars (Stars::off); });
+    // The stars answering each attack (prefs::viewLit) — the machine's, off unless asked for.
+    const bool lit = prefs::viewLitByGuitar (amp.product());
+    addChoice (menu, "Lit by the guitar", lit, [self, lit] (face::Console& e) { prefs::setViewLitByGuitar (self (e).amp.product(), ! lit); },
+               flying == Stars::gpu);
 }
 
 //==============================================================================
@@ -815,6 +819,8 @@ void CatpitEditor::applySky()
         glSky = std::make_unique<GlSky> (gl, amp.loadedAs());
         glSky->setThrottle ((float) lever.getPlace() / (float) (Lever::numDetents - 1));
         glSky->setSteer (steering.value());
+        glSky->setHearing ([&a = amp] { return a.takePlay(); });   // the sky shines with the guitar (worlds/Play.h)
+        glSky->setLit ([&a = amp] { return a.viewLit(); });          // ...where the player asked for it (prefs::viewLit)
         gl.setRenderer (glSky.get());
         gl.setComponentPaintingEnabled (true);
        #if JUCE_LINUX || JUCE_BSD

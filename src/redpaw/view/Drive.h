@@ -40,6 +40,13 @@ public:
     virtual void setWipers (int /*speed*/) {}
     /** Searchlights, left and right, where the face has keys for them; a world with none takes no notice. */
     virtual void setLights (bool /*left*/, bool /*right*/) {}
+    /** THE GUITAR, heard: what an Ear heard since the last step — the amp's input's peak, linear, and its pick,
+        how far the sound's top jumped (worlds/Ear.h) — what the world lights by (worlds/Play.h). A world that
+        answers nothing takes no notice. */
+    virtual void hear (float /*peak*/, float /*pick*/) {}
+    /** Whether the view is lit by the guitar at all (prefs::viewLit): off, the world is the one it was before
+        it could hear — what only the guitar lights, a beacon or a lamp, is not there either. */
+    virtual void setLit (bool /*on*/) {}
 
     /** One step of the drive. */
     virtual void step (double dt) = 0;

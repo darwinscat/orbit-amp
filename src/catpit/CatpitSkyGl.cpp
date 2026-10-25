@@ -23,7 +23,8 @@ bool SkyGl::create()
     // (uFocus), turns the whole sky about it against the bank (uRoll), and slides each layer and each
     // cloud sideways by as far as the turns have swept it since it came up out of the distance (uDrift,
     // uCloudDrift); a star's streak then runs back toward where the sweep brought it from as well
-    // (uSlide). Flying straight, all of it is nothing and the sky is the one it always was.
+    // (uSlide). Flying straight, all of it is nothing and the sky is the one it always was. THE GUITAR
+    // brightens the stars (uShine) and the nebulae (uCloudShine): in silence nothing, as well.
     const auto head = legacyHeader();
     program = gpu::program (shaders::vertexToV3 (shaders::source ("catpit/sky.vert"), head),
                             shaders::fragmentToV3 (shaders::source ("catpit/sky.frag"), head), trouble);
@@ -32,7 +33,8 @@ bool SkyGl::create()
 
     const auto uniform = [this] (const char* name) { return (int) glGetUniformLocation (program, name); };
     at = { uniform ("uOrigin"), uniform ("uSize"), uniform ("uTravel"), uniform ("uSpeed"), uniform ("uWarp"),
-           uniform ("uFocus"), uniform ("uRoll"), uniform ("uSlide"), uniform ("uDrift"), uniform ("uCloudDrift") };
+           uniform ("uFocus"), uniform ("uRoll"), uniform ("uSlide"), uniform ("uDrift"), uniform ("uCloudDrift"),
+           uniform ("uShine"), uniform ("uCloudShine") };
     position = (int) glGetAttribLocation (program, "position");
 
     const GLfloat corners[] { -1.0f, -1.0f,  1.0f, -1.0f,  -1.0f, 1.0f,  1.0f, 1.0f };
@@ -75,6 +77,8 @@ void SkyGl::render (const Flight& flight, int x, int y, int w, int h, float vx, 
     glUniform1f (at.slide, flight.slide);
     glUniform4f (at.drift, flight.drift[0], flight.drift[1], flight.drift[2], flight.drift[3]);
     glUniform2f (at.cloudDrift, flight.cloudDrift[0], flight.cloudDrift[1]);
+    glUniform1f (at.shine, flight.starShine());
+    glUniform1f (at.cloudShine, flight.cloudShine());
 
     glBindBuffer (GL_ARRAY_BUFFER, quad);
     const auto pos = (GLuint) position;

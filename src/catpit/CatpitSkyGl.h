@@ -53,7 +53,7 @@ public:
 private:
     std::uint32_t program = 0, quad = 0;
     int position = -1;
-    struct Uniforms { int origin = -1, size = -1, travel = -1, speed = -1, warp = -1, focus = -1, roll = -1, slide = -1, drift = -1, cloudDrift = -1; };
+    struct Uniforms { int origin = -1, size = -1, travel = -1, speed = -1, warp = -1, focus = -1, roll = -1, slide = -1, drift = -1, cloudDrift = -1, shine = -1, cloudShine = -1; };
     Uniforms at;
     int areaX = 0, areaY = 0, areaW = 0, areaH = 0;     // where the last render drew
     std::string trouble;

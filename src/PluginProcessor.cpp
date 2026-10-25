@@ -223,6 +223,7 @@ AmpProcessor::AmpProcessor (const Product& product)
     // settings file, and the audio thread must only ever meet the cached atomic.
     humWanted = &prefs::humCache (ownProduct);
     humLastOn = &prefs::humLastOnCache (ownProduct);
+    litWanted = &prefs::litCache (ownProduct);       // whether a world hears the guitar, the same way
     humPlayWanted  = &prefs::humtune::playCache (ownProduct);
     humQuietWanted = &prefs::humtune::quietCache (ownProduct);
     humUpToWanted  = &prefs::humtune::upToCache (ownProduct);
@@ -1005,6 +1006,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     reverbReady = reverb.prepare (sampleRate, block, channels);
     preamp.prepare (sampleRate, block, channels);
     demo.prepare (sampleRate);
+    ear.prepare (sampleRate);
     scopeDry.setSize (1, block);
     fadeDry.setSize (juce::jmax (2, channels), block);
 
@@ -1536,6 +1538,21 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         for (int ch = 0; ch < nch; ++ch)
             peak = juce::jmax (peak, buffer.getMagnitude (ch, 0, numSamples));
         gateKeyDb.store (juce::Decibels::gainToDecibels (peak, -90.0f));
+
+        // ...and what a world hears of it (takePlay): the peak, and the stroke heard in channel 0's top —
+        // only while the view is lit by the guitar (viewLit); off, nothing listens.
+        if (viewLit())
+        {
+            if (buffer.getNumChannels() > 0)
+                ear.listen (buffer.getReadPointer (0), numSamples);
+            const float pick = ear.take().pick;
+            const auto raise = [] (std::atomic<float>& a, float v)
+            {
+                for (float held = a.load (std::memory_order_relaxed); v > held && ! a.compare_exchange_weak (held, v, std::memory_order_relaxed);) {}
+            };
+            raise (playPeak, peak);
+            raise (playPick, pick);
+        }
 
         if (peak > 1.0f)
             inClip.store (true);   // latched; the IN rail's cap clears it

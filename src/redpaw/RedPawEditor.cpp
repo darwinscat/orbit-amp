@@ -1080,6 +1080,8 @@ RedPawEditor::RedPawEditor (AmpProcessor& p)
     // family's log, under this amp's name, format and host.
     view->setLogName (amp.loadedAs());
     view->setHost (&gl);
+    view->setHearing ([&a = amp] { return a.takePlay(); });   // the world lights by the guitar (worlds/Play.h)
+    view->setLit ([&a = amp] { return a.viewLit(); });          // ...where the player asked for it (prefs::viewLit)
     gl.setOpenGLVersionRequired (juce::OpenGLContext::openGL3_2);
     gl.setRenderer (this);
     gl.setComponentPaintingEnabled (true);
@@ -1184,6 +1186,9 @@ void RedPawEditor::addWindowSections (juce::PopupMenu& menu)
     for (const int fps : { 60, 30 })
         addChoice (menu, juce::String (fps) + " frames a second", view->frameRateCap() == fps,
                    [self, fps] (Console& e) { self (e).chooseFrameRate (fps); }, running != Windscreen::Mode::still);
+    // The world answering each attack (prefs::viewLit) — the machine's, off unless asked for.
+    const bool lit = prefs::viewLitByGuitar (amp.product());
+    addChoice (menu, "Lit by the guitar", lit, [self, lit] (Console& e) { prefs::setViewLitByGuitar (self (e).amp.product(), ! lit); });
 }
 
 /** A RIGHT CLICK ON THE NAV SCREEN — anywhere over its picture or its top line — offers its five

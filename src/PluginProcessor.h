@@ -22,6 +22,7 @@
 #include "core/DoorLimiter.h"
 #include "core/LateWire.h"
 #include "device/EmbeddedIrs.h"
+#include "worlds/Ear.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
 #include <felitronics/appkit/CompareHistory.h>
@@ -1155,8 +1156,27 @@ public:
         gate KEYS off, for the meter the thresholds are drawn on. Same writer, same readers. */
     std::atomic<float> gateKeyDb { -90.0f };
 
+    /** WHAT A WORLD HEARS OF THE GUITAR (worlds/Ear.h, worlds/Play.h): the same peak, linear, and the pick — how far
+        the sound's top jumped — each the largest since the face last took them, so a frame sees the stroke that
+        came between two of them and not only the last block's. A frame that came before any block since the last
+        one gets that last block's peak and no jump. One taker: the face's view. */
+    worlds::Ear::Heard takePlay() noexcept
+    {
+        const float p = playPeak.exchange (-1.0f, std::memory_order_relaxed);
+        const float k = playPick.exchange (-1.0f, std::memory_order_relaxed);
+        return { p >= 0.0f ? p : juce::Decibels::decibelsToGain (gateKeyDb.load (std::memory_order_relaxed), -90.0f),
+                 k >= 0.0f ? k : 1.0f };
+    }
+
+    /** Whether the view is lit by the guitar at all (prefs::litCache): off, the ear does not listen and the
+        face's view hears nothing. */
+    bool viewLit() const noexcept { return litWanted != nullptr && litWanted->load (std::memory_order_relaxed); }
+
 private:
+    const std::atomic<bool>* litWanted = nullptr;                   // prefs::litCache, taken where the hum's are
     int demoLoopIndex = -1;     // which of params::demoLoops the audition player holds
+    std::atomic<float> playPeak { -1.0f }, playPick { -1.0f };     // takePlay's: -1 is nothing since it was last taken
+    worlds::Ear ear;                                                // the audio thread's: the pick, on channel 0
 
     // Cached atomic parameter pointers — getRawParameterValue does a map lookup, which the audio
     // thread should not be doing per block.

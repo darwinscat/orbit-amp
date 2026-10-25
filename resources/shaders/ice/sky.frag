@@ -3,6 +3,7 @@
 uniform sampler2D uDetail;
 uniform vec3 uCamFwd, uCamRight, uCamUp; uniform vec2 uTanHalf; uniform float uShear, uTime, uPxAng;
 uniform vec3 uJupR, uJupU, uJupAxis, uIo; uniform float uJupSin, uJupCos, uIoSin;
+uniform float uAurora;   // how much Jupiter's aurora and its limb glow, by the guitar: 0 in silence
 #include "common/ih.glsl"
 #include "common/hcell.glsl"
 #include "common/sq.glsl"
@@ -64,6 +65,9 @@ void main() {
       float lit = smoothstep (-0.06, 0.34, l) * (0.9 + 0.1 * max (l, 0.0));
       float limb = 0.55 + 0.45 * z;
       vec3 jcol = jc * (lit * 1.25 * limb + 0.045);
+      // The aurora: an oval of violet light about each pole, and a glow along the limb.
+      float oval = exp (-sq ((abs (lat) - 1.2) / 0.09));
+      jcol += vec3 (0.55, 0.50, 1.0) * uAurora * (0.9 * oval + 0.7 * smoothstep (0.4, 0.0, z));
       col = mix (col, jcol, edge);
     }
   }

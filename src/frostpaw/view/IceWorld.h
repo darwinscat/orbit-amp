@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../../worlds/Play.h"
+
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -89,6 +91,11 @@ public:
     void setGear (int g) noexcept;                       // 1..numGears()
     void setTurbo (bool on) noexcept { turbo = on; }
     void setSteer (float s) noexcept;                    // -1..1, held input
+    /** The guitar: what an Ear heard since the last step — the peak and the pick (worlds/Ear.h, worlds/Play.h). */
+    void hear (float peak, float pick) noexcept { play.hear (peak, pick); }
+    /** Whether the view is lit by the guitar at all (Drive::setLit); and so whether what only it lights is there. */
+    void setLit (bool on) noexcept { lit = on; }
+    bool isLit() const noexcept { return lit; }
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
     int numGears() const noexcept { return gears; }
@@ -127,6 +134,8 @@ public:
         float avoidYaw = 0.0f;           // radians a second the steel ahead is pushing the heading by
     };
     const State& state() const noexcept { return s; }
+    /** What the guitar is doing, stepped with the drive; silence after place(). */
+    const worlds::Play& playing() const noexcept { return play; }
 
     /** The height function, the mirror of the shaders': metres at absolute world xz. `dist` is the
         distance from the rover, which fades the dunes, the blocks and the drifts out. */
@@ -150,6 +159,8 @@ private:
     std::array<float, 4> gmax { 1, 1, 1, 1 };
 
     State s;
+    worlds::Play play;
+    bool lit = false;
     const int gears;
     int gearWanted = 1;
     bool turbo = false;

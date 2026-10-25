@@ -25,6 +25,15 @@ namespace
     constexpr double skyClock = 2 * pi * 2000;     // seconds: Jupiter's turn (0.0045 rad/s) and Io's lap (0.011) both whole in it
     constexpr double snowClock = 36.0 * 2000;      // metres: the flakes' 36 m depth cycle, whole in it
 
+    // THE GUITAR (worlds/Play.h): the lamps at the steel's tips flash with each attack, Jupiter's aurora
+    // and its limb glow, and the falling snow glints — nothing of it in silence, so a silent frame is the
+    // frame it always was.
+    constexpr float lampOfGlow = 0.3f;
+    constexpr float lampLight[3] { 1.6f, 0.42f, 0.14f };   // a warm red over the cold ice
+    constexpr float auroraOfHit = 1.0f, auroraOfGlow = 0.35f;
+    constexpr float glintOfHit = 0.8f;
+    constexpr float glowOfHeight = 0.022f;              // a lamp's light: this much of the frame's height across, at least
+
     // THE SHADERS are files in resources/shaders/ice (src/shaders/Shaders.h), written without the
     // #version, which glsl() puts in front of them — the app's or the web's (src/shaders/Gpu.h). ice/height.glsl is the height function, shared by the
     // terrain's two shaders and the steel's vertex shader: HTEX in it is textureLod (.., 0) in a vertex
@@ -33,7 +42,7 @@ namespace
     // per-pixel normal: uGrad1 = (dR/du, dR/dv, dB/du, dB/dv) and uGrad2 = (dG/du, dG/dv, dA/du, dA/dv)
     // per uv unit, as 0.5 + 0.5 * g / gmax in RGBA8; uGS1 = (gmaxR, gmaxB), uGS2 = (gmaxG, gmaxA). The
     // steel (ice/steel.vert): instanced bar meshes, one draw per variant; aCell is the instance's
-    // unwrapped 70 m cell. The sky (ice/sky.frag): stars, Jupiter, Io, the sun, a thin mist band at the
+    // unwrapped 70 m cell; a vertex of LOD flag 2 is a lamp, lit by the guitar. The sky (ice/sky.frag): stars, Jupiter, Io, the sun, a thin mist band at the
     // horizon. The snow (ice/snow.vert): streak quads in camera space, radiating from the vanishing point.
     enum class Htex { none, vertex, fragment };
     std::string glsl (const char* path, Htex htex = Htex::none)
@@ -47,6 +56,7 @@ namespace
     //==========================================================================
     /** THE STEEL'S GEOMETRY: bars are boxes with flat normals. A vertex is position (3), normal (3),
         its direction across the bar (3, for the widening with distance) and a LOD flag (1): ten floats.
+        The flag is 1 for a detail bar that goes far away, 2 for a lamp, which the guitar lights.
         The lumps are the same every time: no generator, only arithmetic. */
     struct V3 { double x, y, z; };
     inline V3 operator+ (V3 a, V3 b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
@@ -93,6 +103,15 @@ namespace
             quad (4, 6, 7, 5, u);  quad (0, 1, 3, 2, u * -1.0);      // the ends
         }
 
+        /** A lamp: a short bar of LOD flag 2, from `at` up by its size — kept wide enough to see far off —
+            and where its light is for the glow pass, its centre. */
+        std::vector<std::array<float, 4>> lamps;
+        void lamp (V3 at, double size)
+        {
+            bar (at, at + V3 { 0, size, 0 }, size, 2);
+            lamps.push_back ({ (float) at.x, (float) (at.y + size / 2), (float) at.z, (float) size });
+        }
+
         /** A paraboloid shell of radius R and depth, both faces, segs around. */
         void dish (V3 c, V3 axis, double R, double depth, int segs)
         {
@@ -133,7 +152,7 @@ namespace
     };
 
     /** The four variants: a 24 m lattice mast, an 11 m gantry, a dish on a tripod, a frame module with a tank. */
-    std::array<std::vector<float>, 4> buildSteelMeshes()
+    std::array<std::vector<float>, 4> buildSteelMeshes (std::array<std::vector<std::array<float, 4>>, 4>& lamps)
     {
         std::array<std::vector<float>, 4> out;
         const std::pair<double, double> corners[] { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } };
@@ -153,8 +172,9 @@ namespace
                 }
             }
             m.bar ({ 0, H, 0 }, { 0, H + 4.5, 0 }, 0.16); m.bar ({ -0.9, H + 2.2, 0 }, { 0.9, H + 2.2, 0 }, 0.10, 1);
+            m.lamp ({ 0, H + 4.5, 0 }, 0.35);
             m.dish ({ 0.0, H * 0.72, b0 * 0.9 }, { 0, 0.25, 1 }, 1.3, 0.35, 10);   // the axis as given, a shade over unit: the dish is that much deeper
-            out[0] = std::move (m.v);
+            out[0] = std::move (m.v); lamps[0] = std::move (m.lamps);
         }
         {   // 1: the gantry — two A-frames and a trussed beam between them, a hook
             MeshBuilder m; const double W = 11, H = 9;
@@ -167,7 +187,8 @@ namespace
                 m.bar ({ x0, H, (i & 1) ? 0.5 : -0.5 }, { x1, H - 1.3, 0 }, 0.10, 1); m.bar ({ x0, H - 1.3, 0 }, { x1, H, (i & 1) ? -0.5 : 0.5 }, 0.10, 1);
             }
             m.bar ({ 1.5, H - 1.3, 0 }, { 1.5, H - 4.2, 0 }, 0.12, 1); m.bar ({ 0.6, H - 4.2, 0 }, { 2.4, H - 4.2, 0 }, 0.18, 1);
-            out[1] = std::move (m.v);
+            for (double x : { -W / 2, W / 2 }) m.lamp ({ x, H + 0.14, 0 }, 0.3);
+            out[1] = std::move (m.v); lamps[1] = std::move (m.lamps);
         }
         {   // 2: a dish on a tripod, a feed strut
             MeshBuilder m; const double H = 6;
@@ -180,7 +201,8 @@ namespace
             m.bar ({ 0, H, 0 }, { 0, H + 1.4, 0 }, 0.22);
             const V3 ax { 0, 0.55, 0.835 }; m.dish ({ 0, H + 1.4, 0 }, ax, 3.2, 0.9, 12);
             m.bar ({ 0, H + 1.4, 0 }, { ax.x * 2.4, H + 1.4 + ax.y * 2.4, ax.z * 2.4 }, 0.10, 1);
-            out[2] = std::move (m.v);
+            m.lamp ({ ax.x * 2.4, H + 1.4 + ax.y * 2.4, ax.z * 2.4 }, 0.25);
+            out[2] = std::move (m.v); lamps[2] = std::move (m.lamps);
         }
         {   // 3: the frame module — an open cube frame on short legs, a tank inside, a boom
             MeshBuilder m; const double S = 4.2, H0 = 1.2, Ht = 4.0;
@@ -190,7 +212,8 @@ namespace
             m.bar (c (-1, H0, -1), c (1, H0 + Ht, -1), 0.10, 1); m.bar (c (1, H0, 1), c (-1, H0 + Ht, 1), 0.10, 1);
             m.prism ({ 0, H0 + 0.1, 0 }, 1.3, Ht - 0.4, 8, 0);
             m.bar ({ S / 2, H0 + Ht, 0 }, { S / 2 + 2.0, H0 + Ht + 1.5, 0 }, 0.12, 1);
-            out[3] = std::move (m.v);
+            m.lamp ({ S / 2 + 2.0, H0 + Ht + 1.5, 0 }, 0.25);
+            out[3] = std::move (m.v); lamps[3] = std::move (m.lamps);
         }
         return out;
     }
@@ -282,7 +305,8 @@ bool IceGl::create()
     if (! compile (terrain, glsl ("ice/terrain.vert", Htex::vertex), glsl ("ice/terrain.frag", Htex::fragment), "terrain")
         || ! compile (steel, glsl ("ice/steel.vert", Htex::vertex), glsl ("ice/steel.frag"), "steel")
         || ! compile (sky, glsl ("common/sky.vert"), glsl ("ice/sky.frag"), "sky")
-        || ! compile (snow, glsl ("ice/snow.vert"), glsl ("ice/snow.frag"), "snow"))
+        || ! compile (snow, glsl ("ice/snow.vert"), glsl ("ice/snow.frag"), "snow")
+        || ! compile (glow, glsl ("ice/glow.vert", Htex::vertex), glsl ("ice/glow.frag"), "glow"))
     {
         destroy();
         return false;
@@ -318,13 +342,14 @@ void IceGl::destroy()
     for (auto& b : instanceBuffer) del (b, glDeleteBuffers);
     instanceCount.fill (0); instanceBx = instanceBz = 0x7fffffff;
     del (vaoTerrain, glDeleteVertexArrays); del (vaoSteel, glDeleteVertexArrays); del (vaoEmpty, glDeleteVertexArrays); del (vboEmpty, glDeleteBuffers);
+    del (vaoGlow, glDeleteVertexArrays);
     del (texHeight, glDeleteTextures); del (texGrad1, glDeleteTextures); del (texGrad2, glDeleteTextures); del (texDetail, glDeleteTextures);
     del (fboColour, glDeleteTextures); del (fboDepth, glDeleteRenderbuffers); del (fbo, glDeleteFramebuffers);
     fbW = fbH = 0;
     if (query[0] != 0) glDeleteQueries ((GLsizei) query.size(), query.data());
     query.fill (0);
     queriesWork = false; queriesPending = 0; queryNext = 0;
-    for (auto* p : { &terrain, &steel, &sky, &snow }) { if (p->id != 0) glDeleteProgram (p->id); p->id = 0; }
+    for (auto* p : { &terrain, &steel, &sky, &snow, &glow }) { if (p->id != 0) glDeleteProgram (p->id); p->id = 0; }
 }
 
 void IceGl::makeTextures()
@@ -404,7 +429,7 @@ void IceGl::makeGeometry()
     glGenVertexArrays (1, &vaoSteel);
     glBindVertexArray (vaoSteel);
     {
-        auto meshes = buildSteelMeshes();
+        auto meshes = buildSteelMeshes (lampsOf);
         std::vector<float> all;
         for (int v = 0; v < IceWorld::numVariants; ++v)
         {
@@ -431,6 +456,8 @@ void IceGl::makeGeometry()
         instanceCount.fill (0); instanceBx = instanceBz = 0x7fffffff;
     }
     glBindVertexArray (0);
+    glGenVertexArrays (1, &vaoGlow);    // the lamps' light: the instance cells alone, the quad's corners from the vertex's index
+    locGlowCell = glGetAttribLocation (glow.id, "aCell");
     vaoEmpty = gpu::attributeless (vboEmpty);   // the sky and the snow draw with no attributes (gpu::attributeless)
     glBindBuffer (GL_ARRAY_BUFFER, 0);
 }
@@ -552,6 +579,9 @@ void IceGl::drawScene (int rw, int rh)
     static const SkyFrame skyF = skyFrame();
     const double skyTime = std::fmod (s.time, skyClock);
     float io[3]; ioDirection (skyF, skyTime, io);
+    const auto& play = world.playing();
+    const float lamps = std::max (play.hit(), lampOfGlow * play.glow());
+    const float aurora = auroraOfHit * play.hit() + auroraOfGlow * play.glow();
 
     // The frame of reference: the integer cell at the rover; every shader position is relative to it.
     const double ccx = std::floor (s.x), ccz = std::floor (s.z);
@@ -668,6 +698,8 @@ void IceGl::drawScene (int rw, int rh)
         glUniform3f (steel.uniform ("uCamRel"), camFrac[0], (float) s.camY, camFrac[1]);
         glUniform1i (steel.uniform ("uDetail"), 1); glUniform1f (steel.uniform ("uJupCos"), skyF.jupCos);
         glUniform1f (steel.uniform ("uPxExpand"), (float) (2 * tv / rh));
+        glUniform3f (steel.uniform ("uLamp"), lampLight[0] * lamps, lampLight[1] * lamps, lampLight[2] * lamps);
+        glUniform1f (steel.uniform ("uLit"), world.isLit() ? 1.0f : 0.0f);   // unlit, no lamp at all
         const double shift = IceWorld::structWindow * IceWorld::structCell * 0.3;
         const int bx = (int) std::floor ((s.x + fx * shift) / IceWorld::structCell) - IceWorld::structWindow / 2;
         const int bz = (int) std::floor ((s.z + fz * shift) / IceWorld::structCell) - IceWorld::structWindow / 2;
@@ -707,7 +739,40 @@ void IceGl::drawScene (int rw, int rh)
     glUniform3fv (sky.uniform ("uJupR"), 1, skyF.jupR); glUniform3fv (sky.uniform ("uJupU"), 1, skyF.jupU); glUniform3fv (sky.uniform ("uJupAxis"), 1, skyF.jupAxis);
     glUniform3fv (sky.uniform ("uIo"), 1, io);
     glUniform1f (sky.uniform ("uJupSin"), skyF.jupSin); glUniform1f (sky.uniform ("uJupCos"), skyF.jupCos); glUniform1f (sky.uniform ("uIoSin"), skyF.ioSin);
+    glUniform1f (sky.uniform ("uAurora"), aurora);
     glDrawArrays (GL_TRIANGLES, 0, 3);
+
+    // The lamps' light, added over the steel and the sky where the guitar has them lit; never drawn in silence.
+    if (instancing && lamps > 0.002f && locGlowCell >= 0)
+    {
+        glUseProgram (glow.id); glBindVertexArray (vaoGlow);
+        setCommon (glow);
+        glEnable (GL_BLEND); glBlendFunc (GL_ONE, GL_ONE); glDepthMask (GL_FALSE);
+        glUniformMatrix4fv (glow.uniform ("uViewProj"), 1, GL_FALSE, VP.data());
+        glUniform3f (glow.uniform ("uCamRel"), camFrac[0], (float) s.camY, camFrac[1]);
+        glUniform2f (glow.uniform ("uPxNdc"), 2.0f / (float) rw, 2.0f / (float) rh);
+        glUniform1f (glow.uniform ("uMetrePx"), (float) (0.5 * rh / tv));
+        glUniform1f (glow.uniform ("uGlowPx"), glowOfHeight * (float) rh);
+        glUniform1f (glow.uniform ("uFadeK"), hazeK);
+        glUniform3f (glow.uniform ("uLamp"), lampLight[0] * lamps, lampLight[1] * lamps, lampLight[2] * lamps);
+        const int uVariant = glow.uniform ("uVariant"), uLampAt = glow.uniform ("uLampAt"), uLampSize = glow.uniform ("uLampSize");
+        for (int v = 0; v < IceWorld::numVariants; ++v)
+        {
+            if (instanceCount[(size_t) v] == 0) continue;
+            glUniform1i (uVariant, v);
+            glBindBuffer (GL_ARRAY_BUFFER, instanceBuffer[(size_t) v]);
+            glEnableVertexAttribArray ((GLuint) locGlowCell);
+            glVertexAttribPointer ((GLuint) locGlowCell, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+            glVertexAttribDivisor ((GLuint) locGlowCell, 1);
+            for (const auto& l : lampsOf[(size_t) v])
+            {
+                glUniform3f (uLampAt, l[0], l[1], l[2]); glUniform1f (uLampSize, l[3]);
+                glDrawArraysInstanced (GL_TRIANGLES, 0, 6, instanceCount[(size_t) v]);
+            }
+        }
+        glBindBuffer (GL_ARRAY_BUFFER, 0);
+        glDisable (GL_BLEND); glDepthMask (GL_TRUE);
+    }
 
     // The snow: the flakes blended over everything, as many as the snow asks for.
     if (snowAmount > 0.005f)
@@ -717,6 +782,7 @@ void IceGl::drawScene (int rw, int rh)
         glUniformMatrix4fv (snow.uniform ("uProj"), 1, GL_FALSE, P.data()); glUniform2f (snow.uniform ("uResolution"), (float) rw, (float) rh);
         glUniform1f (snow.uniform ("uTravel"), (float) std::fmod (s.travel, snowClock)); glUniform1f (snow.uniform ("uTime"), (float) skyTime);
         glUniform1f (snow.uniform ("uSpeed"), s.speed); glUniform1f (snow.uniform ("uSnow"), snowAmount); glUniform1f (snow.uniform ("uCount"), (float) IceWorld::snowCount);
+        glUniform1f (snow.uniform ("uGlint"), glintOfHit * play.hit());
         const int count = std::min (IceWorld::snowCount, (int) std::ceil (IceWorld::snowCount * std::min (1.0f, snowAmount + 0.12f)));
         glDrawArrays (GL_TRIANGLES, 0, count * 6);
         glDisable (GL_BLEND); glEnable (GL_DEPTH_TEST);
