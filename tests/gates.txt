@@ -7,7 +7,8 @@
 #
 #   <name>     what the runner calls it, and the name of its log (<build>/gates/<name>.log)
 #   <target>   the CMake target that builds it; CMakeLists.txt refuses a name that is no target, and
-#              `--target Family_Gates` builds every gate of the list
+#              `--target Family_Gates` builds every gate of the list. Most are orbitamp_gates, the one
+#              program that holds them (CMakeLists.txt: THE GATES BINARY), run with ORBITAMP_GATE=<name>
 #   VAR=value  set in the gate's environment, and nowhere else
 #   skip=      the systems it does NOT run on — macos, windows, linux — each with its reason in a
 #              comment above the line.
@@ -19,57 +20,57 @@
 # which are thrown away after the job.)
 
 # OrbitAmp's own — the engine every amp plays.
-captured           orbitamp_captured_test
+captured           orbitamp_gates
 chain              orbitamp_chain_test
-library            orbitamp_library_test
-reverb             orbitamp_reverb_test
-ribbon             orbitamp_ribbon_test
-set                orbitamp_set_test
-factory            orbitamp_factory_test
+library            orbitamp_gates
+reverb             orbitamp_gates
+ribbon             orbitamp_gates
+set                orbitamp_gates
+factory            orbitamp_gates
 hum                orbitamp_hum_test
-hum-off            orbitamp_hum_off_test
+hum-off            orbitamp_gates
 eqlink             orbitamp_eqlink_test
 tuner              orbitamp_tuner_test
 gatelearn          orbitamp_gatelearn_test
-nofactory          orbitamp_no_factory_test
+nofactory          orbitamp_gates
 # The site's kit of OrbitAmp's face is written on a Mac (ORBITAMP_WEB_EXPORT, through CoreGraphics); on
 # Windows JUCE's own renderer and PNG codec leave a knob's antialiased edges up to 94/255 off when its sprite
 # is laid back over the cabin — a kit nobody writes there. Red on Windows since it came (PR #77).
 # And off on the Mac too until the kit learns OrbitAmp's new face (0.9.0): the channel lever and its names,
 # the EQ curve in the AMP's picture well and more of the new layout are not yet what the export lays, so
 # the cabin is not the poster less its live parts. The site keeps the kit it has until then.
-webface            orbitamp_webface_test  skip=macos,windows
+webface            orbitamp_gates  skip=macos,windows
 
 # The sea's CPU half (AmberPawAmp's windscreen), against the prototype it was ported from.
 titan-world        titan_world_test
 
 # The GPU's refusals, written down: the line a world sent to the CPU leaves in the family's log, and its cap.
-gpu-log            orbitamp_gpu_log_test
+gpu-log            orbitamp_gates
 
 # The pictures of a face's kit for the site: WebP, alpha only where there is a hole, the three sizes, sprites/.
-web-images         orbitamp_web_images_test
+web-images         orbitamp_gates
 
 # The cockpit's own: its set as it leaves the binary, and its channels with no window, moved the way a
 # host moves them. The channel gate takes files into the player's IRs folder only when told the home is
 # its own — and here it always is.
-catpit-set         catpitamp_set_test
-catpit-channel     catpitamp_channel_test     CATPIT_GATE_OWNS_HOME=1
-catpit-nofactory   catpitamp_no_factory_test
+catpit-set         orbitamp_gates
+catpit-channel     orbitamp_gates  CATPIT_GATE_OWNS_HOME=1
+catpit-nofactory   orbitamp_gates
 
 # ...and each rover's, the same two over its own channels.
-redpaw-set         redpawamp_set_test
-redpaw-channel     redpawamp_channel_test     ROVER_GATE_OWNS_HOME=1
-redpaw-nofactory   redpawamp_no_factory_test
-frostpaw-set       frostpawamp_set_test
-frostpaw-channel   frostpawamp_channel_test   ROVER_GATE_OWNS_HOME=1
-amberpaw-set       amberpawamp_set_test
-amberpaw-channel   amberpawamp_channel_test   ROVER_GATE_OWNS_HOME=1
+redpaw-set         orbitamp_gates
+redpaw-channel     orbitamp_gates  ROVER_GATE_OWNS_HOME=1
+redpaw-nofactory   orbitamp_gates
+frostpaw-set       orbitamp_gates
+frostpaw-channel   orbitamp_gates  ROVER_GATE_OWNS_HOME=1
+amberpaw-set       orbitamp_gates
+amberpaw-channel   orbitamp_gates  ROVER_GATE_OWNS_HOME=1
 
 # Every amp in one binary: all five side by side in one process, each its own product (src/Product.h).
-family             orbitamp_family_test
+family             orbitamp_gates
 
 # The input's level: unity at every amp's input, the pack's own level feeding the model, 0.8.0's states as they played.
-input-level        orbitamp_input_level_test
+input-level        orbitamp_gates
 
 # The boost's level: louder by it while each amp's boost is on, ramped and exact, ahead of the limiter; off, bit for bit.
-boost-level        orbitamp_boost_level_test
+boost-level        orbitamp_gates

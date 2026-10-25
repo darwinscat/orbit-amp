@@ -882,29 +882,6 @@ function(amp_console target product amp main)
     set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
 
-# ...and its set as the build lays it out in the factory folder, the set's own reading of it and nothing
-# more, beside the family's cabinet shelf. LIBRARIES is what else the gate's reading needs.
-function(amp_set_test target product amp main)
-    cmake_parse_arguments(PARSE_ARGV 4 GATE "" "CHANNELS" "LIBRARIES")
-    juce_add_console_app(${target} PRODUCT_NAME "${product}")
-    target_sources(${target} PRIVATE
-        ${main}
-        src/channels/Set.cpp)
-    target_include_directories(${target} PRIVATE src)
-    target_compile_definitions(${target} PRIVATE ORBITAMP_PRODUCT_NAME="${amp}")
-    if(GATE_CHANNELS)
-        target_compile_definitions(${target} PRIVATE GATE_CHANNELS=${GATE_CHANNELS})
-    endif()
-    target_compile_definitions(${target} PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-    target_link_libraries(${target} PRIVATE
-        OrbitAmpCabinetCatalog           # the family's cabinet shelf, by the catalog's table
-        ${GATE_LIBRARIES}
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_warning_flags)
-    gate_reads_factory(${target})
-    set_target_properties(${target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
-endfunction()
-
 # ----------------------------------------------------------------------------
 # THE SET: every pack and every cabinet a Darwin's Cat amp plays, ONE copy of each in the tree —
 # resources/set/Devices for the packs, under their own names, and resources/set/IRs for the cabinets
@@ -1256,32 +1233,6 @@ add_executable(titan_world_test tests/TitanWorldTests.cpp src/amberpaw/view/Tita
 target_include_directories(titan_world_test PRIVATE src)
 target_compile_features(titan_world_test PRIVATE cxx_std_20)
 
-# The GPU's refusals, written down (src/shaders/GpuLog.h): a refusal leaves its line in the family's log, and
-# the log keeps its newest half past its cap. JUCE's core and the log, nothing else.
-juce_add_console_app(orbitamp_gpu_log_test PRODUCT_NAME "OrbitAmpGpuLogTest")
-target_sources(orbitamp_gpu_log_test PRIVATE tests/GpuLogTests.cpp src/shaders/GpuLog.cpp)
-target_include_directories(orbitamp_gpu_log_test PRIVATE src)
-target_compile_definitions(orbitamp_gpu_log_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_gpu_log_test PRIVATE
-    juce::juce_core
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-set_target_properties(orbitamp_gpu_log_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
-
-# The pictures of a face's kit for the site, as the site reads them (src/face/WebImages.h): WebP, its alpha
-# kept only where a picture has a hole and then lossless, the three sizes and their names, sprites/. JUCE's
-# graphics and libwebp's encoder, nothing of a face.
-juce_add_console_app(orbitamp_web_images_test PRODUCT_NAME "OrbitAmpWebImagesTest")
-target_sources(orbitamp_web_images_test PRIVATE tests/WebImagesTests.cpp src/face/WebImages.cpp)
-target_include_directories(orbitamp_web_images_test PRIVATE src)
-target_compile_definitions(orbitamp_web_images_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_web_images_test PRIVATE
-    felitronics::appkit_webp
-    juce::juce_graphics
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-set_target_properties(orbitamp_web_images_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
-
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
 # sources, the libraries — and each product adds its own skin's file and its own renders. The lamps a
@@ -1409,49 +1360,17 @@ add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     SET       ${AMBERPAWAMP_SET})
 
 # ----------------------------------------------------------------------------
-# THE FACES' GATES — each a face's own, so built only by name (amp_console, amp_set_test).
+# THE FACES' GATES — in the gates binary, with every other (THE GATES BINARY, below); amp_console builds an amp
+# again under a main() of its own, for what is not a gate.
 # ----------------------------------------------------------------------------
 # The cockpit's memory probe — not a gate, a measuring instrument: what the cockpit holds with its
 # window built, and with it SHUT, which is the figure that matters in a host and the one the
 # standalone cannot give.
 amp_console(catpitamp_memory_probe  "CatpitAmpMemoryProbe"  CatpitAmp  tests/MemoryProbe.cpp)
 
-# AN AMP'S GATES, the same two for the cockpit and every rover, run as that amp — what tells one amp
-# from another, the gates read in tests/AmpGate.h. Its channels with no window at all — as many as
-# CHANNELS says, each with its own memory and what it opens on, moved by CHANNEL the way a host moves
-# it; the rover's gears and the Boost each holds, the cockpit's DRIVE on its dial — and its set as
-# it — and its set as the build lays it out in the factory folder, under its own list, whole and nothing
-# else; that one reads pack manifests (DeviceLibrary.h, through namz).
-set(AMP_SET_GATE_LIBRARIES felitronics::nam juce::juce_core juce::juce_events juce::juce_gui_basics)
-amp_console(catpitamp_channel_test    "CatpitAmpChannelTest"    CatpitAmp    tests/AmpChannelTests.cpp  CHANNELS 4)
-amp_set_test(catpitamp_set_test       "CatpitAmpSetTest"        CatpitAmp    tests/AmpSetTests.cpp      CHANNELS 4
-    LIBRARIES ${AMP_SET_GATE_LIBRARIES})
-amp_console(redpawamp_channel_test    "RedPawAmpChannelTest"    RedPawAmp    tests/AmpChannelTests.cpp  CHANNELS 4)
-amp_set_test(redpawamp_set_test       "RedPawAmpSetTest"        RedPawAmp    tests/AmpSetTests.cpp      CHANNELS 4
-    LIBRARIES ${AMP_SET_GATE_LIBRARIES})
-amp_console(frostpawamp_channel_test  "FrostPawAmpChannelTest"  FrostPawAmp  tests/AmpChannelTests.cpp  CHANNELS 6)
-amp_set_test(frostpawamp_set_test     "FrostPawAmpSetTest"      FrostPawAmp  tests/AmpSetTests.cpp      CHANNELS 6
-    LIBRARIES ${AMP_SET_GATE_LIBRARIES})
-amp_console(amberpawamp_channel_test  "AmberPawAmpChannelTest"  AmberPawAmp  tests/AmpChannelTests.cpp  CHANNELS 6)
-amp_set_test(amberpawamp_set_test     "AmberPawAmpSetTest"      AmberPawAmp  tests/AmpSetTests.cpp      CHANNELS 6
-    LIBRARIES ${AMP_SET_GATE_LIBRARIES})
-
-# AN AMP WITH NO FACTORY FOLDER — copied off a zip without it, or the folder deleted: it plays, and says
-# where the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the
-# cockpit and the rovers' dashboard, which FrostPawAmp and AmberPawAmp wear too.
-amp_console(orbitamp_no_factory_test  "OrbitAmpNoFactoryTest"   OrbitAmp     tests/NoFactoryTests.cpp   NO_FACTORY)
-amp_console(catpitamp_no_factory_test "CatpitAmpNoFactoryTest"  CatpitAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
-amp_console(redpawamp_no_factory_test "RedPawAmpNoFactoryTest"  RedPawAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
-
-# ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
-# builds the face back — its own format, every place on the stage, the hull the poster less its places.
-amp_console(orbitamp_webface_test     "OrbitAmpWebFaceTest"     OrbitAmp     tests/WebFaceTests.cpp)
-
-# EVERY AMP IN ONE BINARY: the sources of all of them, each once, and their libraries, under one main() —
-# what a plug-in of several amps will be. Its gate plays them side by side in one process, each a processor
-# of its own Product, two of them at once: each its own name, its own list in the build's factory folder,
-# its own channels and its own settings (tests/FamilyTests.cpp). An amp that defined something under a name
-# another defines too would not link here.
+# THE FAMILY'S SOURCES: every amp's, each once, and their libraries — what a plug-in of several amps is made
+# of (THE FAMILY'S PLUG-INS), and the gates binary with it (below). An amp that defined something under a name
+# another defines too would not link.
 set(family_sources "")
 set(family_libraries "")
 foreach(amp IN LISTS AMPS)
@@ -1463,45 +1382,181 @@ endforeach()
 list(REMOVE_DUPLICATES family_sources)
 list(REMOVE_DUPLICATES family_libraries)
 list(REMOVE_ITEM family_libraries juce::juce_recommended_lto_flags)    # a gate links in seconds, not minutes
-juce_add_console_app(orbitamp_family_test PRODUCT_NAME "OrbitAmpFamilyTest")
-target_sources(orbitamp_family_test PRIVATE tests/FamilyTests.cpp ${family_sources})
-target_include_directories(orbitamp_family_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
-add_dependencies(orbitamp_family_test OrbitAmpVersionGen)
-target_compile_definitions(orbitamp_family_test PRIVATE
-    ORBITAMP_VERSION="${PROJECT_VERSION}"
-    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
-target_link_libraries(orbitamp_family_test PRIVATE ${family_libraries})
-gate_reads_factory(orbitamp_family_test)
-set_target_properties(orbitamp_family_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
-# THE INPUT'S LEVEL: unity at every amp's input control, the pack's own level feeding the model, and a
-# cockpit's or a rover's state of 0.8.0's, absolute, feeding it and gating as it did — every amp, so the
-# family's sources (tests/InputLevelTests.cpp), out of the build's factory folder.
-juce_add_console_app(orbitamp_input_level_test PRODUCT_NAME "OrbitAmpInputLevelTest")
-target_sources(orbitamp_input_level_test PRIVATE tests/InputLevelTests.cpp ${family_sources})
-target_include_directories(orbitamp_input_level_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
-add_dependencies(orbitamp_input_level_test OrbitAmpVersionGen)
-target_compile_definitions(orbitamp_input_level_test PRIVATE
-    ORBITAMP_VERSION="${PROJECT_VERSION}"
-    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
-target_link_libraries(orbitamp_input_level_test PRIVATE ${family_libraries})
-gate_reads_factory(orbitamp_input_level_test)
-set_target_properties(orbitamp_input_level_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+# ----------------------------------------------------------------------------
+# THE GATES BINARY: most gates of tests/gates.txt are ONE program, orbitamp_gates, run one gate at a time —
+# `orbitamp_gates <gate>`, or with ORBITAMP_GATE=<gate> in its environment, as tools/run-gates.sh runs it (THE
+# GATES, below, says so for every gate the list gives it). They were a program each, and each compiled JUCE
+# and the amps' sources again: 29 programs, 867 compiles of 100 files. Here the family's sources and JUCE are
+# compiled once, and each gate adds its own file — compiled once for every amp it runs as, under a main() of
+# its own name (tests/GateMain.h), with what it is told said at the head of a file the build writes for it,
+# <build>/gates-src/<gate>.cpp; tests/Gates.cpp runs the one asked for.
+#
+#   gate_in_binary(<gate> <file> [PRODUCT <Amp>] [CHANNELS <n>] [NO_FACTORY | MACHINE_FACTORY] [DEFINES <NAME=value>...])
+#
+#   PRODUCT     runs it as that amp: ORBITAMP_PRODUCT_NAME, and ORBITAMP_GATE_PRODUCT — orbitamp::products::<name>
+#               with its first letter small (src/Product.h)
+#   CHANNELS    how many channels it holds the amp to (GATE_CHANNELS), said apart from the amp's lineup
+#   NO_FACTORY  it reads a factory folder that is not there
+#   MACHINE_FACTORY
+#               it reads the machine's, where the installer lays it, as an amp does — as the gates that were
+#               never told a folder did when each was a program of its own. Every other gate reads the
+#               build's own (src/device/FactorySet.h, ORBITAMP_GATES_BINARY).
+#   DEFINES     whatever else its file is told
+#
+# Nothing a gate's file says may be one definition the linker keeps for all of them — a file compiled for
+# several amps keeps what reads the amp in an anonymous namespace (tests/AmpGate.h does).
+#
+# Apart, each a program of its own still: the chain's gate, which counts every allocation of the process with
+# an operator new of its own, which would be every gate's here; the hum's, built with HUM switched on, which no
+# amp ships (src/Features.h) — one program cannot hold the processor built both ways; and the gates with no
+# JUCE in them (eqlink, tuner, gatelearn, titan-world), which cost nothing kept apart.
+# ----------------------------------------------------------------------------
+set(ORBITAMP_GATES_SRC "${CMAKE_BINARY_DIR}/gates-src")
+set_property(GLOBAL PROPERTY ORBITAMP_GATES_IN_BINARY "")
+set_property(GLOBAL PROPERTY ORBITAMP_GATES_FILES "")
+set_property(GLOBAL PROPERTY ORBITAMP_GATES_TABLE "")
 
-# THE BOOST'S LEVEL: while an amp's boost is on — OrbitAmp's BOOST key, the rovers' TURBO, the cockpit's
-# TURBO push — the amp leaves that much louder, ramped, exactly, ahead of the limiter; with it off not at
-# all, bit for bit — every amp, so the family's sources (tests/BoostLevelTests.cpp), out of the build's
-# factory folder.
-juce_add_console_app(orbitamp_boost_level_test PRODUCT_NAME "OrbitAmpBoostLevelTest")
-target_sources(orbitamp_boost_level_test PRIVATE tests/BoostLevelTests.cpp ${family_sources})
-target_include_directories(orbitamp_boost_level_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
-add_dependencies(orbitamp_boost_level_test OrbitAmpVersionGen)
-target_compile_definitions(orbitamp_boost_level_test PRIVATE
+function(gate_in_binary gate file)
+    cmake_parse_arguments(PARSE_ARGV 2 GATE "NO_FACTORY;MACHINE_FACTORY" "PRODUCT;CHANNELS" "DEFINES")
+    get_property(held GLOBAL PROPERTY ORBITAMP_GATES_IN_BINARY)
+    if(gate IN_LIST held)
+        message(FATAL_ERROR "gate_in_binary: ${gate} is in the gates binary twice")
+    endif()
+    string(MAKE_C_IDENTIFIER "${gate}" id)
+    set(text "// The gate ${gate} (tests/gates.txt) in the gates binary — written by the build (CMakeLists.txt:\n// THE GATES BINARY), never by hand.\n")
+    if(GATE_PRODUCT)
+        string(SUBSTRING "${GATE_PRODUCT}" 0 1 first)
+        string(SUBSTRING "${GATE_PRODUCT}" 1 -1 rest)
+        string(TOLOWER "${first}" first)
+        string(APPEND text "#define ORBITAMP_PRODUCT_NAME \"${GATE_PRODUCT}\"\n"
+                           "#define ORBITAMP_GATE_PRODUCT orbitamp::products::${first}${rest}\n")
+    endif()
+    if(GATE_CHANNELS)
+        string(APPEND text "#define GATE_CHANNELS ${GATE_CHANNELS}\n")
+    endif()
+    foreach(define IN LISTS GATE_DEFINES)
+        if(NOT define MATCHES "^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+            message(FATAL_ERROR "gate_in_binary: ${gate}'s \"${define}\" is no NAME=value")
+        endif()
+        string(APPEND text "#define ${CMAKE_MATCH_1} ${CMAKE_MATCH_2}\n")
+    endforeach()
+    string(APPEND text "#define ORBITAMP_GATE_MAIN orbitamp_gate_${id}\n"
+                       "#include \"${CMAKE_CURRENT_SOURCE_DIR}/${file}\"\n")
+    file(CONFIGURE OUTPUT "${ORBITAMP_GATES_SRC}/${id}.cpp" CONTENT "${text}" @ONLY)   # written again only when it changes
+    if(GATE_NO_FACTORY)
+        set(factory GateFactory::none)
+    elseif(GATE_MACHINE_FACTORY)
+        set(factory GateFactory::machine)
+    else()
+        set(factory GateFactory::build)
+    endif()
+    set_property(GLOBAL APPEND PROPERTY ORBITAMP_GATES_IN_BINARY "${gate}")
+    set_property(GLOBAL APPEND PROPERTY ORBITAMP_GATES_FILES "${ORBITAMP_GATES_SRC}/${id}.cpp")
+    set_property(GLOBAL APPEND PROPERTY ORBITAMP_GATES_TABLE "${gate}|${id}|${factory}")
+endfunction()
+
+# The family as one program: all five side by side in one process, each a processor of its own Product, two of
+# them at once — each its own name, its own list in the factory folder, its own channels and settings.
+gate_in_binary(family            tests/FamilyTests.cpp)
+# The input's level: unity at every amp's input control, the pack's own level feeding the model, and a cockpit's
+# or a rover's state of 0.8.0's, absolute, feeding it and gating as it did.
+gate_in_binary(input-level       tests/InputLevelTests.cpp)
+# The boost's level: while an amp's boost is on — OrbitAmp's BOOST key, the rovers' TURBO, the cockpit's TURBO
+# push — the amp leaves that much louder, ramped, exactly, ahead of the limiter; with it off not at all.
+gate_in_binary(boost-level       tests/BoostLevelTests.cpp)
+
+# AN AMP'S GATES, the same two for the cockpit and every rover, run as that amp — what tells one amp from
+# another, the gates read in tests/AmpGate.h. Its channels with no window at all — as many as CHANNELS says,
+# each with its own memory and what it opens on, moved by CHANNEL the way a host moves it; the rover's gears and
+# the Boost each holds, the cockpit's DRIVE on its dial — and its set as the build lays it out in the factory
+# folder, under its own list, whole and nothing else.
+gate_in_binary(catpit-channel    tests/AmpChannelTests.cpp  PRODUCT CatpitAmp    CHANNELS 4)
+gate_in_binary(catpit-set        tests/AmpSetTests.cpp      PRODUCT CatpitAmp    CHANNELS 4)
+gate_in_binary(redpaw-channel    tests/AmpChannelTests.cpp  PRODUCT RedPawAmp    CHANNELS 4)
+gate_in_binary(redpaw-set        tests/AmpSetTests.cpp      PRODUCT RedPawAmp    CHANNELS 4)
+gate_in_binary(frostpaw-channel  tests/AmpChannelTests.cpp  PRODUCT FrostPawAmp  CHANNELS 6)
+gate_in_binary(frostpaw-set      tests/AmpSetTests.cpp      PRODUCT FrostPawAmp  CHANNELS 6)
+gate_in_binary(amberpaw-channel  tests/AmpChannelTests.cpp  PRODUCT AmberPawAmp  CHANNELS 6)
+gate_in_binary(amberpaw-set      tests/AmpSetTests.cpp      PRODUCT AmberPawAmp  CHANNELS 6)
+
+# AN AMP WITH NO FACTORY FOLDER — copied off a zip without it, or the folder deleted: it plays, and says where
+# the folder belongs instead of opening an empty face (src/ui/FactoryMissing.h). OrbitAmp, the cockpit and the
+# rovers' dashboard, which FrostPawAmp and AmberPawAmp wear too.
+gate_in_binary(nofactory         tests/NoFactoryTests.cpp   PRODUCT OrbitAmp     NO_FACTORY)
+gate_in_binary(catpit-nofactory  tests/NoFactoryTests.cpp   PRODUCT CatpitAmp    NO_FACTORY)
+gate_in_binary(redpaw-nofactory  tests/NoFactoryTests.cpp   PRODUCT RedPawAmp    NO_FACTORY)
+
+# ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
+# builds the face back — its own format, every place on the stage, the hull the poster less its places.
+gate_in_binary(webface           tests/WebFaceTests.cpp     PRODUCT OrbitAmp)
+
+# HUM SWITCHED OFF (src/Features.h), the processor built as every amp ships it: with the machine's settings on
+# AUTO — as a machine that chose AUTO before keeps them — the stage is never prepared and never runs, the mode
+# in force is OFF with no LEARN, and a hummed input passes bit for bit. The same file as the hum's own gate
+# (orbitamp_hum_test, below), which runs only this part of itself when the switch is off.
+gate_in_binary(hum-off           tests/HumTests.cpp)
+
+# Reading an .orbitrig pack and playing it through the block the plug-in plays it with — every installed pack
+# sounds, the dial mixes without a step, a linked position is fed softer, a tone knob of either form reaches
+# the audio, and OURS parks the device's own.
+gate_in_binary(captured          tests/CapturedBlockTests.cpp  MACHINE_FACTORY)
+# The library manager's FILE WORK — imports, zip unpacking, renames, and the guards that keep every destructive
+# operation inside the library — in a temp folder, the set's manifests read in place.
+gate_in_binary(library           tests/LibraryTests.cpp     MACHINE_FACTORY  DEFINES "ORBITAMP_SET_DIR=\"${ORBITAMP_SET_DIR}\"")
+# OrbitAmp's set as the build lays it out in the factory folder — every pack OrbitAmp plays, under a name the
+# device list tells apart, every pack of the tree's set (a release leaves the unreleased amps' packs out), and
+# the whole cabinet shelf in its folders; the list it reads is the build's own, <build>/Factory/sets/OrbitAmp.txt.
+gate_in_binary(set               tests/OrbitAmpSetTests.cpp
+    DEFINES ORBITAMP_PLAYS_REVOLT=${FROSTPAWAMP_PACKS_IN_ORBITAMP} ORBITAMP_PLAYS_V4=${AMBERPAWAMP_PACKS_IN_ORBITAMP})
+# The family's factory folder with more than one product reading it — two products of make-believe in one
+# folder, each seeing what its own list names and nothing else. In a temp folder.
+gate_in_binary(factory           tests/FactorySetTests.cpp  MACHINE_FACTORY  DEFINES "ORBITAMP_SET_DIR=\"${ORBITAMP_SET_DIR}\"")
+# felitronics::reverb's AmpReverb, the room every amp plays.
+gate_in_binary(reverb            tests/ReverbStageTests.cpp  MACHINE_FACTORY)
+# The waveform picture's MEMORY — what it recorded must not be rewritten later.
+gate_in_binary(ribbon            tests/WaveRibbonTests.cpp  MACHINE_FACTORY)
+# The GPU's refusals, written down: the line a world sent to the CPU leaves in the family's log, and its cap.
+gate_in_binary(gpu-log           tests/GpuLogTests.cpp  MACHINE_FACTORY)
+# The pictures of a face's kit for the site: WebP, alpha only where there is a hole, the three sizes, sprites/.
+gate_in_binary(web-images        tests/WebImagesTests.cpp  MACHINE_FACTORY)
+
+get_property(gates_files GLOBAL PROPERTY ORBITAMP_GATES_FILES)
+get_property(gates_table GLOBAL PROPERTY ORBITAMP_GATES_TABLE)
+set(table "// The gates of the gates binary (CMakeLists.txt: THE GATES BINARY) — written by the build, never by hand.\n#pragma once\n\n")
+set(rows "")
+foreach(row IN LISTS gates_table)
+    string(REPLACE "|" ";" row "${row}")
+    list(GET row 0 gate)
+    list(GET row 1 id)
+    list(GET row 2 factory)
+    string(APPEND table "int orbitamp_gate_${id}();\n")
+    string(APPEND rows "    { \"${gate}\", &orbitamp_gate_${id}, ${factory} },\n")
+endforeach()
+string(APPEND table "\nenum class GateFactory { build, none, machine };\n\nstruct GateEntry\n{\n    const char* name;\n    int (*run)();\n    GateFactory factory;\n};\n\n"
+                    "inline constexpr GateEntry gateTable[]\n{\n${rows}};\n")
+file(CONFIGURE OUTPUT "${ORBITAMP_GATES_SRC}/GatesTable.h" CONTENT "${table}" @ONLY)
+
+juce_add_console_app(orbitamp_gates PRODUCT_NAME "OrbitAmpGates")
+set(gates_sources tests/Gates.cpp ${family_sources} ${gates_files}
+    src/channels/Set.cpp src/shaders/GpuLog.cpp src/face/WebImages.cpp)
+list(REMOVE_DUPLICATES gates_sources)
+target_sources(orbitamp_gates PRIVATE ${gates_sources})
+target_include_directories(orbitamp_gates PRIVATE src tests "${ORBITAMP_GENERATED_DIR}" "${ORBITAMP_GATES_SRC}")
+add_dependencies(orbitamp_gates OrbitAmpVersionGen Family_Factory)
+target_compile_definitions(orbitamp_gates PRIVATE
     ORBITAMP_VERSION="${PROJECT_VERSION}"
+    ORBITAMP_GATES_BINARY=1
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
-target_link_libraries(orbitamp_boost_level_test PRIVATE ${family_libraries})
-gate_reads_factory(orbitamp_boost_level_test)
-set_target_properties(orbitamp_boost_level_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+set_source_files_properties(tests/Gates.cpp PROPERTIES COMPILE_DEFINITIONS
+    "ORBITAMP_GATES_FACTORY=\"${ORBITAMP_FACTORY_DIR}\";ORBITAMP_GATES_NO_FACTORY=\"${CMAKE_CURRENT_BINARY_DIR}/no-factory/Factory\"")
+target_link_libraries(orbitamp_gates PRIVATE
+    ${family_libraries}
+    OrbitAmpCabinetCatalog           # the family's cabinet shelf, by the catalog's table
+    felitronics::appkit_webp         # the site kit's pictures (web-images)
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(orbitamp_gates PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 
 # ----------------------------------------------------------------------------
@@ -1884,19 +1939,6 @@ add_executable(orbitamp_gatelearn_test tests/GateLearnTests.cpp)
 target_include_directories(orbitamp_gatelearn_test PRIVATE src)
 target_compile_features(orbitamp_gatelearn_test PRIVATE cxx_std_20)
 
-# Same gate for the reverb — felitronics::reverb's AmpReverb, the room this plugin plays. It needs no
-# JUCE any more (the room no longer stands on the framework's Freeverb); it stays a console app so its
-# binary lands where the release workflows look for every gate's.
-juce_add_console_app(orbitamp_reverb_test PRODUCT_NAME "OrbitAmpReverbTest")
-target_sources(orbitamp_reverb_test PRIVATE tests/ReverbStageTests.cpp)
-target_include_directories(orbitamp_reverb_test PRIVATE src)
-target_compile_definitions(orbitamp_reverb_test PRIVATE
-    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_reverb_test PRIVATE
-    felitronics::reverb
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-
 # ----------------------------------------------------------------------------
 # Standalone code signing (macOS, dev loop).
 #
@@ -1959,18 +2001,6 @@ if(APPLE)
 endif()
 
 # ----------------------------------------------------------------------------
-# Gate for the waveform picture's MEMORY — what it recorded must not be rewritten later.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_ribbon_test PRODUCT_NAME "OrbitAmpRibbonTest")
-target_sources(orbitamp_ribbon_test PRIVATE tests/WaveRibbonTests.cpp)
-target_include_directories(orbitamp_ribbon_test PRIVATE src)
-target_compile_definitions(orbitamp_ribbon_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_ribbon_test PRIVATE
-    juce::juce_audio_basics
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-
-# ----------------------------------------------------------------------------
 # Gate for the ASSEMBLED plugin: move a control, hear the output change. Links the plugin's own
 # sources rather than a stage of it, because what this checks is the wiring between them.
 # ----------------------------------------------------------------------------
@@ -1996,8 +2026,8 @@ gate_reads_factory(orbitamp_chain_test)   # OrbitAmp's whole shelf, and its pack
 #
 # HUM is switched off in every amp for now (src/Features.h), so the gate is built twice from the one
 # file. This one throws the switch (ORBITAMP_FEATURE_HUM=1) and tests the stage, which has to stay ready
-# for the day HUM comes back; orbitamp_hum_off_test, below, is built as the products are and holds the
-# switch itself.
+# for the day HUM comes back; the gates binary's hum-off (THE GATES BINARY) is built as the products are
+# and holds the switch itself.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_hum_test PRODUCT_NAME "OrbitAmpHumTest")
 target_sources(orbitamp_hum_test PRIVATE tests/HumTests.cpp ${ORBITAMP_SOURCES})       # ...and so does this one
@@ -2013,107 +2043,6 @@ target_link_libraries(orbitamp_hum_test PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 gate_reads_factory(orbitamp_hum_test)     # OrbitAmp's processor, its whole shelf with it
-
-# ----------------------------------------------------------------------------
-# Gate for HUM SWITCHED OFF (src/Features.h), the processor built as every amp ships it: with the
-# machine's settings on AUTO — as a machine that chose AUTO before keeps them — the stage is never
-# prepared and never runs, the mode in force is OFF with no LEARN, and a hummed input passes bit for
-# bit. The same file as the hum gate, which runs only this part of itself when the switch is off.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_hum_off_test PRODUCT_NAME "OrbitAmpHumOffTest")
-target_sources(orbitamp_hum_off_test PRIVATE tests/HumTests.cpp ${ORBITAMP_SOURCES})
-target_include_directories(orbitamp_hum_off_test PRIVATE src)
-target_include_directories(orbitamp_hum_off_test PRIVATE "${ORBITAMP_GENERATED_DIR}")
-add_dependencies(orbitamp_hum_off_test OrbitAmpVersionGen)
-target_compile_definitions(orbitamp_hum_off_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
-                                                        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_hum_off_test PRIVATE
-    OrbitAmpData
-    ${AMP_ENGINE_LIBRARIES}
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-gate_reads_factory(orbitamp_hum_off_test)
-
-# ----------------------------------------------------------------------------
-# Gate for reading an .orbitrig pack and playing it through the block the plugin plays it with —
-# every installed pack sounds, the dial mixes without a step, a linked position is fed softer, a
-# tone knob of either form reaches the audio, and OURS parks the device's own. Skips cleanly when
-# no pack is installed.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_captured_test PRODUCT_NAME "OrbitAmpCapturedTest")
-target_sources(orbitamp_captured_test PRIVATE tests/CapturedBlockTests.cpp)
-target_include_directories(orbitamp_captured_test PRIVATE src)
-target_compile_definitions(orbitamp_captured_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_link_libraries(orbitamp_captured_test PRIVATE
-    felitronics::lineareq
-    felitronics::nam
-    felitronics::rigplayer
-    felitronics::limiter
-    felitronics::delay               # Parameters.h takes the delay's ladder and ranges from it...
-    felitronics::reverb              # ...and the room's characters
-    OrbitAmpCabinetCatalog           # ...and the cabinets, from the catalog's table
-    juce::juce_audio_basics
-    juce::juce_audio_processors
-    juce::juce_dsp
-    juce::juce_events
-    juce::juce_gui_basics
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-
-# ----------------------------------------------------------------------------
-# Gate for the library manager's FILE WORK — imports, zip unpacking, renames, and the guards that
-# keep every destructive operation inside the library. Runs entirely in a temp folder.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_library_test PRODUCT_NAME "OrbitAmpLibraryTest")
-target_sources(orbitamp_library_test PRIVATE tests/LibraryTests.cpp)
-target_include_directories(orbitamp_library_test PRIVATE src)
-target_compile_definitions(orbitamp_library_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-                                                        ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}")   # the set's manifests, read in place
-target_link_libraries(orbitamp_library_test PRIVATE
-    felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
-    juce::juce_events
-    juce::juce_gui_basics
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-
-# ----------------------------------------------------------------------------
-# Gate for OrbitAmp's set as the build lays it out in the factory folder — every pack OrbitAmp plays, under
-# a name the device list tells apart, every pack of the tree's set, and the whole cabinet shelf in its folders;
-# the list it reads is the build's own, <build>/Factory/sets/OrbitAmp.txt.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
-target_sources(orbitamp_set_test PRIVATE tests/OrbitAmpSetTests.cpp)
-target_include_directories(orbitamp_set_test PRIVATE src)
-target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-    ORBITAMP_PLAYS_REVOLT=${FROSTPAWAMP_PACKS_IN_ORBITAMP}      # a release leaves the unreleased amps' packs out
-    ORBITAMP_PLAYS_V4=${AMBERPAWAMP_PACKS_IN_ORBITAMP})
-target_link_libraries(orbitamp_set_test PRIVATE
-    OrbitAmpCabinetCatalog           # the family's cabinet shelf, by the catalog's table
-    felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
-    juce::juce_events
-    juce::juce_gui_basics
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
-gate_reads_factory(orbitamp_set_test)
-
-# ----------------------------------------------------------------------------
-# Gate for the family's factory folder with more than one product reading it — two products of
-# make-believe in one folder, each seeing what its own list names and nothing else: their packs, their
-# cabinets, with a file missing or empty held as an empty place. Neither product's: built and run with
-# OrbitAmp's gates. Runs entirely in a temp folder.
-# ----------------------------------------------------------------------------
-juce_add_console_app(orbitamp_factory_test PRODUCT_NAME "OrbitAmpFactoryTest")
-target_sources(orbitamp_factory_test PRIVATE tests/FactorySetTests.cpp)
-target_include_directories(orbitamp_factory_test PRIVATE src)
-target_compile_definitions(orbitamp_factory_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-                                                        ORBITAMP_SET_DIR="${ORBITAMP_SET_DIR}")   # the set's packs, copied out of the tree
-target_link_libraries(orbitamp_factory_test PRIVATE
-    OrbitAmpCabinetCatalog           # the shelf's table
-    felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz
-    juce::juce_events
-    juce::juce_gui_basics
-    juce::juce_recommended_config_flags
-    juce::juce_recommended_warning_flags)
 
 # ----------------------------------------------------------------------------
 # THE GATES — tests/gates.txt is the one list, read here the way tools/run-gates.sh reads it. Every target
@@ -2135,6 +2064,7 @@ endif()
 file(STRINGS "${GATES_TXT}" _gate_lines ENCODING UTF-8 REGEX "^[^#]")
 add_custom_target(Family_Gates)
 set(_gate_manifest "")
+set(_gates_listed "")
 foreach(line IN LISTS _gate_lines)
     string(REGEX MATCHALL "[^ \t\r]+" fields "${line}")
     list(LENGTH fields n)
@@ -2167,6 +2097,14 @@ foreach(line IN LISTS _gate_lines)
     if(NOT TARGET ${target})
         message(FATAL_ERROR "tests/gates.txt: gate ${gate} names ${target}, which is no target of this tree")
     endif()
+    list(APPEND _gates_listed "${gate}")
+    if(target STREQUAL "orbitamp_gates")   # THE GATES BINARY: it runs the gate its environment names
+        get_property(held GLOBAL PROPERTY ORBITAMP_GATES_IN_BINARY)
+        if(NOT gate IN_LIST held)
+            message(FATAL_ERROR "tests/gates.txt: gate ${gate} names orbitamp_gates, which holds no ${gate} (gate_in_binary)")
+        endif()
+        list(APPEND env "ORBITAMP_GATE=${gate}")
+    endif()
     if(skipped)
         message(STATUS "Gate ${gate} is skipped on ${_gate_system} (tests/gates.txt)")
         continue()
@@ -2174,5 +2112,12 @@ foreach(line IN LISTS _gate_lines)
     add_dependencies(Family_Gates ${target})
     list(JOIN env " " env)
     string(APPEND _gate_manifest "${gate}\t$<TARGET_FILE:${target}>\t${env}\n")
+endforeach()
+# ...and a gate the gates binary holds that the list does not name would never run.
+get_property(held GLOBAL PROPERTY ORBITAMP_GATES_IN_BINARY)
+foreach(gate IN LISTS held)
+    if(NOT gate IN_LIST _gates_listed)
+        message(FATAL_ERROR "the gates binary holds ${gate}, which tests/gates.txt does not name")
+    endif()
 endforeach()
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/gates/$<CONFIG>.txt" CONTENT "${_gate_manifest}")

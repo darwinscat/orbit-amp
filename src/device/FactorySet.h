@@ -6,6 +6,17 @@
 
 #include <juce_core/juce_core.h>
 
+#if defined (ORBITAMP_GATES_BINARY)
+namespace orbitamp::gates
+{
+    /** The folder the gate that runs reads — the build's factory folder, or one that is not there; or
+        none, for a gate that reads the machine's, as an amp does (tests/Gates.cpp): every gate of the
+        gates binary is compiled with the same sources, so which folder it reads is said as it starts,
+        not on the compiler's line. */
+    juce::File factory();
+}
+#endif
+
 namespace orbitamp::device
 {
 
@@ -68,6 +79,11 @@ struct FactorySet
         with nothing in it. */
     static juce::File location()
     {
+       #if defined (ORBITAMP_GATES_BINARY)
+        if (const auto gate = orbitamp::gates::factory(); gate != juce::File())
+            return gate;
+       #endif
+
        #if defined (ORBITAMP_GATE_FACTORY)
         return juce::File (juce::CharPointer_UTF8 (ORBITAMP_GATE_FACTORY));
        #else
