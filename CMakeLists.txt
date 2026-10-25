@@ -2120,4 +2120,6 @@ foreach(gate IN LISTS held)
         message(FATAL_ERROR "the gates binary holds ${gate}, which tests/gates.txt does not name")
     endif()
 endforeach()
-file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/gates/$<CONFIG>.txt" CONTENT "${_gate_manifest}")
+# UNIX line ends on every system: on Windows CMake writes \r\n, bash's `read` keeps the \r on the last field,
+# and the gates binary was asked for "captured\r" — a gate it does not hold.
+file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/gates/$<CONFIG>.txt" CONTENT "${_gate_manifest}" NEWLINE_STYLE UNIX)
