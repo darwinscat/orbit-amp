@@ -328,7 +328,8 @@ int ORBITAMP_GATE_MAIN()
                 std::printf ("tone: %s, %s\n", t.name.c_str(), bands ? "as bands" : "as a measured ladder");
 
                 // where to listen: the frequency the knob promises to move most, inside its trusted
-                // band — for a ladder from its own tables, for bands at the first band's corner
+                // band — for a ladder from its own tables, for bands at the first band's corner, or a
+                // tilt's two octaves off it
                 double probeHz = 1000.0;
                 if (! bands && t.positions.size() >= 2)
                 {
@@ -348,7 +349,13 @@ int ORBITAMP_GATE_MAIN()
                 }
                 else if (bands)
                 {
-                    probeHz = t.sections.front().hz;
+                    // ...but a TILT turns about its corner, which it leaves where it is (SectionBiquad.h):
+                    // there it moves nothing, by design, and the check read V4 Copper's Tone, a working
+                    // knob, as one that does not reach the audio. Two octaves out on the arm that travels
+                    // more — the top's, unless the hinge sits high — it has most of its travel.
+                    const auto& s = t.sections.front();
+                    probeHz = s.kind != namz::rig::SectionKind::Tilt ? s.hz
+                                                                     : s.pivot > 0.5 ? s.hz / 4.0 : s.hz * 4.0;
                 }
 
                 std::array<float, (size_t) Block::numMeasured> values {};
