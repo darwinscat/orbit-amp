@@ -8,6 +8,7 @@
 // each live part's opening sprite laid on the cabin giving the poster back; and the window left as it
 // opened — every parameter where it stood, the channels' memory as it was.
 
+#include "GateMain.h"
 #include "AmpChannels.h"
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
@@ -64,7 +65,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     using namespace orbitamp;
     const juce::ScopedJuceInitialiser_GUI juceInit;

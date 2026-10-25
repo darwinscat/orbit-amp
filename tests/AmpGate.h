@@ -27,7 +27,12 @@
  #error "the build says which amp the gate runs as"
 #endif
 
+// ITS OWN IN EVERY FILE THAT INCLUDES IT: what is said here reads the build's GATE_CHANNELS and
+// ORBITAMP_PRODUCT_NAME, which the gates binary (tests/Gates.cpp) says differently for every amp's gate in
+// one program — so nothing here may be one definition the linker keeps for all of them.
 namespace gate
+{
+namespace
 {
 
 /** EVERY CHECK SAYS WHAT IT FOUND, a line each — `ok` or `FAIL`, and what it holds the amp to — and the
@@ -171,4 +176,5 @@ inline std::vector<Channel> played()
     return { all.begin(), all.begin() + juce::jmin ((int) GATE_CHANNELS, (int) all.size()) };
 }
 
+} // namespace
 } // namespace gate

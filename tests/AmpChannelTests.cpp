@@ -39,6 +39,7 @@
 // the amp does. Every amp over the channels' engine runs it as itself — CatpitAmp, RedPawAmp,
 // FrostPawAmp, AmberPawAmp (CMakeLists.txt: amp_console), each as AmpGate.h knows it.
 
+#include "GateMain.h"
 #include "AmpGate.h"
 #include "PluginProcessor.h"
 #include "Parameters.h"
@@ -69,7 +70,7 @@ namespace
     constexpr bool turboOf (int channel) noexcept           { return channel % 2 == 1; }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     using namespace orbitamp;
     const juce::ScopedJuceInitialiser_GUI juceInit;

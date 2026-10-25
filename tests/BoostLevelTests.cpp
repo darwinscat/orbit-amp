@@ -25,6 +25,7 @@
 // — whatever the boost does to the capture itself is in both, and only the level is between them. Out of
 // the build's factory folder, so every amp plays its packs. main() returns 0 when every check held.
 
+#include "GateMain.h"
 #include <juce_events/juce_events.h>
 
 #include "AmpChannels.h"
@@ -253,7 +254,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     std::setvbuf (stdout, nullptr, _IONBF, 0);     // a gate that dies says how far it got
     const juce::ScopedJuceInitialiser_GUI juce;

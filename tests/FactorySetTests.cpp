@@ -13,13 +13,14 @@
 //
 // It works in a folder of its own under the system's temporary folder, and leaves it behind to be looked at.
 
+#include "GateMain.h"
 #include "device/DeviceLibrary.h"
 #include "device/FactorySet.h"
 #include "device/FactoryShelf.h"
 
 #include <cstdio>
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     using namespace orbitamp;
     using device::DeviceLibrary;

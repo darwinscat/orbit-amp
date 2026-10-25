@@ -10,6 +10,7 @@
 // or written. The Trash itself is JUCE's; what is ours (and tested) is the refusal to trash
 // anything the library does not own.
 
+#include "GateMain.h"
 #include <juce_events/juce_events.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -63,7 +64,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
 

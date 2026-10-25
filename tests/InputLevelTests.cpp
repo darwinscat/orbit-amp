@@ -22,6 +22,7 @@
 // folder, so every amp plays a pack. It writes the machine's settings only in the home run-gates.sh made
 // for it. main() returns 0 when every check held.
 
+#include "GateMain.h"
 #include <juce_events/juce_events.h>
 
 #include "PluginProcessor.h"
@@ -172,7 +173,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     std::setvbuf (stdout, nullptr, _IONBF, 0);     // a gate that dies says how far it got
     const juce::ScopedJuceInitialiser_GUI juce;

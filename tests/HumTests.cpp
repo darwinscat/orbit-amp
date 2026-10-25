@@ -51,6 +51,7 @@
 // — as a machine that chose it before keeps it — and still the stage is never prepared and never runs,
 // the mode in force is OFF with no LEARN of its own, and the hummed input passes bit for bit.
 
+#include "GateMain.h"
 #include <juce_events/juce_events.h>
 
 #include "PluginProcessor.h"
@@ -322,7 +323,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     std::setvbuf (stdout, nullptr, _IONBF, 0);
     std::printf ("orbitamp hum gate\n");
