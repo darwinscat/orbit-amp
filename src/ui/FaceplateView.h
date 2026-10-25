@@ -7,6 +7,7 @@
 #include "CabinetBlock.h"
 #include "CapturedBlockPanel.h"
 #include "DelayBlock.h"
+#include "GuardBlock.h"
 #include "ReverbBlock.h"
 
 namespace orbitamp
@@ -21,11 +22,9 @@ class AmpProcessor;
     a map is only worth its room while something is hidden. Nothing is hidden here: the row is the
     order, and what a block is set to is written on its face.
 
-    Row one is what makes the sound — the captured preamp, across the whole row. Row two is what
-    happens to it afterwards, in chain order: delay, reverb, cabinet. ONE law for both rows: the
-    width splits evenly among the blocks that STAND in the row — the whole of row one, quarters up to
-    the whole of row two — because which blocks a player keeps on the panel is the player's own
-    business, chosen in the LAYOUT popup. */
+    Row one is what makes the sound — the gate's narrow block, then the captured preamp across the
+    rest of the row. Row two is what happens to it afterwards, in chain order: delay, reverb,
+    cabinet in even shares, then the limiter's narrow block. */
 class FaceplateView : public juce::Component
 {
 public:
@@ -52,6 +51,10 @@ public:
         resized();
         repaint();
     }
+
+    /** The guards' blocks, for the menus their owner opens from them. */
+    GuardBlock& gateBlock()  noexcept { return gate; }
+    GuardBlock& limitBlock() noexcept { return limit; }
 
     /** Escape's errand: put a thrown-open picture back. One Escape folds one picture. */
     bool foldPicture() { return preamp.foldPicture(); }
@@ -101,12 +104,15 @@ public:
     // The faceplate's design size, at 100%. The editor scales from these and never re-lays out.
     static constexpr int designWidth  = 880;
 
-    // Row 1 carries a device combo, the in/out meters, the gain column with the picture beside it,
-    // and the whole EQ console under them. The console is the part that will not compress: knobs at
-    // reading size plus a curve big enough to aim at. Row 2 is a combo and a control or two.
-    static constexpr int row1H  = 378;   // the device combo left the box for its border (-46), the console's row shed a combo's
-                                         // height (-10) and the curve a sixth of its own (-26): 460 -> 378
-    static constexpr int row2H  = 220;
+    // Row 1 is the AMP: three sections side by side — the GAIN dial, the channel lever, the picture
+    // well with the meters at its edges — each a tier over one shared strip of controls. The EQ curve
+    // became one of the well's pictures and its row of knobs the third strip, so the console is no
+    // longer a second storey under the rest. Row 2 is a combo and a control or two.
+    static constexpr int row1H  = 200;   // 460 -> 378 (the combo onto the border, the console's row and curve trimmed);
+                                         // 378 -> 200 when the EQ curve became a page of the picture well
+    static constexpr int row2H  = 200;   // 220 -> 200: every block the AMP's height
+    // Between the rows, the twelve that part two boxes: the AMP's bottom line from the names riding
+    // the lower blocks' top lines.
     static constexpr int rowGap = 12;
     // Lane metrics. No horizontal inset: the lane's edges ARE the panel's edges, so nothing is
     // almost-aligned with anything.
@@ -134,12 +140,15 @@ private:
     DelayBlock         delay;
     ReverbBlock        reverb;
     CabinetBlock       cabinet;
+    GuardBlock         gate, limit;
 
     /** Who stands on the panel, indexed by Block. The core three out of the box; the delay is
         reached for, not found already on. */
-    std::array<bool, 4> shownFlags { true, false, true, true };
+    std::array<bool, 4> shownFlags { true, true, true, true };
 
     bool fillsHeight = true;   // see setFillsHeight
+
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FaceplateView)
 };

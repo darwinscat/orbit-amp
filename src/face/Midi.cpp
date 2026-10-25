@@ -24,8 +24,8 @@ namespace
 //==============================================================================
 bool MidiPanel::available() { return devices() != nullptr; }
 
-MidiPanel::MidiPanel (juce::String text)
-    : commands (std::move (text))
+MidiPanel::MidiPanel (juce::String productName, juce::String text)
+    : product (std::move (productName)), commands (std::move (text))
 {
     layOutCommands();
 
@@ -253,7 +253,7 @@ void MidiPanel::mouseDown (const juce::MouseEvent& e)
 void MidiPanel::saveCommands()
 {
     const auto suggested = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                               .getChildFile (juce::String (product::name) + " MIDI commands.txt");
+                               .getChildFile (product + " MIDI commands.txt");
     chooser = std::make_unique<juce::FileChooser> ("Save the MIDI commands", suggested, "*.txt");
     chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                               | juce::FileBrowserComponent::warnAboutOverwriting,

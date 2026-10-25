@@ -40,7 +40,7 @@ CabinetBlock::CabinetBlock (AmpProcessor& processor)
     // ground, what leaves it as the line — the same liquid columns, the same tilt, one renderer.
     wave.paintSpectrumUnder = [this] (juce::Graphics& g, juce::Rectangle<float> r)
     {
-        if (! prefs::spectraShown())
+        if (! prefs::spectraShown (amp.product()))
             return;
 
         felitronics::analysis::PlotMap pm;
@@ -196,7 +196,7 @@ void CabinetBlock::refreshIr (bool force, bool keepTrimWord)
         wave.setFromMemory (choice.bytes->getData(), choice.bytes->getSize());
     else
     {
-        const auto& bytes = AmpProcessor::cabIrBytes (choice.factory);
+        const auto& bytes = AmpProcessor::cabIrBytes (amp.product(), choice.factory);
         wave.setFromMemory (bytes.data, (size_t) bytes.size);
     }
 
@@ -263,7 +263,7 @@ void CabinetBlock::showIrMenu()
 
     for (const auto& shelf : params::cabShelves)
     {
-        const juce::String name (AmpProcessor::cabIrBytes (shelf.first).folder);
+        const juce::String name (AmpProcessor::cabIrBytes (amp.product(), shelf.first).folder);
         auto at = std::find_if (folders.begin(), folders.end(), [&name] (const Folder& f) { return f.name == name; });
         if (at == folders.end())
             at = folders.insert (folders.end(), Folder { name, {}, false });

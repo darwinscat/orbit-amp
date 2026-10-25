@@ -14,34 +14,33 @@ using face::labelLilac;
 
 juce::Rectangle<float> GearLever::leverBox (float y, float x) const
 {
-    const auto& art = Art::get().lever;
-    const float w = layout::leverWidth;
+    const auto& art = Art::of (skin).lever;
+    const float w = skin.plan.leverWidth;
     const float h = art.isValid() ? w * (float) art.getHeight() / (float) art.getWidth() : w / 3.0f;
-    return { x - w * 0.5f, y + layout::collarSink - h, w, h };
+    return { x - w * 0.5f, y + skin.plan.collarSink - h, w, h };
 }
 
 juce::Rectangle<float> GearLever::standingBox() const
 {
-    // In a notch the collar stands in the notch; at PARK, the slot's top end, there is none. The slot and
-    // its notches in the lever's own space, read here and not as the program starts (RedPawLayout.h).
-    const float slotX  = layout::slotX - layout::leverLeft;
-    const float notchX = layout::notchX - layout::leverLeft;
+    // In a notch the collar stands in the notch; between two, in the slot. The slot and its notches in
+    // the lever's own space, read here and not as the program starts (RedPawLayout.h).
+    const float slotX  = skin.plan.slotX - skin.plan.leverLeft;
+    const float notchX = skin.plan.notchX - skin.plan.leverLeft;
     const float p = travel();
-    const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f)
-                        * juce::jlimit (0.0f, 1.0f, p / 0.5f);
+    const float inNotch = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (p - std::round (p)) / 0.2f);
     return leverBox (yOf (p), slotX + (notchX - slotX) * inNotch);
 }
 
-GearLever::GearLever (int g)
-    : DetentLever (juce::jlimit (1, (int) layout::stops.size(), g) + 1, positionOf (0),
-                   260.0f, 22.0f)      // a heavy lever: it overshoots the notch a hair and comes back
+GearLever::GearLever (const Skin& s, int g)
+    : DetentLever (juce::jlimit (1, (int) s.plan.stops.size(), g), 0,
+                   260.0f, 22.0f),     // a heavy lever: it overshoots the notch a hair and comes back
+      skin (s)
 {
-    // Each position's height in the dashboard's space: PARK at the slot's top end, the gears at their
-    // stops from the top. A stop past the last gear is no position.
+    // Each position's height in the dashboard's space: the gears at their stops from the top. A stop
+    // past the last gear is no position.
     jassert (numGears() == g);
-    heights.push_back (layout::slotTopY);
     for (int i = 0; i < numGears(); ++i)
-        heights.push_back (layout::stops[(size_t) i]);
+        heights.push_back (skin.plan.stops[(size_t) i]);
 
     lit.stiffness = 40.0f;      // soft, like the knobs' rings
     lit.damping   = 13.0f;
@@ -51,15 +50,17 @@ GearLever::GearLever (int g)
 float GearLever::yOf (float at) const noexcept
 {
     const int last = numPlaces() - 1;
+    if (last < 1)       // a lever of one gear stands in it
+        return heights.front() - skin.plan.leverTop;
     const float p = juce::jlimit (0.0f, (float) last, at);
     const int i = juce::jmin (last - 1, (int) p);
-    return juce::jmap (p - (float) i, heights[(size_t) i], heights[(size_t) i + 1]) - layout::leverTop;
+    return juce::jmap (p - (float) i, heights[(size_t) i], heights[(size_t) i + 1]) - skin.plan.leverTop;
 }
 
 float GearLever::travelAt (float y) const noexcept
 {
     const int last = numPlaces() - 1;
-    y += layout::leverTop;
+    y += skin.plan.leverTop;
     if (y <= heights.front()) return 0.0f;
     for (int i = 0; i < last; ++i)
         if (y <= heights[(size_t) i + 1])
@@ -79,7 +80,7 @@ void GearLever::timerCallback()
 void GearLever::paint (juce::Graphics& g)
 {
     // The lever from above: its grip across the slot, the collar under it standing on the position.
-    const auto& art = Art::get().lever;
+    const auto& art = Art::of (skin).lever;
     const auto box = standingBox();
     const auto bar = box.withHeight (box.getHeight() * barBottom);
 
@@ -92,11 +93,11 @@ void GearLever::paint (juce::Graphics& g)
 
     // A soft cyan light round it, the knobs' rings' own, keeps it in sight on the dark plate; under the
     // hand it turns the orange everything that moves wears there.
-    if (const auto& glow = Art::get().leverGlow; glow.isValid() && art.isValid())
+    if (const auto& glow = Art::of (skin).leverGlow; glow.isValid() && art.isValid())
     {
         const float k = box.getWidth() / (float) art.getWidth();
         const float hand = juce::jlimit (0.0f, 1.0f, lit.value);
-        g.setColour (skin().ringLight.interpolatedWith (orange, hand).withAlpha (0.6f + 0.4f * hand));
+        g.setColour (skin.ringLight.interpolatedWith (orange, hand).withAlpha (0.6f + 0.4f * hand));
         g.drawImage (glow, box.expanded ((float) Art::leverGlowPad * k), juce::RectanglePlacement::stretchToFit, true);
     }
 
@@ -140,56 +141,18 @@ void GearLever::mouseUp (const juce::MouseEvent& e)
 }
 
 //==============================================================================
-namespace
-{
-    /** The warning's triangle, its corners rounded, filling `box` — as wide as it is tall and a little more. */
-    juce::Path warningShape (juce::Rectangle<float> box)
-    {
-        juce::Path sign;
-        sign.addTriangle (box.getCentreX(), box.getY(), box.getRight(), box.getBottom(), box.getX(), box.getBottom());
-        return sign.createPathWithRoundedCorners (Warning::corner * box.getHeight() / Warning::unit);
-    }
-
-    /** The warning: the red triangle, an exclamation mark cut dark into it. */
-    void drawWarning (juce::Graphics& g, juce::Rectangle<float> box)
-    {
-        const float h = box.getHeight(), k = h / Warning::unit;
-        g.setColour (juce::Colour (Warning::red));
-        g.fillPath (warningShape (box));
-        g.setColour (juce::Colour (Warning::cut));
-        g.fillRoundedRectangle (juce::Rectangle<float> (Warning::barWidth * k, Warning::barHeight * k)
-                                    .withCentre ({ box.getCentreX(), box.getY() + h * Warning::barCentre }), Warning::barRadius * k);
-        g.fillEllipse (juce::Rectangle<float> (Warning::dot * k, Warning::dot * k)
-                           .withCentre ({ box.getCentreX(), box.getBottom() - Warning::dotUp * k }));
-    }
-}
-
-void ParkSign::paint (juce::Graphics& g)
-{
-    const auto area = getLocalBounds().toFloat();
-    g.setColour (juce::Colour (dim).withAlpha (dimAlpha));
-    g.fillRect (area);
-
-    const float h = juce::jmin (juce::jmax (area.getHeight() - margin, area.getHeight() * atLeast), atMost);
-    const auto box = juce::Rectangle<float> (h * widthOfHeight, h).withCentre (area.getCentre());
-    juce::DropShadow (juce::Colour (Warning::red).withAlpha (glowAlpha), glowRadius, {}).drawForPath (g, warningShape (box));
-    drawWarning (g, box);
-}
-
-//==============================================================================
 NavHeader::NavHeader()
 {
     setInterceptsMouseClicks (false, false);
     startTimerHz (10);
 }
 
-void NavHeader::set (const juce::String& g, const juce::String& c, bool p)
+void NavHeader::set (const juce::String& g, const juce::String& c)
 {
-    if (g == gear && c == channel && p == parked)
+    if (g == gear && c == channel)
         return;
     gear = g;
     channel = c;
-    parked = p;
     repaint();
 }
 
@@ -202,7 +165,7 @@ void NavHeader::timerCallback()
     }
 }
 
-NavHeader::Fit NavHeader::fit (const juce::String& g, const juce::String& c, int kmh, bool p) const
+NavHeader::Fit NavHeader::fit (const juce::String& g, const juce::String& c, int kmh) const
 {
     const auto area = getLocalBounds().toFloat().reduced (8.0f, 0.0f);
     const auto words = face::labelFont (layout::px15).withExtraKerningFactor (0.04f);
@@ -211,7 +174,7 @@ NavHeader::Fit NavHeader::fit (const juce::String& g, const juce::String& c, int
     const auto widthOf = [] (const juce::Font& font, const juce::String& text) { return juce::GlyphArrangement::getStringWidth (font, text) + 2.0f; };
 
     Fit f;
-    const float beside = (p && showsWarning ? 31.0f : 0.0f) + widthOf (words, g) + 10.0f
+    const float beside = widthOf (words, g) + 10.0f
                        + (showsSpeed ? 8.0f + widthOf (words, number) + 6.0f + widthOf (small, unit) : 0.0f);
     f.wanted = beside + widthOf (small, c);
     f.room = juce::jmax (0.0f, area.getWidth() - beside);
@@ -253,15 +216,10 @@ void NavHeader::paint (juce::Graphics& g)
     // A SCREEN TOO NARROW FOR THEM ON ONE LINE, and tall enough for a line each: the gear, the channel
     // under it — set condensed, as tall, where it is wider than the screen — and the speed under that;
     // the gear and the speed alone where the channel is not named.
-    if (const int lines = fit (gear, channel, shownKmh, parked).lines; lines > 1)
+    if (const int lines = fit (gear, channel, shownKmh).lines; lines > 1)
     {
         const float row = area.getHeight() / (float) lines;
         auto first = area.removeFromTop (row), second = lines == 3 ? area.removeFromTop (row) : juce::Rectangle<float>(), third = area;
-        if (parked && showsWarning)
-        {
-            drawWarning (g, first.removeFromLeft (23.0f).withSizeKeepingCentre (23.0f, 20.0f));
-            first.removeFromLeft (8.0f);
-        }
         g.setColour (orange);
         g.setFont (words);
         g.drawText (gear, first, juce::Justification::centredLeft, false);
@@ -303,14 +261,6 @@ void NavHeader::paint (juce::Graphics& g)
         area.removeFromRight (8.0f);
     }
     g.setFont (words);
-
-    // PARKED, a warning first: a red triangle with its mark — the amp is out of the sound.
-    if (parked && showsWarning)
-    {
-        const float h = 20.0f, w = 23.0f;
-        drawWarning (g, area.removeFromLeft (w).withSizeKeepingCentre (w, h));
-        area.removeFromLeft (8.0f);
-    }
 
     // The gear, then the channel.
     g.setColour (orange);
@@ -451,15 +401,23 @@ namespace
     constexpr double breathHoldMs = 1000.0;
 }
 
-KnobRing::KnobRing (const face::ArtKnob& k, juce::Point<float> centre, float r, float w)
-    : knob (k), radius (r), width (w)
+KnobRing::KnobRing (const Skin& s, const face::ArtKnob& k, juce::Point<float> centre, float r, float w)
+    : skin (s), knob (k), radius (r), width (w)
 {
     setInterceptsMouseClicks (false, false);
     breath.stiffness = 40.0f;       // soft: a lamp warming, not a spring
     breath.damping   = 13.0f;
+    place (centre, r, w);
+    startTimerHz (30);
+}
+
+void KnobRing::place (juce::Point<float> centre, float r, float w)
+{
+    radius = r;
+    width = w;
     setBounds (juce::Rectangle<float> ((radius + width + 8.0f) * 2.0f, (radius + width + 8.0f) * 2.0f)
                    .withCentre (centre).getSmallestIntegerContainer());
-    startTimerHz (30);
+    repaint();
 }
 
 void KnobRing::timerCallback()
@@ -472,15 +430,24 @@ void KnobRing::timerCallback()
     touched = now;
     breath.target = now || ms - leftAt < breathHoldMs ? 1.0f : 0.0f;
 
+    // WHERE THE ARC ENDS IS TAKEN HERE, with the repaint of the whole ring, and never in paint. Paint also
+    // runs for a corner of the ring alone — the knob's own repaint, its square over the ring's diagonals,
+    // every time the hand turns it — and an arc that took the value there drew its new end in that corner
+    // while the rest of the ring kept the old one, and then counted itself drawn: the ring stood torn,
+    // in steps and pieces, until the glow eased away a second later and drew it all.
     const bool easing = breath.step (1.0f / 30.0f);
-    const bool moved = std::abs (knob.getValue() - shown) > 1.0e-4f;
-    if (easing || moved)
+    const float value = knob.getValue();
+    if (easing || std::abs (value - shown) > 1.0e-4f)
+    {
+        shown = value;
         repaint();
+    }
 }
 
 void KnobRing::paint (juce::Graphics& g)
 {
-    shown = knob.getValue();
+    if (shown < 0.0f)               // before the first tick: where the knob stands
+        shown = knob.getValue();
     const auto c = getLocalBounds().toFloat().getCentre();
     const float b = juce::jlimit (0.0f, 1.0f, breath.value);
 
@@ -494,11 +461,12 @@ void KnobRing::paint (juce::Graphics& g)
         face::drawHandRim (g, rim, orange.withAlpha (rimAlpha * b));
     }
 
-    // The rest of the ring dimmed: the painted cyan under a dark veil.
+    // The rest of the ring, dim: a band of the ring's width, all the way round, in its light taken down
+    // toward the dark — one closed band, so that no seam shows where a circle's ends would meet.
     juce::Path whole;
-    whole.addCentredArc (c.x, c.y, radius, radius, 0.0f, 0.0f, juce::MathConstants<float>::twoPi, true);
-    g.setColour (juce::Colour (veil).withAlpha (veilAlpha));
-    g.strokePath (whole, juce::PathStrokeType (width + veilWider));
+    whole.addEllipse (juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (c));
+    g.setColour (restOf (skin.ringLight));
+    g.strokePath (whole, juce::PathStrokeType (width));
 
     // From the start of the travel to the pointer, lit: the arc made a band of the ring's own width
     // first, so that the glow and the light are that band and nothing else — a shadow drawn for the
@@ -507,47 +475,10 @@ void KnobRing::paint (juce::Graphics& g)
     juce::Path arc, band;
     arc.addCentredArc (c.x, c.y, radius, radius, 0.0f, juce::degreesToRadians (from), to, true);
     juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (band, arc);
-    const auto light = skin().ringLight;
+    const auto light = skin.ringLight;
     juce::DropShadow (light.withAlpha (glowAlpha + glowAlphaHand * b), juce::roundToInt (glowRadius + glowRadiusHand * b), {}).drawForPath (g, band);
     g.setColour (light.withAlpha (litAlpha + litAlphaHand * b));
     g.fillPath (band);
-}
-
-//==============================================================================
-TurboLid::TurboLid()
-{
-    setInterceptsMouseClicks (false, false);
-    shown.stiffness = stiffness;
-    shown.damping   = damping;
-}
-
-void TurboLid::setShut (bool shut, bool animate)
-{
-    shown.target = shut ? 1.0f : 0.0f;
-    if (animate)
-    {
-        startTimerHz (60);
-        return;
-    }
-    shown.jump (shown.target);
-    stopTimer();
-    repaint();
-}
-
-void TurboLid::paint (juce::Graphics& g)
-{
-    const auto& art = Art::get().turboLid;
-    if (! art.isValid() || shown.value <= 0.0f)
-        return;
-    g.setOpacity (juce::jlimit (0.0f, 1.0f, shown.value));
-    g.drawImage (art, layout::turboLid.translated (-(float) getX(), -(float) getY()));
-}
-
-void TurboLid::timerCallback()
-{
-    if (! shown.step (face::frameDt))
-        stopTimer();
-    repaint();
 }
 
 } // namespace orbitamp::redpaw

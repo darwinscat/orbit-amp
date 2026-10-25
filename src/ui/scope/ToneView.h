@@ -33,6 +33,10 @@ namespace orbitamp::scope
 class ToneView
 {
 public:
+    /** The gear's one switch for every analyser — the product's (prefs::spectraCache) — read where a
+        spectrum is about to be drawn. None: shown. */
+    const std::atomic<bool>* spectraShown = nullptr;
+
     /** WHICH pane is the caller's business, not this view's. The classic one and the constant-Q
         multi-resolution one expose the same `buildColumns (map, rate, tilt, pivot, emit)`, and this
         view wants nothing else from either — so it takes whichever it is handed rather than growing
@@ -55,7 +59,7 @@ public:
         // The EQ's own spectrum when a tap is wired — liquid columns with their peak hold —
         // mapped onto THIS view's trusted band; the homemade fog only when it is not. The gear's
         // spectra switch silences both.
-        if (pane != nullptr && prefs::spectraShown())
+        if (pane != nullptr && (spectraShown == nullptr || spectraShown->load (std::memory_order_relaxed)))
         {
             felitronics::analysis::PlotMap pm;
             pm.width      = r.getWidth();

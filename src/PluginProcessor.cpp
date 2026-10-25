@@ -11,27 +11,28 @@
 namespace orbitamp
 {
 
-AmpProcessor::FirstStart::FirstStart()
+AmpProcessor::FirstStart::FirstStart (const Product& product)
 {
-    firstStart();
+    if (product.firstStart != nullptr)
+        product.firstStart (product);
 }
 
-void gatherFormerIrs()
+void gatherFormerIrs (const Product& product)
 {
-    static const bool once = []
+    static PerProduct<const bool> once;
+    once.of (product.name, [&product]
     {
-        if (prefs::getBool (prefs::irsGathered, false))
+        if (prefs::getBool (product, prefs::irsGathered, false))
             return true;
 
-        const auto gathered = device::IrLibrary::gather (device::IrLibrary::formerDirectory(),
-                                                         device::IrLibrary::directory(), product::name);
+        const auto gathered = device::IrLibrary::gather (device::IrLibrary::formerDirectory (product.name),
+                                                         device::IrLibrary::directory(), product.name);
 
         // A file that would not copy is tried again on the next start; what was copied is not copied twice.
         if (gathered.failed == 0)
-            prefs::setBool (prefs::irsGathered, true);
+            prefs::setBool (product, prefs::irsGathered, true);
         return true;
-    }();
-    juce::ignoreUnused (once);
+    });
 }
 
 // The machine's word for the hum and the stage's are one list in one order: the processor hands one
@@ -51,20 +52,29 @@ static_assert ((int) StageVerdict::Learned      == core::HumLearnLink::learned
 
 namespace
 {
-    /** The engine's parameters, and after them whatever the product adds of its own. */
-    juce::AudioProcessorValueTreeState::ParameterLayout layout()
+    /** The engine's parameters, and after them whatever the product adds of its own — each declaring,
+        as its default, where a fresh instance of the product stands in that environment (params::Opening). */
+    juce::AudioProcessorValueTreeState::ParameterLayout layout (const Product& product, params::StereoMode environment)
     {
-        auto all = params::createLayout();
-        addProductParameters (all);
+        params::Opening opening;
+        if (product.opening != nullptr)
+            product.opening (product, opening);
+        opening.stereoMode = environment;
+
+        auto all = params::createLayout (product.name, opening);
+        if (product.addParameters != nullptr)
+            product.addParameters (product, all);
         return all;
     }
 }
 
-AmpProcessor::AmpProcessor()
+AmpProcessor::AmpProcessor (const Product& product)
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, stateType, layout()),
+      ownProduct (product),
+      firstStarted (product),
+      apvts (*this, nullptr, stateType, layout (product, modeOfEnvironment())),
       // The history's opaque seam: it snapshots and restores the parameter tree without knowing what
       // is in it. replaceState takes a COPY so the parameter objects stay valid and every editor
       // attachment survives an undo.
@@ -81,7 +91,7 @@ AmpProcessor::AmpProcessor()
       // together, under the family's plain vX.Y.Z, so every amp asks for that "latest release", as
       // OrbitAmp always has: no tag prefix (see Product.h).
       updater ({ .ownerRepo      = "darwinscat/orbit-amp",
-                 .productName    = product::name,
+                 .productName    = ownProduct.name,
                  .currentVersion = ORBITAMP_VERSION,
                  .settings       = [this] { return updateStore->file(); } })
 {
@@ -103,7 +113,6 @@ AmpProcessor::AmpProcessor()
         p.lpfOn    = apvts.getRawParameterValue (params::eqLpfOn (l));
         p.lpfHz    = apvts.getRawParameterValue (params::eqLpfHz (l));
         p.lpfSlope = apvts.getRawParameterValue (params::eqLpfSlope (l));
-        p.level    = apvts.getRawParameterValue (params::eqLevel (l));
         p.b3On     = apvts.getRawParameterValue (params::eqB3On (l));
 
         for (int b = 0; b < 3; ++b)
@@ -118,7 +127,7 @@ AmpProcessor::AmpProcessor()
     outTrimParam       = apvts.getRawParameterValue (params::outTrim);
     tunerMuteParam     = apvts.getRawParameterValue (params::tunerMute);
     stereoModeParam    = apvts.getRawParameterValue (params::stereoMode);
-    preampInParam      = apvts.getRawParameterValue (params::blockIn (params::preampId));
+    modeAutoValue      = (int) modeOfEnvironment();     // the layout's default, and so where the mode stands
     preampSmoothParam  = apvts.getRawParameterValue (params::blockSmooth (params::preampId));
     cabHpfOnParam      = apvts.getRawParameterValue (params::cabHpfOn);
     cabHpfHzParam      = apvts.getRawParameterValue (params::cabHpfHz);
@@ -130,12 +139,17 @@ AmpProcessor::AmpProcessor()
     cabTrimParam       = apvts.getRawParameterValue (params::cabTrim);
     cabPhaseParam      = apvts.getRawParameterValue (params::cabPhase);
     limiterCeilParam   = apvts.getRawParameterValue (params::limiterCeiling);
+    boostLevelParam    = apvts.getRawParameterValue (params::boostLevel);
+    preampBoostParam   = apvts.getRawParameterValue (params::preampBoost);
+    for (int i = 0; i < params::numSelectors; ++i)
+        preampSelectorParams[(size_t) i] = apvts.getRawParameterValue (params::selectorId (params::preampId, i));
     for (int i = 0; i < params::numChainRows; ++i)
     {
         const auto& link = params::chainLinks[(size_t) i];
-        rowOn[(size_t) i]      = link.onParam      != nullptr ? apvts.getRawParameterValue (link.onParam)      : nullptr;
-        rowPresent[(size_t) i] = link.presentParam != nullptr ? apvts.getRawParameterValue (link.presentParam) : nullptr;
+        rowOn[(size_t) i] = link.onParam != nullptr ? apvts.getRawParameterValue (link.onParam) : nullptr;
     }
+    if (! ownProduct.tunerSwitch)
+        rowOn[(size_t) params::rowTuner] = nullptr;   // it listens always (Product::tunerSwitch)
 
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
     gatePosParam       = apvts.getRawParameterValue (params::gatePos);
@@ -159,26 +173,38 @@ AmpProcessor::AmpProcessor()
 
     packCompParam    = apvts.getRawParameterValue (params::packLevelComp);
 
-    // Every parameter's audio-thread mirror and the value it falls back to — see sanitiseParameters.
-    for (auto* p : getParameters())
-        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
-            if (auto* raw = apvts.getRawParameterValue (ranged->paramID))
-                parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (ranged->getDefaultValue()) });
     preampGainParam = apvts.getRawParameterValue (params::preampGain);
 
     rescanDevices();
 
+    // Where the engine's own pack stands in this product's list, as the layout found it a moment ago
+    // (engineDefault); its first place where the list has none, as the layout's default was then.
+    for (int i = 0; i < preamp.packs.size(); ++i)
+        if (preamp.packs.getReference (i).displayName() == params::enginePack)
+        {
+            enginePlace = i;
+            break;
+        }
+
+    // Every parameter's audio-thread mirror and the value it falls back to — see sanitiseParameters.
+    for (auto* p : getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p))
+            if (auto* raw = apvts.getRawParameterValue (ranged->paramID))
+                parameterGuards.push_back ({ raw, ranged->convertFrom0to1 (engineDefault (*ranged)) });
+
     // The product's own half, where it has one. HERE, before the history takes its baseline: what it
     // settles as it is built — the cockpit's chain, its channel, its pack — is how the amp starts,
     // and must not be an edit of it.
-    product = makeProductEngine (*this);
-    parked = product != nullptr ? product->parkSwitch() : nullptr;
+    productEngine = ownProduct.makeEngine != nullptr ? ownProduct.makeEngine (*this) : nullptr;
 
     // The names go in BEFORE the history looks, so a plugin that has just opened already knows
     // which device it is playing — and knows it without that knowledge being an edit. Resetting
     // takes the baseline over the seeded tree; marking it saved undoes the dirty flag the reset
-    // raises, which is right: nothing has been changed, the state was merely completed.
+    // raises, which is right: nothing has been changed, the state was merely completed. The state says
+    // which cabinet a fresh one opens on, so that one it saves is never taken for one of before
+    // (takeFormerCabinet).
     seedSwitchNames();
+    apvts.state.setProperty (cabOpeningId, params::cabIrDefault, nullptr);
     history.reset();
     history.markSaved();
 
@@ -195,11 +221,11 @@ AmpProcessor::AmpProcessor()
 
     // The machine's hum setting, read here on the constructing thread: its first read opens the
     // settings file, and the audio thread must only ever meet the cached atomic.
-    humWanted = &prefs::humCache();
-    humLastOn = &prefs::humLastOnCache();
-    humPlayWanted  = &prefs::humtune::playCache();
-    humQuietWanted = &prefs::humtune::quietCache();
-    humUpToWanted  = &prefs::humtune::upToCache();
+    humWanted = &prefs::humCache (ownProduct);
+    humLastOn = &prefs::humLastOnCache (ownProduct);
+    humPlayWanted  = &prefs::humtune::playCache (ownProduct);
+    humQuietWanted = &prefs::humtune::quietCache (ownProduct);
+    humUpToWanted  = &prefs::humtune::upToCache (ownProduct);
 
     // One steady pump for the settle timer. 30 Hz with the engine's default settle count means a
     // burst commits about 0.4 s after you stop moving.
@@ -338,6 +364,11 @@ void AmpProcessor::setStateInformation (const void* data, int sizeInBytes)
         // history would otherwise keep megabytes in its baseline and compare them every tick.
         self.takeEmbeddedIrs (t);
 
+        // ...and a state of 0.8.0's, its trim and its gate where they belong now; one saved while DARK
+        // MATTER was the cabinet every amp opened on, on the one they open on now.
+        self.takeFormerTrims (t);
+        self.takeFormerCabinet (t);
+
         // The aim's bookkeeping belongs to the thread that runs it. Arming it here rather than at
         // the top of setStateInformation also means it is armed AFTER the tree has landed, which
         // is what lets it take the restored values as its baseline instead of the outgoing ones.
@@ -387,6 +418,103 @@ void AmpProcessor::selectDemoLoop (int index)
     demo.setLoop (params::demoLoopsDir().getChildFile (params::demoLoopFiles[demoLoopIndex]), getSampleRate());
 }
 
+void AmpProcessor::takeFormerTrims (juce::ValueTree& tree) const
+{
+    const auto* former = ownProduct.formerInputZeroId;
+    if (former == nullptr || ! tree.isValid())
+        return;
+
+    if (tree.hasType (stateType) && tree.hasProperty (former))
+    {
+        const float dialled = (float) (int) tree.getProperty (former);
+        const auto shift = [&tree] (const char* id, float by, float lowest, float highest)
+        {
+            if (auto p = tree.getChildWithProperty ("id", juce::String (id)); p.isValid())
+                p.setProperty ("value", juce::jlimit (lowest, highest, (float) p.getProperty ("value") + by), nullptr);
+        };
+        shift (params::inTrim,        -dialled, -params::inTrimRangeDb,   params::inTrimRangeDb);
+        shift (params::gateThreshold, -dialled, params::gateThresholdMin, params::gateThresholdMax);
+        tree.removeProperty (former, nullptr);
+    }
+
+    for (auto child : tree)
+        takeFormerTrims (child);
+}
+
+void AmpProcessor::takeFormerCabinet (juce::ValueTree& tree)
+{
+    if (! tree.isValid())
+        return;
+
+    if (tree.hasType (stateType))
+    {
+        // A state with no note is one of before the note, when every amp opened on DARK MATTER.
+        const int now    = params::cabIrDefault;
+        const int former = tree.hasProperty (cabOpeningId) ? (int) tree.getProperty (cabOpeningId)
+                                                           : params::cabIrNames.indexOf ("DARK MATTER");
+        if (former >= 0 && former < params::cabIrNames.size() && former != now)
+        {
+            if (auto p = tree.getChildWithProperty ("id", juce::String (params::cabIr));
+                p.isValid() && juce::roundToInt ((float) p.getProperty ("value")) == former)
+                p.setProperty ("value", (float) now, nullptr);
+
+            // A face plays the build's cabinets as IRs of its own, by their files' names, and a state
+            // lands on it with no window to settle it (channels::Channels::align): the one it played
+            // becomes the new one there and then — its bytes into the store, the state their key, and
+            // its name and `from` the new file's, which lies in the same folder of the shelf. With no
+            // bytes for it (no factory folder) it lets go instead, as a cabinet that is not there. The
+            // channels' memories name the new one's file where they named the old one's.
+            if (ownProduct.makeEngine != nullptr)
+            {
+                const auto file = [] (int n) { return juce::String::fromUTF8 (catalog::irs[n].file); };
+                const auto stem = [&file] (int n) { return file (n).upToLastOccurrenceOf (".", false, false); };
+                const auto was = stem (former), is = stem (now);
+                if (tree.getProperty (params::cabIrUserName).toString() == was)
+                {
+                    const auto& ir = cabIrBytes (ownProduct, now);
+                    const auto key = ir.data != nullptr ? cabIrEmbeds.add (juce::MemoryBlock (ir.data, (size_t) ir.size)) : juce::String();
+                    if (key.isNotEmpty())
+                    {
+                        tree.setProperty (params::cabIrUserKey, key, nullptr);
+                        tree.setProperty (params::cabIrUserName, is, nullptr);
+                        tree.setProperty (params::cabIrUserFrom, tree.getProperty (params::cabIrUserFrom).toString()
+                                                                     .replace (file (former), file (now)), nullptr);
+                    }
+                    else
+                        for (const auto* id : { params::cabIrUserKey, params::cabIrUserName, params::cabIrUserFrom })
+                            tree.removeProperty (id, nullptr);
+                }
+                for (auto node : tree)
+                    for (auto record : node)
+                        if (record.getProperty (recordCabinetId).toString() == was)
+                            record.setProperty (recordCabinetId, is, nullptr);
+            }
+        }
+        tree.setProperty (cabOpeningId, now, nullptr);
+    }
+
+    for (auto child : tree)
+        takeFormerCabinet (child);
+}
+
+juce::String AmpProcessor::loadedAs() const
+{
+    // JUCE names every wrapper of the family's but one: clap-juce-extensions makes its processor as no
+    // wrapper JUCE knows (CMakeLists.txt: clap_juce_extensions_plugin), so of the formats the family ships,
+    // the one JUCE does not name is the CLAP.
+    const auto format = wrapperType == wrapperType_Undefined ? juce::String ("CLAP") : pluginFormat();
+    const auto said = juce::String (ownProduct.name) + "  " + format;
+
+    if (wrapperType == wrapperType_Standalone)
+        return said;
+
+    if (const juce::PluginHostType host; host.type != juce::PluginHostType::UnknownHost)
+        return said + " in " + host.getHostDescription();
+
+    const auto program = juce::File (juce::PluginHostType::getHostPath()).getFileNameWithoutExtension();
+    return program.isNotEmpty() ? said + " in " + program : said;
+}
+
 void AmpProcessor::rescanDevices()
 {
     // Each block asks for its own kind. A preamp offered as a pedal is not a wrong sound, it is a
@@ -407,7 +535,7 @@ void AmpProcessor::rescanDevices()
         const auto* id = deviceIdOf (b);
         auto* p = apvts.getParameter (id);
         const int was = juce::roundToInt (apvts.getRawParameterValue (id)->load());
-        const int now = blockAt (b).rescan (was);
+        const int now = blockAt (b).rescan (ownProduct.name, was);
 
         // Out of the parameter's reach: a folder can hold more devices than this can address, and
         // writing a clamped number would land on the neighbour. Nothing good happens past here —
@@ -460,22 +588,23 @@ void AmpProcessor::rescanDevices()
     }
 }
 
-const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (int index)
+const AmpProcessor::IrBytes& AmpProcessor::cabIrBytes (const Product& product, int index)
 {
     // The family's shelf (device/FactoryShelf.h), in the parameter's order: OrbitAmp plays it from memory,
-    // read once out of the factory folder, by the index `cabIr` keeps.
-    static const auto shelf = []
+    // read once out of the factory folder for each product, by the index `cabIr` keeps.
+    static PerProduct<const std::vector<IrBytes>> shelves;
+    const auto& shelf = shelves.of (product.name, [&product]
     {
         std::vector<IrBytes> out;
-        for (const auto& ir : device::shelf::irs())
+        for (const auto& ir : device::shelf::irs (product.name))
             out.push_back ({ ir.data, ir.size, ir.folder });
         return out;
-    }();
+    });
 
     jassert (shelf.size() == (size_t) params::cabIrNames.size());
     const auto& ir = shelf[(size_t) juce::jlimit (0, (int) shelf.size() - 1, index)];
 
-    // A place the product holds empty — a face plays none of the shelf's `Other` — plays DARK MATTER, the
+    // A place the product holds empty — a face plays none of the shelf's `Other` — plays RED GIANT, the
     // cabinet every product opens on: a host that moves the number there hears a cabinet the product has.
     // With the factory folder missing that one is empty too, and no bytes is what the cabinet is given:
     // the cabinet loads nothing then: where it is loaded, an IR with no bytes is passed over.
@@ -593,6 +722,20 @@ void AmpProcessor::pumpDeviceWork()
         block.selectIfMoved (juce::roundToInt (
             apvts.getRawParameterValue (params::blockDevice (blk))->load()));
 
+        // WHERE THE PLAYING PACK'S BOOST IS: the first of its switches called that — as the AMP's BOOST
+        // key finds it — among the slots its switches are played from. The audio thread reads that
+        // slot's parameter for boostOn(); the pack itself it cannot read. A pack with none is boosted
+        // up its dial instead (params::preampBoost), which the gain dial below is told.
+        int slot = -1;
+        {
+            const auto list = block.selectors();
+            for (int i = 0; i < list.size() && i < params::numSelectors && slot < 0; ++i)
+                if (list.getReference (i).name.trim().equalsIgnoreCase ("boost"))
+                    slot = i;
+            boostSlot.store (slot, std::memory_order_relaxed);
+        }
+        const bool turbo = slot < 0 && preampBoostParam->load() > 0.5f;
+
         // Selectors next: they and the gain dial pick a file together, and a stale one would send
         // resolve looking for a combination the player is not on any more.
         std::array<int, (size_t) params::numSelectors> selectors {};
@@ -608,7 +751,7 @@ void AmpProcessor::pumpDeviceWork()
 
         block.setRaw (mode == params::EqMode::ours);
         block.applySelectors (selectors);
-        block.setGain (gainParam->load(), smoothParam->load() > 0.5f);
+        block.setGain (gainParam->load(), smoothParam->load() > 0.5f, turbo);
 
         std::array<float, (size_t) core::CapturedBlock::numMeasured> values {};
         for (int i = 0; i < (int) values.size(); ++i)
@@ -693,7 +836,7 @@ void AmpProcessor::pumpDeviceWork()
 
             if (choice.isUser())
                 cab.load (choice.bytes->getData(), choice.bytes->getSize());
-            else if (const auto& bytes = cabIrBytes (choice.factory); bytes.data != nullptr)
+            else if (const auto& bytes = cabIrBytes (ownProduct, choice.factory); bytes.data != nullptr)
                 cab.load (bytes.data, (size_t) bytes.size);     // none, with the factory folder missing
         }
     }
@@ -705,7 +848,7 @@ void AmpProcessor::pumpDeviceWork()
         // bytes never move (the store keeps them for its whole life), and the tick re-checks.
         if (const auto* own = cabUserIr.load())
             cab.load (own->getData(), own->getSize());
-        else if (const auto& shelf = cabIrBytes (juce::roundToInt (apvts.getRawParameterValue (params::cabIr)->load()));
+        else if (const auto& shelf = cabIrBytes (ownProduct, juce::roundToInt (apvts.getRawParameterValue (params::cabIr)->load()));
                  shelf.data != nullptr)
             cab.load (shelf.data, (size_t) shelf.size);
     }
@@ -807,7 +950,6 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // it — a bypassed +24 dB would open playback at nearly sixteen times.
     lastTrimGain = linkWorks (params::rowIn)  ? juce::Decibels::decibelsToGain (inTrimParam->load())  : 1.0f;
     lastOutGain  = linkWorks (params::rowOut) ? juce::Decibels::decibelsToGain (outTrimParam->load()) : 1.0f;
-    lastPreampInGain = juce::Decibels::decibelsToGain (preampInParam->load());
     {
         limiterReady = limiter.prepare (sampleRate, block, juce::jmax (2, channels), core::door::config());
         limiterLatency.store (limiterReady ? limiter.latencySamples() : 0);
@@ -828,6 +970,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // starts in it rather than ramping into it — the machine's, or under OFF the last one that was not,
     // OFF's crossfade starting where OFF says. A prepare it refuses (a layout with no input at all)
     // leaves it OFF, and the mode in force says OFF rather than the machine's AUTO.
+    // With HUM switched off in the build (Features.h) it is never prepared at all: it stays out of the
+    // sound and costs nothing, whatever the machine says or a session saved with HUM on — the way a
+    // refused prepare leaves it, OFF in force and no LEARN of its own.
     {
         const int wanted = humWanted->load (std::memory_order_relaxed);
         auto p = humStage.params();
@@ -835,7 +980,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         humTunedPlay = humTunedQuiet = humTunedUpTo = -1.0f;      // handed over whatever it was before
         tuneHum (p);
         humStage.setParams (p);
-        const bool ready = humStage.prepare (sampleRate, block, getTotalNumInputChannels());
+        const bool ready = features::hum && humStage.prepare (sampleRate, block, getTotalNumInputChannels());
         humApplied = (int) p.mains;
         humRuns.store (ready ? humApplied : -1, std::memory_order_relaxed);
         humShown   = wanted;
@@ -852,21 +997,6 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         humHz.store (0.0f, std::memory_order_relaxed);
         humLocked.store (false, std::memory_order_relaxed);
         humDb.store ((float) HumStage::kSilentDb, std::memory_order_relaxed);
-    }
-
-    // The mode's environment default — see modeAutoValue.
-    if (! stateWasRestored)
-    {
-        const auto want = wrapperType == wrapperType_Standalone ? params::StereoMode::stereoSpace
-                        : getTotalNumInputChannels() >= 2       ? params::StereoMode::stereo
-                                                                : params::StereoMode::mono;
-
-        if (juce::roundToInt (stereoModeParam->load()) == modeAutoValue && (int) want != modeAutoValue)
-        {
-            if (auto* p = apvts.getParameter (params::stereoMode))
-                p->setValueNotifyingHost (p->convertTo0to1 ((float) want));
-            modeAutoValue = (int) want;
-        }
     }
 
     // Over the channels the bus carries — one or two, by the layouts this plugin accepts. A prepare
@@ -908,6 +1038,9 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     pumpDeviceWork();
 
+    // The boost's level where the state has it — after the pump, which has found the pack's Boost.
+    boostGain.reset (sampleRate, boostRampSeconds);
+    boostGain.setCurrentAndTargetValue (boostTarget());
 
     // Reported ALWAYS, whether a block is switched on or not: a bypass path carries the same
     // delay, so a toggle never shifts the timing of everything downstream. A latency that changes
@@ -917,6 +1050,24 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     updateEqSettings();
     updateDelaySettings();
     updateReverbSettings();
+}
+
+bool AmpProcessor::boostOn() const noexcept
+{
+    if (! linkWorks (params::rowPreamp))
+        return false;
+
+    // The pack's own Boost, past its first position — the BOOST key lights the same way.
+    if (const int slot = boostSlot.load (std::memory_order_relaxed); juce::isPositiveAndBelow (slot, params::numSelectors))
+        return juce::roundToInt (preampSelectorParams[(size_t) slot]->load()) > 0;
+
+    // ...or, on a pack that has none, the capture played up its dial.
+    return preampBoostParam->load() > 0.5f;
+}
+
+float AmpProcessor::boostTarget() const noexcept
+{
+    return boostOn() ? juce::Decibels::decibelsToGain (boostLevelParam->load()) : 1.0f;
 }
 
 void AmpProcessor::updateDelaySettings() noexcept
@@ -1005,7 +1156,6 @@ void AmpProcessor::updateEqSettings() noexcept
         s.lpfOn    = p.lpfOn->load() > 0.5f;
         s.lpfHz    = (double) p.lpfHz->load();
         s.lpfSlope = slope (p.lpfSlope->load());
-        s.levelDb  = (double) p.level->load();
 
         // WHOSE TONE STACK IS IN THE SIGNAL. The two are alternatives, and until now only half of
         // that was true: `setRaw` parked the device's curves when ours was chosen, but ours went on
@@ -1013,9 +1163,8 @@ void AmpProcessor::updateEqSettings() noexcept
         // console had swapped its row for the device's knobs. A shape somebody dialled in and left
         // behind kept playing where nothing could reach it.
         //
-        // Only the TONE sections step aside. The cut filters and the level belong to the BLOCK
-        // whichever tone is playing: the walls are utility, and the level is the block's output —
-        // the grip on the OUT meter writes it, and it would go dead here.
+        // Only the TONE sections step aside. The cut filters belong to the BLOCK whichever tone is
+        // playing: the walls are utility.
         //
         // Asked of the block, not of the parameter alone: a device that measured nothing has no
         // native stack to hand over, its face collapses the choice to ours, and the DSP has to
@@ -1048,6 +1197,35 @@ bool AmpProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
         return false;
 
     return layouts.getMainInputChannelSet() == out;
+}
+
+params::StereoMode AmpProcessor::modeOfEnvironment() const
+{
+    // Only what the AudioProcessor itself knows: the layout reads it while this processor's own
+    // members are still being made.
+    return wrapperType == wrapperType_Standalone ? params::StereoMode::stereoSpace
+         : getTotalNumInputChannels() >= 2       ? params::StereoMode::stereo
+                                                 : params::StereoMode::mono;
+}
+
+void AmpProcessor::processorLayoutsChanged()
+{
+    // The mode's environment default — see modeAutoValue. A host settles the buses before it activates
+    // the plug-in, and a CLAP host holds a plug-in's parameters still from there: prepared and playing,
+    // nobody's hand on them, they keep the values the host last read.
+    if (stateWasRestored)
+        return;
+
+    auto* p = apvts.getParameter (params::stereoMode);
+    if (p == nullptr)
+        return;
+
+    const int want = (int) modeOfEnvironment();
+    if (juce::roundToInt (p->convertFrom0to1 (p->getValue())) == modeAutoValue && want != modeAutoValue)
+    {
+        p->setValueNotifyingHost (p->convertTo0to1 ((float) want));
+        modeAutoValue = want;
+    }
 }
 
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -1142,8 +1320,9 @@ bool AmpProcessor::tuneHum (felitronics::dehum::HumRemoverParams& p) noexcept
 
 void AmpProcessor::removeHum (juce::AudioBuffer<float>& buffer) noexcept
 {
-    // Refused at prepare: nothing to run, and the mode in force already says OFF.
-    if (! humStage.isPrepared())
+    // Refused at prepare, or HUM switched off in the build (Features.h): nothing to run, and the mode
+    // in force already says OFF.
+    if (! features::hum || ! humStage.isPrepared())
         return;
 
     // The machine's mode, handed over here on the audio thread — the stage's threading contract —
@@ -1382,7 +1561,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
     nsStage[stGate] = elapsedNs (tGate);
 
-    // A captured block, whole: the capture, then its own EQ, then its own volume.
+    // A captured block, whole: the capture, then its own EQ.
     //
     // The EQ sits AFTER the nonlinearity because that is what it is for here — colouring what the
     // device made, not deciding what the device eats. The preamp's stands after the last
@@ -1391,11 +1570,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // It also goes dark with the block. The EQ is part of the block now, not a link that happens to
     // be drawn inside one, and a switch that leaves half of what it names still cutting is a switch
     // nobody can trust.
-    //
-    // LEVEL comes last for the same reason: it is the block's output volume, and the OUT meter
-    // beside it has to be metering everything the block did — the EQ included.
     const auto captured = [&] (auto& blk, int l, params::ChainRow row,
-                               std::atomic<float>* inParam, float& lastInGain,
                                std::atomic<float>& outDbOf, int stBlock, int stEq)
     {
         // A link that REPLACES the signal has no tail of its own to ride out, so dropping it out
@@ -1419,10 +1594,6 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         // that is a comb — sixty-one samples at 44.1 kHz puts the first notch near 362 Hz, in the
         // body of the guitar. Swept over fifteen milliseconds it reads as a tick rather than a
         // filter, but it is a tick that need not exist.
-        //
-        // Taken BEFORE this block's own IN trim: the dry end has to be the signal as it arrived.
-        // Copied after the trim, the two ends of the fade differed by the trim as well as by the
-        // block, and at -24 dB that is not a click, it is a bark.
         const int lat = blk.latencySamples();
 
         if (fade)
@@ -1465,51 +1636,6 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
             // positive between two blocks, and the block after that has to be able to look back.
             wire[(size_t) l].advance (chainView.getArrayOfReadPointers(), nch, numSamples);
         }
-
-        // IN: how hard the capture is fed. Metered immediately after, at the model's own door, so
-        // the grip on the meter and the fill under it answer about one point.
-        //
-        // It applies only while the block is being HEARD — which includes the whole fade, so the
-        // trim stays where the player put it for as long as any of the model is in the sum. Once
-        // the fade is over the block is not run at all and this buffer IS the through-path: a
-        // trim on it would be a trim on the bypass, which is not what a bypass is.
-        //
-        // The `lastInGain` reset is the whole point and cost me a click to learn. Ramping to unity
-        // on the first fully-bypassed block ramps the DRY signal from the trim down to 1.0 — at
-        // +12 dB that is a four-times burst decaying over one block, which is exactly the kind of
-        // step this crossfade exists to remove. There is nothing to ramp: the previous block's
-        // trim was applied to what fed the model, and the blend has already weighed that away.
-        // So the gain simply IS unity here, with no ramp and no memory of the trim.
-        if (on)
-        {
-            const float inTarget = juce::Decibels::decibelsToGain (inParam->load());
-
-            // ARRIVING, not sliding. Coming back from a bypass the trim would otherwise ramp from
-            // unity to what the player set across ONE block — and a block can be longer than the
-            // fade. At 2048 samples the crossfade is over by sample 720, so the model spends the
-            // rest of the block fully audible and still climbing toward the trim: a drive swell,
-            // which is the same family of artefact as the burst this replaced. There is nothing to
-            // ramp INTO: the blend weighs this path at nothing for the first sample, so the trim
-            // simply starts where it belongs.
-            if (! blockWasOn[(size_t) l])
-                lastInGain = inTarget;
-
-            chainView.applyGainRamp (0, numSamples, lastInGain, inTarget);
-            lastInGain = inTarget;
-        }
-        else
-        {
-            lastInGain = 1.0f;   // a bypassed block is a wire, and a wire has no trim to ramp from
-        }
-
-        blockWasOn[(size_t) l] = on;
-
-        // A block that is not working meters nothing: two full passes over the buffer for a needle
-        // nobody reads, and a needle still moving on a dark face is the exception this whole rework
-        // set out to delete.
-        blockInDb[(size_t) l].store (on ? juce::Decibels::gainToDecibels (
-                                              chainView.getMagnitude (0, 0, numSamples), -90.0f)
-                                        : -90.0f);
 
         { const auto a = PerfClock::now();
           if (on)
@@ -1558,7 +1684,7 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         }
     };
 
-    captured (preamp, 0, params::rowPreamp, preampInParam, lastPreampInGain, blockOutDb[0], stPreamp, stPreampEq);
+    captured (preamp, 0, params::rowPreamp, blockOutDb[0], stPreamp, stPreampEq);
 
     // MUTE pre-reverb — the G-String architecture, and the default: everything the chain ADDED
     // (the preamp's hiss) dies here too, and the reverb tail past it rings out.
@@ -1575,56 +1701,26 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // First of the wide stages — the OFFSET is the block's stereo, so it works the back half's
     // channels.
     // STANDBY is the insert's bypass: the block keeps running, it just stops being fed, and the
-    // repeats already in the line ring out into the dry. Only leaving the RIG clears it — that is
-    // unplugging, not standing by. Which is also why a bypassed block still costs: so does a
-    // bypassed insert, in every DAW there is.
-    // STANDBY is unfed-and-ringing (see the engine). Leaving the RIG is the other thing: the line
-    // is cleared, and a ringing tail cut in one sample is a click. So the whole contribution is
-    // crossfaded out first, and only then cleared.
+    // repeats already in the line ring out into the dry. Which is also why a bypassed block still
+    // costs: so does a bypassed insert, in every DAW there is.
+    if (delayReady)
     {
-        const bool inRig = linkInRig (params::rowDelay);
-        const auto span  = blockFade[(size_t) params::rowDelay].advance (numSamples, inRig);
-        const bool run   = delayReady && core::BypassFade::runs (span, inRig);
-        const bool fade  = span.moving && canFade (numSamples, nchBack);
+        const auto a = PerfClock::now();
 
-        if (run)
-        {
-            const auto a = PerfClock::now();
+        // Prepared for every channel the bus carries, so it cannot refuse this block.
+        (void) delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
 
-            if (fade)
-                for (int ch = 0; ch < nchBack; ++ch)
-                    juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
-                                                       buffer.getReadPointer (ch), numSamples);
-
-            // Prepared for every channel the bus carries, so it cannot refuse this block.
-            (void) delay.process (channels, nchBack, numSamples, linkWorks (params::rowDelay));
-
-            if (fade)
-                core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
-                                         nchBack, numSamples, span);
-
-            nsStage[stDelay] = elapsedNs (a);
-        }
-        else
-        {
-            delay.reset();
-        }
+        nsStage[stDelay] = elapsedNs (a);
+    }
+    else
+    {
+        delay.reset();
     }
 
-    // The room stands by the same way the echo does: unfed, still ringing out — and leaves the rig
-    // the same way too, faded rather than cut. See the delay above.
-    const bool reverbInRig = linkInRig (params::rowReverb);
-    const auto reverbSpan  = blockFade[(size_t) params::rowReverb].advance (numSamples, reverbInRig);
-    const bool reverbFade  = reverbSpan.moving && canFade (numSamples, nchBack);
-
-    if (reverbReady && core::BypassFade::runs (reverbSpan, reverbInRig))
+    // The room stands by the same way the echo does: unfed, still ringing out. See the delay above.
+    if (reverbReady)
         { const auto a = PerfClock::now();
           const bool fed = linkWorks (params::rowReverb);
-
-          if (reverbFade)
-              for (int ch = 0; ch < nchBack; ++ch)
-                  juce::FloatVectorOperations::copy (fadeDry.getWritePointer (ch),
-                                                     buffer.getReadPointer (ch), numSamples);
 
           // The pair for the block's picture: the door before the room, the ADDED wet after it.
           // A room nobody is feeding hears silence at its door, and the picture says so.
@@ -1645,10 +1741,6 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                 tout.push (w[i]);
             tout.publishIfDue (eqSpectrumOrder,
                                juce::roundToInt (juce::jmax (8000.0, getSampleRate()) / 30.0)); }
-
-          if (reverbFade)
-              core::BypassFade::blend (channels, fadeDry.getArrayOfReadPointers(),
-                                       nchBack, numSamples, reverbSpan);
 
           nsStage[stReverb] = elapsedNs (a); }
     else
@@ -1701,6 +1793,28 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
       cabOutDb.store (juce::Decibels::gainToDecibels (
           buffer.getMagnitude (0, 0, numSamples), -90.0f));
       nsStage[stCab] = elapsedNs (a); }
+
+    // THE BOOST'S LEVEL (params::boostLevel): the lift of a boost that is on, after everything that
+    // makes the sound and before the master's hand and the limiter, so the ceiling still holds at +9.
+    // Thrown, picked or taken out of the chain, it ramps in a straight line; standing at unity it
+    // touches nothing — a boost off, or on at 0 dB, plays exactly what it played before it had a level.
+    {
+        boostGain.setTargetValue (boostTarget());
+
+        if (boostGain.isSmoothing())
+        {
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float g = boostGain.getNextValue();
+                for (int ch = 0; ch < numChannels; ++ch)
+                    channels[ch][i] *= g;
+            }
+        }
+        else if (const float g = boostGain.getCurrentValue(); ! juce::exactlyEqual (g, 1.0f))
+        {
+            buffer.applyGain (0, numSamples, g);
+        }
+    }
 
     const auto tOut = PerfClock::now();
 
@@ -1856,12 +1970,8 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
 juce::AudioProcessorEditor* AmpProcessor::createEditor()
 {
-    return makeEditor (*this);
+    return ownProduct.makeEditor (*this);
 }
 
 } // namespace orbitamp
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
-    return new orbitamp::AmpProcessor();
-}

@@ -5,6 +5,7 @@
 
 #include "../face/Controls.h"
 #include "../face/Stage.h"
+#include "../face/Strip.h"
 
 #include <juce_graphics/juce_graphics.h>
 
@@ -21,7 +22,7 @@
     once, here (Plan), as RedPawAmp's picture — the first, the one the others were painted to — measures
     it; each product's skin's file says only where its own picture measures otherwise:
     redpaw/RedPawSkin.cpp nowhere, frostpaw/FrostPawSkin.cpp in a few places, amberpaw/AmberPawSkin.cpp,
-    a cockpit of its own, nearly everywhere. A target compiles exactly one. */
+    a cockpit of its own, nearly everywhere. Each face reads its own skin's (Skin::plan). */
 namespace orbitamp::redpaw::layout
 {
 
@@ -125,28 +126,36 @@ struct Plan
     std::array<juce::Point<float>, 2> learnNames {};    // the middle of each key's two lines
     float learnLine = 0.0f;                         // ...the two lines apart
 
+    /** ...AND HUM'S HOLE WHILE THE BUILD HAS NO HUM (Features.h): plate, laid over it once, as the picture
+        is loaded (Art::of) — a stretch of the same plate, `learnPlate`, with the same stretch upside down
+        under it, the two centred on HUM's key and cut to a round `learnHoleSize` across, its edge soft
+        for the last pixel or two. The plate reads on as if the key had never been there. Empty: nothing
+        to cover. */
+    juce::Rectangle<float> learnPlate {};
+    float learnHoleSize = 0.0f;
+
     /** THE WIPERS' SPEED: four keys where the picture paints a row of them — OFF, INT, LO, HI, each word
         on its key, the speed set lit. A size of nought: none, the wipers keep their own time. */
     std::array<juce::Point<float>, 4> wiperKeys {};     // no keys for the wipers
     float wiperKeySize = 0.0f;                      // the key's render, whose face fills the hole
 
-    /** THE GEAR LEVER'S SLOT: straight, its top end PARK, and its notches on its right — the product's
-        gears, CLEAN, CRUNCH, HI-GAIN, stand at its `stops` from the top, as many as it has
+    /** THE GEAR LEVER'S SLOT: straight, and its notches on its right — the product's gears, CLEAN,
+        CRUNCH, HI-GAIN, stand at its `stops` from the top, as many as it has
         (RedPawLineup.h): in the notches the picture paints, or, where a product spreads fewer gears down a
         slot painted for more, at places of its own, the picture baked with its notches there and none
         where no gear stands (tools/bake-art). A position is where the lever's stem stands: seen from
         above, as the whole dashboard is, the lever is its T grip lying across the slot, the stem's collar
         under the grip's middle standing on the position — in a notch, in the notch.
 
-        The slot is 785.5..811 across, its top end at 681, its notches out to 823. */
-    juce::Rectangle<float> gateSlot { 785.5f, 681.0f, 37.5f, 174.0f };
+        The slot is 785.5..811 across, its notches out to 823; painted with its top end at 681, it is
+        baked cut short to 718, as far over the first gear as it runs under the last (tools/bake-art). */
+    juce::Rectangle<float> gateSlot { 785.5f, 718.0f, 37.5f, 137.0f };
     float slotX  = 798.3f;          // the stem in the slot
     float notchX = 814.0f;          // ...and in a notch
-    float slotTopY = 694.0f;        // PARK: the stem at the slot's top end
     // Where the gears stand, top to bottom. Two gears down a slot painted for three notches, 733.8, 776
-    // and 817.5, spread evenly: PARK, then a step of 61.75 to the middle and another to the third notch,
-    // so the slot is the lever's to its end — the picture baked with the first two filled in and the
-    // middle one the second, copied up (tools/bake-art).
+    // and 817.5, spread evenly from 694 under the slot's top end as painted: a step of 61.75 to the middle
+    // and another to the third notch — the picture baked with the first two filled in, the middle one the
+    // second, copied up, and the slot cut short over the first (tools/bake-art).
     std::vector<float> stops { 755.75f, 817.5f };
     float leverWidth = 124.0f;      // the lever's render, grip and collar, this wide: over the plate's edges
     float collarSink = 3.0f;        // how far the collar's foot goes past the position, into the slot
@@ -157,7 +166,6 @@ struct Plan
     juce::Point<float> turbo { 921.5f, 787.3f };
     float turboSize = 52.0f;        // the button's render
     juce::Point<float> turboName { 921.5f, 682.0f };
-    juce::Rectangle<float> turboLid { 873.5f, 689.0f, 101.0f, 168.0f };   // the hatch shut (Art::turboLid): from the open cover's top to the frame's foot
 
     /** THE THREE WELLS — REVERB over DELAY on the left, CAB on the right — and the row each one's words
         are written in: on REVERB's and DELAY's upper rims, which the picture is baked taller to carry them
@@ -236,94 +244,62 @@ struct Plan
     }};
     juce::Rectangle<float> emblemMark { 813.0f, 310.0f, 50.0f, 50.0f };
 
+    /** THE BADGE'S PLACE, where the skin wears the family's badge (Skin::badge) over that plate: the
+        cockpit's plate (catpit/CatpitLayout.h: emblemFace) as it is — its wide flat top, its sides slanting out
+        and then in to the narrower bottom, the shallow nose its bottom edge falls to in the middle — scaled by
+        0.715 about x = 835.5. Bounded by the frame's raised step it sits on: its top 3.5 under the step's top
+        (y 289, x 789..881) and its upper sides as far in from the step's shoulders, so that the step's edge
+        shows all round the top; its nose on the rail under it (y 380), the bottom edge's two ends 5 above
+        the rail, a small gap at either side; and over the picture's hexagon and its groove (783..889 x
+        294..379) but for the groove's bottom line, which shows in those two gaps as their shadow. Its six
+        screws where the cockpit has its own, scaled the same; the mark a little larger than the cockpit's
+        share of its plate, as the wide top leaves its ears room. */
+    std::array<juce::Point<float>, 7> badgeFace {{
+        { 790.1f, 292.5f }, { 880.9f, 292.5f }, { 902.7f, 313.2f }, { 880.5f, 374.7f }, { 835.5f, 379.0f },
+        { 790.5f, 374.7f }, { 768.3f, 313.2f },
+    }};
+    std::array<juce::Point<float>, 6> badgeScrews {{
+        { 793.0f, 296.8f }, { 878.0f, 296.8f }, { 771.9f, 315.4f }, { 899.1f, 315.4f }, { 796.5f, 371.9f }, { 874.5f, 371.9f },
+    }};
+    float badgeScrew = 5.7f;    // the screws' heads, across: the cockpit's 8, scaled
+    juce::Rectangle<float> badgeMark { 797.0f, 295.8f, 77.0f, 75.0f };
+
     /** THE MAKER'S WORDS beside the mark, where the picture has room for them: POWERED BY low on its
         left, DARWIN'S CAT low on its right, each set condensed into its room where it is wider. A room of
         nought: none. */
     juce::Point<float> poweredBy {}, makerName {};  // no room beside the plate for the maker's words
     float makerRoom = 0.0f;
+
+    /** THE ROWS THE PICTURE NO LONGER PAINTS: the tone knobs' sockets and the frame round the keys right
+        of the filters are drawn by code, as many as the playing pack has (face::Console::layStrips), in
+        the room the three sockets and the four-key frame stood in — `tones` and the last four `keys`
+        measure it. The socket's render (socket.webp) is `socketSize` across at the nominal size, its
+        ring `tones`' ring; the frame is a left cap, a cell for each key, a right cap (key-frame-*.webp),
+        `keyFrameHeight` tall. Either row shrinks to fit, to `toneMinScale` and `keyMinScale` of it. */
+    float socketSize = 124.0f;
+    float toneMinScale = 0.6f;
+    float keyCapLeft = 5.5f, keyCapRight = 11.0f, keyFrameHeight = 70.0f;
+    float keyMinScale = 0.75f;
+    /** Each tone knob's sign (face::drawToneSign): this far under the names' row, nearer its knob, and
+        this tall. */
+    float toneSignDrop = 3.0f, toneSignHeight = 12.0f;
+
+    face::Strip toneStrip() const
+    {
+        const float pitch = 0.5f * (tones[2].centre.x - tones[0].centre.x);
+        const float left = tones[0].centre.x - 0.5f * socketSize, right = tones[2].centre.x + 0.5f * socketSize;
+        return { { left, tones[1].centre.y - 0.5f * socketSize, right - left, socketSize }, pitch, socketSize, toneMinScale };
+    }
+
+    face::Strip keyStrip() const
+    {
+        const float pitch = (keys[5].x - keys[2].x) / 3.0f;
+        const float left = keys[2].x - 0.5f * pitch - keyCapLeft, right = keys[5].x + 0.5f * pitch + keyCapRight;
+        return { { left, keys[2].y - 0.5f * keyFrameHeight, right - left, keyFrameHeight }, pitch, pitch + keyCapLeft + keyCapRight, keyMinScale };
+    }
 };
 
-/** The product's own plan, in its skin's file. It is made as the program starts, in no set order with
-    what other files make then — a rectangle is not a constant to the compiler — so it is read in a
-    function, never in what another file makes at its start. */
-extern const Plan plan;
-
-// ...and each of its measures under its own name, as the face reads them.
-inline const auto& windscreenCorners = plan.windscreenCorners;
-inline const auto& windscreen        = plan.windscreen;
-inline const auto& holes             = plan.holes;
-inline const auto& holeRadius        = plan.holeRadius;
-inline const auto& signOffset        = plan.signOffset;
-inline const auto& drive             = plan.drive;
-inline const auto& tones             = plan.tones;
-inline const auto& knobNameY         = plan.knobNameY;
-inline const auto& knobNameEm        = plan.knobNameEm;
-inline const auto& driveNameY        = plan.driveNameY;
-inline const auto& keys              = plan.keys;
-inline const auto& keySize           = plan.keySize;
-inline const auto& keyNameOverY      = plan.keyNameOverY;
-inline const auto& keyNameUnderY     = plan.keyNameUnderY;
-inline const auto& keyNameOver       = plan.keyNameOver;
-inline const auto& keyNameRoom       = plan.keyNameRoom;
-inline const auto& keyNamesOnKeys    = plan.keyNamesOnKeys;
-inline const auto& lightKeys         = plan.lightKeys;
-inline const auto& navScreen         = plan.navScreen;
-inline const auto& navHeader         = plan.navHeader;
-inline const auto& navPicture        = plan.navPicture;
-inline const auto& speedHud          = plan.speedHud;
-inline const auto& tunerScreen       = plan.tunerScreen;
-inline const auto& tunerDial         = plan.tunerDial;
-inline const auto& learnArea         = plan.learnArea;
-inline const auto& learnKeys         = plan.learnKeys;
-inline const auto& learnKeySize      = plan.learnKeySize;
-inline const auto& learnNames        = plan.learnNames;
-inline const auto& learnLine         = plan.learnLine;
-inline const auto& wiperKeys         = plan.wiperKeys;
-inline const auto& wiperKeySize      = plan.wiperKeySize;
-inline const auto& gateSlot          = plan.gateSlot;
-inline const auto& slotX             = plan.slotX;
-inline const auto& notchX            = plan.notchX;
-inline const auto& slotTopY          = plan.slotTopY;
-inline const auto& stops             = plan.stops;
-inline const auto& leverWidth        = plan.leverWidth;
-inline const auto& collarSink        = plan.collarSink;
-inline const auto& gearPlate         = plan.gearPlate;
-inline const auto& leverLeft         = plan.leverLeft;
-inline const auto& leverTop          = plan.leverTop;
-inline const auto& turbo             = plan.turbo;
-inline const auto& turboSize         = plan.turboSize;
-inline const auto& turboName         = plan.turboName;
-inline const auto& turboLid          = plan.turboLid;
-inline const auto& wells             = plan.wells;
-inline const auto& wellNameY         = plan.wellNameY;
-inline const auto& sliderCapLength   = plan.sliderCapLength;
-inline const auto& sliderHeight      = plan.sliderHeight;
-inline const auto& inMeter           = plan.inMeter;
-inline const auto& inFader           = plan.inFader;
-inline const auto& outMeter          = plan.outMeter;
-inline const auto& outFader          = plan.outFader;
-inline const auto& faderWidth        = plan.faderWidth;
-inline const auto& faderCapLength    = plan.faderCapLength;
-inline const auto& meterDots         = plan.meterDots;
-inline const auto& thresholdSlot     = plan.thresholdSlot;
-inline const auto& ceilingSlot       = plan.ceilingSlot;
-inline const auto& slotScale         = plan.slotScale;
-inline const auto& slotRim           = plan.slotRim;
-inline const auto& lamps             = plan.lamps;
-inline const auto& lampDot           = plan.lampDot;
-inline const auto& inputName         = plan.inputName;
-inline const auto& outputName        = plan.outputName;
-inline const auto& columnNameRoom    = plan.columnNameRoom;
-inline const auto& gateWord          = plan.gateWord;
-inline const auto& limiterWord       = plan.limiterWord;
-inline const auto& lampSlant         = plan.lampSlant;
-inline const auto& leftPlate         = plan.leftPlate;
-inline const auto& readings          = plan.readings;
-inline const auto& centrePlate       = plan.centrePlate;
-inline const auto& emblemFace        = plan.emblemFace;
-inline const auto& emblemMark        = plan.emblemMark;
-inline const auto& poweredBy         = plan.poweredBy;
-inline const auto& makerName         = plan.makerName;
-inline const auto& makerRoom         = plan.makerRoom;
+/** The product's own plan is in its skin's file, and its face reads it there (Skin::plan): every rover's
+    sources link into one binary, so no plan is THE plan. */
 
 } // namespace orbitamp::redpaw::layout

@@ -44,6 +44,12 @@
 // settings file alone. Checks 6 and 7 write the file, so the gate first moves HOME into a folder of
 // its own; where the store does not land there (a platform that does not take its settings from HOME),
 // they say so and skip rather than rewrite the choice of the machine they run on.
+//
+// HUM IS SWITCHED OFF in every amp for now (src/Features.h). The checks above are the stage's, and run
+// in the gate built with the switch thrown (orbitamp_hum_test). Built as the products are, with HUM off
+// (orbitamp_hum_off_test), the gate holds the switch instead, and nothing else: the machine set to AUTO
+// — as a machine that chose it before keeps it — and still the stage is never prepared and never runs,
+// the mode in force is OFF with no LEARN of its own, and the hummed input passes bit for bit.
 
 #include <juce_events/juce_events.h>
 
@@ -53,7 +59,18 @@
 
 // OrbitAmp's first start (OrbitAmpStart.cpp) is NOT made from here: it would gather IRs in the machine's
 // real folders.
-void orbitamp::firstStart() {}
+// OrbitAmp as this gate plays it: its own product with no first start, so the gate never reaches the
+// machine's real folders (Product::firstStart).
+static const orbitamp::Product& gateAmp()
+{
+    static const orbitamp::Product quiet = []
+    {
+        auto p = orbitamp::products::orbitAmp();
+        p.firstStart = nullptr;
+        return p;
+    }();
+    return quiet;
+}
 
 #include <algorithm>
 #include <array>
@@ -97,7 +114,7 @@ namespace
         p->setValueNotifyingHost (p->convertTo0to1 (value));
     }
 
-    void machine (Hum h) { orbitamp::prefs::humCache().store ((int) h, std::memory_order_relaxed); }
+    void machine (Hum h) { orbitamp::prefs::humCache(gateAmp()).store ((int) h, std::memory_order_relaxed); }
 
     Hum inForce (const AmpProcessor& amp) { return (Hum) amp.humInForce.load(); }
 
@@ -329,30 +346,49 @@ int main()
     const juce::ScopedJuceInitialiser_GUI juceInit;
 
     // On the heap, as a host holds it: the processor is far bigger than a Windows main thread's stack.
-    const auto ampOwned = std::make_unique<AmpProcessor>();
+    const auto ampOwned = std::make_unique<AmpProcessor> (gateAmp());
     auto& amp = *ampOwned;
 
-    // The input path the tap hears: the INPUT row working (its trim applies) and the tuner listening.
-    for (const auto row : { params::rowIn, params::rowTuner })
-    {
-        set (amp, params::chainLinks[row].onParam, 1.0f);
-        set (amp, params::chainLinks[row].presentParam, 1.0f);
-    }
+    // The input path the tap hears: the tuner listening (the INPUT's trim always applies).
+    set (amp, params::tunerOn, 1.0f);
     set (amp, params::inTrim, 0.0f);
 
     Stream stream (amp);
     stream.prepare();
 
+    // HUM SWITCHED OFF (Features.h) — the products' build. The machine on AUTO, through the cached atomic
+    // the engine reads, and a restart, the way a host opens a session on a machine that chose it: no
+    // stage, OFF in force, no LEARN, and four seconds of a hummed input on the tap bit for bit.
+    if constexpr (! orbitamp::features::hum)
+    {
+        machine (Hum::automatic);
+        stream.prepare();
+        Heard heard;
+        stream.play (4.0, heard);
+        const long long d = firstDifference (heard.out, heard.in, 0, heard.size());
+        report ("HUM off in the build: AUTO on the machine runs no stage",
+                amp.humRuns.load() == -1 && inForce (amp) == Hum::off && ! amp.humLearn.on.load(),
+                juce::String ("runs: ") + juce::String (amp.humRuns.load()) + ", in force: " + name (inForce (amp)));
+        report ("...and the hummed input passes bit for bit", d < 0,
+                d < 0 ? juce::String ("4 s identical, from the first sample") : juce::String::formatted ("differs at %.3f s", (double) d / sampleRate));
+
+        if (failures == 0)
+            std::printf ("\nall hum-off checks passed\n");
+        else
+            std::printf ("\n%d hum-off check(s) FAILED\n", failures);
+        return failures == 0 ? 0 : 1;
+    }
+
     // 0 · OFF BY DEFAULT — on a machine that has never said otherwise, with AUTO the mode it bypasses.
     {
         static_assert (orbitamp::prefs::humDefault == Hum::off && orbitamp::prefs::humFirstOn == Hum::automatic);
-        if (orbitamp::prefs::store().get (orbitamp::prefs::humMains).isVoid())
+        if (orbitamp::prefs::store(gateAmp()).get (orbitamp::prefs::humMains).isVoid())
             report ("a machine that never chose: OFF, and its first On is AUTO",
-                    inForce (amp) == Hum::off && orbitamp::prefs::humFlip() == Hum::automatic && amp.humRuns.load() == (int) Hum::automatic,
-                    juce::String ("in force: ") + name (inForce (amp)) + ", first On: " + name (orbitamp::prefs::humFlip()));
+                    inForce (amp) == Hum::off && orbitamp::prefs::humFlip(gateAmp()) == Hum::automatic && amp.humRuns.load() == (int) Hum::automatic,
+                    juce::String ("in force: ") + name (inForce (amp)) + ", first On: " + name (orbitamp::prefs::humFlip(gateAmp())));
         else
             std::printf ("%-52s skip  this machine has chosen: %s\n", "a machine that never chose: OFF",
-                         name (orbitamp::prefs::hum()));
+                         name (orbitamp::prefs::hum(gateAmp())));
     }
 
     // 1 · AUTO TAKES THE HUM OFF, once locked.
@@ -452,13 +488,13 @@ int main()
         machine (Hum::hz50);
         amp.setStateInformation (session.getData(), (int) session.getSize());
         stream.play (0.1, heard);
-        report ("a session neither carries the mode nor moves it", ! carried && orbitamp::prefs::hum() == Hum::hz50 && inForce (amp) == Hum::hz50,
+        report ("a session neither carries the mode nor moves it", ! carried && orbitamp::prefs::hum(gateAmp()) == Hum::hz50 && inForce (amp) == Hum::hz50,
                 juce::String ("in force after the session came back: ") + name (inForce (amp)));
     }
 
     // 6 · A CHOICE MADE THE WAY THE MENUS MAKE IT: on the machine's disk, and in every engine.
     {
-        const auto file = orbitamp::prefs::store().file();
+        const auto file = orbitamp::prefs::store(gateAmp()).file();
         if (ownHome.empty() || ! file.isAChildOf (juce::File (juce::String (ownHome))))
         {
             std::printf ("%-52s skip  the settings are not in a home of the gate's own: %s\n",
@@ -467,7 +503,7 @@ int main()
         else
         {
             // A second instance of the product in the same process, as a host holds two.
-            const auto otherOwned = std::make_unique<AmpProcessor>();
+            const auto otherOwned = std::make_unique<AmpProcessor> (gateAmp());
             auto& other = *otherOwned;
             other.prepareToPlay (sampleRate, blockSize);
             juce::AudioBuffer<float> quiet (2, blockSize);
@@ -477,7 +513,7 @@ int main()
             juce::String said;
             for (const auto h : orbitamp::prefs::humChoices)
             {
-                orbitamp::prefs::setHum (h);
+                orbitamp::prefs::setHum (gateAmp(), h);
                 const auto onDisk = juce::JSON::parse (file).getProperty (orbitamp::prefs::humMains, {}).toString();
                 kept = kept && onDisk == orbitamp::prefs::humWord (h);
 
@@ -589,17 +625,17 @@ int main()
         }
 
         // Picked under OFF, it switches the hum on first, in the mode OFF bypasses.
-        if (const auto file = orbitamp::prefs::store().file(); ! ownHome.empty() && file.isAChildOf (juce::File (juce::String (ownHome))))
+        if (const auto file = orbitamp::prefs::store(gateAmp()).file(); ! ownHome.empty() && file.isAChildOf (juce::File (juce::String (ownHome))))
         {
-            orbitamp::prefs::setHum (Hum::hz50);
-            orbitamp::prefs::setHum (Hum::off);
-            HumLearner learner (amp.humLearn, amp.gateKeyDb, amp.humTuned.quietHz);
+            orbitamp::prefs::setHum (gateAmp(), Hum::hz50);
+            orbitamp::prefs::setHum (gateAmp(), Hum::off);
+            HumLearner learner (gateAmp(), amp.humLearn, amp.gateKeyDb, amp.humTuned.quietHz);
             learner.start();
-            const Hum after = orbitamp::prefs::hum();
+            const Hum after = orbitamp::prefs::hum(gateAmp());
             learner.cancel();
             stream.play (0.1, heard);
             report ("HUM LEARN under OFF switches the hum on first", after == Hum::hz50, juce::String ("now ") + name (after));
-            orbitamp::prefs::setHum (Hum::automatic);      // AUTO again, and the mode OFF bypasses with it
+            orbitamp::prefs::setHum (gateAmp(), Hum::automatic);      // AUTO again, and the mode OFF bypasses with it
         }
 
         // The words.
@@ -669,20 +705,20 @@ int main()
     // 10 · THE QUICK A/B.
     {
         namespace prefs = orbitamp::prefs;
-        const auto file = prefs::store().file();
+        const auto file = prefs::store(gateAmp()).file();
         if (ownHome.empty() || ! file.isAChildOf (juce::File (juce::String (ownHome))))
         {
             std::printf ("%-52s skip  the settings are not in a home of the gate's own\n", "H: OFF and back to the mode it bypasses");
         }
         else
         {
-            prefs::setHum (Hum::hz50);
-            const Hum first = prefs::humFlip();
-            prefs::setHum (first);
+            prefs::setHum (gateAmp(), Hum::hz50);
+            const Hum first = prefs::humFlip(gateAmp());
+            prefs::setHum (gateAmp(), first);
             stream.play (0.1, heard);
             const Hum offInForce = inForce (amp);
-            const Hum second = prefs::humFlip();
-            prefs::setHum (second);
+            const Hum second = prefs::humFlip(gateAmp());
+            prefs::setHum (gateAmp(), second);
             stream.play (0.1, heard);
             const auto lastOnDisk = juce::JSON::parse (file).getProperty (prefs::humLastOnKey, {}).toString();
             report ("H: OFF and back to the mode it bypasses", first == Hum::off && offInForce == Hum::off
@@ -714,7 +750,7 @@ int main()
     // 12 · A SWITCH, THEN THE MODE.
     {
         namespace prefs = orbitamp::prefs;
-        const auto file = prefs::store().file();
+        const auto file = prefs::store(gateAmp()).file();
         if (ownHome.empty() || ! file.isAChildOf (juce::File (juce::String (ownHome))))
         {
             std::printf ("%-52s skip  the settings are not in a home of the gate's own\n", "HUM in a menu: a switch, then the mode");
@@ -724,24 +760,24 @@ int main()
             const auto ticks = [] (int autoState)
             {
                 juce::String t;
-                for (const auto& line : prefs::humMenu (autoState))
+                for (const auto& line : prefs::humMenu (gateAmp(), autoState))
                     t << (line.ticked ? "[x] " : "[ ] ") << line.text << "; ";
                 return t;
             };
-            prefs::setHum (Hum::hz60);
+            prefs::setHum (gateAmp(), Hum::hz60);
             const auto on = ticks (-1);
-            prefs::setHum (Hum::off);
+            prefs::setHum (gateAmp(), Hum::off);
             const auto off = ticks (-1);
-            const auto offState = prefs::humState (0);
-            prefs::humPick (prefs::humMenu (-1)[4]);       // AUTO, picked under OFF
-            const Hum picked = prefs::hum();
-            prefs::humPick (prefs::humMenu (-1)[1]);       // the switch: OFF...
-            const Hum flipped = prefs::hum();
-            prefs::humPick (prefs::humMenu (-1)[1]);       // ...and back, to the mode
-            const Hum back = prefs::hum();
+            const auto offState = prefs::humState (gateAmp(), 0);
+            prefs::humPick (gateAmp(), prefs::humMenu (gateAmp(), -1)[4]);       // AUTO, picked under OFF
+            const Hum picked = prefs::hum(gateAmp());
+            prefs::humPick (gateAmp(), prefs::humMenu (gateAmp(), -1)[1]);       // the switch: OFF...
+            const Hum flipped = prefs::hum(gateAmp());
+            prefs::humPick (gateAmp(), prefs::humMenu (gateAmp(), -1)[1]);       // ...and back, to the mode
+            const Hum back = prefs::hum(gateAmp());
             report ("HUM in a menu: a switch, then the mode",
                     on == "[ ] Learn; [x] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; " && off == "[ ] Learn; [ ] On; [ ] 50 Hz; [x] 60 Hz; [ ] Auto; "
-                        && offState == "Off" && prefs::humState (0) == juce::String::fromUTF8 ("Auto \xe2\x80\x94 listening"),
+                        && offState == "Off" && prefs::humState (gateAmp(), 0) == juce::String::fromUTF8 ("Auto \xe2\x80\x94 listening"),
                     "60 Hz: " + on + " OFF: " + off);
             report ("...a mode picked under OFF switches it on; the switch flips", picked == Hum::automatic
                                                                                   && flipped == Hum::off && back == Hum::automatic,
@@ -798,7 +834,7 @@ int main()
                                          amp.humTuned.quietHz.load(), amp.humTuned.harmonics.load(), amp.humTuned.maxHz.load(),
                                          amp.humTuned.active.load()));
 
-        const auto file = orbitamp::prefs::store().file();
+        const auto file = orbitamp::prefs::store(gateAmp()).file();
         const bool ownSettings = ! ownHome.empty() && file.isAChildOf (juce::File (juce::String (ownHome)));
         if (! ownSettings)
             std::printf ("%-52s skip  the settings are not in a home of the gate's own\n", "the tuning, chosen");
@@ -806,7 +842,7 @@ int main()
         // 1.2 kHz, against the stage as it ran before: its own params, its own 64 harmonics.
         if (ownSettings)
         {
-        tune::setUpTo (tune::upToOwn);
+        tune::setUpTo (gateAmp(), tune::upToOwn);
         amp.prepareToPlay (sampleRate, blockSize);
         auto before = std::make_unique<felitronics::dehum::HumRemover<64>>();
         before->setParams (own);
@@ -858,27 +894,27 @@ int main()
             juce::String said;
             for (const float v : tune::playWidths)
             {
-                tune::setPlay (v);
+                tune::setPlay (gateAmp(), v);
                 stream.play (2.0 * blockSize / sampleRate, heard);
                 widths = widths && juce::exactlyEqual (amp.humTuned.playHz.load(), v);
             }
             for (const float v : tune::quietWidths)
             {
-                tune::setQuiet (v);
+                tune::setQuiet (gateAmp(), v);
                 stream.play (2.0 * blockSize / sampleRate, heard);
                 widths = widths && juce::exactlyEqual (amp.humTuned.quietHz.load(), v);
             }
             const int harmonicsAt50[] = { 24, 40, 64, 96, 128 };
             for (size_t i = 0; i < std::size (tune::upTos); ++i)
             {
-                tune::setUpTo (tune::upTos[i]);
+                tune::setUpTo (gateAmp(), tune::upTos[i]);
                 stream.play (4.0 * blockSize / sampleRate, heard);
                 reach = reach && amp.humTuned.active.load() == harmonicsAt50[i];
                 said << tune::kHz (tune::upTos[i]) << " -> " << amp.humTuned.active.load() << "; ";
             }
-            tune::setPlay (tune::playDefault);
-            tune::setQuiet (tune::quietDefault);
-            tune::setUpTo (tune::upToDefault);
+            tune::setPlay (gateAmp(), tune::playDefault);
+            tune::setQuiet (gateAmp(), tune::quietDefault);
+            tune::setUpTo (gateAmp(), tune::upToDefault);
             stream.play (2.0 * blockSize / sampleRate, heard);
             report ("every tuning choice reaches the stage", widths && reach && amp.humTuned.harmonics.load() == AmpProcessor::HumStage::kMaxHarmonics,
                     "harmonics running at 50 Hz: " + said);
@@ -888,7 +924,7 @@ int main()
         }
     }
 
-    machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store().get (orbitamp::prefs::humMains, "auto").toString()));
+    machine (orbitamp::prefs::humFromWord (orbitamp::prefs::store(gateAmp()).get (orbitamp::prefs::humMains, "auto").toString()));
 
     if (failures == 0)
         std::printf ("\nall hum checks passed\n");

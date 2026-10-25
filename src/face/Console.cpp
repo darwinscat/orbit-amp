@@ -3,14 +3,19 @@
 
 #include "Console.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "Cabs.h"
 #include "Midi.h"
 #include "Standalone.h"
 
 #include "../Parameters.h"
 #include "../Product.h"
+#include "../ProductPage.h"
 #include "../core/ProcessMemory.h"
 #include "../device/IrLibrary.h"
+#include "../device/SwitchWords.h"
 #include "../ui/AboutConfig.h"
 #include "../ui/HumMenu.h"
 #include "../ui/HumTuning.h"
@@ -24,33 +29,6 @@ namespace orbitamp::face
 
 namespace
 {
-    // The INPUT lever's zero — see Console.h. Kept with the machine's settings.
-    const juce::Identifier leverZeroKey { "input_zero_db" };
-    constexpr int leverZeroDefault = -9, leverZeroLowest = -24, leverZeroHighest = 12, leverZeroStep = 3;
-
-    int snapLeverZero (int db)
-    {
-        db = juce::jlimit (leverZeroLowest, leverZeroHighest, db);
-        return leverZeroLowest + leverZeroStep * juce::roundToInt ((float) (db - leverZeroLowest) / (float) leverZeroStep);
-    }
-
-    /** The lever's travel against the engine's trim: the bottom of the travel is the trim's bottom, the
-        top its top, and the middle whatever `zero` says the lever's zero gives. */
-    float leverToDb (float travel, int zero)
-    {
-        const float z = (float) zero, range = params::inTrimRangeDb;
-        return travel <= 0.5f ? juce::jmap (travel * 2.0f, -range, z)
-                              : juce::jmap ((travel - 0.5f) * 2.0f, z, range);
-    }
-
-    float dbToLever (float db, int zero)
-    {
-        const float z = (float) zero, range = params::inTrimRangeDb;
-        if (db <= z)
-            return z > -range ? 0.5f * (db + range) / (z + range) : 0.5f;   // a zero at the very bottom has nothing under it
-        return 0.5f + 0.5f * (db - z) / (range - z);
-    }
-
     juce::String decibels (int db) { return (db > 0 ? "+" : "") + juce::String (db) + " dB"; }
 
     // The ceilings the OUTPUT column's menu offers the limiter, within what the engine takes
@@ -60,10 +38,6 @@ namespace
     // How much heavier than the ink's weight GATE and LIMITER are cut, on their busy corner plates.
     constexpr float cornerWeight = 1.6f;
 
-    // TURBO's push — see Console.h. Kept with the machine's settings, where the engine reads it too
-    // (channels/Engine.h).
-    using channels::settings::turboKey, channels::settings::turboPushes, channels::settings::snapTurbo;
-
     // How DRIVE goes between the pack's captures — see Console.h. Kept with the machine's settings.
     const juce::Identifier driveStepsKey { "drive_steps" };
     const juce::StringArray driveWays { "Smoothly", "In steps" };
@@ -71,8 +45,8 @@ namespace
     // WHAT A PRODUCT HANDS OUT SAYS WHERE IT CAME FROM: a capture and a cabinet saved from it are
     // offered a name that starts with the product's own and with what kind of file it is —
     // "CatpitAmp-NamA2-", "CatpitAmp-IR-".
-    const juce::String captureNamePrefix = juce::String (product::name) + "-NamA2-";
-    const juce::String cabNamePrefix     = juce::String (product::name) + "-IR-";
+    juce::String captureNamePrefix (const Product& p) { return juce::String (p.name) + "-NamA2-"; }
+    juce::String cabNamePrefix (const Product& p)     { return juce::String (p.name) + "-IR-"; }
 
     /** ...and a capture's name ends with where the gear's gain knob stood for it, as the hour it
         pointed at: "-1h", "-9h30". Nothing when the pack does not say. */
@@ -102,20 +76,15 @@ namespace
                                       nullptr);
     }
 
-    /** The product's own tag on a family link, for the site's analytics: "utm_source=catpitamp&...". */
-    juce::String campaign()
-    {
-        return "utm_source=" + juce::String (product::name).toLowerCase() + "&utm_medium=plugin";
-    }
 
     /** THE BUILD WINDOW, AS THE PRODUCT'S. What the build is and what it was built against is the same
         for every face of the processor (aboutConfig); what is the product's own is its name, its mark —
         the cockpit's a small starship head-on, its fins a cat's ears — and its name where the notice
         says whose product this is. The window outlives the badge that opens it, so the mark is
         shared, not lent. */
-    felitronics::appkit::VersionBadge::Config aboutTheProduct (const juce::String& svg)
+    felitronics::appkit::VersionBadge::Config aboutTheProduct (const Product& p, const juce::String& svg, bool standalone)
     {
-        auto config = aboutConfig (product::name, "https://darwinscat.com", campaign().toRawUTF8());
+        auto config = aboutConfig (p.name, productPageUrl (p.name, standalone), familyLinkTag (p.name));
 
         std::shared_ptr<juce::Drawable> mark { juce::Drawable::createFromImageData (
             svg.toRawUTF8(), svg.getNumBytesAsUTF8()).release() };
@@ -125,7 +94,7 @@ namespace
             if (mark != nullptr)
                 mark->drawWithin (g, { cx - d * 0.5f, cy - d * 0.5f, d, d }, juce::RectanglePlacement::centred, 1.0f);
         };
-        config.notice = config.notice.replace ("OrbitAmp", product::name);
+        config.notice = config.notice.replace ("OrbitAmp", p.name);
         return config;
     }
 
@@ -182,7 +151,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
       tuner (p.tunerEar),
       emblem (where.emblemFace, where.emblemMark),
       version (stage::px13),
-      about (p.updateChecker(), aboutTheProduct (look.mark), p.pluginFormat()),
+      about (p.updateChecker(), aboutTheProduct (p.product(), look.mark, p.wrapperType == juce::AudioProcessor::wrapperType_Standalone), p.pluginFormat()),
       load (where.readingPx),
       memory (where.readingPx),
       presetDoor (stage::px13)
@@ -193,14 +162,12 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     // undo on the panel it must not leave a step to press back through.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
 
-    leverZero = snapLeverZero ((int) prefs::store().get (leverZeroKey, leverZeroDefault));
-    channels.setTurboDb ((float) channels::settings::turbo());
-    driveSteps = (bool) prefs::store().get (driveStepsKey, false);
+    driveSteps = (bool) prefs::store (amp.product()).get (driveStepsKey, false);
 
     channels.readCabinets();    // the player's folder may have gained or lost a file since the engine was built
     engine.setUpChain (channels.adopt());
     channels.align();   // the packs and cabinets are files, and the folders may have changed since the state was saved
-    settleOnSettings(); // ...and INPUT's lever may have another zero than the one the state was dialled against
+    settleOnSettings(); // ...and DRIVE's way may not be the settings' now
 
     // THE STANDALONE PLAYS IN STEREO SPACE — one guitar in, a wide room out. The processor's own default
     // waits for a device to open, so a first run with none saved MONO for good; and the first players'
@@ -218,23 +185,42 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
 
     stage.addAndMakeVisible (drive);
     drive.setBounds (box (places.drive));
+    // The tone knobs and the right group's keys: as many as the console can show, each put where the
+    // playing channel's rows have it, and shown only while they have it (layStrips).
     for (size_t i = 0; i < tones.size(); ++i)
     {
         tones[i] = std::make_unique<ArtKnob> (look.toneKnob, look.tonePointer);
-        stage.addAndMakeVisible (*tones[i]);
-        tones[i]->setBounds (box (places.tones[i]));
+        stage.addChildComponent (*tones[i]);
+
+        // ITS NAME, which its sign stands for: in the tag over it while the hand is on the knob or on the sign.
+        toneSpots[i] = std::make_unique<HoverSpot>();
+        stage.addChildComponent (*toneSpots[i]);
+        const auto name = [this, i] (bool over)
+        {
+            const bool has = i < strips.tones.size();
+            nameTag.show (has ? strips.tones[i].label.getCentre().translated (0.0f, -26.0f) : juce::Point<float>(),
+                          over && has ? strips.tones[i].name : juce::String());
+        };
+        tones[i]->onHover = name;
+        toneSpots[i]->onHover = name;
     }
 
     for (size_t i = 0; i < buttons.size(); ++i)
     {
-        buttons[i] = std::make_unique<PushButton> (switches[i].name);
+        const bool filter = i < (size_t) btFirstRight;
+        buttons[i] = std::make_unique<PushButton> (filter ? switches[i].name : "");
         auto& b = *buttons[i];
-        stage.addAndMakeVisible (b);
-        const auto at = places.keys[i];
-        b.setBounds (around (at, places.keySize, places.keySize));
-        keyNames[i] = switches[i].name;
-        b.onHover = [this, at, &b, i] (bool over)     // a key that does not answer the hand says nothing either
+        stage.addChildComponent (b);
+        if (filter)
         {
+            b.setVisible (true);
+            b.setBounds (around (places.keys[i], places.filterKeyWidth > 0.0f ? places.filterKeyWidth : places.keySize,
+                                 places.filterKeyHeight > 0.0f ? places.filterKeyHeight : places.keySize));
+            keyNames[i] = switches[i].name;
+        }
+        b.onHover = [this, &b, i] (bool over)     // a key that does not answer the hand says nothing either
+        {
+            const auto at = b.getBounds().toFloat().getCentre();
             nameTag.show (at.translated (0.0f, -40.0f), over && b.isEnabled() ? keyNames[i] + "  " + b.stateText() : juce::String());
         };
     }
@@ -396,15 +382,10 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     bind (*sliders[1], params::delayMix);
     bind (outFader, params::outTrim);
 
-    // INPUT's lever does not read the trim's own scale: its middle is the lever's zero (Console.h).
-    inputTrim = follow (params::inTrim, [this] (float db) { inFader.setValue (dbToLever (db, leverZero), false); });
-    inFader.onGestureStart = [this] { inputTrim->beginGesture(); };
-    inFader.onChange       = [this] (float travel) { inputTrim->setValueAsPartOfGesture (leverToDb (travel, leverZero)); };
-    inFader.onGestureEnd   = [this] { inputTrim->endGesture(); };
-    inFader.defaultValue   = 0.5f;
-    inputTrim->sendInitialUpdate();
+    // INPUT's lever IS the trim, as OUTPUT's is: unity in its middle (Console.h).
+    bind (inFader, params::inTrim);
 
-    inFader.onMenu = [this] { showInputMenu(); };
+    inFader.onMenu = [this] { showInputMenu(); };   // ...the face's own menu while HUM is off (showInputMenu)
 
     outFader.onMenu = [this] { showOutputMenu(); };
 
@@ -417,21 +398,19 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
     follow (params::tunerMute, [this] (float) { showTunerState(); });
     showTunerState();
 
-    sayLever (inFader,  "INPUT",  [this] { return getParam (params::inTrim) - (float) leverZero; });
+    sayLever (inFader,  "INPUT",  [this] { return getParam (params::inTrim); });
     sayLever (outFader, "OUTPUT", [this] { return getParam (params::outTrim); });
 
     // The tone stack is the playing pack's own — its Bass, Middle and Treble as they were measured on
     // the amp, centre detent where every capture was taken.
     bindTones();
 
-    // HPF and LPF switch the cabinet's own cut filters in and out. The four keys right of them are the
-    // playing pack's switches where it has any to throw (packKeys), and otherwise FAT, BRIGHT, DEPTH and
-    // PRESENCE: kept with the channel, waiting for the layers the packs will carry — each dimmed and
-    // deaf to the hand until its own arrives (Channels::layerPlayable). Which of the two they are is
-    // showKeys' to say, on every channel.
+    // HPF and LPF switch the cabinet's own cut filters in and out. The keys right of them are the playing
+    // pack's switches a hand may throw, as many as it has (rightKeysOf), and the face's own after them;
+    // a pack with none has none there. Which they are is showKeys' to say, on every channel.
     bindButton (*buttons[btHpf], params::cabHpfOn);
     bindButton (*buttons[btLpf], params::cabLpfOn);
-    for (int key = btFat; key <= btPresence; ++key)
+    for (int key = btFirstRight; key < numKeys; ++key)
         buttons[(size_t) key]->onChange = [this, key] (bool on) { keyThrown (key, on); };
 
     // A switch moved by anything — a key, an undo, a register, a host — lights the key it stands on.
@@ -446,11 +425,12 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
         juce::Path face;
         for (size_t i = 0; i < places.emblemFace.size(); ++i)
             i == 0 ? face.startNewSubPath (places.emblemFace[i]) : face.lineTo (places.emblemFace[i]);
-        emblem.setBounds (face.getBounds().getSmallestIntegerContainer());
+        emblem.setBounds (face.getBounds().expanded (Emblem::bloom + 1.0f).getSmallestIntegerContainer());     // room for the lamp's glow; the target is the plate alone
     }
-    emblem.onClick = []
+    emblem.setLamp (look.emblemLamp);
+    emblem.onClick = [page = productPageUrl (amp.product().name, amp.wrapperType == juce::AudioProcessor::wrapperType_Standalone)]
     {
-        juce::URL ("https://darwinscat.com/felitronics/" + juce::String (product::name).toLowerCase() + "?" + campaign()).launchInDefaultBrowser();
+        juce::URL (page).launchInDefaultBrowser();
     };
 
     // The version, and behind it the window with everything else about the build. That window is
@@ -535,11 +515,11 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
                      readingWidth * 2, juce::roundToInt ((float) readingWidth * 2.0f * height / width));
     setSize (readingWidth, juce::roundToInt ((float) readingWidth * height / width));
 
-    renders = { { "knob-drive.png", look.driveKnob }, { "knob-tone.png", look.toneKnob },
-                { "slider-cap.png", look.cap }, { "fader-cap.png", look.faderCap } };
+    renders = { { "knob-drive", look.driveKnob }, { "knob-tone", look.toneKnob },
+                { "slider-cap", look.cap }, { "fader-cap", look.faderCap } };
     for (size_t i = 0; i < look.lampsLit.size(); ++i)
         if (look.lampsLit[i] != nullptr)
-            renders.push_back ({ "lamp-" + juce::String ((int) i) + ".png", *look.lampsLit[i] });
+            renders.push_back ({ "lamp-" + juce::String ((int) i), *look.lampsLit[i] });
     lookForWeb = { look.drivePointer, look.tonePointer, look.handLight, look.ink };
 
     if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_WEB_EXPORT", {}); folder.isNotEmpty())
@@ -594,16 +574,11 @@ namespace
 
 void writeForWeb (const juce::File& file, const juce::Image& img)
 {
-    if (! img.isValid())
-        return;
-    file.deleteFile();
-    juce::FileOutputStream out (file);
-    if (out.openedOk())
-        juce::PNGImageFormat().writeImageToStream (img, out);
+    web::write (file, img);
 }
 
 void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
-                           const std::vector<juce::Component*>& hidden, const juce::String& file)
+                           const juce::Image& live, const std::vector<juce::Component*>& hidden, const juce::String& stem)
 {
     std::vector<std::pair<juce::Component*, bool>> was;
     for (auto* c : hidden)
@@ -615,24 +590,65 @@ void Console::writePoster (const juce::File& dir, juce::Rectangle<float> window,
 
     const float k = 2.0f;
     const auto shot = stage.createComponentSnapshot (stage.getLocalBounds(), true, k);
-    juce::Image poster (juce::Image::ARGB, juce::roundToInt (stage::width * k), juce::roundToInt (stage::height * k), true);
-    {
-        juce::Graphics g (poster);
-        g.fillAll (juce::Colours::black);
-        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-        if (still.isValid())
-            g.drawImage (still, window * k, juce::RectanglePlacement::stretchToFit);
-        g.drawImageAt (shot, 0, 0);
-    }
     for (const auto& [c, visible] : was)
         c->setVisible (visible);
-    writeForWeb (dir.getChildFile (file), poster);
+    const auto under = [&] (const juce::Image& view)
+    {
+        juce::Image poster (juce::Image::ARGB, juce::roundToInt (stage::width * k), juce::roundToInt (stage::height * k), true);
+        {
+            juce::Graphics g (poster);
+            g.fillAll (juce::Colours::black);
+            g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+            if (view.isValid())
+                g.drawImage (view, window * k, juce::RectanglePlacement::stretchToFit);
+            g.drawImageAt (shot, 0, 0);
+        }
+        return poster;
+    };
+    if (live.isValid())
+        web::writeThreeSizes (dir, stem, under (live), "poster");
+    web::writeThreeSizes (dir, stem + "-still", under (still), "poster");
 
     // ...and the same face with nothing under it: the window empty, for a picture of the site's own to go
-    // under it there — the live view's first frame, say.
-    juce::Image hole (juce::Image::ARGB, poster.getWidth(), poster.getHeight(), true);
+    // under it there.
+    juce::Image hole (juce::Image::ARGB, shot.getWidth(), shot.getHeight(), true);
     juce::Graphics (hole).drawImageAt (shot, 0, 0);
-    writeForWeb (dir.getChildFile (file.upToLastOccurrenceOf (".", false, false) + "-hole.png"), hole);
+    web::writeThreeSizes (dir, stem + "-hole", hole, "poster");
+    postersWritten[stem] = live.isValid();
+}
+
+juce::var Console::posterFiles (const juce::String& stem, bool live)
+{
+    auto files = web::threeNames (live ? stem : stem + "-still", "poster");
+    files.getDynamicObject()->setProperty ("still", web::threeNames (stem + "-still", "poster"));
+    files.getDynamicObject()->setProperty ("hole", web::threeNames (stem + "-hole", "poster"));
+    return files;
+}
+
+void Console::shootPoster (const juce::File& dir, int place, const juce::String& stem, std::function<void()> then)
+{
+    const auto shoot = [safe = juce::Component::SafePointer<Console> (this), dir, place, stem, then] (const juce::Image& live)
+    {
+        if (safe == nullptr)
+            return;
+        safe->writePoster (dir, safe->webPoses.window, safe->webPoses.still (place), live, safe->webPoses.hidden, stem);
+        then();
+    };
+    if (webPoses.firstFrame == nullptr)
+    {
+        shoot ({});
+        return;
+    }
+    // The live view's first frame, from the GPU — or, where none has come in ten seconds, the still: taken
+    // once, whichever comes first.
+    const auto taken = std::make_shared<bool> (false);
+    const auto take = [taken, shoot] (const juce::Image& live)
+    {
+        if (! std::exchange (*taken, true))
+            shoot (live);
+    };
+    webPoses.firstFrame (place, take);
+    juce::Timer::callAfterDelay (10000, [take] { take ({}); });
 }
 
 void Console::webPatch (const juce::String& name, std::initializer_list<const juce::Component*> parts)
@@ -649,7 +665,7 @@ void Console::poseNext (const juce::File& dir, int pose)
 {
     if (pose >= webPoses.count)
     {
-        dir.getChildFile ("done.txt").replaceWithText ("done");
+        finishWeb (dir);
         return;
     }
     webPoses.standAt (pose);
@@ -658,40 +674,83 @@ void Console::poseNext (const juce::File& dir, int pose)
     // (or to a stand), as its nav screen reads it.
     juce::Timer::callAfterDelay (2500, [safe = juce::Component::SafePointer<Console> (this), dir, pose]
     {
-        if (safe == nullptr)
-            return;
-        safe->writePoster (dir, safe->webPoses.window, safe->webPoses.still (pose), safe->webPoses.hidden,
-                           "poster-" + juce::String (pose) + ".png");
-        safe->poseNext (dir, pose + 1);
+        if (safe != nullptr)
+            safe->shootPoster (dir, pose, "poster-" + juce::String (pose), [safe, dir, pose]
+            {
+                if (safe != nullptr)
+                    safe->poseNext (dir, pose + 1);
+            });
     });
 }
 
-void Console::writeSprite (const juce::File& dir, const juce::String& file, const juce::Image& img)
+/** Every poster written: places.json names each one's files — a live frame's where one went under its glass,
+    the still's where none did — and says what its window shows; done.txt last. */
+void Console::finishWeb (const juce::File& dir)
 {
-    if (! img.isValid())
-        return;
-    writeForWeb (dir.getChildFile (file), img);
-    spritesWritten.push_back ({ file.upToLastOccurrenceOf (".", false, false), opaqueBounds (img) });
+    if (auto* o = webPlaces.getDynamicObject())
+    {
+        int live = 0;
+        for (const auto& [stem, withFrame] : postersWritten)
+            live += withFrame ? 1 : 0;
+        if (const auto top = postersWritten.find ("poster"); top != postersWritten.end())
+        {
+            const auto files = posterFiles ("poster", top->second);
+            for (const auto* size : { "poster", "poster1x", "posterHalf" })
+                o->setProperty (size, files[size]);
+            o->setProperty ("posterStill", files["still"]);
+            o->setProperty ("posterHole", files["hole"]);
+            const juce::String still = "still: the still the app ships, as its STILL mode shows it";
+            o->setProperty ("posterWindow", live == 0 ? still
+                                          : live == (int) postersWritten.size() ? "live: " + webPoses.live
+                                          : "live: " + webPoses.live + "; where a place's frame could not be had, the still (" + still.fromFirstOccurrenceOf (": ", false, false) + ")");
+        }
+        juce::Array<juce::var> posters;
+        for (int i = 0; i < webPoses.count; ++i)
+        {
+            const auto at = postersWritten.find ("poster-" + juce::String (i));
+            posters.add (posterFiles ("poster-" + juce::String (i), at != postersWritten.end() && at->second));
+        }
+        o->setProperty ("posters", posters);
+        dir.getChildFile ("places.json").replaceWithText (juce::JSON::toString (webPlaces));
+    }
+    dir.getChildFile ("done.txt").replaceWithText ("done");
+}
+
+juce::var Console::writeSprite (const juce::File& dir, const juce::String& stem, const juce::Image& img)
+{
+    auto file = web::writeSprite (dir, stem, img);
+    if (! file.isVoid())
+        spritesWritten.push_back ({ stem, opaqueBounds (img) });
+    return file;
+}
+
+juce::var Console::spriteRef (const juce::String& stem) const
+{
+    for (const auto& written : spritesWritten)
+        if (written.first == stem)
+            return web::spriteFile (stem);
+    return {};
 }
 
 void Console::exportForWeb (const juce::File& dir)
 {
     dir.createDirectory();
     spritesWritten.clear();
-    writeForWeb (dir.getChildFile ("cabin.png"), picture->staticImage (2.0f));
+    postersWritten.clear();
+    const auto cabin = web::writeThreeSizes (dir, "cabin", picture->staticImage (2.0f), "cabin", web::halfCabinQuality);
     for (const auto& [name, img] : renders)
         writeSprite (dir, name, img);
 
     const auto& p = places;
     auto* o = new juce::DynamicObject();
     o->setProperty ("format", "orbitamp-web-face");
-    o->setProperty ("schema", 3);       // 2: what is one world's own is under "world"; spriteBounds. 3: the world's whole map there
+    o->setProperty ("schema", 4);       // 2: what is one world's own is under "world"; spriteBounds. 3: the world's whole map there. 4: each channel's "face"
     o->setProperty ("stage", rectVar ({ 0.0f, 0.0f, stage::width, stage::height }));
-    o->setProperty ("cabin", "cabin.png");
+    for (const auto& size : cabin.getDynamicObject()->getProperties())       // cabin, cabin1x, cabinHalf
+        o->setProperty (size.name, size.value);
     o->setProperty ("cabinScale", 2.0f);
     o->setProperty ("drive", rectVar (p.drive));
-    o->setProperty ("tones", listVar (p.tones, rectVar));
-    o->setProperty ("keys", listVar (p.keys, pointVar));
+    o->setProperty ("keys", listVar (p.keys, pointVar));       // the two filters; the tone knobs and the right group are each channel's "face"
     o->setProperty ("keySize", p.keySize);
     o->setProperty ("holes", listVar (p.holes, pointVar));
     o->setProperty ("holeKeySize", p.holeKeySize);
@@ -708,6 +767,26 @@ void Console::exportForWeb (const juce::File& dir)
     o->setProperty ("lamps", listVar (p.lamps, rectVar));
     o->setProperty ("emblemFace", listVar (p.emblemFace, pointVar));
     o->setProperty ("emblemMark", rectVar (p.emblemMark));
+    // ...and the mark lit under the hand, where the face has a lamp for it (Emblem): the lit glass whole, at
+    // twice the stage, its box, the lamp, and the spring the light comes up and goes on — for the site to
+    // fade the picture in over the engraving at the light's share, as the face does.
+    if (const auto glass = emblem.litPicture (2.0f); glass.isValid())
+    {
+        auto* l = new juce::DynamicObject();
+        l->setProperty ("sprite", writeSprite (dir, "emblem-lit", glass));
+        l->setProperty ("box", rectVar (emblem.litBox()));
+        l->setProperty ("lamp", colourVar (emblem.lampColour()));
+        l->setProperty ("lights", "mark");      // the cat is the glass: its floor lit through
+        l->setProperty ("stiffness", emblem.lightStiffness());
+        l->setProperty ("damping", emblem.lightDamping());
+        l->setProperty ("riseSeconds", emblem.lightSeconds());
+        l->setProperty ("fallSeconds", emblem.lightSeconds());
+        l->setProperty ("how", "laid over the badge at the light's share, a spring with no overshoot toward 1 under the hand and 0 off it; "
+                               "the cat's floor lit through, its walls kept, a bloom past its edges");
+        o->setProperty ("emblemLit", juce::var (l));
+    }
+    else
+        o->setProperty ("emblemLit", juce::var());
     o->setProperty ("version", rectVar (p.version));
     o->setProperty ("load", rectVar (p.load));
     o->setProperty ("memory", rectVar (p.memory));
@@ -769,14 +848,72 @@ void Console::exportForWeb (const juce::File& dir)
             x->setProperty ("delayMix", channels.defaultOf (c, params::delayMix));
             x->setProperty ("drive", ranged (params::preampGain, channels.defaultOf (c, params::preampGain)));
             juce::Array<juce::var> tones;
-            for (int t = 0; t < Channels::numTones; ++t)
+            const auto toneNames = channels.toneNamesOf (c);     // the pack's tones, knob i its tone i
+            for (int t = 0; t < toneNames.size(); ++t)
             {
                 const auto id = channels.toneOf (c, t);
                 auto v = ranged (id, channels.defaultOf (c, id));
-                v.getDynamicObject()->setProperty ("name", Channels::toneNames[(size_t) t]);
+                v.getDynamicObject()->setProperty ("name", toneNames[t]);
                 tones.add (v);
             }
             x->setProperty ("tones", tones);
+
+            // ITS FACE: the rows as the face lays them on this channel (stripsFor) — each tone knob's box,
+            // its name's box and word, the pack's tone it plays and the parameter that is; each key right
+            // of the filters, its box, its name's box and word, the switch it throws and how; and the
+            // frame round them, where the face draws one.
+            {
+                const auto laid = stripsFor (c);
+                const auto right = rightKeysOf (c);
+                auto* f = new juce::DynamicObject();
+                juce::Array<juce::var> knobs, keys;
+                for (const auto& t : laid.tones)
+                {
+                    // ...its sign, a sprite the size of its label's box (at twice the stage), drawn as the face draws it.
+                    juce::var file;
+                    {
+                        juce::Image img (juce::Image::ARGB, juce::roundToInt (t.label.getWidth() * 2.0f), juce::roundToInt (t.label.getHeight() * 2.0f), true);
+                        juce::Graphics sg (img);
+                        sg.addTransform (juce::AffineTransform::scale (2.0f));
+                        drawToneSign (sg, { 0.0f, 0.0f, t.label.getWidth(), t.label.getHeight() }, t.curve, picture->signInk(), laid.toneSignHeight);
+                        file = writeSprite (dir, "tone-" + juce::String (c) + "-" + juce::String (t.tone), img);
+                    }
+                    auto* k = new juce::DynamicObject();
+                    k->setProperty ("box", rectVar (t.knob));
+                    k->setProperty ("label", rectVar (t.label));
+                    k->setProperty ("icon", file);
+                    k->setProperty ("text", t.name);
+                    k->setProperty ("tone", t.tone);
+                    k->setProperty ("param", t.param);
+                    knobs.add (juce::var (k));
+                }
+                for (size_t i = (size_t) laid.firstRightKey; i < laid.keys.size(); ++i)
+                {
+                    const auto& key = laid.keys[i];
+                    const auto& r = right[i - (size_t) laid.firstRightKey];
+                    auto* k = new juce::DynamicObject();
+                    k->setProperty ("box", rectVar (key.box));
+                    k->setProperty ("label", rectVar (key.label));
+                    k->setProperty ("text", key.name);
+                    if (r.slot >= 0)
+                    {
+                        k->setProperty ("control", r.control);
+                        k->setProperty ("param", params::selectorId (params::preampId, r.slot));
+                        k->setProperty ("lit", r.position);         // the switch's value it is lit at, and puts it to
+                        if (r.off >= 0)
+                            k->setProperty ("off", r.off);          // ...an off/on key: where letting it up puts it
+                    }
+                    else
+                        k->setProperty ("own", true);               // the face's own key, not the pack's
+                    keys.add (juce::var (k));
+                }
+                f->setProperty ("tones", knobs);
+                f->setProperty ("toneScale", laid.toneScale);
+                f->setProperty ("keys", keys);
+                f->setProperty ("keyScale", laid.keyScale);
+                f->setProperty ("frame", laid.keyFrame.isEmpty() ? juce::var() : rectVar (laid.keyFrame));
+                x->setProperty ("face", juce::var (f));
+            }
             juce::Array<juce::var> switches;
             for (const auto& sw : channels.switchesOf (c))
             {
@@ -813,14 +950,20 @@ void Console::exportForWeb (const juce::File& dir)
         delay->setProperty ("division", params::delayDivisions[juce::roundToInt (channels.defaultOf (0, params::delayDiv))]);
         delay->setProperty ("bpm", channels.defaultOf (0, params::delayBpm));
         l->setProperty ("delay", juce::var (delay));
-        if (line.parkId != nullptr)
-        {
-            auto* park = new juce::DynamicObject();
-            park->setProperty ("param", line.parkId);
-            park->setProperty ("does", "takes the whole amp out of the sound, INPUT and OUTPUT still holding the dry guitar's level; the channel waits, TURBO does nothing until a gear is pulled");
-            l->setProperty ("park", juce::var (park));
-        }
         o->setProperty ("lineup", juce::var (l));
+    }
+
+    // BOOST'S LEVEL (params::boostLevel): how much louder the amp leaves while TURBO is on — one for the
+    // whole amp, chosen from these, on the right click on TURBO.
+    {
+        auto* b = new juce::DynamicObject();
+        b->setProperty ("param", params::boostLevel);
+        juce::Array<juce::var> levels;
+        for (const int db : params::boostLevels)
+            levels.add (db);
+        b->setProperty ("levels", levels);
+        b->setProperty ("default", params::boostLevelDefault);
+        o->setProperty ("boostLevel", juce::var (b));
     }
 
     // HOW THIS FACE DRAWS THE FAMILY'S CONTROLS — what is its own; what every face shares is in
@@ -890,14 +1033,14 @@ void Console::exportForWeb (const juce::File& dir)
     webPatch ("memory", { &memory });
     webExtras (dir, *o, *world);
     o->setProperty ("world", juce::var (world));
-    juce::Array<juce::var> posters;
-    for (int i = 0; i < webPoses.count; ++i)
-    {
-        auto* poster = new juce::DynamicObject();
-        poster->setProperty ("poster", "poster-" + juce::String (i) + ".png");
-        posters.add (juce::var (poster));
-    }
-    o->setProperty ("posters", posters);
+
+    // THE POSTER THE PAGE OPENS ON, where the face has a window — its three sizes, and its still and its
+    // hole as kinds of their own — and one for each place of the lever: their keys here, in their order,
+    // their files named once they are written (finishWeb).
+    if (! webPoses.window.isEmpty())
+        for (const auto* key : { "poster", "poster1x", "posterHalf", "posterStill", "posterHole", "posterWindow" })
+            o->setProperty (key, juce::var());
+    o->setProperty ("posters", juce::Array<juce::var>());
     juce::Array<juce::var> patches;
     for (const auto& [name, r] : webPatches)
     {
@@ -911,9 +1054,17 @@ void Console::exportForWeb (const juce::File& dir)
     for (const auto& [name, r] : spritesWritten)
         bounds->setProperty (name, rectVar (r));
     o->setProperty ("spriteBounds", juce::var (bounds));
-    juce::var json (o);
-    dir.getChildFile ("places.json").replaceWithText (juce::JSON::toString (json));
-    poseNext (dir, 0);
+    webPlaces = juce::var (o);
+
+    // The face as it opened first, at the place it opened at; then each place in turn.
+    if (webPoses.window.isEmpty())
+        poseNext (dir, 0);
+    else
+        shootPoster (dir, webPoses.opening, "poster", [safe = juce::Component::SafePointer<Console> (this), dir]
+        {
+            if (safe != nullptr)
+                safe->poseNext (dir, 0);
+        });
 }
 
 Console::~Console()
@@ -942,8 +1093,7 @@ bool Console::go (int to)
     open — is made its own the way the constructor makes the first one: the fixed chain, the channel
     whose pack is playing, a cabinet CAB can reach. And one it HAS seen, whose cabinet is no longer
     the file of that name — a register kept from before the file was replaced — has it read again;
-    as one whose INPUT was dialled against another zero of the lever has it settled on this one, and
-    one kept under another TURBO or another way of DRIVE's is given the settings' own. */
+    and one kept under another way of DRIVE's is given the settings' own. */
 void Console::adoptState()
 {
     adoptionPending = false;
@@ -973,57 +1123,24 @@ void Console::followEngine()
 
 bool Console::settingsDiffer() const
 {
-    const auto dialled = amp.apvts.state.getProperty (channels.leverZeroId());
-    const float push = getParam (params::blockIn (params::preampId).toRawUTF8());
-
-    return dialled.isVoid() || (int) dialled != leverZero
-        || (push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
-        || (getParam (params::blockSmooth (params::preampId).toRawUTF8()) > 0.5f) == driveSteps;
+    return (getParam (params::blockSmooth (params::preampId).toRawUTF8()) > 0.5f) == driveSteps;
 }
 
 void Console::settleOnSettings()
 {
-    // No note: the trim was dialled on the engine's own scale, whose middle is 0 dB.
-    const auto dialled = amp.apvts.state.getProperty (channels.leverZeroId());
-    const int was = dialled.isVoid() ? 0 : (int) dialled;
-
-    if (was != leverZero)
-        setParam (params::inTrim, leverToDb (dbToLever (getParam (params::inTrim), was), leverZero));
-    if (dialled.isVoid() || was != leverZero)
-        amp.apvts.state.setProperty (channels.leverZeroId(), leverZero, nullptr);
-
-    inFader.setValue (dbToLever (getParam (params::inTrim), leverZero), false);
-
-    // TURBO the same way: that it is on is the state's, how hard is the settings'.
-    const auto turboTrim = params::blockIn (params::preampId);
-    if (const float push = getParam (turboTrim.toRawUTF8());
-        push > Channels::turboOnAbove && std::abs (push - channels.turboDb()) > 0.05f)
-        setParam (turboTrim.toRawUTF8(), channels.turboDb());
-
-    // ...and so is how DRIVE goes between the captures: mixing the two it stands between, or in steps.
+    // How DRIVE goes between the captures is the settings': mixing the two it stands between, or in steps.
     const auto smooth = params::blockSmooth (params::preampId);
     if ((getParam (smooth.toRawUTF8()) > 0.5f) == driveSteps)
         setParam (smooth.toRawUTF8(), driveSteps ? 0.0f : 1.0f);
 }
 
-/** The machine's setting, not an edit of the sound: the lever stays, the trim follows, and there is
-    no step to undo. */
-void Console::chooseLeverZero (int db)
-{
-    leverZero = snapLeverZero (db);
-    prefs::store().set (leverZeroKey, leverZero);
-
-    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
-    settleOnSettings();
-}
-
 void Console::flipHum()
 {
     endTapping();
-    prefs::setHum (prefs::humFlip());
+    prefs::setHum (amp.product(), prefs::humFlip (amp.product()));
 
     const auto at = inFader.getBoundsInParent().toFloat();
-    sayForAMoment ({ at.getCentreX(), at.getY() - 24.0f }, prefs::humTag (prefs::hum(), amp.humHeard()));
+    sayForAMoment ({ at.getCentreX(), at.getY() - 24.0f }, prefs::humTag (prefs::hum (amp.product()), amp.humHeard()));
 }
 
 /** G: the gate's On, through the same hands as GATE's menu — and the tag over GATE says where it is. */
@@ -1066,20 +1183,10 @@ void Console::sayLever (ColumnFader& fader, const juce::String& name, std::funct
     fader.onGestureEnd   = [this, before = fader.onGestureEnd] { if (before) before(); nameTag.show ({}, {}); };
 }
 
-void Console::chooseTurbo (int db)
-{
-    db = snapTurbo (db);
-    prefs::store().set (turboKey, db);
-    channels.setTurboDb ((float) db);
-
-    const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
-    settleOnSettings();
-}
-
 void Console::chooseDriveSteps (bool steps)
 {
     driveSteps = steps;
-    prefs::store().set (driveStepsKey, steps);
+    prefs::store (amp.product()).set (driveStepsKey, steps);
 
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
     settleOnSettings();
@@ -1104,7 +1211,7 @@ void Console::startHumLearn()
     on the tag, and the three modes. */
 void Console::addHumLines (juce::PopupMenu& menu)
 {
-    for (const auto& line : prefs::humMenu (amp.humHeard(), humLearner.isLearning()))
+    for (const auto& line : prefs::humMenu (amp.product(), amp.humHeard(), humLearner.isLearning()))
         addChoice (menu, line.text, line.ticked, [line] (Console& e)
         {
             if (line.isLearn)
@@ -1112,12 +1219,12 @@ void Console::addHumLines (juce::PopupMenu& menu)
             else if (line.isSwitch)
                 e.flipHum();
             else
-                prefs::humPick (line);
+                prefs::humPick (e.amp.product(), line);
         });
 
     // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
     // its title.
-    for (const auto& knob : prefs::humtune::knobs())
+    for (const auto& knob : prefs::humtune::knobs (amp.product()))
     {
         juce::PopupMenu values;
         for (int i = 0; i < knob.count; ++i)
@@ -1143,18 +1250,22 @@ void Console::addChoice (juce::PopupMenu& menu, const juce::String& text, bool t
     menu.addItem (item);
 }
 
-/** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: what the lever gives in the
-    middle of its travel, and the hum the input carries — both the machine's, the four modes here as
-    flat items, AUTO's line naming what it decided once it has. */
+/** A RIGHT CLICK ON THE INPUT COLUMN — the lever, or the meter beside it: the hum the input carries — the
+    machine's, the four modes here as flat items, AUTO's line naming what it decided once it has. With HUM
+    off in the build (Features.h) the column has no menu of its own, and a right click on it is one on the
+    face, as anywhere else that has none: the face's menu — whose INPUT is DRIVE's — rather than a lever
+    that jumps. */
 void Console::showInputMenu()
 {
     endTapping();
 
-    juce::PopupMenu menu;
-    menu.addSectionHeader ("LEVER'S ZERO");
-    for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
-        addChoice (menu, decibels (db), db == leverZero, [db] (Console& e) { e.chooseLeverZero (db); });
+    if constexpr (! features::hum)
+    {
+        showSettingsMenu();
+        return;
+    }
 
+    juce::PopupMenu menu;
     menu.addSectionHeader ("HUM");
     addHumLines (menu);
 
@@ -1220,19 +1331,22 @@ void Console::showGateMenu()
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
 
-/** A RIGHT CLICK ON TURBO: how hard it pushes into the capture — here only, the settings menu leaves it to
-    TURBO. The machine's to say: every channel that has TURBO on comes back at the push in force. */
-void Console::showTurboMenu()
+void Console::addBoostLevels (juce::PopupMenu& menu)
+{
+    const int now = juce::roundToInt (getParam (params::boostLevel));
+
+    menu.addSectionHeader ("TURBO OUTPUT");
+    for (const int db : params::boostLevels)
+        addChoice (menu, decibels (db), db == now, [db] (Console& e) { e.setParam (params::boostLevel, (float) db); });
+}
+
+/** A RIGHT CLICK ON TURBO: how much louder the amp leaves while it is on. */
+void Console::showBoostMenu()
 {
     endTapping();
 
-    const int now = juce::roundToInt (channels.turboDb());
-
     juce::PopupMenu menu;
-    menu.addSectionHeader ("TURBO ADDS");
-    for (const int db : turboPushes)
-        addChoice (menu, decibels (db), db == now, [db] (Console& e) { e.chooseTurbo (db); });
-
+    addBoostLevels (menu);
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
 
@@ -1254,9 +1368,9 @@ void Console::showTunerMenu()
 
     // The pitch its A is tuned to: the machine's, not the sound's — it is about who the guitar plays with.
     juce::PopupMenu reference;
-    const int a4 = prefs::tunerReference();
+    const int a4 = prefs::tunerReference (amp.product());
     for (const int hz : prefs::tunerReferences)
-        addChoice (reference, juce::String (hz) + " Hz", hz == a4, [hz] (Console&) { prefs::setTunerReference (hz); });
+        addChoice (reference, juce::String (hz) + " Hz", hz == a4, [hz] (Console& c) { prefs::setTunerReference (c.amp.product(), hz); });
     menu.addSubMenu ("Reference  A = " + juce::String (a4) + " Hz", reference);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
@@ -1310,20 +1424,20 @@ void Console::saveCapture()
     if (capture.nam.isEmpty())
         return;
 
-    auto folder = juce::File (prefs::store().get (captureFolderKey, juce::String()).toString());
+    auto folder = juce::File (prefs::store (amp.product()).get (captureFolderKey, juce::String()).toString());
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
-    captureChooser = std::make_unique<juce::FileChooser> ("Save the capture", folder.getChildFile (captureNamePrefix + capture.name + hourTag (capture.hour) + ".nam"), "*.nam");
+    captureChooser = std::make_unique<juce::FileChooser> ("Save the capture", folder.getChildFile (captureNamePrefix (amp.product()) + capture.name + hourTag (capture.hour) + ".nam"), "*.nam");
     captureChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                                      | juce::FileBrowserComponent::warnAboutOverwriting,
-                                 [nam = std::move (capture.nam)] (const juce::FileChooser& picked)
+                                 [nam = std::move (capture.nam), &product = amp.product()] (const juce::FileChooser& picked)
                                  {
                                      const auto file = picked.getResult();
                                      if (file == juce::File())
                                          return;
 
-                                     prefs::store().set (captureFolderKey, file.getParentDirectory().getFullPathName());
+                                     prefs::store (product).set (captureFolderKey, file.getParentDirectory().getFullPathName());
                                      if (! file.replaceWithData (nam.getData(), nam.getSize()))
                                          sayNotSaved (file);
                                  });
@@ -1356,22 +1470,22 @@ void Console::saveCab()
         return;
     const auto cabinet = channels.cabinets()[playing];
 
-    auto folder = juce::File (prefs::store().get (cabFolderKey, juce::String()).toString());
+    auto folder = juce::File (prefs::store (amp.product()).get (cabFolderKey, juce::String()).toString());
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
     cabChooser = std::make_unique<juce::FileChooser> ("Save the cabinet",
-                                                      folder.getChildFile (cabNamePrefix + Channels::cabinetStem (cabinet) + cabinet.getFileExtension()),
+                                                      folder.getChildFile (cabNamePrefix (amp.product()) + Channels::cabinetStem (cabinet) + cabinet.getFileExtension()),
                                                       "*" + cabinet.getFileExtension());
     cabChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                                  | juce::FileBrowserComponent::warnAboutOverwriting,
-                             [cabinet] (const juce::FileChooser& picked)
+                             [cabinet, &product = amp.product()] (const juce::FileChooser& picked)
                              {
                                  const auto file = picked.getResult();
                                  if (file == juce::File())
                                      return;
 
-                                 prefs::store().set (cabFolderKey, file.getParentDirectory().getFullPathName());
+                                 prefs::store (product).set (cabFolderKey, file.getParentDirectory().getFullPathName());
                                  if (! cabinet.copyFileTo (file))
                                      sayNotSaved (file);
                              });
@@ -1443,8 +1557,10 @@ void Console::playMidi()
     if (driveTo >= 0)   along (params::preampGain, (float) driveTo / 127.0f);
 
     // A tone knob's middle is where the pack was captured, and 0..127 has no middle: 64 is given it, and
-    // each half of the controller's travel is spread over its own half of the knob's.
-    for (int t = 0; t < Channels::numTones; ++t)
+    // each half of the controller's travel is spread over its own half of the knob's. The three tone
+    // controllers are the first three knobs, whatever the pack calls its tones; a knob the pack has not
+    // names no parameter (Channels::toneOf), and its controller turns nothing.
+    for (int t = 0; t < (int) std::size (toneTo); ++t)
         if (const int v = toneTo[(size_t) t]; v >= 0)
             along (channels.toneId (t), v <= 64 ? 0.5f * (float) v / 64.0f : 0.5f + 0.5f * (float) (v - 64) / 63.0f);
 }
@@ -1463,7 +1579,7 @@ void Console::showLoad()
 /** THE MIDI WINDOW — which inputs the product listens to, and the list of what it does with what it hears. */
 void Console::showMidi()
 {
-    showSheet (std::make_unique<MidiPanel> (midiCommands));
+    showSheet (std::make_unique<MidiPanel> (amp.product().name, midiCommands));
 }
 
 void Console::showSheet (std::unique_ptr<juce::Component> content)
@@ -1497,7 +1613,7 @@ void Console::refreshHistory()
     showChannel();   // an undo, a redo or another register may have brought a different channel with it
 
     // ...or a state with no channels in it at all, or one whose cabinet is not the file of that name
-    // any more, or whose INPUT was dialled against another zero. Settling any of them writes, and this
+    // any more, or one kept under DRIVE's other way. Settling any of them writes, and this
     // is the history's own callback, so it is done on the way out.
     if ((! channels.adopted() || channels.cabinetIsStale() || settingsDiffer()) && ! adoptionPending)
     {
@@ -1517,7 +1633,7 @@ void Console::showChannel()
 {
     const int channel = channels.active();
     showSelector (channel);
-    bindTones();        // another channel's pack may keep its Bass, Middle and Treble in other places
+    bindTones();        // another channel's pack may have other tones, and another count of them
     showKeys();
 
     // CAB's cap, on the cabinet that is playing. (This is first called while the face is still being
@@ -1527,88 +1643,72 @@ void Console::showChannel()
     showCab();
 }
 
-/** The keys under the tones as the playing channel has them (packKeys): the pack's switches where it
-    has any to throw, laid on the four keys a switch at a time, whole or not at all — and the layers
-    otherwise. Reads only. */
-void Console::showKeys()
+std::vector<Console::RightKey> Console::rightKeysOf (int channel) const
 {
-    const int channel = channels.active();
-    const auto standsAt = [this] (int slot) { return juce::roundToInt (getParam (params::selectorId (params::preampId, slot).toRawUTF8())); };
     const auto isOff = [] (const juce::String& v)
     {
         const auto w = v.trim().toLowerCase();
         return w == "off" || w == "0" || w == "false" || w == "no";
     };
 
-    packKeys = {};
-    std::array<juce::String, 4> named;
+    // The keys the pack's switches may have: the right group's, but the ones the face has taken.
+    std::vector<int> free, own;
+    for (int b = btFirstRight; b < numKeys; ++b)
+        (claimed[(size_t) b] ? own : free).push_back (b);
+
+    std::vector<RightKey> out;
     size_t next = 0;
     for (const auto& s : channels.switchesOf (channel))
     {
         if (s.held)
             continue;
         const bool offOn = s.values.size() == 2 && isOff (s.values[0]) != isOff (s.values[1]);
-        if (next + (offOn ? 1 : (size_t) s.values.size()) > packKeys.size())
-            continue;
+        if (next + (offOn ? 1 : (size_t) s.values.size()) > free.size())
+            continue;       // a switch that would not fit whole is left off
         if (offOn)
         {
             const int off = isOff (s.values[0]) ? 0 : 1;
-            packKeys[next] = { s.slot, 1 - off, off };
-            named[next++] = s.name.toUpperCase();
+            out.push_back ({ free[next++], s.slot, 1 - off, off, s.name, s.name.toUpperCase(), {} });
         }
         else
-            for (int p = 0; p < s.values.size(); ++p)
-            {
-                packKeys[next] = { s.slot, p, -1 };
-                named[next++] = s.values[p].toUpperCase();
-            }
-    }
-    packKeysUp = next > 0;
-
-    std::array<juce::String, 6> shortNames;
-    for (size_t i = 0; i < switches.size(); ++i)
-    {
-        if (! claimed[i])
-            keyNames[i] = switches[i].name;
-        shortNames[i] = claimed[i] ? keyNames[i] : juce::String (switches[i].shortName);
-    }
-
-    if (packKeysUp)
-    {
-        for (size_t k = 0; k < packKeys.size(); ++k)
         {
-            if (claimed[btFat + k])
-                continue;
-            const auto& pk = packKeys[k];
-            auto& b = *buttons[btFat + k];
-            b.setEnabled (pk.slot >= 0);
-            b.setOn (pk.slot >= 0 && standsAt (pk.slot) == pk.position, false);
-            keyNames[btFat + k] = shortNames[btFat + k] = named[k];
+            // A switch whose every position is bare (the IR-X Ch1's Bright: off, 1, 2) has its name written
+            // once over its keys, and each key its position alone: BRIGHT over OFF · 1 · 2.
+            const bool titled = std::all_of (s.values.begin(), s.values.end(), [] (const juce::String& v) { return device::isBarePosition (v); });
+            for (int p = 0; p < s.values.size(); ++p)
+                out.push_back ({ free[next++], s.slot, p, -1, s.name,
+                                 titled ? s.values[p].trim().toUpperCase() : device::positionWords (s.name, s.values[p]),
+                                 titled ? s.name.trim().toUpperCase() : juce::String() });
         }
     }
-    else
-    {
-        // A layer the packs do not carry yet never shows as thrown — whatever the state says.
-        const auto playable = [] (Channels::Flag f) { return Channels::layerPlayable[(size_t) f]; };
-        const auto thrown = [this, playable] (Channels::Flag f) { return playable (f) && channels.flag (f); };
-        const bool hot = channels.lineup().channels[(size_t) channel].hot;     // FAT is a layer only the hottest packs carry
-        for (int key = btFat; key <= btPresence; ++key)
-            if (const auto f = (Channels::Flag) (Channels::fat + key - btFat); ! claimed[(size_t) key])
-            {
-                buttons[(size_t) key]->setEnabled ((key != btFat || hot) && playable (f));
-                buttons[(size_t) key]->setOn (thrown (f), false);
-            }
-    }
-
-    std::array<bool, 6> live {};
-    for (size_t i = 0; i < live.size(); ++i)
-        live[i] = buttons[i]->isEnabled();
-    picture->setKeys (live, shortNames);
+    for (const int b : own)
+        out.push_back ({ b, -1, -1, -1, {}, keyNames[(size_t) b], {} });
+    return out;
 }
 
-/** One of the four keys right of the filters, thrown by the hand: a layer, or the pack's switch moved to
-    the position the key is — its other position, for an off/on key let up. A position's key pressed
-    while lit stays lit: the switch leaves it only for another of its keys. */
+/** The keys under the tones as the playing channel has them (rightKeysOf): the pack's switches it may
+    throw, each lit where it stands, and the face's own; the rest of the right group's keys hidden. Then
+    the rows are laid again. Reads only. */
+void Console::showKeys()
+{
+    const auto standsAt = [this] (int slot) { return juce::roundToInt (getParam (params::selectorId (params::preampId, slot).toRawUTF8())); };
+
+    rightKeys = rightKeysOf (channels.active());
+    for (const auto& k : rightKeys)
+    {
+        if (k.slot < 0)
+            continue;       // the face's own: lit as the face says
+        auto& b = *buttons[(size_t) k.button];
+        b.setEnabled (true);
+        b.setOn (standsAt (k.slot) == k.position, false);
+        keyNames[(size_t) k.button] = k.title.isEmpty() ? k.name : k.title + " " + k.name;     // the tag says it whole
+    }
+    layStrips();
+}
+
+/** One of the keys right of the filters, thrown by the hand: the pack's switch moved to the position
+    the key is — its other position, for an off/on key let up. A position's key pressed while lit stays
+    lit: the switch leaves it only for another of its keys. */
 void Console::claimKey (int key, const juce::String& name)
 {
     const auto k = (size_t) key;
@@ -1621,20 +1721,15 @@ void Console::claimKey (int key, const juce::String& name)
 
 void Console::keyThrown (int key, bool on)
 {
-    const auto k = (size_t) (key - btFat);
-
-    if (! packKeysUp)
-    {
-        constexpr Channels::Flag layers[] { Channels::fat, Channels::bright, Channels::depth, Channels::presence };
-        channels.setFlag (layers[k], on);
+    const auto it = std::find_if (rightKeys.begin(), rightKeys.end(), [key] (const RightKey& k) { return k.button == key; });
+    if (it == rightKeys.end() || it->slot < 0)
         return;
-    }
 
-    const auto pk = packKeys[k];
+    const auto pk = *it;
     const int to = on ? pk.position : pk.off;
-    if (pk.slot < 0 || to < 0)
+    if (to < 0)
     {
-        buttons[(size_t) key]->setOn (pk.slot >= 0, false);
+        buttons[(size_t) key]->setOn (true, false);
         return;
     }
 
@@ -1644,6 +1739,178 @@ void Console::keyThrown (int key, bool on)
         p->setValueNotifyingHost (p->convertTo0to1 ((float) to));
         p->endChangeGesture();      // ...and the switch's follower lights the key it stands on now
     }
+}
+
+/** THE ROWS (Strip.h), for any channel: its pack's tones, as many as the face's row shows, each knob's
+    box and its name's; its right keys likewise, and the frame round them; and the filters, where they
+    always are. Nothing on the face moves here. */
+std::vector<float> Console::toneCurve (const namz::rig::Tone& tone)
+{
+    using namz::rig::SectionKind;
+    struct Band { SectionKind kind; double hz, q, db, pivot; };
+    std::vector<Band> bands;
+    std::vector<double> measured;       // ...or a position's own curve, on the pack's grid
+    if (! tone.sections.empty())
+        for (const auto& s : tone.sections)     // a knob: at the top of its travel
+            bands.push_back ({ s.kind, s.hz, s.q, std::abs (s.dbAtMax) > 1.0e-6 ? s.dbAtMax : s.dbAtMin, s.pivot });
+    else if (! tone.positions.empty())          // a switch: at its last position
+    {
+        const auto& last = tone.positions.back();
+        for (const auto& s : last.sections)
+            bands.push_back ({ s.kind, s.hz, s.q, s.gainDb, s.pivot });
+        measured = last.db;
+    }
+
+    // The cookbook's analogue shapes, |H| in dB at w = f / f0.
+    const auto bandDb = [] (const Band& b, double f)
+    {
+        if (b.hz <= 0.0 || b.q <= 0.0)
+            return 0.0;
+        const double w = f / b.hz, w2 = w * w, A = std::pow (10.0, b.db / 40.0), sA = std::sqrt (A);
+        const auto db = [] (double num, double den) { return den > 0.0 && num > 0.0 ? 10.0 * std::log10 (num / den) : 0.0; };
+        const double sh = juce::square (sA * w / b.q);
+        switch (b.kind)
+        {
+            case SectionKind::Bell:      return db (juce::square (1.0 - w2) + juce::square (w * A / b.q), juce::square (1.0 - w2) + juce::square (w / (A * b.q)));
+            case SectionKind::LowShelf:  return db (A * A * (juce::square (A - w2) + sh), juce::square (1.0 - A * w2) + sh);
+            case SectionKind::HighShelf: return db (A * A * (juce::square (1.0 - A * w2) + sh), juce::square (A - w2) + sh);
+            case SectionKind::Tilt:      return db (A * A * (juce::square (1.0 - A * w2) + sh), juce::square (A - w2) + sh) - b.pivot * b.db;
+        }
+        return 0.0;
+    };
+
+    constexpr int n = 40;
+    constexpr double fLo = 30.0, fHi = 16000.0;
+    std::vector<double> dB;
+    for (int i = 0; i < n; ++i)
+    {
+        const double f = fLo * std::pow (fHi / fLo, (double) i / (double) (n - 1));
+        double v = 0.0;
+        for (const auto& b : bands)
+            v += bandDb (b, f);
+        if (bands.empty() && measured.size() >= 2)      // the measured curve, read on its own log grid
+        {
+            const double g0 = tone.grid.fLo > 0.0 ? tone.grid.fLo : 20.0, g1 = tone.grid.fHi > g0 ? tone.grid.fHi : 20000.0;
+            const double at = juce::jlimit (0.0, 1.0, std::log (f / g0) / std::log (g1 / g0)) * (double) (measured.size() - 1);
+            const auto k = (size_t) juce::jmin ((int) at, (int) measured.size() - 2);
+            v = measured[k] + (measured[k + 1] - measured[k]) * (at - (double) k);
+        }
+        dB.push_back (v);
+    }
+
+    const auto [lo, hi] = std::minmax_element (dB.begin(), dB.end());
+    std::vector<float> curve;
+    for (const double v : dB)
+        curve.push_back (*hi - *lo < 0.1 ? 0.5f : (float) ((v - *lo) / (*hi - *lo)));
+    return curve;
+}
+
+Strips Console::stripsFor (int channel) const
+{
+    Strips out;
+    const auto& p = places;
+
+    const auto names = channels.toneNamesOf (channel);
+    const auto packTones = channels.tonesOf (channel);
+    const auto tonesLaid = lay (p.toneStrip, names.size());
+    out.toneScale = tonesLaid.scale;
+    out.toneSignHeight = p.toneSignHeight;
+    const float toneRoom = p.toneStrip.pitch * tonesLaid.scale - 8.0f;
+    for (size_t i = 0; i < tonesLaid.centres.size(); ++i)
+    {
+        const auto c = tonesLaid.centres[i];
+        const float k = p.toneKnob * tonesLaid.scale;
+        out.tones.push_back ({ juce::Rectangle<float> (k, k).withCentre (c),
+                               juce::Rectangle<float> (toneRoom, 28.0f).withCentre ({ c.x, p.toneNameY + p.toneSignDrop }),
+                               names[(int) i].toUpperCase(), (int) i, channels.toneOf (channel, (int) i),
+                               i < packTones.size() ? toneCurve (packTones[i]) : std::vector<float>() });
+    }
+
+    const auto keyAt = [&p] (juce::Point<float> c, float size, int index, const juce::String& name, bool live, bool under)
+    {
+        const bool over = p.keyNamesAlternate && index % 2 == 1 && ! under;
+        const auto label = p.keyNamesOnKeys ? juce::Rectangle<float> (size, size).withCentre (c)
+                                            : juce::Rectangle<float> (p.keyNameRoom, 20.0f).withCentre ({ c.x, over ? p.keyNameOverY : p.keyNameUnderY });
+        return Strips::Key { juce::Rectangle<float> (size, size).withCentre (c), label, name, live, p.keyNamesOnKeys };
+    };
+    for (int f = btHpf; f < btFirstRight; ++f)      // the filters' names are on their keys, on every face
+    {
+        const auto box = juce::Rectangle<float> (p.filterKeyWidth > 0.0f ? p.filterKeyWidth : p.keySize,
+                                                 p.filterKeyHeight > 0.0f ? p.filterKeyHeight : p.keySize).withCentre (p.keys[(size_t) f]);
+        out.keys.push_back ({ box, box, switches[(size_t) f].shortName, true, true });
+    }
+    out.firstRightKey = (int) out.keys.size();
+
+    const auto right = channel == channels.active() ? rightKeys : rightKeysOf (channel);
+    const auto keysLaid = lay (p.keyStrip, (int) right.size());
+    out.keyScale = keysLaid.scale;
+    for (size_t i = 0; i < keysLaid.centres.size(); ++i)
+        out.keys.push_back (keyAt (keysLaid.centres[i], p.keySize * keysLaid.scale, (int) i, right[i].name, true,
+                                   right[i].title.isNotEmpty()));
+
+    // A titled switch's name, once over its keys: its positions' names are all under them (keyAt), so the
+    // row over them is the title's alone. Where the names are on the keys' faces, or the face has no row
+    // over its keys, it stands just over the keys.
+    for (size_t i = 0; i < keysLaid.centres.size();)
+    {
+        size_t end = i + 1;
+        while (end < keysLaid.centres.size() && right[end].slot == right[i].slot && right[end].title == right[i].title)
+            ++end;
+        if (right[i].title.isNotEmpty())
+        {
+            const float size = p.keySize * keysLaid.scale;
+            const float x0 = keysLaid.centres[i].x, x1 = keysLaid.centres[end - 1].x;
+            const float y = p.keyNamesOnKeys || p.keyNameOverY <= 0.0f ? keysLaid.centres[i].y - 0.5f * size - 12.0f
+                                                                       : p.keyNameOverY;
+            out.keyTitles.push_back ({ juce::Rectangle<float> (x1 - x0 + p.keyStrip.pitch * keysLaid.scale, 20.0f)
+                                           .withCentre ({ 0.5f * (x0 + x1), y }),
+                                       right[i].title });
+        }
+        i = end;
+    }
+    if (! keysLaid.centres.empty() && p.keyFrameHeight > 0.0f)
+    {
+        const float s = keysLaid.scale, half = 0.5f * p.keyStrip.pitch * s;
+        const float left = keysLaid.centres.front().x - half - p.keyCapLeft * s;
+        const float frameRight = keysLaid.centres.back().x + half + p.keyCapRight * s;
+        out.keyFrame = { left, p.keyStrip.area.getCentreY() - 0.5f * p.keyFrameHeight * s, frameRight - left, p.keyFrameHeight * s };
+    }
+    return out;
+}
+
+/** The playing channel's rows laid, and everything that stands on them put there: the tone knobs, the
+    right group's keys — the ones past what the row shows, and the ones no switch has, hidden — the
+    picture's sockets, frame and names, and whatever the face draws round them. */
+void Console::layStrips()
+{
+    strips = stripsFor (channels.active());
+
+    for (size_t t = 0; t < tones.size(); ++t)
+    {
+        const bool shown = t < strips.tones.size();
+        if (shown)
+        {
+            tones[t]->setBounds (box (strips.tones[t].knob));
+            toneSpots[t]->setBounds (box (strips.tones[t].label));
+        }
+        tones[t]->setVisible (shown);
+        toneSpots[t]->setVisible (shown);
+    }
+
+    std::array<bool, numKeys> shown {};
+    for (int f = btHpf; f < btFirstRight; ++f)
+        shown[(size_t) f] = true;
+    for (size_t i = 0; i + (size_t) strips.firstRightKey < strips.keys.size() && i < rightKeys.size(); ++i)
+    {
+        const auto b = (size_t) rightKeys[i].button;
+        shown[b] = true;
+        buttons[b]->setBounds (box (strips.keys[(size_t) strips.firstRightKey + i].box));
+    }
+    for (size_t b = (size_t) btFirstRight; b < buttons.size(); ++b)
+        buttons[b]->setVisible (shown[b]);
+
+    picture->setStrips (strips);
+    stripsLaid (strips);
 }
 
 void Console::showRegisterMenu (int index)
@@ -1720,8 +1987,9 @@ bool Console::keyPressed (const juce::KeyPress& key)
                 return true;
             }
 
-        // H: the hum, OFF and back — Р under a Russian layout, the same key. G: the gate — П.
-        if (letter == 'H' || letter == 0x0420)
+        // H: the hum, OFF and back — Р under a Russian layout, the same key; only while the build has HUM
+        // (Features.h), and without it the key goes on to the host. G: the gate — П.
+        if (features::hum && (letter == 'H' || letter == 0x0420))
         {
             flipHum();
             return true;
@@ -1889,26 +2157,24 @@ void Console::showSettingsMenu()
     // What the product's window shows, and full screen.
     addWindowSections (menu);
 
-    // What the INPUT lever gives in the middle of its travel, how DRIVE goes between the pack's
-    // captures, and the hum the input carries. How hard TURBO pushes, where it pushes, is TURBO's own
-    // menu's (showTurboMenu).
+    // How DRIVE goes between the pack's captures, and the hum the input carries. How much louder TURBO
+    // is, is TURBO's own menu's (showBoostMenu).
     menu.addSectionHeader ("INPUT");
-    juce::PopupMenu zero;
-    for (int db = leverZeroHighest; db >= leverZeroLowest; db -= leverZeroStep)
-        addChoice (zero, decibels (db), db == leverZero, [db] (Console& e) { e.chooseLeverZero (db); });
-    menu.addSubMenu ("Lever's zero  " + decibels (leverZero), zero);
 
     juce::PopupMenu way;
     for (int i = 0; i < driveWays.size(); ++i)
         addChoice (way, driveWays[i], (i == 1) == driveSteps, [steps = i == 1] (Console& e) { e.chooseDriveSteps (steps); });
     menu.addSubMenu ("DRIVE turns  " + driveWays[driveSteps ? 1 : 0], way);
 
-    // The hum is the machine's, like the lever's zero (prefs::hum): every window of this product and
+    // The hum is the machine's (prefs::hum): every window of this product and
     // every engine behind one follow the choice from their next look and their next block. The title
-    // says where it stands — AUTO's state with it.
-    juce::PopupMenu hum;
-    addHumLines (hum);
-    menu.addSubMenu ("HUM  " + prefs::humState (amp.humHeard()), hum);
+    // says where it stands — AUTO's state with it. Only while the build has HUM (Features.h).
+    if constexpr (features::hum)
+    {
+        juce::PopupMenu hum;
+        addHumLines (hum);
+        menu.addSubMenu ("HUM  " + prefs::humState (amp.product(), amp.humHeard()), hum);
+    }
 
     menu.addSectionHeader ("OUTPUT");
     for (int i = 0; i < params::stereoModes.size(); ++i)
@@ -1980,7 +2246,7 @@ void Console::cabinetsChanged()
 /** ADD: the files a player points at, taken in the way dropped ones are. */
 void Console::chooseCabsToAdd()
 {
-    auto folder = juce::File (prefs::store().get (cabFolderKey, juce::String()).toString());
+    auto folder = juce::File (prefs::store (amp.product()).get (cabFolderKey, juce::String()).toString());
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
@@ -2149,23 +2415,34 @@ std::unique_ptr<juce::ParameterAttachment> Console::attach (Control& control, co
     control.onGestureStart = [a] { a->beginGesture(); };
     control.onChange       = [a, p] (float v) { a->setValueAsPartOfGesture (p->convertFrom0to1 (v)); };
     control.onGestureEnd   = [a] { a->endGesture(); };
-    control.defaultValue   = p->getDefaultValue();
+    control.defaultValue   = amp.engineDefault (*p);
 
     a->sendInitialUpdate();
     return att;
 }
 
-/** The tone knobs on the playing pack's own Bass, Middle and Treble — wherever its list has them, so
-    the knobs of a channel whose pack lists them otherwise turn other parameters (Channels::toneId). Only
-    a knob whose parameter is another now is bound again. */
+/** The tone knobs on the playing pack's tones, knob i on its tone i (Channels::toneOf), as many as it
+    has: only a knob whose parameter is another now is bound again, and a knob past the pack's list is
+    bound to nothing and hidden (layStrips). */
 void Console::bindTones()
 {
     for (size_t t = 0; t < tones.size(); ++t)
-        if (const auto id = channels.toneId ((int) t); tones[t] != nullptr && id != toneBound[t])
+    {
+        auto& knob = *tones[t];
+        if (const auto id = channels.toneId ((int) t); id.isEmpty())
         {
-            toneBindings[t] = attach (*tones[t], id);
+            knob.onGestureStart = nullptr;
+            knob.onChange       = nullptr;
+            knob.onGestureEnd   = nullptr;
+            toneBindings[t].reset();
+            toneBound[t] = {};
+        }
+        else if (id != toneBound[t])
+        {
+            toneBindings[t] = attach (knob, id);
             toneBound[t] = id;
         }
+    }
 }
 
 juce::ParameterAttachment* Console::follow (const char* paramId, std::function<void (float)> moved)
@@ -2290,9 +2567,9 @@ void Console::showPresetMenu()
 {
     enum : int { itemSave = 1, itemSaveAs, itemRename, itemDelete, itemInit, firstPreset = 100 };
 
-    const auto names   = Presets::names();
+    const auto names   = presets.names();
     const auto current = presets.current();
-    const bool onDisk  = Presets::exists (current);
+    const bool onDisk  = presets.exists (current);
 
     const auto itemFor = [] (const juce::String& text, int id, bool ticked = false, bool enabled = true)
     {

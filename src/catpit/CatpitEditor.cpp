@@ -12,50 +12,71 @@
 
 #include <utility>
 
-namespace orbitamp
+namespace orbitamp::catpit
 {
 
 juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
 {
     // No cockpit to draw without its pictures, which lie in the factory folder: where that is missing,
     // the window says so, and where it belongs (ui/FactoryMissing.h).
-    if (! face::renders::has ("cockpit.webp", catpit::artFolderVariable))
-        return new ui::FactoryMissingEditor (p);
+    if (! face::renders::has (p.product().name, "cockpit.webp", artFolderVariable))
+        return new ui::FactoryMissingEditor (p, p.product());
 
-    return new catpit::CatpitEditor (p);
+    return new CatpitEditor (p);
 }
-
-namespace catpit
-{
 
 namespace
 {
     /** Where the keys stand along their row. ONE pitch for all six — the widest pair of neighbouring
         names plus a little air, so no name touches the next — the filters centred under BASS, the four
         layers set against the right end of the row, clear of the divider that parts the two groups. */
-    std::array<float, 6> keyCentres()
+    /** The keys' pitch, as the six names the row was first set for need it — HPF, LPF and the four the
+        packs' layers were to have, FAT BRIGHT DEPTH PRES — at 11 px with room between. */
+    float keyPitch()
     {
         const auto font = labelFont (layout::px11).withExtraKerningFactor (keyTracking);
-        std::array<float, 6> w {}, x {};
-        for (size_t i = 0; i < w.size(); ++i)
-            w[i] = juce::GlyphArrangement::getStringWidth (font, switches[i].shortName);
-
+        const char* names[] { "HPF", "LPF", "FAT", "BRIGHT", "DEPTH", "PRES" };
         float pitch = 0.0f;
-        for (size_t i = 0; i + 1 < w.size(); ++i)
-            if (i != btLpf)     // the divider stands between LPF and FAT, not air
-                pitch = juce::jmax (pitch, (w[i] + w[i + 1]) * 0.5f + 7.5f);
+        for (size_t i = 0; i + 1 < std::size (names); ++i)
+            if (i != 1)     // the filters' group ends at LPF
+                pitch = juce::jmax (pitch, (juce::GlyphArrangement::getStringWidth (font, names[i])
+                                            + juce::GlyphArrangement::getStringWidth (font, names[i + 1])) * 0.5f + 7.5f);
+        return pitch;
+    }
 
-        x[btHpf] = layout::keyGroupX - pitch * 0.5f;
-        x[btLpf] = layout::keyGroupX + pitch * 0.5f;
-        for (size_t i = btFat; i <= btPresence; ++i)
-            x[i] = layout::keyRowRight - w[btPresence] * 0.5f - pitch * (float) (btPresence - i);
-        return x;
+    /** THE KEYS RIGHT OF THE FILTERS (face::Strip): where the four stood, the last's name ending at
+        keyRowRight — a key `pitch` wide each, as many as the pack has switches, shrunk to fit to 0.75. */
+    face::Strip keyStrip()
+    {
+        const float pitch = keyPitch();
+        const auto font = labelFont (layout::px11).withExtraKerningFactor (keyTracking);
+        const float right = layout::keyRowRight - 0.5f * juce::GlyphArrangement::getStringWidth (font, "PRES") + 0.5f * pitch;
+        return { { right - 4.0f * pitch, layout::keyRowY - 0.5f * layout::keySize, 4.0f * pitch, layout::keySize }, pitch, pitch, 0.75f };
     }
 
     // Measured off the original renders (the ones that still had their pointers): where the lit slot
     // starts and ends along the radius, and how wide it is, as fractions of the knob's opaque radius.
     constexpr ArtKnob::Pointer drivePointer { 0.32f, 0.76f, 0.068f };
     constexpr ArtKnob::Pointer tonePointer  { 0.335f, 0.70f, 0.076f };
+    /** HPF AND LPF ARE BROAD KEYS on the cockpit, in the row under the tones, which the sockets and keys the
+        picture lost left free: the kit's chrome key `filterKeyHeight` tall, made a little longer than tall —
+        `filterKeyAspect` — by three slices (PushButton::drawWideChromeKey), the filter's sign in the middle of
+        each — near black, engraved into the light pill whatever its state — going down with the cap. The two
+        stand evenly in the room, as much of it before the first as between them and after the second. The
+        X88-IR's packs have no switches, so nothing else stands in the row. */
+    constexpr float filterRowLeft = 1060.3f - 72.0f, filterRowRight = 1418.0f;    // the row's free room: BASS's socket's left edge to short of the corner screw
+    constexpr float filterKeyHeight = 66.0f;     // its bezel 56 of that, from the sockets' foot to the plate's
+    constexpr float filterKeyAspect = 1.25f;     // near square: a key, not a pill stretched across the row
+    constexpr float filterKeyWidth = filterKeyAspect * filterKeyHeight;
+    constexpr float filterKeySpace = (filterRowRight - filterRowLeft - 2.0f * filterKeyWidth) / 3.0f;     // before, between and after them
+    constexpr float filterKeyDrop = 10.0f;     // ...their middles this far under the key row's: between the sockets and the plate's edge
+    void filterKey (juce::Graphics& g, juce::Rectangle<float> box, bool down, float lit, bool highpass)
+    {
+        PushButton::drawWideChromeKey (g, box, down ? 1.0f : 0.0f, lit);
+        // The sign cut dark into the light pill, as an engraving — in every state: the pill's light says on.
+        face::drawFilterSign (g, box.withSizeKeepingCentre (box.getHeight(), box.getHeight()).translated (0.0f, down ? 0.7f : 0.0f),
+                              highpass, juce::Colour (0xff15121c).withAlpha (0.9f));
+    }
 
     /** How the stars fly, and what the windshield shows — settings of the machine's, in the cockpit's
         settings file. The stars are kept as a word, in the order of CatpitEditor::Stars. */
@@ -88,13 +109,19 @@ namespace
 
         face::Console::Places p;
         p.drive = around (drive.centre, drive.radius * 1.86f, drive.radius * 1.86f);
-        for (size_t i = 0; i < tones.size(); ++i)
-            p.tones[i] = around (tones[i].centre, tones[i].radius * 2.05f, tones[i].radius * 2.05f);
+        p.toneStrip  = toneStrip;
+        p.toneKnob   = toneKnob;
+        p.toneNameY  = toneNameY;
+        p.toneNameEm = px13;
 
-        const auto keyX = keyCentres();
-        for (size_t i = 0; i < p.keys.size(); ++i)
-            p.keys[i] = { keyX[i], keyRowY };
+        p.keys = { juce::Point<float> { filterRowLeft + filterKeySpace + 0.5f * filterKeyWidth, keyRowY + filterKeyDrop },
+                   juce::Point<float> { filterRowRight - filterKeySpace - 0.5f * filterKeyWidth, keyRowY + filterKeyDrop } };
         p.keySize = keySize;
+        p.filterKeyWidth = filterKeyWidth;
+        p.filterKeyHeight = filterKeyHeight;
+        p.keyStrip = keyStrip();
+        p.keyNameUnderY = keyNameY;
+        p.keyNameOverY = keyNameY;
         p.holes = holes;
         p.holeKeySize = 40.0f;
 
@@ -128,8 +155,11 @@ namespace
         const auto& art = Art::get();
         return { art.knobDrive, drivePointer, art.knobTone, tonePointer, art.sliderCap, art.sliderCap,
                  { &art.lampLit[0], &art.lampLit[1], &art.lampLit[2], &art.lampLit[3] },
-                 face::renders::text ("mark.svg", artFolderVariable),
-                 face::renders::text ("midi.txt", artFolderVariable) };
+                 face::renders::text (products::catpitAmp().name, "mark.svg", artFolderVariable),
+                 face::renders::text (products::catpitAmp().name, "midi.txt", artFolderVariable),
+                 {}, {},
+                 face::BadgeLook {}.lamp };      // the badge's lamp: the cockpit's violet
+
     }
 
     /** Whether a point on the stage is glass: where the render is cut through to the sky (Art), which
@@ -216,15 +246,35 @@ void Cockpit::paintLive (juce::Graphics& g) const
 }
 
 /** The keys' names, under them — a dimmed key's as dim as the key, and the playing pack's own where its
-    switches are on them. They stand where the six names of their own set them (keyCentres). */
+    switches are on them. They stand where the rows put them (face::Strips). */
 void Cockpit::paintKeyNames (juce::Graphics& g) const
 {
     using namespace layout;
 
-    const auto keyX = keyCentres();
-    for (size_t i = 0; i < keyNames.size(); ++i)
-        drawLabel (g, keyNames[i], juce::Rectangle<float> (120.0f, 20.0f).withCentre ({ keyX[i], keyNameY }),
-                   px11, labelLilac.withAlpha (keysLive[i] ? 1.0f : PushButton::dimmed), keyTracking);
+    for (const auto& k : strips.keys)
+        if (! k.onKey)      // HPF and LPF are on their keys (CatpitEditor)
+            drawLabel (g, k.name, juce::Rectangle<float> (120.0f, 20.0f).withCentre (k.label.getCentre()),
+                       px11, labelLilac.withAlpha (k.live ? 1.0f : PushButton::dimmed), keyTracking);
+    for (const auto& t : strips.keyTitles)      // a switch's name once over its keys (BRIGHT)
+        drawLabel (g, t.name, t.label, px11, labelLilac, keyTracking);
+}
+
+/** THE PLAYING CHANNEL'S TONE KNOBS on the panel (face::Strips): a socket under each, the size the row
+    gives it, and each knob's sign over it — the tone's own curve — in DRIVE's row; its name is the tag's,
+    under the hand. */
+void Cockpit::paintStrips (juce::Graphics& g, float) const
+{
+    using namespace layout;
+    const auto& art = Art::get();
+    for (const auto& t : strips.tones)
+    {
+        if (art.socket.isValid())
+        {
+            const float d = socketSize * strips.toneScale;
+            g.drawImage (art.socket, juce::Rectangle<float> (d, d).withCentre (t.knob.getCentre()));
+        }
+        drawToneSign (g, t.label, t.curve, signInk(), strips.toneSignHeight);     // its sign, in its name's place; the name is the tag's, under the hand
+    }
 }
 
 void Cockpit::paintOverhead (juce::Graphics& g) const
@@ -277,35 +327,27 @@ void Cockpit::paintEmblem (juce::Graphics& g, float scale) const
 {
     using namespace layout;
 
-    // A fresh face over the render's: dark metal, lit from above, with a fine bevel — so the render's
-    // own cat is gone and the plate still reads as the same piece of hull.
-    juce::Path face;
-    face.startNewSubPath (emblemFace[0]);
-    for (size_t i = 1; i < emblemFace.size(); ++i)
-        face.lineTo (emblemFace[i]);
-    face.closeSubPath();
-
-    const auto box = face.getBounds();
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff24222b), box.getCentreX(), box.getY(),
-                                             juce::Colour (0xff111016), box.getCentreX(), box.getBottom(), false));
-    g.fillPath (face);
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.05f), box.getX(), box.getY(),
-                                             juce::Colours::transparentWhite, box.getCentreX(), box.getCentreY(), false));
-    g.fillPath (face);
-    g.setColour (juce::Colour (0xff4a4757).withAlpha (0.8f));
-    g.strokePath (face, juce::PathStrokeType (1.2f));
-
-    for (const auto& c : emblemScrews)
+    // A fresh face over the render's, the family's badge (face::paintBadge): dark metal, lit from above, with
+    // a fine bevel — so the render's own cat is gone and the plate still reads as the same piece of hull —
+    // its six screws, and the cat engraved light in it: a pale floor on the dark plate, the shadow deeper,
+    // the lip brighter, so the mark reads from across the room.
+    const auto outline = [] (const auto& corners)
     {
-        const auto head = juce::Rectangle<float> (8.0f, 8.0f).withCentre (c);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff6d6a78), c.translated (-1.5f, -2.0f),
-                                                 juce::Colour (0xff141318), c.translated (2.5f, 3.0f), true));
-        g.fillEllipse (head);
-        g.setColour (juce::Colour (0xff09080c));
-        g.drawLine (c.x - 2.2f, c.y - 2.2f, c.x + 2.2f, c.y + 2.2f, 1.0f);
-    }
+        juce::Path p;
+        p.startNewSubPath (corners[0]);
+        for (size_t i = 1; i < corners.size(); ++i)
+            p.lineTo (corners[i]);
+        p.closeSubPath();
+        return p;
+    };
 
-    engraveMark (g, emblemMark, scale);
+    // The seat first, the recess the plate lies in, dark as the hull's shadows round it; then the plate in it.
+    const auto seat = outline (emblemSeat);
+    const auto box = seat.getBounds();
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff1a1720), box.getCentreX(), box.getY(),
+                                             juce::Colour (0xff0d0b10), box.getCentreX(), box.getBottom(), false));
+    g.fillPath (seat);
+    paintBadge (g, outline (emblemFace), { emblemScrews.begin(), emblemScrews.end() }, emblemScrew, emblemMark, scale);
 }
 
 void Cockpit::paintStatic (juce::Graphics& g, float scale) const
@@ -322,9 +364,7 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
     paintEmblem (g, scale);
 
     drawLabel (g, "DRIVE", juce::Rectangle<float> (220.0f, 30.0f).withCentre ({ drive.centre.x, 394.0f }), px15, labelLilac);
-    const char* toneNames[] { "BASS", "MIDDLE", "TREBLE" };
-    for (size_t i = 0; i < tones.size(); ++i)
-        drawLabel (g, toneNames[i], juce::Rectangle<float> (150.0f, 28.0f).withCentre ({ tones[i].centre.x, 394.0f }), px13, labelLilac);
+    // ...the tone knobs' names are the playing pack's, with their sockets (paintStrips).
 
     // TURBO stands IN its frame's top line, in the gap the two brackets leave (96 wide; the word is 80).
     // The capitals sit a hair under the middle of the row they are drawn in — hence the 1.
@@ -337,21 +377,33 @@ void Cockpit::paintStatic (juce::Graphics& g, float scale) const
 
     // The tuner's name; its screen is the live TunerFace.
     drawLabel (g, "TUNER", juce::Rectangle<float> (200.0f, 26.0f).withCentre ({ tunerScreen.getCentreX(), 781.0f }), px13, labelLilac);
+
+    // The maker's words, on the plates right of the emblem: a size under the controls' names and a little
+    // quieter, as the rovers have them beside their mark.
+    drawLabel (g, "POWERED BY",   juce::Rectangle<float> (makerBox, 26.0f).withCentre (poweredByPlate), px11, labelLilac.withAlpha (0.8f));
+    drawLabel (g, "DARWIN'S CAT", juce::Rectangle<float> (makerBox, 26.0f).withCentre (makerNamePlate), px11, labelLilac.withAlpha (0.8f));
 }
 
 //==============================================================================
 /** The cockpit's own part of the site's demo (Console::webExtras): where the glass is and where the
     picture in it is composed for, the throttle's and TURBO's frames, their renders, the sky standing still
-    for each channel, the glass's whole rectangle at twice the stage's size (sky-<channel>.png) — and the
+    for each channel, the glass's whole rectangle at twice the stage's size (sky-<channel>.webp) — and the
     poster, the first channel's still sky through the glass. */
 void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places, juce::DynamicObject& world)
 {
     using namespace layout;
     const auto& art = Art::get();
-    writeSprite (dir, "lever-grip.png", art.leverGrip);
-    writeSprite (dir, "guard-closed.png", art.guardClosed);
-    writeSprite (dir, "guard-open.png", art.guardOpen);
-    writeSprite (dir, "guard-on.png", art.guardOn);
+    writeSprite (dir, "lever-grip", art.leverGrip);
+    writeSprite (dir, "guard-closed", art.guardClosed);
+    const auto socketFile = writeSprite (dir, "socket", art.socket);   // under each tone knob, socketSize across at the row's nominal size; null with no render
+    {
+        auto* pieces = new juce::DynamicObject();
+        pieces->setProperty ("socket", socketFile);
+        pieces->setProperty ("socketSize", layout::socketSize);
+        world.setProperty ("rows", juce::var (pieces));
+    }
+    writeSprite (dir, "guard-open", art.guardOpen);
+    writeSprite (dir, "guard-on", art.guardOn);
 
     // WHAT THE WINDSHIELD SHOWS OVER THE SKY as the cockpit opens — SHAPE, in its band, going out with the
     // sound (Monitor).
@@ -360,7 +412,7 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
     window->setProperty ("shape", monitor.shapeForWeb());
     world.setProperty ("monitor", juce::var (window));
     for (int c = 0; c < channels.count(); ++c)
-        face::writeForWeb (dir.getChildFile ("sky-" + juce::String (c) + ".png"), stillSky (c));
+        face::writeForWeb (dir.getChildFile ("sky-" + juce::String (c) + ".webp"), stillSky (c));
 
     const auto rect = [] (juce::Rectangle<float> r)
     {
@@ -397,38 +449,75 @@ void CatpitEditor::webExtras (const juce::File& dir, juce::DynamicObject& places
 
     places.setProperty ("window", rect (glass));
 
-    // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
+    // TURBO is the amp's boost on a pack with no Boost switch (params::preampBoost): the capture `steps`
+    // positions up the dial from where DRIVE stands, the knob where it is, and each position the dial has
+    // not above it `dbPerMissingStep` into the capture instead (core::CapturedBlock::setGain). How much
+    // louder the amp leaves meanwhile is places.json's boostLevel (Console::exportForWeb).
     auto* turboKind = new juce::DynamicObject();
-    turboKind->setProperty ("kind", "push");
-    turboKind->setProperty ("db", channels::settings::turboDefault);
-    juce::Array<juce::var> pushes;
-    for (const int db : channels::settings::turboPushes)
-        pushes.add (db);
-    turboKind->setProperty ("pushes", pushes);
-    turboKind->setProperty ("param", params::blockIn (params::preampId));
+    turboKind->setProperty ("kind", "dial");
+    turboKind->setProperty ("steps", core::CapturedBlock::turboSteps);
+    turboKind->setProperty ("dbPerMissingStep", core::CapturedBlock::turboDbPerStep);
+    turboKind->setProperty ("param", params::preampBoost);
     world.setProperty ("turbo", juce::var (turboKind));
-    world.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render
+    world.setProperty ("keys", "drawn");      // face::PushButton paints them; there is no render — but HPF and LPF, whole (filterKeys)
     world.setProperty ("knobRing", false);
     auto* keyNames = new juce::DynamicObject();      // under the keys, in one row (Cockpit::paintKeyNames)
     keyNames->setProperty ("onKeys", false);
     keyNames->setProperty ("y", keyNameY);
     keyNames->setProperty ("px", px11);
+    keyNames->setProperty ("filters", "signs");         // HPF and LPF wear no word: their signs (world.filterSigns)
     keyNames->setProperty ("tracking", face::keyTracking);
     keyNames->setProperty ("dimmed", face::PushButton::dimmed);
     keyNames->setProperty ("colour", juce::String::formatted ("#%02x%02x%02x%02x", face::labelLilac.getRed(), face::labelLilac.getGreen(),
                                                                 face::labelLilac.getBlue(), face::labelLilac.getAlpha()));
     world.setProperty ("keyNames", juce::var (keyNames));
+
+    // THE FILTER KEYS, WHOLE: each wide key with its sign, as the cockpit draws it, at twice the stage —
+    // off, up and quiet; on, down and lit — and the box it is laid at.
+    {
+        auto* filterKeys = new juce::DynamicObject();
+        for (const bool highpass : { true, false })
+        {
+            auto* k = new juce::DynamicObject();
+            const auto at = key (highpass ? face::btHpf : face::btLpf).getBoundsInParent().toFloat();
+            k->setProperty ("box", rect (at));
+            for (const bool on : { false, true })
+            {
+                juce::Image img (juce::Image::ARGB, juce::roundToInt (at.getWidth() * 2.0f), juce::roundToInt (at.getHeight() * 2.0f), true);
+                {
+                    juce::Graphics sg (img);
+                    sg.addTransform (juce::AffineTransform::scale (2.0f));
+                    filterKey (sg, { 0.0f, 0.0f, at.getWidth(), at.getHeight() }, on, on ? 1.0f : 0.0f, highpass);
+                }
+                const auto file = writeSprite (dir, juce::String (highpass ? "hpf" : "lpf") + (on ? "-key-on" : "-key-off"), img);
+                k->setProperty (on ? "on" : "off", file);
+            }
+            filterKeys->setProperty (highpass ? "hpf" : "lpf", juce::var (k));
+        }
+        world.setProperty ("filterKeys", juce::var (filterKeys));
+    }
     world.setProperty ("claimedKeys", juce::Array<juce::var>());
     juce::Array<juce::var> stills;
     for (int c = 0; c < channels.count(); ++c)
-        stills.add ("sky-" + juce::String (c) + ".png");
+        stills.add ("sky-" + juce::String (c) + ".webp");
     places.setProperty ("stills", stills);
-    writePoster (dir, glass, stillSky (channels.active()), { &space, &still, &monitor });
 
-    // ...and one for each channel the throttle can stand in, the channel's own still sky in the glass.
+    // THE POSTERS: the cockpit as it opens, and one for each channel the throttle can stand in — through the
+    // glass the sky's first frame there, as the live sky starts at that channel (GlSky::firstFrame), and
+    // the channel's own still sky in the poster's -still kind.
     webPoses.count = channels.count();
+    webPoses.opening = channels.active();
     webPoses.standAt = [this] (int channel) { go (channel); this->lever.setPlace (channel, false, false); };
     webPoses.still = [] (int channel) { return stillSky (channel); };
+    webPoses.firstFrame = [this] (int channel, std::function<void (juce::Image)> done)
+    {
+        if (glSky == nullptr)       // the sky on the CPU, or no sky: no GPU frame to be had
+            juce::MessageManager::callAsync ([done] { done ({}); });
+        else
+            glSky->firstFrame ((float) channel / (float) (Lever::numDetents - 1), glass, windshield, 2.0f, std::move (done));
+    };
+    webPoses.live = "the sky's first frame for the place's channel: the flight on the GPU from its start, settled at the "
+                    "channel's detent, nothing stepped (t = 0); the top poster is the channel the app opens on";
     webPoses.window = glass;
     webPoses.hidden = { &space, &still, &monitor };
     webPatch ("gateFader", { &threshold });
@@ -443,6 +532,13 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
 
     // Everything this constructor sets is the face settling onto the state, not a player's edit.
     const felitronics::appkit::CompareHistory::ScopedSuppress settling (amp.history);
+
+    // HPF AND LPF, broad (filterKey).
+    for (int f = face::btHpf; f <= face::btLpf; ++f)
+        key (f).drawKey = [f] (juce::Graphics& g, juce::Rectangle<float> box, bool down, float lit)
+        {
+            filterKey (g, box, down, lit, f == face::btHpf);
+        };
 
     // The sky, under the cockpit's picture: what the windshield is cut through to.
     stage.addAndMakeVisible (space, 0);
@@ -484,16 +580,16 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
             glSky->setSteer (s);
     };
 
-    // TURBO pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
-    // The trim is a parameter and a host may leave it anywhere, so anything well above nothing reads as on.
+    // TURBO is the AMP's boost (params::preampBoost): the X88-IR has no Boost switch of its own, so the
+    // capture plays two positions up its dial from THROTTLE's DRIVE, and past the top capture it is fed
+    // harder instead. A right click is how much louder the amp leaves with it.
     addToStage (turbo);
     turbo.setBounds (turboFrame.toNearestInt());
-    turbo.onMenu = [this] { showTurboMenu(); };
+    turbo.onMenu = [this] { showBoostMenu(); };
     {
-        auto* push = follow (params::blockIn (params::preampId).toRawUTF8(),
-                             [this] (float db) { turbo.setOn (db > Channels::turboOnAbove, false); });
-        turbo.onChange = [this, push] (bool on) { push->setValueAsCompleteGesture (on ? channels.turboDb() : 0.0f); };
-        push->sendInitialUpdate();
+        auto* boost = follow (params::preampBoost, [this] (float on) { turbo.setOn (on > 0.5f, false); });
+        turbo.onChange = [boost] (bool on) { boost->setValueAsCompleteGesture (on ? 1.0f : 0.0f); };
+        boost->sendInitialUpdate();
     }
 
     // GATE'S THRESHOLD AND LIMITER'S CEILING, each on a short fader in the slot cut into its corner, the
@@ -544,14 +640,14 @@ CatpitEditor::CatpitEditor (AmpProcessor& p)
     {
         auto word = juce::SystemStats::getEnvironmentVariable ("CATPIT_SKY", {}).toLowerCase();
         if (! starsWords.contains (word))
-            word = prefs::store().get (starsKey, starsWords[0]).toString();
+            word = prefs::store (amp.product()).get (starsKey, starsWords[0]).toString();
         stars = (Stars) juce::jmax (0, starsWords.indexOf (word));
     }
 
     // ...and so does what the windshield shows over it: nothing, or a picture of the amp at work — the
     // shape it gives the sound, as every face of the family opens on.
     monitor.show ((Monitor::View) juce::jlimit (0, (int) Monitor::View::numViews - 1,
-                                                (int) prefs::store().get (windowKey, (int) Monitor::View::shape)));
+                                                (int) prefs::store (amp.product()).get (windowKey, (int) Monitor::View::shape)));
     applySky();
 
     // LEARN from GATE's menu takes the tuner's glass while it runs.
@@ -593,10 +689,10 @@ void CatpitEditor::programChange (int program)
         lever.setPlace (program, true);
 }
 
-/** TURBO's controller: the push, or none. */
+/** TURBO's controller: the boost, on or off. */
 void CatpitEditor::turboChange (bool thrown)
 {
-    setParam (params::blockIn (params::preampId).toRawUTF8(), thrown ? channels.turboDb() : 0.0f);
+    setParam (params::preampBoost, thrown ? 1.0f : 0.0f);
 }
 
 /** What the windshield shows over the sky — nothing, or one of the pictures of the amp at work — and
@@ -704,7 +800,7 @@ void CatpitEditor::placeSky()
 void CatpitEditor::chooseStars (Stars chosen)
 {
     stars = chosen;
-    prefs::store().set (starsKey, starsWords[(int) chosen]);
+    prefs::store (amp.product()).set (starsKey, starsWords[(int) chosen]);
     applySky();
 }
 
@@ -716,7 +812,7 @@ void CatpitEditor::applySky()
 
     if (wantGpu && glSky == nullptr)
     {
-        glSky = std::make_unique<GlSky> (gl);
+        glSky = std::make_unique<GlSky> (gl, amp.loadedAs());
         glSky->setThrottle ((float) lever.getPlace() / (float) (Lever::numDetents - 1));
         glSky->setSteer (steering.value());
         gl.setRenderer (glSky.get());
@@ -760,9 +856,9 @@ void CatpitEditor::applySky()
 
 void CatpitEditor::showInWindow (Monitor::View view)
 {
-    prefs::store().set (windowKey, (int) view);
+    prefs::store (amp.product()).set (windowKey, (int) view);
     monitor.show (view);
 }
 
-} // namespace catpit
-} // namespace orbitamp
+} // namespace orbitamp::catpit
+

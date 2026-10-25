@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "Features.h"
 #include "Product.h"
 #include "Parameters.h"
 #include "ui/Prefs.h"
@@ -49,10 +50,6 @@ struct ProductEngine
     /** The state changed under the processor — a session opened, a register recalled, a step of the
         history taken. Said from inside the landing itself: it may look, and must not write. */
     virtual void stateLanded() = 0;
-
-    /** A SWITCH THAT PARKS THE WHOLE AMP, where the product has one: the raw value of its parameter,
-        read on the audio thread. Parked, no link of the chain works but the tuner — see linkWorks. */
-    virtual const std::atomic<float>* parkSwitch() const { return nullptr; }
 };
 
 /** The plugin shell. Deliberately thin: the chain (preamp -> EQ -> delay -> reverb -> cabinet) lands
@@ -62,7 +59,9 @@ class AmpProcessor final : public juce::AudioProcessor,
                            private juce::ValueTree::Listener
 {
 public:
-    AmpProcessor();
+    /** A processor of `product`, which it keeps: which amp it is (Product.h). The product outlives it —
+        every product is made once in a process and never goes. */
+    explicit AmpProcessor (const Product& product);
     /** Takes the saved session's listener off the tree, and nothing else — worth writing down WHY
         nothing else, because this looks like the place a weak reference has to be cleared and it
         is not.
@@ -83,6 +82,10 @@ public:
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout&) const override;
+    void processorLayoutsChanged() override;
+
+    /** Where the amp itself puts that parameter back, normalised — see params::engineDefault. */
+    float engineDefault (const juce::RangedAudioParameter& p) const { return params::engineDefault (p, enginePlace); }
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
 private:
@@ -104,7 +107,17 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override                          { return true; }
 
-    const juce::String getName() const override              { return product::name; }
+    const juce::String getName() const override              { return ownProduct.name; }
+
+    /** WHICH AMP THIS IS (Product.h): what everything that is one amp's and not another's is read off —
+        handed down from here, never looked up anywhere else. */
+    const Product& product() const noexcept                  { return ownProduct; }
+
+    /** WHAT THIS IS, AND WHERE, for a line of the family's logs (shaders/GpuLog.h): the product, the format it
+        was loaded as — VST3, AU, CLAP or Standalone — and, a plug-in, its host: by JUCE's name for it where
+        JUCE knows it, by its program's file name where not. */
+    juce::String loadedAs() const;
+
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }
@@ -134,14 +147,9 @@ public:
     {
         double tail = 0.1;   // every ramp in here, and the models' handful of milliseconds
 
-        if (linkInRig (params::rowDelay))
-            tail += (double) delay.tailSeconds();
-
-        if (linkInRig (params::rowReverb))
-            tail += (double) reverb.tailSeconds();
-
-        if (linkInRig (params::rowCab))
-            tail += (double) cab.tailSeconds();
+        tail += (double) delay.tailSeconds();
+        tail += (double) reverb.tailSeconds();
+        tail += (double) cab.tailSeconds();
 
         // A FLOOR, BECAUSE NOTHING CAN TELL A HOST THIS NUMBER MOVED. There is no such message in
         // any of the three wrappers — JUCE's change notifications carry latency, programs, state
@@ -151,14 +159,12 @@ public:
         // reaches it, and one host at least stops calling a plugin at all after `tail` seconds of
         // silence: that would cut a tail while PLAYING, not only in a bounce.
         //
-        // So while either link that can be set to ring long is in the rig, the answer is never
-        // below the flat eight this used to be. Both of the wins survive it — a rig with neither
-        // of them asks for its cabinet and a tenth instead of eight, and a hall breathing at double
-        // is no longer cut at eight — and the one case that stays wrong in a caching host is one
-        // where the old constant was exactly as wrong. Lifting the floor is a thing to do after
-        // watching a real session in Cubase and Logic, not before.
-        if (linkInRig (params::rowDelay) || linkInRig (params::rowReverb))
-            tail = juce::jmax (tail, 8.0);
+        // So the answer is never below the flat eight this used to be: the echo and the room are
+        // always in the chain, and either can be set to ring long. A hall breathing at double is
+        // no longer cut at eight, and the one case that stays wrong in a caching host is one where
+        // the old constant was exactly as wrong. Lifting the floor is a thing to do after watching
+        // a real session in Cubase and Logic, not before.
+        tail = juce::jmax (tail, 8.0);
 
         return juce::jmin (tail, 30.0);
     }
@@ -187,10 +193,13 @@ public:
         `force` writes it now whatever has changed. Message thread only. */
     void refreshSavedState (bool force = false);
 
+    // FIRST OF ALL, the product: everything after it is made for it.
+    const Product& ownProduct;
+
     // BEFORE THE PARAMETERS, and so before everything: what the product does once in a process before
-    // it reads anything off the disk (firstStart) — the list of devices a parameter offers is read when
-    // the parameters are made. A member, because the constructor's body would be too late.
-    struct FirstStart { FirstStart(); } firstStarted;
+    // it reads anything off the disk (Product::firstStart) — the list of devices a parameter offers is
+    // read when the parameters are made. A member, because the constructor's body would be too late.
+    struct FirstStart { explicit FirstStart (const Product&); } firstStarted;
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -285,6 +294,45 @@ public:
         plain state, before anything applies it. Message thread only. */
     void takeEmbeddedIrs (juce::ValueTree& tree) { cabIrEmbeds.unpack (tree); }
 
+    /** A STATE OF 0.8.0'S, made what it means now. Up to 0.8.0 the cockpit's and the rovers' face folded
+        the lever's zero, a machine setting (-9 dB unless the player chose another), into the input trim,
+        and noted beside it which zero it had folded in (Product::formerInputZeroId). The trim is unity at
+        the lever's middle now and the level is the pack's own (`chain[].input_db`), so every tree of the
+        state's type in `tree` — the live one, each register, a preset — that carries that note N has
+          - its input trim made the trim less N, within the trim's range: what the lever adds to the
+            pack's level, so that with the pack's -9 dB the model is fed what it was fed then; and
+          - its gate's threshold raised by -N, within the gate's range: the gate's key hears the guitar
+            after the input trim and before the pack's level, where 0.8.0's heard it after the folded-in
+            zero, so it opens on the same guitar it opened on then;
+        and the note taken away. A state with no such note — OrbitAmp's, or one no 0.8.0 window ever
+        saw — is left as it is. Any thread: it touches nothing but `tree`. */
+    void takeFormerTrims (juce::ValueTree& tree) const;
+
+    /** A STATE SAVED UNDER ANOTHER OPENING CABINET, on the one every amp opens on now (params::cabIrDefault,
+        RED GIANT). Every state carries a note of the cabinet a fresh instance opened on when it was saved
+        (`cabOpeningId`, the catalog's number); one with no note was saved before the note, when that was
+        DARK MATTER. A state cannot say whether it plays its opening cabinet because the player chose it or
+        because nobody chose another, and the old one is taken as nobody's choice: in every tree of the
+        state's type in `tree` — the live one, each register, a preset — whose note names another cabinet
+          - `cabIr` on that cabinet's number is moved to the opening one's;
+          - where the product's channels play the build's cabinets as IRs of their own (a ProductEngine:
+            the cockpit and the rovers), the cabinet playing under the old one's file name is made the new
+            one — the new one's bytes into the IR store, their key, name and `from` on the state — and
+            every channel's memory that names the old one's file names the new one's;
+        and the note is made the opening cabinet's. Any other cabinet — another of the shelf's, an IR of
+        the player's, one the state carries — is kept, and so is the old opening cabinet in a state whose
+        note says it was the player's pick. Any thread: it touches `tree`, and the IR store, which takes
+        bytes from any. */
+    void takeFormerCabinet (juce::ValueTree& tree);
+
+    /** The note (takeFormerCabinet): on every state, from the first moment of the processor's (its
+        constructor) and of every state that lands. */
+    static constexpr const char* cabOpeningId = "cab_opening";
+
+    /** Where a channel's memory names its cabinet, by its file's name without the extension
+        (channels/Channels.cpp) — said here, for takeFormerCabinet to read it by. */
+    static constexpr const char* recordCabinetId = "cabinet";
+
     /** The state tree's type — a constant, so code off the message thread can recognise a state
         inside a saved envelope without touching the live tree. */
     static constexpr const char* stateType = "state";
@@ -318,7 +366,7 @@ private:
     float aimWroteSwitch[numCaptured][core::CapturedBlock::numMeasured] { };
 
     // MUST precede `updater`: the checker takes the store by reference and is destroyed before it.
-    juce::SharedResourcePointer<prefs::UpdateStore> updateStore;
+    std::shared_ptr<prefs::UpdateStore> updateStore = prefs::UpdateStore::of (ownProduct);   // the product's own, shared by its processors
     felitronics::appkit::UpdateChecker updater;   // built in the ctor: it needs the store above
 
     /** Pumps the history's settle timer — a burst of edits that has been quiet for a moment commits
@@ -326,8 +374,8 @@ private:
     void timerCallback() override
     {
         // The product's own half first — what it does it does as a hand would, between two ticks.
-        if (product != nullptr)
-            product->pump();
+        if (productEngine != nullptr)
+            productEngine->pump();
 
         history.tick();
 
@@ -707,8 +755,8 @@ private:
         switchAimFrames = aimWindowFrames;
         cabIrParamBaselineStale = true;   // a restored `cab_ir` is not a host moving it — see the pump
 
-        if (product != nullptr)
-            product->stateLanded();       // ...and the product's own half has parameters to read the same way
+        if (productEngine != nullptr)
+            productEngine->stateLanded();       // ...and the product's own half has parameters to read the same way
 
         // BOTH baselines are taken from what the tree has just become, and that is the whole of
         // how a hand wins. `aimWrote*` starting at "nothing written yet" meant theft could only be
@@ -754,39 +802,18 @@ private:
             sr > 0.0 && ! juce::approximatelyEqual (sr, tunerEar.preparedRate()))
             tunerEar.prepare (sr);
 
-        tunerEar.setLevelFloorDb ((double) prefs::tunerFloor());
-        tunerEar.setReferenceHz ((float) prefs::tunerReference());
+        tunerEar.setLevelFloorDb ((double) prefs::tunerFloor (ownProduct));
+        tunerEar.setReferenceHz ((float) prefs::tunerReference (ownProduct));
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
     }
 
-    /** IS THIS LINK WORKING — the one question the chain asks, and the only shape of it.
-
-        In the rig AND on. Out of the rig is nothing at all; STANDBY is here but not taking new
-        signal. Both are ordinary parameters, so this reads like any other switch — no mirror to
-        keep, nothing to normalise, and no way to express "not in the rig but playing". */
+    /** IS THIS LINK WORKING — the one question the chain asks, and the only shape of it. Every
+        link stands in the chain for good; a switch says only whether it is ON or in STANDBY, and a
+        link with no switch — the two ends — always works. */
     bool linkWorks (params::ChainRow row) const noexcept
     {
-        // PARKED, the amp is out of the sound: every link stands by — the captured blocks' fades and
-        // wires hand the dry signal through at the chain's own latency, the rooms and the delay are no
-        // longer fed and ring out, the blocks' trims go to unity — but the tuner goes on listening, and
-        // the player's own levels, IN and OUT, go on holding: the dry guitar comes out where they put
-        // the amp, not at full level past a master turned down.
-        if (row != params::rowTuner && row != params::rowIn && row != params::rowOut && isParked())
-            return false;
-
         const auto* on = rowOn[(size_t) row];
-        const auto* in = rowPresent[(size_t) row];
-
-        return (on == nullptr || on->load() > 0.5f) && (in == nullptr || in->load() > 0.5f);
-    }
-
-    /** IN THE RIG, on its own — for the links that keep running while they stand by. An additive
-        block out of the rig is unplugged: cleared, and costing nothing. In the rig it runs whether
-        it is on or not, and `linkWorks` decides only whether it is being FED. */
-    bool linkInRig (params::ChainRow row) const noexcept
-    {
-        const auto* in = rowPresent[(size_t) row];
-        return in == nullptr || in->load() > 0.5f;
+        return on == nullptr || on->load() > 0.5f;
     }
 
 
@@ -870,6 +897,14 @@ private:
     bool delayReady = false, reverbReady = false;
 
 public:
+    /** WHETHER THE AMP'S BOOST IS ON, the one its level (params::boostLevel) is heard with: the playing
+        pack's own Boost switch past its first position — OrbitAmp's BOOST key, the rovers' TURBO, which
+        holds it there — or, on a pack with no such switch, params::preampBoost — OrbitAmp's BOOST key and
+        the cockpit's TURBO there. Never while the AMP is out of the chain or switched off: the boost is
+        the amp's. Any thread — the audio thread asks it every
+        block; which slot the pack's Boost is in is found by the pump, where the pack is. */
+    bool boostOn() const noexcept;
+
     /** The delay's picture taps, read-only: the face draws its comb from the same numbers the
         heads are actually standing on. */
     const felitronics::delay::TapeDelay& delayTaps() const noexcept { return delay; }
@@ -881,10 +916,6 @@ public:
     /** Whether a host could conduct at all — false in the standalone, where the choice between the
         host's tempo and the block's own does not exist. */
     bool runsInHost() const noexcept { return wrapperType != wrapperType_Standalone; }
-
-    /** Whether the product has parked the whole amp (ProductEngine::parkSwitch): the dry signal
-        passes. Never, for a product with no such switch. */
-    bool isParked() const noexcept { return parked != nullptr && parked->load (std::memory_order_relaxed) > 0.5f; }
 
     /** A PROGRAM CHANGE THAT CAME IN, for a face that plays them. The engine has no programs of its
         own: it keeps the last one a MIDI input sent (0..127, on any channel) until a face that gives
@@ -952,9 +983,9 @@ public:
 
     /** The cabinet shelf — the family's (device/FactoryShelf.h), in params::cabIrNames order, and the
         folder of it each IR lies in. The face draws the same bytes the engine convolves. A number the
-        build does not carry (a face, and the shelf's `Other`) is DARK MATTER's, the default's. */
+        build does not carry (a face, and the shelf's `Other`) is RED GIANT's, the default's. */
     struct IrBytes { const char* data; int size; const char* folder; };
-    static const IrBytes& cabIrBytes (int index);
+    static const IrBytes& cabIrBytes (const Product&, int index);
 
     /** WHAT THE CABINET PLAYS, as the state says it: an IR of the player's own when the state names
         one the store holds, and the factory shelf's entry under `cabIr` otherwise — which is also
@@ -1042,11 +1073,6 @@ public:
         captured block's output, indexed like blockSpectrumTap — 0 is the preamp. */
     std::array<std::atomic<float>, numCaptured> blockOutDb { -90.0f };
 
-    /** What each captured block is FEEDING ITS MODEL, after its own input trim. Measured at the
-        model's door rather than the block's, because that is the level the question is about: a
-        capture answers to what goes in, and the meter has to be reading the same point the trim
-        beside it moves. Indexed like blockSpectrumTap — 0 is the preamp. */
-    std::array<std::atomic<float>, numCaptured> blockInDb { -90.0f };
     std::atomic<float> cabOutDb    { -90.0f };
     std::atomic<bool>  inClip  { false };
     std::atomic<bool>  outClip { false };
@@ -1146,7 +1172,6 @@ private:
         std::atomic<float>* lpfOn    = nullptr;
         std::atomic<float>* lpfHz    = nullptr;
         std::atomic<float>* lpfSlope = nullptr;
-        std::atomic<float>* level    = nullptr;
         std::atomic<float>* b3On     = nullptr;
         std::atomic<float>* bellDb[3] {};
         std::atomic<float>* bellHz[3] {};
@@ -1164,6 +1189,19 @@ private:
     int   histSamples = 0;
     std::atomic<float>* limiterCeilParam   = nullptr;
     float lastOutGain = 1.0f;
+
+    // THE BOOST'S LEVEL (params::boostLevel), ahead of the master's hand: unity while the boost is off,
+    // its level while it is on, and between the two a straight ramp of boostRampSeconds — not the
+    // block-long ramp of the trims, whose length is whatever the host's block is: a boost thrown on a
+    // block of 32 samples would step in under a millisecond. Seeded at prepare, so a session saved with
+    // its boost on opens at its level instead of rising into it.
+    std::atomic<float>* boostLevelParam = nullptr;
+    std::atomic<float>* preampBoostParam = nullptr;
+    std::array<std::atomic<float>*, (size_t) params::numSelectors> preampSelectorParams {};
+    std::atomic<int> boostSlot { -1 };          // the playing pack's Boost among the preamp's selector slots; -1 for none
+    juce::LinearSmoothedValue<float> boostGain { 1.0f };
+    static constexpr double boostRampSeconds = 0.015;
+    float boostTarget() const noexcept;         // what boostGain heads for: the level, or unity
     // THE SAFETY AT THE DOOR (core/DoorLimiter.h): a true-peak limiter that sees each peak a
     // millisecond before it arrives. It always runs, so its state is warm when it is switched in; while
     // it is out, `limiterLate` hands on the input exactly as late as the limiter would have, so the
@@ -1206,20 +1244,13 @@ private:
         one, and each register's. */
     void embedCabIrs (juce::ValueTree& tree) const;
 
-    std::atomic<float>* preampInParam = nullptr;
     std::atomic<float>* preampSmoothParam = nullptr;
-    float lastPreampInGain = 1.0f;
 
-    /** Whether each captured block was in the path last block — so the trim can ARRIVE at what
-        the player set instead of sliding up to it while the block is already audible. */
-    bool blockWasOn[numCaptured] { true };
     float lastTrimGain = 1.0f;
 
-    /** The two switches of every link, straight off `params::chainLinks` — plus the two ends,
-        which are not rows in the strip yet but have had their switches since they were declared.
+    /** Every link's switch, straight off `params::chainLinks`; null for a link that has none.
         Filled once in prepare; read on the audio thread like every other parameter. */
-    std::atomic<float>* rowOn[params::numChainRows]      { };
-    std::atomic<float>* rowPresent[params::numChainRows] { };
+    std::atomic<float>* rowOn[params::numChainRows] { };
 
     std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* gatePosParam       = nullptr;
@@ -1302,11 +1333,15 @@ private:
 
     /** The channel mode's default follows the ENVIRONMENT until somebody chooses: the standalone
         opens on STEREO SPACE (one guitar in, a wide room out), a plugin on a mono bus on MONO, on
-        a stereo bus on STEREO. `modeAutoValue` is what the environment last set — while the
-        parameter still reads that, nobody has chosen and the environment may set it again; one
-        hand-move or one restored session ends it. */
+        a stereo bus on STEREO. The layout declares it so, for the buses the processor is made with,
+        and a host that settles other buses moves it there (processorLayoutsChanged) — never a
+        prepare, which a host may hold the parameters still across. `modeAutoValue` is what the
+        environment last set — while the parameter still reads that, nobody has chosen and the
+        environment may set it again; one hand-move or one restored session ends it. */
+    params::StereoMode modeOfEnvironment() const;
+    int  enginePlace      = 0;      // where params::enginePack stood in the product's list as it was made
     bool stateWasRestored = false;
-    int  modeAutoValue    = (int) params::StereoMode::mono;   // the layout's own default
+    int  modeAutoValue    = (int) params::StereoMode::mono;   // the layout's own default, set as it is made
 
     //==========================================================================
     // The saved session — see refreshSavedState.
@@ -1338,36 +1373,18 @@ private:
 public:
     /** The product's own half of the engine, where it has one (ProductEngine) — null for OrbitAmp.
         Declared after everything it reaches into, so that it goes before any of it does. */
-    std::unique_ptr<ProductEngine> product;
-    const std::atomic<float>* parked = nullptr;     // the product's park switch, if it has one
+    std::unique_ptr<ProductEngine> productEngine;
 
 private:
     JUCE_DECLARE_WEAK_REFERENCEABLE (AmpProcessor)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpProcessor)
 };
 
-/** The face a build opens. One processor, two faces: OrbitAmp's comes from PluginEditor.cpp, the
-    cockpit's from catpit/CatpitEditor.cpp, and each target compiles exactly one of them. */
-juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
-
-/** What a product does ONCE IN A PROCESS, before its first processor builds anything of its own — today,
-    gather the player's IRs of before (gatherFormerIrs). Defined once per target, like the face: OrbitAmp's
-    in OrbitAmpStart.cpp, the cockpit's and the rovers' beside their lineups; a gate that must not reach
-    the machine's real folders stands in one of its own that does nothing. What the amps play out of the
-    box is laid out by the family's installer, not by an amp (device/FactorySet.h). The processor calls it
-    before anything else — see AmpProcessor::firstStarted. */
-void firstStart();
-
 /** THE PLAYER'S IRS OF BEFORE, gathered into the family's folder: what the product kept in its own `IRs`
-    is copied into `Darwin's Cat/IRs` (device::IrLibrary::gather) — once in a process, and once on this
-    machine (prefs::irsGathered), tried again on the next start only where a file could not be copied.
-    Every product's firstStart calls it, so a gate that stands that in for nothing never reaches the
-    machine's real folders. */
-void gatherFormerIrs();
-
-/** A product's own parameters, after the engine's, and its own half of the engine (ProductEngine) —
-    once per target again. OrbitAmp adds no parameter and has no such half: it answers null. */
-void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
-std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor&);
+    is copied into `Darwin's Cat/IRs` (device::IrLibrary::gather) — once in a process for each product,
+    and once on this machine (prefs::irsGathered), tried again on the next start only where a file could
+    not be copied. Every product's first start calls it (Product::firstStart), so a gate that plays a
+    product with none never reaches the machine's real folders. */
+void gatherFormerIrs (const Product&);
 
 } // namespace orbitamp

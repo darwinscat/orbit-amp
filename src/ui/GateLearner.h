@@ -35,9 +35,8 @@ class GateLearner final : private juce::Timer
 public:
     GateLearner (juce::AudioProcessorValueTreeState& state, const std::atomic<float>& keyDbSource)
         : keyDb (keyDbSource),
-          presentP (*state.getParameter (params::gatePresent)),
-          onP      (*state.getParameter (params::gateOn)),
-          thP      (*state.getParameter (params::gateThreshold))
+          onP (*state.getParameter (params::gateOn)),
+          thP (*state.getParameter (params::gateThreshold))
     {
         onAtt = std::make_unique<juce::ParameterAttachment> (onP, [] (float) {});
         thAtt = std::make_unique<juce::ParameterAttachment> (thP, [] (float) {});
@@ -69,9 +68,8 @@ public:
         // What the patch looked like when the measurement began. If any of it moves while we are
         // counting, somebody else is driving — and finishing would write into a patch that is no
         // longer the one that asked.
-        watchPresent = presentP.getValue();
-        watchOn      = onP.getValue();
-        watchTh      = thP.getValue();
+        watchOn = onP.getValue();
+        watchTh = thP.getValue();
 
         startTimerHz (core::GateLearn::ticksPerSecond);
 
@@ -115,8 +113,7 @@ private:
         }
 
         // Somebody else moved the gate while we were counting. Stop, and write nothing.
-        if (! juce::approximatelyEqual (presentP.getValue(), watchPresent)
-            || ! juce::approximatelyEqual (onP.getValue(), watchOn)
+        if (! juce::approximatelyEqual (onP.getValue(), watchOn)
             || ! juce::approximatelyEqual (thP.getValue(), watchTh))
         {
             cancel();
@@ -142,13 +139,12 @@ private:
     }
 
     const std::atomic<float>& keyDb;
-    juce::RangedAudioParameter& presentP;
     juce::RangedAudioParameter& onP;
     juce::RangedAudioParameter& thP;
     std::unique_ptr<juce::ParameterAttachment> onAtt, thAtt;
 
     core::GateLearn take { params::gateHysteresisDb, params::gateThresholdMin, params::gateThresholdMax };
-    float watchPresent = 0.0f, watchOn = 0.0f, watchTh = 0.0f;
+    float watchOn = 0.0f, watchTh = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GateLearner)
 };

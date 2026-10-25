@@ -161,12 +161,23 @@ void PlainsWorld::build()
         {
             const int ch = chans[ci];
             std::vector<float> g (nn * 2);
+            // Each column's neighbours named outright, the seam's too. Written as `(x ± 1) & m` inside the
+            // index, the loop was vectorised as if the neighbours ran on unbroken across the seam: the wrong
+            // left neighbour at x = 1 of every row, and on the last row a read past the end of the texture,
+            // which stops the host where the page after it is not mapped.
             for (int y = 0; y < n; ++y)
+            {
+                const float* row   = height.data() + (size_t) y * (size_t) n * 4;
+                const float* below = height.data() + (size_t) ((y + 1) & m) * (size_t) n * 4;
+                const float* above = height.data() + (size_t) ((y - 1) & m) * (size_t) n * 4;
+                float* out = g.data() + (size_t) y * (size_t) n * 2;
                 for (int x = 0; x < n; ++x)
                 {
-                    g[(size_t) ((y * n + x) * 2)]     = (height[(size_t) ((y * n + ((x + 1) & m)) * 4 + ch)] - height[(size_t) ((y * n + ((x - 1) & m)) * 4 + ch)]) * 0.5f * (float) n;
-                    g[(size_t) ((y * n + x) * 2 + 1)] = (height[(size_t) ((((y + 1) & m) * n + x) * 4 + ch)] - height[(size_t) ((((y - 1) & m) * n + x) * 4 + ch)]) * 0.5f * (float) n;
+                    const int left = x == 0 ? m : x - 1, right = x == m ? 0 : x + 1;
+                    out[x * 2]     = (row[right * 4 + ch] - row[left * 4 + ch]) * 0.5f * (float) n;
+                    out[x * 2 + 1] = (below[x * 4 + ch] - above[x * 4 + ch]) * 0.5f * (float) n;
                 }
+            }
             std::vector<float> a;
             for (size_t k = 0; k < g.size(); k += 97) a.push_back (std::abs (g[k]));
             std::sort (a.begin(), a.end());
@@ -351,46 +362,37 @@ void PlainsWorld::place (double x, double z, double heading, int g, bool t)
 
 void PlainsWorld::settle() noexcept
 {
-    s.speed = parked ? 0.0f : speedFor (gearWanted, turbo);
-    s.storm = parked ? 0.0f : dustFor (gearWanted, turbo);
+    s.speed = speedFor (gearWanted, turbo);
+    s.storm = dustFor (gearWanted, turbo);
 }
 
 void PlainsWorld::step (double dt)
 {
     s.time += dt;
-    const float target = parked ? 0.0f : speedFor (gearWanted, turbo);
-    const float kS = (float) (1 - std::exp (-dt / (parked ? parkSeconds : speedSeconds)));
+    const float target = speedFor (gearWanted, turbo);
+    const float kS = (float) (1 - std::exp (-dt / speedSeconds));
     s.speed += (target - s.speed) * kS;
-    s.storm += ((parked ? 0.0f : dustFor (gearWanted, turbo)) - s.storm) * (float) (1 - std::exp (-dt / dustEaseSeconds));
+    s.storm += (dustFor (gearWanted, turbo) - s.storm) * (float) (1 - std::exp (-dt / dustEaseSeconds));
 
     // Yaw: the player's hand wins, with the push away from a relic ahead added so one steered at is
     // still passed around; a gentle meander resumes after 1.5 s of no input, plus a lean away from
-    // higher ground 300 m ahead (two height samples, 35 degrees either side). Parked, the hand turns
-    // the view in place and nothing meanders.
+    // higher ground 300 m ahead (two height samples, 35 degrees either side).
     double yawTarget;
-    if (parked)
+    const double fx0 = std::sin (s.heading), fz0 = -std::cos (s.heading);
+    const double push = avoidRelics (fx0, fz0);
+    if (std::abs (steer) > 0.001f)
     {
-        yawTarget = steer * parkedYawDegrees * pi / 180;
+        yawTarget = steer * 25 * pi / 180 + push;
         lastSteerTime = s.time;
     }
     else
     {
-        const double fx0 = std::sin (s.heading), fz0 = -std::cos (s.heading);
-        const double push = avoidRelics (fx0, fz0);
-        if (std::abs (steer) > 0.001f)
-        {
-            yawTarget = steer * 25 * pi / 180 + push;
-            lastSteerTime = s.time;
-        }
-        else
-        {
-            const float fadeIn = smoothstep (1.5f, 4.5f, (float) (s.time - lastSteerTime));
-            const double ca = std::cos (0.61), sa = std::sin (0.61);
-            const float hR = terrainHeight (s.x + 300 * (fx0 * ca - fz0 * sa), s.z + 300 * (fz0 * ca + fx0 * sa), 300);
-            const float hL = terrainHeight (s.x + 300 * (fx0 * ca + fz0 * sa), s.z + 300 * (fz0 * ca - fx0 * sa), 300);
-            const double avoid = std::clamp ((hL - hR) * 0.08, -6.0, 6.0) * pi / 180;    // left higher: turn right
-            yawTarget = fadeIn * (4.5 * pi / 180 * std::sin (s.time * 0.11 + meanderPhase) + avoid) + push;
-        }
+        const float fadeIn = smoothstep (1.5f, 4.5f, (float) (s.time - lastSteerTime));
+        const double ca = std::cos (0.61), sa = std::sin (0.61);
+        const float hR = terrainHeight (s.x + 300 * (fx0 * ca - fz0 * sa), s.z + 300 * (fz0 * ca + fx0 * sa), 300);
+        const float hL = terrainHeight (s.x + 300 * (fx0 * ca + fz0 * sa), s.z + 300 * (fz0 * ca - fx0 * sa), 300);
+        const double avoid = std::clamp ((hL - hR) * 0.08, -6.0, 6.0) * pi / 180;    // left higher: turn right
+        yawTarget = fadeIn * (4.5 * pi / 180 * std::sin (s.time * 0.11 + meanderPhase) + avoid) + push;
     }
     yawRate += (yawTarget - yawRate) * (1 - std::exp (-dt / 0.35));
     s.heading += yawRate * dt;

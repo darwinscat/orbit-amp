@@ -23,7 +23,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binari
 # Darwin's Cat Amps, under one tag, vX.Y.Z — and this is its number: every amp shows it, stamps its bundles
 # with it and compares the family's releases against it (add_amp). The release refuses a tag that says
 # another (installer/version.sh, which reads it from this line).
-project(OrbitAmp VERSION 0.8.0 LANGUAGES C CXX)
+project(OrbitAmp VERSION 0.9.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,6 +38,47 @@ if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS build archs" FORCE)
 endif()
 
+# A RELEASE KEEPS THE SYMBOLS OF WHAT IT SHIPPED — ORBITAMP_KEEP_SYMBOLS, on for the release workflow's
+# builds and installer/release.sh's, off for every other. A crash report from a player's host names
+# addresses in our binaries and nothing more, as a released binary carries no names of its own (A RELEASE
+# BINARY CARRIES NO LOCAL SYMBOLS, below); it can be read, months later, only with the symbols of the build
+# that made those very bytes. So a release compiles everything in its Release configuration with line tables
+# — the functions, their lines and what was inlined where, nothing of the variables: `-gline-tables-only`
+# (clang), `-g1` (gcc), `/Zi` (MSVC), none of which changes the code a compiler makes — and every format it
+# ships keeps its symbols in <build>/symbols/<target>/ (strip_release): a .dSYM on the Mac, a .pdb on
+# Windows, a .debug file on Linux, which the release uploads beside the run and never publishes. Said here,
+# before any dependency is fetched, so every library linked into a shipped binary is compiled the same way;
+# in each language's flags of the Release configuration, which reach the link line too (gcc writes the debug
+# information of an optimised-at-link binary there) and no resource compiler is handed. (The amps' .mm
+# sources are compiled as C++ here: no Objective-C language is enabled.)
+option(ORBITAMP_KEEP_SYMBOLS "Keep every shipped binary's symbols in <build>/symbols, then strip it (a release)" OFF)
+set(ORBITAMP_SYMBOLS_DIR "${CMAKE_BINARY_DIR}/symbols")
+if(ORBITAMP_KEEP_SYMBOLS)
+    if(MSVC)
+        set(_oa_line_tables /Zi)
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set(_oa_line_tables -g1)
+    else()
+        set(_oa_line_tables -gline-tables-only)
+    endif()
+    get_property(_oa_languages GLOBAL PROPERTY ENABLED_LANGUAGES)
+    foreach(lang IN ITEMS C CXX OBJC OBJCXX)
+        if(lang IN_LIST _oa_languages)
+            string(APPEND CMAKE_${lang}_FLAGS_RELEASE " ${_oa_line_tables}")
+        endif()
+    endforeach()
+    if(APPLE)
+        find_program(ORBITAMP_DSYMUTIL dsymutil REQUIRED)
+        find_program(ORBITAMP_DWARFDUMP dwarfdump REQUIRED)
+        # Where the link keeps its link-time-optimised object, one an architecture (strip_release).
+        set(ORBITAMP_LTO_OBJECTS_DIR "${CMAKE_BINARY_DIR}/lto-objects")
+        file(MAKE_DIRECTORY "${ORBITAMP_LTO_OBJECTS_DIR}")
+    elseif(UNIX AND NOT CMAKE_OBJCOPY)
+        message(FATAL_ERROR "ORBITAMP_KEEP_SYMBOLS: no objcopy found (CMAKE_OBJCOPY) to keep the symbols with")
+    endif()
+    message(STATUS "Symbols: every shipped binary keeps its symbols in ${ORBITAMP_SYMBOLS_DIR} (${_oa_line_tables})")
+endif()
+
 include(FetchContent)
 
 # ----------------------------------------------------------------------------
@@ -46,43 +87,23 @@ include(FetchContent)
 # full clone — but only while that tree is the pinned version; any other tree is passed over and
 # the pin is fetched, so a local build never quietly runs on a JUCE the CI does not. Bump the tag
 # deliberately.
-# ----------------------------------------------------------------------------
-set(ORBITAMP_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
-set(ORBITAMP_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
-    CACHE PATH "Local JUCE source tree (used if it is the pinned version); else the pin is fetched")
-string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _orbitamp_juce_want "${ORBITAMP_JUCE_TAG}")
-set(_orbitamp_juce_have "")
-if(ORBITAMP_JUCE_DIR AND EXISTS "${ORBITAMP_JUCE_DIR}/CMakeLists.txt")
-    file(STRINGS "${ORBITAMP_JUCE_DIR}/CMakeLists.txt" _orbitamp_juce_have
-        REGEX "^project\\(JUCE VERSION [0-9.]+" LIMIT_COUNT 1)
-    string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" _orbitamp_juce_have "${_orbitamp_juce_have}")
-    if(NOT _orbitamp_juce_have STREQUAL _orbitamp_juce_want)
-        message(STATUS "JUCE: local tree is ${_orbitamp_juce_have}, the pin is ${_orbitamp_juce_want} — passed over")
-    endif()
-endif()
-if(_orbitamp_juce_have AND _orbitamp_juce_have STREQUAL _orbitamp_juce_want)
-    message(STATUS "JUCE: local source — ${ORBITAMP_JUCE_DIR}")
-    FetchContent_Declare(juce SOURCE_DIR "${ORBITAMP_JUCE_DIR}")
-else()
-    message(STATUS "JUCE: fetching ${ORBITAMP_JUCE_TAG} from GitHub")
-    FetchContent_Declare(juce
-        GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-        GIT_TAG        ${ORBITAMP_JUCE_TAG}
-        GIT_SHALLOW    TRUE)
-endif()
-FetchContent_MakeAvailable(juce)
-
-# ----------------------------------------------------------------------------
+#
 # CLAP format via the MIT clap-juce-extensions wrapper (native CLAP is slated for JUCE 9).
 # Pinned like JUCE — the same commit OrbitCab ships. Upstream stopped tagging in 2022, so a
 # commit hash is their de-facto release channel.
+#
+# BOTH ARE PATCHED, so that one binary holds several plug-ins: the family's VST3 and CLAP hold every
+# amp of the release, each under the ids its own bundle always had (THE FAMILY'S PLUG-INS, below).
+# cmake/PatchedWrappers.cmake declares the two from these pins and says what the patches change and
+# what they leave alone; every target that defines no plug-in list builds as it did. The escape hatch
+# still saves the clone: the local tree, when it is the pin, is COPIED into this build and the copy
+# patched — another project's tree is never written to.
 # ----------------------------------------------------------------------------
+set(ORBITAMP_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
+set(ORBITAMP_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
+    CACHE PATH "Local JUCE source tree (copied and patched if it is the pinned version); else the pin is fetched")
 set(ORBITAMP_CLAP_EXT_TAG "51a9359315298de632cf44e9d7524940868441e6" CACHE STRING "clap-juce-extensions git commit to build against")
-FetchContent_Declare(
-    clap-juce-extensions
-    GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
-    GIT_TAG        ${ORBITAMP_CLAP_EXT_TAG})
-FetchContent_MakeAvailable(clap-juce-extensions)
+include(cmake/PatchedWrappers.cmake)
 
 # ----------------------------------------------------------------------------
 # felitronics-core — shared, JUCE-free, header-only DSP core (eq / dynamics / saturation /
@@ -109,7 +130,7 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 #
 # v0.51.0 is the first release felitronics-guitar-core accepts: nam, rigplayer and poweramp left core
 # for that repository in it (see below). v0.60.0 is the first with felitronics::dehum, the HumRemover
-# the input's HUM stage is built on. v0.61.0 is the freshest, and the first with felitronics::delay and
+# the input's HUM stage is built on. v0.61.0 is the first with felitronics::delay and
 # felitronics::reverb — the echo and the room, which were this repository's own stages until they moved
 # there, so nothing older builds here. Between v0.31.0 and
 # v0.53.0, nothing this plugin calls plays differently INSIDE a running stream —
@@ -131,7 +152,10 @@ FetchContent_MakeAvailable(clap-juce-extensions)
 # one read at that parked head to within 4e-8 — a time, not a level or a tone. A fresh room no longer
 # leaks the dry into its first 10 ms, and an Intel build plays the arm64 sound: the framework's Freeverb
 # under ours quantised its state on x86-64, up to 1e-6.
-set(ORBITAMP_FCORE_TAG "v0.61.0" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+#
+# v0.61.2 changes one thing here: the echo's and the room's `feed` — what the DELAY / REVERB switches stop — fades over 5 ms where it switched at one sample, which the repeats played back as ticks. Fed, both
+# render bit for bit as on v0.61.0 (v0.61.1 touches only a wasm build of FlushToZero.h).
+set(ORBITAMP_FCORE_TAG "v0.61.2" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
 
 set(ORBITAMP_FCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core"
     CACHE PATH "Local felitronics-core checkout (used if present); else the pinned release is fetched")
@@ -159,7 +183,25 @@ set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "orbit-amp's cabinet convolver uses the
 # second clone of trees this machine already has, and fall back to the pins when they are gone. From v0.1.1
 # it takes Eigen from Darwin's Cat's own mirror, github.com/darwinscat/eigen, instead of NeuralAmpModelerCore's
 # submodule on gitlab.com: a build now asks GitHub alone.
-set(ORBITAMP_GUITAR_TAG "v0.1.1" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
+#
+# v0.7.0 makes a LOAD cheap and leaves what plays alone: a .namz is built straight into NAM through
+# namz::decode instead of printed to JSON text and parsed back, a mono host gets one network per capture
+# instead of two (a recurrent one still gets two), and a load handed out by the player skips NAM's prewarm
+# of silence, since no slot is heard before live input has run through its receptive field. The seam this
+# tree calls — takeLoadJob / run / deliver (src/core/CapturedBlock.h) — is unchanged; LoadJob::channels is
+# new and takeLoadJob fills it in. It needs namz v4.4.0 (namz::decode, and the float16 .nam16z it widens),
+# pinned with it below: move the two together. One load of a real capture, measured on x86-64 (gcc,
+# Release): 25.5 ms on v0.1.1, 1.7 ms on v0.7.0 for a mono host and 3.3 ms for a stereo one; a copy held
+# for a mono host 6.2 MiB → 3.2 MiB.
+#
+# Past v0.1.1 ONE thing reaches what plays, and it came in v0.3.0: a capture's sound fades in only once
+# every capture the gain dial blends is ready, where it used to start rising while one of them was still
+# on its way and let the dry input through. Measured on 48 sessions through CapturedBlock — the twelve
+# packs of the set at 44.1, 48 and 96 kHz, mono and stereo, the dial turned SMOOTH and STEP and a switch
+# turned while playing, every load landing mid-session: v0.1.1 and v0.7.0 differ in the eight blocks of
+# the first fade-in alone — v0.7.0 silent through four blocks where v0.1.1 had begun to rise, then its own
+# fade, four blocks later — and in nothing after them; v0.6.0 and v0.7.0 are the same bit for bit in all 48.
+set(ORBITAMP_GUITAR_TAG "v0.7.0" CACHE STRING "felitronics-guitar-core release tag (fetched when no local checkout)")
 set(ORBITAMP_GUITAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-guitar-core"
     CACHE PATH "Local felitronics-guitar-core checkout (used if present); else the pinned release is fetched")
 
@@ -224,7 +266,18 @@ endif()
 # `serial_number`, `designed_in`, `made_in`), all of which were newer than the commit the NAM module
 # carried. Pinned HERE rather than waited for: a library release exists to move the library's own code,
 # and holding this behind one would leave the plugin unbuildable on CI for no reason of its own.
-set(ORBITAMP_NAMZ_TAG "v4.1.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
+#
+# THE TWO PINS MOVE TOGETHER. The tag here is FORCEd over the NAM module's own, so guitar-core's pin
+# never reaches this build — and since guitar-core v0.7.0 a fetched namz is held to FELITRONICS_NAMZ_COMMIT,
+# the commit of the tag the NAM module pins (v4.4.0's, 215d164, by default). This tag is guitar-core
+# v0.7.0's own, so the two agree and the commit is left at its default. A guitar-core bump moves this tag
+# to that release's namz pin in the same commit: a tag left behind stops the configure, naming both
+# commits. A namz bump made HERE alone, ahead of guitar-core, FORCEs FELITRONICS_NAMZ_COMMIT to the new
+# tag's commit beside it — a tag moved without its commit stops the configure the same way. The local
+# checkout (ORBITAMP_NAMZ_SRC) is not held to either, and is taken whenever it exists: on a namz older
+# than v4.3.0 the NAM module stops compiling (no namz::decode), and one older than v4.4.0 refuses every
+# float16 capture — keep it on v4.4.0 or later, or empty the override.
+set(ORBITAMP_NAMZ_TAG "v4.4.0" CACHE STRING "namz release tag CI builds against (no local checkout)")
 set(FELITRONICS_NAMZ_TAG "${ORBITAMP_NAMZ_TAG}" CACHE STRING "" FORCE)
 
 FetchContent_MakeAvailable(felitronics_core)
@@ -518,8 +571,10 @@ endfunction()
 #
 #   <Name>      the target, the PRODUCT_NAME and the stem of every bundle it builds; in lower case, its
 #               bundle id and its CLAP id, com.darwinscat.<name>; and its icon, resources/icon/<Name>-*.
-#               The name is the amp's own on the compiler's line too (src/Product.h): its settings, its
-#               presets and its update check go by it.
+#               It is the name of the amp's Product too (src/Product.h), which the amp's own file says —
+#               its settings, its presets and its update check go by it — and its plug-in's entry
+#               (createPluginFilter, beside the Product, compiled in under ORBITAMP_PLUGIN_ENTRY) makes
+#               a processor of that Product.
 #   CODE        its 4-char plug-in code, unique per plugin (OrbitCab holds `Orbt`). LOCK it before the
 #               first release: changing it afterwards makes hosts treat it as a different plugin. The
 #               manufacturer code is the family's, Dcat (Darwin's Cat — >=1 uppercase, AU rule; same as
@@ -546,6 +601,98 @@ endfunction()
 # never be handed are not built: Ogg Vorbis, FLAC, and Windows Media. Said for every amp and its gates alike.
 set(AMP_UNREAD_CODECS JUCE_USE_OGGVORBIS=0 JUCE_USE_FLAC=0 JUCE_USE_WINDOWS_MEDIA_FORMAT=0)
 
+# WHAT KIND OF PLUG-IN AN AMP IS, to a host: its VST3 categories and its CLAP features. Said once, for an
+# amp's own plug-in and for its entry in the family's (THE FAMILY'S PLUG-INS) alike.
+set(AMP_VST3_CATEGORIES Fx Distortion)
+set(AMP_CLAP_FEATURES audio-effect guitar amplifier)
+
+# A RELEASE BINARY CARRIES NO LOCAL SYMBOLS — tens of thousands of internal names, a fifth of a face's
+# binary. Its exports stay, which is all a host looks up (GetPluginFactory, the AU's factory, clap_entry):
+# `ld -x` on the Mac, `-s` on Linux, at the link of every format, the CLAP's too. A crash report from a
+# released amp shows addresses, not the names of its own functions. A Release build of MSVC's makes no
+# symbols at all. For every format of an amp (add_amp) and of the family's plug-ins (THE FAMILY'S PLUG-INS).
+#
+# A RELEASE (ORBITAMP_KEEP_SYMBOLS, above) KEEPS THEM FIRST, from the very link that is shipped, into
+# <build>/symbols/<target>/, which nothing that packs a release reads. The Mac and Linux link it whole and
+# strip it after (cmake/KeepSymbols.cmake, a step after the build): the Mac's dsymutil makes the .dSYM of
+# every architecture from what the link left, and `strip -S -x` then takes out what `ld -x` did — the
+# debug map with it — and a bundle the strip unsealed is signed ad hoc again, as JUCE's own step signs it;
+# Linux's objcopy keeps a .debug file, `strip --strip-all` takes out what `-s` did, and the binary is given
+# a .gnu_debuglink naming its debug file. The link-time optimisation's object is where a Mac binary's lines
+# are, and the linker throws it away unless told where to keep it: -object_path_lto, one path an
+# architecture (`-Xarch_`), or the second architecture's link of a universal binary writes over the first's.
+# On Windows the link writes the .pdb itself (/DEBUG) into the symbols folder, never beside the binary or
+# inside a VST3's folder that the installer copies whole — and says /OPT:REF and /OPT:ICF, which /DEBUG
+# would otherwise turn off, so the code it links is the code it linked before.
+function(strip_release)
+    foreach(target IN LISTS ARGN)
+        if(ORBITAMP_KEEP_SYMBOLS)
+            keep_symbols(${target})
+        elseif(APPLE)
+            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:LINKER:-x>)
+        elseif(UNIX)
+            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:-s>)
+        endif()
+    endforeach()
+endfunction()
+
+function(keep_symbols target)
+    set(dir "${ORBITAMP_SYMBOLS_DIR}/${target}")
+    if(MSVC)
+        target_link_options(${target} PRIVATE "$<$<CONFIG:Release>:/DEBUG:FULL;/OPT:REF;/OPT:ICF;/INCREMENTAL:NO>")
+        set_target_properties(${target} PROPERTIES PDB_OUTPUT_DIRECTORY_RELEASE "${dir}")
+        return()
+    endif()
+    if(APPLE)
+        foreach(arch IN LISTS CMAKE_OSX_ARCHITECTURES)
+            target_link_options(${target} PRIVATE
+                "$<$<CONFIG:Release>:SHELL:-Xarch_${arch} -Wl,-object_path_lto,${ORBITAMP_LTO_OBJECTS_DIR}/${target}-${arch}.o>")
+        endforeach()
+        set(tools "-DSTRIP=${CMAKE_STRIP}" "-DDSYMUTIL=${ORBITAMP_DSYMUTIL}" "-DDWARFDUMP=${ORBITAMP_DWARFDUMP}"
+                  "-DBUNDLE=$<TARGET_BUNDLE_DIR:${target}>")
+    else()
+        set(tools "-DSTRIP=${CMAKE_STRIP}" "-DOBJCOPY=${CMAKE_OBJCOPY}" "-DREADELF=${CMAKE_READELF}")
+    endif()
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" "-DCONFIG=$<CONFIG>" "-DBINARY=$<TARGET_FILE:${target}>" "-DSYMBOLS=${dir}"
+                ${tools} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/KeepSymbols.cmake"
+        COMMENT "${target}: keeping its symbols, then stripping it"
+        VERBATIM)
+endfunction()
+
+# A PLUG-IN EXPORTS ITS ENTRY POINTS AND NOTHING ELSE — on Linux, where nothing else sees to it. A host that
+# opens two of our binaries in one process — the family's VST3 and its CLAP, an amp's own bundle beside the
+# family's, two amps' own bundles — holds two copies of everything an amp is made of, and each copy must stay
+# its binary's own. JUCE is compiled with hidden visibility; the static libraries an amp links are not — NAM's
+# code (felitronics-guitar-core's felitronics_nam), the core's, the codecs' — and gcc emits a static of theirs
+# that must be one in a program (a registry, a function's static local) as a GNU_UNIQUE symbol, which the
+# dynamic linker makes ONE for the whole process, RTLD_LOCAL or not. So the second binary to load registered
+# its NAM models in the first's registry and stopped the process: "Config parser already registered for:
+# SlimmableContainer". Every Linux binary of a plug-in is linked with a version script that names its format's
+# entry points and makes every other symbol local, whatever library it came from and however that library was
+# compiled: cmake/exports/vst3.ver (GetPluginFactory, ModuleEntry, ModuleExit — what a VST3 host looks up) and
+# cmake/exports/clap.ver (clap_entry). Nothing of ours is in the process's symbol table for another binary to
+# meet, and a binary with no GNU_UNIQUE symbol can be unloaded again, as on the other systems. The standalones
+# are executables, which export nothing a host could meet, and are left alone. The Mac (two-level namespace)
+# and Windows (a DLL exports what it names) keep each binary's symbols its own already and are left as they
+# are. For every format of an amp (add_amp) and of the family's plug-ins (THE FAMILY'S PLUG-INS).
+function(export_entry_points_only)
+    if(APPLE OR NOT UNIX)
+        return()
+    endif()
+    foreach(target IN LISTS ARGN)
+        if(target MATCHES "_VST3$")
+            set(script "${CMAKE_CURRENT_SOURCE_DIR}/cmake/exports/vst3.ver")
+        elseif(target MATCHES "_CLAP$")
+            set(script "${CMAKE_CURRENT_SOURCE_DIR}/cmake/exports/clap.ver")
+        else()
+            continue()
+        endif()
+        target_link_options(${target} PRIVATE "LINKER:--version-script=${script}")
+        set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${script}")   # an edited script relinks
+    endforeach()
+endfunction()
+
 function(add_amp name)
     cmake_parse_arguments(PARSE_ARGV 1 AMP "BY_NAME;WHOLE_SHELF" "CODE" "SOURCES;LIBRARIES;ART;SET")
     string(TOLOWER "${name}" id)
@@ -568,7 +715,7 @@ function(add_amp name)
         PLUGIN_MANUFACTURER_CODE    Dcat
         PLUGIN_CODE                 ${AMP_CODE}
         FORMATS                     VST3 AU Standalone
-        VST3_CATEGORIES             "Fx" "Distortion"
+        VST3_CATEGORIES             ${AMP_VST3_CATEGORIES}
         AU_MAIN_TYPE                "kAudioUnitType_Effect"
         IS_SYNTH                    FALSE
         NEEDS_MIDI_INPUT            FALSE
@@ -593,7 +740,7 @@ function(add_amp name)
     # links its own headers into the plug-in, ahead of everything the amp links below.
     clap_juce_extensions_plugin(TARGET ${name}
         CLAP_ID       "com.darwinscat.${id}"
-        CLAP_FEATURES audio-effect "guitar" "amplifier")
+        CLAP_FEATURES ${AMP_CLAP_FEATURES})
 
     # The CLAP wrapper ships its own default clap.icns (the generic CLAP logo) and JUCE's ICON_BIG
     # does not reach it. Overwrite it in place with the AppIcon.icns juceaide already generated for
@@ -610,10 +757,12 @@ function(add_amp name)
     # THE FAMILY'S version, not the plugin wrapper's. `JucePlugin_VersionString` exists only inside a
     # target juce_add_plugin built, and the headless gates compile the very same UI sources without it —
     # so a face that read it built as a plugin and failed as a test. This one is defined for everything
-    # that compiles a face, with the amp's name beside it.
+    # that compiles a face. Which amp it is, is not on the compiler's line: it is the Product the
+    # processor is made with (src/Product.h), and only the plug-in's own entry is compiled here, in the
+    # amp's own file — a gate, or a binary of several amps, makes its processors itself.
     target_compile_definitions(${name} PUBLIC
-        ORBITAMP_VERSION="${PROJECT_VERSION}"
-        ORBITAMP_PRODUCT_NAME="${name}")
+        ORBITAMP_VERSION="${PROJECT_VERSION}")
+    target_compile_definitions(${name} PRIVATE ORBITAMP_PLUGIN_ENTRY=1)
     target_compile_definitions(${name} PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
@@ -670,23 +819,13 @@ function(add_amp name)
         endif()
     endforeach()
 
-    # A RELEASE BINARY CARRIES NO LOCAL SYMBOLS — tens of thousands of internal names, a fifth of a face's
-    # binary. Its exports stay, which is all a host looks up (GetPluginFactory, the AU's factory,
-    # clap_entry): `ld -x` on the Mac, `-s` on Linux, at the link of every format, the CLAP's too. A crash
-    # report from a released amp shows addresses, not the names of its own functions. MSVC writes its
-    # symbols to a .pdb beside the binary, which no installer packs, and is left as it is.
-    foreach(target IN LISTS formats)
-        if(APPLE)
-            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:LINKER:-x>)
-        elseif(UNIX)
-            target_link_options(${target} PRIVATE $<$<CONFIG:Release>:-s>)
-        endif()
-    endforeach()
+    strip_release(${formats})
+    export_entry_points_only(${formats})
 
     # BY_NAME: not part of the default build. OrbitAmp's own build — a contributor's, a pull request's —
     # must never fail on a face. Whoever wants one asks for it by name: one format (`cmake --build build
     # --target CatpitAmp_Standalone`), or all of them — `--target CatpitAmp_All`; the family's release
-    # asks for every amp it carries (Family_All).
+    # asks for the Standalone of every amp it carries, and holds their plug-ins in its own (Family_All).
     if(AMP_BY_NAME)
         set_target_properties(${name} ${formats} PROPERTIES EXCLUDE_FROM_ALL TRUE)
     endif()
@@ -696,13 +835,16 @@ function(add_amp name)
 
     set_property(TARGET ${name} PROPERTY AMP_SOURCES ${AMP_SOURCES})
     set_property(TARGET ${name} PROPERTY AMP_LIBRARIES ${libraries})
+    set_property(TARGET ${name} PROPERTY AMP_CODE ${AMP_CODE})
     set(AMPS ${AMPS} ${name} PARENT_SCOPE)
 endfunction()
 
 # AN AMP'S GATES are the amp compiled again under a main() of its own — its sources, its libraries, the
 # family's version and its name, as add_amp was given them, and the build's factory folder for what it
-# plays — and are built only when asked for by name. CHANNELS is how many channels the gate holds it to
-# (GATE_CHANNELS), said apart from the amp's lineup. NO_FACTORY plays it with no factory folder at all.
+# plays — and are built only when asked for by name. The gate makes its processors of the amp's Product,
+# ORBITAMP_GATE_PRODUCT — orbitamp::products::<name> with its first letter small (src/Product.h).
+# CHANNELS is how many channels the gate holds it to (GATE_CHANNELS), said apart from the amp's lineup.
+# NO_FACTORY plays it with no factory folder at all.
 function(amp_console target product amp main)
     cmake_parse_arguments(PARSE_ARGV 4 GATE "NO_FACTORY" "CHANNELS" "")
     get_target_property(sources ${amp} AMP_SOURCES)
@@ -712,9 +854,13 @@ function(amp_console target product amp main)
     target_sources(${target} PRIVATE ${main} ${sources})
     target_include_directories(${target} PRIVATE src "${ORBITAMP_GENERATED_DIR}")
     add_dependencies(${target} OrbitAmpVersionGen)
+    string(SUBSTRING "${amp}" 0 1 first)
+    string(SUBSTRING "${amp}" 1 -1 rest)
+    string(TOLOWER "${first}" first)
     target_compile_definitions(${target} PRIVATE
         ORBITAMP_VERSION="${PROJECT_VERSION}"
-        ORBITAMP_PRODUCT_NAME="${amp}")
+        ORBITAMP_PRODUCT_NAME="${amp}"
+        ORBITAMP_GATE_PRODUCT=orbitamp::products::${first}${rest})
     if(GATE_CHANNELS)
         target_compile_definitions(${target} PRIVATE GATE_CHANNELS=${GATE_CHANNELS})
     endif()
@@ -822,22 +968,54 @@ foreach(folder IN LISTS ORBITAMP_SET_FOLDERS)
 endforeach()
 add_custom_target(OrbitAmpSetPacks DEPENDS ${ORBITAMP_SET_PACKS})
 
-# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — but the ones
-# put away. A pack added there is OrbitAmp's from the next build on, with nobody to remember to list it.
-#
-# PUT AWAY, the Victory V4's six: in the tree still, for the faces that play them in a build of this tree
-# (FrostPawAmp, AmberPawAmp), but no longer the family's devices — the family will play the V4 again from
-# new captures, with the power amp inside — and in no amp of the release, so in no installer.
-set(ORBITAMP_SET_PUT_AWAY "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
-foreach(pack IN LISTS ORBITAMP_SET_PUT_AWAY)
-    if(NOT pack IN_LIST ORBITAMP_SET_NAMES)
-        message(FATAL_ERROR "ORBITAMP_SET_PUT_AWAY names ${pack}, which resources/set/Devices has not")
-    endif()
-endforeach()
+# WHAT ORBITAMP PLAYS: every pack in resources/set/Devices — every folder there, zipped — the X88-IR's,
+# the IR-X's, the ReVolt's and the V4's, each one file in the family's folder whichever amps play it. A
+# pack added there is OrbitAmp's from the next build on, with nobody to remember to list it; a pack the
+# tree keeps but OrbitAmp should not play has no place in resources/set/Devices.
 set(ORBITAMP_PLAYS ${ORBITAMP_SET_NAMES})
-list(REMOVE_ITEM ORBITAMP_PLAYS ${ORBITAMP_SET_PUT_AWAY})
+
+# WHAT EACH OTHER AMP PLAYS of the set, said once — its row in THE AMPS names it by these.
+set(CATPITAMP_SET   "Soldano X88-IR Normal" "Soldano X88-IR Altered" "Soldano X88-IR Crunch" "Soldano X88-IR Overdrive")
+set(REDPAWAMP_SET   "Friedman IR-X Ch1 PowerAmp" "Friedman IR-X Ch2 PowerAmp")
+set(FROSTPAWAMP_SET "Two Notes ReVolt Clean PowerAmp" "Two Notes ReVolt Crunch PowerAmp" "Two Notes ReVolt Lead PowerAmp")
+set(AMBERPAWAMP_SET "Victory V4 Copper (clean)" "Victory V4 Sheriff (crunch)" "Victory V4 Kraken (hi-gain)")
+
+# A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT. A release (ORBITAMP_DEV_FACTORY OFF) carries the amps
+# installer/family.ini names; the packs only an amp it leaves out plays — today AmberPawAmp's V4 — are not
+# OrbitAmp's there either, so they wait for their own amp. Built here, OrbitAmp
+# plays them all.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini" ORBITAMP_RELEASED REGEX "^amps=")
+string(REGEX REPLACE "^amps=" "" ORBITAMP_RELEASED "${ORBITAMP_RELEASED}")
+separate_arguments(ORBITAMP_RELEASED)
+if(NOT ORBITAMP_DEV_FACTORY)
+    set(kept "")
+    set(left "")
+    foreach(amp CatpitAmp RedPawAmp FrostPawAmp AmberPawAmp)
+        string(TOUPPER "${amp}" key)
+        if(amp IN_LIST ORBITAMP_RELEASED)
+            list(APPEND kept ${${key}_SET})
+        else()
+            list(APPEND left ${${key}_SET})
+        endif()
+    endforeach()
+    foreach(pack IN LISTS left)
+        if(NOT pack IN_LIST kept)
+            list(REMOVE_ITEM ORBITAMP_PLAYS "${pack}")
+        endif()
+    endforeach()
+endif()
 list(LENGTH ORBITAMP_PLAYS ORBITAMP_SET_COUNT)
 message(STATUS "OrbitAmp Devices: ${ORBITAMP_SET_COUNT} in the factory folder")
+# Which of the rovers' devices OrbitAmp plays here, for its set gate: the ReVolt with FrostPawAmp, the V4 with
+# AmberPawAmp — each in a release only when its amp is.
+foreach(amp FROSTPAWAMP AMBERPAWAMP)
+    list(GET ${amp}_SET 0 first)
+    if(first IN_LIST ORBITAMP_PLAYS)
+        set(${amp}_PACKS_IN_ORBITAMP 1)
+    else()
+        set(${amp}_PACKS_IN_ORBITAMP 0)
+    endif()
+endforeach()
 
 # ----------------------------------------------------------------------------
 # Embedded assets. The display FACE is not among them: appkit carries Michroma itself, whole, as
@@ -956,7 +1134,8 @@ set(AMP_ENGINE_LIBRARIES
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures)      # ValueTree behind the workspace / presets
 
-# OrbitAmp — the player: the processor, its face (src/ui), and its first start (OrbitAmpStart.cpp).
+# OrbitAmp — the player: the processor, its face (src/ui), and OrbitAmp itself — its Product, its first
+# start, its plug-in's entry (OrbitAmpStart.cpp).
 set(ORBITAMP_SOURCES
     src/PluginProcessor.cpp
     src/PluginEditor.cpp
@@ -973,12 +1152,10 @@ set(ORBITAMP_SOURCES
     src/ui/DemoStrip.cpp
     src/ui/Footer.cpp
     src/ui/SetupPanel.cpp
+    src/ui/WebFaceplate.cpp
     src/ui/library/DeviceListView.cpp
-    src/ui/library/IrTreeView.cpp)
-# ...and the gates that play OrbitAmp's processor compile the same sources less its first start: each
-# stands in a firstStart() of its own that does nothing (PluginProcessor.h).
-set(ORBITAMP_GATE_SOURCES ${ORBITAMP_SOURCES})
-list(REMOVE_ITEM ORBITAMP_GATE_SOURCES src/OrbitAmpStart.cpp)
+    src/ui/library/IrTreeView.cpp
+    src/face/Controls.cpp)           # the family's controls — the AMP's channel lever is a face::DetentLever
 
 # A FACE is the family's console (src/face) over the family's channels (src/channels), on the same
 # processor: what the cockpit and every rover are compiled from before their own.
@@ -999,15 +1176,16 @@ set(FACE_SOURCES
     src/face/Picture.cpp
     src/face/Renders.cpp
     src/face/Sheet.cpp
-    src/face/Standalone.cpp)
+    src/face/Standalone.cpp
+    src/face/WebImages.cpp)
 
-# CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and two
-# faces, each target compiling exactly one `makeEditor`. Its renders are in resources/catpit, as
+# CatpitAmp — the cockpit: a second face over the same processor (src/catpit), one processor and a face
+# for each product, which the product names (src/Product.h). Its renders are in resources/catpit, as
 # bake-art made them, and lie in its own folder of the factory, Faces/CatpitAmp. What the cockpit is made
 # of is said once, for the plug-in and for its gates, which are the cockpit compiled again under a main()
 # of their own.
 set(CATPITAMP_RENDERS
-    cockpit.webp lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp midi.txt knob-drive.webp knob-tone.webp
+    cockpit.webp lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp midi.txt knob-drive.webp knob-tone.webp socket.webp
     throttle-grip.webp guard-closed.webp guard-open.webp guard-on.webp fader-cap.webp sky-clean.jpg
     sky-edge.jpg sky-crunch.jpg sky-hi-gain.jpg mark.svg)
 list(TRANSFORM CATPITAMP_RENDERS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/resources/catpit/")
@@ -1020,6 +1198,7 @@ set(CATPITAMP_SOURCES
     src/catpit/CatpitGlSky.cpp
     src/catpit/CatpitSkyGl.cpp
     src/catpit/CatpitEditor.cpp
+    src/shaders/GpuLog.cpp
     src/shaders/Shaders.cpp)
 
 # THE WORLDS a windscreen looks out on — views that take values and no processor, so they stand on their
@@ -1032,6 +1211,7 @@ set(REDPAW_VIEW_SOURCES
     src/redpaw/view/PlainsWorld.cpp
     src/redpaw/view/PlainsGl.cpp
     src/redpaw/view/Windscreen.cpp
+    src/shaders/GpuLog.cpp
     src/shaders/Shaders.cpp)
 set(FROSTPAW_VIEW_SOURCES
     src/frostpaw/view/IceWorld.cpp
@@ -1068,17 +1248,44 @@ add_executable(titan_world_test tests/TitanWorldTests.cpp src/amberpaw/view/Tita
 target_include_directories(titan_world_test PRIVATE src)
 target_compile_features(titan_world_test PRIVATE cxx_std_20)
 
+# The GPU's refusals, written down (src/shaders/GpuLog.h): a refusal leaves its line in the family's log, and
+# the log keeps its newest half past its cap. JUCE's core and the log, nothing else.
+juce_add_console_app(orbitamp_gpu_log_test PRODUCT_NAME "OrbitAmpGpuLogTest")
+target_sources(orbitamp_gpu_log_test PRIVATE tests/GpuLogTests.cpp src/shaders/GpuLog.cpp)
+target_include_directories(orbitamp_gpu_log_test PRIVATE src)
+target_compile_definitions(orbitamp_gpu_log_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_gpu_log_test PRIVATE
+    juce::juce_core
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(orbitamp_gpu_log_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# The pictures of a face's kit for the site, as the site reads them (src/face/WebImages.h): WebP, its alpha
+# kept only where a picture has a hole and then lossless, the three sizes and their names, sprites/. JUCE's
+# graphics and libwebp's encoder, nothing of a face.
+juce_add_console_app(orbitamp_web_images_test PRODUCT_NAME "OrbitAmpWebImagesTest")
+target_sources(orbitamp_web_images_test PRIVATE tests/WebImagesTests.cpp src/face/WebImages.cpp)
+target_include_directories(orbitamp_web_images_test PRIVATE src)
+target_compile_definitions(orbitamp_web_images_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_web_images_test PRIVATE
+    felitronics::appkit_webp
+    juce::juce_graphics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+set_target_properties(orbitamp_web_images_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
 # THE ROVER'S FACE IS WORN BY MORE THAN ONE PRODUCT (src/redpaw/RedPawSkin.h): what every rover is made
 # of is said once here — the renders by the file names the face asks for, as bake-art made them, the
 # sources, the libraries — and each product adds its own skin's file and its own renders. The lamps a
 # dashboard paints lit, cut out of it, are a rover's own too: there where its picture paints them.
 set(ROVER_RENDERS
-    dashboard.webp midi.txt mark.svg knob-drive.webp knob-tone.webp lever.webp lever-glow.webp
+    dashboard.webp midi.txt mark.svg knob-drive.webp knob-tone.webp socket.webp key-frame-left.webp
+    key-frame-cell.webp key-frame-right.webp lever.webp lever-glow.webp
     slider-cap.webp fader-cap.webp fader-cap-light.webp toggle-up.webp toggle-down.webp key-up.webp
     key-down.webp turbo-up.webp turbo-down.webp)
 set(ROVER_LAMPS lamp-0.webp lamp-1.webp lamp-2.webp lamp-3.webp)
 
-set(REDPAWAMP_RENDERS ${ROVER_RENDERS} ${ROVER_LAMPS} turbo-lid.webp)     # ...its lamps, and TURBO's hatch shut, its own
+set(REDPAWAMP_RENDERS ${ROVER_RENDERS} ${ROVER_LAMPS})     # ...and its lamps
 list(TRANSFORM REDPAWAMP_RENDERS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/")
 # ...and the STILL it ships, one frame of its world, where there is one: never another rover's.
 file(GLOB REDPAWAMP_STILL CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/still.jpg")
@@ -1087,9 +1294,8 @@ list(APPEND REDPAWAMP_RENDERS ${REDPAWAMP_STILL})
 # Every other rover's renders are in resources/<face>, under the rover's names; one that is not there
 # yet is RedPawAmp's. So a render of its own is a file dropped in there and nothing more: the folder is
 # looked at again on every build. ...and renders a rover may carry or not — the maker's mark raised in
-# its own metal, instead of engraved; TURBO's hatch shut, instead of open on PARK too: there when the
-# file is, and nothing in its place when it is not. Never RedPawAmp's: a rusted hatch on frosted steel
-# would be a patch.
+# its own metal, instead of engraved: there when the file is, and nothing in its place when it is not.
+# Never RedPawAmp's: its rust on frosted steel would be a patch.
 function(rover_renders out face)
     set(folder "${CMAKE_CURRENT_SOURCE_DIR}/resources/${face}")
     file(GLOB own CONFIGURE_DEPENDS "${folder}/*")
@@ -1101,7 +1307,7 @@ function(rover_renders out face)
             list(APPEND renders "${CMAKE_CURRENT_SOURCE_DIR}/resources/redpaw/${render}")
         endif()
     endforeach()
-    foreach(render IN ITEMS emblem.webp turbo-lid.webp still.jpg ${ROVER_LAMPS})
+    foreach(render IN ITEMS emblem.webp still.jpg ${ROVER_LAMPS})
         if("${folder}/${render}" IN_LIST own)
             list(APPEND renders "${folder}/${render}")
         endif()
@@ -1134,8 +1340,8 @@ set(ROVER_LIBRARIES
 # version and tags of its own, catpit-vX.Y.Z; from 0.8.0 on every amp's update check reads the family's.
 # ----------------------------------------------------------------------------
 
-# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole but what is
-# put away (ORBITAMP_PLAYS, above), and the whole cabinet shelf.
+# OrbitAmp — the player of the whole library, and the default build. It plays THE SET whole — in a release
+# but the packs of an amp the release leaves out (ORBITAMP_PLAYS, above) — and the whole cabinet shelf.
 add_amp(OrbitAmp      CODE Oamp
     SOURCES   ${ORBITAMP_SOURCES}
     LIBRARIES
@@ -1157,7 +1363,7 @@ add_amp(CatpitAmp     CODE Ctpt    BY_NAME
         OrbitAmpShaders              # the sky's shaders
         ${AMP_ENGINE_LIBRARIES}
         juce::juce_opengl            # the sky, on the GPU
-    SET       "X88-IR Normal" "X88-IR Altered" "X88-IR Crunch" "X88-IR Overdrive")
+    SET       ${CATPITAMP_SET})
 
 # RedPawAmp — the rover: a third face over the same processor (src/redpaw), the dashboard of a Mars rover
 # with the drive across Mars in its windscreen. Four channels — the Friedman IR-X's two, each with its
@@ -1168,31 +1374,31 @@ add_amp(RedPawAmp     CODE Rdpw    BY_NAME
     ART       ${REDPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} src/redpaw/RedPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "IR-X Ch1 PowerAmp" "IR-X Ch2 PowerAmp")
+    SET       ${REDPAWAMP_SET})
 
 # FrostPawAmp — the ice moon's rover: a fourth face over the same processor, RedPawAmp's dashboard worn
 # over a picture of its own (src/frostpaw/FrostPawSkin.cpp) — frosted stainless steel, amber lamps,
-# ice-blue rings. The same controls, TURBO and PARK: the rover's, shared, not copied — over channels of
-# its own, six on the V4's six packs in three gears, and the rovers' cabinets; its set under its own list
-# in the family's folder (src/channels/Set.h), where a file another product plays too is one file. Not in
-# the family's release yet (installer/family.ini), so none of it is in the release's factory folder.
+# ice-blue rings. The same controls, the gears and TURBO: the rover's, shared, not copied — over channels of
+# its own, six on the ReVolt Guitar's three packs in three gears, and the rovers' cabinets; its set under
+# its own list in the family's folder (src/channels/Set.h), where a file another product plays too is one
+# file. In the family's release from 0.9.0 (installer/family.ini).
 add_amp(FrostPawAmp   CODE Frpw    BY_NAME
     ART       ${FROSTPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${FROSTPAW_VIEW_SOURCES} src/frostpaw/FrostPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
+    SET       ${FROSTPAWAMP_SET})
 
 # AmberPawAmp — a helicopter over Titan's methane sea: a fifth face over the same processor, the rovers'
 # dashboard worn over a cockpit of its own (src/amberpaw/AmberPawSkin.cpp) — dark gunmetal under a canopy
 # of three panes, its tuner a gauge, its meters dots — and out of its canopy, the flight over the sea.
-# The same controls, TURBO and PARK: the rovers', shared, not copied — over the V4's six channels in three
-# gears, its set for now FrostPawAmp's until it has captures of its own, and the rovers' cabinets. Not in
+# The same controls, the gears and TURBO: the rovers', shared, not copied — over the V4's six channels in three
+# gears, the V4's six packs until it has captures of its own, and the rovers' cabinets. Not in
 # the family's release yet (installer/family.ini).
 add_amp(AmberPawAmp   CODE Ambp    BY_NAME
     ART       ${AMBERPAWAMP_RENDERS}
     SOURCES   ${ROVER_SOURCES} ${AMBERPAW_VIEW_SOURCES} src/amberpaw/AmberPawSkin.cpp
     LIBRARIES ${ROVER_LIBRARIES}
-    SET       "V4 Copper" "V4 Copper TB" "V4 Sheriff Ch1" "V4 Sheriff Ch2" "V4 Kraken Ch1" "V4 Kraken Ch2")
+    SET       ${AMBERPAWAMP_SET})
 
 # ----------------------------------------------------------------------------
 # THE FACES' GATES — each a face's own, so built only by name (amp_console, amp_set_test).
@@ -1205,7 +1411,7 @@ amp_console(catpitamp_memory_probe  "CatpitAmpMemoryProbe"  CatpitAmp  tests/Mem
 # AN AMP'S GATES, the same two for the cockpit and every rover, run as that amp — what tells one amp
 # from another, the gates read in tests/AmpGate.h. Its channels with no window at all — as many as
 # CHANNELS says, each with its own memory and what it opens on, moved by CHANNEL the way a host moves
-# it; the rover's gears and the Boost each holds, PARK, the cockpit's DRIVE on its dial — and its set as
+# it; the rover's gears and the Boost each holds, the cockpit's DRIVE on its dial — and its set as
 # it — and its set as the build lays it out in the factory folder, under its own list, whole and nothing
 # else; that one reads pack manifests (DeviceLibrary.h, through namz).
 set(AMP_SET_GATE_LIBRARIES felitronics::nam juce::juce_core juce::juce_events juce::juce_gui_basics)
@@ -1229,30 +1435,395 @@ amp_console(orbitamp_no_factory_test  "OrbitAmpNoFactoryTest"   OrbitAmp     tes
 amp_console(catpitamp_no_factory_test "CatpitAmpNoFactoryTest"  CatpitAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
 amp_console(redpawamp_no_factory_test "RedPawAmpNoFactoryTest"  RedPawAmp    tests/NoFactoryTests.cpp   NO_FACTORY)
 
+# ORBITAMP'S FACE AS THE SITE GETS IT (src/ui/WebFaceplate.h): a fresh OrbitAmp writes the kit, and the kit
+# builds the face back — its own format, every place on the stage, the hull the poster less its places.
+amp_console(orbitamp_webface_test     "OrbitAmpWebFaceTest"     OrbitAmp     tests/WebFaceTests.cpp)
+
+# EVERY AMP IN ONE BINARY: the sources of all of them, each once, and their libraries, under one main() —
+# what a plug-in of several amps will be. Its gate plays them side by side in one process, each a processor
+# of its own Product, two of them at once: each its own name, its own list in the build's factory folder,
+# its own channels and its own settings (tests/FamilyTests.cpp). An amp that defined something under a name
+# another defines too would not link here.
+set(family_sources "")
+set(family_libraries "")
+foreach(amp IN LISTS AMPS)
+    get_target_property(sources ${amp} AMP_SOURCES)
+    get_target_property(libraries ${amp} AMP_LIBRARIES)
+    list(APPEND family_sources ${sources})
+    list(APPEND family_libraries ${libraries})
+endforeach()
+list(REMOVE_DUPLICATES family_sources)
+list(REMOVE_DUPLICATES family_libraries)
+list(REMOVE_ITEM family_libraries juce::juce_recommended_lto_flags)    # a gate links in seconds, not minutes
+juce_add_console_app(orbitamp_family_test PRODUCT_NAME "OrbitAmpFamilyTest")
+target_sources(orbitamp_family_test PRIVATE tests/FamilyTests.cpp ${family_sources})
+target_include_directories(orbitamp_family_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_family_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_family_test PRIVATE
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
+target_link_libraries(orbitamp_family_test PRIVATE ${family_libraries})
+gate_reads_factory(orbitamp_family_test)
+set_target_properties(orbitamp_family_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# THE INPUT'S LEVEL: unity at every amp's input control, the pack's own level feeding the model, and a
+# cockpit's or a rover's state of 0.8.0's, absolute, feeding it and gating as it did — every amp, so the
+# family's sources (tests/InputLevelTests.cpp), out of the build's factory folder.
+juce_add_console_app(orbitamp_input_level_test PRODUCT_NAME "OrbitAmpInputLevelTest")
+target_sources(orbitamp_input_level_test PRIVATE tests/InputLevelTests.cpp ${family_sources})
+target_include_directories(orbitamp_input_level_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_input_level_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_input_level_test PRIVATE
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
+target_link_libraries(orbitamp_input_level_test PRIVATE ${family_libraries})
+gate_reads_factory(orbitamp_input_level_test)
+set_target_properties(orbitamp_input_level_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# THE BOOST'S LEVEL: while an amp's boost is on — OrbitAmp's BOOST key, the rovers' TURBO, the cockpit's
+# TURBO push — the amp leaves that much louder, ramped, exactly, ahead of the limiter; with it off not at
+# all, bit for bit — every amp, so the family's sources (tests/BoostLevelTests.cpp), out of the build's
+# factory folder.
+juce_add_console_app(orbitamp_boost_level_test PRODUCT_NAME "OrbitAmpBoostLevelTest")
+target_sources(orbitamp_boost_level_test PRIVATE tests/BoostLevelTests.cpp ${family_sources})
+target_include_directories(orbitamp_boost_level_test PRIVATE src "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_boost_level_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_boost_level_test PRIVATE
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 ${AMP_UNREAD_CODECS})
+target_link_libraries(orbitamp_boost_level_test PRIVATE ${family_libraries})
+gate_reads_factory(orbitamp_boost_level_test)
+set_target_properties(orbitamp_boost_level_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+
 # ----------------------------------------------------------------------------
-# THE FAMILY'S RELEASE: `--target Family_All` builds every format of every amp installer/family.ini
-# names — the list each family installer packs (build-family-pkg.sh, darwinscat-amps.iss,
-# build-family-linux.sh) — so what is built for the release and what is packed are one list, said in one
-# place. The file is read the way those read it, by its `amps=` line, and is looked at again when it
-# changes; a name there that is no amp here stops the configure, since an installer would go looking for
-# bundles nothing builds.
+# THE FAMILY'S RELEASE: `--target Family_All` builds what the family's installers pack — the family's
+# plug-ins, ONE bundle per format that holds every amp installer/family.ini names (THE FAMILY'S PLUG-INS,
+# below), each of those amps' Standalone, and the release's factory folder — so what is built for the
+# release and what is packed are one list, said in one place (build-family-pkg.sh, darwinscat-amps.iss,
+# build-family-linux.sh, build-family-zip.sh read nothing else). The file is read the way those read it, by
+# its `amps=`, `bundle=` and `bundle_target=` lines, and is looked at again when it changes; a name there
+# that is no amp here stops the configure, since an installer would go looking for what nothing builds.
 # ----------------------------------------------------------------------------
 set(FAMILY_INI "${CMAKE_CURRENT_SOURCE_DIR}/installer/family.ini")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FAMILY_INI}")
-file(STRINGS "${FAMILY_INI}" FAMILY_AMPS REGEX "^amps=")
-string(REGEX REPLACE "^amps=" "" FAMILY_AMPS "${FAMILY_AMPS}")
+
+# One `key=value` line of family.ini, its value as the installers read it.
+function(family_ini key out)
+    file(STRINGS "${FAMILY_INI}" value REGEX "^${key}=")
+    string(REGEX REPLACE "^${key}=" "" value "${value}")
+    string(STRIP "${value}" value)
+    set(${out} "${value}" PARENT_SCOPE)
+endfunction()
+
+family_ini(amps FAMILY_AMPS)
 string(REGEX MATCHALL "[^ \t\r]+" FAMILY_AMPS "${FAMILY_AMPS}")
-if(NOT FAMILY_AMPS)
-    message(FATAL_ERROR "installer/family.ini names no amps")
+family_ini(bundle FAMILY_BUNDLE)
+family_ini(bundle_target FAMILY_BUNDLE_TARGET)
+if(NOT FAMILY_AMPS OR NOT FAMILY_BUNDLE OR NOT FAMILY_BUNDLE_TARGET)
+    message(FATAL_ERROR "installer/family.ini names no amps, no bundle or no bundle_target")
 endif()
 add_custom_target(Family_All)
 foreach(amp IN LISTS FAMILY_AMPS)
     if(NOT amp IN_LIST AMPS)
         message(FATAL_ERROR "installer/family.ini names ${amp}, which is no amp of this tree (${AMPS})")
     endif()
-    add_dependencies(Family_All ${amp}_All)
+    add_dependencies(Family_All ${amp}_Standalone)
 endforeach()
-message(STATUS "The family's release (Family_All): ${FAMILY_AMPS}")
+list(JOIN FAMILY_AMPS ", " family_amps_said)
+message(STATUS "The family's release (Family_All): ${FAMILY_BUNDLE} (${FAMILY_BUNDLE_TARGET}) holding ${family_amps_said}, and their standalones")
+
+# ----------------------------------------------------------------------------
+# THE FAMILY'S PLUG-INS — ONE binary per format, "Darwin's Cat Amps" (family.ini's `bundle=`), built by the
+# target family.ini names (`bundle_target=`, DarwinsCatAmps): every amp of the release in one VST3, one CLAP
+# and, on the Mac, one AU, each under the ids its own bundle has always had — its VST3 classes made of the
+# family's manufacturer code, Dcat, and its own CODE, its Audio Unit aufx/<CODE>/Dcat, and its CLAP id,
+# com.darwinscat.<name> — so a session saved with an amp's own bundle opens it from the family's unchanged.
+# The wrappers are patched to hold a list (cmake/PatchedWrappers.cmake). The binary's own code, Dcam, and
+# CLAP id, com.darwinscat.amps, name no plug-in a host is shown: the list names those.
+#
+# THE LIST IS WRITTEN HERE, at configure time, into <build>/generated/family: FamilyPluginList.h, what the
+# wrappers read (JUCE_PLUGIN_LIST_HEADER) — each amp's name, its CODE, its CLAP id, and the categories and
+# features every amp has (AMP_VST3_CATEGORIES, AMP_CLAP_FEATURES), in family.ini's order —
+# FamilyProducts.h, the Product each entry is made with, orbitamp::products::<name> with its first letter
+# small (src/Product.h), and the AU's Info.plist (THE AU'S COMPONENTS, below). All of them come from
+# family.ini's `amps=` and each amp's row in THE AMPS, never from a second list kept by hand; a name with no
+# Product does not compile. The binary's entry, createPluginFilter (const juce::PluginListEntry&), is
+# src/FamilyPlugin.cpp.
+#
+# IT IS EVERY AMP'S OWN PLUG-IN, COMPILED ONCE: the sources of every amp of the release, each once, and their
+# libraries — as the family's gate links them (EVERY AMP IN ONE BINARY) — built as add_amp builds an amp:
+# the family's version, the same definitions, link-time optimisation, no codec an amp never reads, no local
+# symbols in a release, and the build's factory folder first (ORBITAMP_DEV_FACTORY). No amp's own entry is
+# compiled in (ORBITAMP_PLUGIN_ENTRY): the list's makes them all. Nor is ASIO: a plug-in opens no device.
+#
+# An amp's own VST3, AU and CLAP (add_amp) stay, for development — OrbitAmp's in the default build, every
+# other amp's by name — and the release never builds them: it ships these and each amp's Standalone
+# (Family_All), and a host that found an amp's own bundle beside the family's would see the amp twice, under
+# one id. For the same reason the family's bundles are never copied into the user's plug-in folders after a
+# build: ORBITAMP_COPY_PLUGIN copies an amp's own.
+# ----------------------------------------------------------------------------
+set(FAMILY_GENERATED_DIR "${ORBITAMP_GENERATED_DIR}/family")
+list(JOIN AMP_VST3_CATEGORIES "|" family_categories)
+set(family_features "")
+foreach(feature IN LISTS AMP_CLAP_FEATURES)
+    string(APPEND family_features "\"${feature}\", ")
+endforeach()
+set(family_entries "")
+set(family_products "")
+set(family_plugin_sources "")
+set(family_plugin_libraries "")
+foreach(amp IN LISTS FAMILY_AMPS)
+    get_target_property(code ${amp} AMP_CODE)
+    string(LENGTH "${code}" length)
+    if(NOT length EQUAL 4)
+        message(FATAL_ERROR "${amp}'s CODE, '${code}', is not four characters")
+    endif()
+    string(TOLOWER "${amp}" id)
+    string(SUBSTRING "${amp}" 0 1 first)
+    string(SUBSTRING "${amp}" 1 -1 rest)
+    string(TOLOWER "${first}" first)
+    string(APPEND family_entries
+        "    { \"${amp}\", \"${code}\", \"com.darwinscat.${id}\", \"${family_categories}\", familyClapFeatures },\n")
+    string(APPEND family_products "    { \"${code}\", &products::${first}${rest} },\n")
+
+    get_target_property(sources ${amp} AMP_SOURCES)
+    get_target_property(libraries ${amp} AMP_LIBRARIES)
+    list(APPEND family_plugin_sources ${sources})
+    list(APPEND family_plugin_libraries ${libraries})
+endforeach()
+list(REMOVE_DUPLICATES family_plugin_sources)
+list(REMOVE_DUPLICATES family_plugin_libraries)
+
+file(CONFIGURE OUTPUT "${FAMILY_GENERATED_DIR}/FamilyPluginList.h" @ONLY CONTENT [=[
+// WRITTEN BY THE BUILD (CMakeLists.txt: THE FAMILY'S PLUG-INS) from installer/family.ini's `amps=` and each
+// amp's row in THE AMPS — never edited. The plug-ins the family's one VST3, CLAP and AU hold, in the order
+// hosts show them, each under its own ids (juce_PluginList.h, which the patched JUCE carries). Plain data,
+// nothing of JUCE: the VST3 manifest helper compiles it too.
+#pragma once
+
+#include <juce_audio_plugin_client/juce_PluginList.h>
+
+inline constexpr const char* familyClapFeatures[] { @family_features@nullptr };
+
+inline constexpr juce::PluginListEntry jucePluginList[]
+{
+@family_entries@};
+]=])
+
+file(CONFIGURE OUTPUT "${FAMILY_GENERATED_DIR}/FamilyProducts.h" @ONLY CONTENT [=[
+// WRITTEN BY THE BUILD (CMakeLists.txt: THE FAMILY'S PLUG-INS), beside FamilyPluginList.h and from the same
+// rows — never edited. The Product each plug-in of the family's list is made with, by its code
+// (src/FamilyPlugin.cpp); a name with no Product (src/Product.h) does not compile.
+#pragma once
+
+#include "Product.h"
+
+namespace orbitamp::family
+{
+struct Plugin
+{
+    const char* code;
+    const Product& (*product)();
+};
+
+inline constexpr Plugin plugins[]
+{
+@family_products@};
+} // namespace orbitamp::family
+]=])
+
+# Its icon: the family's own, resources/icon/<bundle_target>-*.png, where there is one — and until there is,
+# its first amp's, family.ini's first: what a bundle's own icon is shown as, and nothing a host lists.
+list(GET FAMILY_AMPS 0 family_first)
+foreach(stem IN ITEMS ${FAMILY_BUNDLE_TARGET} ${family_first})
+    if(APPLE)
+        set(family_icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${stem}-macOS-1024.png")
+    else()
+        set(family_icon "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/${stem}-1024.png")
+    endif()
+    if(EXISTS "${family_icon}")
+        break()
+    endif()
+endforeach()
+
+juce_add_plugin(${FAMILY_BUNDLE_TARGET}
+    VERSION                     "${PROJECT_VERSION}"
+    PRODUCT_NAME                "${FAMILY_BUNDLE}"
+    COMPANY_NAME                "Darwin's Cat"
+    BUNDLE_ID                   "com.darwinscat.amps"
+    PLUGIN_MANUFACTURER_CODE    Dcat
+    PLUGIN_CODE                 Dcam
+    FORMATS                     VST3 AU               # AU on the Mac alone, as an amp's own (add_amp)
+    VST3_CATEGORIES             ${AMP_VST3_CATEGORIES}
+    AU_MAIN_TYPE                "kAudioUnitType_Effect"
+    IS_SYNTH                    FALSE
+    NEEDS_MIDI_INPUT            FALSE
+    NEEDS_MIDI_OUTPUT           FALSE
+    IS_MIDI_EFFECT              FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    ICON_BIG                    "${family_icon}"
+    COPY_PLUGIN_AFTER_BUILD     FALSE)
+
+# The code every format links, a library no one ships, named without the bundle's apostrophe. JUCE calls
+# it "<PRODUCT_NAME>_SharedCode", and the Visual Studio generator's MSBuild (VS 18's Microsoft.CppBuild
+# targets) quotes a format's whole list of link inputs in single quotes inside a condition — where the
+# apostrophe in "Darwin's Cat Amps" ends the string and stops the link of the VST3 and the CLAP
+# (MSB4100). Ninja never quotes it, which is why the pull request's Windows build did not see it.
+set_target_properties(${FAMILY_BUNDLE_TARGET} PROPERTIES OUTPUT_NAME "${FAMILY_BUNDLE_TARGET}_SharedCode")
+
+clap_juce_extensions_plugin(TARGET ${FAMILY_BUNDLE_TARGET}
+    CLAP_ID       "com.darwinscat.amps"
+    CLAP_FEATURES ${AMP_CLAP_FEATURES})
+
+# The CLAP's icon, as an amp's own (add_amp): the wrapper's generic clap.icns overwritten with the bundle's.
+if(APPLE)
+    add_custom_command(TARGET ${FAMILY_BUNDLE_TARGET}_CLAP POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+                "$<TARGET_PROPERTY:${FAMILY_BUNDLE_TARGET},JUCE_ICON_FILE>"
+                "$<TARGET_BUNDLE_DIR:${FAMILY_BUNDLE_TARGET}_CLAP>/Contents/Resources/clap.icns"
+        VERBATIM)
+endif()
+
+# THE AU'S COMPONENTS. A host finds an Audio Unit in its bundle's Info.plist, one AudioComponents entry per
+# plug-in, before it loads the binary — and JUCE writes one entry, the binary's own (PLUGIN_CODE, named as
+# the bundle). Here that entry is the pattern of one for every amp of the list, in family.ini's order: the
+# amp's name in it, "<company>: <Amp>", as an amp's own build names its AU, its description, <Amp>, and its
+# CODE as the subtype — and the rest as JUCE wrote it: the type, the manufacturer, the version, the resource
+# usage, and the one factory function the binary exports for them all. So each is the entry the amp's own
+# AU had, but for that function; the binary's own entry is gone, as its VST3 and CLAP name no plug-in of
+# their own either. The patched wrapper makes the amp whose CODE is the subtype of the component a host
+# opened. Written at configure time beside the list's headers, and the bundle's plist from then on.
+if(TARGET ${FAMILY_BUNDLE_TARGET}_AU)
+    get_target_property(family_au_juce_plist ${FAMILY_BUNDLE_TARGET}_AU MACOSX_BUNDLE_INFO_PLIST)
+    get_target_property(family_au_code ${FAMILY_BUNDLE_TARGET} JUCE_PLUGIN_CODE)
+    file(READ "${family_au_juce_plist}" family_au_plist)
+    set(family_au_space "[ \t\r\n]*")
+
+    # JUCE's AudioComponents: the key, the array's opening, its one entry and what closes it.
+    string(FIND "${family_au_plist}" "<key>AudioComponents</key>" family_au_at)
+    if(family_au_at LESS 0)
+        message(FATAL_ERROR "JUCE wrote no AudioComponents into ${family_au_juce_plist}")
+    endif()
+    string(SUBSTRING "${family_au_plist}" ${family_au_at} -1 family_au_rest)
+    string(FIND "${family_au_rest}" "</array>" family_au_length)
+    string(SUBSTRING "${family_au_rest}" 0 ${family_au_length} family_au_components)
+    string(CONCAT family_au_one "^(<key>AudioComponents</key>${family_au_space}<array>)"
+                                "(${family_au_space})(<dict>.*</dict>)(${family_au_space})$")
+    if(NOT family_au_components MATCHES "${family_au_one}")
+        message(FATAL_ERROR "The AudioComponents JUCE wrote are not one entry: ${family_au_components}")
+    endif()
+    set(family_au_open "${CMAKE_MATCH_1}")
+    set(family_au_indent "${CMAKE_MATCH_2}")
+    set(family_au_pattern "${CMAKE_MATCH_3}")
+    set(family_au_close "${CMAKE_MATCH_4}")
+
+    # The pattern is the binary's own entry, named "<company>: <bundle>", or this reads JUCE wrong.
+    set(family_au_name_at "(<key>name</key>${family_au_space}<string>)([^<]*)(</string>)")
+    set(family_au_description_at "(<key>description</key>${family_au_space}<string>)([^<]*)(</string>)")
+    set(family_au_subtype_at "(<key>subtype</key>${family_au_space}<string>)([^<]*)(</string>)")
+    string(REGEX MATCH "${family_au_name_at}" ignored "${family_au_pattern}")
+    set(family_au_name "${CMAKE_MATCH_2}")
+    string(REGEX MATCH "${family_au_description_at}" ignored "${family_au_pattern}")
+    set(family_au_description "${CMAKE_MATCH_2}")
+    string(REGEX MATCH "${family_au_subtype_at}" ignored "${family_au_pattern}")
+    set(family_au_subtype "${CMAKE_MATCH_2}")
+    string(LENGTH "${family_au_name}" family_au_name_length)
+    string(LENGTH "${FAMILY_BUNDLE}" family_au_bundle_length)
+    math(EXPR family_au_prefix_length "${family_au_name_length} - ${family_au_bundle_length}")
+    set(family_au_named "")
+    if(family_au_prefix_length GREATER 0)
+        string(SUBSTRING "${family_au_name}" 0 ${family_au_prefix_length} family_au_prefix)
+        string(SUBSTRING "${family_au_name}" ${family_au_prefix_length} -1 family_au_named)
+    endif()
+    if(NOT family_au_named STREQUAL FAMILY_BUNDLE OR NOT family_au_description STREQUAL FAMILY_BUNDLE
+       OR NOT family_au_subtype STREQUAL family_au_code)
+        message(FATAL_ERROR "JUCE's AudioComponents entry is not the binary's own: ${family_au_pattern}")
+    endif()
+
+    # One entry per amp, from the list's rows.
+    set(family_au_entries "")
+    foreach(amp IN LISTS FAMILY_AMPS)
+        get_target_property(code ${amp} AMP_CODE)
+        set(entry "${family_au_pattern}")
+        string(REGEX REPLACE "${family_au_name_at}" "\\1${family_au_prefix}${amp}\\3" entry "${entry}")
+        string(REGEX REPLACE "${family_au_description_at}" "\\1${amp}\\3" entry "${entry}")
+        string(REGEX REPLACE "${family_au_subtype_at}" "\\1${code}\\3" entry "${entry}")
+        string(APPEND family_au_entries "${family_au_indent}${entry}")
+    endforeach()
+
+    string(LENGTH "${family_au_components}" family_au_length)
+    math(EXPR family_au_after_at "${family_au_at} + ${family_au_length}")
+    string(SUBSTRING "${family_au_plist}" 0 ${family_au_at} family_au_before)
+    string(SUBSTRING "${family_au_plist}" ${family_au_after_at} -1 family_au_after)
+    set(family_au_info "${FAMILY_GENERATED_DIR}/AU/Info.plist")
+    file(WRITE "${family_au_info}"
+        "${family_au_before}${family_au_open}${family_au_entries}${family_au_close}${family_au_after}")
+    set_target_properties(${FAMILY_BUNDLE_TARGET}_AU PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${family_au_info}")
+endif()
+
+target_sources(${FAMILY_BUNDLE_TARGET} PRIVATE src/FamilyPlugin.cpp ${family_plugin_sources})
+
+# The list's header is the shared code's, PUBLIC like every definition here: the VST3 manifest helper is
+# compiled with the shared code's definitions and include path, and reads the list to write moduleinfo.json.
+# The products' header finds src/Product.h on the path too.
+target_include_directories(${FAMILY_BUNDLE_TARGET} PUBLIC "${ORBITAMP_GENERATED_DIR}" "${FAMILY_GENERATED_DIR}")
+target_include_directories(${FAMILY_BUNDLE_TARGET} PRIVATE src)
+add_dependencies(${FAMILY_BUNDLE_TARGET} OrbitAmpVersionGen)
+target_compile_definitions(${FAMILY_BUNDLE_TARGET} PUBLIC
+    JUCE_PLUGIN_LIST_HEADER="FamilyPluginList.h"
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    ${AMP_UNREAD_CODECS})
+target_link_libraries(${FAMILY_BUNDLE_TARGET} PRIVATE ${family_plugin_libraries})   # the LTO flags among them
+add_dependencies(${FAMILY_BUNDLE_TARGET} Family_Factory)
+if(ORBITAMP_DEV_FACTORY)
+    target_compile_definitions(${FAMILY_BUNDLE_TARGET} PRIVATE ORBITAMP_DEV_FACTORY="${ORBITAMP_FACTORY_DIR}")
+endif()
+set(family_formats ${FAMILY_BUNDLE_TARGET}_VST3 ${FAMILY_BUNDLE_TARGET}_CLAP)
+if(TARGET ${FAMILY_BUNDLE_TARGET}_AU)
+    list(APPEND family_formats ${FAMILY_BUNDLE_TARGET}_AU)
+endif()
+strip_release(${family_formats})
+export_entry_points_only(${family_formats})
+
+# Faces are in it, so it is built by name, as they are: `--target DarwinsCatAmps_All` (VST3, CLAP and the
+# Mac's AU), or with the rest of the release, Family_All.
+set_target_properties(${FAMILY_BUNDLE_TARGET} ${family_formats} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(${FAMILY_BUNDLE_TARGET}_All ${FAMILY_BUNDLE_TARGET}_CLAP)
+add_dependencies(Family_All ${FAMILY_BUNDLE_TARGET}_All)
+
+# THE FAMILY'S PLUG-INS AS A HOST OPENS THEM (tests/BundleHost.cpp): the VST3, the CLAP and, on the Mac, the AU
+# beside the VST3 held to the ids each amp's own bundle shipped with, each amp its own in them, two and more
+# alive at once — and, given a build where the amps' own VST3s were built, each held to its own. Not a gate:
+# it opens built bundles, which no gate waits for; built by name, run by hand or by the CI after Family_All:
+#
+#   <build>/orbitamp_bundle_host_artefacts/Release/orbitamp_bundle_host \
+#       "<build>/DarwinsCatAmps_artefacts/Release/VST3/Darwin's Cat Amps.vst3" \
+#       "<build>/DarwinsCatAmps_artefacts/Release/CLAP/Darwin's Cat Amps.clap" [<build>]
+string(JOIN " " family_amps_line ${FAMILY_AMPS})
+set(bundle_host_au FALSE)
+if(APPLE)
+    set(bundle_host_au TRUE)   # JUCE's AU host, and the framework its views need
+endif()
+juce_add_console_app(orbitamp_bundle_host PRODUCT_NAME "OrbitAmpBundleHost" PLUGINHOST_AU ${bundle_host_au})
+target_sources(orbitamp_bundle_host PRIVATE tests/BundleHost.cpp)
+target_include_directories(orbitamp_bundle_host PRIVATE "${clap-juce-extensions_SOURCE_DIR}/clap-libs/clap/include")
+target_compile_definitions(orbitamp_bundle_host PRIVATE
+    ORBITAMP_VERSION="${PROJECT_VERSION}"
+    ORBITAMP_FAMILY_AMPS="${family_amps_line}"
+    JUCE_PLUGINHOST_VST3=1
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0)
+target_link_libraries(orbitamp_bundle_host PRIVATE
+    juce::juce_audio_processors
+    juce::juce_recommended_config_flags)
+set_target_properties(orbitamp_bundle_host PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 # ...and the factory folder of every amp, and of the family's alone (THE FACTORY FOLDER).
 family_factory()
@@ -1396,7 +1967,7 @@ target_link_libraries(orbitamp_ribbon_test PRIVATE
 # sources rather than a stage of it, because what this checks is the wiring between them.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_chain_test PRODUCT_NAME "OrbitAmpChainTest")
-target_sources(orbitamp_chain_test PRIVATE tests/ChainTests.cpp ${ORBITAMP_GATE_SOURCES})
+target_sources(orbitamp_chain_test PRIVATE tests/ChainTests.cpp ${ORBITAMP_SOURCES})   # it plays OrbitAmp with no first start
 target_include_directories(orbitamp_chain_test PRIVATE src)
 target_include_directories(orbitamp_chain_test PRIVATE "${ORBITAMP_GENERATED_DIR}")   # the same faces, the same stamp
 add_dependencies(orbitamp_chain_test OrbitAmpVersionGen)
@@ -1414,13 +1985,19 @@ gate_reads_factory(orbitamp_chain_test)   # OrbitAmp's whole shelf, and its pack
 # which listens after the trim: AUTO takes a mains hum off; an INPUT trim moved mid-stream does not
 # bring it back, because the stage sits ahead of the trim; OFF hands the input on bit for bit; and a
 # demo loop with no hum in it passes untouched. Needs no pack: the input path is ahead of every block.
+#
+# HUM is switched off in every amp for now (src/Features.h), so the gate is built twice from the one
+# file. This one throws the switch (ORBITAMP_FEATURE_HUM=1) and tests the stage, which has to stay ready
+# for the day HUM comes back; orbitamp_hum_off_test, below, is built as the products are and holds the
+# switch itself.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_hum_test PRODUCT_NAME "OrbitAmpHumTest")
-target_sources(orbitamp_hum_test PRIVATE tests/HumTests.cpp ${ORBITAMP_GATE_SOURCES})
+target_sources(orbitamp_hum_test PRIVATE tests/HumTests.cpp ${ORBITAMP_SOURCES})       # ...and so does this one
 target_include_directories(orbitamp_hum_test PRIVATE src)
 target_include_directories(orbitamp_hum_test PRIVATE "${ORBITAMP_GENERATED_DIR}")
 add_dependencies(orbitamp_hum_test OrbitAmpVersionGen)
 target_compile_definitions(orbitamp_hum_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                    ORBITAMP_FEATURE_HUM=1
                                                     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(orbitamp_hum_test PRIVATE
     OrbitAmpData
@@ -1428,6 +2005,26 @@ target_link_libraries(orbitamp_hum_test PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 gate_reads_factory(orbitamp_hum_test)     # OrbitAmp's processor, its whole shelf with it
+
+# ----------------------------------------------------------------------------
+# Gate for HUM SWITCHED OFF (src/Features.h), the processor built as every amp ships it: with the
+# machine's settings on AUTO — as a machine that chose AUTO before keeps them — the stage is never
+# prepared and never runs, the mode in force is OFF with no LEARN, and a hummed input passes bit for
+# bit. The same file as the hum gate, which runs only this part of itself when the switch is off.
+# ----------------------------------------------------------------------------
+juce_add_console_app(orbitamp_hum_off_test PRODUCT_NAME "OrbitAmpHumOffTest")
+target_sources(orbitamp_hum_off_test PRIVATE tests/HumTests.cpp ${ORBITAMP_SOURCES})
+target_include_directories(orbitamp_hum_off_test PRIVATE src)
+target_include_directories(orbitamp_hum_off_test PRIVATE "${ORBITAMP_GENERATED_DIR}")
+add_dependencies(orbitamp_hum_off_test OrbitAmpVersionGen)
+target_compile_definitions(orbitamp_hum_off_test PRIVATE ORBITAMP_VERSION="${PROJECT_VERSION}"
+                                                        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(orbitamp_hum_off_test PRIVATE
+    OrbitAmpData
+    ${AMP_ENGINE_LIBRARIES}
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+gate_reads_factory(orbitamp_hum_off_test)
 
 # ----------------------------------------------------------------------------
 # Gate for reading an .orbitrig pack and playing it through the block the plugin plays it with —
@@ -1473,13 +2070,15 @@ target_link_libraries(orbitamp_library_test PRIVATE
 
 # ----------------------------------------------------------------------------
 # Gate for OrbitAmp's set as the build lays it out in the factory folder — every pack OrbitAmp plays, under
-# a name the device list tells apart, none of what is put away, and the whole cabinet shelf in its folders;
+# a name the device list tells apart, every pack of the tree's set, and the whole cabinet shelf in its folders;
 # the list it reads is the build's own, <build>/Factory/sets/OrbitAmp.txt.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_set_test PRODUCT_NAME "OrbitAmpSetTest")
 target_sources(orbitamp_set_test PRIVATE tests/OrbitAmpSetTests.cpp)
 target_include_directories(orbitamp_set_test PRIVATE src)
-target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(orbitamp_set_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+    ORBITAMP_PLAYS_REVOLT=${FROSTPAWAMP_PACKS_IN_ORBITAMP}      # a release leaves the unreleased amps' packs out
+    ORBITAMP_PLAYS_V4=${AMBERPAWAMP_PACKS_IN_ORBITAMP})
 target_link_libraries(orbitamp_set_test PRIVATE
     OrbitAmpCabinetCatalog           # the family's cabinet shelf, by the catalog's table
     felitronics::nam                 # DeviceLibrary.h reads pack manifests through namz

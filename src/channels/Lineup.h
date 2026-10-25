@@ -36,14 +36,9 @@ struct Lineup
 
     const char* nodeType;       // the product's node in the state tree, where the channels' memory is kept
     const char* parameterId;    // CHANNEL, the host's handle on the selector
-    const char* leverZeroId;    // the note beside INPUT's trim: the zero of INPUT's lever it was dialled against
     const char* openingCabinet; // the cabinet a channel opens on, by the stem of its file's name
 
     std::vector<Channel> channels;
-
-    /** PARK, where the product has it: a switch of its own that takes the whole amp out of the sound
-        (ProductEngine::parkSwitch) — its parameter's id, or none. */
-    const char* parkId = nullptr;
 
     /** CHANNELS IN PAIRS OVER ONE MEMORY, where the product has them: each channel and the next play
         their two packs over one set of everything else — DRIVE, the tones by their knobs, the keys, the

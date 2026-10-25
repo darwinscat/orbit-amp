@@ -29,7 +29,7 @@ namespace
         std::printf ("%s %-44s got %.12g want %.12g\n", ok ? "  ok " : "FAIL ", what, got, want);
     }
 
-    struct Flight { int gear; bool turbo, park; double time, seconds; };
+    struct Flight { int gear; bool turbo; double time, seconds; };
     struct Seen { double x, z, headingDeg, speed, boost, down; int drops, trails, fields, buoys; double wiper, saturn, erupt; };
 
     /** The prototype's drive(): placed at the start at `time`, flown `seconds` at 60 steps a second. */
@@ -38,7 +38,7 @@ namespace
         TitanWorld w (4);
         w.build();
         const auto start = w.start();
-        w.place (start[0], start[1], 0, f.gear, f.turbo, f.park);
+        w.place (start[0], start[1], 0, f.gear, f.turbo);
         w.setClock (f.time, 0);
         for (int i = 0, n = (int) std::lround (f.seconds * 60); i < n; ++i)
             w.step (1.0 / 60);
@@ -73,16 +73,14 @@ int main()
     }
 
     // gear 1 cruising; mid-wipe at the 60 s cycle; the top gear's TURBO dash (the prototype's gear 3 is
-    // this one's 4: both 13.5 m/s); PARK, a hover; Saturn out of the haze with the volcano erupting.
-    fly ("gear 1", { 1, false, false, 500, 20 },
+    // this one's 4: both 13.5 m/s); Saturn out of the haze with the volcano erupting.
+    fly ("gear 1", { 1, false, 500, 20 },
          { 256670.5237666793, 208677.9750098219, 20.84581875896388, 2.4, 0, 0.922, 18, 0, 1, 3, -1, 0.9977801343954082, 1 });
-    fly ("mid-wipe", { 1, false, false, 500, 60.5 },
+    fly ("mid-wipe", { 1, false, 500, 60.5 },
          { 256631.1051304885, 208598.59017425295, -35.840917064358074, 2.4, 0, 0.922, 102, 0, 2, 5, 0.4750092592586006, 0.62, 1 });
-    fly ("TURBO dash", { 4, true, false, 500, 20 },
+    fly ("TURBO dash", { 4, true, 500, 20 },
          { 256788.5112697613, 208206.27835703193, 20.84581875896388, 27, 1, 0.25, 73, 900, 1, 3, -1, 0.9977801343954082, 1 });
-    fly ("PARK", { 1, false, true, 500, 20 },
-         { 256659.01279076934, 208723.99419546127, 0, 0, 0, 1, 18, 0, 0, 0, -1, 0.9977801343954082, 1 });
-    fly ("Saturn up", { 1, false, false, 455, 10 },
+    fly ("Saturn up", { 1, false, 455, 10 },
          { 256655.92652608608, 208700.3944584778, -22.529391457508343, 2.4, 0, 0.922, 21, 0, 1, 2, -1, 1, 0.7344960103876313 });
 
     std::printf ("the gears\n");
@@ -128,7 +126,7 @@ int main()
             TitanWorld w (4);
             w.build();
             const auto start = w.start();
-            w.place (start[0], start[1], 0, 1, false, false);
+            w.place (start[0], start[1], 0, 1, false);
             w.setClock (500, 0);
             w.setWipers (speed);
             int wipes = 0;

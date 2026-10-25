@@ -21,6 +21,8 @@ class Cockpit final : public face::Picture
 {
 private:
     void paintStatic (juce::Graphics&, float scale) const override;
+    void paintStrips (juce::Graphics&, float scale) const override;
+    juce::Colour signInk() const override { return face::labelLilac.withAlpha (0.75f); }     // as quiet as the filter keys' signs at rest
     void paintLive (juce::Graphics&) const override;
     juce::Rectangle<int> historyArea() const override;
 
@@ -79,7 +81,7 @@ private:
     bool handOnGlass = false;       // the button went down on the glass: a drag steers, a click is the menu
 
     // The throttle picks the channel — its pack, and everything that channel was left with — and TURBO
-    // pushes the capture: the preamp's input trim, at the push the settings give or at nothing.
+    // is the AMP's boost (params::preampBoost), which each channel keeps.
     Lever lever;
     GuardButton turbo;
 
@@ -99,4 +101,9 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CatpitEditor)
 };
 
+/** The cockpit's face (Product::makeEditor) — or, with its pictures missing, the notice that says where
+    they belong. */
+juce::AudioProcessorEditor* makeEditor (AmpProcessor&);
+
 } // namespace orbitamp::catpit
+

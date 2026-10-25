@@ -7,6 +7,8 @@
 
 #include <array>
 #include <cmath>
+#include <functional>
+
 
 namespace orbitamp::prefs::humtune
 {
@@ -43,27 +45,27 @@ float snap (const float (&offered)[N], float v)
     return best;
 }
 
-inline std::atomic<float>& playCache()
+inline std::atomic<float>& playCache (const Product& p)
 {
-    static std::atomic<float> cached { snap (playWidths, (float) (double) store().get (playKey, playDefault)) };
-    return cached;
+    static PerProduct<std::atomic<float>> cached;
+    return cached.of (p.name, [&p] { return snap (playWidths, (float) (double) store (p).get (playKey, playDefault)); });
 }
 
-inline std::atomic<float>& quietCache()
+inline std::atomic<float>& quietCache (const Product& p)
 {
-    static std::atomic<float> cached { snap (quietWidths, (float) (double) store().get (quietKey, quietDefault)) };
-    return cached;
+    static PerProduct<std::atomic<float>> cached;
+    return cached.of (p.name, [&p] { return snap (quietWidths, (float) (double) store (p).get (quietKey, quietDefault)); });
 }
 
-inline std::atomic<float>& upToCache()
+inline std::atomic<float>& upToCache (const Product& p)
 {
-    static std::atomic<float> cached { snap (upTos, (float) (double) store().get (upToKey, upToDefault)) };
-    return cached;
+    static PerProduct<std::atomic<float>> cached;
+    return cached.of (p.name, [&p] { return snap (upTos, (float) (double) store (p).get (upToKey, upToDefault)); });
 }
 
-inline void setPlay (float v)  { v = snap (playWidths, v);  playCache().store (v, std::memory_order_relaxed);  store().set (playKey, v); }
-inline void setQuiet (float v) { v = snap (quietWidths, v); quietCache().store (v, std::memory_order_relaxed); store().set (quietKey, v); }
-inline void setUpTo (float v)  { v = snap (upTos, v);       upToCache().store (v, std::memory_order_relaxed);  store().set (upToKey, v); }
+inline void setPlay (const Product& p, float v)  { v = snap (playWidths, v);  playCache (p).store (v, std::memory_order_relaxed);  store (p).set (playKey, v); }
+inline void setQuiet (const Product& p, float v) { v = snap (quietWidths, v); quietCache (p).store (v, std::memory_order_relaxed); store (p).set (quietKey, v); }
+inline void setUpTo (const Product& p, float v)  { v = snap (upTos, v);       upToCache (p).store (v, std::memory_order_relaxed);  store (p).set (upToKey, v); }
 
 /** A number as a person writes it: no trailing zeros, no bare point. */
 inline juce::String plain (float v)
@@ -86,14 +88,16 @@ struct Knob
     int          count;
     float        now;
     juce::String (*say) (float);
-    void         (*choose) (float);
+    std::function<void (float)> choose;
 };
 
-inline std::array<Knob, 3> knobs()
+/** The product's three. */
+inline std::array<Knob, 3> knobs (const Product& p)
 {
-    return { { { "Width playing", playWidths,  (int) std::size (playWidths),  playCache().load(),  hz,  setPlay },
-               { "Width quiet",   quietWidths, (int) std::size (quietWidths), quietCache().load(), hz,  setQuiet },
-               { "Up to",         upTos,       (int) std::size (upTos),       upToCache().load(),  kHz, setUpTo } } };
+    return { { { "Width playing", playWidths,  (int) std::size (playWidths),  playCache (p).load(),  hz,  [&p] (float v) { setPlay (p, v); } },
+               { "Width quiet",   quietWidths, (int) std::size (quietWidths), quietCache (p).load(), hz,  [&p] (float v) { setQuiet (p, v); } },
+               { "Up to",         upTos,       (int) std::size (upTos),       upToCache (p).load(),  kHz, [&p] (float v) { setUpTo (p, v); } } } };
 }
+
 
 } // namespace orbitamp::prefs::humtune

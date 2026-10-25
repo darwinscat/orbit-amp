@@ -5,9 +5,10 @@
 //
 // Each face's renders are painted once and kept as they were painted, in resources/<face>/source. What a
 // face draws is not quite that: a rover's dashboard has its rims made taller for the words, its notches
-// fitted to the product's gears, its corner plates grown for a fader, and the lamps it paints lit cut out
-// of it, to be lit again from the engine; the cockpit's render has its windshield cut out and its tone
-// sockets and TURBO frame raised; a lever has a glow the shape of it, a throttle grip is rebuilt. Each
+// fitted to the product's gears, its corner plates grown for a fader, the lamps it paints lit cut out
+// of it, to be lit again from the engine, and the rings it and the sockets paint round the knobs taken
+// out, to be drawn whole by the face; the cockpit's render has its windshield cut out and its TURBO
+// frame raised; a lever has a glow the shape of it, a throttle grip is rebuilt. Each
 // face used to do that itself on every start. This does it once, and writes what comes out into
 // resources/<face> as lossless WebP — the panel, each render, each sprite made from one — and that is
 // what a product carries and draws as it is (src/face/Renders.h). The numbers each correction was

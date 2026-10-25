@@ -1,0 +1,9 @@
+/* What a CLAP of ours exports on Linux (CMakeLists.txt: A PLUG-IN EXPORTS ITS ENTRY POINTS AND NOTHING ELSE):
+   clap_entry, the one symbol a CLAP host looks up, and nothing else. Every other symbol of the binary, from
+   whatever library, is local. */
+{
+    global:
+        clap_entry;
+    local:
+        *;
+};

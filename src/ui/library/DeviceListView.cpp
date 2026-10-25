@@ -63,7 +63,8 @@ struct DeviceListView::Row final : public juce::Component
 };
 
 //==============================================================================
-DeviceListView::DeviceListView (device::DeviceLibrary::Slot wanted) : slot (wanted)
+DeviceListView::DeviceListView (const juce::String& productName, device::DeviceLibrary::Slot wanted)
+    : product (productName), slot (wanted)
 {
     viewport.setScrollBarsShown (true, false);
     viewport.setViewedComponent (&content, false);
@@ -77,7 +78,7 @@ DeviceListView::DeviceListView (device::DeviceLibrary::Slot wanted) : slot (want
     }
 
     addButton.onClick    = [this] { addClicked(); };
-    revealButton.onClick = [] { device::DeviceLibrary::directory().revealToUser(); };
+    revealButton.onClick = [this] { device::DeviceLibrary::directory (product).revealToUser(); };
 }
 
 DeviceListView::~DeviceListView() = default;
@@ -90,7 +91,7 @@ void DeviceListView::rebuild()
     // Only the user's layer — the factory devices are the build's, not this panel's to edit —
     // and only this tab's slot, the same cut the block's own selector makes. EVERY file, though:
     // the selectors show one entry per capture, and a copy hidden here could never be removed.
-    auto packs = device::DeviceLibrary::scan (slot, false);
+    auto packs = device::DeviceLibrary::scan (product, slot, false);
     packs.removeIf ([] (const device::DeviceLibrary::Pack& p) { return p.bundled; });
 
     for (int i = 0; i < packs.size(); ++i)
@@ -208,7 +209,7 @@ void DeviceListView::importPaths (const juce::StringArray& paths)
     {
         juce::String refused;
 
-        if (device::DeviceLibrary::importDevice (juce::File (p), device::DeviceLibrary::directory(),
+        if (device::DeviceLibrary::importDevice (product, juce::File (p), device::DeviceLibrary::directory (product),
                                                  device::DeviceLibrary::bundledDirectory(),
                                                  [] (const juce::File& f) { return f.moveToTrash(); },
                                                  &refused) != juce::File())
@@ -231,7 +232,7 @@ void DeviceListView::importPaths (const juce::StringArray& paths)
 void DeviceListView::removePack (int index)
 {
     if (juce::isPositiveAndBelow (index, (int) rows.size())
-        && device::DeviceLibrary::removeDevice (rows[(size_t) index]->pack))
+        && device::DeviceLibrary::removeDevice (product, rows[(size_t) index]->pack))
         changedLater();
 }
 

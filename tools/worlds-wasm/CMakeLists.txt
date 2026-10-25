@@ -127,7 +127,7 @@ inline const char* getNamedResourceOriginalFilename (const char* name)
 # view.h names; `EXTRA` are a world's own beyond them.
 # ----------------------------------------------------------------------------
 set(ORBITAMP_VIEW_CALLS
-    _view_make _view_build _view_context _view_create _view_error _view_gear _view_turbo _view_park _view_settle
+    _view_make _view_build _view_context _view_create _view_error _view_gear _view_turbo _view_settle
     _view_frame _view_draw _view_test _view_read _view_read_width _view_read_height _view_destroy)
 
 function(orbitamp_world name factory)

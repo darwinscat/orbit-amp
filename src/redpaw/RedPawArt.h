@@ -21,10 +21,15 @@ namespace orbitamp::redpaw
     and its lit lamps cut out of it; every control is a render of its own, drawn at its place: the knobs
     without a pointer (the pointer is drawn), the lever's T grip seen from above with its collar, the
     slider and fader caps, the roof's toggle up and down, the square keys and TURBO each up and pressed. */
+struct Skin;
+
 struct Art
 {
+
     juce::Image bg;                    // the dashboard, its windscreen transparent, its lamps out
     juce::Image knobDrive, knobTone;
+    juce::Image socket;                // a tone knob's socket, its ring and its bolts: drawn as many times as the pack has tones
+    juce::Image keyFrameLeft, keyFrameCell, keyFrameRight;     // the right group's frame: a cap, a cell a key, a cap
     juce::Image lever;
     juce::Image leverGlow;             // a soft light the shape of the lever, white, `leverGlowPad` wider all round
     static constexpr int leverGlowPad = 26;    // in the lever render's own pixels, as bake-art made it
@@ -33,7 +38,6 @@ struct Art
     juce::Image toggleUp, toggleDown;
     juce::Image keyUp, keyDown;
     juce::Image turboUp, turboDown;
-    juce::Image turboLid;              // TURBO's hatch shut, over layout::turboLid, where the rover has one; else it stays open
     juce::Image emblem;               // the maker's mark raised in the rover's own metal, where it has one; else it is engraved
 
     /** The lamps (layout::lamps), each as the dashboard painted it lit, over the box it is laid back
@@ -41,15 +45,17 @@ struct Art
         picture paints no lamp lit: the binary carries none. */
     std::array<juce::Image, layout::numLamps> lampLit;
 
-    static const Art& get();
+    /** A rover's, by its skin: decoded the first time that rover asks, and kept for each rover. */
+    static const Art& of (const Skin&);
 
     /** THE STILL the rover ships: one frame of its world, chosen and kept, that its windscreen shows in
         STILL instead of rendering one. Decoded when asked, never held here; invalid where it has none. */
-    static juce::Image still();
+    static juce::Image still (const Skin&);
 
     /** THE ROVER'S MARK, as SVG: its vehicle seen from the front, as its icon draws it — the build window
         wears it. Empty where the product has none. */
-    static juce::String mark();
+    static juce::String mark (const Skin&);
+
 };
 
 } // namespace orbitamp::redpaw

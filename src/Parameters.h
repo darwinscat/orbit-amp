@@ -32,6 +32,31 @@ inline constexpr const char* limiterCeiling = "limiter_ceiling";
 inline constexpr float limiterCeilingMin = -3.0f;
 inline constexpr float limiterCeilingMax = -0.1f;
 
+/** THE BOOST'S LEVEL: how much louder the amp leaves while its boost is on. A boost a player stamps on
+    for a solo is meant to stand out of the band, and a capture of an amp's boost is levelled like any
+    other capture — so the lift is given back here, at the end of the chain: after the cabinet, the
+    reverb and the delay, ahead of the master's hand and of the limiter, which keeps the last word.
+
+    The boost is OrbitAmp's BOOST key and TURBO on the cockpit and the rovers, whatever it does to the
+    capture: the playing pack's own switch of that name where it has one — the rovers' TURBO holds it
+    on — and preampBoost, the capture played higher up its dial, where it has none. With the AMP out of
+    the chain there is no boost, and the level is not heard.
+
+    ONE FOR THE WHOLE AMP, like the master's hand and the limiter beside it, not one per channel: the
+    rovers' TURBO is one key for every gear, and a boost
+    that is louder on one channel than on the next is a level nobody can find again. It is the sound's,
+    not the machine's: a session and a preset keep it, and undo steps over it. Picked on the boost's own
+    right-click menu, out of boostLevels; +3 out of the box. Whole decibels, so the five places on the
+    menu are exactly the numbers the engine plays.
+
+    Its id is the output's, `out_boost`, beside `out_trim`: `boost_` is the prefix of the boost BLOCK that
+    once stood ahead of the amp, and no parameter of the engine's carries it any more. */
+inline constexpr const char* boostLevel = "out_boost";
+inline constexpr float boostLevelMin     = -3.0f;
+inline constexpr float boostLevelMax     =  9.0f;
+inline constexpr float boostLevelDefault =  3.0f;
+inline constexpr int   boostLevels[] { -3, 0, 3, 6, 9 };
+
 /** The noise gate — the second service link, right after the tuner: it keys off the raw guitar,
     and kills the hum before any dirt can multiply it. The threshold is the OPEN level in dBFS
     against that raw input; feel (attack, hold, hysteresis, floor) is fixed in the engine. */
@@ -96,6 +121,14 @@ inline juce::String selectorId (const char* blk, int i)
     return juce::String (blk) + "_sel" + juce::String (i + 1);
 }
 
+/** THE BOOST OF A PACK THAT HAS NO BOOST SWITCH — the X88-IR's four, and any pack like them: OrbitAmp's
+    BOOST key and the cockpit's TURBO on such a pack. On, the capture plays two captured positions up its
+    gain dial from where DRIVE stands, the knob staying where it is, and a step the dial has not got above
+    its top capture feeds the top capture 3 dB harder instead (core::CapturedBlock::setGain says the
+    rule). A pack WITH a Boost switch is boosted by its switch, as it always was, and this is not read.
+    The sound's: a session, a preset and the channel's memory keep it, and undo steps over it. */
+inline constexpr const char* preampBoost = "preamp_boost";
+
 inline constexpr const char* preampId = "preamp";
 
 /** What a player reads where the preamp is named — its arrow, its face, its lanes in a host. To a
@@ -113,33 +146,6 @@ inline juce::String blockGain     (const char* blk) { return juce::String (blk) 
     play together, mixed by angle — a continuous dial, at the price of two models running. STEP:
     the dial lands only on the captured positions and one capture plays at a time. */
 inline juce::String blockSmooth   (const char* blk) { return juce::String (blk) + "_smooth"; }
-/** The block's INPUT trim — how hard the capture is fed, applied immediately before the model and
-    metered right there. ONE per block, and there is deliberately no output volume beside it.
-
-    A block's output and the next block's input are two multipliers in series with nothing between
-    them: the same decibel written twice, and two places for it to hide from you. Of the two names
-    for that one number, INPUT is the useful one — the meter beside it then reads what the capture
-    is being fed, which is the question the green zone answers.
-
-    The price, and it is the hardware's rather than ours: on a captured device this is a DRIVE
-    control, so every loudness fix made HERE is also a tone change. Between a real pedal and a real
-    amp there is exactly one knob and turning it up is both louder and dirtier. The last block's
-    output is caught by the master volume, and what the next block is fed by its own DRIVE.
-
-    …which is why the loudness fix stopped living here. A pack now states its own output level
-    (`chain[].output_db`, namz schema 4) and the player applies it after everything: that is the
-    number that makes a hot pack stop cooking whatever comes after it, and it changes volume and
-    nothing else. This hand is for drive; that one is for balance. */
-inline juce::String blockIn (const char* blk) { return juce::String (blk) + "_in"; }
-
-/** Asymmetric on purpose. Forty-eight down and twelve up: cutting is what gain staging mostly
-    asks for — a hot interface, a hot pack — and now that the hand
-    rides a full-height wall there is room for a real cut; twelve decibels of boost is already
-    more than a capture wants before it stops being the device that was captured. The SAME
-    reach on both walls: the IN trim and the console's LEVEL move over one ladder. */
-inline constexpr float blockTrimMinDb = -48.0f;
-inline constexpr float blockTrimMaxDb =  12.0f;
-
 /** Where a captured device likes to be fed, in dBFS peak — the green zone on the IN meter.
     Still a CONVENTION: it is the window a guitar DI normally peaks in, not a level anyone measured.
 
@@ -210,7 +216,6 @@ inline juce::String eqHiHz     (int l) { return eqId (l, "hi_hz"); }
 inline juce::String eqLpfOn    (int l) { return eqId (l, "lpf_on"); }
 inline juce::String eqLpfHz    (int l) { return eqId (l, "lpf_hz"); }
 inline juce::String eqLpfSlope (int l) { return eqId (l, "lpf_slope"); }
-inline juce::String eqLevel    (int l) { return eqId (l, "level"); }
 
 inline juce::String eqBellDb (int l, int b) { return eqId (l, "b") + juce::String (b + 1) + "_db"; }
 inline juce::String eqBellHz (int l, int b) { return eqId (l, "b") + juce::String (b + 1) + "_hz"; }
@@ -222,7 +227,6 @@ inline const juce::StringArray eqSlopes { "6", "12", "18", "24", "48" };
 inline constexpr int eqSlopeValues[] = { 6, 12, 18, 24, 48 };
 inline constexpr int eqSlopeDefault  = 1;
 
-inline constexpr float eqLevelMinDb = -48.0f, eqLevelMaxDb = 12.0f;   // the walls' shared ladder
 
 inline constexpr const char* cabOn = "cab_on";
 inline constexpr const char* cabIr = "cab_ir";
@@ -232,7 +236,7 @@ inline constexpr const char* cabIr = "cab_ir";
 // the table read here. What a session keeps of `cabIr` is an INDEX into this list — the IR's number in
 // the catalog, which is for good: a new cabinet takes the next one, and nothing already here ever moves,
 // so a session saved on WUMBO opens on WUMBO. The menu does not show them in this order; it shows them by
-// the shelf's folders, and inside each by cabinet (cabShelves, below). The catalog's default, DARK MATTER,
+// the shelf's folders, and inside each by cabinet (cabShelves, below). The catalog's default, RED GIANT,
 // is the shipping default, the cabinet every face's channels open on too.
 inline const juce::StringArray cabIrNames = []
 {
@@ -301,14 +305,19 @@ inline const juce::StringArray stereoModes { "Mono", "Stereo", "Stereo Space" };
 enum class StereoMode { mono, stereo, stereoSpace };
 
 /** TEMPORARY — the audition loops, in the order the player offers them. Default is the first.
+    The site's demo loops, the same takes under the same names and in its order.
 
     The audio is NOT shipped: it is read at run time from the dev machine's private folder, and
     when that folder is absent the player and its menu entry are absent with it. The binary is the
     same either way — presence of the folder is the whole switch. */
-inline const juce::StringArray demoLoops { "GGG", "Eleven Light Years", "Cats Hard Day",
-                                           "Deep Space Is My Home", "Fifth Dimension" };
-inline constexpr const char* demoLoopFiles[] = { "ggg.wav", "eleven-light-years.wav",
-                                                 "cats-hard-day.wav", "deep-space-is-my-home.wav",
+inline const juce::StringArray demoLoops { "Eleven Light Years 1", "Eleven Light Years 2", "Eleven Light Years 3",
+                                           "Eleven Light Years 4", "Deep Space Is My Home 1",
+                                           "Deep Space Is My Home 2", "Cat's Hard Day", "I Am Projection",
+                                           "Fifth Dimension" };
+inline constexpr const char* demoLoopFiles[] = { "eleven-light-years-1.wav", "eleven-light-years-2.wav",
+                                                 "eleven-light-years-3.wav", "eleven-light-years-4.wav",
+                                                 "deep-space-is-my-home-1.wav", "deep-space-is-my-home-2.wav",
+                                                 "cats-hard-day.wav", "i-am-projection.wav",
                                                  "fifth-dimension.wav" };
 
 inline juce::File demoLoopsDir()
@@ -403,45 +412,17 @@ inline const juce::StringArray typeNames { "Clean", "Edge", "Crunch", "High-gain
 inline constexpr int maxVoicesPerType = 8;
 
 
-/** THE TWO SWITCHES EVERY LINK HAS.
-
-    `*_present` — is this link in the rig at all. Set in the strip's checklist; a link that is not
-    in the rig has no arrow in the strip, no face on the panel, no entry in the cost breakdown,
-    and is not processed.
-
-    `*_on` — STANDBY or ON. Set by the link's arrow in the strip; a link in STANDBY keeps its
-    place but its action is IGNORED — a volume is not applied, a mute is not applied, a block is
-    not processed.
-
-    Both are ordinary automatable parameters, so both ride in the preset, the host's session, the
-    A/B/C/D registers and undo without a line of code about storage. Two rather than one
-    three-position control on purpose: bypassing a link is something players automate and removing
-    it from the rig is not, and two actions of such different weight must not share one lane, where
-    aiming at the middle of three and landing on the end takes a block out of the rig instead of
-    stepping it aside.
-
-    The fourth combination — not in the rig, switch up — is not a contradiction: it is the link
-    remembering whether it was playing while it sits out.
-
-    IN, OUT and TUNER get their own `*_on` here because they never had one: hiding a column used
-    to be a machine preference that also wrote its trim to zero. Now STANDBY simply does not apply
-    the volume, and the value the player set stays where they left it. */
-inline constexpr const char* inPresent     = "in_present";
-inline constexpr const char* inOn          = "in_on";
-inline constexpr const char* tunerPresent  = "tuner_present";
+/** EVERY LINK STANDS IN THE CHAIN FOR GOOD. There used to be a second switch beside each one's ON
+    — in the rig or out of it, with a checklist that took a block off the panel and the panel
+    re-splitting under the hands. Gone: a link's one switch is ON or STANDBY, set by its arrow in the
+    strip, and a link in STANDBY keeps its place on the panel, dimmed, its action IGNORED — a block
+    is not fed, a guard does not press. The two ends, IN and OUT, have no switch at all: their
+    volumes always apply. */
 inline constexpr const char* tunerOn       = "tuner_on";
 /** The tuner's MUTE: silence at the jack while the tuner works, so a string can be tuned without
     the room hearing it. The tuner keeps listening — it reads the input before anything — and a
     tuner standing by does not mute, like any link's action in STANDBY. */
 inline constexpr const char* tunerMute     = "tuner_mute";
-inline constexpr const char* gatePresent   = "gate_present";
-inline constexpr const char* preampPresent = "preamp_present";
-inline constexpr const char* delayPresent  = "delay_present";
-inline constexpr const char* reverbPresent = "reverb_present";
-inline constexpr const char* cabPresent    = "cab_present";
-inline constexpr const char* limitPresent  = "limit_present";
-inline constexpr const char* outPresent    = "out_present";
-inline constexpr const char* outOn         = "out_on";
 
 //==============================================================================
 // THE CHAIN, AS ONE LIST.
@@ -494,22 +475,21 @@ struct ChainLink
     const char* name;       // what its arrow says
     bool        captured;   // wears the captured accent rather than ours
     bool        hasTile;    // a face on the panel; a link without one answers with its menu
-    const char* onParam;      // STANDBY/ON — the switch its arrow writes
-    const char* presentParam; // in the rig or not — the switch the strip's checklist writes
+    const char* onParam;      // STANDBY/ON — the switch its arrow writes; none for the two ends
     Stage       stage;        // the cost entry it owns
     Stage       eqStage;    // a captured block's console; `numStages` for everyone else
 };
 
 inline constexpr ChainLink chainLinks[numChainRows] = {
-    /* IN     */ { "IN",     false, true,  inOn,      inPresent,     numStages, numStages },
-    /* TUNER  */ { "TUNER",  false, true,  tunerOn,   tunerPresent,  stTuner,  numStages },
-    /* GATE   */ { "GATE",   false, false, gateOn,    gatePresent,   stGate,   numStages },
-    /* AMP    */ { "AMP",    true,  true,  preampOn,  preampPresent, stPreamp, stPreampEq },
-    /* DELAY  */ { "DELAY",  false, true,  delayOn,   delayPresent,  stDelay,  numStages },
-    /* REVERB */ { "REVERB", false, true,  reverbOn,  reverbPresent, stReverb, numStages },
-    /* CAB IR */ { "CAB IR", true,  true,  cabOn,     cabPresent,    stCab,    numStages },
-    /* LIMIT  */ { "LIMIT",  false, false, limiterOn, limitPresent,  stLimit,  numStages },
-    /* OUT    */ { "OUT",    false, true,  outOn,     outPresent,    stOut,    numStages },
+    /* IN     */ { "IN",     false, true,  nullptr,   numStages, numStages },
+    /* TUNER  */ { "TUNER",  false, true,  tunerOn,   stTuner,  numStages },
+    /* GATE   */ { "GATE",   false, false, gateOn,    stGate,   numStages },
+    /* AMP    */ { "AMP",    true,  true,  preampOn,  stPreamp, stPreampEq },
+    /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages },
+    /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages },
+    /* CAB IR */ { "CAB IR", true,  true,  cabOn,     stCab,    numStages },
+    /* LIMIT  */ { "LIMIT",  false, false, limiterOn, stLimit,  numStages },
+    /* OUT    */ { "OUT",    false, true,  nullptr,   stOut,    numStages },
 };
 
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL
@@ -524,6 +504,46 @@ inline constexpr int rowForStage (Stage s)
     return numChainRows;
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+/** THE ENGINE'S OWN PACK, by its name in a product's list: the device a fresh OrbitAmp plays, and the one
+    whose knobs and switches give every amp's their defaults (Parameters.cpp, blockDefaults). */
+inline constexpr const char* enginePack = "Soldano X88-IR Crunch";
+
+/** THE CHANNEL A DEVICE OPENS ON where it is not its first — the first time the hand picks the device,
+    before it was ever left on one (AmpChannels::openingOf) — by the pack's `rig_id`. The Friedman IR-X
+    opens on its Channel 2 (Oleh, 24.10). */
+inline constexpr const char* openingChannels[] = { "ir-x-ch2-poweramp-67e9" };
+
+/** WHERE A FRESH INSTANCE STANDS, wherever that is not where the engine stands: the defaults createLayout
+    gives the few parameters a product, or the place it runs in, opens elsewhere. A parameter's default
+    is what a fresh instance IS — what a host shows as its default, resets it to, and holds a new instance
+    to (CLAP's params; clap-validator's param-default-values) — so a product that opens on a channel of
+    its own declares that channel's pack, room and delay (channels::Engine::opening), and the channel
+    mode is declared where the environment puts it (AmpProcessor::modeOfEnvironment). Default-made it
+    is the engine's own: OrbitAmp's, in a plug-in on a mono bus — and the one place its values are said,
+    which is where the amp itself puts these parameters back (engineDefault). */
+struct Opening
+{
+    /** The pack it plays, by the `rig_id` its manifest carries, or none: the engine's, the Soldano X88-IR Crunch.
+        Only the device — the knobs and switches keep the defaults the engine's pack gives them, which is
+        where a channel the hand has never been on finds them (channels/Channels.cpp, defaultOf). */
+    const char* capture = nullptr;
+    const char* reverb  = "Plate";      // the room, one of reverbCharacters
+    float reverbMix     = 30.0f;        // its share, percent
+    float delayMix      = 0.0f;         // the delay's, percent
+    StereoMode stereoMode = StereoMode::mono;
+};
+
+/** The engine's parameters, for the product of that name: the devices a parameter offers are the ones
+    it plays, and a fresh instance stands where `opening` says. */
+juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::String& product, const Opening& opening = {});
+
+/** WHERE THE AMP ITSELF PUTS A PARAMETER BACK — INIT, the face's "Reset to default", a double-click on a
+    control, a value healed from NaN — as normalised for `p`. The parameters an Opening moves go back
+    where the engine's own opening has them (a default-made Opening; the device to `enginePlace`, where
+    enginePack stood in the product's list as the processor was made), as they always have; every other
+    parameter to its declared default, which is the same thing. A host's own reset follows the declared
+    default — that is the format's contract, and where a fresh instance stands. */
+float engineDefault (const juce::RangedAudioParameter& p, int enginePlace);
+
 
 } // namespace orbitamp::params

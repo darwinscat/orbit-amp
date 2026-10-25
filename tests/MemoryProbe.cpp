@@ -47,7 +47,7 @@ int main (int argc, char** argv)
         last = now;
     };
 
-    auto amp = std::make_unique<AmpProcessor>();
+    auto amp = std::make_unique<AmpProcessor> (ORBITAMP_GATE_PRODUCT());
     amp->inlineLoads = true;            // no message loop here: a model lands inside the pump
     read ("the processor built");
 

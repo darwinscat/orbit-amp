@@ -59,13 +59,19 @@ public:
         return juce::isPositiveAndBelow (i, packs.size()) ? i : 0;
     }
 
-    /** The channel a device opens on when the hand picks it: the one it was last left on, its first
-        otherwise. */
+    /** The channel a device opens on when the hand picks it: the one it was last left on, otherwise
+        the one params::openingChannels names for it, otherwise its first. */
     int openingOf (const Library::Device& d) const
     {
         const auto n = node();
         int best = d.channels.isEmpty() ? -1 : d.channels.getFirst();
         int bestTurn = 0;
+
+        for (const int c : d.channels)
+            if (juce::isPositiveAndBelow (c, amp.preamp.packs.size()))
+                for (const auto* id : params::openingChannels)
+                    if (amp.preamp.packs.getReference (c).rigId == id)
+                        best = c;
 
         for (const int c : d.channels)
         {
@@ -137,17 +143,20 @@ public:
 
             for (int i = 0; i < params::numSelectors; ++i)
                 set (params::selectorId (params::preampId, i), (float) opening.sel[(size_t) i]);
+
+            set (params::preampBoost, 0.0f);     // BOOST off, as a pack's own Boost switch opens
         }
 
         amp.settleDeviceNames();
         return true;
     }
 
-    /** What a channel keeps: DRIVE and SMOOTH, the tone knobs, the pack's switches, and the block's
-        whole EQ — its mode, its bands, its level — every parameter the console's id prefix names. */
+    /** What a channel keeps: DRIVE and SMOOTH, the tone knobs, the pack's switches and BOOST where it
+        has none, and the block's whole EQ — its mode, its bands, its level — every parameter the
+        console's id prefix names. */
     juce::StringArray kept() const
     {
-        juce::StringArray ids { params::preampGain, params::blockSmooth (params::preampId) };
+        juce::StringArray ids { params::preampGain, params::blockSmooth (params::preampId), params::preampBoost };
 
         for (int i = 0; i < params::preampNumMeasured; ++i)
             ids.add (params::preampMeasured (i));

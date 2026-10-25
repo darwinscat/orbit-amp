@@ -23,7 +23,31 @@
 
 // OrbitAmp's first start (OrbitAmpStart.cpp) is NOT made from here: it would gather IRs in the machine's
 // real folders.
-void orbitamp::firstStart() {}
+// OrbitAmp as this gate plays it: its own product with no first start, so the gate never reaches the
+// machine's real folders (Product::firstStart).
+static const orbitamp::Product& gateAmp()
+{
+    static const orbitamp::Product quiet = []
+    {
+        auto p = orbitamp::products::orbitAmp();
+        p.firstStart = nullptr;
+        return p;
+    }();
+    return quiet;
+}
+
+// The same, with a tuner that has an ON of its own — as the rovers' and the cockpit's have
+// (Product::tunerSwitch). OrbitAmp's listens always.
+static const orbitamp::Product& switchedTunerAmp()
+{
+    static const orbitamp::Product switched = []
+    {
+        auto p = gateAmp();
+        p.tunerSwitch = true;
+        return p;
+    }();
+    return switched;
+}
 
 #include <felitronics/core/StreamResampler.h>
 
@@ -268,7 +292,7 @@ int main()
     std::printf ("  sizeof(AmpProcessor) = %.2f MB\n",
                  (double) sizeof (orbitamp::AmpProcessor) / (1024.0 * 1024.0));
 
-    const auto ampOwned = std::make_unique<orbitamp::AmpProcessor>();
+    const auto ampOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
     auto& amp = *ampOwned;
     std::printf ("  processor constructed\n");
 
@@ -1131,7 +1155,7 @@ int main()
         };
         const auto nameOfBytes = [&nameOfFile] (const char* data)
         {
-            for (const auto& ir : orbitamp::device::shelf::irs())
+            for (const auto& ir : orbitamp::device::shelf::irs (gateAmp().name))
                 if (data != nullptr && ir.data == data)
                     return nameOfFile (ir.file);
             return juce::String();
@@ -1139,7 +1163,7 @@ int main()
 
         juce::StringArray wrong;
         for (int i = 0; i < names; ++i)
-            if (nameOfBytes (orbitamp::AmpProcessor::cabIrBytes (i).data) != orbitamp::params::cabIrNames[i])
+            if (nameOfBytes (orbitamp::AmpProcessor::cabIrBytes (gateAmp(), i).data) != orbitamp::params::cabIrNames[i])
                 wrong.add (orbitamp::params::cabIrNames[i]);
 
         report ("...and every one plays the file it is named after", wrong.isEmpty(), wrong.joinIntoString (", "));
@@ -1149,18 +1173,51 @@ int main()
         juce::StringArray split;
         for (const auto& shelf : orbitamp::params::cabShelves)
             for (int i = shelf.first; i < shelf.first + shelf.count; ++i)
-                if (juce::String (orbitamp::AmpProcessor::cabIrBytes (i).folder) != orbitamp::AmpProcessor::cabIrBytes (shelf.first).folder)
+                if (juce::String (orbitamp::AmpProcessor::cabIrBytes (gateAmp(), i).folder) != orbitamp::AmpProcessor::cabIrBytes (gateAmp(), shelf.first).folder)
                     split.addIfNotAlreadyThere (juce::String::fromUTF8 (shelf.about).upToFirstOccurrenceOf (" \xc2\xb7", false, false));
         report ("...every cabinet's IRs lie in one folder of the shelf", split.isEmpty(), split.joinIntoString (", "));
-        report ("...and DARK MATTER in Darwin's Cat's own, the Orange's",
-                juce::String (orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault).folder) == "Orange PPC212V");
+        report ("...and RED GIANT in Darwin's Cat's own, the Orange's",
+                juce::String (orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault).folder) == "Orange PPC212V");
 
         // The default is a NUMBER, and a number names a cabinet only while the list stands still.
-        const auto fresh = std::make_unique<orbitamp::AmpProcessor>();
+        const auto fresh = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         const auto opens = fresh->cabChoice();
-        report ("...and a fresh instance opens on DARK MATTER",
-                ! opens.isUser() && orbitamp::params::cabIrNames[opens.factory] == "DARK MATTER",
+        report ("...and a fresh instance opens on RED GIANT",
+                ! opens.isUser() && orbitamp::params::cabIrNames[opens.factory] == "RED GIANT",
                 orbitamp::params::cabIrNames[opens.factory]);
+
+        // A SESSION OF BEFORE, when every amp opened on DARK MATTER (AmpProcessor::takeFormerCabinet):
+        // the same session as a build of then saved it — no note of its opening cabinet on any state —
+        // opens on RED GIANT; one on another cabinet keeps it; and one saved now on DARK MATTER, the
+        // player's pick by its note, keeps that.
+        const auto savedOn = [] (const char* cabinet, bool before)
+        {
+            const auto a = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
+            a->chooseCabFactory (orbitamp::params::cabIrNames.indexOf (cabinet));
+            juce::MemoryBlock session;
+            a->getStateInformation (session);
+            if (before)
+            {
+                auto tree = juce::ValueTree::fromXml (*juce::AudioProcessor::getXmlFromBinary (session.getData(), (int) session.getSize()));
+                std::function<void (juce::ValueTree)> unnote = [&unnote] (juce::ValueTree t)
+                {
+                    t.removeProperty (orbitamp::AmpProcessor::cabOpeningId, nullptr);
+                    for (auto child : t)
+                        unnote (child);
+                };
+                unnote (tree);
+                session.reset();
+                juce::AudioProcessor::copyXmlToBinary (*tree.createXml(), session);
+            }
+            const auto b = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
+            b->setStateInformation (session.getData(), (int) session.getSize());
+            const auto c = b->cabChoice();
+            return c.isUser() ? juce::String ("an IR of its own") : orbitamp::params::cabIrNames[c.factory];
+        };
+        const auto oldDark = savedOn ("DARK MATTER", true), oldOther = savedOn ("WUMBO", true), newDark = savedOn ("DARK MATTER", false);
+        report ("a session of before on DARK MATTER opens on RED GIANT", oldDark == "RED GIANT", oldDark);
+        report ("...one of before on another cabinet keeps it",        oldOther == "WUMBO", oldOther);
+        report ("...and one saved now on DARK MATTER keeps it",        newDark == "DARK MATTER", newDark);
     }
 
     // A CABINET IR OF THE PLAYER'S OWN travels with the state, whole. Picked from a file, saved with
@@ -1211,7 +1268,7 @@ int main()
         const auto notAudio = work.getChildFile ("readme.wav");
         notAudio.replaceWithText ("not an impulse");
 
-        const auto a = std::make_unique<orbitamp::AmpProcessor>();
+        const auto a = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         a->inlineLoads = true;
         a->prepareToPlay (sampleRate, blockSize);
 
@@ -1235,7 +1292,7 @@ int main()
         a->getStateInformation (session);
         wavFile.deleteFile();
 
-        const auto b = std::make_unique<orbitamp::AmpProcessor>();
+        const auto b = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         b->inlineLoads = true;
         b->prepareToPlay (sampleRate, blockSize);
         b->setStateInformation (session.getData(), (int) session.getSize());
@@ -1274,7 +1331,7 @@ int main()
 
         set (*b, orbitamp::params::stereoMode, 0.0f);
         set (*b, orbitamp::params::cabOn, 1.0f);
-        set (*b, orbitamp::params::preampPresent, 0.0f);
+        set (*b, orbitamp::params::preampOn, 0.0f);
         settleCabinet (*b);
         const auto own = run (*b);
         b->chooseCabFactory (0);
@@ -1287,7 +1344,7 @@ int main()
         // `cab_ir` lets the player's IR go; a session restored with the player's IR and a different
         // number underneath keeps playing the player's IR.
         {
-            const auto h = std::make_unique<orbitamp::AmpProcessor>();
+            const auto h = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             h->inlineLoads = true;
             h->prepareToPlay (sampleRate, blockSize);
             h->pumpDeviceWork();
@@ -1316,7 +1373,7 @@ int main()
             h->pumpDeviceWork();
             report ("a host moving cab_ir lets the player's IR go", ! h->cabChoice().isUser() && h->cabChoice().factory == 4);
 
-            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            const auto r = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             r->inlineLoads = true;
             r->prepareToPlay (sampleRate, blockSize);
             set (*r, orbitamp::params::cabIr, 2.0f);
@@ -1348,7 +1405,7 @@ int main()
             }
         } head;
 
-        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        const auto d = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         d->prepareToPlay (sampleRate, blockSize);
         d->setPlayHead (&head);
 
@@ -1407,7 +1464,7 @@ int main()
     // twenty-eight samples short and stayed there, every repeat that much early. Eight seconds of
     // blocks is fifty of the motor's time constants — long past any glide that is going to land.
     {
-        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        const auto d = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         d->prepareToPlay (sampleRate, blockSize);
         set (*d, orbitamp::params::delaySync, 0.0f);
 
@@ -1531,7 +1588,7 @@ int main()
         constexpr float hairMs = 4.47034836e-07f;
         const float knobZero = []
         {
-            const auto p = std::make_unique<orbitamp::AmpProcessor>();
+            const auto p = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             return p->apvts.getRawParameterValue (orbitamp::params::delayOffset)->load();
         }();
 
@@ -1550,7 +1607,7 @@ int main()
     {
         orbitamp::core::CabinetIr cabinet;
         cabinet.prepare (sampleRate, blockSize, 2);
-        const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+        const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault);
         cabinet.load (shelf.data, (size_t) shelf.size);
 
         juce::AudioBuffer<float> buf (2, blockSize);
@@ -1590,7 +1647,7 @@ int main()
 
     // THE CABINET'S CONVOLVER — felitronics-core's CabConvolver — kept as the cabinet it replaced.
     {
-        const auto& shelfIr = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
+        const auto& shelfIr = orbitamp::AmpProcessor::cabIrBytes (gateAmp(), orbitamp::params::cabIrDefault);
         constexpr int bs = 512;
 
         // Blocks of a signal through a cabinet; `on` false is the chain's out-of-the-path call.
@@ -1822,12 +1879,12 @@ int main()
     {
         const auto level = [&] (bool cut)
         {
-            const auto p = std::make_unique<orbitamp::AmpProcessor>();
+            const auto p = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             p->inlineLoads = true;
             set (*p, orbitamp::params::stereoMode, 0.0f);
             set (*p, orbitamp::params::cabOn, 1.0f);
-            set (*p, orbitamp::params::preampPresent, 0.0f);
-            set (*p, orbitamp::params::delayPresent,  0.0f);
+            set (*p, orbitamp::params::preampOn, 0.0f);
+            set (*p, orbitamp::params::delayOn,  0.0f);
             set (*p, orbitamp::params::cabLpfOn, cut ? 1.0f : 0.0f);
             set (*p, orbitamp::params::cabLpfHz, 1200.0f);
 
@@ -1966,16 +2023,14 @@ int main()
 
         const auto chainRun = [&] (bool poisoned, int& badLate)
         {
-            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            const auto c = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             c->prepareToPlay (sampleRate, blockSize);
 
             set (*c, orbitamp::params::stereoMode, 0.0f);
             for (const auto* id : { orbitamp::params::gateOn, orbitamp::params::delayOn, orbitamp::params::reverbOn,
-                                    orbitamp::params::cabOn, orbitamp::params::limiterOn,
-                                    orbitamp::params::gatePresent, orbitamp::params::delayPresent,
-                                    orbitamp::params::reverbPresent, orbitamp::params::cabPresent })
+                                    orbitamp::params::cabOn, orbitamp::params::limiterOn })
                 set (*c, id, 1.0f);
-            set (*c, orbitamp::params::preampPresent, 0.0f);
+            set (*c, orbitamp::params::preampOn, 0.0f);
             set (*c, orbitamp::params::gateThreshold, -70.0f);   // the tone stays open
 
             juce::AudioBuffer<float> buf (2, blockSize);
@@ -2061,12 +2116,12 @@ int main()
     {
         const auto chained = [&] (bool oneBigBlock)
         {
-            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            const auto c = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             c->prepareToPlay (sampleRate, blockSize);
             set (*c, orbitamp::params::stereoMode, 0.0f);
             for (const auto* id : { orbitamp::params::delayOn, orbitamp::params::reverbOn, orbitamp::params::cabOn })
                 set (*c, id, 1.0f);
-            set (*c, orbitamp::params::preampPresent, 0.0f);
+            set (*c, orbitamp::params::preampOn, 0.0f);
 
             juce::MidiBuffer midi;
             std::vector<float> out;
@@ -2131,14 +2186,14 @@ int main()
     {
         const auto tailWith = [&] (bool poisonDecay)
         {
-            const auto c = std::make_unique<orbitamp::AmpProcessor>();
+            const auto c = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             c->prepareToPlay (sampleRate, blockSize);
             set (*c, orbitamp::params::stereoMode, 0.0f);
             set (*c, orbitamp::params::reverbOn, 1.0f);
             set (*c, orbitamp::params::reverbMix, 100.0f);
-            set (*c, orbitamp::params::preampPresent, 0.0f);
-            set (*c, orbitamp::params::cabPresent,    0.0f);
-            set (*c, orbitamp::params::delayPresent,  0.0f);
+            set (*c, orbitamp::params::preampOn, 0.0f);
+            set (*c, orbitamp::params::cabOn,    0.0f);
+            set (*c, orbitamp::params::delayOn,  0.0f);
 
             if (poisonDecay)
                 c->apvts.getParameter (orbitamp::params::reverbDecay)
@@ -2177,20 +2232,22 @@ int main()
     }
 
     // THE TUNER'S MUTE: silence at the jack while the tuner works, and not a sample of it while the
-    // tuner stands by — a link's action in STANDBY is ignored. A quiet tone through a chain with
-    // nothing that needs a pack; the last block of each run is what the jack puts out.
+    // tuner stands by — a link's action in STANDBY is ignored. OrbitAmp's tuner has no standby: a
+    // tuner_on left off in an old session must not switch its mute away. A quiet tone through a
+    // chain with nothing that needs a pack; the last block of each run is what the jack puts out.
     //
     // Nothing that rings, either: the echo and the room grow louder with every run the tone goes
     // on, so a third run came out a few per cent over the first with no mute anywhere near it —
     // under the tolerance through BIG BUBBA, and over it through a cabinet 3.7 dB louder at 220 Hz.
     // Without them the two runs are the same number.
+    for (const bool switched : { false, true })
     {
-        const auto m = std::make_unique<orbitamp::AmpProcessor>();
+        const auto m = std::make_unique<orbitamp::AmpProcessor> (switched ? switchedTunerAmp() : gateAmp());
         m->prepareToPlay (sampleRate, blockSize);
         set (*m, orbitamp::params::stereoMode, 0.0f);
-        set (*m, orbitamp::params::preampPresent, 0.0f);
-        set (*m, orbitamp::params::delayPresent,  0.0f);
-        set (*m, orbitamp::params::reverbPresent, 0.0f);
+        set (*m, orbitamp::params::preampOn, 0.0f);
+        set (*m, orbitamp::params::delayOn,  0.0f);
+        set (*m, orbitamp::params::reverbOn, 0.0f);
 
         juce::AudioBuffer<float> buf (2, blockSize);
         juce::MidiBuffer midi;
@@ -2220,10 +2277,15 @@ int main()
         set (*m, orbitamp::params::tunerOn, 0.0f);
         const float standby = lastBlockPeak();
 
-        report ("tuner mute: the jack goes silent",            open > 0.01f && muted == 0.0f,
-                juce::String (open, 3) + " -> " + juce::String (muted, 5));
-        report ("...and a tuner standing by does not mute",   std::abs (standby - open) < 0.01f,
-                juce::String (standby, 3));
+        report (switched ? "tuner mute, a tuner with a switch: the jack goes silent"
+                         : "tuner mute: the jack goes silent",
+                open > 0.01f && muted == 0.0f, juce::String (open, 3) + " -> " + juce::String (muted, 5));
+        if (switched)
+            report ("...and a tuner standing by does not mute", std::abs (standby - open) < 0.01f,
+                    juce::String (standby, 3));
+        else
+            report ("...OrbitAmp's tuner has no standby: a tuner_on left off still mutes", standby == 0.0f,
+                    juce::String (standby, 5));
     }
 
     // A SAVE FROM A HOST'S WORKER THREAD hands out the session the message thread wrote down, and
@@ -2266,14 +2328,14 @@ int main()
             }
         };
 
-        const auto c = std::make_unique<orbitamp::AmpProcessor>();
+        const auto c = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         set (*c, orbitamp::params::reverbMix, 37.0f);
         ticks (*c, 12);
 
         juce::MemoryBlock fromWorker;
         onWorker ([&] { c->getStateInformation (fromWorker); });
 
-        const auto d = std::make_unique<orbitamp::AmpProcessor>();
+        const auto d = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         d->setStateInformation (fromWorker.getData(), (int) fromWorker.getSize());
         report ("a worker's save carries what the pump wrote down", std::abs (readMix (*d) - 37.0f) < 0.01f,
                 "mix " + juce::String (readMix (*d), 2));
@@ -2289,7 +2351,7 @@ int main()
             ticks (*c, 12);
             onWorker ([&] { c->getStateInformation (after); });
 
-            const auto e = std::make_unique<orbitamp::AmpProcessor>();
+            const auto e = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             e->setStateInformation (after.getData(), (int) after.getSize());
             e->history.switchTo (2);
             report ("...a copy into a register reaches it",  std::abs (readMix (*e) - 11.0f) < 0.01f,
@@ -2299,7 +2361,7 @@ int main()
         // Restored from a worker — queued for a message thread that is busy — while the pump keeps
         // ticking over a live state that has just changed: the save must still be what came in.
         {
-            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            const auto r = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             set (*r, orbitamp::params::reverbMix, 90.0f);   // the live state the restore replaces, dirty
             onWorker ([&] { r->setStateInformation (fromWorker.getData(), (int) fromWorker.getSize()); });
             ticks (*r, 30);
@@ -2323,7 +2385,7 @@ int main()
             juce::MemoryBlock back;
             onWorker ([&] { c->getStateInformation (back); });
 
-            const auto f = std::make_unique<orbitamp::AmpProcessor>();
+            const auto f = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             f->setStateInformation (back.getData(), (int) back.getSize());
             report ("...an unloadable blob never becomes the saved session", std::abs (readMix (*f) - 37.0f) < 0.01f,
                     "mix " + juce::String (readMix (*f), 2));
@@ -2333,7 +2395,7 @@ int main()
             ticks (*c, 12);
             juce::MemoryBlock later;
             onWorker ([&] { c->getStateInformation (later); });
-            const auto g = std::make_unique<orbitamp::AmpProcessor>();
+            const auto g = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             g->setStateInformation (later.getData(), (int) later.getSize());
             report ("...nor freezes it",                    std::abs (readMix (*g) - 64.0f) < 0.01f,
                     "mix " + juce::String (readMix (*g), 2));
@@ -2365,7 +2427,7 @@ int main()
             w.signalThreadShouldExit();
             w.waitForThreadToExit (5000);
 
-            const auto f = std::make_unique<orbitamp::AmpProcessor>();
+            const auto f = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             f->setStateInformation (last.getData(), (int) last.getSize());
             const float mix = readMix (*f);
             report ("...and saving flat out beside a changing state never tears",
@@ -2384,13 +2446,13 @@ int main()
         namespace P = orbitamp::params;
         using Library = orbitamp::device::DeviceLibrary;
 
-        const auto m = std::make_unique<orbitamp::AmpProcessor>();
+        const auto m = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         m->inlineLoads = true;
         m->prepareToPlay (sampleRate, blockSize);
 
         // The packs as the build lays them out, in its factory folder, under OrbitAmp's own list.
         const auto nowhere = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("orbitamp-no-devices");
-        const auto library = Library::scan (Library::ampSlot, true, Library::factoryDirectory(), nowhere);
+        const auto library = Library::scan (gateAmp().name, Library::ampSlot, true, Library::factoryDirectory(), nowhere);
 
         const auto indexOf = [&library] (const juce::String& name)
         {
@@ -2400,7 +2462,7 @@ int main()
             return -1;
         };
 
-        const int ch1 = indexOf ("IR-X Ch1 PowerAmp"), ch2 = indexOf ("IR-X Ch2 PowerAmp"), x88 = indexOf ("X88-IR Crunch");
+        const int ch1 = indexOf ("Friedman IR-X Ch1 PowerAmp"), ch2 = indexOf ("Friedman IR-X Ch2 PowerAmp"), x88 = indexOf ("Soldano X88-IR Crunch");
 
         const auto value = [] (orbitamp::AmpProcessor& p, const juce::String& id)
         {
@@ -2437,10 +2499,10 @@ int main()
             set (*m, P::selectorId (P::preampId, 0), 1.0f);
             set (*m, P::blockSmooth (P::preampId), 0.0f);
             set (*m, P::eqLoDb (0), 4.0f);
-            set (*m, P::eqLevel (0), -3.0f);
+            set (*m, P::eqHiDb (0), -3.0f);
 
             report ("a hand's switch plays the other channel",   channels.play (ch2) && channels.playing() == ch2
-                                                                    && m->preamp.selectedName() == "IR-X Ch2 PowerAmp",
+                                                                    && m->preamp.selectedName() == "Friedman IR-X Ch2 PowerAmp",
                     m->preamp.selectedName());
 
             const auto opening = orbitamp::device::PackOpening::of (library.getReference (ch2));
@@ -2458,7 +2520,7 @@ int main()
                     near (value (*m, P::preampGain), 7.5f) && near (value (*m, P::preampMeasured (0)), 0.2f)
                         && near (value (*m, P::selectorId (P::preampId, 0)), 1.0f)
                         && near (value (*m, P::blockSmooth (P::preampId)), 0.0f)
-                        && near (value (*m, P::eqLoDb (0)), 4.0f) && near (value (*m, P::eqLevel (0)), -3.0f),
+                        && near (value (*m, P::eqLoDb (0)), 4.0f) && near (value (*m, P::eqHiDb (0)), -3.0f),
                     "DRIVE " + juce::String (value (*m, P::preampGain)) + ", LO " + juce::String (value (*m, P::eqLoDb (0))));
 
             channels.play (ch2);
@@ -2475,7 +2537,7 @@ int main()
             juce::MemoryBlock saved;
             m->getStateInformation (saved);
 
-            const auto r = std::make_unique<orbitamp::AmpProcessor>();
+            const auto r = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             r->inlineLoads = true;
             r->prepareToPlay (sampleRate, blockSize);
             r->preamp.packs = library;
@@ -2502,7 +2564,7 @@ int main()
             m->history.undo();
             ticks (*m);
             report ("...and undo brings back the device and its knobs", channels.playing() == x88
-                                                                           && m->preamp.selectedName() == "X88-IR Crunch"
+                                                                           && m->preamp.selectedName() == "Soldano X88-IR Crunch"
                                                                            && near (value (*m, P::preampGain), driveBefore),
                     m->preamp.selectedName() + " at " + juce::String (channels.playing()) + ", DRIVE "
                         + juce::String (value (*m, P::preampGain)));
@@ -2539,17 +2601,17 @@ int main()
         const auto& packs = amp.preamp.packs;
         int crunch = -1;
         for (int i = 0; i < packs.size(); ++i)
-            if (packs.getReference (i).displayName() == "X88-IR Crunch")
+            if (packs.getReference (i).displayName() == "Soldano X88-IR Crunch")
                 crunch = i;
 
         const auto* device = amp.apvts.getParameter (orbitamp::params::preampDevice);
         const int opens = juce::roundToInt (device->convertFrom0to1 (device->getDefaultValue()));
 
         if (crunch >= 0)
-            report ("the preamp ships on the X88-IR Crunch", opens == crunch,
+            report ("the preamp ships on the Soldano X88-IR Crunch", opens == crunch,
                     juce::isPositiveAndBelow (opens, packs.size()) ? packs.getReference (opens).displayName() : juce::String (opens));
         else
-            std::printf ("no X88-IR Crunch installed — the preamp's starting device is not checked\n");
+            std::printf ("no Soldano X88-IR Crunch installed — the preamp's starting device is not checked\n");
     }
 
     std::printf ("device: %s\n\n", amp.preamp.selectedName().toRawUTF8());
@@ -2705,7 +2767,7 @@ int main()
 
             // The heap, for the reason the one in main() is there: a megabyte and a half does not
             // fit a Windows stack, and this one is nested deeper still.
-            const auto soloOwned = std::make_unique<orbitamp::AmpProcessor>();
+            const auto soloOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             auto& solo = *soloOwned;
             solo.inlineLoads = true;
             solo.prepareToPlay (sampleRate, blockSize);
@@ -2790,14 +2852,7 @@ int main()
 
     // The input trim, through the whole plugin: a linear gain ahead of everything, so on a bare
     // wire it must arrive as exactly itself.
-    //
-    // IN has to be put in the RIG first. It is not there out of the box any more — the volumes
-    // that matter are the captured blocks' own, and a global input fader is a thing a player
-    // reaches for when a rig needs fixing. A trim that is not in the rig is not applied, which is
-    // the whole point of the switch, so a test that did not ask for it was testing the default
-    // rather than the trim.
     {
-        set (amp, orbitamp::params::inPresent, 1.0f);
         set (amp, orbitamp::params::inTrim, 0.0f);
         const auto unity = run (amp);
 
@@ -2864,19 +2919,22 @@ int main()
     }
 
     // The three channel modes. MONO: one chain, the copy after everything — the channels are
-    // identical. STEREO SPACE: mono up to the reverb, stereo from it — with the reverb in the rig
-    // the two channels differ (the space is wide), with it OUT of the rig they are identical (the
-    // copy at the seam feeds the cabinet the same signal). Measured on the plugin's own output,
-    // both channels kept.
+    // identical. STEREO SPACE: mono up to the reverb, stereo from it — with the reverb sounding
+    // the two channels differ (the space is wide), with it silent they are identical (the copy at
+    // the seam feeds the cabinet the same signal). Measured on the plugin's own output, both
+    // channels kept.
     //
-    // Out of the RIG, not merely standing by: standing by is the insert's bypass, and a bypassed
+    // Silent at MIX 0, not merely standing by: standing by is the insert's bypass, and a bypassed
     // room rings out instead of being cut, so its tail would still be spreading the channels for
     // as long as it takes to decay. That is the next check's job, not this one's.
     {
+        auto* mixP = amp.apvts.getParameter (orbitamp::params::reverbMix);
+        const float mixWas = mixP->getValue();
+
         const auto runBoth = [&] (float mode, bool reverbIn)
         {
             set (amp, orbitamp::params::stereoMode, mode);
-            set (amp, orbitamp::params::reverbPresent, reverbIn ? 1.0f : 0.0f);
+            mixP->setValueNotifyingHost (reverbIn ? mixWas : 0.0f);
             set (amp, orbitamp::params::reverbOn, 1.0f);
             set (amp, orbitamp::params::limiterOn, 0.0f);
 
@@ -2922,9 +2980,10 @@ int main()
                 differencePercent (spaceWet.first, spaceWet.second) > 1.0
                     && rms (spaceWet.second) > 1.0e-4,
                 juce::String (differencePercent (spaceWet.first, spaceWet.second), 2) + "% apart");
-        report ("...and with the reverb out of the rig they are one signal again",
+        report ("...and with the reverb silent they are one signal again",
                 differencePercent (spaceDry.first, spaceDry.second) < 0.01);
 
+        mixP->setValueNotifyingHost (mixWas);
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
     }
 
@@ -2937,7 +2996,6 @@ int main()
     // that says which of the two the plugin is.
     {
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::stereoSpace);
-        set (amp, orbitamp::params::reverbPresent, 1.0f);
         set (amp, orbitamp::params::reverbOn, 1.0f);
         set (amp, orbitamp::params::limiterOn, 0.0f);
 
@@ -3005,7 +3063,6 @@ int main()
     // of the signal, which is an order of magnitude more and is what a click IS.
     {
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
-        set (amp, orbitamp::params::cabPresent, 1.0f);
         set (amp, orbitamp::params::cabOn, 1.0f);
         set (amp, orbitamp::params::limiterOn, 0.0f);
 
@@ -3056,7 +3113,6 @@ int main()
     // click. Driven hard enough to be gripping, then switched off mid-note.
     {
         set (amp, orbitamp::params::stereoMode, (float) orbitamp::params::StereoMode::mono);
-        set (amp, orbitamp::params::limitPresent, 1.0f);
         set (amp, orbitamp::params::limiterOn, 1.0f);
         set (amp, orbitamp::params::limiterCeiling, -6.0f);
 
@@ -3141,7 +3197,7 @@ int main()
         //     prepares at that rate has to be longer than it — whatever the kernel decides that
         //     number is next.
         {
-            const auto hiOwned = std::make_unique<orbitamp::AmpProcessor>();
+            const auto hiOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
             auto& hi = *hiOwned;
             hi.inlineLoads = true;
             hi.prepareToPlay (96000.0, blockSize);
@@ -3233,9 +3289,7 @@ int main()
                 for (const char* off : { orbitamp::params::preampOn,
                                          orbitamp::params::gateOn,    orbitamp::params::delayOn,
                                          orbitamp::params::reverbOn,  orbitamp::params::cabOn,
-                                         orbitamp::params::limiterOn, orbitamp::params::delayPresent,
-                                         orbitamp::params::reverbPresent, orbitamp::params::cabPresent,
-                                         orbitamp::params::gatePresent })
+                                         orbitamp::params::limiterOn })
                     set (hi, off, 0.0f);
             };
 
@@ -3413,7 +3467,7 @@ int main()
             {
                 constexpr int tiny = 64;                    // below the 96 a 48 kHz pack asks for
 
-                const auto smallOwned = std::make_unique<orbitamp::AmpProcessor>();
+                const auto smallOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
                 auto& sm = *smallOwned;
                 sm.inlineLoads = true;
                 sm.prepareToPlay (96000.0, tiny);
@@ -3452,7 +3506,7 @@ int main()
             //    on the ordinary path where a player picks a device with the block still switched
             //    off. Fed instead, it has the signal that just went past and there is no hole.
             {
-                const auto lateOwned = std::make_unique<orbitamp::AmpProcessor>();
+                const auto lateOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
                 auto& late = *lateOwned;
                 // WHAT ACTUALLY HOLDS THE LOAD BACK, said plainly because the first version of this
                 // comment claimed the wrong mechanism: `inlineLoads = false` sends the request to
@@ -3468,9 +3522,7 @@ int main()
                 for (const char* off : { orbitamp::params::preampOn,
                                          orbitamp::params::gateOn,    orbitamp::params::delayOn,
                                          orbitamp::params::reverbOn,  orbitamp::params::cabOn,
-                                         orbitamp::params::limiterOn, orbitamp::params::delayPresent,
-                                         orbitamp::params::reverbPresent, orbitamp::params::cabPresent,
-                                         orbitamp::params::gatePresent })
+                                         orbitamp::params::limiterOn })
                     set (late, off, 0.0f);
 
                 juce::AudioBuffer<float> b (2, blockSize);
@@ -3550,93 +3602,59 @@ int main()
         }
 
     // WHAT THE PLUGIN TELLS A HOST ABOUT ITS OWN TAIL. It used to be a flat eight seconds, which
-    // is wrong in both directions: a big room rings longer than that, a long echo very much
-    // longer, and a rig with none of the ringing links in it rings for no time at all while the
-    // host renders eight seconds of silence onto every bounce.
+    // is wrong one way: a big room rings longer than that, a long echo very much longer. The echo,
+    // the room and the speaker always stand in the chain now, so the answer is their sum — floored
+    // at the old eight, capped at thirty.
     {
-        const auto tailOwned = std::make_unique<orbitamp::AmpProcessor>();
+        const auto tailOwned = std::make_unique<orbitamp::AmpProcessor> (gateAmp());
         auto& amp = *tailOwned;
         amp.prepareToPlay (sampleRate, blockSize);
 
-        const auto tailWith = [&amp] (bool delayIn, bool reverbIn, bool cabIn)
+        // The stages take their settings from the pump, not from the parameter write.
+        const auto settle = [&amp]
         {
-            set (amp, orbitamp::params::delayPresent,  delayIn  ? 1.0f : 0.0f);
-            set (amp, orbitamp::params::reverbPresent, reverbIn ? 1.0f : 0.0f);
-            set (amp, orbitamp::params::cabPresent,    cabIn    ? 1.0f : 0.0f);
+            for (int i = 0; i < 8; ++i)
+            {
+                juce::AudioBuffer<float> b (2, blockSize);
+                juce::MidiBuffer m;
+                b.clear();
+                amp.processBlock (b, m);
+            }
             return amp.getTailLengthSeconds();
         };
 
-        // A HALL breathing at double: room 0.98, 0.974 per pass round a 37.2 ms comb.
-        set (amp, orbitamp::params::reverbType, 2.0f);   // Hall
-        set (amp, orbitamp::params::reverbDecay, 2.0f);
+        // A short room and a short echo: well under eight.
+        set (amp, orbitamp::params::reverbType, 0.0f);
+        set (amp, orbitamp::params::reverbDecay, 0.5f);
         set (amp, orbitamp::params::reverbPredelay, 0.0f);
-
-        // Two seconds of echo, and NO repeats: one echo, so the delay's own tail is exactly its
-        // time — the number that makes the serial sum easy to read.
         set (amp, orbitamp::params::delaySync, 0.0f);
-        set (amp, orbitamp::params::delayTimeMs, 2000.0f);
+        set (amp, orbitamp::params::delayTimeMs, 20.0f);
         set (amp, orbitamp::params::delayRepeats, 0.0f);
         set (amp, orbitamp::params::delayOffset, 0.0f);
+        const double shortRig = settle();
 
-        // The stages take their settings from the pump, not from the parameter write.
-        for (int i = 0; i < 8; ++i)
-        {
-            juce::AudioBuffer<float> b (2, blockSize);
-            juce::MidiBuffer m;
-            b.clear();
-            amp.processBlock (b, m);
-        }
-
-        const double bare  = tailWith (false, false, false);
-        const double spkr  = tailWith (false, false, true);
-        const double room  = tailWith (false, true,  false);
-        const double echo  = tailWith (true,  false, false);
-        const double two   = tailWith (true,  true,  false);
+        // A HALL breathing at double: room 0.98, 0.974 per pass round a 37.2 ms comb — and two
+        // seconds of echo with NO repeats, one echo, so the delay's own tail is exactly its time.
+        set (amp, orbitamp::params::reverbType, 2.0f);   // Hall
+        set (amp, orbitamp::params::reverbDecay, 2.0f);
+        set (amp, orbitamp::params::delayTimeMs, 2000.0f);
+        const double two = settle();
 
         set (amp, orbitamp::params::delayRepeats, 95.0f);
-        for (int i = 0; i < 4; ++i)
-        {
-            juce::AudioBuffer<float> b (2, blockSize);
-            juce::MidiBuffer m;
-            b.clear();
-            amp.processBlock (b, m);
-        }
-        const double runaway = tailWith (true, true, true);
+        const double runaway = settle();
 
-        std::printf ("\ntail: nothing %.2f | speaker %.2f | room %.2f | echo %.2f | echo+room %.2f"
-                     " | 95%% repeats %.2f  (seconds)\n", bare, spkr, room, echo, two, runaway);
+        std::printf ("\ntail: short %.2f | echo+hall %.2f | 95%% repeats %.2f  (seconds)\n",
+                     shortRig, two, runaway);
 
-        report ("nothing that rings asks the host for nothing", bare < 0.5,
-                juce::String (bare, 2) + " s");
-        // ...exactly as long as the shipping cabinet's file is. Over half a second, this used to say:
-        // true of BIG BUBBA's second and a quarter, and not of DARK MATTER's 4096 samples, which is
-        // as much as that cabinet goes on saying.
-        const double impulse = []
-        {
-            const auto& shelf = orbitamp::AmpProcessor::cabIrBytes (orbitamp::params::cabIrDefault);
-            juce::AudioFormatManager formats;
-            formats.registerFormat (new juce::WavAudioFormat(), true);
-            const std::unique_ptr<juce::AudioFormatReader> reader (
-                formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (shelf.data, (size_t) shelf.size, false)));
-            return reader != nullptr ? (double) reader->lengthInSamples / reader->sampleRate : 0.0;
-        }();
-
-        report ("the speaker alone asks for its own impulse", impulse > 0.0 && std::abs (spkr - (bare + impulse)) < 1.0e-3,
-                juce::String (spkr, 3) + " s, the impulse " + juce::String (impulse, 3) + " s of it");
-        report ("a hall at double decay outlives the old eight", room > 9.0 && room < 12.0,
-                juce::String (room, 2) + " s");
-        // Nothing can tell a host this number moved, so while a link that CAN be set to ring long
-        // is in the rig the answer never drops below the flat eight that shipped before it. A
-        // single two-second echo is really 2.1; a host that asked once and cached it would be
-        // told 8, which is what it used to be told anyway.
-        report ("a link that can ring long never asks below the old eight",
-                echo >= 8.0 && echo < 8.01, juce::String (echo, 2) + " s");
+        // Nothing can tell a host this number moved, so the answer never drops below the flat eight
+        // that shipped before it.
+        report ("a short rig never asks below the old eight", shortRig >= 8.0 && shortRig < 8.01,
+                juce::String (shortRig, 2) + " s");
 
         // The links are in SERIES: the echo is what the room rings ABOUT, so the two add rather
-        // than compete. Taking the longest of them would report the room's number and cut the
-        // echo's own two seconds off the end of every bounce.
-        report ("an echo into a room asks for both, not the longer", two > room + 1.5,
-                juce::String (two, 2) + " s vs " + juce::String (room, 2));
+        // than compete. A hall at double alone is over nine; with the echo it is past eleven.
+        report ("an echo into a hall asks for both, not the longer", two > 11.0 && two < 30.0,
+                juce::String (two, 2) + " s");
         report ("and never more than the cap, however long it rings", runaway <= 30.0 + 1.0e-6,
                 juce::String (runaway, 2) + " s");
     }

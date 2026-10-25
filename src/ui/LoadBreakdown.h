@@ -43,21 +43,8 @@ struct LoadBreakdown final : public juce::Component,
         startTimerHz (15);
     }
 
-    /** THE LIST IS THE RIG. A link out of the rig has no cost entry, because it has no cost:
-        it is not in the chain at all. A link STANDING BY keeps its row and keeps its real
-        number — a bypassed insert costs what it costs in any DAW — but reads faint, which is
-        the useful truth: the bypass bought you nothing, and taking it out of the rig will. */
-    bool stageInRig (int stage) const
-    {
-        const int row = params::rowForStage ((params::Stage) stage);
-
-        if (row >= params::numChainRows)
-            return true;                     // TOTAL belongs to nobody and is always there
-
-        const auto* p = amp.apvts.getParameter (params::chainLinks[(size_t) row].presentParam);
-        return p == nullptr || p->getValue() > 0.5f;
-    }
-
+    /** A link STANDING BY keeps its row and its real number — a bypassed insert costs what it
+        costs in any DAW — but reads faint: the bypass bought you nothing. */
     bool stageWorking (int stage) const
     {
         const int row = params::rowForStage ((params::Stage) stage);
@@ -65,7 +52,13 @@ struct LoadBreakdown final : public juce::Component,
         if (row >= params::numChainRows)
             return true;
 
-        const auto* p = amp.apvts.getParameter (params::chainLinks[(size_t) row].onParam);
+        // The two ends have no switch: OUT always works. Looking a parameter up by a null name read
+        // address zero and took the app down the moment this callout painted.
+        const char* id = params::chainLinks[(size_t) row].onParam;
+        if (id == nullptr)
+            return true;
+
+        const auto* p = amp.apvts.getParameter (id);
         return p == nullptr || p->getValue() > 0.5f;
     }
 
@@ -94,7 +87,7 @@ struct LoadBreakdown final : public juce::Component,
     juce::String report() const
     {
         juce::String t;
-        t << product::name << " DSP report  |  " << juce::String (amp.currentSampleRate() / 1000.0, 1)
+        t << amp.product().name << " DSP report  |  " << juce::String (amp.currentSampleRate() / 1000.0, 1)
           << " kHz  |  block " << amp.getBlockSize()
           << "  |  " << params::stereoModes[juce::jlimit (0, params::stereoModes.size() - 1,
                                                           juce::roundToInt (amp.apvts.getRawParameterValue (params::stereoMode)->load()))].toUpperCase()
@@ -103,9 +96,6 @@ struct LoadBreakdown final : public juce::Component,
 
         for (int i = 0; i < AmpProcessor::numStages; ++i)
         {
-            if (! stageInRig (i))
-                continue;
-
             t << juce::String::formatted ("%-8s %7.1f%% %7.0f%%\n", stageName (i, true).toRawUTF8(),
                                           amp.stageLoad[i].load(), amp.stageWorst[i].load());
         }
@@ -163,9 +153,6 @@ struct LoadBreakdown final : public juce::Component,
 
         for (int i = 0; i < AmpProcessor::numStages; ++i)
         {
-            if (! stageInRig (i))
-                continue;
-
             auto row = r.removeFromTop (rowH);
             const float v = amp.stageLoad[i].load();
             const bool total   = i == AmpProcessor::stTotal;
@@ -244,10 +231,18 @@ struct LoadBreakdown final : public juce::Component,
 };
 
 /** Opens it as a callout pointing at `anchor`, which is in screen coordinates — the words that were
-    clicked. */
-inline void openLoadBreakdown (AmpProcessor& amp, juce::Rectangle<int> anchor)
+    clicked — and INSIDE `window`, the plugin's own window on the screen, when it fits there.
+
+    JUCE picks the callout's side from the whole display: whichever side puts it nearest the words.
+    With the DSP figure near the window's right edge that was the right, out over whatever stands
+    beside the plugin. Refitted into the window the sides with no room drop out, and the box opens
+    over the faceplate, its arrow on the words. A window too small to hold it keeps JUCE's choice. */
+inline void openLoadBreakdown (AmpProcessor& amp, juce::Rectangle<int> anchor, juce::Rectangle<int> window)
 {
-    juce::CallOutBox::launchAsynchronously (std::make_unique<LoadBreakdown> (amp), anchor, nullptr);
+    auto& box = juce::CallOutBox::launchAsynchronously (std::make_unique<LoadBreakdown> (amp), anchor, nullptr);
+
+    if (box.getWidth() < window.getWidth() && box.getHeight() < window.getHeight())
+        box.updatePosition (anchor, window);
 }
 
 } // namespace orbitamp

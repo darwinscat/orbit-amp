@@ -39,43 +39,80 @@ public:
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    /** The limiter's whole console, opened from its arrow. The OUT trim's RESET used to ride
-        along when this opened from the COLUMN; the column has no menu of its own any more, and
-        the trim's reset is its own double-click. */
+    /** The limiter's whole console. */
     void showLimiterMenu (juce::Point<int> screenPos);
     void showInputMenu (juce::Point<int> screenPos);
 
-    /** The strip's checklist: which links are in the rig at all, and — after the separator — the
-        two switches that decide what an emptied row does to the window. */
-    void showChainMenu (juce::Component& anchor);
-
-    /** Re-read the window preferences and lay the editor out to match. Setup's VIEW page and the
-        strip's checklist both write the same prefs, so they both come through here — the panel
-        must not have two opinions about what a pref means. */
+    /** Re-read the window preferences (Setup's VIEW page) and lay the editor out to match. */
     void applyViewPrefs();
-
-
-    /** What the two switches of every row mean to the WINDOW — the tiles, the two columns and
-        the tuner's row — read in one place after any of them moves. */
-    void applyRowStates();
 
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
     static constexpr int headerGap = 0;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
-    static constexpr int chromeGap = 10;   // faceplate to tuner to footer
+    static constexpr int chromeGap = 10;   // faceplate to the tuner's row, the tuner to the facts, the row to the edge
 
     /** Room for the host's or the standalone's own title bar, which the display's user area does not
         know about. Guessing slightly high costs nothing; guessing low costs a window that opens
         partly off the bottom of the screen. */
     static constexpr int titleBarAllowance = 60;
 
-    static constexpr int baseWidth   = FaceplateView::designWidth + margin * 2;
+    /** THE WIDTH IS THE WINDOW'S CHOICE. The height sets the zoom; what the corner gives beyond the
+        design's own width is laid out across — the pictures and the air widen, every knob keeps its
+        size. From the design's own width up to a window of `maxAspect`. */
+    static constexpr int    minDesignWidth = FaceplateView::designWidth;
+    static constexpr int    minBaseWidth   = minDesignWidth + margin * 2;
+    static constexpr double maxAspect      = 2.2;
+
+    int designW = minDesignWidth;   // the faceplate's width in design units, as the window stands it
+    int baseW() const noexcept { return designW + margin * 2; }
+    int maxDesignWidth() const noexcept
+    {
+        return juce::jmax (minDesignWidth, (int) (maxAspect * (double) baseHeight()) - margin * 2);
+    }
+
+    /** The corner may set any aspect between the design's own and `maxAspect`: a corner or a side
+        edge moves the width within that range, a top or bottom edge the height. The window's own
+        size limits come first, the range after them. */
+    struct AspectRange final : public juce::ComponentBoundsConstrainer
+    {
+        double lowAspect = 1.0, highAspect = 2.0;   // width / height
+
+        void checkBounds (juce::Rectangle<int>& b, const juce::Rectangle<int>& previous,
+                          const juce::Rectangle<int>& limits,
+                          bool top, bool left, bool bottom, bool right) override
+        {
+            juce::ComponentBoundsConstrainer::checkBounds (b, previous, limits, top, left, bottom, right);
+
+            const int h = juce::jmax (1, b.getHeight());
+            const int wLo = juce::roundToInt (lowAspect * h), wHi = juce::roundToInt (highAspect * h);
+
+            if ((top || bottom) && ! (left || right))
+            {
+                // A top or bottom edge: the height moves, the width stays — keep the height in range.
+                const int w  = b.getWidth();
+                const int nh = juce::jlimit (juce::roundToInt (w / highAspect), juce::roundToInt (w / lowAspect), h);
+                b = top ? b.withTop (b.getBottom() - nh) : b.withHeight (nh);
+            }
+            else
+            {
+                const int nw = juce::jlimit (wLo, juce::jmax (wLo, wHi), b.getWidth());
+                b = left ? b.withLeft (b.getRight() - nw) : b.withWidth (nw);
+            }
+        }
+    };
+
+    AspectRange aspect;
+
+    /** The range and the size limits, from the height the window's rows stand at now. */
+    void applySizeLimits();
 
     /** Everything around the faceplate — the faceplate itself answers for its own height now,
         because a LAYOUT choice can collapse a whole row. */
+    /** The bottom row: the tuner in the left half, the footer's facts in the right — one row. */
+    static constexpr int bottomRowH = juce::jmax (TunerStrip::designHeight, Footer::designHeight);
+
     static constexpr int fixedHeight = Chrome::designHeight + headerGap
-                                     + chromeGap + TunerStrip::designHeight
-                                     + chromeGap + Footer::designHeight
+                                     + chromeGap + bottomRowH + chromeGap
                                      + margin * 2;
 
     /** The window is as tall as what it shows: the faceplate as its LAYOUT stands it, and the
@@ -84,35 +121,28 @@ private:
     bool showGlyphs = false;
     int  baseHeight() const noexcept
     {
-        // The tuner IS the row now: hidden, it collapses whole, gap included.
-        return fixedHeight + LayoutStrip::designHeight + faceplate.currentHeight()
-                           - (tunerStands ? 0 : TunerStrip::designHeight + chromeGap)
+        // The tuner's row stays when the tuner does not: the facts stand in it too. The chain strip
+        // is the header's second line, inside Chrome::designHeight.
+        return fixedHeight + faceplate.currentHeight()
                            + (showDemo ? DemoStrip::designHeight : 0)
                            + (showGlyphs ? GlyphPreview::designHeight : 0);
     }
 
-    /** One attachment per chain link that HAS a switch, guards included — built in one loop off
-        `params::chainLinks`. Wherever a switch moves — the strip, an undo, a preset, a register,
-        automation — the arrow and, for a link with a face, the panel follow. */
+    /** One attachment per arrow in the strip — built in one loop off `params::chainLinks`.
+        Wherever a switch moves — the strip, an undo, a preset, a register, automation — the arrow
+        follows. */
     std::vector<std::unique_ptr<juce::ParameterAttachment>> blockRowAtts;
 
-    /** Whether the two columns and the tuner's row stand on the panel. Not preferences any more:
-        `applyRowStates` reads them off the same two switches every other link answers to. */
-    bool inColStands  = true;
-    bool outColStands = true;
-    bool tunerStands  = true;
+    /** The window's size to come back to when the full-screen button is pressed the second time;
+        empty while nothing is remembered. */
+    juce::Rectangle<int> sizeBeforeFull;
 
-    /** How a link standing by is SHOWN: removed from the panel, or left in place and dimmed. The
-        eye's business, not the sound's — a machine preference. Wired to its switch in the step
-        that gives it one; until then the panel does what it has always done. */
-    bool dimRatherThanRemove = false;
+    /** The zoom the window stands at, from its height — kept so a strip shown or hidden under the
+        footer resizes the window at the zoom and the width it already has. */
+    float zoomNow = AmpProcessor::preferredScale;
 
-    /** The scale to come back to when the full-screen button is pressed the second time;
-        negative while nothing is remembered. */
-    float scaleBeforeFull = -1.0f;
-
-    /** After a strip is switched: the aspect the corner drag keeps, the limits, and the window
-        itself, at the scale it already has. */
+    /** After a strip is switched: the range the corner keeps, the limits, and the window itself,
+        at the zoom and the width it already has. */
     void applyStripChoice();
 
     /** Hints. The face has started keeping its captions out of the way — a dial with no label, a
@@ -130,10 +160,10 @@ private:
     FaceplateView faceplate;        // the whole chain, five blocks in two rows
 
     /** The layout strip — the chain laid flat between the toolbar and the device, always there:
-        the ONE place blocks are stood down and brought back. Built in the constructor because
-        its rows come from a table the header cannot see. */
+        the ONE place blocks are stood by and brought back. Built in the constructor because its
+        rows come from a table the header cannot see. */
     std::unique_ptr<LayoutStrip> layoutStrip;
-    /** The gate, with no face of its own — its door is the strip's arrow. DECLARED BEFORE the
+    /** The gate's console — its menu and LEARN; its face is the rail and the lamp at IN. DECLARED BEFORE the
         overlay on purpose: the overlay draws LEARN's trace from a pointer into this object, and
         members die in reverse order, so the reader has to go first. */
     GateConsole   gateConsole;
@@ -148,8 +178,10 @@ private:
     DragRuler     outRuler;         // the OUT trim's, mirrored
     GlyphPreview  glyphs;           // TEMPORARY — device-glyph review strip
     SetupPanel    setup;   // constructed with the processor: its LIBRARY page reads the packs
-    DisclaimerPanel devices;        // DEVICES & TRADEMARKS: the long notice and the list it is about
+    DisclaimerPanel devices { amp.product().name };        // DEVICES & TRADEMARKS: the long notice and the list it is about
             // the Setup overlay — last member, so it sits on top
+
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpEditor)
 };

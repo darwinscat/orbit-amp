@@ -39,6 +39,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     addAndMakeVisible (mix);
     addAndMakeVisible (decay);
     addAndMakeVisible (pre);
+    addAndMakeVisible (lowCut);
     attachPower (*amp.apvts.getParameter (params::reverbOn));
 
     // The character IS the block's name: PLATE or HALL on the border where REVERB stood, set like
@@ -59,8 +60,22 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
     mix.textForValue   = [] (double v) { return juce::String (juce::roundToInt (v)) + "%"; };
     decay.textForValue = [] (double v) { return juce::String (v, 1) + "x"; };
     pre.textForValue   = [] (double v) { return juce::String (juce::roundToInt (v)); };
-    decay.labelFontHeight = 7.0f;
-    pre.labelFontHeight   = 7.0f;
+    lowCut.textForValue = [] (double v) { return juce::String (juce::roundToInt (v)); };
+    mix.setHint    ("MIX:   how much of the room rides over the dry");
+    decay.setHint  ("DECAY:   how long the tail rings, times the character's own");
+    pre.setHint    ("PRE:   the tail held back so the attack stays dry, in ms");
+    lowCut.setHint ("LOW CUT:   the tail's lows cut away so the room never booms, in Hz: the dashed line on the picture");
+
+    mix.setFader (true);
+
+    for (auto* k : { &mix, &decay, &pre, &lowCut })
+    {
+        k->labelFontHeight = Knob::fxLabelH;   // the delay's names, the delay's size
+        k->labelTracking   = Knob::fxLabelTracking;
+        k->labelRowHeight  = Knob::fxLabelRowH;
+        k->valueInDial     = false;
+        k->setValueRowShown (true);
+    }
 
     mix.onValueChange   = [this] { refreshTail(); };
     decay.onValueChange = [this] { refreshTail(); };
@@ -83,6 +98,8 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
         amp.apvts, params::reverbDecay, decay);
     preAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         amp.apvts, params::reverbPredelay, pre);
+    lowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        amp.apvts, params::reverbHpfHz, lowCut);
 
     // The tail's HPF: the consoles' cut, at home in the reverb and ALWAYS in — the dashed
     // vertical is the handle, the curve is what it does, and there is nothing to switch.
@@ -118,7 +135,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
                                  if (auto* p = safe->amp.apvts.getParameter (id))
                                  {
                                      p->beginChangeGesture();
-                                     p->setValueNotifyingHost (p->getDefaultValue());
+                                     p->setValueNotifyingHost (safe->amp.engineDefault (*p));
                                      p->endChangeGesture();
                                  }
                          });
@@ -169,7 +186,7 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
 
         const double fs = juce::jmax (8000.0, amp.currentSampleRate());
 
-        const bool spectraOn = prefs::spectraShown();   // the gear's one switch for every analyser
+        const bool spectraOn = prefs::spectraShown (amp.product());   // the gear's one switch for every analyser
 
         const auto draw = [&] (felitronics::analysis::SpectrumPane& pane, juce::Colour tint,
                                float fillTop, float fillBottom, float line)
@@ -247,9 +264,11 @@ ReverbBlock::ReverbBlock (AmpProcessor& processor)
             g.setColour (theme::violet.withAlpha (0.60f));
             g.strokePath (line, juce::PathStrokeType (1.2f));
 
+            // In the top corner: the bottom one is where the frequencies are written, and the
+            // seconds sat on the 10K (Oleh, 24.10).
             g.setColour (theme::txFaint);
             theme::drawTracked (g, juce::String (tailSeconds, 1) + " S", r.reduced (8.0f, 5.0f),
-                                theme::displayFont (7.5f), 0.1f, juce::Justification::bottomRight);
+                                theme::displayFont (7.5f), 0.1f, juce::Justification::topRight);
         }
 
         // The tail's HPF, always in: the second-order curve and its dashed vertical — the
@@ -363,23 +382,25 @@ void ReverbBlock::layOutContent (juce::Rectangle<int> area)
         borderSlotUsed = character.getBounds();
     }
 
-    // The picture takes the whole box; everything else overlays it.
+    // MIX a fader the box's whole height at the left, its number under it; at the right DECAY, PRE and
+    // LOW CUT in even shares of a row, each number tucked up under its cap; the picture under them — the
+    // delay's arrangement to the unit (DelayBlock::layOutContent; Oleh, 24.10).
+    mix.setBounds (area.removeFromLeft (Knob::faderW));
+    area.removeFromLeft (Knob::faderGap);
+
+    const int lift = Knob::snugLift (Knob::fxSide);
+    auto miniRow = area.removeFromTop (Knob::fxLabelRowH + Knob::fxSide + Knob::valueRowH - lift);
+    const int cell = miniRow.getWidth() / 3;
+
+    for (auto* k : { &decay, &pre, &lowCut })
+        k->valueLift = lift;
+
+    decay.setBounds  (miniRow.removeFromLeft (cell));
+    pre.setBounds    (miniRow.removeFromLeft (cell));
+    lowCut.setBounds (miniRow);
+
+    area.removeFromTop (6);
     view.setBounds (area);
-
-    const int side = juce::jmin (maxKnobSide, juce::jmin (area.getWidth() / 2, area.getHeight() / 2 + 24));
-    auto row = area.removeFromTop (side);
-    mix.setBounds (row.removeFromRight (side).translated (-2, 2));
-    mix.toFront (false);
-
-    // The two refinements back at the hero's left hand — small, and pressed to the TOP edge
-    // rather than riding the hero's centre line.
-    const int mini = 42;
-    auto miniRow = row.removeFromRight (mini * 2 + 6).withHeight (mini + 11).translated (0, 2);
-    decay.setBounds (miniRow.removeFromLeft (mini));
-    miniRow.removeFromLeft (6);
-    pre.setBounds (miniRow);
-    decay.toFront (false);
-    pre.toFront (false);
 }
 
 } // namespace orbitamp

@@ -133,8 +133,8 @@ int main()
     Block preamp (orbitamp::device::DeviceLibrary::Slot::preamp);
     boost.prepare (sampleRate, blockSize, 1);
     preamp.prepare (sampleRate, blockSize, 1);
-    boost.rescan (0);
-    preamp.rescan (0);
+    boost.rescan ("OrbitAmp", 0);
+    preamp.rescan ("OrbitAmp", 0);
 
     if (boost.packs.isEmpty() && preamp.packs.isEmpty())
     {
@@ -449,7 +449,13 @@ int main()
                 return std::vector<std::byte> (p, p + blk.getSize());
             };
 
-            const auto plain = lv.player.stage();
+            // From no stated level at all: the first pack may state its own — the V4's and the ReVolt's do
+            // (input_db -9, -12, output_db +6) — and these checks are about what a stated level does.
+            const auto found = lv.player.stage();
+            auto plain = found;
+            plain.inputDb = 0.0;
+            plain.outputDb = 0.0;
+            lv.player.load (plain, bytesOfPack);
             const double quiet = toDb (rms (run (lv, 0.1)));
 
             // 1. The pack's OUTPUT level reaches the block's output — the whole point of the release:
@@ -524,7 +530,7 @@ int main()
                     juce::String (byLevel.db - bare, 2) + " of the stated -3, "
                         + juce::String (byBoth.db - byLevel.db, 2) + " of the trimmed -6");
 
-            lv.player.load (plain, bytesOfPack);      // …and the device is left as it was found
+            lv.player.load (found, bytesOfPack);      // …and the device is left as it was found
         }
     }
 

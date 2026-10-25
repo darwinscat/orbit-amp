@@ -10,10 +10,13 @@
 #include "LearnGlass.h"
 #include "Picture.h"
 #include "Sheet.h"
+#include "WebImages.h"
 
 #include <felitronics/appkit/VersionBadge.h>
 
 #include <array>
+#include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -24,18 +27,18 @@ using channels::Engine;
 using channels::Channels;
 using channels::Presets;
 
-/** The six keys under the tone knobs: the two filters, then the pack's own layers. A face has room for a
-    short name under each; the full one shows on hover. */
+/** The keys under the tone knobs: the two filters, painted on every face — a face has room for a short
+    name under each, the full one shows on hover — and right of them a group of as many as the playing
+    pack has switches a hand may throw (Console::rightKeysOf), laid by code (Strip.h): at most
+    maxRightKeys, and as many as the face's row shows of them. */
 struct Switch { const char* name; const char* shortName; };
-enum { btHpf, btLpf, btFat, btBright, btDepth, btPresence };
-inline constexpr std::array<Switch, 6> switches {{
-    { "HIGHPASS", "HPF"    },
-    { "LOWPASS",  "LPF"    },
-    { "FAT",      "FAT"    },
-    { "BRIGHT",   "BRIGHT" },
-    { "DEPTH",    "DEPTH"  },
-    { "PRESENCE", "PRES"   },
+enum { btHpf, btLpf, btFirstRight };
+inline constexpr std::array<Switch, 2> switches {{
+    { "HIGHPASS", "HPF" },
+    { "LOWPASS",  "LPF" },
 }};
+inline constexpr int maxRightKeys = 6;
+inline constexpr int numKeys = btFirstRight + maxRightKeys;
 inline constexpr float keyTracking = 0.04f;
 
 /** The lilac the words printed on a face are written in. */
@@ -54,7 +57,8 @@ enum LampId { inClipLamp, outClipLamp, gateLamp, limiterLamp, numLamps };
     (redo); back is its mirror (undo). */
 void drawTurnArrow (juce::Graphics&, juce::Point<float> centre, float radius, bool back, juce::Colour);
 
-/** A render written as a PNG for the site (Console::exportForWeb); nothing for an invalid one. */
+/** A picture written for the site (Console::exportForWeb), as every picture of its kit is (web::write):
+    a WebP, its alpha kept where it has a hole; nothing for an invalid one. */
 void writeForWeb (const juce::File&, const juce::Image&);
 
 //==============================================================================
@@ -77,9 +81,27 @@ public:
     struct Places
     {
         juce::Rectangle<float> drive;                       // the knob's box
-        std::array<juce::Rectangle<float>, 3> tones;        // BASS, MIDDLE, TREBLE
-        std::array<juce::Point<float>, 6> keys;             // the six keys' centres
+        /** THE TONE KNOBS' ROW (Strip.h): as many knobs as the playing pack has tones, each `toneKnob`
+            across at the row's nominal size, the socket under it the row's `size`; each knob's name over
+            it, in the row at `toneNameY`, written `toneNameEm` and set condensed into the room its pitch
+            leaves (layStrips). */
+        Strip toneStrip;
+        float toneKnob = 0.0f;
+        float toneNameY = 0.0f, toneNameEm = 13.0f;
+        float toneSignDrop = 5.0f;                          // each knob's sign this much under its name's row: nearer its knob
+        float toneSignHeight = toneSignSize.y;              // ...and this tall
+        /** THE KEYS: the two filters' centres, painted where they are; and the right group's row (Strip.h)
+            — each key `keySize` across at the row's nominal size, in a frame with these caps at its ends
+            where the face draws one (a size of nought: none), its name over or under it (the first under,
+            then by turns where `keyNamesAlternate`), or on its face where `keyNamesOnKeys`. */
+        std::array<juce::Point<float>, 2> keys;             // HPF, LPF
         float keySize = 34.0f;
+        float filterKeyWidth = 0.0f;                        // ...HPF's and LPF's width, where wider than they are tall; else square
+        float filterKeyHeight = 0.0f;                       // ...and their height, where taller than the other keys; else keySize
+        Strip keyStrip;
+        float keyCapLeft = 0.0f, keyCapRight = 0.0f, keyFrameHeight = 0.0f;
+        float keyNameOverY = 0.0f, keyNameUnderY = 0.0f, keyNameRoom = 120.0f;
+        bool keyNamesAlternate = false, keyNamesOnKeys = false;
         std::array<juce::Point<float>, 6> holes;            // the roof keys' centres
         float holeKeySize = 40.0f;
         std::array<juce::Rectangle<float>, 3> sliders;      // REVERB, DELAY, CAB
@@ -117,6 +139,7 @@ public:
         juce::String midiCommands;                          // what the MIDI window lists (Midi.h)
         juce::Colour handLight {};                          // a light round a slider's or a fader's cap under the hand; none if transparent
         Ink ink {};                                         // what the words on the panel are written in
+        juce::Colour emblemLamp {};                         // the lamp under the cat's glass under the hand (Emblem); none if transparent
     };
 
     Console (AmpProcessor&, std::unique_ptr<Picture>, const Places&, const Look&);
@@ -153,10 +176,14 @@ protected:
     Channels& channels;     // ...and these are its
     Presets   presets;
     const Places places;
-    std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the file names exportForWeb gives them
+    std::vector<std::pair<juce::String, juce::Image>> renders;     // the Look's, by the names exportForWeb writes them under
     struct LookForWeb { ArtKnob::Pointer drive {}, tone {}; juce::Colour handLight; Ink ink; } lookForWeb;   // ...and the rest of it
     std::vector<std::pair<juce::String, juce::Rectangle<float>>> spritesWritten;     // writeSprite's, for spriteBounds
+    std::map<juce::String, bool> postersWritten;     // writePoster's stems, each with whether a live frame went under its glass
+    juce::var webPlaces;                             // places.json, written once every poster is
     void poseNext (const juce::File& dir, int pose);
+    void shootPoster (const juce::File& dir, int place, const juce::String& stem, std::function<void()> then);
+    void finishWeb (const juce::File& dir);
 
     juce::Component stage;
     std::unique_ptr<Picture> picture;
@@ -169,7 +196,7 @@ protected:
     void showOutputMenu();          // the OUTPUT column: the limiter, and where its ceiling is — and LIMITER's plate
 
     // While a lever is held, a tag over it says where it stands, in the lever's own decibels — which
-    // for INPUT count from the lever's zero, so the middle of the travel reads 0.
+    // for INPUT are the trim's own, so the middle of the travel reads 0.
     void sayLever (ColumnFader&, const juce::String& name, std::function<float()> reading);
 
     // THE PRODUCT'S OWN. Each is asked from the console's own code once the face is built.
@@ -200,11 +227,13 @@ protected:
     /** The stage has been placed in the window again. */
     virtual void stagePlaced() {}
 
-    /** FOR THE SITE: what the web's demo of this face is built from, written into `dir` — the picture
-        that never changes at twice the stage's size, its window transparent (cabin.png); the renders its
-        controls are drawn with; where everything stands (places.json, in the stage's own 1672 x 941); and
-        what the product adds (webExtras). Done once, when the window first comes up with the environment
-        variable ORBITAMP_WEB_EXPORT naming the folder; a player never sees it. */
+    /** FOR THE SITE: what the web's demo of this face is built from, written into `dir` as the kit the site
+        reads, every picture a WebP (WebImages.h) — the picture that never changes at twice the stage's
+        size, its window transparent, at the three sizes (cabin.webp, cabin@1x.webp, cabin@half.webp); the
+        renders its controls are drawn with, in sprites/; where everything stands (places.json, in the
+        stage's own 1672 x 941); and what the product adds (webExtras). Done once, when the window first
+        comes up with the environment variable ORBITAMP_WEB_EXPORT naming the folder; a player never sees
+        it. */
     void exportForWeb (const juce::File& dir);
 
     /** The product's part of it: its own renders (writeSprite) and files; in `places` the two keys every
@@ -212,25 +241,49 @@ protected:
         lever's order; in `world` whatever is its own alone — and its poster (writePoster). */
     virtual void webExtras (const juce::File& /*dir*/, juce::DynamicObject& /*places*/, juce::DynamicObject& /*world*/) {}
 
-    /** A render of a control written for the site, its opaque box (opaqueBounds) kept for places.json's
-        spriteBounds under the file's stem. */
-    void writeSprite (const juce::File& dir, const juce::String& file, const juce::Image& img);
+    /** A render of a control written for the site — sprites/<stem>.webp (web::writeSprite), which it
+        returns for places.json to name it by, or null where there is no render to write — its opaque box
+        (opaqueBounds) kept for places.json's spriteBounds under `stem`. */
+    juce::var writeSprite (const juce::File& dir, const juce::String& stem, const juce::Image& img);
 
-    /** THE POSTER: the whole face as it opens — every control where it stands, the lamps out — with
-        `still` in `window` under the glass, at twice the stage's size (poster.png). What shows through the
-        window live is `hidden` while it is taken, the still in its place. */
+    /** ...and the name of one written already, for places.json: null where none was. */
+    juce::var spriteRef (const juce::String& stem) const;
+
+    /** THE POSTER: the whole face as it stands — every control where it stands, the lamps out — at twice
+        the stage's size and the two smaller ones, in three kinds: with `live`, the live view's first frame,
+        in `window` under the glass (<stem>.webp, <stem>@1x.webp, <stem>@half.webp), so that a page that
+        starts the view there does not jump; with `still` there instead (<stem>-still.webp and its two); and
+        with the window empty (<stem>-hole.webp and its two). With no live frame, the still's are the
+        poster's and nothing is written twice. What shows through the window live is `hidden` while it is
+        taken. */
     void writePoster (const juce::File& dir, juce::Rectangle<float> window, const juce::Image& still,
-                      const std::vector<juce::Component*>& hidden, const juce::String& file = "poster.png");
+                      const juce::Image& live, const std::vector<juce::Component*>& hidden, const juce::String& stem);
 
-    /** A POSTER FOR EACH PLACE OF THE LEVER, for a page that opens on another channel than the app does:
-        how many places there are, how the face is stood in one (no animation), the still under the glass
-        there, and the window and its live layers as for the poster. Set by webExtras; exportForWeb then
-        stands the face in each in turn and writes poster-<n>.png once it has settled, and done.txt last. */
+    /** ...and how places.json names a poster's files: the three sizes of it, and the same three of its
+        kinds, "still" and "hole" — the poster's own being the still's where no live frame went in. */
+    static juce::var posterFiles (const juce::String& stem, bool live);
+
+    /** THE POSTERS: the one the page opens on — the face as it opened, at the place it opened at — and one
+        for each place of the lever, for a page that opens on another channel than the app does: how many
+        places there are, which one the face opens at, how the face is stood in one (no animation), the
+        still there, the live view's first frame there, and the window and its live layers. Set by
+        webExtras; exportForWeb then writes the face's poster (poster.webp), stands the face in each place
+        in turn and writes poster-<n>.webp once it has settled, then places.json, and done.txt last. */
     struct WebPoses
     {
         int count = 0;
+        int opening = 0;
         std::function<void (int)> standAt;
         std::function<juce::Image (int)> still;
+
+        /** THE LIVE VIEW'S FIRST FRAME at a place: what the view shows the moment it starts there, before
+            anything has moved — as a page that starts its own copy of the view there shows it first —
+            handed to `done` on the message thread, the window's size at twice the stage, or invalid where
+            the GPU could not give one (the still goes under the glass then). Asked for once the face stands
+            at the place. Unset, every poster has the still. */
+        std::function<void (int, std::function<void (juce::Image)>)> firstFrame;
+        juce::String live;      // ...what that frame is, for places.json's posterWindow: "live: <live>"
+
         juce::Rectangle<float> window;
         std::vector<juce::Component*> hidden;
     };
@@ -262,12 +315,11 @@ protected:
     void addChoice (juce::PopupMenu&, const juce::String& text, bool ticked,
                     std::function<void (Console&)> picked, bool enabled = true);
 
-    // TURBO'S PUSH is the machine's to say (Channels::turboDb), on a face whose TURBO pushes the capture:
-    // the state says that TURBO is on, by the preamp's input trim standing above nothing, and the
-    // settings say how hard that is — +9 dB unless told otherwise, which with the lever's zero at -9
-    // feeds the captures as they were taken.
-    void showTurboMenu();           // how hard it pushes
-    void chooseTurbo (int db);
+    // THE BOOST'S LEVEL (params::boostLevel) on TURBO's own menu: how much louder the amp leaves while
+    // TURBO is on. The sound's — a session and a preset keep it, undo steps over it. How TURBO itself
+    // drives the capture is the pack's and the engine's, and no menu's.
+    void addBoostLevels (juce::PopupMenu&);
+    void showBoostMenu();
 
     // Tapping — see tapTempo. Anything that moves the state ends a count left open.
     void endTapping();
@@ -297,8 +349,19 @@ private:
     const Ink ink;
 
     ArtKnob drive;
-    std::array<std::unique_ptr<ArtKnob>, 3> tones;
-    std::array<std::unique_ptr<PushButton>, 6> buttons;      // the keys under the tone knobs
+    std::array<std::unique_ptr<ArtKnob>, Channels::maxTones> tones;
+
+    /** Where each tone's sign is painted (the picture takes no hand): the hand over it names the tone,
+        as over its knob. */
+    struct HoverSpot final : juce::Component
+    {
+        HoverSpot() { setRepaintsOnMouseActivity (false); }
+        std::function<void (bool)> onHover;
+        void mouseEnter (const juce::MouseEvent&) override { if (onHover) onHover (true); }
+        void mouseExit (const juce::MouseEvent&) override  { if (onHover) onHover (false); }
+    };
+    std::array<std::unique_ptr<HoverSpot>, Channels::maxTones> toneSpots;
+    std::array<std::unique_ptr<PushButton>, numKeys> buttons;   // the keys under the tone knobs
     std::array<std::unique_ptr<PushButton>, 6> overhead;     // the keys in the roof's holes
 
 protected:
@@ -307,6 +370,7 @@ protected:
     PushButton& roofKey (int index) { return *overhead[(size_t) index]; }
     ArtKnob& driveKnob()            { return drive; }
     ArtKnob& toneKnob (int index)   { return *tones[(size_t) index]; }
+    const juce::String& keyName (int index) const { return keyNames[(size_t) index]; }
 
 private:
     std::array<std::unique_ptr<PlateSlider>, 3> sliders;
@@ -348,29 +412,23 @@ private:
     void tapTempo();
     ColumnFader inFader, outFader;
 
-    // THE INPUT LEVER'S ZERO is the machine's to say (the settings): what the engine's input trim stands
-    // at with the lever in the middle of its travel — -9 dB unless the player says otherwise, a guitar
-    // straight into an interface being hotter than what the captures were fed. The lever's ends are the
-    // trim's own, so each half of the travel has the decibels between them and the zero.
-    // The state carries the trim in decibels and, beside it, the zero it was dialled against
-    // (Channels::leverZeroId). Where that is not the zero in force — a session from before there was
-    // one, a register, another setting — the LEVER stays where it stood and the trim goes to what that
-    // place gives now.
+    // INPUT'S LEVER IS THE TRIM ITSELF, as OUTPUT's is: unity in the middle of its travel, ±24 dB about it.
+    // How hard the capture is fed is the pack's to say, and it says it (`chain[].input_db`), so a lever
+    // left in the middle feeds every pack where its captures were taken. Up to 0.8.0 the lever's middle
+    // stood at a zero of the machine's instead, which a state of then carries folded into its trim
+    // (AmpProcessor::takeFormerTrims).
     //
     // HOW DRIVE GOES BETWEEN THE PACK'S CAPTURES is the machine's too. Smoothly, unless told otherwise:
     // between two captures the player mixes them by the knob's angle, and the sound goes with the hand.
     // In steps, it lands on the nearer capture and holds it until the knob is nearer the next — one
     // capture playing at a time, each exactly as it was shot. The knob goes the same way: it clicks from
     // one capture's place to the next under the hand, and stands on one whatever DRIVE was left at.
-    int  leverZero = 0;
     bool driveSteps = false;
-    juce::ParameterAttachment* inputTrim = nullptr;
     bool settingsDiffer() const;
     void settleOnSettings();
-    void chooseLeverZero (int db);
     void chooseDriveSteps (bool steps);
 
-    void showInputMenu();           // the INPUT column: the lever's zero, and the hum
+    void showInputMenu();           // the INPUT column: the hum
     void addHumLines (juce::PopupMenu&);    // the hum's switch and its modes, as every menu has them
 
     // THE HUM'S QUICK A/B: H flips it between OFF and the mode OFF bypasses (prefs::humFlip), and the
@@ -425,7 +483,7 @@ private:
 
     // ...the hum's, from HUM's menus — its own, apart from the gate's (ui/HumLearner.h); only one of the
     // two runs at a time: starting either cancels the other.
-    HumLearner humLearner { amp.humLearn, amp.gateKeyDb, amp.humTuned.quietHz };
+    HumLearner humLearner { amp.product(), amp.humLearn, amp.gateKeyDb, amp.humTuned.quietHz };
 
 protected:
     // ...and its picture, which the product lays over a glass of its own and places there (LearnGlass.h).
@@ -476,30 +534,56 @@ private:
     template <typename Control>
     std::unique_ptr<juce::ParameterAttachment> attach (Control&, const juce::String& paramId);
 
-    std::array<std::unique_ptr<juce::ParameterAttachment>, 3> toneBindings;
-    std::array<juce::String, 3> toneBound;
+    std::array<std::unique_ptr<juce::ParameterAttachment>, Channels::maxTones> toneBindings;
+    std::array<juce::String, Channels::maxTones> toneBound;
     void bindTones();
     void bindButton (PushButton&, const char* paramId);
 
-    /** THE KEYS THAT ARE THE PACK'S. Where the playing pack has switches a hand may throw (Channels::
-        switchesOf, all but the one its channel holds), the four keys right of the filters are those, in
-        the pack's order and under its names: a key to each position of a switch, the one it stands at
-        lit — the IR-X Ch1's BRIGHT 1 · CENTER · BRIGHT 2, the Ch2's TIGHT · FAT — and a switch whose
-        two positions are off and on one key, under the switch's own name. A switch that would not fit
-        whole is left off them; a key no switch has stands dim and says nothing. A pack with none leaves
-        the four keys the layers' (Channels::Flag), as they always were. */
-    struct PackKey
+    /** THE RIGHT GROUP'S KEYS on a channel: the switches of its pack a hand may throw (Channels::
+        switchesOf, all but the one the channel holds), in the pack's order and under its names — a key to
+        each position of a switch, the one it stands at lit (the Ch2's TIGHT · FAT; a switch whose every
+        position is bare, the IR-X Ch1's Bright, its name once over its keys and each position alone by its
+        key: BRIGHT over OFF · 1 · 2), and a switch whose two positions are off and on one key under the switch's
+        own name — and after them the keys the face has taken for itself (claimKey), under the names it
+        gave them. As many as there are, at most the keys the console has for them. */
+    struct RightKey
     {
-        int slot = -1;          // the selector it throws; -1 = no switch on this key
+        int button = -1;        // which of `buttons`
+        int slot = -1;          // the selector it throws; -1 = the face's own key
         int position = -1;      // lit while the switch stands here, and where a press puts it
         int off = -1;           // an off/on key: where it puts the switch when let up; -1 for a position's key
+        juce::String control;   // the switch's name in the pack
+        juce::String name;      // what is written by it
+        juce::String title;     // the switch's name written once over its keys (BRIGHT); empty for most
     };
-    std::array<PackKey, 4> packKeys;
-    bool packKeysUp = false;                    // the playing pack's switches are on the keys
-    std::array<juce::String, 6> keyNames;       // each key's name for the tag over it, as showKeys last said
-    std::array<bool, 6> claimed {};             // ...and the keys the face has taken for itself
+    std::vector<RightKey> rightKeysOf (int channel) const;
+    std::vector<RightKey> rightKeys;            // the playing channel's, as showKeys last laid them
+    std::array<juce::String, numKeys> keyNames; // each key's name for the tag over it, as showKeys last said
+    std::array<bool, numKeys> claimed {};       // ...and the keys the face has taken for itself
     void keyThrown (int key, bool on);
     void showKeys();                            // the keys as the playing channel has them; reads only
+
+protected:
+    /** THE PLAYING CHANNEL'S ROWS (Strip.h), laid by one rule from the face's places, the channel's pack's
+        tones and its right keys: what the controls stand on, what the picture paints and what the site
+        is told (exportForWeb), each read off this. `stripsFor` lays any channel's without touching the
+        face; `strips` is the playing one's, as layStrips last put the controls on it. */
+    Strips stripsFor (int channel) const;
+    Strips strips;
+    void layStrips();
+
+    /** A TONE'S SIGN, from the pack (rig.json `chain[].tone[i]`): its frequency response from 30 Hz to
+        16 kHz — the sum of its bands (`sections`: low and high shelves, bells, tilts, by the cookbook's
+        shapes), a knob at the top of its travel, a switch at its last position; or the position's own
+        measured curve where it ships one — its lowest point 0 and its highest 1. Flat (all 0.5) where
+        it states no shape. Dumb: the tone in, the points out. */
+    static std::vector<float> toneCurve (const namz::rig::Tone&);
+
+    /** The rows have been laid again — another channel, another count: what the face draws round its
+        knobs and keys follows them (the rovers' rings). */
+    virtual void stripsLaid (const Strips&) {}
+
+private:
 
     void showReverbMenu();
     void showDelayMenu();

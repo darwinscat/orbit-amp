@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "RedPawLineup.h"
+#include "RedPawSkin.h"
 
 #include "../channels/Engine.h"
 
@@ -11,50 +12,47 @@ namespace orbitamp::redpaw
 channels::Lineup roverLineup (std::vector<channels::Lineup::Channel> channels)
 {
     jassert (! channels.empty() && channels.size() % 2 == 0 && channels.size() <= (size_t) maxGears * 2);
-    return { "rover", "rover_channel", "rover_input_zero", "dark-matter",
+    return { "rover", "rover_channel", "red-giant",
              std::move (channels),
-             "rover_park",      // PARK: the lever's top end, the whole amp out of the sound
              true };            // a gear and its TURBO: one memory
 }
 
-channels::Lineup v4Lineup()
+int numGears (const channels::Lineup& lineup) noexcept
 {
-    return roverLineup ({
-        { "Clean",         "v4-copper-4ae0",      "Hall",     15.0f, 15.0f, false },
-        { "Clean Turbo",   "v4-copper-tb-5841",   "Hall",     30.0f, 30.0f, false },
-        { "Crunch",        "v4-sheriff-ch1-82ab", "Plate",    15.0f, 15.0f, false },
-        { "Crunch Turbo",  "v4-sheriff-ch2-2f2f", "Plate",    30.0f, 30.0f, false },
-        { "Hi-Gain",       "v4-kraken-ch1-f7fc",  "Ambience", 15.0f, 0.0f,  true  },
-        { "Hi-Gain Turbo", "v4-kraken-ch2-5f71",  "Ambience", 30.0f, 0.0f,  true  },
-    });
+    return lineup.count() / 2;
 }
 
-int numGears() noexcept
+namespace
 {
-    return lineup().count() / 2;
+    // The rover's half of the two things a product gives the processor beside its face (Product.h): over
+    // its skin's channels.
+    void addParameters (const Product& p, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+    {
+        channels::Engine::addParameters (layout, skinOf (p).lineup);
+    }
+
+    std::unique_ptr<ProductEngine> makeEngine (AmpProcessor& p)
+    {
+        return std::make_unique<channels::Engine> (p, skinOf (p.product()).lineup);
+    }
+
+    void opening (const Product& p, params::Opening& o)
+    {
+        channels::Engine::opening (skinOf (p).lineup, o);
+    }
+
+    /** The rover's first start in a process: the player's IRs it kept in its own folder are gathered into
+        the family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the installer. */
+    void firstStart (const Product& p)
+    {
+        gatherFormerIrs (p);
+    }
+}
+
+Product rover (const Skin& skin)
+{
+    return { skin.product, makeEditor, firstStart, addParameters, makeEngine, &skin, "rover_input_zero", opening };
 }
 
 } // namespace orbitamp::redpaw
 
-namespace orbitamp
-{
-
-// The rover's half of the two things a product gives the processor beside its face (PluginProcessor.h).
-void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
-{
-    channels::Engine::addParameters (layout, redpaw::lineup());
-}
-
-std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor& p)
-{
-    return std::make_unique<channels::Engine> (p, redpaw::lineup());
-}
-
-/** The rover's first start in a process: the player's IRs it kept in its own folder are gathered into the
-    family's (gatherFormerIrs). Its set is the family's factory folder's, laid out by the installer. */
-void firstStart()
-{
-    gatherFormerIrs();
-}
-
-} // namespace orbitamp

@@ -14,7 +14,9 @@ namespace
     /** The factory defaults of a captured block, read from the PACK it opens on — the device by
         name in its slot's list, its tone knobs where the pack starts them, its selectors likewise.
         A parameter's default is what a fresh instance IS, and "the middle of every slot" is not a
-        sound anyone chose. With the pack absent, everything falls back to the old neutral. */
+        sound anyone chose. With the pack absent, everything falls back to the old neutral. A product
+        that plays a pack of its own first (`capture`, its `rig_id`) has that pack's place as the
+        device, and the named pack's knobs and switches still. */
     struct BlockDefaults
     {
         int   device = 0;
@@ -24,38 +26,59 @@ namespace
         BlockDefaults() { meas.fill (0.5f); }
     };
 
-    BlockDefaults blockDefaults (device::DeviceLibrary::Slot slot, const juce::String& wantedName)
+    BlockDefaults blockDefaults (const juce::String& product, device::DeviceLibrary::Slot slot,
+                                 const juce::String& wantedName, const char* capture)
     {
         BlockDefaults d;
-        const auto packs = device::DeviceLibrary::scan (slot);
+        const auto packs = device::DeviceLibrary::scan (product, slot);
+        int named = -1, own = -1;
 
         for (int i = 0; i < packs.size(); ++i)
         {
             const auto& pack = packs.getReference (i);
-            if (pack.displayName() != wantedName)
+            if (capture != nullptr && own < 0 && pack.rigId == capture)
+                own = i;
+            if (named >= 0 || pack.displayName() != wantedName)
                 continue;
 
             const auto opening = device::PackOpening::of (pack);
+            named    = i;
             d.device = i;
             d.meas   = opening.meas;
             d.sel    = opening.sel;
-            break;
         }
 
+        if (own >= 0)
+            d.device = own;
         return d;
     }
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
+float engineDefault (const juce::RangedAudioParameter& p, int enginePlace)
 {
-    // A FRESH INSTANCE IS CATPITAMP'S CRUNCH CHANNEL — the first launch, a new instance in a host, and
-    // INIT alike: the X88-IR Crunch through DARK MATTER, the input and output columns in the chain,
-    // the delay on with nothing in its mix, and everything else where the cockpit leaves it, at its
-    // parameter's own default. The cockpit sets its chain over these defaults (channels/Engine.cpp,
-    // setUpChain) and finds them already so.
+    const Opening engine;
+    const auto& id = p.paramID;
+
+    if (id == preampDevice) return p.convertTo0to1 ((float) enginePlace);
+    if (id == stereoMode)   return p.convertTo0to1 ((float) (int) engine.stereoMode);
+    if (id == reverbType)   return p.convertTo0to1 ((float) juce::jmax (0, reverbCharacters.indexOf (engine.reverb)));
+    if (id == reverbMix)    return p.convertTo0to1 (engine.reverbMix);
+    if (id == delayMix)     return p.convertTo0to1 (engine.delayMix);
+    return p.getDefaultValue();
+}
+
+juce::AudioProcessorValueTreeState::ParameterLayout createLayout (const juce::String& product, const Opening& opening)
+{
+    // A FRESH INSTANCE IS WHAT ITS DEFAULTS SAY — the first launch, a new instance in a host, and INIT
+    // alike: the Soldano X88-IR Crunch through RED GIANT, the input and output columns in the chain, the delay
+    // on with nothing in its mix, and everything else where the cockpit leaves it, at its parameter's
+    // own default — except where `opening` says otherwise: a product's first channel's pack, room and
+    // delay, and the channel mode the environment chose. The cockpit and the rovers set their chain over
+    // these defaults (channels/Engine.cpp, setUpChain) and find them already so.
     //
-    // The device a fresh instance opens on, and everything its pack says about starting it.
-    const auto preampDef = blockDefaults (device::DeviceLibrary::ampSlot, "X88-IR Crunch");
+    // The device a fresh instance opens on, and everything the engine's pack says about starting it.
+    const auto preampDef = blockDefaults (product, device::DeviceLibrary::ampSlot, enginePack, opening.capture);
+
     using Bool   = juce::AudioParameterBool;
     using Choice = juce::AudioParameterChoice;
     using Float  = juce::AudioParameterFloat;
@@ -63,23 +86,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    // IN THE RIG, one per link — see the pair's note in Parameters.h. All true out of the box: IN and
-    // OUT are in, at unity — the cockpit's INPUT and OUTPUT faders.
-    layout.add (std::make_unique<Bool> (juce::ParameterID { inPresent,     1 }, "Input In Rig",    true),
-                std::make_unique<Bool> (juce::ParameterID { tunerPresent,  1 }, "Tuner In Rig",    true),
-                std::make_unique<Bool> (juce::ParameterID { gatePresent,   1 }, "Gate In Rig",     true),
-                std::make_unique<Bool> (juce::ParameterID { preampPresent, 1 }, "Amp In Rig",      true),
-                std::make_unique<Bool> (juce::ParameterID { delayPresent,  1 }, "Delay In Rig",    true),
-                std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Rig",   true),
-                std::make_unique<Bool> (juce::ParameterID { cabPresent,    1 }, "Cabinet In Rig",  true),
-                std::make_unique<Bool> (juce::ParameterID { limitPresent,  1 }, "Limiter In Rig",  true),
-                std::make_unique<Bool> (juce::ParameterID { outPresent,    1 }, "Output In Rig",   true));
-
-    // STANDBY/ON for the three links that never had one: the two volume columns and the tuner.
-    // ON out of the box — a column that does not apply its volume is a column nobody asked for.
-    layout.add (std::make_unique<Bool> (juce::ParameterID { inOn,    1 }, "Input",  true),
-                std::make_unique<Bool> (juce::ParameterID { outOn,   1 }, "Output", true),
-                std::make_unique<Bool> (juce::ParameterID { tunerOn, 1 }, "Tuner",  true));
+    // The tuner's own STANDBY/ON — the rovers' and the cockpit's menus (Product::tunerSwitch). On out of
+    // the box.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { tunerOn, 1 }, "Tuner",  true));
 
     // The tuner's mute ships OFF: a plugin that opens silent is a plugin reported as broken.
     layout.add (std::make_unique<Bool> (juce::ParameterID { tunerMute, 1 }, "Tuner Mute", false));
@@ -105,6 +114,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                          limiterCeilingMax, 0.1f),
                                          -0.3f));
 
+    // The boost's level, heard only while the amp's boost is on — see Parameters.h.
+    layout.add (std::make_unique<Float> (juce::ParameterID { boostLevel, 1 }, "Boost Level",
+                                         juce::NormalisableRange<float> (boostLevelMin, boostLevelMax, 1.0f),
+                                         boostLevelDefault));
+
     // The noise gate. Off out of the box — a gate is a decision about YOUR noise floor, not part
     // of the voicing. The ceiling is -10, NOT OrbitCab's -20: that range was voiced for a
     // post-trim guitar, and a raw input's bleed can sit at -20 dBFS all day — a threshold that
@@ -118,16 +132,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                 std::make_unique<Choice> (juce::ParameterID { gateDecay, 1 }, "Gate Decay",
                                           gateDecayModes, 0));
 
-    // The raw switch and the selector slots, one set per captured block — and the block's one trim.
-    // IN is how hard the capture is fed, and it rides its own meter rather than being a knob among
-    // knobs, because it is the question you ask first about a captured device.
+    // The raw switch and the selector slots, one set per captured block. No trim of its own: how
+    // hard the capture is fed is the pack's stated level and the IN column's hand.
     for (const char* blk : { preampId })
     {
-        const juce::NormalisableRange<float> trim (blockTrimMinDb, blockTrimMaxDb, 0.1f);
         const juce::String label = blk == preampId ? preampName : blk;   // the block's name, as a host shows it
-
-        layout.add (std::make_unique<Float> (juce::ParameterID { blockIn (blk), 1 },
-                                             label + " In", trim, 0.0f));
 
         // The DEVICE's own tone by default: a captured pedal arrives wearing its own knobs, and
         // the console is the scalpel you reach for past them.
@@ -163,6 +172,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // on the nearer one itself — the parameter never has to know where the captures are.
     layout.add (std::make_unique<Float> (juce::ParameterID { preampGain, 1 }, "Gain",
                                          juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), 5.0f));
+
+    // The boost of a pack that has no Boost switch of its own — see Parameters.h. Off out of the box.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { preampBoost, 1 }, juce::String (preampName) + " Boost", false));
 
     // Frequencies are skewed so the useful end of each sweep gets the middle of the travel.
     auto hz = [] (float lo, float hi, float centre)
@@ -216,12 +228,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                     std::make_unique<Float> (juce::ParameterID { eqBellHz (l, 2), 1 }, name + "B3 Freq",
                                              hz (100.0f, 12000.0f, 3000.0f), 3000.0f),
                     std::make_unique<Float> (juce::ParameterID { eqBellQ (l, 2),  1 }, name + "B3 Q", qN, 8.0f));
-
-        // The output level — a fader on the link: the block's own volume, metered by the OUT
-        // beside it, and shape deserves a say separate from push.
-        layout.add (std::make_unique<Float> (juce::ParameterID { eqLevel (l), 1 }, name + "Level",
-                                             juce::NormalisableRange<float> (eqLevelMinDb, eqLevelMaxDb, 0.1f),
-                                             0.0f));
     }
 
     // The cabinet. Position and distance are the two halves of one gesture on the grid; distance is
@@ -246,9 +252,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     // MONO is the truth of a guitar chain and half the neural cost; STEREO is the double-track
     // option — two takes on one bus, each through its own amp; STEREO SPACE keeps the amp mono
-    // and lets the reverb and everything after it go wide.
+    // and lets the reverb and everything after it go wide. Which one a fresh instance stands on is
+    // the environment's (AmpProcessor::modeOfEnvironment), and so is its default.
     layout.add (std::make_unique<Choice> (juce::ParameterID { stereoMode, 1 }, "Stereo Mode",
-                                          stereoModes, 0));
+                                          stereoModes, (int) opening.stereoMode));
 
     // ON ships as the pack's stated law for its ALIASES; a library captured at one honest level
     // switches it off and feeds every model exactly what the chain hands over. It bypasses
@@ -259,11 +266,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     layout.add (std::make_unique<Choice> (juce::ParameterID { cabIr, 1 }, "Cabinet IR",
                                           cabIrNames, cabIrDefault));
 
-    // The delay, ON with nothing in its mix, as the cockpit's Crunch opens: the echo is there to be
-    // turned up, and still not a starting point. Sync ships ON at a quarter note: the free
-    // milliseconds are the specialist's mode, the division is the player's. The BPM field is the
-    // standalone's conductor; in a host the session's tempo conducts, unless the player asks the
-    // delay to keep its own.
+    // The delay, ON with nothing in its mix, as the cockpit's Crunch opens (a product whose first channel
+    // opens on some declares that): the echo is there to be turned up, and still not a starting point.
+    // Sync ships ON at a quarter note: the free milliseconds are the specialist's mode, the division is
+    // the player's. The BPM field is the standalone's conductor; in a host the session's tempo conducts,
+    // unless the player asks the delay to keep its own.
     layout.add (std::make_unique<Bool>   (juce::ParameterID { delayOn, 1 }, "Delay", true),
                 std::make_unique<Bool>   (juce::ParameterID { delaySync, 1 }, "Delay Sync", true),
                 std::make_unique<Bool>   (juce::ParameterID { delayHostTempo, 1 }, "Delay Follows Host", true),
@@ -286,14 +293,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                           delayOffsetMaxMs, 0.1f),
                                           0.0f),
                 std::make_unique<Float>  (juce::ParameterID { delayMix, 1 }, "Delay Mix",
-                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), opening.delayMix));
 
-    // PLATE at thirty: the shipping room. DECAY breathes around unity, PREDELAY ships at zero,
-    // and the tail's HPF waits switched off at a bass-cleaning corner.
+    // PLATE at thirty: the shipping room, or the room and share a product's first channel opens on.
+    // DECAY breathes around unity, PREDELAY ships at zero, and the tail's HPF waits switched off at a
+    // bass-cleaning corner.
     layout.add (std::make_unique<Choice> (juce::ParameterID { reverbType, 1 }, "Reverb", reverbCharacters,
-                                          reverbCharacters.indexOf ("Plate")),
+                                          juce::jmax (0, reverbCharacters.indexOf (opening.reverb))),
                 std::make_unique<Float>  (juce::ParameterID { reverbMix, 1 }, "Mix",
-                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 30.0f),
+                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), opening.reverbMix),
                 std::make_unique<Float>  (juce::ParameterID { reverbDecay, 1 }, "Reverb Decay",
                                           juce::NormalisableRange<float> (0.5f, 2.0f, 0.01f,
                                                                           std::log (0.5f) / std::log ((1.0f - 0.5f) / (2.0f - 0.5f))),

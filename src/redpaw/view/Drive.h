@@ -14,7 +14,7 @@ namespace orbitamp::redpaw
 
 /** A DRIVE THE WINDSCREEN HOSTS: a world and its GPU renderer behind one face, so the same glass can
     look out on the Plains of Mars or across the ice of a moon. The windscreen hands the drive its gear,
-    TURBO, PARK and the steering, steps it once a frame and has it draw; what the world is — its height
+    TURBO and the steering, steps it once a frame and has it draw; what the world is — its height
     function, its sky, what flies at the glass — is the drive's own. A product passes the drive it wants,
     made for its own number of gears, to the windscreen's constructor.
 
@@ -34,7 +34,6 @@ public:
     /** The drive's inputs. */
     virtual void setGear (int gear) = 0;            // 1..numGears()
     virtual void setTurbo (bool on) = 0;
-    virtual void setParked (bool on) = 0;
     virtual void setSteer (float amount) = 0;       // -1..1, held
     /** The wipers' speed, where the face has keys for it: 0 off, 1 a wipe now and then, 2 slow, 3 fast. A
         world whose wipers keep their own time takes no notice. */
@@ -47,7 +46,7 @@ public:
 
     /** Placed where it stands with no history: the speed and the air the gear asks for reached, the
         camera evaluated directly. For a still. */
-    virtual void settle (int gear, bool turbo, bool parked) = 0;
+    virtual void settle (int gear, bool turbo) = 0;
 
     /** Put somewhere: absolute world metres and a heading in radians, 0 = -z. The world made first if
         it was not yet (tens of milliseconds, once). */
@@ -61,8 +60,8 @@ public:
     virtual float speed() const noexcept = 0;
     /** The speed the gear and TURBO ask for, m/s. */
     virtual float speedFor (int gear, bool turbo) const noexcept = 0;
-    /** How the speed is eased to what is asked, a time constant in seconds: driving, and coming to a stand. */
-    struct Ease { double drive = 0.0, park = 0.0; };
+    /** How the speed is eased to what is asked, a time constant in seconds. */
+    struct Ease { double drive = 0.0; };
     virtual Ease ease() const noexcept = 0;
 
     /** The 1993 landscape's colours for this world. */
@@ -73,8 +72,10 @@ public:
     virtual std::string landmarks (double /*metres*/) const { return {}; }
 
     //==========================================================================
-    /** The GPU's half — see PlainsGl. create() is false when a shader would not build here. */
+    /** The GPU's half — see PlainsGl. create() is false when a shader would not build here, or no
+        context was current; error() says which, a shader's in its driver's words. */
     virtual bool create() = 0;
+    virtual std::string error() const { return {}; }
     virtual void destroy() = 0;
     /** The scene at (w * scale) x (h * scale), blitted to `targetFrameBuffer` over (x, y, w, h) — GL's
         own pixels, from its bottom-left corner. */

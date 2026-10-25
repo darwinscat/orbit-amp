@@ -9,8 +9,6 @@
 //   view.setGear (3);          // 1 CLEAN, 2 CRUNCH, 3 HI-GAIN: the helicopter eases to that gear's speed
 //   view.setGear (3, { settled: true })   // ...or is at it at once; createTitanView (canvas, { gear: 3 }) starts so
 //   view.setTurbo (true);      // a dash at twice the speed: the nose dips, the downwash tears a streak of foam ahead
-//   view.setPark (true);       // a hover: the craft comes to a stand over the sea; steering only turns the view
-//   view.setPark (true, { settled: true })   // ...or stands at once, as setGear (n, { settled: true }) is at its gear
 //   view.setSteer (-1..1);     // the stick, from outside; or { steer: true } lets a drag across the canvas steer
 //   view.setWipers (0..3);     // the four keys under the radio: OFF, INT (a wipe a minute), LO, HI; { wipers: 1 } starts so
 //   view.setLights (left, right);   // the two searchlights under the nose; { lights: [false, false] } starts so
@@ -18,7 +16,7 @@
 //
 // The canvas lies over the canopy's box (1672 x 418 in the app: the cabin's top rows, its three panes). The rest —
 // the quality ladder, the worker, onReady, view.ready, onFallback, the bench's `test` and `worker: false` — is every
-// world's, as view.js says. The first frame is the same every time for the same gear, PARK, lights and canvas
+// world's, as view.js says. The first frame is the same every time for the same gear, lights and canvas
 // aspect: the craft stands where the app's search puts it, at the clock's zero. A bench's `test` is
 // AmberPawViewDemo's: { at: [x, z, headingDegrees], clock: [seconds, metres], drive: seconds, steer: -1..1,
 // still: bool } (titan.cpp, view_test).

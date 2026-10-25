@@ -12,7 +12,15 @@ namespace orbitamp
 FaceplateView::FaceplateView (AmpProcessor& processor)
     : preamp (processor, processor.preamp, params::preampName, params::preampId, 0,
               processor.blockSpectrumTap[0], processor.blockInSpectrumTap[0]),
-      delay (processor), reverb (processor), cabinet (processor)
+      delay (processor), reverb (processor), cabinet (processor),
+      gate ("GATE", *processor.apvts.getParameter (params::gateThreshold), *processor.apvts.getParameter (params::gateOn),
+            -80.0f, -30.0f, true,
+            [&processor] { return processor.gateKeyDb.load() <= -89.5f ? 0.0f : -processor.gateMeterDb.load() / 40.0f; },
+            processor.gateWorked),
+      limit ("LIMIT", *processor.apvts.getParameter (params::limiterCeiling), *processor.apvts.getParameter (params::limiterOn),
+             params::limiterCeilingMin, params::limiterCeilingMax, false,
+             [&processor] { return -processor.limiterGrDb.load() / 6.0f; },
+             processor.limiterWorked)
 {
     for (auto* b : { (BlockFrame*) &preamp, (BlockFrame*) &delay, (BlockFrame*) &reverb,
                      (BlockFrame*) &cabinet })
@@ -25,6 +33,24 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     }
 
     // Every block still binds its power parameter — the frames follow it for their own state.
+
+    addAndMakeVisible (gate);
+    addAndMakeVisible (limit);
+    gate.setSwitchShown (false);
+    limit.setSwitchShown (false);
+
+    // The guards' fixed scales: the gate's threshold over -80..-30 — above that a gate cuts the
+    // playing, not the hum, so the rail does not offer it (Oleh, 24.10) — a tick every 5 dB and a
+    // number every 10; the limiter's ceiling over -3..-0.1, a numbered tick every half decibel. The
+    // gate's rail stands at the window's left, the limiter's at its right, the scales toward the centre.
+    for (int db = -80; db <= -30; db += 5)
+        gate.marks.push_back ({ (float) db, db % 10 == 0 });
+
+    for (int half = -6; half <= -1; ++half)
+        limit.marks.push_back ({ half * 0.5f, true });
+
+    limit.labelDecimals = 1;
+    limit.railOnLeft    = false;
 }
 
 BlockFrame& FaceplateView::frame (Block b)
@@ -86,7 +112,26 @@ void FaceplateView::resized()
         }
     };
 
+    // The guards first: the gate at the head of row one, the limiter at the end of row two.
+    gate.setVisible (! row1.isEmpty());
+    limit.setVisible (! row2.isEmpty());
+
+    if (! row1.isEmpty())
+    {
+        gate.setBounds (row1.removeFromLeft (GuardBlock::designWidth));
+        row1.removeFromLeft (colGap);
+    }
+
     lay (row1, { Block::preamp });
+
+    // Row two: the limiter's narrow block at its end, and the rest in even shares among the delay,
+    // the reverb and the cabinet — the limiter's width taken from all three alike (Oleh, 24.10).
+    if (! row2.isEmpty())
+    {
+        limit.setBounds (row2.removeFromRight (GuardBlock::designWidth));
+        row2.removeFromRight (colGap);
+    }
+
     lay (row2, { Block::delay, Block::reverb, Block::cabinet });
 }
 

@@ -4,7 +4,6 @@
 #include "Engine.h"
 
 #include "../Parameters.h"
-#include "../ui/Prefs.h"
 
 namespace orbitamp::channels
 {
@@ -16,20 +15,6 @@ namespace
     using Suppress = felitronics::appkit::CompareHistory::ScopedSuppress;
 }
 
-int settings::snapTurbo (int db)
-{
-    int best = turboPushes.front();
-    for (const int push : turboPushes)
-        if (std::abs (push - db) < std::abs (best - db))
-            best = push;
-    return best;
-}
-
-int settings::turbo()
-{
-    return snapTurbo ((int) prefs::store().get (turboKey, turboDefault));
-}
-
 //==============================================================================
 void Engine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout, const Lineup& lineup)
 {
@@ -38,27 +23,38 @@ void Engine::addParameters (juce::AudioProcessorValueTreeState::ParameterLayout&
     for (const auto& c : lineup.channels)
         names.add (c.name);
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { lineup.parameterId, 1 }, "Channel", names, 0));
+}
 
-    // ...and PARK, where the product has it: off, the amp plays.
-    if (lineup.parkId != nullptr)
-        layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { lineup.parkId, 1 }, "Park", false));
+void Engine::opening (const Lineup& lineup, params::Opening& o)
+{
+    // A fresh instance opens on the first channel (Channels::adopt) and setUpChain gives it that
+    // channel's room and delay (Channels::defaultOf) — said here before there is an instance to say it to.
+    jassert (! lineup.channels.empty());
+    if (lineup.channels.empty())
+        return;
+
+    const auto& first = lineup.channels.front();
+    o.capture  = first.capture;
+    o.reverb   = first.reverb;
+    o.delayMix = first.delayMix;
+    if (first.reverbMix.has_value())
+        o.reverbMix = *first.reverbMix;
 }
 
 Engine& Engine::of (AmpProcessor& p)
 {
-    jassert (dynamic_cast<Engine*> (p.product.get()) != nullptr);
-    return static_cast<Engine&> (*p.product);
+    jassert (dynamic_cast<Engine*> (p.productEngine.get()) != nullptr);
+    return static_cast<Engine&> (*p.productEngine);
+
 }
 
 /** Built while the processor is still building itself, before its history has taken a baseline: what
     is settled here is how the amp starts, not an edit of it. */
 Engine::Engine (AmpProcessor& p, const Lineup& lineup)
-    : channels (p, lineup), amp (p), channel (p.apvts.getParameter (lineup.parameterId)),
-      park (lineup.parkId != nullptr ? p.apvts.getRawParameterValue (lineup.parkId) : nullptr)
+    : channels (p, lineup), amp (p), channel (p.apvts.getParameter (lineup.parameterId))
 {
     jassert (channel != nullptr);
 
-    channels.setTurboDb ((float) settings::turbo());
     makeOwn();
     channels.align();
     say (channels.active());
@@ -145,21 +141,12 @@ void Engine::setParam (const juce::String& paramId, float value)
 
 void Engine::setUpChain (bool firstTime)
 {
-    setParam (params::tunerPresent,  1.0f);   // the tuner bay is always there...
-    if (firstTime)                            // ...and listening, until the player switches it off
+    if (firstTime)                            // the tuner listens until the player switches it off
         setParam (params::tunerOn,   1.0f);
-    setParam (params::gatePresent,   1.0f);   // the gate stands in the chain; whether it works is the settings' ON
-    setParam (params::inPresent,     1.0f);   // the INPUT and OUTPUT faders are these links' trims
-    setParam (params::inOn,          1.0f);
-    setParam (params::outPresent,    1.0f);
-    setParam (params::outOn,         1.0f);
-    setParam (params::preampPresent, 1.0f);
     setParam (params::preampOn,      1.0f);
-    setParam (params::delayPresent,  1.0f);
     setParam (params::delayOn,       1.0f);
     setParam (params::delaySync,      1.0f);  // the delay keeps time, always: the host's when there is one...
     setParam (params::delayHostTempo, 1.0f);  // ...and its own BPM when there is not
-    setParam (params::reverbPresent, 1.0f);
     setParam (params::reverbOn,      1.0f);
     if (firstTime)                            // after that the reverb is the player's to choose
     {
@@ -167,14 +154,12 @@ void Engine::setUpChain (bool firstTime)
         if (channels.lineup().channels[(size_t) channels.active()].reverbMix.has_value())
             setParam (params::reverbMix, channels.defaultOf (channels.active(), params::reverbMix));
     }
-    setParam (params::cabPresent,    1.0f);
     if (firstTime)                            // after that, whether the cabinet plays is the player's to say
         setParam (params::cabOn,     1.0f);
 
-    // TURBO is the preamp's input trim, at its push or at nothing: a state the product has never seen
-    // starts with it off, wherever that trim was left.
+    // A state the product has never seen starts with TURBO off, wherever it was left.
     if (firstTime)
-        setParam (params::blockIn (params::preampId), 0.0f);
+        setParam (params::preampBoost, 0.0f);
 
     // ...and with as much delay as its channel opens on, not as much as the engine does — and its pack's
     // switches where the pack opens them, the one the channel holds where it holds it.

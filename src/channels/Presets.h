@@ -17,8 +17,7 @@ namespace orbitamp::channels
     of the family keeps them (PresetStore.h).
 
     INPUT is not in a preset. It is set to the guitar and the interface, not to a sound, and a preset
-    that moved it would be undoing a setting made once for the room. Nor is PARK, where the product has
-    it: whether the amp is in the sound at all is the moment's, not the preset's.
+    that moved it would be undoing a setting made once for the room.
 
     Loading goes through the processor's history, so it is one undoable step and lands in the register
     that is playing. Which preset the sound came from, and a number that stands for that sound, are
@@ -33,9 +32,9 @@ public:
     Presets (AmpProcessor&, Channels&);
 
     /** The product's folder and its files: `Darwin's Cat/<product>/Presets`, `.<product in lower case>`. */
-    static PresetStore store();
-    static juce::StringArray names();
-    static bool exists (const juce::String& name);
+    PresetStore store() const;
+    juce::StringArray names() const;
+    bool exists (const juce::String& name) const;
 
     /** The preset this sound was loaded from or last saved as; empty when it is nobody's. */
     juce::String current() const;

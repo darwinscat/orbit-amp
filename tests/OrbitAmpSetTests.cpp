@@ -2,12 +2,12 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 // Gate for ORBITAMP'S SET AS THE BUILD LAYS IT OUT in the factory folder (CMakeLists.txt: THE FACTORY
-// FOLDER), under OrbitAmp's own list there: that the list names every pack OrbitAmp plays — the X88-IR's
-// four channels and the Friedman IR-X's two — and none of the V4's six, which are put away, whatever else
-// the folder holds for another product; that it names the whole cabinet shelf in its folders, and every
+// FOLDER), under OrbitAmp's own list there: that the list names every pack OrbitAmp plays — every pack of
+// the tree's set: the X88-IR's four channels, the Friedman IR-X's two, the ReVolt Guitar's three and the
+// Victory V4's three, the last two only where the build is not a release — and nothing else; that it names the whole cabinet shelf in its folders, and every
 // file it names is there; that the shelf OrbitAmp plays holds every place of the catalog; that each pack
 // lies under the name of the capture it holds; that the preamp list shows each by a name of its own; and
-// that the AMP's menu shows the X88-IR and the IR-X as the family's devices and no OLD any more.
+// that the AMP's menu shows the X88-IR, the IR-X, the ReVolt and the V4 as the family's devices and no OLD.
 //
 // It reads the build's own <build>/Factory (gate_reads_factory) — never the machine's — and the player's
 // Devices folder is one of its own, empty, under the system's temporary folder.
@@ -39,13 +39,19 @@ int main()
     own.createDirectory();
     std::printf ("reading %s\n", factory.getFullPathName().toRawUTF8());
 
-    const auto list = FactorySet::listOf (factory, product::name);
+    const auto list = FactorySet::listOf (factory, "OrbitAmp");
     check (list.size() > 0, "OrbitAmp has a list in the build's factory folder, " + juce::String (list.size()) + " files");
 
     // What OrbitAmp plays, by the names its list shows them by: a pack that went missing from the tree
-    // would otherwise go missing from the product without a word.
-    const juce::StringArray wanted { "X88-IR Normal", "X88-IR Altered", "X88-IR Crunch", "X88-IR Overdrive",
-                                     "IR-X Ch1 PowerAmp", "IR-X Ch2 PowerAmp" };
+    // would otherwise go missing from the product without a word. A release leaves out the packs of the
+    // amps it does not carry — the ReVolt's without FrostPawAmp, the V4's without AmberPawAmp (CMakeLists.txt:
+    // A RELEASE SHIPS NO PACK OF AN AMP IT LEAVES OUT); built here, OrbitAmp plays them all.
+    juce::StringArray wanted { "Soldano X88-IR Normal", "Soldano X88-IR Altered", "Soldano X88-IR Crunch", "Soldano X88-IR Overdrive",
+                               "Friedman IR-X Ch1 PowerAmp", "Friedman IR-X Ch2 PowerAmp" };
+    if (ORBITAMP_PLAYS_REVOLT)
+        wanted.addArray ({ "Two Notes ReVolt Clean PowerAmp", "Two Notes ReVolt Crunch PowerAmp", "Two Notes ReVolt Lead PowerAmp" });
+    if (ORBITAMP_PLAYS_V4)
+        wanted.addArray ({ "Victory V4 Copper (clean)", "Victory V4 Sheriff (crunch)", "Victory V4 Kraken (hi-gain)" });
 
     juce::StringArray packs, cabinets, astray, missing;
     for (const auto& path : list)
@@ -64,20 +70,12 @@ int main()
     bool everyOne = packs.size() == wanted.size();
     for (const auto& w : wanted)
         everyOne = everyOne && packs.contains (w);
-    check (everyOne, "the list names every pack OrbitAmp plays, the X88-IR's four and the IR-X's two: " + packs.joinIntoString (", "));
+    check (everyOne, juce::String ("the list names every pack OrbitAmp plays, the X88-IR's four and the IR-X's two")
+                         + (ORBITAMP_PLAYS_REVOLT ? ", the ReVolt's three" : "")
+                         + (ORBITAMP_PLAYS_V4 ? ", the V4's three" : "")
+                         + ", and no more: " + packs.joinIntoString (", "));
     check (astray.isEmpty(), "...and nothing but packs and cabinets — no face's pictures" + (astray.isEmpty() ? juce::String() : ": " + astray.joinIntoString (", ")));
     check (missing.isEmpty(), "every file it names is there, with something in it" + (missing.isEmpty() ? juce::String() : ": " + missing.joinIntoString (", ")));
-
-    // THE V4'S SIX ARE PUT AWAY: in the tree, and in the build's folder for the rovers that play them, but
-    // not OrbitAmp's.
-    {
-        bool none = true;
-        for (const auto& p : packs)
-            none = none && ! p.startsWith ("V4 ");
-        check (none, "...none of them the V4's");
-        check (factory.getChildFile ("V4 Copper.orbitrig.zip").existsAsFile(),
-               "...though the build's folder holds the V4's for the rovers that play them");
-    }
 
     // THE WHOLE SHELF, in its folders: Darwin's Cat's own ten in the Orange's, the twenty-one others in Other,
     // each where the catalog has it — and every place of it filled in the shelf OrbitAmp plays.
@@ -92,22 +90,28 @@ int main()
         check (cabinets.size() == 31 && in ("Orange PPC212V") == 10 && in ("Other") == 21,
                "the whole shelf: ten in Orange PPC212V, twenty-one in Other (" + juce::String (cabinets.size()) + ")");
 
-        bool cataloged = true, whole = device::shelf::irs().size() == std::size (catalog::irs);
+        bool cataloged = true, whole = device::shelf::irs ("OrbitAmp").size() == std::size (catalog::irs);
         for (const auto& ir : catalog::irs)
             cataloged = cataloged && cabinets.contains (device::shelf::pathOf (ir.folder, juce::String::fromUTF8 (ir.file)));
-        for (const auto& ir : device::shelf::irs())
+        for (const auto& ir : device::shelf::irs ("OrbitAmp"))
             whole = whole && ir.data != nullptr && ir.size > 0;
         check (cataloged, "...each at the path the catalog gives it");
         check (whole, "...and OrbitAmp's shelf holds every place of the catalog, read from the folder");
     }
 
-    // A name is a promise about the capture: "X88-IR Crunch" is the pack whose rig_id is x88-ir-crunch-….
+    // A name is a promise about the capture: its maker first, then the capture's own words — "Soldano X88-IR
+    // Crunch" is the pack whose rig_id is x88-ir-crunch-…, "Victory V4 Copper (clean)" the one whose rig_id is
+    // v4-copper-… — a word in brackets says its character.
     {
         juce::StringArray wrong;
         for (const auto& p : packs)
         {
             const auto rig = DeviceLibrary::rigIdOf (factory.getChildFile (p + ".orbitrig.zip"));
-            if (! rig.startsWith (p.toLowerCase().replaceCharacter (' ', '-') + "-"))
+            const auto words = juce::StringArray::fromTokens (p.upToFirstOccurrenceOf (" (", false, false), " ", "");
+            bool kept = false;      // a maker of a word or more, and the rest the rig_id's start
+            for (int maker = 1; maker < words.size() && ! kept; ++maker)
+                kept = rig.startsWith (words.joinIntoString ("-", maker).toLowerCase() + "-");
+            if (! kept)
                 wrong.add (p + " holds " + (rig.isEmpty() ? juce::String ("no capture") : rig));
         }
         check (wrong.isEmpty(), "each lies under the name of the capture it holds" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString (", ")));
@@ -116,7 +120,7 @@ int main()
     // What the preamp's list offers, read as the amp reads its own.
     {
         juce::StringArray listed;
-        for (const auto& p : DeviceLibrary::scan (DeviceLibrary::Slot::preamp, true, factory, own))
+        for (const auto& p : DeviceLibrary::scan ("OrbitAmp", DeviceLibrary::Slot::preamp, true, factory, own))
             if (p.bundled)
                 listed.add (p.displayName());
 
@@ -129,14 +133,16 @@ int main()
     // WHAT THE AMP'S MENU SHOWS (DeviceLibrary::shelfOf, which the menu is built from): the family's
     // devices, and no folder of the factory's — there is no OLD any more.
     {
-        const auto shelf = DeviceLibrary::shelfOf (DeviceLibrary::scan (DeviceLibrary::ampSlot, true, factory, own));
+        const auto shelf = DeviceLibrary::shelfOf (DeviceLibrary::scan ("OrbitAmp", DeviceLibrary::ampSlot, true, factory, own));
         juce::StringArray devices, folders;
         for (const auto& d : shelf.factory)
             devices.add (d.name);
         for (const auto& f : shelf.folders)
             folders.add (f.name);
-        check (devices.joinIntoString (", ") == "IR-X, X88-IR", "the AMP's menu: the family's devices are the IR-X and the X88-IR: "
-                                                                  + devices.joinIntoString (", "));
+        const auto menu = juce::String ("Friedman IR-X, Soldano X88-IR") + (ORBITAMP_PLAYS_REVOLT ? ", Two Notes ReVolt" : "")
+                                                                         + (ORBITAMP_PLAYS_V4 ? ", Victory V4" : "");
+        check (devices.joinIntoString (", ") == menu,
+               "the AMP's menu: the family's devices by maker and name — " + menu + ": " + devices.joinIntoString (", "));
         check (folders.isEmpty(), "...and no folder of the factory's, OLD or any other: " + folders.joinIntoString (", "));
     }
 

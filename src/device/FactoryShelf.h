@@ -4,6 +4,7 @@
 #pragma once
 
 #include "FactorySet.h"
+#include "../PerProduct.h"
 
 #include <CabinetCatalog.h>   // written by CMake from resources/cabinets.txt
 
@@ -90,11 +91,13 @@ inline std::vector<Ir> read (const juce::File& factory, const juce::String& prod
     return out;
 }
 
-/** The whole shelf this product plays, from the folder this build reads — read once in a process. */
-inline const std::vector<Ir>& irs()
+/** The whole shelf a product plays, by its name, from the folder this build reads — read once in a
+    process for each product. */
+inline const std::vector<Ir>& irs (const juce::String& product)
 {
-    static const std::vector<Ir> shelf = read (FactorySet::location(), product::name);
-    return shelf;
+    static PerProduct<const std::vector<Ir>> shelves;
+    return shelves.of (product.toStdString(), [&product] { return read (FactorySet::location(), product); });
 }
+
 
 } // namespace orbitamp::device::shelf

@@ -30,6 +30,15 @@ namespace
         the seam. */
     struct NotchFill { float above, below, left, seam, right, run, plateShift, feather; };
 
+    /** A SLOT PAINTED WITH ROOM OVER ITS FIRST NOTCH IS CUT SHORT (`shortenSlot`), so it ends as far over
+        the first gear as it runs under the last and nothing over the gears reads as a place. Its top end
+        — the plate just over it, the rim and the round corners, from `top` down `end` rows, `left` to
+        `right` — moves `drop` down; the rows it leaves are the plate `plateShift` to the left, from
+        `plateTop` down, where it is plain; the whole faded into the picture over `feather` at its top and
+        its sides, and the plate into the moved end across their seam. Under the moved end the slot runs
+        on as painted. A `drop` of nought: the slot as painted. */
+    struct SlotEnd { float left, right, top, end, drop, plateShift, plateTop, feather; };
+
     /** REVERB's or DELAY's frame, as the picture painted it: the plate's top (its shadow), where the rim's
         lit edge ends and its face begins, where the well opens under it, and how far down the end caps'
         top screws reach. */
@@ -47,16 +56,23 @@ namespace
         juce::Rectangle<float> slot;        // the slot cut down the room, its rim included — where the skin lays its fader
     };
 
+    /** A RING PAINTED ROUND A KNOB (`eraseRing`): the circle fitted to the middle of its light, `centre`
+        and `radius`; how far its middle wanders off that circle, at most (`reach`); and how far its light
+        reaches either side of its own middle, its glow on the groove's floor included (`half`). */
+    struct PaintedRing { juce::Point<float> centre; float radius, reach, half; };
+
     /** WHAT ONE ROVER'S PICTURE NEEDS. */
     struct Rover
     {
         const char* face;
 
         /** The lever: its gears (the product's pairs of channels, RedPawLineup.h), the notches its picture
-            paints, the stops the gears stand at (the skin's layout::stops), and how a notch is filled. */
+            paints, the stops the gears stand at (the skin's layout::stops), how a notch is filled, and how
+            the slot is cut short over the first gear. */
         int gears;
         std::vector<float> notches, stops;
         NotchFill notchFill;
+        SlotEnd slotEnd;
 
         /** REVERB's and DELAY's upper rims, each made `rimLift` taller, upward, so that the words over each
             well stand ON its frame; none where the picture has room for the words as painted. */
@@ -78,6 +94,13 @@ namespace
             pixel is a lit lamp, 0..1 — none where the picture paints no lamp lit. */
         float (*lampness) (juce::Colour);
         std::array<juce::Rectangle<float>, 4> lamps;
+
+        /** THE RINGS PAINTED ROUND THE KNOBS, TAKEN OUT: DRIVE's, in the dashboard's space, and the one in
+            the socket's render under each tone knob, in the socket's own — `socketSize` across, the
+            skin's plan.socketSize, the render twice that; and how much of a pixel is a ring's light. */
+        PaintedRing driveRing, socketRing;
+        float socketSize;
+        float (*ringness) (juce::Colour);
     };
 
     /** On a rusted dashboard warm is everywhere: a lamp is what is both warm AND bright — its red well
@@ -102,14 +125,31 @@ namespace
         return juce::jmin (juce::jlimit (0.0f, 1.0f, warm), juce::jlimit (0.0f, 1.0f, bright));
     }
 
+    /** A cyan ring's light is green and blue well over red: the rust round RedPawAmp's has its red over
+        both, and FrostPawAmp's steel, blue as it is, only a little of either over its red. */
+    float cyanRingness (juce::Colour c)
+    {
+        return juce::jmin (c.getFloatGreen(), c.getFloatBlue()) - c.getFloatRed();
+    }
+
+    /** A white ring on dark gunmetal is what is bright. */
+    float whiteRingness (juce::Colour c)
+    {
+        return 0.3f * c.getFloatRed() + 0.59f * c.getFloatGreen() + 0.11f * c.getFloatBlue();
+    }
+
     const std::array<Rover, 3> rovers {{
-        // REDPAWAMP: two gears down a slot painted for three, spread evenly — PARK, then a step of 61.75 to
-        // the middle and another to the third notch. The first two notches are filled in, and the middle
+        // REDPAWAMP: two gears down a slot painted for three, spread evenly from 694 under the slot's top
+        // end — a step of 61.75 to the middle and another to the third notch. The first two notches are filled in, and the middle
         // one is the second, copied up. A notch is cut 805..829 down and out to 824, its bevels' corners
         // reaching 803.5 and 831.5 on the slot's lit edge, 809.5..811.5; the straight run over the third is
         // 789..803.5. The plate right of it is plain out to 850.
+        // The slot's dark is 786..810 across, 681.25..855.25 down, its rim 783.5..812.25 and its top 679.75;
+        // the last gear stands 37.75 over its bottom end, so its top end goes to 37.75 over the first gear,
+        // 718 — 36.75 down. The plate left of it, 747..781, is plain from 697 down, under the plate's screw.
         { "redpaw", 2, { 733.8f, 776.0f, 817.5f }, { 755.75f, 817.5f },
           { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 2.0f },
+          { 781.0f, 815.0f, 676.0f, 15.0f, 36.75f, 34.0f, 697.0f, 2.0f },
           {{ { 276.0f, 681.0f, 683.0f, 691.0f, 699.5f, 703.0f, 316.0f, 637.0f },      // REVERB
              { 276.0f, 681.0f, 755.5f, 763.0f, 772.5f, 777.0f, 316.0f, 637.0f } }},   // DELAY
           10.0f,
@@ -129,13 +169,21 @@ namespace
           {{ { 27.0f,   363.0f, 135.0f, 32.0f },      // the segments 37..152 x 373..385
              { 1510.0f, 363.0f, 132.0f, 32.0f },      // the segments 1520..1632 x 372..385
              { 69.0f,   824.0f, 62.0f, 63.0f },       // the slant 55..97 x 834..877 as painted, moved in with its plate
-             { 1541.0f, 824.0f, 62.0f, 63.0f } }} },  // the slant 1575..1617 x 834..877 as painted, moved in with its plate
+             { 1541.0f, 824.0f, 62.0f, 63.0f } }},    // the slant 1575..1617 x 834..877 as painted, moved in with its plate
+          // DRIVE's ring fits 374.28,538.36 r 71.72, its middle off that by +-0.64 for most of the way
+          // round and up to 1.8 at most; its light, glow and all, 3 either side. A tone socket's,
+          // 62.04,62.10 r 40.56 in its render, +-0.64; its light 2.25 either side.
+          { { 374.28f, 538.36f }, 71.72f, 2.5f, 3.0f }, { { 62.04f, 62.10f }, 40.56f, 2.0f, 2.25f }, 124.0f,
+          cyanRingness },
 
         // FROSTPAWAMP: three gears in its three notches, so nothing is filled; its third notch cut 804..830
         // down, its slot's lit edge 810..812, the straight run over it 789..803, the plate plain out to 848:
         // filled as RedPawAmp's would be, were it to have fewer gears. Rims and corner plates as RedPawAmp's.
+        // The slot's dark is 681.5..855.25 down; the last gear stands 38.45 over its bottom end, so its top
+        // end goes to 38.45 over the first gear, 694.35 — 12.85 down — cut short as RedPawAmp's is.
         { "frostpaw", 3, { 732.8f, 775.5f, 816.8f }, { 732.8f, 775.5f, 816.8f },
           { 17.0f, 17.0f, 803.0f, 813.0f, 831.0f, 11.0f, 16.0f, 2.0f },
+          { 781.0f, 815.0f, 676.0f, 15.0f, 12.85f, 34.0f, 697.0f, 2.0f },
           {{ { 276.0f, 681.0f, 683.0f, 691.0f, 699.5f, 703.0f, 316.0f, 637.0f },      // REVERB
              { 276.0f, 681.0f, 755.5f, 763.0f, 772.5f, 777.0f, 316.0f, 637.0f } }},   // DELAY
           10.0f,
@@ -155,19 +203,30 @@ namespace
           {{ { 27.0f,   363.0f, 135.0f, 32.0f },      // the segments 40..152 x 372..386
              { 1510.0f, 363.0f, 132.0f, 32.0f },      // the segments 1520..1631 x 372..386
              { 69.0f,   824.0f, 62.0f, 63.0f },       // the slant 55..97 x 834..877 as painted, moved in with its plate
-             { 1541.0f, 824.0f, 62.0f, 63.0f } }} },  // the slant 1575..1617 x 834..877 as painted, moved in with its plate
+             { 1541.0f, 824.0f, 62.0f, 63.0f } }},    // the slant 1575..1617 x 834..877 as painted, moved in with its plate
+          // Its rings are painted wider and glow wider, over the steel too: DRIVE's fits 374.22,538.27
+          // r 72.06, +-0.92, its light 4 either side; a tone socket's 62.02,61.80 r 40.35, +-0.72, its light
+          // 3 either side. The faint ice-blue its glow leaves on the steel beyond that stays, as painted.
+          { { 374.22f, 538.27f }, 72.06f, 2.5f, 4.0f }, { { 62.02f, 61.80f }, 40.35f, 2.0f, 3.0f }, 124.0f,
+          cyanRingness },
 
-        // AMBERPAWAMP: five ticks right of a straight slot, PARK and four places below it; a fourth gear's
-        // tick, past its three, is painted over — the spare tick's white bar is 926..946.5 x 702..708: over
-        // it, the plain plate just above, mirrored down and back, faded in at the fill's top, bottom and
-        // right. The wells' words have room as painted, and its corner slots are painted: nothing grows. No
-        // lamp is painted lit.
-        { "amberpaw", 3, { 587.5f, 627.0f, 666.3f, 704.7f }, { 587.5f, 627.0f, 666.3f, 704.7f },
+        // AMBERPAWAMP: five ticks right of a straight slot, four places and one over them that is none; the
+        // top tick, and a fourth gear's tick past its three, are painted over — the spare tick's white bar is
+        // 926..946.5 x 702..708: over it, the plain plate just above, mirrored down and back, faded in at the
+        // fill's top, bottom and right. Its slot stands as painted: with both end ticks gone it runs about as
+        // far over the first gear as under the last. The wells' words have room as painted, and its corner
+        // slots are painted: nothing grows. No lamp is painted lit.
+        { "amberpaw", 3, { 548.9f, 587.5f, 627.0f, 666.3f, 704.7f }, { 587.5f, 627.0f, 666.3f, 704.7f },
           { 9.0f, 9.0f, 921.0f, 960.0f, 953.0f, 9.0f, 0.0f, 2.0f },
+          {},
           {}, 0.0f,
           0.0f, {}, {},
           { 20.0f, 492.0f, 27.0f, 221.0f }, 13.0f, 21.0f / 27.0f,
-          nullptr, {} },
+          nullptr, {},
+          // Its rings are white: GAIN's fits 732.16,625.09 r 90.62, +-1.09, its light 3 either side; a tone
+          // socket's, 59.14,59.30 r 44.23 in its render, 118 across, +-0.26, its light 1.75 either side.
+          { { 732.16f, 625.09f }, 90.62f, 2.5f, 3.0f }, { { 59.14f, 59.30f }, 44.23f, 1.5f, 1.75f }, 118.0f,
+          whiteRingness },
     }};
 
     /** THE UPPER RIMS OF REVERB'S AND DELAY'S FRAMES GROW, so that the words over each well stand ON its
@@ -274,6 +333,39 @@ namespace
         return img;
     }
 
+    /** THE SLOT CUT SHORT OVER THE FIRST GEAR (SlotEnd): its top end moves down, the rows it leaves are
+        plain plate from beside the slot, and the two meet across a seam as soft as the fill's edges. */
+    juce::Image shortenSlot (juce::Image img, const Rover& rover)
+    {
+        const auto& s = rover.slotEnd;
+        if (! img.isValid() || s.drop <= 0.0f)
+            return img;
+
+        const float k = (float) img.getWidth() / width;
+        const auto at = [k] (float v) { return juce::roundToInt (v * k); };
+        const auto original = img.createCopy();
+        const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
+
+        const int left = at (s.left), right = at (s.right), top = at (s.top), drop = at (s.drop);
+        const int bottom = top + drop + at (s.end), shift = at (s.plateShift), plateTop = at (s.plateTop);
+        const float feather = (float) juce::jmax (1, at (s.feather));
+
+        for (int y = top; y < bottom; ++y)
+        {
+            const float down = juce::jmin (1.0f, (float) (y - top + 1) / feather);     // under the moved end the slot is as painted
+            const float seam = juce::jlimit (0.0f, 1.0f, (float) (y - top - drop) / feather + 0.5f);     // plate to end
+
+            for (int x = left; x < right; ++x)
+            {
+                const auto fill = src.getPixelColour (x - shift, plateTop + y - top).interpolatedWith (src.getPixelColour (x, y - drop), seam);
+                const float amount = juce::jlimit (0.0f, 1.0f, juce::jmin (down, (float) (x - left + 1) / feather, (float) (right - x) / feather));
+                dst.setPixelColour (x, y, src.getPixelColour (x, y).interpolatedWith (fill, amount));
+            }
+        }
+        return img;
+    }
+
     /** THE CORNER LAMPS' PLATES GROW ON THEIR OUTER LEGS (LampPlate): the plate inward of the cut moves
         inward, cut to its own outline; the room it leaves gets the plate's top edge, plain metal, the
         plate's bottom edge, each from where the picture has it plain; and down the room, INPUT's slot at a
@@ -334,6 +426,141 @@ namespace
         return img;
     }
 
+    /** THE RINGS PAINTED ROUND THE KNOBS ARE TAKEN OUT, and the face draws each ring whole itself
+        (redpaw::KnobRing). A painted ring is no true circle — round RedPawAmp's DRIVE its middle wanders
+        up to a pixel and three quarters of the stage either way, half the ring's width — and the true
+        circle drawn over it left slivers of the painted one showing where it wandered out, and steps in
+        the lit band where it wandered in.
+
+        Round the ring, each way from its middle: where the ring's middle is — the middle of its light,
+        each colour weighed by its `ringness` — smoothed along the ring, so that the dark gap between two
+        segments follows its neighbours; and across that, `half` either way, the picture becomes what lies
+        just beyond the band, inside it and outside, drawn straight across — the groove's floor, with no
+        ring in it. Only the band changes: the rust, the steel, the screws round it stay as they were
+        painted. `k` is the picture's pixels to its space's. */
+    juce::Image eraseRing (juce::Image img, const PaintedRing& ring, float k, float (*ringness) (juce::Colour))
+    {
+        if (! img.isValid() || ringness == nullptr || ring.radius <= 0.0f || k <= 0.0f)
+            return img;
+
+        const auto original = img.createCopy();
+        const juce::Image::BitmapData src (original, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData dst (img, juce::Image::BitmapData::readWrite);
+        const auto c = ring.centre * k;
+        const float radius = ring.radius * k, reach = ring.reach * k, half = ring.half * k;
+        const float twoPi = juce::MathConstants<float>::twoPi;
+
+        // The picture between its pixels, premultiplied as it is held, a pixel's middle on its whole
+        // coordinates.
+        struct Premultiplied { float a, r, g, b; };
+        const auto mix = [] (Premultiplied p, Premultiplied q, float t) -> Premultiplied
+        {
+            return { p.a + (q.a - p.a) * t, p.r + (q.r - p.r) * t, p.g + (q.g - p.g) * t, p.b + (q.b - p.b) * t };
+        };
+        const auto pixel = [&src] (int x, int y) -> Premultiplied
+        {
+            const auto* p = reinterpret_cast<const juce::PixelARGB*> (src.getPixelPointer (juce::jlimit (0, src.width - 1, x),
+                                                                                          juce::jlimit (0, src.height - 1, y)));
+            return { (float) p->getAlpha(), (float) p->getRed(), (float) p->getGreen(), (float) p->getBlue() };
+        };
+        const auto at = [&] (juce::Point<float> p)
+        {
+            const int x = (int) std::floor (p.x), y = (int) std::floor (p.y);
+            const float fx = p.x - (float) x, fy = p.y - (float) y;
+            return mix (mix (pixel (x, y), pixel (x + 1, y), fx), mix (pixel (x, y + 1), pixel (x + 1, y + 1), fx), fy);
+        };
+        const auto colourOf = [] (Premultiplied p)
+        {
+            return p.a <= 0.0f ? juce::Colour() : juce::Colour::fromFloatRGBA (p.r / p.a, p.g / p.a, p.b / p.a, p.a / 255.0f);
+        };
+
+        // The ring's middle, in each direction a pixel apart round it: the middle of what is lit over
+        // half the brightest across it, its light weighing each point.
+        const int n = juce::jmax (64, juce::roundToInt (twoPi * radius));
+        std::vector<float> middle ((size_t) n), light ((size_t) n);
+        for (int i = 0; i < n; ++i)
+        {
+            const float t = twoPi * (float) i / (float) n;
+            const juce::Point<float> u { std::cos (t), std::sin (t) };
+            std::vector<std::pair<float, float>> across;
+            float peak = 0.0f;
+            for (float r = radius - reach - half; r <= radius + reach + half; r += 0.25f)
+            {
+                across.push_back ({ r, ringness (colourOf (at (c + u * r))) });
+                peak = juce::jmax (peak, across.back().second);
+            }
+            float sum = 0.0f, weight = 0.0f;
+            for (const auto& [r, v] : across)
+                if (v > 0.5f * peak)
+                    sum += r * v, weight += v;
+            middle[(size_t) i] = weight > 0.0f ? sum / weight : radius;
+            light[(size_t) i] = peak;
+        }
+
+        // ...smoothed along the ring, four pixels of the stage each way, each middle weighed by how far it
+        // is lit over half the ring's usual light: a gap between segments, dark, takes its neighbours'.
+        auto sorted = light;
+        std::nth_element (sorted.begin(), sorted.begin() + n / 2, sorted.end());
+        const float dim = 0.5f * sorted[(size_t) n / 2];
+        const int span = juce::jmax (1, juce::roundToInt (4.0f * k));
+        std::vector<float> smooth ((size_t) n);
+        for (int i = 0; i < n; ++i)
+        {
+            float sum = 0.0f, weight = 0.0f;
+            for (int j = i - span; j <= i + span; ++j)
+            {
+                const auto other = (size_t) ((j + n) % n);
+                const float w = juce::jmax (0.0f, light[other] - dim);
+                sum += middle[other] * w, weight += w;
+            }
+            smooth[(size_t) i] = juce::jlimit (radius - reach, radius + reach, weight > 0.0f ? sum / weight : radius);
+        }
+
+        // Across the band, from what lies just beyond it inside to what lies just beyond it outside — each
+        // the mean of the picture there over a pixel and a half outward and a pixel either way along the
+        // ring, so that no one grain of it is drawn across in a streak.
+        const auto beyond = [&] (juce::Point<float> u, float from, float way)
+        {
+            const juce::Point<float> along { -u.y, u.x };
+            Premultiplied sum { 0.0f, 0.0f, 0.0f, 0.0f };
+            int taken = 0;
+            for (int s = 0; s < 3; ++s)
+                for (int a = -1; a <= 1; ++a)
+                    sum = mix (sum, at (c + u * (from + way * 0.75f * (float) s) + along * (float) a), 1.0f / (float) ++taken);
+            return sum;
+        };
+        const float outer = radius + reach + half + 2.0f;
+        const auto box = juce::Rectangle<float> (2.0f * outer, 2.0f * outer).withCentre (c).getSmallestIntegerContainer()
+                             .getIntersection (img.getBounds());
+        for (int y = box.getY(); y < box.getBottom(); ++y)
+            for (int x = box.getX(); x < box.getRight(); ++x)
+            {
+                const auto d = juce::Point<float> ((float) x, (float) y) - c;
+                const float r = d.getDistanceFromOrigin();
+                if (r < radius - reach - half - 1.0f || r > radius + reach + half + 1.0f)
+                    continue;
+
+                float t = std::atan2 (d.y, d.x);
+                if (t < 0.0f)
+                    t += twoPi;
+                const float f = t / twoPi * (float) n;
+                const int i0 = juce::jlimit (0, n - 1, (int) f), i1 = (i0 + 1) % n;
+                const float m = smooth[(size_t) i0] + (smooth[(size_t) i1] - smooth[(size_t) i0]) * (f - (float) i0);
+                const float off = r - m;
+                const float amount = juce::jlimit (0.0f, 1.0f, half + 0.5f - std::abs (off));     // a pixel's soft edge
+                if (amount <= 0.0f)
+                    continue;
+
+                const auto u = d / r;
+                const auto groove = mix (beyond (u, m - half, -1.0f), beyond (u, m + half, 1.0f), juce::jlimit (0.0f, 1.0f, (off + half) / (2.0f * half)));
+                const auto now = mix (pixel (x, y), groove, amount);
+                reinterpret_cast<juce::PixelARGB*> (dst.getPixelPointer (x, y))
+                    ->setARGB ((juce::uint8) juce::roundToInt (now.a), (juce::uint8) juce::roundToInt (now.r),
+                               (juce::uint8) juce::roundToInt (now.g), (juce::uint8) juce::roundToInt (now.b));
+            }
+        return img;
+    }
+
     /** A RENDER'S METAL LIFTED: each colour raised to `gamma` (under 1 lightens the darks most), its alpha
         as it was. */
     juce::Image lifted (const juce::Image& img, float gamma)
@@ -380,7 +607,9 @@ Pictures bakeRover (const juce::String& face, const Sources& sources)
     const auto& rover = *std::find_if (rovers.begin(), rovers.end(), [&face] (const Rover& r) { return face == r.face; });
     Pictures out;
 
-    auto dashboard = widenLampPlates (widenRims (fitNotches (sources.load ("dashboard.png"), rover), rover), rover);
+    auto dashboard = sources.load ("dashboard.png");
+    dashboard = eraseRing (dashboard, rover.driveRing, (float) dashboard.getWidth() / width, rover.ringness);
+    dashboard = widenLampPlates (widenRims (shortenSlot (fitNotches (dashboard, rover), rover), rover), rover);
     std::array<juce::Image, 4> lit;
     if (rover.lampness != nullptr && dashboard.isValid())
         for (size_t i = 0; i < lit.size(); ++i)
@@ -390,18 +619,23 @@ Pictures bakeRover (const juce::String& face, const Sources& sources)
         if (lit[i].isValid())
             out.push_back ({ "lamp-" + juce::String ((int) i) + ".webp", lit[i] });
 
-    for (const char* name : { "knob-drive", "knob-tone", "lever", "slider-cap", "fader-cap",
+    for (const char* name : { "knob-drive", "knob-tone", "socket", "key-frame-left", "key-frame-cell", "key-frame-right",
+                              "lever", "slider-cap", "fader-cap",
                               "toggle-up", "toggle-down", "key-up", "key-down", "turbo-up", "turbo-down" })
-        out.push_back ({ juce::String (name) + ".webp", sources.load (juce::String (name) + ".png") });
+    {
+        auto img = sources.load (juce::String (name) + ".png");
+        if (juce::String (name) == "socket")
+            img = eraseRing (img, rover.socketRing, (float) img.getWidth() / rover.socketSize, rover.ringness);
+        out.push_back ({ juce::String (name) + ".webp", img });
+    }
 
     const auto lever = sources.load ("lever.png");
     out.push_back ({ "lever-glow.webp", glowOf (lever, leverGlowPad) });
     out.push_back ({ "fader-cap-light.webp", lifted (sources.load ("fader-cap.png"), faderCapLift) });
 
-    // ...and the renders only some rovers carry: never another rover's.
-    for (const char* name : { "turbo-lid", "emblem" })
-        if (sources.has (juce::String (name) + ".png"))
-            out.push_back ({ juce::String (name) + ".webp", juce::Image (sources.load (juce::String (name) + ".png")) });
+    // ...and the render only some rovers carry: never another rover's.
+    if (sources.has ("emblem.png"))
+        out.push_back ({ "emblem.webp", juce::Image (sources.load ("emblem.png")) });
 
     return out;
 }

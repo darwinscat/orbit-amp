@@ -6,27 +6,10 @@
 #include "ui/HumMenu.h"
 #include "ui/HumTuning.h"
 #include "ui/Prefs.h"
+#include "ui/WebFaceplate.h"
 
 namespace orbitamp
 {
-
-namespace
-{
-    /** Which face on the panel a link owns, if any. `params::chainLinks` is deliberately free of
-        anything visual, so this is the ONE place that knows about both — and it is a switch over
-        NAMED rows, not a sum over positions, so a row standing down moves nothing. */
-    std::optional<FaceplateView::Block> faceplateBlockFor (int row)
-    {
-        switch (row)
-        {
-            case params::rowPreamp: return FaceplateView::Block::preamp;
-            case params::rowDelay:  return FaceplateView::Block::delay;
-            case params::rowReverb: return FaceplateView::Block::reverb;
-            case params::rowCab:    return FaceplateView::Block::cabinet;
-            default:                return {};
-        }
-    }
-}
 
 AmpEditor::AmpEditor (AmpProcessor& p)
     : juce::AudioProcessorEditor (&p), amp (p), chrome (p), faceplate (p),
@@ -35,7 +18,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
       outColumn (VolumeColumn::Side::out, p.outDb,     p.outClip,
                  *p.apvts.getParameter (params::outTrim)),
       gateConsole (p.apvts, p.gateKeyDb),
-      humLearner (p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
+      humLearner (p.product(), p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
       tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
@@ -49,19 +32,22 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     tooltips.setColour (juce::TooltipWindow::outlineColourId, theme::hair2);
     addAndMakeVisible (inColumn);
     addAndMakeVisible (outColumn);
+
+    // THE GUARDS' MENUS open from their blocks on the panel (GuardBlock); a look clears the dot that
+    // said the guard worked unseen.
+    faceplate.gateBlock().onMenu  = [this] (juce::Point<int> pos) { amp.gateWorked.store (false);    gateConsole.showMenu (pos); };
+    faceplate.limitBlock().onMenu = [this] (juce::Point<int> pos) { amp.limiterWorked.store (false); showLimiterMenu (pos); };
+    if constexpr (features::hum)   // the input column's menu is HUM's in the build that has it (Features.h)
+        inColumn.onMenu = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     addAndMakeVisible (tunerStrip);
     tunerStrip.mute.attach (*p.apvts.getParameter (params::tunerMute));
     addAndMakeVisible (footer);
     // The two TEMPORARY strips under the footer, off unless this player asked for them (the gear).
     // The demo needs its loops on disk — a machine without them has no player to show.
-    showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
-    showGlyphs = prefs::getBool (prefs::showGlyphs, false);
+    showDemo   = params::demoLoopsPresent() && prefs::getBool (amp.product(), prefs::showDemo, false);
+    showGlyphs = prefs::getBool (amp.product(), prefs::showGlyphs, false);
 
-    // Before the first layout: whether an emptied row hands its height to whoever is left, or
-    // takes it out of the window. See prefs::growBlocks.
-    faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
-    dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
-    faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
+    faceplate.setEqRowOnTop (prefs::getBool (amp.product(), prefs::eqRowOnTop, false));
 
 
     addChildComponent (demoStrip);
@@ -92,70 +78,45 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         if (display == nullptr)
             return;
 
+        // The whole display: the zoom from its height (or from its width, on a display narrower than
+        // the design), the width then as much of the display as the range allows.
         const auto area = display->userArea;
         const float fit = juce::jlimit (AmpProcessor::minScale, AmpProcessor::maxScale,
-                                        juce::jmin ((float) area.getWidth() / (float) baseWidth,
+                                        juce::jmin ((float) area.getWidth() / (float) minBaseWidth,
                                                     (float) (area.getHeight() - titleBarAllowance)
                                                         / (float) baseHeight()));
-        const float cur = (float) getWidth() / (float) baseWidth;
+        const int fullH = juce::roundToInt ((float) baseHeight() * fit);
+        const int fullW = juce::jlimit (juce::roundToInt ((float) minBaseWidth * fit),
+                                        juce::roundToInt ((float) (maxDesignWidth() + margin * 2) * fit),
+                                        area.getWidth());
 
-        if (std::abs (cur - fit) < 0.01f && scaleBeforeFull > 0.0f)
+        if (! sizeBeforeFull.isEmpty() && std::abs (getHeight() - fullH) <= 1 && std::abs (getWidth() - fullW) <= 1)
         {
-            setSize (juce::roundToInt (baseWidth * scaleBeforeFull),
-                     juce::roundToInt (baseHeight() * scaleBeforeFull));
-            scaleBeforeFull = -1.0f;
+            setSize (sizeBeforeFull.getWidth(), sizeBeforeFull.getHeight());
+            sizeBeforeFull = {};
         }
         else
         {
-            scaleBeforeFull = cur;
-            setSize (juce::roundToInt (baseWidth * fit), juce::roundToInt (baseHeight() * fit));
+            sizeBeforeFull = getLocalBounds();
+            setSize (fullW, fullH);
         }
 
         if (auto* window = dynamic_cast<juce::ResizableWindow*> (tl))
             window->setCentrePosition (area.getCentre());
     };
 
-    // The layout strip: always there, the ONE place anything is stood down and brought back —
-    // the whole path as arrows, the two ends among them.
-
+    // The layout strip: the chain, FIXED — every block's arrow is its STANDBY/ON, and nothing is
+    // ever taken off the panel. The two ends and the tuner are not arrows: their columns and their
+    // strip are always on the face.
     {
-        // Straight off the one list. The initial `on` is a placeholder for everyone the
-        // parameters answer for: the attachments' first echo dresses the row and the panel the
-        // moment the strip stands.
         std::vector<LayoutStrip::Row> rows;
 
         for (int i = 0; i < params::numChainRows; ++i)
         {
             const auto& link = params::chainLinks[(size_t) i];
 
-            LayoutStrip::Row row { link.name,
-                                   link.captured ? theme::orange : theme::violet,
-                                   i == params::rowTuner ? tunerStands : true };
-
-            // A link with no face on the panel has nothing for a click to reveal, so its click
-            // opens its menu instead — the law is READ off the list rather than written out for
-            // the two rows it happens to catch today.
-            row.hasMenu = row.clickIsMenu = ! link.hasTile;
-
-            if (i == params::rowGate)
-            {
-                // Silence is not work: with nothing at the key (the -90 floor) the gate has
-                // nothing to press, and a light that burns all night means nothing by morning.
-                row.depth = [this]
-                {
-                    if (amp.gateKeyDb.load() <= -89.5f)
-                        return 0.0f;
-
-                    return juce::jlimit (0.0f, 1.0f, -amp.gateMeterDb.load() / 40.0f);
-                };
-                row.dot = [this] { return amp.gateWorked.load(); };
-            }
-            else if (i == params::rowLimit)
-            {
-                row.depth = [this] { return juce::jlimit (0.0f, 1.0f, -amp.limiterGrDb.load() / 6.0f); };
-                row.dot   = [this] { return amp.limiterWorked.load(); };
-            }
-
+            LayoutStrip::Row row { link.name, link.captured ? theme::orange : theme::violet };
+            row.present = link.onParam != nullptr && i != params::rowTuner;
             rows.push_back (std::move (row));
         }
 
@@ -176,45 +137,20 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     };
 
     // The echo that makes it ONE fact: wherever a link's switch moves — the strip, an undo, a
-    // loaded preset, a register switch, host automation — the arrow and the panel follow. ONE
-    // loop for every link that has a switch, guards included: a guard turned off in its menu
-    // reads dark in the strip the way a stood-down block does, and that used to be two more
-    // attachments written out by hand.
+    // loaded preset, a register switch, host automation — the arrow follows. The blocks dim
+    // themselves: each binds its own switch.
     for (int i = 0; i < params::numChainRows; ++i)
     {
         const auto& link = params::chainLinks[(size_t) i];
 
-        if (link.onParam != nullptr)
+        if (link.onParam != nullptr && i != params::rowTuner)
             blockRowAtts.push_back (std::make_unique<juce::ParameterAttachment> (
                 *amp.apvts.getParameter (link.onParam),
-                [this, i] (float v) { layoutStrip->setRowOn (i, v > 0.5f); applyRowStates(); }));
-
-        if (link.presentParam != nullptr)
-            blockRowAtts.push_back (std::make_unique<juce::ParameterAttachment> (
-                *amp.apvts.getParameter (link.presentParam),
-                [this, i] (float v) { layoutStrip->setRowPresent (i, v > 0.5f); applyRowStates(); }));
+                [this, i] (float v) { layoutStrip->setRowOn (i, v > 0.5f); }));
     }
 
     for (auto& att : blockRowAtts)
         att->sendInitialUpdate();
-
-    // The guards' arrows ARE their consoles: any click opens the menu (OFF is its first item),
-    // and the look clears the latched dot, the way a look at the badge used to.
-    layoutStrip->onRowMenu = [this] (int i, juce::Point<int> pos)
-    {
-        if (i == params::rowGate)
-        {
-            amp.gateWorked.store (false);
-            gateConsole.showMenu (pos);
-        }
-        else if (i == params::rowLimit)
-        {
-            amp.limiterWorked.store (false);
-            showLimiterMenu (pos);
-        }
-    };
-
-    layoutStrip->onChainMenu = [this] (juce::Component& anchor) { showChainMenu (anchor); };
 
     addAndMakeVisible (*layoutStrip);
 
@@ -274,13 +210,13 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     outRuler.currentDb = [this] { auto* p = amp.apvts.getParameter (params::outTrim);
                                   return p->convertFrom0to1 (p->getValue()); };
 
-    // The ceiling's own ladder: -0.1 at the top of the rail's top third, halves down to -3.
-
     addChildComponent (inRuler);    // went missing with the ceiling's ruler: a ladder with no
     addChildComponent (outRuler);   // parent cannot be shown, however often it is asked
 
+    inColumn.showGuard  (*p.apvts.getParameter (params::gateThreshold),  *p.apvts.getParameter (params::gateOn));
+    outColumn.showGuard (*p.apvts.getParameter (params::limiterCeiling), *p.apvts.getParameter (params::limiterOn));
+
     inColumn.onTrimDrag  = [this] (bool a) { inRuler.setVisible (a); if (a) inRuler.toFront (false); };
-    inColumn.onMenu      = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     outColumn.onTrimDrag = [this] (bool a) { outRuler.setVisible (a); if (a) outRuler.toFront (false); };
 
     // Devices came or went while the window was open: the engine re-reads the folder, then the
@@ -291,13 +227,11 @@ AmpEditor::AmpEditor (AmpProcessor& p)
         faceplate.deviceChanged();
     };
 
-    // Dragging the corner IS the zoom: the aspect is locked, so width alone determines the factor.
+    // The corner sets the zoom AND the width: the height decides the factor, and the aspect is free
+    // between the design's own and `maxAspect` (AspectRange), the width laid out across.
+    setConstrainer (&aspect);
     setResizable (true, true);
-    getConstrainer()->setFixedAspectRatio ((double) baseWidth / (double) baseHeight());
-    setResizeLimits (juce::roundToInt (baseWidth    * AmpProcessor::minScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::minScale),
-                     juce::roundToInt (baseWidth    * AmpProcessor::maxScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::maxScale));
+    applySizeLimits();
 
     // As large as the screen allows, up to the size the plugin WANTS to open at. Asking for 2x on a
     // display that cannot hold it does not give 2x — it gives whatever the window manager shrinks it
@@ -308,80 +242,50 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
     {
         const auto area = display->userArea;
-        const float fits = juce::jmin ((float) area.getWidth()  / (float) baseWidth,
+        const float fits = juce::jmin ((float) area.getWidth()  / (float) minBaseWidth,
                                        (float) (area.getHeight() - titleBarAllowance) / (float) baseHeight());
         s = juce::jlimit (AmpProcessor::minScale, s, fits);
         amp.setEditorScale (s);
     }
 
-    setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight() * s));
+    // It opens at the design's own width; the corner widens it from there.
+    zoomNow = s;
+    setSize (juce::roundToInt (minBaseWidth * s), juce::roundToInt (baseHeight() * s));
 
     // The one place this plugin may reach the network without a click, and only because a player
     // ticked the switch in the version popover: once a day at most, on the message thread, never in
     // a constructor a scanner runs. Not ticked, or checked already today — nothing happens at all.
     amp.updateChecker().checkIfDue();
-}
 
-/** What the two switches of every row mean to the WINDOW, read in one place after any of them
-    moves. A tile, a column and the tuner's row are all "stands on the panel or does not", and the
-    answer is the same sentence for all three: in the rig, and either on or dimmed rather than
-    removed. */
-void AmpEditor::applyRowStates()
-{
-    const auto stands = [this] (params::ChainRow row)
-    {
-        const auto* in = amp.apvts.getParameter (params::chainLinks[(size_t) row].presentParam);
-        const auto* on = amp.apvts.getParameter (params::chainLinks[(size_t) row].onParam);
+    // THE SITE'S KIT: OrbitAmp's own face written out for darwinscat.com, when the environment names a
+    // folder for it (WebFaceplate.h). A player never sets it, and without it nothing here happens.
+    if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_WEB_EXPORT", {}); folder.isNotEmpty())
+        WebFaceplate::exportAfterOpening (*this, juce::File (folder));
 
-        if (in != nullptr && in->getValue() <= 0.5f)
-            return false;                               // out of the rig: gone, whatever the eye prefers
-
-        return on == nullptr || on->getValue() > 0.5f || dimRatherThanRemove;
-    };
-
-    for (int i = 0; i < params::numChainRows; ++i)
-        if (const auto block = faceplateBlockFor (i))
-            faceplate.setShown (*block, stands ((params::ChainRow) i));
-
-    inColStands  = stands (params::rowIn);
-    outColStands = stands (params::rowOut);
-    tunerStands  = stands (params::rowTuner);
-
-    // Standing on the panel is not the same as WORKING. A link that kept its place while standing
-    // by has to READ as standing by: dimmed, and its instrument stopped where it stood. The blocks
-    // do this for themselves — every one of them binds its own switch — and these three are the
-    // ones that are not blocks.
-    const auto works = [this] (params::ChainRow row)
-    {
-        const auto* in = amp.apvts.getParameter (params::chainLinks[(size_t) row].presentParam);
-        const auto* on = amp.apvts.getParameter (params::chainLinks[(size_t) row].onParam);
-
-        return (in == nullptr || in->getValue() > 0.5f) && (on == nullptr || on->getValue() > 0.5f);
-    };
-
-    inColumn .setLive (works (params::rowIn));
-    outColumn.setLive (works (params::rowOut));
-    tunerStrip.setLive (works (params::rowTuner));
-
-    // BOTH, and in this order. `applyStripChoice` only asks for a new SIZE, and a column leaving
-    // does not change the window's height — so `setSize` was a no-op and the column stayed on
-    // screen until something else resized the window. (Which is why switching the TUNER appeared
-    // to switch off a column: the tuner DOES change the height, and the pending relayout landed
-    // with it.)
-    applyStripChoice();
-    resized();
+    // A live still of the face for a product page (WebFaceplate.h) — a dev tool, like the kit above.
+    if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT", {}); folder.isNotEmpty())
+        WebFaceplate::liveShotAfterOpening (*this, juce::File (folder),
+                                            juce::File (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_DI", {})));
 }
 
 void AmpEditor::applyStripChoice()
 {
-    const float s = (float) getWidth() / (float) baseWidth;
+    // The zoom and the width the window already has; only the height follows the rows.
+    applySizeLimits();
+    designW = juce::jlimit (minDesignWidth, maxDesignWidth(), designW);
+    setSize (juce::roundToInt ((float) baseW() * zoomNow), juce::roundToInt ((float) baseHeight() * zoomNow));
+}
 
-    getConstrainer()->setFixedAspectRatio ((double) baseWidth / (double) baseHeight());
-    setResizeLimits (juce::roundToInt (baseWidth    * AmpProcessor::minScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::minScale),
-                     juce::roundToInt (baseWidth    * AmpProcessor::maxScale),
-                     juce::roundToInt (baseHeight() * AmpProcessor::maxScale));
-    setSize (juce::roundToInt (baseWidth * s), juce::roundToInt (baseHeight() * s));
+void AmpEditor::applySizeLimits()
+{
+    const int h = baseHeight();
+
+    aspect.lowAspect  = (double) minBaseWidth / (double) h;
+    aspect.highAspect = juce::jmax (aspect.lowAspect, (double) (maxDesignWidth() + margin * 2) / (double) h);
+    aspect.setSizeLimits (juce::roundToInt ((float) minBaseWidth * AmpProcessor::minScale),
+                          juce::roundToInt ((float) h * AmpProcessor::minScale),
+                          juce::roundToInt ((float) (maxDesignWidth() + margin * 2) * AmpProcessor::maxScale),
+                          juce::roundToInt ((float) h * AmpProcessor::maxScale));
 }
 
 void AmpEditor::paint (juce::Graphics& g)
@@ -409,13 +313,14 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     }
 
     // H: the hum, OFF and back (prefs::humFlip) — Р under a Russian layout, the same key. G: the
-    // gate's On, the sound's switch and so an undo step, as its menu sets it — П.
+    // gate's On, the sound's switch and so an undo step, as its menu sets it — П. H only while the build
+    // has HUM (Features.h); without it the key is not ours, and goes on to the host.
     if (! key.getModifiers().isAnyModifierKeyDown())
     {
         const auto letter = juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) key.getKeyCode());
-        if (letter == 'H' || letter == 0x0420)
+        if (features::hum && (letter == 'H' || letter == 0x0420))
         {
-            prefs::setHum (prefs::humFlip());
+            prefs::setHum (amp.product(), prefs::humFlip (amp.product()));
             return true;
         }
         if (letter == 'G' || letter == 0x041f)
@@ -433,93 +338,14 @@ bool AmpEditor::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
-/** The checklist menu's two window switches. The links take 1..numChainRows — off their own
-    indices, so the ids stay right whatever the chain grows into — and these sit well clear. */
-static constexpr int itemGrowBlocks = 101, itemDimStandby = 102;
-
 void AmpEditor::applyViewPrefs()
 {
-    faceplate.setFillsHeight (prefs::getBool (prefs::growBlocks, true));
-    faceplate.setEqRowOnTop (prefs::getBool (prefs::eqRowOnTop, false));
-    dimRatherThanRemove = prefs::getBool (prefs::dimStandby, false);
-    showDemo   = params::demoLoopsPresent() && prefs::getBool (prefs::showDemo, false);
-    showGlyphs = prefs::getBool (prefs::showGlyphs, false);
-    applyRowStates();
+    faceplate.setEqRowOnTop (prefs::getBool (amp.product(), prefs::eqRowOnTop, false));
+    showDemo   = params::demoLoopsPresent() && prefs::getBool (amp.product(), prefs::showDemo, false);
+    showGlyphs = prefs::getBool (amp.product(), prefs::showGlyphs, false);
+    applyStripChoice();
+    resized();
     repaint();
-}
-
-void AmpEditor::showChainMenu (juce::Component& anchor)
-{
-    // The rig itself, straight off the one list and in chain order, so the menu reads as the strip
-    // it edits. The tick is PRESENCE — in the rig or not at all — which is a different question
-    // from standby: that one stays the arrow's own click, and the two must not look alike.
-    juce::PopupMenu m;
-
-    for (int i = 0; i < params::numChainRows; ++i)
-    {
-        const auto& link = params::chainLinks[(size_t) i];
-
-        if (auto* p = amp.apvts.getParameter (link.presentParam))
-            m.addItem (i + 1, link.name, true, p->getValue() > 0.5f);
-    }
-
-    m.addSeparator();
-
-    // What an emptied row does — the eye's business, this machine only, so these two write the
-    // preferences rather than any parameter. They live HERE and nowhere else: they only mean
-    // anything while a link is being taken out, which is the list above.
-    m.addItem (itemGrowBlocks, "KEEP WINDOW HEIGHT", true, prefs::getBool (prefs::growBlocks, true));
-    m.addItem (itemDimStandby, "STANDBY KEEPS ITS PLACE", true, prefs::getBool (prefs::dimStandby, false));
-
-    // ATTACHED to the button, not hung at a point: a menu that does not know its launcher
-    // dismisses synchronously and lets the click through to it, so a second press on the checklist
-    // would close the menu and reopen it in the same breath — JUCE spells this out at
-    // juce_PopupMenu.cpp:724. With the target named, the second press just closes it.
-    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&anchor),
-                     // Guarded like the limiter's: the parameters outlive this window, the editor
-                     // does not, and this callback reaches back through `this` twice.
-                     [safe = juce::Component::SafePointer<AmpEditor> (this),
-                      home = juce::Component::SafePointer<juce::Component> (&anchor)] (int r)
-                     {
-                         if (safe == nullptr || r == 0)
-                             return;
-
-                         if (r <= params::numChainRows)
-                         {
-                             const auto& link = params::chainLinks[(size_t) (r - 1)];
-
-                             if (auto* p = safe->amp.apvts.getParameter (link.presentParam))
-                             {
-                                 // THE switch: a link's place in the rig is a parameter, so the
-                                 // pick travels in the preset, the undo history and the registers
-                                 // exactly as the Setup page's does.
-                                 const bool on = p->getValue() > 0.5f;
-                                 p->beginChangeGesture();
-                                 p->setValueNotifyingHost (on ? 0.0f : 1.0f);
-                                 p->endChangeGesture();
-                             }
-                         }
-                         else if (r == itemGrowBlocks || r == itemDimStandby)
-                         {
-                             const auto& key = r == itemGrowBlocks ? prefs::growBlocks : prefs::dimStandby;
-                             const bool fallback = r == itemGrowBlocks;
-
-                             prefs::setBool (key, ! prefs::getBool (key, fallback));
-                             safe->applyViewPrefs();
-                         }
-
-                         // Ten ticks in one list: a menu that shuts on every pick would have to be
-                         // opened ten times to build a rig. It comes straight back, on the same
-                         // button, so the whole visit is one visit. Through the message queue, not
-                         // straight from here: JUCE does delete the old menu window before this
-                         // callback runs, but that is its own dismissal order, and a reopen has no
-                         // business depending on it.
-                         juce::MessageManager::callAsync ([safe, home]
-                         {
-                             if (safe != nullptr && home != nullptr)
-                                 safe->showChainMenu (*home);
-                         });
-                     });
 }
 
 void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
@@ -538,7 +364,13 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
     // can sit between them with no item ticked and nothing anywhere to say what it is.
     m.addSectionHeader (isOn ? "LIMITER  " + juce::String (c, 1) + " DB"
                              : juce::String ("LIMITER  OFF"));
-    m.addItem (1, "OFF",           true, ! isOn);
+    // OFF on top, ruled off, and only while it is on; a ceiling picked below switches it on (Oleh, 24.10).
+    if (isOn)
+    {
+        m.addItem (1, "OFF");
+        m.addSeparator();
+    }
+
     m.addItem (2, "SAFETY  -0.3",  true, matches (-0.3f));
     m.addItem (3, "NORMAL  -1.0",  true, matches (-1.0f));
     m.addItem (4, "TIGHT   -3.0",  true, matches (-3.0f));
@@ -561,10 +393,10 @@ void AmpEditor::showLimiterMenu (juce::Point<int> screenPos)
                              p->endChangeGesture();
                          };
 
-                         // OFF is a toggle here too — a menu that can only kill is no menu.
+                         // OFF is offered only to a limiter that is on; a ceiling is the way back on.
                          if (r == 1)
                          {
-                             set (on, on->getValue() > 0.5f ? 0.0f : 1.0f);
+                             set (on, 0.0f);
                              return;
                          }
 
@@ -582,16 +414,16 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 {
     // The switch, then the modes (ui/HumMenu.h), in this menu's capitals.
     const int  heard = amp.humHeard();
-    const auto lines = prefs::humMenu (heard, humLearner.isLearning());
+    const auto lines = prefs::humMenu (amp.product(), heard, humLearner.isLearning());
 
     juce::PopupMenu m;
-    m.addSectionHeader ("HUM  " + prefs::humState (heard).toUpperCase());
+    m.addSectionHeader ("HUM  " + prefs::humState (amp.product(), heard).toUpperCase());
     for (size_t i = 0; i < lines.size(); ++i)
         m.addItem ((int) i + 1, lines[i].text.toUpperCase(), true, lines[i].ticked);
 
     // How hard it works — TEMPORARY, for tuning by ear (ui/HumTuning.h): each a submenu, its value in
     // its title; knob k's values answer as 100 (k + 1) + their index.
-    const auto knobs = prefs::humtune::knobs();
+    const auto knobs = prefs::humtune::knobs (amp.product());
     for (size_t k = 0; k < knobs.size(); ++k)
     {
         juce::PopupMenu values;
@@ -605,7 +437,7 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
     // closed under the open menu is left alone.
     m.showMenuAsync (juce::PopupMenu::Options()
                          .withTargetScreenArea ({ screenPos.x, screenPos.y, 1, 1 }),
-                     [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs] (int r)
+                     [safe = juce::Component::SafePointer<AmpEditor> (this), lines, knobs, &product = amp.product()] (int r)
                      {
                          if (r > 0 && r <= (int) lines.size() && lines[(size_t) r - 1].isLearn)
                          {
@@ -616,7 +448,7 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
                              }
                          }
                          else if (r > 0 && r <= (int) lines.size())
-                             prefs::humPick (lines[(size_t) r - 1]);
+                             prefs::humPick (product, lines[(size_t) r - 1]);
                          else if (const int k = r / 100 - 1, i = r % 100;
                                   k >= 0 && k < (int) knobs.size() && i < knobs[(size_t) k].count)
                              knobs[(size_t) k].choose (knobs[(size_t) k].values[i]);
@@ -625,23 +457,34 @@ void AmpEditor::showInputMenu (juce::Point<int> screenPos)
 
 void AmpEditor::resized()
 {
-    const float s = (float) getWidth() / (float) baseWidth;
+    // The HEIGHT is the zoom; the width, in design units, is what is left to lay out across.
+    const float s = (float) getHeight() / (float) baseHeight();
     amp.setEditorScale (s);
+    zoomNow = s;
+    designW = juce::jlimit (minDesignWidth, maxDesignWidth(),
+                            juce::roundToInt ((float) getWidth() / s) - margin * 2);
 
     // Bounds stay in design units; the transform does all the scaling, margins included.
     const auto zoom = juce::AffineTransform::scale (s);
 
-    chrome.setBounds (margin, margin, FaceplateView::designWidth, Chrome::designHeight);
+    chrome.setBounds (margin, margin, designW, Chrome::designHeight);
     chrome.setTransform (zoom);
 
     // The gate's IN sliver takes the faceplate row's left edge; the faceplate wears the rest.
-    int faceplateY = margin + Chrome::designHeight + headerGap;
+    const int faceplateY = margin + Chrome::designHeight + headerGap;
 
-    // The layout strip: the chain laid flat between the toolbar and the device, always there.
-    layoutStrip->setBounds (margin, faceplateY, FaceplateView::designWidth,
-                            LayoutStrip::designHeight);
-    layoutStrip->setTransform (zoom);
-    faceplateY += LayoutStrip::designHeight;
+    // The layout strip: the chain laid flat on the header's second line, beside the brand's marks,
+    // always there. In front of the header, whose component spans both lines. Its first arrow's
+    // tail stands under the wordmark's first letter: no lane inset, the strip that tail's air left.
+    // The last arrow's point ends under the gear, the first line's last button.
+    {
+        layoutStrip->leftPad = 0;
+        const int x = chrome.secondLineX() - LayoutStrip::tailAir;
+        layoutStrip->arrowsEndX = chrome.gearBounds().reduced (2).getRight() - x;
+        layoutStrip->setBounds (margin + x, margin + Chrome::firstLineH, designW - x,
+                                LayoutStrip::designHeight);
+        layoutStrip->setTransform (zoom);
+    }
 
     // The faceplate is only as tall as its LAYOUT stands it — a collapsed row is not here.
     const int faceplateH = faceplate.currentHeight();
@@ -655,69 +498,59 @@ void AmpEditor::resized()
     const int gutterH = juce::jmax (0, faceplateH - FaceplateView::contentTop
                                                   - FaceplateView::contentBottom);
 
-    // The side columns stand only when the strip's end caps say so; a hidden column hands its
-    // width to the faceplate — all but the edge inset the badges keep, so the outermost block
-    // never presses against the window's own edge.
+    // The side columns always stand, the panel's full height: the way in and the way out. The guards
+    // are blocks on the panel now (FaceplateView), not rails beside these.
     const int edgeInset = 12;
-    const int colL = inColStands  ? VolumeColumn::designWidth + chromeGap : edgeInset;
-    const int colR = outColStands ? VolumeColumn::designWidth  + chromeGap : edgeInset;
+    const int sideW = VolumeColumn::designWidth;
+    const int colL  = sideW + chromeGap;
+    const int colR  = sideW + chromeGap;
+    const int railH = gutterH;
 
-    inColumn.setVisible (inColStands);
-    outColumn.setVisible (outColStands);
-
-    inColumn.setBounds (margin, gutterY, VolumeColumn::designWidth, gutterH);
+    inColumn.setBounds (margin, gutterY, VolumeColumn::designWidth, railH);
     inColumn.setTransform (zoom);
 
-    outColumn.setBounds (margin + FaceplateView::designWidth - VolumeColumn::designWidth, gutterY,
-                        VolumeColumn::designWidth, gutterH);
+    outColumn.setBounds (margin + designW - VolumeColumn::designWidth, gutterY,
+                        VolumeColumn::designWidth, railH);
     outColumn.setTransform (zoom);
 
     faceplate.setBounds (margin + colL, faceplateY,
-                         FaceplateView::designWidth - colL - colR, faceplateH);
+                         designW - colL - colR, faceplateH);
     faceplate.setTransform (zoom);
 
-    // The always-on needle, full width, above the footer's facts — dropped a hair below its
-    // gap's centre, which reads better than the arithmetic middle; the footer keeps its place,
-    // so the window's height is untouched. The badges stand off the window's edge the way the
-    // rails above them do, and the tuner takes whatever the badges leave it.
-    const int tunerDrop  = 3;
+    // The bottom row: the always-on needle in the left half, the footer's facts in the right. Both
+    // stand off the window's edges the way the rails above them do.
     const int badgeInset = edgeInset;
-    const int tunerY = faceplateY + faceplateH + chromeGap + tunerDrop;
+    const int rowY   = faceplateY + faceplateH + chromeGap;
+    const int rowW   = designW - 2 * badgeInset;
+    const int tunerW = (rowW - chromeGap) / 2;
 
-    // The row is the tuner, whole: the guards' lights and menus live in the strip's arrows now.
-    tunerStrip.setVisible (tunerStands);
-    tunerStrip.setBounds (margin + badgeInset, tunerY,
-                          FaceplateView::designWidth - 2 * badgeInset,
-                          TunerStrip::designHeight);
+    tunerStrip.setBounds (margin + badgeInset, rowY + (bottomRowH - TunerStrip::designHeight) / 2,
+                          tunerW, TunerStrip::designHeight);
     tunerStrip.setTransform (zoom);
 
     // The summoned rulers: the same vertical extent as their columns, standing toward the centre.
-    inRuler.setBounds (margin + colL - chromeGap + 2, gutterY, 56, gutterH);
+    inRuler.setBounds (margin + sideW + 2, gutterY, 56, railH);
     inRuler.setTransform (zoom);
-    outRuler.setBounds (margin + FaceplateView::designWidth - VolumeColumn::designWidth - 58, gutterY,
-                        56, gutterH);
+    outRuler.setBounds (margin + designW - sideW - 58, gutterY, 56, railH);
     outRuler.setTransform (zoom);
 
     // The learn sheet: half the plugin, centred over the faceplate.
-    learnOverlay.setBounds (margin + FaceplateView::designWidth / 6, faceplateY + 60,
-                            FaceplateView::designWidth * 2 / 3, 330);
+    learnOverlay.setBounds (margin + designW / 6, faceplateY + 60,
+                            designW * 2 / 3, 330);
     learnOverlay.setTransform (zoom);
 
-    // The row is as gone as the tuner: hidden, the footer moves up whole.
-    const int footerY = tunerStands
-                            ? tunerY - tunerDrop + TunerStrip::designHeight + chromeGap
-                            : faceplateY + faceplateH + chromeGap;
-    footer.setBounds (margin, footerY, FaceplateView::designWidth, Footer::designHeight);
+    footer.setBounds (margin + badgeInset + tunerW + chromeGap, rowY + (bottomRowH - Footer::designHeight) / 2,
+                      rowW - tunerW - chromeGap, Footer::designHeight);
     footer.setTransform (zoom);
 
-    // TEMPORARY — the audition player and the glyph review strip, under the footer, each only
+    // TEMPORARY — the audition player and the glyph review strip, under the bottom row, each only
     // when this player switched it on; the window is as tall as what it shows.
-    int stripY = footerY + Footer::designHeight;
+    int stripY = rowY + bottomRowH + chromeGap;
 
     demoStrip.setVisible (showDemo);
     if (showDemo)
     {
-        demoStrip.setBounds (margin, stripY, FaceplateView::designWidth, DemoStrip::designHeight);
+        demoStrip.setBounds (margin, stripY, designW, DemoStrip::designHeight);
         demoStrip.setTransform (zoom);
         stripY += DemoStrip::designHeight;
     }
@@ -725,27 +558,19 @@ void AmpEditor::resized()
     glyphs.setVisible (showGlyphs);
     if (showGlyphs)
     {
-        glyphs.setBounds (margin, stripY, FaceplateView::designWidth, GlyphPreview::designHeight);
+        glyphs.setBounds (margin, stripY, designW, GlyphPreview::designHeight);
         glyphs.setTransform (zoom);
     }
 
     // The overlay covers the whole editor, margins included, in the same design units.
-    setup.setBounds (0, 0, baseWidth, baseHeight());
+    setup.setBounds (0, 0, baseW(), baseHeight());
     setup.setTransform (zoom);
-    devices.setBounds (0, 0, baseWidth, baseHeight());
+    devices.setBounds (0, 0, baseW(), baseHeight());
     devices.setTransform (zoom);
 
 }
 
-juce::AudioProcessorEditor* makeEditor (AmpProcessor& p)
-{
-    return new AmpEditor (p);
-}
-
-// OrbitAmp's first start is OrbitAmpStart.cpp's, apart from the face.
-
-// ...and it is the engine as it stands: no parameter of its own, no half of its own.
-void addProductParameters (juce::AudioProcessorValueTreeState::ParameterLayout&) {}
-std::unique_ptr<ProductEngine> makeProductEngine (AmpProcessor&) { return nullptr; }
+// OrbitAmp itself — its name, this face, its first start — is said in OrbitAmpStart.cpp.
 
 } // namespace orbitamp
+

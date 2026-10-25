@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# THE FAMILY'S macOS RELEASE, from built bundles to what ships. Every amp of installer/family.ini is
-# signed (Developer ID, hardened runtime), all of them are notarized in ONE submission and each gets its
-# ticket stapled; then the zip (build-family-zip.sh) and the package (build-family-pkg.sh) are made from
-# the stapled bundles, and the package is signed, notarized and stapled. The release workflow's macOS job
+# THE FAMILY'S macOS RELEASE, from built bundles to what ships. The family's plug-ins — ONE bundle per
+# format, every amp of installer/family.ini inside it (family.ini's `bundle=`) — and every amp's standalone
+# app are signed (Developer ID, hardened runtime), all of them are notarized in ONE submission and each gets its
+# ticket stapled; then the package (build-family-pkg.sh) is made from the stapled bundles, and it is signed, notarized and stapled. The release workflow's macOS job
 # runs this on the signing runner, and installer/release.sh runs it here: the same steps, said once.
 #
 # Usage: sign-family-macos.sh <version> <build-dir> <out-dir>
 # Needs, in the environment: APP_IDENTITY (a Developer ID Application identity), INSTALLER_IDENTITY (a
 # Developer ID Installer identity) and NOTARY_PROFILE (a notarytool keychain profile) — and a keychain
 # they can be used from without a prompt (the workflow unlocks the runner's first).
-# Out: <out-dir>/darwinscat-amps-<version>-macos-arm64.zip and …-macos-x86_64.zip (one architecture each,
-# build-family-zip.sh), and darwinscat-amps-<version>-macos.pkg (universal).
+# Out: <out-dir>/darwinscat-amps-<version>-macos.pkg (universal) — the Mac release is the package alone, no zip.
 set -euo pipefail
 
 VER="${1:?usage: sign-family-macos.sh <version> <build-dir> <out-dir>}"
@@ -20,13 +19,26 @@ OUT="${3:?missing output dir}"
 : "${INSTALLER_IDENTITY:?a Developer ID Installer identity}"
 : "${NOTARY_PROFILE:?a notarytool keychain profile}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-AMPS="$(sed -n 's/^amps=//p' "$HERE/family.ini")"
-[ -n "$AMPS" ] || { echo "sign-family-macos.sh: no amps in $HERE/family.ini" >&2; exit 1; }
+ini() { sed -n "s/^$1=//p" "$HERE/family.ini" | tr -d '\r'; }
+AMPS="$(ini amps)"
+BUNDLE="$(ini bundle)"
+TARGET="$(ini bundle_target)"
+if [ -z "$AMPS" ] || [ -z "$BUNDLE" ] || [ -z "$TARGET" ]; then
+  echo "sign-family-macos.sh: no amps, bundle or bundle_target in $HERE/family.ini" >&2; exit 1
+fi
 mkdir -p "$OUT"
+
+# THE PROFILE IS READ FROM THE LOGIN KEYCHAIN, BY PATH. Left to itself notarytool keeps a profile in "Local
+# Items", which locks with the screen: the runner is a working laptop, and a release that ran while it was locked
+# signed everything and then failed at the notary with «No Keychain password item found for profile». The login
+# keychain is the one the workflow unlocks for codesign. So the profile lives there too — stored once with
+# `xcrun notarytool store-credentials <profile> --keychain ~/Library/Keychains/login.keychain-db` — and is asked
+# for there.
+NOTARY_KEYCHAIN="${NOTARY_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}"
 
 notarize() {   # notarize <file> — submit, wait, and refuse anything but Accepted
   local out
-  out="$(xcrun notarytool submit "$1" --keychain-profile "$NOTARY_PROFILE" --wait 2>&1 | tee /dev/stderr)"
+  out="$(xcrun notarytool submit "$1" --keychain-profile "$NOTARY_PROFILE" --keychain "$NOTARY_KEYCHAIN" --wait 2>&1 | tee /dev/stderr)"
   grep -q "status: Accepted" <<< "$out"
 }
 
@@ -36,7 +48,7 @@ notarize() {   # notarize <file> — submit, wait, and refuse anything but Accep
 # minutes, longer when Apple's service is having a bad afternoon. It reads as `The staple and validate
 # action failed! Error 65`, which means "no such ticket", on a submission that was accepted.
 #
-# The family staples four bundles an amp and the package, so it has that many chances to land inside that
+# The family staples three plug-in bundles, an app per amp and the package, so it has that many chances to land inside that
 # window, and `set -e` would end the release on the first one, after both notarization round trips are
 # already paid for. Waiting costs nothing on the day it works, which is most days.
 staple_retry() {
@@ -50,16 +62,19 @@ staple_retry() {
 }
 
 BUNDLES=()
+# The plug-ins, one bundle per format for every amp: hardened-runtime sign (they run inside the host → no
+# entitlements of their own).
+plugs="$BUILD/${TARGET}_artefacts/Release"
+lipo -info "$plugs/VST3/$BUNDLE.vst3/Contents/MacOS/$BUNDLE"
+for b in "$plugs/VST3/$BUNDLE.vst3" "$plugs/AU/$BUNDLE.component" "$plugs/CLAP/$BUNDLE.clap"; do
+  codesign --force --options runtime --timestamp --sign "$APP_IDENTITY" "$b"
+  codesign --verify --strict --verbose=1 "$b"
+  BUNDLES+=("$b")
+done
+
 for amp in $AMPS; do
   rel="$BUILD/${amp}_artefacts/Release"
   lipo -info "$rel/Standalone/$amp.app/Contents/MacOS/$amp"
-
-  # Plug-ins: hardened-runtime sign (they run inside the host → no entitlements of their own).
-  for b in "$rel/VST3/$amp.vst3" "$rel/AU/$amp.component" "$rel/CLAP/$amp.clap"; do
-    codesign --force --options runtime --timestamp --sign "$APP_IDENTITY" "$b"
-    codesign --verify --strict --verbose=1 "$b"
-    BUNDLES+=("$b")
-  done
 
   # The standalone: its own process → the audio-input entitlement, under the hardened runtime.
   app="$rel/Standalone/$amp.app"
@@ -79,7 +94,8 @@ done
 #
 # Stapling does not disturb the signature — the ticket lands beside the seal, not inside it — so the
 # originals are stapled and everything downstream, the .zip and the .pkg alike, is made from bundles that
-# already carry theirs. Every bundle's name is the amp's and the format's, so they share one folder.
+# already carry theirs. Every bundle's name is its own — the family's with a format's suffix, or an amp's
+# app — so they share one folder.
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 for b in "${BUNDLES[@]}"; do ditto --norsrc --noextattr --noacl "$b" "$stage/bundles/$(basename "$b")"; done
@@ -92,10 +108,7 @@ for b in "${BUNDLES[@]}"; do
   codesign --verify --deep --strict "$b"
 done
 
-# What ships: a zip of the stapled bundles for each architecture, thinned after they were notarized, and
-# the package, universal — signed as productbuild makes it, then notarized and stapled itself.
-"$HERE/build-family-zip.sh" "$VER" "$BUILD" "$OUT" macos-arm64
-"$HERE/build-family-zip.sh" "$VER" "$BUILD" "$OUT" macos-x86_64
+# What ships: the package, universal — signed as productbuild makes it, then notarized and stapled itself.
 
 PKG="$OUT/darwinscat-amps-$VER-macos.pkg"
 INSTALLER_IDENTITY="$INSTALLER_IDENTITY" "$HERE/build-family-pkg.sh" "$VER" "$BUILD" "$OUT"

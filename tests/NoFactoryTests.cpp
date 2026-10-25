@@ -3,7 +3,7 @@
 
 // Gate for AN AMP WITH NO FACTORY FOLDER (ui/FactoryMissing.h) — copied off a zip without it, or the
 // folder deleted. The amp is compiled again to read a folder that is not there (CMakeLists.txt:
-// amp_console NO_FACTORY), and must: hold every place of its cabinet shelf empty, DARK MATTER's too; find
+// amp_console NO_FACTORY), and must: hold every place of its cabinet shelf empty, the default's (RED GIANT) too; find
 // no pack of its own; play a guitar through for as long as a few seconds of blocks, and through every
 // channel it has, without a crash and without a sample that is not a number; and open a window that says
 // the folder is missing and where it belongs — a face in place of its whole window, in type a player
@@ -11,7 +11,6 @@
 
 #include "PluginProcessor.h"
 #include "Parameters.h"
-#include "Product.h"
 #include "device/DeviceLibrary.h"
 #include "device/FactoryShelf.h"
 #include "ui/FactoryMissing.h"
@@ -31,33 +30,33 @@ int main()
         if (! ok)
             ++failed;
     };
-    const juce::String amp (product::name);
+    const juce::String amp (ORBITAMP_PRODUCT_NAME);
 
     const auto factory = device::FactorySet::location();
-    std::printf ("%s, its factory folder at %s\n", product::name, factory.getFullPathName().toRawUTF8());
+    std::printf ("%s, its factory folder at %s\n", ORBITAMP_PRODUCT_NAME, factory.getFullPathName().toRawUTF8());
     check (! factory.exists(), "the factory folder is not there");
 
     // THE SHELF: every place empty, and the cabinet every amp opens on with them.
     {
-        bool empty = device::shelf::irs().size() == (size_t) params::cabIrNames.size();
-        for (const auto& ir : device::shelf::irs())
+        bool empty = device::shelf::irs (ORBITAMP_PRODUCT_NAME).size() == (size_t) params::cabIrNames.size();
+        for (const auto& ir : device::shelf::irs (ORBITAMP_PRODUCT_NAME))
             empty = empty && ir.data == nullptr && ir.size == 0 && ir.file.isEmpty();
         check (empty, "every place of the cabinet shelf is held empty");
-        check (AmpProcessor::cabIrBytes (params::cabIrDefault).data == nullptr
-                   && AmpProcessor::cabIrBytes (0).data == nullptr,
-               "...DARK MATTER's too, and a number of Other's plays no bytes rather than a stray pointer");
+        check (AmpProcessor::cabIrBytes (ORBITAMP_GATE_PRODUCT(), params::cabIrDefault).data == nullptr
+                   && AmpProcessor::cabIrBytes (ORBITAMP_GATE_PRODUCT(), 0).data == nullptr,
+               "...RED GIANT's too, and a number of Other's plays no bytes rather than a stray pointer");
     }
 
     // THE PACKS: none of the factory's — whatever the player's own Devices folder holds is his.
     {
         int factoryPacks = 0;
-        for (const auto& p : device::DeviceLibrary::scan())
+        for (const auto& p : device::DeviceLibrary::scan (ORBITAMP_PRODUCT_NAME))
             factoryPacks += p.bundled ? 1 : 0;
         check (factoryPacks == 0, "no pack of the factory's is offered");
     }
 
     // THE AMP PLAYS: a few seconds of a guitar's worth of noise, through every channel it has.
-    auto processor = std::make_unique<AmpProcessor>();
+    auto processor = std::make_unique<AmpProcessor> (ORBITAMP_GATE_PRODUCT());
     processor->inlineLoads = true;            // no message loop here: a model would land inside the pump
     constexpr double rate = 48000.0;
     constexpr int block = 512;
@@ -70,8 +69,8 @@ int main()
 
     const auto pump = [&processor]
     {
-        if (processor->product != nullptr)
-            processor->product->pump();
+        if (processor->productEngine != nullptr)
+            processor->productEngine->pump();
         processor->pumpDeviceWork();
         processor->history.tick();
     };
@@ -108,17 +107,17 @@ int main()
     // the player adds, and says it where its empty device block stands — its whole face, which a Linux
     // runner with no display is not asked to build.
    #if JUCE_LINUX
-    if (juce::String (product::name) == "OrbitAmp")
+    if (juce::String (ORBITAMP_PRODUCT_NAME) == "OrbitAmp")
         std::printf ("skip  OrbitAmp's window, on a system that may have no display\n");
     else
    #endif
     {
         std::unique_ptr<juce::AudioProcessorEditor> window (processor->createEditor());
         const auto* notice = dynamic_cast<ui::FactoryMissingEditor*> (window.get());
-        const auto said = ui::FactoryMissingEditor::text();
+        const auto said = ui::factoryMissingText (ORBITAMP_GATE_PRODUCT());
 
         check (window != nullptr, "the " + amp + " opens a window");
-        if (juce::String (product::name) == "OrbitAmp")
+        if (juce::String (ORBITAMP_PRODUCT_NAME) == "OrbitAmp")
             check (notice == nullptr, "...OrbitAmp's own, which still plays what the player adds");
         else
             check (notice != nullptr, "...which is the notice, not an empty face");

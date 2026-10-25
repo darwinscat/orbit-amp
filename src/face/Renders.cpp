@@ -3,7 +3,6 @@
 
 #include "Renders.h"
 
-#include "../Product.h"
 #include "../device/FactorySet.h"
 
 #include <juce_core/juce_core.h>
@@ -23,45 +22,45 @@ namespace
     }
 }
 
-juce::File folder()
+juce::File folder (const juce::String& product)
 {
-    return device::FactorySet::location().getChildFile ("Faces").getChildFile (product::name);
+    return device::FactorySet::location().getChildFile ("Faces").getChildFile (product);
 }
 
-juce::File fileOf (const char* name, const char* folderVariable)
+juce::File fileOf (const juce::String& product, const char* name, const char* folderVariable)
 {
     if (const auto dir = juce::SystemStats::getEnvironmentVariable (folderVariable, {}); dir.isNotEmpty())
         if (const auto file = juce::File (dir).getChildFile (name); file.existsAsFile())
             return file;
 
-    return folder().getChildFile (name);
+    return folder (product).getChildFile (name);
 }
 
-bool has (const char* name, const char* folderVariable)
+bool has (const juce::String& product, const char* name, const char* folderVariable)
 {
-    return fileOf (name, folderVariable).existsAsFile();
+    return fileOf (product, name, folderVariable).existsAsFile();
 }
 
-juce::Image decode (const char* name, const char* folderVariable)
+juce::Image decode (const juce::String& product, const char* name, const char* folderVariable)
 {
     juce::Image img;
 
-    if (juce::MemoryBlock bytes; fileOf (name, folderVariable).loadFileAsData (bytes))
+    if (juce::MemoryBlock bytes; fileOf (product, name, folderVariable).loadFileAsData (bytes))
         img = decodeBytes (name, bytes.getData(), bytes.getSize());
 
-    jassert (img.isValid() || ! folder().isDirectory());   // a name the face's own folder lacks is a typo
+    jassert (img.isValid() || ! folder (product).isDirectory());   // a name the face's own folder lacks is a typo
     return img;
 }
 
-juce::Image load (const char* name, const char* folderVariable)
+juce::Image load (const juce::String& product, const char* name, const char* folderVariable)
 {
-    const auto img = decode (name, folderVariable);
+    const auto img = decode (product, name, folderVariable);
     return img.isValid() ? img.convertedToFormat (juce::Image::ARGB) : img;
 }
 
-juce::String text (const char* name, const char* folderVariable)
+juce::String text (const juce::String& product, const char* name, const char* folderVariable)
 {
-    const auto file = fileOf (name, folderVariable);
+    const auto file = fileOf (product, name, folderVariable);
     return file.existsAsFile() ? file.loadFileAsString() : juce::String();
 }
 

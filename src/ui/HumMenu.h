@@ -29,10 +29,10 @@ struct HumLine
 
 /** The five lines, `heard` as for humLabel (AmpProcessor::humHeard), `learning` whether the hum's
     LEARN runs. */
-inline std::array<HumLine, 5> humMenu (int heard, bool learning = false)
+inline std::array<HumLine, 5> humMenu (const Product& p, int heard, bool learning = false)
 {
-    const Hum now  = hum();
-    const Hum runs = now == Hum::off ? humLastOn() : now;
+    const Hum now  = hum (p);
+    const Hum runs = now == Hum::off ? humLastOn (p) : now;
     return { { { "Learn", learning, false, Hum::off, true },
                { "On", now != Hum::off, true, Hum::off },
                { humLabel (Hum::hz50, heard),      runs == Hum::hz50,      false, Hum::hz50 },
@@ -42,13 +42,13 @@ inline std::array<HumLine, 5> humMenu (int heard, bool learning = false)
 
 /** What a picked line does: the switch flips, a mode is chosen — and with it the hum is on. LEARN is
     the surface's to start (it owns the learner); here it does nothing. */
-inline void humPick (const HumLine& line)
+inline void humPick (const Product& p, const HumLine& line)
 {
     if (! line.isLearn)
-        setHum (line.isSwitch ? humFlip() : line.mode);
+        setHum (p, line.isSwitch ? humFlip (p) : line.mode);
 }
 
 /** Where the hum stands, in a menu's title: OFF, or the mode in force as its line says it. */
-inline juce::String humState (int heard) { return hum() == Hum::off ? juce::String ("Off") : humLabel (hum(), heard); }
+inline juce::String humState (const Product& p, int heard) { return hum (p) == Hum::off ? juce::String ("Off") : humLabel (hum (p), heard); }
 
 } // namespace orbitamp::prefs

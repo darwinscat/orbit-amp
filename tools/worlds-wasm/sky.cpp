@@ -6,7 +6,7 @@
 // the picture in it is composed for the windshield inside it, as the app's GlSky composes it. One sky to a module.
 //
 // The calls are every world's (view.h). What a world calls a gear is the sky's channel, counted from 0 among
-// `gears` channels, the throttle standing at its detent; the sky has no TURBO or PARK, and those two calls do
+// `gears` channels, the throttle standing at its detent; the sky has no TURBO, and that call does
 // nothing. Its own: view_throttle, the lever anywhere along its travel, and view_place, where the glass and the
 // windshield are.
 
@@ -50,7 +50,7 @@ namespace
 extern "C"
 {
     /** A sky among `gears` channels at channel `gear` (0 the first); flown at that channel's speed once settled. */
-    EMSCRIPTEN_KEEPALIVE void view_make (int gears, int gear, int, int)
+    EMSCRIPTEN_KEEPALIVE void view_make (int gears, int gear, int)
     {
         view.reset();
         flight = {};
@@ -76,7 +76,6 @@ extern "C"
     /** The lever to a channel's detent: the ship spools up or down to its speed. */
     EMSCRIPTEN_KEEPALIVE void view_gear (int g)  { throttle = detent (g); }
     EMSCRIPTEN_KEEPALIVE void view_turbo (int)   {}
-    EMSCRIPTEN_KEEPALIVE void view_park (int)    {}
 
     /** The lever anywhere along its travel, 0 = CLEAN .. 1 = HI-GAIN, as the app's GlSky::setThrottle. */
     EMSCRIPTEN_KEEPALIVE void view_throttle (float t) { throttle = std::clamp (t, 0.0f, 1.0f); }

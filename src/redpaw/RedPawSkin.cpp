@@ -6,6 +6,7 @@
 #include "RedPawLineup.h"
 #include "view/PlainsDrive.h"
 
+#include "../PluginProcessor.h"
 #include "../face/Renders.h"
 
 /** REDPAWAMP'S OWN (RedPawSkin.h): the Mars rover — its channels, its rusted dashboard, measured, its
@@ -13,46 +14,85 @@
 namespace orbitamp::redpaw
 {
 
+namespace
+{
+
+constexpr const char* name = "RedPawAmp";
+
 /** ITS CHANNELS (RedPawLineup.h): the Friedman IR-X's two, a gear each — CRUNCH its Ch1, HI-GAIN its
     Ch2 (the lever names them from the top) — and TURBO that channel's own Boost: the same pack, the
     gear holding the switch off and its TURBO on (Lineup::Channel::held). The pack's other switches are
     the hand's, on the keys: Ch1's three-way Bright, Ch2's Tight and Fat. A channel's pack is the capture
-    it plays, known by the `rig_id` its manifest carries. What each opens on: a gear a little of its room
-    and as much delay, its TURBO twice as much of both — Ch1 on a plate, Ch2 in an ambience with no
-    delay at all. */
-const channels::Lineup& lineup()
+    it plays, known by the `rig_id` its manifest carries. What each opens on: both on a plate, Ch1 with 15 %
+    of it and as much delay, Ch2 drier, 10 % and no delay at all. */
+const channels::Lineup& marsLineup()
 {
     static const channels::Lineup rover = roverLineup ({
         { "Crunch",         "ir-x-ch1-poweramp-3e66", "Plate",    15.0f, 15.0f, false, { "Boost", "off" } },
         { "Crunch Turbo",   "ir-x-ch1-poweramp-3e66", "Plate",    30.0f, 30.0f, false, { "Boost", "on"  } },
-        { "Hi-Gain",        "ir-x-ch2-poweramp-67e9", "Ambience", 15.0f, 0.0f,  true,  { "Boost", "off" } },
-        { "Hi-Gain Turbo",  "ir-x-ch2-poweramp-67e9", "Ambience", 30.0f, 0.0f,  true,  { "Boost", "on"  } },
+        { "Hi-Gain",        "ir-x-ch2-poweramp-67e9", "Plate",    10.0f, 0.0f,  true,  { "Boost", "off" } },
+        { "Hi-Gain Turbo",  "ir-x-ch2-poweramp-67e9", "Plate",    30.0f, 0.0f,  true,  { "Boost", "on"  } },
     });
     return rover;
-}
-
-const Skin& skin()
-{
-    static const Skin mars {
-        "REDPAW_ART_DIR",
-        juce::Colour (0xff3fe6f2),      // the painted rings' light, a shade brighter
-        face::Ink {},                   // the family's lilac on the dark rust...
-        juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words, so they read off the dust
-        face::renders::text ("midi.txt", "REDPAW_ART_DIR"),
-        [] { return std::make_unique<Windscreen> (std::make_unique<PlainsDrive> (numGears())); },     // the drive across Mars
-        { "Plains (GPU)", "1993 (CPU)", "Still" },
-    };
-    return mars;
 }
 
 //==============================================================================
 // THE DASHBOARD, MEASURED (RedPawLayout.h): its picture is the one the rovers' plan is measured off, so
 // what it measures is the plan as it stands.
-namespace layout
+const layout::Plan plan {
+    // No plate under the cat: it is cut straight into the frame's raised step, as large as the badge's was.
+    .emblemMark { 797.0f, 295.8f, 77.0f, 75.0f },
+
+    // ...and the maker's words either side of it, low on that step, their foot a little over a capital above
+    // its bottom edge (379), each in the middle of its half between the cat (797..874) and the step's slanted
+    // end (602, 1072).
+    .poweredBy { 699.0f, 365.0f },
+    .makerName { 972.0f, 365.0f },
+    .makerRoom = 110.0f,
+};
+
+const Skin& mars()
 {
+    static const Skin mars = []
+    {
+        Skin s {
+            name,
+            marsLineup(),
+            plan,
+            "REDPAW_ART_DIR",
+            juce::Colour (0xff3fe6f2),      // the painted rings' light, a shade brighter
+            face::Ink {},                   // the family's lilac on the dark rust...
+            juce::Colours::black.withAlpha (0.7f),     // ...and a shadow under the large words, so they read off the dust
+            face::renders::text (name, "midi.txt", "REDPAW_ART_DIR"),
+            [] { return std::make_unique<PlainsDrive> (numGears (marsLineup())); },     // the drive across Mars
+            { "Plains (GPU)", "1993 (CPU)", "Still" },
+        };
+        // No badge: the cat cut straight into the dashboard's metal, ginger — leaning to the colour of the plains
+        // out of the window (#8f4b24 on the ground), light enough still to read on the rust.
+        s.markInk = { juce::Colour (0xffc29576), juce::Colour (0xff955e3e), 0.9f, 0.4f };
+        s.markLamp = juce::Colour (0xffee7a3c);       // ...and the lamp under its glass Mars's own
+        return s;
+    }();
+    return mars;
+}
 
-const Plan plan {};
-
-} // namespace layout
+} // namespace
 
 } // namespace orbitamp::redpaw
+
+/** REDPAWAMP (Product.h): the rover (redpaw::rover) in the skin above. */
+const orbitamp::Product& orbitamp::products::redPawAmp()
+{
+    static const Product redPaw = redpaw::rover (redpaw::mars());
+    return redPaw;
+}
+
+// THE PLUG-IN'S ENTRY, in RedPawAmp's own plug-in alone (CMakeLists.txt: add_amp): a host that opens it
+// gets a processor of RedPawAmp. A gate, or a binary that plays several amps, makes its own.
+#if ORBITAMP_PLUGIN_ENTRY
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
+    return new orbitamp::AmpProcessor (orbitamp::products::redPawAmp());
+}
+#endif
+

@@ -64,7 +64,7 @@ public:
         // setInterceptsMouseClicks(true, false) turned out not to block children at all —
         // getComponentAt descends into them regardless (found in review). The shield forwards
         // to the frame, so the power switch and the right-click menu work through it.
-        shield.setVisible (! on);
+        shield.setVisible (! on && shieldsWhenOff);
         raiseShield();
         repaint();
 
@@ -442,7 +442,7 @@ private:
     // small to read at 1x is not a smaller version of a control, it is a missing one.
     static constexpr int   switchWidth  = 42;
     static constexpr int   switchHeight = 22;
-    static constexpr float labelHeight  = 16.0f;
+    static constexpr float labelHeight  = 14.0f;   // 16 -> 14 (Oleh, 24.10)
 
 public:
     /** How far below the component's top the drawn frame actually begins — the room the switch
@@ -470,6 +470,10 @@ protected:
         its CONTENT (word, flood) do the talking. */
     float borderAlpha = 1.0f;
 
+    /** Off: a dark block stays in reach. For the blocks whose own hand is their way back on — the
+        guards', whose rails switch them on when dragged (GuardBlock.h). */
+    bool shieldsWhenOff = true;
+
 private:
 
     juce::String title;
@@ -480,6 +484,8 @@ private:
     OffShield shield { *this };
     juce::RangedAudioParameter* powerParam = nullptr;
     std::unique_ptr<juce::ParameterAttachment> power;
+
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BlockFrame)
 };

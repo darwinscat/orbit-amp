@@ -91,6 +91,17 @@ public:
     /** The runner entered or left the hand — the editor slides the drag ruler out beside us. */
     std::function<void (bool)> onTrimDrag;
 
+    /** THE GUARD'S MARK: the gate's threshold on IN, the limiter's ceiling on OUT, drawn across the
+        meter while that guard is on — where the level meets it (Oleh, 24.10). The guards' hands are
+        in their own blocks on the panel; this only shows where they stand. */
+    void showGuard (juce::RangedAudioParameter& value, juce::RangedAudioParameter& on)
+    {
+        guardValue = &value;
+        guardOn    = &on;
+        guardValueAtt = std::make_unique<juce::ParameterAttachment> (value, [this] (float) { repaint(); });
+        guardOnAtt    = std::make_unique<juce::ParameterAttachment> (on,    [this] (float) { repaint(); });
+    }
+
     /** A right click: the column's menu, where the editor gives it one (the input's: the hum it
         carries). None, and a right click is a click like any other. */
     std::function<void (juce::Point<int> screenPos)> onMenu;
@@ -112,6 +123,13 @@ public:
             meterrail::paintHold (g, col, dbToY (col, holdDb));
 
         meterrail::paintClipCap (g, col, clip.load());
+
+        if (guardValue != nullptr && guardOn->getValue() > 0.5f)
+        {
+            const float gy = dbToY (col, guardValue->convertFrom0to1 (guardValue->getValue()));
+            g.setColour (theme::lilac);
+            g.fillRect (col.getX(), gy - 0.75f, col.getWidth(), 1.5f);
+        }
 
         // The ghost: while the trim is in hand, where the last phrase's peak WOULD land at the
         // new gain, walking the scale as a dashed line. The consequence, on the grid.
@@ -312,6 +330,9 @@ private:
     const std::atomic<float>& levelSource;
     std::atomic<bool>&        clip;
     juce::RangedAudioParameter& trimP;
+    juce::RangedAudioParameter* guardValue = nullptr;
+    juce::RangedAudioParameter* guardOn    = nullptr;
+    std::unique_ptr<juce::ParameterAttachment> guardValueAtt, guardOnAtt;
     std::unique_ptr<juce::ParameterAttachment> trim;
 
     meterrail::GripEditor gripEd;
@@ -324,6 +345,8 @@ private:
     float trimStartDb = 0.0f;
     float holdAtGrab  = -90.0f;
     bool  live        = true;
+
+    friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VolumeColumn)
 };

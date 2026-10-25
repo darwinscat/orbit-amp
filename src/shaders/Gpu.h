@@ -66,6 +66,35 @@ inline bool current() noexcept
    #endif
 }
 
+/** True when the context current on this thread runs shaders, as every renderer here needs before its first
+    call. A machine with no GPU driver — a virtual machine, a Remote Desktop session, a build server — hands JUCE
+    the system's own OpenGL 1.1: no shaders, and the entry points a renderer calls are never loaded, so the first
+    of them crashes. JUCE has asked by the time a renderer's newOpenGLContextCreated runs. */
+inline bool runsShaders() noexcept
+{
+   #if defined (__EMSCRIPTEN__)
+    return current();
+   #else
+    const auto* context = juce::OpenGLContext::getCurrentContext();
+    return context != nullptr && context->areShadersAvailable()
+        && glCreateProgram != nullptr && glGenVertexArrays != nullptr;
+   #endif
+}
+
+/** The context current on this thread in its driver's own words — renderer / vendor / version — or nothing
+    when none is: what a line about this GPU names it by (src/shaders/GpuLog.h). */
+inline std::string driver()
+{
+    if (! current())
+        return {};
+    const auto said = [] (GLenum name)
+    {
+        const auto* text = reinterpret_cast<const char*> (glGetString (name));
+        return text != nullptr ? std::string (text) : std::string ("?");
+    };
+    return said (GL_RENDERER) + " / " + said (GL_VENDOR) + " / " + said (GL_VERSION);
+}
+
 /** A VERTEX ARRAY FOR DRAWS THAT TAKE NO ATTRIBUTES — full-screen passes, particles made from the vertex's index —
     but one: aZero, attribute 0, a zero for each of up to attributelessVertices vertices in `buffer`, which such a
     vertex shader adds to its position. Core GL wants a vertex array bound for any draw, and a browser on desktop GL

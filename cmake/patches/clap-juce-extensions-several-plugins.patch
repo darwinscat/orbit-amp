@@ -1,0 +1,137 @@
+ONE BINARY, SEVERAL PLUG-INS — the CLAP wrapper of clap-juce-extensions. Applied by
+cmake/PatchedWrappers.cmake to the pinned commit (ORBITAMP_CLAP_EXT_TAG, 51a9359) before it builds, beside
+the JUCE patch that brings juce_PluginList.h; git apply reads from the first "diff --git" line on.
+
+The wrapper's factory counts one plug-in and describes it from CLAP_ID, CLAP_FEATURES and JucePlugin_Name.
+With JUCE_PLUGIN_LIST_HEADER defined it counts the entries of jucePluginList, describes each with its own id,
+name and features (vendor, version and links stay the binary's), and creates by id, the processor made by
+createPluginFilter (const juce::PluginListEntry&) for the entry asked for. Without the macro every added line
+is compiled out and the file preprocesses to its text before the patch.
+
+diff --git a/src/wrapper/clap-juce-wrapper.cpp b/src/wrapper/clap-juce-wrapper.cpp
+index 0b60b73..8f7cfc7 100644
+--- a/src/wrapper/clap-juce-wrapper.cpp
++++ b/src/wrapper/clap-juce-wrapper.cpp
+@@ -416,9 +416,17 @@ class ClapJuceWrapper : public clap::helpers::Plugin<
+     bool usingLegacyParameterAPI{false};
+     std::atomic<bool> callLatencyChangeOnNextActivate{false};
+ 
++#ifdef JUCE_PLUGIN_LIST_HEADER
++    // One plug-in of the binary's list, described by its own descriptor (pluginListDescriptors).
++    ClapJuceWrapper(const clap_host *host, juce::AudioProcessor *p,
++                    const clap_plugin_descriptor *pluginDesc)
++        : clap::helpers::Plugin<clap::helpers::MisbehaviourHandler::CLAP_MISBEHAVIOUR_HANDLER_LEVEL,
++                                clap::helpers::CheckingLevel::CLAP_CHECKING_LEVEL>(pluginDesc, host),
++#else
+     ClapJuceWrapper(const clap_host *host, juce::AudioProcessor *p)
+         : clap::helpers::Plugin<clap::helpers::MisbehaviourHandler::CLAP_MISBEHAVIOUR_HANDLER_LEVEL,
+                                 clap::helpers::CheckingLevel::CLAP_CHECKING_LEVEL>(&desc, host),
++#endif
+           processor(p)
+     {
+         processor->setRateAndBufferSizeDetails(0, 0);
+@@ -2550,12 +2558,51 @@ JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wredundant-decls")
+ juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter();
+ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+ 
++#ifdef JUCE_PLUGIN_LIST_HEADER
++// THE BINARY HOLDS SEVERAL PLUG-INS, the ones its list names (juce_PluginList.h, which the patched
++// JUCE carries), and createPluginFilter(const juce::PluginListEntry &) makes each one's processor.
++// One descriptor for each entry, in the list's order: the entry's own id, name and features, the
++// binary's vendor, version and links — what the descriptor above says of a binary's only plug-in.
++#include <array>
++#include JUCE_PLUGIN_LIST_HEADER
++
++static const auto pluginListDescriptors = [] {
++    std::array<clap_plugin_descriptor, std::size(jucePluginList)> result{};
++
++    for (size_t i = 0; i < result.size(); ++i)
++        result[i] = {CLAP_VERSION,
++                     jucePluginList[i].clapId,
++                     jucePluginList[i].name,
++                     JucePlugin_Manufacturer,
++                     JucePlugin_ManufacturerWebsite,
++                     CLAP_MANUAL_URL,
++                     CLAP_SUPPORT_URL,
++                     JucePlugin_VersionString,
++                     JucePlugin_Desc,
++                     jucePluginList[i].clapFeatures};
++
++    return result;
++}();
++#endif
++
+ namespace ClapAdapter
+ {
+ static bool clap_init(const char *) { return true; }
+ 
+ static void clap_deinit(void) {}
+ 
++#ifdef JUCE_PLUGIN_LIST_HEADER
++static uint32_t clap_get_plugin_count(const struct clap_plugin_factory *)
++{
++    return (uint32_t)pluginListDescriptors.size();
++}
++
++static const clap_plugin_descriptor *clap_get_plugin_descriptor(const struct clap_plugin_factory *,
++                                                                uint32_t index)
++{
++    return index < pluginListDescriptors.size() ? &pluginListDescriptors[index] : nullptr;
++}
++#else
+ static uint32_t clap_get_plugin_count(const struct clap_plugin_factory *) { return 1; }
+ 
+ static const clap_plugin_descriptor *clap_get_plugin_descriptor(const struct clap_plugin_factory *,
+@@ -2563,12 +2610,27 @@ static const clap_plugin_descriptor *clap_get_plugin_descriptor(const struct cla
+ {
+     return &ClapJuceWrapper::desc;
+ }
++#endif
+ 
+ const clap_plugin *clap_create_plugin(const struct clap_plugin_factory *, const clap_host *host,
+                                       const char *plugin_id)
+ {
+     juce::ScopedJuceInitialiser_GUI libraryInitialiser;
+ 
++#ifdef JUCE_PLUGIN_LIST_HEADER
++    size_t entry = 0;
++
++    while (entry < pluginListDescriptors.size() &&
++           strcmp(plugin_id, pluginListDescriptors[entry].id) != 0)
++        ++entry;
++
++    if (entry == pluginListDescriptors.size())
++    {
++        std::cout << "Warning: CLAP asked for plugin_id '" << plugin_id
++                  << "', which is not in this binary's plug-in list" << std::endl;
++        return nullptr;
++    }
++#else
+     if (strcmp(plugin_id, ClapJuceWrapper::desc.id))
+     {
+         std::cout << "Warning: CLAP asked for plugin_id '" << plugin_id
+@@ -2576,15 +2638,24 @@ const clap_plugin *clap_create_plugin(const struct clap_plugin_factory *, const
+                   << std::endl;
+         return nullptr;
+     }
++#endif
+     clap_juce_extensions::clap_properties::building_clap = true;
+     clap_juce_extensions::clap_properties::clap_version_major = CLAP_VERSION_MAJOR;
+     clap_juce_extensions::clap_properties::clap_version_minor = CLAP_VERSION_MINOR;
+     clap_juce_extensions::clap_properties::clap_version_revision = CLAP_VERSION_REVISION;
+     clap_juce_extensions::clap_juce_audio_processor_capabilities::clapHostStatic = host;
++#ifdef JUCE_PLUGIN_LIST_HEADER
++    auto *const pluginInstance = ::createPluginFilter(jucePluginList[entry]);
++#else
+     auto *const pluginInstance = ::createPluginFilter();
++#endif
+     clap_juce_extensions::clap_properties::building_clap = false;
+     clap_juce_extensions::clap_juce_audio_processor_capabilities::clapHostStatic = nullptr;
++#ifdef JUCE_PLUGIN_LIST_HEADER
++    auto *wrapper = new ClapJuceWrapper(host, pluginInstance, &pluginListDescriptors[entry]);
++#else
+     auto *wrapper = new ClapJuceWrapper(host, pluginInstance);
++#endif
+     return wrapper->clapPlugin();
+ }
+ 

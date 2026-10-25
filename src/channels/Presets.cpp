@@ -4,7 +4,6 @@
 #include "Presets.h"
 
 #include "../Parameters.h"
-#include "../Product.h"
 
 namespace orbitamp::channels
 {
@@ -24,17 +23,18 @@ namespace
 
 Presets::Presets (AmpProcessor& p, Channels& c) : amp (p), channels (c) {}
 
-PresetStore Presets::store()
+PresetStore Presets::store() const
 {
-    return { product::name, "." + juce::String (product::name).toLowerCase() };
+    return { amp.product().name, "." + juce::String (amp.product().name).toLowerCase() };
+
 }
 
-juce::StringArray Presets::names()
+juce::StringArray Presets::names() const
 {
     return store().names();
 }
 
-bool Presets::exists (const juce::String& name)
+bool Presets::exists (const juce::String& name) const
 {
     return store().exists (name);
 }
@@ -53,7 +53,6 @@ bool Presets::changed() const
     give the same one, so what is left out matters as much as what is in:
       - INPUT, which no preset holds;
       - how DRIVE goes between the captures, which the settings say;
-      - how hard TURBO pushes, which they say too: that it is on is in, with its channel;
       - the device NUMBERS, which are places in a list that belongs to this machine today — the names
         beside them are the identity, and they are in;
       - the product's node as it lies in the tree, replaced by every channel written out in full:
@@ -64,11 +63,9 @@ juce::String Presets::sound() const
     auto tree = amp.apvts.copyState();
 
     setInTree (tree, params::inTrim, 0.0f);
-    if (const auto* park = channels.lineup().parkId)
-        setInTree (tree, park, 0.0f);                           // ...nor PARK
-    tree.removeProperty (channels.leverZeroId(), nullptr);      // ...nor the zero INPUT was dialled against
+    if (const auto* former = amp.product().formerInputZeroId)   // ...nor the zero 0.8.0 noted beside INPUT
+        tree.removeProperty (former, nullptr);
     setInTree (tree, params::blockSmooth (params::preampId), 1.0f);    // ...nor DRIVE's way: as every state had it before there was a choice
-    setInTree (tree, params::blockIn (params::preampId), 0.0f);        // ...nor TURBO's push: Channels::whole says on or off
     setInTree (tree, params::preampDevice, 0.0f);
 
     // CHANNEL the parameter says nothing the node does not, and is left out whole: a preset marked
@@ -101,19 +98,12 @@ bool Presets::load (const juce::String& name)
         return false;
 
     amp.takeEmbeddedIrs (tree);     // a cabinet IR it carries goes to the store, not into the history
+    amp.takeFormerTrims (tree);     // a preset of 0.8.0's: its gate set where 0.8.0's key heard the guitar
+    amp.takeFormerCabinet (tree);   // ...and one saved while every amp opened on DARK MATTER, on RED GIANT
 
-    // INPUT stays where the player has it — the trim, and the lever's zero it was dialled against.
+    // INPUT stays where the player has it.
     if (auto* in = amp.apvts.getParameter (params::inTrim))
         setInTree (tree, params::inTrim, in->convertFrom0to1 (in->getValue()));
-    if (const auto zero = amp.apvts.state.getProperty (channels.leverZeroId()); ! zero.isVoid())
-        tree.setProperty (channels.leverZeroId(), zero, nullptr);
-    else
-        tree.removeProperty (channels.leverZeroId(), nullptr);
-
-    // ...and the amp stays parked or playing as it is.
-    if (const auto* park = channels.lineup().parkId)
-        if (auto* p = amp.apvts.getParameter (park))
-            setInTree (tree, park, p->convertFrom0to1 (p->getValue()));
 
     // ...and DRIVE goes on turning the way the settings have it.
     const auto smooth = params::blockSmooth (params::preampId);
@@ -171,7 +161,7 @@ void Presets::init()
     for (auto* p : amp.getParameters())
         if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
             if (rp->paramID != params::inTrim)
-                setInTree (tree, rp->paramID, rp->convertFrom0to1 (rp->getDefaultValue()));
+                setInTree (tree, rp->paramID, rp->convertFrom0to1 (amp.engineDefault (*rp)));
 
     // ...and every channel's memory, and whose preset this was. A state without the node is one the
     // product has not seen, and its engine adopts it the way it adopts the first: chain, channel, pack.

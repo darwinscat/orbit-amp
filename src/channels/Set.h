@@ -16,7 +16,8 @@ juce::File cabinetsIn (const juce::File& factory);
 
 /** THE PRODUCT'S OWN CABINETS in a factory folder: the ones its own list there names, in whichever of
     the shelf's folders, and that are there. The folder is the family's, and another product's cabinets
-    may lie beside them; CAB steps through the product's alone. */
-juce::Array<juce::File> ownCabinets (const juce::File& factory);
+    may lie beside them; CAB steps through the product's alone. `product` is the product's name. */
+juce::Array<juce::File> ownCabinets (const juce::File& factory, const juce::String& product);
+
 
 } // namespace orbitamp::channels::set
