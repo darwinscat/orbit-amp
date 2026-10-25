@@ -11,6 +11,7 @@
 //
 // JUCE-light on purpose: the ribbon is arrays and arithmetic, so this needs no host and no device.
 
+#include "GateMain.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 
 #include "core/WaveRibbon.h"
@@ -65,7 +66,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     std::printf ("orbitamp wave-ribbon gate\n\n");
 

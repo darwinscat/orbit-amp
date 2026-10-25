@@ -11,6 +11,7 @@
 // (felitronics-core's rigplayer tests). What is checked here is the TRANSLATION: a host's 0..10 and 0..1
 // into that player, and the pack's bytes into its hands.
 
+#include "GateMain.h"
 #include "core/CapturedBlock.h"
 
 #include <juce_events/juce_events.h>
@@ -124,7 +125,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     const juce::ScopedJuceInitialiser_GUI juceInit;
     std::printf ("orbitamp captured-block gate\n\n");

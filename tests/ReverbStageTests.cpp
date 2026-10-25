@@ -5,6 +5,7 @@
 // adds rather than replaces, that a tail exists and decays, and that disabling the block cannot spill
 // the previous tail back in. Returns non-zero on any failure.
 
+#include "GateMain.h"
 #include <felitronics/reverb/AmpReverb.h>
 
 #include <cmath>
@@ -49,7 +50,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     AmpReverb r;
     (void) r.prepare (sampleRate, (int) sampleRate * 3, 2);   // the tests hand whole seconds in one call

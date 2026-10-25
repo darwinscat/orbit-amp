@@ -9,6 +9,7 @@
 // the folder is missing and where it belongs — a face in place of its whole window, in type a player
 // reads. OrbitAmp, the cockpit and the rovers' dashboard each run it as themselves.
 
+#include "GateMain.h"
 #include "PluginProcessor.h"
 #include "Parameters.h"
 #include "device/DeviceLibrary.h"
@@ -18,7 +19,7 @@
 #include <cmath>
 #include <cstdio>
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     using namespace orbitamp;
     const juce::ScopedJuceInitialiser_GUI juceInit;

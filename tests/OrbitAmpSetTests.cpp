@@ -12,13 +12,14 @@
 // It reads the build's own <build>/Factory (gate_reads_factory) — never the machine's — and the player's
 // Devices folder is one of its own, empty, under the system's temporary folder.
 
+#include "GateMain.h"
 #include "device/DeviceLibrary.h"
 #include "device/FactorySet.h"
 #include "device/FactoryShelf.h"
 
 #include <cstdio>
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     using namespace orbitamp;
     using device::DeviceLibrary;

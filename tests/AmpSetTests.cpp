@@ -12,6 +12,7 @@
 // It reads the build's own <build>/Factory (gate_reads_factory) — never the machine's — and, for the
 // product beside it, a folder of its own under the system's temporary folder, which it leaves behind.
 
+#include "GateMain.h"
 #include "AmpGate.h"
 #include "channels/Set.h"
 #include "device/DeviceLibrary.h"
@@ -20,7 +21,7 @@
 
 #include <cstdio>
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     using namespace orbitamp::channels;
     using orbitamp::device::FactorySet;

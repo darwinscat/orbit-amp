@@ -16,7 +16,7 @@
 
     The hum gate builds the processor with the switch thrown (ORBITAMP_FEATURE_HUM=1, CMakeLists.txt:
     orbitamp_hum_test): it tests the stage, which has to stay ready for the day it comes back. Built as
-    the products are, the same gate holds the switch itself (orbitamp_hum_off_test). */
+    the products are, the same gate holds the switch itself (hum-off, in the gates binary). */
 #ifndef ORBITAMP_FEATURE_HUM
  #define ORBITAMP_FEATURE_HUM 0
 #endif

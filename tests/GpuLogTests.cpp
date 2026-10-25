@@ -13,6 +13,7 @@
 // Windows is the runner's own profile — and it takes nothing out of it: the threads and the caps are tried on
 // logs of its own in the temporary folder. main() returns 0 when every check held.
 
+#include "GateMain.h"
 #include "shaders/GpuLog.h"
 
 #include <cstdio>
@@ -80,7 +81,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     std::printf ("The GPU's log\n");
 

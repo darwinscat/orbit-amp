@@ -18,6 +18,7 @@
 // It writes into a folder of its own in the temporary folder and leaves nothing behind. main() returns 0
 // when every check held.
 
+#include "GateMain.h"
 #include "face/WebImages.h"
 
 #include <webp/decode.h>
@@ -78,7 +79,7 @@ namespace
     }
 }
 
-int main()
+int ORBITAMP_GATE_MAIN()
 {
     const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
                          .getChildFile ("orbitamp-web-images-" + juce::String::toHexString (juce::Random().nextInt64()));
