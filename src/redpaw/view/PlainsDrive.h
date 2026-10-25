@@ -30,6 +30,7 @@ public:
     void setTurbo (bool on) override         { world.setTurbo (on); }
     void setSteer (float amount) override    { world.setSteer (amount); }
     void hear (float peak, float pick) override          { world.hear (peak, pick); }
+    void setLit (bool on) override                       { world.setLit (on); }
     void step (double dt) override           { world.step (dt); }
 
     /** A still is clear air, as the drive would be once settled. */

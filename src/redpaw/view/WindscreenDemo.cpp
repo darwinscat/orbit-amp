@@ -56,7 +56,7 @@ namespace
     public:
         Picked (std::unique_ptr<orbitamp::redpaw::Drive> d, float p) : inner (std::move (d)), peak (p) {}
 
-        void settle (int g, bool t) override { inner->settle (g, t); inner->hear (peak, 10.0f); inner->step (1.0e-9); }
+        void settle (int g, bool t) override { inner->settle (g, t); inner->setLit (true); inner->hear (peak, 10.0f); inner->step (1.0e-9); }
 
         const char* name() const noexcept override                   { return inner->name(); }
         int numGears() const noexcept override                        { return inner->numGears(); }
@@ -66,6 +66,7 @@ namespace
         void setWipers (int speed) override                           { inner->setWipers (speed); }
         void setLights (bool l, bool r) override                      { inner->setLights (l, r); }
         void hear (float p, float k) override                         { inner->hear (p, k); }
+        void setLit (bool on) override                                { inner->setLit (on); }
         void step (double dt) override                                { inner->step (dt); }
         void placeAt (double x, double z, double h) override          { inner->placeAt (x, z, h); }
         void setClock (double seconds, double metres) override        { inner->setClock (seconds, metres); }
@@ -180,6 +181,8 @@ namespace
             view.steer (args.steer);
             view.setAdaptive (! args.fixed);
             view.setLights (args.lights, args.lights);
+            if (args.play > 0.0f || args.hit > 0.0f)
+                view.setLit ([] { return true; });       // a note played or picked lights the view; none, as the app's default
             if (args.play > 0.0f)
                 view.setHearing ([peak = args.play, began = juce::Time::getMillisecondCounterHiRes(), last = -1.0] () mutable
                 {

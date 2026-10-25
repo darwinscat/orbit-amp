@@ -650,7 +650,9 @@ void Windscreen::renderFrame (int x, int y, int w, int h, juce::uint32 target)
     world->setSteer (steering.value());
     world->setWipers (wipersWanted.load());
     world->setLights ((lightsWanted.load() & 1) != 0, (lightsWanted.load() & 2) != 0);
-    if (hearing)
+    const bool litNow = lit && lit();
+    world->setLit (litNow);
+    if (litNow && hearing)
     {
         const auto heard = hearing();
         world->hear (heard.peak, heard.pick);

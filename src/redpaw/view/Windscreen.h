@@ -79,6 +79,8 @@ public:
     /** THE GUITAR, as the world hears it (Drive::hear): asked once a frame, on the thread that drives, for what was
         heard since it was last asked. Set before the first setMode; none is silence. */
     void setHearing (std::function<worlds::Ear::Heard()> heardSinceAsked) { hearing = std::move (heardSinceAsked); }
+    /** ...and whether it is lit by the guitar at all (Drive::setLit), asked as often. None is never. */
+    void setLit (std::function<bool()> litNow) { lit = std::move (litNow); }
 
     /** THE ROVER'S SPEED, km/h, as the view is driving it: eased toward what the gear and TURBO ask for.
         In the 1993 landscape its own drive, counted in the Plains' measure; in
@@ -206,6 +208,7 @@ private:
     std::atomic<bool> turboWanted { false };
     std::atomic<int> wipersWanted { 1 }, lightsWanted { 0 };
     std::function<worlds::Ear::Heard()> hearing;
+    std::function<bool()> lit;
     face::Steering steering;        // the drag, the keys, and steer() from outside, as one value
     std::atomic<float> scaleInUse { 1.0f };
     float scaleWanted = 1.0f;

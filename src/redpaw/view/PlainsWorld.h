@@ -86,6 +86,9 @@ public:
     void setSteer (float s) noexcept;                    // -1..1, held input
     /** The guitar: what an Ear heard since the last step — the peak and the pick (worlds/Ear.h, worlds/Play.h). */
     void hear (float peak, float pick) noexcept { play.hear (peak, pick); }
+    /** Whether the view is lit by the guitar at all (Drive::setLit); and so whether what only it lights is there. */
+    void setLit (bool on) noexcept { lit = on; }
+    bool isLit() const noexcept { return lit; }
     int gear() const noexcept { return gearWanted; }
     bool isTurbo() const noexcept { return turbo; }
     int numGears() const noexcept { return gears; }
@@ -144,6 +147,7 @@ private:
 
     State s;
     worlds::Play play;
+    bool lit = false;
     const int gears;
     int gearWanted = 1;
     bool turbo = false;

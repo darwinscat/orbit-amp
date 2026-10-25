@@ -128,6 +128,22 @@ inline std::atomic<bool>& spectraCache (const Product& p)
 inline bool spectraShown (const Product& p)               { return spectraCache (p).load (std::memory_order_relaxed); }
 inline void setSpectraShown (const Product& p, bool shown) { spectraCache (p).store (shown, std::memory_order_relaxed); setBool (p, showSpectra, shown); }
 
+/** THE VIEW LIT BY THE GUITAR (worlds/Play.h) — the world outside the window answering each attack: the
+    rovers' beacons, lamps and searchlights, the cockpit's stars. Off unless this player asked for it, and
+    off is the view as it always was: the amp does not listen for the attack, and the beacons and lamps
+    the guitar would light are not there. Read by the audio thread every block and by the view every
+    frame, so cached like the spectra, and taken by pointer where a lookup would cost (as the hum is). */
+inline const juce::Identifier viewLit { "view_lit_by_guitar" };
+
+inline std::atomic<bool>& litCache (const Product& p)
+{
+    static PerProduct<std::atomic<bool>> cached;
+    return cached.of (p.name, [&p] { return getBool (p, viewLit, false); });
+}
+
+inline bool viewLitByGuitar (const Product& p)              { return litCache (p).load (std::memory_order_relaxed); }
+inline void setViewLitByGuitar (const Product& p, bool lit) { litCache (p).store (lit, std::memory_order_relaxed); setBool (p, viewLit, lit); }
+
 /** The TUNER's LEVEL FLOOR — about this room and this guitar, not about a sound, so it lives on the
     machine like the switches above and a preset does not carry it. Read by the tuner thirty times a
     second, so cached like the spectra: a tick must not open a file.

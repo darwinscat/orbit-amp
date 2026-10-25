@@ -699,6 +699,7 @@ void IceGl::drawScene (int rw, int rh)
         glUniform1i (steel.uniform ("uDetail"), 1); glUniform1f (steel.uniform ("uJupCos"), skyF.jupCos);
         glUniform1f (steel.uniform ("uPxExpand"), (float) (2 * tv / rh));
         glUniform3f (steel.uniform ("uLamp"), lampLight[0] * lamps, lampLight[1] * lamps, lampLight[2] * lamps);
+        glUniform1f (steel.uniform ("uLit"), world.isLit() ? 1.0f : 0.0f);   // unlit, no lamp at all
         const double shift = IceWorld::structWindow * IceWorld::structCell * 0.3;
         const int bx = (int) std::floor ((s.x + fx * shift) / IceWorld::structCell) - IceWorld::structWindow / 2;
         const int bz = (int) std::floor ((s.z + fz * shift) / IceWorld::structCell) - IceWorld::structWindow / 2;

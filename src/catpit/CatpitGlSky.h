@@ -43,6 +43,8 @@ public:
     /** THE GUITAR, as the sky hears it (Flight::hear): asked once a frame, on the GL thread, for what was heard
         since it was last asked. Set before the context renders; none is silence. */
     void setHearing (std::function<worlds::Ear::Heard()> heardSinceAsked) { hearing = std::move (heardSinceAsked); }
+    /** ...and whether it is lit by the guitar at all (prefs::viewLit), asked as often. None is never. */
+    void setLit (std::function<bool()> litNow) { lit = std::move (litNow); }
 
     /** Where the glass is — all that is shaded — where the windshield is — what the picture is composed
         for: the stars fly out of its centre — and how big the whole surface is, in the editor's logical
@@ -75,6 +77,7 @@ private:
     std::atomic<float> viewX { 0 }, viewY { 0 }, viewW { 0 }, viewH { 0 };     // the windshield, inside the area
     std::atomic<bool>  broken { false };
     std::function<worlds::Ear::Heard()> hearing;
+    std::function<bool()> lit;
 
     // GL thread only.
     Flight flight;

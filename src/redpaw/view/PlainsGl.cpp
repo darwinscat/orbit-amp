@@ -768,6 +768,7 @@ void PlainsGl::drawScene (int rw, int rh)
             glUniformMatrix4fv (relic.uniform ("uViewProj"), 1, GL_FALSE, VP.data());
             glUniform3f (relic.uniform ("uCamRel"), camFrac[0], (float) s.camY, camFrac[1]);
             glUniform3f (relic.uniform ("uBeacon"), beaconLight[0] * beacons, beaconLight[1] * beacons, beaconLight[2] * beacons);
+            glUniform1f (relic.uniform ("uLit"), world.isLit() ? 1.0f : 0.0f);   // unlit, no beacon at all
             for (int v = 0; v < PlainsWorld::numRelics; ++v)
             {
                 if (relicCount[(size_t) v] == 0) continue;

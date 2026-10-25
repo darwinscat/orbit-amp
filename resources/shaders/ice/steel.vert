@@ -3,6 +3,7 @@
 in vec3 aPos; in vec3 aNrm; in vec3 aExp; in float aLod; in vec2 aCell;
 uniform mat4 uViewProj;
 uniform int uVariant;
+uniform float uLit;   // whether the view is lit by the guitar: unlit, a lamp is not there
 uniform vec3 uCamRel; uniform float uPxExpand;   // metres of bar width per metre of distance that one pixel covers
 out vec3 vN; out vec3 vRel; out vec3 vWorld; out float vSeed; out float vLamp;
 void main() {
@@ -22,6 +23,7 @@ void main() {
   float extra = max (0.0, uPxExpand * dist * 1.3 - 0.22 * scl) * 0.5;
   lp += aExp * extra;
   if (aLod > 0.5 && aLod < 1.5 && dist > 900.0) lp = vec3 (0.0, 0.0, 0.0);
+  if (aLod > 1.5 && uLit < 0.5) lp = vec3 (0.0, 0.0, 0.0);
   vec3 ln = aNrm;
   lp.xz = vec2 (ca * lp.x - sa * lp.z, sa * lp.x + ca * lp.z);
   ln.xz = vec2 (ca * ln.x - sa * ln.z, sa * ln.x + ca * ln.z);
