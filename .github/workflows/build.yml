@@ -49,9 +49,13 @@ jobs:
           arch: x64
 
       # Compiler cache. MUST precede Configure: JUCE builds juceaide at configure time and
-      # passes the compiler launcher through to that sub-build.
+      # passes the compiler launcher through to that sub-build. sccache itself is pinned: the action
+      # takes the newest release otherwise, and a new release keys every file anew — 24.10, v0.19.0,
+      # not one hit on the cache 0.18.0 had filled, a run of 2 h 16 min.
       - name: sccache
         uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696   # v0.0.10
+        with:
+          version: v0.19.0
 
       - name: Cache FetchContent sources
         uses: actions/cache@v6
