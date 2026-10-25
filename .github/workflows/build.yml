@@ -70,18 +70,9 @@ jobs:
       # THE FAMILY'S RELEASE, as the release builds it: the family's plug-ins — one VST3 and one CLAP holding
       # every amp installer/family.ini names (CMakeLists.txt: THE FAMILY'S PLUG-INS) — and each of those
       # amps' Standalone. The faces are not part of the default build, so that OrbitAmp's build can never
-      # fail on them: this is the only place a pull request meets MSVC with the cockpit and the rover.
+      # fail on them: this is the only place a pull request meets MSVC with the cockpit and the rovers.
       - name: Build the family (Family_All)
         run: cmake --build build --target Family_All
-
-      # The faces not in the family's release yet, by name, every format of each: the ice moon's rover,
-      # the same dashboard in a skin of its own...
-      - name: Build FrostPawAmp
-        run: cmake --build build --target FrostPawAmp_All
-
-      # ...and the helicopter over Titan, the same dashboard in a cockpit of its own.
-      - name: Build AmberPawAmp
-        run: cmake --build build --target AmberPawAmp_All
 
       # Every gate of the one list (tests/gates.txt) — the faces' are built only when asked for.
       - name: Build the gates
