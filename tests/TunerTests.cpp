@@ -622,6 +622,54 @@ namespace
             checkTrue ("...while the ear held the note on for half a second more", liveAfter > 0.5);
         }
 
+        // ---- A QUIET, DETUNED HIGH NOTE SHOWS: what the ear hears, the strobe shows — a sine just over the
+        //      level floor (peak 0.0025, -55 dBFS RMS), E5, B5 and E6, every 5 c from -50 to +50. The band's own
+        //      filter takes a fast beat down 40 dB and more (E6 +45 c beats at 34.6 Hz), so the floor is the
+        //      input's, never the filtered band's. Of the ticks the ear names the note, all but the lock-on. ----
+        {
+            double worstShare = 1.0;
+            char worstCase[64] = "";
+            for (const double note : { 659.255, 987.767, 1318.51 })
+                for (int cents = -50; cents <= 50; cents += 5)
+                {
+                    const double hz = note * std::pow (2.0, cents / 1200.0), sr = 48000.0;
+                    TunerTap tap;
+                    TunerEar ear;
+                    TunerStrobe s;
+                    ear.prepare (sr);
+                    s.prepare (sr);
+                    std::vector<float> block (512);
+                    long n = 0;
+                    unsigned now = 0;
+                    int heardTicks = 0, shownTicks = 0;
+                    for (int b = 0; n < (long) (3.0 * sr); ++b)
+                    {
+                        for (auto& v : block)
+                            v = (float) (0.0025 * std::sin (2.0 * pi * hz * (double) n++ / sr));
+                        tap.write (block.data(), 512);
+                        if (b % 3 != 2)
+                            continue;
+                        ear.update (tap, now += 32);
+                        s.update (tap, ear);
+                        if (n > (long) (0.5 * sr) && ear.live())
+                        {
+                            ++heardTicks;
+                            shownTicks += s.strength (0) > 0.0f ? 1 : 0;
+                        }
+                    }
+                    const double share = heardTicks > 0 ? (double) shownTicks / heardTicks : 0.0;
+                    if (share < worstShare)
+                    {
+                        worstShare = share;
+                        std::snprintf (worstCase, sizeof (worstCase), "%.0f Hz %+d c", note, cents);
+                    }
+                    if (note > 1300.0 && cents == 45)
+                        check ("strobe: E6 +45 c at the floor, share of heard ticks shown", share, 1.0, 0.0);
+                }
+            std::printf ("strobe: quiet high notes, the worst: %s\n", worstCase);
+            check ("strobe: quiet high notes +-50 c, worst share of heard ticks shown", worstShare, 1.0, 0.0);
+        }
+
         // ---- SILENCE COSTS NOTHING: once the ear hears no note, the strobe demodulates nothing — the filters
         //      would decay into subnormals on the message thread, ~50x the cost of a tick on x86. ----
         {

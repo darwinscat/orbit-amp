@@ -40,8 +40,10 @@ namespace orbitamp::core
     — strength over 0, its phase counted — only once it has stood CLEAR of the noise for `settleTaus` of
     the filters' time constant: after a restart (a new note, the flip, a new A, a stretch of input it never
     saw), and after a pluck out of silence alike — the well alone until then, a wheel spinning up. CLEAR is
-    over a twentieth of a note at the player's level floor and within 24 dB of the strongest band since
-    the note began. And when the INPUT falls 24 dB under its own recent peak faster than a ringing string
+    the INPUT over half the player's level floor, and the band within 24 dB of the strongest band since
+    the note began. The floor is judged on the input, before any band's filter: a band's filter takes a
+    fast beat down by 40 dB and more (E6 45 c sharp beats at 34.6 Hz), so a quiet, detuned high note the
+    ear names would never clear a floor judged after it. And when the INPUT falls 24 dB under its own recent peak faster than a ringing string
     ever falls — a damped string, while the ear still holds its name — the filters start again at once
     rather than show their tail: hiss never throws stripes about. While the ear hears no note it filters
     nothing at all: silence filtered on the message thread decays into subnormals, which x86 pays for
@@ -79,9 +81,9 @@ public:
         reset();
     }
 
-    /** The player's level floor (prefs::tunerFloor, as the ear has it), in dBFS: a band whose partial is
-        `floorShare` of a note standing at it is taken for noise. Cheap: call it every tick. */
-    void setLevelFloorDb (double db) noexcept { floorMag = std::pow (10.0, db / 20.0) * floorShare; }
+    /** The player's level floor (prefs::tunerFloor, as the ear has it), in dBFS RMS: an input under
+        `floorShare` of it is taken for noise. Cheap: call it every tick. */
+    void setLevelFloorDb (double db) noexcept { floorEnergy = std::pow (std::pow (10.0, db / 20.0) * floorShare, 2.0); }
 
     /** Forget the note, the filters and where it read the tap: the next tick starts from now. */
     void reset() noexcept
@@ -94,6 +96,7 @@ public:
         count  = 0;
         settleSamples = 0;
         peak = level = levelPeak = energy = 0.0;
+        loud = false;
         working = false;
         for (auto& b : band)
             b = Band {};
@@ -267,11 +270,12 @@ private:
     static constexpr unsigned decimate = 16;  // the phase is read every this many samples...
     static constexpr unsigned resync  = 256;  // ...the oscillator re-drawn from its exact phase every this many
 
-    /** A band is noise under `floorShare` of the player's level floor (-26 dB: a partial a twentieth of a
-        note standing at the floor), or `keepShare` of the strongest band's peak since the note began
-        (-24 dB), which falls `peakFallDb` a second — slower than a ringing string's, far slower than
-        filters letting go of a damped one. */
-    static constexpr double floorShare = 0.05, keepShare = 0.063, peakFallDb = 30.0;
+    /** Noise: the input's RMS under `floorShare` of the player's level floor (-6 dB: the ear names nothing
+        under the floor itself, and a note it names may dip that far between two of its windows), or a band
+        under `keepShare` of the strongest band's peak since the note began (-24 dB), which falls
+        `peakFallDb` a second — slower than a ringing string's, far slower than filters letting go of a
+        damped one. */
+    static constexpr double floorShare = 0.5, keepShare = 0.063, peakFallDb = 30.0;
 
     /** The input's own level: the energy of each 16 samples, eased over `levelTau` (a low E's period
         reads as a level, not a ripple); a CUT is the level under `cutShare` of its peak (-24 dB in
@@ -313,6 +317,7 @@ private:
                 restart();          // the string is gone: no tail, no hiss shown — and a new start for the next
                 levelPeak = level;
             }
+            loud = level >= floorEnergy;
         }
 
         for (int k = 0; k < numBands; ++k)
@@ -350,7 +355,7 @@ private:
             {
                 const double mag   = std::sqrt (re * re + im * im);
                 peak = std::max (peak, mag);
-                const bool   clear = mag >= floorMag && mag >= keepShare * peak;
+                const bool   clear = loud && mag >= keepShare * peak;
                 const bool   ready = clear && b.clearFor >= settleSamples;
                 b.clearFor = clear ? std::min (settleSamples, b.clearFor + decimate) : 0u;
                 if (ready && b.ready)
@@ -387,6 +392,7 @@ private:
         }
         restart();
         level = levelPeak = energy = 0.0;   // across a gap the input's level says nothing
+        loud  = false;
     }
 
     /** The filters empty, the bands blank and still, each to settle again — and the bands' peak forgotten:
@@ -410,8 +416,9 @@ private:
     void follow (const TunerEar& ear) { follow (ear.live(), ear.hz(), ear.referenceHz()); }
 
     double sr = 0.0, coeff = 0.0, noteHz = 0.0;
-    double peak = 0.0, peakFall = 1.0, floorMag = 1.0e-3 * floorShare;   // the floor: -60 dBFS, as the ear's
+    double peak = 0.0, peakFall = 1.0, floorEnergy = 0.25e-6;   // the floor: -60 dBFS, as the ear's, less 6 dB
     double level = 0.0, levelPeak = 0.0, levelEase = 1.0, energy = 0.0;
+    bool   loud = false;                                       // the input over it, at the last reading
     int    target = -1;
     float  a4Used = 0.0f;
     bool   heard = false, fresh = true, running = false, working = false;
