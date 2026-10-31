@@ -99,6 +99,13 @@ public:
     float numeralHeight() const noexcept { return numbered ? scaleFontHeight : 0.0f; }
     static constexpr float scaleFontHeight = 9.5f;
 
+    /** Its name on the border, centred (the frame's own is not shown): the box, and the width the gear must clear. */
+    juce::Rectangle<int> titleBounds() const override { return nameBox; }
+    int borderTitleWidth() const override
+    {
+        return juce::roundToInt (theme::trackedWidth (name, theme::displayFont (titleHeight), 0.15f)) + 1;
+    }
+
     /** Its rail — for a face that gives it a look of its own (bass::asBassRail). */
     GuardRail& valueRail() noexcept { return rail; }
 
@@ -110,7 +117,7 @@ protected:
         const int  w   = juce::roundToInt (theme::trackedWidth (name, theme::displayFont (titleHeight), 0.15f)) + 1;
         // ...left of the gear where the block wears one (OrbitBass), so the two do not meet.
         nameBox        = juce::Rectangle<int> (w, (int) titleHeight + 6)
-                             .withCentre ({ box.getCentreX() - (hasGear() ? gearSize / 2 + 2 : 0), box.getY() });
+                             .withCentre ({ box.getCentreX() - (hasGear() && ! gearInside() ? gearSize / 2 + 2 : 0), box.getY() });
         borderSlotUsed = nameBox;
 
         // The lamp across the block's whole width at its foot (Oleh, 24.10); above it the rail at the

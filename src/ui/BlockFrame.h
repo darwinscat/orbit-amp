@@ -210,12 +210,34 @@ public:
 
     bool hasGear() const noexcept { return gear != nullptr; }
 
+    /** WHERE THE GEAR STANDS: on the border at the top right, opposite the name — or, where the line is too short for
+        the name and the gear both (GATE's and LIMIT's 80), INSIDE the box under that corner, and the block's content
+        starts below it. The name and the gear never meet, at any width. */
+    bool gearInside() const
+    {
+        if (gear == nullptr)
+            return false;
+        const int need = 2 * borderInset + borderTitleWidth() + 2 * juce::roundToInt (legendGap) + gearSize;
+        return need > boxArea().getWidth();
+    }
+
+    juce::Rectangle<int> gearBounds() const { return gear != nullptr ? gear->getBounds() : juce::Rectangle<int>(); }
+
+    /** The name's box on the border, in the block's own coordinates; empty where it writes none there. */
+    virtual juce::Rectangle<int> titleBounds() const
+    {
+        return showTitle && titleInBorder ? titleArea() : juce::Rectangle<int>();
+    }
+
     void resized() override final
     {
         shield.setBounds (getLocalBounds());
         if (gear != nullptr)
-            gear->setBounds (juce::Rectangle<int> (gearSize, gearSize)
-                                 .withCentre ({ boxArea().getRight() - borderInset - gearSize / 2, boxArea().getY() }));
+            gear->setBounds (gearInside()
+                                 ? juce::Rectangle<int> (gearSize, gearSize)
+                                       .withPosition (boxArea().getRight() - gearInsideInset - gearSize, boxArea().getY() + gearInsideTop())
+                                 : juce::Rectangle<int> (gearSize, gearSize)
+                                       .withCentre ({ boxArea().getRight() - borderInset - gearSize / 2, boxArea().getY() }));
         layOutHeader (headerWidgetArea());
         layOutContent (contentArea());
     }
@@ -280,9 +302,15 @@ protected:
     juce::Rectangle<int> contentArea() const
     {
         auto r = boxArea().reduced (padX, padY);
+        if (gearInside())   // the gear under the top right corner, below the name: the content starts below it
+            r.removeFromTop (gearInsideTop() + gearSize + 2 - padY);
         const int h = headerHeight();
         return h > 0 ? r.withTrimmedTop (h + headerGap) : r;
     }
+
+    /** How wide the name stands on the border — 0 where it writes none there. A block that writes its own name there (a
+        guard's) says its own width. */
+    virtual int borderTitleWidth() const { return showTitle && titleInBorder ? titleArea().getWidth() : 0; }
 
     /** The first row, minus whatever is still living in it. With both the title and the switch moved
         onto the border, a block's header widget gets the full width. */
@@ -549,6 +577,9 @@ protected:
     std::unique_ptr<Gear> gear;
     std::function<void()> onSettings;
     static constexpr int gearSize = 18;
+    static constexpr int gearInsideInset = 5;   // the gear inside the box: this far from its right...
+    /** ...and below the name riding the line, whose box reaches half its height under it. */
+    int gearInsideTop() const noexcept { return juce::roundToInt (titleHeight * 0.5f) + 3 + 3; }
 
 private:
 
