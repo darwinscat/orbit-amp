@@ -685,6 +685,30 @@ namespace
             check ("strobe: a sustain after a falling attack, shown after, s", popped.first, 0.3, 0.1);
             check ("...and went blank again", popped.second, 0.0, 0.0);
 
+            // A string that comes back SOFTLY after a fall: A2 at -10 dBFS, then -62 for 300 ms (under the
+            // floor: the strobe hushed), then -59 — just over it. Its 5 ms level dips under the floor every
+            // cycle; the floor's own eased level does not: it shows.
+            const auto dbAt = [] (double db) { return std::pow (10.0, db / 20.0) / 0.3745; };   // the tone's RMS at 1.0
+            const auto soft = run ([dbAt] (double t) { return dbAt (t < 1.0 ? -10.0 : t < 1.3 ? -62.0 : -59.0); }, 5.3, 1.3, -200.0);
+            check ("strobe: back softly at -59 after a fall to -62, shown after, s", soft.first, 0.3, 0.2);
+            check ("...and went blank again", soft.second, 0.0, 0.0);
+
+            // ...and one that swells back: -62 to -58 over a second.
+            const auto swell = run ([dbAt] (double t) { return dbAt (t < 1.0 ? -10.0 : t < 1.3 ? -62.0 : t < 2.3 ? -62.0 + 4.0 * (t - 1.3) : -58.0); },
+                                    4.3, 1.3, -200.0);
+            check ("strobe: swelling back -62 to -58 in 1 s, shown after, s", swell.first, 0.75, 0.25);
+            check ("...and went blank again", swell.second, 0.0, 0.0);
+
+            // A string at full level damped into hiss 2 dB under the floor: the floor's eased level, slow to
+            // fall from so high, may let the hush go in the hiss — and still nothing shows again.
+            for (const double loudDb : { 0.0, -10.0 })
+            {
+                const auto damped = run ([dbAt, loudDb] (double t) { return t < 1.0 ? dbAt (loudDb) : 0.0; }, 2.5, 1.0, -62.0);
+                char name[96];
+                std::snprintf (name, sizeof (name), "strobe: %.0f dBFS damped into hiss at -62, shown again after, s", loudDb);
+                check (name, damped.first, -1.0, 0.0);
+            }
+
             // A note hovering at the floor: A2 at -59.7 dBFS RMS, swinging 0.5 dB either way once a second, no
             // hiss — once it shows, it never flickers off.
             const double atFloor = std::pow (10.0, -59.7 / 20.0) / 0.3745;   // the tone's RMS at 1.0 is 0.3745

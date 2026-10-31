@@ -49,7 +49,7 @@ namespace orbitamp::core
     faster than a ringing string ever falls — a damped string, while the ear still holds its name — the
     filters start again at once rather than show their tail, and the strobe stays HUSHED until a string
     comes again: the input 6 dB over the lowest it fell to (a pluck), or holding over the floor for 100 ms
-    (a note's sustain after an attack that fell like a damping). Hiss never throws stripes about, however
+    (a note come back softly, a swell, a sustain after an attack that fell like a damping). Hiss never throws stripes about, however
     close under the floor it is. While the ear hears no note it filters nothing at all: silence filtered
     on the message thread decays into subnormals, which x86 pays for fifty times over.
 
@@ -286,9 +286,10 @@ private:
     /** The input's own level: the energy of each 16 samples, eased over `levelTau`; a CUT is the level
         under `cutShare` of its peak (-24 dB in energy), the peak falling `peakFallDb` a second like the
         bands'. Hushed by a cut until the level stands `onsetShare` over the lowest it fell to (+6 dB) — or
-        holds over the floor, never falling `fallShare` (3 dB) under its last low, for `sustainSeconds`: a
-        damped string's tail falls into the hiss in milliseconds, and hiss under the floor never holds over
-        it; a sustain after an attack that fell like a damping does. */
+        the floor's eased level holds over the floor, never falling `fallShare` (3 dB) under its last low,
+        for `sustainSeconds`: a damped string's tail falls into the hiss in milliseconds, and hiss under the
+        floor never holds over it; a note come back softly, a swell, a sustain after an attack that fell
+        like a damping do. */
     static constexpr double levelTau = 0.005, cutShare = 0.004, onsetShare = 4.0, fallShare = 0.5, sustainSeconds = 0.1;
     static constexpr double tiny = 1.0e-30;
 
@@ -335,22 +336,25 @@ private:
                 }
             }
 
-            const bool overFloor = floorLevel >= (loud ? holdShare * floorEnergy : floorEnergy);
             if (hushed)
             {
-                // A string again: a pluck — the input 6 dB over the lowest it fell to — or a sustain the cut
-                // took for a damping: over the floor, and no new low 3 dB under the last, for `sustainSeconds`.
+                // A string again: a pluck — the input 6 dB over the lowest it fell to — or a level that holds
+                // over the floor (the floor's own eased, hysteretic gate: the 5 ms level of a note just over
+                // it dips under every cycle) with no new low 3 dB under the last, for `sustainSeconds` — a
+                // note come back softly, a swell, a sustain the cut took for a damping. (The eased level falls
+                // slower than a damped string: from full level it holds over the floor some 140 ms into the
+                // hiss and may let the hush go — but a band shows only after 160 ms clear, so nothing does.)
                 if (level < fallShare * lowest)
                 {
                     lowest  = level;
                     loudFor = 0;
                 }
                 else
-                    loudFor = level >= floorEnergy ? loudFor + decimate : 0u;
+                    loudFor = floorLevel >= floorEnergy ? loudFor + decimate : 0u;
                 if (level > onsetShare * lowest || loudFor >= sustainSamples)
                     hushed = false;
             }
-            loud = overFloor && ! hushed;
+            loud = ! hushed && floorLevel >= (loud ? holdShare * floorEnergy : floorEnergy);
         }
 
         for (int k = 0; k < numBands; ++k)
