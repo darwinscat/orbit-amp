@@ -1944,6 +1944,12 @@ add_executable(orbitamp_polytuner_test tests/PolyTunerTests.cpp)
 target_include_directories(orbitamp_polytuner_test PRIVATE src)
 target_compile_features(orbitamp_polytuner_test PRIVATE cxx_std_20)
 
+# ... and against strings that are NOT the analysis's model: partials off the formula, two planes of vibration,
+# two-stage decay, the pick, a slow settle, mains hum to the 12th — every reading of the timer judged.
+add_executable(orbitamp_polytuner_hard_test tests/PolyTunerHardTests.cpp)
+target_include_directories(orbitamp_polytuner_hard_test PRIVATE src)
+target_compile_features(orbitamp_polytuner_hard_test PRIVATE cxx_std_20)
+
 # Same gate for the gate's LEARN: known traces in, the threshold out — and the arithmetic held to
 # what OrbitAmp's GateConsole did before the faces came to share it. core::GateLearn is plain C++.
 add_executable(orbitamp_gatelearn_test tests/GateLearnTests.cpp)
