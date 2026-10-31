@@ -49,7 +49,6 @@ namespace
 {
     int failures = 0;
     constexpr double pi = 3.14159265358979323846;
-    double spanSeconds = 1.7;   // the analysed span of the last reading — see onAnotherPartial
 
     struct Rng
     {
@@ -194,31 +193,9 @@ namespace
         pt.analyse();
         if (seconds != nullptr)
             *seconds = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
-        spanSeconds = pt.reading().spanMs / 1000.0;
         return pt.reading();
     }
 
-    /** True when string s's first partial lies within `cents` of another sounding string's partial —
-        the unison in which a string cannot be told from a harmonic of another. With cents <= 0, the
-        radius is half a bin of the analysed span: the resolution the span has to tell two partials
-        apart by — 0.29 Hz at 1.7 s, 7 cents on a bass D, 1.5 on a high E. */
-    bool onAnotherPartial (const Scene& sc, int s, double cents)
-    {
-        const auto& me = sc.strings[(size_t) s];
-        if (cents <= 0.0)
-            cents = 1200.0 * std::log2 ((me.f1 + 0.5 / spanSeconds) / me.f1);
-        for (size_t r = 0; r < sc.strings.size(); ++r)
-        {
-            const auto& o = sc.strings[r];
-            if ((int) r == s || ! o.on)
-                continue;
-            const double f0 = o.f1 / std::sqrt (1.0 + o.B);
-            for (int h = 1; h <= 12; ++h)
-                if (std::abs (1200.0 * std::log2 (h * f0 * std::sqrt (1.0 + o.B * h * h) / me.f1)) < cents)
-                    return true;
-        }
-        return false;
-    }
 
     bool partialNear (const StringSpec& o, double hz, double cents)
     {
@@ -266,6 +243,22 @@ namespace
     {
         return o.hz > 0.0f ? 1200.0 * std::log2 (o.hz / st.f1) : 999.0;
     }
+
+    // The rule the analysis keeps (PolyTuner.h, Decisions): a published number within a cent of the truth,
+    // or none — "pluck alone" or "-". Withholding is counted, and the count is held to a ceiling at the end:
+    // a tuner that withheld everything would pass the rest.
+    int withheld = 0, sounding = 0;
+    constexpr double withheldCeiling = 10.0;
+    bool rightOrWithheld (const PolyTuner::String& o, const StringSpec& st)
+    {
+        ++sounding;
+        if (o.heard == Heard::near)
+            return std::abs (errCents (o, st)) <= 1.0;
+        if (o.heard == Heard::far)
+            return false;   // every string here is within 40 c of its note
+        ++withheld;
+        return true;
+    }
 }
 
 int main()
@@ -277,7 +270,7 @@ int main()
     // another. A string within half a bin of the span of another string's partial may read MASKED —
     // it cannot be told from that harmonic — and is counted, not failed.
     std::printf ("Accuracy: %d random strums per tuning and rate, detune +-40 c, levels 0..-20 dB\n", strums);
-    std::printf ("%-24s %s\n", "tuning", "worst |error| per string, cents (masked unisons)");
+    std::printf ("%-24s %s\n", "tuning", "worst |error| per string, cents (readings withheld)");
     double worstAll = 0.0, analysisSeconds = 0.0, audioSeconds = 0.0;
     int analyses = 0;
     for (const auto& t : PolyTuner::tunings)
@@ -297,14 +290,11 @@ int main()
                 for (int s = 0; s < t.strings; ++s)
                 {
                     const auto& o = r.string[(size_t) s];
-                    if (o.heard == Heard::masked && onAnotherPartial (sc, s, 0.0))
-                    {
+                    if (o.heard != Heard::near && o.heard != Heard::far)
                         ++masked[s];
-                        continue;
-                    }
-                    const double e = errCents (o, sc.strings[(size_t) s]);
-                    worst[s] = std::max (worst[s], std::abs (e));
-                    ok = ok && o.heard == Heard::near && std::abs (e) <= 1.0;
+                    else
+                        worst[s] = std::max (worst[s], std::abs (errCents (o, sc.strings[(size_t) s])));
+                    ok = rightOrWithheld (o, sc.strings[(size_t) s]) && ok;
                 }
                 check (ok, "strum", t, sc, r);
             }
@@ -330,8 +320,8 @@ int main()
             const auto r = listen (t, sc);
             bool ok = r.string[(size_t) m].heard == Heard::no || r.string[(size_t) m].heard == Heard::masked;
             for (int s = 0; s < t.strings; ++s)
-                if (s != m && ! (r.string[(size_t) s].heard == Heard::masked && onAnotherPartial (sc, s, 0.0)))
-                    ok = ok && r.string[(size_t) s].heard == Heard::near && std::abs (errCents (r.string[(size_t) s], sc.strings[(size_t) s])) <= 1.0;
+                if (s != m)
+                    ok = rightOrWithheld (r.string[(size_t) s], sc.strings[(size_t) s]) && ok;
             check (ok, "muted string", t, sc, r);
         }
     std::printf ("muted string: checked every string of every tuning\n");
@@ -347,8 +337,8 @@ int main()
             const auto& o = r.string[(size_t) f];
             bool ok = o.heard == Heard::far && std::abs (o.cents - off) <= 2.0;
             for (int s = 0; s < t.strings; ++s)
-                if (s != f && ! (r.string[(size_t) s].heard == Heard::masked && onAnotherPartial (sc, s, 0.0)))
-                    ok = ok && r.string[(size_t) s].heard == Heard::near && std::abs (errCents (r.string[(size_t) s], sc.strings[(size_t) s])) <= 1.0;
+                if (s != f)
+                    ok = rightOrWithheld (r.string[(size_t) s], sc.strings[(size_t) s]) && ok;
             check (ok, "one string 150 c off", t, sc, r);
         }
     std::printf ("far string: +-150 c on every string of every tuning\n");
@@ -366,9 +356,7 @@ int main()
             for (int s = 0; s < t.strings; ++s)
             {
                 const auto& o = r.string[(size_t) s];
-                if (o.heard == Heard::masked && onAnotherPartial (sc, s, 0.0))
-                    continue;
-                ok = ok && o.heard == Heard::near && std::abs (errCents (o, sc.strings[(size_t) s])) <= 1.0;
+                ok = rightOrWithheld (o, sc.strings[(size_t) s]) && ok;
                 if (clean.string[(size_t) s].heard == Heard::near && o.heard == Heard::near)
                     humShift = std::max (humShift, (double) std::abs (o.cents - clean.string[(size_t) s].cents));
             }
@@ -421,14 +409,11 @@ int main()
                 got = pt.maybeAnalyse() && pt.reading().strum > 0 && pt.reading().spanMs > 0.0f
                       && (double) k / sc.fs > sc.strumAt;
             }
-            spanSeconds = pt.reading().spanMs / 1000.0;
-            bool ok = got;
+                bool ok = got;
             for (int s = 0; s < t.strings; ++s)
             {
                 const auto& o = pt.reading().string[(size_t) s];
-                if (o.heard == Heard::masked && onAnotherPartial (sc, s, 0.0))
-                    continue;
-                ok = ok && o.heard == Heard::near && std::abs (errCents (o, sc.strings[(size_t) s])) <= 1.0;
+                ok = rightOrWithheld (o, sc.strings[(size_t) s]) && ok;
             }
             check (ok, "first reading after a hard pluck", t, sc, pt.reading());
         }
@@ -601,9 +586,10 @@ int main()
         const auto lanes = poly.lanes (true);
         expect (lanes.lane[1].mark == Mark::near && std::abs (lanes.lane[1].cents - 12.0f) < 0.5f && ! lanes.lane[1].green
                     && lanes.lane[3].mark == Mark::near && std::abs (lanes.lane[3].cents + 30.0f) < 0.5f
-                    && lanes.lane[4].mark == Mark::masked
-                    && lanes.lane[0].green && lanes.lane[2].green && lanes.lane[5].green,
-                "pump: the strum's lanes - +12, -30, B muted, the rest home");
+                    && lanes.lane[4].mark != Mark::near && lanes.lane[4].mark != Mark::far
+                    && lanes.lane[5].mark == Mark::masked
+                    && lanes.lane[0].green && lanes.lane[2].green,
+                "pump: the strum's lanes - +12, -30, B muted (no number), E on the low E's 4th partial (pluck alone), the rest home");
 
         poly.tune (t, 442.0f);
         const auto retuned = poly.lanes (true);
@@ -616,6 +602,15 @@ int main()
         expect (poly.on() && ! poly.running() && poly.reading().spanMs == 0.0f, "pump: stopped, shown, nothing kept");
         poly.stop();
         expect (! poly.on(), "pump: another display, not shown");
+    }
+
+    // Withholding is allowed, not free: on the gate's own clean strums it stays under a ceiling.
+    {
+        const double share = 100.0 * withheld / std::max (1, sounding);
+        if (share > withheldCeiling)
+            ++failures;
+        std::printf ("withheld: %.1f%% of %d sounding-string readings (want <= %.0f%%)  %s\n", share, sounding, withheldCeiling,
+                     share <= withheldCeiling ? "ok" : "FAIL");
     }
 
     std::printf ("cost: %.2f ms per analysis on average (%d analyses), %.1f%% of a core at one per 200 ms\n",
