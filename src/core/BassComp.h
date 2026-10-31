@@ -28,9 +28,9 @@ namespace orbitamp::core
         sample-aligned (no lookahead, no latency).
       - MAKE-UP is automatic and LEVEL-NEUTRAL (the owner, 31.10: BLEND changes evenness, not loudness): it gives back
         exactly what the curve takes from a note at the REFERENCE — a steady note at -18 dBFS RMS (`referenceDb`), which
-        SMOOTH's detector reads at -18 dB and PUNCHY's `punchyReadsDb` higher (its peaks, as its squeeze settles). A
-        note there keeps its level at any BLEND; a quieter one comes up a little, a louder one goes down a little. It
-        glides as the squeeze does — up at the attack's pace, down at the release's.
+        each detector reads as its squeeze settles there (`readsDb`: by CHARACTER, ATTACK and RELEASE, measured). A note
+        there keeps its level at any BLEND, at every setting; a quieter one comes up a little, a louder one goes down a
+        little. It glides as the squeeze does — up at the attack's pace, down at the release's.
       - Every move GLIDES: the blend over 20 ms for its whole travel, the threshold over 20 ms for its 48 dB, the ratio
         over 20 ms for 2:1..10:1 — a drag, a recall or automation is never a step.
       - CHARACTER chooses the detector: SMOOTH hears the level's RMS over 10 ms, PUNCHY its peaks. (The old law raised
@@ -83,17 +83,32 @@ public:
     static constexpr double thresholdMinDb = -48.0, thresholdMaxDb = 0.0, defaultThresholdDb = -24.0;
     static constexpr double ratioMin = 2.0, ratioMax = 10.0, defaultRatio = 4.0;
 
-    /** THE MAKE-UP'S REFERENCE: a steady note at this RMS, dBFS, comes out at its own level at any BLEND. PUNCHY's
-        detector reads the same note `punchyReadsDb` higher: its peaks, a steady tone's crest (3 dB) less what its
-        squeeze lets go between them — measured, settled at the MED attack on A1..A4 (0.75 dB at 82..440 Hz); SLOW
-        reads it 0.4 dB lower, FAST 0.4 higher, within the gate's half a decibel either way. */
-    static constexpr double referenceDb   = -18.0;
-    static constexpr double punchyReadsDb = 2.25;
+    /** THE MAKE-UP'S REFERENCE: a steady note at this RMS, dBFS, comes out at its own level at any BLEND. */
+    static constexpr double referenceDb = -18.0;
 
-    /** The make-up, dB, at a threshold and a ratio in a character: what core's curve (the compressor's own, its knee
-        and range) takes from the reference note as that character's detector reads it — so the note at the reference
-        keeps its level. 0 where the reference lies under the knee. */
-    static double makeupDbFor (double thresholdDb, double ratio, Character character) noexcept
+    /** HOW EACH DETECTOR READS THE REFERENCE NOTE as its squeeze settles, dB over the note's RMS — measured on core's own
+        compressor (steady notes A1..A4 at -18 dBFS RMS, -24 dB, 4:1: the middle of their spread), by
+        [CHARACTER smooth, punchy][ATTACK slow, med, fast][RELEASE fast 80 ms, slow 400 ms]. The ballistics sit on the
+        squeeze, so a steady note's settles where each cycle's attack meets its release: SMOOTH's RMS reads the note
+        itself, within a fifth of a decibel; PUNCHY's peaks a steady tone's crest (3 dB) less what its squeeze lets go
+        between them — much with a fast release, little with a fast attack. AUTO's release lies between, by the same
+        fraction of its hold that apply() gives its time. The key's 30 Hz high-pass reads B0 and E1 low: those notes come
+        up 1.5..3 dB at the full BLEND (the gate says how much). */
+    static constexpr double readsDb[2][3][2] = { { { -0.07, 0.11 }, { 0.01, 0.15 }, { 0.12, 0.17 } },
+                                                 { {  0.29, 1.74 }, { 1.05, 2.11 }, { 1.88, 2.47 } } };
+
+    /** ...for a release `slowness` of the way from FAST (0) to SLOW (1). */
+    static double readingDb (Character character, Attack attack, double slowness) noexcept
+    {
+        const auto& r = readsDb[character == Character::punchy ? 1 : 0][std::clamp ((int) attack, 0, 2)];
+        return r[0] + (r[1] - r[0]) * std::clamp (slowness, 0.0, 1.0);
+    }
+
+    /** The make-up, dB, at a threshold and a ratio, in a character, an attack and a release's slowness: what core's curve
+        (the compressor's own, its knee and range) takes from the reference note as that detector reads it — so the
+        note at the reference keeps its level. 0 where the reference lies under the knee. */
+    static double makeupDbFor (double thresholdDb, double ratio, Character character, Attack attack = Attack::med,
+                               double slowness = 1.0) noexcept
     {
         felitronics::dynamics::GainComputer curve;
         curve.setMode (felitronics::dynamics::Mode::DownCompress);
@@ -101,7 +116,7 @@ public:
         curve.setRatio (ratio);
         curve.setKneeDb (kneeDb);
         curve.setRangeDb (felitronics::dynamics::CompressorParams {}.rangeDb);   // the compressor's, as apply() leaves it
-        return -curve.deltaDb (referenceDb + (character == Character::punchy ? punchyReadsDb : 0.0));
+        return -curve.deltaDb (referenceDb + readingDb (character, attack, slowness));
     }
 
     static double attackMsOf (Attack a) noexcept
@@ -151,6 +166,7 @@ public:
         snapMakeup  = false;
         running     = false;
         paramsValid = false;
+        tapWrote    = false;
         grDb.store (0.0f, std::memory_order_relaxed);
     }
 
@@ -180,6 +196,7 @@ public:
             if (running)
                 reset();
             grDb.store (0.0f, std::memory_order_relaxed);
+            tapWrote = false;
             return;
         }
         if (! ready || x == nullptr || n <= 0 || n > block)
@@ -253,9 +270,16 @@ public:
         grDb.store (heard ? gr[(size_t) n - 1] : 0.0f, std::memory_order_relaxed);
 
         // THE PICTURE only while COMP is heard (the owner, 31.10): standing by — its strip arrow off, its fade done — it
-        // writes nothing, and the picture stands still, dimmed with its block; switched in again, it is alive.
-        if (tap != nullptr && heard)
-            tap->write (key.data(), path.data(), shown.data(), gr.data(), n, character == Character::smooth);   // IN the detector's
+        // writes nothing, and the picture stands still, dimmed with its block; switched in again, it is alive, on a trace
+        // of its own. IN is the signal COMP is handed — the full band, as AFTER and AFTER + BLEND (CompTap).
+        const bool write = tap != nullptr && heard;
+        if (write)
+        {
+            if (! tapWrote)
+                tap->breakTrace();
+            tap->write (dry.data(), path.data(), shown.data(), gr.data(), n, character == Character::smooth);
+        }
+        tapWrote = write;
     }
 
     /** Where the picture's columns go, while it is on screen — null otherwise (the processor sets it per block). */
@@ -292,16 +316,16 @@ private:
             ratioAt = ratioWant > ratioAt ? std::min (ratioWant, ratioAt + ratioStep) : std::max (ratioWant, ratioAt - ratioStep);
         }
 
-        double releaseMs = release == Release::fast ? releaseFastMs : releaseSlowMs;
-        if (release == Release::automatic)
-            releaseMs = releaseFastMs + (releaseSlowMs - releaseFastMs) * std::clamp (heldDb / holdFullDb, 0.0, 1.0);
+        // The release's slowness, FAST 0 .. SLOW 1 — AUTO's by how deep the squeeze has been held.
+        const double slowness  = release == Release::fast ? 0.0 : release == Release::slow ? 1.0 : std::clamp (heldDb / holdFullDb, 0.0, 1.0);
+        const double releaseMs = releaseFastMs + (releaseSlowMs - releaseFastMs) * slowness;
 
         felitronics::dynamics::CompressorParams p;
         p.thresholdDb = thrAt;   // the line is where the detector works, in either character (no offset any more)
 
         // The make-up's number — what the curve takes from the reference note, as this character's detector reads it
         // (level-neutral: see the class comment) — and the paces it glides at.
-        makeupTargetDb = makeupDbFor (thrAt, ratioAt, character);
+        makeupTargetDb = makeupDbFor (thrAt, ratioAt, character, attack, slowness);
         makeupUpK      = 1.0 - std::exp (-1.0 / (attackMsOf (attack) * 0.001 * fs));
         makeupDownK    = 1.0 - std::exp (-1.0 / (releaseMs * 0.001 * fs));
         warmSamples    = (3.0 * attackMsOf (attack) + warmMs) * 0.001 * fs;
@@ -351,6 +375,7 @@ private:
     bool   snapMakeup = false;
     int    block = 0, cadence = 48;
     bool   ready = false, running = false, paramsValid = false;
+    bool   tapWrote = false;   // the picture's tap written last block: not, and the next write breaks its trace
 };
 
 } // namespace orbitamp::core

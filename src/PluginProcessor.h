@@ -963,6 +963,10 @@ public:
         return lit ? 1.0f : 0.0f;
     }
 
+    /** Whether OCTAVE is at work — in the chain, switched on, its slider up — as the audio thread last told it (any
+        thread): its picture's frame stands whole while it is not. */
+    bool octaveAtWork() const noexcept { return octaveWorks.load (std::memory_order_relaxed); }
+
     /** How many planes the bass's back half runs — from CHORUS on: the prepared bus's, 1 or 2 — or 0 on a guitar amp's
         chain. Any thread. */
     int bassBackPlanes() const noexcept { return bassWide.load (std::memory_order_relaxed); }
@@ -1478,6 +1482,7 @@ private:
     felitronics::chorus::BassChorusParams        chorusTold {};
     bool octaveToldValid = false, filterToldValid = false, chorusToldValid = false;
     bool filterTapLive = false;   // the audio thread's: whether it wrote FILTER's tap last block (a fresh look wakes it)
+    std::atomic<bool> octaveWorks { false };   // octaveLive, for the picture (octaveAtWork)
     bool octaveLive = false, filterLive = false, chorusLive = false;   // the audio thread's: each at work — in the chain,
                                                                        // switched on, its slider up — its picture written only then
     std::array<int, 3> effectTold {};     // setParams calls, per effect — for a gate (effectTells)

@@ -53,6 +53,7 @@ public:
         {
             auto line = std::make_unique<Line>();
             line->row = r;
+            line->count = linesOf (r);   // kept: its layout never asks the processor again
             line->label.setText (r.label.toUpperCase(), juce::dontSendNotification);
             style (line->label, theme::txDim);
             addAndMakeVisible (line->label);
@@ -85,7 +86,13 @@ public:
             {
                 auto b = std::make_unique<juce::TextButton>();
                 styleButton (*b);
-                b->onClick = [this, id = r.id] { if (auto* q = amp.apvts.getParameter (id)) type (id, q->getValue() > 0.5f ? 0.0f : 1.0f); };
+                b->onClick = [this, id = r.id]
+                {
+                    if (detached)
+                        return;   // a click queued before its face went: the processor may be gone
+                    if (auto* q = amp.apvts.getParameter (id))
+                        type (id, q->getValue() > 0.5f ? 0.0f : 1.0f);
+                };
                 addAndMakeVisible (*b);
                 line->buttons.push_back (std::move (b));
             }
@@ -115,11 +122,20 @@ public:
     const juce::String& block() const noexcept { return name; }
 
     /** Its face is going (the editor closing, the plug-in removed): it stops reading and writing the processor at once —
-        the window it stands in goes on its own, a moment later. */
+        the window it stands in goes on its own, a moment later. EVERY CALLBACK GOES WITH IT: a click or a typed value
+        queued before (a keyboard activation the message loop has not delivered yet) finds nothing to call. */
     void detach() noexcept
     {
         stopTimer();
         detached = true;
+        for (auto& l : lines)
+        {
+            l->value.onTextChange = nullptr;
+            for (auto& b : l->buttons)
+                b->onClick = nullptr;
+        }
+        resetButton.onClick = nullptr;
+        setEnabled (false);
     }
     bool isDetached() const noexcept { return detached; }
 
@@ -182,7 +198,7 @@ public:
         r.removeFromTop (titleH);
         for (auto& l : lines)
         {
-            const int count = linesOf (l->row);
+            const int count = l->count;
             auto block = r.removeFromTop (rowH * count);
             auto line = block.removeFromTop (rowH).reduced (0, 3);
             l->label.setBounds (line.removeFromLeft (labelW));
@@ -208,6 +224,7 @@ private:
     struct Line
     {
         Row row;
+        int count = 1;   // its lines (linesOf), counted once
         juce::Label label, value;
         std::vector<std::unique_ptr<juce::TextButton>> buttons;
     };

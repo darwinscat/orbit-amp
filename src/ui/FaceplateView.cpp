@@ -73,6 +73,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         octave->valueRail().onGesture = [&processor] (bool begin) { if (begin) processor.history.beginGesture(); else processor.history.endGesture(); };
         octave->onMenu = [&state, raw = octave.get()] (juce::Point<int>) { bass::showOctaveMenu (state, raw); };
         octave->setPicture (std::make_unique<OctaveScope> (processor));   // the note and its sub, right of the rail
+        octave->dimWhenIdle (*octave->pictureShown(), *state.getParameter (params::octaveAmount));   // at 0, still and dimmed
         addAndMakeVisible (*octave);
     }
 
@@ -143,7 +144,7 @@ int FaceplateView::bassCabLeast()
     static const int least = []
     {
         const float line = juce::GlyphArrangement::getStringWidth (juce::Font (juce::FontOptions (13.0f)),
-                                                                   "500ms  |  48.0kHz  |  24-bit  |  mono");
+                                                                   worstIrLine);
         return juce::jmax (226, CabinetBlock::bassWidthForWave ((int) std::ceil (line) + 16));   // the line's 8 px each side
     }();
     return least;

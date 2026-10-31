@@ -40,7 +40,12 @@ struct LoadBreakdown final : public juce::Component,
     }
 
     /** Its window's owner is going: no more reading the processor (the callout goes by its own dismissal). */
-    void detach() noexcept { stopTimer(); }
+    void detach() noexcept
+    {
+        stopTimer();
+        detached = true;   // a paint or a click arriving after its face went reads nothing of the processor
+    }
+    bool isDetached() const noexcept { return detached; }
 
     explicit LoadBreakdown (AmpProcessor& p) : amp (p)
     {
@@ -57,8 +62,8 @@ struct LoadBreakdown final : public juce::Component,
 
     /** A link STANDING BY keeps its row and its real number — a bypassed insert costs what it
         costs in any DAW — but reads faint: the bypass bought you nothing. */
-    /** Whether the product's chain has the stage at all — the bass's has no delay and no reverb, a guitar
-        amp's no COMP: a stage it does not hold has no row here. */
+    /** Whether the product's chain has the stage at all — a guitar amp's has no COMP, OCTAVE, ENVELOPE or CHORUS (the
+        bass's holds every one): a stage it does not hold has no row here. */
     bool stageHeld (int stage) const
     {
         const int row = params::rowForStage ((params::Stage) stage);
@@ -85,6 +90,8 @@ struct LoadBreakdown final : public juce::Component,
 
     void mouseDown (const juce::MouseEvent& e) override
     {
+        if (detached)
+            return;
         if (resetArea().contains (e.getPosition()))
         {
             for (auto& w : amp.stageWorst)
@@ -128,6 +135,8 @@ struct LoadBreakdown final : public juce::Component,
 
     void paint (juce::Graphics& g) override
     {
+        if (detached)
+            return;   // its face is gone, the processor perhaps with it
         auto r = getLocalBounds().reduced (12, 4);
 
         {
@@ -244,6 +253,8 @@ struct LoadBreakdown final : public juce::Component,
 
     void timerCallback() override
     {
+        if (detached)
+            return;
         if (copied > 0)
             --copied;
         repaint();
@@ -252,6 +263,7 @@ struct LoadBreakdown final : public juce::Component,
     enum { rowH = 22, graphH = 64 };   // rowH is 13 px of type and the air around it
     AmpProcessor& amp;
     int copied = 0;
+    bool detached = false;
 };
 
 /** Opens it as a callout pointing at `anchor`, which is in screen coordinates — the words that were

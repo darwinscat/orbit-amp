@@ -93,6 +93,15 @@ public:
         power->sendInitialUpdate();
     }
 
+    /** A PICTURE THAT DIMS WHILE ITS BLOCK DOES NOTHING — its `amount` (BLEND, the slider, MIX) at 0 — as it does standing
+        by (the owner, 31.10: it stands still then too); the block's controls stay lit and live. */
+    void dimWhenIdle (juce::Component& picture, juce::RangedAudioParameter& amount)
+    {
+        idlePicture = &picture;
+        idleAtt = std::make_unique<juce::ParameterAttachment> (amount, [this] (float v) { idle = ! (v > 0.0f); dimChildren(); });
+        idleAtt->sendInitialUpdate();
+    }
+
     /** Re-reads the power parameter into the visual state — insurance against any stale widget,
         called whenever a face comes (back) into view. */
     void resyncPower()
@@ -387,6 +396,15 @@ private:
         for (auto* c : getChildren())
             if (c != &shield && std::find (independent.begin(), independent.end(), c) == independent.end())
                 c->setAlpha (on ? 1.0f : theme::offAlpha);
+
+        // The idle picture: dimmed while on and doing nothing — its own alpha, once, whether a child or deeper in.
+        if (auto* pic = idlePicture.getComponent())
+        {
+            if (pic->getParentComponent() == this)
+                pic->setAlpha (on && ! idle ? 1.0f : theme::offAlpha);
+            else
+                pic->setAlpha (on && idle ? theme::offAlpha : 1.0f);
+        }
     }
 
     /** Keeps the shield the frontmost child. Guarded: toFront itself fires childrenChanged. */
@@ -600,6 +618,9 @@ private:
     OffShield shield { *this };
     juce::RangedAudioParameter* powerParam = nullptr;
     std::unique_ptr<juce::ParameterAttachment> power;
+    std::unique_ptr<juce::ParameterAttachment> idleAtt;
+    juce::Component::SafePointer<juce::Component> idlePicture;   // safe: a derived block's picture goes before this frame does
+    bool idle = false;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 

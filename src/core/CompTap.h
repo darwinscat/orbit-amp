@@ -14,14 +14,18 @@ namespace orbitamp::core
 
 /** WHAT THE BASS'S COMP DID, FOR ITS PICTURE (ui/CompBlock.h): the level going in, the level coming out and the
     squeeze, as COLUMNS — each the peaks of in and out and the deepest squeeze over `hopSeconds` of audio — in a ring
-    the picture reads the newest few hundred of.
+    the picture reads the newest few hundred of. ALL THREE LEVELS ARE THE FULL-BAND AUDIO, measured alike: BEFORE is the
+    signal COMP is handed — not its detector's key, which drops below 30 Hz — so with no squeeze the three lie on each
+    other at every note. The THRESHOLD line is the detector's: on the lowest notes (B0, E1) the key reads them a decibel
+    or three under the trace, and the squeeze starts that much later than the line says.
 
     The audio thread writes (write), only while the picture is on screen (AmpProcessor::compWatched) and COMP is heard —
     standing by or at BLEND 0 it writes nothing and the picture stands still (BassComp::process); the message
     thread reads (read) on its own timer. No lock and no allocation: fixed arrays of relaxed atomics and one release
     count. SILENCE IS NOT WRITTEN: once in and out have stood under -80 dBFS, with no squeeze, for `holdColumns`
     columns, nothing more goes in until the playing comes back — the picture stops scrolling rather than scroll
-    an empty floor away.
+    an empty floor away. A TRACE BREAKS (breakTrace) where the writer stopped writing — COMP standing by, at BLEND 0, the
+    picture away: the next column starts a new trace, nothing of the old hop in it (the family's tap, as SpaceTap).
 
     JUCE-free on purpose: built here first, moves to felitronics-core when it settles. */
 class CompTap
@@ -38,6 +42,7 @@ public:
         float out = 0.0f;   // peak, linear
         float gr  = 0.0f;   // the deepest squeeze, dB (0 or below)
         float mid = 0.0f;   // AFTER COMP, before BLEND and the make-up — measured as `in` and `out`
+        bool  joined = false;   // continues the column before it: no break between them
     };
 
     /** Off the audio thread, with the rate; starts empty. */
@@ -49,19 +54,23 @@ public:
         inPeak = outPeak = grLow = 0.0f;
         filled = 0;
         quiet  = holdColumns + 1;   // nothing has played yet: nothing to scroll
+        joinNext = false;
     }
 
-    /** The audio thread: one block of what COMP's detector hears (its key) and of its output, the same instant, and its
-        squeeze per sample in dB (null for none). The input column is the
-        DETECTOR'S level — its RMS over 10 ms in SMOOTH (`rms`), its peak in PUNCHY — so a trace over the threshold is a
-        trace being squeezed. */
-    void write (const float* in, const float* out, const float* grDb, int n, bool rms) noexcept
+    /** The audio thread: the writer stopped writing a while — the partial hop and the levels' memories go, and the next
+        column starts a new trace. */
+    void breakTrace() noexcept
     {
-        write (in, in, out, grDb, n, rms);
+        meanSquare = meanSquareOut = meanSquareMid = midPeak = 0.0f;
+        inPeak = outPeak = grLow = 0.0f;
+        filled   = 0;
+        joinNext = false;
     }
 
-    /** ...the three traces (the owner, 31.10): BEFORE COMP `in`, AFTER COMP `mid` (the compressed path, before BLEND), and
-        AFTER COMP + BLEND `out` — all before the make-up, all measured alike. */
+    /** The audio thread, one block: the three traces (the owner, 31.10) — BEFORE COMP `in` (the signal it is handed),
+        AFTER COMP `mid` (the compressed path, before BLEND) and AFTER COMP + BLEND `out`, all before the make-up, all
+        measured alike as the detector measures: their RMS over 10 ms in SMOOTH (`rms`), their peaks in PUNCHY — and the
+        squeeze per sample in dB (null for none). */
     void write (const float* in, const float* mid, const float* out, const float* grDb, int n, bool rms) noexcept
     {
         for (int i = 0; i < n; ++i)
@@ -96,7 +105,8 @@ public:
         {
             const auto at = (size_t) ((k - (std::uint32_t) have + (std::uint32_t) i) % (std::uint32_t) columns);
             dst[i] = { ins[at].load (std::memory_order_relaxed), outs[at].load (std::memory_order_relaxed),
-                       grs[at].load (std::memory_order_relaxed), mids[at].load (std::memory_order_relaxed) };
+                       grs[at].load (std::memory_order_relaxed), mids[at].load (std::memory_order_relaxed),
+                       joins[at].load (std::memory_order_relaxed) != 0 };
         }
 
         // A writer far ahead (an offline render) may have written over the oldest of these while they were copied — the
@@ -122,18 +132,22 @@ private:
             outs[at].store (outPeak, std::memory_order_relaxed);
             grs[at].store (grLow, std::memory_order_relaxed);
             mids[at].store (midPeak, std::memory_order_relaxed);
+            joins[at].store (joinNext ? 1 : 0, std::memory_order_relaxed);
             count.store (k + 1, std::memory_order_release);
+            joinNext = true;
         }
         inPeak = outPeak = grLow = midPeak = 0.0f;
         filled = 0;
     }
 
     std::array<std::atomic<float>, columns> ins {}, outs {}, grs {}, mids {};
+    std::array<std::atomic<int>, columns>   joins {};
     std::atomic<std::uint32_t> count { 0 };
     static constexpr double rmsSeconds = 0.010;   // BassComp's SMOOTH detector: RMS over 10 ms
     float inPeak = 0.0f, outPeak = 0.0f, grLow = 0.0f, meanSquare = 0.0f, meanSquareOut = 0.0f, rmsK = 0.002f;
     float midPeak = 0.0f, meanSquareMid = 0.0f;
     int   filled = 0, hop = 240, quiet = holdColumns + 1;
+    bool  joinNext = false;
 };
 
 } // namespace orbitamp::core

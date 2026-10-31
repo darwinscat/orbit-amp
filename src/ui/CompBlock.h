@@ -182,9 +182,22 @@ public:
         // The columns, the newest at the right edge; a pixel shows the loudest of the columns it covers, and the deepest
         // squeeze. Three traces, each a path along the pixels that have playing behind them.
         const int w = juce::jmax (1, (int) r.getWidth());
-        juce::Path inEdge, midEdge, outEdge, grLine, inFill, outFill;
+        juce::Path inEdge, midEdge, outEdge, grLine, inFill, inSegment;
         bool started = false;
-        float firstX = 0.0f, lastX = 0.0f, lastGr = 0.0f;
+        float segmentX = 0.0f, lastX = 0.0f, lastGr = 0.0f;
+
+        // A BROKEN TRACE (the tap not written a while — COMP standing by, at BLEND 0, the picture away) starts afresh: each
+        // run of joined columns its own edges and its own fill under IN.
+        const auto closeSegment = [&]
+        {
+            if (inSegment.isEmpty())
+                return;
+            inSegment.lineTo (lastX, lv.getBottom());
+            inSegment.lineTo (segmentX, lv.getBottom());
+            inSegment.closeSubPath();
+            inFill.addPath (inSegment);
+            inSegment.clear();
+        };
         const auto grY = [&] (float gr) { return strip.getY() + 3.0f + juce::jmin (1.0f, (float) (-gr / grRangeDb)) * (strip.getHeight() - 6.0f); };
         if (shown > 0)
             lastGr = cols[(size_t) shown - 1].gr;
@@ -192,7 +205,7 @@ public:
         {
             const int a = x * columnsShown / w, b = juce::jmax (a + 1, (x + 1) * columnsShown / w);
             float in = 0.0f, out = 0.0f, gr = 0.0f, mid = 0.0f;
-            bool  any = false;
+            bool  any = false, broken = false;
             for (int j = a; j < b; ++j)
                 if (const int k = j - (columnsShown - shown); k >= 0)
                 {
@@ -201,6 +214,7 @@ public:
                     out = juce::jmax (out, c.out);
                     mid = juce::jmax (mid, c.mid);
                     gr  = juce::jmin (gr, c.gr);
+                    broken = broken || ! c.joined;
                     any = true;
                 }
             if (! any)
@@ -210,10 +224,12 @@ public:
             const float yIn = juce::jlimit (lv.getY(), lv.getBottom(), yOfDb (dbOf (in)));
             const float yOut = juce::jlimit (lv.getY(), lv.getBottom(), yOfDb (dbOf (out)));
             const float yMid = juce::jlimit (lv.getY(), lv.getBottom(), yOfDb (dbOf (mid)));
-            if (! started)
+            if (! started || broken)
             {
-                started = true;
-                firstX  = px;
+                closeSegment();
+                started  = true;
+                segmentX = px;
+                inSegment.startNewSubPath (px, yIn);
                 inEdge.startNewSubPath (px, yIn);
                 midEdge.startNewSubPath (px, yMid);
                 outEdge.startNewSubPath (px, yOut);
@@ -221,6 +237,7 @@ public:
             }
             else
             {
+                inSegment.lineTo (px, yIn);
                 inEdge.lineTo (px, yIn);
                 midEdge.lineTo (px, yMid);
                 outEdge.lineTo (px, yOut);
@@ -229,22 +246,14 @@ public:
             lastX = px;
         }
 
+        closeSegment();
         if (started)
         {
-            // Each level a translucent fill under its own edge: neither hides the other where they overlap.
-            const auto filled = [&] (const juce::Path& edge)
-            {
-                juce::Path p (edge);
-                p.lineTo (lastX, lv.getBottom());
-                p.lineTo (firstX, lv.getBottom());
-                p.closeSubPath();
-                return p;
-            };
             // In the AMP's ENVELOPE page's own style (scope::EnvelopeView): IN its violet fill under its edge; OUT its
             // orange — as a LINE alone: orange is never a wash on the violet panel.
             using Page = scope::EnvelopeView;
             g.setColour (Page::inColour().withAlpha (Page::inFillAlpha));
-            g.fillPath (filled (inEdge));
+            g.fillPath (inFill);   // under its own edge, a run at a time
             g.setColour (Page::inColour());
             g.strokePath (inEdge, juce::PathStrokeType (Page::edgeWidth));
             // AFTER COMP, the compressed path itself — under BEFORE by exactly the squeeze: the page's lilac, DASHED, so it reads
@@ -688,6 +697,7 @@ public:
         const auto menu = [this] (juce::Point<int>) { bass::showCompMenu (state, this); };
         rail.onMenu = graph.onMenu = ratioSlider.onMenu = transfer.onMenu = menu;
         attachPower (*processor.apvts.getParameter (params::compOn));
+        dimWhenIdle (graph, *processor.apvts.getParameter (params::compAmount));   // at BLEND 0 it stands still, dimmed
     }
 
     void mouseDown (const juce::MouseEvent& e) override

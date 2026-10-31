@@ -284,6 +284,7 @@ public:
         addAndMakeVisible (picture);
         rail.onMenu = picture.onMenu = [this] (juce::Point<int>) { openWindow(); };
         attachPower (*processor.apvts.getParameter (w == SpacePicture::Which::delay ? params::delayOn : params::reverbOn));
+        dimWhenIdle (picture, *processor.apvts.getParameter (w == SpacePicture::Which::delay ? params::delayMix : params::reverbMix));
     }
 
     void mouseDown (const juce::MouseEvent&) override { openWindow(); }

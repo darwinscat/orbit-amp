@@ -149,9 +149,11 @@ public:
 
     /** THE CABINET'S LEAST on the bass: never under the guitar face's cabinet at its least (226, three in a row), and wide
         enough that appkit's IrWaveView — which writes the IR's line itself ("85ms  |  48.0kHz  |  24-bit  |  mono", at
-        12 px, cut mid-word where it does not fit) — has room for such a line with a three-digit length at 13 px in this
-        platform's own sans. Measured once, on the message thread. */
+        12 px, cut mid-word where it does not fit) — has room for the WORST such line an IR the cabinet takes can give (a
+        four-digit length — it takes up to five seconds — at 192 kHz, 32-bit, stereo) at 13 px in this platform's own sans.
+        Measured once, on the message thread. */
     static int bassCabLeast();
+    static constexpr const char* worstIrLine = "5000ms  |  192.0kHz  |  32-bit  |  stereo";
 
     /** THE LEAST WIDTH OF ORBITBASS'S FACEPLATE as its strip stands: the cabinet's row — CHORUS, DELAY, REVERB as they
         are in it, the cabinet at its least, LIMIT — or `fallback` (the guitar's least), whichever is wider. */

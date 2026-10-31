@@ -835,8 +835,9 @@ int ORBITAMP_GATE_MAIN()
                     for (int i = 0; i < blockSize; ++i, ++n)
                         x[(size_t) i] = (float) (0.5 * std::exp (-2.0 * std::fmod ((double) n / sampleRate, 0.6))
                                                  * std::sin (juce::MathConstants<double>::twoPi * 97.0 * (double) n / sampleRate));
+                    // RELEASE SLOW: its make-up one number once snapped (AUTO's follows the hold, a glide within the block).
                     c.process (x.data(), blockSize, blend, link.advance (blockSize, blend > 0.0),
-                               BassComp::Attack::med, BassComp::Release::automatic, BassComp::Character::smooth);
+                               BassComp::Attack::med, BassComp::Release::slow, BassComp::Character::smooth);
                     r.out.insert (r.out.end(), x.begin(), x.end());
                     r.gr.insert (r.gr.end(), c.squeezeDb(), c.squeezeDb() + blockSize);
                     r.mk.insert (r.mk.end(), (size_t) blockSize, (float) c.makeupNow());   // snapped, its knobs still: one number
@@ -3574,7 +3575,7 @@ int ORBITAMP_GATE_MAIN()
             std::unique_ptr<juce::AudioProcessorEditor> ged (g->createEditor());
             auto* gEditor = dynamic_cast<AmpEditor*> (ged.get());
             check (list == "OCTAVE+ ENVELOPE+ CHORUS+ DELAY- REVERB- " && follows && least0 == FaceplateView::designWidth
-                       && least1 == FaceplateView::designWidth && least2 > least0
+                       && least1 >= FaceplateView::designWidth && least2 > least1   // one added: the cabinet's least may widen it (step 11)
                        && least2 <= 960 + (FaceplateView::bassCabLeast() - 226)   // ~960, and what the IR's line costs (step 10)
                        && gEditor != nullptr && gEditor->checklistRows().empty() && gEditor->leastDesignWidth() == FaceplateView::designWidth,
                    "the strip's checklist: " + list + "; a pick one undo step, the face and the least width following ("
@@ -3606,7 +3607,12 @@ int ORBITAMP_GATE_MAIN()
                                + (ch == 1 ? "mono" : ch == 2 ? "stereo" : juce::String (ch) + "ch");
                     }
             }
-            const float irLineW = juce::GlyphArrangement::getStringWidth (juce::Font (juce::FontOptions (13.0f)), irLine);
+            const bool irRead = irLine.isNotEmpty();
+            // ...and the WORST line an IR the cabinet takes can give (review 9: a four-digit length, 192 kHz, 32-bit, stereo).
+            const juce::String worstLine ("5000ms  |  192.0kHz  |  32-bit  |  stereo");   // the gate's own, not the face's probe
+            const float irLineW = juce::jmax (juce::GlyphArrangement::getStringWidth (juce::Font (juce::FontOptions (13.0f)), irLine),
+                                              juce::GlyphArrangement::getStringWidth (juce::Font (juce::FontOptions (13.0f)), worstLine));
+            irLine << "\" and \"" << worstLine;
 
             for (const int mode : { 0, 1, 2 })   // default, both added, everything in and out
             {
@@ -3664,7 +3670,7 @@ int ORBITAMP_GATE_MAIN()
                                              + ") wider than " + sb->getName() + "'s picture (" + juce::String (sb->view().getWidth()) + ")");
                         if (dynamic_cast<CabinetBlock*> (b) != nullptr && b->getWidth() < FaceplateView::bassCabLeast())
                             bad.add (where + "the cabinet " + juce::String (b->getWidth()) + " wide");
-                        if (auto* cb = dynamic_cast<CabinetBlock*> (b); cb != nullptr && (irLine.isEmpty() || (float) (cb->waveView().getWidth() - 16) < irLineW))
+                        if (auto* cb = dynamic_cast<CabinetBlock*> (b); cb != nullptr && (! irRead || (float) (cb->waveView().getWidth() - 16) < irLineW))
                             bad.add (where + "the IR's line \"" + irLine + "\" (" + juce::String (irLineW, 1) + " px at 13 px) wider than the room under the waveform ("
                                      + juce::String (cb->waveView().getWidth() - 16) + " px, the cabinet " + juce::String (cb->getWidth()) + ")");
                         if (face != nullptr && b->getParentComponent() == face && ! face->getLocalBounds().contains (b->getBounds()))
@@ -3792,8 +3798,14 @@ int ORBITAMP_GATE_MAIN()
                 const auto& c = cols[(size_t) i];
                 gr = (double) c.gr;
                 const double mix = 20.0 * std::log10 ((1.0 - blend) + blend * std::pow (10.0, gr / 20.0));
-                worstMid = std::max (worstMid, std::abs (20.0 * std::log10 ((double) c.mid / (double) c.in) - gr));
-                worstOut = std::max (worstOut, std::abs (20.0 * std::log10 ((double) c.out / (double) c.in) - mix));
+                // A level of zero or not a number is no comparison: it counts as off by 99 dB (no std::max swallowing a NaN).
+                const auto apartDb = [] (float num, float den, double want)
+                {
+                    const double d = 20.0 * std::log10 ((double) num / (double) den) - want;
+                    return num > 0.0f && den > 0.0f && std::isfinite (d) ? std::abs (d) : 99.0;
+                };
+                worstMid = std::max (worstMid, apartDb (c.mid, c.in, gr));
+                worstOut = std::max (worstOut, apartDb (c.out, c.in, mix));
             }
             check (worstMid <= 0.5 && worstOut <= 0.5, "COMP's three traces at BLEND " + juce::String (juce::roundToInt (blend * 100.0f)) + " %, "
                                                            + juce::String (gr, 1) + " dB squeezed: AFTER COMP under BEFORE by it within "
@@ -3801,6 +3813,37 @@ int ORBITAMP_GATE_MAIN()
         }
 
         // STANDING BY AT LOW NOTES (review 8's F3): nothing is written standing by any more — see STEP 10's six pictures.
+
+        // THE THREE ON ONE BASIS (review 9): BEFORE is the signal COMP is handed, the full band as AFTER and AFTER + BLEND
+        // — at B0 and E1, under the threshold (no squeeze), BLEND 100, either character, the three lie on each other.
+        {
+            double worst = 0.0;
+            juce::String said;
+            for (const double hz : { 30.9, 41.2 })
+                for (const float character : { 0.0f, 1.0f })
+                {
+                    auto t = make (bass);
+                    set (*t, params::compAmount, 1.0f);
+                    set (*t, params::compCharacter, character);
+                    t->compWatched.store (true);
+                    (void) tone (*t, hz, -40.0f, 80);
+                    std::vector<core::CompTap::Column> cols (20);
+                    const int got = t->compTap.read (cols.data(), 20);
+                    double here = got > 0 ? 0.0 : 99.0;
+                    for (int i = 0; i < got; ++i)
+                    {
+                        const auto& c = cols[(size_t) i];
+                        for (const float v : { c.mid, c.out })
+                        {
+                            const double d = 20.0 * std::log10 ((double) v / (double) c.in);
+                            here = std::max (here, v > 0.0f && c.in > 0.0f && std::isfinite (d) && c.gr > -0.01f ? std::abs (d) : 99.0);
+                        }
+                    }
+                    worst = std::max (worst, here);
+                    said << " " << juce::String (hz, 1) << " Hz " << (character > 0.5f ? "PUNCHY " : "SMOOTH ") << juce::String (here, 3);
+                }
+            check (worst <= 0.1, "COMP's three traces on one basis: at B0 and E1 with no squeeze they lie on each other within 0.1 dB:" + said);
+        }
 
         // THE GEAR WORKS WITH ITS BLOCK STANDING BY: the AMP out, its gear still the thing under a click there.
         {
@@ -4001,11 +4044,13 @@ int ORBITAMP_GATE_MAIN()
                 const int back = over (30);
                 set (*t, b.amount, 0.0f);
                 (void) over (4);
-                const int  idle = over (40);
-                const bool fine = pic != nullptr && live > 0 && standing == 0 && back > 0 && idle == 0 && lit == 1.0f && dimmed < 1.0f;
+                const int   idle      = over (40);
+                const float idleAlpha = alpha();   // doing nothing, switched on: dimmed as standing by (review 9)
+                const bool fine = pic != nullptr && live > 0 && standing == 0 && back > 0 && idle == 0 && lit == 1.0f && dimmed < 1.0f
+                                  && idleAlpha < 1.0f;
                 ok = ok && fine;
                 said.add (name + (fine ? "" : " (!)") + " " + juce::String (live) + " live, " + juce::String (standing) + " standing by (alpha "
-                          + juce::String (dimmed, 2) + "), " + juce::String (back) + " on again, " + juce::String (idle) + " at 0");
+                          + juce::String (dimmed, 2) + "), " + juce::String (back) + " on again, " + juce::String (idle) + " at 0 (alpha " + juce::String (idleAlpha, 2) + ")");
             }
             check (ok, "a picture stands still when its block is off — written while on, nothing standing by or at 0, dimmed with its "
                        "block: " + said.joinIntoString ("; "));
@@ -4015,10 +4060,8 @@ int ORBITAMP_GATE_MAIN()
         // -18 dBFS RMS, comes out at its own level at BLEND 0, 50 and 100 % in either character (PUNCHY's detector reading it
         // at its peak); a quieter one (-36) comes up, a louder one (-6) goes down — toward each other.
         {
-            const auto gainDb = [] (double rmsDb, double blend, BassComp::Character ch)
+            const auto gainDb = [] (double rmsDb, double blend, BassComp::Character ch, BassComp::Attack at, BassComp::Release rel, double hz)
             {
-                constexpr double hz = 110.0;   // A2, over the key's corner: what the detector hears is the note
-                constexpr auto   at = BassComp::Attack::med;
                 BassComp c;
                 (void) c.prepare (sampleRate, blockSize);
                 c.snapAmount (blend);
@@ -4034,8 +4077,7 @@ int ORBITAMP_GATE_MAIN()
                         x[(size_t) i] = (float) (a * std::sin (juce::MathConstants<double>::twoPi * hz * (double) n / sampleRate));
                         sumIn += (double) x[(size_t) i] * (double) x[(size_t) i];
                     }
-                    c.process (x.data(), blockSize, blend, core::BypassFade::Span { 1.0f, 1.0f, false, 0 },
-                               at, BassComp::Release::automatic, ch);
+                    c.process (x.data(), blockSize, blend, core::BypassFade::Span { 1.0f, 1.0f, false, 0 }, at, rel, ch);
                     if (b >= 100)
                     {
                         in2 += sumIn;
@@ -4045,22 +4087,57 @@ int ORBITAMP_GATE_MAIN()
                 }
                 return 10.0 * std::log10 (out2 / in2);
             };
+            using C = BassComp::Character;
+            using A = BassComp::Attack;
+            using R = BassComp::Release;
+
+            // THE WHOLE MATRIX (review 9): every CHARACTER x ATTACK x RELEASE, the reference note at A1..A4 within half a
+            // decibel at BLEND 50 and 100 % (BLEND 0 is the signal bit for bit); B0 and E1 — the key's 30 Hz high-pass reads
+            // them low — said, not judged.
             bool ok = true;
-            juce::String said;
-            for (const auto ch : { BassComp::Character::smooth, BassComp::Character::punchy })
+            double worst = 0.0, lowB = -99.0, lowE = -99.0;
+            juce::String worstAt;
+            std::printf ("      COMP, a -18 dBFS RMS note at BLEND 100 / 50, out dB:      31 Hz        41 Hz        55 Hz        82 Hz       110 Hz       220 Hz       440 Hz\n");
+            for (const auto ch : { C::smooth, C::punchy })
+                for (const auto at : { A::slow, A::med, A::fast })
+                    for (const auto rel : { R::automatic, R::fast, R::slow })
+                    {
+                        const char* atName  = at == A::slow ? "SLOW" : at == A::med ? "MED " : "FAST";
+                        const char* relName = rel == R::automatic ? "AUTO" : rel == R::fast ? "FAST" : "SLOW";
+                        std::printf ("      %s attack %s release %s:", ch == C::smooth ? "SMOOTH" : "PUNCHY", atName, relName);
+                        for (const double hz : { 30.9, 41.2, 55.0, 82.4, 110.0, 220.0, 440.0 })
+                        {
+                            const double full = gainDb (-18.0, 1.0, ch, at, rel, hz), half = gainDb (-18.0, 0.5, ch, at, rel, hz);
+                            std::printf ("  %+5.2f %+5.2f", full, half);
+                            const bool finite = std::isfinite (full) && std::isfinite (half);
+                            if (hz < 50.0)
+                            {
+                                (hz < 35.0 ? lowB : lowE) = std::max (hz < 35.0 ? lowB : lowE, finite ? std::max (std::abs (full), std::abs (half)) : 99.0);
+                                continue;
+                            }
+                            const double off = finite ? std::max (std::abs (full), std::abs (half)) : 99.0;
+                            if (off > worst)
+                            {
+                                worst   = off;
+                                worstAt = juce::String (ch == C::smooth ? "SMOOTH " : "PUNCHY ") + atName + " attack " + relName + " release at "
+                                        + juce::String (hz, 1) + " Hz";
+                            }
+                            ok = ok && off <= 0.5;
+                        }
+                        std::printf ("\n");
+                    }
+
+            // ...and where it leaves the rest: a quieter note comes up, a louder one goes down — toward each other.
+            for (const auto ch : { C::smooth, C::punchy })
             {
-                const double r0 = gainDb (-18.0, 0.0, ch), r50 = gainDb (-18.0, 0.5, ch), r100 = gainDb (-18.0, 1.0, ch);
-                const double q50 = gainDb (-36.0, 0.5, ch), q100 = gainDb (-36.0, 1.0, ch);
-                const double l50 = gainDb (-6.0, 0.5, ch),  l100 = gainDb (-6.0, 1.0, ch);
-                ok = ok && std::abs (r0) <= 0.5 && std::abs (r50) <= 0.5 && std::abs (r100) <= 0.5
-                        && q100 > q50 && q50 > 0.5 && l100 < l50 && l50 < -0.5;
-                said << (ch == BassComp::Character::smooth ? " SMOOTH" : "; PUNCHY") << " (make-up "
-                     << juce::String (BassComp::makeupDbFor (BassComp::defaultThresholdDb, BassComp::defaultRatio, ch), 2) << " dB): the reference "
-                     << juce::String (r0, 2) << " / " << juce::String (r50, 2) << " / " << juce::String (r100, 2) << " dB at 0 / 50 / 100 %, -36 dBFS "
-                     << juce::String (q50, 1) << " / " << juce::String (q100, 1) << " and -6 dBFS " << juce::String (l50, 1) << " / " << juce::String (l100, 1)
-                     << " at 50 / 100 %";
+                const double q50 = gainDb (-36.0, 0.5, ch, A::med, R::automatic, 110.0), q100 = gainDb (-36.0, 1.0, ch, A::med, R::automatic, 110.0);
+                const double l50 = gainDb (-6.0, 0.5, ch, A::med, R::automatic, 110.0),  l100 = gainDb (-6.0, 1.0, ch, A::med, R::automatic, 110.0);
+                ok = ok && q100 > q50 && q50 > 0.5 && l100 < l50 && l50 < -0.5;
             }
-            check (ok, "COMP's BLEND level-neutral at the reference, -18 dBFS RMS, within 0.5 dB; quiet up, loud down:" + said);
+            check (ok, "COMP's BLEND level-neutral: a -18 dBFS RMS note at 55..440 Hz within 0.5 dB at BLEND 50 and 100 % for every "
+                       "CHARACTER x ATTACK x RELEASE (worst " + juce::String (worst, 2) + " dB, " + worstAt + "); B0 off by up to "
+                       + juce::String (lowB, 2) + " dB and E1 by " + juce::String (lowE, 2) + " (the key's 30 Hz high-pass, not judged); "
+                       "a quiet note up, a loud one down");
         }
 
         // RE-ADDED ONE CALL AFTER ITS REMOVAL (review 2): a ringing DELAY, and a ringing REVERB, taken out of the strip in a
@@ -4212,6 +4289,159 @@ int ORBITAMP_GATE_MAIN()
         }
     }
 
+    // ---- STEP 11: REVIEW ROUND 9 (of a60777c) ---------------------------------------------------------------------
+    {
+        const auto walk11 = [] (juce::Component& root, const std::function<void (juce::Component&)>& visit)
+        {
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                visit (c);
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+        };
+
+        // NO CALLBACK REACHES THE PROCESSOR AFTER ITS FACE IS GONE (both reviewers): a keyboard activation of CAB's Trim
+        // queued, the settings and load windows let go, the processor deleted — every callback of theirs is gone, so a
+        // late message finds nothing to call; laid out, painted and clicked then, neither touches the freed processor.
+        {
+            auto t = make (bass);
+            auto panel = bass::makeSettings (*t, "CAB IR");
+            auto load  = std::make_unique<LoadBreakdown> (*t);
+            juce::TextButton* toggle = nullptr;
+            if (panel != nullptr)
+                walk11 (*panel, [&] (juce::Component& c)
+                {
+                    if (auto* b = dynamic_cast<juce::TextButton*> (&c); b != nullptr && toggle == nullptr && b->getButtonText() != "RESET")
+                        toggle = b;
+                });
+            if (toggle != nullptr)
+                toggle->triggerClick();   // queued: the message loop would deliver it later
+            bool cleared = panel != nullptr && toggle != nullptr;
+            if (panel != nullptr)
+            {
+                panel->detach();
+                walk11 (*panel, [&] (juce::Component& c)
+                {
+                    if (auto* b = dynamic_cast<juce::Button*> (&c))
+                        cleared = cleared && b->onClick == nullptr && b->onStateChange == nullptr;
+                    if (auto* l = dynamic_cast<juce::Label*> (&c))
+                        cleared = cleared && l->onTextChange == nullptr;
+                });
+            }
+            load->detach();
+            t.reset();   // the processor gone
+            juce::Image img (juce::Image::ARGB, 420, 420, true);
+            {
+                juce::Graphics g (img);
+                if (panel != nullptr)
+                {
+                    panel->setSize (panel->getWidth(), panel->getHeight() + 1);
+                    panel->paintEntireComponent (g, false);
+                }
+                load->paintEntireComponent (g, false);
+            }
+            const auto now = juce::Time::getCurrentTime();
+            const juce::Point<float> at (20.0f, (float) load->getHeight() - 20.0f);
+            load->mouseDown (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys(), 0.0f,
+                                               juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                               juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                               load.get(), load.get(), now, at, now, 1, false));
+            check (cleared && panel != nullptr && panel->isDetached() && load->isDetached(),
+                   "the settings and load windows let go: every callback gone with their face, a queued click finding nothing to call, "
+                   "laid out, painted and clicked after the processor went without reading it");
+        }
+
+        // SPACE SETTINGS THROUGH A GAP (review 5): DELAY's time moved 200 -> 400 ms and REVERB's decay moved just before a
+        // long gap — each told at the gap, gliding through it as through silence of its length.
+        {
+            const auto after = [&] (bool gap)
+            {
+                auto t = make (bass);
+                set (*t, params::delayPresent, 1.0f);
+                set (*t, params::reverbPresent, 1.0f);
+                set (*t, params::delaySync, 0.0f);
+                set (*t, params::delayTimeMs, 200.0f);
+                (void) tone (*t, 220.0, -12.0f, 20);
+                set (*t, params::delayTimeMs, 400.0f);
+                auto* decay = t->apvts.getParameter (params::reverbDecay);
+                decay->setValueNotifyingHost (decay->getValue() > 0.5f ? 0.1f : 0.9f);
+                t->pumpDeviceWork();
+                if (gap)
+                {
+                    juce::AudioBuffer<float> none (0, blockSize);
+                    juce::MidiBuffer midi;
+                    for (int b = 0; b < 60; ++b)
+                        t->processBlock (none, midi);
+                }
+                else
+                {
+                    (void) tone (*t, 220.0, -12.0f, 60, -1, {}, 0);
+                }
+                return std::pair<double, double> { (double) t->delayTaps().shownTimeMs(), (double) t->reverbTailSeconds() };
+            };
+            const auto [gapTime, gapTail]   = after (true);
+            const auto [stillTime, stillTail] = after (false);
+            check (stillTime > 210.0 && std::abs (gapTime - stillTime) < 1.0 && std::abs (gapTail - stillTail) <= 1.0e-3 * stillTail,
+                   "DELAY's and REVERB's knobs reach them through a gap: the time gliding to 400 ms at " + juce::String (gapTime, 1)
+                       + " ms (through silence " + juce::String (stillTime, 1) + "), the tail " + juce::String (gapTail, 2) + " s ("
+                       + juce::String (stillTail, 2) + ")");
+        }
+
+        // OCTAVE'S FRAME FREEZES WHOLE (review 6): switched off on a held note, its frame — the samples, the lock, the reading —
+        // stays exactly as it stood, however the tracker lets go after.
+        {
+            auto t = make (bass);
+            set (*t, params::octaveAmount, 0.6f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            OctaveScope* scope = nullptr;
+            walk11 (*ed, [&] (juce::Component& c) { if (auto* s = dynamic_cast<OctaveScope*> (&c)) scope = s; });
+            bool same = false;
+            juce::String said = "no scope";
+            if (scope != nullptr)
+            {
+                t->octaveWatched.store (true);
+                (void) tone (*t, 41.2, -12.0f, 80);
+                scope->pull();
+                const auto a = scope->frame();
+                const auto ra = scope->reading();
+                set (*t, params::octaveOn, 0.0f);
+                (void) tone (*t, 41.2, -12.0f, 60);
+                (void) tone (*t, 41.2, -12.0f, 60, -1, {}, 0);   // ...and the note let go: the lock goes with it
+                scope->pull();
+                const auto b = scope->frame();
+                const auto rb = scope->reading();
+                same = a.subShown && a.count > 0 && a.count == b.count && juce::exactlyEqual (a.start, b.start)
+                       && juce::exactlyEqual (a.span, b.span) && a.subShown == b.subShown && juce::exactlyEqual (a.noteHz, b.noteHz)
+                       && ra == rb;
+                said = "the sub " + juce::String (b.subShown ? "still drawn" : "GONE") + ", the reading " + rb.first + " / " + rb.second
+                       + " (was " + ra.first + " / " + ra.second + "), " + juce::String (b.count) + " samples (" + juce::String (a.count) + ")";
+            }
+            check (same, "OCTAVE switched off on a held note: its frame stands whole — " + said);
+        }
+
+        // COMP'S TRACE BREAKS ACROSS STANDBY (review F6): playing, standing by, on again — the column after the gap starts a
+        // new trace (two starts in all: the first column and the one after standby), nothing of the old hop in it.
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.6f);
+            t->compWatched.store (true);
+            (void) tone (*t, 110.0, -12.0f, 30);
+            set (*t, params::compOn, 0.0f);
+            (void) tone (*t, 110.0, -12.0f, 20);
+            set (*t, params::compOn, 1.0f);
+            (void) tone (*t, 110.0, -12.0f, 20);
+            std::vector<core::CompTap::Column> cols (core::CompTap::columns);
+            const int got = t->compTap.read (cols.data(), (int) cols.size());
+            int starts = 0;
+            for (int i = 0; i < got; ++i)
+                starts += cols[(size_t) i].joined ? 0 : 1;
+            check (got > 50 && (int) t->compTap.written() == got && starts == 2 && ! cols[0].joined,
+                   "COMP's trace breaks across standby: " + juce::String (starts) + " starts in " + juce::String (got) + " columns");
+        }
+    }
+
     // A GAP — a call of positive length that carries no channel (law 11c) — reaches the three: FILTER's follower lets go
     // through it as through silence, its sweep falling back as far. Last, for an amp that falls over on one.
     {
@@ -4329,6 +4559,35 @@ int ORBITAMP_GATE_MAIN()
             (void) play (*t, 120, false);
             feed (*ed);
             write ("orbitbass-standing-by.png", ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f));
+        }
+
+        // STEP 11: COMP at BLEND 100 on a low E under its line (no squeeze) — its three traces on each other; and at BLEND 0,
+        // still and dimmed.
+        for (const float blend : { 1.0f, 0.0f })
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, blend);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            t->compWatched.store (true);
+            if (blend > 0.0f)
+                (void) tone (*t, 41.2, -40.0f, 150);
+            else
+            {
+                set (*t, params::compAmount, 1.0f);
+                (void) tone (*t, 41.2, -12.0f, 150);
+                set (*t, params::compAmount, 0.0f);
+                (void) tone (*t, 41.2, -12.0f, 60);
+            }
+            feed (*ed);
+            std::function<void (juce::Component&)> findComp = [&] (juce::Component& c)
+            {
+                if (auto* cb = dynamic_cast<CompBlock*> (&c))
+                    write (blend > 0.0f ? "comp-low-e-no-squeeze.png" : "comp-blend-0-still.png",
+                           cb->createComponentSnapshot (cb->getLocalBounds(), true, 3.0f));
+                for (auto* child : c.getChildren())
+                    findComp (*child);
+            };
+            findComp (*ed);
         }
     }
 

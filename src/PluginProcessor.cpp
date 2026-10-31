@@ -1364,6 +1364,7 @@ void AmpProcessor::tellOctave() noexcept
     menu.gateDb  = bass.octaveGateDb->load();
     const float amount = linkWorks (params::rowOctave) ? bass.octave->load() : 0.0f;
     octaveLive = amount > 0.0f;   // at work: its picture written (runOctave)
+    octaveWorks.store (octaveLive, std::memory_order_relaxed);
     const auto  p = felitronics::octave::paramsForAmount (amount, menu);
     if (! octaveToldValid || ! sameKnobs (p, octaveTold))
     {
@@ -1503,8 +1504,11 @@ void AmpProcessor::passGap (int numSamples) noexcept
 {
     // A GAP IS TIME WITH SILENCE: the five cuts run over silence of its length — their memories decaying, their glides and
     // fades going on — a block at a time on the scratch bus (no allocation); the input's cut makes FILTER's key of it, as
-    // it would of a silent input; the three effects take the gap as theirs (law 11c).
+    // it would of a silent input; the three effects take the gap as theirs (law 11c) — and DELAY and REVERB, told their
+    // knobs first (the host's tempo with them), so a change made before a gap glides through it as through silence.
     sanitiseParameters();
+    updateDelaySettings();
+    updateReverbSettings();
     const int most = juce::jmax (1, juce::jmin (preparedBlock.load (std::memory_order_relaxed), narrowBus.getNumSamples(),
                                                 filterKey.getNumSamples()));
     const int wide = juce::jlimit (1, juce::jmin (2, narrowBus.getNumChannels()), bassWide.load (std::memory_order_relaxed));

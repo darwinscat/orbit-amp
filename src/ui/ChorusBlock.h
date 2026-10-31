@@ -338,6 +338,7 @@ public:
         const auto menu = [this] (juce::Point<int>) { bass::showChorusMenu (state, this); };
         rail.onMenu = circle.onMenu = menu;
         attachPower (*processor.apvts.getParameter (params::chorusOn));
+        dimWhenIdle (circle, *processor.apvts.getParameter (params::chorusAmount));
     }
 
     void mouseDown (const juce::MouseEvent&) override { bass::showChorusMenu (state, this); }

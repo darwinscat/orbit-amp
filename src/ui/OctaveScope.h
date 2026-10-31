@@ -99,6 +99,10 @@ public:
     /** What the tap holds, worked into a frame — the timer's work, and a picture's made off screen. */
     void pull()
     {
+        // ITS BLOCK NOT AT WORK (standing by, at 0, out of the strip): the frame stands WHOLE — its samples, its lock, its
+        // reading — as the block left it; nothing re-read, nothing re-analysed (review 9).
+        if (! amp.octaveAtWork())
+            return;
         std::uint32_t newest = 0;
         const int  n      = amp.octaveTap->read (dry.data(), sub.data(), core::OctaveTap::capacity, &newest);
         const bool locked = amp.effectLampDepth (0) > 0.5f;

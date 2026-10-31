@@ -384,6 +384,7 @@ public:
         const auto menu = [this] (juce::Point<int>) { bass::showFilterMenu (state, this); };
         rail.onMenu = curve.onMenu = menu;
         attachPower (*processor.apvts.getParameter (params::filterOn));
+        dimWhenIdle (curve, *processor.apvts.getParameter (params::filterAmount));
     }
 
     void mouseDown (const juce::MouseEvent&) override { bass::showFilterMenu (state, this); }
