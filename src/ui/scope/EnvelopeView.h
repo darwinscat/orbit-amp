@@ -20,6 +20,12 @@ struct EnvelopeView
 {
     static constexpr float floorDb = -80.0f;
 
+    /** THE PAGE'S TWO TRACES — what goes in, what comes out — and their style, the family's for every in/out picture (the
+        bass's COMP draws its IN and OUT with these): a translucent fill under an edge line. */
+    static juce::Colour inColour()  { return theme::violet; }
+    static juce::Colour outColour() { return theme::orange; }
+    static constexpr float inFillAlpha = 0.15f, outFillAlpha = 0.22f, edgeWidth = 1.2f;
+
     /** `bare` is for a face that throws the picture across a window as light rather than setting it in
         a well: no rules, and the two envelopes as LINES — their crests alone, nothing filled and nothing
         closed along the floor. Over a picture of its own a translucent body is a stain, and the box its
@@ -88,11 +94,11 @@ struct EnvelopeView
             g.setColour (c.withAlpha (alpha));
             g.fillPath (p);
             g.setColour (c);
-            g.strokePath (p, juce::PathStrokeType (1.2f));
+            g.strokePath (p, juce::PathStrokeType (edgeWidth));
         };
 
-        fill (de, bare ? theme::lilac : theme::violet, 0.15f);
-        fill (we, theme::orange, 0.22f);
+        fill (de, bare ? theme::lilac : inColour(), inFillAlpha);
+        fill (we, outColour(), outFillAlpha);
     }
 };
 

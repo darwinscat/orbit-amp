@@ -58,11 +58,6 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     // said the guard worked unseen.
     faceplate.gateBlock().onMenu  = [this] (juce::Point<int> pos) { amp.gateWorked.store (false);    gateConsole.showMenu (pos); };
     faceplate.limitBlock().onMenu = [this] (juce::Point<int> pos) { amp.limiterWorked.store (false); showLimiterMenu (pos); };
-    if (amp.product().chain == Chain::bass)   // the bass's guards: their settings windows, as every block of its face
-    {
-        faceplate.gateBlock().onMenu  = [this] (juce::Point<int>) { amp.gateWorked.store (false);    faceplate.openSettings ("GATE"); };
-        faceplate.limitBlock().onMenu = [this] (juce::Point<int>) { amp.limiterWorked.store (false); faceplate.openSettings ("LIMIT"); };
-    }
     if constexpr (features::hum)   // the input column's menu is HUM's in the build that has it (Features.h)
         inColumn.onMenu = [this] (juce::Point<int> pos) { showInputMenu (pos); };
     addAndMakeVisible (tunerStrip);

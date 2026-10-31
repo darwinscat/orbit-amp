@@ -49,6 +49,7 @@ public:
     std::function<void()> onDevices;
 
 private:
+    juce::Component::SafePointer<juce::CallOutBox> loadBox;   // the load window up now (openLoadBreakdown)
     void timerCallback() override;
     void showLoadBreakdown();
 

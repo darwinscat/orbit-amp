@@ -3282,8 +3282,8 @@ int ORBITAMP_GATE_MAIN()
             auto* compBlock = first (*ed, (CompBlock*) nullptr);
             if (compBlock != nullptr)
                 bass::showCompMenu (t->apvts, compBlock);
-            check (gears == 8 && face != nullptr && face->lastSettings == "COMP",
-                   "every OrbitBass block wears a gear (" + juce::String (gears) + " of 8); a right click on COMP opens its window ("
+            check (gears == 6 && face != nullptr && face->lastSettings == "COMP",
+                   "every OrbitBass block but the guards wears a gear (" + juce::String (gears) + " of 6); a right click on COMP opens its window ("
                        + (face != nullptr ? face->lastSettings : juce::String ("no face")) + ")");
         }
 
@@ -3292,7 +3292,7 @@ int ORBITAMP_GATE_MAIN()
             auto t = make (bass);
             settle (*t);
             bool all = true;
-            for (const char* block : { "GATE", "COMP", "OCTAVE", "ENVELOPE", "AMP", "CHORUS", "CAB IR", "LIMIT" })
+            for (const char* block : { "COMP", "OCTAVE", "ENVELOPE", "AMP", "CHORUS", "CAB IR" })
                 all = all && bass::makeSettings (*t, block) != nullptr;
             auto comp = bass::makeSettings (*t, "COMP");
             bool typed = false, reset = false;
@@ -3584,7 +3584,8 @@ int ORBITAMP_GATE_MAIN()
         }
 
         // THE FACE: row three in the signal's order at the least width and at 16:9, none overlapping, the cabinet never
-        // under its least; every word of the pictures inside them; and THE GEARS — on every block, never on its name.
+        // under its least; every word of the pictures inside them; and THE GEARS — on every block but the guards, never on
+        // its name.
         {
             juce::StringArray bad;
             for (const int mode : { 0, 1, 2 })   // default, both added, everything in and out
@@ -3624,8 +3625,10 @@ int ORBITAMP_GATE_MAIN()
                             if (title.intersects (gear) || ! b->getLocalBounds().contains (gear))
                                 bad.add (where + label (*b) + "'s gear " + gear.toString() + " on its name " + title.toString());
                         }
-                        else
+                        else if (dynamic_cast<GuardBlock*> (b) == nullptr)   // the guards wear none (the owner, 31.10)
                             bad.add (where + label (*b) + " has no gear");
+                        else if (b->hasGear())
+                            bad.add (where + label (*b) + " — a guard — wears a gear");
                         if (b->getY() > 300 && face != nullptr && b->getParentComponent() == face)
                             row3.emplace_back (b->getX(), dynamic_cast<GuardBlock*> (b) != nullptr ? juce::String ("LIMIT")
                                                           : dynamic_cast<ChorusBlock*> (b) != nullptr ? juce::String ("CHORUS")
@@ -3660,6 +3663,196 @@ int ORBITAMP_GATE_MAIN()
                                   "and 2.2:1, the cabinet never under its least, the pictures' words inside them; a gear on every block, "
                                   "never on its name" + (bad.isEmpty() ? juce::String() : ": " + bad.joinIntoString ("; ")));
         }
+    }
+
+    // ---- STEP 9b: THE RATIO'S TICKS ARE ITS DETENTS; A DRAG ONTO EACH LANDS ON IT, SLIDER AND SQUARE ----------------
+    {
+        auto t = make (bass);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+        CompRatioSlider* slider = nullptr;
+        CompTransfer* square = nullptr;
+        std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+        {
+            if (auto* s = dynamic_cast<CompRatioSlider*> (&c)) slider = s;
+            if (auto* q = dynamic_cast<CompTransfer*> (&c))   square = q;
+            for (auto* child : c.getChildren())
+                walk (*child);
+        };
+        walk (*ed);
+        juce::StringArray wrong;
+        if (slider == nullptr || square == nullptr)
+            wrong.add ("no ratio controls");
+        else
+        {
+            const auto ticks = slider->tickXs();
+            for (size_t k = 0; k < std::size (compRatioDetents); ++k)
+            {
+                const double d = compRatioDetents[k];
+                slider->beginDrag();
+                slider->dragTo (ticks[k]);
+                slider->endDrag();
+                const double onSlider = slider->shownRatio();
+                square->beginRatioDrag();
+                square->dragRatioTo (square->yOfRatio (d));
+                square->endRatioDrag();
+                const double onSquare = square->shownRatio();
+                if (onSlider != d || std::abs (slider->xOfRatio (onSlider) - ticks[k]) > 0.5f || onSquare != d)
+                    wrong.add (juce::String (d, 0) + ":1 -> slider " + juce::String (onSlider, 2) + ", square " + juce::String (onSquare, 2));
+            }
+        }
+        check (wrong.isEmpty(), "the ratio's ticks are its detents: dragged onto each of 2, 3, 4, 5, 7, 10 : 1, the slider and the square land on it"
+                                    + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString ("; ")));
+    }
+
+    // ---- THE GUARDS KEEP THEIR SCALES AND THEIR MENUS (the owner, 31.10): no gear on GATE or LIMIT, their rails the
+    //      guitar's less the 20 px the bass's rows are shorter, and their right click their own menus (LEARN), not a window.
+    {
+        const auto railOf = [] (juce::Component& root, const char* id)
+        {
+            GuardRail* found = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* r = dynamic_cast<GuardRail*> (&c); r != nullptr && r->paramId() == id)
+                    found = r;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+        auto b = make (bass);
+        std::unique_ptr<juce::AudioProcessorEditor> bed (b->createEditor());
+        auto g = make (products::orbitAmp());
+        std::unique_ptr<juce::AudioProcessorEditor> ged (g->createEditor());
+        FaceplateView* face = nullptr;
+        std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+        {
+            if (auto* f = dynamic_cast<FaceplateView*> (&c)) face = f;
+            for (auto* child : c.getChildren())
+                find (*child);
+        };
+        find (*bed);
+        bool ok = face != nullptr && ! face->gateBlock().hasGear() && ! face->limitBlock().hasGear();
+        juce::String said;
+        for (const char* id : { params::gateThreshold, params::limiterCeiling })
+        {
+            auto* br = railOf (*bed, id);
+            auto* gr = railOf (*ged, id);
+            const int want = gr != nullptr ? gr->getHeight() - (FaceplateView::row1H - FaceplateView::bassFxRowH) : -1;
+            ok = ok && br != nullptr && br->getHeight() == want;
+            said << " " << id << " " << (br != nullptr ? br->getHeight() : -1) << " (" << want << ")";
+        }
+        if (face != nullptr && face->gateBlock().onMenu != nullptr)
+            face->gateBlock().onMenu ({});
+        ok = ok && face != nullptr && face->lastSettings.isEmpty();
+        check (ok, "GATE and LIMIT without gears, their rails at full height:" + said + "; GATE's right click its own menu, no window");
+    }
+
+    // ---- REVIEW ROUND 8 (of steps 8-9) AND THE OWNER'S OUT ----------------------------------------------------
+    {
+        // THREE TRACES BEFORE THE MAKE-UP: at a steady squeeze AFTER COMP sits under BEFORE by the squeeze, and AFTER COMP +
+        // BLEND is the blend's mix of the two — at 100 % and at half.
+        for (const float blend : { 1.0f, 0.5f })
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, blend);
+            t->compWatched.store (true);
+            (void) tone (*t, 120.0, -6.0f, 80);
+            std::vector<core::CompTap::Column> cols (20);
+            const int got = t->compTap.read (cols.data(), 20);
+            double worstMid = got > 0 ? 0.0 : 99.0, worstOut = worstMid, gr = 0.0;
+            for (int i = 0; i < got; ++i)
+            {
+                const auto& c = cols[(size_t) i];
+                gr = (double) c.gr;
+                const double mix = 20.0 * std::log10 ((1.0 - blend) + blend * std::pow (10.0, gr / 20.0));
+                worstMid = std::max (worstMid, std::abs (20.0 * std::log10 ((double) c.mid / (double) c.in) - gr));
+                worstOut = std::max (worstOut, std::abs (20.0 * std::log10 ((double) c.out / (double) c.in) - mix));
+            }
+            check (worstMid <= 0.5 && worstOut <= 0.5, "COMP's three traces at BLEND " + juce::String (juce::roundToInt (blend * 100.0f)) + " %, "
+                                                           + juce::String (gr, 1) + " dB squeezed: AFTER COMP under BEFORE by it within "
+                                                           + juce::String (worstMid, 2) + " dB, AFTER + BLEND the mix within " + juce::String (worstOut, 2) + " dB");
+        }
+
+        // STANDING BY AT LOW NOTES: the low B and the low E, either character — IN and OUT the same signal.
+        {
+            double worst = 0.0;
+            for (const double hz : { 30.9, 41.2 })
+                for (const float character : { 0.0f, 1.0f })
+                {
+                    auto t = make (bass);
+                    set (*t, params::compCharacter, character);
+                    set (*t, params::compOn, 0.0f);
+                    t->compWatched.store (true);
+                    (void) tone (*t, hz, -12.0f, 80);
+                    std::vector<core::CompTap::Column> cols (20);
+                    const int got = t->compTap.read (cols.data(), 20);
+                    for (int i = 0; i < got; ++i)
+                        worst = std::max ({ worst, std::abs (20.0 * std::log10 ((double) cols[(size_t) i].out / (double) cols[(size_t) i].in)),
+                                            std::abs (20.0 * std::log10 ((double) cols[(size_t) i].mid / (double) cols[(size_t) i].in)) });
+                    if (got == 0)
+                        worst = 99.0;
+                }
+            check (worst <= 0.1, "COMP standing by at the low B and the low E, either character: IN and OUT within " + juce::String (worst, 3) + " dB");
+        }
+
+        // THE GEAR WORKS WITH ITS BLOCK STANDING BY: the AMP out, its gear still the thing under a click there.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            set (*t, params::preampOn, 0.0f);
+            CapturedBlockPanel* panel = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* p = dynamic_cast<CapturedBlockPanel*> (&c)) panel = p;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (*ed);
+            auto* hit = panel != nullptr && panel->hasGear() ? panel->getComponentAt (panel->gearBounds().getCentre()) : nullptr;
+            check (hit != nullptr && hit->getTitle() == "Settings" && hit->getAlpha() == 1.0f,
+                   "the AMP standing by: its gear on top of its shield, undimmed — a click there opens its settings");
+        }
+
+       #if JUCE_MAC || JUCE_WINDOWS
+        // THE SETTINGS WINDOW GOES WITH THE EDITOR: open, then the editor closed (a host closing it, removing the plug-in) —
+        // no window left holding the processor.
+        {
+            auto t = make (bass);
+            const auto boxes = []
+            {
+                int n = 0;
+                for (int i = 0; i < juce::Desktop::getInstance().getNumComponents(); ++i)
+                    n += dynamic_cast<juce::CallOutBox*> (juce::Desktop::getInstance().getComponent (i)) != nullptr ? 1 : 0;
+                return n;
+            };
+            auto ed = std::unique_ptr<juce::AudioProcessorEditor> (t->createEditor());
+            ed->addToDesktop (0);
+            ed->setVisible (true);
+            FaceplateView* face = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* f = dynamic_cast<FaceplateView*> (&c)) face = f;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (*ed);
+            if (face != nullptr)
+                face->openSettings ("COMP");
+            const bool opened = face != nullptr && face->settingsShown() && boxes() == 1;
+            ed.reset();
+            // What is left of it — its callout goes by its own dismissal, a moment later — is hidden and lets go of the
+            // processor at once.
+            int live = 0;
+            for (int i = 0; i < juce::Desktop::getInstance().getNumComponents(); ++i)
+                if (auto* box = dynamic_cast<juce::CallOutBox*> (juce::Desktop::getInstance().getComponent (i)))
+                    for (auto* c : box->getChildren())
+                        if (auto* panel = dynamic_cast<bass::SettingsPanel*> (c); panel != nullptr && (! panel->isDetached() || box->isVisible()))
+                            ++live;
+            check (opened && live == 0, "COMP's settings window opened (" + juce::String (opened ? "yes" : "no") + ") lets go of the processor with the editor ("
+                                            + juce::String (live) + " still live)");
+        }
+       #endif
     }
 
     // ---- WHOSE STATE IT IS ----------------------------------------------------------------------------

@@ -120,12 +120,12 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     limit.labelDecimals = 1;
     limit.railOnLeft    = false;
 
-    // ORBITBASS: every block's GEAR at the top right of its frame, and a right click on it, open its settings window.
+    // ORBITBASS: every block's GEAR at the top right of its frame, and a right click on it, open its settings window —
+    // all but the guards: GATE and LIMIT keep their full scales and their own menus (the owner, 31.10).
     if (processor.product().chain == Chain::bass)
     {
         bassRows = true;   // three rows by the signal's way
         const auto gear = [this] (BlockFrame* b, const char* name) { if (b != nullptr) b->enableSettings ([this, name] { openSettings (name); }); };
-        gear (&gate, "GATE");
         gear (comp.get(), "COMP");
         gear (octave.get(), "OCTAVE");
         gear (filter.get(), "ENVELOPE");
@@ -134,11 +134,30 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         gear (spaceDelay.get(), "DELAY");
         gear (spaceReverb.get(), "REVERB");
         gear (&cabinet, "CAB IR");
-        gear (&limit, "LIMIT");
+        cabinet.routeRightClickToSettings (cabinet.waveView());   // its waveform takes its own clicks
     }
 }
 
-FaceplateView::~FaceplateView() = default;
+FaceplateView::~FaceplateView()
+{
+    closeSettings();
+}
+
+void FaceplateView::closeSettings()
+{
+    // THE SETTINGS WINDOW HOLDS THE PROCESSOR: it never outlives the face (a host closing the editor, removing the
+    // plug-in). Its panel lets go of the processor at once — no more reading, no more writing — and hides; the callout
+    // goes by its own dismissal (the modal manager owns it: deleting it here would free it twice).
+    if (auto* panel = dynamic_cast<bass::SettingsPanel*> (settingsPanel.getComponent()))
+        panel->detach();
+    if (auto* box = settingsBox.getComponent())
+    {
+        box->setVisible (false);
+        box->dismiss();
+    }
+    settingsBox = nullptr;
+    settingsPanel = nullptr;
+}
 
 void FaceplateView::openSettings (const juce::String& block)
 {
@@ -151,7 +170,11 @@ void FaceplateView::openSettings (const juce::String& block)
     if (at == nullptr || ! at->isShowing())
         return;
     if (auto panel = bass::makeSettings (owner, block))
-        juce::CallOutBox::launchAsynchronously (std::move (panel), at->getScreenBounds(), nullptr);
+    {
+        closeSettings();   // one window at a time
+        settingsPanel = panel.get();
+        settingsBox = &juce::CallOutBox::launchAsynchronously (std::move (panel), at->getScreenBounds(), nullptr);
+    }
 }
 
 BlockFrame& FaceplateView::frame (Block b)

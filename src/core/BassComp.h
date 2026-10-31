@@ -100,6 +100,8 @@ public:
         dry.assign ((size_t) block, 0.0f);
         work.assign ((size_t) block, 0.0f);
         gr.assign ((size_t) block, 0.0f);
+        shown.assign ((size_t) block, 0.0f);
+        path.assign ((size_t) block, 0.0f);
 
         keySections = std::clamp (cut.sections, 1, (int) keyCut.size());
         for (auto& b : keyCut)
@@ -196,10 +198,14 @@ public:
                 amt = target > amt ? std::min (target, amt + glideStep) : std::max (target, amt - glideStep);
 
                 makeupNowDb += (makeupTargetDb - makeupNowDb) * (makeupTargetDb > makeupNowDb ? makeupUpK : makeupDownK);
+                const float squeezed = work[(size_t) k];   // after the squeeze, before the make-up: the picture's
                 work[(size_t) k] *= (float) std::exp (makeupNowDb * 0.11512925464970228);   // ln 10 / 20
 
                 if (! heard)
+                {
+                    shown[(size_t) k] = path[(size_t) k] = dry[(size_t) k];   // standing by: nothing of it, in the sound or the picture
                     continue;
+                }
 
                 // BLEND — parallel compression: the compressed signal over the clean one, sample-aligned (no lookahead),
                 // in the share the knob has glided to; continuous from its zero by construction. A JUMP to zero is the
@@ -211,6 +217,10 @@ public:
                 const float  d     = dry[(size_t) k];
                 const float  wet   = work[(size_t) k];
                 x[k] = d + (wet - d) * (float) (blend * (double) g);
+                // THE PICTURE'S OUT: the same blend of the squeezed signal BEFORE the make-up — so the gap under IN is what
+                // COMP took (the owner, 31.10: no make-up number anywhere). The sound is x, unchanged.
+                shown[(size_t) k] = d + (squeezed - d) * (float) (blend * (double) g);
+                path[(size_t) k]  = squeezed;   // AFTER COMP itself: under the input by exactly the squeeze
             }
 
             i          += len;
@@ -221,7 +231,8 @@ public:
         // The indicator shows the squeeze that is heard: none while the link stands by, fed or not.
         grDb.store (heard ? gr[(size_t) n - 1] : 0.0f, std::memory_order_relaxed);
         if (tap != nullptr)
-            tap->write (key.data(), x, heard ? gr.data() : nullptr, n, character == Character::smooth);   // what the detector hears
+            tap->write (heard ? key.data() : dry.data(), heard ? path.data() : dry.data(), shown.data(), heard ? gr.data() : nullptr, n,
+                        character == Character::smooth);   // IN the detector's; standing by, the signal as all three
     }
 
     /** Where the picture's columns go, while it is on screen — null otherwise (the processor sets it per block). */
@@ -301,7 +312,7 @@ private:
     felitronics::dynamics::CompressorParams set;
     std::array<CutBiquad, 2> keyCut;
     int    keySections = 1;
-    std::vector<float> key, dry, work, gr;
+    std::vector<float> key, dry, work, gr, shown, path;
     double fs = 48000.0, heldDb = 0.0, amt = 0.0, glideStep = 0.001, holdK = 0.001;
     double thrWant = defaultThresholdDb, thrAt = defaultThresholdDb, thrStep = 0.05;
     double ratioWant = defaultRatio, ratioAt = defaultRatio, ratioStep = 0.4;

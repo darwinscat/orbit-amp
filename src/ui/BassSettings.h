@@ -65,7 +65,7 @@ public:
                 line->value.onTextChange = [this, id = r.id, l = line.get()]
                 {
                     if (const auto v = parse (l->value.getText()); v.has_value())
-                        type (id, id == params::compAmount ? *v / 100.0f : *v);   // BLEND is typed in percent
+                        type (id, id == params::compAmount || id == params::cabTrim ? *v / 100.0f : *v);   // typed in percent
                 };
                 addAndMakeVisible (line->value);
             }
@@ -114,6 +114,15 @@ public:
 
     const juce::String& block() const noexcept { return name; }
 
+    /** Its face is going (the editor closing, the plug-in removed): it stops reading and writing the processor at once —
+        the window it stands in goes on its own, a moment later. */
+    void detach() noexcept
+    {
+        stopTimer();
+        detached = true;
+    }
+    bool isDetached() const noexcept { return detached; }
+
     /** The parameters it sets, in its order. */
     juce::StringArray ids() const
     {
@@ -127,6 +136,8 @@ public:
     /** A value set from the window — typed, a word, a switch: ONE undo step, the host told as one gesture. */
     void type (const juce::String& id, float plain)
     {
+        if (detached)
+            return;
         auto* p = amp.apvts.getParameter (id);
         if (p == nullptr || ! std::isfinite (plain))
             return;
@@ -141,6 +152,8 @@ public:
     /** RESET: the block's settings back to their defaults, ONE undo step. */
     void reset()
     {
+        if (detached)
+            return;
         amp.history.beginGesture();
         for (const auto& id : ids())
             if (auto* p = amp.apvts.getParameter (id))
@@ -249,6 +262,8 @@ private:
             return juce::String (v, 1) + ":1";
         if (id == params::compAmount)
             return juce::String (juce::roundToInt (v * 100.0f)) + " %";
+        if (id == params::cabTrim)
+            return juce::String (juce::roundToInt (v * 100.0f)) + " % of the IR";   // the share of the IR kept, not a level
         if (id == params::diMix)
             return juce::String (juce::roundToInt (v)) + " %";
         if (id.containsIgnoreCase ("resonance"))
@@ -258,6 +273,8 @@ private:
 
     void refresh()
     {
+        if (detached)
+            return;
         for (auto& l : lines)
         {
             auto* p = l->row.id.isNotEmpty() ? amp.apvts.getParameter (l->row.id) : nullptr;
@@ -294,14 +311,15 @@ private:
     std::vector<Row> rows;
     std::vector<std::unique_ptr<Line>> lines;
     juce::TextButton resetButton;
+    bool detached = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SettingsPanel)
 };
 
 /** EACH BLOCK'S WINDOW: its menu's settings, and the law's values its slider drives — DELAY's and REVERB's what the
     guitar's blocks offer, but MIX, which is their rail. Held back (not invented here): the
-    AMP's device tone / EQ mode (its own combo on the block), the cabinet's IR (its own list on the border), the GATE's
-    learn and the LIMIT's further menu items (their own menus on the editor), ENVELOPE's reach (the picture's law). */
+    AMP's device tone / EQ mode (its own combo on the block), the cabinet's IR (its own list on the border), GATE and
+    LIMIT (no window: their own menus, LEARN included, and their full scales), ENVELOPE's reach (the picture's law). */
 inline std::unique_ptr<SettingsPanel> makeSettings (AmpProcessor& amp, const juce::String& block)
 {
     using K = SettingsPanel::Row::Kind;
@@ -356,11 +374,7 @@ inline std::unique_ptr<SettingsPanel> makeSettings (AmpProcessor& amp, const juc
                  { K::toggle, "LPF", params::bassLpfOn }, { K::choice, "LPF hand", params::bassLpf },
                  { K::number, "LPF fingers", params::bassLpfHzFingers }, { K::number, "LPF slap", params::bassLpfHzSlap } };
     else if (block == "CAB IR")
-        rows = { { K::number, "DI / CAB", params::diMix }, { K::toggle, "Trim", params::cabTrimOn }, { K::number, "Trim level", params::cabTrim } };
-    else if (block == "GATE")
-        rows = { { K::number, "Threshold", params::gateThreshold }, { K::choice, "Mutes at", params::gatePos } };
-    else if (block == "LIMIT")
-        rows = { { K::number, "Ceiling", params::limiterCeiling } };
+        rows = { { K::number, "DI / CAB", params::diMix }, { K::toggle, "Trim", params::cabTrimOn }, { K::number, "Trim keeps", params::cabTrim } };
     else
         return nullptr;
 

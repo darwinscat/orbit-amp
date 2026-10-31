@@ -7,6 +7,7 @@
 #include "BlockFrame.h"
 #include "GuardRail.h"
 #include "MeterRail.h"
+#include "scope/EnvelopeView.h"
 #include "scope/TransferView.h"
 #include "../PluginProcessor.h"
 #include "../core/BassComp.h"
@@ -16,9 +17,9 @@
 namespace orbitamp
 {
 
-/** COMP'S PICTURE: the level running right to left over the last 2.5 s — what goes in and what comes out, each a
-    translucent fill under its own edge line, the input grey and the output brighter, so where they overlap both still
-    read and the squeeze is the distance between the two edges — and, in a strip of its own along the top, the squeeze
+/** COMP'S PICTURE: the level running right to left over the last 2.5 s in THREE traces, all before the automatic make-up
+    (the owner, 31.10): BEFORE COMP, the AMP's ENVELOPE page's violet fill under its edge; AFTER COMP, the compressed path
+    itself, a dashed lilac line under it by exactly the squeeze; AFTER COMP + BLEND, what goes on, the orange line — and, in a strip of its own along the top, the squeeze
     itself as a violet LINE with its number now. Across the levels, the THRESHOLD: a lilac line with an orange handle
     carrying its number.
 
@@ -180,7 +181,7 @@ public:
         // The columns, the newest at the right edge; a pixel shows the loudest of the columns it covers, and the deepest
         // squeeze. Three traces, each a path along the pixels that have playing behind them.
         const int w = juce::jmax (1, (int) r.getWidth());
-        juce::Path inEdge, outEdge, grLine, inFill, outFill;
+        juce::Path inEdge, midEdge, outEdge, grLine, inFill, outFill;
         bool started = false;
         float firstX = 0.0f, lastX = 0.0f, lastGr = 0.0f;
         const auto grY = [&] (float gr) { return strip.getY() + 3.0f + juce::jmin (1.0f, (float) (-gr / grRangeDb)) * (strip.getHeight() - 6.0f); };
@@ -189,7 +190,7 @@ public:
         for (int x = 0; x < w && shown > 0; ++x)
         {
             const int a = x * columnsShown / w, b = juce::jmax (a + 1, (x + 1) * columnsShown / w);
-            float in = 0.0f, out = 0.0f, gr = 0.0f;
+            float in = 0.0f, out = 0.0f, gr = 0.0f, mid = 0.0f;
             bool  any = false;
             for (int j = a; j < b; ++j)
                 if (const int k = j - (columnsShown - shown); k >= 0)
@@ -197,6 +198,7 @@ public:
                     const auto& c = cols[(size_t) k];
                     in  = juce::jmax (in, c.in);
                     out = juce::jmax (out, c.out);
+                    mid = juce::jmax (mid, c.mid);
                     gr  = juce::jmin (gr, c.gr);
                     any = true;
                 }
@@ -206,17 +208,20 @@ public:
             const float px  = r.getX() + (float) x + 0.5f;
             const float yIn = juce::jlimit (lv.getY(), lv.getBottom(), yOfDb (dbOf (in)));
             const float yOut = juce::jlimit (lv.getY(), lv.getBottom(), yOfDb (dbOf (out)));
+            const float yMid = juce::jlimit (lv.getY(), lv.getBottom(), yOfDb (dbOf (mid)));
             if (! started)
             {
                 started = true;
                 firstX  = px;
                 inEdge.startNewSubPath (px, yIn);
+                midEdge.startNewSubPath (px, yMid);
                 outEdge.startNewSubPath (px, yOut);
                 grLine.startNewSubPath (px, grY (gr));
             }
             else
             {
                 inEdge.lineTo (px, yIn);
+                midEdge.lineTo (px, yMid);
                 outEdge.lineTo (px, yOut);
                 grLine.lineTo (px, grY (gr));
             }
@@ -234,14 +239,25 @@ public:
                 p.closeSubPath();
                 return p;
             };
-            g.setColour (levelIn.withAlpha (0.16f));
+            // In the AMP's ENVELOPE page's own style (scope::EnvelopeView): IN its violet fill under its edge; OUT its
+            // orange — as a LINE alone: orange is never a wash on the violet panel.
+            using Page = scope::EnvelopeView;
+            g.setColour (Page::inColour().withAlpha (Page::inFillAlpha));
             g.fillPath (filled (inEdge));
-            g.setColour (levelOut.withAlpha (0.16f));
-            g.fillPath (filled (outEdge));
-            g.setColour (levelIn.withAlpha (0.9f));
-            g.strokePath (inEdge, juce::PathStrokeType (1.2f));
-            g.setColour (levelOut.withAlpha (0.95f));
-            g.strokePath (outEdge, juce::PathStrokeType (1.4f));
+            g.setColour (Page::inColour());
+            g.strokePath (inEdge, juce::PathStrokeType (Page::edgeWidth));
+            // AFTER COMP, the compressed path itself — under BEFORE by exactly the squeeze: the page's lilac, DASHED, so it reads
+            // against the violet fill and beside the orange.
+            {
+                juce::Path dashed;
+                const float dashes[] { 4.0f, 3.0f };
+                juce::PathStrokeType (Page::edgeWidth).createDashedStroke (dashed, midEdge, dashes, 2);
+                g.setColour (theme::lilac);
+                g.fillPath (dashed);
+            }
+            // AFTER COMP + BLEND, what goes on down the chain (before the make-up): the orange line.
+            g.setColour (Page::outColour());
+            g.strokePath (outEdge, juce::PathStrokeType (Page::edgeWidth));
 
             g.setColour (theme::violet.brighter (0.3f));                                // the squeeze, a line in its strip
             g.strokePath (grLine, juce::PathStrokeType (1.6f));
@@ -394,10 +410,17 @@ inline constexpr float  compDetentPx = 4.0f;
 template <typename PositionOf>
 double snapRatio (double r, float at, PositionOf positionOf)
 {
+    // The NEAREST detent within reach, not the first: where two are within reach of each other (the square's upper
+    // ratios, a few pixels apart) the hand lands on the one it is on.
+    double best = r;
+    float  apart = compDetentPx;
     for (const double d : compRatioDetents)
-        if (std::abs (positionOf (d) - at) <= compDetentPx)
-            return d;
-    return r;
+        if (const float gap = std::abs (positionOf (d) - at); gap <= apart)
+        {
+            best  = d;
+            apart = gap;
+        }
+    return best;
 }
 
 /** COMP'S RATIO SLIDER, over the IN/OUT square: 2:1 … 10:1 along `comp_ratio`'s own travel, a lilac track and an orange
@@ -426,6 +449,15 @@ public:
     {
         const auto t = track();
         return t.getX() + ratio.ratioP.convertTo0to1 ((float) r) * t.getWidth();
+    }
+
+    /** Where the ticks stand: at every detent, on the slider's own mapping. */
+    std::vector<float> tickXs() const
+    {
+        std::vector<float> xs;
+        for (const double d : compRatioDetents)
+            xs.push_back (xOfRatio (d));
+        return xs;
     }
 
     double ratioAtX (float x) const
@@ -470,8 +502,8 @@ public:
         const float cy = t.getCentreY();
         g.setColour (theme::lilac.withAlpha (0.55f));
         g.fillRoundedRectangle (juce::Rectangle<float> (t.getX(), cy - 1.0f, t.getWidth(), 2.0f), 1.0f);
-        for (const double r : { 2.0, 4.0, 6.0, 8.0, 10.0 })   // a tick every two, no numbers: the grip says it
-            g.fillRect (xOfRatio (r) - 0.5f, cy - 4.0f, 1.0f, 8.0f);
+        for (const float x : tickXs())   // a tick at every detent — where the grip catches — no numbers: the grip says it
+            g.fillRect (x - 0.5f, cy - 4.0f, 1.0f, 8.0f);
 
         // The grip, a solid of the hand's orange, its ratio written over it.
         const auto  r     = shownRatio();

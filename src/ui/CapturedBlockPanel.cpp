@@ -1147,7 +1147,9 @@ void CapturedBlockPanel::mouseDown (const juce::MouseEvent& e)
     // is a scope's.
     if (widgetArea.contains (e.getPosition()))
     {
-        if (e.mods.isPopupMenu())
+        if (e.mods.isPopupMenu() && bassKnobs != nullptr && onSettings != nullptr)
+            onSettings();   // OrbitBass: a right click on the AMP is its settings window, the picture's too
+        else if (e.mods.isPopupMenu())
             showVizMenu (e.getScreenPosition());
         else
             setViz (nextViz (vizPick));   // round the loop, one click at a time

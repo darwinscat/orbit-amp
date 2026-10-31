@@ -39,6 +39,9 @@ struct LoadBreakdown final : public juce::Component,
         return twice ? name + " x2" : name;
     }
 
+    /** Its window's owner is going: no more reading the processor (the callout goes by its own dismissal). */
+    void detach() noexcept { stopTimer(); }
+
     explicit LoadBreakdown (AmpProcessor& p) : amp (p)
     {
         // Sized for EVERY stage, not for the ones standing when it opened: presence can be
@@ -258,12 +261,13 @@ struct LoadBreakdown final : public juce::Component,
     With the DSP figure near the window's right edge that was the right, out over whatever stands
     beside the plugin. Refitted into the window the sides with no room drop out, and the box opens
     over the faceplate, its arrow on the words. A window too small to hold it keeps JUCE's choice. */
-inline void openLoadBreakdown (AmpProcessor& amp, juce::Rectangle<int> anchor, juce::Rectangle<int> window)
+inline juce::CallOutBox& openLoadBreakdown (AmpProcessor& amp, juce::Rectangle<int> anchor, juce::Rectangle<int> window)
 {
     auto& box = juce::CallOutBox::launchAsynchronously (std::make_unique<LoadBreakdown> (amp), anchor, nullptr);
 
     if (box.getWidth() < window.getWidth() && box.getHeight() < window.getHeight())
         box.updatePosition (anchor, window);
+    return box;
 }
 
 } // namespace orbitamp

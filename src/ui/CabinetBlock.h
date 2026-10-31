@@ -73,6 +73,11 @@ private:
     VoicingSelector ir;
     felitronics::appkit::IrWaveView wave;
 
+public:
+    juce::Component& waveView() noexcept { return wave; }
+
+private:
+
     struct Switch
     {
         ZoneSwitch  sw;

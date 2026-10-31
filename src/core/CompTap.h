@@ -36,6 +36,7 @@ public:
         float in  = 0.0f;   // peak, linear
         float out = 0.0f;   // peak, linear
         float gr  = 0.0f;   // the deepest squeeze, dB (0 or below)
+        float mid = 0.0f;   // AFTER COMP, before BLEND and the make-up — measured as `in` and `out`
     };
 
     /** Off the audio thread, with the rate; starts empty. */
@@ -43,7 +44,7 @@ public:
     {
         hop = std::max (1, (int) std::lround (sampleRate * hopSeconds));
         rmsK = (float) (1.0 - std::exp (-1.0 / (rmsSeconds * std::max (1.0, sampleRate))));
-        meanSquare = meanSquareOut = 0.0f;
+        meanSquare = meanSquareOut = meanSquareMid = midPeak = 0.0f;
         inPeak = outPeak = grLow = 0.0f;
         filled = 0;
         quiet  = holdColumns + 1;   // nothing has played yet: nothing to scroll
@@ -55,12 +56,22 @@ public:
         trace being squeezed. */
     void write (const float* in, const float* out, const float* grDb, int n, bool rms) noexcept
     {
+        write (in, in, out, grDb, n, rms);
+    }
+
+    /** ...the three traces (the owner, 31.10): BEFORE COMP `in`, AFTER COMP `mid` (the compressed path, before BLEND), and
+        AFTER COMP + BLEND `out` — all before the make-up, all measured alike. */
+    void write (const float* in, const float* mid, const float* out, const float* grDb, int n, bool rms) noexcept
+    {
         for (int i = 0; i < n; ++i)
         {
             const float x = std::isfinite (in[i]) ? in[i] : 0.0f;
+            const float m = std::isfinite (mid[i]) ? mid[i] : 0.0f;
             const float y = std::isfinite (out[i]) ? out[i] : 0.0f;
             meanSquare    += rmsK * (x * x - meanSquare);
+            meanSquareMid += rmsK * (m * m - meanSquareMid);
             meanSquareOut += rmsK * (y * y - meanSquareOut);
+            midPeak = std::max (midPeak, rms ? std::sqrt (meanSquareMid) : std::abs (m));
             // ...and the OUTPUT measured exactly as the input: at 0 the two traces lie on each other, and their gap is what
             // COMP did.
             inPeak  = std::max (inPeak,  rms ? std::sqrt (meanSquare)    : std::abs (x));
@@ -84,7 +95,7 @@ public:
         {
             const auto at = (size_t) ((k - (std::uint32_t) have + (std::uint32_t) i) % (std::uint32_t) columns);
             dst[i] = { ins[at].load (std::memory_order_relaxed), outs[at].load (std::memory_order_relaxed),
-                       grs[at].load (std::memory_order_relaxed) };
+                       grs[at].load (std::memory_order_relaxed), mids[at].load (std::memory_order_relaxed) };
         }
 
         // A writer far ahead (an offline render) may have written over the oldest of these while they were copied — the
@@ -109,16 +120,18 @@ private:
             ins[at].store (inPeak, std::memory_order_relaxed);
             outs[at].store (outPeak, std::memory_order_relaxed);
             grs[at].store (grLow, std::memory_order_relaxed);
+            mids[at].store (midPeak, std::memory_order_relaxed);
             count.store (k + 1, std::memory_order_release);
         }
-        inPeak = outPeak = grLow = 0.0f;
+        inPeak = outPeak = grLow = midPeak = 0.0f;
         filled = 0;
     }
 
-    std::array<std::atomic<float>, columns> ins {}, outs {}, grs {};
+    std::array<std::atomic<float>, columns> ins {}, outs {}, grs {}, mids {};
     std::atomic<std::uint32_t> count { 0 };
     static constexpr double rmsSeconds = 0.010;   // BassComp's SMOOTH detector: RMS over 10 ms
     float inPeak = 0.0f, outPeak = 0.0f, grLow = 0.0f, meanSquare = 0.0f, meanSquareOut = 0.0f, rmsK = 0.002f;
+    float midPeak = 0.0f, meanSquareMid = 0.0f;
     int   filled = 0, hop = 240, quiet = holdColumns + 1;
 };
 

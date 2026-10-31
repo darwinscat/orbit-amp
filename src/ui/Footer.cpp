@@ -113,7 +113,19 @@ Footer::Footer (AmpProcessor& processor)
     startTimerHz (4);   // nobody needs the sample rate or the load sooner than that
 }
 
-Footer::~Footer() = default;
+Footer::~Footer()
+{
+    // The load window holds the processor: it never outlives the footer. It stops reading and hides at once; the callout
+    // goes by its own dismissal (the modal manager owns it).
+    if (auto* box = loadBox.getComponent())
+    {
+        for (auto* c : box->getChildren())
+            if (auto* lb = dynamic_cast<LoadBreakdown*> (c))
+                lb->detach();
+        box->setVisible (false);
+        box->dismiss();
+    }
+}
 
 void Footer::timerCallback()
 {
@@ -222,7 +234,9 @@ void Footer::resized()
 
 void Footer::showLoadBreakdown()
 {
-    openLoadBreakdown (amp, loadBadge.getScreenBounds(), getTopLevelComponent()->getScreenBounds());
+    if (auto* box = loadBox.getComponent())
+        box->dismiss();
+    loadBox = &openLoadBreakdown (amp, loadBadge.getScreenBounds(), getTopLevelComponent()->getScreenBounds());
 }
 
 } // namespace orbitamp

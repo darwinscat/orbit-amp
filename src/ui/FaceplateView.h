@@ -44,6 +44,7 @@ public:
         right click's. `lastSettings` says which was asked for last (a gate reads it). */
     void openSettings (const juce::String& block) override;
     juce::String lastSettings;
+    bool settingsShown() const noexcept { return settingsBox != nullptr; }
 
     /** The loaded device changed — the captured blocks rebuild their faces from their packs. */
     void deviceChanged() { preamp.deviceChanged(); }
@@ -221,6 +222,9 @@ private:
     std::array<bool, 4> shownFlags { true, true, true, true };
 
     bool fillsHeight = true;   // see setFillsHeight
+    juce::Component::SafePointer<juce::CallOutBox> settingsBox;   // the settings window up now — it goes with the face
+    juce::Component::SafePointer<juce::Component>  settingsPanel; // ...and what stands in it (bass::SettingsPanel)
+    void closeSettings();
     bool bassRows    = false;  // OrbitBass's three rows (bassDesignHeight)
     void layOutBassRows();
 
