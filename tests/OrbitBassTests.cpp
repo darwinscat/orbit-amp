@@ -26,6 +26,10 @@
 #include "ui/CompBlock.h"
 #include "ui/OctaveScope.h"
 #include "core/OctaveTap.h"
+#include "ui/FilterBlock.h"
+#include <felitronics/envfilter/EnvelopeFilterLaw.h>
+#include "ui/ChorusBlock.h"
+#include "core/ChorusTap.h"
 #include "ui/FaceplateView.h"
 #include "ui/GuardRail.h"
 #include "channels/Engine.h"
@@ -320,7 +324,7 @@ int ORBITAMP_GATE_MAIN()
 
     // ---- ITS STRIP -----------------------------------------------------------------------------------
     auto guitar = make (products::orbitAmp());
-    check (arrows (AmpEditor::stripRows (*amp)) == "GATE > COMP > OCTAVE > FILTER > AMP > CHORUS > CAB IR > LIMIT",
+    check (arrows (AmpEditor::stripRows (*amp)) == "GATE > COMP > OCTAVE > ENVELOPE > AMP > CHORUS > CAB IR > LIMIT",
            "OrbitBass's strip: " + arrows (AmpEditor::stripRows (*amp)));
     check (arrows (AmpEditor::stripRows (*guitar)) == "GATE > AMP > DELAY > REVERB > CAB IR > LIMIT",
            "OrbitAmp's, as it was: " + arrows (AmpEditor::stripRows (*guitar)));
@@ -1698,6 +1702,225 @@ int ORBITAMP_GATE_MAIN()
                        + juce::String ((int) playing) + " columns while it shows, " + juce::String ((int) (tail - playing))
                        + " of the tail, then none in silence (" + juce::String ((int) (still - tail)) + ")");
         }
+
+        // ---- CHORUS, A BLOCK WITH ITS PICTURE: its two voices on a circle, where the stage's LFO is ---------------------
+        // THE PHASE IS THE STAGE'S: the tap derives it (the stage keeps its LFO to itself), so it is checked against the
+        // stage's own output — a click into a stage that has run a while, whose voice comes back where its heads stand
+        // (head = centre + swing · sin 2π·phase on the left, · cos on the right). Where the tap's phase puts the echo and
+        // where it comes, in samples: a phase a hundredth of a turn off misses by up to 9.
+        {
+            using felitronics::chorus::BassChorus;
+            using felitronics::chorus::BassChorusParams;
+            struct Call { int n; float rate; float mix; bool gap; };
+            const auto echoMiss = [] (const std::vector<Call>& calls) -> double
+            {
+                constexpr double fs = 48000.0;
+                const auto knobs = [] (const Call& c) { return BassChorusParams { 3.0f, c.mix, c.rate, 100.0f, 8.0f }; };
+                BassChorus st;
+                core::ChorusTap tap;
+                st.setParams (knobs (calls.front()));
+                if (! st.prepare (fs, 2048, 2))
+                    return 1.0e9;
+                tap.prepare (fs, st);
+                std::vector<float> l (2048), r (2048);
+                float* io[] { l.data(), r.data() };
+                for (const auto& c : calls)
+                {
+                    std::fill (l.begin(), l.end(), 0.0f);
+                    std::fill (r.begin(), r.end(), 0.0f);
+                    st.setParams (knobs (c));
+                    const bool was = st.isIdle();
+                    const bool ok  = st.process (c.gap ? nullptr : io, c.gap ? 0 : 2, c.n);
+                    tap.follow (st, was, ok ? c.n : 0, false);
+                }
+                const double phi0 = tap.phase(), rate = (double) calls.back().rate;
+                std::fill (l.begin(), l.end(), 0.0f);
+                std::fill (r.begin(), r.end(), 0.0f);
+                l[0] = r[0] = 1.0f;
+                (void) st.process (io, 2, 1024);
+                l[0] -= 1.0f;   // the dry is the input's own, bit for bit: what is left is the voice
+                r[0] -= 1.0f;
+                const double centre = 8.0 * fs / 1000.0;
+                const double swing  = felitronics::chorus::detail::smoothMin (3.0 * fs / 1000.0, centre - fs / 1000.0, fs / 1000.0);
+                double worst = 0.0;
+                for (int v = 0; v < 2; ++v)
+                {
+                    const auto& y = v == 0 ? l : r;
+                    int at = 16;
+                    for (int i = 16; i < 1000; ++i)
+                        if (y[(size_t) i] > y[(size_t) at])
+                            at = i;
+                    double m = 0.0, w = 0.0;
+                    for (int i = at - 2; i <= at + 2; ++i)
+                    {
+                        m += (double) i * (double) y[(size_t) i];
+                        w += (double) y[(size_t) i];
+                    }
+                    // Sample i's phase is phi0 + (i + 1)·rate/fs (the stage steps its clock, then reads); the echo comes
+                    // where i is its own head.
+                    double p = centre;
+                    for (int k = 0; k < 30; ++k)
+                    {
+                        const double a = juce::MathConstants<double>::twoPi * (phi0 + (p + 1.0) * rate / fs);
+                        p = centre + swing * (v == 0 ? std::sin (a) : std::cos (a));
+                    }
+                    worst = std::max (worst, std::abs (m / w - p));
+                }
+                return worst;
+            };
+            std::vector<Call> steady (140, Call { 512, 0.7f, 1.0f, false });
+            std::vector<Call> moved (30, Call { 333, 0.3f, 1.0f, false });   // the rate moved: the stage's glide, odd blocks, gaps
+            for (int k = 0; k < 60; ++k)
+                moved.push_back ({ std::array<int, 4> { 37, 480, 1024, 7 }[(size_t) k % 4], 2.5f, 1.0f, k < 20 && k % 7 == 3 });
+            std::vector<Call> woken (50, Call { 480, 1.5f, 1.0f, false });   // playing, then idle, then woken: a restart
+            for (int k = 0; k < 50; ++k)
+                woken.push_back ({ 480, 1.5f, 0.0f, false });
+            for (int k = 0; k < 37; ++k)
+                woken.push_back ({ 480, 1.5f, 1.0f, false });
+            const double a = echoMiss (steady), b = echoMiss (moved), c = echoMiss (woken);
+            check (a < 0.5 && b < 0.5 && c < 0.5, "CHORUS's dots where the stage's heads are: the echo of a click where the tap's phase "
+                                                  "puts it — steady " + juce::String (a, 3) + " samples, the rate moved mid-way "
+                                                  + juce::String (b, 3) + ", woken from idle " + juce::String (c, 3));
+        }
+
+        // ...AND THE PICTURE DRAWS THE TAP: its dots at the newest phase — the left at 2π·phase, the right a quarter turn on —
+        // on the radius the slider gives (the law's swing over its swing at the top), in its block 200 wide; and nothing
+        // is written while it is off screen, a hidden block included, nor while the stage idles — yet it runs in silence.
+        {
+            auto t = make (bass);
+            set (*t, params::chorusAmount, 0.6f);
+            set (*t, params::chorusRateHz, 1.37f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* block = findIn (*ed, (ChorusBlock*) nullptr);
+            juce::AudioBuffer<float> buf (2, 480);   // two hops a call: the newest entry is the call's end
+            juce::MidiBuffer midi;
+            const auto run = [&] (int calls)
+            {
+                for (int k = 0; k < calls; ++k)
+                {
+                    buf.clear();   // silence: a chorus runs on without a note
+                    t->processBlock (buf, midi);
+                }
+            };
+            run (40);
+            const auto hidden = t->chorusTap.written();
+            bool drawn = false;
+            juce::String said = "no CHORUS block";
+            if (block != nullptr)
+            {
+                auto& pic = block->picture();
+                t->chorusWatched.store (true);   // as on screen
+                run (60);
+                pic.pull();
+                const float want = (float) t->chorusTap.phase();
+                const auto  o = pic.centre();
+                const float rr = pic.reach() * pic.radiusFraction();
+                const auto angle = [&] (juce::Point<float> d) { return std::atan2 ((double) (o.y - d.y), (double) (d.x - o.x)); };
+                const auto turn  = [] (double x) { x = std::fmod (x, juce::MathConstants<double>::twoPi); return std::min (std::abs (x), juce::MathConstants<double>::twoPi - std::abs (x)); };
+                const double offL = turn (angle (pic.dotAt (0)) - juce::MathConstants<double>::twoPi * (double) want);
+                const double offR = turn (angle (pic.dotAt (1)) - angle (pic.dotAt (0)) - juce::MathConstants<double>::halfPi);
+                const float  lawFrac = felitronics::chorus::paramsForAmount (0.6f).depthMs / felitronics::chorus::kDepthMsAtFull;
+                drawn = block->getWidth() == FaceplateView::chorusWidth && pic.voices() == t->bassBackPlanes()
+                        && std::abs (pic.shownPhase() - want) < 1.0e-6f && offL < 1.0e-4 && offR < 1.0e-4
+                        && std::abs (pic.radiusFraction() - lawFrac) < 1.0e-6f && std::abs (lawFrac - 0.6f) < 1.0e-6f
+                        && std::abs (pic.dotAt (0).getDistanceFrom (o) - rr) < 0.01f && rr > 10.0f;
+                said = "block " + juce::String (block->getWidth()) + " px, " + juce::String (pic.voices()) + " voices, phase "
+                       + juce::String (pic.shownPhase(), 4) + " (the tap's " + juce::String (want, 4) + "), off " + juce::String (offL, 6)
+                       + " and a quarter turn off by " + juce::String (offR, 6) + " rad, radius " + juce::String (pic.radiusFraction(), 3)
+                       + " of the reach (" + juce::String (rr, 1) + " px)";
+            }
+            check (drawn, "CHORUS's picture draws the tap: " + said);
+
+            const auto shownW = t->chorusTap.written();
+            set (*t, params::chorusAmount, 0.0f);
+            run (20);   // the voice fades, the stage idles
+            const auto idleW = t->chorusTap.written();
+            run (60);
+            const auto stillW = t->chorusTap.written();
+            set (*t, params::chorusAmount, 0.6f);
+            if (block != nullptr)
+            {
+                block->setVisible (false);    // its block hidden: the picture is not on screen, whatever its own flag says
+                block->picture().look();      // ...as its timer's next tick finds
+            }
+            run (60);
+            const auto hiddenW = t->chorusTap.written();
+            check (hidden == 0 && shownW > 100 && stillW == idleW && hiddenW == stillW && ! t->chorusWatched.load(),
+                   "CHORUS's taps: nothing written off screen (" + juce::String ((int) hidden) + "), " + juce::String ((int) shownW)
+                       + " hops shown in silence, none more once idle (" + juce::String ((int) (stillW - idleW)) + ") and none with its block hidden ("
+                       + juce::String ((int) (hiddenW - stillW)) + ")");
+        }
+
+        // ITS RING READ WHOLE OR NOT AT ALL: a writer lapping the reader as fast as it can, the reader taking the whole
+        // ring — every entry it takes whole is its own number's, never its successor's: two in a row differ by one.
+        {
+            core::ChorusTap tap;
+            std::atomic<bool> stop { false };
+            std::thread writer ([&]
+            {
+                for (std::uint32_t k = 0; ! stop.load (std::memory_order_relaxed); ++k)
+                    tap.pushForTest ((float) (k & 0xFFFFFu), true);
+            });
+            std::array<core::ChorusTap::Entry, core::ChorusTap::slots> got {};
+            long long whole = 0, dropped = 0, mixed = 0;
+            const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds (150);
+            while (std::chrono::steady_clock::now() < until)
+            {
+                const int have = tap.read (got.data(), (int) got.size());
+                for (int i = 0; i < have; ++i)
+                {
+                    (got[(size_t) i].ok ? whole : dropped)++;
+                    if (i > 0 && got[(size_t) i].ok && got[(size_t) i - 1].ok)
+                    {
+                        const auto a = (std::uint32_t) got[(size_t) i - 1].phase, b = (std::uint32_t) got[(size_t) i].phase;
+                        mixed += ((a + 1u) & 0xFFFFFu) != b ? 1 : 0;
+                    }
+                }
+            }
+            stop.store (true);
+            writer.join();
+            check (mixed == 0 && whole > 1000 && dropped > 0,
+                   "CHORUS's ring under a writer lapping it: " + juce::String (whole) + " entries taken whole, " + juce::String (dropped)
+                       + " lapped and dropped, " + juce::String (mixed) + " mixed with another's");
+        }
+
+        // ITS NUMBERS ARE FIELDS: the RATE and the CROSSOVER typed in land on their parameters, each one step of the
+        // history, undone whole.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* block = findIn (*ed, (ChorusBlock*) nullptr);
+            const auto settle = [&] { for (int i = 0; i < 40; ++i) t->history.tick(); };
+            juce::String said = "no CHORUS block";
+            bool ok = false;
+            if (block != nullptr)
+            {
+                auto& pic = block->picture();
+                ok = true;
+                said.clear();
+                for (const auto& [f, id, typed, want] : { std::tuple { ChorusPicture::Field::rate, params::chorusRateHz, "1.35 Hz", 1.35f },
+                                                          std::tuple { ChorusPicture::Field::crossover, params::chorusCrossoverHz, "310", 310.0f } })
+                {
+                    settle();
+                    const float before = value (*t, id);
+                    const int   depth  = t->history.undoDepth();
+                    pic.openField (f);
+                    const bool  opened = pic.fieldEditor().isOpen();
+                    pic.fieldEditor().ed.setText (typed, false);
+                    pic.fieldEditor().takeAndHide();
+                    settle();
+                    const float landed = value (*t, id);
+                    const int   steps  = t->history.undoDepth() - depth;
+                    t->history.undo();
+                    settle();
+                    const float back = value (*t, id);
+                    ok = ok && opened && std::abs (landed - want) < 1.0e-3f && steps == 1 && std::abs (back - before) < 1.0e-3f;
+                    said << id << " " << juce::String (before, 2) << " -> typed " << typed << " -> " << juce::String (landed, 2) << " in "
+                         << steps << " step(s), undone to " << juce::String (back, 2) << "; ";
+                }
+            }
+            check (ok, "CHORUS's numbers are fields: " + said);
+        }
     }
 
     // ---- REVIEW ROUND 5 (of 317fbe1) AND THE OWNER'S LOOK (step 4b) --------------------------------------------
@@ -1998,25 +2221,47 @@ int ORBITAMP_GATE_MAIN()
             };
         };
 
-        // ITS PLACE: OCTAVE 170 wide, the AMP's row giving the width, FILTER and CHORUS as they were.
+        // ITS PLACE: OCTAVE 170 wide, ENVELOPE 170, CHORUS 200 — and THE AMP AS WIDE AS IT WAS beside narrow rails: the
+        // face wider by what OCTAVE and ENVELOPE took (the AMP's section 2 is the real packs' lever, its EQ row's knobs
+        // need their room), the guitar face's AMP and the BLEND column, at the window's least width. CHORUS's width
+        // comes out of the cabinet's share. No lamps: each picture shows its effect at work.
         {
             std::unique_ptr<juce::AudioProcessorEditor> ed (amp->createEditor());
             std::map<juce::String, int> widths;
+            int ampW = -1, faceW = -1, lamps = 0;
             std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
             {
                 if (auto* g = dynamic_cast<GuardBlock*> (&c))
                     widths[g->guardName()] = g->getWidth();
+                if (auto* f = dynamic_cast<FilterBlock*> (&c))
+                    widths["ENVELOPE"] = f->getWidth();
+                if (auto* ch = dynamic_cast<ChorusBlock*> (&c))
+                    widths["CHORUS"] = ch->getWidth();
+                if (auto* p = dynamic_cast<CapturedBlockPanel*> (&c))
+                    ampW = p->getWidth();
+                if (auto* f = dynamic_cast<FaceplateView*> (&c))
+                    faceW = f->getWidth();
+                if (dynamic_cast<GuardLamp*> (&c) != nullptr && c.isVisible())
+                    ++lamps;
                 for (auto* child : c.getChildren())
                     walk (*child);
             };
             walk (*ed);
             auto* scope = findScope (*ed);
+            // The guitar face's AMP at the same window (the face less the bass's extra, less the GATE) and the BLEND column.
+            const int ampThen = faceW - FaceplateView::bassExtraWidth - GuardBlock::designWidth - FaceplateView::colGap
+                              + CapturedBlockPanel::bassSideW;
             check (widths["OCTAVE"] == FaceplateView::octaveWidth && FaceplateView::octaveWidth == 170
-                       && widths["FILTER"] == GuardBlock::designWidth && widths["CHORUS"] == GuardBlock::designWidth
+                       && widths["ENVELOPE"] == FaceplateView::filterWidth && widths["CHORUS"] == FaceplateView::chorusWidth
                        && scope != nullptr && scope->getWidth() > 100 && scope->getHeight() > 100,
                    "OCTAVE's block " + juce::String (widths["OCTAVE"]) + " px wide with its picture "
                        + (scope != nullptr ? juce::String (scope->getWidth()) + " x " + juce::String (scope->getHeight()) : juce::String ("missing"))
-                       + "; FILTER " + juce::String (widths["FILTER"]) + ", CHORUS " + juce::String (widths["CHORUS"]));
+                       + "; ENVELOPE " + juce::String (widths["ENVELOPE"]) + ", CHORUS " + juce::String (widths["CHORUS"]));
+            check (faceW > 0 && ampW == ampThen,
+                   "the AMP " + juce::String (ampW) + " px wide at the face's least width " + juce::String (faceW)
+                       + " — as wide as it stood beside narrow rails (" + juce::String (ampThen) + ")");
+            check (lamps == 2, "the bass's effects show no lamp, COMP, OCTAVE, ENVELOPE and CHORUS alike: the GATE's and the LIMIT's alone ("
+                                   + juce::String (lamps) + " lamps)");
         }
 
         // THE MAPPING: four notes across the bass's range, the -1 alone and then the -2 under it — the note named is the
@@ -2191,6 +2436,276 @@ int ORBITAMP_GATE_MAIN()
         }
     }
 
+    // ---- ENVELOPE (FILTER), A BLOCK OF ITS OWN WITH ITS PICTURE — the curve the stage's, its marks where the sweep goes,
+    //      its start corner a field, its taps idle while nobody looks, still when the sweep stands, never two laps mixed --
+    {
+        namespace ef = felitronics::envfilter;
+        const auto findIn = [] (juce::Component& root, auto* none)
+        {
+            using T = std::remove_pointer_t<decltype (none)>;
+            T* found = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* t = dynamic_cast<T*> (&c); t != nullptr && found == nullptr)
+                    found = t;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+        struct Gestures final : juce::AudioProcessorParameter::Listener
+        {
+            int begun = 0, ended = 0;
+            void parameterValueChanged (int, float) override {}
+            void parameterGestureChanged (int, bool starting) override { ++(starting ? begun : ended); }
+        };
+
+        // THE BLOCK: ENVELOPE, 170 wide after OCTAVE, the picture right of its slider.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* blk = findIn (*ed, (FilterBlock*) nullptr);
+            check (blk != nullptr && blk->getWidth() == FaceplateView::filterWidth && blk->picture().getWidth() > 90
+                       && blk->picture().getHeight() > 120,
+                   "ENVELOPE's block " + juce::String (blk != nullptr ? blk->getWidth() : 0) + " wide, its picture "
+                       + juce::String (blk != nullptr ? blk->picture().getWidth() : 0) + " x " + juce::String (blk != nullptr ? blk->picture().getHeight() : 0));
+        }
+
+        // THE CURVE IS THE STAGE'S: a quiet probe (-60 dBFS, under every sensitivity's floor, so it moves nothing) through
+        // the module, the sweep at rest and held part-way open by a steady key; its settled gain at nine frequencies
+        // against the picture's at the cutoff the module reports — both modes, the lows kept and not, mix 1 and 0.4.
+        {
+            const auto measure = [] (const ef::EnvelopeFilterParams& p, float keyLevel, double hz, double& cutoff)
+            {
+                ef::EnvelopeFilter f;
+                (void) f.prepare (sampleRate, blockSize, 1);
+                f.setParams (p);
+                std::vector<float> x ((size_t) blockSize), key ((size_t) blockSize, keyLevel);
+                constexpr double a = 1.0e-3;
+                const int nBlocks = (int) (sampleRate / blockSize);
+                double c = 0.0, sn = 0.0;
+                long long n = 0, counted = 0;
+                for (int b = 0; b < nBlocks; ++b)
+                {
+                    const long long first = n;
+                    for (int i = 0; i < blockSize; ++i, ++n)
+                        x[(size_t) i] = (float) (a * std::sin (juce::MathConstants<double>::twoPi * hz * (double) n / sampleRate));
+                    float* io[] = { x.data() };
+                    const float* k[] = { key.data() };
+                    (void) f.process (io, 1, blockSize, keyLevel > 0.0f ? k : nullptr, keyLevel > 0.0f ? 1 : 0);
+                    if (b >= nBlocks / 2)
+                        for (int i = 0; i < blockSize; ++i, ++counted)
+                        {
+                            const double ph = juce::MathConstants<double>::twoPi * hz * (double) (first + i) / sampleRate;
+                            c += x[(size_t) i] * std::cos (ph);
+                            sn += x[(size_t) i] * std::sin (ph);
+                        }
+                }
+                cutoff = (double) f.shownCutoffHz();
+                return 20.0 * std::log10 (2.0 * std::sqrt (c * c + sn * sn) / (double) counted / a);
+            };
+            struct Case { ef::Mode mode; float keep; float amount; float q; int range; ef::Direction dir; };
+            const Case cases[] { { ef::Mode::lowPass, 1.0f, 0.6f, 4.0f, 1, ef::Direction::up },
+                                 { ef::Mode::lowPass, 0.0f, 0.2f, 12.0f, 1, ef::Direction::up },
+                                 { ef::Mode::bandPass, 1.0f, 0.6f, 8.0f, 2, ef::Direction::down },
+                                 { ef::Mode::bandPass, 0.0f, 0.2f, 2.0f, 0, ef::Direction::up } };
+            double worst = 0.0;
+            juce::String where;
+            int probes = 0, moved = 0;
+            for (const auto& cs : cases)
+                for (const float keyLevel : { 0.0f, 0.1f })
+                    for (const double hz : { 50.0, 90.0, 150.0, 250.0, 400.0, 700.0, 1200.0, 2500.0, 6000.0 })
+                    {
+                        ef::EnvelopeFilterParams menu;
+                        menu.mode = cs.mode;
+                        menu.keepLows = cs.keep;
+                        menu.keepLowsHz = 150.0f;
+                        menu.resonance = cs.q;
+                        menu.sweepLoHz = params::filterRangeHz[cs.range][0];
+                        menu.sweepHiHz = params::filterRangeHz[cs.range][1];
+                        menu.direction = cs.dir;
+                        const auto p = ef::paramsForAmount (cs.amount, menu);
+                        double cutoff = 0.0;
+                        const double heard = measure (p, keyLevel, hz, cutoff);
+                        const double drawn = core::envelopeResponseDb (p, cutoff, hz, sampleRate);
+                        ++probes;
+                        if (keyLevel > 0.0f && std::abs (std::log2 (cutoff / core::envelopeRestHz (p))) > 0.5)
+                            ++moved;   // the key held the sweep well away from its rest
+                        if (std::abs (heard - drawn) > worst)
+                        {
+                            worst = std::abs (heard - drawn);
+                            where = juce::String (cs.mode == ef::Mode::lowPass ? "LP" : "BP") + " at " + juce::String (hz, 0) + " Hz, cutoff "
+                                    + juce::String (cutoff, 0) + ": heard " + juce::String (heard, 2) + ", drawn " + juce::String (drawn, 2);
+                        }
+                    }
+            check (probes == 72 && moved == 36 && worst <= 0.2,
+                   "the picture's curve is what the stage does, " + juce::String (probes) + " probes (" + juce::String (moved)
+                       + " with the sweep held open) within " + juce::String (worst, 3) + " dB (worst: " + where + ")");
+        }
+
+        // THE MARKS ARE WHERE THE SWEEP GOES. The start: the amp in silence rests where the line stands, each range either
+        // way. The reach: a fingered note (-18 dBFS) at the key takes the sweep to the reach mark at every slider — exactly
+        // through the module with a steady key, and through the whole amp with a played square.
+        {
+            double worstRest = 0.0;
+            for (const auto& [range, down] : { std::pair<int, bool> { 1, false }, { 2, true }, { 0, false }, { 0, true } })
+            {
+                auto t = make (bass);
+                set (*t, params::filterAmount, 0.6f);
+                set (*t, params::filterRange, (float) range);
+                set (*t, params::filterDirection, down ? 1.0f : 0.0f);
+                std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+                auto& pic = findIn (*ed, (FilterBlock*) nullptr)->picture();
+                (void) tone (*t, 110.0, -6.0f, 40, -1, {}, 0);
+                worstRest = std::max (worstRest, std::abs (std::log2 ((double) t->filterShownCutoffHz() / pic.restHz())));
+            }
+            double worstReach = 0.0;
+            for (const float amount : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
+            {
+                ef::EnvelopeFilterParams menu;
+                const auto p = ef::paramsForAmount (amount, menu);
+                ef::EnvelopeFilter f;
+                (void) f.prepare (sampleRate, blockSize, 1);
+                f.setParams (p);
+                std::vector<float> x ((size_t) blockSize, 0.0f), key ((size_t) blockSize, (float) juce::Decibels::decibelsToGain (FilterCurve::fingeredDb));
+                float* io[] = { x.data() };
+                const float* k[] = { key.data() };
+                for (int b = 0; b < 40; ++b)
+                    (void) f.process (io, 1, blockSize, k, 1);
+                worstReach = std::max (worstReach, std::abs (std::log2 ((double) f.shownCutoffHz() / core::envelopeReachHz (p, FilterCurve::fingeredDb))));
+            }
+            double played = 0.0, drawnReach = 0.0;
+            {
+                auto t = make (bass);
+                set (*t, params::filterAmount, 0.5f);
+                std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+                auto& pic = findIn (*ed, (FilterBlock*) nullptr)->picture();
+                juce::AudioBuffer<float> buf (2, blockSize);
+                juce::MidiBuffer midi;
+                const float a = (float) juce::Decibels::decibelsToGain (FilterCurve::fingeredDb);
+                long long n = 0;
+                for (int b = 0; b < 60; ++b)
+                {
+                    for (int i = 0; i < blockSize; ++i, ++n)
+                        for (int ch = 0; ch < 2; ++ch)
+                            buf.setSample (ch, i, (n / 109) % 2 == 0 ? a : -a);   // a 220 Hz square: |x| steady at the hit
+                    t->processBlock (buf, midi);
+                }
+                played = (double) t->filterShownCutoffHz();
+                drawnReach = pic.reachHz();
+            }
+            check (worstRest <= 0.005 && worstReach <= 0.005 && std::abs (std::log2 (played / drawnReach)) <= 0.07,
+                   "ENVELOPE's marks: the start where the amp rests (worst " + juce::String (worstRest, 4) + " octave), the reach where a "
+                       "fingered note takes the sweep (worst " + juce::String (worstReach, 4) + " octave); played through the amp at 0.5, "
+                       + juce::String (played, 0) + " Hz against the mark's " + juce::String (drawnReach, 0) + " Hz");
+        }
+
+        // THE START CORNER, A FIELD: typed, Enter — the RANGE whose resting corner is nearest, one gesture each; going down
+        // it is the range's high end, and "3" is 3K.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto& pic = findIn (*ed, (FilterBlock*) nullptr)->picture();
+            auto* rangeP = t->apvts.getParameter (params::filterRange);
+            Gestures gestures;
+            rangeP->addListener (&gestures);
+            pic.openStartField();
+            const bool opened = pic.fieldOpen();
+            pic.startField().ed.setText ("300", false);
+            pic.startField().takeAndHide();                                      // Enter
+            const int high = juce::roundToInt (value (*t, params::filterRange));
+            const double highRest = pic.restHz();
+            pic.typeStartHz (120.0f);
+            const int low = juce::roundToInt (value (*t, params::filterRange));
+            set (*t, params::filterDirection, 1.0f);
+            pic.typeStartHz (3.0f);
+            const int mid = juce::roundToInt (value (*t, params::filterRange));
+            const double downRest = pic.restHz();
+            rangeP->removeListener (&gestures);
+            check (opened && ! pic.fieldOpen() && high == 2 && juce::approximatelyEqual (highRest, 300.0) && low == 0 && mid == 1
+                       && juce::approximatelyEqual (downRest, 3000.0) && gestures.begun == 3 && gestures.ended == 3,
+                   "ENVELOPE's start corner typed: 300 -> " + params::filterRanges[high] + " (" + juce::String (highRest, 0) + " Hz), 120 -> "
+                       + params::filterRanges[low] + ", going down 3 -> " + params::filterRanges[mid] + " (" + juce::String (downRest, 0)
+                       + " Hz); " + juce::String (gestures.begun) + " gestures begun, " + juce::String (gestures.ended) + " ended");
+        }
+
+        // THE TAPS: nothing written with no picture on screen — an editor up but not showing included; written while it
+        // is, the newest column where the module says the sweep stands; still once the sweep has landed; a fresh look takes
+        // the next column; and the picture's own tick lets go when it is not showing — a hidden parent tells no child.
+        {
+            auto t = make (bass);
+            set (*t, params::filterAmount, 0.8f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto& pic = findIn (*ed, (FilterBlock*) nullptr)->picture();
+            (void) tone (*t, 41.2, -6.0f, 50);
+            const auto hidden = t->filterTap.written();
+            t->filterWatched.store (true);
+            (void) tone (*t, 41.2, -6.0f, 60);
+            const auto playing = t->filterTap.written();
+            core::FilterTap::Column newest[1];
+            const bool atModule = t->filterTap.read (newest, 1) == 1 && juce::exactlyEqual (newest[0].hz, t->filterShownCutoffHz());
+            (void) tone (*t, 41.2, -6.0f, 150, -1, {}, 0);
+            const auto tail = t->filterTap.written();
+            (void) tone (*t, 41.2, -6.0f, 100, -1, {}, 0);
+            const auto still = t->filterTap.written();
+            t->filterWatched.store (false);
+            (void) tone (*t, 41.2, -6.0f, 5, -1, {}, 0);
+            t->filterWatched.store (true);
+            (void) tone (*t, 41.2, -6.0f, 1, -1, {}, 0);
+            const auto woken = t->filterTap.written();
+            t->filterWatched.store (false);
+            check (hidden == 0 && playing > 0 && atModule && tail > playing && still == tail && woken > still,
+                   "ENVELOPE's taps: nothing written off screen (" + juce::String ((int) hidden) + "), " + juce::String ((int) playing)
+                       + " columns playing" + (atModule ? ", the newest the module's own cutoff, " : ", NOT the module's cutoff, ")
+                       + juce::String ((int) (tail - playing)) + " of the ride back, none once it stood (" + juce::String ((int) (still - tail))
+                       + "), " + juce::String ((int) (woken - still)) + " on a fresh look");
+
+            const bool pollsHidden = pic.polling() && ! pic.isWatching();
+            pic.tick (true);                                   // as if it showed
+            const bool watched = t->filterWatched.load() && pic.isWatching();
+            pic.tick();                                        // the timer's tick: not showing (no screen here, as under a hidden parent)
+            check (pollsHidden && watched && ! t->filterWatched.load() && ! pic.isWatching() && pic.polling(),
+                   "ENVELOPE's picture asks isShowing() on every tick: watching while it shows, let go the tick it does not, polling still");
+        }
+
+        // NEVER TWO LAPS OF THE RING: a writer racing a reader; every column read is the one its number says, or dropped.
+        {
+            auto tap = std::make_unique<core::FilterTap>();
+            tap->prepare (sampleRate);
+            // A hundredth of an octave a column, never still, over a period prime to the ring's: the column a lap later in
+            // the same slot holds another value — a pattern that repeated with the ring would make every mix-up look right.
+            std::vector<float> hzOf (997);
+            for (size_t i = 0; i < hzOf.size(); ++i)
+                hzOf[i] = (float) (100.0 * std::exp2 ((double) i / 100.0));
+            const int hop = (int) std::lround (sampleRate * core::FilterTap::hopSeconds);
+            std::atomic<bool> stop { false };
+            std::thread writer ([&]
+            {
+                for (std::uint32_t k = 0; ! stop.load (std::memory_order_relaxed); ++k)
+                    tap->write (hzOf[k % hzOf.size()], hop);
+            });
+            std::vector<core::FilterTap::Column> cols ((size_t) core::FilterTap::columns);
+            long long reads = 0, seen = 0, wrong = 0, dropped = 0;
+            const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds (300);
+            while (std::chrono::steady_clock::now() < until)
+            {
+                const auto want = (int) std::min<std::uint32_t> (tap->written(), (std::uint32_t) cols.size());
+                const int got = tap->read (cols.data(), (int) cols.size());
+                ++reads;
+                dropped += std::max (0, want - got);
+                for (int i = 0; i < got; ++i, ++seen)
+                    if (! juce::exactlyEqual (cols[(size_t) i].hz, hzOf[cols[(size_t) i].index % hzOf.size()]))
+                        ++wrong;
+            }
+            stop.store (true);
+            writer.join();
+            std::printf ("envelope tap race: %lld reads, %lld columns, %lld dropped mid-read, %lld wrong\n", reads, seen, dropped, wrong);
+            check (reads > 100 && seen > 1000 && wrong == 0, "ENVELOPE's tap never mixes two laps: " + juce::String (seen) + " columns read under a racing writer, "
+                                                                 + juce::String (wrong) + " wrong, " + juce::String (dropped) + " dropped as overwritten");
+        }
+    }
+
     // ---- WHOSE STATE IT IS ----------------------------------------------------------------------------
     {
         auto source = make (bass);
@@ -2234,7 +2749,7 @@ int ORBITAMP_GATE_MAIN()
         LoadBreakdown gw (*guitar), bw (*amp);
         check (gw.getHeight() == 384 && bw.getHeight() == 384 + 2 * 22,
                "the load window: OrbitAmp's " + juce::String (gw.getHeight()) + " px (384 before), OrbitBass's " + juce::String (bw.getHeight())
-                   + " (no DELAY, no REVERB; COMP, OCTAVE, FILTER, CHORUS)");
+                   + " (no DELAY, no REVERB; COMP, OCTAVE, ENVELOPE, CHORUS)");
     }
 
     // ---- ITS TUNER -----------------------------------------------------------------------------------

@@ -1063,6 +1063,8 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         bassComp.snapAmount (bass.compAmount->load());
         compTap.prepare (sampleRate);
         octaveTap->prepare (sampleRate);
+        filterTap.prepare (sampleRate);
+        filterTapLive = false;
         bassCuts.prepare (sampleRate);
         diNow  = juce::jlimit (0.0f, 1.0f, bass.diMix->load() * 0.01f);
         diStep = (float) (1000.0 / (juce::jmax (8000.0, sampleRate) * 20.0));   // the prepared rate, not getSampleRate()'s
@@ -1078,6 +1080,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         octaverReady   = octaver.prepare (sampleRate, block, 1);
         envFilterReady = envFilter.prepare (sampleRate, block, 1);
         chorusReady    = chorus.prepare (sampleRate, block, juce::jlimit (1, 2, channels));
+        chorusTap.prepare (sampleRate, chorus);   // its phase where the stage's restart put it
         for (auto& w : effectWorking)
             w.store (false, std::memory_order_relaxed);
         filterKey.setSize (1, block);
@@ -1260,9 +1263,10 @@ void AmpProcessor::tellOctave() noexcept
     }
 }
 
-void AmpProcessor::tellFilter() noexcept
+felitronics::envfilter::EnvelopeFilterParams AmpProcessor::filterKnobsNow (felitronics::envfilter::EnvelopeFilterParams menu) const noexcept
 {
-    auto menu = filterToldValid ? filterTold : felitronics::envfilter::EnvelopeFilterParams {};
+    if (bass.filter == nullptr)
+        return menu;
     const int range = juce::jlimit (0, 2, juce::roundToInt (bass.filterRange->load()));
     menu.attackMs   = bass.filterAttackMs->load();
     menu.releaseMs  = bass.filterReleaseMs->load();
@@ -1276,7 +1280,12 @@ void AmpProcessor::tellFilter() noexcept
     menu.keepLows   = bass.filterKeepLows->load() > 0.5f ? 1.0f : 0.0f;
     menu.keepLowsHz = bass.filterKeepHz->load();
     const float amount = linkWorks (params::rowFilter) ? bass.filter->load() : 0.0f;
-    const auto  p = felitronics::envfilter::paramsForAmount (amount, menu);
+    return felitronics::envfilter::paramsForAmount (amount, menu);
+}
+
+void AmpProcessor::tellFilter() noexcept
+{
+    const auto p = filterKnobsNow (filterToldValid ? filterTold : felitronics::envfilter::EnvelopeFilterParams {});
     if (! filterToldValid || ! sameKnobs (p, filterTold))
     {
         envFilter.setParams (p);
@@ -1337,6 +1346,14 @@ void AmpProcessor::runFilter (float* const* channels, int numChannels, int numSa
     const bool keyed = numChannels > 0 && numSamples <= filterKey.getNumSamples();
     (void) envFilter.process (channels, numChannels, numSamples, keyed ? key : nullptr, keyed ? 1 : 0);
     effectWorking[1].store (! envFilter.isIdle(), std::memory_order_relaxed);
+
+    // ITS PICTURE ON SCREEN: where the sweep stands, into the tap — a fresh look takes the next column whatever it holds.
+    const bool watched = filterWatched.load (std::memory_order_relaxed);
+    if (watched && ! filterTapLive)
+        filterTap.wake();
+    filterTapLive = watched;
+    if (watched)
+        filterTap.write (envFilter.shownCutoffHz(), numSamples);
 }
 
 void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSamples) noexcept
@@ -1344,7 +1361,9 @@ void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSa
     if (! chorusReady)
         return;
     tellChorus();
-    (void) chorus.process (channels, numChannels, numSamples);
+    const bool wasIdle = chorus.isIdle();
+    const bool ran     = chorus.process (channels, numChannels, numSamples);
+    chorusTap.follow (chorus, wasIdle, ran ? numSamples : 0, chorusWatched.load (std::memory_order_relaxed));
     effectWorking[2].store (! chorus.isIdle(), std::memory_order_relaxed);
 }
 

@@ -19,6 +19,8 @@
 #include "core/BassComp.h"
 #include "core/OctaveTap.h"
 #include "core/BassCuts.h"
+#include "core/FilterTap.h"
+#include "core/ChorusTap.h"
 #include "core/BypassFade.h"
 #include "core/BypassWire.h"
 #include "core/CabinetIr.h"
@@ -880,6 +882,21 @@ public:
     const std::unique_ptr<core::OctaveTap> octaveTap { std::make_unique<core::OctaveTap>() };
     std::atomic<bool> octaveWatched { false };
 
+    /** THE ENVELOPE'S PICTURE (ui/FilterBlock.h): where FILTER's sweep stood, a column every 5 ms — written by the audio
+        thread only while `filterWatched`, which the picture sets while it is on screen; read on the picture's own timer. */
+    core::FilterTap filterTap;
+    std::atomic<bool> filterWatched { false };
+
+    /** FILTER's knobs as its stage is told them now: the menu's fields from their parameters, through the module's law
+        at its slider — at 0 while its link stands by. The stage is told exactly this (tellFilter) and its picture draws
+        it (any thread: relaxed reads of the parameters). `base` gives the fields no parameter holds — none today. */
+    felitronics::envfilter::EnvelopeFilterParams filterKnobsNow (felitronics::envfilter::EnvelopeFilterParams base = {}) const noexcept;
+
+    /** CHORUS'S PICTURE (ui/ChorusBlock.h): its LFO's phase, derived on every call of the stage and written into the
+        ring only while `chorusWatched`, which the picture sets while it is on screen; read on the picture's own timer. */
+    core::ChorusTap chorusTap;
+    std::atomic<bool> chorusWatched { false };
+
     /** The ratio COMP works at now — the law's, or the hand's (the audio thread's; a gate reads it between blocks). */
     double compRatioNow() const noexcept { return bassComp.ratioNow(); }
 
@@ -1398,6 +1415,7 @@ private:
     felitronics::envfilter::EnvelopeFilterParams filterTold {};
     felitronics::chorus::BassChorusParams        chorusTold {};
     bool octaveToldValid = false, filterToldValid = false, chorusToldValid = false;
+    bool filterTapLive = false;   // the audio thread's: whether it wrote FILTER's tap last block (a fresh look wakes it)
     std::array<int, 3> effectTold {};     // setParams calls, per effect — for a gate (effectTells)
     std::atomic<bool> effectWorking[3] {};  // FILTER's and CHORUS's "not idle", for their lamps (OCTAVE's is the module's)
 

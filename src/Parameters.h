@@ -547,7 +547,7 @@ inline constexpr StageName stageNames[numStages] = {
     { "GATE",   "GATE"      },
     { "COMP",   "COMP"      },
     { "OCTAVE", "OCTAVE"    },
-    { "FILTER", "FILTER"    },
+    { "ENVELOPE", "ENVELOPE" },   // FILTER: the owner reads it as ENVELOPE (31.10)
     { "AMP",    "AMP"       },
     { "AMP EQ", "AMP EQ"    },
     { "DELAY",  "DELAY"     },
@@ -581,7 +581,7 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* GATE   */ { "GATE",   false, false, gateOn,    stGate,   numStages },
     /* COMP   */ { "COMP",   false, false, compOn,    stComp,   numStages },
     /* OCTAVE */ { "OCTAVE", false, false, octaveOn,  stOctave, numStages },
-    /* FILTER */ { "FILTER", false, false, filterOn,  stFilter, numStages },
+    /* FILTER */ { "ENVELOPE", false, false, filterOn, stFilter, numStages },
     /* AMP    */ { "AMP",    true,  true,  preampOn,  stPreamp, stPreampEq },
     /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages },
     /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages },

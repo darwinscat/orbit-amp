@@ -67,7 +67,7 @@ public:
     /** The rail at the block's left edge, the scale to its right — or mirrored. */
     bool railOnLeft = true;
 
-    /** A PICTURE of what the block's effect does, right of its rail and scale, over the lamp — OCTAVE's scope
+    /** A PICTURE of what the block's effect does, right of its rail and scale — OCTAVE's scope
         (ui/OctaveScope.h). The block is then laid wider than designWidth and the picture takes the rest; with none it
         is the guard's narrow block as it always was. A click on the picture is the block's: its menu. */
     void setPicture (std::unique_ptr<juce::Component> p)
@@ -79,6 +79,17 @@ public:
     }
 
     juce::Component* pictureShown() const noexcept { return picture.get(); }
+
+    /** Whether the lamp stands at the block's foot — a guard's always; an effect whose picture shows it at work
+        (OCTAVE's) goes without, its rail and picture down to the foot, as the bass's other blocks stand. */
+    void setLampShown (bool shown)
+    {
+        lampShown = shown;
+        lamp.setVisible (shown);
+        resized();
+    }
+
+    bool lampIsShown() const noexcept { return lampShown; }
 
     void mouseDown (const juce::MouseEvent& e) override { openMenu (e.getScreenPosition()); }
 
@@ -102,8 +113,11 @@ protected:
 
         // The lamp across the block's whole width at its foot (Oleh, 24.10); above it the rail at the
         // outer edge, the scale beside it.
-        lamp.setBounds (r.removeFromBottom (GuardRail::designWidth));
-        r.removeFromBottom (lampGap);
+        if (lampShown)
+        {
+            lamp.setBounds (r.removeFromBottom (GuardRail::designWidth));
+            r.removeFromBottom (lampGap);
+        }
 
         auto col = railOnLeft ? r.removeFromLeft (GuardRail::designWidth) : r.removeFromRight (GuardRail::designWidth);
         rail.setBounds (col);
@@ -166,6 +180,7 @@ private:
     GuardLamp lamp;
     std::unique_ptr<juce::Component> picture;
     juce::Rectangle<int> nameBox, scaleBox;
+    bool lampShown = true;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 

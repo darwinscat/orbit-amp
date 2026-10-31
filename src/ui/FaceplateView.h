@@ -16,6 +16,8 @@ namespace orbitamp
 {
 
 class CompBlock;
+class FilterBlock;
+class ChorusBlock;
 
 class AmpProcessor;
 
@@ -116,13 +118,21 @@ public:
     /** OrbitBass's COMP block, after the GATE: its slider, its picture and its ratio square (ui/CompBlock.h). */
     static constexpr int compWidth = 360;
 
-    /** OrbitBass's OCTAVE block, its rail and its picture of the note and its sub (ui/OctaveScope.h): wider than a
-        guard's rail alone, the width taken from the AMP's share of the row — the face's width stays bassExtraWidth's. */
+    /** OrbitBass's OCTAVE block, its rail and its picture of the note and its sub (ui/OctaveScope.h), after COMP. */
     static constexpr int octaveWidth = 170;
 
-    /** ...and by its COMP block and two of its effects' rails at the head of the AMP's row, OCTAVE and FILTER (CHORUS
-        stands at the head of the cabinet's row, which takes what is left). */
-    static constexpr int bassExtraWidth = CapturedBlockPanel::bassSideW + compWidth + colGap + 2 * (GuardBlock::designWidth + colGap);
+    /** OrbitBass's ENVELOPE block (FILTER inside), after OCTAVE: its slider and its picture (ui/FilterBlock.h). */
+    static constexpr int filterWidth = 170;
+
+    /** OrbitBass's CHORUS block, at the head of the cabinet's row: its slider and its picture (ui/ChorusBlock.h). The
+        row's width is the AMP's, so the cabinet gives up what it takes. */
+    static constexpr int chorusWidth = 200;
+
+    /** ...and by its COMP block and two of its effects at the head of the AMP's row, OCTAVE and ENVELOPE — the face
+        wider by all three, so the AMP keeps the width it had beside narrow rails (its section 2 is the lever's, its EQ
+        row's knobs need theirs). CHORUS stands at the head of the cabinet's row, which takes what is left. */
+    static constexpr int bassExtraWidth = CapturedBlockPanel::bassSideW + compWidth + colGap
+                                        + (octaveWidth + colGap) + (filterWidth + colGap);
 
     // Row 1 is the AMP: three sections side by side — the GAIN dial, the channel lever, the picture
     // well with the meters at its edges — each a tier over one shared strip of controls. The EQ curve
@@ -161,14 +171,17 @@ private:
     CabinetBlock       cabinet;
     GuardBlock         gate, limit;
 
-    /** OrbitBass's three effects, each ONE slider — a guard's rail over its amount, 0..1, and its menu on a right
-        click (ui/BassControls.h); none on a guitar amp. Their lamps light while each works; they latch nothing. OCTAVE's
-        block carries its picture beside the rail, the note and its sub (ui/OctaveScope.h), octaveWidth wide. */
-    std::unique_ptr<GuardBlock> octave, filter, chorus;
+    /** OrbitBass's three effects, each ONE slider — a rail over its amount, 0..1, the bass's look (bass::asBassRail) —
+        and its picture beside it, its menu on a click (ui/BassControls.h); none on a guitar amp. No lamps: the pictures
+        show the effect at work. OCTAVE is a guard's block carrying its picture, the note and its sub (ui/OctaveScope.h);
+        ENVELOPE (its FILTER, ui/FilterBlock.h) and CHORUS (ui/ChorusBlock.h) blocks of their own. */
+    std::unique_ptr<GuardBlock>  octave;
+    std::unique_ptr<FilterBlock> filter;
+    std::unique_ptr<ChorusBlock> chorus;
 
     /** OrbitBass's COMP, a block of its own (ui/CompBlock.h); none on a guitar amp. */
     std::unique_ptr<CompBlock> comp;
-    std::atomic<bool> effectWorked[3] {};
+    std::atomic<bool> octaveWorked {};   // the latch OCTAVE's guard block holds for a lamp it does not show
 
     /** Who stands on the panel, indexed by Block. The core three out of the box; the delay is
         reached for, not found already on. */
