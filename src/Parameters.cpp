@@ -110,6 +110,14 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                 std::make_unique<Float>  (juce::ParameterID { chorusCentreMs, 1 },    "Chorus Centre ms",
                                           juce::NormalisableRange<float> (5.0f, 25.0f, 0.1f), 8.0f));
 
+    // IN THE STRIP OR NOT (Parameters.h): the three effects in, the echo and the room out — a player adds them through
+    // the strip's checklist.
+    layout.add (std::make_unique<Bool> (juce::ParameterID { octavePresent, 1 }, "Octave In Strip", true),
+                std::make_unique<Bool> (juce::ParameterID { filterPresent, 1 }, "Envelope In Strip", true),
+                std::make_unique<Bool> (juce::ParameterID { chorusPresent, 1 }, "Chorus In Strip", true),
+                std::make_unique<Bool> (juce::ParameterID { delayPresent, 1 },  "Delay In Strip", false),
+                std::make_unique<Bool> (juce::ParameterID { reverbPresent, 1 }, "Reverb In Strip", false));
+
     layout.add (std::make_unique<Float> (juce::ParameterID { ampBlend, 1 },       "Amp Blend",
                                          juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f),
                 std::make_unique<Float> (juce::ParameterID { ampBlendHz, 1 },     "Amp Blend Hz",

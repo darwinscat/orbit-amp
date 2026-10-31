@@ -11,6 +11,7 @@
 #include "BassSettings.h"
 #include "FilterBlock.h"
 #include "OctaveScope.h"
+#include "SpaceBlocks.h"
 
 namespace orbitamp
 {
@@ -89,6 +90,18 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         addAndMakeVisible (*chorus);
     }
 
+    // The bass's DELAY and REVERB, compact: their MIX rail and their picture, the rest in their windows.
+    if (processor.product().chain == Chain::bass)
+    {
+        spaceDelay  = std::make_unique<SpaceBlock> (processor, SpacePicture::Which::delay);
+        spaceReverb = std::make_unique<SpaceBlock> (processor, SpacePicture::Which::reverb);
+        for (auto* b : { spaceDelay.get(), spaceReverb.get() })
+        {
+            b->setSwitchShown (false);
+            addChildComponent (*b);
+        }
+    }
+
     addAndMakeVisible (gate);
     addAndMakeVisible (limit);
     gate.setSwitchShown (false);
@@ -118,6 +131,8 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
         gear (filter.get(), "ENVELOPE");
         gear (&preamp, "AMP");
         gear (chorus.get(), "CHORUS");
+        gear (spaceDelay.get(), "DELAY");
+        gear (spaceReverb.get(), "REVERB");
         gear (&cabinet, "CAB IR");
         gear (&limit, "LIMIT");
     }
@@ -130,6 +145,7 @@ void FaceplateView::openSettings (const juce::String& block)
     lastSettings = block;
     juce::Component* at = block == "COMP" ? (juce::Component*) comp.get() : block == "OCTAVE" ? (juce::Component*) octave.get()
                         : block == "ENVELOPE" ? (juce::Component*) filter.get() : block == "CHORUS" ? (juce::Component*) chorus.get()
+                        : block == "DELAY" ? (juce::Component*) spaceDelay.get() : block == "REVERB" ? (juce::Component*) spaceReverb.get()
                         : block == "AMP" ? (juce::Component*) &preamp : block == "CAB IR" ? (juce::Component*) &cabinet
                         : block == "GATE" ? (juce::Component*) &gate : (juce::Component*) &limit;
     if (at == nullptr || ! at->isShowing())
@@ -160,43 +176,79 @@ void FaceplateView::layOutBassRows()
     lane.removeFromTop (rowGap);
     auto back = lane.removeFromTop (bassFxRowH);
 
-    for (auto* b : { (juce::Component*) &gate, (juce::Component*) &limit, (juce::Component*) comp.get(), (juce::Component*) octave.get(),
-                     (juce::Component*) filter.get(), (juce::Component*) chorus.get() })
+    // WHO IS IN THE STRIP (the checklist): a block out of it is not on the face, and leaves no hole.
+    const auto in = [this] (params::ChainRow row) { return owner.linkShown (row); };
+    BlockFrame* const octaveB = in (params::rowOctave) ? (BlockFrame*) octave.get() : nullptr;
+    BlockFrame* const filterB = in (params::rowFilter) ? (BlockFrame*) filter.get() : nullptr;
+    BlockFrame* const chorusB = in (params::rowChorus) ? (BlockFrame*) chorus.get() : nullptr;
+    BlockFrame* const delayB  = in (params::rowDelay)  ? (BlockFrame*) spaceDelay.get() : nullptr;
+    BlockFrame* const reverbB = in (params::rowReverb) ? (BlockFrame*) spaceReverb.get() : nullptr;
+
+    for (auto* b : { (juce::Component*) &gate, (juce::Component*) &limit, (juce::Component*) comp.get() })
         if (b != nullptr)
             b->setVisible (true);
+    if (octave != nullptr)      octave->setVisible (octaveB != nullptr);
+    if (filter != nullptr)      filter->setVisible (filterB != nullptr);
+    if (chorus != nullptr)      chorus->setVisible (chorusB != nullptr);
+    if (spaceDelay != nullptr)  spaceDelay->setVisible (delayB != nullptr);
+    if (spaceReverb != nullptr) spaceReverb->setVisible (reverbB != nullptr);
 
     // Row 1, before the amp: GATE, COMP, OCTAVE, ENVELOPE. A wider window goes to the pictures: a third of it to COMP,
-    // the rest to OCTAVE and ENVELOPE alike.
+    // the rest to OCTAVE and ENVELOPE alike. With one of them out of the strip the other takes their share; with both
+    // out, COMP takes the row.
     gate.setBounds (fx.removeFromLeft (GuardBlock::designWidth));
     fx.removeFromLeft (colGap);
     constexpr int fxLeast = 219;   // OCTAVE's and ENVELOPE's share at the least width (880)
-    const int rest  = fx.getWidth() - compWidth - 2 * colGap;
-    const int extra = juce::jmax (0, rest - 2 * fxLeast);
-    const int compW = compWidth + extra / 3;
-    if (comp != nullptr)
-        comp->setBounds (fx.removeFromLeft (compW));
-    fx.removeFromLeft (colGap);
-    const int half = (fx.getWidth() - colGap) / 2;
-    if (octave != nullptr)
-        octave->setBounds (fx.removeFromLeft (half));
-    fx.removeFromLeft (colGap);
-    if (filter != nullptr)
-        filter->setBounds (fx);
+    const int effects = (octaveB != nullptr ? 1 : 0) + (filterB != nullptr ? 1 : 0);
+    if (effects == 2)
+    {
+        const int rest  = fx.getWidth() - compWidth - 2 * colGap;
+        const int extra = juce::jmax (0, rest - 2 * fxLeast);
+        const int compW = compWidth + extra / 3;
+        if (comp != nullptr)
+            comp->setBounds (fx.removeFromLeft (compW));
+        fx.removeFromLeft (colGap);
+        const int half = (fx.getWidth() - colGap) / 2;
+        octaveB->setBounds (fx.removeFromLeft (half));
+        fx.removeFromLeft (colGap);
+        filterB->setBounds (fx);
+    }
+    else if (effects == 1)
+    {
+        const int rest  = fx.getWidth() - compWidth - colGap;
+        const int extra = juce::jmax (0, rest - fxLeast);
+        if (comp != nullptr)
+            comp->setBounds (fx.removeFromLeft (compWidth + extra / 3));
+        fx.removeFromLeft (colGap);
+        (octaveB != nullptr ? octaveB : filterB)->setBounds (fx);
+    }
+    else if (comp != nullptr)
+    {
+        comp->setBounds (fx);
+    }
 
     // Row 2: the AMP, the whole width.
     preamp.setVisible (shownFlags[(size_t) Block::preamp]);
     preamp.setBounds (amp);
 
-    // Row 3, after the amp: CHORUS, the cabinet (what is left), LIMIT at the end.
+    // Row 3, after the amp, in the signal's order: CHORUS, DELAY, REVERB, the cabinet (what is left), LIMIT at the end.
+    // A wider window: a quarter of what it adds to CHORUS, a sixth to DELAY and to REVERB, the rest to the cabinet.
     delay.setVisible (false);
     reverb.setVisible (false);
     limit.setBounds (back.removeFromRight (GuardBlock::designWidth));
     back.removeFromRight (colGap);
-    if (chorus != nullptr)
+    const int spare = juce::jmax (0, back.getWidth() - 880);
+    if (chorusB != nullptr)
     {
-        chorus->setBounds (back.removeFromLeft (chorusWidth + juce::jmax (0, back.getWidth() - 880) / 4));
+        chorusB->setBounds (back.removeFromLeft (chorusWidth + spare / 4));
         back.removeFromLeft (colGap);
     }
+    for (auto* b : { delayB, reverbB })
+        if (b != nullptr)
+        {
+            b->setBounds (back.removeFromLeft (spaceWidth + spare / 6));
+            back.removeFromLeft (colGap);
+        }
     cabinet.setVisible (shownFlags[(size_t) Block::cabinet]);
     cabinet.setBounds (back);
 }

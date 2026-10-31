@@ -39,6 +39,7 @@
 #include <felitronics/delay/TapeDelay.h>
 #include <felitronics/dynamics/NoiseGate.h>
 #include <felitronics/reverb/AmpReverb.h>
+#include "core/SpaceTap.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <array>
@@ -158,8 +159,8 @@ public:
     {
         double tail = 0.1;   // every ramp in here, and the models' handful of milliseconds
 
-        // The bass's chain holds neither the echo nor the room (Product::chain): no tail of theirs, and
-        // no floor for them below.
+        // Every chain holds the echo and the room now; the bass's may have them out of its strip, and a host that
+        // asks once must not cut one added later — so their tails count either way.
         const bool echoes = chainHolds (params::rowDelay) || chainHolds (params::rowReverb);
 
         if (chainHolds (params::rowChorus))
@@ -183,8 +184,8 @@ public:
         // no longer cut at eight, and the one case that stays wrong in a caching host is one where
         // the old constant was exactly as wrong. Lifting the floor is a thing to do after watching
         // a real session in Cubase and Logic, not before.
-        // The bass's has no echo and no room, and a floor of its own: the longest IR the cabinet takes, so a
-        // host that asks once never cuts one that is loaded later.
+        // A chain with neither would floor at the longest IR the cabinet takes (5 s), so a host that asks once never
+        // cuts one that is loaded later.
         tail = juce::jmax (tail, echoes ? 8.0 : 5.0);
 
         return juce::jmin (tail, 30.0);
@@ -861,8 +862,50 @@ private:
     bool linkWorks (params::ChainRow row) const noexcept
     {
         const auto* on = rowOn[(size_t) row];
-        return chainHolds (row) && (on == nullptr || on->load() > 0.5f);
+        return chainHolds (row) && linkInRig (row) && (on == nullptr || on->load() > 0.5f);
     }
+
+public:
+    /** WHETHER THE LINK STANDS IN THE CHAIN NOW (any thread): its chain holds it and, where the player may take it out of
+        the strip (ChainLink::presentParam — OrbitBass's effects), it is in. Out, it never works, whatever its switch. */
+    bool linkInRig (params::ChainRow row) const noexcept
+    {
+        const auto* in = rowPresent[(size_t) row];
+        return chainHolds (row) && (in == nullptr || in->load() > 0.5f);
+    }
+
+    /** The same, as the FACE reads it (message thread): from the parameter itself, which a callback of its own already
+        holds — the raw value behind the audio thread's read may still be a step behind. */
+    bool linkShown (params::ChainRow row) const noexcept
+    {
+        if (! chainHolds (row))
+            return false;
+        const char* id = params::chainLinks[(size_t) row].presentParam;
+        auto* p = id != nullptr ? apvts.getParameter (id) : nullptr;
+        return p == nullptr || p->getValue() > 0.5f;
+    }
+
+    /** Whether the link may be taken out of the strip here (its checklist offers it). */
+    bool linkRemovable (params::ChainRow row) const noexcept
+    {
+        const char* id = params::chainLinks[(size_t) row].presentParam;
+        return chainHolds (row) && id != nullptr && apvts.getParameter (id) != nullptr;
+    }
+
+    /** THE BASS'S DELAY'S AND REVERB'S PICTURES (ui/SpaceBlocks.h): the loudest of what each ADDS, a column every 10 ms
+        — written by the audio thread only while `delayWatched` / `reverbWatched`, which the pictures set while they are
+        on screen; read on the pictures' own timers. */
+    core::SpaceTap delayTap, reverbTap;
+    std::atomic<bool> delayWatched { false }, reverbWatched { false };
+
+    /** The reverb's tail as its stage computes it now, seconds (any thread) — the REVERB picture's law. */
+    float reverbTailSeconds() const noexcept { return reverb.tailSeconds(); }
+
+    /** Whether the bass's DELAY / REVERB ran its stage in the last block (the audio thread's; a gate reads it between
+        blocks): out of the strip, and once its fade is done, it is not run at all. */
+    bool spaceRan (bool reverbStage) const noexcept { return spaceRunning[reverbStage ? 1 : 0]; }
+
+private:
 
 public:
     /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's has no delay and no
@@ -1457,6 +1500,17 @@ private:
     void runFilter (float* const* channels, int numChannels, int numSamples) noexcept;
     void runChorus (float* const* channels, int numChannels, int numSamples) noexcept;
 
+    /** THE BASS'S DELAY OR REVERB (Chain::bass), after its CHORUS, on the back half's planes: the stage run on a copy
+        of what it is handed, what it ADDED cut below params::bassWetCutHz and put back over the dry — the repeats and
+        the tail lose their lows, the bass keeps them. Out of the strip, a stage's whole contribution fades out over the
+        bypass fade, and then the stage is cleared and not run at all. */
+    template <typename Stage>
+    void runSpaceStage (Stage&, bool ready, params::ChainRow, int which, core::SpaceTap&, const std::atomic<bool>& watched,
+                        float* const* channels, int numChannels, int numSamples) noexcept;
+    juce::AudioBuffer<float> spaceDry;                        // a stage's input, for what it added
+    std::array<std::array<core::CutBiquad, 2>, 2> wetCuts {};  // [delay, reverb][plane]: the low cut on the wet
+    std::array<bool, 2> spaceRunning {};                      // [delay, reverb]: ran last block
+
     /** A call of positive length with no channel (law 11c), to the three effects: their shared clocks run as through
         silence. */
     void passGap (int numSamples) noexcept;
@@ -1498,6 +1552,7 @@ private:
     /** Every link's switch, straight off `params::chainLinks`; null for a link that has none.
         Filled once in prepare; read on the audio thread like every other parameter. */
     std::atomic<float>* rowOn[params::numChainRows] { };
+    std::atomic<float>* rowPresent[params::numChainRows] { };   // ChainLink::presentParam, where the product has it
 
     std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* gatePosParam       = nullptr;

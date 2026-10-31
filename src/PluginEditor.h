@@ -50,6 +50,16 @@ public:
         an arrow for each link with a switch that its chain holds. */
     static std::vector<LayoutStrip::Row> stripRows (const AmpProcessor&);
 
+    /** THE STRIP'S CHECKLIST (OrbitBass): a removable link into the strip or out of it — its presence parameter, ONE undo
+        step, the host told as one gesture. The strip, the face and the window's least width follow (applyPresence). */
+    void setLinkPresent (params::ChainRow row, bool present);
+
+    /** The checklist's rows, in the chain's order: each removable link's name and whether it stands in the strip. */
+    std::vector<std::pair<params::ChainRow, bool>> checklistRows() const;
+
+    /** The window's least width in design units, as its strip stands now. */
+    int leastDesignWidth() const noexcept { return minDesignWidth; }
+
 private:
     static constexpr int margin    = 2;    // the device fills its window: the columns touch the sides, the brand the corner
     static constexpr int headerGap = 0;    // toolbar to faceplate — the frames' own inset already keeps the switches clear
@@ -63,15 +73,26 @@ private:
     /** THE WIDTH IS THE WINDOW'S CHOICE. The height sets the zoom; what the corner gives beyond the
         design's own width is laid out across — the pictures and the air widen, every knob keeps its
         size. From the design's own width up to a window of `maxAspect`. */
-    /** The design's own width for this product — OrbitBass's wider by its knobs beside the AMP's dial. */
+    /** The design's own width for this product, as its strip stands: OrbitBass's three rows are the guitar's width at
+        their least (31.10) — wider by what its DELAY and REVERB take when both are in the strip. */
     static int minDesignWidthFor (const AmpProcessor& p)
     {
-        juce::ignoreUnused (p);
-        return FaceplateView::designWidth;   // OrbitBass's three rows are the guitar's width at their least (31.10)
+        if (p.product().chain != Chain::bass)
+            return FaceplateView::designWidth;
+        const int sides = 2 * (VolumeColumn::designWidth + chromeGap);   // the in and out columns, as resized() stands them
+        return juce::jmax ((int) FaceplateView::designWidth,
+                           FaceplateView::bassLeastWidth (p.linkShown (params::rowChorus), p.linkShown (params::rowDelay),
+                                                          p.linkShown (params::rowReverb), 0) + sides);
     }
 
-    const int               minDesignWidth;
-    const int               minBaseWidth   = minDesignWidth + margin * 2;
+    int minDesignWidth;
+    int minBaseWidth = minDesignWidth + margin * 2;
+
+    /** A link came into the strip or left it: the strip's arrows, the face's blocks, the window's least width — and the
+        window itself, wider when it must be, at the zoom it has. */
+    void applyPresence();
+    void showChecklist (juce::Component& anchor);
+    std::vector<std::unique_ptr<juce::ParameterAttachment>> presenceAtts;
     static constexpr double maxAspect      = 2.2;
 
     int designW = minDesignWidth;   // the faceplate's width in design units, as the window stands it

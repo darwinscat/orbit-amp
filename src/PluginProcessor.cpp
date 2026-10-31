@@ -154,6 +154,7 @@ AmpProcessor::AmpProcessor (const Product& product)
     {
         const auto& link = params::chainLinks[(size_t) i];
         rowOn[(size_t) i] = link.onParam != nullptr ? apvts.getRawParameterValue (link.onParam) : nullptr;
+        rowPresent[(size_t) i] = link.presentParam != nullptr ? apvts.getRawParameterValue (link.presentParam) : nullptr;
     }
     if (! ownProduct.tunerSwitch)
         rowOn[(size_t) params::rowTuner] = nullptr;   // it listens always (Product::tunerSwitch)
@@ -1097,6 +1098,18 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         bassWide.store (juce::jlimit (1, 2, channels), std::memory_order_relaxed);
         narrowBus.setSize (juce::jlimit (1, 2, channels), block);
         diDry.setSize (juce::jmax (2, channels), block);
+
+        // The DELAY and the REVERB: their input kept aside, the low cut on what they add, their pictures' taps.
+        spaceDry.setSize (2, block);
+        for (auto& stage : wetCuts)
+            for (auto& c : stage)
+            {
+                c.design (true, params::bassWetCutHz, sampleRate);
+                c.reset();
+            }
+        delayTap.prepare (sampleRate);
+        reverbTap.prepare (sampleRate);
+        spaceRunning = {};
     }
     demo.prepare (sampleRate);
     ear.prepare (sampleRate);
@@ -1130,6 +1143,10 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         blockFade[(size_t) i].prepare (sampleRate);
         blockFade[(size_t) i].snapTo (linkWorks ((params::ChainRow) i));
     }
+    // The bass's DELAY and REVERB fade on their place in the strip, not on their switch: standing by, they ring out.
+    if (ownProduct.chain == Chain::bass)
+        for (const auto row : { params::rowDelay, params::rowReverb })
+            blockFade[(size_t) row].snapTo (linkInRig (row));
     if (bass.compAmount != nullptr)   // the bass's COMP is in toward its knob up as well (processChunk)
         blockFade[(size_t) params::rowComp].snapTo (linkWorks (params::rowComp) && bass.compAmount->load() > 0.0f);
 
@@ -1225,6 +1242,67 @@ void AmpProcessor::updateReverbSettings() noexcept
     reverb.setDecay (reverbDecayParam->load());
     reverb.setPredelayMs (reverbPredelayParam->load());
     reverb.setHpfHz (reverbHpfHzParam->load());
+}
+
+template <typename Stage>
+void AmpProcessor::runSpaceStage (Stage& stage, bool ready, params::ChainRow row, int which, core::SpaceTap& tap,
+                                  const std::atomic<bool>& watched, float* const* channels, int numChannels,
+                                  int numSamples) noexcept
+{
+    const bool inRig = linkInRig (row);
+    const auto span  = blockFade[(size_t) row].advance (numSamples, inRig);
+    const bool run   = ready && core::BypassFade::runs (span, inRig) && numChannels > 0;
+
+    if (! run)
+    {
+        // OUT OF THE STRIP: cleared once its fade is done, and not run at all — a stage added again starts silent.
+        if (spaceRunning[(size_t) which])
+        {
+            stage.reset();
+            for (auto& c : wetCuts[(size_t) which])
+                c.reset();
+            tap.breakTrace();
+        }
+        spaceRunning[(size_t) which] = false;
+        return;
+    }
+    spaceRunning[(size_t) which] = true;
+
+    const bool fed   = linkWorks (row);
+    const bool write = watched.load (std::memory_order_relaxed);
+    const int  nch   = juce::jmin (numChannels, 2);
+    const int  chunk = juce::jmax (1, spaceDry.getNumSamples());
+
+    // In pieces of the kept input's length: a host's longer call is played as several, the same samples.
+    const int   ramp = juce::jlimit (0, numSamples, span.ramp);
+    const float step = span.moving && ramp > 0 ? (span.to - span.from) / (float) ramp : 0.0f;
+
+    for (int done = 0; done < numSamples;)
+    {
+        const int n = juce::jmin (chunk, numSamples - done);
+        float* part[2] = { channels[0] + done, nch > 1 ? channels[1] + done : nullptr };
+
+        for (int ch = 0; ch < nch; ++ch)
+            juce::FloatVectorOperations::copy (spaceDry.getWritePointer (ch), part[ch], n);
+
+        (void) stage.process (part, nch, n, fed);   // prepared for the bus's planes and its block: it cannot refuse
+
+        for (int i = 0; i < n; ++i)
+        {
+            const int   at   = done + i;
+            const float gain = ! span.moving ? span.to : (at < ramp ? span.from + step * (float) (at + 1) : span.to);
+            float loudest = 0.0f;
+            for (int ch = 0; ch < nch; ++ch)
+            {
+                const float dry = spaceDry.getReadPointer (ch)[i];
+                const float wet = wetCuts[(size_t) which][(size_t) ch].process (part[ch][i] - dry) * gain;
+                part[ch][i] = dry + wet;
+                loudest = juce::jmax (loudest, std::abs (wet));
+            }
+            tap.take (loudest, write);
+        }
+        done += n;
+    }
 }
 
 void AmpProcessor::tellBlend()
@@ -2177,8 +2255,8 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
 
     // THE BASS'S CHORUS (Chain::bass), on the planes the seam just made: two distinct copies on a stereo bus, so each
-    // gets its own voice — above the low end only, which stays one, in the centre. The bass holds no delay and no
-    // reverb: neither is prepared, run or reset below (chainHolds), and their switches never work.
+    // gets its own voice — above the low end only, which stays one, in the centre. Its DELAY and REVERB follow it,
+    // before the cabinet, as the guitar's do (runSpaceStage).
     if (bass.chorus != nullptr && nchBack > 0)
     {
         const auto a = PerfClock::now();
@@ -2192,7 +2270,19 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     // STANDBY is the insert's bypass: the block keeps running, it just stops being fed, and the
     // repeats already in the line ring out into the dry. Which is also why a bypassed block still
     // costs: so does a bypassed insert, in every DAW there is.
-    if (delayReady)
+    if (ownProduct.chain == Chain::bass)
+    {
+        // Its own (runSpaceStage): the wet's lows cut; out of the strip, faded and then cleared and not run.
+        const auto a = PerfClock::now();
+        runSpaceStage (delay, delayReady, params::rowDelay, 0, delayTap, delayWatched, channels, nchBack, numSamples);
+        if (spaceRunning[0])
+            nsStage[stDelay] = elapsedNs (a);
+        const auto b = PerfClock::now();
+        runSpaceStage (reverb, reverbReady, params::rowReverb, 1, reverbTap, reverbWatched, channels, nchBack, numSamples);
+        if (spaceRunning[1])
+            nsStage[stReverb] = elapsedNs (b);
+    }
+    else if (delayReady)
     {
         const auto a = PerfClock::now();
 
@@ -2207,7 +2297,11 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     }
 
     // The room stands by the same way the echo does: unfed, still ringing out. See the delay above.
-    if (reverbReady)
+    if (ownProduct.chain == Chain::bass)
+    {
+        // run above, with the delay
+    }
+    else if (reverbReady)
         { const auto a = PerfClock::now();
           const bool fed = linkWorks (params::rowReverb);
 

@@ -62,6 +62,50 @@ public:
 
     std::function<void (int index, bool on)> onToggle;
 
+    /** THE CHECKLIST (OrbitBass: which of its effects stand in the strip at all), at the strip's right end — given by
+        an owner that has one to offer, and only then: a strip without it is the fixed chain it always was. The BUTTON is
+        handed over, not a point: a menu that does not know its launcher dismisses synchronously and lets the click
+        through, so a second press would close it and reopen it at once. */
+    void setChecklist (std::function<void (juce::Component& anchor)> open)
+    {
+        onChainMenu = std::move (open);
+        if (checklist == nullptr)
+        {
+            checklist = std::make_unique<ChecklistButton>();
+            checklist->onClick = [this] { if (onChainMenu != nullptr && checklist != nullptr) onChainMenu (*checklist); };
+            addAndMakeVisible (*checklist);
+        }
+        resized();
+    }
+
+    bool hasChecklist() const noexcept { return checklist != nullptr; }
+    juce::Button* checklistButton() noexcept { return checklist.get(); }
+
+    /** Where the owner centres the checklist, in this strip's own x; -1 keeps the strip's right end. */
+    int menuCentreX = -1;
+    static constexpr int menuW = 20, menuGap = 8;   // the checklist's square, and the air the last arrow's point keeps
+
+    /** In the strip or out of it (OrbitBass's checklist): everyone after this row moves. */
+    void setRowPresent (int index, bool present)
+    {
+        if (rows[(size_t) index].present == present)
+            return;
+        rows[(size_t) index].present = present;
+        repaint();
+    }
+
+    bool rowPresent (int index) const { return rows[(size_t) index].present; }
+
+    void resized() override
+    {
+        if (checklist == nullptr)
+            return;
+        auto cell = getLocalBounds().withTrimmedRight (padX).removeFromRight (menuW);
+        if (menuCentreX >= 0)
+            cell.setX (menuCentreX - menuW / 2);
+        checklist->setBounds (cell.withSizeKeepingCentre (menuW, menuW));
+    }
+
     /** Redress one row from outside — the editor answers a toggle through here, so the strip
         only ever shows what was actually applied. */
     void setRowOn (int index, bool on)
@@ -127,6 +171,45 @@ public:
     }
 
 private:
+    /** The checklist's handle: two ticked rows and an empty one, because that is literally what opens under it. NOT a
+        gear: the toolbar already wears one and it means the Setup window. Drawn in a 24x24 design box fitted to the
+        button, so it keeps its proportions at any zoom. */
+    class ChecklistButton final : public juce::Button
+    {
+    public:
+        ChecklistButton() : juce::Button ("chain") { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTitle ("In the strip"); }
+
+        void paintButton (juce::Graphics& g, bool over, bool down) override
+        {
+            const auto r = getLocalBounds().toFloat();
+            if (over || down)
+            {
+                g.setColour (juce::Colour (over ? 0x1effffff : 0x14ffffff));
+                g.fillRoundedRectangle (r.reduced (0.5f), 4.0f);
+            }
+            const auto fit = juce::RectanglePlacement (juce::RectanglePlacement::centred)
+                                 .getTransformToFit ({ 0.0f, 0.0f, 24.0f, 24.0f }, r.reduced (2.0f));
+            juce::Path p;
+            for (int row = 0; row < 3; ++row)
+            {
+                const float y = 5.0f + (float) row * 7.0f;
+                if (row < 2)   // some links are in, one is not — that is the whole picture
+                {
+                    p.startNewSubPath (2.0f, y);
+                    p.lineTo (4.5f, y + 2.5f);
+                    p.lineTo (8.5f, y - 3.0f);
+                }
+                p.startNewSubPath (11.5f, y);
+                p.lineTo (22.0f, y);
+            }
+            g.setColour (over || down ? theme::tx : theme::txDim);
+            g.strokePath (p, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded), fit);
+        }
+    };
+
+    std::function<void (juce::Component& anchor)> onChainMenu;
+    std::unique_ptr<ChecklistButton> checklist;
+
     static constexpr int   padX   = 14;
     static constexpr int   tileH  = 22;
     static constexpr int   tipW   = 8;      // the arrow's point, and the notch it nests into

@@ -24,7 +24,8 @@ std::vector<LayoutStrip::Row> AmpEditor::stripRows (const AmpProcessor& p)
         const auto& link = params::chainLinks[(size_t) i];
 
         LayoutStrip::Row row { link.name, link.captured ? theme::orange : theme::violet };
-        row.present = link.onParam != nullptr && i != params::rowTuner && p.chainHolds ((params::ChainRow) i);
+        row.present = link.onParam != nullptr && i != params::rowTuner && p.chainHolds ((params::ChainRow) i)
+                      && p.linkShown ((params::ChainRow) i);   // OrbitBass's checklist: a link out of the strip has no arrow
         rows.push_back (std::move (row));
     }
 
@@ -161,6 +162,16 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     for (auto& att : blockRowAtts)
         att->sendInitialUpdate();
 
+    // THE CHECKLIST, where the product has links a player may take out of the strip (OrbitBass's effects): at the
+    // strip's right end; and whoever moves one of them — the checklist, an undo, a preset, a register, a host — the
+    // strip, the face and the window follow.
+    for (int i = 0; i < params::numChainRows; ++i)
+        if (amp.linkRemovable ((params::ChainRow) i))
+            presenceAtts.push_back (std::make_unique<juce::ParameterAttachment> (
+                *amp.apvts.getParameter (params::chainLinks[(size_t) i].presentParam), [this] (float) { applyPresence(); }));
+    if (! presenceAtts.empty())
+        layoutStrip->setChecklist ([this] (juce::Component& anchor) { showChecklist (anchor); });
+
     addAndMakeVisible (*layoutStrip);
 
     // The badges' clicks mean MENU — the whole device in one pick. There is nowhere to "open" any
@@ -275,6 +286,64 @@ AmpEditor::AmpEditor (AmpProcessor& p)
     if (const auto folder = juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT", {}); folder.isNotEmpty())
         WebFaceplate::liveShotAfterOpening (*this, juce::File (folder),
                                             juce::File (juce::SystemStats::getEnvironmentVariable ("ORBITAMP_LIVE_SHOT_DI", {})));
+}
+
+std::vector<std::pair<params::ChainRow, bool>> AmpEditor::checklistRows() const
+{
+    std::vector<std::pair<params::ChainRow, bool>> list;
+    for (int i = 0; i < params::numChainRows; ++i)
+        if (amp.linkRemovable ((params::ChainRow) i))
+            list.emplace_back ((params::ChainRow) i, amp.linkShown ((params::ChainRow) i));
+    return list;
+}
+
+void AmpEditor::setLinkPresent (params::ChainRow row, bool present)
+{
+    const char* id = params::chainLinks[(size_t) row].presentParam;
+    auto* p = id != nullptr && amp.linkRemovable (row) ? amp.apvts.getParameter (id) : nullptr;
+    if (p == nullptr)
+        return;
+    amp.history.beginGesture();
+    p->beginChangeGesture();
+    p->setValueNotifyingHost (present ? 1.0f : 0.0f);
+    p->endChangeGesture();
+    amp.history.endGesture();
+}
+
+void AmpEditor::showChecklist (juce::Component& anchor)
+{
+    juce::PopupMenu m;
+    m.addSectionHeader ("IN THE STRIP");
+    const auto rows = checklistRows();
+    for (size_t k = 0; k < rows.size(); ++k)
+        m.addItem ((int) k + 1, params::chainLinks[(size_t) rows[k].first].name, true, rows[k].second);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&anchor),
+                     [safe = juce::Component::SafePointer<AmpEditor> (this), rows] (int r)
+                     {
+                         if (safe != nullptr && r >= 1 && r <= (int) rows.size())
+                             safe->setLinkPresent (rows[(size_t) r - 1].first, ! rows[(size_t) r - 1].second);
+                     });
+}
+
+void AmpEditor::applyPresence()
+{
+    for (int i = 0; i < params::numChainRows; ++i)
+        if (amp.linkRemovable ((params::ChainRow) i))
+            layoutStrip->setRowPresent (i, amp.linkShown ((params::ChainRow) i));
+
+    faceplate.resized();
+    faceplate.repaint();
+
+    // The least width as the strip now stands; a window narrower than it widens, at the zoom it has.
+    minDesignWidth = minDesignWidthFor (amp);
+    minBaseWidth   = minDesignWidth + margin * 2;
+    applySizeLimits();
+    const int wanted = juce::jlimit (minDesignWidth, maxDesignWidth(), designW);
+    if (wanted != designW)
+    {
+        designW = wanted;
+        setSize (juce::roundToInt ((float) baseW() * zoomNow), getHeight());
+    }
 }
 
 void AmpEditor::applyStripChoice()
@@ -490,9 +559,16 @@ void AmpEditor::resized()
         layoutStrip->leftPad = 0;
         const int x = chrome.secondLineX() - LayoutStrip::tailAir;
         layoutStrip->arrowsEndX = chrome.gearBounds().reduced (2).getRight() - x;
+        if (layoutStrip->hasChecklist())   // OrbitBass: the checklist under the gear, the arrows ending before it
+        {
+            layoutStrip->menuCentreX = chrome.gearBounds().getCentreX() - x;
+            layoutStrip->arrowsEndX  = layoutStrip->menuCentreX - LayoutStrip::menuW / 2 - LayoutStrip::menuGap;
+        }
         layoutStrip->setBounds (margin + x, margin + Chrome::firstLineH, designW - x,
                                 LayoutStrip::designHeight);
         layoutStrip->setTransform (zoom);
+        if (layoutStrip->hasChecklist())
+            layoutStrip->resized();   // its checklist follows the gear even where the strip kept its size
     }
 
     // The faceplate is only as tall as its LAYOUT stands it — a collapsed row is not here.

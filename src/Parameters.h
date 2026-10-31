@@ -496,6 +496,20 @@ inline constexpr float filterRangeHz[3][2] = { { 100.0f, 1500.0f }, { 150.0f, 30
 /** CHORUS, after the AMP's tone and before the cabinet: where the bass's chain turns stereo, the lows centred. The
     menu: RATE, CROSSOVER (below it the voice falls away), CENTRE (the delay its head swings about). */
 inline constexpr const char* chorusOn          = "chorus_on";
+
+/** OrbitBass's REMOVABLE LINKS, in its strip or out of it — the strip's own checklist writes these (the owner, 31.10:
+    "throwable out of the strip"). Out is GONE: no arrow, no block on the face, no sound (an effect let go through its
+    own door, the echo and the room faded out and then cleared). Their ON switches remember whether each played while
+    it sits out. OCTAVE, ENVELOPE and CHORUS in out of the box; DELAY and REVERB out. */
+inline constexpr const char* octavePresent = "octave_present";
+inline constexpr const char* filterPresent = "filter_present";
+inline constexpr const char* chorusPresent = "chorus_present";
+inline constexpr const char* delayPresent  = "delay_present";
+inline constexpr const char* reverbPresent = "reverb_present";
+
+/** The low cut on what the bass's DELAY and REVERB ADD — the repeats and the tail — so its lows stay dry and centred.
+    Fixed, the bass's own: a 12 dB/oct high-pass on the wet alone. */
+inline constexpr double bassWetCutHz = 300.0;
 inline constexpr const char* chorusAmount      = "chorus";
 inline constexpr const char* chorusRateHz      = "chorus_rate_hz";
 inline constexpr const char* chorusCrossoverHz = "chorus_crossover_hz";
@@ -542,8 +556,8 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
 /** The DSP cost entries, in the order the chain runs them: a captured block is followed by its own
     console. Here rather than in the processor so a link can name its stage and the footer can
     label one, without either of them having to know about the other. */
-enum Stage { stTotal, stTuner, stGate, stComp, stOctave, stFilter, stPreamp, stPreampEq, stDelay, stReverb,
-             stChorus, stCab, stLimit, stOut, numStages };
+enum Stage { stTotal, stTuner, stGate, stComp, stOctave, stFilter, stPreamp, stPreampEq, stChorus, stDelay,
+             stReverb, stCab, stLimit, stOut, numStages };
 
 /** What the breakdown calls a stage. TWO spellings, both ASCII on purpose: the copied report runs
     through `formatted ("%-8s")`, where a multi-byte character breaks the encoding and the column
@@ -559,9 +573,9 @@ inline constexpr StageName stageNames[numStages] = {
     { "ENVELOPE", "ENVELOPE" },   // FILTER: the owner reads it as ENVELOPE (31.10)
     { "AMP",    "AMP"       },
     { "AMP EQ", "AMP EQ"    },
+    { "CHORUS", "CHORUS"    },
     { "DELAY",  "DELAY"     },
     { "REVERB", "REVERB"    },
-    { "CHORUS", "CHORUS"    },
     { "CAB",    "CAB"       },
     { "LIMIT",  "LIMIT"     },
     { "OUT",    "OUT"       },
@@ -570,8 +584,10 @@ inline constexpr StageName stageNames[numStages] = {
 /** A link's place in the chain — by NAME, not by arithmetic. The order is the chain's order and
     doubles as the index into `chainLinks`; naming the places is what lets one stand down without
     every row after it sliding under somebody's `i - first` sum. */
-enum ChainRow { rowIn, rowTuner, rowGate, rowComp, rowOctave, rowFilter, rowPreamp, rowDelay, rowReverb,
-                rowChorus, rowCab, rowLimit, rowOut, numChainRows };
+/** The bass's CHORUS stands before the echo and the room (OrbitBass: CHORUS -> DELAY -> REVERB -> the cabinet); no
+    guitar amp has a CHORUS, so its strip and its chain read as they always did. */
+enum ChainRow { rowIn, rowTuner, rowGate, rowComp, rowOctave, rowFilter, rowPreamp, rowChorus, rowDelay, rowReverb,
+                rowCab, rowLimit, rowOut, numChainRows };
 
 /** One link of the chain. */
 struct ChainLink
@@ -582,6 +598,10 @@ struct ChainLink
     const char* onParam;      // STANDBY/ON — the switch its arrow writes; none for the two ends
     Stage       stage;        // the cost entry it owns
     Stage       eqStage;    // a captured block's console; `numStages` for everyone else
+    /** IN THE STRIP OR NOT (OrbitBass's effects): the switch its checklist writes — a link out of it has no arrow, no
+        block and no sound. None for a link that stands for good; a product with no such parameter (every guitar amp)
+        holds the link for good too. */
+    const char* presentParam = nullptr;
 };
 
 inline constexpr ChainLink chainLinks[numChainRows] = {
@@ -589,23 +609,23 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* TUNER  */ { "TUNER",  false, true,  tunerOn,   stTuner,  numStages },
     /* GATE   */ { "GATE",   false, false, gateOn,    stGate,   numStages },
     /* COMP   */ { "COMP",   false, false, compOn,    stComp,   numStages },
-    /* OCTAVE */ { "OCTAVE", false, false, octaveOn,  stOctave, numStages },
-    /* FILTER */ { "ENVELOPE", false, false, filterOn, stFilter, numStages },
+    /* OCTAVE */ { "OCTAVE", false, false, octaveOn,  stOctave, numStages, octavePresent },
+    /* FILTER */ { "ENVELOPE", false, false, filterOn, stFilter, numStages, filterPresent },
     /* AMP    */ { "AMP",    true,  true,  preampOn,  stPreamp, stPreampEq },
-    /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages },
-    /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages },
-    /* CHORUS */ { "CHORUS", false, false, chorusOn,  stChorus, numStages },
+    /* CHORUS */ { "CHORUS", false, false, chorusOn,  stChorus, numStages, chorusPresent },
+    /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages, delayPresent },
+    /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages, reverbPresent },
     /* CAB IR */ { "CAB IR", true,  true,  cabOn,     stCab,    numStages },
     /* LIMIT  */ { "LIMIT",  false, false, limiterOn, stLimit,  numStages },
     /* OUT    */ { "OUT",    false, true,  nullptr,   stOut,    numStages },
 };
 
-/** THE BASS'S CHAIN (OrbitBass, Product's Chain::bass): every link of the guitar's but the delay and the
-    reverb — neither is in its sound, its strip or its panel — and its COMP. Its blocks still to come have no
-    row yet. */
-inline constexpr bool bassChainHolds (ChainRow row) noexcept
+/** THE BASS'S CHAIN (OrbitBass, Product's Chain::bass): every link there is — the guitar's, its COMP and its effects.
+    Five of them stand in it only while the player keeps them in the strip (`presentParam`): OCTAVE, ENVELOPE and CHORUS
+    in out of the box, DELAY and REVERB out (the owner, 31.10). */
+inline constexpr bool bassChainHolds (ChainRow) noexcept
 {
-    return row != rowDelay && row != rowReverb;
+    return true;
 }
 
 /** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's own — COMP, OCTAVE, FILTER and

@@ -33,7 +33,18 @@ public:
         juce::String label;
         juce::String id;                          // the parameter (none for a reading)
         std::function<juce::String()> read = {};  // a reading's words
+        int perLine = 0;                          // a choice's words a line, 0 all on one (a long list wraps)
     };
+
+    /** How many lines a row takes: one, or a long choice's words wrapped `perLine` a line. */
+    int linesOf (const Row& r) const
+    {
+        if (r.kind != Row::Kind::choice || r.perLine <= 0)
+            return 1;
+        auto* c = dynamic_cast<juce::AudioParameterChoice*> (amp.apvts.getParameter (r.id));
+        const int n = c != nullptr ? c->choices.size() : 0;
+        return juce::jmax (1, (n + r.perLine - 1) / r.perLine);
+    }
 
     SettingsPanel (AmpProcessor& processor, juce::String blockName, std::vector<Row> rowList)
         : amp (processor), name (std::move (blockName)), rows (std::move (rowList))
@@ -91,12 +102,15 @@ public:
         resetButton.onClick = [this] { reset(); };
         addAndMakeVisible (resetButton);
 
-        setSize (width, titleH + (int) rows.size() * rowH + footH);
+        int lineCount = 0;
+        for (const auto& r : rows)
+            lineCount += linesOf (r);
+        setSize (width, titleH + lineCount * rowH + footH);
         refresh();
         startTimerHz (10);   // the readings and a value moved elsewhere (a host, the face) follow
     }
 
-    static constexpr int width = 400, titleH = 34, rowH = 28, footH = 44;
+    static constexpr int width = 400, titleH = 34, rowH = 28, footH = 44, labelW = 150;
 
     const juce::String& block() const noexcept { return name; }
 
@@ -155,13 +169,21 @@ public:
         r.removeFromTop (titleH);
         for (auto& l : lines)
         {
-            auto line = r.removeFromTop (rowH).reduced (0, 3);
-            l->label.setBounds (line.removeFromLeft (150));
+            const int count = linesOf (l->row);
+            auto block = r.removeFromTop (rowH * count);
+            auto line = block.removeFromTop (rowH).reduced (0, 3);
+            l->label.setBounds (line.removeFromLeft (labelW));
             if (! l->buttons.empty())
             {
-                const int w = line.getWidth() / (int) l->buttons.size();
-                for (auto& b : l->buttons)
-                    b->setBounds (line.removeFromLeft (w).reduced (2, 0));
+                // A long list's words wrap, `perLine` a line, every word the same width.
+                const int across = count > 1 ? l->row.perLine : (int) l->buttons.size();
+                const int w = line.getWidth() / juce::jmax (1, across);
+                const int x0 = line.getX();
+                for (size_t k = 0; k < l->buttons.size(); ++k)
+                {
+                    const int row = (int) k / juce::jmax (1, across), col = (int) k % juce::jmax (1, across);
+                    l->buttons[k]->setBounds (juce::Rectangle<int> (x0 + col * w, line.getY() + row * rowH, w, line.getHeight()).reduced (2, 0));
+                }
             }
             else
                 l->value.setBounds (line.removeFromLeft (juce::jmin (150, line.getWidth())));
@@ -215,8 +237,14 @@ private:
         const float v = p->convertFrom0to1 (p->getValue());
         if (id.endsWith ("_hz") || id.contains ("_hz_"))
             return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " kHz" : juce::String (v, v < 100.0f ? 1 : 0) + " Hz";
-        if (id.endsWith ("_ms"))
-            return juce::String (v, v < 10.0f ? 1 : 0) + " ms";
+        if (id.endsWith ("_ms") || id == params::delayOffset || id == params::reverbPredelay)
+            return juce::String (v, std::abs (v) < 10.0f ? 1 : 0) + " ms";
+        if (id == params::delayRepeats || id == params::delayDark)
+            return juce::String (juce::roundToInt (v)) + " %";
+        if (id == params::delayBpm)
+            return juce::String (v, 1) + " BPM";
+        if (id == params::reverbDecay)
+            return juce::String (v, 2) + " x";
         if (id == params::compRatio)
             return juce::String (v, 1) + ":1";
         if (id == params::compAmount)
@@ -270,7 +298,8 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SettingsPanel)
 };
 
-/** EACH BLOCK'S WINDOW: its menu's settings, and the law's values its slider drives. Held back (not invented here): the
+/** EACH BLOCK'S WINDOW: its menu's settings, and the law's values its slider drives — DELAY's and REVERB's what the
+    guitar's blocks offer, but MIX, which is their rail. Held back (not invented here): the
     AMP's device tone / EQ mode (its own combo on the block), the cabinet's IR (its own list on the border), the GATE's
     learn and the LIMIT's further menu items (their own menus on the editor), ENVELOPE's reach (the picture's law). */
 inline std::unique_ptr<SettingsPanel> makeSettings (AmpProcessor& amp, const juce::String& block)
@@ -305,6 +334,21 @@ inline std::unique_ptr<SettingsPanel> makeSettings (AmpProcessor& amp, const juc
                  { K::number, "Centre", params::chorusCentreMs },
                  { K::reading, "Depth (the slider)", {}, [plainOf]
                    { return juce::String (felitronics::chorus::paramsForAmount (plainOf (params::chorusAmount), {}).depthMs, 2) + " ms"; } } };
+    else if (block == "DELAY")   // the guitar's DELAY block's, but MIX (the rail)
+        rows = { { K::toggle, "Sync", params::delaySync },
+                 { K::choice, "Division", params::delayDiv, {}, 5 },
+                 { K::number, "Time (free)", params::delayTimeMs },
+                 { K::toggle, "Host tempo", params::delayHostTempo },
+                 { K::number, "BPM", params::delayBpm },
+                 { K::number, "Repeats", params::delayRepeats }, { K::number, "Dark", params::delayDark },
+                 { K::number, "Offset", params::delayOffset },
+                 { K::reading, "Time now", {}, [&amp] { return juce::String (juce::roundToInt (amp.delayTaps().shownTimeMs())) + " ms"; } },
+                 { K::reading, "Low cut (repeats)", {}, [] { return juce::String (juce::roundToInt (params::bassWetCutHz)) + " Hz"; } } };
+    else if (block == "REVERB")   // the guitar's REVERB block's, but MIX (the rail); its low cut the bass's own
+        rows = { { K::choice, "Type", params::reverbType, {}, 2 },
+                 { K::number, "Decay", params::reverbDecay }, { K::number, "Pre-delay", params::reverbPredelay },
+                 { K::reading, "Tail", {}, [&amp] { return juce::String (amp.reverbTailSeconds(), 1) + " s"; } },
+                 { K::reading, "Low cut (tail)", {}, [] { return juce::String (juce::roundToInt (params::bassWetCutHz)) + " Hz"; } } };
     else if (block == "AMP")
         rows = { { K::number, "Blend crossover", params::ampBlendHz }, { K::toggle, "Blend invert", params::ampBlendInvert },
                  { K::toggle, "HPF", params::bassHpfOn }, { K::choice, "HPF strings", params::bassHpf },

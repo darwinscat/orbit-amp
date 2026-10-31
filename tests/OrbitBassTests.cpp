@@ -30,6 +30,8 @@
 #include "ui/FilterBlock.h"
 #include <felitronics/envfilter/EnvelopeFilterLaw.h>
 #include "ui/ChorusBlock.h"
+#include "ui/SpaceBlocks.h"
+#include "core/SpaceTap.h"
 #include "core/ChorusTap.h"
 #include "ui/FaceplateView.h"
 #include "ui/GuardRail.h"
@@ -53,6 +55,7 @@
 #include <string>
 #include <tuple>
 #include <type_traits>
+#include <typeinfo>
 
 namespace
 {
@@ -282,6 +285,32 @@ int ORBITAMP_GATE_MAIN()
             ++failed;
     };
 
+    // STILLS FOR A LOOK, a dev tool (off unless ORBITBASS_STILLS names a folder): OrbitAmp's face as it opens, at the least
+    // width and at 16:9, for a byte compare across a change that must leave the guitar alone.
+    if (const auto stills = juce::SystemStats::getEnvironmentVariable ("ORBITBASS_STILLS", {}); stills.isNotEmpty())
+    {
+        const juce::File dir (stills);
+        dir.createDirectory();
+        for (const auto* g : { &products::orbitAmp(), &products::catpitAmp() })
+        {
+            auto t = make (*g);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            const int h = ed->getHeight();
+            for (const int w : { ed->getWidth(), juce::roundToInt ((float) h * 16.0f / 9.0f) })
+            {
+                ed->setSize (w, h);
+                juce::PNGImageFormat png;
+                juce::FileOutputStream os (dir.getChildFile (juce::String (g->name) + "-" + juce::String (w) + ".png"));
+                if (os.openedOk())
+                {
+                    os.setPosition (0);
+                    os.truncate();
+                    png.writeImageToStream (ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f), os);
+                }
+            }
+        }
+    }
+
     const Product& bass = ORBITAMP_GATE_PRODUCT();
     check (juce::String (bass.name) == "OrbitBass" && bass.chain == Chain::bass, "OrbitBass plays the bass's chain");
 
@@ -310,9 +339,14 @@ int ORBITAMP_GATE_MAIN()
                    && value (a, params::ampBlendInvert) < 0.5f,
                "BLEND 0, its crossover at 150 Hz, not inverted");
         check (juce::approximatelyEqual (value (a, params::diMix), 30.0f), "DI/CAB 30 % DI");
-        check (declared (a, params::delayOn) < 0.5f && declared (a, params::reverbOn) < 0.5f
-                   && value (a, params::delayOn) < 0.5f && value (a, params::reverbOn) < 0.5f,
-               "no delay and no reverb");
+        check (declared (a, params::delayPresent) < 0.5f && declared (a, params::reverbPresent) < 0.5f
+                   && value (a, params::delayPresent) < 0.5f && value (a, params::reverbPresent) < 0.5f
+                   && value (a, params::delayOn) > 0.5f && value (a, params::reverbOn) > 0.5f
+                   && ! a.linkInRig (params::rowDelay) && ! a.linkInRig (params::rowReverb),
+               "DELAY and REVERB out of the strip (their switches on, so one added plays at once)");
+        check (value (a, params::octavePresent) > 0.5f && value (a, params::filterPresent) > 0.5f && value (a, params::chorusPresent) > 0.5f
+                   && a.linkInRig (params::rowOctave) && a.linkInRig (params::rowFilter) && a.linkInRig (params::rowChorus),
+               "OCTAVE, ENVELOPE and CHORUS in the strip");
         check (juce::roundToInt (declared (a, params::stereoMode)) == (int) params::StereoMode::mono
                    && juce::roundToInt (value (a, params::stereoMode)) == (int) params::StereoMode::mono,
                "mono");
@@ -323,8 +357,9 @@ int ORBITAMP_GATE_MAIN()
         check (packs.size() == 1 && packs.getReference (0).rigId == "revolt-clean-poweramp-bf62"
                    && packs.getReference (0).bundled && juce::roundToInt (value (a, params::preampDevice)) == 0,
                "it plays its one temporary pack, the ReVolt Clean (" + juce::String (packs.size()) + " in its list)");
-        check (a.getTailLengthSeconds() < 8.0, "its tail is the cabinet's, no echo's or room's ("
-                                                   + juce::String (a.getTailLengthSeconds(), 2) + " s)");
+        check (a.getTailLengthSeconds() >= 8.0 && a.getTailLengthSeconds() <= 30.0,
+               "its tail counts the echo and the room, which a player may add while a host keeps the first answer ("
+                   + juce::String (a.getTailLengthSeconds(), 2) + " s)");
     }
 
     // ---- ITS STRIP -----------------------------------------------------------------------------------
@@ -348,7 +383,7 @@ int ORBITAMP_GATE_MAIN()
     const auto plain = play (*amp, blocks, false);
     check (peak (plain.l) > 1.0e-3f, "it sounds (peak " + juce::String (peak (plain.l), 4) + ")");
 
-    // The delay and the reverb switched on, all wet: nothing changes, bit for bit.
+    // The delay and the reverb OUT OF THE STRIP, switched on and all wet: nothing changes, bit for bit.
     {
         auto forced = make (bass);
         set (*forced, params::delayOn, 1.0f);
@@ -357,7 +392,7 @@ int ORBITAMP_GATE_MAIN()
         set (*forced, params::reverbMix, 100.0f);
         const auto heard = play (*forced, blocks, false);
         check (worstApart (heard.l, plain.l) == 0.0f && worstApart (heard.r, plain.r) == 0.0f,
-               "the delay and the reverb switched on change nothing, bit for bit (worst "
+               "the delay and the reverb out of the strip, on and all wet, change nothing, bit for bit (worst "
                    + juce::String (worstApart (heard.l, plain.l), 6) + ")");
     }
 
@@ -438,6 +473,11 @@ int ORBITAMP_GATE_MAIN()
                     if (auto* there = same->apvts.getParameter (ranged->paramID);
                         there != nullptr && ! juce::approximatelyEqual (there->getValue(), ranged->getValue()))
                         apart.add (ranged->paramID);
+            // The bass's DELAY and REVERB are out of its strip: the OrbitAmp's are switched off.
+            set (*same, params::delayOn, 0.0f);
+            set (*same, params::reverbOn, 0.0f);
+            apart.removeString (params::delayOn);
+            apart.removeString (params::reverbOn);
             check (apart.isEmpty() && value (*same, params::delayOn) < 0.5f && value (*same, params::reverbOn) < 0.5f,
                    what + ": an OrbitAmp set as OrbitBass is, its delay and reverb off"
                        + (apart.isEmpty() ? juce::String() : " — apart: " + apart.joinIntoString (", ")));
@@ -969,8 +1009,8 @@ int ORBITAMP_GATE_MAIN()
             check (worstApart (play (*boosted, blocks, false).l, play (*level, blocks, false).l) == 0.0f,
                    "no BOOST lift on the bass: its level at +6 dB plays as at 0");
         }
-        check (amp->getTailLengthSeconds() >= 5.0 && amp->getTailLengthSeconds() < 8.0,
-               "the bass's tail is at least the cabinet's longest, 5 s (" + juce::String (amp->getTailLengthSeconds(), 2) + " s)");
+        check (amp->getTailLengthSeconds() >= 8.0,
+               "the bass's tail is at least the cabinet's longest, 5 s, and the echo's floor, 8 (" + juce::String (amp->getTailLengthSeconds(), 2) + " s)");
     }
 
     // ---- REVIEW ROUND 2 -----------------------------------------------------------------------------------
@@ -2122,8 +2162,9 @@ int ORBITAMP_GATE_MAIN()
                 if (r->paramId() == params::ampBlend && r->gripText() != "40")
                     wrong.add ("BLEND reads " + r->gripText());
             }
-            check (wrong.isEmpty() && seen.contains (params::ampBlend) && seen.size() == 7,
-                   "the bass's five rails write their amounts at 13 px, in percent; GATE and LIMIT as before ("
+            check (wrong.isEmpty() && seen.contains (params::ampBlend) && seen.contains (params::delayMix) && seen.contains (params::reverbMix)
+                       && seen.size() == 9,
+                   "the bass's seven rails (DELAY's and REVERB's MIX among them) write their amounts at 13 px, in percent; GATE and LIMIT as before ("
                        + juce::String (seen.size()) + " rails" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString (", ")) + ")");
         }
 
@@ -3275,6 +3316,352 @@ int ORBITAMP_GATE_MAIN()
         }
     }
 
+    // ---- STEP 9: DELAY AND REVERB BEFORE THE CABINET, OUT OF THE STRIP BY DEFAULT; FIVE EFFECTS REMOVABLE; THE GEARS ------
+    {
+        const auto settle = [] (AmpProcessor& a) { for (int i = 0; i < 40; ++i) a.history.tick(); };
+        const auto walkAll = [] (juce::Component& root, const std::function<void (juce::Component&)>& visit)
+        {
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                visit (c);
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+        };
+        const auto shownIn = [] (juce::Component& c, juce::Component& root)
+        {
+            for (auto* x = &c; x != nullptr && x != &root; x = x->getParentComponent())
+                if (! x->isVisible())
+                    return false;
+            return true;
+        };
+        const auto label = [] (BlockFrame& b)
+        {
+            if (auto* g = dynamic_cast<GuardBlock*> (&b))
+                return g->guardName();
+            return b.getName().isNotEmpty() ? b.getName() : juce::String (typeid (b).name());
+        };
+        const auto both = [] (AmpProcessor& t, bool in)
+        {
+            set (t, params::delayPresent, in ? 1.0f : 0.0f);
+            set (t, params::reverbPresent, in ? 1.0f : 0.0f);
+        };
+
+        // THE STRIP: DELAY and REVERB absent; added, after CHORUS in the signal's order; OCTAVE, ENVELOPE and CHORUS taken
+        // out the same way. OrbitAmp's strip as it was.
+        {
+            auto t = make (bass);
+            both (*t, true);
+            const auto all = arrows (AmpEditor::stripRows (*t));
+            set (*t, params::octavePresent, 0.0f);
+            set (*t, params::filterPresent, 0.0f);
+            set (*t, params::chorusPresent, 0.0f);
+            const auto few = arrows (AmpEditor::stripRows (*t));
+            check (all == "GATE > COMP > OCTAVE > ENVELOPE > AMP > CHORUS > DELAY > REVERB > CAB IR > LIMIT"
+                       && few == "GATE > COMP > AMP > DELAY > REVERB > CAB IR > LIMIT",
+                   "added, DELAY and REVERB stand after CHORUS (" + all + "); the three effects out: " + few);
+        }
+
+        // THE SOUND: out of the strip, an effect with its slider up plays as one at 0, bit for bit; DELAY and REVERB
+        // added are heard.
+        {
+            juce::StringArray loud;
+            for (const auto& [present, amount] : { std::pair<const char*, const char*> { params::octavePresent, params::octaveAmount },
+                                                   { params::filterPresent, params::filterAmount }, { params::chorusPresent, params::chorusAmount } })
+            {
+                auto out = make (bass);
+                set (*out, amount, 0.8f);
+                set (*out, present, 0.0f);
+                out->prepareToPlay (sampleRate, blockSize);
+                out->pumpDeviceWork();
+                auto zero = make (bass);
+                set (*zero, amount, 0.0f);
+                zero->prepareToPlay (sampleRate, blockSize);
+                zero->pumpDeviceWork();
+                if (worstApart (play (*out, 150, false).l, play (*zero, 150, false).l) != 0.0f)
+                    loud.add (amount);
+            }
+            check (loud.isEmpty(), "OCTAVE, ENVELOPE and CHORUS out of the strip, their sliders at 0.8, play as at 0, bit for bit"
+                                       + (loud.isEmpty() ? juce::String() : " — not: " + loud.joinIntoString (", ")));
+
+            auto base = make (bass);
+            const auto dry = play (*base, 200, false);
+            float heard[2] {};
+            for (int k = 0; k < 2; ++k)
+            {
+                auto t = make (bass);
+                set (*t, k == 0 ? params::delayPresent : params::reverbPresent, 1.0f);
+                set (*t, k == 0 ? params::delayMix : params::reverbMix, 50.0f);
+                t->prepareToPlay (sampleRate, blockSize);
+                t->pumpDeviceWork();
+                heard[k] = worstApart (play (*t, 200, false).l, dry.l);
+            }
+            check (heard[0] > 1.0e-3f && heard[1] > 1.0e-3f, "DELAY and REVERB added are heard (worst apart " + juce::String (heard[0], 4)
+                                                                 + ", " + juce::String (heard[1], 4) + ")");
+        }
+
+        // THE LOW CUT ON THE WET: what the stage ADDS to a held sine, against the dry at the same frequency — at 880 Hz the
+        // repeat whole, at 55 Hz more than 20 dB under it (the bass's lows stay dry). A single repeat (REPS 0), limiter out.
+        {
+            const auto wetRel = [&] (bool reverbStage, double hz)
+            {
+                const auto run = [&] (bool in)
+                {
+                    auto t = make (bass);
+                    set (*t, params::limiterOn, 0.0f);
+                    set (*t, reverbStage ? params::reverbPresent : params::delayPresent, in ? 1.0f : 0.0f);
+                    set (*t, reverbStage ? params::reverbMix : params::delayMix, 100.0f);
+                    set (*t, params::delaySync, 0.0f);
+                    set (*t, params::delayTimeMs, 100.0f);
+                    set (*t, params::delayRepeats, 0.0f);
+                    t->prepareToPlay (sampleRate, blockSize);
+                    t->pumpDeviceWork();
+                    return tone (*t, hz, -18.0f, 80);
+                };
+                const auto with = run (true), without = run (false);
+                std::vector<float> added (with.size());
+                for (size_t i = 0; i < with.size(); ++i)
+                    added[i] = with[i] - without[i];
+                return levelAt (added, hz) - levelAt (without, hz);
+            };
+            const double dLow = wetRel (false, 55.0), dHigh = wetRel (false, 880.0);
+            const double rLow = wetRel (true, 55.0),  rHigh = wetRel (true, 880.0);
+            check (dHigh > -3.0 && dLow < dHigh - 20.0 && rLow < rHigh - 20.0,
+                   "the wet's low cut: DELAY's repeat " + juce::String (dHigh, 1) + " dB at 880 Hz, " + juce::String (dLow, 1)
+                       + " dB at 55 Hz; REVERB's tail " + juce::String (rHigh, 1) + " dB at 880 Hz, " + juce::String (rLow, 1) + " dB at 55 Hz");
+        }
+
+        // OUT OF THE STRIP, FADED AND CLEARED: DELAY taken out mid-tail stops running once its fade is done; added again in
+        // silence it brings none of its old repeats back.
+        {
+            auto t = make (bass);
+            set (*t, params::delayPresent, 1.0f);
+            set (*t, params::delayMix, 100.0f);
+            set (*t, params::delayRepeats, 80.0f);
+            set (*t, params::delaySync, 0.0f);
+            set (*t, params::delayTimeMs, 200.0f);
+            t->prepareToPlay (sampleRate, blockSize);
+            t->pumpDeviceWork();
+            (void) tone (*t, 220.0, -12.0f, 40);
+            const bool ranBefore = t->spaceRan (false);
+            // Out, and silence until the chain before it has nothing left to give: a repeat of that would be no fault.
+            (void) tone (*t, 220.0, -12.0f, 30, 0, [&] { set (*t, params::delayPresent, 0.0f); }, 0);
+            const bool ranAfter = t->spaceRan (false);
+            const auto quiet = tone (*t, 220.0, -12.0f, 30, 0, [&] { set (*t, params::delayPresent, 1.0f); }, 0);
+            // ...against the same amp that never had it.
+            auto never = make (bass);
+            (void) tone (*never, 220.0, -12.0f, 40);
+            (void) tone (*never, 220.0, -12.0f, 30, -1, {}, 0);
+            const auto alone = tone (*never, 220.0, -12.0f, 30, -1, {}, 0);
+            float tail = 0.0f, loudT = 0.0f, loudN = 0.0f;
+            for (size_t i = quiet.size() / 2; i < quiet.size(); ++i)
+            {
+                tail  = std::max (tail, std::abs (quiet[i] - alone[i]));
+                loudT = std::max (loudT, std::abs (quiet[i]));
+                loudN = std::max (loudN, std::abs (alone[i]));
+            }
+            check (ranBefore && ! ranAfter && t->spaceRan (false) && tail < 1.0e-3f,
+                   "DELAY out of the strip stops running after its fade, added again it starts silent (apart from one that never had it by "
+                       + juce::String (tail, 6) + " in silence; loudest " + juce::String (loudT, 6) + " and " + juce::String (loudN, 6) + ")");
+        }
+
+        // THE PICTURES' TAPS: written only while watched, and read whole.
+        {
+            auto t = make (bass);
+            set (*t, params::delayPresent, 1.0f);
+            set (*t, params::delayMix, 60.0f);
+            set (*t, params::delayRepeats, 50.0f);
+            set (*t, params::delaySync, 0.0f);
+            set (*t, params::delayTimeMs, 250.0f);
+            SpacePicture pic (*t, SpacePicture::Which::delay);
+            pic.look();   // not on screen: not watched
+            const auto w0 = t->delayTap.written();
+            (void) tone (*t, 220.0, -12.0f, 30);
+            const auto w1 = t->delayTap.written();
+            t->delayWatched.store (true);
+            (void) tone (*t, 220.0, -12.0f, 30);
+            const auto w2 = t->delayTap.written();
+            pic.pull();
+            const auto marks = pic.lawMarks();
+            check (w1 == w0 && w2 > w1 + 20 && pic.shownCount() > 20 && pic.newestDb() > -40.0f
+                       && marks.size() >= 2 && std::abs (marks[0].x - 0.25f) < 0.01f && std::abs (marks[1].y - (marks[0].y - 6.02f)) < 0.1f,
+                   "DELAY's picture: its tap written only while watched (" + juce::String ((int) (w1 - w0)) + " then "
+                       + juce::String ((int) (w2 - w1)) + " entries), the newest at " + juce::String (pic.newestDb(), 1)
+                       + " dB; its repeats every 250 ms, each 6 dB under the last at REPS 50");
+        }
+
+        // THE WINDOWS: DELAY's and REVERB's, with what the guitar's blocks offer but MIX; a typed number one undo step;
+        // RESET one step; the long lists wrapped, every word inside its button.
+        {
+            auto t = make (bass);
+            settle (*t);
+            auto d = bass::makeSettings (*t, "DELAY");
+            auto r = bass::makeSettings (*t, "REVERB");
+            bool ids = d != nullptr && r != nullptr;
+            if (ids)
+            {
+                for (const char* id : { params::delaySync, params::delayDiv, params::delayTimeMs, params::delayHostTempo, params::delayBpm,
+                                        params::delayRepeats, params::delayDark, params::delayOffset })
+                    ids = ids && d->ids().contains (id);
+                for (const char* id : { params::reverbType, params::reverbDecay, params::reverbPredelay })
+                    ids = ids && r->ids().contains (id);
+                ids = ids && ! d->ids().contains (params::delayMix) && ! r->ids().contains (params::reverbMix);
+            }
+            bool undo = false, reset = false, fits = true;
+            juce::String why;
+            if (ids)
+            {
+                d->type (params::delayRepeats, 70.0f);
+                d->type (params::delayDark, 20.0f);
+                settle (*t);
+                t->history.undo();
+                undo = std::abs (value (*t, params::delayRepeats) - 70.0f) < 0.01f && std::abs (value (*t, params::delayDark) - params::delayDarkDefaultPct) < 0.01f;
+                r->type (params::reverbDecay, 1.7f);
+                r->type (params::reverbType, 2.0f);
+                settle (*t);
+                r->reset();
+                settle (*t);
+                const bool back = std::abs (value (*t, params::reverbDecay) - 1.0f) < 0.01f;
+                t->history.undo();
+                reset = back && std::abs (value (*t, params::reverbDecay) - 1.7f) < 0.01f && juce::roundToInt (value (*t, params::reverbType)) == 2;
+                for (auto* panel : { d.get(), r.get() })
+                {
+                    panel->setSize (panel->getWidth(), panel->getHeight());
+                    panel->resized();
+                    for (auto* c : panel->getChildren())
+                        if (auto* b = dynamic_cast<juce::TextButton*> (c))
+                        {
+                            const auto f = juce::Font (juce::FontOptions (juce::jmin (16.0f, (float) b->getHeight() * 0.6f)));
+                            const float w = juce::GlyphArrangement::getStringWidth (f, b->getButtonText());
+                            if (w + 4.0f > (float) b->getWidth() || ! panel->getLocalBounds().contains (b->getBounds()) || f.getHeight() < 13.0f)
+                                fits = false, why << b->getButtonText() << " ";
+                        }
+                }
+            }
+            check (ids && undo && reset && fits, "DELAY's and REVERB's windows: their settings but MIX, a typed value one undo step, RESET one step back"
+                                                     + juce::String (fits ? "" : "; clipped: " + why));
+        }
+
+        // THE CHECKLIST: the five, ticked as they stand; a pick one undo step; the strip, the face and the window's least
+        // width follow. OrbitAmp has none.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* editor = dynamic_cast<AmpEditor*> (ed.get());
+            juce::String list;
+            if (editor != nullptr)
+                for (const auto& [row, in] : editor->checklistRows())
+                    list << params::chainLinks[(size_t) row].name << (in ? "+ " : "- ");
+            const int least0 = editor != nullptr ? editor->leastDesignWidth() : -1;
+            bool follows = false;
+            int least2 = -1, least1 = -1, w0 = ed->getWidth(), wBoth = -1;
+            if (editor != nullptr)
+            {
+                settle (*t);
+                editor->setLinkPresent (params::rowDelay, true);
+                least1 = editor->leastDesignWidth();
+                settle (*t);
+                editor->setLinkPresent (params::rowReverb, true);
+                least2 = editor->leastDesignWidth();
+                wBoth  = ed->getWidth();
+                int shownSpace = 0;
+                walkAll (*ed, [&] (juce::Component& c) { if (dynamic_cast<SpaceBlock*> (&c) != nullptr && shownIn (c, *ed)) ++shownSpace; });
+                settle (*t);
+                t->history.undo();
+                follows = shownSpace == 2 && ! t->linkShown (params::rowReverb) && t->linkShown (params::rowDelay)
+                          && editor->leastDesignWidth() == least1 && wBoth > w0;
+            }
+            auto g = make (products::orbitAmp());
+            std::unique_ptr<juce::AudioProcessorEditor> ged (g->createEditor());
+            auto* gEditor = dynamic_cast<AmpEditor*> (ged.get());
+            check (list == "OCTAVE+ ENVELOPE+ CHORUS+ DELAY- REVERB- " && follows && least0 == FaceplateView::designWidth
+                       && least1 == FaceplateView::designWidth && least2 > least0 && least2 <= 960
+                       && gEditor != nullptr && gEditor->checklistRows().empty() && gEditor->leastDesignWidth() == FaceplateView::designWidth,
+                   "the strip's checklist: " + list + "; a pick one undo step, the face and the least width following ("
+                       + juce::String (least0) + ", one added " + juce::String (least1) + ", both " + juce::String (least2)
+                       + "); OrbitAmp's has none");
+        }
+
+        // THE FACE: row three in the signal's order at the least width and at 16:9, none overlapping, the cabinet never
+        // under its least; every word of the pictures inside them; and THE GEARS — on every block, never on its name.
+        {
+            juce::StringArray bad;
+            for (const int mode : { 0, 1, 2 })   // default, both added, everything in and out
+            {
+                auto t = make (bass);
+                if (mode >= 1)
+                    both (*t, true);
+                if (mode == 2)
+                {
+                    set (*t, params::octavePresent, 0.0f);
+                    set (*t, params::chorusPresent, 0.0f);
+                }
+                std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+                auto* editor = dynamic_cast<AmpEditor*> (ed.get());
+                if (editor == nullptr)
+                {
+                    bad.add ("no editor");
+                    continue;
+                }
+                const int h = ed->getHeight();
+                for (const int width : { -1, juce::roundToInt ((float) h * 16.0f / 9.0f), juce::roundToInt ((float) h * 2.2f) })
+                {
+                        ed->setSize (width < 0 ? 10 : width, h);   // narrower than the least: laid out at the least
+                    const juce::String where = "mode " + juce::String (mode) + " at " + juce::String (ed->getWidth()) + " px: ";
+                    std::vector<std::pair<int, juce::String>> row3;
+                    juce::Component* face = nullptr;
+                    walkAll (*ed, [&] (juce::Component& c)
+                    {
+                        if (dynamic_cast<FaceplateView*> (&c) != nullptr)
+                            face = &c;
+                        auto* b = dynamic_cast<BlockFrame*> (&c);
+                        if (b == nullptr || ! shownIn (c, *ed) || face == nullptr || b->getParentComponent() != face)
+                            return;
+                        if (b->hasGear())
+                        {
+                            const auto title = b->titleBounds(), gear = b->gearBounds();
+                            if (title.intersects (gear) || ! b->getLocalBounds().contains (gear))
+                                bad.add (where + label (*b) + "'s gear " + gear.toString() + " on its name " + title.toString());
+                        }
+                        else
+                            bad.add (where + label (*b) + " has no gear");
+                        if (b->getY() > 300 && face != nullptr && b->getParentComponent() == face)
+                            row3.emplace_back (b->getX(), dynamic_cast<GuardBlock*> (b) != nullptr ? juce::String ("LIMIT")
+                                                          : dynamic_cast<ChorusBlock*> (b) != nullptr ? juce::String ("CHORUS")
+                                                          : dynamic_cast<CabinetBlock*> (b) != nullptr ? juce::String ("CAB")
+                                                          : dynamic_cast<SpaceBlock*> (b) != nullptr ? juce::String ("SPACE")
+                                                          : juce::String ("?"));
+                        if (auto* sb = dynamic_cast<SpaceBlock*> (b))
+                            for (const auto& w : SpacePicture::everyHeadline (sb->getName() == "DELAY" ? SpacePicture::Which::delay
+                                                                                                      : SpacePicture::Which::reverb))
+                                if (theme::trackedWidth (w, theme::displayFont (SpacePicture::textHeight), SpacePicture::tracking)
+                                    > (float) sb->view().getWidth())
+                                    bad.add (where + w + " (" + juce::String (theme::trackedWidth (w, theme::displayFont (SpacePicture::textHeight), SpacePicture::tracking), 1)
+                                             + ") wider than " + sb->getName() + "'s picture (" + juce::String (sb->view().getWidth()) + ")");
+                        if (dynamic_cast<CabinetBlock*> (b) != nullptr && b->getWidth() < FaceplateView::bassCabLeast)
+                            bad.add (where + "the cabinet " + juce::String (b->getWidth()) + " wide");
+                        if (face != nullptr && b->getParentComponent() == face && ! face->getLocalBounds().contains (b->getBounds()))
+                            bad.add (where + label (*b) + " outside the face");
+                    });
+                    std::sort (row3.begin(), row3.end());
+                    juce::String order;
+                    for (const auto& [x, n] : row3)
+                        order << n << " ";
+                    const juce::String want = mode == 0 ? "CHORUS CAB LIMIT " : mode == 1 ? "CHORUS SPACE SPACE CAB LIMIT " : "SPACE SPACE CAB LIMIT ";
+                    if (order != want)
+                        bad.add (where + "row three " + order);
+                    for (size_t k = 1; k < row3.size(); ++k)
+                        if (row3[k].first <= row3[k - 1].first)
+                            bad.add (where + "row three overlaps");
+                }
+            }
+            check (bad.isEmpty(), "row three in the signal's order — CHORUS, DELAY, REVERB, the cabinet, LIMIT — at the least width, 16:9 "
+                                  "and 2.2:1, the cabinet never under its least, the pictures' words inside them; a gear on every block, "
+                                  "never on its name" + (bad.isEmpty() ? juce::String() : ": " + bad.joinIntoString ("; ")));
+        }
+    }
+
     // ---- WHOSE STATE IT IS ----------------------------------------------------------------------------
     {
         auto source = make (bass);
@@ -3316,9 +3703,9 @@ int ORBITAMP_GATE_MAIN()
     // ---- THE LOAD WINDOW: a guitar amp's as it was before the bass's COMP, the bass's a row shorter ----------
     {
         LoadBreakdown gw (*guitar), bw (*amp);
-        check (gw.getHeight() == 384 && bw.getHeight() == 384 + 2 * 22,
+        check (gw.getHeight() == 384 && bw.getHeight() == 384 + 4 * 22,
                "the load window: OrbitAmp's " + juce::String (gw.getHeight()) + " px (384 before), OrbitBass's " + juce::String (bw.getHeight())
-                   + " (no DELAY, no REVERB; COMP, OCTAVE, ENVELOPE, CHORUS)");
+                   + " (its DELAY and REVERB too, which a player may add; COMP, OCTAVE, ENVELOPE, CHORUS)");
     }
 
     // ---- ITS TUNER -----------------------------------------------------------------------------------
@@ -3361,6 +3748,67 @@ int ORBITAMP_GATE_MAIN()
         check (viaGap < 0.8 * loud && std::abs (viaGap - silent) <= 1.0e-3 * silent,
                "a gap of 40 blocks lets FILTER's sweep fall as silence does: " + juce::String (loud, 0) + " Hz to " + juce::String (viaGap, 0)
                    + " (silence: " + juce::String (silent, 0) + ")");
+    }
+
+    // STILLS FOR A LOOK (ORBITBASS_STILLS, as above): OrbitBass's face as it opens, with DELAY and REVERB added at the least
+    // width and at 16:9 4K, a phrase played through it, its pictures fed; DELAY's and REVERB's windows.
+    if (const auto stills = juce::SystemStats::getEnvironmentVariable ("ORBITBASS_STILLS", {}); stills.isNotEmpty())
+    {
+        const juce::File dir (stills);
+        const auto write = [&dir] (const juce::String& name, const juce::Image& image)
+        {
+            juce::PNGImageFormat png;
+            juce::FileOutputStream os (dir.getChildFile (name));
+            if (os.openedOk())
+            {
+                os.setPosition (0);
+                os.truncate();
+                png.writeImageToStream (image, os);
+            }
+        };
+        const auto feed = [] (juce::Component& root)
+        {
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* p = dynamic_cast<SpacePicture*> (&c))  p->pull();
+                if (auto* p = dynamic_cast<ChorusPicture*> (&c)) p->pull();
+                if (auto* p = dynamic_cast<OctaveScope*> (&c))   p->pull();
+                if (auto* p = dynamic_cast<FilterCurve*> (&c))   p->pull();
+                if (auto* p = dynamic_cast<CompGraph*> (&c))     p->pull();
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+        };
+        for (const int mode : { 0, 1 })
+        {
+            auto t = make (bass);
+            if (mode == 1)
+            {
+                set (*t, params::delayPresent, 1.0f);
+                set (*t, params::reverbPresent, 1.0f);
+                set (*t, params::delayMix, 35.0f);
+                set (*t, params::delayRepeats, 45.0f);
+                set (*t, params::delayDiv, 7.0f);   // 1/8.
+            }
+            set (*t, params::chorusAmount, 0.5f);
+            set (*t, params::compAmount, 0.6f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            for (auto* w : { &t->compWatched, &t->octaveWatched, &t->filterWatched, &t->chorusWatched, &t->delayWatched, &t->reverbWatched })
+                w->store (true);
+            (void) play (*t, 150, false);
+            feed (*ed);
+            const int h = ed->getHeight();   // it opens at its least width, as its strip stands
+            write (mode == 0 ? "orbitbass-default.png" : "orbitbass-space-least.png", ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f));
+            if (mode == 1)
+            {
+                ed->setSize (juce::roundToInt ((float) h * 16.0f / 9.0f), h);
+                write ("orbitbass-space-16x9-4k.png", ed->createComponentSnapshot (ed->getLocalBounds(), true, 2160.0f / (float) h));
+                for (const char* block : { "DELAY", "REVERB" })
+                    if (auto panel = bass::makeSettings (*t, block))
+                        write (juce::String (block).toLowerCase() + "-window.png", panel->createComponentSnapshot (panel->getLocalBounds(), true, 2.0f));
+            }
+        }
     }
 
     std::printf ("%s\n", failed == 0 ? "PASSED" : "FAILED");

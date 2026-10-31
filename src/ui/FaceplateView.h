@@ -19,6 +19,7 @@ namespace orbitamp
 class CompBlock;
 class FilterBlock;
 class ChorusBlock;
+class SpaceBlock;
 
 class AmpProcessor;
 
@@ -141,6 +142,22 @@ public:
     /** ORBITBASS'S FACE, THREE ROWS by the signal's way (the owner, 31.10): GATE, COMP, OCTAVE and ENVELOPE before the
         amp; the AMP across the whole width; CHORUS, CAB IR and LIMIT after it (the cabinet takes what is left — room for
         one more block). Its least width is the guitar's; a wider window widens the pictures, every knob keeps its size. */
+    /** OrbitBass's DELAY and REVERB, compact (ui/SpaceBlocks.h): after CHORUS in the cabinet's row, each this wide at the
+        least — its MIX rail and its picture — and the cabinet never narrower than `bassCabLeast` beside them. */
+    static constexpr int spaceWidth   = 150;
+    static constexpr int bassCabLeast = 226;   // the guitar face's cabinet at its least (three in a row)
+
+    /** THE LEAST WIDTH OF ORBITBASS'S FACEPLATE as its strip stands: the cabinet's row — CHORUS, DELAY, REVERB as they
+        are in it, the cabinet at its least, LIMIT — or `fallback` (the guitar's least), whichever is wider. */
+    static int bassLeastWidth (bool chorusIn, bool delayIn, bool reverbIn, int fallback)
+    {
+        int row = GuardBlock::designWidth + colGap + bassCabLeast;
+        if (chorusIn) row += chorusWidth + colGap;
+        if (delayIn)  row += spaceWidth + colGap;
+        if (reverbIn) row += spaceWidth + colGap;
+        return juce::jmax (fallback, row);
+    }
+
     static constexpr int bassFxRowH  = 180;
     static constexpr int bassAmpRowH = 200;
     static constexpr int bassDesignHeight = 2 * 2 + bassFxRowH + 12 + bassAmpRowH + 12 + bassFxRowH;   // lanePadY, rowGap
@@ -190,6 +207,10 @@ private:
     std::unique_ptr<GuardBlock>  octave;
     std::unique_ptr<FilterBlock> filter;
     std::unique_ptr<ChorusBlock> chorus;
+
+    /** OrbitBass's DELAY and REVERB, compact, after CHORUS (ui/SpaceBlocks.h); none on a guitar amp — the guitar's own
+        blocks above stand hidden on the bass. On the face only while in the strip (AmpProcessor::linkShown). */
+    std::unique_ptr<SpaceBlock> spaceDelay, spaceReverb;
 
     /** OrbitBass's COMP, a block of its own (ui/CompBlock.h); none on a guitar amp. */
     std::unique_ptr<CompBlock> comp;

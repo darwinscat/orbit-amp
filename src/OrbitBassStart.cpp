@@ -14,16 +14,13 @@ namespace
         return new AmpEditor (p);
     }
 
-    /** WHERE A FRESH ORBITBASS STANDS, beyond the engine's: its chain's own (params::Opening) — no delay
-        and no reverb. The gate stays off, as every amp's does, and so out of the strip until it is switched
-        on. Its cuts are its own stage, not the cabinet's (params::bassHpf: the HPF at 5, a low B whole; the
-        LPF off), so the cabinet's own stay off and its IR plays as it was shot. The pack it opens on is the
-        first of its list, which is its only one for now (CMakeLists.txt: ORBITBASS_SET). */
-    void bassOpening (const Product&, params::Opening& o)
-    {
-        o.delayOn  = false;
-        o.reverbOn = false;
-    }
+    /** WHERE A FRESH ORBITBASS STANDS, beyond the engine's: the engine's own (params::Opening). Its DELAY and REVERB
+        are out of the strip (params::delayPresent, reverbPresent) — not in its sound or on its face until a player adds
+        them — and their switches ON, so one added plays at once. The gate stays off, as every amp's does. Its cuts are
+        its own stage, not the cabinet's (params::bassHpf: the HPF at 5, a low B whole; the LPF off), so the cabinet's
+        own stay off and its IR plays as it was shot. The pack it opens on is the first of its list, which is its only
+        one for now (CMakeLists.txt: ORBITBASS_SET). */
+    void bassOpening (const Product&, params::Opening&) {}
 
     /** Its own parameters, after the engine's: COMP, BLEND, DI/CAB and its cuts. */
     void bassParameters (const Product&, juce::AudioProcessorValueTreeState::ParameterLayout& layout)
@@ -33,7 +30,7 @@ namespace
 }
 
 /** ORBITBASS (Product.h): the bass's workstation — OrbitAmp's engine, frame and blocks over the bass's
-    chain (Chain::bass): mono, no delay, no reverb; COMP, the AMP's BLEND, DI/CAB and its own cuts, and the
+    chain (Chain::bass): mono to its CHORUS; COMP, the AMP's BLEND, DI/CAB and its own cuts, and the
     places of the blocks still to come. Its
     tuner listens always, as OrbitAmp's does, and down to a drop-A's A0. No first start: it has no
     player's files of before to gather. */
