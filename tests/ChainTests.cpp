@@ -3730,6 +3730,7 @@ int main()
         amp.prepareToPlay (48000.0, 512);
         amp.pumpDeviceWork();
         amp.compWatched.store (true);   // COMP's block on screen: its taps written every block, and that allocates nothing either
+        amp.filterWatched.store (true); // ENVELOPE's picture on screen too: its tap written every block
         juce::AudioBuffer<float> buf (2, 512);
         juce::MidiBuffer midi;
         long long n = 0, inBass = 0, inBassMalloc = 0;
@@ -3770,7 +3771,7 @@ int main()
         std::printf ("\norbitbass: 700 blocks from the first, every effect woken, stopped and switched, allocated %lld times"
                      " (operator new), %lld (malloc family)\n", inBass, inBassMalloc);
        #if ORBITAMP_COUNT_ALLOCATIONS
-        report ("OrbitBass's processBlock allocates nothing from its first block, its effects waking and stopping, COMP's picture shown", inBass == 0,
+        report ("OrbitBass's processBlock allocates nothing from its first block, its effects waking and stopping, COMP's and ENVELOPE's pictures shown", inBass == 0,
                 juce::String (inBass));
        #endif
        #if ORBITAMP_COUNT_MALLOCS

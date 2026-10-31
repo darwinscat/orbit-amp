@@ -7,6 +7,7 @@
 #include "../PluginProcessor.h"
 #include "BassControls.h"
 #include "CompBlock.h"
+#include "FilterBlock.h"
 
 namespace orbitamp
 {
@@ -72,7 +73,9 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
             return g;
         };
         octave = make ("OCTAVE", params::octaveAmount, params::octaveOn, 0, effectWorked[0], bass::showOctaveMenu);
-        filter = make ("FILTER", params::filterAmount, params::filterOn, 1, effectWorked[1], bass::showFilterMenu);
+        filter = std::make_unique<FilterBlock> (processor, effectWorked[1]);   // ENVELOPE on the face: its slider and its picture
+        filter->setSwitchShown (false);
+        addAndMakeVisible (*filter);
         chorus = make ("CHORUS", params::chorusAmount, params::chorusOn, 2, effectWorked[2], bass::showChorusMenu);
     }
 
@@ -159,7 +162,7 @@ void FaceplateView::resized()
     // The guards first: the gate at the head of row one, the limiter at the end of row two.
     gate.setVisible (! row1.isEmpty());
     limit.setVisible (! row2.isEmpty());
-    for (auto* fx : { octave.get(), filter.get() })
+    for (auto* fx : { (BlockFrame*) octave.get(), (BlockFrame*) filter.get() })
         if (fx != nullptr)
             fx->setVisible (! row1.isEmpty());
     if (comp != nullptr)
@@ -178,10 +181,10 @@ void FaceplateView::resized()
             row1.removeFromLeft (colGap);
         }
 
-        for (auto* fx : { octave.get(), filter.get() })
+        for (auto* fx : { (BlockFrame*) octave.get(), (BlockFrame*) filter.get() })
             if (fx != nullptr)
             {
-                fx->setBounds (row1.removeFromLeft (GuardBlock::designWidth));
+                fx->setBounds (row1.removeFromLeft (fx == filter.get() ? filterWidth : GuardBlock::designWidth));
                 row1.removeFromLeft (colGap);
             }
     }

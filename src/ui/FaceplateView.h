@@ -16,6 +16,7 @@ namespace orbitamp
 {
 
 class CompBlock;
+class FilterBlock;
 
 class AmpProcessor;
 
@@ -116,6 +117,10 @@ public:
     /** OrbitBass's COMP block, after the GATE: its slider, its picture and its ratio square (ui/CompBlock.h). */
     static constexpr int compWidth = 360;
 
+    /** OrbitBass's ENVELOPE block (FILTER inside), after OCTAVE: its slider and its picture (ui/FilterBlock.h). Its
+        width past a rail's comes out of the AMP's share: the face keeps the width below. */
+    static constexpr int filterWidth = 170;
+
     /** ...and by its COMP block and two of its effects' rails at the head of the AMP's row, OCTAVE and FILTER (CHORUS
         stands at the head of the cabinet's row, which takes what is left). */
     static constexpr int bassExtraWidth = CapturedBlockPanel::bassSideW + compWidth + colGap + 2 * (GuardBlock::designWidth + colGap);
@@ -159,7 +164,10 @@ private:
 
     /** OrbitBass's three effects, each ONE slider — a guard's rail over its amount, 0..1, and its menu on a right
         click (ui/BassControls.h); none on a guitar amp. Their lamps light while each works; they latch nothing. */
-    std::unique_ptr<GuardBlock> octave, filter, chorus;
+    std::unique_ptr<GuardBlock> octave, chorus;
+
+    /** OrbitBass's ENVELOPE (its FILTER), a block of its own with its picture (ui/FilterBlock.h); none on a guitar amp. */
+    std::unique_ptr<FilterBlock> filter;
 
     /** OrbitBass's COMP, a block of its own (ui/CompBlock.h); none on a guitar amp. */
     std::unique_ptr<CompBlock> comp;
