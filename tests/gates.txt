@@ -31,6 +31,7 @@ hum                orbitamp_hum_test
 hum-off            orbitamp_gates
 eqlink             orbitamp_eqlink_test
 tuner              orbitamp_tuner_test
+bass-tuner         orbitamp_bass_tuner_test
 gatelearn          orbitamp_gatelearn_test
 nofactory          orbitamp_gates
 # The site's kit of OrbitAmp's face is written on a Mac (ORBITAMP_WEB_EXPORT, through CoreGraphics); on

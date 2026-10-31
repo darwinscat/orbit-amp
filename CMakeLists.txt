@@ -1934,6 +1934,13 @@ add_executable(orbitamp_tuner_test tests/TunerTests.cpp)
 target_include_directories(orbitamp_tuner_test PRIVATE src)
 target_compile_features(orbitamp_tuner_test PRIVATE cxx_std_20)
 
+# The tuner on a BASS, the same way: every string a bassist tunes, through the processor's own path
+# (tap, 30 Hz ear, default floor and reference). A characterisation — it prints the tables and
+# passes whatever they say; it fails only if the harness stops hearing a guitar's A2.
+add_executable(orbitamp_bass_tuner_test tests/BassTunerTests.cpp)
+target_include_directories(orbitamp_bass_tuner_test PRIVATE src)
+target_compile_features(orbitamp_bass_tuner_test PRIVATE cxx_std_20)
+
 # Same gate for the gate's LEARN: known traces in, the threshold out — and the arithmetic held to
 # what OrbitAmp's GateConsole did before the faces came to share it. core::GateLearn is plain C++.
 add_executable(orbitamp_gatelearn_test tests/GateLearnTests.cpp)
