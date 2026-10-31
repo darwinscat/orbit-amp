@@ -1415,9 +1415,22 @@ void AmpProcessor::passGap (int numSamples) noexcept
         runOctave (nullptr, 0, len);
         if (envFilterReady)
         {
+            // The key is consumed through a gap (envfilter's contract) — a column at a time while ENVELOPE's picture is on
+            // screen, so it follows the sweep falling through the gap as through silence.
             tellFilter();
-            const float* key[] = { filterKey.getReadPointer (0) };
-            (void) envFilter.process (nullptr, 0, len, key, 1);   // the key is consumed through a gap (envfilter's contract)
+            const bool watched = filterWatched.load (std::memory_order_relaxed);
+            if (watched && ! filterTapLive)
+                filterTap.wake();
+            filterTapLive = watched;
+            for (int done = 0; done < len; )
+            {
+                const int n = watched ? juce::jmin (len - done, filterTap.untilColumn()) : len - done;
+                const float* key[] = { filterKey.getReadPointer (0) + done };
+                (void) envFilter.process (nullptr, 0, n, key, 1);
+                if (watched)
+                    filterTap.write (envFilter.shownCutoffHz(), n);
+                done += n;
+            }
             effectWorking[1].store (! envFilter.isIdle(), std::memory_order_relaxed);
         }
         runChorus (nullptr, 0, len);

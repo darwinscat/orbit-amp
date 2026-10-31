@@ -104,8 +104,13 @@ public:
         const float v = p.convertFrom0to1 (p.getValue());
         editing = f;
         editor.open (*this, fieldBox (f).toNearestInt(), v, f == Field::rate ? theme::orange : theme::lilac,
-                     [this, f] (float typed) { bass::setPlain (state, f == Field::rate ? params::chorusRateHz
-                                                                                         : params::chorusCrossoverHz, typed); });
+                     [this, f] (float typed)
+                     {
+                         // A typed number is ONE undo step of its own: two typed in quick succession stay two.
+                         amp.history.beginGesture();
+                         bass::setPlain (state, f == Field::rate ? params::chorusRateHz : params::chorusCrossoverHz, typed);
+                         amp.history.endGesture();
+                     });
         // The house's grip editor opens on a whole number; these are not whole, and they read at 13 px.
         editor.ed.setFont (theme::displayFont (textHeight));
         editor.ed.setText (numberText (f, v), false);

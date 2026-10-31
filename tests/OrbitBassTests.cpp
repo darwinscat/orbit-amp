@@ -1788,7 +1788,12 @@ int ORBITAMP_GATE_MAIN()
                         const double a = juce::MathConstants<double>::twoPi * (phi0 + (p + 1.0) * rate / fs);
                         p = centre + swing * (v == 0 ? std::sin (a) : std::cos (a));
                     }
-                    worst = std::max (worst, std::abs (m / w - p));
+                    // Every number finite and the centroid's weight not zero: a NaN anywhere — the tap's phase included — is a
+                    // miss, never a value std::max quietly drops.
+                    const double err = std::abs (m / w - p);
+                    if (! (std::abs (w) > 0.0) || ! std::isfinite (m) || ! std::isfinite (w) || ! std::isfinite (p) || ! std::isfinite (err))
+                        return 1.0e9;
+                    worst = std::max (worst, err);
                 }
                 return worst;
             };
@@ -2775,11 +2780,34 @@ int ORBITAMP_GATE_MAIN()
                         return levelAt (tone (*t, note, -12.0f, 150), note);
                     };
                     const double lost = at (false) - at (true);
-                    (five ? lostB : lostE) = std::max (five ? lostB : lostE, lost);
-                    worstAt << (five ? " 5@" : " 4@") << juce::String (hz, 0) << ":" << juce::String (lost, 2);
+                    // ...and the four inner cuts ALONE, a sine through them in series: what they take before the AMP (whose
+                    // own curve then squeezes the difference — the chain's number is the smaller).
+                    double alone = 0.0;
+                    {
+                        std::array<core::BassCuts, 4> cuts;
+                        core::BassCuts::Settings in;
+                        in.hpfOn = true;
+                        in.hpfHz = (double) hz / 3.0;
+                        const double note = five ? 30.9 : 41.2;
+                        std::vector<float> x ((size_t) sampleRate), y ((size_t) sampleRate);
+                        for (size_t i = 0; i < x.size(); ++i)
+                            x[i] = y[i] = (float) (0.25 * std::sin (juce::MathConstants<double>::twoPi * note * (double) i / sampleRate));
+                        for (auto& c : cuts)
+                        {
+                            c.prepare (sampleRate);
+                            for (size_t i = 0; i < y.size(); i += (size_t) blockSize)
+                            {
+                                float* ch[] = { y.data() + i };
+                                c.process (ch, 1, (int) std::min ((size_t) blockSize, y.size() - i), in);
+                            }
+                        }
+                        alone = levelAt (x, note) - levelAt (y, note);
+                    }
+                    (five ? lostB : lostE) = std::max ({ five ? lostB : lostE, lost, alone });
+                    worstAt << (five ? " 5@" : " 4@") << juce::String (hz, 0) << ": chain " << juce::String (lost, 2) << ", alone " << juce::String (alone, 3);
                 }
             check (structured && lostB <= 0.5 && lostE <= 0.5 && lostB >= 0.0 && lostE >= 0.0,
-                   "the inner cuts cost the low B at 5 STR at most " + juce::String (lostB, 2) + " dB and the low E at 4 STR at most "
+                   "the inner cuts cost — through the chain and alone, the larger — the low B at 5 STR at most " + juce::String (lostB, 2) + " dB and the low E at 4 STR at most "
                        + juce::String (lostE, 2) + " dB against the END cut alone, every frequency of the menus (0.5 at most):" + worstAt);
         }
 
@@ -3008,6 +3036,94 @@ int ORBITAMP_GATE_MAIN()
             check (pairs > 20 && same * 10 < pairs && worstApart (seen, unseen) == 0.0f,
                    "ENVELOPE's trail a column each: " + juce::String (same) + " of " + juce::String (pairs) + " neighbouring columns the same; watched or not, the sound bit for bit (worst "
                        + juce::String (worstApart (seen, unseen), 9) + ")");
+        }
+    }
+
+    // ---- RE-CHECK ROUND 7 (of 954fd16) -----------------------------------------------------------------------
+    {
+        const auto settle = [] (AmpProcessor& a) { for (int i = 0; i < 40; ++i) a.history.tick(); };
+        const auto first = [] (juce::Component& root, auto* none)
+        {
+            using T = std::remove_pointer_t<decltype (none)>;
+            T* found = nullptr;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* t = dynamic_cast<T*> (&c); t != nullptr && found == nullptr)
+                    found = t;
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+
+        // THE PICTURES' TYPED NUMBERS ARE A STEP EACH: two typed in quick succession on CHORUS's rate, its crossover and
+        // ENVELOPE's start corner — two undo steps, not one burst.
+        {
+            auto t = make (bass);
+            settle (*t);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* chorusPic = first (*ed, (ChorusPicture*) nullptr);
+            auto* curve     = first (*ed, (FilterCurve*) nullptr);
+            juce::StringArray said;
+            bool ok = chorusPic != nullptr && curve != nullptr;
+            if (ok)
+            {
+                for (const auto f : { ChorusPicture::Field::rate, ChorusPicture::Field::crossover })
+                {
+                    const char* id = f == ChorusPicture::Field::rate ? params::chorusRateHz : params::chorusCrossoverHz;
+                    const float before = value (*t, id);
+                    const float a = f == ChorusPicture::Field::rate ? 1.2f : 300.0f, b = f == ChorusPicture::Field::rate ? 2.2f : 500.0f;
+                    for (const float typed : { a, b })
+                    {
+                        chorusPic->openField (f);
+                        chorusPic->fieldEditor().ed.setText (juce::String (typed), false);
+                        chorusPic->fieldEditor().takeAndHide();
+                    }
+                    settle (*t);
+                    t->history.undo();
+                    const bool one = std::abs (value (*t, id) - a) < 0.02f * a;
+                    t->history.undo();
+                    const bool two = one && std::abs (value (*t, id) - before) < 0.02f * std::max (1.0f, before);
+                    ok = ok && two;
+                    said.add (juce::String (id) + (two ? " two steps" : " not two steps"));
+                }
+                const float before = value (*t, params::filterRange);
+                curve->typeStartHz (90.0f);
+                const float a = value (*t, params::filterRange);
+                curve->typeStartHz (400.0f);
+                settle (*t);
+                t->history.undo();
+                const bool one = juce::approximatelyEqual (value (*t, params::filterRange), a);
+                t->history.undo();
+                const bool two = one && juce::approximatelyEqual (value (*t, params::filterRange), before) && ! juce::approximatelyEqual (a, before);
+                ok = ok && two;
+                said.add (juce::String ("ENVELOPE's start") + (two ? " two steps" : " not two steps"));
+            }
+            check (ok, "the pictures' typed numbers, two quick ones two undo steps: " + said.joinIntoString ("; "));
+        }
+
+        // ENVELOPE'S PICTURE THROUGH A GAP: watched, a note sweeps it up; a gap of 40 blocks lets the sweep fall, and the
+        // picture's newest column is where it fell to — not where the note left it.
+        {
+            auto t = make (bass);
+            set (*t, params::filterAmount, 0.8f);
+            t->filterWatched.store (true);
+            (void) tone (*t, 110.0, -6.0f, 60);
+            juce::AudioBuffer<float> none (0, blockSize);
+            juce::MidiBuffer midi;
+            for (int b = 0; b < 40; ++b)
+                t->processBlock (none, midi);
+            std::vector<core::FilterTap::Column> cols (4);
+            const int got = t->filterTap.read (cols.data(), 4);
+            const double shown = got > 0 ? (double) cols[(size_t) got - 1].hz : 0.0, now = (double) t->filterShownCutoffHz();
+            // Within a column's own movement: the newest column is the last one closed, up to a column (5 ms) behind the sweep,
+            // which is still falling.
+            const double oneColumn = got > 1 ? std::abs (std::log2 ((double) cols[(size_t) got - 2].hz / shown)) : 0.0;
+            check (got > 1 && std::abs (std::log2 (shown / now)) <= std::max (0.01, oneColumn),
+                   "ENVELOPE's picture through a gap: its newest column " + juce::String (shown, 1) + " Hz, the sweep at " + juce::String (now, 1) + " Hz (columns "
+                       + juce::String ((int) t->filterTap.written()) + ": " + juce::String (got > 3 ? cols[0].hz : 0.0f, 1) + " " + juce::String (got > 3 ? cols[1].hz : 0.0f, 1)
+                       + " " + juce::String (got > 3 ? cols[2].hz : 0.0f, 1) + " at " + juce::String (got > 3 ? (int) cols[3].index : -1) + ")");
         }
     }
 

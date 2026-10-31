@@ -145,7 +145,9 @@ public:
                 apart = d;
                 best  = i;
             }
+        amp.history.beginGesture();   // ONE undo step of its own: two typed in quick succession stay two
         rangeAtt->setValueAsCompleteGesture ((float) best);
+        amp.history.endGesture();
     }
 
     bool fieldOpen() const { return field.isOpen(); }
