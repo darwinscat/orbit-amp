@@ -454,6 +454,45 @@ inline const juce::StringArray compAttacks    { "Slow", "Med", "Fast" };
 inline const juce::StringArray compReleases   { "Auto", "Fast", "Slow" };
 inline const juce::StringArray compCharacters { "Smooth", "Punchy" };
 
+/** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter and chorus), each a block in the strip — its
+    STANDBY/ON — and ONE slider, its amount 0..1 through the module's own law (<Module>Law.h, paramsForAmount): 0 is
+    the dry bit for bit, nothing computed. Everything else is the block's menu — the menu's fields, never the law's.
+
+    OCTAVE, after COMP: the -1 octave under the note; the menu: the -2 at the slider's top, TONE (the sub's low
+    pass), SUB HP (its high pass, 10..80 Hz) and the tracking GATE. */
+inline constexpr const char* octaveOn      = "octave_on";
+inline constexpr const char* octaveAmount  = "octave";
+inline constexpr const char* octaveSub2    = "octave_sub2";
+inline constexpr const char* octaveToneHz  = "octave_tone_hz";
+inline constexpr const char* octaveSubHpHz = "octave_sub_hp_hz";
+inline constexpr const char* octaveGateDb  = "octave_gate_db";
+inline constexpr float octaveSub2Top = 1.0f;   // the -2's level at the slider's top, where the menu switches it in
+
+/** FILTER, after OCTAVE: the envelope filter, its detector keyed from the gated input BEFORE COMP — it follows the
+    string. The menu: LP/BP, up/down, RESONANCE, RANGE, KEEP LOWS and its corner, the follower's attack and release. */
+inline constexpr const char* filterOn        = "filter_on";
+inline constexpr const char* filterAmount    = "filter";
+inline constexpr const char* filterMode      = "filter_mode";
+inline constexpr const char* filterDirection = "filter_direction";
+inline constexpr const char* filterResonance = "filter_resonance";
+inline constexpr const char* filterRange     = "filter_range";
+inline constexpr const char* filterKeepLows  = "filter_keep_lows";
+inline constexpr const char* filterKeepHz    = "filter_keep_hz";
+inline constexpr const char* filterAttackMs  = "filter_attack_ms";
+inline constexpr const char* filterReleaseMs = "filter_release_ms";
+inline const juce::StringArray filterModes      { "LP", "BP" };
+inline const juce::StringArray filterDirections { "Up", "Down" };
+inline const juce::StringArray filterRanges     { "Low", "Mid", "High" };
+inline constexpr float filterRangeHz[3][2] = { { 100.0f, 1500.0f }, { 150.0f, 3000.0f }, { 300.0f, 6000.0f } };
+
+/** CHORUS, after the AMP's tone and before the cabinet: where the bass's chain turns stereo, the lows centred. The
+    menu: RATE, CROSSOVER (below it the voice falls away), CENTRE (the delay its head swings about). */
+inline constexpr const char* chorusOn          = "chorus_on";
+inline constexpr const char* chorusAmount      = "chorus";
+inline constexpr const char* chorusRateHz      = "chorus_rate_hz";
+inline constexpr const char* chorusCrossoverHz = "chorus_crossover_hz";
+inline constexpr const char* chorusCentreMs    = "chorus_centre_ms";
+
 /** BLEND, in the AMP: the clean input below a frequency, the capture above it (RigPlayer's crossover
     blend) — 0 is the capture alone. The frequency and the polarity in its menu. */
 inline constexpr const char* ampBlend       = "amp_blend";
@@ -488,8 +527,8 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout&);
 /** The DSP cost entries, in the order the chain runs them: a captured block is followed by its own
     console. Here rather than in the processor so a link can name its stage and the footer can
     label one, without either of them having to know about the other. */
-enum Stage { stTotal, stTuner, stGate, stComp, stPreamp, stPreampEq, stDelay, stReverb,
-             stCab, stLimit, stOut, numStages };
+enum Stage { stTotal, stTuner, stGate, stComp, stOctave, stFilter, stPreamp, stPreampEq, stDelay, stReverb,
+             stChorus, stCab, stLimit, stOut, numStages };
 
 /** What the breakdown calls a stage. TWO spellings, both ASCII on purpose: the copied report runs
     through `formatted ("%-8s")`, where a multi-byte character breaks the encoding and the column
@@ -501,10 +540,13 @@ inline constexpr StageName stageNames[numStages] = {
     { "TUNER",  "TUNER"     },
     { "GATE",   "GATE"      },
     { "COMP",   "COMP"      },
+    { "OCTAVE", "OCTAVE"    },
+    { "FILTER", "FILTER"    },
     { "AMP",    "AMP"       },
     { "AMP EQ", "AMP EQ"    },
     { "DELAY",  "DELAY"     },
     { "REVERB", "REVERB"    },
+    { "CHORUS", "CHORUS"    },
     { "CAB",    "CAB"       },
     { "LIMIT",  "LIMIT"     },
     { "OUT",    "OUT"       },
@@ -513,8 +555,8 @@ inline constexpr StageName stageNames[numStages] = {
 /** A link's place in the chain — by NAME, not by arithmetic. The order is the chain's order and
     doubles as the index into `chainLinks`; naming the places is what lets one stand down without
     every row after it sliding under somebody's `i - first` sum. */
-enum ChainRow { rowIn, rowTuner, rowGate, rowComp, rowPreamp, rowDelay, rowReverb, rowCab,
-                rowLimit, rowOut, numChainRows };
+enum ChainRow { rowIn, rowTuner, rowGate, rowComp, rowOctave, rowFilter, rowPreamp, rowDelay, rowReverb,
+                rowChorus, rowCab, rowLimit, rowOut, numChainRows };
 
 /** One link of the chain. */
 struct ChainLink
@@ -532,9 +574,12 @@ inline constexpr ChainLink chainLinks[numChainRows] = {
     /* TUNER  */ { "TUNER",  false, true,  tunerOn,   stTuner,  numStages },
     /* GATE   */ { "GATE",   false, false, gateOn,    stGate,   numStages },
     /* COMP   */ { "COMP",   false, false, compOn,    stComp,   numStages },
+    /* OCTAVE */ { "OCTAVE", false, false, octaveOn,  stOctave, numStages },
+    /* FILTER */ { "FILTER", false, false, filterOn,  stFilter, numStages },
     /* AMP    */ { "AMP",    true,  true,  preampOn,  stPreamp, stPreampEq },
     /* DELAY  */ { "DELAY",  false, true,  delayOn,   stDelay,  numStages },
     /* REVERB */ { "REVERB", false, true,  reverbOn,  stReverb, numStages },
+    /* CHORUS */ { "CHORUS", false, false, chorusOn,  stChorus, numStages },
     /* CAB IR */ { "CAB IR", true,  true,  cabOn,     stCab,    numStages },
     /* LIMIT  */ { "LIMIT",  false, false, limiterOn, stLimit,  numStages },
     /* OUT    */ { "OUT",    false, true,  nullptr,   stOut,    numStages },
@@ -548,11 +593,11 @@ inline constexpr bool bassChainHolds (ChainRow row) noexcept
     return row != rowDelay && row != rowReverb;
 }
 
-/** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's COMP, which no guitar amp has a
-    parameter for. */
+/** THE GUITAR'S CHAIN, every amp's but OrbitBass's: every link but the bass's own — COMP, OCTAVE, FILTER and
+    CHORUS — which no guitar amp has a parameter for. */
 inline constexpr bool guitarChainHolds (ChainRow row) noexcept
 {
-    return row != rowComp;
+    return row != rowComp && row != rowOctave && row != rowFilter && row != rowChorus;
 }
 
 /** Whose cost a stage is. A captured block owns two — itself and its own console — and TOTAL

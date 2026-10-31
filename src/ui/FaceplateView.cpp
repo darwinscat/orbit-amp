@@ -5,6 +5,7 @@
 
 #include "../Parameters.h"
 #include "../PluginProcessor.h"
+#include "BassControls.h"
 
 namespace orbitamp
 {
@@ -38,6 +39,30 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
     // row splits among the rest.
     shownFlags[(size_t) Block::delay]  = processor.chainHolds (params::rowDelay);
     shownFlags[(size_t) Block::reverb] = processor.chainHolds (params::rowReverb);
+
+    // The bass's three effects: a rail each over its amount, the rail's own scale 0..1 by tenths, its menu on a right
+    // click — OCTAVE and FILTER at the head of the AMP's row, CHORUS at the head of the cabinet's, in the signal's order.
+    if (processor.chainHolds (params::rowOctave))
+    {
+        auto& state = processor.apvts;
+        const auto make = [&] (const char* name, const char* amountId, const char* onId, std::atomic<bool>& worked,
+                               void (*menu) (juce::AudioProcessorValueTreeState&, juce::Component*))
+        {
+            auto g = std::make_unique<GuardBlock> (name, *state.getParameter (amountId), *state.getParameter (onId),
+                                                   0.0f, 1.0f, false, [] { return 0.0f; }, worked);
+            g->setSwitchShown (false);
+            for (int k = 0; k <= 10; ++k)
+                g->marks.push_back ({ (float) k * 0.1f, k % 5 == 0 });
+            g->labelDecimals = 1;
+            auto* raw = g.get();
+            g->onMenu = [&state, raw, menu] (juce::Point<int>) { menu (state, raw); };
+            addAndMakeVisible (*g);
+            return g;
+        };
+        octave = make ("OCTAVE", params::octaveAmount, params::octaveOn, effectWorked[0], bass::showOctaveMenu);
+        filter = make ("FILTER", params::filterAmount, params::filterOn, effectWorked[1], bass::showFilterMenu);
+        chorus = make ("CHORUS", params::chorusAmount, params::chorusOn, effectWorked[2], bass::showChorusMenu);
+    }
 
     addAndMakeVisible (gate);
     addAndMakeVisible (limit);
@@ -120,11 +145,23 @@ void FaceplateView::resized()
     // The guards first: the gate at the head of row one, the limiter at the end of row two.
     gate.setVisible (! row1.isEmpty());
     limit.setVisible (! row2.isEmpty());
+    for (auto* fx : { octave.get(), filter.get() })
+        if (fx != nullptr)
+            fx->setVisible (! row1.isEmpty());
+    if (chorus != nullptr)
+        chorus->setVisible (! row2.isEmpty());
 
     if (! row1.isEmpty())
     {
         gate.setBounds (row1.removeFromLeft (GuardBlock::designWidth));
         row1.removeFromLeft (colGap);
+
+        for (auto* fx : { octave.get(), filter.get() })
+            if (fx != nullptr)
+            {
+                fx->setBounds (row1.removeFromLeft (GuardBlock::designWidth));
+                row1.removeFromLeft (colGap);
+            }
     }
 
     lay (row1, { Block::preamp });
@@ -135,6 +172,12 @@ void FaceplateView::resized()
     {
         limit.setBounds (row2.removeFromRight (GuardBlock::designWidth));
         row2.removeFromRight (colGap);
+
+        if (chorus != nullptr)
+        {
+            chorus->setBounds (row2.removeFromLeft (GuardBlock::designWidth));
+            row2.removeFromLeft (colGap);
+        }
     }
 
     lay (row2, { Block::delay, Block::reverb, Block::cabinet });

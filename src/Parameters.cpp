@@ -72,6 +72,40 @@ void addBassParameters (juce::AudioProcessorValueTreeState::ParameterLayout& lay
                 std::make_unique<Choice> (juce::ParameterID { compRelease, 1 },   "Comp Release",   compReleases, 0),
                 std::make_unique<Choice> (juce::ParameterID { compCharacter, 1 }, "Comp Character", compCharacters, 0));
 
+    // The three effects: in the strip, their sliders at 0 — present, and doing nothing until one is moved. The menus'
+    // defaults are the modules' own.
+    const juce::NormalisableRange<float> unit { 0.0f, 1.0f, 0.001f };
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { octaveOn, 1 },       "Octave", true),
+                std::make_unique<Float>  (juce::ParameterID { octaveAmount, 1 },   "Octave Amount", unit, 0.0f),
+                std::make_unique<Bool>   (juce::ParameterID { octaveSub2, 1 },     "Octave -2", false),
+                std::make_unique<Float>  (juce::ParameterID { octaveToneHz, 1 },   "Octave Tone Hz", hz (30.0f, 2000.0f, 120.0f), 120.0f),
+                std::make_unique<Float>  (juce::ParameterID { octaveSubHpHz, 1 },  "Octave Sub HP Hz",
+                                          juce::NormalisableRange<float> (10.0f, 80.0f, 0.1f), 25.0f),
+                std::make_unique<Float>  (juce::ParameterID { octaveGateDb, 1 },   "Octave Gate dB",
+                                          juce::NormalisableRange<float> (-90.0f, -20.0f, 0.1f), -50.0f));
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { filterOn, 1 },        "Filter", true),
+                std::make_unique<Float>  (juce::ParameterID { filterAmount, 1 },    "Filter Amount", unit, 0.0f),
+                std::make_unique<Choice> (juce::ParameterID { filterMode, 1 },      "Filter Mode", filterModes, 0),
+                std::make_unique<Choice> (juce::ParameterID { filterDirection, 1 }, "Filter Direction", filterDirections, 0),
+                std::make_unique<Float>  (juce::ParameterID { filterResonance, 1 }, "Filter Resonance",
+                                          juce::NormalisableRange<float> (0.5f, 12.0f, 0.01f, 0.5f), 4.0f),
+                std::make_unique<Choice> (juce::ParameterID { filterRange, 1 },     "Filter Range", filterRanges, 1),
+                std::make_unique<Bool>   (juce::ParameterID { filterKeepLows, 1 },  "Filter Keep Lows", true),
+                std::make_unique<Float>  (juce::ParameterID { filterKeepHz, 1 },    "Filter Keep Lows Hz",
+                                          juce::NormalisableRange<float> (80.0f, 300.0f, 1.0f), 150.0f),
+                std::make_unique<Float>  (juce::ParameterID { filterAttackMs, 1 },  "Filter Attack ms",
+                                          juce::NormalisableRange<float> (0.1f, 100.0f, 0.1f, 0.4f), 3.0f),
+                std::make_unique<Float>  (juce::ParameterID { filterReleaseMs, 1 }, "Filter Release ms",
+                                          juce::NormalisableRange<float> (5.0f, 2000.0f, 1.0f, 0.4f), 120.0f));
+    layout.add (std::make_unique<Bool>   (juce::ParameterID { chorusOn, 1 },          "Chorus", true),
+                std::make_unique<Float>  (juce::ParameterID { chorusAmount, 1 },      "Chorus Amount", unit, 0.0f),
+                std::make_unique<Float>  (juce::ParameterID { chorusRateHz, 1 },      "Chorus Rate Hz",
+                                          juce::NormalisableRange<float> (0.05f, 10.0f, 0.01f, 0.4f), 0.7f),
+                std::make_unique<Float>  (juce::ParameterID { chorusCrossoverHz, 1 }, "Chorus Crossover Hz",
+                                          hz (100.0f, 1000.0f, 200.0f), 200.0f),
+                std::make_unique<Float>  (juce::ParameterID { chorusCentreMs, 1 },    "Chorus Centre ms",
+                                          juce::NormalisableRange<float> (5.0f, 25.0f, 0.1f), 8.0f));
+
     layout.add (std::make_unique<Float> (juce::ParameterID { ampBlend, 1 },       "Amp Blend",
                                          juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f),
                 std::make_unique<Float> (juce::ParameterID { ampBlendHz, 1 },     "Amp Blend Hz",

@@ -129,7 +129,7 @@ namespace
     /** `blocks` blocks of a steady sine at `hz`, peak `db` dBFS (or silence, from block `quietFrom` on), into
         `amp`; before block `at`, `move` runs — a hand, a recall, automation. Channel 0 out. */
     std::vector<float> tone (AmpProcessor& amp, double hz, float db, int blocks, int at = -1,
-                             const std::function<void()>& move = {}, int quietFrom = 1 << 30)
+                             const std::function<void()>& move = {}, int quietFrom = 1 << 30, std::vector<float>* right = nullptr)
     {
         std::vector<float> out;
         juce::AudioBuffer<float> buf (2, blockSize);
@@ -150,8 +150,23 @@ namespace
             amp.processBlock (buf, midi);
             amp.pumpDeviceWork();
             out.insert (out.end(), buf.getReadPointer (0), buf.getReadPointer (0) + blockSize);
+            if (right != nullptr)
+                right->insert (right->end(), buf.getReadPointer (1), buf.getReadPointer (1) + blockSize);
         }
         return out;
+    }
+
+    /** The level of `v`'s component at `hz`, dB, over its second half — a single DFT bin. */
+    double levelAt (const std::vector<float>& v, double hz)
+    {
+        double c = 0.0, sn = 0.0;
+        for (size_t i = v.size() / 2; i < v.size(); ++i)
+        {
+            const double ph = juce::MathConstants<double>::twoPi * hz * (double) i / sampleRate;
+            c += v[i] * std::cos (ph);
+            sn += v[i] * std::sin (ph);
+        }
+        return 10.0 * std::log10 (c * c + sn * sn + 1.0e-30);
     }
 
     float peakIn (const std::vector<float>& v, size_t from, size_t to)
@@ -262,13 +277,15 @@ int ORBITAMP_GATE_MAIN()
 
     // ---- ITS STRIP -----------------------------------------------------------------------------------
     auto guitar = make (products::orbitAmp());
-    check (arrows (AmpEditor::stripRows (*amp)) == "GATE > COMP > AMP > CAB IR > LIMIT",
+    check (arrows (AmpEditor::stripRows (*amp)) == "GATE > COMP > OCTAVE > FILTER > AMP > CHORUS > CAB IR > LIMIT",
            "OrbitBass's strip: " + arrows (AmpEditor::stripRows (*amp)));
     check (arrows (AmpEditor::stripRows (*guitar)) == "GATE > AMP > DELAY > REVERB > CAB IR > LIMIT",
            "OrbitAmp's, as it was: " + arrows (AmpEditor::stripRows (*guitar)));
     {
-        bool none = ! guitar->chainHolds (params::rowComp);
-        for (const char* id : { params::compOn, params::compAmount, params::ampBlend, params::diMix, params::bassHpf, params::bassLpf })
+        bool none = ! guitar->chainHolds (params::rowComp) && ! guitar->chainHolds (params::rowOctave)
+                 && ! guitar->chainHolds (params::rowFilter) && ! guitar->chainHolds (params::rowChorus);
+        for (const char* id : { params::compOn, params::compAmount, params::ampBlend, params::diMix, params::bassHpf, params::bassLpf,
+                                params::octaveAmount, params::filterAmount, params::chorusAmount })
             none = none && guitar->apvts.getParameter (id) == nullptr;
         check (none, "OrbitAmp has no COMP and none of the bass's parameters");
     }
@@ -845,6 +862,101 @@ int ORBITAMP_GATE_MAIN()
                "the bass's tail is at least the cabinet's longest, 5 s (" + juce::String (amp->getTailLengthSeconds(), 2) + " s)");
     }
 
+    // ---- THE THREE EFFECTS (step 3) ----------------------------------------------------------------------
+    {
+        check (value (*amp, params::octaveOn) > 0.5f && value (*amp, params::filterOn) > 0.5f && value (*amp, params::chorusOn) > 0.5f
+                   && value (*amp, params::octaveAmount) == 0.0f && value (*amp, params::filterAmount) == 0.0f
+                   && value (*amp, params::chorusAmount) == 0.0f,
+               "OCTAVE, FILTER and CHORUS stand in the strip, their sliders at 0");
+
+        // At 0, whatever their menus say, each is the dry bit for bit — both outputs.
+        {
+            auto moved = make (bass);
+            set (*moved, params::octaveSub2, 1.0f);
+            set (*moved, params::octaveToneHz, 400.0f);
+            set (*moved, params::filterMode, 1.0f);
+            set (*moved, params::filterResonance, 12.0f);
+            set (*moved, params::filterKeepLows, 0.0f);
+            set (*moved, params::chorusRateHz, 2.5f);
+            set (*moved, params::chorusCentreMs, 20.0f);
+            const auto heard = play (*moved, blocks, false);
+            check (worstApart (heard.l, plain.l) == 0.0f && worstApart (heard.r, plain.r) == 0.0f,
+                   "the three at 0, their menus moved: the step-2b output, bit for bit, both sides");
+        }
+        // Each turned up is heard.
+        for (const auto& [id, name] : { std::pair<const char*, const char*> { params::octaveAmount, "OCTAVE" },
+                                        { params::filterAmount, "FILTER" }, { params::chorusAmount, "CHORUS" } })
+        {
+            auto up = make (bass);
+            set (*up, id, 0.8f);
+            const auto heard = play (*up, blocks, false);
+            check (worstApart (heard.l, plain.l) > 1.0e-3f, juce::String (name) + " at 0.8 is heard");
+        }
+
+        // One signal before CHORUS, two after it, the lows one in the centre. At 0 both outputs are the same samples.
+        check (worstApart (plain.l, plain.r) == 0.0f, "before CHORUS one signal: both outputs the same, bit for bit");
+        {
+            auto wide = make (bass);
+            set (*wide, params::chorusAmount, 1.0f);
+            const auto heard = play (*wide, blocks, false);
+            check (worstApart (heard.l, heard.r) > 1.0e-3f, "CHORUS turned up: two sides");
+            // The lows in the centre: an E1, 41 Hz, through it — the sides' difference at 41 Hz against their sum.
+            std::vector<float> r;
+            const auto l = tone (*wide, 41.2, -12.0f, 150, -1, {}, 1 << 30, &r);
+            std::vector<float> side (l.size()), mid (l.size());
+            for (size_t i = 0; i < l.size(); ++i)
+            {
+                side[i] = l[i] - r[i];
+                mid[i]  = l[i] + r[i];
+            }
+            const double apart = levelAt (side, 41.2) - levelAt (mid, 41.2);
+            check (apart < -40.0, "...the lows in the centre: at 41 Hz the sides' difference " + juce::String (apart, 1) + " dB under their sum");
+        }
+
+        // THE ORDER. OCTAVE's sub reaches the AMP's output: an E2's octave down, at 41 Hz, comes up through the amp.
+        {
+            const auto at = [] (const std::vector<float>& v, double hz)
+            {
+                double c = 0.0, sn = 0.0;
+                for (size_t i = v.size() / 2; i < v.size(); ++i)
+                {
+                    const double ph = juce::MathConstants<double>::twoPi * hz * (double) i / sampleRate;
+                    c += v[i] * std::cos (ph);
+                    sn += v[i] * std::sin (ph);
+                }
+                return 10.0 * std::log10 (c * c + sn * sn + 1.0e-30);
+            };
+            const auto sub = [&] (float amount)
+            {
+                auto t = make (bass);
+                set (*t, params::cabOn, 0.0f);
+                set (*t, params::bassHpf, (float) params::BassHpf::off);
+                set (*t, params::octaveAmount, amount);
+                return at (tone (*t, 82.41, -12.0f, 150), 41.2);
+            };
+            const double off = sub (0.0f), on = sub (1.0f);
+            check (on > off + 20.0, "OCTAVE's sub comes out of the AMP: 41 Hz under an E2 up " + juce::String (on - off, 1) + " dB");
+        }
+
+        // FILTER's key is the gated input BEFORE COMP: the sweep follows the string, so COMP squeezing — and lifting a
+        // quiet note by its make-up — moves it not at all; a louder string does.
+        {
+            const auto cutoff = [&] (float comp, float db)
+            {
+                auto t = make (bass);
+                set (*t, params::cabOn, 0.0f);
+                set (*t, params::compAmount, comp);
+                set (*t, params::filterAmount, 0.6f);
+                (void) tone (*t, 110.0, db, 100);
+                return (double) t->filterShownCutoffHz();
+            };
+            const double plainQuiet = cutoff (0.0f, -36.0f), squeezed = cutoff (1.0f, -36.0f), loud = cutoff (0.0f, -6.0f);
+            check (std::abs (squeezed - plainQuiet) <= 0.001 * plainQuiet && loud > plainQuiet * 1.5,
+                   "FILTER keyed before COMP: a quiet string's sweep at " + juce::String (plainQuiet, 0) + " Hz, COMP at the top "
+                       + juce::String (squeezed, 0) + " Hz; a loud one " + juce::String (loud, 0) + " Hz");
+        }
+    }
+
     // ---- WHOSE STATE IT IS ----------------------------------------------------------------------------
     {
         auto source = make (bass);
@@ -886,8 +998,9 @@ int ORBITAMP_GATE_MAIN()
     // ---- THE LOAD WINDOW: a guitar amp's as it was before the bass's COMP, the bass's a row shorter ----------
     {
         LoadBreakdown gw (*guitar), bw (*amp);
-        check (gw.getHeight() == 384 && bw.getHeight() == 384 - 22,
-               "the load window: OrbitAmp's " + juce::String (gw.getHeight()) + " px (384 before), OrbitBass's " + juce::String (bw.getHeight()));
+        check (gw.getHeight() == 384 && bw.getHeight() == 384 + 2 * 22,
+               "the load window: OrbitAmp's " + juce::String (gw.getHeight()) + " px (384 before), OrbitBass's " + juce::String (bw.getHeight())
+                   + " (no DELAY, no REVERB; COMP, OCTAVE, FILTER, CHORUS)");
     }
 
     // ---- ITS TUNER -----------------------------------------------------------------------------------

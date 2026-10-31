@@ -4,6 +4,12 @@
 #include "PluginProcessor.h"
 #include "Product.h"
 #include "Parameters.h"
+
+#include <felitronics/chorus/ChorusLaw.h>
+#include <felitronics/envfilter/EnvelopeFilterLaw.h>
+#include <felitronics/octave/OctaveLaw.h>
+
+#include <cstring>
 #include "device/FactoryShelf.h"
 #include "device/IrLibrary.h"
 
@@ -113,6 +119,7 @@ AmpProcessor::AmpProcessor (const Product& product)
         p.lpfOn    = apvts.getRawParameterValue (params::eqLpfOn (l));
         p.lpfHz    = apvts.getRawParameterValue (params::eqLpfHz (l));
         p.lpfSlope = apvts.getRawParameterValue (params::eqLpfSlope (l));
+        p.eqMode   = apvts.getRawParameterValue (params::blockEqMode (params::eqBlockId (l)));
         p.b3On     = apvts.getRawParameterValue (params::eqB3On (l));
 
         for (int b = 0; b < 3; ++b)
@@ -158,8 +165,14 @@ AmpProcessor::AmpProcessor (const Product& product)
         bass = { raw (params::compAmount), raw (params::compAttack), raw (params::compRelease), raw (params::compCharacter),
                  raw (params::ampBlend), raw (params::ampBlendHz), raw (params::ampBlendInvert), raw (params::diMix),
                  raw (params::bassHpf), raw (params::bassHpfHz4), raw (params::bassHpfHz5),
-                 raw (params::bassLpf), raw (params::bassLpfHzFingers), raw (params::bassLpfHzSlap) };
-        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr);
+                 raw (params::bassLpf), raw (params::bassLpfHzFingers), raw (params::bassLpfHzSlap),
+                 raw (params::octaveAmount), raw (params::octaveSub2), raw (params::octaveToneHz), raw (params::octaveSubHpHz),
+                 raw (params::octaveGateDb),
+                 raw (params::filterAmount), raw (params::filterMode), raw (params::filterDirection), raw (params::filterResonance),
+                 raw (params::filterRange), raw (params::filterKeepLows), raw (params::filterKeepHz), raw (params::filterAttackMs),
+                 raw (params::filterReleaseMs),
+                 raw (params::chorusAmount), raw (params::chorusRateHz), raw (params::chorusCrossoverHz), raw (params::chorusCentreMs) };
+        jassert (bass.compAmount != nullptr && bass.lpfHzSlap != nullptr && bass.chorusCentreMs != nullptr);
     }
 
     gateThresholdParam = apvts.getRawParameterValue (params::gateThreshold);
@@ -1040,6 +1053,13 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         bassCuts.prepare (sampleRate);
         diNow  = juce::jlimit (0.0f, 1.0f, bass.diMix->load() * 0.01f);
         diStep = (float) (1000.0 / (juce::jmax (8000.0, sampleRate) * 20.0));   // the prepared rate, not getSampleRate()'s
+
+        // The three effects: mono up to the chorus, which takes the bus's planes. Prepared from rest, told nothing yet.
+        octaverReady   = octaver.prepare (sampleRate, block, 1);
+        envFilterReady = envFilter.prepare (sampleRate, block, 1);
+        chorusReady    = chorus.prepare (sampleRate, block, juce::jlimit (1, 2, channels));
+        octaveToldValid = filterToldValid = chorusToldValid = false;
+        filterKey.setSize (1, block);
         diDry.setSize (juce::jmax (2, channels), block);
     }
     demo.prepare (sampleRate);
@@ -1166,6 +1186,84 @@ void AmpProcessor::updateReverbSettings() noexcept
     reverb.setHpfHz (reverbHpfHzParam->load());
 }
 
+namespace
+{
+    /** The same knobs, byte for byte — the parameter structs are floats and enums, nothing between them. */
+    template <typename P>
+    bool sameKnobs (const P& a, const P& b) noexcept { return std::memcmp (&a, &b, sizeof (P)) == 0; }
+}
+
+void AmpProcessor::runOctave (float* const* channels, int numSamples) noexcept
+{
+    if (! octaverReady)
+        return;
+
+    felitronics::octave::OctaverParams menu;
+    menu.sub2Top = bass.octaveSub2->load() > 0.5f ? params::octaveSub2Top : 0.0f;
+    menu.toneHz  = bass.octaveToneHz->load();
+    menu.subHpHz = bass.octaveSubHpHz->load();
+    menu.gateDb  = bass.octaveGateDb->load();
+    const float amount = linkWorks (params::rowOctave) ? bass.octave->load() : 0.0f;
+    const auto  p = felitronics::octave::paramsForAmount (amount, menu);
+    if (! octaveToldValid || ! sameKnobs (p, octaveTold))
+    {
+        octaver.setParams (p);
+        octaveTold = p;
+        octaveToldValid = true;
+    }
+    (void) octaver.process (channels, 1, numSamples);
+}
+
+void AmpProcessor::runFilter (float* const* channels, int numSamples) noexcept
+{
+    if (! envFilterReady)
+        return;
+
+    felitronics::envfilter::EnvelopeFilterParams menu;
+    const int range = juce::jlimit (0, 2, juce::roundToInt (bass.filterRange->load()));
+    menu.attackMs   = bass.filterAttackMs->load();
+    menu.releaseMs  = bass.filterReleaseMs->load();
+    menu.sweepLoHz  = params::filterRangeHz[range][0];
+    menu.sweepHiHz  = params::filterRangeHz[range][1];
+    menu.direction  = juce::roundToInt (bass.filterDirection->load()) == 1 ? felitronics::envfilter::Direction::down
+                                                                            : felitronics::envfilter::Direction::up;
+    menu.mode       = juce::roundToInt (bass.filterMode->load()) == 1 ? felitronics::envfilter::Mode::bandPass
+                                                                       : felitronics::envfilter::Mode::lowPass;
+    menu.resonance  = bass.filterResonance->load();
+    menu.keepLows   = bass.filterKeepLows->load() > 0.5f ? 1.0f : 0.0f;
+    menu.keepLowsHz = bass.filterKeepHz->load();
+    const float amount = linkWorks (params::rowFilter) ? bass.filter->load() : 0.0f;
+    const auto  p = felitronics::envfilter::paramsForAmount (amount, menu);
+    if (! filterToldValid || ! sameKnobs (p, filterTold))
+    {
+        envFilter.setParams (p);
+        filterTold = p;
+        filterToldValid = true;
+    }
+    const float* key[] = { filterKey.getReadPointer (0) };
+    (void) envFilter.process (channels, 1, numSamples, numSamples <= filterKey.getNumSamples() ? key : nullptr, 1);
+}
+
+void AmpProcessor::runChorus (float* const* channels, int numChannels, int numSamples) noexcept
+{
+    if (! chorusReady)
+        return;
+
+    auto menu = chorus.params();   // the stage's current knobs: the law keeps the menu's and sets its own two
+    menu.rateHz      = bass.chorusRateHz->load();
+    menu.crossoverHz = bass.chorusCrossoverHz->load();
+    menu.delayMs     = bass.chorusCentreMs->load();
+    const float amount = linkWorks (params::rowChorus) ? bass.chorus->load() : 0.0f;
+    const auto  p = felitronics::chorus::paramsForAmount (amount, menu);
+    if (! chorusToldValid || ! sameKnobs (p, chorusTold))
+    {
+        chorus.setParams (p);
+        chorusTold = p;
+        chorusToldValid = true;
+    }
+    (void) chorus.process (channels, numChannels, numSamples);
+}
+
 core::BassCuts::Settings AmpProcessor::bassCutSettings() const noexcept
 {
     const auto hpf = static_cast<params::BassHpf> (juce::jlimit (0, 2, juce::roundToInt (bass.hpf->load())));
@@ -1224,8 +1322,10 @@ void AmpProcessor::updateEqSettings() noexcept
         // Asked of the block, not of the parameter alone: a device that measured nothing has no
         // native stack to hand over, its face collapses the choice to ours, and the DSP has to
         // reach the same verdict or the block ends up with no tone stack at all.
-        const auto mode = static_cast<params::EqMode> (juce::roundToInt (
-            apvts.getRawParameterValue (params::blockEqMode (params::eqBlockId (l)))->load()));
+        //
+        // The parameter is looked up once (EqLinkParams::eqMode): its id is built from strings, and building it here
+        // allocated twice a block on the audio thread.
+        const auto mode = static_cast<params::EqMode> (juce::roundToInt (eqParams[(size_t) l].eqMode->load()));
 
         const auto& blockFor = blockAt ((size_t) l);
 
@@ -1585,7 +1685,10 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
                           : static_cast<params::StereoMode> (
                                 juce::jlimit (0, params::stereoModes.size() - 1, juce::roundToInt (stereoModeParam->load())));
     const int nch     = mode == params::StereoMode::stereo ? numChannels : juce::jmin (1, numChannels);
-    const int nchBack = mode == params::StereoMode::mono   ? nch         : numChannels;
+    // The bass's chain turns stereo at its CHORUS (Chain::bass): one signal up to it, the bus's planes from it on —
+    // the cabinet, the DI, the cuts, OUT and LIMIT per channel. A mono bus stays one voice.
+    const int nchBack = ownProduct.chain == Chain::bass   ? juce::jmin (2, numChannels)
+                      : mode == params::StereoMode::mono   ? nch : numChannels;
 
     // The captured blocks take a BUFFER — this alias holds only the channels the chain works.
     juce::AudioBuffer<float> chainView (const_cast<float**> (channels), nch, numSamples);
@@ -1643,6 +1746,11 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
 
     nsStage[stGate] = elapsedNs (tGate);
 
+    // FILTER's key, kept before COMP touches the signal: the gated input, the string itself — the filter follows the
+    // playing, not the compressed signal nor the octave's sub.
+    if (bass.filter != nullptr && nch > 0 && numSamples <= filterKey.getNumSamples())
+        filterKey.copyFrom (0, 0, buffer, 0, 0, numSamples);
+
     // THE BASS'S COMP (Chain::bass), after the gate, on its one signal: ONE KNOB (core::BassComp). Its STANDBY is
     // the house's crossfade, toward the link in AND its knob up; standing by with the knob up it is fed, not heard;
     // at 0 nothing is computed and the block passes bit for bit.
@@ -1659,9 +1767,20 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
         nsStage[stComp] = elapsedNs (a);
     }
 
-    // THE BASS'S PLACES STILL EMPTY BEFORE THE AMP, in its order:
-    //   [OCTAVE]  the sub octave, under the dry;
-    //   [FILTER]  the envelope filter, the low end kept.
+    // THE BASS'S OCTAVE, then its FILTER (Chain::bass), on the one signal, before the AMP: the sub goes into the amp
+    // with the note, and the filter sweeps both.
+    if (bass.octave != nullptr && nch > 0)
+    {
+        const auto a = PerfClock::now();
+        runOctave (channels, numSamples);
+        nsStage[stOctave] = elapsedNs (a);
+    }
+    if (bass.filter != nullptr && nch > 0)
+    {
+        const auto a = PerfClock::now();
+        runFilter (channels, numSamples);
+        nsStage[stFilter] = elapsedNs (a);
+    }
 
     // A captured block, whole: the capture, then its own EQ.
     //
@@ -1801,9 +1920,15 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     for (int ch = nch; ch < nchBack; ++ch)
         buffer.copyFrom (ch, 0, buffer, 0, 0, numSamples);
 
-    // THE BASS'S PLACE AFTER THE AMP (Chain::bass), still empty: [CHORUS], where its stereo will begin —
-    // above the low end only. It holds no delay and no reverb: neither is prepared, run or reset below
-    // (chainHolds), and their switches never work.
+    // THE BASS'S CHORUS (Chain::bass), on the planes the seam just made: two distinct copies on a stereo bus, so each
+    // gets its own voice — above the low end only, which stays one, in the centre. The bass holds no delay and no
+    // reverb: neither is prepared, run or reset below (chainHolds), and their switches never work.
+    if (bass.chorus != nullptr && nchBack > 0)
+    {
+        const auto a = PerfClock::now();
+        runChorus (channels, nchBack, numSamples);
+        nsStage[stChorus] = elapsedNs (a);
+    }
 
     // The echo before the space: repeats of what the preamp made, which the reverb then rooms.
     // First of the wide stages — the OFFSET is the block's stereo, so it works the back half's

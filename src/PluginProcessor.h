@@ -27,6 +27,9 @@
 #include "worlds/Ear.h"
 
 #include <felitronics/analysis/RollingSpectrumTap.h>
+#include <felitronics/chorus/BassChorus.h>
+#include <felitronics/envfilter/EnvelopeFilter.h>
+#include <felitronics/octave/Octaver.h>
 #include <felitronics/appkit/CompareHistory.h>
 #include <felitronics/appkit/UpdateChecker.h>
 #include <felitronics/dehum/HumRemover.h>
@@ -154,6 +157,8 @@ public:
         // no floor for them below.
         const bool echoes = chainHolds (params::rowDelay) || chainHolds (params::rowReverb);
 
+        if (chainHolds (params::rowChorus))
+            tail += (double) felitronics::chorus::BassChorus::tailSeconds();
         if (chainHolds (params::rowDelay))
             tail += (double) delay.tailSeconds();
         if (chainHolds (params::rowReverb))
@@ -858,6 +863,9 @@ public:
     /** WHETHER THIS PRODUCT'S CHAIN HAS THE LINK AT ALL (Product::chain) — the bass's has no delay and no
         reverb. A link it does not hold never works, whatever its switch says (a state of another amp's, a
         host's automation), and has no arrow on the strip and no block on the panel. */
+    /** The bass's FILTER: where its sweep stands now, Hz — the module's own read-out (any thread). */
+    float filterShownCutoffHz() const noexcept { return envFilter.shownCutoffHz(); }
+
     bool chainHolds (params::ChainRow row) const noexcept
     {
         return ownProduct.chain == Chain::bass ? params::bassChainHolds (row) : params::guitarChainHolds (row);
@@ -1248,6 +1256,7 @@ private:
         std::atomic<float>* lpfOn    = nullptr;
         std::atomic<float>* lpfHz    = nullptr;
         std::atomic<float>* lpfSlope = nullptr;
+        std::atomic<float>* eqMode   = nullptr;   // the block's DEVICE TONE / UNIVERSAL EQ, looked up once, not per block
         std::atomic<float>* b3On     = nullptr;
         std::atomic<float>* bellDb[3] {};
         std::atomic<float>* bellHz[3] {};
@@ -1316,7 +1325,43 @@ private:
         std::atomic<float>* lpf = nullptr;
         std::atomic<float>* lpfHzFingers = nullptr;
         std::atomic<float>* lpfHzSlap = nullptr;
+        std::atomic<float>* octave = nullptr;
+        std::atomic<float>* octaveSub2 = nullptr;
+        std::atomic<float>* octaveToneHz = nullptr;
+        std::atomic<float>* octaveSubHpHz = nullptr;
+        std::atomic<float>* octaveGateDb = nullptr;
+        std::atomic<float>* filter = nullptr;
+        std::atomic<float>* filterMode = nullptr;
+        std::atomic<float>* filterDirection = nullptr;
+        std::atomic<float>* filterResonance = nullptr;
+        std::atomic<float>* filterRange = nullptr;
+        std::atomic<float>* filterKeepLows = nullptr;
+        std::atomic<float>* filterKeepHz = nullptr;
+        std::atomic<float>* filterAttackMs = nullptr;
+        std::atomic<float>* filterReleaseMs = nullptr;
+        std::atomic<float>* chorus = nullptr;
+        std::atomic<float>* chorusRateHz = nullptr;
+        std::atomic<float>* chorusCrossoverHz = nullptr;
+        std::atomic<float>* chorusCentreMs = nullptr;
     } bass;
+
+    /** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter, chorus), on its chain alone: each fed its slider
+        through the module's own law (paramsForAmount) over the menu's fields, and told only when the result moved.
+        A link standing by is a slider at 0 — the module's own counted ramp takes it to idle, and a wake is its own
+        10 ms door. All three are zero-latency. Audio thread. */
+    felitronics::octave::Octaver          octaver;
+    felitronics::envfilter::EnvelopeFilter envFilter;
+    felitronics::chorus::BassChorus       chorus;
+    bool octaverReady = false, envFilterReady = false, chorusReady = false;
+    felitronics::octave::OctaverParams           octaveTold {};
+    felitronics::envfilter::EnvelopeFilterParams filterTold {};
+    felitronics::chorus::BassChorusParams        chorusTold {};
+    bool octaveToldValid = false, filterToldValid = false, chorusToldValid = false;
+    juce::AudioBuffer<float> filterKey;   // FILTER's key: the gated input before COMP, the string itself
+
+    void runOctave (float* const* channels, int numSamples) noexcept;
+    void runFilter (float* const* channels, int numSamples) noexcept;
+    void runChorus (float* const* channels, int numChannels, int numSamples) noexcept;
     std::atomic<float>* cabHpfOnParam = nullptr;
     std::atomic<float>* cabHpfHzParam = nullptr;
     std::atomic<float>* cabHpfSlopeParam = nullptr;

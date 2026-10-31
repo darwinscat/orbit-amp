@@ -1123,6 +1123,9 @@ set(AMP_ENGINE_LIBRARIES
     felitronics::nam                 # NAM inference — the captured devices actually play
     felitronics::rigplayer           # the pack player: captures, their crossfade, tone, alignment
     felitronics::limiter             # the safety at the door: a true-peak limiter with lookahead
+    felitronics::octave              # the bass's OCTAVE (Octaver) and its slider's law
+    felitronics::envfilter           # the bass's FILTER (EnvelopeFilter, keyed) and its slider's law
+    felitronics::chorus              # the bass's CHORUS (BassChorus) and its slider's law
     juce::juce_audio_utils           # pulls audio_processors / audio_basics / gui_basics ...
     juce::juce_dsp                   # the chain stages will build on this
     juce::juce_data_structures)      # ValueTree behind the workspace / presets
@@ -2044,7 +2047,8 @@ endif()
 # sources rather than a stage of it, because what this checks is the wiring between them.
 # ----------------------------------------------------------------------------
 juce_add_console_app(orbitamp_chain_test PRODUCT_NAME "OrbitAmpChainTest")
-target_sources(orbitamp_chain_test PRIVATE tests/ChainTests.cpp ${ORBITAMP_SOURCES})   # it plays OrbitAmp with no first start
+target_sources(orbitamp_chain_test PRIVATE tests/ChainTests.cpp ${ORBITAMP_SOURCES}   # it plays OrbitAmp with no first start
+    src/OrbitBassStart.cpp)          # ...and OrbitBass, for its allocations
 target_include_directories(orbitamp_chain_test PRIVATE src)
 target_include_directories(orbitamp_chain_test PRIVATE "${ORBITAMP_GENERATED_DIR}")   # the same faces, the same stamp
 add_dependencies(orbitamp_chain_test OrbitAmpVersionGen)

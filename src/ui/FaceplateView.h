@@ -106,7 +106,11 @@ public:
 
     /** OrbitBass's face is wider by its COMP and BLEND columns beside the AMP's dial
         (CapturedBlockPanel::bassSideW): its least width is designWidth and this. */
-    static constexpr int bassExtraWidth = 2 * CapturedBlockPanel::bassSideW;
+    static constexpr int colGap = 14;
+
+    /** ...and by its three effects' rails at the head of the AMP's row, OCTAVE and FILTER (CHORUS stands at the head
+        of the cabinet's row, which takes what is left). */
+    static constexpr int bassExtraWidth = 2 * CapturedBlockPanel::bassSideW + 2 * (GuardBlock::designWidth + colGap);
 
     // Row 1 is the AMP: three sections side by side — the GAIN dial, the channel lever, the picture
     // well with the meters at its edges — each a tier over one shared strip of controls. The EQ curve
@@ -136,7 +140,6 @@ public:
     static constexpr int contentBottom = lanePadY;
 
 private:
-    static constexpr int colGap = 14;
 
     BlockFrame& frame (Block b);
 
@@ -145,6 +148,11 @@ private:
     ReverbBlock        reverb;
     CabinetBlock       cabinet;
     GuardBlock         gate, limit;
+
+    /** OrbitBass's three effects, each ONE slider — a guard's rail over its amount, 0..1, and its menu on a right
+        click (ui/BassControls.h); none on a guitar amp. Their lamps have nothing to latch. */
+    std::unique_ptr<GuardBlock> octave, filter, chorus;
+    std::atomic<bool> effectWorked[3] {};
 
     /** Who stands on the panel, indexed by Block. The core three out of the box; the delay is
         reached for, not found already on. */

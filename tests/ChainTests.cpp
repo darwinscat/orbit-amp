@@ -3659,6 +3659,58 @@ int main()
                 juce::String (runaway, 2) + " s");
     }
 
+    // ORBITBASS'S CHAIN ALLOCATES NOTHING EITHER: its COMP, OCTAVE, FILTER and CHORUS turned up and moved, its BLEND,
+    // DI/CAB and cuts, every block of a few seconds of playing counted — the same counter, the bass's own processor.
+    {
+        static const orbitamp::Product bassQuiet = [] { auto p = orbitamp::products::orbitBass(); p.firstStart = nullptr; return p; }();
+        orbitamp::AmpProcessor amp (bassQuiet);
+        amp.inlineLoads = true;
+        amp.prepareToPlay (48000.0, 512);
+        amp.pumpDeviceWork();
+        for (const auto& [id, v] : { std::pair<const char*, float> { orbitamp::params::compAmount, 0.7f },
+                                      { orbitamp::params::octaveAmount, 0.8f }, { orbitamp::params::filterAmount, 0.9f },
+                                      { orbitamp::params::chorusAmount, 0.8f }, { orbitamp::params::ampBlend, 0.5f },
+                                      { orbitamp::params::bassLpf, 1.0f }, { orbitamp::params::diMix, 60.0f } })
+            set (amp, id, v);
+        amp.pumpDeviceWork();
+
+        juce::AudioBuffer<float> buf (2, 512);
+        juce::MidiBuffer midi;
+        long long n = 0, inBass = 0;
+        bool counting = false;
+        const auto play = [&] (int blocks)
+        {
+            for (int b = 0; b < blocks; ++b)
+            {
+                for (int i = 0; i < 512; ++i, ++n)
+                {
+                    const double t = (double) n / 48000.0;
+                    const auto v = (float) (0.3 * std::exp (-3.0 * std::fmod (t, 0.5)) * std::sin (2.0 * 3.14159265358979 * 55.0 * t));
+                    buf.setSample (0, i, v);
+                    buf.setSample (1, i, v);
+                }
+                const long long b0 = gAllocations;   // processBlock alone: a hand on a parameter is the message thread's
+                amp.processBlock (buf, midi);
+                if (counting)
+                    inBass += gAllocations - b0;
+            }
+        };
+        play (50);   // every stage woken, every door through
+        counting = true;
+        play (300);
+        set (amp, orbitamp::params::octaveAmount, 0.0f);   // the sliders moved while playing: the laws and the doors
+        set (amp, orbitamp::params::filterMode, 1.0f);
+        set (amp, orbitamp::params::chorusRateHz, 2.5f);
+        play (100);
+        set (amp, orbitamp::params::octaveAmount, 1.0f);
+        set (amp, orbitamp::params::chorusAmount, 0.0f);
+        play (100);
+        std::printf ("\norbitbass: 500 blocks with every effect turned up and moved allocated %lld times\n", inBass);
+       #if ORBITAMP_COUNT_ALLOCATIONS
+        report ("OrbitBass's processBlock allocates nothing, its three effects in it", inBass == 0, juce::String (inBass));
+       #endif
+    }
+
     std::printf ("\n%s\n", failures != 0 ? "FAILURES" : "all checks passed");
     return failures;
 }
