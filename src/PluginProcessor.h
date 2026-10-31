@@ -17,6 +17,7 @@
 #include "core/EqLink.h"
 #include "core/HumLearnLink.h"
 #include "core/BassComp.h"
+#include "core/OctaveTap.h"
 #include "core/BassCuts.h"
 #include "core/BypassFade.h"
 #include "core/BypassWire.h"
@@ -873,6 +874,12 @@ public:
     core::CompTap compTap;
     std::atomic<bool> compWatched { false };
 
+    /** OCTAVE'S PICTURE (ui/OctaveScope.h): the stage's input and its sub, sample by sample — written by the audio thread
+        only while `octaveWatched`, which the picture sets while it is on screen; read on the picture's own timer. On the
+        heap, made with the processor: a third of a second of two signals is no object for a stack. */
+    const std::unique_ptr<core::OctaveTap> octaveTap { std::make_unique<core::OctaveTap>() };
+    std::atomic<bool> octaveWatched { false };
+
     /** The ratio COMP works at now — the law's, or the hand's (the audio thread's; a gate reads it between blocks). */
     double compRatioNow() const noexcept { return bassComp.ratioNow(); }
 
@@ -1385,6 +1392,8 @@ private:
     felitronics::envfilter::EnvelopeFilter envFilter;
     felitronics::chorus::BassChorus       chorus;
     bool octaverReady = false, envFilterReady = false, chorusReady = false;
+    /** OCTAVE's input kept while its picture watches: the stage adds its sub in place (runOctave). */
+    std::array<float, 256> octaveDry {};
     felitronics::octave::OctaverParams           octaveTold {};
     felitronics::envfilter::EnvelopeFilterParams filterTold {};
     felitronics::chorus::BassChorusParams        chorusTold {};

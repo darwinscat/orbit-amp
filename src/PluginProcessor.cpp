@@ -1062,6 +1062,7 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         (void) bassComp.prepare (sampleRate, block);   // a refusal leaves it a wire (BassComp::process)
         bassComp.snapAmount (bass.compAmount->load());
         compTap.prepare (sampleRate);
+        octaveTap->prepare (sampleRate);
         bassCuts.prepare (sampleRate);
         diNow  = juce::jlimit (0.0f, 1.0f, bass.diMix->load() * 0.01f);
         diStep = (float) (1000.0 / (juce::jmax (8000.0, sampleRate) * 20.0));   // the prepared rate, not getSampleRate()'s
@@ -1307,7 +1308,24 @@ void AmpProcessor::runOctave (float* const* channels, int numChannels, int numSa
     if (! octaverReady)
         return;
     tellOctave();
-    (void) octaver.process (channels, numChannels, numSamples);
+    if (numChannels < 1 || numChannels > 2 || ! octaveWatched.load (std::memory_order_relaxed))
+    {
+        (void) octaver.process (channels, numChannels, numSamples);
+        return;
+    }
+
+    // Its picture on screen: the stage run a piece at a time, its input kept before it adds the sub, and both handed to
+    // the tap. The stage's output does not depend on how its calls are sliced (its law 8: the audio-time grid), so the
+    // pieces play bit for bit what one call would.
+    for (int done = 0; done < numSamples; )
+    {
+        const int n = juce::jmin (numSamples - done, (int) octaveDry.size());
+        float* piece[2] = { channels[0] + done, numChannels > 1 ? channels[1] + done : nullptr };
+        std::copy_n (piece[0], n, octaveDry.data());
+        (void) octaver.process (piece, numChannels, n);
+        octaveTap->write (octaveDry.data(), piece[0], n);
+        done += n;
+    }
 }
 
 void AmpProcessor::runFilter (float* const* channels, int numChannels, int numSamples) noexcept
