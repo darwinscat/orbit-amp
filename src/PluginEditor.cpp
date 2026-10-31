@@ -19,7 +19,7 @@ AmpEditor::AmpEditor (AmpProcessor& p)
                  *p.apvts.getParameter (params::outTrim)),
       gateConsole (p.apvts, p.gateKeyDb),
       humLearner (p.product(), p.humLearn, p.gateKeyDb, p.humTuned.quietHz),
-      tunerStrip (p.tunerEar), footer (p), demoStrip (p), setup (p)
+      tunerStrip (p.tunerEar, p.tunerStrobe), footer (p), demoStrip (p), setup (p)
 {
     setWantsKeyboardFocus (true);
 

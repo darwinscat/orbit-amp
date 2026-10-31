@@ -148,7 +148,7 @@ Console::Console (AmpProcessor& p, std::unique_ptr<Picture> pic, const Places& w
                     [this] { return -amp.limiterGrDb.load (std::memory_order_relaxed) / 3.0f; }, 300.0, 400.0),   // full at 3 dB squeezed
       gateDoor (stage::px13),
       limiterDoor (stage::px13),
-      tuner (p.tunerEar),
+      tuner (p.tunerEar, p.tunerStrobe),
       emblem (where.emblemFace, where.emblemMark),
       version (stage::px13),
       about (p.updateChecker(), aboutTheProduct (p.product(), look.mark, p.wrapperType == juce::AudioProcessor::wrapperType_Standalone), p.pluginFormat()),
@@ -1372,6 +1372,13 @@ void Console::showTunerMenu()
     for (const int hz : prefs::tunerReferences)
         addChoice (reference, juce::String (hz) + " Hz", hz == a4, [hz] (Console& c) { prefs::setTunerReference (c.amp.product(), hz); });
     menu.addSubMenu ("Reference  A = " + juce::String (a4) + " Hz", reference);
+
+    // How it shows the note — the needle, or a strobe — the machine's too: it is about who reads it.
+    const bool strobe = prefs::tunerStrobe (amp.product());
+    juce::PopupMenu display;
+    addChoice (display, "Needle", ! strobe, [] (Console& c) { prefs::setTunerStrobe (c.amp.product(), false); });
+    addChoice (display, "Strobe", strobe,   [] (Console& c) { prefs::setTunerStrobe (c.amp.product(), true); });
+    menu.addSubMenu (juce::String ("Display  ") + (strobe ? "Strobe" : "Needle"), display);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }

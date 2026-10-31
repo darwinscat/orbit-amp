@@ -5,6 +5,7 @@
 
 #include "Stage.h"
 #include "../core/TunerEar.h"
+#include "../core/TunerStrobe.h"
 
 #include <felitronics/appkit/Brand.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -618,11 +619,15 @@ private:
     Its state it writes in its corner, always — ON; OFF: it is not listening, and shows no note; MUTE: it
     listens, and the amp is silent while it does — since the screen is the switch: a click throws it.
     Over the note it writes the pitch its A is tuned to, when that is not 440: a needle that reads a
-    tuned guitar flat wants a reason as well. */
+    tuned guitar flat wants a reason as well.
+
+    While the player reads by the STROBE (core::TunerStrobe — the processor pumps it only then), its bands
+    stand where the ruler stood — big on the screen, thin in the strip — and on a dial its disc turns in
+    the needle's place; the note is the strobe's, the ink the needle's (ui/StrobeView.h). */
 class TunerFace final : public juce::Component, private juce::Timer
 {
 public:
-    explicit TunerFace (const core::TunerEar&);
+    TunerFace (const core::TunerEar&, const core::TunerStrobe&);
     void setState (bool listening, bool muting);
     void paint (juce::Graphics&) override;
 
@@ -660,14 +665,23 @@ public:
         room it needs: the strip's ruler gives way, the dial's window is overrun. */
     static constexpr float humAlpha = 0.4f, humPx = 24.0f;
 
+    /** THE STROBE's stripe — the fundamental's — on the screen and in the strip, px; the dial's disc has
+        `discSegments` round its fundamental ring, between `discInner` and `discOuter` of its reach. */
+    static constexpr float screenPeriod = 48.0f, stripPeriod = 32.0f;
+    static constexpr int   discSegments = 12;
+    static constexpr float discInner = 0.28f, discOuter = 0.86f;
+
 private:
     const core::TunerEar& ear;
+    const core::TunerStrobe& strobe;
     bool listening = true, muting = false, strip = false;
     Dial dial;
     void paintStrip (juce::Graphics&);
     void paintDial (juce::Graphics&);
     int  hum() const;                                   // the mains the reading is taken for, 0 = a note
+    core::PitchTracker::Note shownNote() const;         // the ear's nearest — or, strobing, the strobe's note
     juce::Colour needleColour() const;
+    juce::Colour strobeInk() const;                     // the needle's colour — lilac, dimmed, under HUM
     void timerCallback() override { repaint(); }
 };
 

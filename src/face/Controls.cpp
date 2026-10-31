@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of OrbitAmp — see LICENSE.
 
 #include "Controls.h"
+#include "../ui/StrobeView.h"
 
 #include <felitronics/appkit/BrandAssets.h>
 
@@ -1325,7 +1326,7 @@ void SegmentMeter::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-TunerFace::TunerFace (const core::TunerEar& e) : ear (e)
+TunerFace::TunerFace (const core::TunerEar& e, const core::TunerStrobe& s) : ear (e), strobe (s)
 {
     setInterceptsMouseClicks (false, false);
     startTimerHz (30);
@@ -1357,12 +1358,24 @@ int TunerFace::hum() const
     return listening && ear.live() ? ear.humMains() : 0;
 }
 
+core::PitchTracker::Note TunerFace::shownNote() const
+{
+    if (strobe.on() && strobe.note() >= 0)
+        return { strobe.note(), strobe.cents (ear.hz()) };
+    return ear.nearestNote();
+}
+
 juce::Colour TunerFace::needleColour() const
 {
     if (hum() != 0)
         return home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents)).withMultipliedAlpha (humAlpha);
     return ear.green() ? home
                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+}
+
+juce::Colour TunerFace::strobeInk() const
+{
+    return hum() != 0 ? lilac.withAlpha (humAlpha) : needleColour();
 }
 
 void TunerFace::paintDial (juce::Graphics& g)
@@ -1372,8 +1385,13 @@ void TunerFace::paintDial (juce::Graphics& g)
     const auto window = dial.window - origin;
     const float hub   = dial.reach * 0.07f;
     const bool live   = listening && ear.live();
-    const auto note   = ear.nearestNote();
+    const auto note   = shownNote();
     g.setFont (labelFont (stage::px13));
+
+    // STROBING: an old strobe tuner's disc turns where the needle swings, under everything else the dial writes.
+    if (strobe.on())
+        strobeview::paintDisc (g, pivot, dial.reach * discInner, dial.reach * discOuter, dial.sweep, strobe, live,
+                               strobeInk(), violet.withAlpha (0.16f), lilac.withAlpha (0.5f), discSegments);
 
     // The note in the window — HUM and its mains when the reading is the mains' — a dash while nothing is heard.
     if (hum() != 0)
@@ -1414,7 +1432,7 @@ void TunerFace::paintDial (juce::Graphics& g)
 
     // The needle, while a string is heard: green when it is home, warming to orange by 25 cents out,
     // tapering from the pivot to the ticks, with a short tail behind it.
-    if (live)
+    if (live && ! strobe.on())
     {
         const auto colour = needleColour();
         const float tail = dial.reach * 0.14f;
@@ -1444,7 +1462,7 @@ void TunerFace::paintStrip (juce::Graphics& g)
 {
     auto area = getLocalBounds().toFloat().reduced (10.0f, 1.0f);
     const bool live = listening && ear.live();
-    const auto note = ear.nearestNote();
+    const auto note = shownNote();
     g.setFont (labelFont (stage::px13));
 
     // Its state first — ON, OFF, or MUTE — then the note, a dash while nothing is heard.
@@ -1472,7 +1490,14 @@ void TunerFace::paintStrip (juce::Graphics& g)
     }
 
     // The ruler: a tick every five cents, the quarters taller, the centre orange; the needle over it.
+    // Strobing, the strobe's bands in its place.
     area.removeFromLeft (6.0f);
+    if (strobe.on())
+    {
+        strobeview::paintBands (g, area.reduced (0.0f, 2.0f), strobe, live, strobeInk(), violet.withAlpha (0.16f),
+                                lilac.withAlpha (0.5f), stripPeriod, 1.5f);
+        return;
+    }
     const auto ruler = area;
     const auto xOf = [&ruler] (float c) { return ruler.getX() + ruler.getWidth() * (juce::jlimit (-50.0f, 50.0f, c) + 50.0f) / 100.0f; };
     for (int c = -50; c <= 50; c += 5)
@@ -1508,7 +1533,7 @@ void TunerFace::paint (juce::Graphics& g)
 
     auto area = getLocalBounds().toFloat().reduced (18.0f, 10.0f);
     const bool live = listening && ear.live();      // switched off, the ear keeps the last note it heard
-    const auto note = ear.nearestNote();
+    const auto note = shownNote();
 
     // The note: name big, octave small beside it; a dash while nothing is heard.
     auto noteArea = area.removeFromLeft (96.0f);
@@ -1559,6 +1584,15 @@ void TunerFace::paint (juce::Graphics& g)
     // ruler stops short of the right edge so "+50" stays on the glass.
     area.removeFromLeft (8.0f);
     area.removeFromRight (18.0f);
+
+    // Strobing: the strobe, big, where the ruler and its numbers stood.
+    if (strobe.on())
+    {
+        strobeview::paintBands (g, area.reduced (0.0f, 4.0f), strobe, live, strobeInk(), violet.withAlpha (0.16f),
+                                lilac.withAlpha (0.5f), screenPeriod, 3.0f);
+        return;
+    }
+
     auto numbers = area.removeFromBottom (24.0f);
     const auto ruler = area;
     const auto xOf = [&ruler] (float c) { return ruler.getX() + ruler.getWidth() * (juce::jlimit (-50.0f, 50.0f, c) + 50.0f) / 100.0f; };

@@ -139,6 +139,17 @@ void SetupPanel::buildTunerPage()
         rows.push_back (std::move (floor));
     }
 
+    {
+        SettingsList::Row display;
+        display.name = "DISPLAY";
+        display.note = "a needle, or a strobe - stripes that stand still when the string is in tune";
+        display.choices.add ("NEEDLE");
+        display.choices.add ("STROBE");
+        display.chosen = [this] { return prefs::tunerStrobe (amp.product()) ? 1 : 0; };
+        display.choose = [this] (int k) { prefs::setTunerStrobe (amp.product(), k == 1); };
+        rows.push_back (std::move (display));
+    }
+
     tunerPage.setRows (std::move (rows));
 }
 

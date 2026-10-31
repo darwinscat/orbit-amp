@@ -12,6 +12,7 @@
 #include "core/DemoPlayer.h"
 #include "core/ScopeTap.h"
 #include "core/TunerEar.h"
+#include "core/TunerStrobe.h"
 #include "core/TunerTap.h"
 #include "core/WaveRibbon.h"
 #include "core/EqLink.h"
@@ -797,15 +798,28 @@ private:
         // Nobody watching, or the tuner is not in the rig: an MPM pass thirty times a second
         // for a needle that is not there is the definition of waste.
         if (getActiveEditor() == nullptr || ! linkWorks (params::rowTuner))
+        {
+            tunerStrobe.stop (prefs::tunerStrobe (ownProduct));   // off, a strobe still shows as one
             return;
+        }
 
         if (const double sr = getSampleRate();
             sr > 0.0 && ! juce::approximatelyEqual (sr, tunerEar.preparedRate()))
+        {
             tunerEar.prepare (sr);
+            tunerStrobe.prepare (sr);
+        }
 
         tunerEar.setLevelFloorDb ((double) prefs::tunerFloor (ownProduct));
         tunerEar.setReferenceHz ((float) prefs::tunerReference (ownProduct));
         tunerEar.update (tunerTap, juce::Time::getMillisecondCounter());
+
+        // The strobe, when the player reads by it: after the ear, whose note it holds to. Off, it is not
+        // run at all, and the ear and its needle are exactly what they were without it.
+        if (prefs::tunerStrobe (ownProduct))
+            tunerStrobe.update (tunerTap, tunerEar);
+        else
+            tunerStrobe.stop();
     }
 
     /** IS THIS LINK WORKING — the one question the chain asks, and the only shape of it. Every
@@ -1025,6 +1039,7 @@ public:
         zoomed tuner — reads the one ear, so they can never disagree. */
     core::TunerTap tunerTap;
     core::TunerEar tunerEar;
+    core::TunerStrobe tunerStrobe;   // the same pump, after the ear — only while the player reads by it
 
     /** The gate's effective gain at the last block end, in dB — what a pressure meter shows.
         Written by the audio thread, read by the strip's thumb and the zoomed gate on their

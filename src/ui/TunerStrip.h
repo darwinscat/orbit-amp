@@ -4,6 +4,8 @@
 #pragma once
 
 #include "../core/TunerEar.h"
+#include "../core/TunerStrobe.h"
+#include "StrobeView.h"
 #include "Theme.h"
 #include "ZoneSwitch.h"
 
@@ -18,12 +20,14 @@ namespace orbitamp
     dash and a dim scale.
 
     It reads the same TunerEar every other needle reads, on its own repaint clock — the ear is
-    pumped by the processor, so this is drawing only. */
+    pumped by the processor, so this is drawing only. While the player reads by the STROBE (the
+    processor pumps it only then), its bands stand where the ruler stood, the note's name and the
+    cents are the strobe's note's, and the stripes wear the needle's colour. */
 class TunerStrip final : public juce::Component,
                          private juce::Timer
 {
 public:
-    explicit TunerStrip (const core::TunerEar& tunerEar) : ear (tunerEar)
+    TunerStrip (const core::TunerEar& tunerEar, const core::TunerStrobe& tunerStrobe) : ear (tunerEar), strobe (tunerStrobe)
     {
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
         startTimerHz (30);
@@ -67,7 +71,9 @@ public:
         g.fillRoundedRectangle (r, theme::radiusMd);
 
         const bool live  = ear.live();
-        const auto note  = ear.nearestNote();
+        const bool strobing = strobe.on();
+        const auto note  = strobing && strobe.note() >= 0 ? core::PitchTracker::Note { strobe.note(), strobe.cents (ear.hz()) }
+                                                          : ear.nearestNote();
         const int  hum   = live ? ear.humMains() : 0;   // the mains it is taken for, 0 = a note
         const bool green = ear.green() && hum == 0;
 
@@ -122,6 +128,19 @@ public:
         // ---- the ruler between them, as wide as the note and the cents allow: the ruler is
         //      the tuner's actual instrument, the numbers are its captions ----
         const auto ruler = inner.reduced (9.0f, 0.0f);
+
+        // ---- or the strobe in its place: three bands, the needle's colour, still when in tune ----
+        if (strobing)
+        {
+            const auto ink = hum != 0 ? theme::lilac.withMultipliedAlpha (humDim)   // hum: they stay, dimmed
+                           : green    ? inTune
+                                      : inTune.interpolatedWith (theme::orange,
+                                            juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+            strobeview::paintBands (g, ruler, strobe, live, ink, theme::violet.withAlpha (0.16f),
+                                    theme::lilac.withAlpha (0.5f), strobePeriod, 1.5f);
+            return;
+        }
+
         const float midY = ruler.getCentreY();
         const float bandH = ruler.getHeight();   // the scale's wash and its zero: the strip's inner height
         const auto centsX = [&ruler] (float cents)
@@ -194,6 +213,7 @@ private:
         under the label at `humDim` of their light. */
     static constexpr float humPx = 13.0f, humDim = 0.4f;
     static constexpr float insetY = 5.0f;
+    static constexpr float strobePeriod = 32.0f;   // the fundamental's stripe, px; its octaves' 16 and 8
 
     /** Where the pill stands: at the far right, centred on the strip, the cents just before it —
         the same insets `paint` lays the row out with. */
@@ -229,6 +249,7 @@ private:
     inline static const juce::Colour inTune { 0xff5fc97a };   // the character ramp's clean green
 
     const core::TunerEar& ear;
+    const core::TunerStrobe& strobe;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 

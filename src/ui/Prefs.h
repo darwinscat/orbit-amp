@@ -203,6 +203,21 @@ inline std::atomic<int>& tunerReferenceCache (const Product& p)
 inline int  tunerReference (const Product& p)              { return tunerReferenceCache (p).load (std::memory_order_relaxed); }
 inline void setTunerReference (const Product& p, int hz)   { hz = snapTunerReference (hz); tunerReferenceCache (p).store (hz, std::memory_order_relaxed); store (p).set (tunerReferenceHz, hz); }
 
+/** HOW THE TUNER SHOWS A NOTE: its NEEDLE, or a STROBE (core::TunerStrobe) — stripes that stand still when
+    the string is in tune and drift by the sound's own phase when it is not. The player's way of reading,
+    not a sound's, so it lives on the machine with the reference and is read the same way, every tick.
+    The needle unless the player chose the strobe. */
+inline const juce::Identifier tunerStrobeKey { "tuner_strobe" };
+
+inline std::atomic<bool>& tunerStrobeCache (const Product& p)
+{
+    static PerProduct<std::atomic<bool>> cached;
+    return cached.of (p.name, [&p] { return getBool (p, tunerStrobeKey, false); });
+}
+
+inline bool tunerStrobe (const Product& p)              { return tunerStrobeCache (p).load (std::memory_order_relaxed); }
+inline void setTunerStrobe (const Product& p, bool on)  { tunerStrobeCache (p).store (on, std::memory_order_relaxed); setBool (p, tunerStrobeKey, on); }
+
 /** THE HUM AT THE INPUT — which mains the hum on this machine's input is made of: none to take off,
     50 Hz, 60 Hz, or AUTO, which listens and decides. It is about the wall socket, the cable and the
     pickups in this room, not about a sound, so it lives on the machine like the tuner's floor and a
