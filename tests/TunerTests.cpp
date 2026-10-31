@@ -6,18 +6,41 @@
 // sine and a strong harmonic is how tuners read octaves wrong; a Karplus-Strong pluck because it
 // decays and drifts the way a string does. Returns non-zero on any failure.
 //
+// And the STROBE (core::TunerStrobe): tones a known fraction of a cent off their note, read off the
+// stripes' speed; its phase across ticks of any length; the note it holds to; that it allocates nothing
+// (this program counts every allocation of its own — it is kept apart from the gates binary, so the count
+// is nobody else's); and that the ear beside it, HUM label and all, reads bit for bit as without it.
+//
 // JUCE-free, like the code under test: links nothing at all.
 
 #include "core/PitchTracker.h"
 #include "core/TunerEar.h"
+#include "core/TunerStrobe.h"
 
+#include <algorithm>
+#include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <new>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <utility>
 #include <vector>
+
+// THE STROBE ALLOCATES NOTHING: every allocation in this program is counted, so a tick can be held to none.
+namespace { std::atomic<long> allocations { 0 }; }
+void* operator new (std::size_t n)
+{
+    allocations.fetch_add (1, std::memory_order_relaxed);
+    if (void* p = std::malloc (n > 0 ? n : 1))
+        return p;
+    throw std::bad_alloc();
+}
+void operator delete (void* p) noexcept                 { std::free (p); }
+void operator delete (void* p, std::size_t) noexcept    { std::free (p); }
 
 using orbitamp::core::PitchTracker;
 
@@ -96,6 +119,325 @@ namespace
         for (int n = N + 1; n < total; ++n)
             y[(size_t) n] = 0.5f * (y[(size_t) (n - N)] + y[(size_t) (n - N - 1)]);
         return y;
+    }
+
+    // ---- THE STROBE (core::TunerStrobe) ----------------------------------------------------------
+
+    /** A string's worth of partials — 1 to 6, the 2nd over the 1st, as a wound string rings — at `hz`, each
+        partial p optionally `stretch[p]` cents off p * hz. Generated sample by sample, in double. */
+    struct Tone
+    {
+        double hz = 110.0, sr = 48000.0;
+        std::array<double, 7> stretch {};
+        std::array<double, 7> amp { 0.0, 0.30, 0.36, 0.18, 0.14, 0.08, 0.05 };
+        double vibratoCents = 0.0, vibratoHz = 0.0;
+        std::array<double, 7> phase {};
+        long n = 0;
+
+        float next()
+        {
+            const double t   = (double) n++ / sr;
+            const double bend = vibratoCents != 0.0 ? std::pow (2.0, vibratoCents * std::sin (2.0 * pi * vibratoHz * t) / 1200.0) : 1.0;
+            double y = 0.0;
+            for (int p = 1; p < 7; ++p)
+            {
+                y += amp[(size_t) p] * std::sin (2.0 * pi * phase[(size_t) p]);
+                phase[(size_t) p] += p * hz * bend * std::pow (2.0, stretch[(size_t) p] / 1200.0) / sr;
+                phase[(size_t) p] -= std::floor (phase[(size_t) p]);
+            }
+            return (float) y;
+        }
+    };
+
+    /** The tuner as the processor runs it: 512-sample blocks into the tap, and every tick — uneven, as a
+        timer's are — the ear, then the strobe. `each` sees every tick. */
+    template <typename Each>
+    void playThroughStrobe (Tone& tone, double seconds, orbitamp::core::TunerTap& tap, orbitamp::core::TunerEar& ear,
+                            orbitamp::core::TunerStrobe& strobe, unsigned& nowMs, long& played, Each&& each)
+    {
+        static constexpr int ticks[] = { 1536, 1600, 1700, 1650 };
+        std::vector<float> block (512);
+        const long end = played + (long) (seconds * tone.sr);
+        int sinceTick = 0, t = 0;
+        while (played < end)
+        {
+            for (auto& v : block)
+                v = tone.next();
+            tap.write (block.data(), (int) block.size());
+            played += (long) block.size();
+            sinceTick += (int) block.size();
+            if (sinceTick >= ticks[t % 4])
+            {
+                nowMs += (unsigned) std::lround (1000.0 * sinceTick / tone.sr);
+                ear.update (tap, nowMs);
+                strobe.update (tap, ear);
+                each (played);
+                sinceTick = 0;
+                ++t;
+            }
+        }
+    }
+
+    /** What band `k` reads, in cents of its partial, from its phase between seconds `from` and `to`. */
+    struct StrobeRun
+    {
+        std::array<double, 3> cents {};
+        int note = -1;
+    };
+
+    StrobeRun measureStrobe (Tone tone, double from = 1.0, double to = 3.0)
+    {
+        using namespace orbitamp::core;
+        TunerTap tap;
+        TunerEar ear;
+        TunerStrobe strobe;
+        ear.prepare (tone.sr);
+        strobe.prepare (tone.sr);
+        unsigned now = 0;
+        long played = 0;
+        std::array<double, 3> at {}, after {};
+        long atN = 0, afterN = 0;
+        playThroughStrobe (tone, to + 0.05, tap, ear, strobe, now, played, [&] (long n)
+        {
+            if (atN == 0 && n >= (long) (from * tone.sr)) { atN = n; for (int k = 0; k < 3; ++k) at[(size_t) k] = strobe.turns (k); }
+            if (afterN == 0 && n >= (long) (to * tone.sr)) { afterN = n; for (int k = 0; k < 3; ++k) after[(size_t) k] = strobe.turns (k); }
+        });
+
+        StrobeRun r;
+        r.note = strobe.note();
+        const double f = strobe.noteFrequency(), seconds = (double) (afterN - atN) / tone.sr;
+        for (int k = 0; k < 3; ++k)
+            r.cents[(size_t) k] = f > 0.0 ? 1200.0 * std::log2 (1.0 + (after[(size_t) k] - at[(size_t) k]) / seconds / f) : 999.0;
+        return r;
+    }
+
+    void strobeTests()
+    {
+        using namespace orbitamp::core;
+
+        // The stripes' speed IS the error: a string x cents off its note turns every band x cents' worth.
+        struct Case { const char* what; double note; double cents; double sr; };
+        const Case cases[] = {
+            { "A2",  110.0,    0.1, 48000.0 }, { "A2", 110.0,  0.5, 48000.0 }, { "A2",  110.0,  2.0, 48000.0 },
+            { "A2",  110.0,   10.0, 48000.0 }, { "A2", 110.0, -3.0, 48000.0 }, { "A2",  110.0, -0.1, 48000.0 },
+            { "A2",  110.0,   30.0, 48000.0 }, { "E1", 41.2034, 0.5, 48000.0 }, { "E1", 41.2034, -3.0, 48000.0 },
+            { "A1",  55.0,     2.0, 48000.0 }, { "E4", 329.628, 0.1, 48000.0 }, { "E4", 329.628, -10.0, 48000.0 },
+            { "A2",  110.0,    2.0, 44100.0 }, { "A2", 110.0,  2.0, 96000.0 }, { "E1", 41.2034, 0.1, 96000.0 },
+        };
+        double worst = 0.0;
+        for (const auto& c : cases)
+        {
+            Tone tone;
+            tone.hz = c.note * std::pow (2.0, c.cents / 1200.0);
+            tone.sr = c.sr;
+            const auto r = measureStrobe (tone);
+            for (int k = 0; k < 3; ++k)
+            {
+                char name[96];
+                std::snprintf (name, sizeof (name), "strobe: %s %+.1f c at %.0f k, band %d reads", c.what, c.cents, c.sr / 1000.0,
+                               TunerStrobe::partials[(size_t) k]);
+                check (name, r.cents[(size_t) k], c.cents, 0.05);
+                worst = std::max (worst, std::fabs (r.cents[(size_t) k] - c.cents));
+            }
+            checkTrue ("...held to the note it is nearest", r.note == PitchTracker::nearestNote ((float) c.note).midi);
+        }
+        std::printf ("strobe: the worst band of all, cents off            %.4f\n", worst);
+
+        // The bands against each other: a string whose 2nd partial runs 3 c sharp and 4th 6 c, in tune
+        // itself — the octave band drifts 3 c, the next 6, the fundamental stands.
+        {
+            Tone tone;
+            tone.stretch[2] = 3.0;
+            tone.stretch[4] = 6.0;
+            const auto r = measureStrobe (tone);
+            check ("strobe: stretched partials, fundamental band", r.cents[0], 0.0, 0.05);
+            check ("strobe: stretched partials, octave band",      r.cents[1], 3.0, 0.05);
+            check ("strobe: stretched partials, two-octave band",  r.cents[2], 6.0, 0.05);
+        }
+
+        // PHASE CONTINUITY: the same samples cut into ticks of any length leave the same phase, bit for bit.
+        {
+            TunerTap tap;
+            TunerStrobe even, uneven;
+            even.prepare (48000.0);
+            uneven.prepare (48000.0);
+            even.hold (45, 440.0f);
+            uneven.hold (45, 440.0f);
+
+            Tone tone;
+            tone.hz = 110.0 * std::pow (2.0, 4.0 / 1200.0);
+            const int cuts[] = { 37, 2000, 1, 900, 4096, 333, 1600, 7, 12000, 64 };
+            std::vector<float> chunk;
+            bool same = true;
+            int compared = 0;
+            double turnsAt10 = 0.0;
+            long samples = 0, samplesAt10 = 0;
+            for (int round = 0; round < 40; ++round)
+            {
+                for (const int cut : cuts)
+                {
+                    chunk.resize ((size_t) cut);
+                    for (auto& v : chunk)
+                        v = tone.next();
+                    tap.write (chunk.data(), cut);
+                    uneven.listen (tap);
+                    samples += cut;
+                }
+                even.listen (tap);
+                if (round == 10)
+                {
+                    turnsAt10   = even.turns (0);
+                    samplesAt10 = samples;
+                }
+                for (int k = 0; k < 3; ++k)
+                    same = same && even.turns (k) == uneven.turns (k) && even.stripes (k) == uneven.stripes (k);
+                ++compared;
+            }
+            checkTrue ("strobe: ticks of uneven length leave the phase bit for bit", same && compared == 40);
+            check ("...and reads the 4 c it was given",
+                   1200.0 * std::log2 (1.0 + (even.turns (0) - turnsAt10) / ((double) (samples - samplesAt10) / 48000.0) / 110.0), 4.0, 0.05);
+        }
+
+        // THE NOTE HOLDS: a string halfway between A2 and A#2, wavering 6 c either side, never flips the
+        // strobe — though the ear's nearest note does.
+        {
+            Tone tone;
+            tone.hz = 110.0 * std::pow (2.0, 50.0 / 1200.0);
+            tone.vibratoCents = 6.0;
+            tone.vibratoHz    = 3.0;
+            TunerTap tap;
+            TunerEar ear;
+            TunerStrobe strobe;
+            ear.prepare (tone.sr);
+            strobe.prepare (tone.sr);
+            unsigned now = 0;
+            long played = 0;
+            int first = -1, flips = 0, nearestFlips = 0, lastNearest = -1;
+            playThroughStrobe (tone, 4.0, tap, ear, strobe, now, played, [&] (long)
+            {
+                if (! ear.live())
+                    return;
+                if (first < 0)
+                    first = strobe.note();
+                flips += strobe.note() != first ? 1 : 0;
+                const int nearest = ear.nearestNote().midi;
+                nearestFlips += lastNearest >= 0 && nearest != lastNearest ? 1 : 0;
+                lastNearest = nearest;
+            });
+            check ("strobe: between two notes, ticks off its first note", flips, 0.0, 0.0);
+            checkTrue ("...though the ear's nearest note flipped", nearestFlips > 0);
+
+            // ...and 70 c up, the next note is the nearer by far: it moves.
+            TunerStrobe s;
+            s.prepare (48000.0);
+            s.follow (true, 110.0f * std::pow (2.0f, 45.0f / 1200.0f), 440.0f);
+            const int a2 = s.note();
+            s.follow (true, 110.0f * std::pow (2.0f, 60.0f / 1200.0f), 440.0f);
+            const int stillA2 = s.note();
+            s.follow (true, 110.0f * std::pow (2.0f, 70.0f / 1200.0f), 440.0f);
+            checkTrue ("strobe: A2 +45, +60 holds A2, +70 takes A#2", a2 == 45 && stillA2 == 45 && s.note() == 46);
+            s.follow (false, 0.0f, 440.0f);
+            s.follow (true, 110.0f * std::pow (2.0f, 55.0f / 1200.0f), 440.0f);
+            checkTrue ("...and a note after silence takes its own nearest", s.note() == 46);
+            s.follow (false, 0.0f, 440.0f);
+            s.follow (true, 110.0f * std::pow (2.0f, 45.0f / 1200.0f), 440.0f);
+            checkTrue ("...whichever side it is on", s.note() == 45);
+
+            // The tuner switched off while the player reads by the strobe: still a strobe; the needle's: not.
+            s.stop (true);
+            const bool offButChosen = s.on();
+            s.stop();
+            checkTrue ("strobe: off but chosen shows as a strobe, the needle's mode not", offButChosen && ! s.on());
+        }
+
+        // NO ALLOCATION: a strobe tick allocates nothing — the ear's ticks are not counted.
+        {
+            Tone tone;
+            TunerTap tap;
+            TunerEar ear;
+            TunerStrobe strobe;
+            ear.prepare (tone.sr);
+            strobe.prepare (tone.sr);
+            std::vector<float> block (512);
+            long during = 0;
+            for (int b = 0; b < 400; ++b)
+            {
+                for (auto& v : block)
+                    v = tone.next();
+                tap.write (block.data(), 512);
+                if (b % 3 == 2)
+                {
+                    ear.update (tap, (unsigned) b * 11u);
+                    const long before = allocations.load();
+                    strobe.update (tap, ear);
+                    during += allocations.load() - before;
+                }
+            }
+            check ("strobe: allocations in its ticks", (double) during, 0.0, 0.0);
+        }
+
+        // THE EAR IS UNTOUCHED: with the strobe pumped beside it, every tick of the ear — the needle, the
+        // reading, the note, the HUM label — is what it is without, bit for bit. Hum, then a string, then hum.
+        {
+            const auto run = [] (bool withStrobe)
+            {
+                std::vector<float> trace;
+                TunerTap tap;
+                TunerEar ear;
+                TunerStrobe strobe;
+                ear.prepare (48000.0);
+                strobe.prepare (48000.0);
+                std::vector<float> block (512);
+                long n = 0;
+                int hum50 = 0;
+                for (int b = 0; b < 1200; ++b)
+                {
+                    const bool string = b >= 400 && b < 700;
+                    for (auto& v : block)
+                    {
+                        const double t = (double) n++ / 48000.0;
+                        v = (float) (0.02 * std::sin (2.0 * pi * 50.0 * t) + 0.004 * std::sin (2.0 * pi * 100.0 * t)
+                                     + (string ? 0.3 * std::exp (-(t - 400 * 512 / 48000.0)) * std::sin (2.0 * pi * 146.83 * t) : 0.0));
+                    }
+                    tap.write (block.data(), 512);
+                    if (b % 3 == 2)
+                    {
+                        ear.update (tap, (unsigned) (n * 1000 / 48000));
+                        if (withStrobe)
+                            strobe.update (tap, ear);
+                        trace.push_back (ear.needle());
+                        trace.push_back (ear.hz());
+                        trace.push_back ((float) ear.nearestNote().midi);
+                        trace.push_back ((float) ear.humMains());
+                        hum50 += ear.humMains() == 50 ? 1 : 0;
+                    }
+                }
+                trace.push_back ((float) hum50);
+                return trace;
+            };
+            const auto alone = run (false), beside = run (true);
+            checkTrue ("strobe: the ear beside it reads bit for bit as alone",
+                       alone.size() == beside.size() && std::memcmp (alone.data(), beside.data(), alone.size() * sizeof (float)) == 0);
+            std::printf ("strobe: ticks labelled HUM 50 with the strobe pumped %.0f\n", (double) beside.back());
+            checkTrue ("...and the hum still reads HUM 50 in STROBE mode", beside.back() > 100.0f);
+        }
+
+        // THE TAP'S NEW SAMPLES: in order, and what the ring could not keep stepped over and counted.
+        {
+            TunerTap tap;
+            std::vector<float> in (30000), out ((size_t) TunerTap::size);
+            for (int i = 0; i < 30000; ++i)
+                in[(size_t) i] = (float) i;
+            unsigned cursor = 0, skipped = 0;
+            tap.write (in.data(), 30000);
+            const int n = tap.readSince (cursor, out.data(), (int) out.size(), skipped);
+            checkTrue ("tap: 30000 new, the oldest beyond the ring's keep stepped over",
+                       n == TunerTap::size - TunerTap::guard && skipped == 30000u - (unsigned) n
+                       && out[0] == (float) skipped && out[(size_t) n - 1] == 29999.0f && cursor == 30000u);
+            tap.write (in.data(), 10);
+            const int m = tap.readSince (cursor, out.data(), (int) out.size(), skipped);
+            checkTrue ("tap: ...then only what came after", m == 10 && skipped == 0 && out[9] == 9.0f && cursor == 30010u);
+        }
     }
 
     void checkNote (const char* what, double hz, const char* wantName, int wantOctave)
@@ -1083,6 +1425,8 @@ int main()
     check ("440 Hz against an A of 442, in cents", (double) PitchTracker::nearestNote (440.0f, 442.0f).cents, -7.85, 0.05);
     checkTrue ("432 Hz against an A of 432 is A4", PitchTracker::nearestNote (432.0f, 432.0f).midi == 69);
     checkTrue ("an ear nobody told measures from 440", orbitamp::core::TunerEar().referenceHz() == 440.0f);
+
+    strobeTests();
 
     std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "PASS" : "FAIL", failures, failures == 1 ? "" : "s");
     return failures == 0 ? 0 : 1;
