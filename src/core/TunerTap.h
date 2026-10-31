@@ -5,6 +5,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 
 namespace orbitamp::core
 {
@@ -39,8 +40,24 @@ public:
             w = (w + 1) % size;
         }
         writePos.store (w, std::memory_order_relaxed);
+        total.fetch_add ((std::uint32_t) numSamples, std::memory_order_release);
 
         generation.fetch_add (1, std::memory_order_release);
+    }
+
+    /** Samples ever written, modulo 2^32 — a reader's cursor for what is new since it last looked
+        (the polyphonic tuner keeps a history longer than this window). Sample number i sits at
+        buf[i % size]: writePos and this count start together and move together, and 2^32 is a
+        multiple of size, so the wrap keeps them in step. */
+    std::uint32_t written() const noexcept { return total.load (std::memory_order_acquire); }
+
+    /** Copies `count` samples starting at sample number `from`. The caller keeps them within the
+        newest `size` written — older ones are gone. Torn by a concurrent write the same way read()
+        is, and harmless the same way. */
+    void copy (std::uint32_t from, int count, float* out) const noexcept
+    {
+        for (int i = 0; i < count; ++i)
+            out[i] = buf[(size_t) ((from + (std::uint32_t) i) % (std::uint32_t) size)];
     }
 
     /** Copies the window out, oldest first. Returns false when the tap has never been written. */
@@ -60,6 +77,7 @@ private:
     std::array<float, size> buf {};
     std::atomic<int> writePos { 0 };   // the head is shared with the reader — by the letter, too
     std::atomic<unsigned> generation { 0 };
+    std::atomic<std::uint32_t> total { 0 };   // 32 bits: lock-free everywhere, and wraps cleanly
 };
 
 } // namespace orbitamp::core
