@@ -1929,10 +1929,13 @@ target_link_libraries(orbitamp_eqlink_test PRIVATE felitronics::eq)
 target_compile_features(orbitamp_eqlink_test PRIVATE cxx_std_20)
 
 # Same gate for the tuner's ear, and JUCE-free for the same reason: signals with a KNOWN pitch go
-# in, the cents error comes out. Links nothing at all — core::PitchTracker is plain C++.
+# in, the cents error comes out — and the strobe's stripes. Links nothing but threads — core::PitchTracker,
+# TunerEar and TunerStrobe are plain C++.
 add_executable(orbitamp_tuner_test tests/TunerTests.cpp)
 target_include_directories(orbitamp_tuner_test PRIVATE src)
 target_compile_features(orbitamp_tuner_test PRIVATE cxx_std_20)
+find_package(Threads REQUIRED)   # the strobe's tap is read while another thread laps it
+target_link_libraries(orbitamp_tuner_test PRIVATE Threads::Threads)
 
 # Same gate for the gate's LEARN: known traces in, the threshold out — and the arithmetic held to
 # what OrbitAmp's GateConsole did before the faces came to share it. core::GateLearn is plain C++.

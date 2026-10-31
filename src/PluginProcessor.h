@@ -817,7 +817,10 @@ private:
         // The strobe, when the player reads by it: after the ear, whose note it holds to. Off, it is not
         // run at all, and the ear and its needle are exactly what they were without it.
         if (prefs::tunerStrobe (ownProduct))
+        {
+            tunerStrobe.setLevelFloorDb ((double) prefs::tunerFloor (ownProduct));   // what the ear takes for noise
             tunerStrobe.update (tunerTap, tunerEar);
+        }
         else
             tunerStrobe.stop();
     }

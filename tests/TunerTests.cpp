@@ -20,7 +20,9 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
+#include <functional>
 #include <cstdint>
 #include <cstdlib>
 #include <new>
@@ -28,10 +30,16 @@
 #include <cstring>
 #include <memory>
 #include <utility>
+#include <thread>
 #include <vector>
 
 // THE STROBE ALLOCATES NOTHING: every allocation in this program is counted, so a tick can be held to none.
+// (gcc reads malloc in a replaced new and free in its delete as a mismatched pair; they are the pair.)
 namespace { std::atomic<long> allocations { 0 }; }
+#if defined (__GNUC__) && ! defined (__clang__)
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#endif
 void* operator new (std::size_t n)
 {
     allocations.fetch_add (1, std::memory_order_relaxed);
@@ -41,6 +49,9 @@ void* operator new (std::size_t n)
 }
 void operator delete (void* p) noexcept                 { std::free (p); }
 void operator delete (void* p, std::size_t) noexcept    { std::free (p); }
+#if defined (__GNUC__) && ! defined (__clang__)
+ #pragma GCC diagnostic pop
+#endif
 
 using orbitamp::core::PitchTracker;
 
@@ -209,6 +220,74 @@ namespace
         for (int k = 0; k < 3; ++k)
             r.cents[(size_t) k] = f > 0.0 ? 1200.0 * std::log2 (1.0 + (after[(size_t) k] - at[(size_t) k]) / seconds / f) : 999.0;
         return r;
+    }
+
+    /** ACROSS A RESTART — a note change, a stall, a flip, a new A: what each band's stripes did from the
+        first tick after it. While a band is blank (strength 0: its filters are settling) every step it takes
+        is false motion; once it shows, each step's miss from `expected` stripes a second — but for the tick it
+        came back in, which was blank for part of it. The step is the stripes' change in a tick, wrapped to the
+        nearest. */
+    struct Across
+    {
+        double falseMotion = 0.0, worstMiss = 0.0;
+        int    blankTicks = 0, shownTicks = 0;
+    };
+
+    Across watchAcross (orbitamp::core::TunerStrobe& s, orbitamp::core::TunerTap& tap, Tone& tone, double seconds,
+                        double expected, const std::function<void()>& atFirstTick = {})
+    {
+        static constexpr int ticks[] = { 1536, 1600, 1700, 1650 };
+        Across a;
+        std::array<double, 3> was { s.stripes (0), s.stripes (1), s.stripes (2) };
+        std::array<int, 3> shown {}, blanked {};
+        std::vector<float> chunk;
+        const long end = (long) (seconds * tone.sr);
+        for (long played = 0, t = 0; played < end; ++t)
+        {
+            const int n = ticks[t % 4];
+            chunk.resize ((size_t) n);
+            for (auto& v : chunk)
+                v = tone.next();
+            tap.write (chunk.data(), n);
+            played += n;
+            if (t == 0 && atFirstTick)
+                atFirstTick();
+            s.listen (tap);
+            for (int k = 0; k < 3; ++k)
+            {
+                double step = s.stripes (k) - was[(size_t) k];
+                step -= std::round (step);
+                was[(size_t) k] = s.stripes (k);
+                if (s.strength (k) <= 0.0f && shown[(size_t) k] == 0)
+                {
+                    a.falseMotion = std::max (a.falseMotion, std::fabs (step));
+                    ++a.blankTicks;
+                    blanked[(size_t) k] = 1;
+                }
+                else if (s.strength (k) > 0.0f && (shown[(size_t) k]++ > 0 || blanked[(size_t) k] == 0))
+                {
+                    a.worstMiss = std::max (a.worstMiss, std::fabs (step - expected * n / tone.sr));
+                    ++a.shownTicks;
+                }
+            }
+        }
+        return a;
+    }
+
+    void reportAcross (const char* what, const Across& a)
+    {
+        char name[96];
+        std::snprintf (name, sizeof (name), "strobe: %s, false motion settling", what);
+        check (name, a.falseMotion, 0.0, 0.01);
+        std::snprintf (name, sizeof (name), "strobe: %s, worst step miss after", what);
+        check (name, a.worstMiss, 0.0, 0.01);
+        checkTrue ("...and it shows again", a.shownTicks > 30);
+    }
+
+    /** The stripes a second a string at `hz` moves against a strobe held to `noteHz`. */
+    double stripesPerSecond (double hz, double noteHz)
+    {
+        return (hz - noteHz) * orbitamp::core::TunerStrobe::speedHz / noteHz;
     }
 
     void strobeTests()
@@ -420,6 +499,199 @@ namespace
                        alone.size() == beside.size() && std::memcmp (alone.data(), beside.data(), alone.size() * sizeof (float)) == 0);
             std::printf ("strobe: ticks labelled HUM 50 with the strobe pumped %.0f\n", (double) beside.back());
             checkTrue ("...and the hum still reads HUM 50 in STROBE mode", beside.back() > 100.0f);
+        }
+
+        // ---- RESTARTS: whatever starts its filters again shows nothing until they have settled, and then
+        //      the true motion — never the start-up's lurch (a backward kick on every new string). ----
+        {
+            // A NOTE CHANGE: A2 + 2 c, then E2 + 2 c.
+            TunerTap tap;
+            TunerStrobe s;
+            s.prepare (48000.0);
+            s.hold (45, 440.0f);
+            Tone tone;
+            tone.hz = 110.0 * std::pow (2.0, 2.0 / 1200.0);
+            watchAcross (s, tap, tone, 2.0, 0.0);
+            tone.hz = 82.4069 * std::pow (2.0, 2.0 / 1200.0);
+            reportAcross ("A2 to E2 +2 c", watchAcross (s, tap, tone, 2.0, stripesPerSecond (tone.hz, 82.4069),
+                                                     [&s] { s.hold (40, 440.0f); }));
+        }
+        {
+            // ...on a bass: E1 + 2 c from A1.
+            TunerTap tap;
+            TunerStrobe s;
+            s.prepare (48000.0);
+            s.hold (33, 440.0f);
+            Tone tone;
+            tone.hz = 55.0;
+            watchAcross (s, tap, tone, 2.0, 0.0);
+            tone.hz = 41.2034 * std::pow (2.0, 2.0 / 1200.0);
+            reportAcross ("A1 to E1 +2 c", watchAcross (s, tap, tone, 3.0, stripesPerSecond (tone.hz, 41.2034),
+                                                     [&s] { s.hold (28, 440.0f); }));
+        }
+        {
+            // A STALL: E1 in tune at 96 k, the strobe not pumped for 800 ms — more than the tap keeps for it.
+            TunerTap tap;
+            TunerStrobe s;
+            s.prepare (96000.0);
+            s.hold (28, 440.0f);
+            Tone tone;
+            tone.hz = 41.2034;
+            tone.sr = 96000.0;
+            watchAcross (s, tap, tone, 2.0, 0.0);
+            std::vector<float> lost (76800);
+            for (auto& v : lost)
+                v = tone.next();
+            tap.write (lost.data(), (int) lost.size());
+            reportAcross ("E1 after an 800 ms stall at 96 k", watchAcross (s, tap, tone, 3.0, 0.0));
+        }
+        {
+            // THE FLIP: a string at A2 + 60 c, read first at + 45 (A2 held), then at + 70: A#2, 40 c flat.
+            TunerTap tap;
+            TunerStrobe s;
+            s.prepare (48000.0);
+            Tone tone;
+            tone.hz = 110.0 * std::pow (2.0, 60.0 / 1200.0);
+            s.follow (true, 110.0f * std::pow (2.0f, 45.0f / 1200.0f), 440.0f);
+            watchAcross (s, tap, tone, 2.0, 0.0);
+            reportAcross ("the flip to A#2 -40 c", watchAcross (s, tap, tone, 2.0, stripesPerSecond (tone.hz, 116.5409),
+                                                             [&s] { s.follow (true, 110.0f * std::pow (2.0f, 70.0f / 1200.0f), 440.0f); }));
+        }
+        {
+            // A NEW A: A2 at 440, the reference moved to 442 — now 7.85 c flat.
+            TunerTap tap;
+            TunerStrobe s;
+            s.prepare (48000.0);
+            s.hold (45, 440.0f);
+            Tone tone;
+            watchAcross (s, tap, tone, 2.0, 0.0);
+            reportAcross ("A2 when A moves to 442", watchAcross (s, tap, tone, 2.0, stripesPerSecond (110.0, 110.5),
+                                                              [&s] { s.hold (45, 442.0f); }));
+        }
+
+        // ---- THE STRING DAMPED: the ear holds its note 700 ms more, the input is the interface's hiss. The
+        //      bands go blank within 100 ms, and no band that shows moves after the string has gone: never
+        //      stripes thrown about by noise. (What a band did in the tick it went blank in is never drawn.) ----
+        for (const double hz : { 110.0, 41.2034 })
+        {
+            Tone tone;
+            tone.hz = hz;
+            TunerTap tap;
+            TunerEar ear;
+            TunerStrobe s;
+            ear.prepare (tone.sr);
+            s.prepare (tone.sr);
+            std::vector<float> block (512);
+            std::uint32_t seed = 7;
+            long n = 0;
+            unsigned now = 0;
+            const long stopAt = (long) (1.5 * tone.sr);
+            double blankAfter = -1.0, motion = 0.0, liveAfter = 0.0;
+            std::array<double, 3> was {};
+            std::array<float, 3> wasShown {};
+            for (int b = 0; n < (long) (2.5 * tone.sr); ++b)
+            {
+                for (auto& v : block)
+                    v = n++ < stopAt ? tone.next() : 5.5e-4f * lcgNoise (seed);   // hiss at -70 dBFS
+                tap.write (block.data(), 512);
+                if (b % 3 != 2)
+                    continue;
+                ear.update (tap, now += 32);
+                s.update (tap, ear);
+                const double t = (double) (n - stopAt) / tone.sr;
+                const bool blank = s.strength (0) <= 0.0f && s.strength (1) <= 0.0f && s.strength (2) <= 0.0f;
+                for (int k = 0; k < 3; ++k)
+                {
+                    double step = s.stripes (k) - was[(size_t) k];
+                    step -= std::round (step);
+                    was[(size_t) k] = s.stripes (k);
+                    if (t > 0.0 && ear.live() && s.strength (k) > 0.0f && wasShown[(size_t) k] > 0.0f)
+                        motion = std::max (motion, std::fabs (step));
+                    wasShown[(size_t) k] = s.strength (k);
+                }
+                if (t > 0.0 && ear.live())
+                    liveAfter = t;
+                if (t > 0.0 && blank && blankAfter < 0.0)
+                    blankAfter = t;
+            }
+            char name[96];
+            std::snprintf (name, sizeof (name), "strobe: %.0f Hz damped, blank after, s", hz);
+            check (name, blankAfter, 0.0, 0.1);
+            std::snprintf (name, sizeof (name), "strobe: %.0f Hz damped, motion while the ear holds", hz);
+            check (name, motion, 0.0, 0.01);
+            checkTrue ("...while the ear held the note on for half a second more", liveAfter > 0.5);
+        }
+
+        // ---- SILENCE COSTS NOTHING: once the ear hears no note, the strobe demodulates nothing — the filters
+        //      would decay into subnormals on the message thread, ~50x the cost of a tick on x86. ----
+        {
+            Tone tone;
+            tone.sr = 96000.0;
+            TunerTap tap;
+            TunerEar ear;
+            TunerStrobe s;
+            ear.prepare (tone.sr);
+            s.prepare (tone.sr);
+            std::vector<float> block (512);
+            long n = 0;
+            unsigned now = 0;
+            int quietTicks = 0, workingQuiet = 0;
+            for (int b = 0; n < (long) (16.0 * tone.sr); ++b)
+            {
+                for (auto& v : block)
+                    v = n++ < (long) tone.sr ? tone.next() : 0.0f;
+                tap.write (block.data(), 512);
+                if (b % 6 != 5)
+                    continue;
+                ear.update (tap, now += 32);
+                s.update (tap, ear);
+                if (! ear.live())
+                {
+                    ++quietTicks;
+                    workingQuiet += s.demodulating() ? 1 : 0;
+                }
+            }
+            checkTrue ("strobe: 15 s of silence went by", quietTicks > 400);
+            check ("strobe: ticks of silence it demodulated", workingQuiet, 0.0, 0.0);
+        }
+
+        // ---- A TAP LAPPED WHILE IT IS READ: what was overwritten under the copy never reaches the strobe —
+        //      it is dropped and counted as a gap. A ramp, so a chunk is whole when its samples count on. ----
+        {
+            TunerTap tap;
+            std::atomic<bool> done { false };
+            std::thread writer ([&tap, &done]
+            {
+                std::vector<float> block (16384);
+                unsigned next = 0;
+                while (! done.load (std::memory_order_relaxed))
+                {
+                    for (auto& v : block)
+                        v = (float) (next++ & 0xffffffu);
+                    tap.write (block.data(), (int) block.size());
+                }
+            });
+            std::vector<float> out ((size_t) TunerTap::size);
+            unsigned cursor = 0, skipped = 0;
+            long chunks = 0, torn = 0, samples = 0;
+            const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds (1500);
+            while (std::chrono::steady_clock::now() < until)
+            {
+                const unsigned from = cursor;
+                const int got = tap.readSince (cursor, out.data(), (int) out.size(), skipped);
+                const unsigned first = from + skipped;
+                bool whole = true;
+                for (int i = 0; i < got && whole; ++i)
+                    whole = out[(size_t) i] == (float) ((first + (unsigned) i) & 0xffffffu);
+                torn += whole ? 0 : 1;
+                chunks += got > 0 ? 1 : 0;
+                samples += got;
+            }
+            done = true;
+            writer.join();
+            std::printf ("tap: lapped, %ld chunks, %ld samples read\n", chunks, samples);
+            check ("tap: lapped while read, torn chunks", (double) torn, 0.0, 0.0);
+            checkTrue ("...and it read on", chunks > 100);
         }
 
         // THE TAP'S NEW SAMPLES: in order, and what the ring could not keep stepped over and counted.

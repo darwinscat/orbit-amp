@@ -18,7 +18,11 @@ namespace orbitamp::core
     counter is only there to say "never written yet".
 
     The STROBE reads it the other way (readSince): not a window, but every sample that arrived since
-    it last looked, in order — the count of samples ever written says which those are.
+    it last looked, in order — the count of samples ever written says which those are. It must never
+    integrate a sample overwritten under its copy as if it were the next one in time, so the writer
+    CLAIMS a block before writing it, and the reader, having copied, drops whatever a claim has reached
+    (the samples are atomics, relaxed — plain loads and stores — so the claim and the copy are ordered by
+    a fence on either side, and nothing waits on anything).
 
     32768 samples is ~680 ms at 48 kHz and ~340 ms at 96 kHz. The tracker analyses the NEWEST ~256
     ms of it after decimation and lets the rest go — and the rest is not waste: it is where the
@@ -36,14 +40,18 @@ public:
     {
         generation.fetch_add (1, std::memory_order_release);
 
+        const unsigned start = written.load (std::memory_order_relaxed);   // one writer: its own count
+        claimed.store (start + (unsigned) numSamples, std::memory_order_relaxed);
+        std::atomic_thread_fence (std::memory_order_release);   // the claim is seen before any sample it covers
+
         int w = writePos.load (std::memory_order_relaxed);
         for (int i = 0; i < numSamples; ++i)
         {
-            buf[(size_t) w] = in[i];
+            buf[(size_t) w].store (in[i], std::memory_order_relaxed);
             w = (w + 1) % size;
         }
         writePos.store (w, std::memory_order_relaxed);
-        written.fetch_add ((unsigned) numSamples, std::memory_order_release);
+        written.store (start + (unsigned) numSamples, std::memory_order_release);
 
         generation.fetch_add (1, std::memory_order_release);
     }
@@ -56,7 +64,9 @@ public:
         `out`; `cursor` moves past them all. At most `capacity`, and never more than the ring holds
         less `guard` — the head the audio thread may be writing into while this copies. What there is
         no room for is the OLDEST: it is stepped over, and `skipped` says how many, so a reader that
-        keeps time in samples keeps it across the gap. Returns how many were copied. */
+        keeps time in samples keeps it across the gap. And what the writer lapped while this copied —
+        a reader descheduled mid-copy, a block longer than the guard — is dropped the same way, never
+        handed on: the oldest of the copy, which is where a lap lands. Returns how many were copied. */
     int readSince (unsigned& cursor, float* out, int capacity, unsigned& skipped) const noexcept
     {
         const unsigned total = written.load (std::memory_order_acquire);
@@ -64,10 +74,23 @@ public:
         const unsigned keep  = (unsigned) std::max (0, std::min (capacity, size - guard));
 
         skipped = fresh > keep ? fresh - keep : 0u;
-        const int n = (int) (fresh - skipped);
+        int n = (int) (fresh - skipped);
         const unsigned from = cursor + skipped;
         for (int i = 0; i < n; ++i)
-            out[i] = buf[(size_t) ((from + (unsigned) i) % (unsigned) size)];
+            out[i] = buf[(size_t) ((from + (unsigned) i) % (unsigned) size)].load (std::memory_order_relaxed);
+
+        // Sample t is overwritten by the writer's sample t + size: everything under its latest claim
+        // less a ring may be gone. A copied sample it reached was read after the claim was made, so
+        // this load sees that claim (the fence pairs with the writer's).
+        std::atomic_thread_fence (std::memory_order_acquire);
+        const unsigned clean = claimed.load (std::memory_order_relaxed) - (unsigned) size;
+        if (const int lapped = (int) (clean - from); n > 0 && lapped > 0)
+        {
+            const int lost = std::min (n, lapped);
+            std::copy (out + lost, out + n, out);
+            n -= lost;
+            skipped += (unsigned) lost;
+        }
 
         cursor = total;
         return n;
@@ -84,16 +107,17 @@ public:
 
         const int start = writePos.load (std::memory_order_relaxed);
         for (int i = 0; i < size; ++i)
-            out[(size_t) i] = buf[(size_t) ((start + i) % size)];
+            out[(size_t) i] = buf[(size_t) ((start + i) % size)].load (std::memory_order_relaxed);
 
         return true;
     }
 
 private:
-    std::array<float, size> buf {};
+    std::array<std::atomic<float>, size> buf {};   // relaxed: plain moves, but never a data race
     std::atomic<int> writePos { 0 };   // the head is shared with the reader — by the letter, too
     std::atomic<unsigned> generation { 0 };
     std::atomic<unsigned> written { 0 };   // samples ever written, round 2^32 — published after them
+    std::atomic<unsigned> claimed { 0 };   // ...and what the block being written will have made it
 };
 
 } // namespace orbitamp::core
