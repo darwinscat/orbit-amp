@@ -39,6 +39,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <array>
+#include <mutex>
 
 namespace orbitamp
 {
@@ -1358,6 +1359,11 @@ private:
     felitronics::chorus::BassChorusParams        chorusTold {};
     bool octaveToldValid = false, filterToldValid = false, chorusToldValid = false;
     juce::AudioBuffer<float> filterKey;   // FILTER's key: the gated input before COMP, the string itself
+
+    /** BLEND's three to the player (CapturedBlock::setCrossover), under `blendControl`: the two control-side callers —
+        the message thread's pump and a prepare on a host's thread — never write it at once. Never the audio thread. */
+    void tellBlend();
+    std::mutex blendControl;
 
     void runOctave (float* const* channels, int numSamples) noexcept;
     void runFilter (float* const* channels, int numSamples) noexcept;

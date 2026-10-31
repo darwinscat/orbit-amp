@@ -798,11 +798,13 @@ void AmpProcessor::pumpDeviceWork()
     pump (preamp,   preampGainParam, preampSmoothParam, params::preampMeasured, params::preampId);
 
     // The bass's BLEND, its clean low end under the capture: the player's crossover, told from here as every
-    // other setting of the device is. Amount 0 is the player without it. ONE WRITER, the message thread: this
-    // pump runs from prepareToPlay too, which a host may call from a thread of its own, and the player's setters
-    // keep bookkeeping that two control threads would race on — a prepare elsewhere leaves it to the next tick.
-    if (bass.blend != nullptr && juce::MessageManager::existsAndIsCurrentThread())
-        preamp.setCrossover (bass.blend->load(), bass.blendHz->load(), bass.blendInvert->load() > 0.5f);
+    // other setting of the device is. Amount 0 is the player without it. This pump runs from the message thread's
+    // timer and from prepareToPlay, which a host may call from a thread of its own: the message thread tells it
+    // here (or the only thread there is, with no MessageManager at all), and a prepare elsewhere tells it itself
+    // (tellBlend, from prepareToPlay) — both under one control-side lock, never the audio callback's.
+    if (bass.blend != nullptr
+        && (juce::MessageManager::existsAndIsCurrentThread() || juce::MessageManager::getInstanceWithoutCreating() == nullptr))
+        tellBlend();
 
     // A model that landed may carry rate-matching the host has to know about.
     reportLatency();
@@ -1099,6 +1101,11 @@ void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     pumpDeviceWork();
 
+    // ...and BLEND as the state has it, whatever thread prepares: a host that sets it, prepares on a worker and
+    // renders at once — an offline render, its message thread busy — plays it from the first block.
+    if (bass.blend != nullptr)
+        tellBlend();
+
     // The boost's level where the state has it — after the pump, which has found the pack's Boost.
     boostGain.reset (sampleRate, boostRampSeconds);
     boostGain.setCurrentAndTargetValue (boostTarget());
@@ -1184,6 +1191,12 @@ void AmpProcessor::updateReverbSettings() noexcept
     reverb.setDecay (reverbDecayParam->load());
     reverb.setPredelayMs (reverbPredelayParam->load());
     reverb.setHpfHz (reverbHpfHzParam->load());
+}
+
+void AmpProcessor::tellBlend()
+{
+    const std::scoped_lock control (blendControl);
+    preamp.setCrossover (bass.blend->load(), bass.blendHz->load(), bass.blendInvert->load() > 0.5f);
 }
 
 namespace
