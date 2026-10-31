@@ -42,18 +42,24 @@ public:
     void prepare (double sampleRate) noexcept
     {
         hop = std::max (1, (int) std::lround (sampleRate * hopSeconds));
+        rmsK = (float) (1.0 - std::exp (-1.0 / (rmsSeconds * std::max (1.0, sampleRate))));
+        meanSquare = 0.0f;
         inPeak = outPeak = grLow = 0.0f;
         filled = 0;
         quiet  = holdColumns + 1;   // nothing has played yet: nothing to scroll
     }
 
-    /** The audio thread: one block of COMP's input and output, the same instant, and its squeeze per sample in dB
-        (null for none — the link standing by, the knob at zero). */
-    void write (const float* in, const float* out, const float* grDb, int n) noexcept
+    /** The audio thread: one block of what COMP's detector hears (its key) and of its output, the same instant, and its
+        squeeze per sample in dB (null for none — the link standing by, the knob at zero). The input column is the
+        DETECTOR'S level — its RMS over 10 ms in SMOOTH (`rms`), its peak in PUNCHY — so a trace over the threshold is a
+        trace being squeezed. */
+    void write (const float* in, const float* out, const float* grDb, int n, bool rms) noexcept
     {
         for (int i = 0; i < n; ++i)
         {
-            inPeak  = std::max (inPeak,  std::abs (in[i]));
+            const float x = std::isfinite (in[i]) ? in[i] : 0.0f;
+            meanSquare += rmsK * (x * x - meanSquare);
+            inPeak  = std::max (inPeak, rms ? std::sqrt (meanSquare) : std::abs (x));
             outPeak = std::max (outPeak, std::abs (out[i]));
             if (grDb != nullptr)
                 grLow = std::min (grLow, grDb[i]);
@@ -76,7 +82,15 @@ public:
             dst[i] = { ins[at].load (std::memory_order_relaxed), outs[at].load (std::memory_order_relaxed),
                        grs[at].load (std::memory_order_relaxed) };
         }
-        return have;
+
+        // A writer far ahead (an offline render) may have written over the oldest of these while they were copied — the
+        // one being written now included: those are dropped, never shown torn.
+        const auto after = count.load (std::memory_order_acquire);
+        const auto ahead = after + 1u - k, room = (std::uint32_t) (columns - have);
+        const int  lost  = ahead > room ? (int) std::min<std::uint32_t> ((std::uint32_t) have, ahead - room) : 0;
+        if (lost > 0)
+            std::copy (dst + lost, dst + have, dst);
+        return have - lost;
     }
 
 private:
@@ -99,7 +113,8 @@ private:
 
     std::array<std::atomic<float>, columns> ins {}, outs {}, grs {};
     std::atomic<std::uint32_t> count { 0 };
-    float inPeak = 0.0f, outPeak = 0.0f, grLow = 0.0f;
+    static constexpr double rmsSeconds = 0.010;   // BassComp's SMOOTH detector: RMS over 10 ms
+    float inPeak = 0.0f, outPeak = 0.0f, grLow = 0.0f, meanSquare = 0.0f, rmsK = 0.002f;
     int   filled = 0, hop = 240, quiet = holdColumns + 1;
 };
 

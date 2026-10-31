@@ -31,17 +31,65 @@ class GuardRail final : public juce::Component
 public:
     GuardRail (juce::RangedAudioParameter& valueParam, juce::RangedAudioParameter& onParam,
                float footValue, float headValue, bool footIsOff)
+        : GuardRail (valueParam, &onParam, footValue, headValue, footIsOff) {}
+
+    /** A rail with no switch of its own (the bass's BLEND, the AMP's): a drag moves its value and nothing else. */
+    GuardRail (juce::RangedAudioParameter& valueParam, float footValue, float headValue)
+        : GuardRail (valueParam, nullptr, footValue, headValue, false) {}
+
+private:
+    GuardRail (juce::RangedAudioParameter& valueParam, juce::RangedAudioParameter* onParam,
+               float footValue, float headValue, bool footIsOff)
         : valueP (valueParam), onP (onParam), lo (footValue), hi (headValue), offAtFoot (footIsOff)
     {
         valueAtt = std::make_unique<juce::ParameterAttachment> (valueP, [this] (float) { repaint(); });
-        onAtt    = std::make_unique<juce::ParameterAttachment> (onP,    [this] (float) { repaint(); });
+        if (onP != nullptr)
+            onAtt = std::make_unique<juce::ParameterAttachment> (*onP, [this] (float) { repaint(); });
 
         setRepaintsOnMouseActivity (true);   // the hand comes up under the mouse
     }
 
+public:
     static constexpr int designWidth = 30;
 
     std::function<void (juce::Point<int> screenPos)> onMenu;
+
+    /** CLICK-TO-TYPE on the grip, where the rail's number is a field: the decimals it is typed with, or -1 where a click
+        on the grip is the menu like a click anywhere else (the guards, the effects). */
+    int typeDecimals = -1;
+
+    /** A number typed: the value and the switch, one gesture each — what a drag does. */
+    void typeValue (float v)
+    {
+        const auto range = valueP.getNormalisableRange();
+        valueAtt->setValueAsCompleteGesture (juce::jlimit (juce::jmax (range.start, lo), juce::jmin (range.end, hi), v));
+        if (onAtt != nullptr)
+            onAtt->setValueAsCompleteGesture (1.0f);
+    }
+
+    void openTyping()
+    {
+        const float v = valueP.convertFrom0to1 (valueP.getValue());
+        const auto  box = juce::Rectangle<float> (1.0f, yOfValue (v) - meterrail::gripH * 0.5f, (float) getWidth() - 2.0f, meterrail::gripH);
+        typing.open (*this, box.toNearestInt(), v * typedScale, gripColour, [this] (float t) { typeValue (t / typedScale); }, typeDecimals, 13.0f);
+    }
+
+    bool isTyping() const { return typing.isOpen(); }
+
+    /** For a gate: whose value the rail moves, the size its grip writes it at, and what it writes. */
+    const juce::String& paramId() const noexcept { return valueP.paramID; }
+    juce::String gripText() const { return gripTextOf (valueP.convertFrom0to1 (valueP.getValue())); }
+
+    /** THE GRIP'S LOOK, the guards' by default: a lilac hand writing a trim's decibels at 11 px. A rail whose number is
+        an amount (the bass's) says how it is written, at what size, in which colour — and the scale a typed number is
+        in (100: typed in percent). */
+    std::function<juce::String (float)> textForValue;
+    float        gripTextHeight = 11.0f;
+    juce::Colour gripColour     = theme::lilac;
+    float        typedScale     = 1.0f;
+
+    /** Told when a drag begins (true) and ends (false) — an owner's undo history brackets it. */
+    std::function<void (bool)> onGesture;
 
     /** Where a value stands, in the rail's own coordinates: the hand's centre at it. */
     float yOfValue (float v) const
@@ -58,7 +106,7 @@ public:
         g.fillRoundedRectangle (r, theme::radiusSm);
 
         const auto s = scaleArea();
-        const bool on = onP.getValue() > 0.5f;
+        const bool on = onP == nullptr || onP->getValue() > 0.5f;
 
         // The slot the hand rides in.
         g.setColour (theme::lilac.withAlpha (0.18f));
@@ -78,8 +126,8 @@ public:
         const float v      = valueP.convertFrom0to1 (valueP.getValue());
         const float y      = atFoot ? s.getBottom() - offH * 0.5f : yOfValue (v);
 
-        meterrail::paintGrip (g, r, y, atFoot ? juce::String ("OFF") : meterrail::trimText (v),
-                              theme::lilac.withMultipliedAlpha (alpha), dragging);
+        meterrail::paintGrip (g, r, y, atFoot ? juce::String ("OFF") : gripTextOf (v),
+                              gripColour.withMultipliedAlpha (alpha), dragging, gripTextHeight);
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -105,7 +153,10 @@ public:
         {
             dragging = true;
             valueAtt->beginGesture();
-            onAtt->beginGesture();
+            if (onAtt != nullptr)
+                onAtt->beginGesture();
+            if (onGesture != nullptr)
+                onGesture (true);
         }
 
         if (dragging)
@@ -120,16 +171,27 @@ public:
             return;
         }
 
-        // A click moves nothing, as on the columns: it is the guard's menu. Only a drag moves.
+        // A click moves nothing, as on the columns: it is the guard's menu. Only a drag moves. Where the number is a
+        // field, a click on the grip types it.
         if (! dragging)
         {
+            if (typeDecimals >= 0
+                && std::abs (e.position.y - yOfValue (valueP.convertFrom0to1 (valueP.getValue()))) <= meterrail::gripH * 0.5f)
+            {
+                openTyping();
+                return;
+            }
+
             if (onMenu != nullptr)
                 onMenu (e.getScreenPosition());
             return;
         }
 
         valueAtt->endGesture();
-        onAtt->endGesture();
+        if (onAtt != nullptr)
+            onAtt->endGesture();
+        if (onGesture != nullptr)
+            onGesture (false);
 
         dragging = false;
         repaint();
@@ -156,7 +218,8 @@ private:
 
         if (offAtFoot && y > s.getBottom() - offH)
         {
-            onAtt->setValueAsPartOfGesture (0.0f);
+            if (onAtt != nullptr)
+                onAtt->setValueAsPartOfGesture (0.0f);
             return;
         }
 
@@ -167,17 +230,21 @@ private:
         const float v    = lo + (span.getBottom() - y) / juce::jmax (1.0f, span.getHeight()) * (hi - lo);
 
         valueAtt->setValueAsPartOfGesture (juce::jlimit (juce::jmax (range.start, lo), juce::jmin (range.end, hi), v));
-        onAtt->setValueAsPartOfGesture (1.0f);
+        if (onAtt != nullptr)
+            onAtt->setValueAsPartOfGesture (1.0f);
     }
 
     juce::RangedAudioParameter& valueP;
-    juce::RangedAudioParameter& onP;
+    juce::RangedAudioParameter* onP;
     const float lo, hi;
     const bool  offAtFoot;
+
+    juce::String gripTextOf (float v) const { return textForValue != nullptr ? textForValue (v) : meterrail::trimText (v); }
     std::unique_ptr<juce::ParameterAttachment> valueAtt, onAtt;
 
     bool dragging = false;
     bool swallow  = false;
+    meterrail::GripEditor typing;
 
     friend class WebFaceplate;   // the site's kit reads where the parts stand (WebFaceplate.h)
 

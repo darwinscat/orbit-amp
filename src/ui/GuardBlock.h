@@ -75,6 +75,9 @@ public:
     float numeralHeight() const noexcept { return numbered ? scaleFontHeight : 0.0f; }
     static constexpr float scaleFontHeight = 9.5f;
 
+    /** Its rail — for a face that gives it a look of its own (bass::asBassRail). */
+    GuardRail& valueRail() noexcept { return rail; }
+
 protected:
     void layOutContent (juce::Rectangle<int> r) override
     {

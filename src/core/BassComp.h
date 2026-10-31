@@ -125,7 +125,7 @@ public:
         threshold, its parallel share and its fade stay the law's. Taken and given back by GLIDING, as the knob does —
         twice the law's own pace, 10 ms for 2:1 to 6:1 — never by a step; following the law the ratio IS the law's,
         sample for sample. */
-    static constexpr double heldRatioMin = 1.5, heldRatioMax = 10.0;
+    static constexpr double heldRatioMin = 2.0, heldRatioMax = 10.0;
 
     static Law lawAt (double amount) noexcept
     {
@@ -208,7 +208,7 @@ public:
                 reset();
             grDb.store (0.0f, std::memory_order_relaxed);
             if (tap != nullptr && x != nullptr && n > 0)
-                tap->write (x, x, nullptr, n);   // the signal through, untouched: in is out
+                tap->write (x, x, nullptr, n, character == Character::smooth);   // the signal through, untouched
             return;
         }
         if (! ready || x == nullptr || n <= 0 || n > block)
@@ -280,7 +280,7 @@ public:
         // The indicator shows the squeeze that is heard: none while the link stands by, fed or not.
         grDb.store (heard ? gr[(size_t) n - 1] : 0.0f, std::memory_order_relaxed);
         if (tap != nullptr)
-            tap->write (dry.data(), x, heard ? gr.data() : nullptr, n);
+            tap->write (key.data(), x, heard ? gr.data() : nullptr, n, character == Character::smooth);   // what the detector hears
     }
 
     /** Where the picture's columns go, while it is on screen — null otherwise (the processor sets it per block). */

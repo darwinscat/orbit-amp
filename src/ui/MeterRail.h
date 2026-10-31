@@ -116,8 +116,9 @@ inline void paintGrip (juce::Graphics& g, juce::Rectangle<float> track, float y,
     committed on Enter or focus lost, dismissed on Escape. */
 struct GripEditor
 {
+    /** `decimals` the number opens with (whole decibels by default) and `fontHeight` its type. */
     void open (juce::Component& parent, juce::Rectangle<int> box, float current,
-               juce::Colour accent, std::function<void (float)> commitFn)
+               juce::Colour accent, std::function<void (float)> commitFn, int decimals = 0, float fontHeight = 12.0f)
     {
         commit = std::move (commitFn);
 
@@ -125,7 +126,6 @@ struct GripEditor
         {
             inited = true;
             ed.setJustification (juce::Justification::centred);
-            ed.setFont (theme::displayFont (12.0f));
             ed.setColour (juce::TextEditor::backgroundColourId, theme::bezel);
             ed.setColour (juce::TextEditor::textColourId, juce::Colours::white);
             ed.setColour (juce::TextEditor::highlightColourId, theme::violet.withAlpha (0.35f));
@@ -140,9 +140,10 @@ struct GripEditor
         ed.setColour (juce::TextEditor::focusedOutlineColourId, accent);
 
         ed.setBounds (box);
-        // The editor deals in whole decibels: it opens on the nearest INT — type a fraction if
-        // you really mean one.
-        ed.setText (juce::String (juce::roundToInt (current)), false);
+        ed.setFont (theme::displayFont (fontHeight));
+        // The editor deals in whole decibels unless told otherwise: it opens on the nearest INT —
+        // type a fraction if you really mean one.
+        ed.setText (decimals > 0 ? juce::String (current, decimals) : juce::String (juce::roundToInt (current)), false);
         ed.setVisible (true);
         ed.selectAll();
         ed.grabKeyboardFocus();
@@ -155,7 +156,8 @@ struct GripEditor
         if (! ed.isVisible())
             return;
 
-        const auto t = ed.getText().retainCharacters ("0123456789.+-");
+        // A ratio typed as "6:1" is its first number.
+        const auto t = ed.getText().upToFirstOccurrenceOf (":", false, false).retainCharacters ("0123456789.+-");
         ed.setVisible (false);
 
         if (t.isNotEmpty() && commit != nullptr)

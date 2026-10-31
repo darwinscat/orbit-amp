@@ -98,37 +98,7 @@ static const orbitamp::Product& switchedTunerAmp()
 
 static thread_local long long gAllocations = 0;
 
-// THE MALLOC FAMILY TOO, where a program can see it: on the Mac every malloc, calloc, realloc and aligned allocation —
-// JUCE's HeapBlock's, a C library's — passes libSystem's malloc_logger, which this file sets while it counts. It counts
-// the thread that asked to be counted alone (no thread-local in a hook that runs inside malloc: a thread-local's first
-// touch allocates). Elsewhere — glibc, the MSVC runtime — the family is not counted, and the gate says so rather than
-// claiming it.
-#if ORBITAMP_COUNT_ALLOCATIONS && defined(__APPLE__)
-  #define ORBITAMP_COUNT_MALLOCS 1
-  #include <pthread.h>
-extern "C"
-{
-    typedef void (malloc_logger_t) (uint32_t type, uintptr_t, uintptr_t, uintptr_t, uintptr_t result, uint32_t skip);
-    extern malloc_logger_t* malloc_logger;
-}
-static std::atomic<long long> gMallocs { 0 };
-static pthread_t gMallocThread {};
-static void countMalloc (uint32_t type, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uint32_t)
-{
-    if ((type & 2u) != 0 && pthread_equal (pthread_self(), gMallocThread))   // MALLOC_LOG_TYPE_ALLOCATE
-        gMallocs.fetch_add (1, std::memory_order_relaxed);
-}
-static void countMallocsHere (bool on)
-{
-    gMallocThread = pthread_self();
-    malloc_logger = on ? countMalloc : nullptr;
-}
-static long long mallocsSoFar() { return gMallocs.load (std::memory_order_relaxed); }
-#else
-  #define ORBITAMP_COUNT_MALLOCS 0
-static void countMallocsHere (bool) {}
-static long long mallocsSoFar() { return 0; }
-#endif
+#include "MallocCount.h"   // the malloc family, where a program can see it
 
 #if ORBITAMP_COUNT_ALLOCATIONS
 static void* countedAlloc (std::size_t n)
@@ -3766,8 +3736,10 @@ int main()
         for (const auto* on : { orbitamp::params::compOn, orbitamp::params::octaveOn, orbitamp::params::filterOn, orbitamp::params::chorusOn })
             set (amp, on, 1.0f);                            // ...and in again
         play (100);
+        set (amp, orbitamp::params::chorusAmount, 0.8f);    // ...and CHORUS woken from idle
+        play (100);
         countMallocsHere (false);
-        std::printf ("\norbitbass: 700 blocks from the first, every effect woken, stopped and switched, allocated %lld times"
+        std::printf ("\norbitbass: 800 blocks from the first, every effect woken, stopped and switched, allocated %lld times"
                      " (operator new), %lld (malloc family)\n", inBass, inBassMalloc);
        #if ORBITAMP_COUNT_ALLOCATIONS
         report ("OrbitBass's processBlock allocates nothing from its first block, its effects waking and stopping, COMP's picture shown", inBass == 0,

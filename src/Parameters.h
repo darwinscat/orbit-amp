@@ -458,7 +458,7 @@ inline const juce::StringArray compCharacters { "Smooth", "Punchy" };
     slider says (`compRatioHeld` on) until the menu's "RATIO: BY THE SLIDER" gives it back to the law. Both saved. */
 inline constexpr const char* compRatio     = "comp_ratio";
 inline constexpr const char* compRatioHeld = "comp_ratio_held";
-inline constexpr float compRatioMin = 1.5f, compRatioMax = 10.0f;
+inline constexpr float compRatioMin = 2.0f, compRatioMax = 10.0f;
 
 /** THE BASS'S THREE EFFECTS (felitronics-core's octave, envfilter and chorus), each a block in the strip — its
     STANDBY/ON — and ONE slider, its amount 0..1 through the module's own law (<Module>Law.h, paramsForAmount): 0 is

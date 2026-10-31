@@ -7,6 +7,7 @@
 #include "../PluginProcessor.h"
 #include "../device/SwitchWords.h"
 #include "BassControls.h"
+#include "GuardRail.h"
 #include "FactoryMissing.h"
 
 #include <felitronics/appkit/WebpImage.h>
@@ -18,38 +19,39 @@ namespace orbitamp
 
 struct CapturedBlockPanel::BassKnobs
 {
-    explicit BassKnobs (AmpProcessor& p) : state (p.apvts) {}
+    explicit BassKnobs (AmpProcessor& p)
+        : state (p.apvts), blend (*p.apvts.getParameter (params::ampBlend), 0.0f, 1.0f) {}
 
     juce::AudioProcessorValueTreeState& state;
-    bass::MenuKnob blend { "BLEND", theme::orange, 0 };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> blendAtt;
+    GuardRail   blend;
+    juce::Label name { {}, "BLEND" };
 
     void addTo (BlockFrame& owner)
     {
+        // BLEND, a rail as the bass's others are (the owner, 31.10): its amount in percent on its hand, 13 px, typed on
+        // a click; its menu on a right click.
+        bass::asBassRail (blend);
+        blend.onMenu = [this] (juce::Point<int>) { bass::showBlendMenu (state, &blend); };
+        name.setFont (theme::displayFont (13.0f));
+        name.setColour (juce::Label::textColourId, theme::txDim);
+        name.setJustificationType (juce::Justification::centred);
+        name.setInterceptsMouseClicks (false, false);
         owner.addAndMakeVisible (blend);
-        // Read at the family's fx knobs' sizes (Knob::fx*): the name at its floor, the number under the dial in the
-        // 13 px row, and not a second time inside it.
-        blend.labelFontHeight = Knob::fxLabelH;
-        blend.labelTracking   = Knob::fxLabelTracking;
-        blend.labelRowHeight  = Knob::fxLabelRowH;
-        blend.valueInDial     = false;
-        blend.setValueRowShown (true);
-        blend.valueForText = [] (const juce::String& t) { return t.getDoubleValue() / 100.0; };
-        blend.textForValue = [] (double v) { return juce::String (juce::roundToInt (v * 100.0)) + "%"; };
-
-        blendAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, params::ampBlend, blend);
-        blend.setHint ("BLEND:   the clean bass under the crossover, the amp above it. Right click: where, and polarity");
-        blend.onMenu = [this] { bass::showBlendMenu (state, &blend); };
+        owner.addAndMakeVisible (name);
     }
 
-    /** BLEND in the middle of its column beside the dial (COMP is a block of its own: ui/CompBlock.h). */
+    /** BLEND's name over its rail, in the column beside the dial (COMP is a block of its own: ui/CompBlock.h). */
     void layOut (juce::Rectangle<int> right)
     {
-        const int side = juce::jmin (52, right.getWidth() - 14);
-        blend.setBounds (right.withSizeKeepingCentre (side, side + Knob::valueRowH + Knob::fxLabelRowH));
+        name.setBounds (right.removeFromTop (18));
+        blend.setBounds (right.withSizeKeepingCentre (GuardRail::designWidth, right.getHeight() - 4));
     }
 
-    void setVisible (bool v) { blend.setVisible (v); }
+    void setVisible (bool v)
+    {
+        blend.setVisible (v);
+        name.setVisible (v);
+    }
 };
 
 namespace

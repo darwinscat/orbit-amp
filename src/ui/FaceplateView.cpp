@@ -66,6 +66,7 @@ FaceplateView::FaceplateView (AmpProcessor& processor)
             for (int k = 0; k <= 10; ++k)
                 g->marks.push_back ({ (float) k * 0.1f, k % 5 == 0 });
             g->numbered = false;
+            bass::asBassRail (g->valueRail());
             auto* raw = g.get();
             g->onMenu = [&state, raw, menu] (juce::Point<int>) { menu (state, raw); };
             addAndMakeVisible (*g);

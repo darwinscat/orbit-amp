@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "GuardRail.h"
 #include "Knob.h"
 #include "Theme.h"
 #include "../Parameters.h"
@@ -35,6 +36,17 @@ inline float plain (juce::AudioProcessorValueTreeState& state, const char* id)
 {
     auto* p = state.getParameter (id);
     return p != nullptr ? p->convertFrom0to1 (p->getValue()) : 0.0f;
+}
+
+/** THE BASS'S RAILS — COMP, OCTAVE, FILTER, CHORUS, BLEND — one look: an orange hand (what the hand sets), its amount
+    written in percent at 13 px, and a click on the hand types it, in percent. */
+inline void asBassRail (GuardRail& r)
+{
+    r.gripColour     = theme::orange;
+    r.gripTextHeight = 13.0f;
+    r.textForValue   = [] (float v) { return juce::String (juce::roundToInt (v * 100.0f)); };
+    r.typeDecimals   = 0;
+    r.typedScale     = 100.0f;
 }
 
 /** A knob whose right click asks for its menu. */

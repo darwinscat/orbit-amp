@@ -220,7 +220,7 @@ AmpProcessor::AmpProcessor (const Product& product)
                 // The bass's effects' sliders keep their last number through a NaN: their default, 0, would switch an
                 // effect off on an invalid automation point (review round 3).
                 const bool holds = ranged->paramID == params::octaveAmount || ranged->paramID == params::filterAmount
-                                || ranged->paramID == params::chorusAmount;
+                                || ranged->paramID == params::chorusAmount || ranged->paramID == params::compAmount;
                 const float fallback = ranged->convertFrom0to1 (engineDefault (*ranged));
                 parameterGuards.push_back ({ raw, fallback, holds, fallback });
             }
@@ -1794,7 +1794,9 @@ void AmpProcessor::processChunk (juce::AudioBuffer<float>& buffer)
     const int nch     = mode == params::StereoMode::stereo ? numChannels : juce::jmin (1, numChannels);
     // The bass's chain turns stereo at its CHORUS (Chain::bass): one signal up to it, the bus's planes from it on —
     // the cabinet, the DI, the cuts, OUT and LIMIT per channel. A mono bus stays one voice.
-    const int nchBack = ownProduct.chain == Chain::bass   ? juce::jmin (2, numChannels)
+    // ...never wider than it was prepared: a host handing more channels than the bus it prepared gets the left copied to
+    // the rest after the limiter, as a mono bus's outputs are.
+    const int nchBack = ownProduct.chain == Chain::bass   ? juce::jmin (juce::jmax (1, bassWide.load (std::memory_order_relaxed)), 2, numChannels)
                       : mode == params::StereoMode::mono   ? nch : numChannels;
 
     // The captured blocks take a BUFFER — this alias holds only the channels the chain works.

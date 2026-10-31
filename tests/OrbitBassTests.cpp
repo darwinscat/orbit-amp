@@ -25,6 +25,7 @@
 #include "ui/GuardBlock.h"
 #include "ui/CompBlock.h"
 #include "ui/FaceplateView.h"
+#include "ui/GuardRail.h"
 #include "channels/Engine.h"
 #include "channels/Presets.h"
 
@@ -142,7 +143,7 @@ namespace
         static constexpr int blocks = 40;
         std::vector<float> was;
         bool  recorder = false;
-        float allowed  = 1.0e-4f;
+        float allowed  = 1.0e-6f;
     };
 
     StepTwoB stepTwoBReference()
@@ -158,8 +159,7 @@ namespace
        #if defined (__APPLE__) && defined (__aarch64__)
         ref.recorder = juce::String (__VERSION__) == "Apple LLVM 21.0.0 (clang-2100.1.1.101)";
        #endif
-        if (ref.recorder)
-            ref.allowed = 0.0f;
+        ref.allowed = ref.recorder ? 0.0f : 1.0e-6f;   // gcc reads 6.7e-8 off the recording compiler
         return ref;
     }
 
@@ -1112,7 +1112,7 @@ int ORBITAMP_GATE_MAIN()
             check (stepTwoB.was.size() == (size_t) (stepTwoB.blocks * blockSize) && apartL <= stepTwoB.allowed
                        && apartR <= stepTwoB.allowed && apartPlain <= stepTwoB.allowed,
                    "the three at 0, their menus moved — and at their defaults: what step 2b (78e037a) played, "
-                       + juce::String (stepTwoB.recorder ? "bit for bit" : "within 1e-4") + ", both sides (worst "
+                       + juce::String (stepTwoB.recorder ? "bit for bit" : "within 1e-6") + ", both sides (worst "
                        + juce::String (apartL, 9) + " / " + juce::String (apartR, 9) + ", defaults " + juce::String (apartPlain, 9) + ")");
         }
         // Each turned up is heard.
@@ -1535,6 +1535,96 @@ int ORBITAMP_GATE_MAIN()
                        + juce::String (graph != nullptr ? graph->thresholdDb() : 0.0, 2) + " dB");
         }
 
+        // THE RATIO'S TWO CONTROLS AND THE LAW: comp_ratio runs 2:1 .. 10:1; not held, the slider over the square and the
+        // square show the law's ratio at the knob; the slider dragged holds what it says — the square with it, one gesture
+        // a drag; the square dragged, the slider follows; given back by the menu, both show the law again.
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.5f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* slider = findIn (*ed, (CompRatioSlider*) nullptr);
+            auto* square = findIn (*ed, (CompTransfer*) nullptr);
+            const auto range = t->apvts.getParameter (params::compRatio)->getNormalisableRange();
+            struct Gestures final : juce::AudioProcessorParameter::Listener
+            {
+                int begun = 0, ended = 0;
+                void parameterValueChanged (int, float) override {}
+                void parameterGestureChanged (int, bool starting) override { ++(starting ? begun : ended); }
+            } gestures;
+            bool lawShown = false, heldSeven = false, followed = false, back = false;
+            double atSeven = 0.0, atThree = 0.0;
+            if (slider != nullptr && square != nullptr)
+            {
+                const double law = BassComp::lawAt ((double) value (*t, params::compAmount)).ratio;
+                lawShown = slider->shownRatio() == law && square->shownRatio() == law;
+                auto* ratioP = t->apvts.getParameter (params::compRatio);
+                ratioP->addListener (&gestures);
+                slider->beginDrag();
+                slider->dragTo (slider->xOfRatio (5.0));
+                slider->dragTo (slider->xOfRatio (7.0));
+                slider->endDrag();
+                ratioP->removeListener (&gestures);
+                atSeven = slider->shownRatio();
+                heldSeven = value (*t, params::compRatioHeld) > 0.5f && std::abs (atSeven - 7.0) < 0.02
+                         && square->shownRatio() == atSeven && std::abs (slider->xOfRatio (atSeven) - slider->xOfRatio (7.0)) <= 0.5f;
+                square->beginRatioDrag();
+                square->dragRatioTo (square->yOfRatio (3.0));
+                square->endRatioDrag();
+                atThree  = square->shownRatio();
+                followed = std::abs (atThree - 3.0) < 0.02 && slider->shownRatio() == atThree;
+                set (*t, params::compRatioHeld, 0.0f);
+                back = slider->shownRatio() == law && square->shownRatio() == law;
+            }
+            check (range.start == 2.0f && range.end == 10.0f && lawShown && heldSeven && gestures.begun == 1 && gestures.ended == 1
+                       && followed && back,
+                   "COMP's ratio, 2:1 .. 10:1: the slider and the square show the law's; the slider dragged to 7 holds "
+                       + juce::String (atSeven, 2) + ":1 in " + juce::String (gestures.begun) + " gesture, the square with it; the square dragged to 3, the slider at "
+                       + juce::String (atThree, 2) + ":1; given back, both the law's again");
+        }
+
+        // EVERY NUMBER A PARAMETER SHOWS IS TYPED: the threshold on the line (a dB, the knob moved to it, clamped to the
+        // law's travel), the ratio over the square (held at what is typed), the fader's amount — each a field on a click,
+        // each one gesture.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto* block = findIn (*ed, (CompBlock*) nullptr);
+            bool ok = block != nullptr;
+            juce::String said;
+            if (ok)
+            {
+                struct Gestures final : juce::AudioProcessorParameter::Listener
+                {
+                    int begun = 0;
+                    void parameterValueChanged (int, float) override {}
+                    void parameterGestureChanged (int, bool starting) override { begun += starting ? 1 : 0; }
+                } gestures;
+                auto* amountP = t->apvts.getParameter (params::compAmount);
+                amountP->addListener (&gestures);
+                block->picture().openTyping();
+                const bool lineField = block->picture().isTyping();
+                block->picture().typeThreshold (-30.0);
+                const float atThirty = value (*t, params::compAmount);
+                block->picture().typeThreshold (-60.0);
+                const float clamped = value (*t, params::compAmount);
+                block->fader().openTyping();
+                const bool faderField = block->fader().isTyping();
+                block->fader().typeValue (0.42f);
+                const float typed = value (*t, params::compAmount);
+                amountP->removeListener (&gestures);
+                block->ratio().openTyping();
+                const bool ratioField = block->ratio().isTyping();
+                block->ratio().typeRatio (6.5);
+                ok = lineField && faderField && ratioField && std::abs (atThirty - 0.75f) < 0.001f && clamped == 1.0f
+                  && std::abs (typed - 0.42f) < 0.001f && gestures.begun == 3
+                  && value (*t, params::compRatioHeld) > 0.5f && std::abs (value (*t, params::compRatio) - 6.5f) < 0.01f;
+                said = ": -30 dB typed -> " + juce::String (atThirty, 3) + ", -60 -> " + juce::String (clamped, 3) + ", the fader 0.42 -> "
+                     + juce::String (typed, 3) + " (" + juce::String (gestures.begun) + " gestures), the ratio 6.5 -> held "
+                     + juce::String (value (*t, params::compRatio), 2) + ":1";
+            }
+            check (ok, "COMP's numbers are fields: the threshold, the ratio, the fader" + said);
+        }
+
         // THE RATIO HELD AND GIVEN BACK: the law's at the knob; held at 8:1 it stays 8:1 with the slider moved; "RATIO: BY
         // THE SLIDER" and it is the law's again, exactly — gliding there mid-note, no burst, no step.
         {
@@ -1601,6 +1691,266 @@ int ORBITAMP_GATE_MAIN()
                    "COMP's taps: nothing written with the picture off screen (" + juce::String ((int) hidden) + "), "
                        + juce::String ((int) playing) + " columns while it shows, " + juce::String ((int) (tail - playing))
                        + " of the tail, then none in silence (" + juce::String ((int) (still - tail)) + ")");
+        }
+    }
+
+    // ---- REVIEW ROUND 5 (of 317fbe1) AND THE OWNER'S LOOK (step 4b) --------------------------------------------
+    {
+        using core::BassComp;
+        const auto findAll = [] (juce::Component& root, auto* none)
+        {
+            using T = std::remove_pointer_t<decltype (none)>;
+            std::vector<T*> found;
+            std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+            {
+                if (auto* t = dynamic_cast<T*> (&c))
+                    found.push_back (t);
+                for (auto* child : c.getChildren())
+                    walk (*child);
+            };
+            walk (root);
+            return found;
+        };
+        const auto mouse = [] (juce::Component& c, juce::Point<float> at, juce::Point<float> down)
+        {
+            const auto now = juce::Time::getCurrentTime();
+            return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys(), 0.0f,
+                                     juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                                     juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY,
+                                     &c, &c, now, down, now, 1, at != down);
+        };
+        const auto settle = [] (AmpProcessor& a) { for (int i = 0; i < 40; ++i) a.history.tick(); };   // longer than the settle
+
+        // ONE CONTROL, ONE SWITCH, ONE UNDO: COMP standing by, its line dragged — paused longer than the history settles —
+        // switches it in; one undo gives back the knob AND the switch. The ratio square and the ratio slider, the same.
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.3f);
+            set (*t, params::compOn, 0.0f);
+            settle (*t);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto graphs = findAll (*ed, (CompGraph*) nullptr);
+            auto squares = findAll (*ed, (CompTransfer*) nullptr);
+            auto sliders = findAll (*ed, (CompRatioSlider*) nullptr);
+            juce::String said;
+            bool ok = graphs.size() == 1 && squares.size() == 1 && sliders.size() == 1;
+            if (ok)
+            {
+                auto& g = *graphs[0];
+                g.beginLineDrag();
+                g.dragLineTo (g.yOfDb (-20.0));
+                settle (*t);
+                g.dragLineTo (g.yOfDb (-28.0));
+                settle (*t);
+                g.endLineDrag();
+                settle (*t);
+                const bool on = value (*t, params::compOn) > 0.5f;
+                const float moved = value (*t, params::compAmount);
+                t->history.undo();
+                const bool line = on && std::abs (moved - 0.3f) > 0.05f && std::abs (value (*t, params::compAmount) - 0.3f) < 1.0e-3f
+                               && value (*t, params::compOn) < 0.5f;
+                said << "the line: on " << (on ? "yes" : "no") << ", undone to " << juce::String (value (*t, params::compAmount), 3);
+
+                bool rest = true;
+                for (juce::Component* c : { (juce::Component*) squares[0], (juce::Component*) sliders[0] })
+                {
+                    set (*t, params::compOn, 0.0f);
+                    settle (*t);
+                    const auto start = c->getLocalBounds().toFloat().getCentre().withY (c == sliders[0] ? (float) c->getHeight() - 10.0f
+                                                                                                       : c->getLocalBounds().toFloat().getCentreY());
+                    const auto end = c == sliders[0] ? start.translated (20.0f, 0.0f) : start.translated (0.0f, 20.0f);
+                    c->mouseDown (mouse (*c, start, start));
+                    c->mouseDrag (mouse (*c, start.translated ((end.x - start.x) * 0.5f, (end.y - start.y) * 0.5f), start));
+                    settle (*t);
+                    c->mouseDrag (mouse (*c, end, start));
+                    c->mouseUp (mouse (*c, end, start));
+                    settle (*t);
+                    const bool switched = value (*t, params::compOn) > 0.5f && value (*t, params::compRatioHeld) > 0.5f;
+                    t->history.undo();
+                    rest = rest && switched && value (*t, params::compOn) < 0.5f && value (*t, params::compRatioHeld) < 0.5f;
+                    said << (c == sliders[0] ? "; the slider " : "; the square ") << (switched ? "switched in" : "did not switch in")
+                         << ", one undo " << (value (*t, params::compRatioHeld) < 0.5f ? "gave it back" : "did not give it back");
+                }
+                ok = line && rest;
+            }
+            check (ok, "COMP's line and ratio switch it in, and one undo gives back all of a paused drag: " + said);
+        }
+
+        // A CLICK MOVES NOTHING: in the ratio square and on the slider's track, a press and a release where it was pressed
+        // change neither the ratio nor whether it is held; a drag takes the ratio from where the hand took it.
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.5f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            auto squares = findAll (*ed, (CompTransfer*) nullptr);
+            auto sliders = findAll (*ed, (CompRatioSlider*) nullptr);
+            bool ok = squares.size() == 1 && sliders.size() == 1;
+            double after = 0.0;
+            if (ok)
+                for (juce::Component* c : { (juce::Component*) squares[0], (juce::Component*) sliders[0] })
+                {
+                    const auto at = c->getLocalBounds().toFloat().getCentre().translated (7.0f, c == sliders[0] ? 9.0f : 23.0f);
+                    c->mouseDown (mouse (*c, at, at));
+                    c->mouseUp (mouse (*c, at, at));
+                    ok = ok && value (*t, params::compRatioHeld) < 0.5f;
+                }
+            if (ok)
+            {
+                auto& sq = *squares[0];
+                const double before = sq.shownRatio();
+                const auto from = juce::Point<float> (sq.box().getCentreX(), sq.yOfRatio (before) + 15.0f);
+                sq.mouseDown (mouse (sq, from, from));
+                sq.mouseDrag (mouse (sq, from.translated (0.0f, 2.0f), from));   // under the threshold: nothing yet
+                const bool still = value (*t, params::compRatioHeld) < 0.5f;
+                sq.mouseDrag (mouse (sq, from.translated (0.0f, -12.0f), from));
+                sq.mouseUp (mouse (sq, from.translated (0.0f, -12.0f), from));
+                after = sq.shownRatio();
+                ok = still && std::abs (sq.yOfRatio (after) - (sq.yOfRatio (before) - 12.0f)) <= 1.0f;
+            }
+            check (ok, "a click in COMP's ratio square or on its slider changes nothing; a drag moves the ratio from where it was taken (now "
+                           + juce::String (after, 2) + ":1)");
+        }
+
+        // THE BASS'S RAILS — COMP, OCTAVE, FILTER, CHORUS and BLEND — write their amounts at 13 px, as percent, one format;
+        // the guards' grips as they were.
+        {
+            auto t = make (bass);
+            set (*t, params::compAmount, 0.7f);
+            set (*t, params::ampBlend, 0.4f);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            juce::StringArray wrong, seen;
+            for (auto* r : findAll (*ed, (GuardRail*) nullptr))
+            {
+                const bool guard = r->paramId() == params::gateThreshold || r->paramId() == params::limiterCeiling;
+                seen.add (r->paramId());
+                if (guard ? r->gripTextHeight != 11.0f : r->gripTextHeight < 13.0f)
+                    wrong.add (r->paramId() + " " + juce::String (r->gripTextHeight, 1) + " px");
+            }
+            for (auto* r : findAll (*ed, (GuardRail*) nullptr))
+            {
+                if (r->paramId() == params::compAmount && r->gripText() != "70")
+                    wrong.add ("COMP reads " + r->gripText());
+                if (r->paramId() == params::ampBlend && r->gripText() != "40")
+                    wrong.add ("BLEND reads " + r->gripText());
+            }
+            check (wrong.isEmpty() && seen.contains (params::ampBlend) && seen.size() == 7,
+                   "the bass's five rails write their amounts at 13 px, in percent; GATE and LIMIT as before ("
+                       + juce::String (seen.size()) + " rails" + (wrong.isEmpty() ? juce::String() : ": " + wrong.joinIntoString (", ")) + ")");
+        }
+
+       #if JUCE_MAC || JUCE_WINDOWS
+        // SHOWING FOLLOWS THE ANCESTORS: the window on the desktop, COMP's block hidden and shown again — the taps follow.
+        {
+            auto t = make (bass);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (t->createEditor());
+            ed->addToDesktop (0);
+            ed->setVisible (true);
+            auto graphs = findAll (*ed, (CompGraph*) nullptr);
+            auto blocks = findAll (*ed, (CompBlock*) nullptr);
+            bool shown = false, hidden = true, again = false;
+            if (graphs.size() == 1 && blocks.size() == 1)
+            {
+                graphs[0]->refresh();
+                shown = t->compWatched.load();
+                blocks[0]->setVisible (false);
+                graphs[0]->refresh();
+                hidden = t->compWatched.load();
+                blocks[0]->setVisible (true);
+                graphs[0]->refresh();
+                again = t->compWatched.load();
+            }
+            ed->removeFromDesktop();
+            check (shown && ! hidden && again, juce::String ("COMP's taps follow its block hidden and shown: shown ") + (shown ? "on" : "off")
+                                                   + ", hidden " + (hidden ? "on" : "off") + ", shown again " + (again ? "on" : "off"));
+        }
+       #endif
+
+        // THE TRACE IS WHAT THE DETECTOR HEARS: a steady sine, its peak at -22 dB — SMOOTH's detector (RMS) reads it 3 dB
+        // under, PUNCHY's at its peak; the input trace reads the same.
+        {
+            const auto traced = [&] (int character)
+            {
+                auto t = make (bass);
+                set (*t, params::compAmount, 0.5f);
+                set (*t, params::compCharacter, (float) character);
+                t->compWatched.store (true);
+                (void) tone (*t, 220.0, -22.0f, 60);
+                std::vector<core::CompTap::Column> cols (50);
+                const int got = t->compTap.read (cols.data(), 50);
+                return got > 0 ? 20.0 * std::log10 ((double) cols[(size_t) got - 1].in + 1.0e-12) : -200.0;
+            };
+            const double smooth = traced (0), punchy = traced (1);
+            check (std::abs (smooth + 25.0) < 0.6 && std::abs (punchy + 22.0) < 0.6,
+                   "COMP's input trace is its detector's level: SMOOTH " + juce::String (smooth, 1) + " dB (RMS -25), PUNCHY "
+                       + juce::String (punchy, 1) + " dB (peak -22)");
+        }
+
+        // COMP'S SLIDER SENT NaN keeps its last amount, as the effects' do.
+        {
+            const auto run = [&] (bool poison)
+            {
+                auto t = make (bass);
+                set (*t, params::compAmount, 0.7f);
+                return tone (*t, 97.0, -6.0f, 120, 40, [&]
+                {
+                    if (poison)
+                        t->apvts.getRawParameterValue (params::compAmount)->store (std::numeric_limits<float>::quiet_NaN());
+                });
+            };
+            const float apart = worstApart (run (true), run (false));
+            check (apart == 0.0f, "COMP's slider sent NaN mid-note keeps its amount, bit for bit (worst " + juce::String (apart, 9) + ")");
+        }
+
+        // STANDING BY AFTER PLAYING IS SLIDER 0 IN THE SOUND: the three told up — playing on a silent input, so every
+        // other link hears the same — their arrows off, a prepare; then the phrase plays, bit for bit, what it plays after
+        // the same with the three at 0 (CHORUS used to arrive at its last knobs and fade out of them, wet).
+        {
+            const auto after = [&] (float amount)
+            {
+                auto t = make (bass);
+                for (const char* id : { params::octaveAmount, params::filterAmount, params::chorusAmount })
+                    set (*t, id, amount);
+                (void) tone (*t, 82.41, -12.0f, 60, -1, {}, 0);
+                for (const char* id : { params::octaveOn, params::filterOn, params::chorusOn })
+                    set (*t, id, 0.0f);
+                t->prepareToPlay (sampleRate, blockSize);
+                t->pumpDeviceWork();
+                return play (*t, 60, false);
+            };
+            const auto up = after (0.8f), zero = after (0.0f);
+            const float apart = std::max (worstApart (up.l, zero.l), worstApart (up.r, zero.r));
+            check (apart == 0.0f, "the three told up, standing by, prepared: the phrase as with the three at 0, bit for bit (worst "
+                                      + juce::String (apart, 9) + ")");
+        }
+
+        // A GAP REACHES ALL THREE: playing up, their sliders to 0, then a gap — each ramps to idle through it.
+        {
+            auto t = make (bass);
+            for (const char* id : { params::octaveAmount, params::filterAmount, params::chorusAmount })
+                set (*t, id, 0.8f);
+            (void) tone (*t, 82.41, -12.0f, 60);
+            for (const char* id : { params::octaveAmount, params::filterAmount, params::chorusAmount })
+                set (*t, id, 0.0f);
+            juce::AudioBuffer<float> none (0, blockSize);
+            juce::MidiBuffer midi;
+            for (int b = 0; b < 40; ++b)
+                t->processBlock (none, midi);
+            check (t->effectIdle (0) && t->effectIdle (1) && t->effectIdle (2), "a gap reaches OCTAVE, FILTER and CHORUS: each idle after it");
+        }
+
+        // A CALL WIDER THAN PREPARED: a mono bus prepared, a host hands two channels — the back half stays one plane, both
+        // outputs the same.
+        {
+            auto t = make (bass);
+            t->setPlayConfigDetails (1, 1, sampleRate, blockSize);
+            t->prepareToPlay (sampleRate, blockSize);
+            t->pumpDeviceWork();
+            set (*t, params::chorusAmount, 0.8f);
+            std::vector<float> r;
+            const auto l = tone (*t, 82.41, -12.0f, 60, -1, {}, 1 << 30, &r);
+            check (t->bassBackPlanes() == 1 && worstApart (l, r) == 0.0f,
+                   "a mono bus handed two channels: one plane, both outputs the same (planes " + juce::String (t->bassBackPlanes()) + ", worst "
+                       + juce::String (worstApart (l, r), 9) + ")");
         }
     }
 
