@@ -68,13 +68,26 @@ public:
 
         const bool live  = ear.live();
         const auto note  = ear.nearestNote();
-        const bool green = ear.green();
+        const int  hum   = live ? ear.humMains() : 0;   // the mains it is taken for, 0 = a note
+        const bool green = ear.green() && hum == 0;
 
         auto inner = r.reduced (14.0f, insetY);
 
-        // ---- the note, left ----
+        // ---- the note, left — or HUM and its mains where the name and the octave stand ----
         auto noteArea = inner.removeFromLeft (52.0f);
-        if (live)
+        if (hum != 0)
+        {
+            const auto font = theme::displayFont (humPx);
+            const float w   = theme::trackedWidth ("HUM", font, 0.05f);
+
+            g.setColour (theme::tx);
+            theme::drawTracked (g, "HUM", noteArea.withWidth (w), font, 0.05f, juce::Justification::centredLeft);
+
+            g.setColour (theme::txDim);
+            theme::drawTracked (g, juce::String (hum), noteArea.withTrimmedLeft (w + 3.0f), font, 0.05f,
+                                juce::Justification::centredLeft);
+        }
+        else if (live)
         {
             const auto name = juce::String (core::PitchTracker::noteName (note.midi));
             const auto font = theme::displayFont (20.0f);
@@ -101,7 +114,7 @@ public:
         if (live)
         {
             const auto cents = juce::String (juce::roundToInt (note.cents));
-            g.setColour (theme::txDim);
+            g.setColour (hum != 0 ? theme::txDim.withMultipliedAlpha (humDim) : theme::txDim);
             theme::drawTracked (g, (note.cents >= 0.5f ? "+" : "") + cents + " C", centsArea,
                                 theme::displayFont (13.0f), 0.12f, juce::Justification::centredRight);
         }
@@ -154,15 +167,17 @@ public:
         {
             // The needle says HOW off with its colour: green at home, orange by 25 cents out.
             const float x = centsX (ear.needle());
-            const auto  needle = green ? inTune
-                                       : inTune.interpolatedWith (theme::orange,
-                                             juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+            auto needle = green ? inTune
+                                : inTune.interpolatedWith (theme::orange,
+                                      juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / 25.0f));
+            if (hum != 0)
+                needle = needle.withMultipliedAlpha (humDim);   // hum: the reading stays, dimmed
 
             // A little taller than the scale, as it always stood — inside the strip's own well.
             const float nh = bandH + 4.0f;
-            g.setColour (needle.withAlpha (0.18f));
+            g.setColour (needle.withMultipliedAlpha (0.18f));
             g.fillRoundedRectangle (x - 5.0f, midY - nh * 0.5f - 2.0f, 10.0f, nh + 4.0f, 5.0f);
-            g.setColour (needle.withAlpha (0.45f));
+            g.setColour (needle.withMultipliedAlpha (0.45f));
             g.fillRoundedRectangle (x - 2.5f, midY - nh * 0.5f - 1.0f, 5.0f, nh + 2.0f, 2.5f);
             g.setColour (needle);
             g.fillRoundedRectangle (x - 1.25f, midY - nh * 0.5f, 2.5f, nh, 1.25f);
@@ -173,6 +188,11 @@ private:
     void timerCallback() override { repaint(); }
 
     static constexpr float muteW = 26.0f, muteH = 13.0f, muteGap = 8.0f;
+
+    /** HUM in the note's place, its mains beside it where the octave stands, both at the reading
+        size: smaller than a note's name, so the two fit the same 52 px. The needle and the cents
+        under the label at `humDim` of their light. */
+    static constexpr float humPx = 13.0f, humDim = 0.4f;
     static constexpr float insetY = 5.0f;
 
     /** Where the pill stands: at the far right, centred on the strip, the cents just before it —

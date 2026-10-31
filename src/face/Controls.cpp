@@ -1352,6 +1352,19 @@ void TunerFace::setDial (const Dial& d)
     repaint();
 }
 
+int TunerFace::hum() const
+{
+    return listening && ear.live() ? ear.humMains() : 0;
+}
+
+juce::Colour TunerFace::needleColour() const
+{
+    if (hum() != 0)
+        return home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents)).withMultipliedAlpha (humAlpha);
+    return ear.green() ? home
+                       : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+}
+
 void TunerFace::paintDial (juce::Graphics& g)
 {
     const auto origin = getPosition().toFloat();
@@ -1362,8 +1375,17 @@ void TunerFace::paintDial (juce::Graphics& g)
     const auto note   = ear.nearestNote();
     g.setFont (labelFont (stage::px13));
 
-    // The note in the window, a dash while nothing is heard.
-    if (live)
+    // The note in the window — HUM and its mains when the reading is the mains' — a dash while nothing is heard.
+    if (hum() != 0)
+    {
+        // Wider than a note's name, and than the window: centred on it, past its edges if it must.
+        const auto label = "HUM " + juce::String (hum());
+        const float w    = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), label) + 4.0f;
+        g.setColour (heard);
+        g.drawText (label, window.withSizeKeepingCentre (juce::jmax (w, window.getWidth()), window.getHeight()),
+                    juce::Justification::centred, false);
+    }
+    else if (live)
     {
         g.setColour (ear.green() ? home : heard);
         g.drawText (juce::String (core::PitchTracker::noteName (note.midi)) + juce::String (core::PitchTracker::noteOctave (note.midi)),
@@ -1394,8 +1416,7 @@ void TunerFace::paintDial (juce::Graphics& g)
     // tapering from the pivot to the ticks, with a short tail behind it.
     if (live)
     {
-        const auto colour = ear.green() ? home
-                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+        const auto colour = needleColour();
         const float tail = dial.reach * 0.14f;
         juce::Path needle;
         needle.startNewSubPath (-1.6f, tail);
@@ -1429,8 +1450,16 @@ void TunerFace::paintStrip (juce::Graphics& g)
     // Its state first — ON, OFF, or MUTE — then the note, a dash while nothing is heard.
     g.setColour (! listening ? violet : orange);
     g.drawText (! listening ? "OFF" : muting ? "MUTE" : "ON", area.removeFromLeft (64.0f), juce::Justification::centredLeft, false);
-    auto noteArea = area.removeFromLeft (54.0f);
-    if (live)
+    // HUM and its mains are wider than a note's name: while they show, the ruler gives them the room.
+    const auto humLabel = "HUM " + juce::String (hum());
+    auto noteArea = area.removeFromLeft (hum() != 0 ? juce::jmax (54.0f, juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), humLabel) + 4.0f)
+                                                    : 54.0f);
+    if (hum() != 0)
+    {
+        g.setColour (heard);
+        g.drawText (humLabel, noteArea, juce::Justification::centredLeft, false);
+    }
+    else if (live)
     {
         g.setColour (ear.green() ? home : heard);
         g.drawText (juce::String (core::PitchTracker::noteName (note.midi)) + juce::String (core::PitchTracker::noteOctave (note.midi)),
@@ -1455,8 +1484,7 @@ void TunerFace::paintStrip (juce::Graphics& g)
     }
     if (live)
     {
-        const auto colour = ear.green() ? home
-                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+        const auto colour = needleColour();
         juce::Path needle;
         needle.addRoundedRectangle (juce::Rectangle<float> (3.0f, ruler.getHeight()).withCentre ({ xOf (ear.needle()), ruler.getCentreY() }), 1.5f);
         glow (g, needle, colour, 5.0f);
@@ -1498,7 +1526,22 @@ void TunerFace::paint (juce::Graphics& g)
     g.setFont (labelFont (stage::px13));
     g.drawText (! listening ? "OFF" : muting ? "MUTE" : "ON", noteArea.withTop (noteArea.getBottom() - 24.0f),
                 juce::Justification::centredLeft, false);
-    if (live)
+    if (hum() != 0)
+    {
+        // Its mains takes the octave's place, as wide as its two digits are.
+        const auto mains     = juce::String (hum());
+        const auto mainsFont = labelFont (stage::px13);
+        auto mainsArea = noteArea.removeFromRight (juce::GlyphArrangement::getStringWidth (mainsFont, mains) + 2.0f);
+        const auto humFont = labelFont (humPx);
+        const float humW   = juce::GlyphArrangement::getStringWidth (humFont, "HUM") + 2.0f;
+        g.setColour (heard);
+        g.setFont (humFont);
+        g.drawText ("HUM", noteArea.withX (mainsArea.getX() - 4.0f - humW).withWidth (humW), juce::Justification::centredRight, false);
+        g.setColour (lilac.withAlpha (quietAlpha));
+        g.setFont (mainsFont);
+        g.drawText (mains, mainsArea.withTrimmedTop (mainsArea.getHeight() * 0.42f), juce::Justification::centredLeft, false);
+    }
+    else if (live)
     {
         const auto name = juce::String (core::PitchTracker::noteName (note.midi));
         g.setColour (ear.green() ? home : heard);
@@ -1541,8 +1584,7 @@ void TunerFace::paint (juce::Graphics& g)
     if (live)
     {
         const float x = xOf (ear.needle());
-        const auto colour = ear.green() ? home
-                                        : home.interpolatedWith (orange, juce::jlimit (0.0f, 1.0f, std::abs (ear.needle()) / warmCents));
+        const auto colour = needleColour();
         juce::Path needle;
         needle.addRoundedRectangle (juce::Rectangle<float> (4.0f, ruler.getHeight()).withCentre ({ x, ruler.getCentreY() }), 2.0f);
         glow (g, needle, colour, 8.0f);
