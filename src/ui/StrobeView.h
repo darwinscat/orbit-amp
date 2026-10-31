@@ -26,6 +26,10 @@ namespace orbitamp::strobeview
     `wash`, the only colour ever drawn translucent — not as stripes that alias. Sharp moves right, and the
     disc clockwise, as the needle does. */
 
+/** The narrowest a stripe is drawn, in the face's own pixels: under two, a moving stripe antialiases into a
+    shimmer (the strip's two-octave band has 8 px a period). Never wider than half its period. */
+inline constexpr float minStripePx = 2.0f;
+
 /** A band's stripes, as seen this frame: how wide each is, a share of its period (0: none), and how much
     of the band is the blur. */
 struct Look
@@ -72,7 +76,7 @@ inline void paintBands (juce::Graphics& g, juce::Rectangle<float> area, const co
 
         const float p     = period / (float) core::TunerStrobe::partials[(size_t) k];
         const float off   = std::fmod (s.stripes (k) * period, p);
-        const float w     = p * look.width;
+        const float w     = juce::jmin (p * 0.5f, juce::jmax (minStripePx, p * look.width));
         const float inset = (p * 0.5f - w) * 0.5f;   // a narrower stripe keeps its centre
 
         juce::Graphics::ScopedSaveState clip (g);
@@ -119,7 +123,7 @@ inline void paintDisc (juce::Graphics& g, juce::Point<float> centre, float inner
         const float pitch = juce::MathConstants<float>::twoPi / (float) (segments * core::TunerStrobe::partials[(size_t) k]);
         const float turn  = std::fmod (s.stripes (k) * juce::MathConstants<float>::twoPi / (float) segments, pitch);
 
-        const float span  = pitch * look.width;
+        const float span  = juce::jmin (pitch * 0.5f, juce::jmax (minStripePx * 2.0f / (r0 + r1), pitch * look.width));
         const float inset = (pitch * 0.5f - span) * 0.5f;
 
         juce::Path lit;
